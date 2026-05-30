@@ -2267,6 +2267,8 @@ export default function ImportData() {
                         <TableHead>Department</TableHead>
                         <TableHead>Grade</TableHead>
                         <TableHead>Level</TableHead>
+                        <TableHead>Category</TableHead>
+                        <TableHead>Empl. Status</TableHead>
                         <TableHead>Manager ID</TableHead>
                         <TableHead>Manager Name</TableHead>
                         <TableHead>Status</TableHead>
@@ -2295,6 +2297,8 @@ export default function ImportData() {
                           <TableCell>{row.department || '-'}</TableCell>
                           <TableCell>{row.pmsGrade || '-'}</TableCell>
                           <TableCell>{row.level || '-'}</TableCell>
+                          <TableCell>{row.employeeCategory || '-'}</TableCell>
+                          <TableCell>{row.employmentStatus || '-'}</TableCell>
                           <TableCell>{row.managerEmployeeId || '-'}</TableCell>
                           <TableCell>{row.managerName || '-'}</TableCell>
                           <TableCell>
