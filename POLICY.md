@@ -3338,3 +3338,19 @@ Governance source: `docs/safety-integration-governance.md` §Phase 5.
 6. **Rollback.** Flip `ui_safety_analytics_v2 = false`. The new MV may remain in place (cheap, refreshed in the same RPC) or be dropped — dropping it does NOT require a data migration because no row writes against it.
 
 7. **Phase 11 (SLA escalation engine) and Phase 12 (retry-v2 enable + QA)** remain blocked behind their own gates per §Phase Execution Order.
+
+## §Phase11-Safety — SLA Monitor v2 (codified 2026-05-30)
+
+1. **Flag.** Behind `safety_settings.ui_safety_sla_v2` (boolean JSONB, default `false`). With the flag OFF, `/safety/settings/sla` renders pixel-identical to v2.66.13.25 — only the existing history table and manual "Run now" control are visible.
+
+2. **Additive only.** Phase 11 MUST NOT remove or restyle the existing escalation history table, "Run now" control, or any other Phase 1.D surface. The v2 at-risk queue card is mounted ABOVE the history `SafetyFilterBar` only when the flag is ON.
+
+3. **SSOT helpers.** All SLA classification and formatting (`classifySla`, `formatSlaCountdown`, `prioritizeSlaQueue`, `badgeToneFor`) lives in `src/lib/safetySla.ts` and is pure. `SafetySlaQueueCard` and `SafetySlaBadge` are strictly presentational — they MUST NOT issue queries, mutations, or RPCs.
+
+4. **Zero writers / no new I/O.** Phase 11 introduces ZERO `.insert / .update / .upsert / .delete / .rpc / .upload / fetch(` calls, and ZERO new query keys or realtime channels outside the flag insert. The queue derives strictly from the cached `useSafetyIncidents()` payload. The 100-row screen cap is fixed; widening requires a new policy item. Guarded by `src/test/safety/slaV2NoNewWriters.test.ts`.
+
+5. **TS classification mirrors DB.** `classifySla` MUST follow the same rule as the `safety_incidents_with_sla` view (closed → closed; `now > close_due_at` → red; inside the last 25% of `[created_at, close_due_at]` → amber; else green). Any future change to the view requires a paired update of `classifySla` and its tests.
+
+6. **Engine ownership.** The actual escalation logic remains in `public.run_safety_sla_escalations()` (SECURITY DEFINER), executed every 5 minutes by pg_cron and surfaced by the `check-safety-sla` edge fn. Phase 11 does NOT introduce new schedules or alter recipient logic.
+
+7. **Rollback.** Flip `ui_safety_sla_v2 = false`. No schema or data migration required.

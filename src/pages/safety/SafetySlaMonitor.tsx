@@ -23,6 +23,8 @@ import { useRunSafetySlaCheck } from '@/hooks/useSafetyNotifications';
 import { useManualQuery, type ManualQueryFetcherArgs } from '@/hooks/useManualQuery';
 import { SafetyFilterBar } from '@/components/safety/SafetyFilterBar';
 import { SafetyDataTable } from '@/components/safety/SafetyDataTable';
+import { useSafetySettings } from '@/hooks/useSafetySettings';
+import { SafetySlaQueueCard } from '@/components/safety/SafetySlaQueueCard';
 
 type SlaRow = {
   id: string;
@@ -63,6 +65,9 @@ async function fetchSlaPage({
 export default function SafetySlaMonitor() {
   const { toast } = useToast();
   const runCheck = useRunSafetySlaCheck();
+  const { data: settings } = useSafetySettings();
+  const slaV2Enabled =
+    settings?.find((r) => r.key === 'ui_safety_sla_v2')?.value === true;
 
   const {
     rows, total, page, pageSize, totalPages,
@@ -114,6 +119,8 @@ export default function SafetySlaMonitor() {
         </CardHeader>
         <CardContent />
       </Card>
+
+      {slaV2Enabled ? <SafetySlaQueueCard /> : null}
 
       <SafetyFilterBar
         title="Escalation history"

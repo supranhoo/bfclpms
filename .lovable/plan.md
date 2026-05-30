@@ -100,3 +100,13 @@ Rather than building a new JSON editor in `SafetySettings`, the correct move is 
 
 ## Post-Implementation Notes
 - After approval and execution, run the safety test suite and verify the overlay on `/safety/home` (FAB visible once flag is on). The Settings link card should be visible regardless of the flag.
+
+## Phase 11 — Safety SLA Monitor v2 (2026-05-30, shipped)
+
+- Flag inserted: `safety_settings.ui_safety_sla_v2` (default `false`).
+- New SSOT: `src/lib/safetySla.ts` (`classifySla`, `formatSlaCountdown`, `prioritizeSlaQueue`, `badgeToneFor`).
+- New components: `src/components/safety/SafetySlaBadge.tsx`, `src/components/safety/SafetySlaQueueCard.tsx`.
+- Integration: `src/pages/safety/SafetySlaMonitor.tsx` mounts the queue card above history when the flag is ON.
+- Tests: `src/test/safety/safetySla.test.ts` (10), `src/test/safety/slaV2NoNewWriters.test.ts` (3) — all green.
+- Docs/Policy/Memory: `DOCUMENTATION.md` v2.66.13.26, `POLICY.md` §Phase11-Safety, `mem/features/safety/sla-v2.md`.
+- Rollback: flip the flag back to `false`. No schema or data migration required.
