@@ -76,3 +76,27 @@ No other RLS gaps detected. RLS posture is **GREEN** for Phase 2 gating.
   UNIQUE guard remain in force.
 - **Disposition:** **Accept** — intentional access expansion.
 - **Regression lock:** `src/test/safety/incidentReportRlsPolicy.test.ts`.
+
+### F-RLS-05 — `safety_incidents` server-authoritative submission RPC (Phase 18, 2026-05-30)
+
+- **Entrypoint:** `public.report_safety_incident(p_payload jsonb)` —
+  `SECURITY DEFINER`, `SET search_path = public`,
+  `GRANT EXECUTE TO authenticated`, `REVOKE FROM anon, PUBLIC`.
+- **Why:** Direct browser INSERTs into `safety_incidents` intermittently
+  failed with `42501` even when the policy text was correct, because the
+  WITH CHECK predicate depends on `auth.uid()` being resolvable AND on
+  the client payload matching it. Routing the write through a
+  `SECURITY DEFINER` RPC removes this entire failure class while
+  preserving anti-impersonation (the RPC stamps `reporter_id` from
+  `auth.uid()` and ignores any client-supplied `reporter_id`).
+- **Defence-in-depth:** the restrictive INSERT policy from §F-RLS-03 is
+  RETAINED. Direct table inserts from rogue clients remain gated; only
+  the RPC bypasses RLS via definer rights.
+- **Idempotency:** atomic on `(reporter_id, client_submission_id)`;
+  returns `{ id, incident_number, reused }`. Offline queue flush uses
+  the same entrypoint.
+- **Risk:** Low. Definer rights are scoped to a single insert with
+  hard-stamped identity; the function raises `not_authenticated`
+  (`42501`) when `auth.uid()` is NULL.
+- **Regression lock:** `src/test/safety/incidentReportRlsPolicy.test.ts`
+  (Phase 18 block).

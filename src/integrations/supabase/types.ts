@@ -9119,6 +9119,7 @@ export type Database = {
         Args: { p_apply?: boolean; p_kpi_id?: string }
         Returns: Json
       }
+      report_safety_incident: { Args: { p_payload: Json }; Returns: Json }
       request_org_kpi_revision: {
         Args: { p_kpi_id: string; p_reason: string }
         Returns: Json
