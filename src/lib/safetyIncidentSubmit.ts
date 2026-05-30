@@ -57,7 +57,23 @@ export async function submitSafetyIncident(
     'report_safety_incident' as never,
     { p_payload: payload as never } as never,
   );
-  if (rpcErr) throw rpcErr;
+  if (rpcErr) {
+    // Phase 19.1 — friendlier mapping for the RLS / permission failure that
+    // surfaces when the caller's JWT has expired or the user no longer has
+    // permission. The RPC bypasses RLS via SECURITY DEFINER, so a 42501 here
+    // almost always means "no auth context".
+    const msg = (rpcErr as { message?: string; code?: string })?.message ?? '';
+    const code = (rpcErr as { code?: string })?.code ?? '';
+    if (
+      code === '42501' ||
+      /row-level security|not_authenticated|permission denied/i.test(msg)
+    ) {
+      throw new Error(
+        'Your session expired or your account no longer has permission to report incidents. Please sign in again and retry.',
+      );
+    }
+    throw rpcErr;
+  }
   const rpcRow = rpcData as unknown as {
     id: string;
     incident_number: string;

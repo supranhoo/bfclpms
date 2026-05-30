@@ -14,9 +14,22 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Loader2, Search, Shield, UserPlus, Trash2 } from 'lucide-react';
+import { Loader2, Search, Shield, UserPlus, Trash2, ChevronsUpDown, RotateCcw } from 'lucide-react';
 import { Sparkles } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '@/components/ui/command';
 import {
   ALL_SAFETY_ROLES,
   SAFETY_ROLE_LABEL,
@@ -46,12 +59,20 @@ interface ProfileRow {
  */
 export default function SafetyUsers() {
   const { toast } = useToast();
-  const [search, setSearch] = useState('');
+  // Phase 19.1 — split draft (input) and applied (query key) so search
+  // fires ONLY when the user clicks Search / presses Enter / picks a row.
+  const [draftSearch, setDraftSearch] = useState('');
+  const [appliedSearch, setAppliedSearch] = useState('');
   const [selectedUserId, setSelectedUserId] = useState<string>('');
   const [selectedRole, setSelectedRole] = useState<SafetyAppRole>('worker');
+  const [pickerOpen, setPickerOpen] = useState(false);
 
   const profilesQuery = useQuery({
-    queryKey: ['safety', 'profiles', search],
+    queryKey: ['safety', 'profiles', appliedSearch],
+    // Only fetch when the picker is open AND the user has actually applied
+    // a search term. Prevents auto-fetch on keystroke and avoids loading
+    // the full 50-user list on page open.
+    enabled: pickerOpen,
     queryFn: async () => {
       let q = supabase
         .from('profiles')
@@ -59,9 +80,10 @@ export default function SafetyUsers() {
         .eq('is_active', true)
         .order('full_name', { ascending: true })
         .limit(50);
-      if (search.trim()) {
+      const term = appliedSearch.trim();
+      if (term) {
         q = q.or(
-          `full_name.ilike.%${search}%,email.ilike.%${search}%,employee_code.ilike.%${search}%`,
+          `full_name.ilike.%${term}%,email.ilike.%${term}%,employee_code.ilike.%${term}%`,
         );
       }
       const { data, error } = await q;
@@ -107,6 +129,15 @@ export default function SafetyUsers() {
     (assignedProfilesQuery.data ?? []).forEach((p) => m.set(p.id, p));
     return m;
   }, [assignedProfilesQuery.data]);
+
+  const selectedProfile =
+    profilesById.get(selectedUserId) ?? assignedProfilesById.get(selectedUserId) ?? null;
+
+  const applySearch = () => setAppliedSearch(draftSearch);
+  const resetSearch = () => {
+    setDraftSearch('');
+    setAppliedSearch('');
+  };
 
   const handleGrant = async () => {
     if (!selectedUserId) {
@@ -183,46 +214,116 @@ export default function SafetyUsers() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="space-y-2 md:col-span-2">
               <Label htmlFor="safety-user-search">User</Label>
-              <div className="relative">
-                <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  id="safety-user-search"
-                  placeholder="Search by name, email, or employee code"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  className="pl-9"
-                />
-              </div>
-              <div className="border rounded-md max-h-64 overflow-auto divide-y">
-                {profilesQuery.isLoading ? (
-                  <div className="p-6 flex items-center justify-center">
-                    <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-                  </div>
-                ) : (profilesQuery.data ?? []).length === 0 ? (
-                  <div className="p-4 text-sm text-center text-muted-foreground">
-                    No users match.
-                  </div>
-                ) : (
-                  (profilesQuery.data ?? []).map((p) => (
-                    <button
-                      key={p.id}
-                      type="button"
-                      onClick={() => setSelectedUserId(p.id)}
-                      className={`w-full text-left p-2 text-sm hover:bg-accent ${
-                        selectedUserId === p.id ? 'bg-accent' : ''
-                      }`}
-                    >
-                      <div className="font-medium truncate">
-                        {p.full_name || p.email}
-                      </div>
-                      <div className="text-xs text-muted-foreground truncate">
-                        {p.email}
-                        {p.employee_code ? ` · ${p.employee_code}` : ''}
-                      </div>
-                    </button>
-                  ))
-                )}
-              </div>
+              <Popover open={pickerOpen} onOpenChange={setPickerOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    id="safety-user-search"
+                    type="button"
+                    variant="outline"
+                    role="combobox"
+                    aria-expanded={pickerOpen}
+                    className="w-full justify-between h-10"
+                  >
+                    <span className="truncate text-left">
+                      {selectedProfile
+                        ? `${selectedProfile.full_name || selectedProfile.email}${
+                            selectedProfile.employee_code
+                              ? ` · ${selectedProfile.employee_code}`
+                              : ''
+                          }`
+                        : 'Select a user…'}
+                    </span>
+                    <ChevronsUpDown className="h-4 w-4 opacity-50 shrink-0 ml-2" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent
+                  className="p-0 w-[--radix-popover-trigger-width] min-w-[280px]"
+                  align="start"
+                  // Esc + outside click close the popover natively.
+                >
+                  <Command shouldFilter={false}>
+                    <CommandInput
+                      placeholder="Type employee ID, name, or email…"
+                      value={draftSearch}
+                      onValueChange={setDraftSearch}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          applySearch();
+                        }
+                      }}
+                    />
+                    <div className="flex items-center gap-2 border-b px-2 py-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        className="flex-1 h-8"
+                        onClick={applySearch}
+                        disabled={profilesQuery.isFetching}
+                      >
+                        {profilesQuery.isFetching ? (
+                          <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                        ) : (
+                          <Search className="h-3.5 w-3.5 mr-1.5" />
+                        )}
+                        Search
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="h-8"
+                        onClick={resetSearch}
+                      >
+                        <RotateCcw className="h-3.5 w-3.5 mr-1.5" />
+                        Reset
+                      </Button>
+                    </div>
+                    <CommandList className="max-h-64">
+                      {!appliedSearch && !profilesQuery.isFetching ? (
+                        <div className="p-4 text-xs text-center text-muted-foreground">
+                          Enter a name, email or employee ID, then tap Search.
+                        </div>
+                      ) : profilesQuery.isLoading || profilesQuery.isFetching ? (
+                        <div className="p-6 flex items-center justify-center">
+                          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                        </div>
+                      ) : (
+                        <>
+                          <CommandEmpty>No users match.</CommandEmpty>
+                          <CommandGroup>
+                            {(profilesQuery.data ?? []).map((p) => (
+                              <CommandItem
+                                key={p.id}
+                                value={p.id}
+                                onSelect={() => {
+                                  setSelectedUserId(p.id);
+                                  setPickerOpen(false);
+                                }}
+                              >
+                                <div className="min-w-0 flex-1">
+                                  <div className="font-medium truncate">
+                                    {p.full_name || p.email}
+                                  </div>
+                                  <div className="text-xs text-muted-foreground truncate">
+                                    {p.email}
+                                    {p.employee_code ? ` · ${p.employee_code}` : ''}
+                                  </div>
+                                </div>
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                        </>
+                      )}
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
+              {selectedProfile && (
+                <p className="text-xs text-muted-foreground">
+                  Selected: <span className="font-medium text-foreground">{selectedProfile.full_name || selectedProfile.email}</span>
+                </p>
+              )}
             </div>
 
             <div className="space-y-2">

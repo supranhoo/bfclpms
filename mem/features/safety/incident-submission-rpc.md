@@ -12,3 +12,5 @@ type: feature
 - Evidence upload pipeline (`safety-media` bucket + `safety_incident_evidence` rows) is unchanged and uses the `id` returned by the RPC.
 - Rollback: drop the RPC + revert the two frontend files to the prior direct-insert form. No data migration.
 - Regression lock: `src/test/safety/incidentReportRlsPolicy.test.ts` (Phase 18 block — SECURITY DEFINER, pinned search_path, server-stamped reporter_id, unauthenticated rejection, idempotency, grant/revoke posture).
+- Phase 19.1 hardening: `SafetyIncidentNew.handleSubmit` calls `supabase.auth.getSession()` + `refreshSession()` BEFORE invoking the RPC; if no session can be restored it aborts with a "Your session expired" toast instead of letting the RPC fail with 42501. `safetyIncidentSubmit.ts` maps any RLS / 42501 / permission-denied / not_authenticated error from the RPC to the same user-language message.
+- Phase 19.1 regression lock: `src/test/safety/noDirectIncidentInsert.test.ts` greps `src/**` and fails the build if any non-test file calls `.from('safety_incidents').insert(`. The RPC is the only sanctioned write path.
