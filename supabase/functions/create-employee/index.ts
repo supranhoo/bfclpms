@@ -19,6 +19,7 @@ interface CreateEmployeeRequest {
   location?: string;
   portal_access?: boolean;
   is_active?: boolean;
+  group_doj?: string | null;
 }
 
 Deno.serve(async (req) => {
@@ -110,6 +111,7 @@ Deno.serve(async (req) => {
       location_id: locationId,
       portal_access: portalAccess,
       has_real_email: !!body.email, // FALSE when no email provided -> employee-code login
+      ...(body.group_doj ? { group_doj: body.group_doj } : {}),
       ...(typeof body.is_active === 'boolean' ? { is_active: body.is_active } : {}),
     }
 
