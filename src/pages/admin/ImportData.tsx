@@ -1437,6 +1437,7 @@ export default function ImportData() {
             company_id: newCompanyId,
             location: sanitizeText(row.location) || undefined,
             portal_access: hasPortalAccess,
+            group_doj: row.groupDoj && row.groupDoj !== 'INVALID' ? row.groupDoj : undefined,
             ...(() => {
               const s = parseEmployeeStatus(row.employeeStatus);
               return s === true || s === false ? { is_active: s } : {};
