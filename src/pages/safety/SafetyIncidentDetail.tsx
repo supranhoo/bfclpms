@@ -11,11 +11,16 @@ import { EvidenceList } from '@/components/safety/EvidenceList';
 import { ProgressLogList } from '@/components/safety/ProgressLogList';
 import { SAFETY_SEVERITY_LABELS, SAFETY_TYPE_LABELS } from '@/lib/safetyIncidents';
 import { format } from 'date-fns';
+import { IncidentStageHeader } from '@/components/safety/IncidentStageHeader';
+import { IncidentRcaPanel } from '@/components/safety/IncidentRcaPanel';
+import { useSafetySettings } from '@/hooks/useSafetySettings';
 
 export default function SafetyIncidentDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { data: incident, isLoading, error } = useSafetyIncident(id);
+  const { data: settings = [] } = useSafetySettings();
+  const uiV2 = settings.find((r) => r.key === 'ui_incident_v2')?.value === true;
 
   if (isLoading) {
     return (
@@ -46,7 +51,7 @@ export default function SafetyIncidentDetail() {
         <span className="sm:hidden">Back</span>
       </Button>
 
-      <Card>
+      <Card data-incident-layout={uiV2 ? 'v2' : 'legacy'}>
         <CardHeader className="px-4 py-3 sm:px-6 sm:py-4">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
@@ -63,6 +68,7 @@ export default function SafetyIncidentDetail() {
           </div>
         </CardHeader>
         <CardContent className="px-4 sm:px-6 space-y-3">
+          {uiV2 && <IncidentStageHeader status={incident.status} />}
           <div>
             <h3 className="text-sm font-medium mb-1">Description</h3>
             <p className="text-sm whitespace-pre-wrap">{incident.description}</p>
@@ -88,11 +94,13 @@ export default function SafetyIncidentDetail() {
         </CardContent>
       </Card>
 
+      {uiV2 && <IncidentRcaPanel incident={incident} />}
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <StageActionPanel incident={incident} />
         <Card>
           <CardHeader><CardTitle className="text-base">Status Timeline</CardTitle></CardHeader>
-          <CardContent><IncidentTimeline incidentId={incident.id} /></CardContent>
+          <CardContent><IncidentTimeline incidentId={incident.id} grouped={uiV2} /></CardContent>
         </Card>
         <Card>
           <CardHeader><CardTitle className="text-base">Evidence</CardTitle></CardHeader>
