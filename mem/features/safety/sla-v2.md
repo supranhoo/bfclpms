@@ -20,4 +20,3 @@ type: feature
 - Engine ownership unchanged: `public.run_safety_sla_escalations()` (SECURITY DEFINER) runs every 5 min via pg_cron.
 - Any change to the `safety_incidents_with_sla` view rule MUST be paired with a `classifySla` + test update.
 - Rollback = flip flag back to `false`. No schema/data migration needed.
-EOF
