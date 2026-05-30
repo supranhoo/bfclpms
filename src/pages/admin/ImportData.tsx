@@ -1377,6 +1377,7 @@ export default function ImportData() {
             reporting_manager_id: managerId || existingEmployee.reporting_manager_id,
             ...(resolvedCompanyId ? { company_id: resolvedCompanyId } : {}),
             ...(row.groupDoj && row.groupDoj !== 'INVALID' ? { group_doj: row.groupDoj } : {}),
+            ...(row.doj && row.doj !== 'INVALID' ? { doj: row.doj } : {}),
             ...(() => {
               const s = parseEmployeeStatus(row.employeeStatus);
               return s === true || s === false ? { is_active: s } : {};
@@ -1445,6 +1446,7 @@ export default function ImportData() {
             location: sanitizeText(row.location) || undefined,
             portal_access: hasPortalAccess,
             group_doj: row.groupDoj && row.groupDoj !== 'INVALID' ? row.groupDoj : undefined,
+            doj: row.doj && row.doj !== 'INVALID' ? row.doj : undefined,
             ...(() => {
               const s = parseEmployeeStatus(row.employeeStatus);
               return s === true || s === false ? { is_active: s } : {};
