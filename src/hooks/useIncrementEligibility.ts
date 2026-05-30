@@ -335,15 +335,19 @@ export function useUpsertCriterion() {
       row: Partial<EligibilityCriterionRow> & { config_id: string; criterion_key: string; criterion_name: string }
     ) => {
       if (row.id) {
+        const { id, config_id, created_at, updated_at, ...patch } = row as any;
         const { error } = await supabase
           .from('increment_eligibility_criteria')
-          .update(row)
-          .eq('id', row.id);
+          .update(patch)
+          .eq('id', id);
         if (error) throw error;
       } else {
-        // Caller guarantees required fields on insert path (validated in CriterionDialog).
+        // Strip id/created_at/updated_at so DB defaults (gen_random_uuid, now()) apply.
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { error } = await supabase.from('increment_eligibility_criteria').insert([row as any]);
+        const { id: _id, created_at, updated_at, ...insertRow } = row as any;
+        const { error } = await supabase
+          .from('increment_eligibility_criteria')
+          .insert([insertRow]);
         if (error) throw error;
       }
     },
