@@ -64,11 +64,27 @@ function scopeKey(s: EligibilityScope) {
 }
 
 /**
- * Apply scope-array equality. Postgres compares text/uuid arrays element-wise;
- * because the DB trigger sorts arrays before write, supplying a sorted array
- * to `.eq()` matches exactly one row per (scope, assessment_year).
+ * Build a Postgres array literal (`{a,b,c}` / `{}`) from a JS string[].
+ * Required because PostgREST `.eq(col, jsArray)` serializes a JS array as CSV,
+ * which does NOT match a `uuid[]` column. We must send a real array literal
+ * via `.filter(col, 'eq', literal)`. Sorted to match the normalize trigger.
  */
-function applyScope<T extends { eq: (col: string, val: unknown) => T }>(
+export function toPgArrayLiteral(a: string[]): string {
+  if (!a || a.length === 0) return '{}';
+  return `{${[...a].sort().join(',')}}`;
+}
+
+/**
+ * Apply scope-array equality. The DB trigger sorts arrays before write, so we
+ * send a sorted Postgres array literal via `.filter(col,'eq',…)` — `.eq()` with
+ * a JS array would serialize as CSV and never match `uuid[]` rows.
+ */
+function applyScope<
+  T extends {
+    eq: (col: string, val: unknown) => T;
+    filter: (col: string, op: string, val: unknown) => T;
+  },
+>(
   q: T,
   scope: EligibilityScope,
 ): T {
@@ -82,8 +98,7 @@ function applyScope<T extends { eq: (col: string, val: unknown) => T }>(
   ];
   let next = q;
   for (const [k, col] of cols) {
-    const v = [...(scope[k] as string[])].sort();
-    next = next.eq(col, v);
+    next = next.filter(col, 'eq', toPgArrayLiteral(scope[k] as string[]));
   }
   next = next.eq('assessment_year', scope.assessment_year);
   return next;
@@ -156,8 +171,7 @@ export function useEligibilityVersionHistory(scope: EligibilityScope | null) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       let q: any = supabase.from('increment_eligibility_configs').select('*');
       for (const [k, col] of cols) {
-        const v = [...(scope[k] as string[])].sort();
-        q = q.eq(col, v);
+        q = q.filter(col, 'eq', toPgArrayLiteral(scope[k] as string[]));
       }
       q = q.neq('assessment_year', scope.assessment_year).order('assessment_year', { ascending: false });
       const { data, error } = await q;
