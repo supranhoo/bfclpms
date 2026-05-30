@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { useProfiles, useKraCategories, useDepartments, useDivisions, useBusinessUnits, useDesignations } from '@/hooks/useOrganization';
+import { useProfiles, useKraCategories, useDepartments, useDivisions, useBusinessUnits, useDesignations, useEmployeeCategories, useEmploymentStatuses } from '@/hooks/useOrganization';
 import { useCompanies } from '@/hooks/useCompanies';
 import { useCreateKpi } from '@/hooks/useKpis';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -147,6 +147,8 @@ interface EmployeeImportRow {
   location?: string;
   pmsGrade?: string;
   level?: string;
+  employeeCategory?: string;
+  employmentStatus?: string;
   managerEmployeeId?: string;
   managerName?: string;
   role?: string;
@@ -206,6 +208,8 @@ export default function ImportData() {
   const { data: businessUnits } = useBusinessUnits();
   const { data: departments } = useDepartments();
   const { data: designations } = useDesignations();
+  const { data: employeeCategories } = useEmployeeCategories();
+  const { data: employmentStatuses } = useEmploymentStatuses();
   const { data: companiesList } = useCompanies();
   const createKpi = useCreateKpi();
   const { toast } = useToast();
@@ -764,6 +768,8 @@ export default function ImportData() {
       location: getValue(['location', 'workLocation', 'worklocation', 'work_location', 'site', 'plantLocation', 'plantlocation', 'plant_location']),
       pmsGrade: getValue(['pmsGrade', 'pmsgrade', 'pms_grade', 'grade']),
       level: getValue(['level', 'employeeLevel', 'employee_level', 'lvl']),
+      employeeCategory: getValue(['employeeCategory', 'employeecategory', 'employee_category', 'category']),
+      employmentStatus: getValue(['employmentStatus', 'employmentstatus', 'employment_status']),
       managerEmployeeId: getValue(['managerEmployeeId', 'manageremployeeid', 'manager_employee_id', 'managerId', 'managerid', 'manager_id', 'reportingTo', 'reportingto', 'reporting_to', 'reportsTo', 'reportsto', 'reports_to']),
       managerName: getValue(['managerName', 'managername', 'manager_name', 'reportingManager', 'reportingmanager', 'reporting_manager', 'supervisor']),
       role: getValue(['role', 'appRole', 'approle', 'app_role', 'userRole', 'userrole', 'user_role', 'systemRole', 'systemrole', 'system_role']),
@@ -815,6 +821,8 @@ export default function ImportData() {
         const divNames = new Set((divisions || []).map(d => d.name.toLowerCase()));
         const buNames = new Set((businessUnits || []).map(d => d.name.toLowerCase()));
         const desigNames = new Set((designations || []).map(d => d.name.toLowerCase()));
+        const empCatNames = new Set((employeeCategories || []).map((c: any) => String(c.name).toLowerCase()));
+        const empStatusNames = new Set((employmentStatuses || []).map((s: any) => String(s.name).toLowerCase()));
         const existingCodes = new Set((profiles || []).map(p => p.employee_code?.toLowerCase()).filter(Boolean));
 
         jsonData.forEach((row, index) => {
@@ -846,6 +854,12 @@ export default function ImportData() {
           if (row.designation && !desigNames.has(row.designation.toLowerCase())) {
             rowErrs.push(`Designation '${row.designation}' does not exist in the system`);
           }
+          if (row.employeeCategory && !empCatNames.has(row.employeeCategory.toLowerCase())) {
+            rowErrs.push(`Employee Category '${row.employeeCategory}' does not exist in the system`);
+          }
+          if (row.employmentStatus && !empStatusNames.has(row.employmentStatus.toLowerCase())) {
+            rowErrs.push(`Employment Status '${row.employmentStatus}' does not exist in the system`);
+          }
           if (row.employeeStatus) {
             const parsed = parseEmployeeStatus(row.employeeStatus);
             if (parsed === 'INVALID') {
@@ -872,7 +886,7 @@ export default function ImportData() {
       }
     };
     reader.readAsArrayBuffer(file);
-  }, [toast, departments, divisions, businessUnits, designations, profiles, allowUpdateExisting]);
+  }, [toast, departments, divisions, businessUnits, designations, employeeCategories, employmentStatuses, profiles, allowUpdateExisting]);
 
   const handleImport = async () => {
     if (importData.length === 0) return;
@@ -1374,6 +1388,8 @@ export default function ImportData() {
             department_id: departmentId || existingEmployee.department_id,
             pms_grade: row.pmsGrade || existingEmployee.pms_grade,
             level: row.level || (existingEmployee as any).level,
+            ...(row.employeeCategory ? { employee_category: row.employeeCategory } : {}),
+            ...(row.employmentStatus ? { employment_status: row.employmentStatus } : {}),
             reporting_manager_id: managerId || existingEmployee.reporting_manager_id,
             ...(resolvedCompanyId ? { company_id: resolvedCompanyId } : {}),
             ...(row.groupDoj && row.groupDoj !== 'INVALID' ? { group_doj: row.groupDoj } : {}),
@@ -1441,6 +1457,8 @@ export default function ImportData() {
             department_id: departmentId || undefined,
             pms_grade: sanitizeText(row.pmsGrade) || undefined,
             level: sanitizeText(row.level) || undefined,
+            employee_category: sanitizeText(row.employeeCategory) || undefined,
+            employment_status: sanitizeText(row.employmentStatus) || undefined,
             reporting_manager_id: managerId || undefined,
             company_id: newCompanyId,
             location: sanitizeText(row.location) || undefined,
@@ -1732,6 +1750,8 @@ export default function ImportData() {
         location: 'Mumbai',
         pmsGrade: 'A',
         level: 'Level 1',
+        employeeCategory: 'Staff',
+        employmentStatus: 'Confirmed',
         managerEmployeeId: '100002',
         managerName: 'Jane Smith',
         employeeStatus: 'Active',
@@ -1755,7 +1775,7 @@ export default function ImportData() {
       const allProfiles = await fetchAllPaged<any>((from, to) =>
         supabase
           .from('profiles')
-          .select('id, employee_code, full_name, email, designation, company_id, pms_grade, level, department_id, reporting_manager_id, is_active, group_doj, doj')
+          .select('id, employee_code, full_name, email, designation, company_id, pms_grade, level, employee_category, employment_status, department_id, reporting_manager_id, is_active, group_doj, doj')
           .order('id')
           .range(from, to)
       );
@@ -1810,6 +1830,8 @@ export default function ImportData() {
           department: dept?.name || '',
           pmsGrade: profile.pms_grade || '',
           level: (profile as any).level || '',
+          employeeCategory: (profile as any).employee_category || '',
+          employmentStatus: (profile as any).employment_status || '',
           managerEmployeeId: manager?.employee_code || '',
           managerName: manager?.full_name || '',
           groupDoj: (profile as any).group_doj || '',
@@ -2082,6 +2104,8 @@ export default function ImportData() {
                         const divNames = new Set((divisions || []).map(d => d.name.toLowerCase()));
                         const buNames = new Set((businessUnits || []).map(d => d.name.toLowerCase()));
                         const desigNames = new Set((designations || []).map(d => d.name.toLowerCase()));
+                        const empCatNames = new Set((employeeCategories || []).map((c: any) => String(c.name).toLowerCase()));
+                        const empStatusNames = new Set((employmentStatuses || []).map((s: any) => String(s.name).toLowerCase()));
                         const existingCodes = new Set((profiles || []).map(p => p.employee_code?.toLowerCase()).filter(Boolean));
                         const newRowErrors = new Map<number, string[]>();
                         employeeData.forEach((row, index) => {
@@ -2095,6 +2119,8 @@ export default function ImportData() {
                           if (row.division && !divNames.has(row.division.toLowerCase())) rowErrs.push(`Division '${row.division}' does not exist`);
                           if (row.businessUnit && !buNames.has(row.businessUnit.toLowerCase())) rowErrs.push(`Business Unit '${row.businessUnit}' does not exist`);
                           if (row.designation && !desigNames.has(row.designation.toLowerCase())) rowErrs.push(`Designation '${row.designation}' does not exist`);
+                          if (row.employeeCategory && !empCatNames.has(row.employeeCategory.toLowerCase())) rowErrs.push(`Employee Category '${row.employeeCategory}' does not exist`);
+                          if (row.employmentStatus && !empStatusNames.has(row.employmentStatus.toLowerCase())) rowErrs.push(`Employment Status '${row.employmentStatus}' does not exist`);
                           if (rowErrs.length > 0) newRowErrors.set(index, rowErrs);
                         });
                         setEmployeeRowErrors(newRowErrors);
@@ -2123,6 +2149,8 @@ export default function ImportData() {
                   <li><code>department</code> - Department Name (must exist in system)</li>
                   <li><code>pmsGrade</code> - PMS Grade</li>
                   <li><code>level</code> - Employee Level</li>
+                  <li><code>employeeCategory</code> - Employee Category (must exist in master)</li>
+                  <li><code>employmentStatus</code> - Employment Status (e.g. Probation, Trainee, Confirmed, Superannuated, Retainer)</li>
                   <li><code>portalAccess</code> - Portal Login Access: <span className="text-xs ml-1 text-muted-foreground">(Yes/No, default: Yes if email provided)</span></li>
                   <li><code>managerEmployeeId</code> - Manager's Employee Code</li>
                   <li><code>managerName</code> - Manager's Full Name</li>
@@ -2239,6 +2267,8 @@ export default function ImportData() {
                         <TableHead>Department</TableHead>
                         <TableHead>Grade</TableHead>
                         <TableHead>Level</TableHead>
+                        <TableHead>Category</TableHead>
+                        <TableHead>Empl. Status</TableHead>
                         <TableHead>Manager ID</TableHead>
                         <TableHead>Manager Name</TableHead>
                         <TableHead>Status</TableHead>
@@ -2267,6 +2297,8 @@ export default function ImportData() {
                           <TableCell>{row.department || '-'}</TableCell>
                           <TableCell>{row.pmsGrade || '-'}</TableCell>
                           <TableCell>{row.level || '-'}</TableCell>
+                          <TableCell>{row.employeeCategory || '-'}</TableCell>
+                          <TableCell>{row.employmentStatus || '-'}</TableCell>
                           <TableCell>{row.managerEmployeeId || '-'}</TableCell>
                           <TableCell>{row.managerName || '-'}</TableCell>
                           <TableCell>

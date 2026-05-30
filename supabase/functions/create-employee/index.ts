@@ -14,6 +14,8 @@ interface CreateEmployeeRequest {
   department_id?: string;
   pms_grade?: string;
   level?: string;
+  employee_category?: string | null;
+  employment_status?: string | null;
   reporting_manager_id?: string;
   company_id?: string;
   location?: string;
@@ -100,6 +102,32 @@ Deno.serve(async (req) => {
       }
     }
 
+    // Validate optional master-data fields (strict): reject unknown values.
+    if (body.employee_category && body.employee_category.trim()) {
+      const name = body.employee_category.trim();
+      let q = supabaseAdmin.from('employee_categories').select('id, name, company_id').ilike('name', name);
+      const { data: rows } = await q;
+      const match = (rows || []).find((r: any) =>
+        String(r.name).trim().toLowerCase() === name.toLowerCase() &&
+        (!body.company_id || !r.company_id || r.company_id === body.company_id)
+      );
+      if (!match) {
+        return new Response(JSON.stringify({ error: `Unknown employee category: '${body.employee_category}'` }), {
+          status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        })
+      }
+    }
+    if (body.employment_status && body.employment_status.trim()) {
+      const name = body.employment_status.trim();
+      const { data: rows } = await supabaseAdmin.from('employment_statuses').select('name').ilike('name', name);
+      const match = (rows || []).find((r: any) => String(r.name).trim().toLowerCase() === name.toLowerCase());
+      if (!match) {
+        return new Response(JSON.stringify({ error: `Unknown employment status: '${body.employment_status}'` }), {
+          status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        })
+      }
+    }
+
     const profilePayload = {
       employee_code: body.employee_code,
       full_name: body.full_name,
@@ -107,6 +135,8 @@ Deno.serve(async (req) => {
       department_id: body.department_id || null,
       pms_grade: body.pms_grade || null,
       level: body.level || null,
+      employee_category: body.employee_category ? body.employee_category.trim() : null,
+      employment_status: body.employment_status ? body.employment_status.trim() : null,
       reporting_manager_id: body.reporting_manager_id || null,
       company_id: body.company_id || null,
       location_id: locationId,

@@ -115,6 +115,8 @@ export default function ProfileSettings() {
     subBranch: subBranch?.name || null,
     designation: profile?.designation || null,
     pmsGrade: profile?.pms_grade || null,
+    employeeCategory: (profile as any)?.employee_category || null,
+    employmentStatus: (profile as any)?.employment_status || null,
     employeeCode: profile?.employee_code || null,
     joiningDate: profile?.created_at || null,
   }), [division, businessUnit, department, subBranch, profile]);
