@@ -104,6 +104,11 @@ export function ExclusionsCard({ configId, defaultAssessmentYear, knownYears, re
           {showAllYears && (
             <Badge variant="outline" className="ml-1">All Years (read-only)</Badge>
           )}
+          {readOnly && !showAllYears && (
+            <span className="text-[10px] text-muted-foreground italic ml-1">
+              Criteria approved — exclusions still editable
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-2">
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -111,7 +116,7 @@ export function ExclusionsCard({ configId, defaultAssessmentYear, knownYears, re
             <span>Show all years</span>
             <Switch checked={showAllYears} onCheckedChange={setShowAllYears} />
           </div>
-          {!readOnly && !showAllYears && !adding && (
+          {!showAllYears && !adding && (
             <Button size="sm" onClick={() => setAdding(true)}>
               <Plus className="h-4 w-4 mr-1" /> Add Exclusion
             </Button>
@@ -134,7 +139,7 @@ export function ExclusionsCard({ configId, defaultAssessmentYear, knownYears, re
         </p>
 
         {/* Add panel */}
-        {!readOnly && adding && !showAllYears && (
+        {adding && !showAllYears && (
           <div className="rounded-md border bg-muted/30 p-3 space-y-3">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               <div className="md:col-span-2 space-y-1.5">
@@ -254,12 +259,10 @@ export function ExclusionsCard({ configId, defaultAssessmentYear, knownYears, re
                         <Button
                           size="icon"
                           variant="ghost"
-                          disabled={readOnly || showAllYears}
+                          disabled={showAllYears}
                           title={
                             showAllYears
                               ? 'Switch off "Show all years" to edit'
-                              : readOnly
-                              ? 'Approved configs are read-only'
                               : 'Remove exclusion'
                           }
                           onClick={() => setDeleteTarget(row)}
