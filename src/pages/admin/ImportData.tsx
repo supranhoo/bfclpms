@@ -854,6 +854,12 @@ export default function ImportData() {
           if (row.designation && !desigNames.has(row.designation.toLowerCase())) {
             rowErrs.push(`Designation '${row.designation}' does not exist in the system`);
           }
+          if (row.employeeCategory && !empCatNames.has(row.employeeCategory.toLowerCase())) {
+            rowErrs.push(`Employee Category '${row.employeeCategory}' does not exist in the system`);
+          }
+          if (row.employmentStatus && !empStatusNames.has(row.employmentStatus.toLowerCase())) {
+            rowErrs.push(`Employment Status '${row.employmentStatus}' does not exist in the system`);
+          }
           if (row.employeeStatus) {
             const parsed = parseEmployeeStatus(row.employeeStatus);
             if (parsed === 'INVALID') {
