@@ -206,6 +206,8 @@ export default function ImportData() {
   const { data: businessUnits } = useBusinessUnits();
   const { data: departments } = useDepartments();
   const { data: designations } = useDesignations();
+  const { data: employeeCategories } = useEmployeeCategories();
+  const { data: employmentStatuses } = useEmploymentStatuses();
   const { data: companiesList } = useCompanies();
   const createKpi = useCreateKpi();
   const { toast } = useToast();
