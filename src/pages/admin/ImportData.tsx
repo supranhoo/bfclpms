@@ -147,6 +147,8 @@ interface EmployeeImportRow {
   location?: string;
   pmsGrade?: string;
   level?: string;
+  employeeCategory?: string;
+  employmentStatus?: string;
   managerEmployeeId?: string;
   managerName?: string;
   role?: string;
