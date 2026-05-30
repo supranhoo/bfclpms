@@ -59,3 +59,20 @@ All 33 `safety_*` tables have RLS **enabled** (`relrowsecurity = true`). ✅
   blocker.
 
 No other RLS gaps detected. RLS posture is **GREEN** for Phase 2 gating.
+
+### F-RLS-03 — `safety_incidents` INSERT opened to all authenticated users (Phase 16, 2026-05-30)
+
+- **Policy:** `Authenticated users can report incidents` —
+  `FOR INSERT TO authenticated WITH CHECK (auth.uid() IS NOT NULL AND reporter_id = auth.uid())`.
+- **Replaces:** legacy `Safety users can report incidents` policy that
+  required `has_safety_module_access(auth.uid())`. That gate blocked
+  ordinary employees (e.g. HR users with no safety role) from filing
+  hazard reports — contrary to standard EHS practice where every
+  employee must be able to raise an incident.
+- **Risk:** Low. `reporter_id = auth.uid()` still prevents impersonation;
+  SELECT/UPDATE/DELETE policies are unchanged so reporters can only see
+  their own incidents and cannot drive stage transitions. The server
+  trigger `safety_incident_before_insert` and the `client_submission_id`
+  UNIQUE guard remain in force.
+- **Disposition:** **Accept** — intentional access expansion.
+- **Regression lock:** `src/test/safety/incidentReportRlsPolicy.test.ts`.
