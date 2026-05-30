@@ -1,7 +1,11 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useSafetyAnalytics, useRefreshSafetyAnalytics } from '@/hooks/useSafetyAnalytics';
 import { aggregateTotals, complianceBand, trirBand, toCsv } from '@/lib/safetyAnalytics';
+import { useSafetySettings } from '@/hooks/useSafetySettings';
+import { SafetyTrendChart } from '@/components/safety/analytics/SafetyTrendChart';
+import { SafetyHeatmap } from '@/components/safety/analytics/SafetyHeatmap';
+import { KpiDrillDownDialog, type DrillKey } from '@/components/safety/analytics/KpiDrillDownDialog';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -21,6 +25,10 @@ import { toast } from 'sonner';
 export default function SafetyAnalytics() {
   const { data, isLoading } = useSafetyAnalytics();
   const refresh = useRefreshSafetyAnalytics();
+  const { data: settings } = useSafetySettings();
+  const v2Enabled =
+    settings?.find((r) => r.key === 'ui_safety_analytics_v2')?.value === true;
+  const [drill, setDrill] = useState<DrillKey | null>(null);
 
   const totals = useMemo(() => (data ? aggregateTotals(data) : null), [data]);
 
@@ -129,18 +137,21 @@ export default function SafetyAnalytics() {
           value={totals.openIncidents}
           tone="amber"
           icon={<AlertTriangle className="h-4 w-4" />}
+          onClick={v2Enabled ? () => setDrill('open') : undefined}
         />
         <KpiTile
           label="Closed Incidents"
           value={totals.closedIncidents}
           tone="success"
           icon={<CheckCircle2 className="h-4 w-4" />}
+          onClick={v2Enabled ? () => setDrill('closed') : undefined}
         />
         <KpiTile
           label="Critical Severity"
           value={totals.criticalSev}
           tone="destructive"
           icon={<AlertTriangle className="h-4 w-4" />}
+          onClick={v2Enabled ? () => setDrill('critical') : undefined}
         />
         <KpiTile
           label="Training %"
@@ -155,6 +166,14 @@ export default function SafetyAnalytics() {
           icon={<FileSignature className="h-4 w-4" />}
         />
       </div>
+
+      {/* Phase 10 — v2 sections (flag-gated) */}
+      {v2Enabled && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <SafetyTrendChart rows={data.monthly_trend ?? []} />
+          <SafetyHeatmap payload={data} />
+        </div>
+      )}
 
       {/* BU heatmap */}
       <Card>
@@ -299,18 +318,27 @@ export default function SafetyAnalytics() {
           </Link>
         </Button>
       </div>
+
+      {v2Enabled && (
+        <KpiDrillDownDialog
+          open={drill !== null}
+          onOpenChange={(o) => !o && setDrill(null)}
+          kind={drill}
+        />
+      )}
     </div>
   );
 }
 
 function KpiTile({
-  label, value, sub, icon, tone,
+  label, value, sub, icon, tone, onClick,
 }: {
   label: string;
   value: number | string;
   sub?: string;
   icon: React.ReactNode;
   tone: 'primary' | 'amber' | 'destructive' | 'success' | 'muted';
+  onClick?: () => void;
 }) {
   const toneClass = {
     primary: 'bg-primary/10 text-primary',
@@ -319,8 +347,22 @@ function KpiTile({
     success: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
     muted: 'bg-muted text-muted-foreground',
   }[tone];
+  const interactive = !!onClick;
   return (
-    <Card>
+    <Card
+      className={interactive ? 'cursor-pointer hover:border-primary/40 transition-colors' : undefined}
+      onClick={onClick}
+      role={interactive ? 'button' : undefined}
+      tabIndex={interactive ? 0 : undefined}
+      onKeyDown={interactive
+        ? (e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              onClick?.();
+            }
+          }
+        : undefined}
+    >
       <CardContent className="p-4">
         <div className="flex items-center justify-between">
           <div>
