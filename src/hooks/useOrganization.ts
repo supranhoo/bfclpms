@@ -158,6 +158,51 @@ export function useLocations(companyId?: string) {
   });
 }
 
+/**
+ * Employee Category master — company-scoped, admin-managed.
+ * Used as a dropdown source for User Management + Import Data.
+ * Stored on profiles as text (mirrors pms_grade / designation pattern).
+ */
+export function useEmployeeCategories(companyId?: string) {
+  return useQuery({
+    queryKey: ['employee-categories', companyId],
+    queryFn: async () => {
+      let query = (supabase as any)
+        .from('employee_categories')
+        .select('*')
+        .order('sort_order')
+        .order('name');
+
+      if (companyId) {
+        query = query.eq('company_id', companyId);
+      }
+
+      const { data, error } = await query;
+      if (error) throw error;
+      return data as any[];
+    },
+  });
+}
+
+/**
+ * Employment Status master — global (Probation / Trainee / Confirmed /
+ * Superannuated / Retainer seeded). Stored on profiles as text.
+ */
+export function useEmploymentStatuses() {
+  return useQuery({
+    queryKey: ['employment-statuses'],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from('employment_statuses')
+        .select('*')
+        .order('sort_order')
+        .order('name');
+      if (error) throw error;
+      return data as any[];
+    },
+  });
+}
+
 export function useKraCategories() {
   return useQuery({
     queryKey: ['kra-categories'],
