@@ -2299,16 +2299,16 @@ export type Database = {
           approved_at: string | null
           approved_by: string | null
           assessment_year: string
-          business_unit_id: string | null
-          category_id: string | null
-          company_id: string | null
+          business_unit_id: string[]
+          category_id: string[]
+          company_id: string[]
           copied_from_config_id: string | null
           created_at: string
           created_by: string | null
-          division_id: string | null
+          division_id: string[]
           id: string
-          level_id: string | null
-          location_id: string | null
+          level_id: string[]
+          location_id: string[]
           status: string
           updated_at: string
         }
@@ -2316,16 +2316,16 @@ export type Database = {
           approved_at?: string | null
           approved_by?: string | null
           assessment_year: string
-          business_unit_id?: string | null
-          category_id?: string | null
-          company_id?: string | null
+          business_unit_id?: string[]
+          category_id?: string[]
+          company_id?: string[]
           copied_from_config_id?: string | null
           created_at?: string
           created_by?: string | null
-          division_id?: string | null
+          division_id?: string[]
           id?: string
-          level_id?: string | null
-          location_id?: string | null
+          level_id?: string[]
+          location_id?: string[]
           status?: string
           updated_at?: string
         }
@@ -2333,67 +2333,25 @@ export type Database = {
           approved_at?: string | null
           approved_by?: string | null
           assessment_year?: string
-          business_unit_id?: string | null
-          category_id?: string | null
-          company_id?: string | null
+          business_unit_id?: string[]
+          category_id?: string[]
+          company_id?: string[]
           copied_from_config_id?: string | null
           created_at?: string
           created_by?: string | null
-          division_id?: string | null
+          division_id?: string[]
           id?: string
-          level_id?: string | null
-          location_id?: string | null
+          level_id?: string[]
+          location_id?: string[]
           status?: string
           updated_at?: string
         }
         Relationships: [
           {
-            foreignKeyName: "increment_eligibility_configs_business_unit_id_fkey"
-            columns: ["business_unit_id"]
-            isOneToOne: false
-            referencedRelation: "business_units"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "increment_eligibility_configs_category_id_fkey"
-            columns: ["category_id"]
-            isOneToOne: false
-            referencedRelation: "kra_categories"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "increment_eligibility_configs_company_id_fkey"
-            columns: ["company_id"]
-            isOneToOne: false
-            referencedRelation: "companies"
-            referencedColumns: ["id"]
-          },
-          {
             foreignKeyName: "increment_eligibility_configs_copied_from_config_id_fkey"
             columns: ["copied_from_config_id"]
             isOneToOne: false
             referencedRelation: "increment_eligibility_configs"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "increment_eligibility_configs_division_id_fkey"
-            columns: ["division_id"]
-            isOneToOne: false
-            referencedRelation: "divisions"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "increment_eligibility_configs_level_id_fkey"
-            columns: ["level_id"]
-            isOneToOne: false
-            referencedRelation: "levels"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "increment_eligibility_configs_location_id_fkey"
-            columns: ["location_id"]
-            isOneToOne: false
-            referencedRelation: "locations"
             referencedColumns: ["id"]
           },
         ]
