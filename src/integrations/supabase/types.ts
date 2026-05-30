@@ -4759,6 +4759,7 @@ export type Database = {
           deactivated_at: string | null
           department_id: string | null
           designation: string | null
+          doj: string | null
           email: string | null
           employee_code: string | null
           full_name: string | null
@@ -4783,6 +4784,7 @@ export type Database = {
           deactivated_at?: string | null
           department_id?: string | null
           designation?: string | null
+          doj?: string | null
           email?: string | null
           employee_code?: string | null
           full_name?: string | null
@@ -4807,6 +4809,7 @@ export type Database = {
           deactivated_at?: string | null
           department_id?: string | null
           designation?: string | null
+          doj?: string | null
           email?: string | null
           employee_code?: string | null
           full_name?: string | null
