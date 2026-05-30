@@ -3294,3 +3294,15 @@ Governance source: `docs/safety-integration-governance.md` §Phase 5.
 6. Accessibility & UX invariants: FAB is min 44×44 px touch target, labelled `aria-label="Open emergency overlay"`, respects `prefers-reduced-motion` via `motion-safe:` Tailwind variants. Contact phone links normalise whitespace before the `tel:` scheme. The overlay never opens automatically and never blocks navigation.
 
 7. Phase 6 (admin/import), Phase 7 (analytics polish), and Phase 8 (final stabilization) remain blocked behind their own governance gates per §Phase Execution Order.
+
+## §Phase8-Safety — Emergency Overlay SSOT Reconciliation (codified 2026-05-30)
+
+1. **Single Source of Truth for emergency contacts.** Emergency contacts live exclusively in `public.safety_emergency_contacts` (typed columns + existing RLS). The legacy `safety_settings.emergency_contacts` JSONB row is **deprecated and deleted**; it must not be re-introduced. Any future contact attribute (e.g., shift, escalation tier) is an additive column on the typed table — never a parallel JSONB blob.
+
+2. **Admin surface.** Contacts are managed via `/safety/emergency/contacts` (powered by `useEmergencyContacts` / `useUpsertEmergencyContact` / `useDeleteEmergencyContact`). The Safety Settings index already links to this page; no JSON editor for contacts may be added to `SafetySettings.tsx`.
+
+3. **Overlay contract update.** `EmergencyOverlay.tsx` reads via `useEmergencyContacts({ type: 'all', activeOnly: true })` only. It MUST NOT import `useUpsertEmergencyContact` or `useDeleteEmergencyContact`; the Phase 5 regression guard `emergencyOverlayNoNewWriters.test.ts` now enforces this in addition to the original write/RPC/`fetch()` bans.
+
+4. **Feature flag & rollback unchanged.** `safety_settings.ui_emergency_overlay_v1` still gates the FAB. Rollback = flip flag to `false`; no migration. Removing the feature entirely now also requires no `safety_settings` cleanup (the JSON row is already gone).
+
+5. **Phases 6 (admin/import) and 7 (analytics polish)** remain blocked behind their own gates per §Phase Execution Order.
