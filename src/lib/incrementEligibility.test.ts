@@ -82,4 +82,52 @@ describe('evaluateIncrementEligibility', () => {
     expect(r.eligible).toBe(false);
     expect(r.failed[0].criterion_name).toBe('Safety');
   });
+
+  it('per-AY exclusion bypasses criteria for that exact AY only', () => {
+    const crit = [c()];
+    const exclusions = new Set<string>(['emp-1|2025-26']);
+    const reasons = new Map<string, string | null>([['emp-1|2025-26', 'Board member']]);
+
+    // Excluded for 2025-26 → eligible despite breach
+    const a = evaluateIncrementEligibility(
+      { absent_days: 50 },
+      crit,
+      new Date('2026-01-01'),
+      { employeeId: 'emp-1', assessmentYear: '2025-26', exclusions, exclusionReasons: reasons },
+    );
+    expect(a.eligible).toBe(true);
+    expect(a.excluded).toBe(true);
+    expect(a.exclusion_reason).toBe('Board member');
+
+    // Same employee, different AY → criteria still apply
+    const b = evaluateIncrementEligibility(
+      { absent_days: 50 },
+      crit,
+      new Date('2027-01-01'),
+      { employeeId: 'emp-1', assessmentYear: '2026-27', exclusions, exclusionReasons: reasons },
+    );
+    expect(b.eligible).toBe(false);
+    expect(b.excluded).toBeUndefined();
+
+    // Different employee, excluded AY → not excluded
+    const cRes = evaluateIncrementEligibility(
+      { absent_days: 50 },
+      crit,
+      new Date('2026-01-01'),
+      { employeeId: 'emp-2', assessmentYear: '2025-26', exclusions },
+    );
+    expect(cRes.eligible).toBe(false);
+  });
+
+  it('missing assessmentYear param → exclusion never fires', () => {
+    const exclusions = new Set<string>(['emp-1|2025-26']);
+    const r = evaluateIncrementEligibility(
+      { absent_days: 50 },
+      [c()],
+      new Date('2026-01-01'),
+      { employeeId: 'emp-1', exclusions }, // no assessmentYear
+    );
+    expect(r.eligible).toBe(false);
+    expect(r.excluded).toBeUndefined();
+  });
 });
