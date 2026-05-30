@@ -152,6 +152,7 @@ interface EmployeeImportRow {
   role?: string;
   portalAccess?: string;
   employeeStatus?: string;
+  groupDoj?: string; // ISO yyyy-MM-dd (normalised)
 }
 
 // Parse Active/Inactive status cell into a boolean (or undefined if empty/unset).
@@ -164,6 +165,36 @@ function parseEmployeeStatus(raw: string | undefined): boolean | undefined | 'IN
   if (['active', 'yes', 'true', '1', 'y'].includes(v)) return true;
   if (['inactive', 'no', 'false', '0', 'n'].includes(v)) return false;
   return 'INVALID';
+}
+
+// Normalise a date cell to ISO yyyy-MM-dd. Accepts:
+//   • ISO yyyy-MM-dd  • dd/mm/yyyy or dd-mm-yyyy  • Excel serial number
+// Returns '' for empty cells, or the sentinel 'INVALID' so callers can flag the row.
+export function normalizeDateCell(raw: any): string | 'INVALID' {
+  if (raw === undefined || raw === null || raw === '') return '';
+  // Excel numeric serial
+  if (typeof raw === 'number' && Number.isFinite(raw)) {
+    const ms = Math.round((raw - 25569) * 86400 * 1000); // 1970-01-01 epoch offset
+    const d = new Date(ms);
+    if (isNaN(d.getTime())) return 'INVALID';
+    return d.toISOString().slice(0, 10);
+  }
+  const s = String(raw).trim();
+  if (!s) return '';
+  // ISO yyyy-MM-dd
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  // dd/mm/yyyy or dd-mm-yyyy
+  const m = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+  if (m) {
+    const [, dd, mm, yyyy] = m;
+    const d = new Date(`${yyyy}-${mm.padStart(2, '0')}-${dd.padStart(2, '0')}`);
+    if (isNaN(d.getTime())) return 'INVALID';
+    return d.toISOString().slice(0, 10);
+  }
+  // Last resort: native parse
+  const d = new Date(s);
+  if (isNaN(d.getTime())) return 'INVALID';
+  return d.toISOString().slice(0, 10);
 }
 
 export default function ImportData() {
