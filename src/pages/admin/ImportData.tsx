@@ -821,6 +821,8 @@ export default function ImportData() {
         const divNames = new Set((divisions || []).map(d => d.name.toLowerCase()));
         const buNames = new Set((businessUnits || []).map(d => d.name.toLowerCase()));
         const desigNames = new Set((designations || []).map(d => d.name.toLowerCase()));
+        const empCatNames = new Set((employeeCategories || []).map((c: any) => String(c.name).toLowerCase()));
+        const empStatusNames = new Set((employmentStatuses || []).map((s: any) => String(s.name).toLowerCase()));
         const existingCodes = new Set((profiles || []).map(p => p.employee_code?.toLowerCase()).filter(Boolean));
 
         jsonData.forEach((row, index) => {
