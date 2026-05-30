@@ -3,7 +3,7 @@ import { invokeAdminEdgeFunction } from '@/lib/adminEdgeFunction';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
-import { useProfiles, useDepartments, useDesignations, usePmsGrades, useDivisions, useBusinessUnits } from '@/hooks/useOrganization';
+import { useProfiles, useDepartments, useDesignations, usePmsGrades, useDivisions, useBusinessUnits, useEmployeeCategories, useEmploymentStatuses } from '@/hooks/useOrganization';
 import { useCompanies } from '@/hooks/useCompanies';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -156,6 +156,8 @@ export default function UserManagement() {
   const { data: departments } = useDepartments();
   const { data: designationsList } = useDesignations();
   const { data: pmsGradesList } = usePmsGrades();
+  const { data: employeeCategoriesList } = useEmployeeCategories();
+  const { data: employmentStatusesList } = useEmploymentStatuses();
   const { data: divisions } = useDivisions();
   const { data: businessUnits } = useBusinessUnits();
   const { data: companiesList } = useCompanies();
@@ -180,6 +182,8 @@ export default function UserManagement() {
   const [editDepartmentId, setEditDepartmentId] = useState<string>('');
   const [editDesignation, setEditDesignation] = useState('');
   const [editPmsGrade, setEditPmsGrade] = useState('');
+  const [editEmployeeCategory, setEditEmployeeCategory] = useState('');
+  const [editEmploymentStatus, setEditEmploymentStatus] = useState('');
   const [editEmployeeCode, setEditEmployeeCode] = useState('');
   const [editFullName, setEditFullName] = useState('');
   const [editEmail, setEditEmail] = useState('');
@@ -197,6 +201,8 @@ export default function UserManagement() {
   const [newDepartmentId, setNewDepartmentId] = useState('');
   const [newDesignation, setNewDesignation] = useState('');
   const [newPmsGrade, setNewPmsGrade] = useState('');
+  const [newEmployeeCategory, setNewEmployeeCategory] = useState('');
+  const [newEmploymentStatus, setNewEmploymentStatus] = useState('');
   const [newManagerId, setNewManagerId] = useState('');
   const [newDivisionId, setNewDivisionId] = useState('');  // UI-only cascading filter
   const [newCompanyId, setNewCompanyId] = useState('');
