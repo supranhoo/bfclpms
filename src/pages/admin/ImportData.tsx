@@ -1736,6 +1736,7 @@ export default function ImportData() {
         managerName: 'Jane Smith',
         employeeStatus: 'Active',
         groupDoj: '2020-04-15',
+        doj: '2020-04-15',
       },
     ];
 
@@ -1754,7 +1755,7 @@ export default function ImportData() {
       const allProfiles = await fetchAllPaged<any>((from, to) =>
         supabase
           .from('profiles')
-          .select('id, employee_code, full_name, email, designation, company_id, pms_grade, level, department_id, reporting_manager_id, is_active, group_doj')
+          .select('id, employee_code, full_name, email, designation, company_id, pms_grade, level, department_id, reporting_manager_id, is_active, group_doj, doj')
           .order('id')
           .range(from, to)
       );
@@ -1812,6 +1813,7 @@ export default function ImportData() {
           managerEmployeeId: manager?.employee_code || '',
           managerName: manager?.full_name || '',
           groupDoj: (profile as any).group_doj || '',
+          doj: (profile as any).doj || '',
         };
       });
 
@@ -2125,6 +2127,7 @@ export default function ImportData() {
                   <li><code>managerEmployeeId</code> - Manager's Employee Code</li>
                   <li><code>managerName</code> - Manager's Full Name</li>
                   <li><code>gdoj</code> / <code>groupDoj</code> - Group Date of Joining (yyyy-MM-dd or dd/MM/yyyy)</li>
+                  <li><code>doj</code> / <code>dateOfJoining</code> - Date of Joining (yyyy-MM-dd or dd/MM/yyyy)</li>
                 </ul>
                 <Alert className="mt-4">
                   <AlertCircle className="h-4 w-4" />
