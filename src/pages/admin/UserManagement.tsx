@@ -1629,6 +1629,24 @@ export default function UserManagement() {
                     />
                   </div>
                   <div className="space-y-1.5">
+                    <Label>Employee Category</Label>
+                    <OrgFilterCombobox
+                      value={newEmployeeCategory}
+                      onValueChange={setNewEmployeeCategory}
+                      options={employeeCategoryOptions}
+                      placeholder="Select employee category"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Employment Status</Label>
+                    <OrgFilterCombobox
+                      value={newEmploymentStatus}
+                      onValueChange={setNewEmploymentStatus}
+                      options={employmentStatusOptions}
+                      placeholder="Select employment status"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
                     <Label>Reporting Manager</Label>
                     <ManagerCombobox
                       value={newManagerId}
