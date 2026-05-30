@@ -2255,6 +2255,205 @@ export type Database = {
           },
         ]
       }
+      increment_eligibility_audit: {
+        Row: {
+          action: string
+          assessment_year: string | null
+          company_label: string | null
+          config_id: string | null
+          criterion_id: string | null
+          id: string
+          performed_at: string
+          performed_by: string | null
+          previous_value: Json | null
+          revised_value: Json | null
+        }
+        Insert: {
+          action: string
+          assessment_year?: string | null
+          company_label?: string | null
+          config_id?: string | null
+          criterion_id?: string | null
+          id?: string
+          performed_at?: string
+          performed_by?: string | null
+          previous_value?: Json | null
+          revised_value?: Json | null
+        }
+        Update: {
+          action?: string
+          assessment_year?: string | null
+          company_label?: string | null
+          config_id?: string | null
+          criterion_id?: string | null
+          id?: string
+          performed_at?: string
+          performed_by?: string | null
+          previous_value?: Json | null
+          revised_value?: Json | null
+        }
+        Relationships: []
+      }
+      increment_eligibility_configs: {
+        Row: {
+          approved_at: string | null
+          approved_by: string | null
+          assessment_year: string
+          business_unit_id: string | null
+          category_id: string | null
+          company_id: string | null
+          copied_from_config_id: string | null
+          created_at: string
+          created_by: string | null
+          division_id: string | null
+          id: string
+          level_id: string | null
+          location_id: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          approved_at?: string | null
+          approved_by?: string | null
+          assessment_year: string
+          business_unit_id?: string | null
+          category_id?: string | null
+          company_id?: string | null
+          copied_from_config_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          division_id?: string | null
+          id?: string
+          level_id?: string | null
+          location_id?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          approved_at?: string | null
+          approved_by?: string | null
+          assessment_year?: string
+          business_unit_id?: string | null
+          category_id?: string | null
+          company_id?: string | null
+          copied_from_config_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          division_id?: string | null
+          id?: string
+          level_id?: string | null
+          location_id?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "increment_eligibility_configs_business_unit_id_fkey"
+            columns: ["business_unit_id"]
+            isOneToOne: false
+            referencedRelation: "business_units"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "increment_eligibility_configs_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "kra_categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "increment_eligibility_configs_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "increment_eligibility_configs_copied_from_config_id_fkey"
+            columns: ["copied_from_config_id"]
+            isOneToOne: false
+            referencedRelation: "increment_eligibility_configs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "increment_eligibility_configs_division_id_fkey"
+            columns: ["division_id"]
+            isOneToOne: false
+            referencedRelation: "divisions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "increment_eligibility_configs_level_id_fkey"
+            columns: ["level_id"]
+            isOneToOne: false
+            referencedRelation: "levels"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "increment_eligibility_configs_location_id_fkey"
+            columns: ["location_id"]
+            isOneToOne: false
+            referencedRelation: "locations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      increment_eligibility_criteria: {
+        Row: {
+          comparison_operator: string
+          config_id: string
+          created_at: string
+          criterion_key: string
+          criterion_name: string
+          description: string | null
+          effective_date: string
+          id: string
+          is_active: boolean
+          sort_order: number
+          threshold_value: number
+          unit_label: string | null
+          updated_at: string
+        }
+        Insert: {
+          comparison_operator: string
+          config_id: string
+          created_at?: string
+          criterion_key: string
+          criterion_name: string
+          description?: string | null
+          effective_date?: string
+          id?: string
+          is_active?: boolean
+          sort_order?: number
+          threshold_value: number
+          unit_label?: string | null
+          updated_at?: string
+        }
+        Update: {
+          comparison_operator?: string
+          config_id?: string
+          created_at?: string
+          criterion_key?: string
+          criterion_name?: string
+          description?: string | null
+          effective_date?: string
+          id?: string
+          is_active?: boolean
+          sort_order?: number
+          threshold_value?: number
+          unit_label?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "increment_eligibility_criteria_config_id_fkey"
+            columns: ["config_id"]
+            isOneToOne: false
+            referencedRelation: "increment_eligibility_configs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       kpi_audit_logs: {
         Row: {
           action: string
