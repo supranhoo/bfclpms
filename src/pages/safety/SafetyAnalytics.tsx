@@ -9,6 +9,7 @@ import { KpiDrillDownDialog, type DrillKey } from '@/components/safety/analytics
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { SafetySkeletonBlock } from '@/components/safety/SafetySkeletonBlock';
 import {
   BarChart3, RefreshCw, Loader2, Download, AlertTriangle,
   CheckCircle2, GraduationCap, ClipboardCheck, FileSignature, Activity, ArrowLeft,
@@ -70,8 +71,8 @@ export default function SafetyAnalytics() {
 
   if (isLoading || !data || !totals) {
     return (
-      <div className="flex items-center justify-center py-16 text-muted-foreground">
-        <Loader2 className="h-5 w-5 animate-spin mr-2" /> Loading analytics…
+      <div className="max-w-6xl mx-auto">
+        <SafetySkeletonBlock variant="detail" />
       </div>
     );
   }

@@ -10,6 +10,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { ArrowLeft, Loader2, Play, CheckCircle2, ClipboardList, Plus } from 'lucide-react';
+import { SafetySkeletonBlock } from '@/components/safety/SafetySkeletonBlock';
 import {
   useDrill,
   useDrillFindings,
@@ -45,8 +46,8 @@ export default function SafetyDrillDetail() {
 
   if (isLoading || !drill) {
     return (
-      <div className="py-10 flex items-center justify-center text-muted-foreground">
-        <Loader2 className="h-4 w-4 animate-spin mr-2" /> Loading…
+      <div className="p-3 sm:p-6 max-w-5xl mx-auto">
+        <SafetySkeletonBlock variant="detail" />
       </div>
     );
   }
