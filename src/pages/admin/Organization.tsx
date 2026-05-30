@@ -1044,6 +1044,7 @@ export default function Organization() {
                   { key: 'pmsGrades', label: 'PMS Grades' },
                   { key: 'levels', label: 'Levels' },
                   { key: 'locations', label: 'Locations' },
+                  { key: 'employeeCategories', label: 'Employee Categories' },
                 ].map(item => (
                   <div key={item.key} className="flex items-center gap-2">
                     <Checkbox
