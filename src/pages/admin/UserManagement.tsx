@@ -444,6 +444,7 @@ export default function UserManagement() {
       reporting_manager_id?: string;
       company_id?: string;
       portal_access?: boolean;
+      group_doj?: string;
     }) => {
       const { data: session } = await supabase.auth.getSession();
       
@@ -458,6 +459,7 @@ export default function UserManagement() {
           reporting_manager_id: data.reporting_manager_id || undefined,
           company_id: data.company_id || undefined,
           portal_access: data.portal_access,
+          group_doj: data.group_doj || undefined,
         },
       });
 
