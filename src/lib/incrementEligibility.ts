@@ -36,6 +36,10 @@ export interface EvaluationResult {
   eligible: boolean;
   failed: FailedCriterion[];
   evaluatedAt: string; // ISO date used as Date of Validation
+  /** True when the employee was bypassed via a per-AY exclusion row. */
+  excluded?: boolean;
+  /** Reason captured on the exclusion row, when applicable. */
+  exclusion_reason?: string | null;
 }
 
 function breaches(actual: number, op: ComparisonOperator, threshold: number): boolean {
@@ -55,12 +59,46 @@ function breaches(actual: number, op: ComparisonOperator, threshold: number): bo
   }
 }
 
+/**
+ * Evaluate increment eligibility for one employee against the active criteria.
+ *
+ * Per-AY exclusions: pass `options.employeeId`, `options.assessmentYear`, and
+ * `options.exclusions` (a Set keyed by `${employeeId}|${assessmentYear}`). When
+ * that key is present, criteria evaluation is short-circuited and the employee
+ * is returned as eligible (excluded). Exclusions NEVER apply across years —
+ * the assessmentYear must match exactly.
+ */
 export function evaluateIncrementEligibility(
   metrics: Record<string, number | null | undefined>,
   criteria: EligibilityCriterion[],
   validationDate: Date = new Date(),
+  options?: {
+    employeeId?: string;
+    assessmentYear?: string;
+    exclusions?: Set<string>;
+    exclusionReasons?: Map<string, string | null>;
+  },
 ): EvaluationResult {
   const validationISO = validationDate.toISOString().slice(0, 10);
+
+  // Per-AY exclusion short-circuit.
+  if (
+    options?.employeeId &&
+    options?.assessmentYear &&
+    options?.exclusions
+  ) {
+    const key = `${options.employeeId}|${options.assessmentYear}`;
+    if (options.exclusions.has(key)) {
+      return {
+        eligible: true,
+        failed: [],
+        evaluatedAt: validationISO,
+        excluded: true,
+        exclusion_reason: options.exclusionReasons?.get(key) ?? null,
+      };
+    }
+  }
+
   const failed: FailedCriterion[] = [];
 
   for (const c of criteria) {
