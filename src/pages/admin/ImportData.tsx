@@ -848,6 +848,9 @@ export default function ImportData() {
               rowErrs.push(`Employee Status '${row.employeeStatus}' is invalid (use Active or Inactive)`);
             }
           }
+          if (row.groupDoj === 'INVALID') {
+            rowErrs.push("Group Date of Joining (GDOJ) is invalid — use yyyy-MM-dd or dd/MM/yyyy");
+          }
           if (rowErrs.length > 0) {
             perRowErrors.set(index, rowErrs);
           }
