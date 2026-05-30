@@ -1,89 +1,60 @@
 
-## 1. Assumptions
-- Org-wide rollout: every authenticated employee (any role, any module access) must be able to file a safety incident from `/safety/incidents/new`, online or offline.
-- Current failure is reproducible: direct browser INSERT into `public.safety_incidents` intermittently fails with `42501` RLS violation even though the policy text (`auth.uid() IS NOT NULL AND reporter_id = auth.uid()`) and BEFORE trigger look correct in the live DB.
-- Root cause (per the completed 5-Why RCA): the write path depends on `auth.uid()` being resolvable at `WITH CHECK` evaluation time AND on the client sending a `reporter_id` that matches it. Any mismatch (stale JWT propagation, offline-queued payload submitted under a different session, profile-id vs auth-id confusion, claim GUC not present on the request connection) surfaces as an RLS violation with no diagnostic.
-- Fix must be additive and reversible — no destructive schema changes, existing incident rows untouched.
+## Goal
+Make the Safety module visible to every authenticated employee, matching the org-wide rollout directive that "every employee must be able to raise incident reports regardless of role". Role-based permissions inside Safety (officer/BU head/etc.) remain unchanged — only the **visibility gate** is opened.
 
-## 2. Clarifications
-None blocking. The RCA already confirmed: login present, grants present, profile active, single permissive INSERT policy, trigger attached, no failed rows persisted. Proceeding with the server-authoritative submission path that the RCA recommended.
+## Root Cause Recap
+`public.has_safety_module_access(uid)` currently returns true only if the user is a PMS admin, has a `safety_module_access` row, or has a `safety_user_roles` row. Regular employees match none of these, so `useModules` hides the Hub card and `SafetyModuleRoute` redirects them to `/home`.
 
-## 3. Risk & Impact Report
-- **Data Impact:** No schema break. Adds one `SECURITY DEFINER` RPC (`public.report_safety_incident`). Existing `safety_incidents` table, columns, triggers, and SLA view unchanged. Idempotency key `client_submission_id` continues to be the dedup anchor.
-- **Workflow Impact:** Incident reporting becomes universal for any authenticated user — matches the stated rollout policy. Stage transitions, RCA/CAPA, closure, SELECT/UPDATE/DELETE gates remain role-scoped and unchanged.
-- **UI/UX Impact:** None visible. The new-incident form and offline queue keep their current UX; only the submission call site swaps from `.from('safety_incidents').insert(...)` to `.rpc('report_safety_incident', ...)`. Toasts, validation, evidence upload flow preserved.
-- **Regression Risk:** Medium → contained. Risk areas: (a) idempotency on retry, (b) offline queue flush, (c) evidence upload using returned `id`, (d) incident-number generation. Mitigated by keeping `client_submission_id` UNIQUE and the existing BEFORE INSERT trigger as the numbering/SLA source of truth, and by adding live insert-path tests (not just SQL-text tests).
-- **Scalability Impact:** Single-row insert per submission; RPC is O(1). No N+1, no fan-out. Evidence upload loop unchanged. No new indexes required.
-- **Auditability:** Reporter identity is derived from the verified JWT inside the RPC (`auth.uid()`), never trusted from the client payload. Impersonation surface is removed at the API boundary, not just at the policy boundary.
-- **Mitigation Plan:** (1) Keep the existing restrictive INSERT policy in place as a defence-in-depth net. (2) Add a runtime regression test that actually performs an insert through PostgREST as an authenticated user — closes the test gap identified in the RCA. (3) Provide a single rollback migration that drops the RPC and restores the direct-insert call site.
+## Risk & Impact Report
+- **Data Impact:** None. No schema change. Only the body of one SECURITY DEFINER function changes.
+- **Workflow Impact:** Every authenticated user gains visibility of the Safety Hub card and `/safety/*` routes. Internal Safety role checks (`has_safety_role`, RLS on `safety_incidents`, `safety_user_roles`, etc.) are unchanged, so privileged actions (closure approvals, RBAC management, audit log access) remain gated correctly.
+- **UI/UX:** Safety card appears in Module Hub for all users. Pages that require a Safety role (Users management, SLA monitor, audit log) will still deny access via their own RLS / role checks — users who land there see empty states or "no access" messages handled by existing components. Incident reporting page (the universal entry) becomes reachable.
+- **Regression Risk:** Low. The function is only used by `useModules` (Hub card filter) and `SafetyModuleRoute` (route guard). Both already exist; only their boolean answer flips for non-admin users.
+- **Scalability:** O(1) — function returns `true` immediately for any authenticated user.
+- **Mitigation:** Keep the function signature identical; only widen the return condition. Add a regression test that asserts a plain authenticated user (no safety role, no module_access row, not a PMS admin) gets `true` from the RPC.
 
-## 4. Step-by-step Plan
+## Change (single migration)
 
-```text
-[Client form / offline queue]
-        │  payload (no reporter_id trusted)
-        ▼
-supabase.rpc('report_safety_incident', { ... })
-        │  SECURITY DEFINER
-        ▼
-public.report_safety_incident(p_payload jsonb)
-  1. v_uid := auth.uid();  RAISE if NULL
-  2. dedup on (v_uid, client_submission_id) → return existing row if found
-  3. INSERT into safety_incidents with reporter_id := v_uid
-  4. BEFORE INSERT trigger stamps incident_number, SLA deadlines
-  5. RETURN { id, incident_number, reused }
-        │
-        ▼
-Client uploads evidence to storage + writes safety_incident_evidence rows
-(unchanged from today; uses returned id)
+Replace `public.has_safety_module_access(uuid)` with:
+
+```sql
+CREATE OR REPLACE FUNCTION public.has_safety_module_access(_user_id uuid)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  -- Org-wide rollout: Safety module is visible to every authenticated user.
+  -- Role-based actions inside Safety remain gated by has_safety_role() and
+  -- per-table RLS policies; this function only controls Hub visibility and
+  -- the /safety/* route guard.
+  SELECT _user_id IS NOT NULL;
+$$;
 ```
 
-### Steps + verification
+`GRANT EXECUTE` to `authenticated` is preserved (no change).
 
-1. **Add RPC `public.report_safety_incident(p_payload jsonb) RETURNS jsonb`** — `SECURITY DEFINER`, `SET search_path = public`, owned so it can write. Resolves caller via `auth.uid()`, raises `insufficient_privilege` if NULL, dedups on `(reporter_id, client_submission_id)`, inserts with server-stamped `reporter_id`, returns `{ id, incident_number, reused }`. Grant `EXECUTE ... TO authenticated`. Revoke from `anon`.
-   - Verify: SQL unit test in migration comment + live regression test in step 4.
-2. **Keep the existing restrictive INSERT policy** on `safety_incidents` unchanged as defence-in-depth. The RPC writes as definer so the policy is bypassed for this entrypoint only; direct table inserts (legacy or rogue clients) remain gated.
-   - Verify: `pg_policies` snapshot in migration; matrix doc update.
-3. **Refactor `src/lib/safetyIncidentSubmit.ts`** to call the RPC instead of `.from('safety_incidents').insert(...)`. Drop the now-redundant pre-insert lookup (the RPC handles dedup atomically). Evidence upload loop is unchanged — it uses the returned `id`. `useReportSafetyIncident` in `src/hooks/useSafetyIncidents.ts` already routes through this codepath via the form; keep its mutation but switch its insert to the RPC for parity with the offline flush path so there is exactly one server entrypoint.
-   - Verify: type-check, unit test, live click-through on `/safety/incidents/new`.
-4. **Tests** (closes the RCA's identified test gap):
-   - Extend `src/test/safety/incidentReportRlsPolicy.test.ts` to assert the migration creates `report_safety_incident` with `SECURITY DEFINER`, grants EXECUTE to authenticated, and revokes from anon.
-   - Add a new live test `src/test/safety/incidentReportRpc.test.ts` that signs in via the anon key as a seeded test user and calls the RPC end-to-end — proving the actual insert path works (not just the SQL text).
-   - Add a negative test: unauthenticated call → RPC raises; client-supplied `reporter_id` is ignored (server stamps `auth.uid()`).
-   - Add an idempotency test: same `client_submission_id` returns the same row with `reused: true`.
-5. **Docs + Policy + Memory sync (mandatory SSOT):**
-   - `DOCUMENTATION.md` → new section + Version History bump documenting the server-authoritative submission entrypoint and why direct-insert was retired for new code paths.
-   - `POLICY.md` → §Phase18-Safety: "Incident reports MUST be created via `public.report_safety_incident`. Browser code MUST NOT insert into `public.safety_incidents` directly. Reporter identity is server-derived from the verified JWT and is never trusted from the client payload."
-   - `docs/safety/phase1/rls-matrix.md` → add §F-RLS-05 noting the SECURITY DEFINER entrypoint and that the restrictive INSERT policy is retained as defence-in-depth.
-   - `mem/features/safety/incident-report-open-insert.md` → update to point at the RPC as the canonical entrypoint while noting the policy is unchanged.
-   - New memory `mem/features/safety/incident-submission-rpc.md` describing the contract, dedup key, and rollback.
+## What stays the same
+- `safety_user_roles` table, `has_safety_role()`, and every Safety RLS policy.
+- `safety_module_access` table (kept for backwards compatibility and future per-user revoke scenarios; no longer the gate).
+- `SafetyModuleRoute` and `useModules` code — they keep calling the RPC, just get `true` more often.
+- Incident submission RPC (`report_safety_incident`) and its RLS — unchanged.
 
-## 5. UI Changes
-Not Applicable. The form, validation, severity selector, evidence picker, offline banner, and success toast remain visually and behaviorally identical. Only the network call underneath changes.
+## Tests
+- `src/test/safety/safetyModuleAccess.test.ts` (new): assert the RPC returns `true` for a freshly created user with no safety role and no `safety_module_access` row; returns `false` for `null`.
+- Extend `src/test/safetyShellIsolation.test.tsx` (or co-locate) to lock the universal-access invariant at the SQL-text level.
 
-## 6. Implementation (to be executed after approval)
-- 1 migration: `report_safety_incident` RPC + GRANT/REVOKE.
-- 1 frontend file edited: `src/lib/safetyIncidentSubmit.ts`.
-- 1 frontend file edited: `src/hooks/useSafetyIncidents.ts` (`useReportSafetyIncident` switched to RPC for entrypoint parity).
-- Tests + docs as listed above.
-No other files touched.
+## Docs & Memory
+- `DOCUMENTATION.md` → bump version, add Phase 19 entry "Safety module universal visibility".
+- `POLICY.md` → §Safety-Access: replace beta opt-in clause with org-wide rollout clause.
+- `mem/architecture/safety/rbac.md` → update the "Module access" bullet to reflect universal visibility + role-gated actions.
+- `mem/index.md` → adjust Safety core line.
 
-## 7. Tests
-- Static: migration-text assertions for RPC definition, GRANT, REVOKE, SECURITY DEFINER, search_path pinning.
-- Runtime: live insert via RPC as authenticated user (happy path).
-- Runtime: unauthenticated call rejected.
-- Runtime: client-supplied `reporter_id` is overridden by `auth.uid()`.
-- Runtime: idempotent retry returns same row with `reused: true`.
-- Regression: offline queue flush submits via the same RPC.
+## Rollback
+Single migration reverts the function body to the previous three-condition form. No data migration needed.
 
-## 8. DOCUMENTATION.md updates
-- New subsection "Safety Incident Submission (Server-Authoritative Entrypoint)" describing the RPC contract, dedup key, evidence pipeline, and why direct table inserts were retired for the new-incident path.
-- Append to "Version History": `vX.Y — Phase 18 Safety: server-authoritative incident submission RPC; universal reporting access verified for org-wide rollout.`
-
-## 9. POLICY.md updates
-- New §Phase18-Safety: universal incident-reporting access; submission MUST go through `public.report_safety_incident`; `reporter_id` is server-stamped; no direct browser INSERTs into `safety_incidents`; impersonation surface eliminated at the API boundary.
-
-## 10. Post-implementation notes
-- **Rollback strategy:** revert `src/lib/safetyIncidentSubmit.ts` + `useReportSafetyIncident` to the prior direct-insert form and drop the RPC in a single migration. No data migration needed — `safety_incidents` rows created via the RPC are schema-identical to rows created via direct insert.
-- **Backup coverage:** No new tables, so the auto-discovered `public.get_backup_table_order()` set is unaffected. No denylist change required.
-- **Why this fix and not "patch the policy again":** Two prior fixes adjusted policy text and the BEFORE trigger but the failure persists at runtime. The RCA showed the test suite only validated migration text, never live insert behavior. Moving the write behind a SECURITY DEFINER RPC removes the entire class of `auth.uid()`-at-WITH-CHECK-time failures while preserving anti-impersonation, idempotency, numbering, and SLA logic. The restrictive INSERT policy stays as a belt-and-braces guard against rogue direct inserts.
+## Out of scope (intentionally)
+- No backfill of `safety_user_roles` (avoids granting accidental privileges).
+- No changes to who can manage RBAC, see audit logs, or approve closures.
+- No UI copy changes beyond what's already wired.

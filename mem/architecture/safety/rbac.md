@@ -8,5 +8,5 @@ type: feature
 - Check helper: has_safety_role(uid, role, bu?) — SECURITY DEFINER, used in every Safety RLS policy to avoid recursion. Mirrors PMS has_role.
 - Convenience: has_any_safety_role(uid) for shell guards.
 - Audit: every grant/revoke logged to public.safety_audit_log via trigger; only admin role can read.
-- Module access: has_safety_module_access(uid) returns true if explicit row in safety_module_access OR ANY safety_user_roles row exists. Means granting a role auto-shows the Hub card.
+- Module access (Phase 19, org-wide rollout): has_safety_module_access(uid) returns true for EVERY authenticated user. Safety Hub card and /safety/* routes are universally visible so any employee can raise an incident. Role-based actions inside Safety (closure approvals, RBAC mgmt, audit log, SLA monitor, etc.) remain gated by has_safety_role() and per-table RLS. The safety_module_access table is retained for backwards compatibility but is no longer the visibility gate.
 - UI: /safety/settings/users (SafetyUsers page) — admins grant/revoke; everyone sees their own assignments.
