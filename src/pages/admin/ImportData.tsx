@@ -734,6 +734,20 @@ export default function ImportData() {
       }
       return '';
     };
+    // Like getValue but returns the RAW cell value (preserves numeric Excel serials for dates).
+    const getRaw = (possibleNames: string[]): any => {
+      for (const name of possibleNames) {
+        for (const key of Object.keys(rawRow)) {
+          if (key.toLowerCase().replace(/[\s_-]/g, '') === name.toLowerCase().replace(/[\s_-]/g, '')) {
+            return rawRow[key];
+          }
+        }
+      }
+      return undefined;
+    };
+
+    const gdojRaw = getRaw(['gdoj', 'groupDoj', 'group_doj', 'groupDateOfJoining', 'group_date_of_joining']);
+    const gdojNorm = normalizeDateCell(gdojRaw);
 
     return {
       employeeCode: getValue(['employeeCode', 'employeecode', 'employee_code', 'empCode', 'empcode', 'emp_code', 'newCode', 'newcode', 'new_code', 'code', 'id', 'empId', 'empid', 'emp_id']),
@@ -752,6 +766,7 @@ export default function ImportData() {
       role: getValue(['role', 'appRole', 'approle', 'app_role', 'userRole', 'userrole', 'user_role', 'systemRole', 'systemrole', 'system_role']),
       portalAccess: getValue(['portalAccess', 'portalaccess', 'portal_access', 'loginAccess', 'loginaccess', 'login_access']),
       employeeStatus: getValue(['employeeStatus', 'employee_status', 'status', 'active', 'isActive', 'is_active']),
+      groupDoj: gdojNorm === 'INVALID' ? 'INVALID' : (gdojNorm || undefined),
     };
   };
 
