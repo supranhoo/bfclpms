@@ -104,7 +104,6 @@ export function useReportSafetyIncident() {
       if (!user) throw new Error('Not authenticated');
       const payload = {
         ...input,
-        reporter_id: user.id,
         // crypto.randomUUID is available in modern browsers + RN; falls back to
         // server default if missing.
         client_submission_id:
@@ -112,13 +111,14 @@ export function useReportSafetyIncident() {
             ? crypto.randomUUID()
             : undefined),
       };
-      const { data, error } = await supabase
-        .from('safety_incidents')
-        .insert(payload as never)
-        .select('id, incident_number')
-        .single();
+      // Phase 18: route through SECURITY DEFINER RPC. reporter_id is stamped
+      // server-side from auth.uid(); never trusted from the client payload.
+      const { data, error } = await supabase.rpc(
+        'report_safety_incident' as never,
+        { p_payload: payload as never } as never,
+      );
       if (error) throw error;
-      return data as { id: string; incident_number: string };
+      return data as unknown as { id: string; incident_number: string; reused?: boolean };
     },
     onSuccess: (res) => {
       toast.success(`Incident ${res.incident_number} reported`);
