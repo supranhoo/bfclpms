@@ -42,8 +42,9 @@ describe('safety_incidents INSERT policy (Phase 16)', () => {
   });
 
   it('does NOT re-introduce has_safety_module_access on the INSERT branch', () => {
+    // Capture the CREATE POLICY block only (stop at the closing ");" of WITH CHECK)
     const match = sql.match(
-      /CREATE\s+POLICY[\s\S]*"Authenticated users can report incidents"[\s\S]*?;/i,
+      /CREATE\s+POLICY[\s\S]*?"Authenticated users can report incidents"[\s\S]*?WITH\s+CHECK\s*\([^;]*\)\s*;/i,
     );
     expect(match).not.toBeNull();
     expect(match![0]).not.toMatch(/has_safety_module_access/i);
