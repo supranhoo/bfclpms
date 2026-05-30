@@ -3306,3 +3306,19 @@ Governance source: `docs/safety-integration-governance.md` §Phase 5.
 4. **Feature flag & rollback unchanged.** `safety_settings.ui_emergency_overlay_v1` still gates the FAB. Rollback = flip flag to `false`; no migration. Removing the feature entirely now also requires no `safety_settings` cleanup (the JSON row is already gone).
 
 5. **Phases 6 (admin/import) and 7 (analytics polish)** remain blocked behind their own gates per §Phase Execution Order.
+
+## §Phase9-Safety — Offline Inspector Retry + Conflict UX (codified 2026-05-30)
+
+1. **Flag.** Behind `safety_settings.ui_offline_inspector_retry_v2` (boolean JSONB, default `false`). Admin or `safety_head` flips it via the existing Safety Settings JSON editor — no bespoke settings UI. With the flag OFF, the Phase 4 inspector renders byte-identical to v2.66.13.21.
+
+2. **Zero new writer contracts.** The single-item retry path MUST reuse the existing `submitSafetyIncident` + `deletePendingIncident` + `recordPendingFailure` triple through `useSafetyOfflineSync().flushOne(id)`. New direct calls to `safety_incident_evidence.insert`, `safety-media.upload`, the `transition_safety_incident` RPC, `enqueuePendingIncident`, or `recordPendingFailure` from the inspector are forbidden — enforced by `src/test/safety/offlineInspectorNoNewWriters.test.ts`.
+
+3. **Idempotency preserved.** The `client_submission_id` keying and the `UNIQUE(reporter_id, client_submission_id)` server guard are FROZEN. A retry never invents a new key; conflicts surface as the "Already received" badge with Retry disabled and Discard recommended.
+
+4. **Error classifier.** Categorisation lives in pure helper `src/lib/safetyOfflineErrorClassify.ts` (no I/O, no imports). Allowed classes: `none | network | conflict | server | unknown`. Attempt-severity buckets: `fresh` (≤2), `warning` (3–5), `critical` (≥6). Adjustments to thresholds MUST be a single PR with updated tests; do not encode per-customer overrides.
+
+5. **Destructive confirmation.** Per-item Discard under v2 MUST go through `ConfirmDestructiveDialog` (Core rule). Retry-all + legacy single-tap Discard fall back to the existing flow when the flag is OFF.
+
+6. **Rollback contract.** Setting `ui_offline_inspector_retry_v2 = false` instantly restores Phase 4 UX. No data migration, no orphaned columns, no cache stampede. Removing the feature entirely = revert the relevant commit + delete the `safety_settings` row.
+
+7. **Phases 6 (admin/import) and 7 (analytics polish)** remain blocked behind their own gates per §Phase Execution Order.
