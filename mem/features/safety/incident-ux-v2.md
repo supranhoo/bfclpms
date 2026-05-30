@@ -24,3 +24,12 @@ type: feature
 
 ## Phase gate
 - Phase 4+ (offline/evidence, emergency, admin/import, analytics polish, stabilization) remain blocked per `docs/safety-integration-governance.md`.
+
+## Verification status (2026-05-30)
+- Flag `ui_incident_v2` flipped to `true` in prod via key/value row in `safety_settings` (NOT the same-named column — see below).
+- Code path is row-based (`settings.find(r => r.key === 'ui_incident_v2')`) — confirmed in `SafetyIncidentDetail.tsx` and `IncidentStageHeader.tsx`.
+- Visual end-to-end check on `/safety/incidents/:id` skipped — `safety_incidents` table is empty in prod and a test-seed was declined.
+
+## Known schema debt (deferred to Phase 8)
+- Migration `20260530042159_*.sql` added unused `ui_incident_v2` BOOLEAN and `incident_stage_copy` JSONB **columns** to `safety_settings`. The table is a key/value store, so runtime config actually lives in **rows** with those keys (already seeded). The columns are NULL on every row and read by no code.
+- DO NOT use the columns. Treat them as dead schema. Drop them in Phase 8 stabilization (additive `ALTER TABLE ... DROP COLUMN IF EXISTS`), not before — explicit user decision on 2026-05-30 was "leave as-is".
