@@ -3360,3 +3360,8 @@ Governance source: `docs/safety-integration-governance.md` §Phase 5.
 - `ui_safety_sla_v2 = true` is now the default-on state for this tenant (v2.66.13.27).
 - §Phase11-Safety invariants remain in force (additive only, zero writers, classification mirrors DB view, engine ownership unchanged).
 - Rollback at the tenant level remains a single JSON edit on `safety_settings.ui_safety_sla_v2 → false`.
+
+## §Phase13-Safety — Analytics v2 production enablement (codified 2026-05-30)
+
+- `ui_safety_analytics_v2 = true` is now the default-on state for this tenant (v2.66.13.28).
+- §Phase10-Safety invariants remain in force: additive-only v2 sections (trend chart, BU heatmap, KPI drill-down dialog), zero new writers, all aggregation lives in pure helpers (`src/lib/safetyAnalytics.ts`), presentational components stay dumb, rollback is a single JSON edit on `safety_settings.ui_safety_analytics_v2 → false`.
