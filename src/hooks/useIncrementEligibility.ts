@@ -457,3 +457,113 @@ export function useEligibilityMasters() {
     },
   });
 }
+
+/* ------------------- exclusions (per-AY exemptions) ------------------- */
+
+/**
+ * Per-AY employee exclusions for a given Increment Eligibility config.
+ * Exclusions ALWAYS apply to a single assessment_year only — never across years.
+ * Pass `assessmentYear` to filter to one AY (default UX); omit to read all years
+ * (read-only "Show all years" mode).
+ */
+export function useEligibilityExclusions(
+  configId: string | null | undefined,
+  assessmentYear?: string,
+) {
+  return useQuery({
+    enabled: !!configId,
+    queryKey: ['increment-eligibility-exclusions', configId, assessmentYear ?? '__all__'],
+    queryFn: async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let q: any = supabase
+        .from('increment_eligibility_exclusions')
+        .select('*, profiles:employee_id(full_name, employee_code, departments:department_id(name))')
+        .eq('config_id', configId!)
+        .order('added_at', { ascending: false });
+      if (assessmentYear) q = q.eq('assessment_year', assessmentYear);
+      const { data, error } = await q;
+      if (error) throw error;
+      return (data as EligibilityExclusionRow[]) ?? [];
+    },
+  });
+}
+
+/**
+ * Bulk-add exclusions. All rows share the same (config, AY, reason).
+ * Duplicates on (config, employee, AY) are silently skipped via upsert
+ * `ignoreDuplicates`. Returns `{ requested, inserted, skipped }` for toast UX.
+ */
+export function useAddEligibilityExclusions() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  return useMutation({
+    mutationFn: async (args: {
+      config_id: string;
+      assessment_year: string;
+      employee_ids: string[];
+      reason?: string | null;
+    }) => {
+      const userRes = await supabase.auth.getUser();
+      const uid = userRes.data.user?.id ?? null;
+      const rows = args.employee_ids.map((eid) => ({
+        config_id: args.config_id,
+        employee_id: eid,
+        assessment_year: args.assessment_year,
+        reason: args.reason?.trim() || null,
+        added_by: uid,
+      }));
+      const { data, error } = await supabase
+        .from('increment_eligibility_exclusions')
+        .upsert(rows, {
+          onConflict: 'config_id,employee_id,assessment_year',
+          ignoreDuplicates: true,
+        })
+        .select('id');
+      if (error) throw error;
+      const inserted = data?.length ?? 0;
+      return {
+        requested: rows.length,
+        inserted,
+        skipped: rows.length - inserted,
+        assessment_year: args.assessment_year,
+      };
+    },
+    onSuccess: (res, vars) => {
+      qc.invalidateQueries({ queryKey: ['increment-eligibility-exclusions', vars.config_id] });
+      qc.invalidateQueries({ queryKey: ['increment-eligibility-audit', vars.config_id] });
+      const parts: string[] = [];
+      parts.push(`${res.inserted} added`);
+      if (res.skipped > 0) parts.push(`${res.skipped} already excluded for ${res.assessment_year}`);
+      toast({ title: 'Exclusions saved', description: parts.join(' · ') });
+    },
+    onError: (e: Error) =>
+      toast({ title: 'Failed to add exclusions', description: e.message, variant: 'destructive' }),
+  });
+}
+
+/** Removes a single exclusion row (affects only its specific AY). */
+export function useRemoveEligibilityExclusion() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  return useMutation({
+    mutationFn: async (args: { id: string; config_id: string }) => {
+      const { error } = await supabase
+        .from('increment_eligibility_exclusions')
+        .delete()
+        .eq('id', args.id);
+      if (error) throw error;
+    },
+    onSuccess: (_d, vars) => {
+      qc.invalidateQueries({ queryKey: ['increment-eligibility-exclusions', vars.config_id] });
+      qc.invalidateQueries({ queryKey: ['increment-eligibility-audit', vars.config_id] });
+      toast({ title: 'Exclusion removed' });
+    },
+    onError: (e: Error) =>
+      toast({ title: 'Remove failed', description: e.message, variant: 'destructive' }),
+  });
+}
+
+/** Stable cache-key helper for the evaluator: `${employeeId}|${assessmentYear}`. */
+export function exclusionKey(employeeId: string, assessmentYear: string): string {
+  return `${employeeId}|${assessmentYear}`;
+}
