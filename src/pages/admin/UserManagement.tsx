@@ -359,6 +359,14 @@ export default function UserManagement() {
   const designationOptions = useMemo(() => (designationsList || []).map(d => ({ value: d.name, label: d.name })), [designationsList]);
   const pmsGradeOptions = useMemo(() => (pmsGradesList || []).map(g => ({ value: g.name, label: g.name })), [pmsGradesList]);
   const employeeCategoryOptions = useMemo(
+    () => (employeeCategoriesList || []).map((c: any) => ({ value: c.name, label: c.name })),
+    [employeeCategoriesList]
+  );
+  const employmentStatusOptions = useMemo(
+    () => (employmentStatusesList || []).map((s: any) => ({ value: s.name, label: s.name })),
+    [employmentStatusesList]
+  );
+  const employeeCategoryOptions = useMemo(
     () => (employeeCategoriesList || []).filter((c: any) => c.is_active !== false).map((c: any) => ({ value: c.name, label: c.name })),
     [employeeCategoriesList],
   );
