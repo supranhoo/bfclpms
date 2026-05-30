@@ -768,6 +768,8 @@ export default function ImportData() {
       location: getValue(['location', 'workLocation', 'worklocation', 'work_location', 'site', 'plantLocation', 'plantlocation', 'plant_location']),
       pmsGrade: getValue(['pmsGrade', 'pmsgrade', 'pms_grade', 'grade']),
       level: getValue(['level', 'employeeLevel', 'employee_level', 'lvl']),
+      employeeCategory: getValue(['employeeCategory', 'employeecategory', 'employee_category', 'category']),
+      employmentStatus: getValue(['employmentStatus', 'employmentstatus', 'employment_status']),
       managerEmployeeId: getValue(['managerEmployeeId', 'manageremployeeid', 'manager_employee_id', 'managerId', 'managerid', 'manager_id', 'reportingTo', 'reportingto', 'reporting_to', 'reportsTo', 'reportsto', 'reports_to']),
       managerName: getValue(['managerName', 'managername', 'manager_name', 'reportingManager', 'reportingmanager', 'reporting_manager', 'supervisor']),
       role: getValue(['role', 'appRole', 'approle', 'app_role', 'userRole', 'userrole', 'user_role', 'systemRole', 'systemrole', 'system_role']),
