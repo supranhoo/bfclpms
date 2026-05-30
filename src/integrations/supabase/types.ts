@@ -7082,21 +7082,27 @@ export type Database = {
       safety_settings: {
         Row: {
           description: string | null
+          incident_stage_copy: Json | null
           key: string
+          ui_incident_v2: boolean | null
           updated_at: string
           updated_by: string | null
           value: Json
         }
         Insert: {
           description?: string | null
+          incident_stage_copy?: Json | null
           key: string
+          ui_incident_v2?: boolean | null
           updated_at?: string
           updated_by?: string | null
           value: Json
         }
         Update: {
           description?: string | null
+          incident_stage_copy?: Json | null
           key?: string
+          ui_incident_v2?: boolean | null
           updated_at?: string
           updated_by?: string | null
           value?: Json
