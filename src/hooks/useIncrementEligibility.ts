@@ -146,7 +146,8 @@ export function useEligibilityVersionHistory(scope: EligibilityScope | null) {
         ['category_id', 'category_id'],
         ['location_id', 'location_id'],
       ];
-      let q = supabase.from('increment_eligibility_configs').select('*');
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let q: any = supabase.from('increment_eligibility_configs').select('*');
       for (const [k, col] of cols) {
         const v = scope[k];
         q = v ? q.eq(col, v) : q.is(col, null);
@@ -319,7 +320,7 @@ export function useUpsertCriterion() {
           .eq('id', row.id);
         if (error) throw error;
       } else {
-        const { error } = await supabase.from('increment_eligibility_criteria').insert(row);
+        const { error } = await supabase.from('increment_eligibility_criteria').insert([row]);
         if (error) throw error;
       }
     },
