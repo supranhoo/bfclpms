@@ -3374,6 +3374,14 @@ Governance source: `docs/safety-integration-governance.md` §Phase 5.
 - Guarded by `src/test/safety/offlineInspectorNoNewWriters.test.ts` and `src/test/safety/safetyOfflineErrorClassify.test.ts`.
 - Rollback = flip `ui_offline_inspector_retry_v2 = false`. Inspector reverts to the Phase 4 read-mostly + "Retry all" + simple per-item Discard layout instantly. No schema or data migration required.
 
+## §Phase15-Safety — Mobile polish pass (codified 2026-05-30)
+
+- Safety detail surfaces MUST use `SafetySkeletonBlock variant="detail"` instead of ad-hoc `Loader2` full-page spinners for their initial load state. Phase 15 brings the following pages into compliance: `SafetyIncidentDetail`, `SafetyAuditRunDetail`, `SafetyDrillDetail`, `SafetyAnalytics`.
+- Wizard / create pages MUST mount `SafetyStickyActionBar` for their primary submit action on mobile, with the in-card footer hidden behind `hidden md:flex` to avoid duplicate CTAs. Phase 15 brings `SafetyDrillNew` and `SafetyAuditRunNew` into compliance with the pattern already established by Permits/Incidents/Assets "new" pages.
+- In-button `Loader2` micro-spinners (per-action pending state on save/submit) remain the correct pattern and MUST NOT be replaced with skeletons.
+- Phase 15 introduces ZERO new files, ZERO database / RLS / RPC / writer-contract changes. Pure presentational consistency pass.
+- Regression: `src/test/safetyMobileLayout.test.tsx` and the full safety suite (46 tests) MUST stay green.
+
 ## §Phase13-Safety — Analytics v2 production enablement (codified 2026-05-30)
 
 - `ui_safety_analytics_v2 = true` is now the default-on state for this tenant (v2.66.13.28).

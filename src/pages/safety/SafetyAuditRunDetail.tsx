@@ -6,6 +6,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { ArrowLeft, Loader2, Send, ShieldCheck, AlertTriangle } from 'lucide-react';
+import { SafetySkeletonBlock } from '@/components/safety/SafetySkeletonBlock';
 import {
   useAuditRun, useAuditResponses, useAuditTemplate, useAuditTemplateItems,
   useUpsertResponse, useSubmitAuditRun, useReviewAuditRun,
@@ -61,8 +62,8 @@ export default function SafetyAuditRunDetail() {
 
   if (isLoading || !run || !template) {
     return (
-      <div className="flex items-center justify-center py-10 text-muted-foreground">
-        <Loader2 className="h-5 w-5 animate-spin mr-2" /> Loading audit…
+      <div className="p-3 sm:p-6 max-w-5xl mx-auto">
+        <SafetySkeletonBlock variant="detail" />
       </div>
     );
   }

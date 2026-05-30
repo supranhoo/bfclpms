@@ -10,6 +10,7 @@ import {
 } from '@/components/ui/select';
 import { Loader2, Siren } from 'lucide-react';
 import { useCreateDrill } from '@/hooks/useSafetyEmergency';
+import { SafetyStickyActionBar } from '@/components/safety/SafetyStickyActionBar';
 import {
   SAFETY_DRILL_TYPES,
   SAFETY_DRILL_TYPE_LABEL,
@@ -52,7 +53,7 @@ export default function SafetyDrillNew() {
   };
 
   return (
-    <div className="max-w-2xl mx-auto space-y-4">
+    <div className="max-w-2xl mx-auto space-y-4 pb-24 md:pb-0">
       <div className="flex items-center gap-3">
         <div className="p-2 rounded-lg bg-destructive/10 text-destructive">
           <Siren className="h-5 w-5" />
@@ -110,7 +111,7 @@ export default function SafetyDrillNew() {
               />
             </div>
           </div>
-          <div className="flex justify-end gap-2 pt-2">
+          <div className="hidden md:flex justify-end gap-2 pt-2">
             <Button variant="outline" onClick={() => nav('/safety/emergency')}>Cancel</Button>
             <Button onClick={submit} disabled={create.isPending}>
               {create.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
@@ -119,6 +120,14 @@ export default function SafetyDrillNew() {
           </div>
         </CardContent>
       </Card>
+
+      <SafetyStickyActionBar>
+        <Button variant="outline" onClick={() => nav('/safety/emergency')}>Cancel</Button>
+        <Button onClick={submit} disabled={create.isPending}>
+          {create.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+          Save
+        </Button>
+      </SafetyStickyActionBar>
     </div>
   );
 }

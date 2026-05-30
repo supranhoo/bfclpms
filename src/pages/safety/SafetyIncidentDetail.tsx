@@ -14,6 +14,7 @@ import { format } from 'date-fns';
 import { IncidentStageHeader } from '@/components/safety/IncidentStageHeader';
 import { IncidentRcaPanel } from '@/components/safety/IncidentRcaPanel';
 import { useSafetySettings } from '@/hooks/useSafetySettings';
+import { SafetySkeletonBlock } from '@/components/safety/SafetySkeletonBlock';
 
 export default function SafetyIncidentDetail() {
   const { id } = useParams<{ id: string }>();
@@ -24,8 +25,8 @@ export default function SafetyIncidentDetail() {
 
   if (isLoading) {
     return (
-      <div className="p-6 flex justify-center">
-        <Loader2 className="h-6 w-6 animate-spin text-primary" />
+      <div className="p-3 sm:p-6 max-w-6xl mx-auto">
+        <SafetySkeletonBlock variant="detail" />
       </div>
     );
   }
