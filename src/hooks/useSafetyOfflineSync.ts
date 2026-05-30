@@ -46,7 +46,8 @@ export function useSafetyOfflineSync() {
     }
   }, []);
 
-  const flushNow = useCallback(async () => {
+  /** Internal worker — flushes the user's queue, optionally restricted to one id. */
+  const flushInternal = useCallback(async (onlyId?: string) => {
     if (!user || isSyncing) return { sent: 0, failed: 0 };
     if (typeof navigator !== 'undefined' && !navigator.onLine) {
       return { sent: 0, failed: 0 };
@@ -59,7 +60,9 @@ export function useSafetyOfflineSync() {
       await pruneStalePending().catch(() => 0);
       const items = await listPendingIncidents();
       // Only flush this user's entries (multi-account on the same device).
-      const mine = items.filter((it) => it.reporter_id === user.id);
+      const mine = items.filter(
+        (it) => it.reporter_id === user.id && (!onlyId || it.id === onlyId),
+      );
 
       for (const it of mine) {
         try {
@@ -81,11 +84,14 @@ export function useSafetyOfflineSync() {
         }
       }
 
-      if (sent > 0) {
+      if (sent > 0 && !onlyId) {
         toast.success(`Synced ${sent} offline incident${sent > 1 ? 's' : ''}`);
         qc.invalidateQueries({ queryKey: ['safety'] });
+      } else if (sent > 0 && onlyId) {
+        toast.success('Synced queued incident');
+        qc.invalidateQueries({ queryKey: ['safety'] });
       }
-      if (failed > 0 && sent === 0) {
+      if (failed > 0 && sent === 0 && !onlyId) {
         toast.error(`Could not sync ${failed} pending incident${failed > 1 ? 's' : ''}`);
       }
     } finally {
@@ -94,6 +100,13 @@ export function useSafetyOfflineSync() {
     }
     return { sent, failed };
   }, [user, isSyncing, qc, refreshCount, compressionEnabled, compressionPolicy]);
+
+  const flushNow = useCallback(() => flushInternal(), [flushInternal]);
+  /** Phase 9: single-item retry. Reuses the exact submit + dedup + failure helpers. */
+  const flushOne = useCallback(
+    (id: string) => flushInternal(id),
+    [flushInternal],
+  );
 
   // Online/offline listeners + initial flush attempt.
   useEffect(() => {
@@ -127,5 +140,5 @@ export function useSafetyOfflineSync() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
 
-  return { pendingCount, isSyncing, isOnline, flushNow, refreshCount };
+  return { pendingCount, isSyncing, isOnline, flushNow, flushOne, refreshCount };
 }
