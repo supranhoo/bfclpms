@@ -3354,3 +3354,9 @@ Governance source: `docs/safety-integration-governance.md` §Phase 5.
 6. **Engine ownership.** The actual escalation logic remains in `public.run_safety_sla_escalations()` (SECURITY DEFINER), executed every 5 minutes by pg_cron and surfaced by the `check-safety-sla` edge fn. Phase 11 does NOT introduce new schedules or alter recipient logic.
 
 7. **Rollback.** Flip `ui_safety_sla_v2 = false`. No schema or data migration required.
+
+## §Phase12-Safety — SLA v2 production enablement (codified 2026-05-30)
+
+- `ui_safety_sla_v2 = true` is now the default-on state for this tenant (v2.66.13.27).
+- §Phase11-Safety invariants remain in force (additive only, zero writers, classification mirrors DB view, engine ownership unchanged).
+- Rollback at the tenant level remains a single JSON edit on `safety_settings.ui_safety_sla_v2 → false`.
