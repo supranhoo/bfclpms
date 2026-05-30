@@ -3228,3 +3228,25 @@ These rows are CORRECT and MUST NOT be removed at the DB layer — they are the 
 5. New audit `action` values that are pure trigger side-effects MUST be added to the `isSideEffect()` predicate in `src/lib/timelineGrouping.ts` and covered by a test in `src/lib/timelineGrouping.test.ts`.
 
 RCA anchor (2026-05-25): single Bulk HR PMS sign-off on Aakash Kumar Roy / April 2026 / Billing Communication produced 5 rows at the same timestamp (`BULK_STAGE_SIGNOFF_HR_PMS` + 2× `SUBMISSION_SCORE_CHANGED` from `safety_net_trigger` + `STATUS_TRANSITION` + `RECONCILE_STATUS`), rendered as 5 cards. Grouping reduced it to 1 card with a 4-child cascade — visually one event, audit trail intact.
+
+
+## §Phase3-Safety — Safety Governance Phase 3 (Incident UX v2, codified 2026-05-30)
+
+Governance source: `docs/safety-integration-governance.md` §Phase 3.
+
+1. Phase 3 is **UI-only**. The contract surface (`transition_safety_incident` RPC, `safety_incident_fsm_guard` trigger, `SAFETY_INCIDENT_STAGES` constant including the `rca` key, `client_submission_id` idempotency, `['safety',...]` cache prefix, `has_safety_role()` RLS gates) is frozen for this phase. Any PR that edits those surfaces is out of scope and must be rejected.
+
+2. The new layout is gated by `safety_settings.ui_incident_v2` (boolean JSONB value). Default is `false` in production. Admin or `safety_head` flips it via the existing Safety Settings JSON editor — no bespoke UI was added (simplicity-first).
+
+3. Stage copy lives in `safety_settings.incident_stage_copy` (JSONB object keyed by `safety_incidents.status` values, each `{ title, hint }`). Missing keys fall back to `SAFETY_STATUS_LABELS`. Zero-hardcoding rule honored.
+
+4. Allowed files for Phase 3 changes:
+   - **Added:** `src/lib/incidentTimelineGrouping.ts`, `src/components/safety/IncidentStageHeader.tsx`, `src/components/safety/IncidentRcaPanel.tsx`, `src/test/safety/incidentTimelineGrouping.test.ts`, `src/test/safety/incidentUxV2NoDirectWrites.test.ts`.
+   - **Edited (additive only):** `src/components/safety/IncidentTimeline.tsx` (new optional `grouped` prop, default `false`), `src/pages/safety/SafetyIncidentDetail.tsx` (flag read + conditional render).
+   - **Forbidden:** `src/lib/safetyIncidents.ts` constants, `src/components/safety/StageActionPanel.tsx`, any `safety_incidents` mutation path, route table, role enums.
+
+5. Regression guard `src/test/safety/incidentUxV2NoDirectWrites.test.ts` MUST stay green. It greps the v2 files for `.from('safety_incidents').update(...)`, `.delete(...)`, and `.rpc('transition_safety_incident', ...)` and fails if any appear. Any v2 file added later must be appended to the `V2_FILES` list.
+
+6. Rollback contract: setting `ui_incident_v2 = false` instantly restores the legacy renderer for every incident. No data migration, no orphaned columns, no cache stampede (same React Query keys).
+
+7. Phase 4 (offline/evidence UX), Phase 5 (emergency overlay), Phase 6 (admin/import), Phase 7 (analytics polish), and Phase 8 (final stabilization) remain blocked behind their own governance gates per §Phase Execution Order.
