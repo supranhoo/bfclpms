@@ -12,6 +12,7 @@ import { useIdleTimeout } from '@/hooks/useIdleTimeout';
 import { useSafetyRealtimeSync } from '@/hooks/useSafetyRealtimeSync';
 import { SafetySidebar } from './SafetySidebar';
 import { SafetyModuleRoute } from './SafetyModuleRoute';
+import { EmergencyFab } from './EmergencyFab';
 
 /**
  * SafetyLayout
@@ -53,6 +54,7 @@ function SafetyContent() {
             </Suspense>
           </ErrorBoundary>
         </main>
+        <EmergencyFab />
       </SidebarInset>
     </>
   );

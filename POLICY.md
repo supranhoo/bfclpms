@@ -3273,3 +3273,24 @@ Governance source: `docs/safety-integration-governance.md` §Phase 4.
 7. Render is capped at 200 items to bound DOM cost; the queue is naturally bounded by `pruneStalePending` (10 attempts AND 7 days → discard) so the cap is a defense-in-depth, not the primary limit.
 
 8. Phase 5 (emergency overlay), Phase 6 (admin/import), Phase 7 (analytics polish), and Phase 8 (final stabilization) remain blocked behind their own governance gates per §Phase Execution Order.
+
+## §Phase5-Safety — Safety Governance Phase 5 (Emergency Overlay, codified 2026-05-30)
+
+Governance source: `docs/safety-integration-governance.md` §Phase 5.
+
+1. Phase 5 is **strictly UI-only**. No database schema, RLS, RPC, trigger, function, storage bucket, queue contract, route, or notification dispatch may be added or modified. Edits to writers (incl. `safetyIncidentSubmit.ts`, `safetyOfflineQueue.ts` mutation paths, `useSafetyOfflineSync.ts`, `transition_safety_incident`) are out of scope and must be rejected.
+
+2. The overlay is gated by `safety_settings.ui_emergency_overlay_v1` (boolean JSONB). Default `false` in production. Admin or `safety_head` flips it via the existing Safety Settings JSON editor — no bespoke settings UI. Emergency contacts live in `safety_settings.emergency_contacts` as a JSONB array of `{label, phone, role?}`; empty by default; the overlay hides the contacts section gracefully when empty.
+
+3. Allowed files for Phase 5 changes:
+   - **Added:** `src/components/safety/EmergencyOverlay.tsx`, `src/components/safety/EmergencyFab.tsx`, `src/test/safety/emergencyOverlayNoNewWriters.test.ts`.
+   - **Edited (additive only):** `src/components/safety/SafetyLayout.tsx` (mounts `<EmergencyFab />` inside `SidebarInset`; gating lives inside the FAB so the layout has no flag knowledge).
+   - **Forbidden:** all queue mutators, all incident submit paths, all transition RPCs, all storage uploads, all external API integrations (no SMS, no email, no telemetry — `tel:` anchors only).
+
+4. Regression guard `src/test/safety/emergencyOverlayNoNewWriters.test.ts` MUST stay green. It greps Phase 5 files for: `.insert(`, `.update(`, `.upsert(`, `.delete(`, `.rpc(`, `.upload(`, `enqueuePendingIncident`, `transition_safety_incident`, and bare `fetch(`. Any Phase 5 file added later must be appended to `PHASE5_FILES`.
+
+5. Rollback contract: setting `ui_emergency_overlay_v1 = false` instantly hides the FAB. No data migration, no orphaned columns, no cache stampede (same `['safety','settings']` React Query key). Removing the feature entirely = revert one commit + delete the two `safety_settings` rows.
+
+6. Accessibility & UX invariants: FAB is min 44×44 px touch target, labelled `aria-label="Open emergency overlay"`, respects `prefers-reduced-motion` via `motion-safe:` Tailwind variants. Contact phone links normalise whitespace before the `tel:` scheme. The overlay never opens automatically and never blocks navigation.
+
+7. Phase 6 (admin/import), Phase 7 (analytics polish), and Phase 8 (final stabilization) remain blocked behind their own governance gates per §Phase Execution Order.
