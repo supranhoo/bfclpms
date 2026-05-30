@@ -620,6 +620,7 @@ export default function UserManagement() {
     setEditMobile((user as any).mobile_number || '');
     setEditIsActive((user as any).is_active !== false);
     setEditGroupDoj((user as any).group_doj || '');
+    setEditDoj((user as any).doj || '');
     setEditDialogOpen(true);
   };
 
@@ -657,6 +658,7 @@ export default function UserManagement() {
       mobileNumber: editMobile,
       isActive: editIsActive,
       groupDoj: editGroupDoj || null,
+      doj: editDoj || null,
     });
   };
 
@@ -681,6 +683,7 @@ export default function UserManagement() {
       company_id: newCompanyId || undefined,
       portal_access: newPortalAccess,
       group_doj: newGroupDoj || undefined,
+      doj: newDoj || undefined,
     });
   };
 
@@ -697,6 +700,7 @@ export default function UserManagement() {
     setNewCompanyId('');
     setNewPortalAccess(true);
     setNewGroupDoj('');
+    setNewDoj('');
   };
 
   const handleBulkUpdate = () => {
