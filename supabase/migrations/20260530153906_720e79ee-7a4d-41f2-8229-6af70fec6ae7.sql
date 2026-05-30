@@ -1,0 +1,2 @@
+ALTER TABLE public.increment_eligibility_audit DROP CONSTRAINT increment_eligibility_audit_action_check;
+ALTER TABLE public.increment_eligibility_audit ADD CONSTRAINT increment_eligibility_audit_action_check CHECK (action = ANY (ARRAY['create','modify','delete','activate','deactivate','submit','approve','reject','copy','publish','exclusion_added','exclusion_removed']));
