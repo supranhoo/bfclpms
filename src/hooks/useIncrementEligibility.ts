@@ -477,7 +477,7 @@ export function useEligibilityExclusions(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       let q: any = supabase
         .from('increment_eligibility_exclusions')
-        .select('*, profiles:employee_id(full_name, employee_code, departments:department_id(name))')
+        .select('*, profiles!increment_eligibility_exclusions_employee_id_fkey(full_name, employee_code, departments:department_id(name))')
         .eq('config_id', configId!)
         .order('added_at', { ascending: false });
       if (assessmentYear) q = q.eq('assessment_year', assessmentYear);
