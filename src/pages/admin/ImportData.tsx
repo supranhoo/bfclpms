@@ -1388,6 +1388,8 @@ export default function ImportData() {
             department_id: departmentId || existingEmployee.department_id,
             pms_grade: row.pmsGrade || existingEmployee.pms_grade,
             level: row.level || (existingEmployee as any).level,
+            ...(row.employeeCategory ? { employee_category: row.employeeCategory } : {}),
+            ...(row.employmentStatus ? { employment_status: row.employmentStatus } : {}),
             reporting_manager_id: managerId || existingEmployee.reporting_manager_id,
             ...(resolvedCompanyId ? { company_id: resolvedCompanyId } : {}),
             ...(row.groupDoj && row.groupDoj !== 'INVALID' ? { group_doj: row.groupDoj } : {}),
