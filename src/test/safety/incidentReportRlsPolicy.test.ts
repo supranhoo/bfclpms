@@ -21,6 +21,18 @@ function latestMigrationDefiningInsertPolicy(): string {
   throw new Error('No migration defining an INSERT policy on safety_incidents was found');
 }
 
+function latestMigrationReplacingBeforeInsertTrigger(): string {
+  const dir = 'supabase/migrations';
+  const files = readdirSync(dir).sort();
+  for (let i = files.length - 1; i >= 0; i--) {
+    const body = readFileSync(join(dir, files[i]), 'utf8');
+    if (/CREATE\s+OR\s+REPLACE\s+FUNCTION\s+public\.safety_incident_before_insert/i.test(body)) {
+      return body;
+    }
+  }
+  throw new Error('No migration replacing safety_incident_before_insert was found');
+}
+
 describe('safety_incidents INSERT policy (Phase 16)', () => {
   const sql = latestMigrationDefiningInsertPolicy();
 
@@ -48,5 +60,21 @@ describe('safety_incidents INSERT policy (Phase 16)', () => {
     );
     expect(match).not.toBeNull();
     expect(match![0]).not.toMatch(/has_safety_module_access/i);
+  });
+});
+
+describe('safety_incidents reporter stamping trigger (Phase 17)', () => {
+  const sql = latestMigrationReplacingBeforeInsertTrigger();
+
+  it('normalizes reporter_id to auth.uid() before INSERT policy checks', () => {
+    expect(sql).toMatch(/v_auth_user\s*:=\s*auth\.uid\(\)/i);
+    expect(sql).toMatch(/IF\s+v_auth_user\s+IS\s+NOT\s+NULL\s+THEN[\s\S]*NEW\.reporter_id\s*:=\s*v_auth_user/i);
+  });
+
+  it('keeps incident numbering and SLA deadline trigger behavior intact', () => {
+    expect(sql).toMatch(/safety_incident_number_seq/i);
+    expect(sql).toMatch(/safety_severity_sla/i);
+    expect(sql).toMatch(/acknowledge_due_at/i);
+    expect(sql).toMatch(/close_due_at/i);
   });
 });
