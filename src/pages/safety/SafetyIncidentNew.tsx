@@ -93,6 +93,26 @@ export default function SafetyIncidentNew() {
     }
     setSubmitting(true);
 
+    // Phase 19.1 — verify (and refresh) the auth session before submit.
+    // Mobile/PWA users sometimes hold a token that's already expired by the
+    // time they tap Submit; the RPC then sees auth.uid() = NULL and the
+    // INSERT trips the safety_incidents WITH-CHECK clause.
+    try {
+      const { data: sess } = await supabase.auth.getSession();
+      if (!sess?.session) {
+        const { data: refreshed } = await supabase.auth.refreshSession();
+        if (!refreshed?.session) {
+          toast.error('Your session expired. Please sign in again and retry.');
+          setSubmitting(false);
+          return;
+        }
+      }
+    } catch {
+      toast.error('Could not verify your session. Please sign in again and retry.');
+      setSubmitting(false);
+      return;
+    }
+
     // Stable client_submission_id for idempotent retries (online or offline).
     const clientSubmissionId =
       typeof crypto !== 'undefined' && 'randomUUID' in crypto
