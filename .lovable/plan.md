@@ -1,12 +1,13 @@
-Phase 14: Enable Retry v2 + QA
-================================
+Phase 15: Safety mobile polish pass
+=====================================
 
-## Status
-Both flags (`ui_offline_inspector_v1` and `ui_offline_inspector_retry_v2`) already `true` in production. Code-path QA performed (see DOCUMENTATION.md v2.66.13.29 and POLICY §Phase14-Safety).
+## What this does
+- Replaces ad-hoc `Loader2` full-page spinners with `SafetySkeletonBlock variant="detail"` on: SafetyIncidentDetail, SafetyAuditRunDetail, SafetyDrillDetail, SafetyAnalytics.
+- Adds `SafetyStickyActionBar` parity to SafetyDrillNew and SafetyAuditRunNew (mobile-only sticky CTA, desktop footer preserved behind `hidden md:flex`).
+- Zero schema / RLS / RPC / writer changes. Pure presentational consistency.
 
 ## QA Sign-Off (2026-05-30)
-- `OfflineQueueInspector` v2 surface gated correctly behind `ui_offline_inspector_retry_v2`.
-- `flushOne(id)` reuses existing writer triple — zero new contracts (enforced by `offlineInspectorNoNewWriters.test.ts`).
-- All 43 safety tests pass; build passes.
-- Sheet not visually opened — BFCL tenant has `pendingCount === 0`, so the offline badge is hidden by design.
-- Rollback path: set `ui_offline_inspector_retry_v2 = false`.
+- All 46 safety + mobile-layout tests pass; build passes.
+- In-button micro-spinners (per-action pending state) intentionally preserved.
+- Existing `safetyMobileLayout.test.tsx` contract continues to enforce sticky-bar / skeleton invariants.
+- Rollback: revert the 6 file edits (no migration).
