@@ -3,7 +3,7 @@ import { invokeAdminEdgeFunction } from '@/lib/adminEdgeFunction';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
-import { useProfiles, useDepartments, useDesignations, usePmsGrades, useDivisions, useBusinessUnits } from '@/hooks/useOrganization';
+import { useProfiles, useDepartments, useDesignations, usePmsGrades, useDivisions, useBusinessUnits, useEmployeeCategories, useEmploymentStatuses } from '@/hooks/useOrganization';
 import { useCompanies } from '@/hooks/useCompanies';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -156,6 +156,8 @@ export default function UserManagement() {
   const { data: departments } = useDepartments();
   const { data: designationsList } = useDesignations();
   const { data: pmsGradesList } = usePmsGrades();
+  const { data: employeeCategoriesList } = useEmployeeCategories();
+  const { data: employmentStatusesList } = useEmploymentStatuses();
   const { data: divisions } = useDivisions();
   const { data: businessUnits } = useBusinessUnits();
   const { data: companiesList } = useCompanies();
@@ -180,6 +182,8 @@ export default function UserManagement() {
   const [editDepartmentId, setEditDepartmentId] = useState<string>('');
   const [editDesignation, setEditDesignation] = useState('');
   const [editPmsGrade, setEditPmsGrade] = useState('');
+  const [editEmployeeCategory, setEditEmployeeCategory] = useState('');
+  const [editEmploymentStatus, setEditEmploymentStatus] = useState('');
   const [editEmployeeCode, setEditEmployeeCode] = useState('');
   const [editFullName, setEditFullName] = useState('');
   const [editEmail, setEditEmail] = useState('');
@@ -197,6 +201,8 @@ export default function UserManagement() {
   const [newDepartmentId, setNewDepartmentId] = useState('');
   const [newDesignation, setNewDesignation] = useState('');
   const [newPmsGrade, setNewPmsGrade] = useState('');
+  const [newEmployeeCategory, setNewEmployeeCategory] = useState('');
+  const [newEmploymentStatus, setNewEmploymentStatus] = useState('');
   const [newManagerId, setNewManagerId] = useState('');
   const [newDivisionId, setNewDivisionId] = useState('');  // UI-only cascading filter
   const [newCompanyId, setNewCompanyId] = useState('');
@@ -352,6 +358,14 @@ export default function UserManagement() {
   const createDepartmentOptions = useMemo(() => createFilteredDepartments.map(d => ({ value: d.id, label: d.name })), [createFilteredDepartments]);
   const designationOptions = useMemo(() => (designationsList || []).map(d => ({ value: d.name, label: d.name })), [designationsList]);
   const pmsGradeOptions = useMemo(() => (pmsGradesList || []).map(g => ({ value: g.name, label: g.name })), [pmsGradesList]);
+  const employeeCategoryOptions = useMemo(
+    () => (employeeCategoriesList || []).filter((c: any) => c.is_active !== false).map((c: any) => ({ value: c.name, label: c.name })),
+    [employeeCategoriesList],
+  );
+  const employmentStatusOptions = useMemo(
+    () => (employmentStatusesList || []).filter((s: any) => s.is_active !== false).map((s: any) => ({ value: s.name, label: s.name })),
+    [employmentStatusesList],
+  );
   const roleOptions = useMemo(() => ALL_APP_ROLES.map(role => ({ value: role, label: ROLE_LABELS[role] })), []);
 
   const totalPages = Math.ceil(filteredProfiles.length / ITEMS_PER_PAGE);
@@ -376,6 +390,8 @@ export default function UserManagement() {
       departmentId,
       designation,
       pmsGrade,
+      employeeCategory,
+      employmentStatus,
       employeeCode,
       mobileNumber,
       isActive,
@@ -389,6 +405,8 @@ export default function UserManagement() {
       departmentId: string | null;
       designation: string;
       pmsGrade: string;
+      employeeCategory?: string;
+      employmentStatus?: string;
       employeeCode: string;
       mobileNumber?: string;
       isActive?: boolean;
@@ -401,6 +419,8 @@ export default function UserManagement() {
         department_id: departmentId || null,
         designation,
         pms_grade: pmsGrade,
+        employee_category: employeeCategory ?? null,
+        employment_status: employmentStatus ?? null,
         employee_code: employeeCode || null,
         mobile_number: mobileNumber !== undefined ? (mobileNumber || null) : undefined,
         group_doj: groupDoj !== undefined ? (groupDoj || null) : undefined,
@@ -446,6 +466,8 @@ export default function UserManagement() {
       department_id?: string;
       designation?: string;
       pms_grade?: string;
+      employee_category?: string;
+      employment_status?: string;
       reporting_manager_id?: string;
       company_id?: string;
       portal_access?: boolean;
@@ -462,6 +484,8 @@ export default function UserManagement() {
           department_id: data.department_id || undefined,
           designation: data.designation || undefined,
           pms_grade: data.pms_grade || undefined,
+          employee_category: data.employee_category || undefined,
+          employment_status: data.employment_status || undefined,
           reporting_manager_id: data.reporting_manager_id || undefined,
           company_id: data.company_id || undefined,
           portal_access: data.portal_access,
@@ -614,6 +638,8 @@ export default function UserManagement() {
     setEditDivisionId(deriveDivisionFromDept(user.department_id));
     setEditDesignation(user.designation || '');
     setEditPmsGrade(user.pms_grade || '');
+    setEditEmployeeCategory((user as any).employee_category || '');
+    setEditEmploymentStatus((user as any).employment_status || '');
     setEditEmployeeCode(user.employee_code || '');
     setEditFullName(user.full_name || '');
     setEditEmail(user.email || '');
@@ -654,6 +680,8 @@ export default function UserManagement() {
       departmentId: editDepartmentId === 'none' ? null : editDepartmentId || null,
       designation: editDesignation,
       pmsGrade: editPmsGrade,
+      employeeCategory: editEmployeeCategory,
+      employmentStatus: editEmploymentStatus,
       employeeCode: editEmployeeCode,
       mobileNumber: editMobile,
       isActive: editIsActive,
@@ -679,6 +707,8 @@ export default function UserManagement() {
       department_id: newDepartmentId || undefined,
       designation: newDesignation || undefined,
       pms_grade: newPmsGrade || undefined,
+      employee_category: newEmployeeCategory || undefined,
+      employment_status: newEmploymentStatus || undefined,
       reporting_manager_id: newManagerId || undefined,
       company_id: newCompanyId || undefined,
       portal_access: newPortalAccess,
@@ -695,6 +725,8 @@ export default function UserManagement() {
     setNewDepartmentId('');
     setNewDesignation('');
     setNewPmsGrade('');
+    setNewEmployeeCategory('');
+    setNewEmploymentStatus('');
     setNewManagerId('');
     setNewDivisionId('');
     setNewCompanyId('');

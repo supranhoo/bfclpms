@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { useDivisions, useBusinessUnits, useDepartments, useSubBranches, useProfiles, useDesignations, usePmsGrades, useLevels, useLocations } from '@/hooks/useOrganization';
+import { useDivisions, useBusinessUnits, useDepartments, useSubBranches, useProfiles, useDesignations, usePmsGrades, useLevels, useLocations, useEmployeeCategories, useEmploymentStatuses } from '@/hooks/useOrganization';
 import { useCompanies, useCreateCompany, useUpdateCompany, useDeleteCompany, useCloneStructure } from '@/hooks/useCompanies';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -33,12 +33,14 @@ export default function Organization() {
   const { data: pmsGrades, isLoading: pmsGradesLoading } = usePmsGrades(activeCompanyId || undefined);
   const { data: levels, isLoading: levelsLoading } = useLevels(activeCompanyId || undefined);
   const { data: locations, isLoading: locationsLoading } = useLocations(activeCompanyId || undefined);
+  const { data: employeeCategories, isLoading: empCatLoading } = useEmployeeCategories(activeCompanyId || undefined);
+  const { data: employmentStatuses, isLoading: empStatLoading } = useEmploymentStatuses();
   const { data: profiles } = useProfiles();
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [dialogType, setDialogType] = useState<'division' | 'bu' | 'department' | 'sub-branch' | 'designation' | 'pms-grade' | 'level' | 'location'>('division');
+  const [dialogType, setDialogType] = useState<'division' | 'bu' | 'department' | 'sub-branch' | 'designation' | 'pms-grade' | 'level' | 'location' | 'employee-category' | 'employment-status'>('division');
   const [formName, setFormName] = useState('');
   const [formCode, setFormCode] = useState('');
   const [formParentId, setFormParentId] = useState('');
@@ -147,6 +149,14 @@ export default function Organization() {
           table = 'locations';
           data.company_id = activeCompanyId;
           break;
+        case 'employee-category':
+          table = 'employee_categories';
+          data.company_id = activeCompanyId;
+          break;
+        case 'employment-status':
+          table = 'employment_statuses';
+          // global — no company_id
+          break;
       }
 
       const { error } = await supabase.from(table as any).insert(data);
@@ -161,6 +171,8 @@ export default function Organization() {
       queryClient.invalidateQueries({ queryKey: ['pms-grades'] });
       queryClient.invalidateQueries({ queryKey: ['levels'] });
       queryClient.invalidateQueries({ queryKey: ['locations'] });
+      queryClient.invalidateQueries({ queryKey: ['employee-categories'] });
+      queryClient.invalidateQueries({ queryKey: ['employment-statuses'] });
       toast({ title: 'Created successfully' });
       setDialogOpen(false);
       resetForm();
@@ -182,6 +194,8 @@ export default function Organization() {
         case 'pms-grade': table = 'pms_grades'; break;
         case 'level': table = 'levels'; break;
         case 'location': table = 'locations'; break;
+        case 'employee-category': table = 'employee_categories'; break;
+        case 'employment-status': table = 'employment_statuses'; break;
       }
       const { error } = await supabase.from(table as any).delete().eq('id', id);
       if (error) throw error;
@@ -195,6 +209,8 @@ export default function Organization() {
       queryClient.invalidateQueries({ queryKey: ['pms-grades'] });
       queryClient.invalidateQueries({ queryKey: ['levels'] });
       queryClient.invalidateQueries({ queryKey: ['locations'] });
+      queryClient.invalidateQueries({ queryKey: ['employee-categories'] });
+      queryClient.invalidateQueries({ queryKey: ['employment-statuses'] });
       toast({ title: 'Deleted successfully' });
       setDeleteDialogOpen(false);
       setDeleteTarget(null);
@@ -216,6 +232,8 @@ export default function Organization() {
         case 'pms-grade': table = 'pms_grades'; break;
         case 'level': table = 'levels'; break;
         case 'location': table = 'locations'; break;
+        case 'employee-category': table = 'employee_categories'; break;
+        case 'employment-status': table = 'employment_statuses'; break;
       }
       const { error } = await supabase.from(table as any).update({ code }).eq('id', id);
       if (error) throw error;
@@ -229,6 +247,8 @@ export default function Organization() {
       queryClient.invalidateQueries({ queryKey: ['pms-grades'] });
       queryClient.invalidateQueries({ queryKey: ['levels'] });
       queryClient.invalidateQueries({ queryKey: ['locations'] });
+      queryClient.invalidateQueries({ queryKey: ['employee-categories'] });
+      queryClient.invalidateQueries({ queryKey: ['employment-statuses'] });
       toast({ title: 'Code updated successfully' });
       setEditingCode(null);
     },
@@ -333,7 +353,7 @@ export default function Organization() {
   };
 
   const activeCompany = companies?.find(c => c.id === activeCompanyId);
-  const isLoading = companiesLoading || divisionsLoading || busLoading || deptsLoading || subLoading || designationsLoading || pmsGradesLoading || levelsLoading || locationsLoading;
+  const isLoading = companiesLoading || divisionsLoading || busLoading || deptsLoading || subLoading || designationsLoading || pmsGradesLoading || levelsLoading || locationsLoading || empCatLoading || empStatLoading;
 
   if (isLoading && !companies) {
     return (
@@ -389,6 +409,8 @@ export default function Organization() {
           <TabsTrigger value="designations">Designations ({designations?.length || 0})</TabsTrigger>
           <TabsTrigger value="pms-grades">PMS Grades ({pmsGrades?.length || 0})</TabsTrigger>
           <TabsTrigger value="levels">Levels ({levels?.length || 0})</TabsTrigger>
+          <TabsTrigger value="employee-categories">Employee Categories ({employeeCategories?.length || 0})</TabsTrigger>
+          <TabsTrigger value="employment-statuses">Employment Statuses ({employmentStatuses?.length || 0})</TabsTrigger>
         </TabsList>
 
         <TabsContent value="divisions">
@@ -752,6 +774,87 @@ export default function Organization() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        <TabsContent value="employee-categories">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <div>
+                <CardTitle>Employee Categories</CardTitle>
+                <CardDescription>Workforce categorisation (e.g. Worker, Staff, Officer, Executive)</CardDescription>
+              </div>
+              <Button onClick={() => openCreateDialog('employee-category')}>
+                <Plus className="h-4 w-4 mr-2" />
+                Add Category
+              </Button>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Code</TableHead>
+                    <TableHead className="w-[80px]">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {employeeCategories?.map((c: any) => (
+                    <TableRow key={c.id}>
+                      <TableCell className="font-medium">{c.name}</TableCell>
+                      <TableCell>{renderCodeCell('employee-category', c.id, c.code)}</TableCell>
+                      <TableCell>
+                        <Button variant="ghost" size="icon" onClick={() => confirmDelete('employee-category', c.id, c.name)}>
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {(!employeeCategories || employeeCategories.length === 0) && (
+                    <TableRow><TableCell colSpan={3} className="text-center text-sm text-muted-foreground py-6">No categories yet — click "Add Category" to create one.</TableCell></TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="employment-statuses">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <div>
+                <CardTitle>Employment Statuses</CardTitle>
+                <CardDescription>Lifecycle states such as Probation, Trainee, Confirmed, Superannuated, Retainer. Shared across all companies.</CardDescription>
+              </div>
+              <Button onClick={() => openCreateDialog('employment-status')}>
+                <Plus className="h-4 w-4 mr-2" />
+                Add Status
+              </Button>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Code</TableHead>
+                    <TableHead className="w-[80px]">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {employmentStatuses?.map((s: any) => (
+                    <TableRow key={s.id}>
+                      <TableCell className="font-medium">{s.name}</TableCell>
+                      <TableCell>{renderCodeCell('employment-status', s.id, s.code)}</TableCell>
+                      <TableCell>
+                        <Button variant="ghost" size="icon" onClick={() => confirmDelete('employment-status', s.id, s.name)}>
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
       </Tabs>
 
       {/* Create Entity Dialog */}
@@ -759,7 +862,7 @@ export default function Organization() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
-              Add {dialogType === 'bu' ? 'Business Unit' : dialogType === 'sub-branch' ? 'Sub-Branch' : dialogType === 'pms-grade' ? 'PMS Grade' : dialogType === 'level' ? 'Level' : dialogType === 'location' ? 'Location' : dialogType.charAt(0).toUpperCase() + dialogType.slice(1)}
+              Add {dialogType === 'bu' ? 'Business Unit' : dialogType === 'sub-branch' ? 'Sub-Branch' : dialogType === 'pms-grade' ? 'PMS Grade' : dialogType === 'level' ? 'Level' : dialogType === 'location' ? 'Location' : dialogType === 'employee-category' ? 'Employee Category' : dialogType === 'employment-status' ? 'Employment Status' : dialogType.charAt(0).toUpperCase() + dialogType.slice(1)}
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4">
