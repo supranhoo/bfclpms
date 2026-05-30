@@ -11,7 +11,7 @@ import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { MultiSelectFilter } from '@/components/review/MultiSelectFilter';
-import { Building2, Network, Factory, Layers, Tags, MapPin } from 'lucide-react';
+import { Building2, Network, Factory, Layers, MapPin } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -147,7 +147,7 @@ export function IncrementEligibilitySection() {
         </CardTitle>
         <CardDescription>
           Organization-wide rules that disqualify employees from increments before percentage calculation.
-          Configurations are maintained per scope (Company, Division, Business Unit, Level, Category, Location)
+          Configurations are maintained per scope (Company, Division, Business Unit, Level, Location)
           and Assessment Year.
         </CardDescription>
       </CardHeader>
@@ -159,7 +159,6 @@ export function IncrementEligibilitySection() {
             <MultiFilter label="Division"      icon={<Network  className="h-3 w-3 text-muted-foreground" />} values={draft.division_id}      onChange={(v) => setDraft((s) => ({ ...s, division_id: v }))}      options={masters?.divisions ?? []} />
             <MultiFilter label="Business Unit" icon={<Factory  className="h-3 w-3 text-muted-foreground" />} values={draft.business_unit_id} onChange={(v) => setDraft((s) => ({ ...s, business_unit_id: v }))} options={masters?.business_units ?? []} />
             <MultiFilter label="Level"         icon={<Layers   className="h-3 w-3 text-muted-foreground" />} values={draft.level_id}         onChange={(v) => setDraft((s) => ({ ...s, level_id: v }))}         options={masters?.levels ?? []} />
-            <MultiFilter label="Category"      icon={<Tags     className="h-3 w-3 text-muted-foreground" />} values={draft.category_id}      onChange={(v) => setDraft((s) => ({ ...s, category_id: v }))}      options={masters?.categories ?? []} />
             <MultiFilter label="Location"      icon={<MapPin   className="h-3 w-3 text-muted-foreground" />} values={draft.location_id}      onChange={(v) => setDraft((s) => ({ ...s, location_id: v }))}      options={masters?.locations ?? []} />
             <div className="space-y-1.5">
               <Label className="text-xs">Assessment Year <span className="text-destructive">*</span></Label>
@@ -286,7 +285,7 @@ export function IncrementEligibilitySection() {
                         <TableHead className="w-16 text-center">Oper.</TableHead>
                         <TableHead className="w-24 text-right">Threshold</TableHead>
                         <TableHead className="w-24">Unit</TableHead>
-                        <TableHead className="w-32">Effective</TableHead>
+                        <TableHead className="w-32">Assessment Year</TableHead>
                         <TableHead className="w-20 text-center">Active</TableHead>
                         <TableHead className="w-24 text-right">Actions</TableHead>
                       </TableRow>
@@ -303,7 +302,7 @@ export function IncrementEligibilitySection() {
                           <TableCell className="text-center">{opLabel(row.comparison_operator)}</TableCell>
                           <TableCell className="text-right tabular-nums">{row.threshold_value}</TableCell>
                           <TableCell className="text-xs">{row.unit_label}</TableCell>
-                          <TableCell className="text-xs">{row.effective_date}</TableCell>
+                          <TableCell className="text-xs">{config.assessment_year}</TableCell>
                           <TableCell className="text-center">
                             <Switch
                               checked={row.is_active}
@@ -512,11 +511,7 @@ function CriterionDialog(props: {
               <Input placeholder="days / programs / %" value={form.unit_label} onChange={(e) => setForm((s) => ({ ...s, unit_label: e.target.value }))} className="h-9" />
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label className="text-xs">Effective Date</Label>
-              <Input type="date" value={form.effective_date} onChange={(e) => setForm((s) => ({ ...s, effective_date: e.target.value }))} className="h-9" />
-            </div>
+          <div className="grid grid-cols-1 gap-3">
             <div className="space-y-1.5">
               <Label className="text-xs">Active</Label>
               <div className="h-9 flex items-center">
