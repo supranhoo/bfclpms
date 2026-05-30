@@ -153,6 +153,7 @@ interface EmployeeImportRow {
   portalAccess?: string;
   employeeStatus?: string;
   groupDoj?: string; // ISO yyyy-MM-dd (normalised)
+  doj?: string; // ISO yyyy-MM-dd (normalised)
 }
 
 // Parse Active/Inactive status cell into a boolean (or undefined if empty/unset).
@@ -748,6 +749,8 @@ export default function ImportData() {
 
     const gdojRaw = getRaw(['gdoj', 'groupDoj', 'group_doj', 'groupDateOfJoining', 'group_date_of_joining']);
     const gdojNorm = normalizeDateCell(gdojRaw);
+    const dojRaw = getRaw(['doj', 'dateOfJoining', 'date_of_joining', 'joiningDate', 'joining_date']);
+    const dojNorm = normalizeDateCell(dojRaw);
 
     return {
       employeeCode: getValue(['employeeCode', 'employeecode', 'employee_code', 'empCode', 'empcode', 'emp_code', 'newCode', 'newcode', 'new_code', 'code', 'id', 'empId', 'empid', 'emp_id']),
@@ -767,6 +770,7 @@ export default function ImportData() {
       portalAccess: getValue(['portalAccess', 'portalaccess', 'portal_access', 'loginAccess', 'loginaccess', 'login_access']),
       employeeStatus: getValue(['employeeStatus', 'employee_status', 'status', 'active', 'isActive', 'is_active']),
       groupDoj: gdojNorm === 'INVALID' ? 'INVALID' : (gdojNorm || undefined),
+      doj: dojNorm === 'INVALID' ? 'INVALID' : (dojNorm || undefined),
     };
   };
 
@@ -850,6 +854,9 @@ export default function ImportData() {
           }
           if (row.groupDoj === 'INVALID') {
             rowErrs.push("Group Date of Joining (GDOJ) is invalid — use yyyy-MM-dd or dd/MM/yyyy");
+          }
+          if (row.doj === 'INVALID') {
+            rowErrs.push("Date of Joining (DOJ) is invalid — use yyyy-MM-dd or dd/MM/yyyy");
           }
           if (rowErrs.length > 0) {
             perRowErrors.set(index, rowErrs);
