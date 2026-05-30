@@ -638,6 +638,8 @@ export default function UserManagement() {
     setEditDivisionId(deriveDivisionFromDept(user.department_id));
     setEditDesignation(user.designation || '');
     setEditPmsGrade(user.pms_grade || '');
+    setEditEmployeeCategory((user as any).employee_category || '');
+    setEditEmploymentStatus((user as any).employment_status || '');
     setEditEmployeeCode(user.employee_code || '');
     setEditFullName(user.full_name || '');
     setEditEmail(user.email || '');
@@ -678,6 +680,8 @@ export default function UserManagement() {
       departmentId: editDepartmentId === 'none' ? null : editDepartmentId || null,
       designation: editDesignation,
       pmsGrade: editPmsGrade,
+      employeeCategory: editEmployeeCategory,
+      employmentStatus: editEmploymentStatus,
       employeeCode: editEmployeeCode,
       mobileNumber: editMobile,
       isActive: editIsActive,
@@ -703,6 +707,8 @@ export default function UserManagement() {
       department_id: newDepartmentId || undefined,
       designation: newDesignation || undefined,
       pms_grade: newPmsGrade || undefined,
+      employee_category: newEmployeeCategory || undefined,
+      employment_status: newEmploymentStatus || undefined,
       reporting_manager_id: newManagerId || undefined,
       company_id: newCompanyId || undefined,
       portal_access: newPortalAccess,
@@ -719,6 +725,8 @@ export default function UserManagement() {
     setNewDepartmentId('');
     setNewDesignation('');
     setNewPmsGrade('');
+    setNewEmployeeCategory('');
+    setNewEmploymentStatus('');
     setNewManagerId('');
     setNewDivisionId('');
     setNewCompanyId('');
