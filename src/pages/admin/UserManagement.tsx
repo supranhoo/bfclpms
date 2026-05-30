@@ -1213,40 +1213,42 @@ export default function UserManagement() {
               <TabsTrigger value="access" className="gap-1.5"><Shield className="h-3.5 w-3.5" /> Access & Login</TabsTrigger>
             </TabsList>
 
-            <ScrollArea className="flex-1 pr-4 -mr-4 mt-4">
-            <TabsContent value="profile" className="mt-0 space-y-6 py-1">
-              <div className="space-y-4">
-                <div className="flex items-center gap-2">
+            <ScrollArea className="flex-1 pr-4 -mr-4 mt-3">
+            <TabsContent value="profile" className="mt-0 space-y-4">
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 mb-2">
                   <Users className="h-4 w-4 text-muted-foreground" />
                   <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Personal Information</h3>
                 </div>
-                <Separator />
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-2">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div className="space-y-1.5">
                     <Label>Full Name</Label>
                     <Input
                       value={editFullName}
                       onChange={(e) => setEditFullName(e.target.value)}
                       placeholder="e.g. John Doe"
+                      className="h-9"
                     />
                   </div>
-                  <div className="space-y-2">
+                  <div className="space-y-1.5">
                     <Label>Email</Label>
                     <Input
                       value={editEmail}
                       onChange={(e) => setEditEmail(e.target.value)}
                       placeholder="e.g. user@example.com"
+                      className="h-9"
                     />
                   </div>
-                  <div className="space-y-2">
+                  <div className="space-y-1.5">
                     <Label>Employee Code</Label>
                     <Input
                       value={editEmployeeCode}
                       onChange={(e) => setEditEmployeeCode(e.target.value)}
                       placeholder="e.g. EMP001"
+                      className="h-9"
                     />
                   </div>
-                  <div className="space-y-2">
+                  <div className="space-y-1.5">
                     <Label>Mobile Number</Label>
                     <div className="relative">
                       <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -1255,11 +1257,11 @@ export default function UserManagement() {
                         value={editMobile}
                         onChange={(e) => setEditMobile(e.target.value)}
                         placeholder="+91 98765 43210"
-                        className="pl-9"
+                        className="pl-9 h-9"
                       />
                     </div>
                   </div>
-                  <div className="space-y-2">
+                  <div className="space-y-1.5">
                     <Label>Group Date of Joining (GDOJ)</Label>
                     <div className="relative">
                       <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
@@ -1267,11 +1269,11 @@ export default function UserManagement() {
                         type="date"
                         value={editGroupDoj}
                         onChange={(e) => setEditGroupDoj(e.target.value)}
-                        className="pl-9"
+                        className="pl-9 h-9"
                       />
                     </div>
                   </div>
-                  <div className="space-y-2">
+                  <div className="space-y-1.5">
                     <Label>Date of Joining (DOJ)</Label>
                     <div className="relative">
                       <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
@@ -1279,7 +1281,7 @@ export default function UserManagement() {
                         type="date"
                         value={editDoj}
                         onChange={(e) => setEditDoj(e.target.value)}
-                        className="pl-9"
+                        className="pl-9 h-9"
                       />
                     </div>
                   </div>
@@ -1287,14 +1289,13 @@ export default function UserManagement() {
               </div>
 
               {/* Section: Organization */}
-              <div className="space-y-4">
-                <div className="flex items-center gap-2">
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 mb-2">
                   <Package className="h-4 w-4 text-muted-foreground" />
                   <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Organization</h3>
                 </div>
-                <Separator />
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-2">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div className="space-y-1.5">
                     <Label>Division</Label>
                     <OrgFilterCombobox
                       value={editDivisionId}
@@ -1312,7 +1313,7 @@ export default function UserManagement() {
                       placeholder="All divisions"
                     />
                   </div>
-                  <div className="space-y-2">
+                  <div className="space-y-1.5">
                     <Label>Department</Label>
                     <OrgFilterCombobox
                       value={editDepartmentId === 'none' ? '' : editDepartmentId}
@@ -1321,7 +1322,7 @@ export default function UserManagement() {
                       placeholder="Select department"
                     />
                   </div>
-                  <div className="space-y-2">
+                  <div className="space-y-1.5">
                     <Label>Designation</Label>
                     <OrgFilterCombobox
                       value={editDesignation}
@@ -1330,7 +1331,7 @@ export default function UserManagement() {
                       placeholder="Select designation"
                     />
                   </div>
-                  <div className="space-y-2">
+                  <div className="space-y-1.5">
                     <Label>PMS Grade</Label>
                     <OrgFilterCombobox
                       value={editPmsGrade}
@@ -1339,7 +1340,7 @@ export default function UserManagement() {
                       placeholder="Select PMS grade"
                     />
                   </div>
-                  <div className="space-y-2">
+                  <div className="space-y-1.5">
                     <Label>Reporting Manager</Label>
                     <ManagerCombobox
                       value={editManagerId}
@@ -1353,15 +1354,14 @@ export default function UserManagement() {
               </div>
             </TabsContent>
 
-            <TabsContent value="access" className="mt-0 space-y-6 py-1">
-              <div className="space-y-4">
-                <div className="flex items-center gap-2">
+            <TabsContent value="access" className="mt-0 space-y-4">
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 mb-2">
                   <Shield className="h-4 w-4 text-muted-foreground" />
                   <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Access & Status</h3>
                 </div>
-                <Separator />
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-2">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
                     <Label>Role</Label>
                     <OrgFilterCombobox
                       value={editRole}
