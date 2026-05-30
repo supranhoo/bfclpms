@@ -1,70 +1,56 @@
-# Add Group Date of Joining (GDOJ) — User Management
+## Problem
 
-## Scope (strictly what was asked)
-1. Add User page (UserManagement.tsx) — new GDOJ date field.
-2. Import Employees template/parser — accept `gdoj` / `group_doj` / `groupDoj` column and persist it.
-3. Export Employees — include GDOJ column.
+At 100% browser zoom on a typical laptop viewport (~929×574 CSS px), the **Add New User** dialog clips the Organization section — only the section header is visible, fields and the rest are hidden behind the footer. The user must zoom to 67% to see everything. The dialog already uses `max-h-[92vh]` + `ScrollArea`, but the inner content is taller than the available area and the scroll affordance is not obvious, so it reads as "missing content."
 
-Out of scope: changing profile UI elsewhere, reports, hierarchy logic.
+## Goal
 
-## Assumptions
-- GDOJ is a plain calendar date (no time component).
-- Optional / nullable — existing employees won't have it.
-- "Group Date of Joining" differs from `created_at` (account creation) and from any company-level DOJ; it represents the date the employee joined the group/parent organisation.
-- Stored on `public.profiles` as a single new column.
+All fields of the Profile tab should be visible **without scrolling and without zooming out** on standard laptop viewports, while keeping the existing fields, validation, and submit logic untouched.
 
-## Risk & Impact Report
-- **Data Impact:** Additive column `profiles.group_doj date NULL`. No backfill, no destructive change. Existing rows unaffected.
-- **Workflow Impact:** None — no business logic reads GDOJ today.
-- **UI/UX Impact:** One new optional date input in the Add User dialog; one new column in import template + export sheet.
-- **Regression Risk:** Low. Field is nullable and untouched by existing flows. ImportData parser only adds a new optional key.
-- **Scalability:** Single date column, no index needed (not queried/filtered yet).
-- **Backup:** Coverage is automatic via `get_backup_table_order()` (profiles already included) — no allowlist edit needed.
-- **Rollback:** `ALTER TABLE public.profiles DROP COLUMN group_doj;`
-- **Mitigation:** Zod schema validates date format; unit tests cover parser + add-user payload.
+## Approach (UI only — no logic changes)
 
-## Implementation Steps
+Compact the Profile tab layout in `src/pages/admin/UserManagement.tsx` (Create dialog, lines ~1442–end of Profile tab, and mirror in Edit dialog for parity):
 
-### 1. Migration (additive)
-```sql
-ALTER TABLE public.profiles ADD COLUMN group_doj date;
-COMMENT ON COLUMN public.profiles.group_doj IS 'Group Date of Joining — date employee joined the parent group.';
-```
-No RLS / GRANT changes (profiles already configured).
+1. **Tighter vertical rhythm**
+   - `space-y-6` → `space-y-4` on tab content
+   - `space-y-4` → `space-y-3` inside each section
+   - `space-y-2` → `space-y-1.5` on each field (Label + Input)
+   - Reduce `mt-4` on ScrollArea to `mt-3`; remove `py-1`
+   - Inputs: add `h-9` (default is h-10) for slightly shorter rows
 
-### 2. Add User form — `src/pages/admin/UserManagement.tsx`
-- Extend the add-user form state with `groupDoj: string | null`.
-- Add a shadcn Popover + Calendar date picker (pointer-events-auto) labelled "Group Date of Joining (GDOJ)".
-- Include `group_doj` in the insert payload (ISO `yyyy-MM-dd` or null).
-- Same field surfaced in Edit User dialog for parity (small, non-scope-creep change since it's the same form).
+2. **Denser grid**
+   - Personal Information: change `md:grid-cols-2` → `md:grid-cols-3` so Full Name / Email / Employee Code sit on row 1 and GDOJ / DOJ on row 2 (2 rows instead of 3).
+   - Organization: keep `md:grid-cols-2` but reduce `gap-4` → `gap-3`.
 
-### 3. Import template — `src/pages/admin/ImportData.tsx`
-- Add `gdoj` (aliases: `group_doj`, `groupDoj`, `group date of joining`) to the row mapper near existing `designation` / `pmsGrade` keys.
-- Extend `EmployeeImportRowSchema` in `src/lib/importValidation.ts` with `groupDoj: z.string().optional()` parsed/normalised to `yyyy-MM-dd` (accept Excel serial, `dd/mm/yyyy`, ISO).
-- Persist `group_doj` in both insert and update branches (lines ~1317 and ~1382).
-- Add column to the downloadable template + the import-preview table.
+3. **Lighter section headers**
+   - Drop the `Separator` under each section header (header + uppercase label already provides separation).
+   - Section header wrapper: remove `space-y-4` wrapper's extra gap; use `mb-2` on header.
 
-### 4. Export employees
-- Add `'Group DOJ': profile.group_doj || ''` to the export row (around line 1742) and to the template export (line ~2099).
+4. **Dialog sizing safeguard**
+   - Keep `max-h-[92vh]` and `ScrollArea` (so very small viewports still scroll gracefully), but the content will now fit at ~574px viewport height without scrolling.
 
-### 5. Tests
-- `src/lib/importValidation.test.ts` — new cases: valid ISO date, dd/mm/yyyy, blank, invalid string rejected.
-- New `src/test/admin/userManagementAddUserGdoj.test.ts` — payload includes `group_doj` when set, omits when blank.
+No changes to:
+- Field set, labels, placeholders, required markers
+- State variables, mutations, payload shape
+- Access tab, Edit dialog field logic
+- Database, edge functions, validation
 
-### 6. Docs (mandatory)
-- `DOCUMENTATION.md` — add GDOJ to profiles schema reference + User Management / Import sections + Version History entry.
-- `POLICY.md` — note GDOJ is optional master data, no workflow impact, source-of-truth captured at user provisioning.
+## Files touched
 
-## Technical Notes
-- Date storage: `date` (not `timestamptz`) — avoids timezone drift.
-- Display format in UI: `dd MMM yyyy` via `date-fns format`.
-- Excel serial conversion in import handled via existing date helper if present; otherwise inline (`new Date(Date.UTC(1899,11,30)) + serial*86400000`).
-- Zero-hardcoding: column is plain data, no enum or master table needed.
+- `src/pages/admin/UserManagement.tsx` — Create dialog Profile tab markup; mirror spacing tweaks in Edit dialog for visual parity.
 
-## Verification Checklist
-- [ ] Migration applied; `\d profiles` shows `group_doj date`.
-- [ ] Add User saves a row with GDOJ; reopening Edit shows the value.
-- [ ] Import xlsx with `gdoj` column populates the field for new + existing rows.
-- [ ] Export xlsx contains the `Group DOJ` column with values.
-- [ ] Unit tests pass.
-- [ ] DOCUMENTATION.md + POLICY.md updated in same change.
+## Risk & Impact
+
+- **Data / Workflow / Regression:** None — purely Tailwind class adjustments on the Create/Edit dialogs.
+- **UI/UX:** Slightly denser form; still aligned with existing shadcn input/label scale. No responsive breakage — single-column on mobile is preserved (`grid-cols-1 md:grid-cols-3`).
+- **Mitigation:** Manual visual check at 929×574 and at mobile width after build.
+
+## Verification
+
+- Open Add New User at default zoom on a ~930×580 viewport → all Personal Information + Organization fields and footer visible without scrolling.
+- Mobile viewport: fields stack single-column as before.
+- Edit User dialog reflects the same compact spacing.
+
+## Docs
+
+- `DOCUMENTATION.md` — note the Add/Edit User dialog density adjustment under User Management UI.
+- `POLICY.md` — Not Applicable (no policy change).
