@@ -1830,6 +1830,8 @@ export default function ImportData() {
           department: dept?.name || '',
           pmsGrade: profile.pms_grade || '',
           level: (profile as any).level || '',
+          employeeCategory: (profile as any).employee_category || '',
+          employmentStatus: (profile as any).employment_status || '',
           managerEmployeeId: manager?.employee_code || '',
           managerName: manager?.full_name || '',
           groupDoj: (profile as any).group_doj || '',
