@@ -618,9 +618,10 @@ export default function SystemSettings() {
               </CardContent>
             </Card>
 
-            <IncrementEligibilitySection />
           </div>
         );
+      case 'increment':
+        return <IncrementEligibilitySection />;
       case 'cycles':
         return <FrequencyCycleSettings />;
       case 'controls':
