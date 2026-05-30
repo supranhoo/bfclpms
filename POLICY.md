@@ -1,3 +1,7 @@
+## §Phase17-Safety Incident Reporting Retry v2 Hardening (2026-05-30)
+
+Safety incident reporting remains open to every authenticated employee per §Phase16-Safety. The backend trigger `public.safety_incident_before_insert()` MUST stamp `NEW.reporter_id = auth.uid()` for authenticated requests before the row is accepted, so stale mobile/offline payloads cannot violate the reporter identity check or impersonate another user. Incident numbering, SLA deadline calculation, SELECT/UPDATE/DELETE policies, evidence rules, workflow transitions, and `client_submission_id` idempotency remain unchanged. Regression: `src/test/safety/incidentReportRlsPolicy.test.ts`.
+
 ## §111.7 Bulk Review Action Resolver (codified 2026-05-25; cascade addendum 2026-05-25)
 
 ## §44.3 Production Incentive Rate Cascade — Per-Employee Company Source (RCA 2026-05-29)
