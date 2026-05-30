@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
-import { Settings, Calculator, Edit3, Lightbulb, Save, RefreshCw, Calendar, Users, FileText, AlertCircle, Mail, Building2, CalendarDays, SlidersHorizontal, Database, KeyRound, Upload, Shield, Menu, LogOut, Undo2, LayoutGrid, Flag } from 'lucide-react';
+import { Settings, Calculator, Edit3, Lightbulb, Save, RefreshCw, Calendar, Users, FileText, AlertCircle, Mail, Building2, CalendarDays, SlidersHorizontal, Database, KeyRound, Upload, Shield, Menu, LogOut, Undo2, LayoutGrid, Flag, TrendingUp } from 'lucide-react';
 import { useScoreCalculationMode, useUpdateSystemSetting, ScoreCalculationMode, useAutoRolloverSetting, useRolloverLogs, useDailyAggregationMethod, DailyAggregationMethod, useSystemSetting, useAutoLogoutMinutes } from '@/hooks/useSystemSettings';
 import { useRecallWindowHours } from '@/hooks/useRecallSubmission';
 import { useState, useEffect } from 'react';
@@ -38,6 +38,7 @@ const SETTINGS_SECTIONS = [
   { key: 'branding', label: 'Branding', icon: Building2 },
   { key: 'general', label: 'General', icon: RefreshCw },
   { key: 'scoring', label: 'Scoring', icon: Calculator },
+  { key: 'increment', label: 'Increment', icon: TrendingUp },
   { key: 'cycles', label: 'Cycles', icon: CalendarDays },
   { key: 'controls', label: 'Controls', icon: SlidersHorizontal },
   { key: 'uploads', label: 'Uploads', icon: Upload },
@@ -617,9 +618,10 @@ export default function SystemSettings() {
               </CardContent>
             </Card>
 
-            <IncrementEligibilitySection />
           </div>
         );
+      case 'increment':
+        return <IncrementEligibilitySection />;
       case 'cycles':
         return <FrequencyCycleSettings />;
       case 'controls':
