@@ -3322,3 +3322,19 @@ Governance source: `docs/safety-integration-governance.md` §Phase 5.
 6. **Rollback contract.** Setting `ui_offline_inspector_retry_v2 = false` instantly restores Phase 4 UX. No data migration, no orphaned columns, no cache stampede. Removing the feature entirely = revert the relevant commit + delete the `safety_settings` row.
 
 7. **Phases 6 (admin/import) and 7 (analytics polish)** remain blocked behind their own gates per §Phase Execution Order.
+
+## §Phase10-Safety — Analytics v2 (codified 2026-05-30)
+
+1. **Flag.** Behind `safety_settings.ui_safety_analytics_v2` (boolean JSONB, default `false`). Admin or `safety_head` flips it via the existing Safety Settings JSON editor — no bespoke settings UI. With the flag OFF, `/safety/analytics` renders pixel-identical to v2.66.13.24.
+
+2. **Additive only.** Phase 10 MUST NOT remove or restyle any Phase 7 tile, table, badge, or refresh control. The v2 sections (trend chart, heatmap, drill-down dialog) are mounted alongside the existing layout; they never replace it.
+
+3. **SSOT helpers.** All aggregation (`aggregateMonthlyTrend`, `monthLabel`, `heatmapIntensity`) lives in `src/lib/safetyAnalytics.ts` and is pure. v2 UI components (`SafetyTrendChart`, `SafetyHeatmap`, `KpiDrillDownDialog`) are strictly presentational — they MUST NOT contain inline aggregation or filtering logic beyond mapping helper output to JSX.
+
+4. **Zero writers.** Phase 10 introduces ZERO `.insert / .update / .upsert / .delete / .rpc / .upload / fetch(` calls outside the seed migration. Drill-down reads ONLY the already-cached `useSafetyIncidents()` query — it must not open a new query key, and it must not subscribe to realtime. The 100-row screen cap is fixed; widening it requires a new policy item.
+
+5. **Materialized view contract.** `public.mv_safety_incident_monthly_trend` is read-only, dense (BU × month) over a rolling 12-month window, refreshed CONCURRENTLY by `public.refresh_safety_analytics()`. Adding columns is additive-only. Removing or narrowing the window requires policy review because Analytics v1 BU heatmap continues to assume a 12-month source.
+
+6. **Rollback.** Flip `ui_safety_analytics_v2 = false`. The new MV may remain in place (cheap, refreshed in the same RPC) or be dropped — dropping it does NOT require a data migration because no row writes against it.
+
+7. **Phase 11 (SLA escalation engine) and Phase 12 (retry-v2 enable + QA)** remain blocked behind their own gates per §Phase Execution Order.
