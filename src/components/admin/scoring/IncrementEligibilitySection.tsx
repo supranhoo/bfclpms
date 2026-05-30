@@ -461,7 +461,7 @@ function CriterionDialog(props: {
       .replace(/[^a-z0-9]+/g, '_')
       .replace(/^_|_$/g, '');
     props.onSave({
-      id: props.row?.id,
+      ...(props.row?.id ? { id: props.row.id } : {}),
       config_id: props.configId,
       criterion_key: key,
       criterion_name: form.criterion_name.trim(),
