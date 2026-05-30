@@ -1,72 +1,72 @@
-# Phase 5 — Emergency Overlay
+# Phase 8 — Wire Emergency Overlay to the Real Contacts Table (SSOT Reconciliation)
 
-Flag-gated, UI-only overlay surfacing emergency contacts and one-tap "Report incident" entry from any Safety route. Consistent with Phase 3/4 governance: no schema changes, no new writers, no RLS or RPC edits.
+## Assumptions
+- Phase 5 shipped `EmergencyOverlay` reading from `safety_settings.emergency_contacts` (free-form JSON).
+- A full domain table `public.safety_emergency_contacts` already exists with typed fields (`name`, `role_title`, `phone_primary`, `phone_alt`, `email`, `contact_type`, `is_active`) and a working admin page at `/safety/emergency/contacts` powered by `useSafetyEmergency` hooks.
+- We currently have **two parallel sources of truth** for emergency contacts — a clear SSOT violation per project policy.
 
-## Risk & Impact
+## Clarification (resolved by inspection)
+Rather than building a new JSON editor in `SafetySettings`, the correct move is to retire the JSON setting and point the overlay at the existing table. Building a second editor would entrench the duplication.
 
-- **Data:** None. Reads existing `safety_settings` only. No table or column additions.
-- **Workflow:** None. Overlay routes user into existing `/safety/incidents/new` flow.
-- **UI/UX:** New floating action button (FAB) on `/safety/*` routes when flag ON. Flag OFF → pixel-identical to today.
-- **Regression:** Low. Isolated to a single mount point in `SafetyLayout`. Guarded by new no-writers test.
-- **Scalability:** Negligible — one settings row read, cached.
-- **Rollback:** Set `ui_emergency_overlay_v1 = false` in `safety_settings`.
+## Risk & Impact Report
+- **Data Impact:** No schema changes. We delete one row in `safety_settings` (`key='emergency_contacts'`). The `safety_emergency_contacts` table is unchanged; its existing RLS/grants continue to govern access.
+- **Workflow Impact:** Admins manage contacts only via `/safety/emergency/contacts` (already live). Overlay now shows live, structured contacts (primary + alt phone, role, type) instead of JSON-shaped objects.
+- **UI/UX:** Overlay surface stays identical (Sheet, FAB trigger, CTA). Per-row layout gains alt-phone link and contact-type badge. Adds a discoverable link card on `/safety/settings` pointing to the contacts admin page. FAB still gated by `ui_emergency_overlay_v1`.
+- **Regression Risk:** Low. Single component swaps data source. No new writers, no new RPCs, no schema/RLS change. Existing `emergencyOverlayNoNewWriters` governance test continues to apply.
+- **Scalability:** `useEmergencyContacts({ type: 'all', active: true })` is bounded by the existing hook; small dataset (tens of rows). No pagination needed.
+- **Mitigation:** Keep the overlay UI-only (read via existing hook, no new writers). Update governance test allowlist so reading `useSafetyEmergency` is permitted but the overlay still cannot import the upsert/delete hooks.
 
-## Flag
+## Step-by-Step Plan
+1. **Swap data source in `EmergencyOverlay.tsx`**
+   - Replace `useSafetySettings()` lookup of `emergency_contacts` with `useEmergencyContacts({ type: 'all' })` filtered to `is_active === true`.
+   - Render `phone_primary` as the main `tel:` action; render `phone_alt` as a secondary link when present.
+   - Show `contact_type` as a small badge; show `role_title` as the subtitle.
+   - Keep empty-state copy but link the message to `/safety/emergency/contacts` for admins.
+   - Verification: load `/safety` with FAB enabled → Sheet shows live contacts from the table.
 
-- `ui_emergency_overlay_v1` (boolean, default `false`) — added as a row in `public.safety_settings` via `supabase--insert` (no migration, no dead column — same shape as `ui_offline_inspector_v1`).
-- `emergency_contacts` (JSON row in `safety_settings`) — admin-editable list of `{ label, phone, role }`. Empty array by default; overlay hides contacts section gracefully when empty.
+2. **Add a "Manage emergency contacts" link card on `SafetySettings.tsx`**
+   - Small `Card` with `Phone` icon + `Button asChild` linking to `/safety/emergency/contacts`. Pure navigation, no new logic.
+   - Verification: visible at `/safety/settings`; click navigates to the existing admin page.
 
-## Scope
+3. **Retire the duplicate JSON setting**
+   - Delete the row `safety_settings WHERE key='emergency_contacts'`.
+   - Keep `ui_emergency_overlay_v1` (still the overlay feature flag).
+   - Verification: `select * from safety_settings where key='emergency_contacts'` returns 0 rows; overlay still renders contacts from the table.
 
-**New files**
-- `src/components/safety/EmergencyOverlay.tsx` — Radix `Sheet` (bottom on mobile, right on desktop) with: emergency contacts list (tel: links), "Report incident now" CTA → `navigate('/safety/incidents/new')`, "Offline queue" shortcut (reuses Phase 4 inspector when its flag is also ON).
-- `src/components/safety/EmergencyFab.tsx` — fixed-position FAB trigger; respects `prefers-reduced-motion`; min 44px touch target.
-- `src/test/safety/emergencyOverlayNoNewWriters.test.ts` — regex guard mirroring Phase 3/4 pattern.
-- `src/test/safety/emergencyOverlay.test.tsx` — render, flag-off invisibility, contact tap, CTA navigation.
+4. **Refresh governance test `emergencyOverlayNoNewWriters.test.ts`**
+   - Allow `useEmergencyContacts` (read hook) imports in `EmergencyOverlay.tsx`; explicitly forbid `useUpsertEmergencyContact` and `useDeleteEmergencyContact` to keep the overlay read-only.
+   - Verification: `bunx vitest run src/test/safety/` → all green.
 
-**Edited files**
-- `src/components/safety/SafetyLayout.tsx` (or equivalent route shell) — mount `<EmergencyFab />` gated by flag.
-- `DOCUMENTATION.md` — v2.66.13.22 entry.
-- `POLICY.md` — §Phase5-Safety.
-- `mem/index.md` + new `mem/features/safety/emergency-overlay-v1.md`.
-
-**Forbidden (Phase 5 hard limits)**
-- No edits to incident submit, queue mutators, RLS, RPCs, storage, or routes.
-- No new DB tables, columns, triggers, or functions.
-- No edits to `safetyIncidentSubmit.ts`, `safetyOfflineQueue.ts` mutation paths, `useSafetyOfflineSync.ts`.
-- No notification dispatch, SMS, or external API integration (read-only `tel:` links only).
-
-## Steps
-
-1. **Flag insert** — `supabase--insert` adds `ui_emergency_overlay_v1=false` and `emergency_contacts=[]` rows to `safety_settings`. Verify via existing settings hook. *(Verification: row visible in Safety Settings JSON editor.)*
-2. **Build `EmergencyOverlay` + `EmergencyFab`** — pure presentational, reads settings via existing hook, no new fetchers. *(Verification: Storybook-style render in test.)*
-3. **Mount in `SafetyLayout`** behind flag. *(Verification: flag OFF → DOM unchanged snapshot.)*
-4. **Guard test** — `emergencyOverlayNoNewWriters.test.ts` greps Phase 5 files for `insert(`, `update(`, `upsert(`, `delete(`, `.rpc(`, `.upload(`. *(Verification: green.)*
-5. **Docs + memory** — atomic update with code.
-6. **Default OFF in prod** until safety-head sign-off. Toggle ON via existing Settings JSON editor; no redeploy.
+5. **Documentation & policy sync**
+   - `DOCUMENTATION.md`: bump version, note Phase 8 reconciliation and the SSOT decision.
+   - `POLICY.md` §Phase5-Safety: amend to state that emergency contacts live in `safety_emergency_contacts` and are managed at `/safety/emergency/contacts`; the JSON setting is deprecated.
+   - `mem/features/safety/emergency-overlay-v1.md`: update to reflect new data source.
+   - `mem/index.md`: no new entry needed; existing one stays.
 
 ## UI Changes
+- **Where:** `/safety/*` (FAB → Sheet) and `/safety/settings` (new link card).
+- **What visually changes:**
+  - Overlay rows now display: bold name, subtle role+type, primary phone link (tap-to-call), optional alt phone link, optional email link. Empty-state copy links to the admin page.
+  - Settings page gains a single new card "Emergency contacts" with a "Manage" button.
+- **Interaction:** Tap FAB → Sheet opens → tap phone → native dialer; tap "Report incident now" → `/safety/incidents/new` (unchanged).
+- **Responsive:** Sheet keeps bottom-anchored mobile / right-anchored desktop behavior; 44px min touch targets preserved.
 
-- **Location:** Bottom-right FAB on all `/safety/*` routes (offset above bottom nav on mobile).
-- **Trigger:** Tap opens Sheet (bottom on `<md`, right on `≥md`).
-- **Contents:** Header "Emergency", contacts list (label + `tel:` link), divider, primary CTA "Report incident now", secondary "View offline queue" (only if Phase 4 flag ON).
-- **Interaction:** Esc / outside-click closes. Reduced-motion respected. No backdrop blur on low-power hint.
-- **Responsive:** 44px+ touch targets; FAB hidden when virtual keyboard open on `/safety/incidents/new` to avoid covering the submit button.
+## Technical Notes
+- Files touched:
+  - `src/components/safety/EmergencyOverlay.tsx` (rewrite data source, ~30 LOC delta)
+  - `src/pages/safety/SafetySettings.tsx` (add one card)
+  - `src/test/safety/emergencyOverlayNoNewWriters.test.ts` (update allow/deny lists)
+  - `DOCUMENTATION.md`, `POLICY.md`, `mem/features/safety/emergency-overlay-v1.md`
+- Data op (one row delete) executed via the data-change tool, not a migration.
+- Zero new writers, RPCs, edge functions, or schemas.
 
-## Tests
+## Rollback Strategy
+- Revert the four code files. The deleted `safety_settings.emergency_contacts` row can be re-inserted with an empty `[]` value if any consumer is later discovered; no destructive schema change to undo.
 
-- Flag OFF → FAB not rendered (snapshot).
-- Flag ON, empty contacts → CTA visible, contacts section hidden.
-- Flag ON, with contacts → `tel:` links render with correct `href`.
-- CTA click → `navigate('/safety/incidents/new')` called.
-- No-new-writers regex guard green.
+## Decision Justification
+- **Chosen:** Point overlay at `safety_emergency_contacts`. Honors SSOT, reuses existing typed schema/RLS, admin page already exists.
+- **Rejected:** Build a JSON contacts editor inside `SafetySettings`. Would entrench two sources of truth, duplicate validation logic, and bypass the typed table's RLS structure.
+- **Rejected:** Migrate `safety_emergency_contacts` rows into `safety_settings`. Loses typing, RLS granularity, and the working admin UI.
 
-## Approval Gate
-
-Requires Principal Architect + Safety Lead sign-off per governance §Phase 5. On approval: insert flag row first (default `false`), then ship UI in a single commit. No production toggle without safety-head confirmation.
-
-## Post-Phase Notes
-
-- Phase 6 (Analytics surface) remains gated.
-- Schema debt: none added in Phase 5.
-- Removal path: delete two settings rows + revert one commit.
+## Post-Implementation Notes
+- After approval and execution, run the safety test suite and verify the overlay on `/safety/home` (FAB visible once flag is on). The Settings link card should be visible regardless of the flag.
