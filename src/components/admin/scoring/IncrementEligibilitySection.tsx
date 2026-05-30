@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { format } from 'date-fns';
 import { ShieldCheck, Plus, Pencil, Trash2, Copy, History, ScrollText, Loader2, Save, CheckCircle2, XCircle, Send } from 'lucide-react';
+import { Unlock } from 'lucide-react';
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -94,6 +95,7 @@ export function IncrementEligibilitySection() {
   const [deleteTarget, setDeleteTarget] = useState<EligibilityCriterionRow | null>(null);
   const [auditOpen, setAuditOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [revertOpen, setRevertOpen] = useState(false);
 
   // Copy-from-previous-year UI
   const [copyMode, setCopyMode] = useState<'no' | 'yes'>('no');
@@ -369,8 +371,8 @@ export function IncrementEligibilitySection() {
                 </>
               )}
               {config.status === 'approved' && (
-                <Button size="sm" variant="outline" onClick={() => updateStatus.mutate({ id: config.id, status: 'draft', action: 'modify', assessment_year: config.assessment_year })}>
-                  Reopen as Draft
+                <Button size="sm" variant="outline" onClick={() => setRevertOpen(true)}>
+                  <Unlock className="h-4 w-4 mr-1" /> Revert to Draft
                 </Button>
               )}
             </div>
@@ -409,6 +411,24 @@ export function IncrementEligibilitySection() {
 
         {/* AUDIT TRAIL DRAWER */}
         <AuditDrawer open={auditOpen} onClose={() => setAuditOpen(false)} configId={config?.id ?? null} />
+
+        {/* REVERT-TO-DRAFT CONFIRM */}
+        <ConfirmDestructiveDialog
+          open={revertOpen}
+          onConfirm={() => {
+            if (config) {
+              updateStatus.mutate(
+                { id: config.id, status: 'draft', action: 'revert_to_draft', assessment_year: config.assessment_year },
+                { onSuccess: () => setRevertOpen(false) },
+              );
+            }
+          }}
+          onCancel={() => setRevertOpen(false)}
+          title="Revert to Draft?"
+          description={`This will unlock criteria for editing on the ${config?.assessment_year ?? ''} configuration. The change is recorded in the audit trail, and you will need to re-publish before it takes effect again.`}
+          confirmLabel="Revert"
+          isLoading={updateStatus.isPending}
+        />
 
         {/* VERSION HISTORY DRAWER */}
         <VersionHistoryDrawer
