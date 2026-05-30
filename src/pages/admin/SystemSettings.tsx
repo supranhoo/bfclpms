@@ -616,6 +616,8 @@ export default function SystemSettings() {
                 </div>
               </CardContent>
             </Card>
+
+            <IncrementEligibilitySection />
           </div>
         );
       case 'cycles':
