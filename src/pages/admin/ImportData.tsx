@@ -1726,6 +1726,7 @@ export default function ImportData() {
         managerEmployeeId: '100002',
         managerName: 'Jane Smith',
         employeeStatus: 'Active',
+        groupDoj: '2020-04-15',
       },
     ];
 
