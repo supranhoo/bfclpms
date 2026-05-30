@@ -40,7 +40,11 @@ import {
   useAllSafetyUserRoles,
   useGrantSafetyRole,
   useRevokeSafetyRole,
+  useMySafetyRoles,
 } from '@/hooks/useSafetyRoles';
+import { useAuth } from '@/contexts/AuthContext';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Lock } from 'lucide-react';
 
 interface ProfileRow {
   id: string;
@@ -59,6 +63,11 @@ interface ProfileRow {
  */
 export default function SafetyUsers() {
   const { toast } = useToast();
+  const { role: pmsRole } = useAuth();
+  const mySafetyRoles = useMySafetyRoles();
+  const isSafetyAdmin = (mySafetyRoles.data ?? []).includes('admin');
+  const isPmsAdmin = pmsRole === 'admin';
+  const canManage = isPmsAdmin || isSafetyAdmin;
   // Phase 19.1 — split draft (input) and applied (query key) so search
   // fires ONLY when the user clicks Search / presses Enter / picks a row.
   const [draftSearch, setDraftSearch] = useState('');
@@ -202,6 +211,19 @@ export default function SafetyUsers() {
         </div>
       </div>
 
+      {!canManage && !mySafetyRoles.isLoading && (
+        <Alert>
+          <Lock className="h-4 w-4" />
+          <AlertTitle>Read-only access</AlertTitle>
+          <AlertDescription>
+            Only Safety Admins (or PMS Admins) can grant or revoke Safety roles. Ask an
+            administrator to assign roles on your behalf, or open the Identity & Access
+            Console above for a unified view.
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {canManage && (
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Grant a role</CardTitle>
@@ -362,6 +384,7 @@ export default function SafetyUsers() {
           </div>
         </CardContent>
       </Card>
+      )}
 
       <Card>
         <CardHeader>
@@ -402,6 +425,7 @@ export default function SafetyUsers() {
                       </p>
                     </div>
                     <Badge variant="secondary">{SAFETY_ROLE_LABEL[row.role]}</Badge>
+                    {canManage && (
                     <Button
                       size="sm"
                       variant="ghost"
@@ -411,6 +435,7 @@ export default function SafetyUsers() {
                     >
                       <Trash2 className="h-4 w-4 text-destructive" />
                     </Button>
+                    )}
                   </div>
                 );
               })}
