@@ -73,7 +73,6 @@ export default function Organization() {
     pmsGrades: true,
     levels: true,
     locations: true,
-    employeeCategories: true,
   });
   const cloneStructure = useCloneStructure();
 
