@@ -3,7 +3,7 @@ name: Safety Incident Open INSERT Policy
 description: safety_incidents INSERT is open to all authenticated users (Phase 16, EHS standard). reporter_id = auth.uid() pin must remain; SELECT/UPDATE/DELETE gates unchanged.
 type: feature
 ---
-- Policy: `Authenticated users can report incidents` on `public.safety_incidents` — `FOR INSERT TO authenticated WITH CHECK (auth.uid() IS NOT NULL AND reporter_id = auth.uid())`.
+- Policy: `Authenticated users can report incidents` on `public.safety_incidents` — `FOR INSERT TO authenticated WITH CHECK (auth.uid() IS NOT NULL AND reporter_id = auth.uid())`. RETAINED as defence-in-depth; canonical write path is now the Phase 18 RPC (see `mem/features/safety/incident-submission-rpc.md`).
 - Reason: EHS standard — every employee can raise a hazard. The prior `has_safety_module_access(...)` gate blocked HR / non-safety users on the mobile incident form.
 - Anti-impersonation: `reporter_id = auth.uid()` MUST remain in WITH CHECK. Never widen to allow arbitrary reporter_id.
 - SELECT (`can_view_safety_incident`), UPDATE (admin/safety_head/safety_officer/assigned_to), DELETE (admin only), and `transition_safety_incident` RPC for stage moves are UNCHANGED.
