@@ -139,14 +139,18 @@ export function useAdminSubmitReviewData() {
         evidence_urls,
       });
 
-      // 2b. Handle is_na flag: explicit toggle takes priority,
-      // otherwise auto-clear when achieved_value is provided.
-      // CRITICAL: Only clear the CURRENT role's fields — never wipe other levels' scores.
+      // 2b. Handle is_na flag.
+      // POLICY §116 / BUG-047 — always write the column when the caller sent
+      // an explicit value, so the row's is_na cannot diverge from the UI
+      // (otherwise the on-behalf trigger sees stale is_na and blocks the
+      // write with a vague guardrail error).
+      // ADR-035 — side-effects (score clearing, na_marked_by_role flip,
+      // final_score reset) only run when is_na ACTUALLY changes, so we never
+      // accidentally re-clear scores on a no-op edit.
       if (is_na !== undefined) {
         const oldIsNa = oldSubmission?.is_na === true;
-        // Only write is_na when it actually changed to prevent accidental re-clears
+        updateFields.is_na = is_na;
         if (is_na !== oldIsNa) {
-          updateFields.is_na = is_na;
           updateFields.na_marked_by_role = is_na ? 'admin' : null;
           if (is_na) {
             // Clear only the CURRENT role's fields + final score
