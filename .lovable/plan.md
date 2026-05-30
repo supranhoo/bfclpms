@@ -1,116 +1,70 @@
+# Add Group Date of Joining (GDOJ) — User Management
 
-# Fixes — Incident submission, Safety user search, Users & Roles UX
+## Scope (strictly what was asked)
+1. Add User page (UserManagement.tsx) — new GDOJ date field.
+2. Import Employees template/parser — accept `gdoj` / `group_doj` / `groupDoj` column and persist it.
+3. Export Employees — include GDOJ column.
+
+Out of scope: changing profile UI elsewhere, reports, hierarchy logic.
+
+## Assumptions
+- GDOJ is a plain calendar date (no time component).
+- Optional / nullable — existing employees won't have it.
+- "Group Date of Joining" differs from `created_at` (account creation) and from any company-level DOJ; it represents the date the employee joined the group/parent organisation.
+- Stored on `public.profiles` as a single new column.
 
 ## Risk & Impact Report
+- **Data Impact:** Additive column `profiles.group_doj date NULL`. No backfill, no destructive change. Existing rows unaffected.
+- **Workflow Impact:** None — no business logic reads GDOJ today.
+- **UI/UX Impact:** One new optional date input in the Add User dialog; one new column in import template + export sheet.
+- **Regression Risk:** Low. Field is nullable and untouched by existing flows. ImportData parser only adds a new optional key.
+- **Scalability:** Single date column, no index needed (not queried/filtered yet).
+- **Backup:** Coverage is automatic via `get_backup_table_order()` (profiles already included) — no allowlist edit needed.
+- **Rollback:** `ALTER TABLE public.profiles DROP COLUMN group_doj;`
+- **Mitigation:** Zod schema validates date format; unit tests cover parser + add-user payload.
 
-| Area | Impact | Risk | Mitigation |
-|------|--------|------|------------|
-| Incident submit path | Avinash (101732) and any user on stale/expired session | Low — RPC bypass already deployed | Force session refresh before submit, surface friendlier error, lock direct-insert regression |
-| Safety user search (SafetyUsers) | Admins granting Safety roles | Low — purely FE change | Deferred-fetch pattern matches other Safety lists |
-| Profiles RLS for Safety admins | Safety admins who are NOT PMS admins currently see 0 users (root cause of "search not working") | Low — additive read policy gated by `has_safety_role(_, 'admin')` | Policy scoped to active profiles only; SELECT-only; idempotent CREATE POLICY IF NOT EXISTS |
-| Combobox dropdown | UX only | Low | Reuse existing shadcn `Popover` + `Command` (cmdk) |
+## Implementation Steps
 
-No schema changes. No destructive ops. Rollback = revert FE files + `DROP POLICY`.
-
----
-
-## Issue 1 — Incident submission fails for 101732
-
-### RCA (verified against live DB)
-- `public.report_safety_incident(jsonb)` exists, is `SECURITY DEFINER`, owner `postgres` with `rolbypassrls = true` → INSERT inside the RPC cannot raise the RLS error.
-- Trigger `safety_incident_before_insert` already stamps `NEW.reporter_id := auth.uid()`.
-- Current FE (`useSafetyIncidents.ts`, `safetyIncidentSubmit.ts`) routes through the RPC.
-- The user's "new row violates row-level security policy for table safety_incidents" can only originate from:
-  1. A **stale published bundle / cached PWA** still calling `.from('safety_incidents').insert(...)` directly, **or**
-  2. An **expired/missing JWT** at submit time → `auth.uid()` is NULL → trigger no-op → WITH-CHECK `reporter_id = auth.uid()` fails (42501).
-
-### Fix
-1. **Pre-submit auth refresh** in `SafetyIncidentNew.tsx`: call `supabase.auth.getSession()`; if missing/expired, attempt `refreshSession()`. If still missing, show "Session expired — please sign in again" and bail before submit. Same in the offline-queue flush.
-2. **Friendlier error mapping** in `safetyIncidentSubmit.ts` — translate Postgres `42501` / "row-level security" into "Your session expired or your account no longer has permission to report incidents. Please sign in again."
-3. **Regression lock** — new test `src/test/safety/noDirectIncidentInsert.test.ts` greps `src/**` and fails the build if any non-test file calls `.from('safety_incidents').insert(`.
-4. **Publish** — republishing pushes the RPC-only bundle and busts the PWA cache, which resolves cause (1) for any user still on the old SW.
-
-### 5-Whys
-1. Why RLS error? → Insert reached the table with `reporter_id ≠ auth.uid()`.
-2. Why? → Either no auth context (NULL uid) or stale bundle doing direct insert.
-3. Why no auth context? → Mobile PWA cached session expired; submit fired before refresh.
-4. Why no graceful handling? → FE didn't pre-validate session, error wasn't mapped to user language.
-5. Why bundle stale? → No regression test prevents a future direct-insert; PWA SW cached old JS.
-
----
-
-## Issue 2 — Safety module: search should fire only on explicit Search click
-
-### Scope (verified)
-- `SafetyIncidents`, `SafetyPermits`, `SafetyAuditLog`, `SafetyAssets` already use `SafetyFilterBar` / `SafetyFilterSheet` (draft state → Search button) ✅
-- Only **`SafetyUsers`** (`/safety/settings/users`) still auto-refetches on every keystroke via `queryKey: [..., search]`.
-
-### Fix
-Apply the same deferred pattern:
-- Split state into `draftSearch` (input) and `appliedSearch` (query key).
-- `useQuery` uses only `appliedSearch`.
-- "Search" button + Enter inside the input set `appliedSearch = draftSearch`.
-- "Reset" clears both and selection.
-
-No changes to other Safety pages.
-
----
-
-## Issue 3 — Users & Roles search and dropdown
-
-### Problem A — Search returns nothing for non-PMS-admin Safety admins
-Profiles RLS has no policy that grants a **Safety admin** read access. Result: empty list regardless of input. (Verified against live `pg_policy`.)
-
-**Fix (migration):** Additive SELECT policy on `public.profiles`:
-
+### 1. Migration (additive)
 ```sql
-CREATE POLICY "Safety admins can view active profiles for role grants"
-ON public.profiles
-FOR SELECT
-TO authenticated
-USING (
-  is_active = true
-  AND public.has_safety_role(auth.uid(), 'admin')
-);
+ALTER TABLE public.profiles ADD COLUMN group_doj date;
+COMMENT ON COLUMN public.profiles.group_doj IS 'Group Date of Joining — date employee joined the parent group.';
 ```
+No RLS / GRANT changes (profiles already configured).
 
-Scoped to `is_active = true` and the Safety-admin role only. No PII columns added.
+### 2. Add User form — `src/pages/admin/UserManagement.tsx`
+- Extend the add-user form state with `groupDoj: string | null`.
+- Add a shadcn Popover + Calendar date picker (pointer-events-auto) labelled "Group Date of Joining (GDOJ)".
+- Include `group_doj` in the insert payload (ISO `yyyy-MM-dd` or null).
+- Same field surfaced in Edit User dialog for parity (small, non-scope-creep change since it's the same form).
 
-### Problem B — Inline result list stays open / no Esc / no outside-close
-Current UI renders an always-visible scrollable `<div>` of buttons below the input.
+### 3. Import template — `src/pages/admin/ImportData.tsx`
+- Add `gdoj` (aliases: `group_doj`, `groupDoj`, `group date of joining`) to the row mapper near existing `designation` / `pmsGrade` keys.
+- Extend `EmployeeImportRowSchema` in `src/lib/importValidation.ts` with `groupDoj: z.string().optional()` parsed/normalised to `yyyy-MM-dd` (accept Excel serial, `dd/mm/yyyy`, ISO).
+- Persist `group_doj` in both insert and update branches (lines ~1317 and ~1382).
+- Add column to the downloadable template + the import-preview table.
 
-**Fix:** Replace with a `Popover` + `Command` (cmdk) combobox:
-- Trigger: the existing input (read-only display of selected user) inside `PopoverTrigger`.
-- Content: `Command` with `CommandInput` (the actual search box), `CommandList`, `CommandEmpty`, `CommandGroup` of users.
-- Selecting an item → `onSelect` sets `selectedUserId` and calls `setOpen(false)`.
-- `Popover` natively closes on outside click and Esc; arrow-key nav via cmdk.
-- Combined with Issue 2's deferred-search: the popover's `CommandInput` updates `draftSearch`; a small "Search" affordance (or Enter) commits to `appliedSearch`. For combobox UX clarity we'll keep the Search button visible inside the popover footer.
+### 4. Export employees
+- Add `'Group DOJ': profile.group_doj || ''` to the export row (around line 1742) and to the template export (line ~2099).
 
----
+### 5. Tests
+- `src/lib/importValidation.test.ts` — new cases: valid ISO date, dd/mm/yyyy, blank, invalid string rejected.
+- New `src/test/admin/userManagementAddUserGdoj.test.ts` — payload includes `group_doj` when set, omits when blank.
 
-## Files to change
+### 6. Docs (mandatory)
+- `DOCUMENTATION.md` — add GDOJ to profiles schema reference + User Management / Import sections + Version History entry.
+- `POLICY.md` — note GDOJ is optional master data, no workflow impact, source-of-truth captured at user provisioning.
 
-**Code**
-- `src/pages/safety/SafetyIncidentNew.tsx` — pre-submit session refresh + bail-on-no-session.
-- `src/lib/safetyIncidentSubmit.ts` — friendly error mapping for 42501 / "row-level security".
-- `src/pages/safety/SafetyUsers.tsx` — deferred search + Popover/Command combobox.
+## Technical Notes
+- Date storage: `date` (not `timestamptz`) — avoids timezone drift.
+- Display format in UI: `dd MMM yyyy` via `date-fns format`.
+- Excel serial conversion in import handled via existing date helper if present; otherwise inline (`new Date(Date.UTC(1899,11,30)) + serial*86400000`).
+- Zero-hardcoding: column is plain data, no enum or master table needed.
 
-**Migration**
-- `supabase/migrations/<ts>_safety_admin_profiles_read.sql` — add SELECT policy above.
-
-**Tests**
-- `src/test/safety/noDirectIncidentInsert.test.ts` — regression: no FE direct insert into `safety_incidents`.
-- `src/test/safety/safetyUsersDeferredSearch.test.tsx` — typing does not fetch; clicking Search does.
-- `src/test/safety/safetyAdminProfilesRead.test.ts` — pins the migration SQL (policy name, SELECT-only, `is_active = true`, `has_safety_role(_, 'admin')`).
-
-**Docs / Memory**
-- `DOCUMENTATION.md` — add Phase 19.1 entry (Safety-admin profiles read; SafetyUsers deferred search & combobox; incident submit hardening).
-- `POLICY.md` — §Safety-Access: Safety admins may read active profiles for role-grant UX.
-- `mem/architecture/safety/rbac.md` — add the new policy.
-- `mem/features/safety/incident-submission-rpc.md` — note pre-submit session refresh + error mapping.
-- `mem/index.md` — reference new memory entries if added.
-
-## Out of scope
-- No changes to Safety RBAC enums, no auto-grant of any Safety role.
-- No edits to other Safety list pages (already compliant with deferred-search rule).
-- No redesign of `SafetyUsers`; only the user picker becomes a combobox, role select and assignments table are unchanged.
+## Verification Checklist
+- [ ] Migration applied; `\d profiles` shows `group_doj date`.
+- [ ] Add User saves a row with GDOJ; reopening Edit shows the value.
+- [ ] Import xlsx with `gdoj` column populates the field for new + existing rows.
+- [ ] Export xlsx contains the `Group DOJ` column with values.
+- [ ] Unit tests pass.
+- [ ] DOCUMENTATION.md + POLICY.md updated in same change.
