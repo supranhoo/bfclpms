@@ -377,6 +377,7 @@ export default function UserManagement() {
       employeeCode,
       mobileNumber,
       isActive,
+      groupDoj,
     }: {
       userId: string;
       role: AppRole;
