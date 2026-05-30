@@ -49,32 +49,22 @@ export async function submitSafetyIncident(
     throw new Error('client_submission_id is required for safe submission');
   }
 
-  // 1) Try to find an already-created row for this client_submission_id.
-  //    This handles "row inserted but client never got the response" case.
-  const { data: existing, error: lookupErr } = await supabase
-    .from('safety_incidents')
-    .select('id, incident_number')
-    .eq('reporter_id', reporterId)
-    .eq('client_submission_id', payload.client_submission_id)
-    .maybeSingle();
-
-  if (lookupErr) throw lookupErr;
-
-  let row: { id: string; incident_number: string };
-  let reused = false;
-
-  if (existing) {
-    row = existing as { id: string; incident_number: string };
-    reused = true;
-  } else {
-    const { data: created, error: insertErr } = await supabase
-      .from('safety_incidents')
-      .insert({ ...payload, reporter_id: reporterId } as never)
-      .select('id, incident_number')
-      .single();
-    if (insertErr) throw insertErr;
-    row = created as { id: string; incident_number: string };
-  }
+  // 1) Server-authoritative submission via SECURITY DEFINER RPC.
+  //    reporter_id is stamped server-side from auth.uid() — the value we
+  //    pass here is ignored by the RPC. Dedup is atomic on
+  //    (reporter_id, client_submission_id). See POLICY §Phase18-Safety.
+  const { data: rpcData, error: rpcErr } = await supabase.rpc(
+    'report_safety_incident' as never,
+    { p_payload: payload as never } as never,
+  );
+  if (rpcErr) throw rpcErr;
+  const rpcRow = rpcData as unknown as {
+    id: string;
+    incident_number: string;
+    reused: boolean;
+  };
+  const row = { id: rpcRow.id, incident_number: rpcRow.incident_number };
+  const reused = !!rpcRow.reused;
 
   // 2) Upload evidence — skip files whose path already exists in the table.
   const { data: existingEvidence } = await supabase
