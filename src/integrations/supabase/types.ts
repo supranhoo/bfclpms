@@ -2412,6 +2412,44 @@ export type Database = {
           },
         ]
       }
+      increment_eligibility_exclusions: {
+        Row: {
+          added_at: string
+          added_by: string | null
+          assessment_year: string
+          config_id: string
+          employee_id: string
+          id: string
+          reason: string | null
+        }
+        Insert: {
+          added_at?: string
+          added_by?: string | null
+          assessment_year: string
+          config_id: string
+          employee_id: string
+          id?: string
+          reason?: string | null
+        }
+        Update: {
+          added_at?: string
+          added_by?: string | null
+          assessment_year?: string
+          config_id?: string
+          employee_id?: string
+          id?: string
+          reason?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "increment_eligibility_exclusions_config_id_fkey"
+            columns: ["config_id"]
+            isOneToOne: false
+            referencedRelation: "increment_eligibility_configs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       kpi_audit_logs: {
         Row: {
           action: string
