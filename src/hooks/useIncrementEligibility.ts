@@ -320,7 +320,9 @@ export function useUpsertCriterion() {
           .eq('id', row.id);
         if (error) throw error;
       } else {
-        const { error } = await supabase.from('increment_eligibility_criteria').insert([row]);
+        // Caller guarantees required fields on insert path (validated in CriterionDialog).
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error } = await supabase.from('increment_eligibility_criteria').insert([row as any]);
         if (error) throw error;
       }
     },
