@@ -3386,3 +3386,12 @@ Governance source: `docs/safety-integration-governance.md` §Phase 5.
 
 - `ui_safety_analytics_v2 = true` is now the default-on state for this tenant (v2.66.13.28).
 - §Phase10-Safety invariants remain in force: additive-only v2 sections (trend chart, BU heatmap, KPI drill-down dialog), zero new writers, all aggregation lives in pure helpers (`src/lib/safetyAnalytics.ts`), presentational components stay dumb, rollback is a single JSON edit on `safety_settings.ui_safety_analytics_v2 → false`.
+
+## §Phase16-Safety — Incident reporting opened to all authenticated users (codified 2026-05-30)
+
+- **Rule:** Any authenticated user MAY file a safety incident as themselves. The `public.safety_incidents` INSERT policy is `FOR INSERT TO authenticated WITH CHECK (auth.uid() IS NOT NULL AND reporter_id = auth.uid())`.
+- **Rationale:** Standard EHS practice — every employee (not just users with a safety role / safety module access) must be able to raise a hazard. The prior `has_safety_module_access(auth.uid())` gate produced the runtime error `new row violates row-level security policy for table "safety_incidents"` for ordinary employees (e.g. HR users) on the mobile incident form.
+- **Anti-impersonation invariant:** `reporter_id = auth.uid()` MUST remain in WITH CHECK. A reporter MUST NOT be able to file on behalf of another user.
+- **Downstream gates UNCHANGED:** SELECT on `safety_incidents` is still scoped via `can_view_safety_incident(id)`; UPDATE is still restricted to `admin` / `safety_head` / `safety_officer` / `assigned_to`; DELETE is still admin-only. Stage transitions still flow exclusively through `transition_safety_incident` RPC. Idempotency via `client_submission_id` UNIQUE is unchanged.
+- **Rollback:** restore the previous policy with a single migration that re-creates `Safety users can report incidents` (WITH CHECK `has_safety_module_access(auth.uid()) AND reporter_id = auth.uid()`) and drops `Authenticated users can report incidents`. No data migration needed.
+- **Regression lock:** `src/test/safety/incidentReportRlsPolicy.test.ts`. RLS matrix updated under §F-RLS-03 in `docs/safety/phase1/rls-matrix.md`.
