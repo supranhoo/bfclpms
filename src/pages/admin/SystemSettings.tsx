@@ -117,8 +117,22 @@ export default function SystemSettings() {
   const { hours: recallWindowHours, isLoading: recallWindowLoading } = useRecallWindowHours();
   const updateSetting = useUpdateSystemSetting();
   const isMobile = useIsMobile();
-  
-  const [activeSection, setActiveSection] = useState<SectionKey>('branding');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const initialSection = (searchParams.get('section') as SectionKey) || 'branding';
+  const [activeSection, setActiveSectionRaw] = useState<SectionKey>(initialSection);
+  const incrementTab = searchParams.get('tab') || 'eligibility';
+  const setActiveSection = (key: SectionKey) => {
+    setActiveSectionRaw(key);
+    const next = new URLSearchParams(searchParams);
+    next.set('section', key);
+    if (key !== 'increment') next.delete('tab');
+    setSearchParams(next, { replace: true });
+  };
+  useEffect(() => {
+    const s = searchParams.get('section') as SectionKey | null;
+    if (s && s !== activeSection) setActiveSectionRaw(s);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
   const [selectedMode, setSelectedMode] = useState<ScoreCalculationMode>(mode);
   const [selectedDailyMethod, setSelectedDailyMethod] = useState<DailyAggregationMethod>(dailyMethod);
   const [hasChanges, setHasChanges] = useState(false);
