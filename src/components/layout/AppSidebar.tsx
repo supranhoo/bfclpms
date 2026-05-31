@@ -110,8 +110,6 @@ const getStaticMenuItems = (policyVisibleRoles: string[]) => ({
     { title: 'Incentive Config', icon: Percent, path: '/admin/incentive-config', menuKey: 'admin-incentive', roles: ['admin'] },
     { title: 'Incentive Data Entry', icon: FileInput, path: '/admin/incentive-data-entry', menuKey: 'admin-incentive-data', roles: ['admin'] },
     { title: 'Increment Inputs', icon: FileInput, path: '/admin/increment-inputs', menuKey: 'admin-increment-inputs', roles: ['admin', 'hr_pms'] },
-    { title: 'General Eligibility', icon: ShieldCheck, path: '/admin/increment/general-eligibility', menuKey: 'admin-increment-general-eligibility', roles: ['admin', 'hr_pms'] },
-    { title: 'Increment Slabs', icon: Percent, path: '/admin/increment/slabs', menuKey: 'admin-increment-slabs', roles: ['admin', 'hr_pms'] },
     { title: 'Employee Development', icon: GraduationCap, path: '/admin/employee-development', menuKey: 'admin-development', roles: ['admin', 'hr_pms'] },
     { title: 'KPI Standardization', icon: GitMerge, path: '/admin/kpi-standardization', menuKey: 'admin-kpi-standardization', roles: ['admin'] },
   ],
