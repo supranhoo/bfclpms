@@ -149,6 +149,23 @@ function resolveConfirmationRule(rules: any[], p: any): ConfirmationTreatment {
   return (candidates[0]?.treatment as ConfirmationTreatment) ?? 'ignore';
 }
 
+/** Returns the entire matching rule row (preserving `applicable_transitions`,
+ *  scope ids, etc.), or null when no rule matches the employee's scope.
+ *  RCA fix: the engine previously kept only `treatment` and silently lost the
+ *  transition allow-list, so Trainee→Confirmed treatment was being applied to
+ *  every confirmed employee regardless of their actual prior status. */
+function resolveConfirmationRuleRow(rules: any[], p: any): any | null {
+  const score = (r: any) =>
+    (r.level_id ? 8 : 0) + (r.category_id ? 4 : 0) + (r.company_id ? 2 : 0);
+  const candidates = rules
+    .filter((r) =>
+      (!r.level_id || r.level_id === p.level_id) &&
+      (!r.category_id || r.category_id === p.category_id) &&
+      (!r.company_id || r.company_id === p.company_id))
+    .sort((a, b) => score(b) - score(a));
+  return candidates[0] ?? null;
+}
+
 /** Fiscal year start month is July (7). */
 function parseAssessmentYear(ay: string): { startYear: number; endYear: number } {
   // Accept "2024-25" or "2024-2025"
