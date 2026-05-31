@@ -643,7 +643,16 @@ export default function SystemSettings() {
         );
       case 'increment':
         return (
-          <Tabs defaultValue="eligibility" className="space-y-4">
+          <Tabs
+            value={incrementTab}
+            onValueChange={(v) => {
+              const next = new URLSearchParams(searchParams);
+              next.set('section', 'increment');
+              next.set('tab', v);
+              setSearchParams(next, { replace: true });
+            }}
+            className="space-y-4"
+          >
             <TabsList>
               <TabsTrigger value="eligibility">Eligibility Criteria</TabsTrigger>
               <TabsTrigger value="method">Increment Method</TabsTrigger>
