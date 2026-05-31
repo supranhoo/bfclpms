@@ -253,13 +253,29 @@ export function KpiTimeline({ isOpen, onClose, kpi, workflowStages: propStages }
       if (log.new_value.management_remarks) details.push(`Management Remarks: ${log.new_value.management_remarks}`);
     }
 
-    // Bulk/batch remark (HR PMS bulk approve etc.)
-    if (log.metadata?.batch_reason) details.push(`Remark: ${String(log.metadata.batch_reason)}`);
+    // Bulk/batch remark is rendered as a dedicated block (see renderRemark) — skip here.
     if (log.metadata?.mirrored_stage && log.metadata.mirrored_stage !== 'none') {
       details.push(`Mirrored to: ${String(log.metadata.mirrored_stage).replace(/_/g, ' ')}`);
     }
     
     return details;
+  };
+
+  // Pull a human-readable remark from various known metadata/new_value fields
+  // so HR PMS bulk-approve / admin overrides always surface the actor's note.
+  const getRemark = (log: AuditLog): string | null => {
+    const m = log.metadata as Record<string, unknown> | null;
+    const nv = log.new_value as Record<string, unknown> | null;
+    const candidate =
+      m?.batch_reason ??
+      m?.remark ??
+      m?.note ??
+      nv?.batch_reason ??
+      nv?.remark ??
+      null;
+    if (candidate == null) return null;
+    const text = String(candidate).trim();
+    return text.length ? text : null;
   };
 
   // Filter the canonical stage list down to the resolved workflow chain
@@ -389,6 +405,17 @@ export function KpiTimeline({ isOpen, onClose, kpi, workflowStages: propStages }
                                 </div>
                               )}
 
+                              {getRemark(log) && (
+                                <div className="mt-2 rounded-md border bg-muted/40 px-3 py-2">
+                                  <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                                    Remark
+                                  </div>
+                                  <p className="mt-1 whitespace-pre-line text-sm text-foreground">
+                                    {getRemark(log)}
+                                  </p>
+                                </div>
+                              )}
+
                               {children.length > 0 && (
                                 <div className="mt-3 border-t pt-2">
                                   <button
@@ -422,6 +449,16 @@ export function KpiTimeline({ isOpen, onClose, kpi, workflowStages: propStages }
                                                 {cDetails.map((d, i) => (
                                                   <p key={i} className="text-xs text-muted-foreground">• {d}</p>
                                                 ))}
+                                              </div>
+                                            )}
+                                            {getRemark(c) && (
+                                              <div className="mt-1 ml-5 rounded border bg-muted/40 px-2 py-1">
+                                                <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                                                  Remark
+                                                </div>
+                                                <p className="mt-0.5 whitespace-pre-line text-xs text-foreground">
+                                                  {getRemark(c)}
+                                                </p>
                                               </div>
                                             )}
                                           </div>
