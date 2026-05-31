@@ -1,80 +1,58 @@
-## Goal
-Add two HR fields to the user lifecycle UI and Excel I/O:
-1. **Confirmation Date** — date input shown immediately after **Date of Joining (DOJ)**.
-2. **Location** — combobox of active locations (master data), shown immediately after **Employment Status**.
-
-Both must round-trip through the Add User dialog, Edit User dialog, Employee Excel template, Import flow, and Export file.
+# Revert Per-Stage Value Cascade in Bulk Override
 
 ## Assumptions
-- `profiles.confirmation_date` (date) and `profiles.location_id` (uuid → `public.locations`) already exist — confirmed in DB. No schema migration needed.
-- `useLocations()` hook already exists in `src/hooks/useOrganization.ts` returning active locations; we'll reuse it (company-scoped when a company is selected in the Create form, unfiltered in Edit to avoid hiding the current value).
-- The Edit dialog should mirror the Create dialog for these two fields (otherwise editing existing records would break parity).
-- Import matches Location **by name** (case-insensitive) to `locations.name`, consistent with how the existing `create-employee` edge function already resolves Location text → `location_id`. Unmatched names insert NULL and produce a row warning (existing pattern).
-- Confirmation Date in Excel accepts `yyyy-MM-dd`, `dd/MM/yyyy`, or Excel date serial, normalized through the existing `normalizeDateCell` helper.
+- The screenshot shows Self / Manager / Skip-Level / HR PMS all displaying the same `Value: 16.66` after an admin override that the user only intended to apply at one stage (HR PMS / Management).
+- The cause is the previous change (migration `20260531111057` + backfill `20260531111218`) which overwrote `<stage>_achieved_value` and `<stage>_score` for **every** completed stage whenever an override happened.
+- Earlier stage values (Self, Manager, Skip-Level) belong to the original reviewer and **must not** be rewritten by an admin override at a later stage.
+
+## Root Cause
+The previous "ADR-067 addendum" cascaded a single override into all completed `<stage>_*` columns. This violates stage ownership: each reviewer's recorded value at their stage must stay intact.
+
+The correct behavior:
+- An admin override updates the **top-level** `achieved_value` + `final_score` (single source of truth for the approved outcome).
+- The per-stage columns (`manager_*`, `skip_level_*`, `hr_pms_*`, `auditor_*`) record what *that reviewer* entered and must remain immutable from outside that stage.
+- Only the stage where the admin is currently acting (Management, in bulk approve) may be stamped — and even then only if that stage is the one being executed.
 
 ## Risk & Impact Report
-- **Data Impact:** None to schema. Writes optional values into existing nullable columns. Backfill not required.
-- **Workflow Impact:** None — neither field gates any workflow. Confirmation Date does feed the existing Confirmation Increment adjuster (already reads `profiles.confirmation_date`), so capturing it here improves that engine's accuracy.
-- **UI/UX Impact:** Two new fields in Create/Edit dialogs, two new columns in Employee import template / parsed rows / export file, two new bullets in the column-help block.
-- **Regression Risk:** Low. Fields are additive and optional. Existing imports without the new columns continue to work because `getValue` / `getRaw` return `undefined`.
-- **Scalability:** No new queries beyond reusing `useLocations()` + resolving location names in export via one `in()` lookup (same pattern as departments/BUs).
+- **Data**: Backfill rewrote historical per-stage columns for rows touched since 2026-05-29. We must restore them from the audit-log snapshots (`STAGE_VALUES_BACKFILLED.old_value` and `STAGE_VALUES_OVERWRITTEN.old_value`).
+- **Workflow**: No status / final_score changes — only per-stage display columns are reverted.
+- **UI**: Review Journey cards will once again show each reviewer's own entered value (e.g., Self may show original employee submission, not 16.66).
+- **Regression**: The original complaint ("Score changed but Value didn't") will resurface unless we also keep the **top-level** `achieved_value` in sync (which we already do via the existing override path). The Review Journey UI must fall back to the top-level value where the stage column is the same as before the cascade — confirmed by current selector logic.
+- **Mitigation**: One-shot reversal driven by audit log; idempotent (uses earliest old_value per submission); wrapped with trigger disable/enable; dry-run COUNT logged.
 
-## Plan (Step → Verification)
+## Plan
 
-### 1. UserManagement.tsx — Create dialog
-- New state: `newConfirmationDate`, `newLocationId`.
-- Add **Confirmation Date** field directly after DOJ inside the Personal Information grid (same date-input pattern, calendar icon).
-- Add **Location** field directly after Employment Status in the Organization grid (`OrgFilterCombobox` fed by `useLocations(newCompanyId)`, falling back to all locations when no company is chosen).
-- Extend `createUser.mutate(...)` payload + the mutation's input type with `confirmation_date` and `location_id`.
-- Extend `resetCreateForm()` to clear both.
-- **Verify:** open Add New User → both fields render in the stated positions, save persists to `profiles`.
+### Step 1 — Code: stop cascading in `bulk_management_approve` override
+Replace the override branch so it only:
+- Sets top-level `achieved_value = v_ach_num`
+- Leaves all `<stage>_achieved_value` / `<stage>_score` columns untouched
+- Continues to write `STAGE_VALUES_OVERWRITTEN` audit (renamed semantics → `TOP_LEVEL_VALUE_OVERWRITTEN`) for traceability
+- Keeps the existing `org_kpi_values` back-write and final_score restamping (those remain correct)
 
-### 2. UserManagement.tsx — Edit dialog
-- New state: `editConfirmationDate`, `editLocationId`; hydrate from `selectedUser`.
-- Add the same two fields in the same positions inside the Edit dialog grids.
-- Extend `updateUser` mutation input + `updatePayload` with `confirmation_date` and `location_id` (only send when defined, mirroring `group_doj`/`doj` handling).
-- **Verify:** open Edit on a user with existing values → fields prefill; change & save persists; clearing them writes NULL.
+### Step 2 — Data repair: restore per-stage columns for affected rows
+For every `review_submissions` row that has a `STAGE_VALUES_BACKFILLED` **or** `STAGE_VALUES_OVERWRITTEN` audit entry created after `2026-05-31 11:10 UTC`:
+- Find the **earliest** such audit row per submission (its `old_value` holds the pre-cascade snapshot).
+- `UPDATE review_submissions SET manager_achieved_value = old.manager_achieved_value, …, manager_score = old.manager_score, …` from that JSONB snapshot.
+- Insert a new audit row `STAGE_VALUES_REVERTED` capturing old (current cascaded) and new (restored) per-stage values; `performed_by = NULL` (system repair).
+- Disable `check_period_lock_on_submission_update` trigger for the duration, then re-enable.
 
-### 3. create-employee edge function (`supabase/functions/create-employee/index.ts`)
-- Accept new optional body fields `confirmation_date` and `location_id`.
-- When `location_id` is provided, use it directly (skip the name lookup).
-- When `confirmation_date` is provided, include `confirmation_date: body.confirmation_date` in the profiles insert.
-- Keep the existing name-based `location` resolver intact for Excel imports.
-- **Verify:** create user with both fields from UI; row in `profiles` has both columns populated. No regression for callers that omit them.
+### Step 3 — Verification
+- `SELECT id, achieved_value, manager_achieved_value, skip_level_achieved_value, hr_pms_achieved_value FROM review_submissions WHERE id = 'd11f4f08…';`
+- Confirm Self/Manager/Skip-Level values revert to original reviewer values; HR PMS/Management still reflect their own entries; top-level `achieved_value` and `final_score` still equal the admin-approved 16.66.
+- Review Journey UI for the sample employee shows distinct per-stage values where reviewers actually entered different numbers.
 
-### 4. ImportData.tsx — Employee template + parser
-- Extend `EmployeeRow` interface with `confirmationDate?: string`.
-- In the template object (`downloadEmployeeTemplate`), insert `confirmationDate: '2021-04-15'` immediately after `doj` (Location key already exists).
-- In `parseEmployeeRow`, add a `getRaw(['confirmationDate','confirmation_date','confirmDate','confirm_date'])` plus `normalizeDateCell`; assign as `'INVALID'` sentinel on bad input, same as `doj`.
-- Add a row-level validation message: *"Confirmation Date is invalid — use yyyy-MM-dd or dd/MM/yyyy"*.
-- In the create-employee payload (lines ~1392, 1461), forward `confirmation_date` when present.
-- Update the column-help bullets in the Import help block to list `confirmationDate` and confirm `location` is already documented.
-- **Verify:** download template → column appears between `doj` and the next column; import a sample row with both fields → profile updated; invalid date surfaces the new error.
+## UI Changes
+None. UI selectors already read `<stage>_*` columns and fall back to top-level `achieved_value` — once the per-stage columns are restored, each card will show its original value automatically.
 
-### 5. ImportData.tsx — Employee export
-- Extend the profiles `.select(...)` (line 1778) to include `confirmation_date, location_id`.
-- After the existing dept/BU/div lookups, add a bounded `locations` lookup (`supabase.from('locations').select('id, name').in('id', uniqueLocationIds)`) and build `locationMap`.
-- In the `exportData.map(...)` block, insert `location: locationMap.get(profile.location_id)?.name || ''` immediately after `employmentStatus`, and `confirmationDate: profile.confirmation_date || ''` immediately after `doj`.
-- **Verify:** export the workbook → both new columns present in stated positions with correct values; ordering of remaining columns unchanged.
-
-## UI Changes (Summary)
-| Where | Position | Field | Control |
-|---|---|---|---|
-| Add New User → Personal Info grid | After DOJ | Confirmation Date | `<Input type="date">` with calendar icon |
-| Add New User → Organization grid | After Employment Status | Location | `OrgFilterCombobox` (active locations) |
-| Edit User → same two grids | Same positions | Same fields | Same controls |
-| Excel template / export | Confirmation Date after `doj`; Location after `employmentStatus` | Same two columns | Plain cells |
-
-No layout reflow — both grids already use `md:grid-cols-3`, so adding one cell each just fills the row.
+## Documentation / Policy Updates
+- `DOCUMENTATION.md` → Bulk Approve section: remove the "cascade per-stage values" note; document the corrected single-stage ownership rule.
+- `POLICY.md` → §88.1 / ADR-067 addendum: mark addendum as **reverted**; restate: *"An admin override updates `achieved_value` and `final_score` only. Per-stage `<stage>_achieved_value` / `<stage>_score` are owned by the reviewer who recorded them and are immutable from later stages."*
+- `mem://features/admin/submission-score-integrity` → add note: per-stage columns are stage-owned; do not cascade.
 
 ## Files Touched
-- `src/pages/admin/UserManagement.tsx` (Create + Edit dialogs, both mutations)
-- `supabase/functions/create-employee/index.ts` (accept `confirmation_date`, `location_id`)
-- `src/pages/admin/ImportData.tsx` (template, parser, validation, payload, export, help text)
-
-No DB migration. No new dependencies. No new components.
+- `supabase/migrations/<new>_revert_per_stage_cascade.sql` — function rewrite + data repair (single migration, transactional).
+- `DOCUMENTATION.md`, `POLICY.md`, `.lovable/plan.md`.
+- No frontend changes.
 
 ## Rollback
-Revert the four files; profiles columns remain unused but harmless. No data cleanup required.
-
-Ready to implement on approval.
+If repair misfires, the audit table retains the cascaded snapshots (`STAGE_VALUES_OVERWRITTEN.new_value` and `STAGE_VALUES_BACKFILLED.new_value`); a reverse migration can re-stamp them. Function change is a `CREATE OR REPLACE` — previous body is in git history.
