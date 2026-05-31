@@ -9,6 +9,7 @@ const corsHeaders = {
 
 interface RunBody {
   assessment_year: string;
+  employee_id?: string | null;
 }
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -255,6 +256,15 @@ Deno.serve(async (req) => {
     const { assessment_year } = body;
     const { startYear, endYear } = parseAssessmentYear(assessment_year);
 
+    const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const scopedEmployeeId =
+      body.employee_id && UUID_RE.test(body.employee_id) ? body.employee_id : null;
+    if (body.employee_id && !scopedEmployeeId) {
+      return new Response(JSON.stringify({ error: 'employee_id must be a UUID' }), {
+        status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     // Admin client for all subsequent reads/writes
     const admin = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false } });
 
@@ -263,7 +273,9 @@ Deno.serve(async (req) => {
       .from('increment_runs')
       .insert({
         assessment_year,
-        scope_snapshot: { triggered_by: userId },
+        scope_snapshot: scopedEmployeeId
+          ? { triggered_by: userId, scope: 'single', employee_id: scopedEmployeeId }
+          : { triggered_by: userId, scope: 'all' },
         triggered_by: userId,
         status: 'running',
       })
@@ -282,7 +294,9 @@ Deno.serve(async (req) => {
         admin.from('increment_inputs').select('*').eq('assessment_year', assessment_year),
         admin.from('increment_eligibility_configs').select('id').eq('assessment_year', assessment_year).eq('status', 'approved').maybeSingle(),
         admin.from('increment_eligibility_exclusions').select('employee_id, reason').eq('assessment_year', assessment_year),
-        admin.from('profiles').select('id, full_name, employee_id, doj, employment_status, employee_category, level_id, category_id, company_id, location_id, department_id, is_active, previous_employment_status, confirmation_date, confirmation_increment_granted, confirmation_increment_effective_date').eq('is_active', true),
+        (scopedEmployeeId
+          ? admin.from('profiles').select('id, full_name, employee_id, doj, employment_status, employee_category, level_id, category_id, company_id, location_id, department_id, is_active, previous_employment_status, confirmation_date, confirmation_increment_granted, confirmation_increment_effective_date').eq('is_active', true).eq('id', scopedEmployeeId)
+          : admin.from('profiles').select('id, full_name, employee_id, doj, employment_status, employee_category, level_id, category_id, company_id, location_id, department_id, is_active, previous_employment_status, confirmation_date, confirmation_increment_granted, confirmation_increment_effective_date').eq('is_active', true)),
         admin.from('confirmation_increment_rules').select('*').eq('assessment_year', assessment_year).eq('status', 'active'),
         admin.from('confirmation_increment_adjustments').select('employee_id, carry_forward_months, final_eligible_months, balance_eligible_months').eq('assessment_year', `${parseInt(assessment_year.split('-')[0], 10) - 1}-${String(parseInt(assessment_year.split('-')[0], 10)).slice(-2)}`),
         admin.from('departments').select('id, business_unit_id'),
