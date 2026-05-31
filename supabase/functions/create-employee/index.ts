@@ -19,10 +19,12 @@ interface CreateEmployeeRequest {
   reporting_manager_id?: string;
   company_id?: string;
   location?: string;
+  location_id?: string;
   portal_access?: boolean;
   is_active?: boolean;
   group_doj?: string | null;
   doj?: string | null;
+  confirmation_date?: string | null;
 }
 
 Deno.serve(async (req) => {
@@ -87,9 +89,9 @@ Deno.serve(async (req) => {
     // Determine portal access: explicit flag or infer from email
     const portalAccess = body.portal_access !== undefined ? body.portal_access : !!body.email;
 
-    // Soft-resolve location name → location_id (case-insensitive). Unmatched values insert NULL.
-    let locationId: string | null = null;
-    if (body.location && body.location.trim()) {
+    // Resolve location: prefer explicit location_id (UI), fall back to name lookup (Excel import).
+    let locationId: string | null = body.location_id || null;
+    if (!locationId && body.location && body.location.trim()) {
       const normalized = body.location.trim().toUpperCase();
       const { data: locRows } = await supabaseAdmin
         .from('locations')
@@ -144,6 +146,7 @@ Deno.serve(async (req) => {
       has_real_email: !!body.email, // FALSE when no email provided -> employee-code login
       ...(body.group_doj ? { group_doj: body.group_doj } : {}),
       ...(body.doj ? { doj: body.doj } : {}),
+      ...(body.confirmation_date ? { confirmation_date: body.confirmation_date } : {}),
       ...(typeof body.is_active === 'boolean' ? { is_active: body.is_active } : {}),
     }
 
