@@ -666,6 +666,8 @@ export default function UserManagement() {
     setEditIsActive((user as any).is_active !== false);
     setEditGroupDoj((user as any).group_doj || '');
     setEditDoj((user as any).doj || '');
+    setEditConfirmationDate((user as any).confirmation_date || '');
+    setEditLocationId((user as any).location_id || '');
     setEditDialogOpen(true);
   };
 
@@ -706,6 +708,8 @@ export default function UserManagement() {
       isActive: editIsActive,
       groupDoj: editGroupDoj || null,
       doj: editDoj || null,
+      confirmationDate: editConfirmationDate || null,
+      locationId: editLocationId || null,
     });
   };
 
@@ -733,6 +737,8 @@ export default function UserManagement() {
       portal_access: newPortalAccess,
       group_doj: newGroupDoj || undefined,
       doj: newDoj || undefined,
+      confirmation_date: newConfirmationDate || undefined,
+      location_id: newLocationId || undefined,
     });
   };
 
@@ -752,6 +758,8 @@ export default function UserManagement() {
     setNewPortalAccess(true);
     setNewGroupDoj('');
     setNewDoj('');
+    setNewConfirmationDate('');
+    setNewLocationId('');
   };
 
   const handleBulkUpdate = () => {
