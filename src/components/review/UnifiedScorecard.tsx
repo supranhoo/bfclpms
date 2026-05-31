@@ -20,7 +20,7 @@ import { ManagerDailyOverrideEditor, calculateOverriddenScore } from '@/componen
 import { ReviewLevelOverrideEditor, calculateOverriddenScore as calculateReviewerOverriddenScore } from '@/components/review/ReviewLevelOverrideEditor';
 import { useManagerSubPeriodOverride } from '@/hooks/useManagerSubPeriodOverride';
 import { useReviewerSubPeriodOverride } from '@/hooks/useReviewerSubPeriodOverride';
-import { QualitativeOption } from '@/lib/qualitativeUom';
+import { QualitativeOption, labelToRating, getQualitativeAchievedLabel } from '@/lib/qualitativeUom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useKpiSorting } from '@/hooks/useKpiSorting';
 import { ReviewPanelSkeleton } from '@/components/ui/LoadingSkeletons';
@@ -946,10 +946,37 @@ export function UnifiedScorecard({
     };
     const ownScore = ownScoreFieldMap[viewLevel] ?? null;
 
-    // Determine the achieved value for this level
-    const achievedVal = (existing as any)?.[`${config.scoreFieldPrefix}_achieved_value`] ?? 
-      existing?.achieved_value ?? 
-      (kpi.is_org_level ? getOrgKpiValue(kpi)?.achieved_value ?? null : null);
+    const uomType = (kpi as any).uom_type as 'numeric' | 'binary' | 'tiered' | undefined;
+    const qualOpts = (kpi as any).qualitative_options as QualitativeOption[] | null;
+    const isQualitative = uomType === 'binary' || uomType === 'tiered';
+    const rawReviewerAchieved = (existing as any)?.[`${config.scoreFieldPrefix}_achieved_value`] ?? null;
+    const remarksField = (existing as any)?.[`${config.scoreFieldPrefix}_remarks`];
+    const ratingField = (existing as any)?.[`${config.scoreFieldPrefix}_rating`];
+    const hasReviewerDraft =
+      ownScore != null ||
+      ratingField != null ||
+      (typeof remarksField === 'string' && remarksField.trim() !== '') ||
+      rawReviewerAchieved != null;
+
+    // Determine the achieved value for this level. For qualitative drafts we derive the
+    // picker label from the reviewer's OWN score (canonical) so the picker tile cannot
+    // diverge from the Review Journey tile.
+    let achievedVal: number | string | null;
+    if (hasReviewerDraft && isQualitative) {
+      const numeric =
+        ownScore != null
+          ? Number(ownScore)
+          : (rawReviewerAchieved != null ? Number(rawReviewerAchieved) : null);
+      achievedVal = getQualitativeAchievedLabel(numeric, uomType, qualOpts) ?? null;
+    } else if (hasReviewerDraft) {
+      achievedVal = rawReviewerAchieved ?? null;
+    } else {
+      const baseAchieved = existing?.achieved_value ?? 
+        (kpi.is_org_level ? getOrgKpiValue(kpi)?.achieved_value ?? null : null);
+      achievedVal = isQualitative
+        ? (getQualitativeAchievedLabel(baseAchieved, uomType, qualOpts) ?? null)
+        : baseAchieved;
+    }
 
     let prevScore: number | null = ownScore;
 
@@ -994,11 +1021,7 @@ export function UnifiedScorecard({
           ? [(existing as any)[`${config.scoreFieldPrefix}_evidence_url`]] 
           : []
     );
-    setReviewerAchievedValue(
-      (existing as any)?.[`${config.scoreFieldPrefix}_achieved_value`] ?? 
-      existing?.achieved_value ?? 
-      (kpi.is_org_level ? getOrgKpiValue(kpi)?.achieved_value ?? null : null)
-    );
+    setReviewerAchievedValue(achievedVal);
     
     // Reset state
     setReviewerAgrees(null);
@@ -1138,9 +1161,24 @@ export function UnifiedScorecard({
           [`${prefix}_evidence_urls`]: reviewerEvidenceUrls,
         };
         if (reviewerAchievedValue !== undefined && reviewerAchievedValue !== null) {
-          updateData[`${prefix}_achieved_value`] = typeof reviewerAchievedValue === 'number' 
-            ? reviewerAchievedValue 
-            : parseFloat(reviewerAchievedValue as string) || null;
+          const uom = (selectedKpi as any)?.uom_type as 'numeric' | 'binary' | 'tiered' | undefined;
+          const qOpts = (selectedKpi as any)?.qualitative_options as QualitativeOption[] | null;
+          const isQual = uom === 'binary' || uom === 'tiered';
+          const numericVal = isQual
+            ? labelToRating(reviewerAchievedValue, uom, qOpts)
+            : (typeof reviewerAchievedValue === 'number'
+                ? reviewerAchievedValue
+                : parseFloat(reviewerAchievedValue as string) || null);
+          updateData[`${prefix}_achieved_value`] = numericVal;
+          if (isQual && numericVal !== null) {
+            // Canonicalise: keep *_score in sync with the picker selection
+            updateData[`${prefix}_score`] = numericVal;
+            updateData[`${prefix}_rating`] = scoreToRating(numericVal);
+            if (approve && config.forwardStatus === 'approved') {
+              updateData.final_score = numericVal;
+              updateData.final_rating = scoreToRating(numericVal);
+            }
+          }
         }
         // When this approval moves KPI to 'approved', sync final score
         if (approve && config.forwardStatus === 'approved') {
@@ -1338,17 +1376,31 @@ export function UnifiedScorecard({
       }
     }
 
-    const rating = scoreToRating(reviewerScore);
+    const uomType = (selectedKpi as any)?.uom_type as 'numeric' | 'binary' | 'tiered' | undefined;
+    const qualOpts = (selectedKpi as any)?.qualitative_options as QualitativeOption[] | null;
+    const isQualitative = uomType === 'binary' || uomType === 'tiered';
+    let achievedToSave: number | null;
+    let scoreToSave: number | null = reviewerScore;
+    if (isQualitative) {
+      const r = labelToRating(reviewerAchievedValue, uomType, qualOpts);
+      achievedToSave = r ?? reviewerScore ?? null;
+      if (r !== null) scoreToSave = r;
+    } else if (typeof reviewerAchievedValue === 'number') {
+      achievedToSave = Number.isFinite(reviewerAchievedValue) ? reviewerAchievedValue : null;
+    } else if (reviewerAchievedValue) {
+      const n = parseFloat(reviewerAchievedValue as string);
+      achievedToSave = Number.isFinite(n) ? n : null;
+    } else {
+      achievedToSave = null;
+    }
     submitReview.mutate({
       kpi_id: selectedKpi.id,
-      rating,
-      score: reviewerScore,
+      rating: scoreToRating(scoreToSave),
+      score: scoreToSave,
       remarks: reviewerRemarks,
       evidence_url: reviewerEvidenceUrls[0] || null,
       evidence_urls: reviewerEvidenceUrls,
-      achieved_value: typeof reviewerAchievedValue === 'number' 
-        ? reviewerAchievedValue 
-        : reviewerAchievedValue ? parseFloat(reviewerAchievedValue) : null,
+      achieved_value: achievedToSave,
       approve,
     });
   };
@@ -1356,17 +1408,31 @@ export function UnifiedScorecard({
   const handleOrgOverrideConfirm = () => {
     setOrgOverrideWarningOpen(false);
     if (selectedKpi && reviewerScore !== null && pendingApproveAction !== null) {
-      const rating = scoreToRating(reviewerScore);
+      const uomType = (selectedKpi as any)?.uom_type as 'numeric' | 'binary' | 'tiered' | undefined;
+      const qualOpts = (selectedKpi as any)?.qualitative_options as QualitativeOption[] | null;
+      const isQualitative = uomType === 'binary' || uomType === 'tiered';
+      let achievedToSave: number | null;
+      let scoreToSave: number | null = reviewerScore;
+      if (isQualitative) {
+        const r = labelToRating(reviewerAchievedValue, uomType, qualOpts);
+        achievedToSave = r ?? reviewerScore ?? null;
+        if (r !== null) scoreToSave = r;
+      } else if (typeof reviewerAchievedValue === 'number') {
+        achievedToSave = Number.isFinite(reviewerAchievedValue) ? reviewerAchievedValue : null;
+      } else if (reviewerAchievedValue) {
+        const n = parseFloat(reviewerAchievedValue as string);
+        achievedToSave = Number.isFinite(n) ? n : null;
+      } else {
+        achievedToSave = null;
+      }
       submitReview.mutate({
         kpi_id: selectedKpi.id,
-        rating,
-        score: reviewerScore,
+        rating: scoreToRating(scoreToSave),
+        score: scoreToSave,
         remarks: reviewerRemarks,
         evidence_url: reviewerEvidenceUrls[0] || null,
         evidence_urls: reviewerEvidenceUrls,
-        achieved_value: typeof reviewerAchievedValue === 'number' 
-          ? reviewerAchievedValue 
-          : reviewerAchievedValue ? parseFloat(reviewerAchievedValue) : null,
+        achieved_value: achievedToSave,
         approve: pendingApproveAction,
       });
     }

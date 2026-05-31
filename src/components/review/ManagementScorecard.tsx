@@ -19,7 +19,7 @@ import { useOrgKpiDataOwnerNames, getOwnerNamesForKpi } from '@/hooks/useOrgKpiD
 import { DailySubmissionSummary } from '@/components/review/DailySubmissionSummary';
 import { ReviewLevelOverrideEditor, calculateOverriddenScore } from '@/components/review/ReviewLevelOverrideEditor';
 import { useReviewerSubPeriodOverride } from '@/hooks/useReviewerSubPeriodOverride';
-import { QualitativeOption } from '@/lib/qualitativeUom';
+import { QualitativeOption, labelToRating, getQualitativeAchievedLabel } from '@/lib/qualitativeUom';
 import { calculateRating } from '@/lib/ratingCalculation';
 import { useAuth } from '@/contexts/AuthContext';
 import { ReviewPanelSkeleton } from '@/components/ui/LoadingSkeletons';
@@ -556,8 +556,36 @@ export function ManagementScorecard({
   const openReviewSheet = (kpi: KPI) => {
     setSelectedKpi(kpi);
     const existing = submissionMap.get(kpi.id);
-    const mgmtAchieved = (existing as any)?.management_achieved_value ?? null;
-    
+    const uomType = (kpi as any).uom_type as 'numeric' | 'binary' | 'tiered' | undefined;
+    const qualOpts = (kpi as any).qualitative_options as QualitativeOption[] | null;
+    const isQualitative = uomType === 'binary' || uomType === 'tiered';
+    const hasMgmtDraft =
+      existing?.management_score != null ||
+      (existing as any)?.management_rating != null ||
+      (typeof existing?.management_remarks === 'string' && existing.management_remarks.trim() !== '') ||
+      (existing as any)?.management_achieved_value != null;
+    const rawMgmtAchieved = (existing as any)?.management_achieved_value ?? null;
+
+    // Picker hydration — for qualitative drafts, derive from management_score (canonical)
+    // resolved against THIS kpi's qualitative_options so the Review Journey tile and the
+    // picker tile cannot diverge. Never inherit the employee's value when a draft exists.
+    let mgmtAchieved: number | string | null;
+    if (hasMgmtDraft) {
+      if (isQualitative) {
+        const numeric =
+          existing?.management_score != null
+            ? Number(existing.management_score)
+            : (rawMgmtAchieved != null ? Number(rawMgmtAchieved) : null);
+        mgmtAchieved = getQualitativeAchievedLabel(numeric, uomType, qualOpts) ?? null;
+      } else {
+        mgmtAchieved = rawMgmtAchieved;
+      }
+    } else if (isQualitative) {
+      mgmtAchieved = getQualitativeAchievedLabel(existing?.achieved_value ?? null, uomType, qualOpts) ?? null;
+    } else {
+      mgmtAchieved = rawMgmtAchieved;
+    }
+
     // Recalculate score from achieved value if management hasn't reviewed yet
     let initialMgmtScore: number | null = existing?.management_score ?? null;
     if (initialMgmtScore === null && mgmtAchieved !== null && mgmtAchieved !== '') {
@@ -747,16 +775,31 @@ export function ManagementScorecard({
       }
     }
     
-    const rating = scoreToRating(managementScore);
+    const uomType = (selectedKpi as any).uom_type as 'numeric' | 'binary' | 'tiered' | undefined;
+    const qualOpts = (selectedKpi as any).qualitative_options as QualitativeOption[] | null;
+    const isQualitative = uomType === 'binary' || uomType === 'tiered';
+    let mgmtAchievedToSave: number | null;
+    let mgmtScoreToSave: number | null = managementScore;
+    if (isQualitative) {
+      const r = labelToRating(managementAchievedValue, uomType, qualOpts);
+      mgmtAchievedToSave = r ?? managementScore ?? null;
+      if (r !== null) mgmtScoreToSave = r;
+    } else if (typeof managementAchievedValue === 'number') {
+      mgmtAchievedToSave = Number.isFinite(managementAchievedValue) ? managementAchievedValue : null;
+    } else if (managementAchievedValue) {
+      const n = parseFloat(String(managementAchievedValue));
+      mgmtAchievedToSave = Number.isFinite(n) ? n : null;
+    } else {
+      mgmtAchievedToSave = null;
+    }
+    const ratingToSave = scoreToRating(mgmtScoreToSave);
     submitManagementReview.mutate({
       kpi_id: selectedKpi.id,
-      management_rating: rating,
-      management_score: managementScore,
+      management_rating: ratingToSave,
+      management_score: mgmtScoreToSave,
       management_remarks: managementRemarks,
       management_evidence_url: managementEvidenceUrls.length > 0 ? managementEvidenceUrls[0] : null,
-      management_achieved_value: typeof managementAchievedValue === 'number' 
-        ? managementAchievedValue 
-        : managementAchievedValue ? parseFloat(managementAchievedValue) : null,
+      management_achieved_value: mgmtAchievedToSave,
       approve,
     });
   };
