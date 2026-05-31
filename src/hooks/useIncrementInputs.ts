@@ -32,7 +32,7 @@ export function useIncrementInputs(
       const to = from + pageSize - 1;
       let query = supabase
         .from('increment_inputs' as any)
-        .select('*, employee:profiles!increment_inputs_employee_id_fkey(id, full_name, employee_id)', { count: 'exact' })
+        .select('*, employee:profiles!increment_inputs_employee_id_fkey(id, full_name, employee_code)', { count: 'exact' })
         .eq('assessment_year', assessmentYear!)
         .order('updated_at', { ascending: false })
         .range(from, to);
