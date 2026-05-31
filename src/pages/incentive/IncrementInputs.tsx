@@ -143,7 +143,7 @@ function EnterInputsTab({ year }: { year: string }) {
                   <TableRow key={r.id}>
                     <TableCell>
                       <div className="text-sm">{r.employee?.full_name ?? '—'}</div>
-                      <div className="text-xs text-muted-foreground">{r.employee?.employee_id ?? r.employee_id}</div>
+                      <div className="text-xs text-muted-foreground">{r.employee?.employee_code ?? ''}</div>
                     </TableCell>
                     <TableCell>{r.absent_days}</TableCell>
                     <TableCell>{r.lwp_days}</TableCell>
@@ -192,7 +192,7 @@ function CalculateIncrementTab({ year }: { year: string }) {
     if (!itemsData?.rows?.length) return;
     const rows = itemsData.rows.map((r: any) => ({
       employee: r.employee?.full_name ?? '',
-      employee_id: r.employee?.employee_id ?? r.employee_id,
+      employee_code: r.employee?.employee_code ?? '',
       pms_score: r.pms_score ?? '',
       rating_band: r.rating_band ?? '',
       slab_percent: r.slab_percent ?? '',
