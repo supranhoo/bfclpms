@@ -175,11 +175,18 @@ export function AchievedValueScoreInput({
         uomType={uomType as 'binary' | 'tiered'}
         qualitativeOptions={kpi.qualitative_options || null}
         value={(() => {
-          if (typeof achievedValue === 'string') return achievedValue;
+          const opts = kpi.qualitative_options?.length
+            ? kpi.qualitative_options
+            : (uomType === 'binary' ? BINARY_OPTIONS : []);
+          if (typeof achievedValue === 'string') {
+            // Direct label match
+            if (opts.find(o => o.label === achievedValue)) return achievedValue;
+            // Defensive: numeric-looking string (e.g. "0", "5.00") — resolve via rating
+            const n = parseFloat(achievedValue);
+            if (Number.isFinite(n)) return opts.find(o => o.rating === n)?.label ?? achievedValue;
+            return achievedValue;
+          }
           if (typeof achievedValue === 'number') {
-            const opts = kpi.qualitative_options?.length
-              ? kpi.qualitative_options
-              : (uomType === 'binary' ? BINARY_OPTIONS : []);
             return opts.find(o => o.rating === achievedValue)?.label || null;
           }
           return null;
