@@ -20,21 +20,18 @@ import {
 import { Loader2, Upload, Play, FileSpreadsheet } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { generateAssessmentYears, getCurrentAssessmentYear } from '@/lib/assessmentYear';
+import * as XLSX from 'xlsx';
 
-function downloadCsv(filename: string, rows: any[], headers: string[]) {
-  const escape = (v: any) => {
-    if (v === null || v === undefined) return '';
-    const s = String(v).replace(/"/g, '""');
-    return /[",\n]/.test(s) ? `"${s}"` : s;
-  };
-  const csv = [headers.join(','), ...rows.map((r) => headers.map((h) => escape(r[h])).join(','))].join('\n');
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
+function downloadXlsx(filename: string, rows: any[], headers: string[]) {
+  const ws = rows.length
+    ? XLSX.utils.json_to_sheet(
+        rows.map((r) => headers.reduce((o, h) => ({ ...o, [h]: r[h] ?? '' }), {} as any)),
+        { header: headers },
+      )
+    : XLSX.utils.aoa_to_sheet([headers]);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
+  XLSX.writeFile(wb, filename);
 }
 
 function EnterInputsTab({ year }: { year: string }) {
@@ -51,22 +48,18 @@ function EnterInputsTab({ year }: { year: string }) {
     const file = e.target.files?.[0];
     if (!file) return;
     try {
-      const text = await file.text();
-      const [header, ...lines] = text.trim().split(/\r?\n/);
-      const cols = header.split(',').map((c) => c.trim());
-      const rows = lines.map((ln) => {
-        const cells = ln.split(',');
-        const o: any = {};
-        cols.forEach((c, i) => (o[c] = cells[i]));
-        return {
+      const buf = await file.arrayBuffer();
+      const wb = XLSX.read(buf, { type: 'array' });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const parsed = XLSX.utils.sheet_to_json<any>(ws, { defval: '' });
+      const rows = parsed.map((o: any) => ({
           employee_id: o.employee_id,
           absent_days: Number(o.absent_days ?? 0),
           lwp_days: Number(o.lwp_days ?? 0),
           disciplinary_actions: Number(o.disciplinary_actions ?? 0),
           training_compliance: Number(o.training_compliance ?? 0),
           current_salary: o.current_salary ? Number(o.current_salary) : null,
-        };
-      }).filter((r) => r.employee_id);
+      })).filter((r) => r.employee_id);
       await importMut.mutateAsync({ rows, assessment_year: year });
     } catch (err: any) {
       toast({ title: 'Import failed', description: err?.message ?? 'Parse error', variant: 'destructive' });
@@ -76,7 +69,7 @@ function EnterInputsTab({ year }: { year: string }) {
   };
 
   const exportTemplate = () => {
-    downloadCsv('increment-inputs-template.csv', [], [
+    downloadXlsx('Import Inputs.xlsx', [], [
       'employee_id', 'absent_days', 'lwp_days', 'disciplinary_actions',
       'training_compliance', 'current_salary',
     ]);
@@ -91,9 +84,9 @@ function EnterInputsTab({ year }: { year: string }) {
             <FileSpreadsheet className="h-4 w-4 mr-2" />Template
           </Button>
           <label className="inline-flex">
-            <input type="file" accept=".csv" onChange={handleFile} className="hidden" />
+            <input type="file" accept=".xlsx,.xls" onChange={handleFile} className="hidden" />
             <Button asChild variant="outline">
-              <span><Upload className="h-4 w-4 mr-2" />Import CSV</span>
+              <span><Upload className="h-4 w-4 mr-2" />Import Inputs</span>
             </Button>
           </label>
         </div>
@@ -133,7 +126,7 @@ function EnterInputsTab({ year }: { year: string }) {
                 {(data?.rows ?? []).length === 0 && (
                   <TableRow>
                     <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
-                      No inputs yet. Import a CSV to begin.
+                      No inputs yet. Import an Excel file to begin.
                     </TableCell>
                   </TableRow>
                 )}
@@ -191,7 +184,7 @@ function CalculateIncrementTab({ year }: { year: string }) {
       treatment_applied: r.confirmation_treatment ?? '',
       adjustment_reason: r.adjustment_reason ?? '',
     }));
-    downloadCsv(`increment-run-${selectedRun}.csv`, rows, Object.keys(rows[0]));
+    downloadXlsx(`increment-run-${selectedRun}.xlsx`, rows, Object.keys(rows[0]));
   };
 
   return (
@@ -247,7 +240,7 @@ function CalculateIncrementTab({ year }: { year: string }) {
           <CardHeader className="flex flex-row items-center justify-between space-y-0">
             <CardTitle>Run Details</CardTitle>
             <Button variant="outline" onClick={exportRun} disabled={!itemsData?.rows?.length}>
-              <FileSpreadsheet className="h-4 w-4 mr-2" />Export CSV
+              <FileSpreadsheet className="h-4 w-4 mr-2" />Export Excel
             </Button>
           </CardHeader>
           <CardContent>
