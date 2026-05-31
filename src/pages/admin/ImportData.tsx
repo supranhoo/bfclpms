@@ -1768,7 +1768,6 @@ export default function ImportData() {
         division: 'Operations',
         businessUnit: 'Plant',
         department: 'HR',
-        location: 'Mumbai',
         pmsGrade: 'A',
         level: 'Level 1',
         employeeCategory: 'Staff',
