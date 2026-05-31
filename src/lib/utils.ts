@@ -28,3 +28,26 @@ export function safeParseFloat(value: string | number | null | undefined): numbe
   const n = parseFloat(String(value));
   return isNaN(n) ? null : n;
 }
+
+/**
+ * Format a numeric value to exactly 2 decimal places.
+ * Returns '—' for null/empty/NaN inputs. Zero is preserved as '0.00'.
+ */
+export function fmt2(value: number | string | null | undefined): string {
+  if (value == null || value === '') return '—';
+  const n = Number(value);
+  if (isNaN(n)) return '—';
+  return n.toFixed(2);
+}
+
+/**
+ * Format a numeric value rounded DOWN (floor) to 2 decimal places.
+ * Used for monetary values like Increment Amount where we must never round up.
+ * Returns '—' for null/empty/NaN inputs.
+ */
+export function fmtFloor2(value: number | string | null | undefined): string {
+  if (value == null || value === '') return '—';
+  const n = Number(value);
+  if (isNaN(n)) return '—';
+  return (Math.floor(n * 100) / 100).toFixed(2);
+}
