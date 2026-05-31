@@ -539,7 +539,7 @@ function CalculateIncrementTab({ year }: { year: string }) {
             ))}
             {rows.length === 0 && (
               <TableRow>
-                <TableCell colSpan={17} className="text-center text-muted-foreground py-8">
+                <TableCell colSpan={18} className="text-center text-muted-foreground py-8">
                   {emptyText}
                 </TableCell>
               </TableRow>
