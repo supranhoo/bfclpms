@@ -27,7 +27,7 @@ import { getCurrentAssessmentYear } from '@/lib/assessmentYear';
 
 const METHOD_OPTIONS: { value: IncrementMethodType; label: string; description: string }[] = [
   { value: 'full', label: 'Full Increment', description: 'Employee receives the complete increment percentage from the applicable slab.' },
-  { value: 'prorated_doj', label: 'Prorated by Date of Joining', description: 'Eligible % = (Configured Increment % ÷ 12) × Months Served in the assessment year.' },
+  { value: 'prorated_doj', label: 'Prorated by GDOJ', description: 'Eligible % = (Configured Slab Increment % ÷ 12) × Months Served in the AY, counted from GDOJ (or AY start if GDOJ is before it).' },
   { value: 'custom', label: 'Custom Service-Period Slabs', description: 'Apply a configurable percentage of the slab based on the employee\'s months of service.' },
 ];
 
@@ -183,12 +183,12 @@ export function IncrementMethodSection() {
             <Badge variant="outline" className="text-[10px]">Applies to all methods</Badge>
           </div>
           <p className="mb-3 text-sm text-muted-foreground">
-            Day of month (1–31) that decides whether the employee's joining month
-            is counted in their AY-bounded service. If DOJ day &lt; cutoff, the
-            joining month is counted; if DOJ day ≥ cutoff, the joining month is
-            excluded and counting starts from the next month. This whole-month
-            count drives <strong>Final Eligible Months</strong>, prorated-DOJ
-            math, and custom-slab matching.
+            Day of month (1–31) that decides whether the employee's GDOJ month
+            is counted in their AY-bounded service. If GDOJ falls before this
+            day, the GDOJ month is counted; if GDOJ falls on or after this day,
+            the GDOJ month is excluded and counting starts from the next month.
+            Applies to <strong>Prorated by GDOJ</strong> and drives
+            <strong> Final Eligible Months</strong> and custom-slab matching.
           </p>
           <div className="flex items-center gap-3">
             <Input

@@ -2,7 +2,7 @@
  * Applies the configured increment method to a slab-determined base percent.
  *
  *  - full         → return base percent unchanged
- *  - prorated_doj → (base / 12) * monthsServed, capped at base
+ *  - prorated_doj → (base / 12) * monthsServed, capped at base (months from GDOJ)
  *  - custom       → look up monthsServed in [from..to] slabs, multiply base by percent_of_slab/100
  */
 
