@@ -28,6 +28,15 @@ import * as XLSX from 'xlsx';
 import { fmt2, fmtFloor2 } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { IncrementInputDialog } from '@/components/incentive/IncrementInputDialog';
+import { TRANSITION_LABELS, type ConfirmationTransition } from '@/lib/confirmationIncrementAdjuster';
+
+/** Render the confirmation-adjustment transition for a run row. */
+const transitionLabel = (r: any): string => {
+  const key = r?.transition_key as ConfirmationTransition | null | undefined;
+  if (key && TRANSITION_LABELS[key]) return TRANSITION_LABELS[key];
+  if (r?.pre_confirmation_status) return `${r.pre_confirmation_status} → Confirmation`;
+  return '—';
+};
 import { useActiveEmployeesForCopy } from '@/hooks/useActiveEmployeesForCopy';
 import { EmployeeMultiSelect } from '@/components/incentive/EmployeeMultiSelect';
 import { IncrementResultEditDialog } from '@/components/incentive/IncrementResultEditDialog';
@@ -344,6 +353,9 @@ function CalculateIncrementTab({ year }: { year: string }) {
       final_eligible_months: r.final_eligible_months ?? '',
       treatment_applied: r.confirmation_treatment ?? '',
       adjustment_reason: r.adjustment_reason ?? '',
+      transition: transitionLabel(r),
+      pre_confirmation_status: r.pre_confirmation_status ?? '',
+      transition_source: r.transition_source ?? '',
     }));
 
   const exportRun = async () => {
@@ -455,6 +467,7 @@ function CalculateIncrementTab({ year }: { year: string }) {
               <TableHead>Conf.Inc?</TableHead>
               <TableHead>Final Eligible Months</TableHead>
               <TableHead>Treatment Applied</TableHead>
+              <TableHead>Transition</TableHead>
               <TableHead>Remarks</TableHead>
               <TableHead className="text-right">Actions</TableHead>
             </TableRow>
@@ -501,6 +514,16 @@ function CalculateIncrementTab({ year }: { year: string }) {
                 <TableCell>{r.confirmation_granted ? <Badge variant="secondary">Yes</Badge> : '—'}</TableCell>
                 <TableCell>{r.final_eligible_months ?? '—'}</TableCell>
                 <TableCell className="text-xs">{r.confirmation_treatment ?? '—'}</TableCell>
+                <TableCell
+                  className="text-xs text-muted-foreground max-w-[180px] truncate"
+                  title={
+                    r.adjustment_reason
+                      ? `${r.adjustment_reason}${r.transition_source ? ` (source: ${r.transition_source})` : ''}`
+                      : ''
+                  }
+                >
+                  {transitionLabel(r)}
+                </TableCell>
                 <TableCell className="text-xs text-muted-foreground max-w-[200px] truncate" title={r.remarks ?? ''}>
                   {r.remarks ?? '—'}
                 </TableCell>
@@ -516,7 +539,7 @@ function CalculateIncrementTab({ year }: { year: string }) {
             ))}
             {rows.length === 0 && (
               <TableRow>
-                <TableCell colSpan={17} className="text-center text-muted-foreground py-8">
+                <TableCell colSpan={18} className="text-center text-muted-foreground py-8">
                   {emptyText}
                 </TableCell>
               </TableRow>

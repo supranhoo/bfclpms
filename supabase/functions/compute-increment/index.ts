@@ -23,6 +23,31 @@ type ConfirmationTreatment =
   | 'shift_next_cycle'
   | 'carry_forward_uncovered';
 
+type ConfirmationTransition =
+  | 'trainee_to_confirmed'
+  | 'probation_to_confirmed'
+  | 'contract_to_confirmed'
+  | 'apprenticeship_to_confirmed';
+
+const TRANSITION_LABELS: Record<ConfirmationTransition, string> = {
+  trainee_to_confirmed: 'Trainee → Confirmation',
+  probation_to_confirmed: 'Probation → Confirmation',
+  contract_to_confirmed: 'Contract → Confirmation',
+  apprenticeship_to_confirmed: 'Apprenticeship → Confirmation',
+};
+
+/** Map a raw pre-confirmation status string → canonical transition key.
+ *  Mirrors src/lib/confirmationIncrementAdjuster.ts. */
+function statusToTransition(prev: string | null | undefined): ConfirmationTransition | null {
+  if (!prev) return null;
+  const k = String(prev).trim().toLowerCase();
+  if (k === 'trainee') return 'trainee_to_confirmed';
+  if (k === 'probation') return 'probation_to_confirmed';
+  if (k === 'contract') return 'contract_to_confirmed';
+  if (k === 'apprenticeship' || k === 'apprentice') return 'apprenticeship_to_confirmed';
+  return null;
+}
+
 function monthsBetweenISO(fromISO: string, toISO: string): number {
   if (!fromISO || !toISO) return 0;
   const from = new Date(fromISO + 'T00:00:00Z');
@@ -43,12 +68,39 @@ function adjustConfirmationIncrement(input: {
   naiveEligibleMonths: number;
   previousCycleUncovered: number;
   treatment: ConfirmationTreatment;
+  applicableTransitions?: ConfirmationTransition[] | null;
+  preConfirmationStatus?: string | null;
 }) {
   const {
     confirmationGranted, confirmationEffective,
     cycleStart, cycleEnd, naiveEligibleMonths,
     previousCycleUncovered, treatment,
+    applicableTransitions, preConfirmationStatus,
   } = input;
+
+  // RCA: Transition gate. Confirmation Increment Adjustment must only fire
+  // when the employee's actual prior status maps to one of the configured
+  // applicable transitions. Missing history → skip with a clear reason (the
+  // engine must NEVER treat "currently Confirmed" as proof of any prior status).
+  const transitionKey = statusToTransition(preConfirmationStatus);
+  if (Array.isArray(applicableTransitions) && applicableTransitions.length > 0) {
+    if (!transitionKey || !applicableTransitions.includes(transitionKey)) {
+      return {
+        treatmentApplied: 'ignore' as ConfirmationTreatment,
+        periodCoveredMonths: 0,
+        balanceEligibleMonths: naiveEligibleMonths,
+        carryForwardMonths: 0,
+        finalEligibleMonths: naiveEligibleMonths,
+        adjustmentReason: transitionKey
+          ? `Transition ${TRANSITION_LABELS[transitionKey]} not in rule applicability list — adjustment skipped`
+          : preConfirmationStatus
+            ? `Pre-confirmation status "${preConfirmationStatus}" not mapped to a configured transition — adjustment skipped`
+            : 'Status history missing — adjustment skipped (data gap)',
+        transitionKey: transitionKey,
+        skipped: true as const,
+      };
+    }
+  }
 
   if (treatment === 'ignore' || !confirmationGranted || !confirmationEffective) {
     return {
@@ -60,6 +112,8 @@ function adjustConfirmationIncrement(input: {
       adjustmentReason: treatment === 'ignore'
         ? 'Policy: ignore confirmation increment'
         : 'No confirmation increment recorded',
+      transitionKey,
+      skipped: false as const,
     };
   }
 
@@ -80,6 +134,8 @@ function adjustConfirmationIncrement(input: {
         carryForwardMonths: 0,
         finalEligibleMonths: balance,
         adjustmentReason: `Subtracted ${covered} month(s) covered by confirmation increment effective ${confirmationEffective}`,
+        transitionKey,
+        skipped: false as const,
       };
     case 'shift_next_cycle':
       return {
@@ -89,6 +145,8 @@ function adjustConfirmationIncrement(input: {
         carryForwardMonths: 0,
         finalEligibleMonths: 0,
         adjustmentReason: 'Employee shifted to next normal cycle — no increment this AY',
+        transitionKey,
+        skipped: false as const,
       };
     case 'carry_forward_uncovered':
       return {
@@ -98,6 +156,8 @@ function adjustConfirmationIncrement(input: {
         carryForwardMonths: previousCycleUncovered,
         finalEligibleMonths: balance + previousCycleUncovered,
         adjustmentReason: `Balance ${balance}m + carry-forward ${previousCycleUncovered}m from prior cycle`,
+        transitionKey,
+        skipped: false as const,
       };
     default:
       return {
@@ -107,6 +167,8 @@ function adjustConfirmationIncrement(input: {
         carryForwardMonths: 0,
         finalEligibleMonths: balance,
         adjustmentReason: 'Unknown treatment — defaulted to balance',
+        transitionKey,
+        skipped: false as const,
       };
   }
 }
@@ -122,6 +184,23 @@ function resolveConfirmationRule(rules: any[], p: any): ConfirmationTreatment {
       (!r.company_id || r.company_id === p.company_id))
     .sort((a, b) => score(b) - score(a));
   return (candidates[0]?.treatment as ConfirmationTreatment) ?? 'ignore';
+}
+
+/** Returns the entire matching rule row (preserving `applicable_transitions`,
+ *  scope ids, etc.), or null when no rule matches the employee's scope.
+ *  RCA fix: the engine previously kept only `treatment` and silently lost the
+ *  transition allow-list, so Trainee→Confirmed treatment was being applied to
+ *  every confirmed employee regardless of their actual prior status. */
+function resolveConfirmationRuleRow(rules: any[], p: any): any | null {
+  const score = (r: any) =>
+    (r.level_id ? 8 : 0) + (r.category_id ? 4 : 0) + (r.company_id ? 2 : 0);
+  const candidates = rules
+    .filter((r) =>
+      (!r.level_id || r.level_id === p.level_id) &&
+      (!r.category_id || r.category_id === p.category_id) &&
+      (!r.company_id || r.company_id === p.company_id))
+    .sort((a, b) => score(b) - score(a));
+  return candidates[0] ?? null;
 }
 
 /** Fiscal year start month is July (7). */
@@ -307,7 +386,7 @@ Deno.serve(async (req) => {
 
     try {
       // Load configs
-      const [annualCfg, methodCfgsRes, generalElig, slabsRes, inputsRes, criteriaConfig, exclusionsRes, profilesRes, confRulesRes, prevAdjRes, deptRes, buRes, divRes, catRes] = await Promise.all([
+      const [annualCfg, methodCfgsRes, generalElig, slabsRes, inputsRes, criteriaConfig, exclusionsRes, profilesRes, confRulesRes, prevAdjRes, deptRes, buRes, divRes, catRes, statusHistoryRes] = await Promise.all([
         admin.from('annual_score_configs').select('*').eq('assessment_year', assessment_year).eq('status', 'active').maybeSingle(),
         // Per-employee scope resolution (RCA ADR-072): fetch ALL active
         // method configs for the AY and pick the most specific match per
@@ -330,6 +409,13 @@ Deno.serve(async (req) => {
         admin.from('business_units').select('id, division_id'),
         admin.from('divisions').select('id'),
         admin.from('employee_categories').select('id, name'),
+        // RCA: load every status-history row whose effective date sits on or
+        // before the cycle end. The engine picks the latest "→ Confirmed"
+        // transition per employee. Falls back to profiles.previous_employment_status
+        // when no history row exists (legacy data, before this audit table existed).
+        (scopedEmployeeIds
+          ? admin.from('employment_status_history').select('employee_id, previous_status, new_status, effective_date').in('employee_id', scopedEmployeeIds).order('effective_date', { ascending: false })
+          : admin.from('employment_status_history').select('employee_id, previous_status, new_status, effective_date').order('effective_date', { ascending: false })),
       ]);
 
       if ((profilesRes as any).error) {
@@ -432,6 +518,23 @@ Deno.serve(async (req) => {
       ((prevAdjRes.data as any[]) ?? []).forEach((r) => prevAdjByEmp.set(r.employee_id, r));
       const cycleStartISO = `${startYear}-07-01`;
       const cycleEndISO = `${endYear}-06-30`;
+
+      // Latest "→ Confirmed" history row per employee, restricted to events on
+      // or before the cycle end. Used to detect prior employment status
+      // (Trainee/Probation/Contract/Apprenticeship → Confirmed).
+      const latestConfirmHistory = new Map<string, { previous_status: string | null; effective_date: string }>();
+      ((statusHistoryRes as any)?.data as any[] ?? []).forEach((h: any) => {
+        if (!h?.employee_id) return;
+        if (String(h.new_status ?? '').trim().toLowerCase() !== 'confirmed') return;
+        if (h.effective_date && h.effective_date > cycleEndISO) return;
+        // Rows came pre-sorted by effective_date DESC — first hit wins.
+        if (!latestConfirmHistory.has(h.employee_id)) {
+          latestConfirmHistory.set(h.employee_id, {
+            previous_status: h.previous_status ?? null,
+            effective_date: h.effective_date,
+          });
+        }
+      });
 
       // Load monthly scores for AY: derived live from review_submissions + kpis
       // using the canonical 8-stage fallback chain (Final → Management → Auditor
@@ -549,6 +652,7 @@ Deno.serve(async (req) => {
       let countEligible = 0, countIneligible = 0, countNoScore = 0, countCriteriaExempt = 0;
       const methodsAppliedSet = new Set<string>();
       let countNoMethodScope = 0;
+      let countConfirmationSkippedNoHistory = 0;
 
       for (const p of profiles) {
         // Resolve employee category name → master id once, and expose it as
@@ -669,7 +773,26 @@ Deno.serve(async (req) => {
 
         // Resolve confirmation-increment rule and run adjuster (pre-method step).
         const naiveEligibleMonths = Math.max(0, Math.min(12, monthsServed));
-        const treatment = resolveConfirmationRule(confRules, p);
+        const ruleRow = resolveConfirmationRuleRow(confRules, p);
+        const treatment: ConfirmationTreatment =
+          (ruleRow?.treatment as ConfirmationTreatment) ?? 'ignore';
+        const applicableTransitions: ConfirmationTransition[] | null = Array.isArray(ruleRow?.applicable_transitions)
+          ? (ruleRow.applicable_transitions as ConfirmationTransition[])
+          : null;
+
+        // Pre-confirmation status resolution order:
+        //   1. Latest employment_status_history row whose new_status='Confirmed'.
+        //   2. profiles.previous_employment_status snapshot (legacy fallback).
+        //   3. null → engine skips with "data gap" reason when the rule has a
+        //      non-empty applicability list.
+        const historyRow = latestConfirmHistory.get(p.id) ?? null;
+        const preConfirmationStatus: string | null =
+          historyRow?.previous_status ?? p.previous_employment_status ?? null;
+        const transitionSource: 'history' | 'profile_snapshot' | 'none' =
+          historyRow ? 'history'
+            : p.previous_employment_status ? 'profile_snapshot'
+              : 'none';
+
         const prevAdj = prevAdjByEmp.get(p.id);
         const previousUncovered = Number(prevAdj?.balance_eligible_months ?? 0) > 0
           ? Math.max(0, 12 - Number(prevAdj?.final_eligible_months ?? 12))
@@ -682,7 +805,19 @@ Deno.serve(async (req) => {
           naiveEligibleMonths,
           previousCycleUncovered: previousUncovered,
           treatment,
+          applicableTransitions,
+          preConfirmationStatus,
         });
+        // Telemetry: count employees where the rule wanted to apply but no
+        // transition history was available (the most common operational gap).
+        if (
+          adjustment.skipped &&
+          transitionSource === 'none' &&
+          Array.isArray(applicableTransitions) &&
+          applicableTransitions.length > 0
+        ) {
+          countConfirmationSkippedNoHistory++;
+        }
         const effectiveMonths = Math.max(0, Math.min(12, adjustment.finalEligibleMonths));
 
         // Shift-to-next-cycle hard-blocks the increment this AY.
@@ -758,6 +893,9 @@ Deno.serve(async (req) => {
           carry_forward_months: adjustment.carryForwardMonths,
           final_eligible_months: adjustment.finalEligibleMonths,
           adjustment_reason: adjustment.adjustmentReason,
+          transition_key: adjustment.transitionKey ?? null,
+          pre_confirmation_status: preConfirmationStatus,
+          transition_source: transitionSource,
         });
 
         adjustmentRows.push({
@@ -779,6 +917,12 @@ Deno.serve(async (req) => {
             previous_cycle_uncovered: previousUncovered,
             cycle_start: cycleStartISO,
             cycle_end: cycleEndISO,
+            pre_confirmation_status: preConfirmationStatus,
+            transition_key: adjustment.transitionKey ?? null,
+            transition_source: transitionSource,
+            applicable_transitions: applicableTransitions,
+            rule_id: ruleRow?.id ?? null,
+            history_effective_date: historyRow?.effective_date ?? null,
           },
         });
       }
@@ -809,6 +953,7 @@ Deno.serve(async (req) => {
           criteria_exempt: countCriteriaExempt,
           methods_applied: Array.from(methodsAppliedSet),
           no_method_scope: countNoMethodScope,
+          confirmation_skipped_no_history: countConfirmationSkippedNoHistory,
           annual_method: annualMethod,
         },
       }).eq('id', runId);

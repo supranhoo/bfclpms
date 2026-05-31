@@ -1528,6 +1528,57 @@ export type Database = {
           },
         ]
       }
+      employment_status_history: {
+        Row: {
+          changed_at: string
+          changed_by: string | null
+          effective_date: string
+          employee_id: string
+          id: string
+          new_status: string
+          notes: string | null
+          previous_status: string | null
+          source: string
+        }
+        Insert: {
+          changed_at?: string
+          changed_by?: string | null
+          effective_date: string
+          employee_id: string
+          id?: string
+          new_status: string
+          notes?: string | null
+          previous_status?: string | null
+          source?: string
+        }
+        Update: {
+          changed_at?: string
+          changed_by?: string | null
+          effective_date?: string
+          employee_id?: string
+          id?: string
+          new_status?: string
+          notes?: string | null
+          previous_status?: string | null
+          source?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "employment_status_history_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "eligible_login_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "employment_status_history_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       employment_statuses: {
         Row: {
           code: string | null
@@ -3016,12 +3067,15 @@ export type Database = {
           method_used: string | null
           period_covered_months: number | null
           pms_score: number | null
+          pre_confirmation_status: string | null
           rating_band: string | null
           remarks: string | null
           revised_salary: number | null
           run_id: string
           service_months: number | null
           slab_percent: number | null
+          transition_key: string | null
+          transition_source: string | null
         }
         Insert: {
           adjustment_reason?: string | null
@@ -3049,12 +3103,15 @@ export type Database = {
           method_used?: string | null
           period_covered_months?: number | null
           pms_score?: number | null
+          pre_confirmation_status?: string | null
           rating_band?: string | null
           remarks?: string | null
           revised_salary?: number | null
           run_id: string
           service_months?: number | null
           slab_percent?: number | null
+          transition_key?: string | null
+          transition_source?: string | null
         }
         Update: {
           adjustment_reason?: string | null
@@ -3082,12 +3139,15 @@ export type Database = {
           method_used?: string | null
           period_covered_months?: number | null
           pms_score?: number | null
+          pre_confirmation_status?: string | null
           rating_band?: string | null
           remarks?: string | null
           revised_salary?: number | null
           run_id?: string
           service_months?: number | null
           slab_percent?: number | null
+          transition_key?: string | null
+          transition_source?: string | null
         }
         Relationships: [
           {
