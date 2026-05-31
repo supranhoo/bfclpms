@@ -147,12 +147,13 @@ export function IncrementEligibilitySection() {
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <ShieldCheck className="h-5 w-5" />
-          Increment Eligibility Criteria
+          Increment Ineligibility Criteria
         </CardTitle>
         <CardDescription>
-          Organization-wide rules that disqualify employees from increments before percentage calculation.
-          Configurations are maintained per scope (Company, Division, Business Unit, Level, Location)
-          and Assessment Year.
+          These rules disqualify employees from increment when configured thresholds are breached.
+          Employees who do not breach these rules continue through PMS score, slab, and increment
+          method calculation. Configurations are maintained per scope (Company, Division, Business
+          Unit, Level, Location) and Assessment Year.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">
@@ -270,13 +271,13 @@ export function IncrementEligibilitySection() {
             {/* CRITERIA TABLE */}
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <h4 className="text-sm font-medium">Criteria</h4>
+                <h4 className="text-sm font-medium">Ineligibility Criteria</h4>
                 <Button
                   size="sm"
                   disabled={isReadOnly}
                   onClick={() => setCriterionDialog({ open: true, row: null })}
                 >
-                  <Plus className="h-4 w-4 mr-1" /> Add Criterion
+                  <Plus className="h-4 w-4 mr-1" /> Add Ineligibility Criterion
                 </Button>
               </div>
               <ScrollArea className="w-full">
@@ -298,7 +299,7 @@ export function IncrementEligibilitySection() {
                       {loadingCriteria ? (
                         <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground text-sm py-4">Loading…</TableCell></TableRow>
                       ) : criteria.length === 0 ? (
-                        <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground text-sm py-4">No criteria yet. Click “Add Criterion”.</TableCell></TableRow>
+                        <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground text-sm py-4">No ineligibility criteria yet. Click “Add Ineligibility Criterion”.</TableCell></TableRow>
                       ) : criteria.map((row) => (
                         <TableRow key={row.id}>
                           <TableCell className="font-medium">{row.criterion_name}</TableCell>
@@ -508,9 +509,11 @@ function CriterionDialog(props: {
     <Dialog open={props.open} onOpenChange={(v) => !v && props.onClose()}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>{editing ? 'Edit Criterion' : 'Add Criterion'}</DialogTitle>
+          <DialogTitle>{editing ? 'Edit Ineligibility Criterion' : 'Add Ineligibility Criterion'}</DialogTitle>
           <DialogDescription>
-            Define the rule. Breach triggers <strong>Not Eligible</strong> and zero increment.
+            Define the disqualification rule. Any breach makes the employee <strong>Ineligible</strong> for
+            increment and sets eligible % to zero. Employees who do not breach this rule continue through
+            PMS score, slab, and increment method calculation as normal.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
