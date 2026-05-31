@@ -896,8 +896,22 @@ Deno.serve(async (req) => {
             const effectiveMethod = slab.prorate_on_doj ? methodType : 'full';
             // Hand the adjuster's finalEligibleMonths to the method engine so
             // proration accounts for any confirmation-increment coverage.
-            const monthsForMethod = effectiveMethod === 'full' ? monthsServed : effectiveMonths;
-            const res = applyMethod(effectiveMethod, slabPercent ?? 0, monthsForMethod, methodSlabs);
+            let monthsForMethod = effectiveMethod === 'full' ? monthsServed : effectiveMonths;
+            let proratedNote: string | undefined;
+            if (effectiveMethod === 'prorated_doj' && p.doj) {
+              const cutoffDay = Number((resolvedCfg as any)?.joining_month_cutoff_day ?? 15);
+              const ayStart = new Date(`${startYear}-07-01T00:00:00Z`);
+              const ayEnd = new Date(`${endYear}-06-30T00:00:00Z`);
+              const r = monthsServedInAY(new Date(p.doj), cutoffDay, ayStart, ayEnd, validationDate);
+              // Honour any confirmation-adjustment ceiling already applied.
+              monthsForMethod = Math.min(r.months, effectiveMonths);
+              proratedNote =
+                r.decision === 'included' ? `Joining month counted due to cutoff day ${cutoffDay}`
+                : r.decision === 'excluded' ? `Joining month excluded due to cutoff day ${cutoffDay}`
+                : r.decision === 'pre_ay' ? `DOJ before AY — full period`
+                : `DOJ after AY — no months served`;
+            }
+            const res = applyMethod(effectiveMethod, slabPercent ?? 0, monthsForMethod, methodSlabs, proratedNote);
             eligiblePercent = res.eligible;
             methodNotes = res.notes;
             if (currentSalary !== null) {
