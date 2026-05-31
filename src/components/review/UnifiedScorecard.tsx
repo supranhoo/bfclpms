@@ -1376,17 +1376,31 @@ export function UnifiedScorecard({
       }
     }
 
-    const rating = scoreToRating(reviewerScore);
+    const uomType = (selectedKpi as any)?.uom_type as 'numeric' | 'binary' | 'tiered' | undefined;
+    const qualOpts = (selectedKpi as any)?.qualitative_options as QualitativeOption[] | null;
+    const isQualitative = uomType === 'binary' || uomType === 'tiered';
+    let achievedToSave: number | null;
+    let scoreToSave: number | null = reviewerScore;
+    if (isQualitative) {
+      const r = labelToRating(reviewerAchievedValue, uomType, qualOpts);
+      achievedToSave = r ?? reviewerScore ?? null;
+      if (r !== null) scoreToSave = r;
+    } else if (typeof reviewerAchievedValue === 'number') {
+      achievedToSave = Number.isFinite(reviewerAchievedValue) ? reviewerAchievedValue : null;
+    } else if (reviewerAchievedValue) {
+      const n = parseFloat(reviewerAchievedValue as string);
+      achievedToSave = Number.isFinite(n) ? n : null;
+    } else {
+      achievedToSave = null;
+    }
     submitReview.mutate({
       kpi_id: selectedKpi.id,
-      rating,
-      score: reviewerScore,
+      rating: scoreToRating(scoreToSave),
+      score: scoreToSave,
       remarks: reviewerRemarks,
       evidence_url: reviewerEvidenceUrls[0] || null,
       evidence_urls: reviewerEvidenceUrls,
-      achieved_value: typeof reviewerAchievedValue === 'number' 
-        ? reviewerAchievedValue 
-        : reviewerAchievedValue ? parseFloat(reviewerAchievedValue) : null,
+      achieved_value: achievedToSave,
       approve,
     });
   };
@@ -1394,17 +1408,31 @@ export function UnifiedScorecard({
   const handleOrgOverrideConfirm = () => {
     setOrgOverrideWarningOpen(false);
     if (selectedKpi && reviewerScore !== null && pendingApproveAction !== null) {
-      const rating = scoreToRating(reviewerScore);
+      const uomType = (selectedKpi as any)?.uom_type as 'numeric' | 'binary' | 'tiered' | undefined;
+      const qualOpts = (selectedKpi as any)?.qualitative_options as QualitativeOption[] | null;
+      const isQualitative = uomType === 'binary' || uomType === 'tiered';
+      let achievedToSave: number | null;
+      let scoreToSave: number | null = reviewerScore;
+      if (isQualitative) {
+        const r = labelToRating(reviewerAchievedValue, uomType, qualOpts);
+        achievedToSave = r ?? reviewerScore ?? null;
+        if (r !== null) scoreToSave = r;
+      } else if (typeof reviewerAchievedValue === 'number') {
+        achievedToSave = Number.isFinite(reviewerAchievedValue) ? reviewerAchievedValue : null;
+      } else if (reviewerAchievedValue) {
+        const n = parseFloat(reviewerAchievedValue as string);
+        achievedToSave = Number.isFinite(n) ? n : null;
+      } else {
+        achievedToSave = null;
+      }
       submitReview.mutate({
         kpi_id: selectedKpi.id,
-        rating,
-        score: reviewerScore,
+        rating: scoreToRating(scoreToSave),
+        score: scoreToSave,
         remarks: reviewerRemarks,
         evidence_url: reviewerEvidenceUrls[0] || null,
         evidence_urls: reviewerEvidenceUrls,
-        achieved_value: typeof reviewerAchievedValue === 'number' 
-          ? reviewerAchievedValue 
-          : reviewerAchievedValue ? parseFloat(reviewerAchievedValue) : null,
+        achieved_value: achievedToSave,
         approve: pendingApproveAction,
       });
     }
