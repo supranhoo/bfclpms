@@ -406,6 +406,8 @@ export default function UserManagement() {
       isActive,
       groupDoj,
       doj,
+      confirmationDate,
+      locationId,
     }: {
       userId: string;
       role: AppRole;
@@ -421,6 +423,8 @@ export default function UserManagement() {
       isActive?: boolean;
       groupDoj?: string | null;
       doj?: string | null;
+      confirmationDate?: string | null;
+      locationId?: string | null;
     }) => {
       const updatePayload: Record<string, any> = {
         full_name: fullName || null,
@@ -434,6 +438,8 @@ export default function UserManagement() {
         mobile_number: mobileNumber !== undefined ? (mobileNumber || null) : undefined,
         group_doj: groupDoj !== undefined ? (groupDoj || null) : undefined,
         doj: doj !== undefined ? (doj || null) : undefined,
+        confirmation_date: confirmationDate !== undefined ? (confirmationDate || null) : undefined,
+        location_id: locationId !== undefined ? (locationId || null) : undefined,
       };
 
       if (isActive !== undefined) {
