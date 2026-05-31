@@ -177,6 +177,11 @@ export default function UserManagement() {
 
   // Edit Dialog
   const [editDialogOpen, setEditDialogOpen] = useState(false);
+  // v2.66.12 — Edit dialog re-hydrates 7 columns missing from the slim roster
+  // RPC (`get_reviewer_roster_slim`). Without this the form rendered empty
+  // placeholders and any subsequent Save would null-overwrite existing data.
+  // See POLICY §126 (Slim-RPC Edit Hydration Contract).
+  const [editHydrating, setEditHydrating] = useState(false);
   const [selectedUser, setSelectedUser] = useState<NonNullable<typeof profiles>[number] | null>(null);
   const [editRole, setEditRole] = useState<AppRole>('employee');
   const [editManagerId, setEditManagerId] = useState<string>('');
