@@ -13,7 +13,7 @@ import {
   useCopyPreviousYearSlabs,
   type IncrementSlabRow,
 } from '@/hooks/useIncrementSlabs';
-import { ConfirmDestructiveDialog } from '@/components/common/ConfirmDestructiveDialog';
+import { ConfirmDestructiveDialog } from '@/components/ui/ConfirmDestructiveDialog';
 import { Plus, Trash2, Loader2 } from 'lucide-react';
 
 function buildAYOptions(): string[] {
