@@ -28,6 +28,9 @@ import { UploadSettingsTab } from '@/components/admin/UploadSettingsTab';
 import { OrgKpiGovernanceSettings } from '@/components/admin/OrgKpiGovernanceSettings';
 import { FeatureFlagsTab } from '@/components/admin/FeatureFlagsTab';
 import { IncrementEligibilitySection } from '@/components/admin/scoring/IncrementEligibilitySection';
+import { AnnualScoreCalculationSection } from '@/components/admin/scoring/AnnualScoreCalculationSection';
+import { IncrementMethodSection } from '@/components/admin/scoring/IncrementMethodSection';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -618,10 +621,20 @@ export default function SystemSettings() {
               </CardContent>
             </Card>
 
+            <AnnualScoreCalculationSection />
           </div>
         );
       case 'increment':
-        return <IncrementEligibilitySection />;
+        return (
+          <Tabs defaultValue="eligibility" className="space-y-4">
+            <TabsList>
+              <TabsTrigger value="eligibility">Eligibility Criteria</TabsTrigger>
+              <TabsTrigger value="method">Increment Method</TabsTrigger>
+            </TabsList>
+            <TabsContent value="eligibility"><IncrementEligibilitySection /></TabsContent>
+            <TabsContent value="method"><IncrementMethodSection /></TabsContent>
+          </Tabs>
+        );
       case 'cycles':
         return <FrequencyCycleSettings />;
       case 'controls':
