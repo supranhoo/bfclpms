@@ -997,6 +997,8 @@ Deno.serve(async (req) => {
             applicable_transitions: applicableTransitions,
             rule_id: ruleRow?.id ?? null,
             history_effective_date: historyRow?.effective_date ?? null,
+            joining_month_cutoff_day: cutoffDayGlobal,
+            cutoff_decision: ayMonths.decision,
           },
         });
       }
