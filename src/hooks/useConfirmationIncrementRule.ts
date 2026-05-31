@@ -53,6 +53,23 @@ export function useConfirmationIncrementRule(scope: ConfirmationRuleScope | null
   });
 }
 
+export function useConfirmationIncrementRuleExists(assessmentYear: string | null) {
+  return useQuery({
+    queryKey: ['confirmation-increment-rule-exists', assessmentYear],
+    enabled: !!assessmentYear,
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from('confirmation_increment_rules')
+        .select('id')
+        .eq('assessment_year', assessmentYear)
+        .eq('status', 'active')
+        .limit(1);
+      if (error) throw error;
+      return (data?.length ?? 0) > 0;
+    },
+  });
+}
+
 export function useConfirmationIncrementRuleHistory(scope: ConfirmationRuleScope | null) {
   return useQuery({
     queryKey: ['confirmation-increment-rule-history', scope],

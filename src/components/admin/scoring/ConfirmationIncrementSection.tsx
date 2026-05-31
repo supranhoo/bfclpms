@@ -14,6 +14,7 @@ import {
   useConfirmationIncrementRule,
   useConfirmationIncrementRuleHistory,
   useSaveConfirmationIncrementRule,
+  useConfirmationIncrementRuleExists,
   type ConfirmationRuleScope,
 } from '@/hooks/useConfirmationIncrementRule';
 import {
@@ -47,6 +48,7 @@ export function ConfirmationIncrementSection() {
   const [companyScopeMode, setCompanyScopeMode] = useState<CompanyScopeMode>('global');
   const [selectedCompanyIds, setSelectedCompanyIds] = useState<string[]>([]);
   const [perCompanyId, setPerCompanyId] = useState<string | null>(null);
+  const [configureIntent, setConfigureIntent] = useState(false);
 
   // Scope used for reading/writing the rule row. Only `per_company` mode
   // narrows the DB scope by company_id — `selected` keeps the rule global
@@ -64,6 +66,8 @@ export function ConfirmationIncrementSection() {
   );
   const { data: history = [] } = useConfirmationIncrementRuleHistory(scope);
   const save = useSaveConfirmationIncrementRule();
+  const { data: anyRuleExists, isLoading: existsLoading } =
+    useConfirmationIncrementRuleExists(assessmentYear);
 
   const [treatment, setTreatment] = useState<ConfirmationTreatment>('ignore');
   const [notes, setNotes] = useState('');
@@ -73,6 +77,17 @@ export function ConfirmationIncrementSection() {
   // Sync local state when the loaded rule changes.
   const ruleKey = rule?.id ?? `${assessmentYear}:${companyScopeMode}:${perCompanyId ?? 'none'}`;
   const [hydratedFor, setHydratedFor] = useState<string | null>(null);
+  const showEmptyState =
+    !existsLoading && anyRuleExists === false && !configureIntent;
+
+  const handleAyChange = (v: string) => {
+    setAssessmentYear(v);
+    setConfigureIntent(false);
+    setCompanyScopeMode('global');
+    setSelectedCompanyIds([]);
+    setPerCompanyId(null);
+    setHydratedFor(null);
+  };
   if (hydratedFor !== ruleKey) {
     setHydratedFor(ruleKey);
     setTreatment(rule?.treatment ?? 'ignore');
@@ -143,7 +158,7 @@ export function ConfirmationIncrementSection() {
         <div className="flex flex-wrap items-end gap-4">
           <div className="space-y-1">
             <Label>Assessment Year</Label>
-            <Select value={assessmentYear} onValueChange={setAssessmentYear}>
+            <Select value={assessmentYear} onValueChange={handleAyChange}>
               <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
               <SelectContent>
                 {ayOptions.map((y) => (
@@ -157,13 +172,33 @@ export function ConfirmationIncrementSection() {
           </div>
           {rule ? (
             <Badge variant="outline">Active v{rule.version}</Badge>
-          ) : (
+          ) : !showEmptyState ? (
             <Badge variant="outline">No rule yet — defaults to “Ignore”</Badge>
-          )}
+          ) : null}
         </div>
 
         <Separator />
 
+        {existsLoading ? (
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin" /> Loading rule…
+          </div>
+        ) : showEmptyState ? (
+          <div className="rounded-md border border-dashed p-8 text-center space-y-3">
+            <div className="text-base font-semibold">
+              No configuration found for selected assessment year
+            </div>
+            <p className="text-sm text-muted-foreground max-w-xl mx-auto">
+              No confirmation increment adjustment rules have been configured for
+              Assessment Year <span className="font-medium">{assessmentYear}</span>.
+              You can create a new configuration for this assessment year if required.
+            </p>
+            <Button onClick={() => setConfigureIntent(true)}>
+              Configure for this Assessment Year
+            </Button>
+          </div>
+        ) : (
+          <>
         {/* Company Scope */}
         <div className="space-y-3">
           <Label>Company Scope</Label>
@@ -316,6 +351,8 @@ export function ConfirmationIncrementSection() {
                 </div>
               </div>
             )}
+          </>
+        )}
           </>
         )}
       </CardContent>
