@@ -698,6 +698,12 @@ export default function SystemSettings() {
         return <DataRepairTab />;
       case 'feature-flags':
         return <FeatureFlagsTab />;
+      case 'workflow':
+        return <WorkflowConfigPage />;
+      case 'organization':
+        return <OrganizationPage />;
+      case 'review-periods':
+        return <ReviewPeriodsPage />;
       default:
         return null;
     }
