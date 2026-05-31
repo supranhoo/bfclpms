@@ -662,18 +662,48 @@ export default function UserManagement() {
     setEditDivisionId(deriveDivisionFromDept(user.department_id));
     setEditDesignation(user.designation || '');
     setEditPmsGrade(user.pms_grade || '');
-    setEditEmployeeCategory((user as any).employee_category || '');
-    setEditEmploymentStatus((user as any).employment_status || '');
+    // Fields below are NOT in the slim roster — clear, then hydrate from DB.
+    setEditEmployeeCategory('');
+    setEditEmploymentStatus('');
     setEditEmployeeCode(user.employee_code || '');
     setEditFullName(user.full_name || '');
     setEditEmail(user.email || '');
-    setEditMobile((user as any).mobile_number || '');
+    setEditMobile('');
     setEditIsActive((user as any).is_active !== false);
-    setEditGroupDoj((user as any).group_doj || '');
-    setEditDoj((user as any).doj || '');
-    setEditConfirmationDate((user as any).confirmation_date || '');
-    setEditLocationId((user as any).location_id || '');
+    setEditGroupDoj('');
+    setEditDoj('');
+    setEditConfirmationDate('');
+    setEditLocationId('');
     setEditDialogOpen(true);
+    // Supplemental fetch — the roster RPC is intentionally slim for perf,
+    // so we pull the editable columns directly from `profiles` on demand.
+    setEditHydrating(true);
+    supabase
+      .from('profiles')
+      .select('group_doj, doj, confirmation_date, location_id, employee_category, employment_status, mobile_number')
+      .eq('id', user.id)
+      .maybeSingle()
+      .then(({ data, error }) => {
+        if (error) {
+          toast({
+            title: 'Failed to load user details',
+            description: error.message,
+            variant: 'destructive',
+          });
+          setEditDialogOpen(false);
+          setEditHydrating(false);
+          return;
+        }
+        const row = (data as any) || {};
+        setEditGroupDoj(row.group_doj || '');
+        setEditDoj(row.doj || '');
+        setEditConfirmationDate(row.confirmation_date || '');
+        setEditLocationId(row.location_id || '');
+        setEditEmployeeCategory(row.employee_category || '');
+        setEditEmploymentStatus(row.employment_status || '');
+        setEditMobile(row.mobile_number || '');
+        setEditHydrating(false);
+      });
   };
 
   const handleSaveUser = async () => {
