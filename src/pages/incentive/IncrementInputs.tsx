@@ -309,8 +309,7 @@ function CalculateIncrementTab({ year }: { year: string }) {
       const newRunId = result?.run_id ?? result?.id ?? null;
       if (newRunId) {
         setSelectedRun(newRunId);
-        setLogView('history');
-        setInnerTab('log');
+        setInnerTab('run');
       }
     } catch {
       /* toast already shown by hook */
@@ -575,10 +574,40 @@ function CalculateIncrementTab({ year }: { year: string }) {
                 </div>
               )}
               <p className="text-xs text-muted-foreground">
-                Choose scope and run calculation. Results appear under <strong>Run Log</strong> once the run completes.
+                Choose scope and run calculation. Results appear below once the run completes. Full history is available under <strong>Run Log</strong>.
               </p>
             </CardContent>
           </Card>
+
+          {selectedRun && (
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0">
+                <CardTitle>Calculated / Run Details</CardTitle>
+                <Button
+                  variant="outline"
+                  onClick={exportRun}
+                  disabled={!itemsData?.rows?.length || exportQuery.isFetching}
+                >
+                  {exportQuery.isFetching
+                    ? <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    : <FileSpreadsheet className="h-4 w-4 mr-2" />}
+                  Export Excel
+                </Button>
+              </CardHeader>
+              <CardContent>
+                <ResultsTable
+                  rows={itemsData?.rows ?? []}
+                  loading={itemsLoading}
+                  emptyText="No calculated rows found for this run."
+                  page={page}
+                  totalPages={totalPages}
+                  total={itemsData?.total ?? 0}
+                  onPrev={() => setPage((p) => Math.max(0, p - 1))}
+                  onNext={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+                />
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
 
         <TabsContent value="log" className="space-y-6">
@@ -634,7 +663,7 @@ function CalculateIncrementTab({ year }: { year: string }) {
                             })()}
                           </TableCell>
                           <TableCell>
-                            <Button size="sm" variant="outline" onClick={() => setSelectedRun(r.id)}>View</Button>
+                            <Button size="sm" variant="outline" onClick={() => { setSelectedRun(r.id); setInnerTab('run'); }}>View</Button>
                           </TableCell>
                         </TableRow>
                       ))}
@@ -681,35 +710,6 @@ function CalculateIncrementTab({ year }: { year: string }) {
             </Card>
           )}
 
-          {logView === 'history' && selectedRun && (
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0">
-                <CardTitle>Calculated / Run Details</CardTitle>
-                <Button
-                  variant="outline"
-                  onClick={exportRun}
-                  disabled={!itemsData?.rows?.length || exportQuery.isFetching}
-                >
-                  {exportQuery.isFetching
-                    ? <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    : <FileSpreadsheet className="h-4 w-4 mr-2" />}
-                  Export Excel
-                </Button>
-              </CardHeader>
-              <CardContent>
-                <ResultsTable
-                  rows={itemsData?.rows ?? []}
-                  loading={itemsLoading}
-                  emptyText="No calculated rows found for this run."
-                  page={page}
-                  totalPages={totalPages}
-                  total={itemsData?.total ?? 0}
-                  onPrev={() => setPage((p) => Math.max(0, p - 1))}
-                  onNext={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
-                />
-              </CardContent>
-            </Card>
-          )}
         </TabsContent>
       </Tabs>
 
