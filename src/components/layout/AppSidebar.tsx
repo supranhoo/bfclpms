@@ -87,26 +87,28 @@ const getStaticMenuItems = (policyVisibleRoles: string[]) => ({
   admin: [
     { title: 'Admin Dashboard', icon: LayoutDashboard, path: '/admin', menuKey: 'admin-dashboard', roles: ['admin'] },
     { title: 'User Management', icon: Users, path: '/admin/users', menuKey: 'admin-users', roles: ['admin'] },
-    { title: 'KRA Library', icon: Library, path: '/admin/templates', menuKey: 'admin-templates', roles: ['admin'] },
-    { title: 'KRA Bundles', icon: Package, path: '/admin/bundles', menuKey: 'admin-bundles', roles: ['admin'] },
-    { title: 'All KRAs', icon: Target, path: '/admin/kpis', menuKey: 'admin-kpis', roles: ['admin'] },
     { title: 'Org KPI Data Entry', icon: Building2, path: '/admin/org-kpi-data', menuKey: 'admin-org-kpi-data', roles: ['admin'] },
     { title: 'Org KPI Overview', icon: Eye, path: '/admin/org-kpi-overview', menuKey: 'admin-org-kpi-overview', roles: ['admin'] },
     { title: 'PIP Management', icon: UserX, path: '/admin/pip', menuKey: 'admin-pip', roles: ['admin'] },
-    { title: 'KRA Categories', icon: ClipboardList, path: '/admin/categories', menuKey: 'admin-categories', roles: ['admin'] },
     { title: 'Import Data', icon: Upload, path: '/admin/import', menuKey: 'admin-import', roles: ['admin'] },
     { title: 'System Settings', icon: Settings, path: '/admin/settings', menuKey: 'admin-settings', roles: ['admin'] },
     { title: 'Audit Logs', icon: History, path: '/audit-logs', menuKey: 'admin-audit-logs', roles: ['admin'] },
     { title: 'Observations', icon: Eye, path: '/admin/observations', menuKey: 'admin-observations', roles: ['admin'] },
     { title: 'Rollback Requests', icon: Undo2, path: '/admin/rollback-requests', menuKey: 'admin-rollback', roles: ['admin'] },
     { title: 'Email Logs', icon: Mail, path: '/admin/email-logs', menuKey: 'admin-email-logs', roles: ['admin'] },
-    { title: 'KPI Mapping', icon: Target, path: '/admin/kpi-mapping', menuKey: 'admin-kpi-mapping', roles: ['admin'] },
-    { title: 'Weightage Matrix', icon: Percent, path: '/admin/kpi-weightage', menuKey: 'admin-weightage', roles: ['admin'] },
     { title: 'Pending Reviews', icon: ClipboardCheck, path: '/admin/pending-reviews', menuKey: 'admin-pending-reviews', roles: ['admin'] },
     { title: 'Incentive Config', icon: Percent, path: '/admin/incentive-config', menuKey: 'admin-incentive', roles: ['admin'] },
     { title: 'Incentive Data Entry', icon: FileInput, path: '/admin/incentive-data-entry', menuKey: 'admin-incentive-data', roles: ['admin'] },
     { title: 'Increment Inputs', icon: FileInput, path: '/admin/increment-inputs', menuKey: 'admin-increment-inputs', roles: ['admin', 'hr_pms'] },
     { title: 'Employee Development', icon: GraduationCap, path: '/admin/employee-development', menuKey: 'admin-development', roles: ['admin', 'hr_pms'] },
+  ],
+  kraSettings: [
+    { title: 'KRA Library', icon: Library, path: '/admin/templates', menuKey: 'admin-templates', roles: ['admin'] },
+    { title: 'KRA Bundles', icon: Package, path: '/admin/bundles', menuKey: 'admin-bundles', roles: ['admin'] },
+    { title: 'All KRAs', icon: Target, path: '/admin/kpis', menuKey: 'admin-kpis', roles: ['admin'] },
+    { title: 'KRA Categories', icon: ClipboardList, path: '/admin/categories', menuKey: 'admin-categories', roles: ['admin'] },
+    { title: 'KPI Mapping', icon: Target, path: '/admin/kpi-mapping', menuKey: 'admin-kpi-mapping', roles: ['admin'] },
+    { title: 'Weightage Matrix', icon: Percent, path: '/admin/kpi-weightage', menuKey: 'admin-weightage', roles: ['admin'] },
     { title: 'KPI Standardization', icon: GitMerge, path: '/admin/kpi-standardization', menuKey: 'admin-kpi-standardization', roles: ['admin'] },
   ],
   dataEntry: [
@@ -123,6 +125,16 @@ const getStaticMenuItems = (policyVisibleRoles: string[]) => ({
 });
 
 // Helper to determine which section contains a given path (handles query params)
+const KRA_SETTINGS_PATHS = new Set([
+  '/admin/templates',
+  '/admin/bundles',
+  '/admin/kpis',
+  '/admin/categories',
+  '/admin/kpi-mapping',
+  '/admin/kpi-weightage',
+  '/admin/kpi-standardization',
+]);
+
 const getSectionForPath = (pathname: string, search: string = ''): string => {
   const fullPath = pathname + search;
   if (fullPath.includes('view=team')) return 'manager';
@@ -132,6 +144,7 @@ const getSectionForPath = (pathname: string, search: string = ''): string => {
   if (fullPath.includes('view=hr_pms')) return 'hr_pms';
   if (pathname === '/management-dashboard') return 'management';
   if (['/dashboard', '/queries', '/pms-policy', '/registry'].includes(pathname)) return 'main';
+  if (KRA_SETTINGS_PATHS.has(pathname)) return 'kraSettings';
   if (pathname.startsWith('/admin')) return 'admin';
   if (pathname.startsWith('/reports')) return 'reports';
   if (pathname === '/audit-logs') return 'admin';
@@ -347,6 +360,18 @@ export function AppSidebar() {
           currentPath={location.pathname + location.search}
           onNavigate={handleNavigation}
           hasActiveRoute={getSectionForPath(location.pathname, location.search) === 'dataEntry'}
+        />
+
+        {/* KRA Settings Section */}
+        <CollapsibleSidebarGroup
+          label="KRA Settings"
+          items={menuItems.kraSettings}
+          isOpen={openSections.has('kraSettings')}
+          onToggle={() => toggleSection('kraSettings')}
+          filterByRole={filterByRole}
+          currentPath={location.pathname + location.search}
+          onNavigate={handleNavigation}
+          hasActiveRoute={getSectionForPath(location.pathname, location.search) === 'kraSettings'}
         />
 
         {/* Administration Section */}
