@@ -630,11 +630,14 @@ export function AuditScorecard({
     const qualOpts = (selectedKpi as any).qualitative_options as QualitativeOption[] | null;
     const isQualitative = uomType === 'binary' || uomType === 'tiered';
     let auditorAchievedToSave: number | null;
+    let auditorScoreToSave: number | null = auditorScore;
     if (isQualitative) {
-      // Convert label ("Yes"/"No"/etc.) → numeric rating. Falls back to auditorScore
-      // when no value is selected so we never persist NaN.
-      auditorAchievedToSave =
-        labelToRating(auditorAchievedValue, uomType, qualOpts) ?? auditorScore ?? null;
+      // Canonicalise: picker label → numeric rating using THIS kpi's qualitative_options
+      // (handles inverted Yes/No safety KPIs). Then mirror it onto auditor_score so the
+      // two columns can never drift apart on subsequent reads.
+      const r = labelToRating(auditorAchievedValue, uomType, qualOpts);
+      auditorAchievedToSave = r ?? auditorScore ?? null;
+      if (r !== null) auditorScoreToSave = r;
     } else if (typeof auditorAchievedValue === 'number') {
       auditorAchievedToSave = Number.isFinite(auditorAchievedValue) ? auditorAchievedValue : null;
     } else if (auditorAchievedValue) {
@@ -643,10 +646,11 @@ export function AuditScorecard({
     } else {
       auditorAchievedToSave = null;
     }
+    const ratingToSave = scoreToRating(auditorScoreToSave);
     submitAuditReview.mutate({
       kpi_id: selectedKpi.id,
-      auditor_rating: rating,
-      auditor_score: auditorScore,
+      auditor_rating: ratingToSave,
+      auditor_score: auditorScoreToSave,
       auditor_remarks: auditorRemarks,
       auditor_evidence_url: auditorEvidenceUrls.length > 0 ? auditorEvidenceUrls[0] : null,
       auditor_achieved_value: auditorAchievedToSave,
