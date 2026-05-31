@@ -324,7 +324,7 @@ export default function KpiScorecardDetail() {
 
   const handleExport = () => {
     if (!filtered.length) return;
-    const exportData = filtered.map(toExportRecord);
+    const exportData = filtered.map(r => toExportRecord(r, selectedYear));
     const ws = XLSX.utils.json_to_sheet(exportData);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'KPI Scorecard');
@@ -332,7 +332,7 @@ export default function KpiScorecardDetail() {
   };
 
   /** Shared row → XLSX record mapping. Used by both single-month and range exports. */
-  function toExportRecord(r: FlatRow) {
+  function toExportRecord(r: FlatRow, year: number) {
     return {
       'Company': getCompanyCode(r.employeeId),
       'Employee Code': r.employeeCode,
@@ -340,7 +340,7 @@ export default function KpiScorecardDetail() {
       'Designation': r.designation,
       'Department': r.department,
       'Month': r.month,
-      'Year': (rows ?? []).find(x => x === r) ? undefined : undefined,
+      'Year': year,
       'Category': r.category,
       'KRA': r.kraName,
       'KPI': r.kpiName,
