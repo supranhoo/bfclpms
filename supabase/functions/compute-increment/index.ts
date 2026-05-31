@@ -998,6 +998,7 @@ Deno.serve(async (req) => {
           adjustment_reason: adjustment.adjustmentReason,
           inputs_snapshot: {
             doj: p.doj,
+            group_doj: (p as any).group_doj ?? null,
             confirmation_date: p.confirmation_date,
             confirmation_increment_granted: p.confirmation_increment_granted,
             confirmation_increment_effective_date: p.confirmation_increment_effective_date,
