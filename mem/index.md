@@ -79,4 +79,5 @@ Lean-Load: debounce search inputs (>200 rows / network); paginate new lists with
 - [Safety Incident Open INSERT Policy](mem://features/safety/incident-report-open-insert) — Phase 16 RLS: any authenticated user can file an incident; reporter_id = auth.uid() pin preserved; downstream SELECT/UPDATE/DELETE gates unchanged
 - [Incident Submission RPC](mem://features/safety/incident-submission-rpc) — Phase 18 SECURITY DEFINER entrypoint; server-stamps reporter_id; idempotent on (reporter_id, client_submission_id); browser must NOT direct-insert
 - [Increment Eligibility Exclusions](mem://features/admin/increment-eligibility-exclusions) — Per-AY employee exemptions from Increment Eligibility Criteria (never cross-year)
+- [Increment criterion_key canonical binding](mem://features/incentive/criterion-key-canonical-binding) — Criterion keys MUST resolve to canonical metric keys; engine fails closed on unknown keys (ADR-070, Vivek 101784 RCA)
 - [Auditor Draft Qualitative Hydration](mem://features/review/auditor-draft-qualitative-hydration) — Save/reopen contract for Yes/No / tiered audit drafts; never inherit employee value
