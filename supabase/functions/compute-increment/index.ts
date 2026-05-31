@@ -165,8 +165,48 @@ function rollUpScores(scores: Array<{ score: number | null; month: number }>, me
   return +(chosen.reduce((a, s) => a + (s.score as number), 0) / chosen.length).toFixed(4);
 }
 
-function matchSlab(slabs: any[], score: number): any | null {
-  return slabs.find((s) => score >= Number(s.rating_from) && score <= Number(s.rating_to)) ?? null;
+// ──────────────────────────────────────────────────────────────────────────
+// Slab matcher (mirror of src/lib/slabMatcher.ts — keep in sync).
+// Picks the most-specific applicable slab; ties broken by sort_order, then
+// most-recent updated_at.
+// ──────────────────────────────────────────────────────────────────────────
+const SLAB_DIMS: Array<{ slab: string; emp: string }> = [
+  { slab: 'company_ids',       emp: 'company_id' },
+  { slab: 'division_ids',      emp: 'division_id' },
+  { slab: 'business_unit_ids', emp: 'business_unit_id' },
+  { slab: 'location_ids',      emp: 'location_id' },
+  { slab: 'category_ids',      emp: 'category_id' },
+  { slab: 'level_ids',         emp: 'level_id' },
+];
+function slabApplies(slab: any, emp: any): boolean {
+  for (const d of SLAB_DIMS) {
+    const scope = Array.isArray(slab[d.slab]) ? slab[d.slab] : [];
+    if (scope.length === 0) continue;
+    const v = emp[d.emp];
+    if (!v || !scope.includes(v)) return false;
+  }
+  return true;
+}
+function slabSpec(slab: any): number {
+  let n = 0;
+  for (const d of SLAB_DIMS) if (Array.isArray(slab[d.slab]) && slab[d.slab].length > 0) n++;
+  return n;
+}
+function pickSlab(slabs: any[], emp: any, score: number): any | null {
+  const cands = slabs.filter(
+    (s) => score >= Number(s.rating_from) && score <= Number(s.rating_to) && slabApplies(s, emp),
+  );
+  if (cands.length === 0) return null;
+  cands.sort((a, b) => {
+    const sa = slabSpec(a), sb = slabSpec(b);
+    if (sa !== sb) return sb - sa;
+    const oa = a.sort_order ?? 0, ob = b.sort_order ?? 0;
+    if (oa !== ob) return oa - ob;
+    const ua = a.updated_at ? Date.parse(a.updated_at) : 0;
+    const ub = b.updated_at ? Date.parse(b.updated_at) : 0;
+    return ub - ua;
+  });
+  return cands[0];
 }
 
 Deno.serve(async (req) => {
