@@ -22,9 +22,10 @@ export interface IncrementMethodConfigRow {
   created_at: string;
   updated_at: string;
   /**
-   * Day-of-month (1-31) cutoff that decides whether the DOJ month is counted
-   * for `prorated_doj`. NULL = engine default of 15. Only meaningful when
-   * method === 'prorated_doj'.
+   * Day-of-month (1-31) cutoff that decides whether the GDOJ month is
+   * counted for `prorated_doj`. NULL = engine default of 15. The engine
+   * reads `profiles.group_doj`; if it is null, the prorated calculation is
+   * skipped with an explicit "GDOJ missing" reason.
    */
   joining_month_cutoff_day: number | null;
 }
