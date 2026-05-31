@@ -292,7 +292,10 @@ function CalculateIncrementTab({ year }: { year: string }) {
       rating_band: r.rating_band ?? '',
       slab_percent: r.slab_percent ?? '',
       eligibility: r.eligibility_status,
-      ineligibility_reason: r.ineligibility_reason ?? '',
+      // PMS-missing is a required-data issue, not an ineligibility-criterion breach —
+      // blank it from the Ineligibility Reason column so the export wording stays accurate.
+      ineligibility_reason:
+        r.eligibility_status === 'no_score' ? '' : (r.ineligibility_reason ?? ''),
       method: r.method_used ?? '',
       eligible_percent: r.eligible_percent ?? '',
       service_months: r.service_months ?? '',
@@ -482,14 +485,16 @@ function CalculateIncrementTab({ year }: { year: string }) {
                           {r.eligibility_status}
                         </Badge>
                         {r.criteria_exempt && (
-                          <Badge variant="outline" className="text-[10px]" title={r.exemption_reason ?? 'Bypassed eligibility criteria'}>
-                            Criteria-exempt
+                          <Badge variant="outline" className="text-[10px]" title={r.exemption_reason ?? 'Bypassed ineligibility criteria'}>
+                            Ineligibility-criteria exempt
                           </Badge>
                         )}
                       </div>
                     </TableCell>
-                    <TableCell className="text-xs text-muted-foreground max-w-[200px] truncate" title={r.ineligibility_reason ?? r.exemption_reason ?? ''}>
-                      {r.ineligibility_reason ?? (r.criteria_exempt ? `Bypassed: ${r.exemption_reason ?? '—'}` : '—')}
+                    <TableCell className="text-xs text-muted-foreground max-w-[200px] truncate" title={r.eligibility_status === 'no_score' ? '' : (r.ineligibility_reason ?? r.exemption_reason ?? '')}>
+                      {r.eligibility_status === 'no_score'
+                        ? '—'
+                        : (r.ineligibility_reason ?? (r.criteria_exempt ? `Bypassed: ${r.exemption_reason ?? '—'}` : '—'))}
                     </TableCell>
                     <TableCell>{r.method_used ?? '—'}</TableCell>
                     <TableCell>{r.eligible_percent ?? '—'}%</TableCell>
