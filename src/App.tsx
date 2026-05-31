@@ -252,9 +252,7 @@ const App = () => (
                   </ProtectedRoute>
                 } />
                 <Route path="/admin/organization" element={
-                  <ProtectedRoute allowedRoles={['admin']} menuKey="admin-organization">
-                    <Organization />
-                  </ProtectedRoute>
+                  <Navigate to="/admin/settings?section=organization" replace />
                 } />
                 <Route path="/admin/categories" element={
                   <ProtectedRoute allowedRoles={['admin']} menuKey="admin-categories">
@@ -262,9 +260,7 @@ const App = () => (
                   </ProtectedRoute>
                 } />
                 <Route path="/admin/review-periods" element={
-                  <ProtectedRoute allowedRoles={['admin']} menuKey="admin-review-periods">
-                    <ReviewPeriods />
-                  </ProtectedRoute>
+                  <Navigate to="/admin/settings?section=review-periods" replace />
                 } />
                 <Route path="/admin/governance-explainer" element={
                   <ProtectedRoute allowedRoles={['admin']} menuKey="admin-governance">
@@ -302,9 +298,7 @@ const App = () => (
                   </ProtectedRoute>
                 } />
                 <Route path="/admin/workflow-config" element={
-                  <ProtectedRoute allowedRoles={['admin']} menuKey="admin-workflow">
-                    <WorkflowConfig />
-                  </ProtectedRoute>
+                  <Navigate to="/admin/settings?section=workflow" replace />
                 } />
                 <Route path="/admin/org-kpi-data" element={
                   <DataOwnerRoute>

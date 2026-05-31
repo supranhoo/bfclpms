@@ -1,122 +1,84 @@
-# RCA & Fix — "View Only" badge on closed months despite Legacy/Global Lock = Open
+# Consolidate Workflow Config, Organization, Review Periods into System Settings
 
-## What you're seeing
-- **Image 1:** KPI of Anil Kumar Pathak for Sep 2025 shows `Approved · View Only` and Admin Data Entry won't accept score changes.
-- **Image 2:** Review Period Governance for Sep 2025 shows `Legacy Lock 🔓 Open`, `Global Lock None`, but `Current Stage = Closed`.
+## Goal
 
-The two screens look contradictory — but they're reading **three different** lock systems.
+Reduce sidebar clutter by folding three admin-only entries — **Workflow Config**, **Organization**, **Review Periods** — into the existing **System Settings** page as new tabs/sections. Sidebar then drops from 3 separate links to a single entry-point.
 
-## Root Cause
+## Risk & Impact
 
-There are three independent "lock" concepts in the system:
+- **Data impact:** None. Pages, queries, RPCs unchanged.
+- **Workflow impact:** Admins reach the same screens one click deeper (Settings → tab). All existing routes remain valid so deep links / bookmarks keep working via redirect.
+- **Menu Access:** `menuKey` entries (`admin-workflow`, `admin-organization`, `admin-review-periods`) are now controlled inside Settings; we keep the keys alive so existing role profiles don't break and continue to gate the new tabs.
+- **Regression risk:** Low — pure navigation/composition change, no edits to the page bodies.
+- **Rollback:** Restore the three sidebar entries; the standalone routes still work.
 
-| # | Concept | Source field | Shown in Governance UI as |
-|---|---|---|---|
-| 1 | Legacy lock | `review_periods.is_locked` (boolean) | "Legacy Lock 🔓 / 🔒" |
-| 2 | Global / role / dept / employee lock | rows in `review_period_locks` | "Global Lock: None / Active" |
-| 3 | **Stage machine** | `review_periods.current_stage` | "Current Stage: Closed" (not surfaced as a lock) |
+## Implementation
 
-The "View Only" badge and the Admin Data Entry write-block both come from one RPC: `public.check_review_period_permission`. That RPC's logic order is:
+### 1. Settings page — add three sections
 
-```text
-1. IF current_stage = 'closed'  → return view_only=true / edit_scores=false   ← short-circuits EVERYONE
-2. IF user is admin            → return default (open)                        ← never reached when closed
-3. Check employee / dept / role / global locks (review_period_locks)
+`src/pages/admin/SystemSettings.tsx`
+
+Add to `SETTINGS_SECTIONS` (near the top, after Branding/General — most-used admin config):
+
+```ts
+{ key: 'workflow',        label: 'Workflow Config', icon: GitBranch },
+{ key: 'organization',    label: 'Organization',    icon: Building2 },
+{ key: 'review-periods',  label: 'Review Periods',  icon: Calendar },
 ```
 
-Because Sep 2025 was advanced to `current_stage = 'closed'` (visible in the Stage Progress strip in image 2), step 1 fires and returns `view_only = true` for **every user including admins**, regardless of Legacy Lock or Global Lock being open. The DB trigger `prevent_locked_submission_updates` has the same ordering bug — it correctly bypasses admins for the Legacy lock, then re-calls the broken RPC and re-blocks admins.
+In `renderSectionContent()` switch, add three cases that render the existing page bodies (no inline duplication — import and reuse):
 
-So:
-- **Legacy Lock open + Global Lock none + Stage = Closed → admin still blocked.** Working as coded, but the code is wrong: admin should be exempt from the stage gate just like they are exempt from the legacy lock.
-- The Governance Overview screen also hides the real culprit: `Current Stage = Closed` is shown as a small chip in "Current Stage" but not in the "Locks" row, so an admin reasonably concludes nothing is locked.
-
-Evidence:
-- `src/components/review/KpiHeaderSection.tsx:68-135` renders the View Only badge purely from `useReviewPeriodPermissions(...).view_only` — no admin override.
-- `src/hooks/useReviewPeriodPermissions.ts:43-87` calls the RPC for every action; no admin short-circuit on the client.
-- `supabase/migrations/20260307072435_*.sql` `check_review_period_permission`: `IF v_current_stage = 'closed'` block runs **before** the admin role check.
-- `supabase/migrations/20260314145515_*.sql` `prevent_locked_submission_updates`: bypasses legacy lock for admin, then re-calls the same RPC.
-
-## Risk & Impact Report
-
-- **Data Impact:** None. RPC logic change only; no schema, no historical row mutation.
-- **Workflow Impact:** Admins regain the ability to edit/score KRAs in `closed` periods. Non-admin users remain fully blocked exactly as today.
-- **Regression Risk:** Low. Two surfaces use this RPC — Self/Manager/Approval screens (still blocked because they check role-specific actions like `submit_self_review`, which the admin role does not have via the role-locks path) and KpiHeaderSection/Admin Data Entry (intended target). The DB triggers fan in to the same RPC, so once the RPC is fixed the triggers automatically respect it.
-- **Security:** Admin already has full row-level UPDATE rights everywhere else; the closed-stage gate is purely a governance UX safety net, not a security boundary. Every admin edit on a closed period is still captured in the immutable audit log (`pms-audit-log` / `kpi_audit_logs`) and `final_score` immutability rules still apply (admin must explicitly Step Back from `approved` first if they want a *different* final value).
-- **Scalability:** Zero query cost change (one short branch moved).
-- **Mitigation:** Add a Governance Overview banner that clearly labels `Current Stage = Closed` as a third lock, and add an explicit "Closed period" warning inside the Admin Data Entry dialog so the admin acknowledges they are editing a closed month.
-
-## Fix Plan
-
-### 1. SQL migration — reorder the RPC
-
-Move the admin bypass to run **before** the `closed` short-circuit. Same shape as the legacy-lock trigger that already exempts admins.
-
-```sql
-CREATE OR REPLACE FUNCTION public.check_review_period_permission(
-  p_user_id uuid, p_period_name text, p_review_year int, p_action text
-) RETURNS boolean
-LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public AS $$
-DECLARE
-  v_current_stage text;
-  v_user_roles text[];
-  v_default_value boolean := (p_action <> 'view_only');
-BEGIN
-  SELECT current_stage INTO v_current_stage FROM review_periods
-   WHERE period_name = p_period_name AND review_year = p_review_year;
-
-  SELECT array_agg(role::text) INTO v_user_roles FROM user_roles WHERE user_id = p_user_id;
-
-  -- ① Admin bypass BEFORE stage gate (was step 2, now step 1)
-  IF 'admin' = ANY(COALESCE(v_user_roles, ARRAY[]::text[])) THEN
-    RETURN v_default_value;
-  END IF;
-
-  -- ② Closed-stage short-circuit for everyone else
-  IF v_current_stage = 'closed' THEN
-    RETURN (p_action = 'view_only');
-  END IF;
-
-  -- ③ employee / dept / role / global lock checks (unchanged)
-  ...
-END;
-$$;
+```tsx
+case 'workflow':       return <WorkflowConfigPage embedded />;
+case 'organization':   return <OrganizationPage embedded />;
+case 'review-periods': return <ReviewPeriodsPage embedded />;
 ```
 
-No grants change. No data backfill. Other functions (`prevent_locked_period_updates`, `prevent_locked_submission_updates`) automatically benefit because they fan into this RPC.
+Each page accepts an optional `embedded` prop that, when true, hides its own outer `container/p-6` wrapper and page `<h1>` (since SystemSettings already provides the heading frame). Implementation = a single conditional wrapper at the top of each page component. No business logic touched.
 
-### 2. Frontend — make the lock source explicit (no behaviour change for non-admin)
+### 2. Sidebar — remove the 3 entries
 
-- `src/components/management/ReviewPeriodOverview.tsx`: add a third pill **"Stage Lock"** next to Legacy Lock / Global Lock that reads `period.current_stage === 'closed' ? 'Active (Closed)' : 'None'`. Solves the visual contradiction the user reported.
-- `src/components/review/KpiHeaderSection.tsx`: when `period.current_stage === 'closed'` AND user is admin, render an amber **"Closed period — admin override"** badge instead of the red "View Only" pill. Admins keep the visual cue that this is a sensitive edit.
-- `src/components/review/AdminDataEntryDialog.tsx` (or equivalent): when the period is closed, show an inline warning `"This month is Closed. Saving will modify a finalised period and will be recorded in the audit log."` with a "Proceed" confirmation before enabling Save. Reuses `ConfirmDestructiveDialog`.
+`src/components/layout/AppSidebar.tsx`
 
-### 3. "How to change the score of a closed month" — supported procedure
+Delete the three items (`Workflow Config`, `Organization`, `Review Periods`) from the admin section. Keep `System Settings`.
 
-After the fix, two equivalent admin paths exist; pick whichever matches the desired audit trail:
+### 3. Routing — keep deep links working
 
-1. **Quickest (single KPI):** open the KRA → click **Admin Data Entry** → acknowledge the "Closed period" warning → edit score → Save. Audit log captures `performed_by = admin`, `period_stage_at_edit = closed`.
-2. **Reopen the whole month (multiple KPIs):** Review Period Governance → Stages → **Step Back** from `Closed` to `Approval` (or earlier). Edit normally. Re-advance back to `Closed` when done. This is the right path when many KPIs need editing or when `final_score` itself needs to change (Step Back also unfreezes `final_score`).
+`src/App.tsx`
 
-We will surface both options inline in the new "Stage Lock" pill tooltip so admins know which to use.
+Keep `/admin/workflow-config`, `/admin/organization`, `/admin/review-periods` routes as redirects to the new section URLs:
 
-## Implementation Order
+- `/admin/workflow-config`  → `/admin/settings?section=workflow`
+- `/admin/organization`     → `/admin/settings?section=organization`
+- `/admin/review-periods`   → `/admin/settings?section=review-periods`
 
-1. New migration `…_admin_bypass_before_closed_stage.sql` updating `check_review_period_permission` (logic-only, idempotent `CREATE OR REPLACE`).
-2. Frontend updates:
-   - `ReviewPeriodOverview.tsx` — add Stage Lock pill.
-   - `KpiHeaderSection.tsx` — render amber "Admin override" for admins on closed periods.
-   - Admin Data Entry dialog — closed-period confirmation step.
-3. Unit tests:
-   - `src/lib/permissions/__tests__/checkReviewPeriodPermission.test.ts` — mock RPC contract: admin returns `view_only=false` and `edit_scores=true` on closed period; non-admin still blocked.
-   - Component test: `KpiHeaderSection` renders "Admin override" pill for admin + closed, "View Only" for non-admin + closed, no pill when stage open.
-4. DOCUMENTATION.md: update Review Period Governance section with the three-lock model and the "edit closed month" procedure.
-5. POLICY.md: clarify "Admins may edit any period at any stage; every closed-period edit is captured in the audit log; `final_score` immutability still requires explicit Step Back."
-6. Update memory `mem://features/admin/review-period-governance-system` with the new three-lock model + admin-bypass-before-stage-gate rule.
+Use `<Navigate to="…" replace />` so bookmarks, in-app links, and notification deep links continue to land users on the right tab.
 
-## Rollback
-Single SQL function — revert with `CREATE OR REPLACE` restoring the original order. Frontend pill is additive; remove file/lines if not wanted.
+### 4. Menu Access compatibility
 
-## Tests / Verification
-- Manual: log in as admin → Sep 2025 → Anil Kumar Pathak's KPI → confirm no "View Only" pill, Admin Data Entry accepts a new score, audit log entry appears.
-- Manual: log in as employee/manager → same KPI → still "View Only", save still blocked.
-- Automated: vitest unit test against mocked RPC + KpiHeaderSection role matrix.
+`src/components/admin/MenuAccessTab.tsx` already keys access by `menuKey`. The three keys (`admin-workflow`, `admin-organization`, `admin-review-periods`) are kept and consulted inside SystemSettings to hide the corresponding section for roles/profiles that lack access. Add a small `useMenuAccess` guard around the three new section entries and route cases.
+
+### 5. Tests
+
+- `src/test/sidebarConsolidation.test.tsx` — assert the three labels are no longer rendered in `AppSidebar` for an admin.
+- `src/test/systemSettingsSections.test.tsx` — assert the three new section keys exist and that switching to each renders without throwing.
+- Route redirect test — visiting `/admin/workflow-config` lands on `/admin/settings?section=workflow`.
+
+### 6. Documentation
+
+- DOCUMENTATION.md → Navigation: note the consolidation and redirect map.
+- POLICY.md → unchanged (no access policy change; menuKey contract preserved).
+
+## Files Touched
+
+- `src/components/layout/AppSidebar.tsx` (remove 3 items)
+- `src/pages/admin/SystemSettings.tsx` (add 3 sections + cases)
+- `src/pages/admin/WorkflowConfig.tsx`, `src/pages/admin/Organization.tsx`, `src/pages/admin/ReviewPeriods.tsx` (add optional `embedded` prop — chrome only)
+- `src/App.tsx` (three routes → `<Navigate>` redirects)
+- Tests + docs as above
+
+## UI Outcome
+
+- Sidebar (admin section): **Workflow Config**, **Organization**, **Review Periods** gone.
+- System Settings: existing tabs + three new ones near the top.
+- Existing bookmarks/notifications still work via redirect.
