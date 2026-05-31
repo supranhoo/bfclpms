@@ -876,6 +876,9 @@ export default function ImportData() {
           if (row.doj === 'INVALID') {
             rowErrs.push("Date of Joining (DOJ) is invalid — use yyyy-MM-dd or dd/MM/yyyy");
           }
+          if (row.confirmationDate === 'INVALID') {
+            rowErrs.push("Confirmation Date is invalid — use yyyy-MM-dd or dd/MM/yyyy");
+          }
           if (rowErrs.length > 0) {
             perRowErrors.set(index, rowErrs);
           }
