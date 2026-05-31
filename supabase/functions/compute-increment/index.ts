@@ -258,25 +258,45 @@ Deno.serve(async (req) => {
     const { startYear, endYear } = parseAssessmentYear(assessment_year);
 
     const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    const scopedEmployeeId =
-      body.employee_id && UUID_RE.test(body.employee_id) ? body.employee_id : null;
-    if (body.employee_id && !scopedEmployeeId) {
-      return new Response(JSON.stringify({ error: 'employee_id must be a UUID' }), {
-        status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+    // Resolve scope: prefer `employee_ids` array; fall back to legacy
+    // `employee_id` single value; otherwise = all employees.
+    let scopedEmployeeIds: string[] | null = null;
+    if (Array.isArray(body.employee_ids) && body.employee_ids.length > 0) {
+      const validated = Array.from(
+        new Set(body.employee_ids.filter((x) => typeof x === 'string' && UUID_RE.test(x))),
+      );
+      if (validated.length === 0) {
+        return new Response(JSON.stringify({ error: 'employee_ids must contain at least one UUID' }), {
+          status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      scopedEmployeeIds = validated;
+    } else if (body.employee_id) {
+      if (!UUID_RE.test(body.employee_id)) {
+        return new Response(JSON.stringify({ error: 'employee_id must be a UUID' }), {
+          status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      scopedEmployeeIds = [body.employee_id];
     }
+    const scopedEmployeeId = scopedEmployeeIds && scopedEmployeeIds.length === 1
+      ? scopedEmployeeIds[0]
+      : null;
 
     // Admin client for all subsequent reads/writes
     const admin = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false } });
 
     // Create the run record (running)
+    const scopeSnapshot = !scopedEmployeeIds
+      ? { triggered_by: userId, scope: 'all' as const }
+      : scopedEmployeeIds.length === 1
+        ? { triggered_by: userId, scope: 'single' as const, employee_id: scopedEmployeeIds[0] }
+        : { triggered_by: userId, scope: 'multi' as const, employee_ids: scopedEmployeeIds, count: scopedEmployeeIds.length };
     const { data: run, error: runErr } = await admin
       .from('increment_runs')
       .insert({
         assessment_year,
-        scope_snapshot: scopedEmployeeId
-          ? { triggered_by: userId, scope: 'single', employee_id: scopedEmployeeId }
-          : { triggered_by: userId, scope: 'all' },
+        scope_snapshot: scopeSnapshot,
         triggered_by: userId,
         status: 'running',
       })
