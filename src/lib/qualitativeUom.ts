@@ -196,3 +196,23 @@ export function validateQualitativeOptions(options: QualitativeOption[]): string
 
   return null;
 }
+
+// Convert a qualitative label (e.g. "Yes") back to its numeric rating (e.g. 0 or 5)
+// for the given UOM. Returns null when the label cannot be resolved.
+export function labelToRating(
+  value: string | number | null | undefined,
+  uomType: UomType | null | undefined,
+  qualitativeOptions: QualitativeOption[] | null | undefined
+): number | null {
+  if (value === null || value === undefined || value === '') return null;
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  if (uomType !== 'binary' && uomType !== 'tiered') {
+    const n = parseFloat(value);
+    return Number.isFinite(n) ? n : null;
+  }
+  const options = qualitativeOptions?.length
+    ? qualitativeOptions
+    : (uomType === 'binary' ? BINARY_OPTIONS : []);
+  const match = options.find(o => o.label === value);
+  return match ? match.rating : null;
+}
