@@ -1334,6 +1334,17 @@ export default function ImportData() {
       return;
     }
 
+    // Pre-fetch locations master (one query) for case-insensitive name → id resolution.
+    const locationByName = new Map<string, string>();
+    try {
+      const { data: allLocs } = await supabase.from('locations').select('id, name');
+      (allLocs || []).forEach((l: any) => {
+        if (l?.name) locationByName.set(String(l.name).trim().toLowerCase(), l.id);
+      });
+    } catch (e) {
+      console.warn('[employee-import] Failed to pre-fetch locations master', e);
+    }
+
     setIsImportingEmployees(true);
     setEmployeeImportProgress({ current: 0, total: employeeData.length });
     setEmployeeImportResults(null);
