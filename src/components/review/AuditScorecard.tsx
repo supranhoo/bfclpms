@@ -625,7 +625,6 @@ export function AuditScorecard({
       }
     }
     
-    const rating = scoreToRating(auditorScore);
     const uomType = (selectedKpi as any).uom_type as 'numeric' | 'binary' | 'tiered' | undefined;
     const qualOpts = (selectedKpi as any).qualitative_options as QualitativeOption[] | null;
     const isQualitative = uomType === 'binary' || uomType === 'tiered';
