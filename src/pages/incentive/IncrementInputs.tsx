@@ -182,6 +182,14 @@ function CalculateIncrementTab({ year }: { year: string }) {
       increment_amount: r.increment_amount ?? '',
       revised_salary: r.revised_salary ?? '',
       remarks: r.remarks ?? '',
+      conf_increment: r.confirmation_granted ? 'Yes' : 'No',
+      conf_effective_date: r.confirmation_effective_date ?? '',
+      period_covered_months: r.period_covered_months ?? '',
+      balance_months: r.balance_eligible_months ?? '',
+      carry_forward_months: r.carry_forward_months ?? '',
+      final_eligible_months: r.final_eligible_months ?? '',
+      treatment_applied: r.confirmation_treatment ?? '',
+      adjustment_reason: r.adjustment_reason ?? '',
     }));
     downloadCsv(`increment-run-${selectedRun}.csv`, rows, Object.keys(rows[0]));
   };
@@ -256,6 +264,13 @@ function CalculateIncrementTab({ year }: { year: string }) {
                   <TableHead>Increment</TableHead>
                   <TableHead>Revised</TableHead>
                   <TableHead>Reason</TableHead>
+                  <TableHead>Conf.Inc?</TableHead>
+                  <TableHead>Conf.Date</TableHead>
+                  <TableHead>Period Covered</TableHead>
+                  <TableHead>Balance</TableHead>
+                  <TableHead>Carry Fwd</TableHead>
+                  <TableHead>Final Months</TableHead>
+                  <TableHead>Treatment</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -275,6 +290,13 @@ function CalculateIncrementTab({ year }: { year: string }) {
                     <TableCell>{r.increment_amount ?? '—'}</TableCell>
                     <TableCell>{r.revised_salary ?? '—'}</TableCell>
                     <TableCell className="text-xs text-muted-foreground">{r.ineligibility_reason ?? ''}</TableCell>
+                    <TableCell>{r.confirmation_granted ? <Badge variant="secondary">Yes</Badge> : '—'}</TableCell>
+                    <TableCell className="text-xs">{r.confirmation_effective_date ?? '—'}</TableCell>
+                    <TableCell>{r.period_covered_months ?? '—'}</TableCell>
+                    <TableCell>{r.balance_eligible_months ?? '—'}</TableCell>
+                    <TableCell>{r.carry_forward_months ?? '—'}</TableCell>
+                    <TableCell>{r.final_eligible_months ?? '—'}</TableCell>
+                    <TableCell className="text-xs">{r.confirmation_treatment ?? '—'}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>

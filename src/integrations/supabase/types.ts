@@ -2976,15 +2976,25 @@ export type Database = {
       }
       increment_run_items: {
         Row: {
+          adjustment_reason: string | null
+          balance_eligible_months: number | null
+          carry_forward_months: number | null
+          confirmation_effective_date: string | null
+          confirmation_granted: boolean | null
+          confirmation_treatment:
+            | Database["public"]["Enums"]["confirmation_increment_treatment"]
+            | null
           created_at: string
           current_salary: number | null
           eligibility_status: string
           eligible_percent: number | null
           employee_id: string
+          final_eligible_months: number | null
           id: string
           increment_amount: number | null
           ineligibility_reason: string | null
           method_used: string | null
+          period_covered_months: number | null
           pms_score: number | null
           rating_band: string | null
           remarks: string | null
@@ -2994,15 +3004,25 @@ export type Database = {
           slab_percent: number | null
         }
         Insert: {
+          adjustment_reason?: string | null
+          balance_eligible_months?: number | null
+          carry_forward_months?: number | null
+          confirmation_effective_date?: string | null
+          confirmation_granted?: boolean | null
+          confirmation_treatment?:
+            | Database["public"]["Enums"]["confirmation_increment_treatment"]
+            | null
           created_at?: string
           current_salary?: number | null
           eligibility_status: string
           eligible_percent?: number | null
           employee_id: string
+          final_eligible_months?: number | null
           id?: string
           increment_amount?: number | null
           ineligibility_reason?: string | null
           method_used?: string | null
+          period_covered_months?: number | null
           pms_score?: number | null
           rating_band?: string | null
           remarks?: string | null
@@ -3012,15 +3032,25 @@ export type Database = {
           slab_percent?: number | null
         }
         Update: {
+          adjustment_reason?: string | null
+          balance_eligible_months?: number | null
+          carry_forward_months?: number | null
+          confirmation_effective_date?: string | null
+          confirmation_granted?: boolean | null
+          confirmation_treatment?:
+            | Database["public"]["Enums"]["confirmation_increment_treatment"]
+            | null
           created_at?: string
           current_salary?: number | null
           eligibility_status?: string
           eligible_percent?: number | null
           employee_id?: string
+          final_eligible_months?: number | null
           id?: string
           increment_amount?: number | null
           ineligibility_reason?: string | null
           method_used?: string | null
+          period_covered_months?: number | null
           pms_score?: number | null
           rating_band?: string | null
           remarks?: string | null
