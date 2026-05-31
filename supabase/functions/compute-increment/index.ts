@@ -309,7 +309,11 @@ Deno.serve(async (req) => {
       // Load configs
       const [annualCfg, methodCfg, generalElig, slabsRes, inputsRes, criteriaConfig, exclusionsRes, profilesRes, confRulesRes, prevAdjRes, deptRes, buRes, divRes, catRes] = await Promise.all([
         admin.from('annual_score_configs').select('*').eq('assessment_year', assessment_year).eq('status', 'active').maybeSingle(),
-        admin.from('increment_method_configs').select('*').eq('assessment_year', assessment_year).eq('status', 'active').maybeSingle(),
+        // Deterministic latest-version pick. Guards against legacy duplicate
+        // active rows (RCA ADR-071): with raw .maybeSingle() PostgREST returns
+        // null on multiple matches and the engine silently fell back to
+        // method='full', producing un-prorated eligible % values.
+        admin.from('increment_method_configs').select('*').eq('assessment_year', assessment_year).eq('status', 'active').order('version', { ascending: false }).limit(1).maybeSingle(),
         admin.from('general_eligibility_configs').select('*').eq('assessment_year', assessment_year).order('version', { ascending: false }).limit(1).maybeSingle(),
         admin.from('increment_slabs').select('*').eq('assessment_year', assessment_year).eq('status', 'active'),
         admin.from('increment_inputs').select('*').eq('assessment_year', assessment_year),
