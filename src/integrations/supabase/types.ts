@@ -1528,6 +1528,57 @@ export type Database = {
           },
         ]
       }
+      employment_status_history: {
+        Row: {
+          changed_at: string
+          changed_by: string | null
+          effective_date: string
+          employee_id: string
+          id: string
+          new_status: string
+          notes: string | null
+          previous_status: string | null
+          source: string
+        }
+        Insert: {
+          changed_at?: string
+          changed_by?: string | null
+          effective_date: string
+          employee_id: string
+          id?: string
+          new_status: string
+          notes?: string | null
+          previous_status?: string | null
+          source?: string
+        }
+        Update: {
+          changed_at?: string
+          changed_by?: string | null
+          effective_date?: string
+          employee_id?: string
+          id?: string
+          new_status?: string
+          notes?: string | null
+          previous_status?: string | null
+          source?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "employment_status_history_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "eligible_login_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "employment_status_history_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       employment_statuses: {
         Row: {
           code: string | null
