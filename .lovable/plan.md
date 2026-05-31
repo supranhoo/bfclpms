@@ -1,61 +1,65 @@
 ## Goal
-Let Admin/HR choose the reference date used to evaluate **Minimum Service (months)** on the General Eligibility screen, instead of implicitly using "today" or run-time.
+Add a **"Download Range"** option on the KPI Scorecard Detail report so Admin/HR can export all KPI rows for a contiguous month range (e.g. Sep 2025 → Apr 2026) in a single Excel file — without changing the on-screen single-month view.
 
 ## Assumptions
-- Today, `min_service_months` is compared against tenure computed at the moment the increment is run (implicit "today").
-- Business wants a fixed cutoff per Assessment Year (e.g. service computed as of 31-Mar-2026) so reruns are deterministic and auditable.
-- Anchor applies to the whole AY config row, not per-employee.
+- Range export reuses the **same row shape and column set** as today's single-month export (no new fields). The existing `Month` column already distinguishes periods inside one sheet.
+- Period iteration uses the existing `review_period` (month name) + `review_year` columns on `kpis` — one fetch per (month, year) pair in the range.
+- Same RLS / company / department / search filters that apply to the on-screen view also apply to the range export, so an Auditor never exports rows they cannot see.
+- Range is **inclusive** on both ends. Hard cap **12 months** per export to protect the browser and Data API.
 
 ## Risk & Impact Report
-- **Data:** Additive columns on `general_eligibility` (`service_as_on_mode`, `service_as_on_date`). No backfill needed; null = legacy "run date" behavior.
-- **Workflow:** `compute-increment` tenure calculation switches to the resolved anchor date when set. Existing AY rows without the field keep current behavior (backward compatible).
-- **UI/UX:** One new inline control next to the existing months input. No layout reflow on mobile (wraps below).
-- **Regression:** Low. Guarded by mode flag; default = `run_date` preserves today's math.
-- **Scalability:** No new queries, no new tables.
-- **Rollback:** Drop the two columns; code falls back to run date.
+- **Data:** Read-only. No schema, no writes.
+- **Workflow:** Additive UI button; existing single-month "Export" stays unchanged.
+- **UI/UX:** One new outline button next to existing **Export**, opens a small popover with From/To selectors and a download button. No layout reflow.
+- **Regression:** Low. New code path is isolated in `handleRangeExport`; current `handleExport` is untouched.
+- **Scalability:** Each month already pages through `kpis` in 1000-row chunks and pulls `review_submissions` in 500-id chunks. For a 12-month range with ~1.8K KPIs/month, that's ~22K rows — within XLSX and browser limits. We hard-cap at 12 months and show a progress toast ("Fetching 3/8 …"). Sequential fetch keeps DB load identical to today's flow, just N times.
+- **Rollback:** Pure additive UI + one helper function; revert the file.
 
-## UI Changes (Configuration card → "Minimum Service" row)
+## UI Changes — `src/pages/reports/KpiScorecardDetail.tsx`
 
-Location: `src/pages/increment/GeneralEligibility.tsx`, replacing the current single inline months input.
+Location: action row, immediately right of the existing **Export** button.
 
 ```text
-Minimum Service   [ 12 ] months   evaluated as of  ( ) Run date
-                                                   ( ) AY end date (31-Mar-2026)
-                                                   (•) Custom date  [ 31-Mar-2026 📅 ]
+[ Export ]  [ ⬇ Download Range ▾ ]
+                    │
+                    ▼ (Popover, 320px)
+                    From  [ Sep ▾ ] [ 2025 ▾ ]
+                    To    [ Apr ▾ ] [ 2026 ▾ ]
+                    ───────────────────────────
+                    Spans 8 months · max 12
+                    [ Cancel ]   [ Download .xlsx ]
 ```
 
-- **Months input** — unchanged (number, min 0).
-- **"Evaluated as of" radio group** — three options:
-  1. `Run date` (default, legacy behavior — tenure computed when increment is calculated).
-  2. `AY end date` — auto-resolves to 31-Mar of the AY's closing year (e.g. AY 2025-26 → 31-Mar-2026). Read-only helper text shows the resolved date.
-  3. `Custom date` — enables a date picker (shadcn `Calendar` in a `Popover`, same pattern as other date pickers in the codebase).
-- **Validation:** if `Custom date` selected, date is required and must fall within the AY window (1-Apr-startYear … 31-Mar-endYear); otherwise Save is disabled with inline error.
-- **Version History card** — append the anchor summary: `…· 0 mo as of 31-Mar-2026`.
-- **Responsive:** controls wrap to a new line below the months input under `md` breakpoint (current row already uses `flex items-center gap-3` — switch to `flex-wrap`).
+- **Trigger button:** outline, same height/size as Export, label "Download Range", `Download` icon.
+- **Popover content:** four shadcn Selects (From-month, From-year, To-month, To-year). Year list = `[selectedYear-1, selectedYear, selectedYear+1]` (same as existing filter, no new master data needed).
+- **Live counter** under the selects: "Spans N months · max 12". Turns destructive-red and disables the Download button when range is invalid (To before From) or > 12 months.
+- **Filters notice:** small muted line — "Applies current Company / Department / Search filters."
+- **Progress UX:** disable Download button while fetching; show toast "Fetching <Month> <Year> (3/8)…" between iterations; final success toast "Exported 22,418 rows across 8 months".
+- **Permission gate:** entire button hidden when `canDownload('kpi-scorecard-detail')` is false (same gate as existing Export).
+- **Responsive:** popover content uses `grid-cols-2 gap-2`; on `<sm` screens it stacks vertically. Button collapses to icon-only on `<md`.
 
-No other pages change visually.
+No other pages, columns, or layouts change.
 
 ## Implementation Steps
 
-1. **Schema migration** — add to `public.general_eligibility`:
-   - `service_as_on_mode text not null default 'run_date'` (check in `'run_date','ay_end','custom'`)
-   - `service_as_on_date date` (nullable; required only when mode = `custom`, enforced by trigger to keep CHECK immutable per project standards).
-2. **Hook (`useGeneralEligibility.ts`)** — extend insert/select payload with the two new fields; bump version on change.
-3. **UI (`GeneralEligibility.tsx`)** — add `RadioGroup` + conditional date picker, helper text for resolved AY-end date, wrap layout.
-4. **Resolver util (`src/lib/serviceAnchorDate.ts`, new)** — pure function `resolveServiceAnchor({mode, date, assessmentYear, runDate}) → Date`. Single source of truth, reused by edge function and UI preview.
-5. **Edge function (`compute-increment`)** — replace `new Date()` used for tenure with `resolveServiceAnchor(...)` from the AY's eligibility row.
-6. **Version History line** — render anchor summary.
+1. **Helper `fetchScorecardForPeriod(month, year)`** (new top-level function in the same file) — extract the existing `queryFn` body so both the React Query hook and the range exporter call the same code path. Pure refactor, zero behavior change for the on-screen view.
+2. **`handleRangeExport({fromMonth, fromYear, toMonth, toYear})`** — build the ordered list of `(month, year)` pairs from `MONTHS`, loop sequentially calling the helper, concat results, then apply the same Company / Department / Search filters and the same XLSX column mapping used by `handleExport`. File name: `KPI_Scorecard_${fromMonth}-${fromYear}_to_${toMonth}-${toYear}.xlsx`.
+3. **`RangeExportPopover`** (small local component in same file) — the popover UI above; emits `handleRangeExport` on submit.
+4. **Mount** the trigger next to the existing Export button inside the `canExport &&` block.
+
+No edge function, no migration, no hook changes outside this file.
 
 ## Tests
-- `serviceAnchorDate.test.ts` — covers all 3 modes, AY parsing, custom-date validation, fallback when row missing.
-- `GeneralEligibility` form test — radio toggles enable/disable date picker; invalid custom date blocks Save.
-- `compute-increment` regression mock — same employee, same AY, two different anchor dates → different `eligible_months`.
+- `kpiScorecardRange.test.ts` (new) — pure helpers:
+  - `enumeratePeriods(from, to)` returns the correct ordered list (single month, 12-month wrap across years, reverse-range = empty).
+  - `validateRange` flags > 12 months, To-before-From, and same-month-same-year as valid (1 month).
+- Manual QA: open the page, pick Sep 2025 → Apr 2026, verify XLSX contains rows for all 8 months with the `Month` column populated.
 
-## SSOT updates
-- `DOCUMENTATION.md` → General Eligibility section: document the three anchor modes and resolution rules.
-- `POLICY.md` → "Minimum Service Evaluation Date" policy entry; default = run date; AY-end recommended for audit determinism.
-- New memory: `mem://features/admin/general-eligibility-service-anchor`.
+## SSOT
+- **DOCUMENTATION.md** → "Reports → KPI Scorecard Detail": document the range exporter, 12-month cap, filter semantics.
+- **POLICY.md** → no policy change (read-only export gated by existing `kpi-scorecard-detail` download permission).
+- **Memory:** append a one-liner under `mem://features/reports/` noting the range-export cap (12) and filter inheritance.
 
 ## Post-implementation notes
-- Default `run_date` keeps every existing AY row behaving exactly as before — zero-touch upgrade.
-- Admins opting into `ay_end` or `custom` get deterministic, replayable eligibility decisions.
+- 12-month cap is conservative; can be raised after measuring real-world payload sizes.
+- If users later ask to export thousands of months or many companies in one go, move this to a backend edge function streaming a CSV — out of scope for now.
