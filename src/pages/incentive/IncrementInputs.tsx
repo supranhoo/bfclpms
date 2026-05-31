@@ -18,7 +18,7 @@ import {
   useTriggerIncrementRun,
   useExportIncrementRunItems,
 } from '@/hooks/useIncrementRuns';
-import { Loader2, Upload, Play, FileSpreadsheet, Plus, Pencil, Search } from 'lucide-react';
+import { Loader2, Upload, Play, FileSpreadsheet, Plus, Pencil, Search, Trash2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { generateAssessmentYears, getCurrentAssessmentYear } from '@/lib/assessmentYear';
 import * as XLSX from 'xlsx';
@@ -26,6 +26,14 @@ import { supabase } from '@/integrations/supabase/client';
 import { IncrementInputDialog } from '@/components/incentive/IncrementInputDialog';
 import { useActiveEmployeesForCopy } from '@/hooks/useActiveEmployeesForCopy';
 import { EmployeeCombobox } from '@/components/admin/EmployeeCombobox';
+import { EmployeeMultiSelect } from '@/components/incentive/EmployeeMultiSelect';
+import { IncrementResultEditDialog } from '@/components/incentive/IncrementResultEditDialog';
+import { ConfirmDestructiveDialog } from '@/components/ui/ConfirmDestructiveDialog';
+import {
+  useDeleteIncrementRunItem,
+  useLatestIncrementResults,
+  useExportLatestIncrementResults,
+} from '@/hooks/useIncrementRuns';
 
 function downloadXlsx(filename: string, rows: any[], headers: string[]) {
   const ws = rows.length
