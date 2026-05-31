@@ -621,6 +621,7 @@ export default function SystemSettings() {
               </CardContent>
             </Card>
 
+            <AnnualScoreCalculationSection />
           </div>
         );
       case 'increment':
