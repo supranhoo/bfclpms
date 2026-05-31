@@ -3082,6 +3082,20 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "increment_run_items_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "eligible_login_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "increment_run_items_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "increment_run_items_run_id_fkey"
             columns: ["run_id"]
             isOneToOne: false
