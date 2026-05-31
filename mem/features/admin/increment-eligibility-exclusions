@@ -1,12 +1,16 @@
 ---
-name: Increment Eligibility Exclusions
-description: Per-Assessment-Year employee exclusions that bypass Increment Eligibility Criteria for a single AY only
+name: Increment Ineligibility Criteria Exclusions
+description: Per-Assessment-Year employee exclusions that bypass Increment Ineligibility Criteria for a single AY only
 type: feature
 ---
 
-# Increment Eligibility Exclusions
+# Increment Ineligibility Criteria Exclusions
 
-Senior employees / board members can be exempted from Increment Eligibility Criteria via the `increment_eligibility_exclusions` table.
+The module is labelled **Increment Ineligibility Criteria** in the UI: every active row in `increment_eligibility_criteria` is a disqualification rule. Breaching any active criterion ⇒ `eligibility = 'ineligible'`, `eligible_percent = 0`. Employees who don't breach continue through PMS score → slab → method as normal.
+
+Internal table/column names (`increment_eligibility_*`, `increment_eligibility_exclusions`) are retained for back-compat — only display labels changed (see ADR-069).
+
+Senior employees / board members can be exempted from these ineligibility criteria via the `increment_eligibility_exclusions` table. Exemption bypasses the criteria block ONLY — PMS score, slab, increment method, salary inputs, and confirmation-increment rules still apply.
 
 ## Per-AY rule (locked)
 - Each exclusion row is keyed by `(config_id, employee_id, assessment_year)` — UNIQUE constraint.

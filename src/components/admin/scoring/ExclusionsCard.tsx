@@ -97,7 +97,7 @@ export function ExclusionsCard({ configId, defaultAssessmentYear, knownYears, re
       <div className="flex flex-wrap items-center justify-between gap-2 p-3 border-b">
         <div className="flex items-center gap-2">
           <ShieldOff className="h-5 w-5 text-muted-foreground" />
-          <h4 className="text-sm font-semibold">Criteria-Exempt Employees</h4>
+          <h4 className="text-sm font-semibold">Ineligibility Criteria Exempt Employees</h4>
           {!showAllYears && (
             <Badge variant="secondary" className="ml-1">AY {activeAY}</Badge>
           )}
@@ -106,7 +106,7 @@ export function ExclusionsCard({ configId, defaultAssessmentYear, knownYears, re
           )}
           {readOnly && !showAllYears && (
             <span className="text-[10px] text-muted-foreground italic ml-1">
-              Criteria approved — exclusions still editable
+              Ineligibility criteria approved — exclusions still editable
             </span>
           )}
         </div>
@@ -126,10 +126,10 @@ export function ExclusionsCard({ configId, defaultAssessmentYear, knownYears, re
 
       <div className="p-3 space-y-3">
         <p className="text-xs text-muted-foreground">
-          These employees bypass the Increment Eligibility Criteria (absent days, LWP,
-          disciplinary actions, training compliance) but <strong>remain eligible</strong>{' '}
-          for the annual increment based on their PMS score. Confirmation-increment rules
-          still apply.{' '}
+          These employees bypass the <strong>Increment Ineligibility Criteria only</strong>. They
+          remain subject to PMS score, valid slab, increment method, salary inputs, and
+          confirmation-increment rules. They will not be disqualified by any active ineligibility
+          criterion configured here.{' '}
           {showAllYears ? (
             <>for the specific Assessment Year shown on each row only.</>
           ) : (
@@ -304,7 +304,7 @@ export function ExclusionsCard({ configId, defaultAssessmentYear, knownYears, re
         title="Remove Exclusion"
         description={
           deleteTarget
-            ? `Remove ${deleteTarget.profiles?.full_name ?? 'this employee'} from the ${deleteTarget.assessment_year} exclusion list? They will once again be governed by the Increment Eligibility Criteria for ${deleteTarget.assessment_year}. This change will be recorded in the audit trail.`
+            ? `Remove ${deleteTarget.profiles?.full_name ?? 'this employee'} from the ${deleteTarget.assessment_year} exclusion list? They will once again be governed by the Increment Ineligibility Criteria for ${deleteTarget.assessment_year}. This change will be recorded in the audit trail.`
             : ''
         }
         confirmLabel="Remove"

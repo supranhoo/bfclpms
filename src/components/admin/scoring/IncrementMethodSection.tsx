@@ -118,7 +118,7 @@ export function IncrementMethodSection() {
         </CardTitle>
         <CardDescription>
           Choose how the increment percentage from the slab is applied to each employee. Works in tandem with the
-          Eligibility Criteria tab — criteria determine eligibility, this method determines the percentage applied.
+          Ineligibility Criteria tab — those rules can disqualify an employee; for everyone who is not disqualified, this method determines the percentage applied.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
