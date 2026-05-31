@@ -136,6 +136,23 @@ export function KpiHeaderSection({ kpi, selectedPeriod, selectedYear, onOpenTime
               </TooltipContent>
             </Tooltip>
           )}
+
+          {/* Admin override indicator: closed period, admin still allowed to edit (audit-logged). */}
+          {!hasRestrictions && isAdmin && govPerms.periodStage === 'closed' && (
+            <Tooltip>
+              <TooltipTrigger>
+                <Badge variant="outline" className="text-xs border-amber-400 text-amber-700 dark:text-amber-300 gap-1">
+                  <Lock className="h-3 w-3" />
+                  Closed — Admin Override
+                </Badge>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p className="text-xs max-w-xs">
+                  This period's stage is Closed. As Admin you may still edit scores; every change is recorded in the audit log. To reopen for non-admin users, Step Back the period stage in Review Period Governance.
+                </p>
+              </TooltipContent>
+            </Tooltip>
+          )}
           
           {kpi.frequency === 'Bi-Monthly' && (
             <Badge variant="outline" className="text-xs border-violet-300 text-violet-700 dark:border-violet-600 dark:text-violet-400">
