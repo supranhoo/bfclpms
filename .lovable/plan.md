@@ -1,54 +1,109 @@
-## Goal
-Reframe the "Increment Eligibility Criteria" module as **Increment Ineligibility Criteria** across UI, engine, and exports — without changing schema, thresholds, scopes, audit history, or downstream PMS/slab/method logic.
+## RCA — Vivek Kumar Dansena (101784), AY 2025-26
 
-## Risk & Impact
-- **Data**: No schema change. Existing rows in `increment_eligibility_*` and `increment_eligibility_exclusions` stay as-is (internal key names retained for back-compat; only display labels change).
-- **Workflow**: Engine already treats criteria breach → `ineligible`. Logic stays generic over `criteria[]` (any future row in the same table is auto-applied). No new hardcoding.
-- **UI**: Tab label, section header, descriptions, button labels, exempt-card wording, confirm-dialog copy all updated.
-- **Regression**: PMS missing remains `no_score` (separate bucket), not an "ineligibility reason". Criteria-exempt continues to bypass criteria block only.
+### Confirmed facts (from DB)
+1. **Inputs row exists and is correctly mapped** — `increment_inputs` for employee `ca3897d0…2926` / code 101784, AY `2025-26`: `absent_days=6, lwp_days=0, disciplinary_actions=0, training_compliance=0`. ✅
+2. **Active approved ineligibility config** for AY 2025-26 is `4476ad81-1c17-43e8-b241-a4f31a494608` (status `approved`). It contains three active criteria:
 
-## Changes
+| criterion_name | **criterion_key** | operator | threshold |
+|---|---|---|---|
+| Absent | `absent` | `>` | 0 |
+| LWP | `lwp` | `>` | 8 |
+| Discipline Action | `discipline_action` | `>` | 0 |
 
-### 1. UI relabeling (presentation only)
-**`src/components/admin/scoring/IncrementEligibilitySection.tsx`**
-- Header: `Increment Eligibility Criteria` → `Increment Ineligibility Criteria`
-- Description → "These rules disqualify employees from increment when configured thresholds are breached. Employees who do not breach these rules continue through PMS score, slab, and increment method calculation."
-- Button + dialog title: `Add Criterion` → `Add Ineligibility Criterion` / `Edit Ineligibility Criterion`
-- Empty-state copy updated accordingly.
+3. Vivek is **not** in `increment_eligibility_exclusions` (not criteria-exempt).
+4. With `Absent > 0` and `absent_days = 6`, Vivek **must** be ineligible.
 
-**`src/components/admin/scoring/ExclusionsCard.tsx`**
-- Card heading: `Criteria-Exempt Employees` → `Ineligibility Criteria Exempt Employees`
-- Intro paragraph rewritten: "These employees bypass the Increment Ineligibility Criteria only. They remain subject to PMS score, slab, increment method, salary inputs, and confirmation-increment rules."
-- Delete-confirm dialog copy updated ("…governed by the Increment Ineligibility Criteria for {year}").
+### Why the engine wrongly returned 20% eligible
 
-**`src/pages/admin/SystemSettings.tsx`** (Increment tab strip)
-- Subtab label `Eligibility Criteria` → `Ineligibility Criteria` (route/key unchanged).
+In `supabase/functions/compute-increment/index.ts` (lines 520–547), the metrics map exposes ONLY the canonical keys:
 
-### 2. Run Details + Excel wording
-**`src/pages/incentive/IncrementInputs.tsx`**
-- Table column header `Ineligibility Reason` (verify; already implied) and badge legend tweak: ineligible badge subtitled "criterion breached".
-- Excel export header for `ineligibility_reason` → "Ineligibility Reason (Criterion Breached)". Ensure rows where `eligibility_status === 'no_score'` export an empty `ineligibility_reason` (PMS-missing is not an ineligibility reason — only the existing `no_score` bucket carries that meaning).
+```ts
+const metrics = {
+  absent_days: ..., lwp_days: ..., disciplinary_actions: ..., training_compliance: ...,
+  ...(input.dynamic_metrics ?? {}),
+};
+for (const c of criteria) {
+  const val = metrics[c.criterion_key];
+  if (val === undefined || val === null) continue;   // ← silently skipped
+  ...
+}
+```
 
-### 3. Engine (no behavior change, copy + safety only)
-**`supabase/functions/compute-increment/index.ts`**
-- Confirm criteria loop already iterates ALL active `criteria` rows generically (it does, lines 527–541) — leave logic untouched.
-- When `pmsScore === null`, keep `eligibility = 'no_score'` and `reason = 'No PMS score found'` (internal). Do NOT surface this string in the `ineligibility_reason` Excel column (handled in step 2 by export-side filter).
-- Comment block at line 488 reworded to "Ineligibility-criteria-exempt list".
+The approved config's `criterion_key` values are `absent`, `lwp`, `discipline_action` — **not** the canonical `absent_days` / `lwp_days` / `disciplinary_actions`. So `metrics[c.criterion_key]` returns `undefined` for every criterion and the `continue` swallows them. No breach is recorded → engine treats Vivek as eligible → PMS score 4.6167 → slab 20% → 20% increment is persisted exactly as displayed.
 
-### 4. Tests
-- Add `src/test/incrementIneligibilityLabels.test.tsx` snapshot-style assertion that section header + button render with new wording.
-- Extend `supabase/functions/compute-increment/criteria_exempt_test.ts` with a source-level assertion that the criteria loop remains generic (no hardcoded keys in the breach check) so future criteria automatically participate.
-- Pure-logic test in `src/test/incrementEligibility.test.ts` verifying `evaluateIncrementEligibility` with a brand-new criterion_key (e.g. `late_arrivals`) flips result to ineligible — proves genericity.
+### Why the keys are non-canonical
 
-### 5. Docs & memory
-- Update `DOCUMENTATION.md` + `POLICY.md`: rename section, restate the rule ("any active criterion breach ⇒ ineligible, eligible % = 0; criteria-exempt bypasses only this block").
-- Update `mem/features/admin/increment-eligibility-exclusions` to reflect new wording.
-- New ADR `docs/adr/ADR-069.md` capturing the rename rationale and back-compat decision (internal table/column names retained).
+`IncrementEligibilitySection.tsx` (line 490) derives `criterion_key` by slugifying `criterion_name` (`"Absent" → "absent"`). The admin renamed the seeded "Absent Days" criterion to "Absent" (and similarly for the others), so the slug no longer matches the engine's hardcoded metric names. There is **no validation** preventing this drift, and the engine **fails silently** on unknown keys.
 
-## Out of scope
-- PMS score derivation, slabs, rating bands, increment methods, confirmation-increment adjuster — unchanged.
-- Database schema, RLS, audit trail, exclusions table — unchanged.
-- `no_score` bucket semantics — unchanged (still distinct from ineligible).
+### Result persistence — no save/mapping bug
+Persistence is correct given the (wrong) in-memory verdict: `eligibility_status='eligible'`, `eligible_percent=20`, `ineligibility_reason=null`, etc. UI and Excel are faithful to the run row — they're not the source of the defect.
 
-## Rollback
-Pure presentation + comment changes outside the engine; revert the touched files. Engine criteria loop is unchanged, so historical runs remain reproducible.
+---
+
+## Correction Plan
+
+### 1. Engine: resolve criterion_key against an alias table + log unknown keys
+File: `supabase/functions/compute-increment/index.ts` (only the criteria-evaluation block, lines ~520-548).
+
+- Build `metrics` as today, then add an **alias resolver** that maps common admin-edited keys to canonical metric keys:
+  - `absent`, `absent_day`, `absence`, `absences` → `absent_days`
+  - `lwp`, `leave_without_pay`, `lwp_day` → `lwp_days`
+  - `discipline_action`, `disciplinary`, `disciplinary_action`, `discipline` → `disciplinary_actions`
+  - `training`, `training_program`, `training_programs` → `training_compliance`
+- Lookup order: `metrics[key]` → `metrics[aliases[key]]` → `dynamic_metrics[key]`.
+- If still unresolved AND the criterion is active, push a synthetic reason `"Configuration error: criterion '<name>' not mapped to any input metric — contact admin"` and mark **ineligible** (fail-closed). This makes silent skips impossible going forward.
+- This change is generic: any future criterion whose key matches a canonical metric or a known alias automatically participates as an ineligibility rule.
+
+### 2. UI: stop free-form slugification, require a canonical metric binding
+File: `src/components/admin/scoring/IncrementEligibilitySection.tsx` (Add/Edit dialog).
+
+- Add a **"Metric"** dropdown bound to a typed enum: `absent_days | lwp_days | disciplinary_actions | training_compliance` (extensible via a small constants file `src/lib/incrementCriterionMetrics.ts`).
+- `criterion_name` stays free-text (display only). `criterion_key` is set from the dropdown, not derived from the name.
+- For existing rows the dropdown pre-selects the resolved canonical key (using the same alias map) so editing a legacy row auto-corrects it on save.
+- Block save when no canonical metric is selected.
+
+### 3. One-time data fix for the live approved config
+Migration to normalize `increment_eligibility_criteria.criterion_key` for the three rows of config `4476ad81…`:
+- `absent` → `absent_days`
+- `lwp` → `lwp_days`
+- `discipline_action` → `disciplinary_actions`
+
+Scope: only rows where `criterion_key` is in the alias map AND `lower(criterion_key)` is not already canonical. Reversible (we keep the old value in audit via the standard updated_at trail; no destructive schema change).
+
+### 4. Scope verification (no engine change required)
+Today the engine selects `increment_eligibility_configs` by `assessment_year + status='approved'` only. Per existing policy, criteria configs are global per-AY (not scoped by company/division/BU/level for criteria themselves — scope filters apply to *exclusions*, not criteria). Confirmed in `evaluateIncrementEligibility` contract. **No change needed.** The original report's concern #3 (scope mismatch) is not the cause.
+
+### 5. Tests (mandatory, in `supabase/functions/compute-increment/`)
+New file `criteria_key_aliasing_test.ts`:
+- alias `absent` resolves to `absent_days` and breaches when `actual=6 > threshold=0`.
+- alias `discipline_action` resolves to `disciplinary_actions`; non-breach for actual=0, threshold=0 with `>` operator.
+- unknown key `xyz` ⇒ synthetic `Configuration error` reason + ineligible.
+- canonical key `absent_days` still works unchanged (regression guard).
+- Mock data factories: `mockVivek` (absent=6) ⇒ ineligible; `mockClean` (all zero) ⇒ eligible.
+
+Extend `criteria_exempt_test.ts` to assert exempt employee with alias `absent` still bypasses the block.
+
+### 6. UI/Excel verification
+- After re-running, Vivek's Run Details row should show `Eligibility = ineligible`, `Eligible % = —`, `Increment Amount = —`, `Revised Salary = —`, `Ineligibility Reason = "Absent > 0 (actual 6)"`.
+- `IncrementInputs.tsx` already renders `ineligibility_reason` straight from the row — no change needed.
+- Excel export reuses the same row shape — no change needed.
+
+### 7. Docs & memory
+- `DOCUMENTATION.md` → note the metric-binding contract.
+- `POLICY.md` → "Criteria are global per AY; metric binding is enforced by canonical key."
+- `mem/features/admin/increment-eligibility-exclusions` → add: "criterion_key MUST be canonical or a known alias; UI binds via dropdown".
+- New ADR-070 documenting the alias resolver + fail-closed behavior.
+
+### Risk & Impact
+- **Data**: 3 rows updated in `increment_eligibility_criteria` (live config). Reversible.
+- **Workflow**: Future runs honor active criteria correctly. Past `increment_run_items` rows are NOT rewritten (per constraint).
+- **UI**: Add/Edit dialog gains one dropdown; existing rows pre-fill. Non-breaking.
+- **Regression**: Fail-closed unknown-key path could newly flag misconfigured rows as ineligible — desired behavior; surfaced explicitly in the reason column so admins can correct.
+- **Scalability**: Pure in-loop alias lookup, O(1) per criterion; no extra DB calls.
+- **Rollback**: Revert the edge-function file and the UI file; migration revert maps canonical → old text if ever required.
+
+### Acceptance check after build
+1. Re-run AY 2025-26 → Vivek 101784: `ineligible`, reason mentions Absent breach, eligible % = 0, increment = 0.
+2. An employee with `absent_days=0, lwp_days=0, disciplinary_actions=0, training_compliance=0` stays eligible.
+3. A criteria-exempt employee with `absent_days=99` stays eligible (block bypassed).
+4. UI table and Excel export reflect the same `eligibility_status`, `eligible_percent`, `ineligibility_reason`.
