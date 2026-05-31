@@ -1,0 +1,1 @@
+ALTER TABLE public.increment_slabs RENAME COLUMN category_ids TO employee_category_ids;

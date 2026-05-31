@@ -3115,11 +3115,11 @@ export type Database = {
         Row: {
           assessment_year: string
           business_unit_ids: string[]
-          category_ids: string[]
           company_ids: string[]
           created_at: string
           created_by: string | null
           division_ids: string[]
+          employee_category_ids: string[]
           extra_attributes: Json
           id: string
           increment_percent: number
@@ -3137,11 +3137,11 @@ export type Database = {
         Insert: {
           assessment_year: string
           business_unit_ids?: string[]
-          category_ids?: string[]
           company_ids?: string[]
           created_at?: string
           created_by?: string | null
           division_ids?: string[]
+          employee_category_ids?: string[]
           extra_attributes?: Json
           id?: string
           increment_percent: number
@@ -3159,11 +3159,11 @@ export type Database = {
         Update: {
           assessment_year?: string
           business_unit_ids?: string[]
-          category_ids?: string[]
           company_ids?: string[]
           created_at?: string
           created_by?: string | null
           division_ids?: string[]
+          employee_category_ids?: string[]
           extra_attributes?: Json
           id?: string
           increment_percent?: number
