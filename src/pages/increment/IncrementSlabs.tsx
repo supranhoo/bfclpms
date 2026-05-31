@@ -16,7 +16,7 @@ import {
   type IncrementSlabRow,
 } from '@/hooks/useIncrementSlabs';
 import { ConfirmDestructiveDialog } from '@/components/ui/ConfirmDestructiveDialog';
-import { Plus, Trash2, Pencil, TrendingUp, Eye, Copy, LayersIcon as Layers, Inbox } from 'lucide-react';
+import { Plus, Trash2, Pencil, TrendingUp, Eye, Copy, Layers, Inbox } from 'lucide-react';
 import { generateAssessmentYears, getCurrentAssessmentYear } from '@/lib/assessmentYear';
 import { SlabEditorDialog } from '@/components/increment/SlabEditorDialog';
 import { SlabScopeDrawer } from '@/components/increment/SlabScopeDrawer';
