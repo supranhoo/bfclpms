@@ -1,41 +1,111 @@
+
 ## Goal
-Ensure every Assessment Year dropdown defaults to the **current AY (Jul–Jun fiscal cycle)** — not to the latest seeded year. Today (May 2026) the default must be **2025-26** everywhere.
+Prevent duplicate increment benefits when an employee already received a salary revision on confirmation from Trainee. Calculate only the **balance eligible period** at the annual increment cycle. Build as a **configuration-driven rule engine** (no hardcoded trainee logic), scoped by Company / Category / Level / Assessment Year.
 
-## Root Cause
-1. `generateAssessmentYears()` in `src/hooks/useIncrementEligibility.ts` uses an **Apr–Mar** cycle (`month >= 3`), conflicting with the project's canonical **Jul–Jun** fiscal cycle (per memory + `KpiWeightageDashboard` + `buildAYOptions` in increment pages).
-2. Sections (`IncrementEligibilitySection`, `IncrementMethodSection`, `AnnualScoreCalculationSection`) compute `years = [...knownYears, ...seeded].sort().reverse()` and default the dropdown to `years[0]`, i.e. the **newest seeded year** (currently 2030-31), not the current AY.
-3. `ExclusionsCard` defaults to `defaultAssessmentYear` passed by parent (fine once parent is fixed).
-4. Three duplicate `buildAYOptions()` copies exist (`GeneralEligibility.tsx`, `IncrementSlabs.tsx`, `IncrementInputs.tsx`) — Jul–Jun based, default to `ayOptions[1]` (current). Correct logic but duplicated.
+## Risk & Impact Report
+- **Data**: Adds new employee fields (confirmation date, increment-on-confirmation flag, effective date, previous status). Additive, nullable, no historical breakage.
+- **Workflow**: Affects only increment computation. Existing eligibility, slab, and method logic untouched — adjustment runs as a pre-step modifier on `eligible_months`.
+- **UI/UX**: One new tab under System Settings → Increment ("Confirmation Adjustment"). One new section on Employee Profile (Employment Lifecycle). Increment report gets 6 new columns.
+- **Regression**: Low. When config = "Ignore Confirmation Increment" (the default seed), behavior is identical to today.
+- **Scalability**: Adjustment is per-employee, O(1) lookup against config table. Report columns reuse existing pagination.
+- **Mitigation**: Feature is opt-in per scope. Pure function with full unit-test matrix covering all 4 treatments × the 3 user-supplied scenarios.
 
-## Fix Strategy (frontend only, no schema change)
+## Schema Changes (additive)
 
-1. **New canonical util** `src/lib/assessmentYear.ts`:
-   - `getCurrentAssessmentYearStart(d = new Date())` → number (e.g. 2025)
-   - `formatAssessmentYear(startYear)` → `"2025-26"`
-   - `getCurrentAssessmentYear()` → `"2025-26"`
-   - `generateAssessmentYears(spread = 4)` → rolling list centered on current, **newest first**, Jul–Jun based
-   - Unit tests covering month 6 (Jun → previous AY) vs month 7 (Jul → new AY) boundary and leap-year edge.
+**`employees` — new nullable columns**
+- `previous_employment_status` text
+- `confirmation_date` date
+- `confirmation_increment_granted` boolean default false
+- `confirmation_increment_effective_date` date
+(DOJ and current employment status already exist.)
 
-2. **Update `useIncrementEligibility.ts`**: re-export `generateAssessmentYears` from the new util to keep imports stable; delete the Apr–Mar version.
+**New table `confirmation_increment_rules`** — scope-keyed rule config
+- `assessment_year` text (required)
+- `company_id`, `category_id`, `level_id` (nullable → wildcard match)
+- `treatment` enum: `ignore` | `adjust_covered_period` | `shift_next_cycle` | `carry_forward_uncovered`
+- `version`, `status` (draft/active/archived), `created_by`, audit timestamps
+- Unique active row per (AY, company, category, level)
+- Standard GRANTs + RLS (Admin write, authenticated read)
 
-3. **Update the three sections** so the initial state uses `getCurrentAssessmentYear()` instead of `years[0]`. Also fix the post-reset assignment (line 112 in IncrementEligibilitySection).
+**New table `confirmation_increment_adjustments`** — immutable audit per run
+- `employee_id`, `assessment_year`, `run_id`
+- `treatment_applied`, `period_covered_months`, `balance_eligible_months`, `carry_forward_months`, `final_eligible_months`
+- `inputs_snapshot` jsonb, `created_at`
+- RLS: Admin + Management read, service_role write
 
-4. **Consolidate `buildAYOptions`** in the three increment pages — replace each local copy with `generateAssessmentYears(2)` from the util and default `useState` to `getCurrentAssessmentYear()` rather than `ayOptions[1]`.
+## Rule Engine (pure module)
+**`src/lib/confirmationIncrementAdjuster.ts`**
 
-5. **Audit other AY/fiscal dropdowns**: `KpiWeightageDashboard` already aligns to Jul–Jun; no change. Grep for any other `getMonth() >= 3` or `>= 6` patterns to be sure none remain misaligned.
+Input: `{ employee, assessmentCycleStart, assessmentCycleEnd, eligibilityCutoff, rule }`
+Output: `{ treatment, periodCoveredMonths, balanceEligibleMonths, carryForwardMonths, finalEligibleMonths, adjustmentReason }`
 
-## UI Impact
-- Same dropdown contents (slightly different range — still ±4 years around current). The **selected value on first load is now the current AY** (today: `2025-26`).
-- No layout or component changes.
+Treatment behavior:
+- **ignore** → finalEligible = naive months (today's behavior)
+- **adjust_covered_period** → subtract months from DOJ→confirmation increment date that fall inside the assessment cycle
+- **shift_next_cycle** → finalEligible = 0 this AY; flag employee for normal cycle next AY
+- **carry_forward_uncovered** → current-cycle balance + previous-cycle uncovered tail (read from prior `confirmation_increment_adjustments` row)
+
+All month math via existing fiscal helpers; no Date math inline.
+
+## Integration Points
+1. `compute-increment` edge function — resolve rule, call adjuster, persist adjustment row, pass `finalEligibleMonths` into existing slab/method calc.
+2. `useIncrementInputs` — surface adjustment output for the report.
+3. Increment report — add 6 columns listed in spec (Confirmation Granted, Date, Period Covered, Balance, Carry Forward, Final Months, Treatment Applied).
+
+## UI Changes
+
+### A) System Settings → Increment → new 5th tab "Confirmation Adjustment"
+```text
+┌─ System Settings ─────────────────────────────────────────────┐
+│ [Eligibility] [Method] [General] [Slabs] [Confirmation Adj.]  │ ← NEW tab
+├───────────────────────────────────────────────────────────────┤
+│ Assessment Year: [2025-26 ▾]   Scope: Company/Cat/Level ▾     │
+│                                                               │
+│ Treatment for confirmation increments:                        │
+│  ( ) Ignore Confirmation Increment            (default)       │
+│  ( ) Adjust Covered Period                                    │
+│  ( ) Shift Employee to Next Normal Cycle                      │
+│  ( ) Carry Forward Uncovered Period                           │
+│                                                               │
+│ Notes: [____________________________________________]         │
+│                                                               │
+│ Version History (collapsible)                                 │
+│ [Copy from previous year]            [Save as new version]    │
+└───────────────────────────────────────────────────────────────┘
+```
+
+### B) Employee Profile → new card "Employment Lifecycle"
+```text
+┌─ Employment Lifecycle ─────────────────────────┐
+│ Previous Status   : Trainee                    │
+│ Current Status    : Confirmed                  │
+│ Date of Joining   : 01-Dec-2024                │
+│ Confirmation Date : 01-Dec-2025                │
+│ Conf. Increment   : ☑ Granted                  │
+│ Effective Date    : 01-Dec-2025                │
+└────────────────────────────────────────────────┘
+```
+
+### C) Increment Inputs report — 6 appended columns
+```text
+… | Conf.Inc? | Conf.Date | Period Covered | Balance | Carry Fwd | Final Months | Treatment
+```
+Existing pagination unchanged.
 
 ## Tests
-- `src/lib/assessmentYear.test.ts` — boundary cases for `getCurrentAssessmentYear` and `generateAssessmentYears` ordering.
+- `confirmationIncrementAdjuster.test.ts` — all 3 user scenarios + 4 treatments + edge cases (no confirmation date, confirmation outside cycle, missing rule → default ignore).
+- `rule resolution` test — scope cascade (Level → Category → Company → Global).
+- Regression test in `bugBountyFixes.test.ts` locking Scenario 1 / 2 / 3 outputs.
 
-## Risk & Impact
-- **Data**: None — pure frontend default change.
-- **Workflow**: Users land on the relevant year by default instead of an empty future year (positive UX).
-- **Regression**: Low; behind a single helper now used everywhere. Existing values already in DB remain selectable via the dropdown.
+## SSOT Updates
+- `DOCUMENTATION.md` → new section "Confirmation Increment Adjustment Engine" with treatment matrix.
+- `POLICY.md` → policy entry + Version History append.
+- New memory file `mem/features/increment/confirmation-adjustment-engine`.
+
+## Rollout
+1. Migration (additive cols + 2 tables + RLS + GRANTs) — reversible.
+2. Default-seed `treatment = 'ignore'` for current AY → zero behavior change on deploy.
+3. Admin opts in per scope when ready.
 
 ## Not Applicable
-- DB / RLS / migration changes.
-- Backup or audit changes.
+- Auth / payment / storage changes.
