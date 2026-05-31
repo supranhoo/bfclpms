@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { PageLoadingOverlay } from '@/components/ui/PageLoadingOverlay';
+import { parseHexSetting, DEFAULT_ROCKET_COLOR } from '@/hooks/useBrandingSettings';
 
 // The overlay calls useBrandingSettings() which talks to Supabase via React
 // Query. Stub it to a known empty state so we can prove the `branding` prop
@@ -14,6 +15,7 @@ vi.mock('@/hooks/useBrandingSettings', async (orig) => {
       tagline: '',
       showLogo: false,
       logoUrl: '',
+      rocketColor: '#C2410C',
       isLoading: false,
     }),
   };
@@ -92,5 +94,41 @@ describe('PageLoadingOverlay branding', () => {
   it('returns null when open=false', () => {
     const { container } = render(<PageLoadingOverlay open={false} />);
     expect(container).toBeEmptyDOMElement();
+  });
+
+  it('applies the configured rocket color to the SVG body', () => {
+    const { container } = render(
+      <PageLoadingOverlay
+        open
+        variant="inline"
+        branding={{ rocketColor: '#FF8800' }}
+      />,
+    );
+    const bodyPath = container.querySelector('path[d^="M60 18"]');
+    expect(bodyPath?.getAttribute('fill')).toBe('#FF8800');
+  });
+
+  it('falls back to the default rocket color when none is provided', () => {
+    const { container } = render(<PageLoadingOverlay open variant="inline" />);
+    const bodyPath = container.querySelector('path[d^="M60 18"]');
+    expect(bodyPath?.getAttribute('fill')).toBe(DEFAULT_ROCKET_COLOR);
+  });
+});
+
+describe('parseHexSetting', () => {
+  it('accepts valid 6-digit hex', () => {
+    expect(parseHexSetting('"#C2410C"', '#000000')).toBe('#C2410C');
+  });
+  it('accepts valid 3-digit hex', () => {
+    expect(parseHexSetting('#abc', '#000000')).toBe('#abc');
+  });
+  it('falls back on missing value', () => {
+    expect(parseHexSetting(null, '#123456')).toBe('#123456');
+    expect(parseHexSetting('', '#123456')).toBe('#123456');
+  });
+  it('falls back on invalid hex', () => {
+    expect(parseHexSetting('orange', '#123456')).toBe('#123456');
+    expect(parseHexSetting('#zzz', '#123456')).toBe('#123456');
+    expect(parseHexSetting('#12345', '#123456')).toBe('#123456');
   });
 });
