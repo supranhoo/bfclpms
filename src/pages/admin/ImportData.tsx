@@ -2181,11 +2181,13 @@ export default function ImportData() {
                   <li><code>level</code> - Employee Level</li>
                   <li><code>employeeCategory</code> - Employee Category (must exist in master)</li>
                   <li><code>employmentStatus</code> - Employment Status (e.g. Probation, Trainee, Confirmed, Superannuated, Retainer)</li>
+                  <li><code>location</code> - Work Location Name (must exist in Locations master; case-insensitive)</li>
                   <li><code>portalAccess</code> - Portal Login Access: <span className="text-xs ml-1 text-muted-foreground">(Yes/No, default: Yes if email provided)</span></li>
                   <li><code>managerEmployeeId</code> - Manager's Employee Code</li>
                   <li><code>managerName</code> - Manager's Full Name</li>
                   <li><code>gdoj</code> / <code>groupDoj</code> - Group Date of Joining (yyyy-MM-dd or dd/MM/yyyy)</li>
                   <li><code>doj</code> / <code>dateOfJoining</code> - Date of Joining (yyyy-MM-dd or dd/MM/yyyy)</li>
+                  <li><code>confirmationDate</code> - Confirmation Date (yyyy-MM-dd or dd/MM/yyyy)</li>
                 </ul>
                 <Alert className="mt-4">
                   <AlertCircle className="h-4 w-4" />
