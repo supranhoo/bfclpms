@@ -38,6 +38,11 @@ import {
   type EligibilityConfigRow,
 } from '@/hooks/useIncrementEligibility';
 import type { ComparisonOperator } from '@/lib/incrementEligibility';
+import {
+  CANONICAL_METRIC_KEYS,
+  METRIC_LABELS,
+  resolveCanonicalMetricKey,
+} from '@/lib/incrementCriterionMetrics';
 import { getCurrentAssessmentYear } from '@/lib/assessmentYear';
 
 const OPERATORS: Array<{ value: ComparisonOperator; label: string }> = [
