@@ -28,7 +28,6 @@ import * as XLSX from 'xlsx';
 import { supabase } from '@/integrations/supabase/client';
 import { IncrementInputDialog } from '@/components/incentive/IncrementInputDialog';
 import { useActiveEmployeesForCopy } from '@/hooks/useActiveEmployeesForCopy';
-import { EmployeeCombobox } from '@/components/admin/EmployeeCombobox';
 import { EmployeeMultiSelect } from '@/components/incentive/EmployeeMultiSelect';
 import { IncrementResultEditDialog } from '@/components/incentive/IncrementResultEditDialog';
 import { ConfirmDestructiveDialog } from '@/components/ui/ConfirmDestructiveDialog';
