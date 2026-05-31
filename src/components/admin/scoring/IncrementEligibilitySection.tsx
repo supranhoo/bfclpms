@@ -607,6 +607,7 @@ function useMemoResetForm(
   row: EligibilityCriterionRow | null,
   setForm: (v: {
     criterion_name: string;
+    criterion_key: string;
     description: string;
     comparison_operator: ComparisonOperator;
     threshold_value: string;
@@ -621,6 +622,7 @@ function useMemoResetForm(
     if (!open) return;
     setForm({
       criterion_name: row?.criterion_name ?? '',
+      criterion_key: resolveCanonicalMetricKey(row?.criterion_key) ?? '',
       description: row?.description ?? '',
       comparison_operator: (row?.comparison_operator as ComparisonOperator) ?? '>=',
       threshold_value: row?.threshold_value?.toString() ?? '',
