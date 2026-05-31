@@ -514,6 +514,16 @@ function CalculateIncrementTab({ year }: { year: string }) {
                 <TableCell>{r.confirmation_granted ? <Badge variant="secondary">Yes</Badge> : '—'}</TableCell>
                 <TableCell>{r.final_eligible_months ?? '—'}</TableCell>
                 <TableCell className="text-xs">{r.confirmation_treatment ?? '—'}</TableCell>
+                <TableCell
+                  className="text-xs text-muted-foreground max-w-[180px] truncate"
+                  title={
+                    r.adjustment_reason
+                      ? `${r.adjustment_reason}${r.transition_source ? ` (source: ${r.transition_source})` : ''}`
+                      : ''
+                  }
+                >
+                  {transitionLabel(r)}
+                </TableCell>
                 <TableCell className="text-xs text-muted-foreground max-w-[200px] truncate" title={r.remarks ?? ''}>
                   {r.remarks ?? '—'}
                 </TableCell>
