@@ -156,6 +156,7 @@ interface EmployeeImportRow {
   employeeStatus?: string;
   groupDoj?: string; // ISO yyyy-MM-dd (normalised)
   doj?: string; // ISO yyyy-MM-dd (normalised)
+  confirmationDate?: string; // ISO yyyy-MM-dd (normalised)
 }
 
 // Parse Active/Inactive status cell into a boolean (or undefined if empty/unset).
@@ -755,6 +756,8 @@ export default function ImportData() {
     const gdojNorm = normalizeDateCell(gdojRaw);
     const dojRaw = getRaw(['doj', 'dateOfJoining', 'date_of_joining', 'joiningDate', 'joining_date']);
     const dojNorm = normalizeDateCell(dojRaw);
+    const confDateRaw = getRaw(['confirmationDate', 'confirmation_date', 'confirmDate', 'confirm_date', 'dateOfConfirmation', 'date_of_confirmation']);
+    const confDateNorm = normalizeDateCell(confDateRaw);
 
     return {
       employeeCode: getValue(['employeeCode', 'employeecode', 'employee_code', 'empCode', 'empcode', 'emp_code', 'newCode', 'newcode', 'new_code', 'code', 'id', 'empId', 'empid', 'emp_id']),
@@ -777,6 +780,7 @@ export default function ImportData() {
       employeeStatus: getValue(['employeeStatus', 'employee_status', 'status', 'active', 'isActive', 'is_active']),
       groupDoj: gdojNorm === 'INVALID' ? 'INVALID' : (gdojNorm || undefined),
       doj: dojNorm === 'INVALID' ? 'INVALID' : (dojNorm || undefined),
+      confirmationDate: confDateNorm === 'INVALID' ? 'INVALID' : (confDateNorm || undefined),
     };
   };
 
@@ -871,6 +875,9 @@ export default function ImportData() {
           }
           if (row.doj === 'INVALID') {
             rowErrs.push("Date of Joining (DOJ) is invalid — use yyyy-MM-dd or dd/MM/yyyy");
+          }
+          if (row.confirmationDate === 'INVALID') {
+            rowErrs.push("Confirmation Date is invalid — use yyyy-MM-dd or dd/MM/yyyy");
           }
           if (rowErrs.length > 0) {
             perRowErrors.set(index, rowErrs);
@@ -1327,6 +1334,17 @@ export default function ImportData() {
       return;
     }
 
+    // Pre-fetch locations master (one query) for case-insensitive name → id resolution.
+    const locationByName = new Map<string, string>();
+    try {
+      const { data: allLocs } = await supabase.from('locations').select('id, name');
+      (allLocs || []).forEach((l: any) => {
+        if (l?.name) locationByName.set(String(l.name).trim().toLowerCase(), l.id);
+      });
+    } catch (e) {
+      console.warn('[employee-import] Failed to pre-fetch locations master', e);
+    }
+
     setIsImportingEmployees(true);
     setEmployeeImportProgress({ current: 0, total: employeeData.length });
     setEmployeeImportResults(null);
@@ -1394,6 +1412,8 @@ export default function ImportData() {
             ...(resolvedCompanyId ? { company_id: resolvedCompanyId } : {}),
             ...(row.groupDoj && row.groupDoj !== 'INVALID' ? { group_doj: row.groupDoj } : {}),
             ...(row.doj && row.doj !== 'INVALID' ? { doj: row.doj } : {}),
+            ...(row.confirmationDate && row.confirmationDate !== 'INVALID' ? { confirmation_date: row.confirmationDate } : {}),
+            ...(row.location && locationByName.get(row.location.trim().toLowerCase()) ? { location_id: locationByName.get(row.location.trim().toLowerCase()) } : {}),
             ...(() => {
               const s = parseEmployeeStatus(row.employeeStatus);
               return s === true || s === false ? { is_active: s } : {};
@@ -1465,6 +1485,7 @@ export default function ImportData() {
             portal_access: hasPortalAccess,
             group_doj: row.groupDoj && row.groupDoj !== 'INVALID' ? row.groupDoj : undefined,
             doj: row.doj && row.doj !== 'INVALID' ? row.doj : undefined,
+            confirmation_date: row.confirmationDate && row.confirmationDate !== 'INVALID' ? row.confirmationDate : undefined,
             ...(() => {
               const s = parseEmployeeStatus(row.employeeStatus);
               return s === true || s === false ? { is_active: s } : {};
@@ -1747,16 +1768,17 @@ export default function ImportData() {
         division: 'Operations',
         businessUnit: 'Plant',
         department: 'HR',
-        location: 'Mumbai',
         pmsGrade: 'A',
         level: 'Level 1',
         employeeCategory: 'Staff',
         employmentStatus: 'Confirmed',
+        location: 'Mumbai',
         managerEmployeeId: '100002',
         managerName: 'Jane Smith',
         employeeStatus: 'Active',
         groupDoj: '2020-04-15',
         doj: '2020-04-15',
+        confirmationDate: '2020-10-15',
       },
     ];
 
@@ -1775,7 +1797,7 @@ export default function ImportData() {
       const allProfiles = await fetchAllPaged<any>((from, to) =>
         supabase
           .from('profiles')
-          .select('id, employee_code, full_name, email, designation, company_id, pms_grade, level, employee_category, employment_status, department_id, reporting_manager_id, is_active, group_doj, doj')
+          .select('id, employee_code, full_name, email, designation, company_id, pms_grade, level, employee_category, employment_status, department_id, reporting_manager_id, is_active, group_doj, doj, confirmation_date, location_id')
           .order('id')
           .range(from, to)
       );
@@ -1796,6 +1818,11 @@ export default function ImportData() {
         ? await supabase.from('divisions').select('id, name').in('id', divIds)
         : { data: [] as any[] };
 
+      const locIds = [...new Set(allProfiles.map((p: any) => p.location_id).filter(Boolean))];
+      const { data: locRows } = locIds.length
+        ? await supabase.from('locations').select('id, name').in('id', locIds)
+        : { data: [] as any[] };
+
       const { data: userRoles, error: rolesError } = await supabase
         .from('user_roles')
         .select('user_id, role');
@@ -1804,6 +1831,7 @@ export default function ImportData() {
       const deptMap = new Map((deptRows || []).map((d: any) => [d.id, d]));
       const buMap = new Map((buRows || []).map((b: any) => [b.id, b]));
       const divMap = new Map((divRows || []).map((d: any) => [d.id, d]));
+      const locMap = new Map((locRows || []).map((l: any) => [l.id, l]));
       const roleMap = new Map(userRoles?.map(r => [r.user_id, r.role]) || []);
       const profileMap = new Map(allProfiles.map(p => [p.id, p]));
 
@@ -1832,10 +1860,12 @@ export default function ImportData() {
           level: (profile as any).level || '',
           employeeCategory: (profile as any).employee_category || '',
           employmentStatus: (profile as any).employment_status || '',
+          location: (locMap.get((profile as any).location_id) as any)?.name || '',
           managerEmployeeId: manager?.employee_code || '',
           managerName: manager?.full_name || '',
           groupDoj: (profile as any).group_doj || '',
           doj: (profile as any).doj || '',
+          confirmationDate: (profile as any).confirmation_date || '',
         };
       });
 
@@ -2151,11 +2181,13 @@ export default function ImportData() {
                   <li><code>level</code> - Employee Level</li>
                   <li><code>employeeCategory</code> - Employee Category (must exist in master)</li>
                   <li><code>employmentStatus</code> - Employment Status (e.g. Probation, Trainee, Confirmed, Superannuated, Retainer)</li>
+                  <li><code>location</code> - Work Location Name (must exist in Locations master; case-insensitive)</li>
                   <li><code>portalAccess</code> - Portal Login Access: <span className="text-xs ml-1 text-muted-foreground">(Yes/No, default: Yes if email provided)</span></li>
                   <li><code>managerEmployeeId</code> - Manager's Employee Code</li>
                   <li><code>managerName</code> - Manager's Full Name</li>
                   <li><code>gdoj</code> / <code>groupDoj</code> - Group Date of Joining (yyyy-MM-dd or dd/MM/yyyy)</li>
                   <li><code>doj</code> / <code>dateOfJoining</code> - Date of Joining (yyyy-MM-dd or dd/MM/yyyy)</li>
+                  <li><code>confirmationDate</code> - Confirmation Date (yyyy-MM-dd or dd/MM/yyyy)</li>
                 </ul>
                 <Alert className="mt-4">
                   <AlertCircle className="h-4 w-4" />

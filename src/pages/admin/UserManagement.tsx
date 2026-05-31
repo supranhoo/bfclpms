@@ -3,7 +3,7 @@ import { invokeAdminEdgeFunction } from '@/lib/adminEdgeFunction';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
-import { useProfiles, useDepartments, useDesignations, usePmsGrades, useDivisions, useBusinessUnits, useEmployeeCategories, useEmploymentStatuses } from '@/hooks/useOrganization';
+import { useProfiles, useDepartments, useDesignations, usePmsGrades, useDivisions, useBusinessUnits, useEmployeeCategories, useEmploymentStatuses, useLocations } from '@/hooks/useOrganization';
 import { useCompanies } from '@/hooks/useCompanies';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -161,6 +161,7 @@ export default function UserManagement() {
   const { data: divisions } = useDivisions();
   const { data: businessUnits } = useBusinessUnits();
   const { data: companiesList } = useCompanies();
+  const { data: locationsList } = useLocations();
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
@@ -192,6 +193,8 @@ export default function UserManagement() {
   const [editDivisionId, setEditDivisionId] = useState('');  // UI-only cascading filter
   const [editGroupDoj, setEditGroupDoj] = useState<string>(''); // yyyy-MM-dd or ''
   const [editDoj, setEditDoj] = useState<string>(''); // yyyy-MM-dd or ''
+  const [editConfirmationDate, setEditConfirmationDate] = useState<string>(''); // yyyy-MM-dd or ''
+  const [editLocationId, setEditLocationId] = useState<string>('');
   // Create Dialog
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [newFullName, setNewFullName] = useState('');
@@ -209,6 +212,8 @@ export default function UserManagement() {
   const [newPortalAccess, setNewPortalAccess] = useState(true);
   const [newGroupDoj, setNewGroupDoj] = useState<string>(''); // yyyy-MM-dd or ''
   const [newDoj, setNewDoj] = useState<string>(''); // yyyy-MM-dd or ''
+  const [newConfirmationDate, setNewConfirmationDate] = useState<string>(''); // yyyy-MM-dd or ''
+  const [newLocationId, setNewLocationId] = useState<string>('');
 
   // Bulk Action Dialog
   const [bulkDialogOpen, setBulkDialogOpen] = useState(false);
@@ -366,6 +371,10 @@ export default function UserManagement() {
     () => (employmentStatusesList || []).filter((s: any) => s.is_active !== false).map((s: any) => ({ value: s.name, label: s.name })),
     [employmentStatusesList],
   );
+  const locationOptions = useMemo(
+    () => (locationsList || []).map((l: any) => ({ value: l.id, label: l.name })),
+    [locationsList],
+  );
   const roleOptions = useMemo(() => ALL_APP_ROLES.map(role => ({ value: role, label: ROLE_LABELS[role] })), []);
 
   const totalPages = Math.ceil(filteredProfiles.length / ITEMS_PER_PAGE);
@@ -397,6 +406,8 @@ export default function UserManagement() {
       isActive,
       groupDoj,
       doj,
+      confirmationDate,
+      locationId,
     }: {
       userId: string;
       role: AppRole;
@@ -412,6 +423,8 @@ export default function UserManagement() {
       isActive?: boolean;
       groupDoj?: string | null;
       doj?: string | null;
+      confirmationDate?: string | null;
+      locationId?: string | null;
     }) => {
       const updatePayload: Record<string, any> = {
         full_name: fullName || null,
@@ -425,6 +438,8 @@ export default function UserManagement() {
         mobile_number: mobileNumber !== undefined ? (mobileNumber || null) : undefined,
         group_doj: groupDoj !== undefined ? (groupDoj || null) : undefined,
         doj: doj !== undefined ? (doj || null) : undefined,
+        confirmation_date: confirmationDate !== undefined ? (confirmationDate || null) : undefined,
+        location_id: locationId !== undefined ? (locationId || null) : undefined,
       };
 
       if (isActive !== undefined) {
@@ -473,6 +488,8 @@ export default function UserManagement() {
       portal_access?: boolean;
       group_doj?: string;
       doj?: string;
+      confirmation_date?: string;
+      location_id?: string;
     }) => {
       const { data: session } = await supabase.auth.getSession();
       
@@ -491,6 +508,8 @@ export default function UserManagement() {
           portal_access: data.portal_access,
           group_doj: data.group_doj || undefined,
           doj: data.doj || undefined,
+          confirmation_date: data.confirmation_date || undefined,
+          location_id: data.location_id || undefined,
         },
       });
 
@@ -647,6 +666,8 @@ export default function UserManagement() {
     setEditIsActive((user as any).is_active !== false);
     setEditGroupDoj((user as any).group_doj || '');
     setEditDoj((user as any).doj || '');
+    setEditConfirmationDate((user as any).confirmation_date || '');
+    setEditLocationId((user as any).location_id || '');
     setEditDialogOpen(true);
   };
 
@@ -687,6 +708,8 @@ export default function UserManagement() {
       isActive: editIsActive,
       groupDoj: editGroupDoj || null,
       doj: editDoj || null,
+      confirmationDate: editConfirmationDate || null,
+      locationId: editLocationId || null,
     });
   };
 
@@ -714,6 +737,8 @@ export default function UserManagement() {
       portal_access: newPortalAccess,
       group_doj: newGroupDoj || undefined,
       doj: newDoj || undefined,
+      confirmation_date: newConfirmationDate || undefined,
+      location_id: newLocationId || undefined,
     });
   };
 
@@ -733,6 +758,8 @@ export default function UserManagement() {
     setNewPortalAccess(true);
     setNewGroupDoj('');
     setNewDoj('');
+    setNewConfirmationDate('');
+    setNewLocationId('');
   };
 
   const handleBulkUpdate = () => {
@@ -1317,6 +1344,18 @@ export default function UserManagement() {
                       />
                     </div>
                   </div>
+                  <div className="space-y-1.5">
+                    <Label>Confirmation Date</Label>
+                    <div className="relative">
+                      <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+                      <Input
+                        type="date"
+                        value={editConfirmationDate}
+                        onChange={(e) => setEditConfirmationDate(e.target.value)}
+                        className="pl-9 h-9"
+                      />
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -1388,6 +1427,15 @@ export default function UserManagement() {
                       onValueChange={setEditEmploymentStatus}
                       options={employmentStatusOptions}
                       placeholder="Select employment status"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Location</Label>
+                    <OrgFilterCombobox
+                      value={editLocationId}
+                      onValueChange={setEditLocationId}
+                      options={locationOptions}
+                      placeholder="Select location"
                     />
                   </div>
                   <div className="space-y-1.5">
@@ -1564,6 +1612,18 @@ export default function UserManagement() {
                       />
                     </div>
                   </div>
+                  <div className="space-y-1.5">
+                    <Label>Confirmation Date</Label>
+                    <div className="relative">
+                      <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+                      <Input
+                        type="date"
+                        value={newConfirmationDate}
+                        onChange={(e) => setNewConfirmationDate(e.target.value)}
+                        className="pl-9 h-9"
+                      />
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -1644,6 +1704,15 @@ export default function UserManagement() {
                       onValueChange={setNewEmploymentStatus}
                       options={employmentStatusOptions}
                       placeholder="Select employment status"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Location</Label>
+                    <OrgFilterCombobox
+                      value={newLocationId}
+                      onValueChange={setNewLocationId}
+                      options={locationOptions}
+                      placeholder="Select location"
                     />
                   </div>
                   <div className="space-y-1.5">
