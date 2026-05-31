@@ -12,6 +12,7 @@ import {
   CommandList,
 } from '@/components/ui/command';
 import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
 import type { EmployeeOption } from '@/components/admin/EmployeeCombobox';
 
 interface Props {
@@ -80,6 +81,20 @@ export function EmployeeMultiSelect({
             />
             <CommandList>
               <CommandEmpty>No employees found.</CommandEmpty>
+              {value.length > 0 && (
+                <div className="flex items-center justify-between px-2 py-1.5 border-b text-xs">
+                  <span className="text-muted-foreground">
+                    {value.length} selected
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => onChange([])}
+                    className="text-primary hover:underline"
+                  >
+                    Clear all
+                  </button>
+                </div>
+              )}
               <CommandGroup className="max-h-[280px] overflow-y-auto">
                 {filtered.map((e) => {
                   const checked = value.includes(e.id);
@@ -87,8 +102,14 @@ export function EmployeeMultiSelect({
                     <CommandItem
                       key={e.id}
                       onSelect={() => toggle(e.id)}
-                      className="cursor-pointer"
+                      className="cursor-pointer gap-2"
                     >
+                      <Checkbox
+                        checked={checked}
+                        onCheckedChange={() => toggle(e.id)}
+                        onClick={(ev) => ev.stopPropagation()}
+                        aria-label={`Select ${e.name}`}
+                      />
                       <div className="flex items-center gap-2 flex-1 min-w-0">
                         <span className="truncate">{e.name}</span>
                         {e.code && (
