@@ -37,6 +37,18 @@ export interface IncrementRunItemRow {
   manually_edited?: boolean | null;
   edited_by?: string | null;
   edited_at?: string | null;
+  // Confirmation Increment Adjustment traceability (RCA: transition gate).
+  confirmation_treatment?: string | null;
+  confirmation_granted?: boolean | null;
+  confirmation_effective_date?: string | null;
+  period_covered_months?: number | null;
+  balance_eligible_months?: number | null;
+  carry_forward_months?: number | null;
+  final_eligible_months?: number | null;
+  adjustment_reason?: string | null;
+  transition_key?: string | null;
+  pre_confirmation_status?: string | null;
+  transition_source?: 'history' | 'profile_snapshot' | 'none' | null;
 }
 
 export function useIncrementRuns(assessmentYear: string | null) {
