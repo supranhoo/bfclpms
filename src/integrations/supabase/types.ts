@@ -2948,6 +2948,7 @@ export type Database = {
           created_by: string | null
           division_id: string | null
           id: string
+          joining_month_cutoff_day: number | null
           level_id: string | null
           location_id: string | null
           method: Database["public"]["Enums"]["increment_method_type"]
@@ -2966,6 +2967,7 @@ export type Database = {
           created_by?: string | null
           division_id?: string | null
           id?: string
+          joining_month_cutoff_day?: number | null
           level_id?: string | null
           location_id?: string | null
           method?: Database["public"]["Enums"]["increment_method_type"]
@@ -2984,6 +2986,7 @@ export type Database = {
           created_by?: string | null
           division_id?: string | null
           id?: string
+          joining_month_cutoff_day?: number | null
           level_id?: string | null
           location_id?: string | null
           method?: Database["public"]["Enums"]["increment_method_type"]
