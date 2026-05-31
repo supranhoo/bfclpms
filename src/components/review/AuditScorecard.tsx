@@ -413,11 +413,15 @@ export function AuditScorecard({
     const rawAuditorAchieved = (existing as any)?.auditor_achieved_value ?? null;
     let auditorAchieved: number | string | null;
     if (hasAuditorDraft) {
-      // Prefer the auditor's stored value. If qualitative and the stored numeric value
-      // is missing (legacy NaN bug), derive from auditor_score so the Yes/No tile
-      // matches what the auditor actually selected. NEVER fall back to the employee's value.
+      // SINGLE SOURCE OF TRUTH for qualitative drafts: derive the picker label from
+      // `auditor_score` (canonical). `auditor_achieved_value` is only used as a
+      // tie-breaker when `auditor_score` is null. This guarantees the Review Journey
+      // tile (which reads auditor_score) and the picker tile cannot diverge.
       if (isQualitative) {
-        const numeric = rawAuditorAchieved ?? existing?.auditor_score ?? null;
+        const numeric =
+          existing?.auditor_score != null
+            ? Number(existing.auditor_score)
+            : (rawAuditorAchieved != null ? Number(rawAuditorAchieved) : null);
         auditorAchieved = getQualitativeAchievedLabel(numeric, uomType, qualOpts) ?? null;
       } else {
         auditorAchieved = rawAuditorAchieved;
