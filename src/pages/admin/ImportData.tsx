@@ -1402,13 +1402,7 @@ export default function ImportData() {
             ...(row.groupDoj && row.groupDoj !== 'INVALID' ? { group_doj: row.groupDoj } : {}),
             ...(row.doj && row.doj !== 'INVALID' ? { doj: row.doj } : {}),
             ...(row.confirmationDate && row.confirmationDate !== 'INVALID' ? { confirmation_date: row.confirmationDate } : {}),
-            ...(await (async () => {
-              if (!row.location || !row.location.trim()) return {};
-              const norm = row.location.trim().toLowerCase();
-              const { data: locRows } = await supabase.from('locations').select('id, name').ilike('name', row.location.trim());
-              const match = (locRows || []).find((l: any) => String(l.name).trim().toLowerCase() === norm);
-              return match ? { location_id: match.id } : {};
-            })()),
+            ...(row.location && locationByName.get(row.location.trim().toLowerCase()) ? { location_id: locationByName.get(row.location.trim().toLowerCase()) } : {}),
             ...(() => {
               const s = parseEmployeeStatus(row.employeeStatus);
               return s === true || s === false ? { is_active: s } : {};
