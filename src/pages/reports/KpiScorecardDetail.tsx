@@ -324,13 +324,23 @@ export default function KpiScorecardDetail() {
 
   const handleExport = () => {
     if (!filtered.length) return;
-    const exportData = filtered.map(r => ({
+    const exportData = filtered.map(toExportRecord);
+    const ws = XLSX.utils.json_to_sheet(exportData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'KPI Scorecard');
+    XLSX.writeFile(wb, `KPI_Scorecard_${selectedMonth}_${selectedYear}.xlsx`);
+  };
+
+  /** Shared row → XLSX record mapping. Used by both single-month and range exports. */
+  function toExportRecord(r: FlatRow) {
+    return {
       'Company': getCompanyCode(r.employeeId),
       'Employee Code': r.employeeCode,
       'Name': r.employeeName,
       'Designation': r.designation,
       'Department': r.department,
       'Month': r.month,
+      'Year': (rows ?? []).find(x => x === r) ? undefined : undefined,
       'Category': r.category,
       'KRA': r.kraName,
       'KPI': r.kpiName,
@@ -353,12 +363,8 @@ export default function KpiScorecardDetail() {
       'Management Score': r.isNa ? 'N/A' : (r.managementScore ?? ''),
       'Final Score': r.isNa ? 'N/A' : (r.finalScore ?? ''),
       'Status': statusLabels[r.status] ?? r.status,
-    }));
-    const ws = XLSX.utils.json_to_sheet(exportData);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'KPI Scorecard');
-    XLSX.writeFile(wb, `KPI_Scorecard_${selectedMonth}_${selectedYear}.xlsx`);
-  };
+    };
+  }
 
   const thClass = 'h-9 px-2 text-xs font-medium whitespace-nowrap cursor-pointer select-none hover:bg-muted/50 transition-colors';
 
