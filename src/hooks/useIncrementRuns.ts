@@ -23,6 +23,8 @@ export interface IncrementRunItemRow {
   rating_band: string | null;
   slab_percent: number | null;
   eligibility_status: 'eligible' | 'ineligible' | 'excluded' | 'no_score';
+  criteria_exempt?: boolean | null;
+  exemption_reason?: string | null;
   ineligibility_reason: string | null;
   method_used: string | null;
   eligible_percent: number | null;
