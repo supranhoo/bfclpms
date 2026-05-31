@@ -547,6 +547,8 @@ Deno.serve(async (req) => {
       const items: any[] = [];
       const adjustmentRows: any[] = [];
       let countEligible = 0, countIneligible = 0, countNoScore = 0, countCriteriaExempt = 0;
+      const methodsAppliedSet = new Set<string>();
+      let countNoMethodScope = 0;
 
       for (const p of profiles) {
         // Resolve employee category name → master id once, and expose it as
@@ -555,6 +557,16 @@ Deno.serve(async (req) => {
         // no category_id column; category is stored as text in employee_category.
         const dims = empDims(p);
         (p as any).category_id = dims.employee_category_id;
+        // Per-employee method resolution (scope-aware). When no config row
+        // matches the employee's scope at all, mark the row with a clear
+        // remark and skip the increment math — the run itself still
+        // completes with the rest of the population.
+        const resolvedCfg = resolveMethodConfig(dims);
+        const methodType: string = (resolvedCfg as any)?.method ?? 'full';
+        const methodSlabs: any[] = resolvedCfg && methodType === 'custom'
+          ? await getMethodSlabs((resolvedCfg as any).id)
+          : [];
+        if (resolvedCfg) methodsAppliedSet.add(methodType);
         // Ineligibility-criteria-exempt list: bypass the disqualification-criteria
         // block ONLY. Employees still flow through PMS-score → slab → increment
         // normally and remain subject to confirmation-increment rules. Every active
@@ -679,7 +691,13 @@ Deno.serve(async (req) => {
           reason = adjustment.adjustmentReason;
         }
 
-        if (pmsScore === null) {
+        if (!resolvedCfg) {
+          // No method config matches this employee's scope. Surface as
+          // 'no_score' with a precise remark, and skip slab/method math.
+          eligibility = 'no_score';
+          reason = 'No increment method configured for employee scope';
+          countNoMethodScope++;
+        } else if (pmsScore === null) {
           if (eligibility === 'eligible') {
             eligibility = 'no_score';
             reason = 'No PMS score found';
@@ -786,7 +804,8 @@ Deno.serve(async (req) => {
           ineligible: countIneligible,
           no_score: countNoScore,
           criteria_exempt: countCriteriaExempt,
-          method: methodType,
+          methods_applied: Array.from(methodsAppliedSet),
+          no_method_scope: countNoMethodScope,
           annual_method: annualMethod,
         },
       }).eq('id', runId);
