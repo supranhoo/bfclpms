@@ -1,59 +1,62 @@
-## Assumptions
-- The selected Assessment Year is stored as `2025-26`, while the UI label renders it as `AY 2025-26`.
-- HR/Admin save and import permissions are working because the database contains the imported row for employee `Jaspal (101125)`.
-- No schema change is required unless we decide to add a database-level foreign key later; the immediate defect is in frontend query/display logic.
+## What the "Score Changed (Safety Net)" card actually is
 
-## Clarifications
-Not Applicable.
+This is **not** an automatic score recalculation. It is an **audit-only catch-net** written by the DB trigger `public.log_untracked_submission_changes()` (migration `20260505134535_…`).
 
-## Risk & Impact Report
-- **Data Impact:** Existing `increment_inputs` rows are safe. I will not alter historical data.
-- **Workflow Impact:** No change to save/import/calculate workflow; only the read/display path changes.
-- **UI/UX Impact:** Rows will appear in the same table after manual save/import; search by employee name/code remains available.
-- **Regression Risk:** Low-medium because the current list query relies on an embedded relationship name that is not actually present in the database metadata.
-- **Scalability Impact:** Preserve server-side pagination at 50 rows/page. Employee enrichment will be batched only for visible page rows, avoiding full dataset loads.
-- **Mitigation Plan:** Replace fragile embedded join reads with a two-step paginated read: fetch `increment_inputs`, then fetch only the visible employees from `profiles` by ID and merge in memory. Add unit coverage for enrichment so this cannot regress.
+That trigger fires on every `UPDATE review_submissions` and inserts a `SUBMISSION_SCORE_CHANGED` row into `kpi_audit_logs` **only when** one of these columns actually changed:
+`self_score, manager_score, skip_level_score, hr_pms_score, auditor_score, management_score, final_score`.
 
-## RCA
-- **Symptom:** Toast says “Saved” / “Imported 1 rows”, but table still shows `0 total`.
-- **Database finding:** The row exists in `public.increment_inputs` for AY `2025-26`, and it maps to profile `Jaspal / 101125`.
-- **Root cause:** The page query uses PostgREST embedded relationship syntax:
-  `employee:profiles!increment_inputs_employee_id_fkey(...)`.
-  However, the live `increment_inputs` table has no discoverable foreign-key constraint for `employee_id`, so the relationship embed is not reliable. That makes the list query fail/drop the result path even though the upsert itself succeeds.
-- **Why both manual and upload fail visually:** Both write to the same table successfully, then the same broken list query is used to reload the table.
+It tags the row with `metadata.source = 'safety_net_trigger'` and stamps `performed_by = auth.uid()` (whichever user's session ran the UPDATE — in your screenshot, Shekhar Sharad).
 
-## Step-by-step Plan
-1. Update `src/hooks/useIncrementInputs.ts` so `useIncrementInputs`:
-   - queries `increment_inputs` directly by `assessment_year`, ordered by `updated_at`, paginated at 50 rows;
-   - fetches only the visible page’s employee profiles by `employee_id`;
-   - merges `{ employee: { id, full_name, employee_code } }` into each row;
-   - applies employee name/code search safely without relying on a missing embedded FK.
-2. Keep `useUpsertIncrementInput` and `useBulkImportIncrementInputs` write behavior unchanged, but ensure query invalidation still refreshes all variants of the inputs list for the AY.
-3. Update/confirm `src/pages/incentive/IncrementInputs.tsx` only if needed for the new hook return shape; table rendering should remain visually unchanged.
-4. Add a focused regression test and mock data for the two-step enrichment/search behavior.
-5. Update `DOCUMENTATION.md` version history and `POLICY.md` to record the invariant: Increment Inputs display must read by stored `employee_id` and enrich via profiles, not rely on an implicit FK embed.
+## Why the UI shows it as a standalone card
 
-## UI Changes
-- **Exact location:** Increment Inputs > Enter Inputs tab > Employee Inputs table.
-- **Visual change:** No redesign. Rows that were already saved/imported will now display.
-- **Interaction impact:** Manual Add, Excel Import, Edit, Search, and pagination remain the same.
-- **Responsiveness:** No new layout changes; existing table behavior retained.
+`src/lib/timelineGrouping.ts` groups side-effect rows under the **human action** that ran in the same transaction-second (e.g. `AUDITOR_REVIEW_*`, `MANAGER_*`, `BULK_*`, `SCORE_PERCOLATED`, `STATUS_CHANGED`, …). When a safety-net row has **no companion human-action row in the same TX-second**, it is shown as an **orphan** card titled *Score Changed (Safety Net)*.
 
-## Implementation
-Pending approval. No files changed in plan mode.
+So the card on screen means exactly this:
 
-## Tests
-- Add/adjust a unit test covering:
-  - direct input rows are enriched with employee name/code;
-  - search by employee code/name filters correctly;
-  - rows are not lost when no embedded FK relationship is available.
+> "A score column on this KPI was changed by an UPDATE statement that did **not** also insert a normal human-action audit row in the same transaction. The trigger caught it so the change is not invisible."
 
-## DOCUMENTATION.md updates
-- Add a version entry documenting the RCA and frontend read-path fix.
+That is by design — it is a regression-protection rail, not a feature that mutates data.
 
-## POLICY.md updates
-- Add an Increment Inputs display/read-path policy: save/import/calculate continue using canonical `employee_id`; frontend display/search must enrich profiles explicitly and preserve server-side pagination.
+## Likely sources of the orphan UPDATE (in priority order)
 
-## Post-implementation notes
-- Rollback strategy: revert the hook to the previous embedded join query if needed, with no database rollback required.
-- Backup impact: no new tables; existing automatic backup coverage remains unchanged.
+Candidates that update score columns without writing their own audit row in the same TX-second:
+1. **Send-back / stage-clearing flow** — when a stage is sent back, downstream `*_score` fields are nulled by a code path that audits `STATUS_CHANGED` separately (often a different timestamp) → orphan safety-net row.
+2. **Workflow Change Step-Back trigger** (`mem://features/admin/workflow-change-step-back`) — structural workflow edits revert dependent KPIs via DB trigger; the structural audit is on the *workflow* row, not the KPI row.
+3. **Recall / Self-Review withdrawal** clearing higher-stage scores.
+4. **Admin bypass / N/A clearing** (`mem://features/admin/admin-data-entry-workflow-controls`) when the client forgot to write a paired `ADMIN_*` audit row.
+5. **Score percolation** running in a separate statement than its `SCORE_PERCOLATED` audit insert.
+
+We can identify exactly which one applies by reading the audit row itself (it contains `old_value` and `new_value` JSONB blobs that pinpoint which column moved and from what → to what).
+
+## Investigation plan (read-only)
+
+Step 1 — Pinpoint the exact change
+- Query `kpi_audit_logs` for the affected KPI around `2026-05-28 15:53:xx` and inspect the `old_value` / `new_value` of the safety-net row. The differing key reveals **which score column** changed.
+- Query the **full audit trail for that KPI** (±2 minutes around 15:53) ordered by `created_at` to see what `STATUS_CHANGED`, `*_REVIEW_*`, `SEND_BACK`, `RECALL`, or `RECONCILE_STATUS` rows surround it. Same `performed_by` = same user session → same UI action.
+
+Step 2 — Map to code path
+- Match the column delta + surrounding actions to the code path list above. Use `rg` to confirm that path updates `review_submissions` but does **not** insert an explicit `kpi_audit_logs` row for the score change.
+
+Step 3 — Decide remediation (only after RCA confirmed)
+- If a legitimate code path is missing an audit insert → add the explicit audit row so the safety-net stops appearing orphaned (grouping will then nest it under the parent human action). No data-correction needed.
+- If an unintended UPDATE path is mutating scores → fix that path or tighten RLS/WITH-CHECK.
+- If the change was legitimate (e.g. admin correction) → no code change; document the case in `POLICY.md`.
+
+Step 4 — Update `DOCUMENTATION.md` § Audit Trail and `POLICY.md` § Safety-Net Logging with the finding and any added audit insert.
+
+Step 5 — Add a unit test to `src/lib/timelineGrouping.test.ts` covering the newly grouped pair (only if Step 3 adds an audit insert).
+
+## What I need from you to start Step 1
+
+Please share **one** of the following so I can read the exact audit row:
+- The KPI id (uuid) of the row in the screenshot, **or**
+- Employee name + KRA name + period (e.g. "Shekhar Sharad / Checking all the billing rates / April 2026") so I can look it up.
+
+Once I have that, I will run read-only queries against `kpi_audit_logs` and `review_submissions` and come back with the definitive root cause (which column changed, from what to what, by which code path) before proposing any code change.
+
+### Risk & Impact (for the investigation itself)
+- Data Impact: None. Read-only queries.
+- Workflow Impact: None.
+- UI/UX Impact: None until Step 3.
+- Regression Risk: None at investigation stage.
+- Mitigation: All actions in Step 1 are `SELECT`s only.
