@@ -81,7 +81,7 @@ export default function SafetyAssetDetail() {
   }
 
   return (
-    <div className="max-w-5xl mx-auto space-y-4">
+    <div className="w-full space-y-4">
       <div className="flex items-center gap-2">
         <Button variant="ghost" size="sm" asChild>
           <Link to="/safety/assets"><ArrowLeft className="h-4 w-4 mr-1" /> Back to register</Link>

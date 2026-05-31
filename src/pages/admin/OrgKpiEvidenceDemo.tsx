@@ -80,7 +80,7 @@ export default function OrgKpiEvidenceDemo() {
   const active = SCENARIOS.find(s => s.id === open) ?? null;
 
   return (
-    <div className="p-6 max-w-6xl mx-auto space-y-6">
+    <div className="p-6 w-full space-y-6">
       <Alert className="border-amber-400/60 bg-amber-50 dark:bg-amber-950/30">
         <AlertTriangle className="h-4 w-4 text-amber-700" />
         <AlertDescription className="text-xs text-amber-900 dark:text-amber-200">

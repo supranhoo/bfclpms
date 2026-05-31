@@ -46,7 +46,7 @@ export default function SafetyDrillDetail() {
 
   if (isLoading || !drill) {
     return (
-      <div className="p-3 sm:p-6 max-w-5xl mx-auto">
+      <div className="p-3 sm:p-6 w-full">
         <SafetySkeletonBlock variant="detail" />
       </div>
     );

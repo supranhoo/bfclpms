@@ -104,7 +104,7 @@ export default function SafetyPermitTypeConfig() {
   };
 
   return (
-    <div className="max-w-4xl mx-auto space-y-4">
+    <div className="w-full space-y-4">
       <Button variant="ghost" size="sm" onClick={() => navigate('/safety')}>
         <ArrowLeft className="h-4 w-4 mr-2" /> Back to Safety
       </Button>

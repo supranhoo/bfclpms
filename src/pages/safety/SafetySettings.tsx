@@ -70,7 +70,7 @@ export default function SafetySettings() {
   }
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6">
+    <div className="w-full space-y-6">
       <div className="flex flex-wrap items-start gap-4">
         <div className="p-3 rounded-xl bg-primary/10 text-primary">
           <Settings className="h-7 w-7" />

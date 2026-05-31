@@ -111,7 +111,7 @@ export default function SafetyAuditLog() {
   };
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6">
+    <div className="w-full space-y-6">
       <div className="flex items-start gap-4">
         <div className="p-3 rounded-xl bg-destructive/10 text-destructive">
           <ScrollText className="h-7 w-7" />

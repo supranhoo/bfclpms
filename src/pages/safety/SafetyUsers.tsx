@@ -186,7 +186,7 @@ export default function SafetyUsers() {
   };
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6">
+    <div className="w-full space-y-6">
       <div className="rounded-md border bg-primary/5 px-4 py-3 flex items-start gap-3">
         <Sparkles className="h-4 w-4 text-primary mt-0.5" />
         <div className="flex-1 min-w-0 text-sm">

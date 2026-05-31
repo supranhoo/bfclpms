@@ -30,7 +30,7 @@ export default function SafetyEmergency() {
   const { data: drills = [], isLoading } = useDrills({ status, type });
 
   return (
-    <div className="max-w-6xl mx-auto space-y-4">
+    <div className="w-full space-y-4">
       <div className="flex flex-wrap items-start gap-4">
         <div className="p-3 rounded-xl bg-destructive/10 text-destructive">
           <Siren className="h-6 w-6" />
