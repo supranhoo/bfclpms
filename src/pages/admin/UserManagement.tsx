@@ -1564,8 +1564,8 @@ export default function UserManagement() {
 
           <DialogFooter className="pt-4 border-t">
             <Button variant="outline" onClick={() => setEditDialogOpen(false)}>Cancel</Button>
-            <Button onClick={handleSaveUser} disabled={updateUser.isPending}>
-              {updateUser.isPending ? 'Saving...' : 'Save Changes'}
+            <Button onClick={handleSaveUser} disabled={updateUser.isPending || editHydrating}>
+              {editHydrating ? 'Loading…' : updateUser.isPending ? 'Saving...' : 'Save Changes'}
             </Button>
           </DialogFooter>
         </DialogContent>
