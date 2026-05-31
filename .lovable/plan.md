@@ -1,38 +1,89 @@
 ## Goal
-Move "Module Hub" from a standalone admin sidebar entry into a section inside **System Settings**, matching the pattern used by other settings (Branding, Workflow, etc.).
+Introduce a new sidebar group **"KRA Settings"** and move the following entries out of **Administration** into it:
 
-## Changes
+- KRA Library (`/admin/templates`)
+- KRA Bundles (`/admin/bundles`)
+- All KRAs (`/admin/kpis`)
+- KRA Categories (`/admin/categories`)
+- KPI Mapping (`/admin/kpi-mapping`)
+- Weightage Matrix (`/admin/kpi-weightage`)
+- KPI Standardization (`/admin/kpi-standardization`)
 
-### 1. `src/pages/admin/SystemSettings.tsx`
-- Import `ModuleHubSettings` from `@/pages/admin/ModuleHubSettings`.
-- Import a suitable icon (`LayoutGrid` already imported, or use `Boxes`).
-- Add a new entry to `SETTINGS_SECTIONS`:
-  ```ts
-  { key: 'module-hub', label: 'Module Hub', icon: LayoutGrid }
-  ```
-  Placed near `feature-flags` (governance/visibility group).
-- Add a case in `renderSectionContent()`:
-  ```ts
-  case 'module-hub':
-    return <ModuleHubSettings />;
-  ```
+## Changes — `src/components/layout/AppSidebar.tsx`
 
-### 2. `src/components/layout/AppSidebar.tsx`
-- Remove the standalone `Module Hub` admin sidebar item (line 99).
+1. **Add new menu group** in `getStaticMenuItems`:
+   ```ts
+   kraSettings: [
+     { title: 'KRA Library',        icon: Library,        path: '/admin/templates',           menuKey: 'admin-templates',            roles: ['admin'] },
+     { title: 'KRA Bundles',        icon: Package,        path: '/admin/bundles',             menuKey: 'admin-bundles',              roles: ['admin'] },
+     { title: 'All KRAs',           icon: Target,         path: '/admin/kpis',                menuKey: 'admin-kpis',                 roles: ['admin'] },
+     { title: 'KRA Categories',     icon: ClipboardList,  path: '/admin/categories',          menuKey: 'admin-categories',           roles: ['admin'] },
+     { title: 'KPI Mapping',        icon: Target,         path: '/admin/kpi-mapping',         menuKey: 'admin-kpi-mapping',          roles: ['admin'] },
+     { title: 'Weightage Matrix',   icon: Percent,        path: '/admin/kpi-weightage',       menuKey: 'admin-weightage',            roles: ['admin'] },
+     { title: 'KPI Standardization',icon: GitMerge,       path: '/admin/kpi-standardization', menuKey: 'admin-kpi-standardization',  roles: ['admin'] },
+   ],
+   ```
 
-### 3. `src/App.tsx`
-- Keep `/admin/module-hub` route working by redirecting it to `/admin/settings?section=module-hub` (avoids broken bookmarks). Replace the existing route element with a `<Navigate>` redirect.
+2. **Remove those 7 entries** from `menuItems.admin`. Administration retains everything else (Admin Dashboard, User Management, Org KPI Data Entry, Org KPI Overview, PIP Management, Import Data, System Settings, Audit Logs, Observations, Rollback Requests, Email Logs, Pending Reviews, Incentive Config/Data, Increment Inputs, Employee Development).
 
-## UI Impact
-- Sidebar: "Module Hub" entry disappears from the Admin group.
-- System Settings: a new left-nav item "Module Hub" appears; selecting it renders the existing Module Hub admin UI (Safety kill switch, per-user grants, Branding Loader panel) inline within the settings shell.
-- Mobile: appears in the Section selector dropdown automatically.
-- Existing direct links to `/admin/module-hub` redirect into Settings.
+3. **Route classification** — extend `getSectionForPath` so the moved routes resolve to the new group (so it auto-expands on direct nav):
+   ```ts
+   const KRA_SETTINGS_PATHS = new Set([
+     '/admin/templates','/admin/bundles','/admin/kpis','/admin/categories',
+     '/admin/kpi-mapping','/admin/kpi-weightage','/admin/kpi-standardization',
+   ]);
+   if (KRA_SETTINGS_PATHS.has(pathname)) return 'kraSettings';
+   ```
+   (Checked before the generic `/admin` → `admin` fallback.)
+
+4. **Render the group** — add a `<CollapsibleSidebarGroup label="KRA Settings" …>` block in the SidebarContent JSX, placed **immediately above the Administration group**.
+
+## UI Preview
+
+```text
+SIDEBAR
+─────────────────────────────
+Main
+Manager Review
+Management
+HR PMS
+Audit
+Data Entry
+
+KRA SETTINGS              ▾   ← NEW collapsible group
+  📚 KRA Library
+  📦 KRA Bundles
+  🎯 All KRAs
+  📋 KRA Categories
+  🎯 KPI Mapping
+  % Weightage Matrix
+  ⇆ KPI Standardization
+
+ADMINISTRATION            ▾   ← these 7 items removed from here
+  Admin Dashboard
+  User Management
+  Org KPI Data Entry
+  Org KPI Overview
+  PIP Management
+  Import Data
+  System Settings
+  Audit Logs
+  Observations
+  Rollback Requests
+  Email Logs
+  Pending Reviews
+  Incentive Config
+  Incentive Data Entry
+  Increment Inputs
+  Employee Development
+
+Reports
+```
 
 ## Out of scope
-- No change to `ModuleHubSettings` component internals.
-- No changes to the user-facing `/modules` (Module Hub launcher) page.
-- No schema, RLS, or policy changes.
+- No route changes — URLs, pages, and permissions (`menuKey` access via `useMenuAccess`) are preserved exactly.
+- No DB/menu-access-rights schema changes; existing menu keys continue to gate visibility.
+- No changes to PageHeader titles on the individual pages.
 
 ## Risk
-Low — purely a navigation reshuffle; the underlying component and data hooks are reused as-is.
+Low — pure sidebar reorganization. Existing `menuKey` access control, deep-links, and routes continue to work; only the visual grouping changes.
