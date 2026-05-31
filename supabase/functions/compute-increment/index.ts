@@ -924,53 +924,27 @@ Deno.serve(async (req) => {
                 eligibility = 'ineligible';
                 reason = 'GDOJ missing for prorated increment calculation';
                 eligiblePercent = 0;
-                methodNotes = 'Prorated by GDOJ · skipped (GDOJ missing)';
-                items.push({
-                  run_id: runId,
-                  employee_id: p.id,
-                  pms_score: pmsScore,
-                  rating_band: ratingBand,
-                  slab_percent: slabPercent,
-                  eligibility_status: eligibility,
-                  ineligibility_reason: reason,
-                  method_used: null,
-                  eligible_percent: null,
-                  service_months: +monthsServed.toFixed(2),
-                  current_salary: currentSalary,
-                  increment_amount: null,
-                  revised_salary: null,
-                  remarks: input?.remarks ?? null,
-                  criteria_exempt: isCriteriaExempt,
-                  exemption_reason: exemptionReason,
-                  confirmation_treatment: adjustment.treatmentApplied,
-                  confirmation_granted: !!p.confirmation_increment_granted,
-                  confirmation_effective_date: p.confirmation_increment_effective_date ?? null,
-                  period_covered_months: adjustment.periodCoveredMonths,
-                  balance_eligible_months: adjustment.balanceEligibleMonths,
-                  carry_forward_months: adjustment.carryForwardMonths,
-                  final_eligible_months: adjustment.finalEligibleMonths,
-                  adjustment_reason: adjustment.adjustmentReason,
-                  transition_key: adjustment.transitionKey ?? null,
-                  pre_confirmation_status: preConfirmationStatus,
-                  transition_source: transitionSource,
-                });
-                countIneligible++;
-                continue;
+                methodNotes = '';
+                incrementAmount = null;
+                revisedSalary = null;
+              } else {
+                // Honour any confirmation-adjustment ceiling already applied.
+                monthsForMethod = Math.min(ayMonths.months, effectiveMonths);
+                proratedNote = cutoffDecisionNote;
               }
-              // Honour any confirmation-adjustment ceiling already applied.
-              monthsForMethod = Math.min(ayMonths.months, effectiveMonths);
-              proratedNote = cutoffDecisionNote;
             } else if (effectiveMethod === 'custom') {
               // Custom slab matching uses the cutoff-aware whole-month count.
               monthsForMethod = Math.min(ayMonths.months, effectiveMonths);
               proratedNote = cutoffDecisionNote;
             }
-            const res = applyMethod(effectiveMethod, slabPercent ?? 0, monthsForMethod, methodSlabs, proratedNote);
-            eligiblePercent = res.eligible;
-            methodNotes = res.notes;
-            if (currentSalary !== null) {
-              incrementAmount = +(currentSalary * (eligiblePercent / 100)).toFixed(2);
-              revisedSalary = +(currentSalary + incrementAmount).toFixed(2);
+            if (eligibility === 'eligible') {
+              const res = applyMethod(effectiveMethod, slabPercent ?? 0, monthsForMethod, methodSlabs, proratedNote);
+              eligiblePercent = res.eligible;
+              methodNotes = res.notes;
+              if (currentSalary !== null) {
+                incrementAmount = +(currentSalary * (eligiblePercent / 100)).toFixed(2);
+                revisedSalary = +(currentSalary + incrementAmount).toFixed(2);
+              }
             }
           }
         }
