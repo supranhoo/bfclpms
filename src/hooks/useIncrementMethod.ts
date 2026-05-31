@@ -111,10 +111,23 @@ export function useSaveIncrementMethod() {
     }) => {
       const { scope, method, slabs, existing } = args;
       const user = (await supabase.auth.getUser()).data.user;
-      if (existing) {
-        await supabase.from('increment_method_configs').update({ status: 'archived' }).eq('id', existing.id);
+      // Archive ALL currently-active rows for the scope, not just the
+      // `existing` row the caller fetched. Prevents duplicate active rows
+      // (RCA ADR-071) when stale duplicates were introduced by earlier saves
+      // or imports. The DB partial-unique index is the ultimate guard.
+      const { data: actives } = await applyScope(
+        supabase.from('increment_method_configs').select('id, version').eq('status', 'active'),
+        scope,
+      );
+      const activeRows = (actives as Array<{ id: string; version: number }> | null) ?? [];
+      if (activeRows.length > 0) {
+        await supabase
+          .from('increment_method_configs')
+          .update({ status: 'archived' })
+          .in('id', activeRows.map((r) => r.id));
       }
-      const nextVersion = (existing?.version ?? 0) + 1;
+      const maxActiveVersion = activeRows.reduce((m, r) => Math.max(m, r.version ?? 0), 0);
+      const nextVersion = Math.max(maxActiveVersion, existing?.version ?? 0) + 1;
       const { data: inserted, error } = await supabase
         .from('increment_method_configs')
         .insert([{
@@ -172,13 +185,21 @@ export function useCopyIncrementMethodFromYear() {
         .eq('method_config_id', (src as any).id)
         .order('sort_order');
 
-      const { data: existing } = await applyScope(
-        supabase.from('increment_method_configs').select('*').eq('status', 'active'),
+      // Archive ALL currently-active rows for the destination scope (RCA ADR-071).
+      const { data: existingActives } = await applyScope(
+        supabase.from('increment_method_configs').select('id, version').eq('status', 'active'),
         toScope,
-      ).maybeSingle();
-      if (existing) {
-        await supabase.from('increment_method_configs').update({ status: 'archived' }).eq('id', (existing as any).id);
+      );
+      const existingRows = (existingActives as Array<{ id: string; version: number }> | null) ?? [];
+      if (existingRows.length > 0) {
+        await supabase
+          .from('increment_method_configs')
+          .update({ status: 'archived' })
+          .in('id', existingRows.map((r) => r.id));
       }
+      const existing = existingRows.length > 0
+        ? existingRows.reduce((a, b) => ((a.version ?? 0) >= (b.version ?? 0) ? a : b))
+        : null;
       const user = (await supabase.auth.getUser()).data.user;
       const nextVersion = ((existing as any)?.version ?? 0) + 1;
       const { data: inserted, error } = await supabase
