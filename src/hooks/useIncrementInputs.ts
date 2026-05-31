@@ -31,25 +31,49 @@ export function useIncrementInputs(
       const from = page * pageSize;
       const to = from + pageSize - 1;
       const term = search.trim();
-      const selectExpr = term
-        ? '*, employee:profiles!increment_inputs_employee_id_fkey!inner(id, full_name, employee_code)'
-        : '*, employee:profiles!increment_inputs_employee_id_fkey(id, full_name, employee_code)';
-      let query = supabase
+
+      // When searching, first resolve matching employee_ids from profiles, then
+      // filter increment_inputs by those ids. Avoids relying on PostgREST FK embeds.
+      let matchedIds: string[] | null = null;
+      if (term) {
+        const safe = term.replace(/[,()*%]/g, ' ').trim();
+        if (safe) {
+          const { data: profs, error: pErr } = await (supabase as any)
+            .from('profiles')
+            .select('id')
+            .or(`full_name.ilike.%${safe}%,employee_code.ilike.%${safe}%`)
+            .limit(2000);
+          if (pErr) throw pErr;
+          matchedIds = (profs ?? []).map((p: any) => p.id);
+          if (matchedIds.length === 0) {
+            return { rows: [], total: 0 };
+          }
+        }
+      }
+
+      let q = supabase
         .from('increment_inputs' as any)
-        .select(selectExpr, { count: 'exact' })
+        .select('*', { count: 'exact' })
         .eq('assessment_year', assessmentYear!)
         .order('updated_at', { ascending: false })
         .range(from, to);
-      if (term) {
-        const safe = term.replace(/[,()*]/g, ' ').trim();
-        query = (query as any).or(
-          `full_name.ilike.%${safe}%,employee_code.ilike.%${safe}%`,
-          { foreignTable: 'employee' },
-        );
-      }
-      const { data, error, count } = await query;
+      if (matchedIds) q = (q as any).in('employee_id', matchedIds);
+      const { data, error, count } = await q;
       if (error) throw error;
-      return { rows: (data as any[]) ?? [], total: count ?? 0 };
+
+      const rows = (data as any[]) ?? [];
+      const ids = Array.from(new Set(rows.map((r) => r.employee_id).filter(Boolean)));
+      let empMap = new Map<string, { id: string; full_name: string | null; employee_code: string | null }>();
+      if (ids.length) {
+        const { data: profs, error: pErr } = await (supabase as any)
+          .from('profiles')
+          .select('id, full_name, employee_code')
+          .in('id', ids);
+        if (pErr) throw pErr;
+        empMap = new Map((profs ?? []).map((p: any) => [p.id, p]));
+      }
+      const enriched = rows.map((r) => ({ ...r, employee: empMap.get(r.employee_id) ?? null }));
+      return { rows: enriched, total: count ?? 0 };
     },
   });
 }
