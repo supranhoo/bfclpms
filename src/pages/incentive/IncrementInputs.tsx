@@ -28,6 +28,15 @@ import * as XLSX from 'xlsx';
 import { fmt2, fmtFloor2 } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { IncrementInputDialog } from '@/components/incentive/IncrementInputDialog';
+import { TRANSITION_LABELS, type ConfirmationTransition } from '@/lib/confirmationIncrementAdjuster';
+
+/** Render the confirmation-adjustment transition for a run row. */
+const transitionLabel = (r: any): string => {
+  const key = r?.transition_key as ConfirmationTransition | null | undefined;
+  if (key && TRANSITION_LABELS[key]) return TRANSITION_LABELS[key];
+  if (r?.pre_confirmation_status) return `${r.pre_confirmation_status} → Confirmation`;
+  return '—';
+};
 import { useActiveEmployeesForCopy } from '@/hooks/useActiveEmployeesForCopy';
 import { EmployeeMultiSelect } from '@/components/incentive/EmployeeMultiSelect';
 import { IncrementResultEditDialog } from '@/components/incentive/IncrementResultEditDialog';
