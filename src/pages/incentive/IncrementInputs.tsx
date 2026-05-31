@@ -353,6 +353,9 @@ function CalculateIncrementTab({ year }: { year: string }) {
       final_eligible_months: r.final_eligible_months ?? '',
       treatment_applied: r.confirmation_treatment ?? '',
       adjustment_reason: r.adjustment_reason ?? '',
+      transition: transitionLabel(r),
+      pre_confirmation_status: r.pre_confirmation_status ?? '',
+      transition_source: r.transition_source ?? '',
     }));
 
   const exportRun = async () => {
