@@ -1546,6 +1546,92 @@ export type Database = {
         }
         Relationships: []
       }
+      general_eligibility_audit: {
+        Row: {
+          action: string
+          assessment_year: string | null
+          changed_at: string
+          changed_by: string | null
+          config_id: string | null
+          id: string
+          new_value: Json | null
+          previous_value: Json | null
+        }
+        Insert: {
+          action: string
+          assessment_year?: string | null
+          changed_at?: string
+          changed_by?: string | null
+          config_id?: string | null
+          id?: string
+          new_value?: Json | null
+          previous_value?: Json | null
+        }
+        Update: {
+          action?: string
+          assessment_year?: string | null
+          changed_at?: string
+          changed_by?: string | null
+          config_id?: string | null
+          id?: string
+          new_value?: Json | null
+          previous_value?: Json | null
+        }
+        Relationships: []
+      }
+      general_eligibility_configs: {
+        Row: {
+          assessment_year: string
+          category_ids: string[]
+          copied_from_id: string | null
+          created_at: string
+          created_by: string | null
+          employment_statuses: string[]
+          id: string
+          level_ids: string[]
+          min_service_months: number
+          status: string
+          updated_at: string
+          version: number
+        }
+        Insert: {
+          assessment_year: string
+          category_ids?: string[]
+          copied_from_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          employment_statuses?: string[]
+          id?: string
+          level_ids?: string[]
+          min_service_months?: number
+          status?: string
+          updated_at?: string
+          version?: number
+        }
+        Update: {
+          assessment_year?: string
+          category_ids?: string[]
+          copied_from_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          employment_statuses?: string[]
+          id?: string
+          level_ids?: string[]
+          min_service_months?: number
+          status?: string
+          updated_at?: string
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "general_eligibility_configs_copied_from_id_fkey"
+            columns: ["copied_from_id"]
+            isOneToOne: false
+            referencedRelation: "general_eligibility_configs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       iac_audit_log: {
         Row: {
           action: string
@@ -2641,6 +2727,57 @@ export type Database = {
           },
         ]
       }
+      increment_inputs: {
+        Row: {
+          absent_days: number
+          assessment_year: string
+          created_at: string
+          current_salary: number | null
+          disciplinary_actions: number
+          dynamic_metrics: Json
+          employee_id: string
+          id: string
+          lwp_days: number
+          remarks: string | null
+          source: string
+          training_compliance: number
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          absent_days?: number
+          assessment_year: string
+          created_at?: string
+          current_salary?: number | null
+          disciplinary_actions?: number
+          dynamic_metrics?: Json
+          employee_id: string
+          id?: string
+          lwp_days?: number
+          remarks?: string | null
+          source?: string
+          training_compliance?: number
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          absent_days?: number
+          assessment_year?: string
+          created_at?: string
+          current_salary?: number | null
+          disciplinary_actions?: number
+          dynamic_metrics?: Json
+          employee_id?: string
+          id?: string
+          lwp_days?: number
+          remarks?: string | null
+          source?: string
+          training_compliance?: number
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
       increment_method_configs: {
         Row: {
           assessment_year: string
@@ -2743,6 +2880,209 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      increment_run_items: {
+        Row: {
+          created_at: string
+          current_salary: number | null
+          eligibility_status: string
+          eligible_percent: number | null
+          employee_id: string
+          id: string
+          increment_amount: number | null
+          ineligibility_reason: string | null
+          method_used: string | null
+          pms_score: number | null
+          rating_band: string | null
+          remarks: string | null
+          revised_salary: number | null
+          run_id: string
+          service_months: number | null
+          slab_percent: number | null
+        }
+        Insert: {
+          created_at?: string
+          current_salary?: number | null
+          eligibility_status: string
+          eligible_percent?: number | null
+          employee_id: string
+          id?: string
+          increment_amount?: number | null
+          ineligibility_reason?: string | null
+          method_used?: string | null
+          pms_score?: number | null
+          rating_band?: string | null
+          remarks?: string | null
+          revised_salary?: number | null
+          run_id: string
+          service_months?: number | null
+          slab_percent?: number | null
+        }
+        Update: {
+          created_at?: string
+          current_salary?: number | null
+          eligibility_status?: string
+          eligible_percent?: number | null
+          employee_id?: string
+          id?: string
+          increment_amount?: number | null
+          ineligibility_reason?: string | null
+          method_used?: string | null
+          pms_score?: number | null
+          rating_band?: string | null
+          remarks?: string | null
+          revised_salary?: number | null
+          run_id?: string
+          service_months?: number | null
+          slab_percent?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "increment_run_items_run_id_fkey"
+            columns: ["run_id"]
+            isOneToOne: false
+            referencedRelation: "increment_runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      increment_runs: {
+        Row: {
+          assessment_year: string
+          completed_at: string | null
+          error_message: string | null
+          id: string
+          scope_snapshot: Json
+          status: string
+          summary: Json
+          triggered_at: string
+          triggered_by: string | null
+        }
+        Insert: {
+          assessment_year: string
+          completed_at?: string | null
+          error_message?: string | null
+          id?: string
+          scope_snapshot?: Json
+          status?: string
+          summary?: Json
+          triggered_at?: string
+          triggered_by?: string | null
+        }
+        Update: {
+          assessment_year?: string
+          completed_at?: string | null
+          error_message?: string | null
+          id?: string
+          scope_snapshot?: Json
+          status?: string
+          summary?: Json
+          triggered_at?: string
+          triggered_by?: string | null
+        }
+        Relationships: []
+      }
+      increment_slabs: {
+        Row: {
+          assessment_year: string
+          business_unit_ids: string[]
+          category_ids: string[]
+          company_ids: string[]
+          created_at: string
+          created_by: string | null
+          division_ids: string[]
+          extra_attributes: Json
+          id: string
+          increment_percent: number
+          increment_period: string | null
+          level_ids: string[]
+          location_ids: string[]
+          prorate_on_doj: boolean
+          rating_from: number
+          rating_to: number
+          sort_order: number
+          status: string
+          updated_at: string
+          version: number
+        }
+        Insert: {
+          assessment_year: string
+          business_unit_ids?: string[]
+          category_ids?: string[]
+          company_ids?: string[]
+          created_at?: string
+          created_by?: string | null
+          division_ids?: string[]
+          extra_attributes?: Json
+          id?: string
+          increment_percent: number
+          increment_period?: string | null
+          level_ids?: string[]
+          location_ids?: string[]
+          prorate_on_doj?: boolean
+          rating_from: number
+          rating_to: number
+          sort_order?: number
+          status?: string
+          updated_at?: string
+          version?: number
+        }
+        Update: {
+          assessment_year?: string
+          business_unit_ids?: string[]
+          category_ids?: string[]
+          company_ids?: string[]
+          created_at?: string
+          created_by?: string | null
+          division_ids?: string[]
+          extra_attributes?: Json
+          id?: string
+          increment_percent?: number
+          increment_period?: string | null
+          level_ids?: string[]
+          location_ids?: string[]
+          prorate_on_doj?: boolean
+          rating_from?: number
+          rating_to?: number
+          sort_order?: number
+          status?: string
+          updated_at?: string
+          version?: number
+        }
+        Relationships: []
+      }
+      increment_slabs_audit: {
+        Row: {
+          action: string
+          assessment_year: string | null
+          changed_at: string
+          changed_by: string | null
+          id: string
+          new_value: Json | null
+          previous_value: Json | null
+          slab_id: string | null
+        }
+        Insert: {
+          action: string
+          assessment_year?: string | null
+          changed_at?: string
+          changed_by?: string | null
+          id?: string
+          new_value?: Json | null
+          previous_value?: Json | null
+          slab_id?: string | null
+        }
+        Update: {
+          action?: string
+          assessment_year?: string | null
+          changed_at?: string
+          changed_by?: string | null
+          id?: string
+          new_value?: Json | null
+          previous_value?: Json | null
+          slab_id?: string | null
+        }
+        Relationships: []
       }
       kpi_audit_logs: {
         Row: {
