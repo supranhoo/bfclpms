@@ -219,12 +219,13 @@ function monthsBetween(from: Date, to: Date): number {
 
 /**
  * AY-bounded months served honoring the "Joining Month Cutoff Day" rule.
+ * Input date is GDOJ (group date of joining) for the prorated method.
  *
- *   - If DOJ is after the AY end → 0 months.
- *   - If DOJ is before the AY start → effectiveStart = AY start (cutoff
+ *   - If GDOJ is after the AY end → 0 months.
+ *   - If GDOJ is before the AY start → effectiveStart = AY start (cutoff
  *     irrelevant, decision = 'pre_ay').
- *   - Else: if DOJ day < cutoff → joining month counted (effectiveStart =
- *     first day of DOJ month). Otherwise excluded (effectiveStart = first
+ *   - Else: if GDOJ day < cutoff → joining month counted (effectiveStart =
+ *     first day of GDOJ month). Otherwise excluded (effectiveStart = first
  *     day of next month).
  *
  * Result is whole-month inclusive, clamped to [0, 12].
@@ -266,7 +267,7 @@ function applyMethod(method: string, basePercent: number, monthsServed: number, 
   if (method === 'full') return { eligible: basePercent, notes: 'Full' };
   if (method === 'prorated_doj') {
     const m = Math.max(0, Math.min(12, monthsServed));
-    const base = `Prorated by DOJ · ${m.toFixed(0)}/12`;
+    const base = `Prorated by GDOJ · ${m.toFixed(0)}/12`;
     const notes = proratedNote ? `${base} · ${proratedNote}` : base;
     return { eligible: +((basePercent / 12) * m).toFixed(4), notes };
   }
@@ -447,8 +448,8 @@ Deno.serve(async (req) => {
         admin.from('increment_eligibility_configs').select('id').eq('assessment_year', assessment_year).eq('status', 'approved').maybeSingle(),
         admin.from('increment_eligibility_exclusions').select('employee_id, reason').eq('assessment_year', assessment_year),
         (scopedEmployeeIds
-          ? admin.from('profiles').select('id, full_name, doj, employment_status, employee_category, level_id, company_id, location_id, department_id, is_active, previous_employment_status, confirmation_date, confirmation_increment_granted, confirmation_increment_effective_date').eq('is_active', true).in('id', scopedEmployeeIds)
-          : admin.from('profiles').select('id, full_name, doj, employment_status, employee_category, level_id, company_id, location_id, department_id, is_active, previous_employment_status, confirmation_date, confirmation_increment_granted, confirmation_increment_effective_date').eq('is_active', true)),
+          ? admin.from('profiles').select('id, full_name, doj, group_doj, employment_status, employee_category, level_id, company_id, location_id, department_id, is_active, previous_employment_status, confirmation_date, confirmation_increment_granted, confirmation_increment_effective_date').eq('is_active', true).in('id', scopedEmployeeIds)
+          : admin.from('profiles').select('id, full_name, doj, group_doj, employment_status, employee_category, level_id, company_id, location_id, department_id, is_active, previous_employment_status, confirmation_date, confirmation_increment_granted, confirmation_increment_effective_date').eq('is_active', true)),
         admin.from('confirmation_increment_rules').select('*').eq('assessment_year', assessment_year).eq('status', 'active'),
         admin.from('confirmation_increment_adjustments').select('employee_id, carry_forward_months, final_eligible_months, balance_eligible_months').eq('assessment_year', `${parseInt(assessment_year.split('-')[0], 10) - 1}-${String(parseInt(assessment_year.split('-')[0], 10)).slice(-2)}`),
         admin.from('departments').select('id, business_unit_id'),
