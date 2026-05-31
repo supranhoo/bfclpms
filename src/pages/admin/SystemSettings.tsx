@@ -700,6 +700,8 @@ export default function SystemSettings() {
         return <DataRepairTab />;
       case 'feature-flags':
         return <FeatureFlagsTab />;
+      case 'module-hub':
+        return <ModuleHubSettings />;
       case 'workflow':
         return <WorkflowConfigPage />;
       case 'organization':
