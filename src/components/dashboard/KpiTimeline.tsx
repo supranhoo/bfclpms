@@ -405,6 +405,17 @@ export function KpiTimeline({ isOpen, onClose, kpi, workflowStages: propStages }
                                 </div>
                               )}
 
+                              {getRemark(log) && (
+                                <div className="mt-2 rounded-md border bg-muted/40 px-3 py-2">
+                                  <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                                    Remark
+                                  </div>
+                                  <p className="mt-1 whitespace-pre-line text-sm text-foreground">
+                                    {getRemark(log)}
+                                  </p>
+                                </div>
+                              )}
+
                               {children.length > 0 && (
                                 <div className="mt-3 border-t pt-2">
                                   <button
@@ -438,6 +449,16 @@ export function KpiTimeline({ isOpen, onClose, kpi, workflowStages: propStages }
                                                 {cDetails.map((d, i) => (
                                                   <p key={i} className="text-xs text-muted-foreground">• {d}</p>
                                                 ))}
+                                              </div>
+                                            )}
+                                            {getRemark(c) && (
+                                              <div className="mt-1 ml-5 rounded border bg-muted/40 px-2 py-1">
+                                                <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                                                  Remark
+                                                </div>
+                                                <p className="mt-0.5 whitespace-pre-line text-xs text-foreground">
+                                                  {getRemark(c)}
+                                                </p>
                                               </div>
                                             )}
                                           </div>
