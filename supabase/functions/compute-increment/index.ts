@@ -165,8 +165,48 @@ function rollUpScores(scores: Array<{ score: number | null; month: number }>, me
   return +(chosen.reduce((a, s) => a + (s.score as number), 0) / chosen.length).toFixed(4);
 }
 
-function matchSlab(slabs: any[], score: number): any | null {
-  return slabs.find((s) => score >= Number(s.rating_from) && score <= Number(s.rating_to)) ?? null;
+// ──────────────────────────────────────────────────────────────────────────
+// Slab matcher (mirror of src/lib/slabMatcher.ts — keep in sync).
+// Picks the most-specific applicable slab; ties broken by sort_order, then
+// most-recent updated_at.
+// ──────────────────────────────────────────────────────────────────────────
+const SLAB_DIMS: Array<{ slab: string; emp: string }> = [
+  { slab: 'company_ids',       emp: 'company_id' },
+  { slab: 'division_ids',      emp: 'division_id' },
+  { slab: 'business_unit_ids', emp: 'business_unit_id' },
+  { slab: 'location_ids',      emp: 'location_id' },
+  { slab: 'category_ids',      emp: 'category_id' },
+  { slab: 'level_ids',         emp: 'level_id' },
+];
+function slabApplies(slab: any, emp: any): boolean {
+  for (const d of SLAB_DIMS) {
+    const scope = Array.isArray(slab[d.slab]) ? slab[d.slab] : [];
+    if (scope.length === 0) continue;
+    const v = emp[d.emp];
+    if (!v || !scope.includes(v)) return false;
+  }
+  return true;
+}
+function slabSpec(slab: any): number {
+  let n = 0;
+  for (const d of SLAB_DIMS) if (Array.isArray(slab[d.slab]) && slab[d.slab].length > 0) n++;
+  return n;
+}
+function pickSlab(slabs: any[], emp: any, score: number): any | null {
+  const cands = slabs.filter(
+    (s) => score >= Number(s.rating_from) && score <= Number(s.rating_to) && slabApplies(s, emp),
+  );
+  if (cands.length === 0) return null;
+  cands.sort((a, b) => {
+    const sa = slabSpec(a), sb = slabSpec(b);
+    if (sa !== sb) return sb - sa;
+    const oa = a.sort_order ?? 0, ob = b.sort_order ?? 0;
+    if (oa !== ob) return oa - ob;
+    const ua = a.updated_at ? Date.parse(a.updated_at) : 0;
+    const ub = b.updated_at ? Date.parse(b.updated_at) : 0;
+    return ub - ua;
+  });
+  return cands[0];
 }
 
 Deno.serve(async (req) => {
@@ -234,7 +274,7 @@ Deno.serve(async (req) => {
 
     try {
       // Load configs
-      const [annualCfg, methodCfg, generalElig, slabsRes, inputsRes, criteriaConfig, exclusionsRes, profilesRes, confRulesRes, prevAdjRes] = await Promise.all([
+      const [annualCfg, methodCfg, generalElig, slabsRes, inputsRes, criteriaConfig, exclusionsRes, profilesRes, confRulesRes, prevAdjRes, deptRes, buRes, divRes, catRes] = await Promise.all([
         admin.from('annual_score_configs').select('*').eq('assessment_year', assessment_year).eq('status', 'active').maybeSingle(),
         admin.from('increment_method_configs').select('*').eq('assessment_year', assessment_year).eq('status', 'active').maybeSingle(),
         admin.from('general_eligibility_configs').select('*').eq('assessment_year', assessment_year).order('version', { ascending: false }).limit(1).maybeSingle(),
@@ -242,9 +282,13 @@ Deno.serve(async (req) => {
         admin.from('increment_inputs').select('*').eq('assessment_year', assessment_year),
         admin.from('increment_eligibility_configs').select('id').eq('assessment_year', assessment_year).eq('status', 'approved').maybeSingle(),
         admin.from('increment_eligibility_exclusions').select('employee_id, reason').eq('assessment_year', assessment_year),
-        admin.from('profiles').select('id, full_name, employee_id, doj, employment_status, employee_category, level_id, category_id, company_id, is_active, previous_employment_status, confirmation_date, confirmation_increment_granted, confirmation_increment_effective_date').eq('is_active', true),
+        admin.from('profiles').select('id, full_name, employee_id, doj, employment_status, employee_category, level_id, category_id, company_id, location_id, department_id, is_active, previous_employment_status, confirmation_date, confirmation_increment_granted, confirmation_increment_effective_date').eq('is_active', true),
         admin.from('confirmation_increment_rules').select('*').eq('assessment_year', assessment_year).eq('status', 'active'),
         admin.from('confirmation_increment_adjustments').select('employee_id, carry_forward_months, final_eligible_months, balance_eligible_months').eq('assessment_year', `${parseInt(assessment_year.split('-')[0], 10) - 1}-${String(parseInt(assessment_year.split('-')[0], 10)).slice(-2)}`),
+        admin.from('departments').select('id, business_unit_id'),
+        admin.from('business_units').select('id, division_id'),
+        admin.from('divisions').select('id'),
+        admin.from('kra_categories').select('id, name'),
       ]);
 
       const annualMethod = (annualCfg.data as any)?.method ?? 'avg_all';
@@ -268,6 +312,30 @@ Deno.serve(async (req) => {
       const exclusionReasons = new Map<string, string>();
       ((exclusionsRes.data as any[]) ?? []).forEach((r) => exclusionReasons.set(r.employee_id, r.reason ?? null));
       const profiles = (profilesRes.data as any[]) ?? [];
+      // Build dimension resolver maps.
+      const deptToBu = new Map<string, string | null>();
+      ((deptRes.data as any[]) ?? []).forEach((d) => deptToBu.set(d.id, d.business_unit_id ?? null));
+      const buToDiv = new Map<string, string | null>();
+      ((buRes.data as any[]) ?? []).forEach((b) => buToDiv.set(b.id, b.division_id ?? null));
+      const catNameToId = new Map<string, string>();
+      ((catRes.data as any[]) ?? []).forEach((c) => {
+        if (c?.name) catNameToId.set(String(c.name).trim().toLowerCase(), c.id);
+      });
+      function empDims(p: any) {
+        const buId = p.department_id ? deptToBu.get(p.department_id) ?? null : null;
+        const divId = buId ? buToDiv.get(buId) ?? null : null;
+        const catId = p.category_id
+          ?? (p.employee_category ? catNameToId.get(String(p.employee_category).trim().toLowerCase()) : null)
+          ?? null;
+        return {
+          company_id: p.company_id ?? null,
+          division_id: divId,
+          business_unit_id: buId,
+          location_id: p.location_id ?? null,
+          category_id: catId,
+          level_id: p.level_id ?? null,
+        };
+      }
       const confRules = (confRulesRes.data as any[]) ?? [];
       const prevAdjByEmp = new Map<string, any>();
       ((prevAdjRes.data as any[]) ?? []).forEach((r) => prevAdjByEmp.set(r.employee_id, r));
@@ -411,7 +479,7 @@ Deno.serve(async (req) => {
             reason = 'No PMS score found';
           }
         } else {
-          const slab = matchSlab(slabs, pmsScore);
+          const slab = pickSlab(slabs, empDims(p), pmsScore);
           if (slab) {
             slabPercent = Number(slab.increment_percent);
             ratingBand = `${slab.rating_from}-${slab.rating_to}`;

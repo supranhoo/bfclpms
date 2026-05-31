@@ -1,65 +1,115 @@
 ## Goal
-Add a **"Download Range"** option on the KPI Scorecard Detail report so Admin/HR can export all KPI rows for a contiguous month range (e.g. Sep 2025 → Apr 2026) in a single Excel file — without changing the on-screen single-month view.
+Extend **Increment Slabs** so the same rating band can carry different Increment % values depending on org dimensions (Company, Division, Business Unit, Location, Category, Level) and the existing **Prorate on DOJ** flag — matching the matrix in Image 2.
 
-## Assumptions
-- Range export reuses the **same row shape and column set** as today's single-month export (no new fields). The existing `Month` column already distinguishes periods inside one sheet.
-- Period iteration uses the existing `review_period` (month name) + `review_year` columns on `kpis` — one fetch per (month, year) pair in the range.
-- Same RLS / company / department / search filters that apply to the on-screen view also apply to the range export, so an Auditor never exports rows they cannot see.
-- Range is **inclusive** on both ends. Hard cap **12 months** per export to protect the browser and Data API.
+## Good news: schema already supports this
+The `public.increment_slabs` table was created in migration `20260531063030...sql` with these columns already present (currently unused by the UI):
+
+- `company_ids UUID[]`
+- `division_ids UUID[]`
+- `business_unit_ids UUID[]`
+- `location_ids UUID[]`
+- `category_ids UUID[]`
+- `level_ids UUID[]`
+- `sort_order INTEGER`
+
+So **no migration is required**. This is a UI + matcher change only.
 
 ## Risk & Impact Report
-- **Data:** Read-only. No schema, no writes.
-- **Workflow:** Additive UI button; existing single-month "Export" stays unchanged.
-- **UI/UX:** One new outline button next to existing **Export**, opens a small popover with From/To selectors and a download button. No layout reflow.
-- **Regression:** Low. New code path is isolated in `handleRangeExport`; current `handleExport` is untouched.
-- **Scalability:** Each month already pages through `kpis` in 1000-row chunks and pulls `review_submissions` in 500-id chunks. For a 12-month range with ~1.8K KPIs/month, that's ~22K rows — within XLSX and browser limits. We hard-cap at 12 months and show a progress toast ("Fetching 3/8 …"). Sequential fetch keeps DB load identical to today's flow, just N times.
-- **Rollback:** Pure additive UI + one helper function; revert the file.
+- **Data impact**: None to existing rows. Existing slabs have empty `*_ids` arrays → interpreted as "applies to everyone" (fully backward compatible). No historical recompute needed.
+- **Workflow impact**: Admin/HR gets a richer slab editor. Compute job (`compute-increment`) needs a smarter `matchSlab` so it picks the most-specific slab for each employee.
+- **Calculation impact (the important one)**: With scoped slabs, two+ rows can cover the same rating band. We must define a deterministic precedence, otherwise the same employee could get different % on re-runs. Proposed rule:
+  1. Slab is *applicable* if, for every dimension, the slab's array is empty OR contains the employee's value for that dimension.
+  2. Among applicable slabs whose `[rating_from, rating_to]` contains the score, pick the one with the **highest specificity score** (count of non-empty dimension arrays that matched the employee).
+  3. Tie-breaker: lower `sort_order`, then most recently updated.
+- **Regression risk**: Low. Existing single-scope-less rows keep working identically (specificity = 0, always wins when nothing more specific exists).
+- **UI/UX**: Table grows wider; we move detailed editing into a side **Sheet** so the main grid stays readable. Inline columns show summary chips ("All companies", "2 divisions", …).
+- **Scalability**: Slab count per AY stays small (tens, not thousands). `matchSlab` runs in-memory per employee — O(slabs × dimensions), negligible.
+- **Mitigation**: Validation prevents *exact-duplicate scope* rows for the same rating band; preview banner shows which slab will apply to a sample employee.
 
-## UI Changes — `src/pages/reports/KpiScorecardDetail.tsx`
+## Scope of change
+1. **UI – `src/pages/increment/IncrementSlabs.tsx`**
+   - Replace the flat row editor with a grid + side-panel editor.
+   - New column layout (read mode):
+     ```text
+     | Rating From | Rating To | Increment % | Scope summary                          | Prorate | Action |
+     |    4.75     |   5.00    |    12 %     | All companies · L1, L2 · Plant Ops    |   Yes   |  ⋯    |
+     ```
+   - Click **Edit** (pencil) or **Add Row** opens a right-side `Sheet` containing:
+     - Rating From / Rating To / Increment % / Prorate on DOJ (existing fields).
+     - **Apply to** section with one `MultiSelect` per dimension:
+       Company · Division · Business Unit · Location · Category · Level.
+       Empty selection = "applies to all".
+     - Inline helper text: *"Leave a dimension empty to apply this slab to every value of that dimension."*
+     - **Specificity preview**: small badge showing how many dimensions are scoped, plus a one-line preview "Will apply to ~N employees" (computed via existing employee profile query, capped at 1000).
+   - **Add Row** button gets a small dropdown: *"Blank row"* | *"Duplicate selected slab"* (faster matrix entry).
+   - **Bulk matrix entry** helper: a "Generate from matrix" action that takes the standard 5 rating bands (4.75+, 4.50–4.74, 3.00–4.49, 2.10–3.00, 1.01–2.09) and a chosen single dimension to scope by, then pre-creates one draft row per (band × value) for the admin to fill.
+   - Validation in the Sheet:
+     - `rating_to ≥ rating_from`
+     - `0 ≤ increment_percent ≤ 100`
+     - Block save if another active slab in the same AY has the **identical scope + overlapping rating band** (exact duplicate). Warn (don't block) if scopes only partially overlap — that's the intended use.
+   - Keep existing **AY selector**, **Copy Previous Year**, **Delete confirmation dialog** behavior.
 
-Location: action row, immediately right of the existing **Export** button.
+2. **Hook – `src/hooks/useIncrementSlabs.ts`**
+   - Extend the upsert payload type to include the six `*_ids` arrays and `sort_order`.
+   - Add a small selector `findApplicableSlabs(slabs, employee, score)` exported for the UI preview.
 
+3. **Matcher – `src/lib/slabMatcher.ts` (new, pure)**
+   - `isSlabApplicable(slab, employee): boolean` — empty array passes; otherwise array must include the employee's value.
+   - `pickSlab(slabs, employee, score)` — implements the precedence rules above; returns the chosen slab or `null`.
+   - Unit-tested independently (no DB / no React) → satisfies the test-driven rule.
+
+4. **Edge function – `supabase/functions/compute-increment/index.ts`**
+   - Replace the current `matchSlab(slabs, score)` (line 168) with the new `pickSlab(slabs, employee, score)`.
+   - Employee dimension values come from the already-fetched `profilesRes` (it already includes company / division / business_unit / location / category / level ids — verify and add to the select if any are missing).
+   - `rating_band` label stays as `"{rating_from}-{rating_to}"`; we additionally store the matched scope summary in `run_items.remarks` for traceability.
+
+5. **Tests – `src/lib/slabMatcher.test.ts`**
+   - Single global slab still wins when no specific slab exists.
+   - Specific slab (e.g. Company=A) wins over global for an A employee.
+   - Two slabs matching same dimensions → `sort_order` tie-breaker.
+   - Slab with mismatched company is excluded even if rating matches.
+   - Employee missing a dimension value → only matches slabs that leave that dimension empty.
+
+6. **Docs & policy**
+   - `DOCUMENTATION.md` → "Increment Slabs" section: add the scope dimensions, precedence rules, matrix-entry helper.
+   - `POLICY.md` → "Increment % is determined by (Rating band × Org scope). Most specific applicable slab wins; ties resolved by sort order."
+   - `mem://features/incentive/core-engine-specifications` → append one line: "Slabs are scoped by 6 org dimensions; matcher picks most-specific applicable slab, ties broken by sort_order."
+
+## UI sketch (read view)
 ```text
-[ Export ]  [ ⬇ Download Range ▾ ]
-                    │
-                    ▼ (Popover, 320px)
-                    From  [ Sep ▾ ] [ 2025 ▾ ]
-                    To    [ Apr ▾ ] [ 2026 ▾ ]
-                    ───────────────────────────
-                    Spans 8 months · max 12
-                    [ Cancel ]   [ Download .xlsx ]
+Slabs for AY 2025-26                  [ AY ▾ ] [Copy Prev Year] [+ Add Row ▾]
+─────────────────────────────────────────────────────────────────────────────
+Rating From | Rating To | Inc % | Scope                              | Prorate | ⋯
+   4.75     |   5.00    | 12 %  | All companies · All divisions      |  Yes    | ✏ 🗑
+   4.75     |   5.00    | 14 %  | BFCL Alloys · Plant Ops · L4–L5    |  Yes    | ✏ 🗑
+   4.50     |   4.74    | 10 %  | All                                |  Yes    | ✏ 🗑
+   ...
 ```
 
-- **Trigger button:** outline, same height/size as Export, label "Download Range", `Download` icon.
-- **Popover content:** four shadcn Selects (From-month, From-year, To-month, To-year). Year list = `[selectedYear-1, selectedYear, selectedYear+1]` (same as existing filter, no new master data needed).
-- **Live counter** under the selects: "Spans N months · max 12". Turns destructive-red and disables the Download button when range is invalid (To before From) or > 12 months.
-- **Filters notice:** small muted line — "Applies current Company / Department / Search filters."
-- **Progress UX:** disable Download button while fetching; show toast "Fetching <Month> <Year> (3/8)…" between iterations; final success toast "Exported 22,418 rows across 8 months".
-- **Permission gate:** entire button hidden when `canDownload('kpi-scorecard-detail')` is false (same gate as existing Export).
-- **Responsive:** popover content uses `grid-cols-2 gap-2`; on `<sm` screens it stacks vertically. Button collapses to icon-only on `<md`.
+## UI sketch (edit Sheet)
+```text
+┌─ Edit Slab ──────────────────────────────────┐
+│ Rating From [ 4.75 ]   Rating To [ 5.00 ]    │
+│ Increment % [ 14 ]     Prorate on DOJ [✓]    │
+│                                              │
+│ Apply to (empty = all)                       │
+│  Company        [ BFCL Alloys ✕ ]      ▾    │
+│  Division       [ — any —            ] ▾    │
+│  Business Unit  [ Plant Ops ✕ ]        ▾    │
+│  Location       [ — any —            ] ▾    │
+│  Category       [ — any —            ] ▾    │
+│  Level          [ L4 ✕  L5 ✕ ]         ▾    │
+│                                              │
+│ Specificity: 3 dimensions scoped             │
+│ Preview: matches ~42 active employees        │
+│                                              │
+│              [ Cancel ]  [ Save Slab ]       │
+└──────────────────────────────────────────────┘
+```
 
-No other pages, columns, or layouts change.
+## Rollback
+Pure additive. To revert: ignore the new UI fields and slabs created with empty `*_ids` continue to behave as before. No destructive DB action.
 
-## Implementation Steps
-
-1. **Helper `fetchScorecardForPeriod(month, year)`** (new top-level function in the same file) — extract the existing `queryFn` body so both the React Query hook and the range exporter call the same code path. Pure refactor, zero behavior change for the on-screen view.
-2. **`handleRangeExport({fromMonth, fromYear, toMonth, toYear})`** — build the ordered list of `(month, year)` pairs from `MONTHS`, loop sequentially calling the helper, concat results, then apply the same Company / Department / Search filters and the same XLSX column mapping used by `handleExport`. File name: `KPI_Scorecard_${fromMonth}-${fromYear}_to_${toMonth}-${toYear}.xlsx`.
-3. **`RangeExportPopover`** (small local component in same file) — the popover UI above; emits `handleRangeExport` on submit.
-4. **Mount** the trigger next to the existing Export button inside the `canExport &&` block.
-
-No edge function, no migration, no hook changes outside this file.
-
-## Tests
-- `kpiScorecardRange.test.ts` (new) — pure helpers:
-  - `enumeratePeriods(from, to)` returns the correct ordered list (single month, 12-month wrap across years, reverse-range = empty).
-  - `validateRange` flags > 12 months, To-before-From, and same-month-same-year as valid (1 month).
-- Manual QA: open the page, pick Sep 2025 → Apr 2026, verify XLSX contains rows for all 8 months with the `Month` column populated.
-
-## SSOT
-- **DOCUMENTATION.md** → "Reports → KPI Scorecard Detail": document the range exporter, 12-month cap, filter semantics.
-- **POLICY.md** → no policy change (read-only export gated by existing `kpi-scorecard-detail` download permission).
-- **Memory:** append a one-liner under `mem://features/reports/` noting the range-export cap (12) and filter inheritance.
-
-## Post-implementation notes
-- 12-month cap is conservative; can be raised after measuring real-world payload sizes.
-- If users later ask to export thousands of months or many companies in one go, move this to a backend edge function streaming a CSV — out of scope for now.
+## Not Applicable
+- New migration (schema already has the columns).
+- Auth/RLS changes (existing policies cover all new behavior).
