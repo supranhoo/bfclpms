@@ -1,58 +1,59 @@
-# Revert Per-Stage Value Cascade in Bulk Override
+# Investigation: "Confirmation Date" and "Location" not visible
 
-## Assumptions
-- The screenshot shows Self / Manager / Skip-Level / HR PMS all displaying the same `Value: 16.66` after an admin override that the user only intended to apply at one stage (HR PMS / Management).
-- The cause is the previous change (migration `20260531111057` + backfill `20260531111218`) which overwrote `<stage>_achieved_value` and `<stage>_score` for **every** completed stage whenever an override happened.
-- Earlier stage values (Self, Manager, Skip-Level) belong to the original reviewer and **must not** be rewritten by an admin override at a later stage.
+## Finding — the code is already in place
 
-## Root Cause
-The previous "ADR-067 addendum" cascaded a single override into all completed `<stage>_*` columns. This violates stage ownership: each reviewer's recorded value at their stage must stay intact.
+The previously approved plan was fully implemented in the source tree. I re-verified every claim:
 
-The correct behavior:
-- An admin override updates the **top-level** `achieved_value` + `final_score` (single source of truth for the approved outcome).
-- The per-stage columns (`manager_*`, `skip_level_*`, `hr_pms_*`, `auditor_*`) record what *that reviewer* entered and must remain immutable from outside that stage.
-- Only the stage where the admin is currently acting (Management, in bulk approve) may be stamped — and even then only if that stage is the one being executed.
+| Surface | File | Lines | Status |
+|---|---|---|---|
+| Add User → Confirmation Date | `src/pages/admin/UserManagement.tsx` | 1615–1626 | ✅ rendered after DOJ |
+| Add User → Location | `src/pages/admin/UserManagement.tsx` | 1709–1717 | ✅ rendered after Employment Status |
+| Edit User → Confirmation Date | `src/pages/admin/UserManagement.tsx` | 1353 | ✅ present |
+| Edit User → Location | `src/pages/admin/UserManagement.tsx` | 1435 | ✅ present |
+| Create mutation payload | `src/pages/admin/UserManagement.tsx` | 740–741 | ✅ sends both |
+| Edit mutation payload | `src/pages/admin/UserManagement.tsx` | 711–712 | ✅ sends both |
+| Edge function accepts both | `supabase/functions/create-employee/index.ts` | 27, 149 | ✅ |
+| Excel template (download) | `src/pages/admin/ImportData.tsx` | 1775, 1781 | ✅ `location` and `confirmationDate` columns |
+| Excel parser | `src/pages/admin/ImportData.tsx` | 759–879 | ✅ |
+| Excel export | `src/pages/admin/ImportData.tsx` | 1800, 1863, 1868 | ✅ `location` & `confirmationDate` columns emitted |
+| Help text | `src/pages/admin/ImportData.tsx` | 2190 | ✅ |
+
+There is no code gap to fix.
+
+## Most likely reason the user can't see it
+
+The current browser session is on `/auth` (sign-in page), and the published URLs (`bfclpms.lovable.app`, `pms.bfclalloys.com`) only reflect a build at the time of the last **Publish** action. The fields were merged after that publish, so:
+
+1. The **live preview** (id-preview…lovable.app) should already show them — likely needs a hard refresh to bust the cached bundle.
+2. The **published site** will keep showing the old UI until the project is republished.
 
 ## Risk & Impact Report
-- **Data**: Backfill rewrote historical per-stage columns for rows touched since 2026-05-29. We must restore them from the audit-log snapshots (`STAGE_VALUES_BACKFILLED.old_value` and `STAGE_VALUES_OVERWRITTEN.old_value`).
-- **Workflow**: No status / final_score changes — only per-stage display columns are reverted.
-- **UI**: Review Journey cards will once again show each reviewer's own entered value (e.g., Self may show original employee submission, not 16.66).
-- **Regression**: The original complaint ("Score changed but Value didn't") will resurface unless we also keep the **top-level** `achieved_value` in sync (which we already do via the existing override path). The Review Journey UI must fall back to the top-level value where the stage column is the same as before the cascade — confirmed by current selector logic.
-- **Mitigation**: One-shot reversal driven by audit log; idempotent (uses earliest old_value per submission); wrapped with trigger disable/enable; dry-run COUNT logged.
+
+- **Data**: None.
+- **Workflow**: None.
+- **UI**: No changes — UI is already correct.
+- **Regression**: Nil — no code change.
+- **Mitigation**: Republish so end-users see the fields; verify on preview with a hard refresh.
 
 ## Plan
 
-### Step 1 — Code: stop cascading in `bulk_management_approve` override
-Replace the override branch so it only:
-- Sets top-level `achieved_value = v_ach_num`
-- Leaves all `<stage>_achieved_value` / `<stage>_score` columns untouched
-- Continues to write `STAGE_VALUES_OVERWRITTEN` audit (renamed semantics → `TOP_LEVEL_VALUE_OVERWRITTEN`) for traceability
-- Keeps the existing `org_kpi_values` back-write and final_score restamping (those remain correct)
+### Step 1 — Verify the live preview
+- Hard refresh the preview (Ctrl/Cmd+Shift+R).
+- Admin → Users → **Add New User** → confirm **Confirmation Date** sits after DOJ and **Location** sits after Employment Status.
+- Admin → Import/Export Data → **Download Employee Template** → confirm `location` and `confirmationDate` columns exist.
+- **Export Employees** → confirm both columns are populated.
 
-### Step 2 — Data repair: restore per-stage columns for affected rows
-For every `review_submissions` row that has a `STAGE_VALUES_BACKFILLED` **or** `STAGE_VALUES_OVERWRITTEN` audit entry created after `2026-05-31 11:10 UTC`:
-- Find the **earliest** such audit row per submission (its `old_value` holds the pre-cascade snapshot).
-- `UPDATE review_submissions SET manager_achieved_value = old.manager_achieved_value, …, manager_score = old.manager_score, …` from that JSONB snapshot.
-- Insert a new audit row `STAGE_VALUES_REVERTED` capturing old (current cascaded) and new (restored) per-stage values; `performed_by = NULL` (system repair).
-- Disable `check_period_lock_on_submission_update` trigger for the duration, then re-enable.
+### Step 2 — Publish so the change reaches `bfclpms.lovable.app` / `pms.bfclalloys.com`
+After approval I will surface the Publish action so the change goes live for end-users.
 
-### Step 3 — Verification
-- `SELECT id, achieved_value, manager_achieved_value, skip_level_achieved_value, hr_pms_achieved_value FROM review_submissions WHERE id = 'd11f4f08…';`
-- Confirm Self/Manager/Skip-Level values revert to original reviewer values; HR PMS/Management still reflect their own entries; top-level `achieved_value` and `final_score` still equal the admin-approved 16.66.
-- Review Journey UI for the sample employee shows distinct per-stage values where reviewers actually entered different numbers.
+### Step 3 — Only if the preview still misses something
+Drop into build mode and fix the specific missing surface. (None observed today.)
 
 ## UI Changes
-None. UI selectors already read `<stage>_*` columns and fall back to top-level `achieved_value` — once the per-stage columns are restored, each card will show its original value automatically.
-
-## Documentation / Policy Updates
-- `DOCUMENTATION.md` → Bulk Approve section: remove the "cascade per-stage values" note; document the corrected single-stage ownership rule.
-- `POLICY.md` → §88.1 / ADR-067 addendum: mark addendum as **reverted**; restate: *"An admin override updates `achieved_value` and `final_score` only. Per-stage `<stage>_achieved_value` / `<stage>_score` are owned by the reviewer who recorded them and are immutable from later stages."*
-- `mem://features/admin/submission-score-integrity` → add note: per-stage columns are stage-owned; do not cascade.
+No new UI changes. Only republishing.
 
 ## Files Touched
-- `supabase/migrations/<new>_revert_per_stage_cascade.sql` — function rewrite + data repair (single migration, transactional).
-- `DOCUMENTATION.md`, `POLICY.md`, `.lovable/plan.md`.
-- No frontend changes.
+None unless Step 3 is triggered.
 
 ## Rollback
-If repair misfires, the audit table retains the cascaded snapshots (`STAGE_VALUES_OVERWRITTEN.new_value` and `STAGE_VALUES_BACKFILLED.new_value`); a reverse migration can re-stamp them. Function change is a `CREATE OR REPLACE` — previous body is in git history.
+Not applicable (no code change in this plan).
