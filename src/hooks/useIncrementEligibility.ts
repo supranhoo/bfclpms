@@ -428,12 +428,12 @@ export function useEligibilityMasters() {
   return useQuery({
     queryKey: ['increment-eligibility-masters'],
     queryFn: async () => {
-      const [companies, divisions, bus, levels, categories, locations] = await Promise.all([
+      const [companies, divisions, bus, levels, employeeCategories, locations] = await Promise.all([
         supabase.from('companies').select('id,name').order('name'),
         supabase.from('divisions').select('id,name').order('name'),
         supabase.from('business_units').select('id,name').order('name'),
         supabase.from('levels').select('id,name').order('name'),
-        supabase.from('kra_categories').select('id,name').order('name'),
+        supabase.from('employee_categories').select('id,name').order('name'),
         supabase.from('locations').select('id,name').order('name'),
       ]);
       return {
@@ -441,7 +441,7 @@ export function useEligibilityMasters() {
         divisions: divisions.data ?? [],
         business_units: bus.data ?? [],
         levels: levels.data ?? [],
-        categories: categories.data ?? [],
+        employee_categories: employeeCategories.data ?? [],
         locations: locations.data ?? [],
       };
     },
