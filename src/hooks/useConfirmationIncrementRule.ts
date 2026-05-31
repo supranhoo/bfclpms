@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import type { ConfirmationTreatment } from '@/lib/confirmationIncrementAdjuster';
+import type { ConfirmationTransition } from '@/lib/confirmationIncrementAdjuster';
 
 export interface ConfirmationIncrementRuleRow {
   id: string;
@@ -16,6 +17,9 @@ export interface ConfirmationIncrementRuleRow {
   created_by: string | null;
   created_at: string;
   updated_at: string;
+  applicable_transitions: ConfirmationTransition[];
+  company_scope_mode: 'global' | 'selected' | 'per_company';
+  selected_company_ids: string[];
 }
 
 export interface ConfirmationRuleScope {
@@ -74,8 +78,14 @@ export function useSaveConfirmationIncrementRule() {
       treatment: ConfirmationTreatment;
       notes?: string | null;
       existing?: ConfirmationIncrementRuleRow | null;
+      applicableTransitions: ConfirmationTransition[];
+      companyScopeMode: 'global' | 'selected' | 'per_company';
+      selectedCompanyIds: string[];
     }) => {
-      const { scope, treatment, notes, existing } = args;
+      const {
+        scope, treatment, notes, existing,
+        applicableTransitions, companyScopeMode, selectedCompanyIds,
+      } = args;
       const user = (await supabase.auth.getUser()).data.user;
       if (existing) {
         await (supabase as any)
@@ -97,6 +107,9 @@ export function useSaveConfirmationIncrementRule() {
           status: 'active',
           copied_from_rule_id: existing?.id ?? null,
           created_by: user?.id ?? null,
+          applicable_transitions: applicableTransitions,
+          company_scope_mode: companyScopeMode,
+          selected_company_ids: selectedCompanyIds,
         }])
         .select('*')
         .single();

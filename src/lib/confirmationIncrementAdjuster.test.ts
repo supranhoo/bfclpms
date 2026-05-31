@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   adjustConfirmationIncrement,
   type AdjusterInput,
+  statusToTransition,
 } from './confirmationIncrementAdjuster';
 
 function base(over: Partial<AdjusterInput> = {}): AdjusterInput {
@@ -125,5 +126,64 @@ describe('adjustConfirmationIncrement', () => {
     );
     expect(r.periodCoveredMonths).toBeLessThanOrEqual(6);
     expect(r.finalEligibleMonths).toBeGreaterThanOrEqual(0);
+  });
+});
+
+describe('adjustConfirmationIncrement — transition eligibility gating', () => {
+  it('Trainee with rule[Trainee] → adjustment applied', () => {
+    const r = adjustConfirmationIncrement(base({
+      preConfirmationStatus: 'Trainee',
+      rule: { treatment: 'adjust_covered_period', applicableTransitions: ['trainee_to_confirmed'] },
+    }));
+    expect(r.treatmentApplied).toBe('adjust_covered_period');
+    expect(r.finalEligibleMonths).toBeLessThan(12);
+  });
+
+  it('Probation with rule[Trainee] → skipped, naive months returned', () => {
+    const r = adjustConfirmationIncrement(base({
+      preConfirmationStatus: 'Probation',
+      rule: { treatment: 'adjust_covered_period', applicableTransitions: ['trainee_to_confirmed'] },
+    }));
+    expect(r.treatmentApplied).toBe('ignore');
+    expect(r.finalEligibleMonths).toBe(12);
+    expect(r.adjustmentReason).toMatch(/not in rule applicability list/);
+  });
+
+  it('Probation with rule[Trainee, Probation] → adjustment applied', () => {
+    const r = adjustConfirmationIncrement(base({
+      preConfirmationStatus: 'Probation',
+      rule: {
+        treatment: 'adjust_covered_period',
+        applicableTransitions: ['trainee_to_confirmed', 'probation_to_confirmed'],
+      },
+    }));
+    expect(r.treatmentApplied).toBe('adjust_covered_period');
+  });
+
+  it('Unknown prior status with any rule → skipped', () => {
+    const r = adjustConfirmationIncrement(base({
+      preConfirmationStatus: null,
+      rule: { treatment: 'shift_next_cycle', applicableTransitions: ['trainee_to_confirmed'] },
+    }));
+    expect(r.treatmentApplied).toBe('ignore');
+    expect(r.finalEligibleMonths).toBe(12);
+  });
+
+  it('Legacy rule (no applicableTransitions field) → backward-compatible passthrough', () => {
+    const r = adjustConfirmationIncrement(base({
+      preConfirmationStatus: 'Probation',
+      // No applicableTransitions → behaves as before (no gating)
+      rule: { treatment: 'adjust_covered_period' },
+    }));
+    expect(r.treatmentApplied).toBe('adjust_covered_period');
+  });
+
+  it('statusToTransition maps known statuses case-insensitively', () => {
+    expect(statusToTransition('trainee')).toBe('trainee_to_confirmed');
+    expect(statusToTransition('PROBATION')).toBe('probation_to_confirmed');
+    expect(statusToTransition('Contract')).toBe('contract_to_confirmed');
+    expect(statusToTransition('Apprentice')).toBe('apprenticeship_to_confirmed');
+    expect(statusToTransition('Confirmed')).toBeNull();
+    expect(statusToTransition(null)).toBeNull();
   });
 });
