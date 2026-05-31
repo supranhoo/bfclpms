@@ -315,8 +315,8 @@ Deno.serve(async (req) => {
         admin.from('increment_inputs').select('*').eq('assessment_year', assessment_year),
         admin.from('increment_eligibility_configs').select('id').eq('assessment_year', assessment_year).eq('status', 'approved').maybeSingle(),
         admin.from('increment_eligibility_exclusions').select('employee_id, reason').eq('assessment_year', assessment_year),
-        (scopedEmployeeId
-          ? admin.from('profiles').select('id, full_name, doj, employment_status, employee_category, level_id, company_id, location_id, department_id, is_active, previous_employment_status, confirmation_date, confirmation_increment_granted, confirmation_increment_effective_date').eq('is_active', true).eq('id', scopedEmployeeId)
+        (scopedEmployeeIds
+          ? admin.from('profiles').select('id, full_name, doj, employment_status, employee_category, level_id, company_id, location_id, department_id, is_active, previous_employment_status, confirmation_date, confirmation_increment_granted, confirmation_increment_effective_date').eq('is_active', true).in('id', scopedEmployeeIds)
           : admin.from('profiles').select('id, full_name, doj, employment_status, employee_category, level_id, company_id, location_id, department_id, is_active, previous_employment_status, confirmation_date, confirmation_increment_granted, confirmation_increment_effective_date').eq('is_active', true)),
         admin.from('confirmation_increment_rules').select('*').eq('assessment_year', assessment_year).eq('status', 'active'),
         admin.from('confirmation_increment_adjustments').select('employee_id, carry_forward_months, final_eligible_months, balance_eligible_months').eq('assessment_year', `${parseInt(assessment_year.split('-')[0], 10) - 1}-${String(parseInt(assessment_year.split('-')[0], 10)).slice(-2)}`),
