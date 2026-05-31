@@ -39,6 +39,13 @@ describe('slabMatcher', () => {
     expect(picked?.id).toBe('2');
   });
 
+  it('employee_category scoping matches trainees only', () => {
+    const trainee = { ...base, id: 't', employee_category_ids: ['trainee'], increment_percent: 8 };
+    const global = { ...base, id: 'g' };
+    expect(pickSlab([global, trainee], { employee_category_id: 'trainee' }, 4.9)?.id).toBe('t');
+    expect(pickSlab([global, trainee], { employee_category_id: 'confirmed' }, 4.9)?.id).toBe('g');
+  });
+
   it('ties on specificity broken by lower sort_order', () => {
     const a = { ...base, id: 'a', company_ids: ['A'], sort_order: 5 };
     const b = { ...base, id: 'b', company_ids: ['A'], sort_order: 1 };
