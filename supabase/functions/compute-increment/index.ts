@@ -485,9 +485,11 @@ Deno.serve(async (req) => {
         // no category_id column; category is stored as text in employee_category.
         const dims = empDims(p);
         (p as any).category_id = dims.employee_category_id;
-        // Criteria-exempt list: bypass eligibility-criteria block ONLY.
-        // Employees still flow through PMS-score → slab → increment normally
-        // and remain subject to confirmation-increment rules.
+        // Ineligibility-criteria-exempt list: bypass the disqualification-criteria
+        // block ONLY. Employees still flow through PMS-score → slab → increment
+        // normally and remain subject to confirmation-increment rules. Every active
+        // row in `criteria` is treated generically as an ineligibility rule —
+        // breaching any one ⇒ eligibility = 'ineligible', eligible % = 0.
         const isCriteriaExempt = exclusions.has(p.id);
         const exemptionReason = isCriteriaExempt
           ? (exclusionReasons.get(p.id) ?? 'Per-AY criteria exemption')
