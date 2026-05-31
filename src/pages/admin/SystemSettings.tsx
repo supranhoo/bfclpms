@@ -32,6 +32,7 @@ import { AnnualScoreCalculationSection } from '@/components/admin/scoring/Annual
 import { IncrementMethodSection } from '@/components/admin/scoring/IncrementMethodSection';
 import GeneralEligibilityPage from '@/pages/increment/GeneralEligibility';
 import IncrementSlabsPage from '@/pages/increment/IncrementSlabs';
+import { ConfirmationIncrementSection } from '@/components/admin/scoring/ConfirmationIncrementSection';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -658,11 +659,13 @@ export default function SystemSettings() {
               <TabsTrigger value="method">Increment Method</TabsTrigger>
               <TabsTrigger value="general-eligibility">General Eligibility</TabsTrigger>
               <TabsTrigger value="increment-slabs">Increment Slabs</TabsTrigger>
+              <TabsTrigger value="confirmation-adjustment">Confirmation Adjustment</TabsTrigger>
             </TabsList>
             <TabsContent value="eligibility"><IncrementEligibilitySection /></TabsContent>
             <TabsContent value="method"><IncrementMethodSection /></TabsContent>
             <TabsContent value="general-eligibility"><GeneralEligibilityPage /></TabsContent>
             <TabsContent value="increment-slabs"><IncrementSlabsPage /></TabsContent>
+            <TabsContent value="confirmation-adjustment"><ConfirmationIncrementSection /></TabsContent>
           </Tabs>
         );
       case 'cycles':
