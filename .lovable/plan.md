@@ -1,84 +1,55 @@
-# Consolidate Workflow Config, Organization, Review Periods into System Settings
+## RCA
 
-## Goal
+Toast: `invalid input value for enum kpi_status: "approved"`.
 
-Reduce sidebar clutter by folding three admin-only entries — **Workflow Config**, **Organization**, **Review Periods** — into the existing **System Settings** page as new tabs/sections. Sidebar then drops from 3 separate links to a single entry-point.
+Confirmed in the live database:
+
+- `public.kpi_status` enum has **only** `open | submitted | approved_by_manager | locked`. There is no `approved` value.
+- `public.review_status` enum has `approved` (the terminal stage for `public.kpis.status`).
+- `public.kpis.status` is typed `review_status`; `public.review_submissions.kpi_status` is typed `kpi_status`.
+- `public.bulk_management_approve(...)` body currently contains:
+  - `kpi_status = 'approved'::kpi_status` ← invalid (value not in enum) → THIS is what the user sees.
+  - `kpis.status = 'approved'::workflow_stage` and `... <> 'approved'::workflow_stage` ← invalid (type `workflow_stage` does not exist; ADR-059 already established the canonical type is `review_status`).
+
+The previous plan proposed adding `'approved'` to `kpi_status`. That is the wrong fix — it pollutes a stable enum and contradicts the codebase convention where the terminal `kpi_status` written by every approval/lock path (see all `20260313…`, `20260324…`, `20260325…` migrations) is **`'locked'`**. The plan now uses the existing canonical values and changes **only** the RPC.
+
+## Plan
+
+Single migration: `CREATE OR REPLACE FUNCTION public.bulk_management_approve(...)` with two surgical changes inside the existing body — signature, RLS gate, audit-log writes, override/skip logic, return shape all unchanged:
+
+1. Replace `kpi_status = 'approved'::kpi_status` → `kpi_status = 'locked'::public.kpi_status` (canonical terminal value, matches every other final-stage writer).
+2. Replace both `'approved'::workflow_stage` casts → `'approved'::public.review_status` (ADR-059 contract; `workflow_stage` does not exist).
+3. Update the post-write drift guard at the bottom of the function to compare against the same corrected values (`kpi_status <> 'locked'::public.kpi_status OR k.status <> 'approved'::public.review_status`).
+
+No enum alteration. No data backfill. No schema change. No client-side change.
+
+### Tests / guards
+
+- Extend `src/test/orgKpiPropagateEnumGuard.test.ts` pattern with a new sibling guard `src/test/bulkManagementApproveEnumGuard.test.ts` that scans `supabase/migrations/**` and asserts:
+  - No occurrence of `'approved'::kpi_status` or `'approved'::workflow_stage`.
+  - The latest `bulk_management_approve` definition contains `'locked'::public.kpi_status` AND `'approved'::public.review_status`.
+
+### Docs / policy
+
+- `docs/adr/ADR-066.md` — new ADR: "Fix `bulk_management_approve` enum casts (`kpi_status`→`locked`, `workflow_stage`→`review_status`)". References ADR-059.
+- `DOCUMENTATION.md` Version History entry.
+- `POLICY.md` §88.1 footnote: terminal `review_submissions.kpi_status` for Management-approved rows is **`locked`** (already true for every other stage writer; this aligns the bulk path).
 
 ## Risk & Impact
 
-- **Data impact:** None. Pages, queries, RPCs unchanged.
-- **Workflow impact:** Admins reach the same screens one click deeper (Settings → tab). All existing routes remain valid so deep links / bookmarks keep working via redirect.
-- **Menu Access:** `menuKey` entries (`admin-workflow`, `admin-organization`, `admin-review-periods`) are now controlled inside Settings; we keep the keys alive so existing role profiles don't break and continue to gate the new tabs.
-- **Regression risk:** Low — pure navigation/composition change, no edits to the page bodies.
-- **Rollback:** Restore the three sidebar entries; the standalone routes still work.
+| Area | Impact |
+|---|---|
+| Data | None. Function currently aborts before any write, so no in-flight rows are mid-state. After fix, new writes use the same `'locked' / 'approved'` values the rest of the system already produces. |
+| Workflow | Restores Management Bulk Approve + Admin Override Bulk Stamp (broken since ~May 27). |
+| RLS / security | Untouched. |
+| Regression | Very low — the two changed tokens are local to this RPC; guard test prevents reintroduction. |
+| Rollback | Re-deploy previous `CREATE OR REPLACE` body. |
 
-## Implementation
+## Files
 
-### 1. Settings page — add three sections
+- `supabase/migrations/<new>_fix_bulk_management_approve_enums.sql` (new)
+- `src/test/bulkManagementApproveEnumGuard.test.ts` (new)
+- `docs/adr/ADR-066.md` (new)
+- `DOCUMENTATION.md`, `POLICY.md` (edited)
 
-`src/pages/admin/SystemSettings.tsx`
-
-Add to `SETTINGS_SECTIONS` (near the top, after Branding/General — most-used admin config):
-
-```ts
-{ key: 'workflow',        label: 'Workflow Config', icon: GitBranch },
-{ key: 'organization',    label: 'Organization',    icon: Building2 },
-{ key: 'review-periods',  label: 'Review Periods',  icon: Calendar },
-```
-
-In `renderSectionContent()` switch, add three cases that render the existing page bodies (no inline duplication — import and reuse):
-
-```tsx
-case 'workflow':       return <WorkflowConfigPage embedded />;
-case 'organization':   return <OrganizationPage embedded />;
-case 'review-periods': return <ReviewPeriodsPage embedded />;
-```
-
-Each page accepts an optional `embedded` prop that, when true, hides its own outer `container/p-6` wrapper and page `<h1>` (since SystemSettings already provides the heading frame). Implementation = a single conditional wrapper at the top of each page component. No business logic touched.
-
-### 2. Sidebar — remove the 3 entries
-
-`src/components/layout/AppSidebar.tsx`
-
-Delete the three items (`Workflow Config`, `Organization`, `Review Periods`) from the admin section. Keep `System Settings`.
-
-### 3. Routing — keep deep links working
-
-`src/App.tsx`
-
-Keep `/admin/workflow-config`, `/admin/organization`, `/admin/review-periods` routes as redirects to the new section URLs:
-
-- `/admin/workflow-config`  → `/admin/settings?section=workflow`
-- `/admin/organization`     → `/admin/settings?section=organization`
-- `/admin/review-periods`   → `/admin/settings?section=review-periods`
-
-Use `<Navigate to="…" replace />` so bookmarks, in-app links, and notification deep links continue to land users on the right tab.
-
-### 4. Menu Access compatibility
-
-`src/components/admin/MenuAccessTab.tsx` already keys access by `menuKey`. The three keys (`admin-workflow`, `admin-organization`, `admin-review-periods`) are kept and consulted inside SystemSettings to hide the corresponding section for roles/profiles that lack access. Add a small `useMenuAccess` guard around the three new section entries and route cases.
-
-### 5. Tests
-
-- `src/test/sidebarConsolidation.test.tsx` — assert the three labels are no longer rendered in `AppSidebar` for an admin.
-- `src/test/systemSettingsSections.test.tsx` — assert the three new section keys exist and that switching to each renders without throwing.
-- Route redirect test — visiting `/admin/workflow-config` lands on `/admin/settings?section=workflow`.
-
-### 6. Documentation
-
-- DOCUMENTATION.md → Navigation: note the consolidation and redirect map.
-- POLICY.md → unchanged (no access policy change; menuKey contract preserved).
-
-## Files Touched
-
-- `src/components/layout/AppSidebar.tsx` (remove 3 items)
-- `src/pages/admin/SystemSettings.tsx` (add 3 sections + cases)
-- `src/pages/admin/WorkflowConfig.tsx`, `src/pages/admin/Organization.tsx`, `src/pages/admin/ReviewPeriods.tsx` (add optional `embedded` prop — chrome only)
-- `src/App.tsx` (three routes → `<Navigate>` redirects)
-- Tests + docs as above
-
-## UI Outcome
-
-- Sidebar (admin section): **Workflow Config**, **Organization**, **Review Periods** gone.
-- System Settings: existing tabs + three new ones near the top.
-- Existing bookmarks/notifications still work via redirect.
+Approve to proceed.
