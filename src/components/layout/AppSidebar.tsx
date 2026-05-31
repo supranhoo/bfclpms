@@ -362,6 +362,18 @@ export function AppSidebar() {
           hasActiveRoute={getSectionForPath(location.pathname, location.search) === 'dataEntry'}
         />
 
+        {/* KRA Settings Section */}
+        <CollapsibleSidebarGroup
+          label="KRA Settings"
+          items={menuItems.kraSettings}
+          isOpen={openSections.has('kraSettings')}
+          onToggle={() => toggleSection('kraSettings')}
+          filterByRole={filterByRole}
+          currentPath={location.pathname + location.search}
+          onNavigate={handleNavigation}
+          hasActiveRoute={getSectionForPath(location.pathname, location.search) === 'kraSettings'}
+        />
+
         {/* Administration Section */}
         <CollapsibleSidebarGroup
           label="Administration"
