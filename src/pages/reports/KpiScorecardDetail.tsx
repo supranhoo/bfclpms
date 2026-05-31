@@ -17,6 +17,9 @@ import { Download, Search, ChevronLeft, ChevronRight, ArrowUp, ArrowDown, ArrowU
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import * as XLSX from 'xlsx';
+import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
+import { useToast } from '@/hooks/use-toast';
+import { enumeratePeriods, validateRange, MAX_RANGE_MONTHS } from '@/lib/kpiScorecardRange';
 
 const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
