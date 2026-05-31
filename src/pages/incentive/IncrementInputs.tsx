@@ -23,12 +23,12 @@ import { generateAssessmentYears, getCurrentAssessmentYear } from '@/lib/assessm
 import * as XLSX from 'xlsx';
 
 function downloadXlsx(filename: string, rows: any[], headers: string[]) {
-  const data = rows.length
-    ? rows.map((r) => headers.reduce((o, h) => ({ ...o, [h]: r[h] ?? '' }), {} as any))
-    : [headers.reduce((o, h) => ({ ...o, [h]: '' }), {} as any)];
-  const ws = XLSX.utils.json_to_sheet(data, { header: headers });
-  // If we only used the placeholder row, drop it so the sheet is just the header.
-  if (!rows.length) XLSX.utils.sheet_add_aoa(ws, [headers], { origin: 'A1' }), ws['!ref'] = XLSX.utils.encode_range({ s: { c: 0, r: 0 }, e: { c: headers.length - 1, r: 0 } });
+  const ws = rows.length
+    ? XLSX.utils.json_to_sheet(
+        rows.map((r) => headers.reduce((o, h) => ({ ...o, [h]: r[h] ?? '' }), {} as any)),
+        { header: headers },
+      )
+    : XLSX.utils.aoa_to_sheet([headers]);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
   XLSX.writeFile(wb, filename);
