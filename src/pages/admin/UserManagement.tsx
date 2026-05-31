@@ -3,7 +3,7 @@ import { invokeAdminEdgeFunction } from '@/lib/adminEdgeFunction';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
-import { useProfiles, useDepartments, useDesignations, usePmsGrades, useDivisions, useBusinessUnits, useEmployeeCategories, useEmploymentStatuses } from '@/hooks/useOrganization';
+import { useProfiles, useDepartments, useDesignations, usePmsGrades, useDivisions, useBusinessUnits, useEmployeeCategories, useEmploymentStatuses, useLocations } from '@/hooks/useOrganization';
 import { useCompanies } from '@/hooks/useCompanies';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -161,6 +161,7 @@ export default function UserManagement() {
   const { data: divisions } = useDivisions();
   const { data: businessUnits } = useBusinessUnits();
   const { data: companiesList } = useCompanies();
+  const { data: locationsList } = useLocations();
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
@@ -192,6 +193,8 @@ export default function UserManagement() {
   const [editDivisionId, setEditDivisionId] = useState('');  // UI-only cascading filter
   const [editGroupDoj, setEditGroupDoj] = useState<string>(''); // yyyy-MM-dd or ''
   const [editDoj, setEditDoj] = useState<string>(''); // yyyy-MM-dd or ''
+  const [editConfirmationDate, setEditConfirmationDate] = useState<string>(''); // yyyy-MM-dd or ''
+  const [editLocationId, setEditLocationId] = useState<string>('');
   // Create Dialog
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [newFullName, setNewFullName] = useState('');
@@ -209,6 +212,8 @@ export default function UserManagement() {
   const [newPortalAccess, setNewPortalAccess] = useState(true);
   const [newGroupDoj, setNewGroupDoj] = useState<string>(''); // yyyy-MM-dd or ''
   const [newDoj, setNewDoj] = useState<string>(''); // yyyy-MM-dd or ''
+  const [newConfirmationDate, setNewConfirmationDate] = useState<string>(''); // yyyy-MM-dd or ''
+  const [newLocationId, setNewLocationId] = useState<string>('');
 
   // Bulk Action Dialog
   const [bulkDialogOpen, setBulkDialogOpen] = useState(false);
