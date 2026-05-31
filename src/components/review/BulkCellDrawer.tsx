@@ -249,7 +249,7 @@ export function BulkCellDrawer({ row, viewerStage, open, onOpenChange, canReopen
                       ? (detail.data.workflow.workflow_stages as string[])
                       : undefined
               }
-              orgKpiEnteredByName={detail.data.org_kpi?.entered_by ?? null}
+              orgKpiEnteredByName={detail.data.org_kpi?.entered_by_name ?? null}
               orgAchievedValue={detail.data.org_kpi?.achieved_value ?? null}
               exploreMode={false}
             />
