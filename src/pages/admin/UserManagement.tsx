@@ -1344,6 +1344,18 @@ export default function UserManagement() {
                       />
                     </div>
                   </div>
+                  <div className="space-y-1.5">
+                    <Label>Confirmation Date</Label>
+                    <div className="relative">
+                      <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+                      <Input
+                        type="date"
+                        value={editConfirmationDate}
+                        onChange={(e) => setEditConfirmationDate(e.target.value)}
+                        className="pl-9 h-9"
+                      />
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -1415,6 +1427,15 @@ export default function UserManagement() {
                       onValueChange={setEditEmploymentStatus}
                       options={employmentStatusOptions}
                       placeholder="Select employment status"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Location</Label>
+                    <OrgFilterCombobox
+                      value={editLocationId}
+                      onValueChange={setEditLocationId}
+                      options={locationOptions}
+                      placeholder="Select location"
                     />
                   </div>
                   <div className="space-y-1.5">
