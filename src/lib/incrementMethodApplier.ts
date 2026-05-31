@@ -41,7 +41,7 @@ export function applyIncrementMethod(input: ApplyInput): ApplyResult {
       const eligible = +((basePercent / 12) * months).toFixed(4);
       return {
         eligiblePercent: eligible,
-        notes: `Prorated: ${basePercent}% × ${months}/12`,
+        notes: `Prorated by GDOJ: ${basePercent}% × ${months}/12`,
       };
     }
 
