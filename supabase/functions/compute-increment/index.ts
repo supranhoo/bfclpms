@@ -175,7 +175,7 @@ const SLAB_DIMS: Array<{ slab: string; emp: string }> = [
   { slab: 'division_ids',      emp: 'division_id' },
   { slab: 'business_unit_ids', emp: 'business_unit_id' },
   { slab: 'location_ids',      emp: 'location_id' },
-  { slab: 'category_ids',      emp: 'category_id' },
+  { slab: 'employee_category_ids', emp: 'employee_category_id' },
   { slab: 'level_ids',         emp: 'level_id' },
 ];
 function slabApplies(slab: any, emp: any): boolean {
@@ -288,7 +288,7 @@ Deno.serve(async (req) => {
         admin.from('departments').select('id, business_unit_id'),
         admin.from('business_units').select('id, division_id'),
         admin.from('divisions').select('id'),
-        admin.from('kra_categories').select('id, name'),
+        admin.from('employee_categories').select('id, name'),
       ]);
 
       const annualMethod = (annualCfg.data as any)?.method ?? 'avg_all';
@@ -324,15 +324,18 @@ Deno.serve(async (req) => {
       function empDims(p: any) {
         const buId = p.department_id ? deptToBu.get(p.department_id) ?? null : null;
         const divId = buId ? buToDiv.get(buId) ?? null : null;
-        const catId = p.category_id
-          ?? (p.employee_category ? catNameToId.get(String(p.employee_category).trim().toLowerCase()) : null)
-          ?? null;
+        // Employee Category is stored on profiles as a name (per the
+        // employee-category-and-status policy). Resolve to its master ID for
+        // slab matching.
+        const empCatId = p.employee_category
+          ? catNameToId.get(String(p.employee_category).trim().toLowerCase()) ?? null
+          : null;
         return {
           company_id: p.company_id ?? null,
           division_id: divId,
           business_unit_id: buId,
           location_id: p.location_id ?? null,
-          category_id: catId,
+          employee_category_id: empCatId,
           level_id: p.level_id ?? null,
         };
       }
