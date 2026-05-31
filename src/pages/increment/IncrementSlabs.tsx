@@ -6,8 +6,6 @@ import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetFooter } from '@/components/ui/sheet';
-import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { MultiSelectFilter } from '@/components/review/MultiSelectFilter';
 import { useEligibilityMasters } from '@/hooks/useIncrementEligibility';
@@ -20,7 +18,7 @@ import {
   type IncrementSlabRow,
 } from '@/hooks/useIncrementSlabs';
 import { ConfirmDestructiveDialog } from '@/components/ui/ConfirmDestructiveDialog';
-import { Plus, Trash2, Loader2, Pencil, Building2, Network, Factory, MapPin, Users, Layers } from 'lucide-react';
+import { Plus, Trash2, Loader2, Save, X, Building2, Network, Factory, MapPin, Users, Layers } from 'lucide-react';
 import { generateAssessmentYears, getCurrentAssessmentYear } from '@/lib/assessmentYear';
 import { useToast } from '@/hooks/use-toast';
 
@@ -52,6 +50,39 @@ function emptyDraft(): SlabDraft {
   };
 }
 
+function rowToDraft(s: IncrementSlabRow): SlabDraft {
+  return {
+    rating_from: Number(s.rating_from),
+    rating_to: Number(s.rating_to),
+    increment_percent: Number(s.increment_percent),
+    prorate_on_doj: s.prorate_on_doj,
+    company_ids: s.company_ids ?? [],
+    division_ids: s.division_ids ?? [],
+    business_unit_ids: s.business_unit_ids ?? [],
+    location_ids: s.location_ids ?? [],
+    employee_category_ids: s.employee_category_ids ?? [],
+    level_ids: s.level_ids ?? [],
+  };
+}
+
+function draftsEqual(a: SlabDraft, b: SlabDraft): boolean {
+  if (a.rating_from !== b.rating_from) return false;
+  if (a.rating_to !== b.rating_to) return false;
+  if (a.increment_percent !== b.increment_percent) return false;
+  if (a.prorate_on_doj !== b.prorate_on_doj) return false;
+  const keys: (keyof SlabDraft)[] = [
+    'company_ids', 'division_ids', 'business_unit_ids',
+    'location_ids', 'employee_category_ids', 'level_ids',
+  ];
+  for (const k of keys) {
+    const av = [...((a[k] as string[]) ?? [])].sort();
+    const bv = [...((b[k] as string[]) ?? [])].sort();
+    if (av.length !== bv.length) return false;
+    for (let i = 0; i < av.length; i++) if (av[i] !== bv[i]) return false;
+  }
+  return true;
+}
+
 export default function IncrementSlabsPage() {
   const ayOptions = useMemo(() => generateAssessmentYears(2), []);
   const [year, setYear] = useState<string>(getCurrentAssessmentYear());
@@ -63,56 +94,54 @@ export default function IncrementSlabsPage() {
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const { toast } = useToast();
 
-  const [editing, setEditing] = useState<{ open: boolean; id: string | null; draft: SlabDraft }>(
-    { open: false, id: null, draft: emptyDraft() },
-  );
+  // Per-row drafts for existing slabs. Absent key = clean (use source).
+  const [drafts, setDrafts] = useState<Record<string, SlabDraft>>({});
+  // Single unsaved "new" row at the top of the table.
+  const [newDraft, setNewDraft] = useState<SlabDraft | null>(null);
 
-  const openNew = () => setEditing({ open: true, id: null, draft: emptyDraft() });
-  const openEdit = (s: IncrementSlabRow) =>
-    setEditing({
-      open: true,
-      id: s.id,
-      draft: {
-        rating_from: Number(s.rating_from),
-        rating_to: Number(s.rating_to),
-        increment_percent: Number(s.increment_percent),
-        prorate_on_doj: s.prorate_on_doj,
-        company_ids: s.company_ids ?? [],
-        division_ids: s.division_ids ?? [],
-        business_unit_ids: s.business_unit_ids ?? [],
-        location_ids: s.location_ids ?? [],
-        employee_category_ids: s.employee_category_ids ?? [],
-        level_ids: s.level_ids ?? [],
-      },
+  const getDraft = (s: IncrementSlabRow): SlabDraft => drafts[s.id] ?? rowToDraft(s);
+  const isDirty = (s: IncrementSlabRow): boolean =>
+    !!drafts[s.id] && !draftsEqual(drafts[s.id], rowToDraft(s));
+
+  const patchExisting = (id: string, source: IncrementSlabRow, patch: Partial<SlabDraft>) => {
+    setDrafts((prev) => {
+      const base = prev[id] ?? rowToDraft(source);
+      return { ...prev, [id]: { ...base, ...patch } };
     });
+  };
 
-  const patchDraft = (patch: Partial<SlabDraft>) =>
-    setEditing((e) => ({ ...e, draft: { ...e.draft, ...patch } }));
+  const patchNew = (patch: Partial<SlabDraft>) => {
+    setNewDraft((prev) => ({ ...(prev ?? emptyDraft()), ...patch }));
+  };
 
-  const saveEditing = async () => {
-    const d = editing.draft;
+  const cancelExisting = (id: string) => {
+    setDrafts((prev) => {
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
+  };
+
+  const validateAndSave = async (d: SlabDraft, id: string | null): Promise<boolean> => {
     if (d.rating_to < d.rating_from) {
       toast({ title: 'Invalid range', description: 'Rating To must be ≥ Rating From.', variant: 'destructive' });
-      return;
+      return false;
     }
     if (d.increment_percent < 0 || d.increment_percent > 100) {
       toast({ title: 'Invalid %', description: 'Increment % must be between 0 and 100.', variant: 'destructive' });
-      return;
+      return false;
     }
-    // Exact-duplicate scope guard against existing slabs (excluding self).
-    const dupe = slabs.find(
-      (s) => s.id !== editing.id && isExactScopeDuplicate(s as any, d as any),
-    );
+    const dupe = slabs.find((s) => s.id !== id && isExactScopeDuplicate(s as any, d as any));
     if (dupe) {
       toast({
         title: 'Duplicate slab',
         description: 'Another slab in this AY has the same rating band and identical scope.',
         variant: 'destructive',
       });
-      return;
+      return false;
     }
     await upsert.mutateAsync({
-      id: editing.id ?? undefined,
+      id: id ?? undefined,
       assessment_year: year,
       increment_period: `Jul ${year.slice(0, 2)}–Jun ${year.slice(-2)}`,
       rating_from: Number(d.rating_from),
@@ -126,7 +155,20 @@ export default function IncrementSlabsPage() {
       employee_category_ids: d.employee_category_ids,
       level_ids: d.level_ids,
     });
-    setEditing({ open: false, id: null, draft: emptyDraft() });
+    return true;
+  };
+
+  const saveExisting = async (s: IncrementSlabRow) => {
+    const d = drafts[s.id];
+    if (!d) return;
+    const ok = await validateAndSave(d, s.id);
+    if (ok) cancelExisting(s.id);
+  };
+
+  const saveNew = async () => {
+    if (!newDraft) return;
+    const ok = await validateAndSave(newDraft, null);
+    if (ok) setNewDraft(null);
   };
 
   const onCopyPrev = () => {
@@ -136,33 +178,129 @@ export default function IncrementSlabsPage() {
 
   const opts = (list?: Array<{ id: string; name: string }>) =>
     (list ?? []).map((o) => ({ value: o.id, label: o.name }));
-  const nameOf = (list: Array<{ id: string; name: string }> | undefined, id: string) =>
-    list?.find((x) => x.id === id)?.name ?? id.slice(0, 6);
 
-  function scopeChips(s: IncrementSlabRow) {
-    const chips: Array<{ label: string; values: string[]; list?: Array<{ id: string; name: string }> }> = [
-      { label: 'Co',  values: s.company_ids ?? [],       list: masters?.companies },
-      { label: 'Div', values: s.division_ids ?? [],      list: masters?.divisions },
-      { label: 'BU',  values: s.business_unit_ids ?? [], list: masters?.business_units },
-      { label: 'Loc', values: s.location_ids ?? [],      list: masters?.locations },
-      { label: 'EmpCat', values: s.employee_category_ids ?? [], list: masters?.employee_categories },
-      { label: 'Lvl', values: s.level_ids ?? [],         list: masters?.levels },
-    ];
-    const scoped = chips.filter((c) => c.values.length > 0);
-    if (scoped.length === 0) return <span className="text-muted-foreground text-xs">All employees</span>;
+  // ---- Row renderer (inline-edit cells) ----------------------------------
+  const renderEditableRow = (
+    key: string,
+    d: SlabDraft,
+    onPatch: (p: Partial<SlabDraft>) => void,
+    onSave: () => void,
+    onCancel: () => void,
+    onDelete: (() => void) | null,
+    dirty: boolean,
+    isNew: boolean,
+  ) => {
+    const spec = slabSpecificity(d as any);
     return (
-      <div className="flex flex-wrap gap-1">
-        {scoped.map((c) => (
-          <Badge key={c.label} variant="secondary" className="text-xs font-normal">
-            {c.label}: {c.values.length === 1 ? nameOf(c.list, c.values[0]) : `${c.values.length} selected`}
-          </Badge>
-        ))}
-      </div>
+      <TableRow key={key} className={isNew ? 'bg-primary/5' : dirty ? 'bg-amber-50/40 dark:bg-amber-950/10' : undefined}>
+        <TableCell className="sticky left-0 bg-inherit">
+          <Input
+            type="number" step="0.01" className="h-9 w-20"
+            value={d.rating_from}
+            onChange={(e) => onPatch({ rating_from: Number(e.target.value) })}
+          />
+        </TableCell>
+        <TableCell>
+          <Input
+            type="number" step="0.01" className="h-9 w-20"
+            value={d.rating_to}
+            onChange={(e) => onPatch({ rating_to: Number(e.target.value) })}
+          />
+        </TableCell>
+        <TableCell>
+          <Input
+            type="number" step="0.01" className="h-9 w-20"
+            value={d.increment_percent}
+            onChange={(e) => onPatch({ increment_percent: Number(e.target.value) })}
+          />
+        </TableCell>
+        <TableCell>
+          <MultiSelectFilter
+            icon={<Building2 className="h-3 w-3 text-muted-foreground" />}
+            label="Company" options={opts(masters?.companies)} values={d.company_ids}
+            onChange={(v) => onPatch({ company_ids: v })} placeholder="All companies" width={190}
+          />
+        </TableCell>
+        <TableCell>
+          <MultiSelectFilter
+            icon={<Network className="h-3 w-3 text-muted-foreground" />}
+            label="Division" options={opts(masters?.divisions)} values={d.division_ids}
+            onChange={(v) => onPatch({ division_ids: v })} placeholder="All divisions" width={190}
+          />
+        </TableCell>
+        <TableCell>
+          <MultiSelectFilter
+            icon={<Factory className="h-3 w-3 text-muted-foreground" />}
+            label="BU" options={opts(masters?.business_units)} values={d.business_unit_ids}
+            onChange={(v) => onPatch({ business_unit_ids: v })} placeholder="All BUs" width={190}
+          />
+        </TableCell>
+        <TableCell>
+          <MultiSelectFilter
+            icon={<MapPin className="h-3 w-3 text-muted-foreground" />}
+            label="Location" options={opts(masters?.locations)} values={d.location_ids}
+            onChange={(v) => onPatch({ location_ids: v })} placeholder="All locations" width={190}
+          />
+        </TableCell>
+        <TableCell>
+          <MultiSelectFilter
+            icon={<Users className="h-3 w-3 text-muted-foreground" />}
+            label="Emp Category" options={opts(masters?.employee_categories)} values={d.employee_category_ids}
+            onChange={(v) => onPatch({ employee_category_ids: v })} placeholder="All emp categories" width={210}
+          />
+        </TableCell>
+        <TableCell>
+          <MultiSelectFilter
+            icon={<Layers className="h-3 w-3 text-muted-foreground" />}
+            label="Level" options={opts(masters?.levels)} values={d.level_ids}
+            onChange={(v) => onPatch({ level_ids: v })} placeholder="All levels" width={170}
+          />
+        </TableCell>
+        <TableCell className="text-center">
+          <Checkbox
+            checked={d.prorate_on_doj}
+            onCheckedChange={(v) => onPatch({ prorate_on_doj: Boolean(v) })}
+          />
+        </TableCell>
+        <TableCell>
+          <div className="flex items-center gap-1">
+            <Badge variant="outline" className="text-[10px] px-1.5">{spec}/6</Badge>
+            <Button
+              variant="ghost" size="icon" className="h-8 w-8"
+              onClick={onSave}
+              disabled={(!dirty && !isNew) || upsert.isPending}
+              aria-label="Save slab"
+              title="Save"
+            >
+              {upsert.isPending
+                ? <Loader2 className="h-4 w-4 animate-spin" />
+                : <Save className="h-4 w-4 text-primary" />}
+            </Button>
+            {(dirty || isNew) && (
+              <Button
+                variant="ghost" size="icon" className="h-8 w-8"
+                onClick={onCancel}
+                aria-label="Discard changes"
+                title="Discard changes"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            )}
+            {onDelete && (
+              <Button
+                variant="ghost" size="icon" className="h-8 w-8"
+                onClick={onDelete}
+                aria-label="Delete slab"
+                title="Delete"
+              >
+                <Trash2 className="h-4 w-4 text-destructive" />
+              </Button>
+            )}
+          </div>
+        </TableCell>
+      </TableRow>
     );
-  }
-
-  const d = editing.draft;
-  const specificity = slabSpecificity(d as any);
+  };
 
   return (
     <div className="space-y-6">
@@ -182,57 +320,73 @@ export default function IncrementSlabsPage() {
               </SelectContent>
             </Select>
             <Button variant="outline" onClick={onCopyPrev} disabled={copy.isPending}>Copy Previous Year</Button>
-            <Button onClick={openNew}><Plus className="h-4 w-4 mr-2" />Add Slab</Button>
+            <Button onClick={() => setNewDraft(emptyDraft())} disabled={!!newDraft}>
+              <Plus className="h-4 w-4 mr-2" />Add Slab
+            </Button>
           </div>
         </CardHeader>
         <CardContent>
           {isLoading ? (
             <Loader2 className="h-5 w-5 animate-spin" />
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Rating From</TableHead>
-                  <TableHead>Rating To</TableHead>
-                  <TableHead>Increment %</TableHead>
-                  <TableHead>Scope</TableHead>
-                  <TableHead>Prorate on DOJ</TableHead>
-                  <TableHead className="w-[120px]">Action</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {slabs.map((s) => (
-                  <TableRow key={s.id}>
-                    <TableCell>{s.rating_from}</TableCell>
-                    <TableCell>{s.rating_to}</TableCell>
-                    <TableCell>{s.increment_percent}%</TableCell>
-                    <TableCell>{scopeChips(s)}</TableCell>
-                    <TableCell>{s.prorate_on_doj ? 'Yes' : 'No'}</TableCell>
-                    <TableCell>
-                      <Button variant="ghost" size="icon" onClick={() => openEdit(s)} aria-label="Edit slab">
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => setConfirmDelete(s.id)}
-                        aria-label="Delete slab"
-                      >
-                        <Trash2 className="h-4 w-4 text-destructive" />
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-                {slabs.length === 0 && (
+            <div className="overflow-x-auto">
+              <Table className="min-w-[1500px]">
+                <TableHeader>
                   <TableRow>
-                    <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
-                      No slabs defined for this year.
-                    </TableCell>
+                    <TableHead className="sticky left-0 bg-background w-24">Rating From</TableHead>
+                    <TableHead className="w-24">Rating To</TableHead>
+                    <TableHead className="w-24">Increment %</TableHead>
+                    <TableHead>Company</TableHead>
+                    <TableHead>Division</TableHead>
+                    <TableHead>Business Unit</TableHead>
+                    <TableHead>Location</TableHead>
+                    <TableHead>Employee Category</TableHead>
+                    <TableHead>Level</TableHead>
+                    <TableHead className="w-28 text-center">Prorate on DOJ</TableHead>
+                    <TableHead className="w-44">Action</TableHead>
                   </TableRow>
-                )}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {newDraft && renderEditableRow(
+                    '__new__',
+                    newDraft,
+                    patchNew,
+                    saveNew,
+                    () => setNewDraft(null),
+                    null,
+                    false,
+                    true,
+                  )}
+                  {slabs.map((s) => {
+                    const d = getDraft(s);
+                    const dirty = isDirty(s);
+                    return renderEditableRow(
+                      s.id,
+                      d,
+                      (p) => patchExisting(s.id, s, p),
+                      () => saveExisting(s),
+                      () => cancelExisting(s.id),
+                      () => setConfirmDelete(s.id),
+                      dirty,
+                      false,
+                    );
+                  })}
+                  {slabs.length === 0 && !newDraft && (
+                    <TableRow>
+                      <TableCell colSpan={11} className="text-center text-muted-foreground py-8">
+                        No slabs defined for this year. Click <strong>Add Slab</strong> to create one.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </div>
           )}
+          <p className="mt-3 text-xs text-muted-foreground">
+            Leave a scope column empty to apply the slab to every value of that dimension.
+            When multiple slabs match an employee, the slab scoping the most dimensions wins
+            (badge shows specificity out of 6).
+          </p>
         </CardContent>
       </Card>
 
@@ -242,113 +396,14 @@ export default function IncrementSlabsPage() {
         title="Delete slab?"
         description="This cannot be undone."
         onConfirm={() => {
-          if (confirmDelete) del.mutate({ id: confirmDelete, assessment_year: year });
+          if (confirmDelete) {
+            del.mutate({ id: confirmDelete, assessment_year: year });
+            // drop any pending draft for the deleted row
+            cancelExisting(confirmDelete);
+          }
           setConfirmDelete(null);
         }}
       />
-
-      <Sheet open={editing.open} onOpenChange={(o) => !o && setEditing({ open: false, id: null, draft: emptyDraft() })}>
-        <SheetContent className="sm:max-w-lg w-full overflow-y-auto">
-          <SheetHeader>
-            <SheetTitle>{editing.id ? 'Edit Slab' : 'Add Slab'}</SheetTitle>
-            <SheetDescription>
-              Define a rating band and (optionally) restrict which employees this slab applies to.
-              Leave a dimension empty to apply to every value of that dimension.
-            </SheetDescription>
-          </SheetHeader>
-
-          <div className="mt-6 space-y-5">
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label className="text-xs">Rating From</Label>
-                <Input type="number" step="0.01" value={d.rating_from}
-                  onChange={(e) => patchDraft({ rating_from: Number(e.target.value) })} />
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs">Rating To</Label>
-                <Input type="number" step="0.01" value={d.rating_to}
-                  onChange={(e) => patchDraft({ rating_to: Number(e.target.value) })} />
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs">Increment %</Label>
-                <Input type="number" step="0.01" value={d.increment_percent}
-                  onChange={(e) => patchDraft({ increment_percent: Number(e.target.value) })} />
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs">Prorate on DOJ</Label>
-                <div className="h-10 flex items-center">
-                  <Checkbox checked={d.prorate_on_doj}
-                    onCheckedChange={(v) => patchDraft({ prorate_on_doj: Boolean(v) })} />
-                  <span className="ml-2 text-sm text-muted-foreground">
-                    Prorate based on date of joining
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            <div className="rounded-lg border p-3 space-y-3 bg-muted/20">
-              <div className="flex items-center justify-between">
-                <Label className="text-xs font-semibold">Apply to (empty = all)</Label>
-                <Badge variant="outline" className="text-xs">
-                  Specificity: {specificity} / 6
-                </Badge>
-              </div>
-
-              <div className="space-y-1.5">
-                <Label className="text-xs">Company</Label>
-                <MultiSelectFilter icon={<Building2 className="h-3 w-3 text-muted-foreground" />} label="Company"
-                  options={opts(masters?.companies)} values={d.company_ids}
-                  onChange={(v) => patchDraft({ company_ids: v })} placeholder="All companies" width={320} />
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs">Division</Label>
-                <MultiSelectFilter icon={<Network className="h-3 w-3 text-muted-foreground" />} label="Division"
-                  options={opts(masters?.divisions)} values={d.division_ids}
-                  onChange={(v) => patchDraft({ division_ids: v })} placeholder="All divisions" width={320} />
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs">Business Unit</Label>
-                <MultiSelectFilter icon={<Factory className="h-3 w-3 text-muted-foreground" />} label="Business Unit"
-                  options={opts(masters?.business_units)} values={d.business_unit_ids}
-                  onChange={(v) => patchDraft({ business_unit_ids: v })} placeholder="All BUs" width={320} />
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs">Location</Label>
-                <MultiSelectFilter icon={<MapPin className="h-3 w-3 text-muted-foreground" />} label="Location"
-                  options={opts(masters?.locations)} values={d.location_ids}
-                  onChange={(v) => patchDraft({ location_ids: v })} placeholder="All locations" width={320} />
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs">Employee Category</Label>
-                <MultiSelectFilter icon={<Users className="h-3 w-3 text-muted-foreground" />} label="Employee Category"
-                  options={opts(masters?.employee_categories)} values={d.employee_category_ids}
-                  onChange={(v) => patchDraft({ employee_category_ids: v })} placeholder="All employee categories" width={320} />
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs">Level</Label>
-                <MultiSelectFilter icon={<Layers className="h-3 w-3 text-muted-foreground" />} label="Level"
-                  options={opts(masters?.levels)} values={d.level_ids}
-                  onChange={(v) => patchDraft({ level_ids: v })} placeholder="All levels" width={320} />
-              </div>
-
-              <p className="text-xs text-muted-foreground pt-1">
-                When multiple slabs match an employee, the slab scoping the most dimensions wins.
-                Ties are broken by sort order, then most-recently updated.
-              </p>
-            </div>
-          </div>
-
-          <SheetFooter className="mt-6 gap-2">
-            <Button variant="outline" onClick={() => setEditing({ open: false, id: null, draft: emptyDraft() })}>
-              Cancel
-            </Button>
-            <Button onClick={saveEditing} disabled={upsert.isPending}>
-              {upsert.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-              Save Slab
-            </Button>
-          </SheetFooter>
-        </SheetContent>
-      </Sheet>
     </div>
   );
 }
