@@ -52,14 +52,43 @@ function EnterInputsTab({ year }: { year: string }) {
       const wb = XLSX.read(buf, { type: 'array' });
       const ws = wb.Sheets[wb.SheetNames[0]];
       const parsed = XLSX.utils.sheet_to_json<any>(ws, { defval: '' });
-      const rows = parsed.map((o: any) => ({
-          employee_id: o.employee_id,
+      const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      const raw = parsed
+        .map((o: any) => ({
+          key: String(o.employee_code ?? o.employee_id ?? '').trim(),
           absent_days: Number(o.absent_days ?? 0),
           lwp_days: Number(o.lwp_days ?? 0),
           disciplinary_actions: Number(o.disciplinary_actions ?? 0),
           training_compliance: Number(o.training_compliance ?? 0),
-          current_salary: o.current_salary ? Number(o.current_salary) : null,
-      })).filter((r) => r.employee_id);
+          current_salary: o.current_salary !== '' && o.current_salary != null ? Number(o.current_salary) : null,
+        }))
+        .filter((r) => r.key);
+
+      const codes = Array.from(new Set(raw.filter((r) => !UUID_RE.test(r.key)).map((r) => r.key)));
+      let codeMap = new Map<string, string>();
+      if (codes.length) {
+        const { data: profs, error: pErr } = await supabase
+          .from('profiles')
+          .select('id, employee_id')
+          .in('employee_id', codes);
+        if (pErr) throw pErr;
+        codeMap = new Map((profs ?? []).map((p: any) => [String(p.employee_id), p.id]));
+      }
+
+      const unresolved: string[] = [];
+      const rows = raw.map((r) => {
+        const id = UUID_RE.test(r.key) ? r.key : codeMap.get(r.key);
+        if (!id) unresolved.push(r.key);
+        const { key, ...rest } = r;
+        return { employee_id: id, ...rest };
+      }).filter((r) => r.employee_id);
+
+      if (!rows.length) {
+        throw new Error(`No matching employees found. Unknown codes: ${unresolved.slice(0, 5).join(', ')}`);
+      }
+      if (unresolved.length) {
+        toast({ title: 'Some rows skipped', description: `Unknown employee codes: ${unresolved.slice(0, 5).join(', ')}${unresolved.length > 5 ? '…' : ''}`, variant: 'destructive' });
+      }
       await importMut.mutateAsync({ rows, assessment_year: year });
     } catch (err: any) {
       toast({ title: 'Import failed', description: err?.message ?? 'Parse error', variant: 'destructive' });
@@ -70,7 +99,7 @@ function EnterInputsTab({ year }: { year: string }) {
 
   const exportTemplate = () => {
     downloadXlsx('Import Inputs.xlsx', [], [
-      'employee_id', 'absent_days', 'lwp_days', 'disciplinary_actions',
+      'employee_code', 'absent_days', 'lwp_days', 'disciplinary_actions',
       'training_compliance', 'current_salary',
     ]);
   };
