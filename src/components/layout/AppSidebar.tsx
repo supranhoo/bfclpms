@@ -125,6 +125,16 @@ const getStaticMenuItems = (policyVisibleRoles: string[]) => ({
 });
 
 // Helper to determine which section contains a given path (handles query params)
+const KRA_SETTINGS_PATHS = new Set([
+  '/admin/templates',
+  '/admin/bundles',
+  '/admin/kpis',
+  '/admin/categories',
+  '/admin/kpi-mapping',
+  '/admin/kpi-weightage',
+  '/admin/kpi-standardization',
+]);
+
 const getSectionForPath = (pathname: string, search: string = ''): string => {
   const fullPath = pathname + search;
   if (fullPath.includes('view=team')) return 'manager';
@@ -134,6 +144,7 @@ const getSectionForPath = (pathname: string, search: string = ''): string => {
   if (fullPath.includes('view=hr_pms')) return 'hr_pms';
   if (pathname === '/management-dashboard') return 'management';
   if (['/dashboard', '/queries', '/pms-policy', '/registry'].includes(pathname)) return 'main';
+  if (KRA_SETTINGS_PATHS.has(pathname)) return 'kraSettings';
   if (pathname.startsWith('/admin')) return 'admin';
   if (pathname.startsWith('/reports')) return 'reports';
   if (pathname === '/audit-logs') return 'admin';
