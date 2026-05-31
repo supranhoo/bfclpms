@@ -17,6 +17,9 @@ import { Download, Search, ChevronLeft, ChevronRight, ArrowUp, ArrowDown, ArrowU
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import * as XLSX from 'xlsx';
+import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
+import { useToast } from '@/hooks/use-toast';
+import { enumeratePeriods, validateRange, MAX_RANGE_MONTHS } from '@/lib/kpiScorecardRange';
 
 const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -89,10 +92,123 @@ const statusLabels: Record<string, string> = {
   management_review: 'Management',
 };
 
+/**
+ * Fetch + flatten KPI scorecard rows for a single (month, year) period.
+ * Shared between the on-screen React Query hook and the range exporter
+ * so behavior stays in lock-step.
+ */
+async function fetchScorecardForPeriod(month: string, year: number): Promise<FlatRow[]> {
+  const allKpis: any[] = [];
+  let offset = 0;
+  let hasMore = true;
+
+  while (hasMore) {
+    const { data, error } = await supabase
+      .from('kpis')
+      .select(`
+        id, employee_id, kra_name, kpi_name, weightage, target_value, review_period, review_year, status,
+        frequency, is_org_level, org_level_scope, category_id,
+        kra_categories ( name )
+      `)
+      .eq('review_period', month)
+      .eq('review_year', year)
+      .range(offset, offset + 999);
+    if (error) throw error;
+    if (data && data.length > 0) {
+      allKpis.push(...data);
+      offset += 1000;
+      hasMore = data.length === 1000;
+    } else {
+      hasMore = false;
+    }
+  }
+
+  const submissionMap = new Map<string, any>();
+  const kpiIds = allKpis.map(k => k.id);
+  const CHUNK = 500;
+  for (let i = 0; i < kpiIds.length; i += CHUNK) {
+    const batch = kpiIds.slice(i, i + CHUNK);
+    const { data: subs, error: subErr } = await supabase
+      .from('review_submissions')
+      .select('kpi_id, self_score, manager_score, skip_level_score, hr_pms_score, auditor_score, management_score, final_score, is_na, achieved_value, manager_achieved_value, skip_level_achieved_value, hr_pms_achieved_value, auditor_achieved_value, management_achieved_value')
+      .in('kpi_id', batch);
+    if (subErr) throw subErr;
+    (subs ?? []).forEach((s: any) => submissionMap.set(s.kpi_id, s));
+  }
+
+  const profiles = await fetchAllPaged<any>((from, to) =>
+    supabase
+      .from('profiles')
+      .select('id, employee_code, full_name, designation, departments ( name )')
+      .range(from, to)
+  );
+
+  let ownerMap = new Map<string, string[]>();
+  try {
+    const dataOwners = await fetchAllPaged<any>((from, to) =>
+      supabase
+        .from('org_kpi_data_owners')
+        .select('category_id, kra_name, kpi_name, owner:profiles!org_kpi_data_owners_owner_id_fkey(full_name)')
+        .range(from, to)
+    );
+    (dataOwners ?? []).forEach((o: any) => {
+      const key = `${o.category_id}||${o.kra_name}||${o.kpi_name}`;
+      const name = o.owner?.full_name ?? '';
+      if (!ownerMap.has(key)) ownerMap.set(key, []);
+      if (name) ownerMap.get(key)!.push(name);
+    });
+  } catch { /* non-critical */ }
+
+  const profileMap = new Map((profiles ?? []).map(p => [p.id, p]));
+
+  return allKpis.map((kpi): FlatRow => {
+    const profile = profileMap.get(kpi.employee_id);
+    const sub = submissionMap.get(kpi.id);
+    const isNa = sub?.is_na ?? false;
+    const dept = profile?.departments;
+    const isOrgKpi = kpi.is_org_level === true;
+    const ownerKey = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}`;
+    const owners = isOrgKpi ? (ownerMap.get(ownerKey) ?? []) : [];
+    return {
+      employeeId: kpi.employee_id ?? '',
+      employeeCode: profile?.employee_code ?? '',
+      employeeName: profile?.full_name ?? '',
+      designation: profile?.designation ?? '',
+      department: (dept && typeof dept === 'object' && 'name' in dept ? (dept as any).name : '') ?? '',
+      month: kpi.review_period,
+      category: (kpi.kra_categories && typeof kpi.kra_categories === 'object' && 'name' in kpi.kra_categories ? (kpi.kra_categories as any).name : '') ?? '',
+      kraName: kpi.kra_name ?? '',
+      kpiName: kpi.kpi_name ?? '',
+      frequency: kpi.frequency ?? 'Monthly',
+      isOrgKpi,
+      orgKpiScope: isOrgKpi ? (kpi.org_level_scope ?? 'organization') : '',
+      dataOwnerNames: owners.join(', '),
+      weightage: kpi.weightage ?? 0,
+      targetValue: kpi.target_value ?? null,
+      selfActual: sub?.achieved_value ?? null,
+      managerActual: sub?.manager_achieved_value ?? null,
+      skipLevelActual: sub?.skip_level_achieved_value ?? null,
+      hrPmsActual: sub?.hr_pms_achieved_value ?? null,
+      auditorActual: sub?.auditor_achieved_value ?? null,
+      managementActual: sub?.management_achieved_value ?? null,
+      selfScore: isNa ? null : (sub?.self_score ?? null),
+      managerScore: isNa ? null : (sub?.manager_score ?? null),
+      skipLevelScore: isNa ? null : (sub?.skip_level_score ?? null),
+      hrPmsScore: isNa ? null : (sub?.hr_pms_score ?? null),
+      auditorScore: isNa ? null : (sub?.auditor_score ?? null),
+      managementScore: isNa ? null : (sub?.management_score ?? null),
+      finalScore: isNa ? null : (sub?.final_score ?? null),
+      status: kpi.status ?? '',
+      isNa,
+    };
+  });
+}
+
 export default function KpiScorecardDetail() {
   const { canDownload } = useReportAccess();
   const canExport = canDownload('kpi-scorecard-detail');
   const { effectiveRole } = useAuth();
+  const { toast } = useToast();
   const ORG_WIDE_ROLES: Array<string> = ['admin', 'management', 'hr_pms', 'auditor'];
   const hasOrgWideAccess = effectiveRole ? ORG_WIDE_ROLES.includes(effectiveRole) : false;
   const { companies, selectedCompanyId, setSelectedCompanyId, filterByCompany, getCompanyName, getCompanyCode } = useCompanyFilter();
@@ -106,6 +222,14 @@ export default function KpiScorecardDetail() {
   const [sortField, setSortField] = useState<SortField>('employeeName');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
 
+  // Range export state
+  const [rangeFromMonth, setRangeFromMonth] = useState(MONTHS[now.getMonth()]);
+  const [rangeFromYear, setRangeFromYear] = useState(now.getFullYear());
+  const [rangeToMonth, setRangeToMonth] = useState(MONTHS[now.getMonth()]);
+  const [rangeToYear, setRangeToYear] = useState(now.getFullYear());
+  const [rangeExporting, setRangeExporting] = useState(false);
+  const [rangePopoverOpen, setRangePopoverOpen] = useState(false);
+
   const years = [selectedYear - 1, selectedYear, selectedYear + 1];
 
   // Click-to-load: heavy fetch only fires when user clicks "Load Data".
@@ -118,118 +242,7 @@ export default function KpiScorecardDetail() {
   const { data: rows, isLoading, isFetching, error, isError } = useQuery({
     queryKey: ['kpi-scorecard-detail', appliedQuery?.month, appliedQuery?.year],
     enabled: !!appliedQuery,
-    queryFn: async () => {
-      const month = appliedQuery!.month;
-      const year = appliedQuery!.year;
-      const allKpis: any[] = [];
-      let offset = 0;
-      let hasMore = true;
-
-      while (hasMore) {
-        const { data, error } = await supabase
-          .from('kpis')
-          .select(`
-            id, employee_id, kra_name, kpi_name, weightage, target_value, review_period, review_year, status,
-            frequency, is_org_level, org_level_scope, category_id,
-            kra_categories ( name )
-          `)
-          .eq('review_period', month)
-          .eq('review_year', year)
-          .range(offset, offset + 999);
-        if (error) throw error;
-        if (data && data.length > 0) {
-          allKpis.push(...data);
-          offset += 1000;
-          hasMore = data.length === 1000;
-        } else {
-          hasMore = false;
-        }
-      }
-
-      // Fetch review_submissions separately in chunks of 500 to avoid timeout
-      // from joining a large nested relation inside the paged kpis query.
-      const submissionMap = new Map<string, any>();
-      const kpiIds = allKpis.map(k => k.id);
-      const CHUNK = 500;
-      for (let i = 0; i < kpiIds.length; i += CHUNK) {
-        const batch = kpiIds.slice(i, i + CHUNK);
-        const { data: subs, error: subErr } = await supabase
-          .from('review_submissions')
-          .select('kpi_id, self_score, manager_score, skip_level_score, hr_pms_score, auditor_score, management_score, final_score, is_na, achieved_value, manager_achieved_value, skip_level_achieved_value, hr_pms_achieved_value, auditor_achieved_value, management_achieved_value')
-          .in('kpi_id', batch);
-        if (subErr) throw subErr;
-        (subs ?? []).forEach((s: any) => submissionMap.set(s.kpi_id, s));
-      }
-
-      // Fetch profiles with department + designation — paged to bypass 1000-row cap.
-      const profiles = await fetchAllPaged<any>((from, to) =>
-        supabase
-          .from('profiles')
-          .select('id, employee_code, full_name, designation, departments ( name )')
-          .range(from, to)
-      );
-
-      // Fetch org KPI data owners (use explicit FK to avoid ambiguity)
-      let ownerMap = new Map<string, string[]>();
-      try {
-        const dataOwners = await fetchAllPaged<any>((from, to) =>
-          supabase
-            .from('org_kpi_data_owners')
-            .select('category_id, kra_name, kpi_name, owner:profiles!org_kpi_data_owners_owner_id_fkey(full_name)')
-            .range(from, to)
-        );
-        (dataOwners ?? []).forEach((o: any) => {
-          const key = `${o.category_id}||${o.kra_name}||${o.kpi_name}`;
-          const name = o.owner?.full_name ?? '';
-          if (!ownerMap.has(key)) ownerMap.set(key, []);
-          if (name) ownerMap.get(key)!.push(name);
-        });
-      } catch { /* non-critical */ }
-
-      const profileMap = new Map((profiles ?? []).map(p => [p.id, p]));
-
-      return allKpis.map((kpi): FlatRow => {
-        const profile = profileMap.get(kpi.employee_id);
-        const sub = submissionMap.get(kpi.id);
-        const isNa = sub?.is_na ?? false;
-        const dept = profile?.departments;
-        const isOrgKpi = kpi.is_org_level === true;
-        const ownerKey = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}`;
-        const owners = isOrgKpi ? (ownerMap.get(ownerKey) ?? []) : [];
-        return {
-          employeeId: kpi.employee_id ?? '',
-          employeeCode: profile?.employee_code ?? '',
-          employeeName: profile?.full_name ?? '',
-          designation: profile?.designation ?? '',
-          department: (dept && typeof dept === 'object' && 'name' in dept ? (dept as any).name : '') ?? '',
-          month: kpi.review_period,
-          category: (kpi.kra_categories && typeof kpi.kra_categories === 'object' && 'name' in kpi.kra_categories ? (kpi.kra_categories as any).name : '') ?? '',
-          kraName: kpi.kra_name ?? '',
-          kpiName: kpi.kpi_name ?? '',
-          frequency: kpi.frequency ?? 'Monthly',
-          isOrgKpi,
-          orgKpiScope: isOrgKpi ? (kpi.org_level_scope ?? 'organization') : '',
-          dataOwnerNames: owners.join(', '),
-          weightage: kpi.weightage ?? 0,
-          targetValue: kpi.target_value ?? null,
-          selfActual: sub?.achieved_value ?? null,
-          managerActual: sub?.manager_achieved_value ?? null,
-          skipLevelActual: sub?.skip_level_achieved_value ?? null,
-          hrPmsActual: sub?.hr_pms_achieved_value ?? null,
-          auditorActual: sub?.auditor_achieved_value ?? null,
-          managementActual: sub?.management_achieved_value ?? null,
-          selfScore: isNa ? null : (sub?.self_score ?? null),
-          managerScore: isNa ? null : (sub?.manager_score ?? null),
-          skipLevelScore: isNa ? null : (sub?.skip_level_score ?? null),
-          hrPmsScore: isNa ? null : (sub?.hr_pms_score ?? null),
-          auditorScore: isNa ? null : (sub?.auditor_score ?? null),
-          managementScore: isNa ? null : (sub?.management_score ?? null),
-          finalScore: isNa ? null : (sub?.final_score ?? null),
-          status: kpi.status ?? '',
-          isNa,
-        };
-      });
-    },
+    queryFn: () => fetchScorecardForPeriod(appliedQuery!.month, appliedQuery!.year),
     staleTime: 5 * 60 * 1000,
     gcTime: 10 * 60 * 1000,
     placeholderData: (prev) => prev,
@@ -320,13 +333,23 @@ export default function KpiScorecardDetail() {
 
   const handleExport = () => {
     if (!filtered.length) return;
-    const exportData = filtered.map(r => ({
+    const exportData = filtered.map(r => toExportRecord(r, selectedYear));
+    const ws = XLSX.utils.json_to_sheet(exportData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'KPI Scorecard');
+    XLSX.writeFile(wb, `KPI_Scorecard_${selectedMonth}_${selectedYear}.xlsx`);
+  };
+
+  /** Shared row → XLSX record mapping. Used by both single-month and range exports. */
+  function toExportRecord(r: FlatRow, year: number) {
+    return {
       'Company': getCompanyCode(r.employeeId),
       'Employee Code': r.employeeCode,
       'Name': r.employeeName,
       'Designation': r.designation,
       'Department': r.department,
       'Month': r.month,
+      'Year': year,
       'Category': r.category,
       'KRA': r.kraName,
       'KPI': r.kpiName,
@@ -349,11 +372,81 @@ export default function KpiScorecardDetail() {
       'Management Score': r.isNa ? 'N/A' : (r.managementScore ?? ''),
       'Final Score': r.isNa ? 'N/A' : (r.finalScore ?? ''),
       'Status': statusLabels[r.status] ?? r.status,
-    }));
-    const ws = XLSX.utils.json_to_sheet(exportData);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'KPI Scorecard');
-    XLSX.writeFile(wb, `KPI_Scorecard_${selectedMonth}_${selectedYear}.xlsx`);
+    };
+  }
+
+  const rangeValidation = useMemo(
+    () => validateRange(
+      { month: rangeFromMonth as any, year: rangeFromYear },
+      { month: rangeToMonth as any, year: rangeToYear },
+    ),
+    [rangeFromMonth, rangeFromYear, rangeToMonth, rangeToYear],
+  );
+
+  const handleRangeExport = async () => {
+    if (!rangeValidation.ok) return;
+    const periods = enumeratePeriods(
+      { month: rangeFromMonth as any, year: rangeFromYear },
+      { month: rangeToMonth as any, year: rangeToYear },
+    );
+    setRangeExporting(true);
+    try {
+      const allRecords: ReturnType<typeof toExportRecord>[] = [];
+      const search = searchTerm.toLowerCase();
+      for (let i = 0; i < periods.length; i++) {
+        const p = periods[i];
+        toast({
+          title: `Fetching ${p.month} ${p.year}`,
+          description: `Period ${i + 1} of ${periods.length}`,
+        });
+        const periodRows = await fetchScorecardForPeriod(p.month, p.year);
+        // Apply the same Company / Department / Search filters as the on-screen view
+        const filteredPeriod = periodRows.filter(r => {
+          if (!filterByCompany(r.employeeId)) return false;
+          if (selectedDept !== 'all' && r.department !== selectedDept) return false;
+          if (search) {
+            if (
+              !r.employeeName.toLowerCase().includes(search) &&
+              !r.employeeCode.toLowerCase().includes(search) &&
+              !r.kpiName.toLowerCase().includes(search) &&
+              !r.kraName.toLowerCase().includes(search)
+            ) return false;
+          }
+          return true;
+        });
+        filteredPeriod.forEach(r => allRecords.push(toExportRecord(r, p.year)));
+      }
+
+      if (allRecords.length === 0) {
+        toast({
+          title: 'No data in range',
+          description: 'No KPI rows match the selected filters across the chosen months.',
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      const ws = XLSX.utils.json_to_sheet(allRecords);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'KPI Scorecard');
+      const first = periods[0];
+      const last = periods[periods.length - 1];
+      XLSX.writeFile(wb, `KPI_Scorecard_${first.month}-${first.year}_to_${last.month}-${last.year}.xlsx`);
+
+      toast({
+        title: 'Export complete',
+        description: `Exported ${allRecords.length.toLocaleString()} rows across ${periods.length} months.`,
+      });
+      setRangePopoverOpen(false);
+    } catch (e: any) {
+      toast({
+        title: 'Range export failed',
+        description: e?.message ?? 'Unknown error',
+        variant: 'destructive',
+      });
+    } finally {
+      setRangeExporting(false);
+    }
   };
 
   const thClass = 'h-9 px-2 text-xs font-medium whitespace-nowrap cursor-pointer select-none hover:bg-muted/50 transition-colors';
@@ -438,6 +531,62 @@ export default function KpiScorecardDetail() {
                 <Button size="sm" variant="outline" className="h-8 text-xs gap-1" onClick={handleExport} disabled={!filtered.length}>
                   <Download className="h-3.5 w-3.5" /> Export
                 </Button>
+              )}
+              {canExport && (
+                <Popover open={rangePopoverOpen} onOpenChange={setRangePopoverOpen}>
+                  <PopoverTrigger asChild>
+                    <Button size="sm" variant="outline" className="h-8 text-xs gap-1">
+                      <Download className="h-3.5 w-3.5" /> Download Range
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent align="end" className="w-[340px] p-4 space-y-3">
+                    <div className="space-y-1">
+                      <h4 className="text-sm font-medium">Download month range</h4>
+                      <p className="text-[11px] text-muted-foreground">
+                        Applies current Company / Department / Search filters. Max {MAX_RANGE_MONTHS} months.
+                      </p>
+                    </div>
+                    <div className="space-y-2">
+                      <div className="grid grid-cols-[40px_1fr_1fr] items-center gap-2">
+                        <span className="text-xs text-muted-foreground">From</span>
+                        <Select value={rangeFromMonth} onValueChange={setRangeFromMonth}>
+                          <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                          <SelectContent>{MONTHS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent>
+                        </Select>
+                        <Select value={String(rangeFromYear)} onValueChange={v => setRangeFromYear(Number(v))}>
+                          <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                          <SelectContent>{years.map(y => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}</SelectContent>
+                        </Select>
+                      </div>
+                      <div className="grid grid-cols-[40px_1fr_1fr] items-center gap-2">
+                        <span className="text-xs text-muted-foreground">To</span>
+                        <Select value={rangeToMonth} onValueChange={setRangeToMonth}>
+                          <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                          <SelectContent>{MONTHS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent>
+                        </Select>
+                        <Select value={String(rangeToYear)} onValueChange={v => setRangeToYear(Number(v))}>
+                          <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                          <SelectContent>{years.map(y => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}</SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                    <div className={`text-[11px] ${rangeValidation.ok ? 'text-muted-foreground' : 'text-destructive'}`}>
+                      {rangeValidation.ok
+                        ? `Spans ${rangeValidation.count} month${rangeValidation.count === 1 ? '' : 's'}`
+                        : rangeValidation.error}
+                    </div>
+                    <div className="flex justify-end gap-2">
+                      <Button size="sm" variant="ghost" className="h-8 text-xs" onClick={() => setRangePopoverOpen(false)} disabled={rangeExporting}>
+                        Cancel
+                      </Button>
+                      <Button size="sm" className="h-8 text-xs gap-1" onClick={handleRangeExport} disabled={!rangeValidation.ok || rangeExporting}>
+                        {rangeExporting
+                          ? <><RefreshCw className="h-3.5 w-3.5 animate-spin" /> Exporting…</>
+                          : <><Download className="h-3.5 w-3.5" /> Download .xlsx</>}
+                      </Button>
+                    </div>
+                  </PopoverContent>
+                </Popover>
               )}
             </div>
           </div>
