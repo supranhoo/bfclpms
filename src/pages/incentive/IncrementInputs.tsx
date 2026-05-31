@@ -68,7 +68,7 @@ function EnterInputsTab({ year }: { year: string }) {
       const codes = Array.from(new Set(raw.filter((r) => !UUID_RE.test(r.key)).map((r) => r.key)));
       let codeMap = new Map<string, string>();
       if (codes.length) {
-        const { data: profs, error: pErr } = await supabase
+        const { data: profs, error: pErr } = await (supabase as any)
           .from('profiles')
           .select('id, employee_id')
           .in('employee_id', codes);
