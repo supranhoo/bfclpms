@@ -363,7 +363,12 @@ Deno.serve(async (req) => {
       const cycleStartISO = `${startYear}-07-01`;
       const cycleEndISO = `${endYear}-06-30`;
 
-      // Load monthly scores for AY: from performance_reviews
+      // Load monthly scores for AY: derived live from review_submissions + kpis
+      // using the canonical 8-stage fallback chain (Final → Management → Auditor
+      // → HR PMS → Skip-Level → Manager → Self), weighted-average across
+      // non-N/A KPIs by kpis.weightage. Mirrors src/hooks/useEmployeeScoresForPeriod.ts.
+      // The `performance_reviews` rollup table is NOT a source — it is unused
+      // and empty for all employees in this deployment.
       // Fiscal months: Jul startYear .. Jun endYear
       const monthsList = [
         { m: 7, y: startYear }, { m: 8, y: startYear }, { m: 9, y: startYear },
@@ -371,22 +376,91 @@ Deno.serve(async (req) => {
         { m: 1, y: endYear }, { m: 2, y: endYear }, { m: 3, y: endYear },
         { m: 4, y: endYear }, { m: 5, y: endYear }, { m: 6, y: endYear },
       ];
-      // Pull all performance_reviews in this fiscal range
-      const periodStrings = monthsList.map(({ m, y }) => {
-        const mn = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][m - 1];
-        return { key: `${mn}-${y}`, month: m, year: y };
+      // Map full month name → fiscal month number; kpis.review_period stores
+      // the full month name ("September") and kpis.review_year is the year.
+      const MONTH_NAMES = [
+        'January','February','March','April','May','June',
+        'July','August','September','October','November','December',
+      ];
+      const periodKeyToMonth = new Map<string, number>();
+      monthsList.forEach(({ m, y }) => {
+        periodKeyToMonth.set(`${MONTH_NAMES[m - 1]}|${y}`, m);
       });
 
-      const { data: prData } = await admin
-        .from('performance_reviews')
-        .select('employee_id, review_period, review_year, overall_score, status')
-        .in('review_year', [startYear, endYear]);
+      // Canonical 8-stage fallback chain — must mirror
+      // src/hooks/useEmployeeScoresForPeriod.ts exactly.
+      const bestScore = (s: any): number | null =>
+        s.final_score ?? s.management_score ?? s.auditor_score
+        ?? s.hr_pms_score ?? s.skip_level_score ?? s.manager_score
+        ?? s.self_score ?? null;
+
+      const employeeIdsForScores = profiles.map((p: any) => p.id);
+
+      // Step A — fetch KPIs (id, employee_id, period, year, weightage) for the
+      // fiscal range. Batched 500 employee_ids per the project's batching policy.
+      type KpiLite = {
+        id: string; employee_id: string;
+        review_period: string; review_year: number;
+        weightage: number | null;
+      };
+      const kpiRows: KpiLite[] = [];
+      for (let i = 0; i < employeeIdsForScores.length; i += 500) {
+        const batch = employeeIdsForScores.slice(i, i + 500);
+        if (!batch.length) continue;
+        const { data, error } = await admin
+          .from('kpis')
+          .select('id, employee_id, review_period, review_year, weightage')
+          .in('employee_id', batch)
+          .in('review_year', [startYear, endYear]);
+        if (error) throw error;
+        (data as any[] ?? []).forEach((r) => {
+          // Only keep KPIs whose (period, year) falls in the fiscal window.
+          if (!periodKeyToMonth.has(`${r.review_period}|${r.review_year}`)) return;
+          kpiRows.push(r as KpiLite);
+        });
+      }
+
+      // Step B — fetch submissions for those KPI ids (batched 500).
+      const subByKpiId = new Map<string, any>();
+      const kpiIds = kpiRows.map((k) => k.id);
+      for (let i = 0; i < kpiIds.length; i += 500) {
+        const batch = kpiIds.slice(i, i + 500);
+        if (!batch.length) continue;
+        const { data, error } = await admin
+          .from('review_submissions')
+          .select('kpi_id, is_na, final_score, management_score, auditor_score, hr_pms_score, skip_level_score, manager_score, self_score')
+          .in('kpi_id', batch);
+        if (error) throw error;
+        (data as any[] ?? []).forEach((s) => subByKpiId.set(s.kpi_id, s));
+      }
+
+      // Step C — aggregate to one weighted-average score per (employee, month).
+      // Accumulate weightedSum / totalWeight per (empId, monthKey).
+      type Acc = { weightedSum: number; totalWeight: number; month: number };
+      const acc = new Map<string, Acc>(); // key = `${empId}|${month}`
+      for (const k of kpiRows) {
+        const month = periodKeyToMonth.get(`${k.review_period}|${k.review_year}`);
+        if (!month) continue;
+        const sub = subByKpiId.get(k.id);
+        if (!sub || sub.is_na) continue;
+        const score = bestScore(sub);
+        if (score === null || score === undefined) continue;
+        const w = Number(k.weightage) || 0;
+        if (w <= 0) continue;
+        const key = `${k.employee_id}|${month}`;
+        const cur = acc.get(key) ?? { weightedSum: 0, totalWeight: 0, month };
+        cur.weightedSum += Number(score) * w;
+        cur.totalWeight += w;
+        acc.set(key, cur);
+      }
+
       const scoresByEmp = new Map<string, Array<{ score: number | null; month: number }>>();
-      ((prData as any[]) ?? []).forEach((r) => {
-        const periodMonth = periodStrings.find((p) => p.key.startsWith(r.review_period) && p.year === r.review_year);
-        if (!periodMonth) return;
-        if (!scoresByEmp.has(r.employee_id)) scoresByEmp.set(r.employee_id, []);
-        scoresByEmp.get(r.employee_id)!.push({ score: r.overall_score, month: periodMonth.month });
+      acc.forEach((v, key) => {
+        const empId = key.split('|')[0];
+        if (v.totalWeight <= 0) return;
+        const monthly = Math.round((v.weightedSum / v.totalWeight) * 10) / 10;
+        if (!scoresByEmp.has(empId)) scoresByEmp.set(empId, []);
+        scoresByEmp.get(empId)!.push({ score: monthly, month: v.month });
       });
 
       // Resolve service-anchor date per General Eligibility config.

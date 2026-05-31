@@ -17,6 +17,7 @@ Lean-Load: debounce search inputs (>200 rows / network); paginate new lists with
 
 ## Memories
 - [Page loading overlay pattern](mem://design/page-loading-overlay-pattern) — Centered PageLoadingOverlay wired in DashboardLayout (Suspense + RouteDataLoadingGate), rocket+chart art
+- [Increment Engine PMS Score Source](mem://features/incentive/pms-score-source) — compute-increment derives monthly PMS score live from review_submissions + kpis (8-stage chain, weighted avg); performance_reviews is NOT a source
 - [All KRAs Period Read Contract](mem://features/admin/all-kras-period-read-contract) — Month KPI reads via get_reviewer_kpis_for_period RPC; chunk profile hydration ≤500 IDs
 - [Lean-Load Policy](mem://architecture/performance/lean-load-policy) — Debounced inputs, slim KPI projection, paginated lists; rejects blanket select('*') rewrite & 20-row picker caps (POLICY §120)
 - [Bulk Review Dashboard](mem://features/review/bulk-review-dashboard) — PRD v2.0, flag-gated /review/bulk-scoring with parallel stages + audited re-open (M1+M2 shipped)

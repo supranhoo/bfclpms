@@ -1,0 +1,6 @@
+---
+name: Increment Engine PMS Score Source
+description: Canonical source and aggregation rule for monthly PMS score inside compute-increment
+type: feature
+---
+The increment engine (supabase/functions/compute-increment/index.ts) derives each employee's monthly PMS score LIVE from `review_submissions` joined to `kpis`, using the canonical 8-stage fallback chain (Final → Management → Auditor → HR PMS → Skip-Level → Manager → Self) and a weighted average across non-N/A KPIs by `kpis.weightage`. Mirrors `src/hooks/useEmployeeScoresForPeriod.ts` exactly. The `performance_reviews` table is NOT a source — it is unused/empty in this deployment. Any future refactor that re-introduces a rollup table must populate it before switching the engine over, or the engine will regress to "No PMS score found" for every employee with PMS data. Batched 500 employee_ids and 500 kpi_ids per fetch to respect DB row limits.

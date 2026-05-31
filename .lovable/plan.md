@@ -1,47 +1,118 @@
-## Root cause
+## Root Cause
 
-The run does insert items correctly (verified in DB: 1 row exists for the latest run with `eligibility_status='no_score'`, `criteria_exempt=true`). The UI is empty because the React Query that powers both the **View** dialog and **Run Details** table uses an embedded PostgREST relationship that points at a foreign key which does not exist:
+The increment engine (`supabase/functions/compute-increment/index.ts`, lines ~380–390) reads monthly PMS scores from the **`performance_reviews`** table:
 
 ```ts
-// src/hooks/useIncrementRuns.ts (useIncrementRunItems + useExportIncrementRunItems)
-.select('*, employee:profiles!increment_run_items_employee_id_fkey(id, full_name, employee_code)')
+const { data: prData } = await admin
+  .from('performance_reviews')
+  .select('employee_id, review_period, review_year, overall_score, status')
+  .in('review_year', [startYear, endYear]);
 ```
 
-DB check confirms the only FK on `public.increment_run_items` is `increment_run_items_run_id_fkey`. There is **no** `increment_run_items_employee_id_fkey`. PostgREST therefore fails relationship resolution and the query returns an error → `itemsData.rows = []` → "No items for this run." and the export comes back empty.
+…then `rollUpScores(monthly, …)` is applied. But that table is **empty** — confirmed by DB query: `SELECT count(*) FROM performance_reviews` returns **0 rows for all employees**, not just Jaspal.
 
-Secondary finding: `increment_runs`, `increment_run_items`, and `confirmation_increment_adjustments` have no explicit `GRANT`s to `authenticated` / `service_role` (only `sandbox_exec`). The runs list still renders today because admin paths reach the data, but this violates the project's GRANT-with-CREATE rule and is fragile.
+The canonical scoring data actually lives in **`review_submissions`** (one row per KPI) and the monthly PMS score must be derived using:
+- the standard **8-stage fallback chain** (`final → management → auditor → hr_pms → skip_level → manager → self`), and
+- a **weighted average across non-N/A KPIs** using `kpis.weightage`.
 
-## Risk & impact
+This is exactly what the dashboard already does in `src/hooks/useEmployeeScoresForPeriod.ts` and what the matrix uses in `src/hooks/useKpiEmployeeMatrix.ts`. The increment engine was wired to a stale/unused rollup table that nobody is populating.
 
-- Data: additive only — add one FK constraint and three GRANT blocks. No row mutations. No RLS change.
-- Workflow: none — purely fixes a read query that's already authorized via existing RLS.
-- UI: View dialog and Run Details table populate; Export Excel returns rows.
-- Regression: low. FK is additive; existing rows already satisfy it (employee_id values come from `profiles.id`). If any orphan exists, add via `NOT VALID` first.
+For Jaspal (101125), the real KPI data is present: Sep–Dec 2025 (13–14 KPIs each, fully reviewed by Auditor + Final), Jan–Mar 2026 (Management approved), Apr 2026 (in review). That's why he shows up in dashboards but the increment engine sees `pmsScore = null` → flags `no_score` with "No PMS score found".
 
-## Plan
+## Impact
 
-1. **Migration** `add increment_run_items employee FK + grants`:
-   - `ALTER TABLE public.increment_run_items ADD CONSTRAINT increment_run_items_employee_id_fkey FOREIGN KEY (employee_id) REFERENCES public.profiles(id) ON DELETE CASCADE NOT VALID;` then `VALIDATE CONSTRAINT` (safe rollback path if orphans exist).
-   - Add missing grants on the three increment tables:
-     ```sql
-     GRANT SELECT, INSERT, UPDATE, DELETE ON public.increment_runs TO authenticated;
-     GRANT SELECT, INSERT, UPDATE, DELETE ON public.increment_run_items TO authenticated;
-     GRANT SELECT, INSERT, UPDATE, DELETE ON public.confirmation_increment_adjustments TO authenticated;
-     GRANT ALL ON public.increment_runs, public.increment_run_items, public.confirmation_increment_adjustments TO service_role;
-     ```
-   - `NOTIFY pgrst, 'reload schema';` so PostgREST picks up the new relationship immediately.
+- **Every** completed run will show 0 eligible / N no_score for everyone with PMS data, regardless of criteria-exempt status.
+- The "criteria-exempt" badge is a separate flag and is unrelated to the no_score bug.
+- No data corruption — only `increment_run_items` are wrong; they are recomputed on every run.
 
-2. **No code changes** to `useIncrementRuns.ts` — the existing embed string will resolve once the FK exists.
+## Fix Plan (edge function only — no schema change)
 
-3. **Verify**:
-   - Re-run the latest "View" — expect the criteria-exempt no-score row to appear.
-   - Run Details table populates with Employee name + code.
-   - Export Excel produces a non-empty file.
+### Step 1 — Replace the data source in the edge function
 
-## Rollback
+In `supabase/functions/compute-increment/index.ts`, replace the `performance_reviews` block with a derivation from `review_submissions` + `kpis`:
 
-`ALTER TABLE public.increment_run_items DROP CONSTRAINT increment_run_items_employee_id_fkey;` — grants can be left in place (they only widen access already implied by RLS).
+```text
+For each employee in scope:
+  Fetch their KPIs in (review_period ∈ periodStrings, review_year ∈ [startYear,endYear]):
+     select id, employee_id, review_period, review_year, weightage
+  Fetch matching review_submissions by kpi_id (batched 500):
+     select kpi_id, is_na, final_score, management_score, auditor_score,
+            hr_pms_score, skip_level_score, manager_score, self_score
+  For each (employee, period, year):
+     weightedSum=0, totalWeight=0
+     for each KPI in the period:
+        sub = subMap.get(kpi.id)
+        if !sub or sub.is_na: skip
+        score = first non-null in [final, management, auditor, hr_pms, skip_level, manager, self]
+        if score == null or weightage <= 0: skip
+        weightedSum += score * weightage
+        totalWeight += weightage
+     if totalWeight > 0: push { score: round1(weightedSum/totalWeight), month }
+```
 
-## Not applicable
+Then keep the existing `rollUpScores(monthly, annualMethod, customMonths)` exactly as is — it already handles annual-method roll-up from monthly scores.
 
-Unit tests, mock data, policy doc — this is a schema-metadata fix with no business-logic change.
+### Step 2 — Keep the 8-stage chain in one place
+
+Add a small helper inside the edge function (or extract to `supabase/functions/_shared/bestScore.ts`):
+```ts
+function bestScore(s) {
+  return s.final_score ?? s.management_score ?? s.auditor_score
+      ?? s.hr_pms_score ?? s.skip_level_score ?? s.manager_score
+      ?? s.self_score ?? null;
+}
+```
+Mirror semantics of `useEmployeeScoresForPeriod.ts` exactly (same chain, same N/A exclusion, same `Math.round(x*10)/10`).
+
+### Step 3 — Batching & limits
+
+- Fetch `kpis` rows in batches of 500 employee_ids (`.in('employee_id', batch)`) to respect the 1000-row default and current convention used in `useKpiEmployeeMatrix.ts`.
+- Fetch `review_submissions` in batches of 500 `kpi_id`s.
+- Build `scoresByEmp: Map<empId, Array<{score, month}>>` once before the per-employee loop, identical to today.
+
+### Step 4 — Preserve "no_score" semantics
+
+Keep the existing branch:
+```ts
+if (pmsScore === null) {
+  if (eligibility === 'eligible') {
+    eligibility = 'no_score';
+    reason = 'No PMS score found';
+  }
+}
+```
+This is now correct because `pmsScore` actually reflects the canonical scoring chain. Jaspal will get a real score and route to a slab.
+
+### Step 5 — Verification
+
+1. Re-run "Calculate Increment" for Jaspal (101125) for AY 2026.
+2. Expected: a numeric `pms_score`, a `rating_band`, a `slab_percent`, `increment_amount > 0`, `eligibility = eligible` (since he's also criteria-exempt → criteria block skipped anyway).
+3. Re-run for an employee with a known low/zero PMS score → confirm correct slab pickup.
+4. Re-run for an employee with truly zero KPIs in the period → confirm `no_score` still fires.
+5. Compare `pms_score` produced by the engine against the dashboard's monthly score for the same employee/period → they must match.
+
+### Step 6 — Tests & docs
+
+- Add `supabase/functions/compute-increment/pms_score_derivation_test.ts` — unit tests for `bestScore()` and the monthly aggregation (weighted-average, N/A exclusion, missing submission, all-N/A case).
+- Update `DOCUMENTATION.md` "Increment Engine — Data Sources" section to state: monthly PMS score is derived live from `review_submissions` + `kpis` using the canonical 8-stage fallback chain. `performance_reviews` is **not** a source.
+- Update `POLICY.md` PMS-scoring section: "Increment uses the same 8-stage chain as dashboards. There is no separate rollup table."
+- Add a memory entry under `mem/features/incentive/` documenting the canonical PMS-score source for the increment engine.
+
+## Risk & Impact
+
+| Area | Impact |
+|---|---|
+| Data | None — only `increment_run_items` are recomputed on each run. Previous runs are historical snapshots and stay untouched. |
+| Workflow | None — UI, RLS, and run/scope flow are unchanged. |
+| UI/UX | Same screens; "View" + Export Excel will now show real `pms_score`, `slab_percent`, `eligible %`, `increment_amount` for employees who have reviews. |
+| Regression | Low — change is confined to one block inside one edge function. The existing `rollUpScores`, slab picker, method engine, and confirmation adjuster are unchanged. |
+| Performance | Two new batched `select`s per run (KPIs + submissions). For a Single-employee scope (e.g. Jaspal) this is ~30 rows total. For org-wide runs, batching at 500 keeps it well within DB limits. |
+| Rollback | Revert the single edge-function file; no schema change to undo. |
+
+## Out of Scope
+
+- No change to the `criteria_exempt` flag, its UI badge, or the run-item schema.
+- No change to slabs, methods, confirmation-increment logic, or general-eligibility gates.
+- No backfill of `performance_reviews` — that table is unused and stays as is.
+
+Awaiting approval to switch to build mode and implement.
