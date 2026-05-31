@@ -8,6 +8,7 @@
  */
 import { memo } from 'react';
 import { RocketGrowthArt } from './RocketGrowthArt';
+import { useBrandingSettings } from '@/hooks/useBrandingSettings';
 
 interface RefreshOverlayProps {
   open: boolean;
@@ -20,6 +21,7 @@ function RefreshOverlayImpl({
   label = 'Refreshing data…',
   sublabel = 'Fetching the latest scores and assignments',
 }: RefreshOverlayProps) {
+  const { rocketColor } = useBrandingSettings();
   if (!open) return null;
   return (
     <div
@@ -29,7 +31,7 @@ function RefreshOverlayImpl({
       aria-label={label}
     >
       <div className="flex flex-col items-center gap-4 rounded-2xl border bg-card/95 px-8 py-7 shadow-2xl">
-        <RocketGrowthArt />
+        <RocketGrowthArt bodyColor={rocketColor} />
         <div className="text-center">
           <p className="text-base font-semibold text-foreground">{label}</p>
           <p className="mt-1 text-xs text-muted-foreground">{sublabel}</p>

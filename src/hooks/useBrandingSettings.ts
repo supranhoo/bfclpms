@@ -19,6 +19,7 @@ export interface BrandingSettings {
   tagline: string;
   showLogo: boolean;
   logoUrl: string;
+  rocketColor: string;
   isLoading: boolean;
 }
 
@@ -39,18 +40,38 @@ export function parseBoolSetting(raw: unknown, dflt = false): boolean {
   return dflt;
 }
 
+/**
+ * Validate a hex color string (3- or 6-digit, leading #). Falls back to
+ * `dflt` when the value is missing or malformed so the loader can never
+ * render an invalid `fill=` attribute.
+ */
+export function parseHexSetting(raw: unknown, dflt: string): string {
+  const s = unwrapSettingString(raw);
+  if (!s) return dflt;
+  return /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(s) ? s : dflt;
+}
+
+/** Default rocket body color when no admin setting is present. */
+export const DEFAULT_ROCKET_COLOR = '#C2410C';
+
 export function useBrandingSettings(): BrandingSettings {
   const nameQ = useSystemSetting('branding_company_name');
   const taglineQ = useSystemSetting('branding_loader_tagline');
   const showLogoQ = useSystemSetting('branding_loader_show_logo');
   const logoUrlQ = useSystemSetting('email_company_logo_url');
+  const rocketColorQ = useSystemSetting('branding_loader_rocket_color');
 
   return {
     companyName: unwrapSettingString(nameQ.data?.setting_value),
     tagline: unwrapSettingString(taglineQ.data?.setting_value),
     showLogo: parseBoolSetting(showLogoQ.data?.setting_value, false),
     logoUrl: unwrapSettingString(logoUrlQ.data?.setting_value),
+    rocketColor: parseHexSetting(rocketColorQ.data?.setting_value, DEFAULT_ROCKET_COLOR),
     isLoading:
-      nameQ.isLoading || taglineQ.isLoading || showLogoQ.isLoading || logoUrlQ.isLoading,
+      nameQ.isLoading ||
+      taglineQ.isLoading ||
+      showLogoQ.isLoading ||
+      logoUrlQ.isLoading ||
+      rocketColorQ.isLoading,
   };
 }

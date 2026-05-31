@@ -48,7 +48,7 @@ function PageLoadingOverlayImpl({
 
   const card = (
     <div className="flex flex-col items-center gap-4 rounded-2xl border bg-card/95 px-8 py-7 shadow-2xl">
-      <RocketGrowthArt />
+      <RocketGrowthArt bodyColor={b.rocketColor} />
       {(showLogo || showName || showTagline) && (
         <div className="flex flex-col items-center gap-1 -mt-2">
           {showLogo && (
