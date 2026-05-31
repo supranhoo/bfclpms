@@ -775,16 +775,31 @@ export function ManagementScorecard({
       }
     }
     
-    const rating = scoreToRating(managementScore);
+    const uomType = (selectedKpi as any).uom_type as 'numeric' | 'binary' | 'tiered' | undefined;
+    const qualOpts = (selectedKpi as any).qualitative_options as QualitativeOption[] | null;
+    const isQualitative = uomType === 'binary' || uomType === 'tiered';
+    let mgmtAchievedToSave: number | null;
+    let mgmtScoreToSave: number | null = managementScore;
+    if (isQualitative) {
+      const r = labelToRating(managementAchievedValue, uomType, qualOpts);
+      mgmtAchievedToSave = r ?? managementScore ?? null;
+      if (r !== null) mgmtScoreToSave = r;
+    } else if (typeof managementAchievedValue === 'number') {
+      mgmtAchievedToSave = Number.isFinite(managementAchievedValue) ? managementAchievedValue : null;
+    } else if (managementAchievedValue) {
+      const n = parseFloat(String(managementAchievedValue));
+      mgmtAchievedToSave = Number.isFinite(n) ? n : null;
+    } else {
+      mgmtAchievedToSave = null;
+    }
+    const ratingToSave = scoreToRating(mgmtScoreToSave);
     submitManagementReview.mutate({
       kpi_id: selectedKpi.id,
-      management_rating: rating,
-      management_score: managementScore,
+      management_rating: ratingToSave,
+      management_score: mgmtScoreToSave,
       management_remarks: managementRemarks,
       management_evidence_url: managementEvidenceUrls.length > 0 ? managementEvidenceUrls[0] : null,
-      management_achieved_value: typeof managementAchievedValue === 'number' 
-        ? managementAchievedValue 
-        : managementAchievedValue ? parseFloat(managementAchievedValue) : null,
+      management_achieved_value: mgmtAchievedToSave,
       approve,
     });
   };
