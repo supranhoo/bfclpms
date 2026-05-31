@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
-import { Settings, Calculator, Edit3, Lightbulb, Save, RefreshCw, Calendar, Users, FileText, AlertCircle, Mail, Building2, CalendarDays, SlidersHorizontal, Database, KeyRound, Upload, Shield, Menu, LogOut, Undo2, LayoutGrid, Flag, TrendingUp } from 'lucide-react';
+import { Settings, Calculator, Edit3, Lightbulb, Save, RefreshCw, Calendar, Users, FileText, AlertCircle, Mail, Building2, CalendarDays, SlidersHorizontal, Database, KeyRound, Upload, Shield, Menu, LogOut, Undo2, LayoutGrid, Flag, TrendingUp, GitBranch } from 'lucide-react';
 import { useScoreCalculationMode, useUpdateSystemSetting, ScoreCalculationMode, useAutoRolloverSetting, useRolloverLogs, useDailyAggregationMethod, DailyAggregationMethod, useSystemSetting, useAutoLogoutMinutes } from '@/hooks/useSystemSettings';
 import { useRecallWindowHours } from '@/hooks/useRecallSubmission';
 import { useState, useEffect } from 'react';
@@ -32,6 +32,9 @@ import { AnnualScoreCalculationSection } from '@/components/admin/scoring/Annual
 import { IncrementMethodSection } from '@/components/admin/scoring/IncrementMethodSection';
 import GeneralEligibilityPage from '@/pages/increment/GeneralEligibility';
 import IncrementSlabsPage from '@/pages/increment/IncrementSlabs';
+import WorkflowConfigPage from '@/pages/admin/WorkflowConfig';
+import OrganizationPage from '@/pages/admin/Organization';
+import ReviewPeriodsPage from '@/pages/admin/ReviewPeriods';
 import { ConfirmationIncrementSection } from '@/components/admin/scoring/ConfirmationIncrementSection';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable';
@@ -44,6 +47,9 @@ import { useSearchParams } from 'react-router-dom';
 const SETTINGS_SECTIONS = [
   { key: 'branding', label: 'Branding', icon: Building2 },
   { key: 'general', label: 'General', icon: RefreshCw },
+  { key: 'workflow', label: 'Workflow Config', icon: GitBranch },
+  { key: 'organization', label: 'Organization', icon: Building2 },
+  { key: 'review-periods', label: 'Review Periods', icon: Calendar },
   { key: 'scoring', label: 'Scoring', icon: Calculator },
   { key: 'increment', label: 'Increment', icon: TrendingUp },
   { key: 'cycles', label: 'Cycles', icon: CalendarDays },
