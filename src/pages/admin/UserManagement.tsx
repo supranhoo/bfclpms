@@ -371,6 +371,10 @@ export default function UserManagement() {
     () => (employmentStatusesList || []).filter((s: any) => s.is_active !== false).map((s: any) => ({ value: s.name, label: s.name })),
     [employmentStatusesList],
   );
+  const locationOptions = useMemo(
+    () => (locationsList || []).map((l: any) => ({ value: l.id, label: l.name })),
+    [locationsList],
+  );
   const roleOptions = useMemo(() => ALL_APP_ROLES.map(role => ({ value: role, label: ROLE_LABELS[role] })), []);
 
   const totalPages = Math.ceil(filteredProfiles.length / ITEMS_PER_PAGE);
