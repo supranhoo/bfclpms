@@ -253,13 +253,29 @@ export function KpiTimeline({ isOpen, onClose, kpi, workflowStages: propStages }
       if (log.new_value.management_remarks) details.push(`Management Remarks: ${log.new_value.management_remarks}`);
     }
 
-    // Bulk/batch remark (HR PMS bulk approve etc.)
-    if (log.metadata?.batch_reason) details.push(`Remark: ${String(log.metadata.batch_reason)}`);
+    // Bulk/batch remark is rendered as a dedicated block (see renderRemark) — skip here.
     if (log.metadata?.mirrored_stage && log.metadata.mirrored_stage !== 'none') {
       details.push(`Mirrored to: ${String(log.metadata.mirrored_stage).replace(/_/g, ' ')}`);
     }
     
     return details;
+  };
+
+  // Pull a human-readable remark from various known metadata/new_value fields
+  // so HR PMS bulk-approve / admin overrides always surface the actor's note.
+  const getRemark = (log: AuditLog): string | null => {
+    const m = log.metadata as Record<string, unknown> | null;
+    const nv = log.new_value as Record<string, unknown> | null;
+    const candidate =
+      m?.batch_reason ??
+      m?.remark ??
+      m?.note ??
+      nv?.batch_reason ??
+      nv?.remark ??
+      null;
+    if (candidate == null) return null;
+    const text = String(candidate).trim();
+    return text.length ? text : null;
   };
 
   // Filter the canonical stage list down to the resolved workflow chain
