@@ -9,25 +9,25 @@ const AY_START = new Date('2025-07-01T00:00:00Z');
 const AY_END = new Date('2026-06-30T00:00:00Z');
 const VAL = AY_END;
 
-Deno.test('DOJ 14 Apr 2026, cutoff 15 → joining month counted (Apr-Jun = 3)', () => {
+Deno.test('GDOJ 14 Apr 2026, cutoff 15 → GDOJ month counted (Apr-Jun = 3)', () => {
   const r = monthsServedInAY(new Date('2026-04-14T00:00:00Z'), 15, AY_START, AY_END, VAL);
   assertEquals(r.decision, 'included');
   assertEquals(r.months, 3);
 });
 
-Deno.test('DOJ 15 Apr 2026, cutoff 15 → excluded (May-Jun = 2)', () => {
+Deno.test('GDOJ 15 Apr 2026, cutoff 15 → excluded (May-Jun = 2)', () => {
   const r = monthsServedInAY(new Date('2026-04-15T00:00:00Z'), 15, AY_START, AY_END, VAL);
   assertEquals(r.decision, 'excluded');
   assertEquals(r.months, 2);
 });
 
-Deno.test('DOJ 16 Apr 2026, cutoff 15 → excluded', () => {
+Deno.test('GDOJ 16 Apr 2026, cutoff 15 → excluded', () => {
   const r = monthsServedInAY(new Date('2026-04-16T00:00:00Z'), 15, AY_START, AY_END, VAL);
   assertEquals(r.decision, 'excluded');
   assertEquals(r.months, 2);
 });
 
-Deno.test('DOJ 10 Jul 2025, cutoff 15, validation 31 Mar 2026 → 9 months', () => {
+Deno.test('GDOJ 10 Jul 2025, cutoff 15, validation 31 Mar 2026 → 9 months', () => {
   const r = monthsServedInAY(
     new Date('2025-07-10T00:00:00Z'),
     15,
@@ -39,26 +39,26 @@ Deno.test('DOJ 10 Jul 2025, cutoff 15, validation 31 Mar 2026 → 9 months', () 
   assertEquals(r.months, 9);
 });
 
-Deno.test('DOJ before AY (1 Jan 2025) → pre_ay, full 12', () => {
+Deno.test('GDOJ before AY (1 Jan 2025) → pre_ay, full 12 (counted from AY start)', () => {
   const r = monthsServedInAY(new Date('2025-01-01T00:00:00Z'), 15, AY_START, AY_END, VAL);
   assertEquals(r.decision, 'pre_ay');
   assertEquals(r.months, 12);
 });
 
-Deno.test('DOJ after AY end (1 Jul 2026) → after_ay, 0 months', () => {
+Deno.test('GDOJ after AY end (1 Jul 2026) → after_ay, 0 months', () => {
   const r = monthsServedInAY(new Date('2026-07-01T00:00:00Z'), 15, AY_START, AY_END, VAL);
   assertEquals(r.decision, 'after_ay');
   assertEquals(r.months, 0);
 });
 
-Deno.test('Cutoff 31 with DOJ in 30-day month → joining day < 31 ⇒ included (safe)', () => {
-  // April has 30 days; DOJ 30 Apr 2026, cutoff 31.
+Deno.test('Cutoff 31 with GDOJ in 30-day month → join day < 31 ⇒ included (safe)', () => {
+  // April has 30 days; GDOJ 30 Apr 2026, cutoff 31.
   const r = monthsServedInAY(new Date('2026-04-30T00:00:00Z'), 31, AY_START, AY_END, VAL);
   assertEquals(r.decision, 'included');
   assertEquals(r.months, 3);
 });
 
-Deno.test('Cutoff 1 → every DOJ-day >= 1 is excluded except impossible day 0', () => {
+Deno.test('Cutoff 1 → every GDOJ-day >= 1 is excluded except impossible day 0', () => {
   const r = monthsServedInAY(new Date('2026-04-01T00:00:00Z'), 1, AY_START, AY_END, VAL);
   assertEquals(r.decision, 'excluded');
   assertEquals(r.months, 2);
@@ -75,13 +75,13 @@ Deno.test('Result clamped to 12 even on very long windows', () => {
   assertEquals(r.months, 12);
 });
 
-Deno.test('DOJ 14 Aug 2025, cutoff 15 → 11 whole months (joining month counted)', () => {
+Deno.test('GDOJ 14 Aug 2025, cutoff 15 → 11 whole months (GDOJ month counted)', () => {
   const r = monthsServedInAY(new Date('2025-08-14T00:00:00Z'), 15, AY_START, AY_END, VAL);
   assertEquals(r.decision, 'included');
   assertEquals(r.months, 11);
 });
 
-Deno.test('DOJ 15 Aug 2025, cutoff 15 → 10 whole months (joining month excluded)', () => {
+Deno.test('GDOJ 15 Aug 2025, cutoff 15 → 10 whole months (GDOJ month excluded)', () => {
   const r = monthsServedInAY(new Date('2025-08-15T00:00:00Z'), 15, AY_START, AY_END, VAL);
   assertEquals(r.decision, 'excluded');
   assertEquals(r.months, 10);
