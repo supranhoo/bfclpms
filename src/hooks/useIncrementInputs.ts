@@ -30,12 +30,23 @@ export function useIncrementInputs(
     queryFn: async () => {
       const from = page * pageSize;
       const to = from + pageSize - 1;
+      const term = search.trim();
+      const selectExpr = term
+        ? '*, employee:profiles!increment_inputs_employee_id_fkey!inner(id, full_name, employee_code)'
+        : '*, employee:profiles!increment_inputs_employee_id_fkey(id, full_name, employee_code)';
       let query = supabase
         .from('increment_inputs' as any)
-        .select('*, employee:profiles!increment_inputs_employee_id_fkey(id, full_name, employee_code)', { count: 'exact' })
+        .select(selectExpr, { count: 'exact' })
         .eq('assessment_year', assessmentYear!)
         .order('updated_at', { ascending: false })
         .range(from, to);
+      if (term) {
+        const safe = term.replace(/[,()*]/g, ' ').trim();
+        query = (query as any).or(
+          `full_name.ilike.%${safe}%,employee_code.ilike.%${safe}%`,
+          { foreignTable: 'employee' },
+        );
+      }
       const { data, error, count } = await query;
       if (error) throw error;
       return { rows: (data as any[]) ?? [], total: count ?? 0 };
