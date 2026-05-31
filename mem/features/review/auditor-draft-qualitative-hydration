@@ -1,0 +1,18 @@
+---
+name: Auditor Draft Qualitative Hydration
+description: How the audit review sheet persists and re-hydrates Yes/No / tiered selections
+type: feature
+---
+
+`review_submissions.auditor_achieved_value` is the canonical numeric rating (0-5) for qualitative KPIs; the UI label ("Yes"/"No"/tier label) is derived from `qualitative_options` (or `BINARY_OPTIONS`).
+
+**Save:** Use `labelToRating(label, uom_type, qualitative_options)` to convert the picker's label string to a number before writing. Never `parseFloat("Yes")` — it produces NaN and Postgres stores NULL, silently losing the auditor's selection.
+
+**Re-hydrate on draft reopen:**
+1. A draft exists when ANY of `auditor_score`, `auditor_rating`, non-empty `auditor_remarks`, or `auditor_achieved_value` is present.
+2. When a draft exists, prefer `auditor_achieved_value`; if NULL on a qualitative KPI, fall back to `auditor_score` and convert via `getQualitativeAchievedLabel`. **Never** fall back to the employee's `achieved_value` — that would silently inherit the wrong selection (e.g. show "No" when the auditor chose "Yes").
+3. When no draft exists, pre-fill from the employee's `achieved_value` (current "fresh review" UX).
+
+**Inverted binary (safety KPIs):** When `qualitative_options` defines Yes=0 / No=5, all conversions must use those options, not `BINARY_OPTIONS`.
+
+Regression test: `src/test/auditorDraftHydration.test.ts`. Same pattern should be applied to `ManagerScorecard.tsx` and `ManagementScorecard.tsx` if/when the same bug is reported there.
