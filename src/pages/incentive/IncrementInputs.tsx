@@ -16,6 +16,7 @@ import {
   useIncrementRuns,
   useIncrementRunItems,
   useTriggerIncrementRun,
+  useExportIncrementRunItems,
 } from '@/hooks/useIncrementRuns';
 import { Loader2, Upload, Play, FileSpreadsheet, Plus, Pencil, Search } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
@@ -24,6 +25,7 @@ import * as XLSX from 'xlsx';
 import { supabase } from '@/integrations/supabase/client';
 import { IncrementInputDialog } from '@/components/incentive/IncrementInputDialog';
 import { useActiveEmployeesForCopy } from '@/hooks/useActiveEmployeesForCopy';
+import { EmployeeCombobox } from '@/components/admin/EmployeeCombobox';
 
 function downloadXlsx(filename: string, rows: any[], headers: string[]) {
   const ws = rows.length
