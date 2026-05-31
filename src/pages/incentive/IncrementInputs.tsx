@@ -406,7 +406,19 @@ function CalculateIncrementTab({ year }: { year: string }) {
                       </Badge>
                     </TableCell>
                     <TableCell className="text-xs">
-                      {r.summary?.total ?? 0} employees · {r.summary?.eligible ?? 0} eligible · {r.summary?.ineligible ?? 0} ineligible
+                      {(() => {
+                        const s = r.summary ?? {};
+                        const parts = [
+                          `${s.total ?? 0} employees`,
+                          `${s.eligible ?? 0} eligible`,
+                          `${s.ineligible ?? 0} ineligible`,
+                        ];
+                        if ((s.no_score ?? 0) > 0) parts.push(`${s.no_score} no-score`);
+                        if ((s.criteria_exempt ?? 0) > 0) parts.push(`${s.criteria_exempt} criteria-exempt`);
+                        // Legacy runs (pre-fix) that stored the old `excluded` bucket
+                        if ((s.excluded ?? 0) > 0) parts.push(`${s.excluded} excluded (legacy)`);
+                        return parts.join(' · ');
+                      })()}
                     </TableCell>
                     <TableCell>
                       <Button size="sm" variant="outline" onClick={() => setSelectedRun(r.id)}>View</Button>
@@ -465,12 +477,19 @@ function CalculateIncrementTab({ year }: { year: string }) {
                     <TableCell>{r.rating_band ?? '—'}</TableCell>
                     <TableCell>{r.slab_percent ?? '—'}%</TableCell>
                     <TableCell>
-                      <Badge variant={r.eligibility_status === 'eligible' ? 'default' : 'destructive'}>
-                        {r.eligibility_status}
-                      </Badge>
+                      <div className="flex flex-col gap-1">
+                        <Badge variant={r.eligibility_status === 'eligible' ? 'default' : r.eligibility_status === 'ineligible' ? 'destructive' : 'secondary'}>
+                          {r.eligibility_status}
+                        </Badge>
+                        {r.criteria_exempt && (
+                          <Badge variant="outline" className="text-[10px]" title={r.exemption_reason ?? 'Bypassed eligibility criteria'}>
+                            Criteria-exempt
+                          </Badge>
+                        )}
+                      </div>
                     </TableCell>
-                    <TableCell className="text-xs text-muted-foreground max-w-[200px] truncate" title={r.ineligibility_reason ?? ''}>
-                      {r.ineligibility_reason ?? '—'}
+                    <TableCell className="text-xs text-muted-foreground max-w-[200px] truncate" title={r.ineligibility_reason ?? r.exemption_reason ?? ''}>
+                      {r.ineligibility_reason ?? (r.criteria_exempt ? `Bypassed: ${r.exemption_reason ?? '—'}` : '—')}
                     </TableCell>
                     <TableCell>{r.method_used ?? '—'}</TableCell>
                     <TableCell>{r.eligible_percent ?? '—'}%</TableCell>

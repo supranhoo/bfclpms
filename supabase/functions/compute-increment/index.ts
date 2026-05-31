@@ -402,7 +402,7 @@ Deno.serve(async (req) => {
       }
       const items: any[] = [];
       const adjustmentRows: any[] = [];
-      let countEligible = 0, countIneligible = 0, countExcluded = 0, countNoScore = 0;
+      let countEligible = 0, countIneligible = 0, countNoScore = 0, countCriteriaExempt = 0;
 
       for (const p of profiles) {
         // Resolve employee category name → master id once, and expose it as
@@ -411,9 +411,16 @@ Deno.serve(async (req) => {
         // no category_id column; category is stored as text in employee_category.
         const dims = empDims(p);
         (p as any).category_id = dims.employee_category_id;
+        // Criteria-exempt list: bypass eligibility-criteria block ONLY.
+        // Employees still flow through PMS-score → slab → increment normally
+        // and remain subject to confirmation-increment rules.
+        const isCriteriaExempt = exclusions.has(p.id);
+        const exemptionReason = isCriteriaExempt
+          ? (exclusionReasons.get(p.id) ?? 'Per-AY criteria exemption')
+          : null;
         // General eligibility gate
         let geFail: string | null = null;
-        if (ge) {
+        if (ge && !isCriteriaExempt) {
           if (ge.category_ids?.length && p.category_id && !ge.category_ids.includes(p.category_id)) geFail = 'Category not eligible';
           else if (ge.employment_statuses?.length && p.employment_status && !ge.employment_statuses.includes(p.employment_status)) geFail = 'Employment status not eligible';
           else if (ge.level_ids?.length && p.level_id && !ge.level_ids.includes(p.level_id)) geFail = 'Level not eligible';
@@ -427,16 +434,14 @@ Deno.serve(async (req) => {
         const currentSalary = input?.current_salary ?? null;
         const monthsServed = p.doj ? monthsBetween(new Date(p.doj), validationDate) : 12;
 
-        // Exclusion bypass
+        // Eligibility evaluation. Criteria-exempt employees skip the
+        // absent/LWP/disciplinary/training criteria block entirely.
         let eligibility: string = 'eligible';
         let reason: string | null = null;
-        if (exclusions.has(p.id)) {
-          eligibility = 'excluded';
-          reason = exclusionReasons.get(p.id) ?? 'Per-AY exclusion';
-        } else if (geFail) {
+        if (geFail) {
           eligibility = 'ineligible';
           reason = geFail;
-        } else if (input && criteria.length) {
+        } else if (input && criteria.length && !isCriteriaExempt) {
           const metrics: Record<string, number> = {
             absent_days: Number(input.absent_days ?? 0),
             lwp_days: Number(input.lwp_days ?? 0),
@@ -529,9 +534,9 @@ Deno.serve(async (req) => {
         switch (eligibility) {
           case 'eligible': countEligible++; break;
           case 'ineligible': countIneligible++; break;
-          case 'excluded': countExcluded++; break;
           case 'no_score': countNoScore++; break;
         }
+        if (isCriteriaExempt) countCriteriaExempt++;
 
         items.push({
           run_id: runId,
@@ -548,6 +553,8 @@ Deno.serve(async (req) => {
           increment_amount: incrementAmount,
           revised_salary: revisedSalary,
           remarks: input?.remarks ?? null,
+          criteria_exempt: isCriteriaExempt,
+          exemption_reason: exemptionReason,
           confirmation_treatment: adjustment.treatmentApplied,
           confirmation_granted: !!p.confirmation_increment_granted,
           confirmation_effective_date: p.confirmation_increment_effective_date ?? null,
@@ -603,8 +610,8 @@ Deno.serve(async (req) => {
           total: items.length,
           eligible: countEligible,
           ineligible: countIneligible,
-          excluded: countExcluded,
           no_score: countNoScore,
+          criteria_exempt: countCriteriaExempt,
           method: methodType,
           annual_method: annualMethod,
         },

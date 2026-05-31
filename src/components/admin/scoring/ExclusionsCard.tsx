@@ -97,7 +97,7 @@ export function ExclusionsCard({ configId, defaultAssessmentYear, knownYears, re
       <div className="flex flex-wrap items-center justify-between gap-2 p-3 border-b">
         <div className="flex items-center gap-2">
           <ShieldOff className="h-5 w-5 text-muted-foreground" />
-          <h4 className="text-sm font-semibold">Excluded Employees</h4>
+          <h4 className="text-sm font-semibold">Criteria-Exempt Employees</h4>
           {!showAllYears && (
             <Badge variant="secondary" className="ml-1">AY {activeAY}</Badge>
           )}
@@ -126,12 +126,15 @@ export function ExclusionsCard({ configId, defaultAssessmentYear, knownYears, re
 
       <div className="p-3 space-y-3">
         <p className="text-xs text-muted-foreground">
-          These employees bypass all Increment Eligibility Criteria{' '}
+          These employees bypass the Increment Eligibility Criteria (absent days, LWP,
+          disciplinary actions, training compliance) but <strong>remain eligible</strong>{' '}
+          for the annual increment based on their PMS score. Confirmation-increment rules
+          still apply.{' '}
           {showAllYears ? (
             <>for the specific Assessment Year shown on each row only.</>
           ) : (
             <>
-              for Assessment Year <strong>{activeAY}</strong> only. They remain governed by
+              Applies to Assessment Year <strong>{activeAY}</strong> only. They remain governed by
               criteria in every other Assessment Year.
             </>
           )}{' '}

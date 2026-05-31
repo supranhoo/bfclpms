@@ -3000,10 +3000,12 @@ export type Database = {
             | Database["public"]["Enums"]["confirmation_increment_treatment"]
             | null
           created_at: string
+          criteria_exempt: boolean
           current_salary: number | null
           eligibility_status: string
           eligible_percent: number | null
           employee_id: string
+          exemption_reason: string | null
           final_eligible_months: number | null
           id: string
           increment_amount: number | null
@@ -3028,10 +3030,12 @@ export type Database = {
             | Database["public"]["Enums"]["confirmation_increment_treatment"]
             | null
           created_at?: string
+          criteria_exempt?: boolean
           current_salary?: number | null
           eligibility_status: string
           eligible_percent?: number | null
           employee_id: string
+          exemption_reason?: string | null
           final_eligible_months?: number | null
           id?: string
           increment_amount?: number | null
@@ -3056,10 +3060,12 @@ export type Database = {
             | Database["public"]["Enums"]["confirmation_increment_treatment"]
             | null
           created_at?: string
+          criteria_exempt?: boolean
           current_salary?: number | null
           eligibility_status?: string
           eligible_percent?: number | null
           employee_id?: string
+          exemption_reason?: string | null
           final_eligible_months?: number | null
           id?: string
           increment_amount?: number | null
