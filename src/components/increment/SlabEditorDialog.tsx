@@ -216,6 +216,7 @@ export function SlabEditorDialog({
                       values={values}
                       onChange={(v) => patch({ [dim.slabKey]: v } as Partial<SlabDraft>)}
                       placeholder={dim.placeholder}
+                      width={320}
                     />
                   </div>
                 );
