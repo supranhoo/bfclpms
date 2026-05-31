@@ -1,71 +1,78 @@
-# Replace "Category" (KRA) with "Employee Category" in Increment Slabs
+# Inline-edit Increment Slabs grid (one screen)
 
-## Problem
-The slab side-panel currently shows a "Category" dimension backed by `kra_categories` (used for KRA/KPI grouping). For increment slabs this is meaningless. Business needs to scope slabs by **Employee Category** (ESI, Non-ESI, Trainee, Confirmed, etc.), which lives in the `employee_categories` master and is stored on `profiles.employee_category` (text name, per the Employee Category & Employment Status policy).
+## Goal
+Replace the side-sheet editor with a single full-width table where every slab row shows its scope (Company, Division, Business Unit, Location, Employee Category, Level) by **name** and is editable in place. "Add Slab" simply appends a blank editable row — no other fields, no popup.
+
+## Feasibility
+Fully feasible. All data and helpers already exist:
+- `useEligibilityMasters()` returns `companies / divisions / business_units / locations / employee_categories / levels` (id+name).
+- `MultiSelectFilter` already shows selected names with chips and a count badge — perfect for compact cells.
+- `useUpsertSlab` / `useDeleteSlab` already handle per-row save/delete.
+- Specificity, duplicate-scope guard, and validation move from sheet to row-level (toast on Save).
+
+The only cost is horizontal width. With 11 columns we need a horizontally scrollable table on viewports < ~1500px (the page is `max-w-7xl` already). We use `overflow-x-auto` and tight min-widths per cell — acceptable for an admin grid (matches existing dense tables like KPI matrix).
+
+## UI Changes (single screen)
+
+Location: `/admin/increment/slabs`
+
+```text
+AY [2025-26 ▼]   [Copy Previous Year]   [+ Add Slab]
+
+┌───────────┬──────────┬───────────┬─────────────┬───────────────┬─────────────┬──────────────────┬──────────┬──────────┬─────────┐
+│ Rating    │ Increment│ Company   │ Division    │ Business Unit │ Location    │ Employee Category│ Level    │ Prorate  │ Action  │
+│ From → To │   %      │           │             │               │             │                  │          │ on DOJ   │         │
+├───────────┼──────────┼───────────┼─────────────┼───────────────┼─────────────┼──────────────────┼──────────┼──────────┼─────────┤
+│ [4.75]→[5]│ [12.00]  │ BFCL ▼    │ All ▼       │ All ▼         │ Plant-1 ▼   │ Confirmed ▼      │ L4 ▼     │  [✓]     │ 💾 🗑   │
+│ [4.50]→[4│ [10.00]  │ BFCL,GHCL▼│ Steel ▼     │ 2 selected ▼  │ All ▼       │ Confirmed,ESI ▼  │ L3,L4 ▼  │  [✓]     │ 💾 🗑   │
+│ …                                                                                                                              │
+└────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+Cell behavior:
+- **Rating From / To / Increment %**: small numeric `<Input>` (~80–96px wide).
+- **Company / Division / BU / Location / Employee Category / Level**: `MultiSelectFilter` trigger that shows the selected name when 1 chosen, "N selected" when many, "All" placeholder when empty. Width 180–220px each.
+- **Prorate on DOJ**: checkbox.
+- **Action**: Save (only enabled when row is dirty), Delete. New unsaved rows show Save + Cancel.
+
+Header row: title row span auto for "Rating From / To" combined cell label "Rating Band" with two inputs side-by-side, or keep as two columns — confirm in build.
+
+Side `Sheet` editor is **removed**. "Add Slab" appends one blank row at the top of the table in dirty/unsaved state with focus on Rating From.
+
+Specificity badge stays as a tiny pill in the Action cell (e.g. `3/6`) so users can see scope weight without opening anything.
+
+Validation (on Save click):
+- `rating_to >= rating_from`, `0 <= increment_percent <= 100`
+- Exact-scope duplicate check vs other rows
+- On failure → red toast + row stays dirty.
+
+## Responsive
+- Table wrapped in `<div className="overflow-x-auto">` with `min-w-[1400px]` so all columns stay visible; horizontal scroll on smaller screens. No layout collapse.
+- Sticky first 3 columns (Rating From / To / Increment %) on horizontal scroll using `sticky left-0 bg-background` so users always see the band while scrolling scope columns.
 
 ## Risk & Impact
-- **Data**: `increment_slabs.category_ids` shipped but has no production rows → safe to rename. Renaming avoids ambiguous columns and keeps history clean. Existing slabs (if any) with values would be discarded — confirmed none exist; we will still guard with a default-empty fallback.
-- **Workflow**: No change to eligibility, scoring, or run pipeline beyond the matcher lookup key.
-- **UI**: Only the slab side-panel "Category" row changes (label, icon, options source, placeholder). Table chip label changes from `Cat:` to `EmpCat:`.
-- **Regression**: `slabMatcher.ts` unit tests stay green (dimension is renamed, not removed). Edge function `compute-increment` already pulls `profiles.employee_category` — we add a name→id lookup.
-- **Mitigation**: Pure rename + new master source; backward-compatible JSON shape on the API side via a single `RENAME COLUMN`.
-
-## UI Changes
-Location: `/admin/increment/slabs` → "Edit Slab" / "Add Slab" side sheet (the panel in the screenshot).
-
-Before → After (only the Category row):
-```text
-Category   [ All categories  ▼ ]   (KRA categories)
-              ↓
-Employee   [ All employee categories ▼ ]   (ESI, Non-ESI, Trainee, Confirmed …)
-Category
-```
-- Icon: swap `Tag` → `Users` (lucide).
-- Placeholder: "All employee categories".
-- Multi-select, empty = applies to all (unchanged behavior).
-- Specificity badge (`x / 6`) unchanged.
-- Slab list row chip relabels `Cat: …` → `EmpCat: …`.
-- No other dimension, no other page affected.
+- **Data**: zero schema change.
+- **Logic**: same `useUpsertSlab`, same matcher, same edge function — only the editor surface changes.
+- **UX regression**: removing the sheet means very wide screens get a dense grid. Mitigated by sticky band columns + horizontal scroll.
+- **Perf**: each row mounts 6 multi-selects. For typical 4–10 slabs this is negligible; we lazy-render dropdown menus (already MultiSelect default).
 
 ## Implementation
-
-1. **Migration** (`supabase/migrations/<ts>_rename_slab_category_to_employee_category.sql`)
-   - `ALTER TABLE public.increment_slabs RENAME COLUMN category_ids TO employee_category_ids;`
-   - Update `increment_slabs_audit` trigger / snapshot column name if it references `category_ids` (verify in file before writing).
-
-2. **Masters hook** (`src/hooks/useIncrementEligibility.ts → useEligibilityMasters`)
-   - Replace the `kra_categories` query with `employee_categories` (id, name), keyed as `employee_categories` in the returned object. Keep `categories` key for any other consumer or rename consumers (search shows only IncrementSlabs uses it).
-
-3. **Slab matcher** (`src/lib/slabMatcher.ts`)
-   - Rename field `category_ids` → `employee_category_ids` on `SlabLike`.
-   - Rename `EmployeeDims.category_id` → `employee_category_id`.
-   - Update `DIMENSIONS` map and `describeScope` label (`Category` → `Emp Category`).
-   - Update `slabMatcher.test.ts` field names; behavior tests unchanged.
-
-4. **Slab UI** (`src/pages/increment/IncrementSlabs.tsx`)
-   - Rename draft field, table chip, and side-panel row.
-   - Swap icon `Tag` → `Users`; label "Employee Category"; placeholder "All employee categories".
-   - Bind options to `masters?.employee_categories`.
-
-5. **Hook payload** (`src/hooks/useIncrementSlabs.ts`)
-   - Rename `category_ids` → `employee_category_ids` in the Slab type and upsert payload.
-
-6. **Edge function** (`supabase/functions/compute-increment/index.ts`)
-   - Build a `Map<lowercased name, id>` from `employee_categories` (already a fetched master if available, else add a fetch).
-   - Resolve each profile's `employee_category` text → id and assign `employee_category_id` on the `EmployeeDims` object passed to `pickSlab`.
-   - Update the legacy local `matchSlab` references (lines ~115–119, ~178, ~335) to the new field name. Remove the old `category_id` → `profiles.category_id` mapping (that was the KRA category UUID and never meaningful here).
-   - Remarks string already comes from `describeScope`; verify label reads "Emp Category".
-
-7. **Types** (`src/integrations/supabase/types.ts`) — auto-regenerated, do not edit by hand.
+1. `src/pages/increment/IncrementSlabs.tsx` — full rewrite of the page:
+   - Drop `Sheet` / `SheetContent` / `editing` state.
+   - Add `dirtyById: Record<string, Draft>` + one `newRow: Draft | null` for the unsaved Add.
+   - Render the wide table with sticky columns; per-cell editors bound to drafts.
+   - Per-row `Save` calls `upsert.mutateAsync`; `Cancel` discards.
+   - Keep `ConfirmDestructiveDialog` for delete.
+   - Show `Specificity n/6` pill in Action column.
+2. No changes to `useIncrementSlabs`, `slabMatcher`, masters hook, or edge function.
 
 ## Tests
-- Update `src/lib/slabMatcher.test.ts` field names (`employee_category_ids`, `employee_category_id`) — all 9 cases stay valid.
-- Add 1 case: slab scoped to `employee_category_ids: ['<trainee-id>']` matches only trainees, falls back to global for confirmed employees.
+- Keep existing `slabMatcher.test.ts` (unchanged).
+- Add `src/pages/increment/__tests__/IncrementSlabsRow.test.tsx` (light) for: invalid range blocks save; duplicate-scope blocks save; new row appears at top on Add Slab.
 
 ## Docs / Policy
-- `DOCUMENTATION.md` Increment Slabs section: change dimension list from "Category (KRA)" → "Employee Category (ESI / Non-ESI / Trainee / Confirmed / …)" with a note that the source is the `employee_categories` master.
-- `POLICY.md` Increment policy: add line "Slabs may be scoped by Employee Category. KRA category is not a valid scoping dimension for increments."
-- Memory update: extend `mem://features/admin/employee-category-and-status` with one line noting Increment Slabs now scope by Employee Category.
+- `DOCUMENTATION.md` Increment Slabs section: update screenshot/wording — "single inline-edit grid" instead of "side-panel editor".
+- No POLICY change.
 
 ## Rollback
-Single migration; reverse with `ALTER TABLE … RENAME COLUMN employee_category_ids TO category_ids;` and revert the 5 frontend files. No data loss because column has no production rows.
+Revert the single `IncrementSlabs.tsx` file; everything else untouched.
