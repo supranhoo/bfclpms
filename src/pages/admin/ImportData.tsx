@@ -1773,11 +1773,13 @@ export default function ImportData() {
         level: 'Level 1',
         employeeCategory: 'Staff',
         employmentStatus: 'Confirmed',
+        location: 'Mumbai',
         managerEmployeeId: '100002',
         managerName: 'Jane Smith',
         employeeStatus: 'Active',
         groupDoj: '2020-04-15',
         doj: '2020-04-15',
+        confirmationDate: '2020-10-15',
       },
     ];
 
