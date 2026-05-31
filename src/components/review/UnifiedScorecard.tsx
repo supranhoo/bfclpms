@@ -946,10 +946,37 @@ export function UnifiedScorecard({
     };
     const ownScore = ownScoreFieldMap[viewLevel] ?? null;
 
-    // Determine the achieved value for this level
-    const achievedVal = (existing as any)?.[`${config.scoreFieldPrefix}_achieved_value`] ?? 
-      existing?.achieved_value ?? 
-      (kpi.is_org_level ? getOrgKpiValue(kpi)?.achieved_value ?? null : null);
+    const uomType = (kpi as any).uom_type as 'numeric' | 'binary' | 'tiered' | undefined;
+    const qualOpts = (kpi as any).qualitative_options as QualitativeOption[] | null;
+    const isQualitative = uomType === 'binary' || uomType === 'tiered';
+    const rawReviewerAchieved = (existing as any)?.[`${config.scoreFieldPrefix}_achieved_value`] ?? null;
+    const remarksField = (existing as any)?.[`${config.scoreFieldPrefix}_remarks`];
+    const ratingField = (existing as any)?.[`${config.scoreFieldPrefix}_rating`];
+    const hasReviewerDraft =
+      ownScore != null ||
+      ratingField != null ||
+      (typeof remarksField === 'string' && remarksField.trim() !== '') ||
+      rawReviewerAchieved != null;
+
+    // Determine the achieved value for this level. For qualitative drafts we derive the
+    // picker label from the reviewer's OWN score (canonical) so the picker tile cannot
+    // diverge from the Review Journey tile.
+    let achievedVal: number | string | null;
+    if (hasReviewerDraft && isQualitative) {
+      const numeric =
+        ownScore != null
+          ? Number(ownScore)
+          : (rawReviewerAchieved != null ? Number(rawReviewerAchieved) : null);
+      achievedVal = getQualitativeAchievedLabel(numeric, uomType, qualOpts) ?? null;
+    } else if (hasReviewerDraft) {
+      achievedVal = rawReviewerAchieved ?? null;
+    } else {
+      const baseAchieved = existing?.achieved_value ?? 
+        (kpi.is_org_level ? getOrgKpiValue(kpi)?.achieved_value ?? null : null);
+      achievedVal = isQualitative
+        ? (getQualitativeAchievedLabel(baseAchieved, uomType, qualOpts) ?? null)
+        : baseAchieved;
+    }
 
     let prevScore: number | null = ownScore;
 
@@ -994,11 +1021,7 @@ export function UnifiedScorecard({
           ? [(existing as any)[`${config.scoreFieldPrefix}_evidence_url`]] 
           : []
     );
-    setReviewerAchievedValue(
-      (existing as any)?.[`${config.scoreFieldPrefix}_achieved_value`] ?? 
-      existing?.achieved_value ?? 
-      (kpi.is_org_level ? getOrgKpiValue(kpi)?.achieved_value ?? null : null)
-    );
+    setReviewerAchievedValue(achievedVal);
     
     // Reset state
     setReviewerAgrees(null);
