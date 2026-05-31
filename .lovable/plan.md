@@ -1,78 +1,88 @@
-# Inline-edit Increment Slabs grid (one screen)
+# Increment Slabs — Compact Row + View/Edit Modal
 
-## Goal
-Replace the side-sheet editor with a single full-width table where every slab row shows its scope (Company, Division, Business Unit, Location, Employee Category, Level) by **name** and is editable in place. "Add Slab" simply appends a blank editable row — no other fields, no popup.
+## Assumptions
+- Keep current DB schema, hooks, matcher, and edge function untouched. UI-only change.
+- "View / Edit" modal is the single editor. Inline grid editing is removed to eliminate horizontal scroll.
+- Future scope/criteria columns (e.g. Employment Status, Service Eligibility) should appear in the modal automatically by driving the form from a config array.
 
-## Feasibility
-Fully feasible. All data and helpers already exist:
-- `useEligibilityMasters()` returns `companies / divisions / business_units / locations / employee_categories / levels` (id+name).
-- `MultiSelectFilter` already shows selected names with chips and a count badge — perfect for compact cells.
-- `useUpsertSlab` / `useDeleteSlab` already handle per-row save/delete.
-- Specificity, duplicate-scope guard, and validation move from sheet to row-level (toast on Save).
+## Risk & Impact Report
+- **Data Impact:** None — no schema or RLS change.
+- **Workflow Impact:** None — same save/delete/copy-year flows; only the editor surface changes.
+- **UI/UX Impact:** Removes horizontal scroll. Row becomes a summary; full configuration moves to modal. Matches preferred Option 1 in the requirement.
+- **Regression Risk:** Low. `useUpsertSlab`, `slabMatcher`, `compute-increment` edge function unchanged. Validation logic (range, %, duplicate scope) is moved verbatim from inline-Save into modal-Save.
+- **Scalability:** Modal is rendered from a `SLAB_DIMENSIONS` config array — adding a new scope dimension only requires appending to the config + (eventually) a column on the table. No layout work.
+- **Mitigation:** Keep `slabMatcher.test.ts` green; add modal tests for validation; preserve specificity badge + scope summary on the row.
 
-The only cost is horizontal width. With 11 columns we need a horizontally scrollable table on viewports < ~1500px (the page is `max-w-7xl` already). We use `overflow-x-auto` and tight min-widths per cell — acceptable for an admin grid (matches existing dense tables like KPI matrix).
+## UI Changes
 
-## UI Changes (single screen)
+Route: `/admin/increment/slabs`
 
-Location: `/admin/increment/slabs`
-
+**Row (no horizontal scroll, fits 929px viewport):**
 ```text
-AY [2025-26 ▼]   [Copy Previous Year]   [+ Add Slab]
-
-┌───────────┬──────────┬───────────┬─────────────┬───────────────┬─────────────┬──────────────────┬──────────┬──────────┬─────────┐
-│ Rating    │ Increment│ Company   │ Division    │ Business Unit │ Location    │ Employee Category│ Level    │ Prorate  │ Action  │
-│ From → To │   %      │           │             │               │             │                  │          │ on DOJ   │         │
-├───────────┼──────────┼───────────┼─────────────┼───────────────┼─────────────┼──────────────────┼──────────┼──────────┼─────────┤
-│ [4.75]→[5]│ [12.00]  │ BFCL ▼    │ All ▼       │ All ▼         │ Plant-1 ▼   │ Confirmed ▼      │ L4 ▼     │  [✓]     │ 💾 🗑   │
-│ [4.50]→[4│ [10.00]  │ BFCL,GHCL▼│ Steel ▼     │ 2 selected ▼  │ All ▼       │ Confirmed,ESI ▼  │ L3,L4 ▼  │  [✓]     │ 💾 🗑   │
-│ …                                                                                                                              │
-└────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+┌──────────────┬───────────┬────────────────────────────────────┬──────────┬─────────────────┐
+│ Rating Band  │ Increment │ Scope summary                      │ Specific.│ Actions         │
+├──────────────┼───────────┼────────────────────────────────────┼──────────┼─────────────────┤
+│ 4.75 → 5.00  │  12.00 %  │ BFCL · Steel · 2 BUs · Confirmed   │   4/6    │ 👁 View/Edit  🗑│
+│ 4.50 → 4.74  │  10.00 %  │ All employees                      │   0/6    │ 👁 View/Edit  🗑│
+└──────────────┴───────────┴────────────────────────────────────┴──────────┴─────────────────┘
 ```
+- Scope summary uses `describeScope()` (already exists) with the masters name resolver — shows real names, truncates with tooltip when long.
+- "Prorate on DOJ" shown as a small badge in the Increment cell when true (`12.00% · pro-rata`).
+- `+ Add Slab` button in the header opens the modal in create mode (no inline blank row).
 
-Cell behavior:
-- **Rating From / To / Increment %**: small numeric `<Input>` (~80–96px wide).
-- **Company / Division / BU / Location / Employee Category / Level**: `MultiSelectFilter` trigger that shows the selected name when 1 chosen, "N selected" when many, "All" placeholder when empty. Width 180–220px each.
-- **Prorate on DOJ**: checkbox.
-- **Action**: Save (only enabled when row is dirty), Delete. New unsaved rows show Save + Cancel.
-
-Header row: title row span auto for "Rating From / To" combined cell label "Rating Band" with two inputs side-by-side, or keep as two columns — confirm in build.
-
-Side `Sheet` editor is **removed**. "Add Slab" appends one blank row at the top of the table in dirty/unsaved state with focus on Rating From.
-
-Specificity badge stays as a tiny pill in the Action cell (e.g. `3/6`) so users can see scope weight without opening anything.
-
-Validation (on Save click):
-- `rating_to >= rating_from`, `0 <= increment_percent <= 100`
-- Exact-scope duplicate check vs other rows
-- On failure → red toast + row stays dirty.
-
-## Responsive
-- Table wrapped in `<div className="overflow-x-auto">` with `min-w-[1400px]` so all columns stay visible; horizontal scroll on smaller screens. No layout collapse.
-- Sticky first 3 columns (Rating From / To / Increment %) on horizontal scroll using `sticky left-0 bg-background` so users always see the band while scrolling scope columns.
-
-## Risk & Impact
-- **Data**: zero schema change.
-- **Logic**: same `useUpsertSlab`, same matcher, same edge function — only the editor surface changes.
-- **UX regression**: removing the sheet means very wide screens get a dense grid. Mitigated by sticky band columns + horizontal scroll.
-- **Perf**: each row mounts 6 multi-selects. For typical 4–10 slabs this is negligible; we lazy-render dropdown menus (already MultiSelect default).
+**Modal (`Dialog`, max-w-3xl, scroll-y):**
+```text
+┌─ Edit Slab ──────────────────────────────────────────── ✕ ─┐
+│ Rating Band                                                │
+│  Rating From [ 4.75 ]   Rating To [ 5.00 ]   Increment % [12]│
+│  [✓] Prorate on DOJ                                        │
+│                                                            │
+│ Scope (leave blank = applies to all)                       │
+│  Company         [ MultiSelect: BFCL, GHCL …          ▾ ] │
+│  Division        [ MultiSelect: Steel …               ▾ ] │
+│  Business Unit   [ MultiSelect: 2 selected            ▾ ] │
+│  Location        [ MultiSelect: All                   ▾ ] │
+│  Employee Cat.   [ MultiSelect: Confirmed, ESI        ▾ ] │
+│  Level           [ MultiSelect: L3, L4                ▾ ] │
+│                                                            │
+│ Remarks (optional)                                         │
+│  [ stored in extra_attributes.remarks                    ] │
+│                                                            │
+│ Specificity: 4/6   ·   Matches: Company, Division, BU, Cat │
+│                                                            │
+│                              [ Cancel ]   [ Save Slab ]    │
+└────────────────────────────────────────────────────────────┘
+```
+- Form fields generated from a single `SLAB_DIMENSIONS` config array → future dimensions appear automatically.
+- Validation on Save (same rules as today): `rating_to >= rating_from`, `0 ≤ % ≤ 100`, exact-scope duplicate check vs other rows in same AY → red toast on failure, modal stays open.
+- Delete stays on the row, gated by `ConfirmDestructiveDialog` (unchanged).
+- Historical rows: open the modal in read-only mode for archived AY (later — out of scope for this change; structure supports it).
 
 ## Implementation
-1. `src/pages/increment/IncrementSlabs.tsx` — full rewrite of the page:
-   - Drop `Sheet` / `SheetContent` / `editing` state.
-   - Add `dirtyById: Record<string, Draft>` + one `newRow: Draft | null` for the unsaved Add.
-   - Render the wide table with sticky columns; per-cell editors bound to drafts.
-   - Per-row `Save` calls `upsert.mutateAsync`; `Cancel` discards.
-   - Keep `ConfirmDestructiveDialog` for delete.
-   - Show `Specificity n/6` pill in Action column.
-2. No changes to `useIncrementSlabs`, `slabMatcher`, masters hook, or edge function.
+1. `src/pages/increment/IncrementSlabs.tsx` — rewrite page:
+   - Remove inline-edit drafts, sticky columns, `min-w-[1500px]` wrapper.
+   - Render compact 5-column table (Band / Increment / Scope / Specificity / Actions).
+   - `View/Edit` button opens new `SlabEditorDialog` with the row's data; `Add Slab` opens it in create mode.
+2. New `src/components/increment/SlabEditorDialog.tsx`:
+   - Props: `open`, `onOpenChange`, `slab | null` (null = create), `assessmentYear`, `existingSlabs` (for dup check), `masters`.
+   - Renders the rating block + a loop over `SLAB_DIMENSIONS` for scope multi-selects + remarks field + footer.
+   - Owns local draft state, validation, and calls `useUpsertSlab.mutateAsync` then closes on success.
+3. New `src/lib/slabDimensions.ts`:
+   - Exports `SLAB_DIMENSIONS` array describing each scope field (`key`, `label`, `mastersKey`, `icon`). Used by the dialog and by `describeScope` callers for naming consistency. Driving config = "future criteria column" extensibility.
+4. No changes to: `useIncrementSlabs`, `useIncrementEligibility`, `slabMatcher.ts`, `compute-increment` edge function, DB schema, RLS.
 
 ## Tests
-- Keep existing `slabMatcher.test.ts` (unchanged).
-- Add `src/pages/increment/__tests__/IncrementSlabsRow.test.tsx` (light) for: invalid range blocks save; duplicate-scope blocks save; new row appears at top on Add Slab.
+- Keep `slabMatcher.test.ts` (10/10) untouched.
+- Add `src/components/increment/__tests__/SlabEditorDialog.test.tsx`:
+  - Renders all dimension fields from `SLAB_DIMENSIONS` (proves future-column auto-appear).
+  - Blocks save when `rating_to < rating_from`.
+  - Blocks save on exact-scope duplicate within the same AY.
+  - Calls `onUpsert` with the correct payload on valid Save.
 
 ## Docs / Policy
-- `DOCUMENTATION.md` Increment Slabs section: update screenshot/wording — "single inline-edit grid" instead of "side-panel editor".
-- No POLICY change.
+- `DOCUMENTATION.md` → Increment Slabs section: replace "inline-edit grid" with "compact row + View/Edit modal; all scope dimensions edited inside the modal; row shows scope summary and specificity."
+- `POLICY.md` → no change (matching/specificity rules unchanged).
+- Add Version History entry: "Increment Slabs editor moved from inline grid to modal for scalability of scope dimensions."
 
 ## Rollback
-Revert the single `IncrementSlabs.tsx` file; everything else untouched.
+Revert `IncrementSlabs.tsx`, delete `SlabEditorDialog.tsx` and `slabDimensions.ts`. No data migration to undo.
