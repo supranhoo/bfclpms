@@ -51,6 +51,9 @@ const KpiWeightageDashboard = lazy(() => import("./pages/admin/KpiWeightageDashb
 const PendingSelfReviews = lazy(() => import("./pages/admin/PendingSelfReviews"));
 const IncentiveConfig = lazy(() => import("./pages/admin/IncentiveConfig"));
 const IncentiveDataEntry = lazy(() => import("./pages/admin/IncentiveDataEntry"));
+const IncrementInputs = lazy(() => import("./pages/incentive/IncrementInputs"));
+const GeneralEligibility = lazy(() => import("./pages/increment/GeneralEligibility"));
+const IncrementSlabsPage = lazy(() => import("./pages/increment/IncrementSlabs"));
 const EmployeeDevelopment = lazy(() => import("./pages/admin/EmployeeDevelopment"));
 const OrgKpiAuditReview = lazy(() => import("./pages/admin/OrgKpiAuditReview"));
 const EmployeeMasterBackfill = lazy(() => import("./pages/admin/EmployeeMasterBackfill"));
