@@ -173,7 +173,7 @@ export default function IncrementSlabsPage() {
 
       <ConfirmDestructiveDialog
         open={!!confirmDelete}
-        onOpenChange={(o) => { if (!o) setConfirmDelete(null); }}
+        onCancel={() => setConfirmDelete(null)}
         title="Delete slab?"
         description="This cannot be undone."
         onConfirm={() => {
