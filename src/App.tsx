@@ -470,6 +470,21 @@ const App = () => (
                     <Suspense fallback={<PageFallback />}><IncentiveDataEntry /></Suspense>
                   </ProtectedRoute>
                 } />
+                <Route path="/admin/increment-inputs" element={
+                  <ProtectedRoute allowedRoles={['admin', 'hr_pms']} menuKey="admin-increment-inputs">
+                    <Suspense fallback={<PageFallback />}><IncrementInputs /></Suspense>
+                  </ProtectedRoute>
+                } />
+                <Route path="/admin/increment/general-eligibility" element={
+                  <ProtectedRoute allowedRoles={['admin', 'hr_pms']} menuKey="admin-increment-general-eligibility">
+                    <Suspense fallback={<PageFallback />}><GeneralEligibility /></Suspense>
+                  </ProtectedRoute>
+                } />
+                <Route path="/admin/increment/slabs" element={
+                  <ProtectedRoute allowedRoles={['admin', 'hr_pms']} menuKey="admin-increment-slabs">
+                    <Suspense fallback={<PageFallback />}><IncrementSlabsPage /></Suspense>
+                  </ProtectedRoute>
+                } />
                 <Route path="/admin/employee-development" element={
                   <ProtectedRoute allowedRoles={['admin', 'hr_pms']} menuKey="admin-employee-development">
                     <Suspense fallback={<PageFallback />}><EmployeeDevelopment /></Suspense>
