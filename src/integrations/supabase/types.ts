@@ -804,6 +804,99 @@ export type Database = {
         }
         Relationships: []
       }
+      confirmation_increment_adjustments: {
+        Row: {
+          adjustment_reason: string | null
+          assessment_year: string
+          balance_eligible_months: number
+          carry_forward_months: number
+          created_at: string
+          employee_id: string
+          final_eligible_months: number
+          id: string
+          inputs_snapshot: Json | null
+          period_covered_months: number
+          run_id: string | null
+          treatment_applied: Database["public"]["Enums"]["confirmation_increment_treatment"]
+        }
+        Insert: {
+          adjustment_reason?: string | null
+          assessment_year: string
+          balance_eligible_months?: number
+          carry_forward_months?: number
+          created_at?: string
+          employee_id: string
+          final_eligible_months?: number
+          id?: string
+          inputs_snapshot?: Json | null
+          period_covered_months?: number
+          run_id?: string | null
+          treatment_applied: Database["public"]["Enums"]["confirmation_increment_treatment"]
+        }
+        Update: {
+          adjustment_reason?: string | null
+          assessment_year?: string
+          balance_eligible_months?: number
+          carry_forward_months?: number
+          created_at?: string
+          employee_id?: string
+          final_eligible_months?: number
+          id?: string
+          inputs_snapshot?: Json | null
+          period_covered_months?: number
+          run_id?: string | null
+          treatment_applied?: Database["public"]["Enums"]["confirmation_increment_treatment"]
+        }
+        Relationships: []
+      }
+      confirmation_increment_rules: {
+        Row: {
+          assessment_year: string
+          category_id: string | null
+          company_id: string | null
+          copied_from_rule_id: string | null
+          created_at: string
+          created_by: string | null
+          id: string
+          level_id: string | null
+          notes: string | null
+          status: string
+          treatment: Database["public"]["Enums"]["confirmation_increment_treatment"]
+          updated_at: string
+          version: number
+        }
+        Insert: {
+          assessment_year: string
+          category_id?: string | null
+          company_id?: string | null
+          copied_from_rule_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          level_id?: string | null
+          notes?: string | null
+          status?: string
+          treatment?: Database["public"]["Enums"]["confirmation_increment_treatment"]
+          updated_at?: string
+          version?: number
+        }
+        Update: {
+          assessment_year?: string
+          category_id?: string | null
+          company_id?: string | null
+          copied_from_rule_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          level_id?: string | null
+          notes?: string | null
+          status?: string
+          treatment?: Database["public"]["Enums"]["confirmation_increment_treatment"]
+          updated_at?: string
+          version?: number
+        }
+        Relationships: []
+      }
       custom_reports: {
         Row: {
           category: string | null
@@ -5584,6 +5677,9 @@ export type Database = {
         Row: {
           avatar_url: string | null
           company_id: string | null
+          confirmation_date: string | null
+          confirmation_increment_effective_date: string | null
+          confirmation_increment_granted: boolean
           created_at: string
           deactivated_at: string | null
           department_id: string | null
@@ -5605,12 +5701,16 @@ export type Database = {
           pms_grade: string | null
           pms_grade_id: string | null
           portal_access: boolean
+          previous_employment_status: string | null
           reporting_manager_id: string | null
           updated_at: string
         }
         Insert: {
           avatar_url?: string | null
           company_id?: string | null
+          confirmation_date?: string | null
+          confirmation_increment_effective_date?: string | null
+          confirmation_increment_granted?: boolean
           created_at?: string
           deactivated_at?: string | null
           department_id?: string | null
@@ -5632,12 +5732,16 @@ export type Database = {
           pms_grade?: string | null
           pms_grade_id?: string | null
           portal_access?: boolean
+          previous_employment_status?: string | null
           reporting_manager_id?: string | null
           updated_at?: string
         }
         Update: {
           avatar_url?: string | null
           company_id?: string | null
+          confirmation_date?: string | null
+          confirmation_increment_effective_date?: string | null
+          confirmation_increment_granted?: boolean
           created_at?: string
           deactivated_at?: string | null
           department_id?: string | null
@@ -5659,6 +5763,7 @@ export type Database = {
           pms_grade?: string | null
           pms_grade_id?: string | null
           portal_access?: boolean
+          previous_employment_status?: string | null
           reporting_manager_id?: string | null
           updated_at?: string
         }
@@ -10272,6 +10377,11 @@ export type Database = {
         | "hr_pms"
         | "skip_level"
       config_status: "draft" | "active" | "archived"
+      confirmation_increment_treatment:
+        | "ignore"
+        | "adjust_covered_period"
+        | "shift_next_cycle"
+        | "carry_forward_uncovered"
       iac_scope_type: "global" | "company" | "business_unit" | "department"
       increment_method_type: "full" | "prorated_doj" | "custom"
       kpi_status: "open" | "submitted" | "approved_by_manager" | "locked"
@@ -10525,6 +10635,12 @@ export const Constants = {
         "skip_level",
       ],
       config_status: ["draft", "active", "archived"],
+      confirmation_increment_treatment: [
+        "ignore",
+        "adjust_covered_period",
+        "shift_next_cycle",
+        "carry_forward_uncovered",
+      ],
       iac_scope_type: ["global", "company", "business_unit", "department"],
       increment_method_type: ["full", "prorated_doj", "custom"],
       kpi_status: ["open", "submitted", "approved_by_manager", "locked"],
