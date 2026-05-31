@@ -1,71 +1,80 @@
 ## Goal
-When an Admin uses **Bulk Approve → Override Value**, the corrected achievement (e.g. 16.66) must reflect in **every completed stage** of the Review Journey (Self / Manager / Skip-Level / HR PMS / Auditor / Management), not only in Self.
+Add two HR fields to the user lifecycle UI and Excel I/O:
+1. **Confirmation Date** — date input shown immediately after **Date of Joining (DOJ)**.
+2. **Location** — combobox of active locations (master data), shown immediately after **Employment Status**.
 
-## RCA — confirmed against live data
-Submission `d11f4f08…` (Mrutyunjaya Mohanty · Jan-2026 · FAD production target):
-```
-achieved_value             = 16.66   ← override applied (Self panel correct)
-manager_achieved_value     = 35.32   ← STALE
-skip_level_achieved_value  = 35.32   ← STALE
-hr_pms_achieved_value      = 35.32   ← STALE
-manager_score = 5, skip_level_score = 5, hr_pms_score = 4   ← STALE (recomputed from old value)
-```
-**Cause:** `bulk_management_approve` (override branch) only writes `review_submissions.achieved_value` (Self column) and `management_score`. The per-stage `*_achieved_value` and `*_score` columns — which `KpiJourneySection.tsx` reads directly (lines 511/518/525/532/539) — are left untouched, so completed stages keep the pre-override value & rating.
+Both must round-trip through the Add User dialog, Edit User dialog, Employee Excel template, Import flow, and Export file.
 
 ## Assumptions
-- Admin override is the **authoritative correction** of the canonical achievement. For stages that were already completed, the journey should reflect *what the value should have been* — same value, recomputed rating.
-- Stages that were never completed (`*_score IS NULL`) must remain NULL — we do not invent new stage entries.
-- For Org KPIs, all stages observe the same canonical value (no per-reviewer disagreement on the raw number), so propagating one value across completed stages is safe.
+- `profiles.confirmation_date` (date) and `profiles.location_id` (uuid → `public.locations`) already exist — confirmed in DB. No schema migration needed.
+- `useLocations()` hook already exists in `src/hooks/useOrganization.ts` returning active locations; we'll reuse it (company-scoped when a company is selected in the Create form, unfiltered in Edit to avoid hiding the current value).
+- The Edit dialog should mirror the Create dialog for these two fields (otherwise editing existing records would break parity).
+- Import matches Location **by name** (case-insensitive) to `locations.name`, consistent with how the existing `create-employee` edge function already resolves Location text → `location_id`. Unmatched names insert NULL and produce a row warning (existing pattern).
+- Confirmation Date in Excel accepts `yyyy-MM-dd`, `dd/MM/yyyy`, or Excel date serial, normalized through the existing `normalizeDateCell` helper.
 
 ## Risk & Impact Report
-- **Data Impact:** Backfills `*_achieved_value` and `*_score` columns on `review_submissions` rows that already carry an Admin override audit log. `final_score` immutability respected (no change to existing final values; only sync underlying stage scores to match). Self stage unchanged.
-- **Workflow Impact:** None — purely synchronises existing approved data; no status change, no notifications.
-- **UI/UX Impact:** Journey panels now display the corrected value + correct rating for every completed stage; no UI code changes required (UI already reads these columns).
-- **Regression Risk:** Low — touches only the override branch of `bulk_management_approve` and a one-shot repair scoped to rows with `ORG_KPI_VALUE_OVERWRITTEN` audit logs.
-- **Scalability:** Repair scans audit logs by action + date — indexed; O(few hundred rows).
+- **Data Impact:** None to schema. Writes optional values into existing nullable columns. Backfill not required.
+- **Workflow Impact:** None — neither field gates any workflow. Confirmation Date does feed the existing Confirmation Increment adjuster (already reads `profiles.confirmation_date`), so capturing it here improves that engine's accuracy.
+- **UI/UX Impact:** Two new fields in Create/Edit dialogs, two new columns in Employee import template / parsed rows / export file, two new bullets in the column-help block.
+- **Regression Risk:** Low. Fields are additive and optional. Existing imports without the new columns continue to work because `getValue` / `getRaw` return `undefined`.
+- **Scalability:** No new queries beyond reusing `useLocations()` + resolving location names in export via one `in()` lookup (same pattern as departments/BUs).
 
 ## Plan (Step → Verification)
 
-### 1. Migration A — extend `bulk_management_approve` override branch
-In the `IF p_is_override THEN` block, after the existing `UPDATE review_submissions SET achieved_value = v_ach_num`, add:
-```sql
-UPDATE public.review_submissions
-   SET manager_achieved_value    = CASE WHEN manager_score    IS NOT NULL THEN v_ach_num ELSE manager_achieved_value    END,
-       skip_level_achieved_value = CASE WHEN skip_level_score IS NOT NULL THEN v_ach_num ELSE skip_level_achieved_value END,
-       hr_pms_achieved_value     = CASE WHEN hr_pms_score     IS NOT NULL THEN v_ach_num ELSE hr_pms_achieved_value     END,
-       auditor_achieved_value    = CASE WHEN auditor_score    IS NOT NULL THEN v_ach_num ELSE auditor_achieved_value    END,
-       management_achieved_value = CASE WHEN management_score IS NOT NULL THEN v_ach_num ELSE management_achieved_value END,
-       manager_score    = CASE WHEN manager_score    IS NOT NULL THEN v_final ELSE manager_score    END,
-       skip_level_score = CASE WHEN skip_level_score IS NOT NULL THEN v_final ELSE skip_level_score END,
-       hr_pms_score     = CASE WHEN hr_pms_score     IS NOT NULL THEN v_final ELSE hr_pms_score     END,
-       auditor_score    = CASE WHEN auditor_score    IS NOT NULL THEN v_final ELSE auditor_score    END
- WHERE id = v_sub_id;
-```
-Emit a single `STAGE_VALUES_OVERWRITTEN` audit log alongside the existing `ORG_KPI_VALUE_OVERWRITTEN` entry (carrying old/new per-stage values for traceability).
+### 1. UserManagement.tsx — Create dialog
+- New state: `newConfirmationDate`, `newLocationId`.
+- Add **Confirmation Date** field directly after DOJ inside the Personal Information grid (same date-input pattern, calendar icon).
+- Add **Location** field directly after Employment Status in the Organization grid (`OrgFilterCombobox` fed by `useLocations(newCompanyId)`, falling back to all locations when no company is chosen).
+- Extend `createUser.mutate(...)` payload + the mutation's input type with `confirmation_date` and `location_id`.
+- Extend `resetCreateForm()` to clear both.
+- **Verify:** open Add New User → both fields render in the stated positions, save persists to `profiles`.
 
-- **Verify:** rerun an override on a fresh test cell; query the row — all `*_achieved_value` for completed stages = override value; `*_score` recalculated; never-completed stages remain NULL.
+### 2. UserManagement.tsx — Edit dialog
+- New state: `editConfirmationDate`, `editLocationId`; hydrate from `selectedUser`.
+- Add the same two fields in the same positions inside the Edit dialog grids.
+- Extend `updateUser` mutation input + `updatePayload` with `confirmation_date` and `location_id` (only send when defined, mirroring `group_doj`/`doj` handling).
+- **Verify:** open Edit on a user with existing values → fields prefill; change & save persists; clearing them writes NULL.
 
-### 2. Migration B — one-shot repair for past overrides
-Idempotent UPDATE for any `review_submissions` whose latest `ORG_KPI_VALUE_OVERWRITTEN` audit log was written after `2026-05-29` (the day this feature shipped). Same column logic as Step 1, using current `achieved_value` as the source of truth, and current KPI thresholds to recompute each completed stage's score. Insert one `STAGE_VALUES_BACKFILLED` audit per row.
-- **Verify:** re-run the live query on `d11f4f08…`; `manager_achieved_value = skip_level_achieved_value = hr_pms_achieved_value = 16.66`; ratings recomputed; reopen UI — all four cards in Review Journey show **Value: 16.66**.
+### 3. create-employee edge function (`supabase/functions/create-employee/index.ts`)
+- Accept new optional body fields `confirmation_date` and `location_id`.
+- When `location_id` is provided, use it directly (skip the name lookup).
+- When `confirmation_date` is provided, include `confirmation_date: body.confirmation_date` in the profiles insert.
+- Keep the existing name-based `location` resolver intact for Excel imports.
+- **Verify:** create user with both fields from UI; row in `profiles` has both columns populated. No regression for callers that omit them.
 
-### 3. Docs
-- `docs/adr/ADR-067.md`: append "Stage value propagation" addendum noting Override now syncs all completed stage `*_achieved_value`/`*_score` columns.
-- `DOCUMENTATION.md` + `POLICY.md`: one-line update under "Bulk Management Override".
+### 4. ImportData.tsx — Employee template + parser
+- Extend `EmployeeRow` interface with `confirmationDate?: string`.
+- In the template object (`downloadEmployeeTemplate`), insert `confirmationDate: '2021-04-15'` immediately after `doj` (Location key already exists).
+- In `parseEmployeeRow`, add a `getRaw(['confirmationDate','confirmation_date','confirmDate','confirm_date'])` plus `normalizeDateCell`; assign as `'INVALID'` sentinel on bad input, same as `doj`.
+- Add a row-level validation message: *"Confirmation Date is invalid — use yyyy-MM-dd or dd/MM/yyyy"*.
+- In the create-employee payload (lines ~1392, 1461), forward `confirmation_date` when present.
+- Update the column-help bullets in the Import help block to list `confirmationDate` and confirm `location` is already documented.
+- **Verify:** download template → column appears between `doj` and the next column; import a sample row with both fields → profile updated; invalid date surfaces the new error.
 
-### 4. Tests
-Extend `src/test/bulkManagementApproveOrgKpiOverride.test.ts` (existing) with:
-- Override on a submission with completed Manager/Skip/HR PMS stages — assert each `*_achieved_value` = override value, each `*_score` recomputed.
-- Override on a submission with only Manager completed — assert Skip-Level/HR PMS stay NULL.
+### 5. ImportData.tsx — Employee export
+- Extend the profiles `.select(...)` (line 1778) to include `confirmation_date, location_id`.
+- After the existing dept/BU/div lookups, add a bounded `locations` lookup (`supabase.from('locations').select('id, name').in('id', uniqueLocationIds)`) and build `locationMap`.
+- In the `exportData.map(...)` block, insert `location: locationMap.get(profile.location_id)?.name || ''` immediately after `employmentStatus`, and `confirmationDate: profile.confirmation_date || ''` immediately after `doj`.
+- **Verify:** export the workbook → both new columns present in stated positions with correct values; ordering of remaining columns unchanged.
 
-## UI Changes
-None. UI already reads `*_achieved_value` and `*_score`; the bug is purely server-side data sync.
+## UI Changes (Summary)
+| Where | Position | Field | Control |
+|---|---|---|---|
+| Add New User → Personal Info grid | After DOJ | Confirmation Date | `<Input type="date">` with calendar icon |
+| Add New User → Organization grid | After Employment Status | Location | `OrgFilterCombobox` (active locations) |
+| Edit User → same two grids | Same positions | Same fields | Same controls |
+| Excel template / export | Confirmation Date after `doj`; Location after `employmentStatus` | Same two columns | Plain cells |
+
+No layout reflow — both grids already use `md:grid-cols-3`, so adding one cell each just fills the row.
+
+## Files Touched
+- `src/pages/admin/UserManagement.tsx` (Create + Edit dialogs, both mutations)
+- `supabase/functions/create-employee/index.ts` (accept `confirmation_date`, `location_id`)
+- `src/pages/admin/ImportData.tsx` (template, parser, validation, payload, export, help text)
+
+No DB migration. No new dependencies. No new components.
 
 ## Rollback
-Drop the new UPDATE block (revert function to current definition) and reverse the one-shot repair via the `STAGE_VALUES_BACKFILLED` audit log (which captures old values).
-
-## Files
-- **2 new migrations**: (a) replace `bulk_management_approve`, (b) one-shot repair.
-- **Edit**: `src/test/bulkManagementApproveOrgKpiOverride.test.ts`, `docs/adr/ADR-067.md`, `DOCUMENTATION.md`, `POLICY.md`.
+Revert the four files; profiles columns remain unused but harmless. No data cleanup required.
 
 Ready to implement on approval.
