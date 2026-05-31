@@ -12,9 +12,19 @@
  * Brand palette is intentionally fixed (matches the reference asset). This is
  * the documented exception to the "semantic tokens only" rule, scoped to
  * isolated brand SVG art (see Core memory).
+ *
+ * The rocket body color is admin-configurable via the Branding tab; callers
+ * pass `bodyColor` (resolved from `useBrandingSettings().rocketColor`). The
+ * window inner dot mirrors the body color at 35% opacity. Window halo, fins,
+ * trail and flame remain fixed brand accents.
  */
-export function RocketLaunchArt() {
-  const navy = '#0E2A47';
+export interface RocketLaunchArtProps {
+  /** Hex color for the rocket body (and inner window dot). Defaults to navy. */
+  bodyColor?: string;
+}
+
+export function RocketLaunchArt({ bodyColor = '#0E2A47' }: RocketLaunchArtProps = {}) {
+  const body = bodyColor;
   const green = '#22C55E';
   const greenSoft = '#86EFAC';
   const flame = '#FB923C';
@@ -54,11 +64,11 @@ export function RocketLaunchArt() {
         {/* Rocket body — pointed nose, rounded tube */}
         <path
           d="M60 18 Q70 32 70 56 L70 80 L50 80 L50 56 Q50 32 60 18 Z"
-          fill={navy}
+          fill={body}
         />
         {/* Window */}
         <circle cx="60" cy="46" r="5" fill={greenSoft} />
-        <circle cx="60" cy="46" r="2.5" fill={navy} opacity="0.35" />
+        <circle cx="60" cy="46" r="2.5" fill={body} opacity="0.35" />
         {/* Fins */}
         <path d="M50 66 L40 84 L50 80 Z" fill={green} />
         <path d="M70 66 L80 84 L70 80 Z" fill={green} />
