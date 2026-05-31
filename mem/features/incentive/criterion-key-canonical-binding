@@ -1,0 +1,7 @@
+---
+name: Increment criterion_key canonical binding
+description: Increment Ineligibility Criteria criterion_key MUST resolve to a canonical metric (absent_days/lwp_days/disciplinary_actions/training_compliance); engine fails closed on unknown keys
+type: feature
+---
+
+Increment Ineligibility Criteria evaluation in `supabase/functions/compute-increment/index.ts` is bound to a fixed set of canonical input metrics: `absent_days`, `lwp_days`, `disciplinary_actions`, `training_compliance` (plus anything in `increment_inputs.dynamic_metrics`). The admin UI (`IncrementEligibilitySection.tsx`) selects `criterion_key` via a dropdown sourced from `src/lib/incrementCriterionMetrics.ts` — never derived from the criterion name. The engine also keeps a defensive ALIASES table (`absent → absent_days`, `lwp → lwp_days`, `discipline_action → disciplinary_actions`, `training → training_compliance`, plus common variants) and, if a criterion is active but its key resolves to no known metric, marks the employee `ineligible` with a `Configuration error: criterion '…' is not mapped to any input metric — contact admin` reason. Silent skips are forbidden: never reintroduce `if (val === undefined) continue;` in the criteria loop. When adding a new metric, update CANONICAL_METRIC_KEYS, the engine metrics map, and the `increment_inputs` schema (column or `dynamic_metrics` JSON key) together. RCA reference: Vivek 101784 / ADR-070 (May 2026).
