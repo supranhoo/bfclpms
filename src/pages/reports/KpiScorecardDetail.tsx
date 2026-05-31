@@ -532,6 +532,62 @@ export default function KpiScorecardDetail() {
                   <Download className="h-3.5 w-3.5" /> Export
                 </Button>
               )}
+              {canExport && (
+                <Popover open={rangePopoverOpen} onOpenChange={setRangePopoverOpen}>
+                  <PopoverTrigger asChild>
+                    <Button size="sm" variant="outline" className="h-8 text-xs gap-1">
+                      <Download className="h-3.5 w-3.5" /> Download Range
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent align="end" className="w-[340px] p-4 space-y-3">
+                    <div className="space-y-1">
+                      <h4 className="text-sm font-medium">Download month range</h4>
+                      <p className="text-[11px] text-muted-foreground">
+                        Applies current Company / Department / Search filters. Max {MAX_RANGE_MONTHS} months.
+                      </p>
+                    </div>
+                    <div className="space-y-2">
+                      <div className="grid grid-cols-[40px_1fr_1fr] items-center gap-2">
+                        <span className="text-xs text-muted-foreground">From</span>
+                        <Select value={rangeFromMonth} onValueChange={setRangeFromMonth}>
+                          <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                          <SelectContent>{MONTHS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent>
+                        </Select>
+                        <Select value={String(rangeFromYear)} onValueChange={v => setRangeFromYear(Number(v))}>
+                          <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                          <SelectContent>{years.map(y => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}</SelectContent>
+                        </Select>
+                      </div>
+                      <div className="grid grid-cols-[40px_1fr_1fr] items-center gap-2">
+                        <span className="text-xs text-muted-foreground">To</span>
+                        <Select value={rangeToMonth} onValueChange={setRangeToMonth}>
+                          <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                          <SelectContent>{MONTHS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent>
+                        </Select>
+                        <Select value={String(rangeToYear)} onValueChange={v => setRangeToYear(Number(v))}>
+                          <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                          <SelectContent>{years.map(y => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}</SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                    <div className={`text-[11px] ${rangeValidation.ok ? 'text-muted-foreground' : 'text-destructive'}`}>
+                      {rangeValidation.ok
+                        ? `Spans ${rangeValidation.count} month${rangeValidation.count === 1 ? '' : 's'}`
+                        : rangeValidation.error}
+                    </div>
+                    <div className="flex justify-end gap-2">
+                      <Button size="sm" variant="ghost" className="h-8 text-xs" onClick={() => setRangePopoverOpen(false)} disabled={rangeExporting}>
+                        Cancel
+                      </Button>
+                      <Button size="sm" className="h-8 text-xs gap-1" onClick={handleRangeExport} disabled={!rangeValidation.ok || rangeExporting}>
+                        {rangeExporting
+                          ? <><RefreshCw className="h-3.5 w-3.5 animate-spin" /> Exporting…</>
+                          : <><Download className="h-3.5 w-3.5" /> Download .xlsx</>}
+                      </Button>
+                    </div>
+                  </PopoverContent>
+                </Popover>
+              )}
             </div>
           </div>
           {isDirty && appliedQuery && (
