@@ -1,118 +1,116 @@
-## Goal
+## 1. Assumptions
+- Configured global increment method for AY 2025-26 is **prorated_doj** (verified in `increment_method_configs`).
+- Slab `4.5–5` has `prorate_on_doj = true` (verified), so the per-slab override is NOT the cause.
+- Vivek Kumar Dansena (101784) shows `Method = Full`, `Eligible % = 20%`, `Final Eligible Months = 9.23` in the screenshot.
 
-Restructure the **Calculate Increment %** tab so triggering a run and reviewing runs are separate workflows, support multi-employee scope, add a "Latest Calculations" view (one latest row per employee per AY), and allow safe admin edit/delete of result rows. No changes to scoring, slab, ineligibility, or confirmation logic.
+## 2. Root Cause Analysis
 
-## Risk & Impact Report
+Direct DB inspection of `increment_method_configs` for AY 2025-26:
 
-- **Data**: One additive migration on `increment_run_items` adds three nullable columns — `manually_edited boolean default false`, `edited_by uuid`, `edited_at timestamptz`. No backfill, no destructive change. RLS already permits admin update + delete; no policy changes needed.
-- **Workflow**: Edge function gains a new optional `employee_ids: string[]` field; existing `employee_id` keeps working (back-compat). Scope snapshot gains `scope: 'multi'` variant.
-- **UI/UX**: All changes are scoped to `CalculateIncrementTab` in `src/pages/incentive/IncrementInputs.tsx`. The outer "Calculate Increment %" tab gains an inner `Tabs` (Run Calculation / Run Log). Latest Calculations becomes the default view on the Run Log side. No route, permission, or sidebar changes.
-- **Regression**: Run-history rendering, single-employee runs, and Export Excel preserved. Edit/Delete are gated by existing admin/hr_pms RLS. Latest-Calculations query reuses existing tables — no derived materialised view.
-- **Mitigation**: Unit test for "latest per employee per AY" selector + edge-fn input parsing for `employee_ids`. Manual smoke: run all → run multi → run single → edit a row → delete a row → export both views.
+| version | method | status |
+|--------:|--------|--------|
+| 1 | prorated_doj | **active** |
+| 2 | prorated_doj | archived |
+| 3 | prorated_doj | **active** |
 
-## Scope
+**Two rows are simultaneously `status = 'active'`** for the same `(assessment_year, scope)`.
 
-Only `CalculateIncrementTab` (the second tab on `/incentive/IncrementInputs`). `EnterInputsTab`, formulas, slab/method/criteria, confirmation logic — untouched.
-
-## Steps
-
-### 1. Backend: extend edge function to accept `employee_ids`
-`supabase/functions/compute-increment/index.ts`
-- Extend `RunBody` to `{ assessment_year, employee_id?: string|null, employee_ids?: string[]|null }`.
-- Resolve a canonical `scopedEmployeeIds: string[] | null`:
-  - `employee_ids` (validated UUIDs, deduped) → use it
-  - else legacy `employee_id` → wrap as `[employee_id]`
-  - else `null` → all employees
-- Replace `.eq('id', scopedEmployeeId)` with `.in('id', scopedEmployeeIds)` when array present.
-- Store scope snapshot:
-  - all → `{ scope:'all' }`
-  - 1 id → `{ scope:'single', employee_id }` (unchanged — keeps log back-compat)
-  - >1 → `{ scope:'multi', employee_ids: [...], count: N }`
-- No change to per-employee compute loop.
-
-### 2. Hook layer
-`src/hooks/useIncrementRuns.ts`
-- `useTriggerIncrementRun`: accept `{ assessment_year, employee_ids?: string[] | null, employee_id?: string | null }` and forward to the edge function.
-- New `useLatestIncrementResults(year)` — fetches all `increment_run_items` for runs in the AY joined with `increment_runs`, then in JS keeps the row with the most recent `runs.triggered_at` per `employee_id`. Paged on the server via `fetchAllPaged` (small dataset bound to AY) and de-duped client-side; returns enriched rows with employee profile.
-- New `useUpdateIncrementRunItem` — patches allowed fields only (`eligible_percent`, `increment_amount`, `revised_salary`, `remarks`, `eligibility_status`) + sets `manually_edited=true, edited_by=auth.uid(), edited_at=now()`.
-- New `useDeleteIncrementRunItem` — `delete().eq('id', id)` then invalidate `['increment-run-items', runId]` + `['latest-increment-results', year]`.
-- `useExportIncrementRunItems` stays; add `useExportLatestIncrementResults(year)` mirroring it.
-
-### 3. Schema migration (additive only)
-New migration `add_manually_edited_to_increment_run_items.sql`:
-```sql
-ALTER TABLE public.increment_run_items
-  ADD COLUMN IF NOT EXISTS manually_edited boolean NOT NULL DEFAULT false,
-  ADD COLUMN IF NOT EXISTS edited_by uuid REFERENCES auth.users(id),
-  ADD COLUMN IF NOT EXISTS edited_at timestamptz;
+In `supabase/functions/compute-increment/index.ts` (line 312):
+```ts
+admin.from('increment_method_configs')
+  .select('*')
+  .eq('assessment_year', assessment_year)
+  .eq('status', 'active')
+  .maybeSingle()
 ```
-No RLS change (admin/hr_pms UPDATE policy already in place).
-
-### 4. UI: split Calculate Increment % into inner tabs
-`src/pages/incentive/IncrementInputs.tsx` (`CalculateIncrementTab`):
-
-```text
-Calculate Increment % · AY 2025-26
-┌──────────────────────────────────────────────┐
-│  [ Run Calculation ]  [ Run Log ]            │
-├──────────────────────────────────────────────┤
-│  (active sub-tab content)                    │
-└──────────────────────────────────────────────┘
+`maybeSingle()` returns `data = null` (PGREST116 — "multiple rows returned") when more than one row matches. Line 335 then silently defaults:
+```ts
+const methodType = (methodCfg.data as any)?.method ?? 'full';
 ```
+So the engine ran in **Full** mode, producing `Eligible % = 20%` instead of the prorated `20 × 9.23 / 12 ≈ 15.38%`.
 
-#### 4a. Run Calculation sub-tab
-- Card: AY context (read-only label), Scope select (`All Employees` / `Selected Employee(s)`), employee multi-select (only when "Selected"), Run button, helper "Choose scope and run calculation."
-- Employee multi-select: reuse `MultiSelectFilter` pattern but bind to employee list (label = `Name (Code)`, value = id). Selected employees shown as removable chips below the trigger. Search hits name **or** code.
-- Run disabled while pending OR (scope=selected AND list empty).
-- On success, auto-switch to Run Log sub-tab and auto-select the new run.
+Why duplicates exist: `useSaveIncrementMethod` only archives the `existing` row passed in by the caller. If the active-config hook ever returned a single row while a second active row was already present (from a prior copy/import/migration), the save path inserted v3 without archiving v1. Result: two active rows.
 
-#### 4b. Run Log sub-tab
-Two views, controlled by a small segmented control at the top:
-- **Latest Calculations** (default) — one row per employee for the AY, sourced from `useLatestIncrementResults(year)`. Renders the same column set as Run Details.
-- **Historical Run Log** — existing runs table (Triggered At, Scope, Status, Summary, Action/View). Clicking View loads "Run Details" panel below (existing component).
+This is a **silent fail-open** — a configuration anomaly degrades correctness without any user-visible error.
 
-Scope cell rendering:
-- `all` → `All Employees`
-- `single` → `Selected: <Name> (Code)`
-- `multi` → `Selected: N employees` (tooltip lists names; resolved from cached employees)
+## 3. Risk & Impact Report
+- **Data Impact**: All AY 2025-26 increment runs executed since the duplicate was introduced are wrong for every employee whose matched slab has `prorate_on_doj = true` AND `monthsServed < 12`. Underlying master data is fine; only `increment_run_items` rows are affected.
+- **Workflow Impact**: None — recompute regenerates results; existing run history is preserved.
+- **UI/UX Impact**: None visually; numeric values change after recompute.
+- **Regression Risk**: Low. The edge-function change is a deterministic tie-breaker (`order by version desc limit 1`) that matches existing single-row behaviour when no duplicates exist.
+- **Scalability**: No change; same query shape, one extra `order`/`limit`.
+- **Mitigation**: Unit tests for both the edge-function resolver and the save hook; DB partial-unique index to prevent recurrence.
 
-Both views share the **Run Details / Latest Calculations** table component with paginated rows and full column set per spec:
-Employee, Code, PMS Score, Rating Band, Slab %, Eligibility, Ineligibility Reason, Method, Eligible %, Current Salary, Increment Amount, Revised Salary, Conf. Increment, Final Eligible Months, Treatment Applied, Remarks, **Actions**.
+## 4. Correction Plan (step → verification)
 
-#### 4c. Row actions
-- **Edit** (pencil icon) → opens `IncrementResultEditDialog` with the 5 allowed fields. On save, calls `useUpdateIncrementRunItem`. A subtle "Edited" badge renders on rows where `manually_edited`.
-- **Delete** (trash icon) → uses existing `ConfirmDestructiveDialog` (project standard) → calls `useDeleteIncrementRunItem`. Only removes the `increment_run_items` row; never touches `increment_inputs`, `profiles`, scoring, or configs.
+### Step A — Data repair (migration, one-off)
+- Within `increment_method_configs`, for each `(assessment_year, company_id, division_id, business_unit_id, category_id, level_id, location_id)` group where `status = 'active'`, keep only the row with the highest `version` active; archive the rest.
+- Add a partial unique index:
+  ```sql
+  CREATE UNIQUE INDEX increment_method_configs_one_active_per_scope
+    ON increment_method_configs (assessment_year,
+       COALESCE(company_id,'00000000-0000-0000-0000-000000000000'),
+       COALESCE(division_id,'00000000-0000-0000-0000-000000000000'),
+       COALESCE(business_unit_id,'00000000-0000-0000-0000-000000000000'),
+       COALESCE(category_id,'00000000-0000-0000-0000-000000000000'),
+       COALESCE(level_id,'00000000-0000-0000-0000-000000000000'),
+       COALESCE(location_id,'00000000-0000-0000-0000-000000000000'))
+    WHERE status = 'active';
+  ```
+- **Verify**: `SELECT count(*) … GROUP BY scope HAVING count > 1` returns 0 rows.
 
-#### 4d. Export Excel
-Button lives in the active panel header:
-- Latest Calculations view → exports all latest-per-employee rows for the AY (`useExportLatestIncrementResults`).
-- Historical run view → exports all rows for the selected run (existing path).
-- Both call `downloadXlsx` with the same column set used in the table.
+### Step B — Edge function hardening (`supabase/functions/compute-increment/index.ts`)
+- Replace the `maybeSingle()` lookup with a deterministic latest-version pick:
+  ```ts
+  admin.from('increment_method_configs')
+    .select('*')
+    .eq('assessment_year', assessment_year)
+    .eq('status', 'active')
+    .order('version', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  ```
+- Replace the silent fallback. If `methodCfg.error` is non-null OR `methodCfg.data` is null AND any non-archived config row exists for the AY, fail the run with a clear message (`"Active increment method configuration not found / ambiguous for AY <year>"`) instead of defaulting to `'full'`. Pure missing-config (no rows at all) keeps the explicit `'full'` default with a `run_notes` entry stating "No method config configured → defaulted to Full".
+- **Verify**: New Deno test in `supabase/functions/compute-increment/` seeds 2 active rows and asserts the resolver returns the higher version; seeds 0 rows and asserts a clean default with notes.
 
-#### 4e. Empty states (exact copy)
-- Run Log historical: `No calculation runs yet.`
-- Run Details: `No calculated rows found for this run.`
-- Latest Calculations: `No latest calculations found for this assessment year.`
+### Step C — Save hook fix (`src/hooks/useIncrementMethod.ts`)
+- In `useSaveIncrementMethod`, before inserting the new version, archive ALL currently-active rows matching the scope (not just the `existing` row the caller fetched):
+  ```ts
+  await applyScope(
+    supabase.from('increment_method_configs').update({ status: 'archived' }).eq('status', 'active'),
+    scope,
+  );
+  ```
+- Same change in `useCopyIncrementMethodFromYear`.
+- **Verify**: Vitest covering "save when 2 active rows exist for scope ⇒ both archived, new version inserted active, only 1 active row remains".
 
-### 5. Tests
-- `supabase/functions/compute-increment/employee_ids_scope_test.ts` — asserts:
-  - `employee_ids: ['u1','u2']` filters profiles to those 2.
-  - `employee_id: 'u1'` still works (back-compat).
-  - Neither field → all employees.
-- `src/lib/__tests__/latestIncrementResults.test.ts` — given fixture of 3 employees × 2 runs, returns 3 rows from the later run only.
+### Step D — Recalculate impacted data
+- Trigger a fresh **Run Calculation · All Employees** for AY 2025-26 from the UI. Existing historical run rows stay (audit trail); latest-view picks up corrected values.
+- **Verify for Vivek 101784**:
+  - Method = `Prorated: 20% × 9.23/12`
+  - Eligible % ≈ **15.38%**
+  - Increment Amount = current_salary × 15.38 / 100
+  - Revised Salary = current_salary + increment_amount
+  - Eligibility stays consistent with current absent-criterion state.
 
-### 6. Documentation
-- `DOCUMENTATION.md` — new section "Calculate Increment %: Run Calculation / Run Log / Latest Calculations" describing scope variants and edit/delete contract.
-- `POLICY.md` — note that Latest Calculations is the canonical "current result" per employee; historical runs are immutable for audit except via explicit row delete/edit, which sets `manually_edited=true`.
-- ADR-071 — UI restructure + multi-employee scope + row edit/delete.
-- `mem/features/incentive/calculate-increment-tabs` — short memory file; add to `mem/index.md`.
+### Step E — Regression tests & mock data
+- `compute-increment` Deno test: duplicate active configs → resolver picks latest version, applies prorated_doj end-to-end with months = 9.23 and slab 20% → expects 15.3833.
+- `useIncrementMethod` Vitest: archiving sweep behaviour.
+- DB migration test note in `docs/safety/phase1/…` (manual): unique index blocks a second active insert.
 
-## Out of Scope (Constraints respected)
+## 5. UI Changes
+**Not Applicable.** No visible UI changes. Only the values inside the Calculated / Run Details table will become correct after Step D recompute. Column structure, tabs, layout untouched.
 
-No change to: PMS score derivation, rating-band/slab logic, ineligibility-criteria engine, confirmation-treatment adjuster, permissions/routes, removal of all-employee runs, removal of Excel export, or deletion of historical run logs.
+## 6. SSOT updates
+- `DOCUMENTATION.md` → add note under Increment Engine: "Method config resolution = latest active version per scope (deterministic). Save path archives all prior active rows."
+- `POLICY.md` → "Only one method config per (AY, scope) may be active at a time; enforced by partial-unique DB index."
+- `docs/adr/ADR-071.md` → new ADR documenting RCA, fix, and rollback.
+- `mem/features/incentive/…` → add memory `method-config-active-uniqueness`.
 
-## Rollback
+## 7. Rollback strategy
+- Migration is additive (archive flips + new index). Rollback = drop the partial unique index; previously-archived duplicate rows can be re-activated manually if ever needed (not expected).
+- Edge function & hook changes are surgical; revert by git revert of the two files.
 
-- UI: revert `IncrementInputs.tsx` + new dialog/hook files.
-- Edge function: revert to single `employee_id` branch (back-compat means old payload still works during partial rollback).
-- Migration is additive (new nullable columns) — safe to leave in place even if UI is reverted.
+## 8. Out of scope
+- No change to slab math, criteria evaluation, confirmation-increment adjuster, or any UI tab.
+- No change to per-slab `prorate_on_doj` semantics.
