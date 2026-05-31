@@ -70,10 +70,10 @@ function EnterInputsTab({ year }: { year: string }) {
       if (codes.length) {
         const { data: profs, error: pErr } = await (supabase as any)
           .from('profiles')
-          .select('id, employee_id')
-          .in('employee_id', codes);
+          .select('id, employee_code')
+          .in('employee_code', codes);
         if (pErr) throw pErr;
-        codeMap = new Map((profs ?? []).map((p: any) => [String(p.employee_id), p.id]));
+        codeMap = new Map((profs ?? []).map((p: any) => [String(p.employee_code), p.id]));
       }
 
       const unresolved: string[] = [];
