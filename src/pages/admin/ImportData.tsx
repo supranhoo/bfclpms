@@ -1797,7 +1797,7 @@ export default function ImportData() {
       const allProfiles = await fetchAllPaged<any>((from, to) =>
         supabase
           .from('profiles')
-          .select('id, employee_code, full_name, email, designation, company_id, pms_grade, level, employee_category, employment_status, department_id, reporting_manager_id, is_active, group_doj, doj')
+          .select('id, employee_code, full_name, email, designation, company_id, pms_grade, level, employee_category, employment_status, department_id, reporting_manager_id, is_active, group_doj, doj, confirmation_date, location_id')
           .order('id')
           .range(from, to)
       );
@@ -1818,6 +1818,11 @@ export default function ImportData() {
         ? await supabase.from('divisions').select('id, name').in('id', divIds)
         : { data: [] as any[] };
 
+      const locIds = [...new Set(allProfiles.map((p: any) => p.location_id).filter(Boolean))];
+      const { data: locRows } = locIds.length
+        ? await supabase.from('locations').select('id, name').in('id', locIds)
+        : { data: [] as any[] };
+
       const { data: userRoles, error: rolesError } = await supabase
         .from('user_roles')
         .select('user_id, role');
@@ -1826,6 +1831,7 @@ export default function ImportData() {
       const deptMap = new Map((deptRows || []).map((d: any) => [d.id, d]));
       const buMap = new Map((buRows || []).map((b: any) => [b.id, b]));
       const divMap = new Map((divRows || []).map((d: any) => [d.id, d]));
+      const locMap = new Map((locRows || []).map((l: any) => [l.id, l]));
       const roleMap = new Map(userRoles?.map(r => [r.user_id, r.role]) || []);
       const profileMap = new Map(allProfiles.map(p => [p.id, p]));
 
@@ -1854,10 +1860,12 @@ export default function ImportData() {
           level: (profile as any).level || '',
           employeeCategory: (profile as any).employee_category || '',
           employmentStatus: (profile as any).employment_status || '',
+          location: (locMap.get((profile as any).location_id) as any)?.name || '',
           managerEmployeeId: manager?.employee_code || '',
           managerName: manager?.full_name || '',
           groupDoj: (profile as any).group_doj || '',
           doj: (profile as any).doj || '',
+          confirmationDate: (profile as any).confirmation_date || '',
         };
       });
 
