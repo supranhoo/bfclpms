@@ -3002,6 +3002,8 @@ export type Database = {
           created_at: string
           criteria_exempt: boolean
           current_salary: number | null
+          edited_at: string | null
+          edited_by: string | null
           eligibility_status: string
           eligible_percent: number | null
           employee_id: string
@@ -3010,6 +3012,7 @@ export type Database = {
           id: string
           increment_amount: number | null
           ineligibility_reason: string | null
+          manually_edited: boolean
           method_used: string | null
           period_covered_months: number | null
           pms_score: number | null
@@ -3032,6 +3035,8 @@ export type Database = {
           created_at?: string
           criteria_exempt?: boolean
           current_salary?: number | null
+          edited_at?: string | null
+          edited_by?: string | null
           eligibility_status: string
           eligible_percent?: number | null
           employee_id: string
@@ -3040,6 +3045,7 @@ export type Database = {
           id?: string
           increment_amount?: number | null
           ineligibility_reason?: string | null
+          manually_edited?: boolean
           method_used?: string | null
           period_covered_months?: number | null
           pms_score?: number | null
@@ -3062,6 +3068,8 @@ export type Database = {
           created_at?: string
           criteria_exempt?: boolean
           current_salary?: number | null
+          edited_at?: string | null
+          edited_by?: string | null
           eligibility_status?: string
           eligible_percent?: number | null
           employee_id?: string
@@ -3070,6 +3078,7 @@ export type Database = {
           id?: string
           increment_amount?: number | null
           ineligibility_reason?: string | null
+          manually_edited?: boolean
           method_used?: string | null
           period_covered_months?: number | null
           pms_score?: number | null

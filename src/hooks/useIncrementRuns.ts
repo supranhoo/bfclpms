@@ -34,6 +34,9 @@ export interface IncrementRunItemRow {
   revised_salary: number | null;
   remarks: string | null;
   created_at: string;
+  manually_edited?: boolean | null;
+  edited_by?: string | null;
+  edited_at?: string | null;
 }
 
 export function useIncrementRuns(assessmentYear: string | null) {
@@ -82,15 +85,25 @@ export function useTriggerIncrementRun() {
     mutationFn: async ({
       assessment_year,
       employee_id,
-    }: { assessment_year: string; employee_id?: string | null }) => {
+      employee_ids,
+    }: {
+      assessment_year: string;
+      employee_id?: string | null;
+      employee_ids?: string[] | null;
+    }) => {
       const { data, error } = await supabase.functions.invoke('compute-increment', {
-        body: { assessment_year, employee_id: employee_id ?? null },
+        body: {
+          assessment_year,
+          employee_id: employee_id ?? null,
+          employee_ids: employee_ids ?? null,
+        },
       });
       if (error) throw error;
       return data;
     },
     onSuccess: (_d, vars) => {
       qc.invalidateQueries({ queryKey: ['increment-runs', vars.assessment_year] });
+      qc.invalidateQueries({ queryKey: ['latest-increment-results', vars.assessment_year] });
       toast({ title: 'Calculation complete', description: 'Increment run finished.' });
     },
     onError: (e: any) =>
@@ -123,6 +136,158 @@ export function useExportIncrementRunItems(runId: string | null) {
           .order('created_at', { ascending: true })
           .range(from, to),
       );
+    },
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Latest Calculations: one latest row per employee for the AY.
+// ─────────────────────────────────────────────────────────────────────
+export function useLatestIncrementResults(assessmentYear: string | null) {
+  return useQuery({
+    queryKey: ['latest-increment-results', assessmentYear],
+    enabled: !!assessmentYear,
+    queryFn: async () => {
+      const { data: runs, error: runsErr } = await supabase
+        .from('increment_runs' as any)
+        .select('id, triggered_at')
+        .eq('assessment_year', assessmentYear!)
+        .order('triggered_at', { ascending: false });
+      if (runsErr) throw runsErr;
+      const runList = (runs as any[]) ?? [];
+      if (!runList.length) return [] as any[];
+      const runOrder = new Map<string, number>();
+      runList.forEach((r, idx) => runOrder.set(r.id, idx)); // 0 = newest
+      const runIds = runList.map((r) => r.id);
+      const items = await fetchAllPaged<any>((from, to) =>
+        supabase
+          .from('increment_run_items' as any)
+          .select(
+            '*, employee:profiles!increment_run_items_employee_id_fkey(id, full_name, employee_code)',
+          )
+          .in('run_id', runIds)
+          .order('created_at', { ascending: false })
+          .range(from, to),
+      );
+      // Keep only the row from the most recent run per employee_id.
+      const latestByEmp = new Map<string, any>();
+      for (const it of items) {
+        const rank = runOrder.get(it.run_id) ?? Number.MAX_SAFE_INTEGER;
+        const cur = latestByEmp.get(it.employee_id);
+        const curRank = cur ? (runOrder.get(cur.run_id) ?? Number.MAX_SAFE_INTEGER) : Number.MAX_SAFE_INTEGER;
+        if (!cur || rank < curRank) latestByEmp.set(it.employee_id, it);
+      }
+      return Array.from(latestByEmp.values()).sort((a, b) => {
+        const an = a.employee?.full_name ?? '';
+        const bn = b.employee?.full_name ?? '';
+        return an.localeCompare(bn);
+      });
+    },
+  });
+}
+
+const EDITABLE_RUN_ITEM_FIELDS = [
+  'eligible_percent',
+  'increment_amount',
+  'revised_salary',
+  'remarks',
+  'eligibility_status',
+] as const;
+
+export function useUpdateIncrementRunItem() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  return useMutation({
+    mutationFn: async ({
+      id,
+      patch,
+    }: {
+      id: string;
+      patch: Partial<Pick<IncrementRunItemRow, typeof EDITABLE_RUN_ITEM_FIELDS[number]>>;
+    }) => {
+      const { data: userData } = await supabase.auth.getUser();
+      const safe: any = {};
+      for (const k of EDITABLE_RUN_ITEM_FIELDS) {
+        if (k in patch) safe[k] = (patch as any)[k];
+      }
+      safe.manually_edited = true;
+      safe.edited_by = userData?.user?.id ?? null;
+      safe.edited_at = new Date().toISOString();
+      const { data, error } = await supabase
+        .from('increment_run_items' as any)
+        .update(safe)
+        .eq('id', id)
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['increment-run-items'] });
+      qc.invalidateQueries({ queryKey: ['latest-increment-results'] });
+      toast({ title: 'Saved', description: 'Result row updated.' });
+    },
+    onError: (e: any) =>
+      toast({ title: 'Save failed', description: e?.message ?? 'Unknown error', variant: 'destructive' }),
+  });
+}
+
+export function useDeleteIncrementRunItem() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase
+        .from('increment_run_items' as any)
+        .delete()
+        .eq('id', id);
+      if (error) throw error;
+      return id;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['increment-run-items'] });
+      qc.invalidateQueries({ queryKey: ['latest-increment-results'] });
+      toast({ title: 'Deleted', description: 'Result row deleted.' });
+    },
+    onError: (e: any) =>
+      toast({ title: 'Delete failed', description: e?.message ?? 'Unknown error', variant: 'destructive' }),
+  });
+}
+
+export function useExportLatestIncrementResults(assessmentYear: string | null) {
+  return useQuery({
+    queryKey: ['latest-increment-results-export', assessmentYear],
+    enabled: false,
+    queryFn: async () => {
+      if (!assessmentYear) return [] as any[];
+      const { data: runs, error: runsErr } = await supabase
+        .from('increment_runs' as any)
+        .select('id, triggered_at')
+        .eq('assessment_year', assessmentYear)
+        .order('triggered_at', { ascending: false });
+      if (runsErr) throw runsErr;
+      const runList = (runs as any[]) ?? [];
+      if (!runList.length) return [] as any[];
+      const runOrder = new Map<string, number>();
+      runList.forEach((r, idx) => runOrder.set(r.id, idx));
+      const runIds = runList.map((r) => r.id);
+      const items = await fetchAllPaged<any>((from, to) =>
+        supabase
+          .from('increment_run_items' as any)
+          .select(
+            '*, employee:profiles!increment_run_items_employee_id_fkey(id, full_name, employee_code)',
+          )
+          .in('run_id', runIds)
+          .range(from, to),
+      );
+      const latest = new Map<string, any>();
+      for (const it of items) {
+        const rank = runOrder.get(it.run_id) ?? Number.MAX_SAFE_INTEGER;
+        const cur = latest.get(it.employee_id);
+        const curRank = cur ? (runOrder.get(cur.run_id) ?? Number.MAX_SAFE_INTEGER) : Number.MAX_SAFE_INTEGER;
+        if (!cur || rank < curRank) latest.set(it.employee_id, it);
+      }
+      return Array.from(latest.values());
     },
   });
 }

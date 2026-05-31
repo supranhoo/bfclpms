@@ -10,6 +10,7 @@ const corsHeaders = {
 interface RunBody {
   assessment_year: string;
   employee_id?: string | null;
+  employee_ids?: string[] | null;
 }
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -257,25 +258,45 @@ Deno.serve(async (req) => {
     const { startYear, endYear } = parseAssessmentYear(assessment_year);
 
     const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    const scopedEmployeeId =
-      body.employee_id && UUID_RE.test(body.employee_id) ? body.employee_id : null;
-    if (body.employee_id && !scopedEmployeeId) {
-      return new Response(JSON.stringify({ error: 'employee_id must be a UUID' }), {
-        status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+    // Resolve scope: prefer `employee_ids` array; fall back to legacy
+    // `employee_id` single value; otherwise = all employees.
+    let scopedEmployeeIds: string[] | null = null;
+    if (Array.isArray(body.employee_ids) && body.employee_ids.length > 0) {
+      const validated = Array.from(
+        new Set(body.employee_ids.filter((x) => typeof x === 'string' && UUID_RE.test(x))),
+      );
+      if (validated.length === 0) {
+        return new Response(JSON.stringify({ error: 'employee_ids must contain at least one UUID' }), {
+          status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      scopedEmployeeIds = validated;
+    } else if (body.employee_id) {
+      if (!UUID_RE.test(body.employee_id)) {
+        return new Response(JSON.stringify({ error: 'employee_id must be a UUID' }), {
+          status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      scopedEmployeeIds = [body.employee_id];
     }
+    const scopedEmployeeId = scopedEmployeeIds && scopedEmployeeIds.length === 1
+      ? scopedEmployeeIds[0]
+      : null;
 
     // Admin client for all subsequent reads/writes
     const admin = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false } });
 
     // Create the run record (running)
+    const scopeSnapshot = !scopedEmployeeIds
+      ? { triggered_by: userId, scope: 'all' as const }
+      : scopedEmployeeIds.length === 1
+        ? { triggered_by: userId, scope: 'single' as const, employee_id: scopedEmployeeIds[0] }
+        : { triggered_by: userId, scope: 'multi' as const, employee_ids: scopedEmployeeIds, count: scopedEmployeeIds.length };
     const { data: run, error: runErr } = await admin
       .from('increment_runs')
       .insert({
         assessment_year,
-        scope_snapshot: scopedEmployeeId
-          ? { triggered_by: userId, scope: 'single', employee_id: scopedEmployeeId }
-          : { triggered_by: userId, scope: 'all' },
+        scope_snapshot: scopeSnapshot,
         triggered_by: userId,
         status: 'running',
       })
@@ -294,8 +315,8 @@ Deno.serve(async (req) => {
         admin.from('increment_inputs').select('*').eq('assessment_year', assessment_year),
         admin.from('increment_eligibility_configs').select('id').eq('assessment_year', assessment_year).eq('status', 'approved').maybeSingle(),
         admin.from('increment_eligibility_exclusions').select('employee_id, reason').eq('assessment_year', assessment_year),
-        (scopedEmployeeId
-          ? admin.from('profiles').select('id, full_name, doj, employment_status, employee_category, level_id, company_id, location_id, department_id, is_active, previous_employment_status, confirmation_date, confirmation_increment_granted, confirmation_increment_effective_date').eq('is_active', true).eq('id', scopedEmployeeId)
+        (scopedEmployeeIds
+          ? admin.from('profiles').select('id, full_name, doj, employment_status, employee_category, level_id, company_id, location_id, department_id, is_active, previous_employment_status, confirmation_date, confirmation_increment_granted, confirmation_increment_effective_date').eq('is_active', true).in('id', scopedEmployeeIds)
           : admin.from('profiles').select('id, full_name, doj, employment_status, employee_category, level_id, company_id, location_id, department_id, is_active, previous_employment_status, confirmation_date, confirmation_increment_granted, confirmation_increment_effective_date').eq('is_active', true)),
         admin.from('confirmation_increment_rules').select('*').eq('assessment_year', assessment_year).eq('status', 'active'),
         admin.from('confirmation_increment_adjustments').select('employee_id, carry_forward_months, final_eligible_months, balance_eligible_months').eq('assessment_year', `${parseInt(assessment_year.split('-')[0], 10) - 1}-${String(parseInt(assessment_year.split('-')[0], 10)).slice(-2)}`),
