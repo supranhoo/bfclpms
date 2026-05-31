@@ -556,8 +556,36 @@ export function ManagementScorecard({
   const openReviewSheet = (kpi: KPI) => {
     setSelectedKpi(kpi);
     const existing = submissionMap.get(kpi.id);
-    const mgmtAchieved = (existing as any)?.management_achieved_value ?? null;
-    
+    const uomType = (kpi as any).uom_type as 'numeric' | 'binary' | 'tiered' | undefined;
+    const qualOpts = (kpi as any).qualitative_options as QualitativeOption[] | null;
+    const isQualitative = uomType === 'binary' || uomType === 'tiered';
+    const hasMgmtDraft =
+      existing?.management_score != null ||
+      (existing as any)?.management_rating != null ||
+      (typeof existing?.management_remarks === 'string' && existing.management_remarks.trim() !== '') ||
+      (existing as any)?.management_achieved_value != null;
+    const rawMgmtAchieved = (existing as any)?.management_achieved_value ?? null;
+
+    // Picker hydration — for qualitative drafts, derive from management_score (canonical)
+    // resolved against THIS kpi's qualitative_options so the Review Journey tile and the
+    // picker tile cannot diverge. Never inherit the employee's value when a draft exists.
+    let mgmtAchieved: number | string | null;
+    if (hasMgmtDraft) {
+      if (isQualitative) {
+        const numeric =
+          existing?.management_score != null
+            ? Number(existing.management_score)
+            : (rawMgmtAchieved != null ? Number(rawMgmtAchieved) : null);
+        mgmtAchieved = getQualitativeAchievedLabel(numeric, uomType, qualOpts) ?? null;
+      } else {
+        mgmtAchieved = rawMgmtAchieved;
+      }
+    } else if (isQualitative) {
+      mgmtAchieved = getQualitativeAchievedLabel(existing?.achieved_value ?? null, uomType, qualOpts) ?? null;
+    } else {
+      mgmtAchieved = rawMgmtAchieved;
+    }
+
     // Recalculate score from achieved value if management hasn't reviewed yet
     let initialMgmtScore: number | null = existing?.management_score ?? null;
     if (initialMgmtScore === null && mgmtAchieved !== null && mgmtAchieved !== '') {
