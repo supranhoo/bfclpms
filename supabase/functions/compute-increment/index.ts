@@ -405,6 +405,12 @@ Deno.serve(async (req) => {
       let countEligible = 0, countIneligible = 0, countExcluded = 0, countNoScore = 0;
 
       for (const p of profiles) {
+        // Resolve employee category name → master id once, and expose it as
+        // p.category_id so downstream gating (general eligibility + confirmation
+        // rule cascade) compares against the resolved master id. profiles has
+        // no category_id column; category is stored as text in employee_category.
+        const dims = empDims(p);
+        (p as any).category_id = dims.employee_category_id;
         // General eligibility gate
         let geFail: string | null = null;
         if (ge) {
@@ -500,7 +506,7 @@ Deno.serve(async (req) => {
             reason = 'No PMS score found';
           }
         } else {
-          const slab = pickSlab(slabs, empDims(p), pmsScore);
+          const slab = pickSlab(slabs, dims, pmsScore);
           if (slab) {
             slabPercent = Number(slab.increment_percent);
             ratingBand = `${slab.rating_from}-${slab.rating_to}`;
