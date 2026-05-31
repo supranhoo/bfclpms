@@ -25,6 +25,7 @@ import { Loader2, Upload, Play, FileSpreadsheet, Plus, Pencil, Search, Trash2 } 
 import { useToast } from '@/hooks/use-toast';
 import { generateAssessmentYears, getCurrentAssessmentYear } from '@/lib/assessmentYear';
 import * as XLSX from 'xlsx';
+import { fmt2, fmtFloor2 } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { IncrementInputDialog } from '@/components/incentive/IncrementInputDialog';
 import { useActiveEmployeesForCopy } from '@/hooks/useActiveEmployeesForCopy';
@@ -472,7 +473,7 @@ function CalculateIncrementTab({ year }: { year: string }) {
                   </div>
                 </TableCell>
                 <TableCell className="text-xs text-muted-foreground">{r.employee?.employee_code ?? '—'}</TableCell>
-                <TableCell>{r.pms_score ?? '—'}</TableCell>
+                <TableCell>{fmt2(r.pms_score)}</TableCell>
                 <TableCell>{r.rating_band ?? '—'}</TableCell>
                 <TableCell>{r.slab_percent ?? '—'}%</TableCell>
                 <TableCell>
@@ -493,9 +494,9 @@ function CalculateIncrementTab({ year }: { year: string }) {
                     : (r.ineligibility_reason ?? (r.criteria_exempt ? `Bypassed: ${r.exemption_reason ?? '—'}` : '—'))}
                 </TableCell>
                 <TableCell>{r.method_used ?? '—'}</TableCell>
-                <TableCell>{r.eligible_percent ?? '—'}%</TableCell>
+                <TableCell>{r.eligible_percent == null ? '—' : `${fmt2(r.eligible_percent)}%`}</TableCell>
                 <TableCell>{r.current_salary ?? '—'}</TableCell>
-                <TableCell>{r.increment_amount ?? '—'}</TableCell>
+                <TableCell>{fmtFloor2(r.increment_amount)}</TableCell>
                 <TableCell>{r.revised_salary ?? '—'}</TableCell>
                 <TableCell>{r.confirmation_granted ? <Badge variant="secondary">Yes</Badge> : '—'}</TableCell>
                 <TableCell>{r.final_eligible_months ?? '—'}</TableCell>
