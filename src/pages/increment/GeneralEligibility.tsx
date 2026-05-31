@@ -8,6 +8,12 @@ import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
+import { Calendar } from '@/components/ui/calendar';
+import { CalendarIcon } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { format } from 'date-fns';
 import {
   useGeneralEligibility,
   useGeneralEligibilityHistory,
@@ -16,6 +22,11 @@ import {
 import { useEmployeeCategories, useEmploymentStatuses, useLevels } from '@/hooks/useOrganization';
 import { Loader2 } from 'lucide-react';
 import { generateAssessmentYears, getCurrentAssessmentYear } from '@/lib/assessmentYear';
+import {
+  getAyEndDate,
+  validateCustomAnchor,
+  type ServiceAsOnMode,
+} from '@/lib/serviceAnchorDate';
 
 export default function GeneralEligibility() {
   const ayOptions = useMemo(() => generateAssessmentYears(2), []);
@@ -31,6 +42,8 @@ export default function GeneralEligibility() {
   const [statusList, setStatusList] = useState<string[]>([]);
   const [levelIds, setLevelIds] = useState<string[]>([]);
   const [minMonths, setMinMonths] = useState<number>(0);
+  const [asOnMode, setAsOnMode] = useState<ServiceAsOnMode>('run_date');
+  const [customDate, setCustomDate] = useState<Date | null>(null);
 
   useEffect(() => {
     if (current) {
@@ -38,11 +51,15 @@ export default function GeneralEligibility() {
       setStatusList(current.employment_statuses);
       setLevelIds(current.level_ids);
       setMinMonths(current.min_service_months);
+      setAsOnMode((current.service_as_on_mode ?? 'run_date') as ServiceAsOnMode);
+      setCustomDate(current.service_as_on_date ? new Date(current.service_as_on_date) : null);
     } else {
       setCategoryIds([]);
       setStatusList([]);
       setLevelIds([]);
       setMinMonths(0);
+      setAsOnMode('run_date');
+      setCustomDate(null);
     }
   }, [current?.id, year]);
 
@@ -55,13 +72,21 @@ export default function GeneralEligibility() {
     if (idx > 0) setYear(ayOptions[idx - 1]);
   };
 
+  const ayEnd = useMemo(() => getAyEndDate(year), [year]);
+  const customError = asOnMode === 'custom' ? validateCustomAnchor(customDate, year) : null;
+  const canSave = !customError;
+
   const onSave = () => {
+    if (customError) return;
     saveMut.mutate({
       assessment_year: year,
       category_ids: categoryIds,
       employment_statuses: statusList,
       level_ids: levelIds,
       min_service_months: minMonths,
+      service_as_on_mode: asOnMode,
+      service_as_on_date:
+        asOnMode === 'custom' && customDate ? format(customDate, 'yyyy-MM-dd') : null,
       previousId: current?.id,
     });
   };
@@ -84,7 +109,7 @@ export default function GeneralEligibility() {
               </SelectContent>
             </Select>
             <Button variant="outline" onClick={copyPrev}>Copy Previous Year</Button>
-            <Button onClick={onSave} disabled={saveMut.isPending}>
+            <Button onClick={onSave} disabled={saveMut.isPending || !canSave}>
               {saveMut.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
               Save
             </Button>
@@ -143,16 +168,69 @@ export default function GeneralEligibility() {
                 </div>
               </div>
               <Separator />
-              <div className="flex items-center gap-3">
-                <Label htmlFor="min-months">Minimum Service (months)</Label>
-                <Input
-                  id="min-months"
-                  type="number"
-                  min={0}
-                  value={minMonths}
-                  onChange={(e) => setMinMonths(Number(e.target.value) || 0)}
-                  className="w-32"
-                />
+              <div className="space-y-3">
+                <div className="flex flex-wrap items-center gap-3">
+                  <Label htmlFor="min-months" className="shrink-0">Minimum Service (months)</Label>
+                  <Input
+                    id="min-months"
+                    type="number"
+                    min={0}
+                    value={minMonths}
+                    onChange={(e) => setMinMonths(Number(e.target.value) || 0)}
+                    className="w-32"
+                  />
+                  <span className="text-sm text-muted-foreground shrink-0">evaluated as of</span>
+                  <RadioGroup
+                    value={asOnMode}
+                    onValueChange={(v) => setAsOnMode(v as ServiceAsOnMode)}
+                    className="flex flex-wrap items-center gap-4"
+                  >
+                    <label className="flex items-center gap-2 text-sm">
+                      <RadioGroupItem value="run_date" id="anchor-run" />
+                      Run date
+                    </label>
+                    <label className="flex items-center gap-2 text-sm">
+                      <RadioGroupItem value="ay_end" id="anchor-ay" />
+                      AY end ({format(ayEnd, 'dd-MMM-yyyy')})
+                    </label>
+                    <label className="flex items-center gap-2 text-sm">
+                      <RadioGroupItem value="custom" id="anchor-custom" />
+                      Custom date
+                    </label>
+                  </RadioGroup>
+                  {asOnMode === 'custom' && (
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="outline"
+                          className={cn(
+                            'w-[200px] justify-start text-left font-normal',
+                            !customDate && 'text-muted-foreground',
+                          )}
+                        >
+                          <CalendarIcon className="mr-2 h-4 w-4" />
+                          {customDate ? format(customDate, 'dd-MMM-yyyy') : 'Pick date'}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <Calendar
+                          mode="single"
+                          selected={customDate ?? undefined}
+                          onSelect={(d) => setCustomDate(d ?? null)}
+                          initialFocus
+                          className={cn('p-3 pointer-events-auto')}
+                        />
+                      </PopoverContent>
+                    </Popover>
+                  )}
+                </div>
+                {customError && (
+                  <p className="text-sm text-destructive">{customError}</p>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  Determines the cutoff date used to compute each employee's tenure against the minimum-service rule.
+                  Choose <strong>AY end</strong> or <strong>Custom date</strong> for deterministic, auditable re-runs.
+                </p>
               </div>
             </>
           )}
@@ -174,6 +252,12 @@ export default function GeneralEligibility() {
                   </div>
                   <span className="text-xs">
                     {h.category_ids.length} categories · {h.employment_statuses.length} statuses · {h.level_ids.length} levels · {h.min_service_months}mo
+                    {' · '}
+                    {h.service_as_on_mode === 'custom' && h.service_as_on_date
+                      ? `as of ${format(new Date(h.service_as_on_date), 'dd-MMM-yyyy')}`
+                      : h.service_as_on_mode === 'ay_end'
+                        ? `as of AY end`
+                        : 'as of run date'}
                   </span>
                 </div>
               ))}
