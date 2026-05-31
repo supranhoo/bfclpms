@@ -38,6 +38,8 @@ const DEFAULT_SLABS: SlabDraft[] = [
   { from_months: 9, to_months: null, percent_of_slab: 100 },
 ];
 
+const DEFAULT_CUTOFF_DAY = 15;
+
 export function IncrementMethodSection() {
   const { data: companies = [] } = useCompanies();
   const { data: knownYears = [] } = useKnownAssessmentYears();
@@ -66,10 +68,16 @@ export function IncrementMethodSection() {
 
   const [method, setMethod] = useState<IncrementMethodType>('full');
   const [slabs, setSlabs] = useState<SlabDraft[]>(DEFAULT_SLABS);
+  const [cutoffDay, setCutoffDay] = useState<number>(DEFAULT_CUTOFF_DAY);
 
   useEffect(() => {
-    if (config) setMethod(config.method);
-    else setMethod('full');
+    if (config) {
+      setMethod(config.method);
+      setCutoffDay(config.joining_month_cutoff_day ?? DEFAULT_CUTOFF_DAY);
+    } else {
+      setMethod('full');
+      setCutoffDay(DEFAULT_CUTOFF_DAY);
+    }
   }, [config]);
 
   useEffect(() => {
@@ -97,11 +105,20 @@ export function IncrementMethodSection() {
       if (s.to_months !== null && s.to_months <= s.from_months) slabErrors.push(`Row ${i + 1}: To months must be greater than From.`);
     });
   }
-  const isValid = method !== 'custom' || slabErrors.length === 0;
+  const cutoffValid =
+    method !== 'prorated_doj' ||
+    (Number.isInteger(cutoffDay) && cutoffDay >= 1 && cutoffDay <= 31);
+  const isValid = (method !== 'custom' || slabErrors.length === 0) && cutoffValid;
 
   const handleSave = () => {
     if (!scope || !isValid) return;
-    save.mutate({ scope, method, slabs: method === 'custom' ? slabs : [], existing: config ?? null });
+    save.mutate({
+      scope,
+      method,
+      slabs: method === 'custom' ? slabs : [],
+      existing: config ?? null,
+      joiningMonthCutoffDay: method === 'prorated_doj' ? cutoffDay : null,
+    });
   };
 
   const handleCopy = () => {
@@ -179,6 +196,34 @@ export function IncrementMethodSection() {
                   <div className="flex-1">
                     <Label htmlFor={`im-${opt.value}`} className="font-medium">{opt.label}</Label>
                     <p className="mt-0.5 text-sm text-muted-foreground">{opt.description}</p>
+                    {opt.value === 'prorated_doj' && method === 'prorated_doj' && (
+                      <div className="mt-3 max-w-md space-y-1.5 rounded-md border bg-background p-3">
+                        <Label htmlFor="prorated-cutoff" className="text-sm">
+                          Joining Month Cutoff Day
+                        </Label>
+                        <Input
+                          id="prorated-cutoff"
+                          type="number"
+                          min={1}
+                          max={31}
+                          step={1}
+                          value={Number.isFinite(cutoffDay) ? cutoffDay : ''}
+                          onChange={(e) => {
+                            const n = parseInt(e.target.value, 10);
+                            setCutoffDay(Number.isFinite(n) ? n : NaN);
+                          }}
+                          className="h-9 w-32"
+                          aria-invalid={!cutoffValid}
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          If employee joins before this day, joining month is counted.
+                          If employee joins on or after this day, joining month is excluded.
+                        </p>
+                        {!cutoffValid && (
+                          <p className="text-xs text-destructive">Enter a whole number between 1 and 31.</p>
+                        )}
+                      </div>
+                    )}
                     {opt.value === 'custom' && method === 'custom' && (
                       <div className="mt-3 space-y-3">
                         <div className="overflow-x-auto rounded-md border">

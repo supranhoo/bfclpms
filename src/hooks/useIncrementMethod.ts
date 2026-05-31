@@ -21,6 +21,12 @@ export interface IncrementMethodConfigRow {
   created_by: string | null;
   created_at: string;
   updated_at: string;
+  /**
+   * Day-of-month (1-31) cutoff that decides whether the DOJ month is counted
+   * for `prorated_doj`. NULL = engine default of 15. Only meaningful when
+   * method === 'prorated_doj'.
+   */
+  joining_month_cutoff_day: number | null;
 }
 
 export interface IncrementMethodSlabRow {
@@ -108,8 +114,9 @@ export function useSaveIncrementMethod() {
       method: IncrementMethodType;
       slabs: SlabDraft[];
       existing?: IncrementMethodConfigRow | null;
+      joiningMonthCutoffDay?: number | null;
     }) => {
-      const { scope, method, slabs, existing } = args;
+      const { scope, method, slabs, existing, joiningMonthCutoffDay } = args;
       const user = (await supabase.auth.getUser()).data.user;
       // Archive ALL currently-active rows for the scope, not just the
       // `existing` row the caller fetched. Prevents duplicate active rows
@@ -138,6 +145,10 @@ export function useSaveIncrementMethod() {
           status: 'active',
           copied_from_config_id: existing?.id ?? null,
           created_by: user?.id ?? null,
+          // Persist cutoff only for prorated_doj; otherwise NULL so the field
+          // stays scoped to the method that uses it.
+          joining_month_cutoff_day:
+            method === 'prorated_doj' ? (joiningMonthCutoffDay ?? 15) : null,
         } as any])
         .select('*')
         .single();
@@ -212,6 +223,10 @@ export function useCopyIncrementMethodFromYear() {
           status: 'active',
           copied_from_config_id: (src as any).id,
           created_by: user?.id ?? null,
+          joining_month_cutoff_day:
+            (src as any).method === 'prorated_doj'
+              ? ((src as any).joining_month_cutoff_day ?? 15)
+              : null,
         } as any])
         .select('*').single();
       if (error) throw error;

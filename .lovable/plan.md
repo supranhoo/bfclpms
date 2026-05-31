@@ -1,72 +1,113 @@
+
 ## Goal
-Change the rocket body color (currently navy `#0E2A47`, which reads as "black" in the screenshot) to dark orange, and expose it as a configurable setting in the Branding tab so admins can pick any color in the future.
 
-## Risk & Impact
-- **Data**: One new `system_settings` key `branding_loader_rocket_color`. Additive. No schema changes.
-- **Workflow**: None. Cosmetic only.
-- **UI/UX**: Rocket body color changes everywhere `RocketGrowthArt` renders (`PageLoadingOverlay`, `RefreshOverlay`, BrandingLoaderPanel preview). Window/fins/flame remain unchanged.
-- **Regression**: Default fallback retains current navy if setting absent — no visual change for projects that haven't configured a color. New default seeded to dark orange (`#C2410C`) per request.
-- **Mitigation**: Unit test for `useBrandingSettings` color parsing + fallback; visual snapshot via existing `loaderBranding.test.tsx` pattern.
+Make the **"Prorated by Date of Joining"** increment method honor a configurable **Joining Month Cutoff Day** (per Assessment Year + Company scope), and count months served strictly **within the assessment year** — including or excluding the joining month based on the cutoff. Surface the decision in run details and Excel export.
 
-## Implementation
+No change to Full Increment, Custom Slabs, PMS scoring, ineligibility, slab matching, or confirmation adjustment.
 
-### 1. Migration — seed default
-Insert `branding_loader_rocket_color` = `"#C2410C"` into `system_settings` (idempotent `ON CONFLICT DO NOTHING`).
+---
 
-### 2. `RocketGrowthArt.tsx`
-Accept optional `bodyColor?: string` prop. Use it for the rocket body `<path fill>` and the inner window dot (which mirrors body color at 0.35 opacity). Default to `#0E2A47` so direct callers without a color still work.
+## Risk & Impact Report
 
-### 3. `useBrandingSettings.ts`
-- Read new key `branding_loader_rocket_color`.
-- Add `rocketColor: string` to `BrandingSettings` (default `#C2410C` when unset).
-- Add hex validator helper `parseHexSetting(raw, dflt)`.
+- **Data**: Adds one nullable column `joining_month_cutoff_day SMALLINT` to `increment_method_configs`. Existing rows = NULL → engine defaults to 15. Additive, reversible.
+- **Workflow**: Only the `prorated_doj` branch of `applyMethod` changes. Other methods untouched.
+- **UI**: One numeric field appears under the Prorated by DOJ radio card only when selected.
+- **Regression**: Today `monthsServed` is computed continuously from DOJ to validationDate (not AY-bounded). New behavior is **opt-in** for `prorated_doj` only and replaces the months value passed to the method engine for that branch only. `service_months` audit column keeps the existing continuous figure for compatibility.
+- **Historical runs**: Not recomputed.
+- **Scalability**: Pure in-memory per-employee arithmetic; no extra queries.
+- **Rollback**: Drop column + revert files.
 
-### 4. `PageLoadingOverlay.tsx` & `RefreshOverlay.tsx`
-Pass `bodyColor={branding.rocketColor}` to `<RocketGrowthArt />`. For `PageLoadingOverlay`'s inline preview variant, accept `branding.rocketColor` in its prop shape.
+---
 
-### 5. `BrandingLoaderPanel.tsx` — UI (Branding tab)
-Add a new row above the "Show logo" toggle:
+## Plan
 
-```
-┌─ Branding · Loading Screen ────────────────────────────────┐
-│ Company Name         [ ACME Corporation         ]         │
-│ Tagline              [ Performance Suite        ]         │
-│                                                            │
-│ Rocket Color         [■ #C2410C ] [native color picker]   │  ← NEW
-│ Quick presets:  [■ Navy] [■ Dark Orange] [■ Emerald]      │
-│                 [■ Crimson] [■ Indigo]    Reset to default│
-│                                                            │
-│ ☐ Show logo on loader                                     │
-│                                                            │
-│         [Save Changes]   │   Live Preview → rocket re-tints│
-└────────────────────────────────────────────────────────────┘
-```
+### 1. Migration — `increment_method_configs`
+- `ALTER TABLE public.increment_method_configs ADD COLUMN joining_month_cutoff_day SMALLINT;`
+- `CHECK (joining_month_cutoff_day IS NULL OR (joining_month_cutoff_day BETWEEN 1 AND 31))`.
+- Comment: "Day-of-month cutoff for counting the DOJ month under prorated_doj. NULL = system default (15)."
 
-Specifics:
-- `<input type="color">` bound to local `rocketColor` state, paired with a read-only hex `<Input>` showing the value.
-- Five preset swatch buttons (h-8 w-8 rounded) for one-click selection: Navy `#0E2A47`, Dark Orange `#C2410C`, Emerald `#047857`, Crimson `#B91C1C`, Indigo `#3730A3`.
-- "Reset to default" link sets value back to `#C2410C`.
-- Live Preview panel on the right re-renders instantly as color changes (already wired via `PageLoadingOverlay` props).
-- Save handler adds one more `update.mutateAsync({ key: 'branding_loader_rocket_color', value: rocketColor })`.
-- `dirty` check includes `rocketColor !== branding.rocketColor`.
+### 2. Hook — `src/hooks/useIncrementMethod.ts`
+- Add `joining_month_cutoff_day: number | null` to `IncrementMethodConfigRow`.
+- `useSaveIncrementMethod` accepts `joiningMonthCutoffDay: number | null` and inserts it; only persists a value when `method === 'prorated_doj'` (else NULL).
+- `useCopyIncrementMethodFromYear` carries the source row's cutoff value.
+
+### 3. UI — `src/components/admin/scoring/IncrementMethodSection.tsx`
+- New local state `cutoffDay` (default 15) hydrated from config.
+- Render a numeric `Input` (min=1, max=31) labelled **"Joining Month Cutoff Day"** with helper text:
+  > "If employee joins before this day, joining month is counted. If employee joins on or after this day, joining month is excluded."
+- Visible only inside the Prorated by DOJ card and only when `method === 'prorated_doj'`.
+- Validation: integer 1–31; block save with inline error otherwise.
+- Pass to `save.mutate`.
+
+### 4. Edge function — `supabase/functions/compute-increment/index.ts`
+- Add helper `monthsServedInAY(doj, cutoffDay, ayStartDate, ayEndDate, validationDate)`:
+  1. If `doj > ayEndDate` → return `{ months: 0, joiningMonthDecision: 'after_ay' }`.
+  2. Compute `effectiveStart`:
+     - If `doj < ayStartDate` → `effectiveStart = ayStartDate` (cutoff irrelevant; `joiningMonthDecision = 'pre_ay'`).
+     - Else: `joiningDay = doj.getDate()`; if `joiningDay < cutoffDay` → include join month (`effectiveStart = first day of doj's month`, `decision = 'included'`); else exclude (`effectiveStart = first day of next month`, `decision = 'excluded'`).
+  3. `effectiveEnd = min(validationDate, ayEndDate)`.
+  4. Return whole-month count between `effectiveStart` and `effectiveEnd` (`(endY-startY)*12 + (endM-startM) + 1` clamped ≥0 and ≤12). Safe when cutoff > month length because we only compare day numbers.
+- Resolve `cutoffDay = resolvedCfg.joining_month_cutoff_day ?? 15`.
+- Only when `effectiveMethod === 'prorated_doj'`, replace `monthsForMethod` with the AY-bounded value; keep `service_months` (continuous) untouched.
+- Extend `applyMethod` notes for `prorated_doj` to:
+  - `"Prorated by DOJ · M/12 · Joining month included due to cutoff day N"` or
+  - `"Prorated by DOJ · M/12 · Joining month excluded due to cutoff day N"` or
+  - `"Prorated by DOJ · M/12 · DOJ pre-AY"` / `"DOJ after AY"`.
+- Persist as `method_used` (existing column), which already flows to UI and Excel.
+
+### 5. UI display & Excel — `src/pages/incentive/IncrementInputs.tsx`
+- No structural change; the new richer string flows through the existing **Method** column and the existing Excel `method` field. Verify column width is comfortable; widen header label tooltip if needed.
 
 ### 6. Tests
-- Extend `src/test/branding/loaderBranding.test.tsx`: assert SVG body path uses the configured color when setting is present; falls back to default when absent; invalid hex falls back safely.
-- Add unit test for `parseHexSetting`.
+- **`src/lib/incrementMethodApplier.test.ts`** unchanged (pure applier still receives months number).
+- **New** `supabase/functions/compute-increment/joining_month_cutoff_test.ts` — pure unit tests for `monthsServedInAY` covering:
+  - DOJ 14 Apr (cutoff 15) AY 2025-26 → joining month counted.
+  - DOJ 15 Apr → excluded.
+  - DOJ 16 Apr → excluded.
+  - DOJ 10 Jul 2025 → counted (9 months when validationDate = 31 Mar 2026 capped at 12).
+  - DOJ before AY start (1 Jan 2025, AY 2025-26) → full 12.
+  - DOJ after AY end (1 Jul 2026, AY 2025-26) → 0.
+  - Cutoff day 31 with DOJ in 30-day month → behaves safely (day < 31 ⇒ included).
+  - NULL config cutoff → defaults to 15.
 
 ### 7. Docs
-- `DOCUMENTATION.md` — add "Loader Rocket Color" to Branding settings section + new setting key.
-- `POLICY.md` — note rocket color is admin-configurable, default Dark Orange `#C2410C`.
+- `DOCUMENTATION.md`: add the cutoff field to the Increment Method section and describe AY-bounded month counting.
+- `POLICY.md`: add policy note "Prorated by DOJ — Joining Month Cutoff (default 15)".
+- Memory: add `mem://features/admin/increment-prorated-doj-cutoff`.
 
-## Files Touched
-- `supabase/migrations/<new>_branding_loader_rocket_color.sql` (new)
-- `src/components/ui/RocketGrowthArt.tsx`
-- `src/hooks/useBrandingSettings.ts`
-- `src/components/ui/PageLoadingOverlay.tsx`
-- `src/components/ui/RefreshOverlay.tsx`
-- `src/components/admin/BrandingLoaderPanel.tsx`
-- `src/test/branding/loaderBranding.test.tsx`
-- `DOCUMENTATION.md`, `POLICY.md`
+---
 
-## Rollback
-Revert files + delete the one settings key. No destructive changes.
+## UI changes (exact)
+
+**Location**: System Settings → Increment → Increment Method tab → inside the "Prorated by Date of Joining" radio card.
+
+When `prorated_doj` is selected, a new sub-block appears beneath the description:
+
+```text
+┌─ Prorated by Date of Joining ────────────────────────────┐
+│ Eligible % = (Configured Increment % ÷ 12) × Months …    │
+│                                                          │
+│   Joining Month Cutoff Day                               │
+│   [  15 ]   (1–31)                                       │
+│   If employee joins before this day, joining month is    │
+│   counted. If employee joins on or after this day,       │
+│   joining month is excluded.                             │
+└──────────────────────────────────────────────────────────┘
+```
+
+**Interaction**: changing the radio away from Prorated by DOJ hides the field; the value is only persisted when the saved method is `prorated_doj`. Responsive: field is a single-column input on mobile, ~140px on desktop.
+
+**Run details** (Increment Inputs → Calculate Increment %): the existing **Method** column now shows e.g. `Prorated by DOJ · 9/12 · Joining month excluded due to cutoff day 15`. Excel export inherits this string from the same field.
+
+---
+
+## Acceptance check
+
+- Admin sees and edits cutoff under Prorated by DOJ only.
+- Cutoff persists per AY + Company scope alongside the method version row.
+- DOJ-day < cutoff → joining month counted; ≥ cutoff → excluded.
+- DOJ before AY → full 12 (subject to validationDate cap); DOJ after AY → 0.
+- Default cutoff 15 applies when column is NULL.
+- Run details + Excel show method, months, and cutoff decision.
+- Full Increment and Custom Slabs paths untouched.
+
