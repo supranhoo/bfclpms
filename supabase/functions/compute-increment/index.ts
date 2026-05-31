@@ -307,13 +307,15 @@ Deno.serve(async (req) => {
 
     try {
       // Load configs
-      const [annualCfg, methodCfg, generalElig, slabsRes, inputsRes, criteriaConfig, exclusionsRes, profilesRes, confRulesRes, prevAdjRes, deptRes, buRes, divRes, catRes] = await Promise.all([
+      const [annualCfg, methodCfgsRes, generalElig, slabsRes, inputsRes, criteriaConfig, exclusionsRes, profilesRes, confRulesRes, prevAdjRes, deptRes, buRes, divRes, catRes] = await Promise.all([
         admin.from('annual_score_configs').select('*').eq('assessment_year', assessment_year).eq('status', 'active').maybeSingle(),
-        // Deterministic latest-version pick. Guards against legacy duplicate
-        // active rows (RCA ADR-071): with raw .maybeSingle() PostgREST returns
-        // null on multiple matches and the engine silently fell back to
-        // method='full', producing un-prorated eligible % values.
-        admin.from('increment_method_configs').select('*').eq('assessment_year', assessment_year).eq('status', 'active').order('version', { ascending: false }).limit(1).maybeSingle(),
+        // Per-employee scope resolution (RCA ADR-072): fetch ALL active
+        // method configs for the AY and pick the most specific match per
+        // employee (specificity = number of non-null scope columns; ties
+        // broken by version DESC, then created_at DESC). The previous
+        // single-row "latest active" query ignored scope entirely and
+        // applied one global row to every employee.
+        admin.from('increment_method_configs').select('*').eq('assessment_year', assessment_year).eq('status', 'active').order('version', { ascending: false }),
         admin.from('general_eligibility_configs').select('*').eq('assessment_year', assessment_year).order('version', { ascending: false }).limit(1).maybeSingle(),
         admin.from('increment_slabs').select('*').eq('assessment_year', assessment_year).eq('status', 'active'),
         admin.from('increment_inputs').select('*').eq('assessment_year', assessment_year),
@@ -336,11 +338,54 @@ Deno.serve(async (req) => {
 
       const annualMethod = (annualCfg.data as any)?.method ?? 'avg_all';
       const customMonths: number[] = (annualCfg.data as any)?.custom_months ?? [];
-      const methodType = (methodCfg.data as any)?.method ?? 'full';
-      let methodSlabs: any[] = [];
-      if (methodType === 'custom' && methodCfg.data) {
-        const { data } = await admin.from('increment_method_slabs').select('*').eq('method_config_id', (methodCfg.data as any).id).order('sort_order');
-        methodSlabs = data ?? [];
+      const methodConfigs = ((methodCfgsRes as any).data as any[]) ?? [];
+      if (methodConfigs.length === 0) {
+        throw new Error(`No increment method configured for AY ${assessment_year}`);
+      }
+      // Lazy cache of custom slabs keyed by method_config_id.
+      const methodSlabsCache = new Map<string, any[]>();
+      async function getMethodSlabs(cfgId: string): Promise<any[]> {
+        if (methodSlabsCache.has(cfgId)) return methodSlabsCache.get(cfgId)!;
+        const { data } = await admin
+          .from('increment_method_slabs')
+          .select('*')
+          .eq('method_config_id', cfgId)
+          .order('sort_order');
+        const list = data ?? [];
+        methodSlabsCache.set(cfgId, list);
+        return list;
+      }
+      // Per-employee scope resolver. Picks the active config row whose
+      // non-null scope columns all match the employee's dimensions, with
+      // the highest specificity. Returns null when no row matches.
+      function resolveMethodConfig(dims: {
+        company_id: string | null;
+        division_id: string | null;
+        business_unit_id: string | null;
+        location_id: string | null;
+        employee_category_id: string | null;
+        level_id: string | null;
+      }): any | null {
+        const candidates = methodConfigs.filter((c) =>
+          (!c.company_id || c.company_id === dims.company_id) &&
+          (!c.division_id || c.division_id === dims.division_id) &&
+          (!c.business_unit_id || c.business_unit_id === dims.business_unit_id) &&
+          (!c.category_id || c.category_id === dims.employee_category_id) &&
+          (!c.level_id || c.level_id === dims.level_id) &&
+          (!c.location_id || c.location_id === dims.location_id),
+        );
+        if (!candidates.length) return null;
+        const score = (c: any) =>
+          (c.company_id ? 1 : 0) + (c.division_id ? 1 : 0) + (c.business_unit_id ? 1 : 0) +
+          (c.category_id ? 1 : 0) + (c.level_id ? 1 : 0) + (c.location_id ? 1 : 0);
+        candidates.sort((a, b) => {
+          const ds = score(b) - score(a);
+          if (ds !== 0) return ds;
+          const dv = (Number(b.version) || 0) - (Number(a.version) || 0);
+          if (dv !== 0) return dv;
+          return String(b.created_at ?? '').localeCompare(String(a.created_at ?? ''));
+        });
+        return candidates[0];
       }
       const ge = (generalElig.data as any) ?? null;
       const slabs = (slabsRes.data as any[]) ?? [];
@@ -502,6 +547,8 @@ Deno.serve(async (req) => {
       const items: any[] = [];
       const adjustmentRows: any[] = [];
       let countEligible = 0, countIneligible = 0, countNoScore = 0, countCriteriaExempt = 0;
+      const methodsAppliedSet = new Set<string>();
+      let countNoMethodScope = 0;
 
       for (const p of profiles) {
         // Resolve employee category name → master id once, and expose it as
@@ -510,6 +557,16 @@ Deno.serve(async (req) => {
         // no category_id column; category is stored as text in employee_category.
         const dims = empDims(p);
         (p as any).category_id = dims.employee_category_id;
+        // Per-employee method resolution (scope-aware). When no config row
+        // matches the employee's scope at all, mark the row with a clear
+        // remark and skip the increment math — the run itself still
+        // completes with the rest of the population.
+        const resolvedCfg = resolveMethodConfig(dims);
+        const methodType: string = (resolvedCfg as any)?.method ?? 'full';
+        const methodSlabs: any[] = resolvedCfg && methodType === 'custom'
+          ? await getMethodSlabs((resolvedCfg as any).id)
+          : [];
+        if (resolvedCfg) methodsAppliedSet.add(methodType);
         // Ineligibility-criteria-exempt list: bypass the disqualification-criteria
         // block ONLY. Employees still flow through PMS-score → slab → increment
         // normally and remain subject to confirmation-increment rules. Every active
@@ -634,7 +691,16 @@ Deno.serve(async (req) => {
           reason = adjustment.adjustmentReason;
         }
 
-        if (pmsScore === null) {
+        if (!resolvedCfg) {
+          // No method config matches this employee's scope. Skip slab/method
+          // math. Preserve any pre-existing ineligibility reason; only
+          // override the default 'eligible' state.
+          if (eligibility === 'eligible') {
+            eligibility = 'no_score';
+            reason = 'No increment method configured for employee scope';
+          }
+          countNoMethodScope++;
+        } else if (pmsScore === null) {
           if (eligibility === 'eligible') {
             eligibility = 'no_score';
             reason = 'No PMS score found';
@@ -741,7 +807,8 @@ Deno.serve(async (req) => {
           ineligible: countIneligible,
           no_score: countNoScore,
           criteria_exempt: countCriteriaExempt,
-          method: methodType,
+          methods_applied: Array.from(methodsAppliedSet),
+          no_method_scope: countNoMethodScope,
           annual_method: annualMethod,
         },
       }).eq('id', runId);
