@@ -30,6 +30,8 @@ import { FeatureFlagsTab } from '@/components/admin/FeatureFlagsTab';
 import { IncrementEligibilitySection } from '@/components/admin/scoring/IncrementEligibilitySection';
 import { AnnualScoreCalculationSection } from '@/components/admin/scoring/AnnualScoreCalculationSection';
 import { IncrementMethodSection } from '@/components/admin/scoring/IncrementMethodSection';
+import GeneralEligibilityPage from '@/pages/increment/GeneralEligibility';
+import IncrementSlabsPage from '@/pages/increment/IncrementSlabs';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -630,9 +632,13 @@ export default function SystemSettings() {
             <TabsList>
               <TabsTrigger value="eligibility">Eligibility Criteria</TabsTrigger>
               <TabsTrigger value="method">Increment Method</TabsTrigger>
+              <TabsTrigger value="general-eligibility">General Eligibility</TabsTrigger>
+              <TabsTrigger value="increment-slabs">Increment Slabs</TabsTrigger>
             </TabsList>
             <TabsContent value="eligibility"><IncrementEligibilitySection /></TabsContent>
             <TabsContent value="method"><IncrementMethodSection /></TabsContent>
+            <TabsContent value="general-eligibility"><GeneralEligibilityPage /></TabsContent>
+            <TabsContent value="increment-slabs"><IncrementSlabsPage /></TabsContent>
           </Tabs>
         );
       case 'cycles':
