@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -17,11 +17,13 @@ import {
   useIncrementRunItems,
   useTriggerIncrementRun,
 } from '@/hooks/useIncrementRuns';
-import { Loader2, Upload, Play, FileSpreadsheet } from 'lucide-react';
+import { Loader2, Upload, Play, FileSpreadsheet, Plus, Pencil, Search } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { generateAssessmentYears, getCurrentAssessmentYear } from '@/lib/assessmentYear';
 import * as XLSX from 'xlsx';
 import { supabase } from '@/integrations/supabase/client';
+import { IncrementInputDialog } from '@/components/incentive/IncrementInputDialog';
+import { useActiveEmployeesForCopy } from '@/hooks/useActiveEmployeesForCopy';
 
 function downloadXlsx(filename: string, rows: any[], headers: string[]) {
   const ws = rows.length
@@ -38,10 +40,30 @@ function downloadXlsx(filename: string, rows: any[], headers: string[]) {
 function EnterInputsTab({ year }: { year: string }) {
   const [page, setPage] = useState(0);
   const pageSize = 50;
-  const { data, isLoading } = useIncrementInputs(year, page, pageSize);
+  const [searchInput, setSearchInput] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(searchInput.trim()), 300);
+    return () => clearTimeout(t);
+  }, [searchInput]);
+  useEffect(() => { setPage(0); }, [debouncedSearch, year]);
+
+  const { data, isLoading } = useIncrementInputs(year, page, pageSize, debouncedSearch);
   const upsert = useUpsertIncrementInput();
   const importMut = useBulkImportIncrementInputs();
   const { toast } = useToast();
+  const { data: employees = [] } = useActiveEmployeesForCopy();
+
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [editingRow, setEditingRow] = useState<any | null>(null);
+
+  const existingEmployeeIds = useMemo(
+    () => new Set((data?.rows ?? []).map((r: any) => r.employee_id)),
+    [data?.rows],
+  );
+
+  const openAdd = () => { setEditingRow(null); setDialogOpen(true); };
+  const openEdit = (row: any) => { setEditingRow(row); setDialogOpen(true); };
 
   const totalPages = Math.max(1, Math.ceil((data?.total ?? 0) / pageSize));
 
@@ -110,6 +132,9 @@ function EnterInputsTab({ year }: { year: string }) {
       <CardHeader className="flex flex-row items-center justify-between space-y-0">
         <CardTitle>Employee Inputs · AY {year}</CardTitle>
         <div className="flex items-center gap-2">
+          <Button onClick={openAdd}>
+            <Plus className="h-4 w-4 mr-2" />Add Input
+          </Button>
           <Button variant="outline" onClick={exportTemplate}>
             <FileSpreadsheet className="h-4 w-4 mr-2" />Template
           </Button>
@@ -122,6 +147,15 @@ function EnterInputsTab({ year }: { year: string }) {
         </div>
       </CardHeader>
       <CardContent>
+        <div className="relative mb-4 max-w-sm">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+            placeholder="Search employee by name or code"
+            className="pl-8"
+          />
+        </div>
         {isLoading ? (
           <Loader2 className="h-5 w-5 animate-spin" />
         ) : (
@@ -136,6 +170,9 @@ function EnterInputsTab({ year }: { year: string }) {
                   <TableHead>Training</TableHead>
                   <TableHead>Current Salary</TableHead>
                   <TableHead>Source</TableHead>
+                  <TableHead>Remarks</TableHead>
+                  <TableHead>Last Updated</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -151,12 +188,25 @@ function EnterInputsTab({ year }: { year: string }) {
                     <TableCell>{r.training_compliance}</TableCell>
                     <TableCell>{r.current_salary ?? '—'}</TableCell>
                     <TableCell><Badge variant="secondary">{r.source}</Badge></TableCell>
+                    <TableCell className="max-w-[220px] truncate text-xs text-muted-foreground" title={r.remarks ?? ''}>
+                      {r.remarks || '—'}
+                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
+                      {r.updated_at ? new Date(r.updated_at).toLocaleDateString() : '—'}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Button variant="ghost" size="sm" onClick={() => openEdit(r)}>
+                        <Pencil className="h-3.5 w-3.5 mr-1" />Edit
+                      </Button>
+                    </TableCell>
                   </TableRow>
                 ))}
                 {(data?.rows ?? []).length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
-                      No inputs yet. Import an Excel file to begin.
+                    <TableCell colSpan={10} className="text-center text-muted-foreground py-8">
+                      {debouncedSearch
+                        ? 'No employees match your search.'
+                        : 'No inputs yet. Add employee inputs manually or import an Excel file to begin.'}
                     </TableCell>
                   </TableRow>
                 )}
@@ -178,6 +228,14 @@ function EnterInputsTab({ year }: { year: string }) {
           </>
         )}
       </CardContent>
+      <IncrementInputDialog
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+        assessmentYear={year}
+        employees={employees}
+        existing={editingRow}
+        existingEmployeeIds={existingEmployeeIds}
+      />
     </Card>
   );
 }
