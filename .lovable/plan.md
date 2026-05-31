@@ -1,76 +1,69 @@
-# Improve Global Layout Space Utilization
 
-## Goal
-Reduce wasted outer whitespace and let main content (tables, tabs, forms, configuration panels) use nearly the full viewport width after the sidebar — without touching workflows, business logic, schema, colors, fonts, or component styling.
+# UI Polish Pass — Galaxy S-inspired Premium Feel
+
+**Scope:** Pure visual/UX polish via the global design system + shared shadcn primitives. **No** business logic, routes, RLS, queries, schema, scoring, workflow, permissions, or page layouts touched. All page files keep their current structure.
 
 ## Risk & Impact Report
-- **Data Impact:** None. Pure CSS/className changes.
-- **Workflow Impact:** None.
-- **UI/UX Impact:** All authenticated pages get wider working area + slightly tighter outer padding. Existing internal spacing (cards, grids, tabs) stays intact.
-- **Regression Risk:** Low. Risk is limited to a few narrow-by-design pages (long-form reading like Governance Explainer, single-column forms). Mitigated by keeping their internal `max-w-*` where the content is intentionally narrow.
-- **Scalability/Responsive:** Mobile (`p-3`) padding preserved. Desktop uses tighter padding + capped at a wide max-width so 4K monitors still look professional.
 
-## Root Cause (from exploration)
-1. `src/components/layout/DashboardLayout.tsx` — `<main>` uses `p-3 sm:p-6` (24px on desktop) which is fine, but combined with #2/#3 below causes double padding.
-2. `src/pages/admin/SystemSettings.tsx` adds its own `mx-auto w-full px-4 lg:px-6 py-4 max-w-[1800px]` — duplicate horizontal padding on top of `<main>` padding.
-3. Several pages (mostly under `src/pages/safety/*` and a handful of admin pages) wrap content in `max-w-3xl|4xl|5xl|6xl mx-auto`, restricting wide tables/configuration grids to a narrow centered column on large screens. 27 files identified.
-4. No global page-container component exists — each page sets its own wrapper, so the only true global lever is `<main>` in `DashboardLayout`.
+- **Data / Workflow / Permissions:** None. CSS + className changes only.
+- **UI/UX:** Intentional global visual shift — softer surfaces, smoother shadows, refined typography.
+- **Regression Risk:** Low. Changes are limited to `index.css` (tokens) + ~6 shadcn primitives (`card`, `button`, `tabs`, `table`, `input`, `select`) + `DashboardLayout` background + `AppSidebar` spacing/hover. All variant names + APIs unchanged.
+- **Responsive:** Mobile sm/lg breakpoints preserved; new shadows/radii are token-driven and theme-aware (light + dark).
+- **Mitigation:** Tokens only — every page automatically inherits. Rollback = revert ~8 files.
 
 ## Plan
 
-### Step 1 — Tighten the global `<main>` container (single source of truth)
-File: `src/components/layout/DashboardLayout.tsx`
+### 1. `src/index.css` — token refinement (the heart of the change)
+- **Background** — replace flat `209 40% 96%` with a softer layered surface: `--background: 220 25% 98%` light / `222 40% 9%` dark. Add a very subtle radial accent on `body` (`bg-background` + low-opacity radial gradient using primary at ~3% — barely visible, premium feel).
+- **Card** — `--card` to pure-white-ish in light (`0 0% 100%`), elevated dark (`222 32% 14%`). Border softened to `220 20% 92%` light.
+- **Radius** — bump `--radius` from `0.5rem` → `0.75rem` (enterprise-appropriate, not cartoonish).
+- **Shadows** — replace flat `--shadow-*` with layered, premium shadows:
+  - `--shadow-sm: 0 1px 2px hsl(220 40% 20% / 0.04), 0 1px 3px hsl(220 40% 20% / 0.03)`
+  - `--shadow-md: 0 2px 6px -1px hsl(220 40% 20% / 0.06), 0 4px 12px -2px hsl(220 40% 20% / 0.05)`
+  - `--shadow-lg: 0 8px 24px -6px hsl(220 40% 20% / 0.08), 0 16px 32px -8px hsl(220 40% 20% / 0.06)`
+- **Muted/border** — slightly cooler & lighter for cleaner separation.
+- **Typography** — add `font-feature-settings: "cv11","ss01","ss03"` + `-webkit-font-smoothing: antialiased` + `text-rendering: optimizeLegibility` on `body`. Tighten heading tracking (`letter-spacing: -0.01em` on h1–h3 via base layer).
+- **Motion** — add a global `transition-colors` default duration var `--motion-fast: 150ms`, `--motion-base: 200ms` (used by primitives below).
+- **Scrollbar** — apply the existing `matrix-scroll` thin-scrollbar treatment globally to `body` via a subtle override (kept opt-in feel, not loud).
 
-Change `<main>` className from:
-```
-flex-1 overflow-y-auto overflow-x-hidden p-3 sm:p-6 bg-muted/30 min-w-0
-```
-to:
-```
-flex-1 overflow-y-auto overflow-x-hidden px-3 py-3 sm:px-5 sm:py-4 lg:px-6 lg:py-5 bg-muted/30 min-w-0
-```
-- Reduces desktop horizontal padding from 24px → 20–24px and vertical from 24px → 20px.
-- Keeps mobile comfort (12px).
-- Sidebar behavior unchanged (still inside `SidebarInset`).
+### 2. `src/components/layout/DashboardLayout.tsx`
+- Change `<main>` background from `bg-muted/30` → `bg-background` (which now carries the soft surface), keep padding tokens.
 
-### Step 2 — Remove duplicate wrapper on System Settings
-File: `src/pages/admin/SystemSettings.tsx` (line 772)
+### 3. Shared primitives — small className upgrades, **no API changes**
 
-Change:
-```
-<div className="mx-auto w-full px-4 lg:px-6 py-4 max-w-[1800px]">
-```
-to:
-```
-<div className="w-full">
-```
-(Outer `<main>` already provides padding; `max-w-[1800px]` no longer needed since `<main>` itself can hold a soft cap if required.)
+| File | Change |
+|---|---|
+| `ui/card.tsx` | `shadow-sm` → `shadow-sm hover:shadow-md transition-shadow duration-200`; border `border-border/60`; default radius inherits new `--radius`. |
+| `ui/button.tsx` | Add `transition-all duration-200 active:scale-[0.98]`; primary gets `shadow-sm hover:shadow-md`; outline gets `border-border/80 hover:border-border`. Sizes unchanged. |
+| `ui/tabs.tsx` | `TabsList` → `bg-muted/60 p-1 rounded-lg`; `TabsTrigger` active state gets `shadow-sm` + smoother `transition-all duration-200`, weight `font-medium` → `font-semibold` when active. |
+| `ui/table.tsx` | Header `bg-muted/40 text-xs font-semibold uppercase tracking-wide`; rows `hover:bg-muted/40 transition-colors`; cell padding tightened to `px-4 py-3` for denser scan. |
+| `ui/input.tsx` | `bg-background` → `bg-card`; add `transition-colors`; focus ring uses `ring-2 ring-ring/30 ring-offset-0` (softer). |
+| `ui/select.tsx` (trigger) | Same focus/ring polish as input for consistency. |
 
-### Step 3 — Relax restrictive page wrappers on wide admin/reporting/settings pages
-Replace `max-w-{4xl|5xl|6xl} mx-auto` with `w-full` ONLY on pages that show tables, multi-column grids, dashboards, or configuration matrices. Targeted files (table/grid/configuration nature, identified by grep):
-- `src/pages/admin/ModuleHubSettings.tsx`
-- `src/pages/admin/GovernanceExplainer.tsx` — keep narrow (long-form text). **Skip.**
-- `src/pages/admin/OrgKpiEvidenceDemo.tsx`
-- `src/pages/ModuleHub.tsx`
-- `src/pages/ProfileSettings.tsx` — keep narrow (single-column form). **Skip.**
-- `src/pages/safety/SafetyHome.tsx`, `SafetyAssets.tsx`, `SafetyAudits.tsx`, `SafetyPermits.tsx`, `SafetyAuditTemplates.tsx`, `SafetyAuditScoreboard.tsx`, `SafetyAuditLog.tsx`, `SafetyUsers.tsx`, `SafetyEmergencyContacts.tsx`, `SafetyHoursWorked.tsx`, `SafetyAnalytics.tsx`, `SafetyPermits.tsx`, `SafetyPermitTypeConfig.tsx`, `SafetySettings.tsx`, `SafetyAssetDetail.tsx`, `SafetyAuditRunDetail.tsx`, `SafetyDrillDetail.tsx`, `SafetyPermitDetail.tsx`, `SafetyIncidentDetail.tsx` (list views & detail dashboards → widen; single-form pages like `SafetyIncidentNew`, `SafetyAssetNew`, `SafetyPermitNew` → **keep narrow**).
+### 4. `src/components/layout/AppSidebar.tsx` (cosmetic only)
+- Header: `p-4` → `px-4 py-5`, slightly larger logo container radius.
+- Active menu item: use `bg-sidebar-accent/15 text-sidebar-primary font-medium` with a 2px left accent bar via `before:` pseudo for tactile feel.
+- Section labels: `text-[11px] uppercase tracking-wider font-semibold text-sidebar-foreground/50`.
+- Footer profile card: lift with new `shadow-sm` and rounded-lg.
+- All menu items, badges, behavior **unchanged**.
 
-Rule applied per file: list/table/dashboard/configuration → widen; single-column create/edit forms or long-form reading → keep.
+### 5. `tailwind.config.ts`
+- No structural change — shadow tokens already wired to CSS vars; new shadow values flow automatically.
 
-### Step 4 — Verification
-- Load `/admin/system-settings`, `/admin`, `/admin/kpi-mapping-matrix`, `/admin/employee-development`, `/safety`, `/safety/audits`, reports pages.
-- Confirm: blank L/R margins reduced, tables use more horizontal room, sidebar untouched, mobile (`<640px`) still has comfortable padding, no horizontal scroll on any page.
-- Pages intentionally kept narrow (ProfileSettings, GovernanceExplainer, *New forms) still look balanced.
+## What is NOT changing
 
-## Out of Scope (explicit)
-- No changes to AppSidebar, headers, cards, tabs, buttons, colors, fonts, icons, or any business logic.
-- No DB / RLS / edge-function changes.
-- No new page sections removed or added.
+- No page-file edits (Dashboard, HR PMS Review, Team Reviews, Admin pages, Reports, KPI Details).
+- No new dependencies.
+- No color palette overhaul — primary/secondary/destructive hues kept.
+- No animation libraries added.
+- No layout/grid changes.
 
-## Files to Modify
-1. `src/components/layout/DashboardLayout.tsx` — main padding (1 line)
-2. `src/pages/admin/SystemSettings.tsx` — remove wrapper max-width (1 line)
-3. ~22 page files — replace `max-w-* mx-auto` with `w-full` on wide-content pages only
+## Verification
+
+- Visual: spot-check `/dashboard`, `/admin`, `/admin/settings`, a report page, and a table-heavy page in light + dark mode at desktop + mobile.
+- Build: existing typecheck/lint must pass; no API change in primitives.
+- Reduced-motion: all added transitions are `transition-colors`/`shadow` (already respected by browser when prefers-reduced-motion is on for our short durations); active scale is `0.98` only — acceptable.
 
 ## Rollback
-All changes are className edits; revert by restoring the original Tailwind classes per file.
+
+Revert these files: `index.css`, `DashboardLayout.tsx`, `AppSidebar.tsx`, `ui/{card,button,tabs,table,input,select}.tsx`.
