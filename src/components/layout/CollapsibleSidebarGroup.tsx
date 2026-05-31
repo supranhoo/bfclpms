@@ -83,6 +83,7 @@ export function CollapsibleSidebarGroup({
                     onClick={() => onNavigate(item.path)}
                     onMouseEnter={() => prefetchRoute(item.path)}
                     onFocus={() => prefetchRoute(item.path)}
+                className="transition-colors duration-150 data-[active=true]:font-semibold data-[active=true]:bg-sidebar-accent/15 data-[active=true]:text-sidebar-primary"
                   >
                     <item.icon className="h-4 w-4" />
                     <span>{item.title}</span>
