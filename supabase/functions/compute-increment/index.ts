@@ -349,7 +349,7 @@ Deno.serve(async (req) => {
 
     try {
       // Load configs
-      const [annualCfg, methodCfgsRes, generalElig, slabsRes, inputsRes, criteriaConfig, exclusionsRes, profilesRes, confRulesRes, prevAdjRes, deptRes, buRes, divRes, catRes] = await Promise.all([
+      const [annualCfg, methodCfgsRes, generalElig, slabsRes, inputsRes, criteriaConfig, exclusionsRes, profilesRes, confRulesRes, prevAdjRes, deptRes, buRes, divRes, catRes, statusHistoryRes] = await Promise.all([
         admin.from('annual_score_configs').select('*').eq('assessment_year', assessment_year).eq('status', 'active').maybeSingle(),
         // Per-employee scope resolution (RCA ADR-072): fetch ALL active
         // method configs for the AY and pick the most specific match per
@@ -372,6 +372,13 @@ Deno.serve(async (req) => {
         admin.from('business_units').select('id, division_id'),
         admin.from('divisions').select('id'),
         admin.from('employee_categories').select('id, name'),
+        // RCA: load every status-history row whose effective date sits on or
+        // before the cycle end. The engine picks the latest "→ Confirmed"
+        // transition per employee. Falls back to profiles.previous_employment_status
+        // when no history row exists (legacy data, before this audit table existed).
+        (scopedEmployeeIds
+          ? admin.from('employment_status_history').select('employee_id, previous_status, new_status, effective_date').in('employee_id', scopedEmployeeIds).order('effective_date', { ascending: false })
+          : admin.from('employment_status_history').select('employee_id, previous_status, new_status, effective_date').order('effective_date', { ascending: false })),
       ]);
 
       if ((profilesRes as any).error) {
