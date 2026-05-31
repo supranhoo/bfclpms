@@ -119,6 +119,12 @@ const actionConfig: Record<string, { icon: React.ElementType; color: string; lab
   'SELF_REVIEW_RECALLED': { icon: Undo2, color: 'bg-blue-400', label: 'Self Review Recalled' },
 };
 
+// Bulk override actor-stage mirror (§88.1)
+actionConfig['BULK_OVERRIDE_VALUE_APPLIED'] = { icon: UserCog, color: 'bg-rose-500', label: 'Bulk Override (Value)' };
+actionConfig['BULK_OVERRIDE_STAGE_RESTAMPED'] = { icon: Edit, color: 'bg-teal-500', label: 'Bulk Override Restamped' };
+actionConfig['TOP_LEVEL_VALUE_OVERWRITTEN'] = { icon: UserCog, color: 'bg-rose-500', label: 'Top-Level Value Overwritten' };
+actionConfig['STAGE_VALUES_REVERTED'] = { icon: Undo2, color: 'bg-amber-500', label: 'Stage Values Reverted' };
+
 export function KpiTimeline({ isOpen, onClose, kpi, workflowStages: propStages }: KpiTimelineProps) {
   // Fetch audit logs for this KPI
   const { data: auditLogs = [], isLoading } = useQuery({
@@ -195,6 +201,21 @@ export function KpiTimeline({ isOpen, onClose, kpi, workflowStages: propStages }
     if (log.metadata?.reason) details.push(`Admin Reason: ${String(log.metadata.reason)}`);
     
     if (log.new_value) {
+      // Added Value: prefer explicit stage_value, then per-stage achieved_value,
+      // then top-level achieved_value. Whichever the audit row actually set.
+      const nv: any = log.new_value;
+      const addedValue =
+        nv.stage_value ??
+        nv.manager_achieved_value ??
+        nv.skip_level_achieved_value ??
+        nv.hr_pms_achieved_value ??
+        nv.auditor_achieved_value ??
+        nv.management_achieved_value ??
+        nv.achieved_value;
+      if (addedValue !== undefined && addedValue !== null && nv.source !== 'org_kpi_data_owner') {
+        details.push(`Added Value: ${addedValue}`);
+      }
+
       // Org KPI propagation details
       if (log.new_value.source === 'org_kpi_data_owner') {
         if (log.new_value.is_na) {
@@ -205,6 +226,10 @@ export function KpiTimeline({ isOpen, onClose, kpi, workflowStages: propStages }
         if (log.new_value.self_score) details.push(`Score: ${log.new_value.self_score}`);
         if (log.new_value.self_rating) details.push(`Rating: ${log.new_value.self_rating}`);
       } else {
+        if (nv.stage_score !== undefined && nv.stage_score !== null) details.push(`Score: ${nv.stage_score}`);
+        if (nv.recomputed_final_score !== undefined && nv.recomputed_final_score !== null && nv.stage_score === undefined) {
+          details.push(`Score: ${nv.recomputed_final_score}`);
+        }
         if (log.new_value.self_score) details.push(`Self Score: ${log.new_value.self_score}`);
         if (log.new_value.manager_score) details.push(`Manager Score: ${log.new_value.manager_score}`);
         if (log.new_value.auditor_score) details.push(`Auditor Score: ${log.new_value.auditor_score}`);
@@ -226,6 +251,12 @@ export function KpiTimeline({ isOpen, onClose, kpi, workflowStages: propStages }
       if (log.new_value.manager_remarks) details.push(`Manager Remarks: ${log.new_value.manager_remarks}`);
       if (log.new_value.auditor_remarks) details.push(`Auditor Remarks: ${log.new_value.auditor_remarks}`);
       if (log.new_value.management_remarks) details.push(`Management Remarks: ${log.new_value.management_remarks}`);
+    }
+
+    // Bulk/batch remark (HR PMS bulk approve etc.)
+    if (log.metadata?.batch_reason) details.push(`Remark: ${String(log.metadata.batch_reason)}`);
+    if (log.metadata?.mirrored_stage && log.metadata.mirrored_stage !== 'none') {
+      details.push(`Mirrored to: ${String(log.metadata.mirrored_stage).replace(/_/g, ' ')}`);
     }
     
     return details;
