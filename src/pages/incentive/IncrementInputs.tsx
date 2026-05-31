@@ -663,7 +663,7 @@ function CalculateIncrementTab({ year }: { year: string }) {
                             })()}
                           </TableCell>
                           <TableCell>
-                            <Button size="sm" variant="outline" onClick={() => setSelectedRun(r.id)}>View</Button>
+                            <Button size="sm" variant="outline" onClick={() => { setSelectedRun(r.id); setInnerTab('run'); }}>View</Button>
                           </TableCell>
                         </TableRow>
                       ))}
