@@ -219,12 +219,13 @@ function monthsBetween(from: Date, to: Date): number {
 
 /**
  * AY-bounded months served honoring the "Joining Month Cutoff Day" rule.
+ * Input date is GDOJ (group date of joining) for the prorated method.
  *
- *   - If DOJ is after the AY end → 0 months.
- *   - If DOJ is before the AY start → effectiveStart = AY start (cutoff
+ *   - If GDOJ is after the AY end → 0 months.
+ *   - If GDOJ is before the AY start → effectiveStart = AY start (cutoff
  *     irrelevant, decision = 'pre_ay').
- *   - Else: if DOJ day < cutoff → joining month counted (effectiveStart =
- *     first day of DOJ month). Otherwise excluded (effectiveStart = first
+ *   - Else: if GDOJ day < cutoff → joining month counted (effectiveStart =
+ *     first day of GDOJ month). Otherwise excluded (effectiveStart = first
  *     day of next month).
  *
  * Result is whole-month inclusive, clamped to [0, 12].
@@ -266,7 +267,7 @@ function applyMethod(method: string, basePercent: number, monthsServed: number, 
   if (method === 'full') return { eligible: basePercent, notes: 'Full' };
   if (method === 'prorated_doj') {
     const m = Math.max(0, Math.min(12, monthsServed));
-    const base = `Prorated by DOJ · ${m.toFixed(0)}/12`;
+    const base = `Prorated by GDOJ · ${m.toFixed(0)}/12`;
     const notes = proratedNote ? `${base} · ${proratedNote}` : base;
     return { eligible: +((basePercent / 12) * m).toFixed(4), notes };
   }
@@ -447,8 +448,8 @@ Deno.serve(async (req) => {
         admin.from('increment_eligibility_configs').select('id').eq('assessment_year', assessment_year).eq('status', 'approved').maybeSingle(),
         admin.from('increment_eligibility_exclusions').select('employee_id, reason').eq('assessment_year', assessment_year),
         (scopedEmployeeIds
-          ? admin.from('profiles').select('id, full_name, doj, employment_status, employee_category, level_id, company_id, location_id, department_id, is_active, previous_employment_status, confirmation_date, confirmation_increment_granted, confirmation_increment_effective_date').eq('is_active', true).in('id', scopedEmployeeIds)
-          : admin.from('profiles').select('id, full_name, doj, employment_status, employee_category, level_id, company_id, location_id, department_id, is_active, previous_employment_status, confirmation_date, confirmation_increment_granted, confirmation_increment_effective_date').eq('is_active', true)),
+          ? admin.from('profiles').select('id, full_name, doj, group_doj, employment_status, employee_category, level_id, company_id, location_id, department_id, is_active, previous_employment_status, confirmation_date, confirmation_increment_granted, confirmation_increment_effective_date').eq('is_active', true).in('id', scopedEmployeeIds)
+          : admin.from('profiles').select('id, full_name, doj, group_doj, employment_status, employee_category, level_id, company_id, location_id, department_id, is_active, previous_employment_status, confirmation_date, confirmation_increment_granted, confirmation_increment_effective_date').eq('is_active', true)),
         admin.from('confirmation_increment_rules').select('*').eq('assessment_year', assessment_year).eq('status', 'active'),
         admin.from('confirmation_increment_adjustments').select('employee_id, carry_forward_months, final_eligible_months, balance_eligible_months').eq('assessment_year', `${parseInt(assessment_year.split('-')[0], 10) - 1}-${String(parseInt(assessment_year.split('-')[0], 10)).slice(-2)}`),
         admin.from('departments').select('id, business_unit_id'),
@@ -742,21 +743,22 @@ Deno.serve(async (req) => {
         const currentSalary = input?.current_salary ?? null;
         const monthsServed = p.doj ? monthsBetween(new Date(p.doj), validationDate) : 12;
 
-        // Cutoff-aware AY-bounded whole-month count. Applies to ALL methods.
-        // Drives Final Eligible Months, prorated-DOJ math, and custom-slab
-        // matching. Falls back to the continuous `monthsServed` when DOJ is
-        // absent.
+        // Cutoff-aware AY-bounded whole-month count. Uses GDOJ
+        // (`profiles.group_doj`) — the prorated method's authoritative join
+        // date. Drives Final Eligible Months and custom-slab matching. Falls
+        // back to the continuous `monthsServed` when GDOJ is absent.
         const cutoffDayGlobal = Number((resolvedCfg as any)?.joining_month_cutoff_day ?? 15);
         const ayStartGlobal = new Date(`${startYear}-07-01T00:00:00Z`);
         const ayEndGlobal = new Date(`${endYear}-06-30T00:00:00Z`);
-        const ayMonths = p.doj
-          ? monthsServedInAY(new Date(p.doj), cutoffDayGlobal, ayStartGlobal, ayEndGlobal, validationDate)
+        const gdoj: Date | null = (p as any).group_doj ? new Date((p as any).group_doj) : null;
+        const ayMonths = gdoj
+          ? monthsServedInAY(gdoj, cutoffDayGlobal, ayStartGlobal, ayEndGlobal, validationDate)
           : { months: Math.max(0, Math.min(12, Math.round(monthsServed))), decision: 'pre_ay' as const };
         const cutoffDecisionNote =
-          ayMonths.decision === 'included' ? `Joining month counted (cutoff day ${cutoffDayGlobal})`
-          : ayMonths.decision === 'excluded' ? `Joining month excluded (cutoff day ${cutoffDayGlobal})`
-          : ayMonths.decision === 'pre_ay' ? `DOJ before AY — full period`
-          : `DOJ after AY — no months served`;
+          ayMonths.decision === 'included' ? `GDOJ month included (cutoff ${cutoffDayGlobal})`
+          : ayMonths.decision === 'excluded' ? `GDOJ month excluded (cutoff ${cutoffDayGlobal})`
+          : ayMonths.decision === 'pre_ay' ? `GDOJ before AY — counted from AY start`
+          : `GDOJ after AY — 0 months`;
 
         // Eligibility evaluation. Criteria-exempt employees skip the
         // absent/LWP/disciplinary/training criteria block entirely.
@@ -916,21 +918,33 @@ Deno.serve(async (req) => {
             // proration accounts for any confirmation-increment coverage.
             let monthsForMethod = effectiveMethod === 'full' ? ayMonths.months : effectiveMonths;
             let proratedNote: string | undefined;
-            if (effectiveMethod === 'prorated_doj' && p.doj) {
-              // Honour any confirmation-adjustment ceiling already applied.
-              monthsForMethod = Math.min(ayMonths.months, effectiveMonths);
-              proratedNote = cutoffDecisionNote;
+            if (effectiveMethod === 'prorated_doj') {
+              if (!gdoj) {
+                // Explicit reason — never silently fall back to DOJ.
+                eligibility = 'ineligible';
+                reason = 'GDOJ missing for prorated increment calculation';
+                eligiblePercent = 0;
+                methodNotes = '';
+                incrementAmount = null;
+                revisedSalary = null;
+              } else {
+                // Honour any confirmation-adjustment ceiling already applied.
+                monthsForMethod = Math.min(ayMonths.months, effectiveMonths);
+                proratedNote = cutoffDecisionNote;
+              }
             } else if (effectiveMethod === 'custom') {
               // Custom slab matching uses the cutoff-aware whole-month count.
               monthsForMethod = Math.min(ayMonths.months, effectiveMonths);
               proratedNote = cutoffDecisionNote;
             }
-            const res = applyMethod(effectiveMethod, slabPercent ?? 0, monthsForMethod, methodSlabs, proratedNote);
-            eligiblePercent = res.eligible;
-            methodNotes = res.notes;
-            if (currentSalary !== null) {
-              incrementAmount = +(currentSalary * (eligiblePercent / 100)).toFixed(2);
-              revisedSalary = +(currentSalary + incrementAmount).toFixed(2);
+            if (eligibility === 'eligible') {
+              const res = applyMethod(effectiveMethod, slabPercent ?? 0, monthsForMethod, methodSlabs, proratedNote);
+              eligiblePercent = res.eligible;
+              methodNotes = res.notes;
+              if (currentSalary !== null) {
+                incrementAmount = +(currentSalary * (eligiblePercent / 100)).toFixed(2);
+                revisedSalary = +(currentSalary + incrementAmount).toFixed(2);
+              }
             }
           }
         }
@@ -984,6 +998,7 @@ Deno.serve(async (req) => {
           adjustment_reason: adjustment.adjustmentReason,
           inputs_snapshot: {
             doj: p.doj,
+            group_doj: (p as any).group_doj ?? null,
             confirmation_date: p.confirmation_date,
             confirmation_increment_granted: p.confirmation_increment_granted,
             confirmation_increment_effective_date: p.confirmation_increment_effective_date,
