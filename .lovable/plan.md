@@ -1,109 +1,118 @@
-## RCA — Vivek Kumar Dansena (101784), AY 2025-26
+## Goal
 
-### Confirmed facts (from DB)
-1. **Inputs row exists and is correctly mapped** — `increment_inputs` for employee `ca3897d0…2926` / code 101784, AY `2025-26`: `absent_days=6, lwp_days=0, disciplinary_actions=0, training_compliance=0`. ✅
-2. **Active approved ineligibility config** for AY 2025-26 is `4476ad81-1c17-43e8-b241-a4f31a494608` (status `approved`). It contains three active criteria:
+Restructure the **Calculate Increment %** tab so triggering a run and reviewing runs are separate workflows, support multi-employee scope, add a "Latest Calculations" view (one latest row per employee per AY), and allow safe admin edit/delete of result rows. No changes to scoring, slab, ineligibility, or confirmation logic.
 
-| criterion_name | **criterion_key** | operator | threshold |
-|---|---|---|---|
-| Absent | `absent` | `>` | 0 |
-| LWP | `lwp` | `>` | 8 |
-| Discipline Action | `discipline_action` | `>` | 0 |
+## Risk & Impact Report
 
-3. Vivek is **not** in `increment_eligibility_exclusions` (not criteria-exempt).
-4. With `Absent > 0` and `absent_days = 6`, Vivek **must** be ineligible.
+- **Data**: One additive migration on `increment_run_items` adds three nullable columns — `manually_edited boolean default false`, `edited_by uuid`, `edited_at timestamptz`. No backfill, no destructive change. RLS already permits admin update + delete; no policy changes needed.
+- **Workflow**: Edge function gains a new optional `employee_ids: string[]` field; existing `employee_id` keeps working (back-compat). Scope snapshot gains `scope: 'multi'` variant.
+- **UI/UX**: All changes are scoped to `CalculateIncrementTab` in `src/pages/incentive/IncrementInputs.tsx`. The outer "Calculate Increment %" tab gains an inner `Tabs` (Run Calculation / Run Log). Latest Calculations becomes the default view on the Run Log side. No route, permission, or sidebar changes.
+- **Regression**: Run-history rendering, single-employee runs, and Export Excel preserved. Edit/Delete are gated by existing admin/hr_pms RLS. Latest-Calculations query reuses existing tables — no derived materialised view.
+- **Mitigation**: Unit test for "latest per employee per AY" selector + edge-fn input parsing for `employee_ids`. Manual smoke: run all → run multi → run single → edit a row → delete a row → export both views.
 
-### Why the engine wrongly returned 20% eligible
+## Scope
 
-In `supabase/functions/compute-increment/index.ts` (lines 520–547), the metrics map exposes ONLY the canonical keys:
+Only `CalculateIncrementTab` (the second tab on `/incentive/IncrementInputs`). `EnterInputsTab`, formulas, slab/method/criteria, confirmation logic — untouched.
 
-```ts
-const metrics = {
-  absent_days: ..., lwp_days: ..., disciplinary_actions: ..., training_compliance: ...,
-  ...(input.dynamic_metrics ?? {}),
-};
-for (const c of criteria) {
-  const val = metrics[c.criterion_key];
-  if (val === undefined || val === null) continue;   // ← silently skipped
-  ...
-}
+## Steps
+
+### 1. Backend: extend edge function to accept `employee_ids`
+`supabase/functions/compute-increment/index.ts`
+- Extend `RunBody` to `{ assessment_year, employee_id?: string|null, employee_ids?: string[]|null }`.
+- Resolve a canonical `scopedEmployeeIds: string[] | null`:
+  - `employee_ids` (validated UUIDs, deduped) → use it
+  - else legacy `employee_id` → wrap as `[employee_id]`
+  - else `null` → all employees
+- Replace `.eq('id', scopedEmployeeId)` with `.in('id', scopedEmployeeIds)` when array present.
+- Store scope snapshot:
+  - all → `{ scope:'all' }`
+  - 1 id → `{ scope:'single', employee_id }` (unchanged — keeps log back-compat)
+  - >1 → `{ scope:'multi', employee_ids: [...], count: N }`
+- No change to per-employee compute loop.
+
+### 2. Hook layer
+`src/hooks/useIncrementRuns.ts`
+- `useTriggerIncrementRun`: accept `{ assessment_year, employee_ids?: string[] | null, employee_id?: string | null }` and forward to the edge function.
+- New `useLatestIncrementResults(year)` — fetches all `increment_run_items` for runs in the AY joined with `increment_runs`, then in JS keeps the row with the most recent `runs.triggered_at` per `employee_id`. Paged on the server via `fetchAllPaged` (small dataset bound to AY) and de-duped client-side; returns enriched rows with employee profile.
+- New `useUpdateIncrementRunItem` — patches allowed fields only (`eligible_percent`, `increment_amount`, `revised_salary`, `remarks`, `eligibility_status`) + sets `manually_edited=true, edited_by=auth.uid(), edited_at=now()`.
+- New `useDeleteIncrementRunItem` — `delete().eq('id', id)` then invalidate `['increment-run-items', runId]` + `['latest-increment-results', year]`.
+- `useExportIncrementRunItems` stays; add `useExportLatestIncrementResults(year)` mirroring it.
+
+### 3. Schema migration (additive only)
+New migration `add_manually_edited_to_increment_run_items.sql`:
+```sql
+ALTER TABLE public.increment_run_items
+  ADD COLUMN IF NOT EXISTS manually_edited boolean NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS edited_by uuid REFERENCES auth.users(id),
+  ADD COLUMN IF NOT EXISTS edited_at timestamptz;
+```
+No RLS change (admin/hr_pms UPDATE policy already in place).
+
+### 4. UI: split Calculate Increment % into inner tabs
+`src/pages/incentive/IncrementInputs.tsx` (`CalculateIncrementTab`):
+
+```text
+Calculate Increment % · AY 2025-26
+┌──────────────────────────────────────────────┐
+│  [ Run Calculation ]  [ Run Log ]            │
+├──────────────────────────────────────────────┤
+│  (active sub-tab content)                    │
+└──────────────────────────────────────────────┘
 ```
 
-The approved config's `criterion_key` values are `absent`, `lwp`, `discipline_action` — **not** the canonical `absent_days` / `lwp_days` / `disciplinary_actions`. So `metrics[c.criterion_key]` returns `undefined` for every criterion and the `continue` swallows them. No breach is recorded → engine treats Vivek as eligible → PMS score 4.6167 → slab 20% → 20% increment is persisted exactly as displayed.
+#### 4a. Run Calculation sub-tab
+- Card: AY context (read-only label), Scope select (`All Employees` / `Selected Employee(s)`), employee multi-select (only when "Selected"), Run button, helper "Choose scope and run calculation."
+- Employee multi-select: reuse `MultiSelectFilter` pattern but bind to employee list (label = `Name (Code)`, value = id). Selected employees shown as removable chips below the trigger. Search hits name **or** code.
+- Run disabled while pending OR (scope=selected AND list empty).
+- On success, auto-switch to Run Log sub-tab and auto-select the new run.
 
-### Why the keys are non-canonical
+#### 4b. Run Log sub-tab
+Two views, controlled by a small segmented control at the top:
+- **Latest Calculations** (default) — one row per employee for the AY, sourced from `useLatestIncrementResults(year)`. Renders the same column set as Run Details.
+- **Historical Run Log** — existing runs table (Triggered At, Scope, Status, Summary, Action/View). Clicking View loads "Run Details" panel below (existing component).
 
-`IncrementEligibilitySection.tsx` (line 490) derives `criterion_key` by slugifying `criterion_name` (`"Absent" → "absent"`). The admin renamed the seeded "Absent Days" criterion to "Absent" (and similarly for the others), so the slug no longer matches the engine's hardcoded metric names. There is **no validation** preventing this drift, and the engine **fails silently** on unknown keys.
+Scope cell rendering:
+- `all` → `All Employees`
+- `single` → `Selected: <Name> (Code)`
+- `multi` → `Selected: N employees` (tooltip lists names; resolved from cached employees)
 
-### Result persistence — no save/mapping bug
-Persistence is correct given the (wrong) in-memory verdict: `eligibility_status='eligible'`, `eligible_percent=20`, `ineligibility_reason=null`, etc. UI and Excel are faithful to the run row — they're not the source of the defect.
+Both views share the **Run Details / Latest Calculations** table component with paginated rows and full column set per spec:
+Employee, Code, PMS Score, Rating Band, Slab %, Eligibility, Ineligibility Reason, Method, Eligible %, Current Salary, Increment Amount, Revised Salary, Conf. Increment, Final Eligible Months, Treatment Applied, Remarks, **Actions**.
 
----
+#### 4c. Row actions
+- **Edit** (pencil icon) → opens `IncrementResultEditDialog` with the 5 allowed fields. On save, calls `useUpdateIncrementRunItem`. A subtle "Edited" badge renders on rows where `manually_edited`.
+- **Delete** (trash icon) → uses existing `ConfirmDestructiveDialog` (project standard) → calls `useDeleteIncrementRunItem`. Only removes the `increment_run_items` row; never touches `increment_inputs`, `profiles`, scoring, or configs.
 
-## Correction Plan
+#### 4d. Export Excel
+Button lives in the active panel header:
+- Latest Calculations view → exports all latest-per-employee rows for the AY (`useExportLatestIncrementResults`).
+- Historical run view → exports all rows for the selected run (existing path).
+- Both call `downloadXlsx` with the same column set used in the table.
 
-### 1. Engine: resolve criterion_key against an alias table + log unknown keys
-File: `supabase/functions/compute-increment/index.ts` (only the criteria-evaluation block, lines ~520-548).
+#### 4e. Empty states (exact copy)
+- Run Log historical: `No calculation runs yet.`
+- Run Details: `No calculated rows found for this run.`
+- Latest Calculations: `No latest calculations found for this assessment year.`
 
-- Build `metrics` as today, then add an **alias resolver** that maps common admin-edited keys to canonical metric keys:
-  - `absent`, `absent_day`, `absence`, `absences` → `absent_days`
-  - `lwp`, `leave_without_pay`, `lwp_day` → `lwp_days`
-  - `discipline_action`, `disciplinary`, `disciplinary_action`, `discipline` → `disciplinary_actions`
-  - `training`, `training_program`, `training_programs` → `training_compliance`
-- Lookup order: `metrics[key]` → `metrics[aliases[key]]` → `dynamic_metrics[key]`.
-- If still unresolved AND the criterion is active, push a synthetic reason `"Configuration error: criterion '<name>' not mapped to any input metric — contact admin"` and mark **ineligible** (fail-closed). This makes silent skips impossible going forward.
-- This change is generic: any future criterion whose key matches a canonical metric or a known alias automatically participates as an ineligibility rule.
+### 5. Tests
+- `supabase/functions/compute-increment/employee_ids_scope_test.ts` — asserts:
+  - `employee_ids: ['u1','u2']` filters profiles to those 2.
+  - `employee_id: 'u1'` still works (back-compat).
+  - Neither field → all employees.
+- `src/lib/__tests__/latestIncrementResults.test.ts` — given fixture of 3 employees × 2 runs, returns 3 rows from the later run only.
 
-### 2. UI: stop free-form slugification, require a canonical metric binding
-File: `src/components/admin/scoring/IncrementEligibilitySection.tsx` (Add/Edit dialog).
+### 6. Documentation
+- `DOCUMENTATION.md` — new section "Calculate Increment %: Run Calculation / Run Log / Latest Calculations" describing scope variants and edit/delete contract.
+- `POLICY.md` — note that Latest Calculations is the canonical "current result" per employee; historical runs are immutable for audit except via explicit row delete/edit, which sets `manually_edited=true`.
+- ADR-071 — UI restructure + multi-employee scope + row edit/delete.
+- `mem/features/incentive/calculate-increment-tabs` — short memory file; add to `mem/index.md`.
 
-- Add a **"Metric"** dropdown bound to a typed enum: `absent_days | lwp_days | disciplinary_actions | training_compliance` (extensible via a small constants file `src/lib/incrementCriterionMetrics.ts`).
-- `criterion_name` stays free-text (display only). `criterion_key` is set from the dropdown, not derived from the name.
-- For existing rows the dropdown pre-selects the resolved canonical key (using the same alias map) so editing a legacy row auto-corrects it on save.
-- Block save when no canonical metric is selected.
+## Out of Scope (Constraints respected)
 
-### 3. One-time data fix for the live approved config
-Migration to normalize `increment_eligibility_criteria.criterion_key` for the three rows of config `4476ad81…`:
-- `absent` → `absent_days`
-- `lwp` → `lwp_days`
-- `discipline_action` → `disciplinary_actions`
+No change to: PMS score derivation, rating-band/slab logic, ineligibility-criteria engine, confirmation-treatment adjuster, permissions/routes, removal of all-employee runs, removal of Excel export, or deletion of historical run logs.
 
-Scope: only rows where `criterion_key` is in the alias map AND `lower(criterion_key)` is not already canonical. Reversible (we keep the old value in audit via the standard updated_at trail; no destructive schema change).
+## Rollback
 
-### 4. Scope verification (no engine change required)
-Today the engine selects `increment_eligibility_configs` by `assessment_year + status='approved'` only. Per existing policy, criteria configs are global per-AY (not scoped by company/division/BU/level for criteria themselves — scope filters apply to *exclusions*, not criteria). Confirmed in `evaluateIncrementEligibility` contract. **No change needed.** The original report's concern #3 (scope mismatch) is not the cause.
-
-### 5. Tests (mandatory, in `supabase/functions/compute-increment/`)
-New file `criteria_key_aliasing_test.ts`:
-- alias `absent` resolves to `absent_days` and breaches when `actual=6 > threshold=0`.
-- alias `discipline_action` resolves to `disciplinary_actions`; non-breach for actual=0, threshold=0 with `>` operator.
-- unknown key `xyz` ⇒ synthetic `Configuration error` reason + ineligible.
-- canonical key `absent_days` still works unchanged (regression guard).
-- Mock data factories: `mockVivek` (absent=6) ⇒ ineligible; `mockClean` (all zero) ⇒ eligible.
-
-Extend `criteria_exempt_test.ts` to assert exempt employee with alias `absent` still bypasses the block.
-
-### 6. UI/Excel verification
-- After re-running, Vivek's Run Details row should show `Eligibility = ineligible`, `Eligible % = —`, `Increment Amount = —`, `Revised Salary = —`, `Ineligibility Reason = "Absent > 0 (actual 6)"`.
-- `IncrementInputs.tsx` already renders `ineligibility_reason` straight from the row — no change needed.
-- Excel export reuses the same row shape — no change needed.
-
-### 7. Docs & memory
-- `DOCUMENTATION.md` → note the metric-binding contract.
-- `POLICY.md` → "Criteria are global per AY; metric binding is enforced by canonical key."
-- `mem/features/admin/increment-eligibility-exclusions` → add: "criterion_key MUST be canonical or a known alias; UI binds via dropdown".
-- New ADR-070 documenting the alias resolver + fail-closed behavior.
-
-### Risk & Impact
-- **Data**: 3 rows updated in `increment_eligibility_criteria` (live config). Reversible.
-- **Workflow**: Future runs honor active criteria correctly. Past `increment_run_items` rows are NOT rewritten (per constraint).
-- **UI**: Add/Edit dialog gains one dropdown; existing rows pre-fill. Non-breaking.
-- **Regression**: Fail-closed unknown-key path could newly flag misconfigured rows as ineligible — desired behavior; surfaced explicitly in the reason column so admins can correct.
-- **Scalability**: Pure in-loop alias lookup, O(1) per criterion; no extra DB calls.
-- **Rollback**: Revert the edge-function file and the UI file; migration revert maps canonical → old text if ever required.
-
-### Acceptance check after build
-1. Re-run AY 2025-26 → Vivek 101784: `ineligible`, reason mentions Absent breach, eligible % = 0, increment = 0.
-2. An employee with `absent_days=0, lwp_days=0, disciplinary_actions=0, training_compliance=0` stays eligible.
-3. A criteria-exempt employee with `absent_days=99` stays eligible (block bypassed).
-4. UI table and Excel export reflect the same `eligibility_status`, `eligible_percent`, `ineligibility_reason`.
+- UI: revert `IncrementInputs.tsx` + new dialog/hook files.
+- Edge function: revert to single `employee_id` branch (back-compat means old payload still works during partial rollback).
+- Migration is additive (new nullable columns) — safe to leave in place even if UI is reverted.
