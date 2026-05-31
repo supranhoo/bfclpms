@@ -295,8 +295,8 @@ Deno.serve(async (req) => {
         admin.from('increment_eligibility_configs').select('id').eq('assessment_year', assessment_year).eq('status', 'approved').maybeSingle(),
         admin.from('increment_eligibility_exclusions').select('employee_id, reason').eq('assessment_year', assessment_year),
         (scopedEmployeeId
-          ? admin.from('profiles').select('id, full_name, doj, employment_status, employee_category, level_id, category_id, company_id, location_id, department_id, is_active, previous_employment_status, confirmation_date, confirmation_increment_granted, confirmation_increment_effective_date').eq('is_active', true).eq('id', scopedEmployeeId)
-          : admin.from('profiles').select('id, full_name, doj, employment_status, employee_category, level_id, category_id, company_id, location_id, department_id, is_active, previous_employment_status, confirmation_date, confirmation_increment_granted, confirmation_increment_effective_date').eq('is_active', true)),
+          ? admin.from('profiles').select('id, full_name, doj, employment_status, employee_category, level_id, company_id, location_id, department_id, is_active, previous_employment_status, confirmation_date, confirmation_increment_granted, confirmation_increment_effective_date').eq('is_active', true).eq('id', scopedEmployeeId)
+          : admin.from('profiles').select('id, full_name, doj, employment_status, employee_category, level_id, company_id, location_id, department_id, is_active, previous_employment_status, confirmation_date, confirmation_increment_granted, confirmation_increment_effective_date').eq('is_active', true)),
         admin.from('confirmation_increment_rules').select('*').eq('assessment_year', assessment_year).eq('status', 'active'),
         admin.from('confirmation_increment_adjustments').select('employee_id, carry_forward_months, final_eligible_months, balance_eligible_months').eq('assessment_year', `${parseInt(assessment_year.split('-')[0], 10) - 1}-${String(parseInt(assessment_year.split('-')[0], 10)).slice(-2)}`),
         admin.from('departments').select('id, business_unit_id'),
@@ -405,6 +405,12 @@ Deno.serve(async (req) => {
       let countEligible = 0, countIneligible = 0, countExcluded = 0, countNoScore = 0;
 
       for (const p of profiles) {
+        // Resolve employee category name → master id once, and expose it as
+        // p.category_id so downstream gating (general eligibility + confirmation
+        // rule cascade) compares against the resolved master id. profiles has
+        // no category_id column; category is stored as text in employee_category.
+        const dims = empDims(p);
+        (p as any).category_id = dims.employee_category_id;
         // General eligibility gate
         let geFail: string | null = null;
         if (ge) {
@@ -500,7 +506,7 @@ Deno.serve(async (req) => {
             reason = 'No PMS score found';
           }
         } else {
-          const slab = pickSlab(slabs, empDims(p), pmsScore);
+          const slab = pickSlab(slabs, dims, pmsScore);
           if (slab) {
             slabPercent = Number(slab.increment_percent);
             ratingBand = `${slab.rating_from}-${slab.rating_to}`;
