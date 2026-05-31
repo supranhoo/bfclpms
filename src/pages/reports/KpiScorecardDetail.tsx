@@ -375,6 +375,80 @@ export default function KpiScorecardDetail() {
     };
   }
 
+  const rangeValidation = useMemo(
+    () => validateRange(
+      { month: rangeFromMonth as any, year: rangeFromYear },
+      { month: rangeToMonth as any, year: rangeToYear },
+    ),
+    [rangeFromMonth, rangeFromYear, rangeToMonth, rangeToYear],
+  );
+
+  const handleRangeExport = async () => {
+    if (!rangeValidation.ok) return;
+    const periods = enumeratePeriods(
+      { month: rangeFromMonth as any, year: rangeFromYear },
+      { month: rangeToMonth as any, year: rangeToYear },
+    );
+    setRangeExporting(true);
+    try {
+      const allRecords: ReturnType<typeof toExportRecord>[] = [];
+      const search = searchTerm.toLowerCase();
+      for (let i = 0; i < periods.length; i++) {
+        const p = periods[i];
+        toast({
+          title: `Fetching ${p.month} ${p.year}`,
+          description: `Period ${i + 1} of ${periods.length}`,
+        });
+        const periodRows = await fetchScorecardForPeriod(p.month, p.year);
+        // Apply the same Company / Department / Search filters as the on-screen view
+        const filteredPeriod = periodRows.filter(r => {
+          if (!filterByCompany(r.employeeId)) return false;
+          if (selectedDept !== 'all' && r.department !== selectedDept) return false;
+          if (search) {
+            if (
+              !r.employeeName.toLowerCase().includes(search) &&
+              !r.employeeCode.toLowerCase().includes(search) &&
+              !r.kpiName.toLowerCase().includes(search) &&
+              !r.kraName.toLowerCase().includes(search)
+            ) return false;
+          }
+          return true;
+        });
+        filteredPeriod.forEach(r => allRecords.push(toExportRecord(r, p.year)));
+      }
+
+      if (allRecords.length === 0) {
+        toast({
+          title: 'No data in range',
+          description: 'No KPI rows match the selected filters across the chosen months.',
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      const ws = XLSX.utils.json_to_sheet(allRecords);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'KPI Scorecard');
+      const first = periods[0];
+      const last = periods[periods.length - 1];
+      XLSX.writeFile(wb, `KPI_Scorecard_${first.month}-${first.year}_to_${last.month}-${last.year}.xlsx`);
+
+      toast({
+        title: 'Export complete',
+        description: `Exported ${allRecords.length.toLocaleString()} rows across ${periods.length} months.`,
+      });
+      setRangePopoverOpen(false);
+    } catch (e: any) {
+      toast({
+        title: 'Range export failed',
+        description: e?.message ?? 'Unknown error',
+        variant: 'destructive',
+      });
+    } finally {
+      setRangeExporting(false);
+    }
+  };
+
   const thClass = 'h-9 px-2 text-xs font-medium whitespace-nowrap cursor-pointer select-none hover:bg-muted/50 transition-colors';
 
   return (
