@@ -104,13 +104,13 @@ export function useSaveAnnualScoreConfig() {
         .from('annual_score_configs').insert(insertPayload).select('*').single();
       if (error) throw error;
       // Audit
-      await supabase.from('annual_score_config_audit').insert({
+      await supabase.from('annual_score_config_audit').insert([{
         config_id: inserted.id,
         action: existing ? 'update' : 'create',
-        prev_value: existing ?? null,
-        new_value: inserted,
+        prev_value: (existing as any) ?? null,
+        new_value: inserted as any,
         performed_by: user?.id ?? null,
-      });
+      }]);
       return inserted as AnnualScoreConfigRow;
     },
     onSuccess: (_data, vars) => {
@@ -160,13 +160,13 @@ export function useCopyAnnualScoreFromYear() {
       const { data: inserted, error } = await supabase
         .from('annual_score_configs').insert(payload).select('*').single();
       if (error) throw error;
-      await supabase.from('annual_score_config_audit').insert({
+      await supabase.from('annual_score_config_audit').insert([{
         config_id: inserted.id,
         action: 'copy_from_year',
-        prev_value: existing ?? null,
-        new_value: { ...inserted, copied_from_year: fromYear },
+        prev_value: (existing as any) ?? null,
+        new_value: { ...(inserted as any), copied_from_year: fromYear } as any,
         performed_by: user?.id ?? null,
-      });
+      }]);
       return inserted as AnnualScoreConfigRow;
     },
     onSuccess: () => {
