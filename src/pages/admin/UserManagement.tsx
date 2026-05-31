@@ -488,6 +488,8 @@ export default function UserManagement() {
       portal_access?: boolean;
       group_doj?: string;
       doj?: string;
+      confirmation_date?: string;
+      location_id?: string;
     }) => {
       const { data: session } = await supabase.auth.getSession();
       
@@ -506,6 +508,8 @@ export default function UserManagement() {
           portal_access: data.portal_access,
           group_doj: data.group_doj || undefined,
           doj: data.doj || undefined,
+          confirmation_date: data.confirmation_date || undefined,
+          location_id: data.location_id || undefined,
         },
       });
 
