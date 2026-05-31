@@ -18,6 +18,7 @@ import { DailySubmissionSummary } from '@/components/review/DailySubmissionSumma
 import { ReviewLevelOverrideEditor, calculateOverriddenScore } from '@/components/review/ReviewLevelOverrideEditor';
 import { useReviewerSubPeriodOverride } from '@/hooks/useReviewerSubPeriodOverride';
 import { QualitativeOption } from '@/lib/qualitativeUom';
+import { labelToRating, getQualitativeAchievedLabel } from '@/lib/qualitativeUom';
 import { calculateRating } from '@/lib/ratingCalculation';
 import { useAuth } from '@/contexts/AuthContext';
 import { ReviewPanelSkeleton } from '@/components/ui/LoadingSkeletons';
