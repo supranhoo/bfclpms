@@ -482,6 +482,23 @@ Deno.serve(async (req) => {
       const cycleStartISO = `${startYear}-07-01`;
       const cycleEndISO = `${endYear}-06-30`;
 
+      // Latest "→ Confirmed" history row per employee, restricted to events on
+      // or before the cycle end. Used to detect prior employment status
+      // (Trainee/Probation/Contract/Apprenticeship → Confirmed).
+      const latestConfirmHistory = new Map<string, { previous_status: string | null; effective_date: string }>();
+      ((statusHistoryRes as any)?.data as any[] ?? []).forEach((h: any) => {
+        if (!h?.employee_id) return;
+        if (String(h.new_status ?? '').trim().toLowerCase() !== 'confirmed') return;
+        if (h.effective_date && h.effective_date > cycleEndISO) return;
+        // Rows came pre-sorted by effective_date DESC — first hit wins.
+        if (!latestConfirmHistory.has(h.employee_id)) {
+          latestConfirmHistory.set(h.employee_id, {
+            previous_status: h.previous_status ?? null,
+            effective_date: h.effective_date,
+          });
+        }
+      });
+
       // Load monthly scores for AY: derived live from review_submissions + kpis
       // using the canonical 8-stage fallback chain (Final → Management → Auditor
       // → HR PMS → Skip-Level → Manager → Self), weighted-average across
