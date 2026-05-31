@@ -30,12 +30,15 @@ import { FeatureFlagsTab } from '@/components/admin/FeatureFlagsTab';
 import { IncrementEligibilitySection } from '@/components/admin/scoring/IncrementEligibilitySection';
 import { AnnualScoreCalculationSection } from '@/components/admin/scoring/AnnualScoreCalculationSection';
 import { IncrementMethodSection } from '@/components/admin/scoring/IncrementMethodSection';
+import GeneralEligibilityPage from '@/pages/increment/GeneralEligibility';
+import IncrementSlabsPage from '@/pages/increment/IncrementSlabs';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
+import { useSearchParams } from 'react-router-dom';
 
 const SETTINGS_SECTIONS = [
   { key: 'branding', label: 'Branding', icon: Building2 },
@@ -114,8 +117,22 @@ export default function SystemSettings() {
   const { hours: recallWindowHours, isLoading: recallWindowLoading } = useRecallWindowHours();
   const updateSetting = useUpdateSystemSetting();
   const isMobile = useIsMobile();
-  
-  const [activeSection, setActiveSection] = useState<SectionKey>('branding');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const initialSection = (searchParams.get('section') as SectionKey) || 'branding';
+  const [activeSection, setActiveSectionRaw] = useState<SectionKey>(initialSection);
+  const incrementTab = searchParams.get('tab') || 'eligibility';
+  const setActiveSection = (key: SectionKey) => {
+    setActiveSectionRaw(key);
+    const next = new URLSearchParams(searchParams);
+    next.set('section', key);
+    if (key !== 'increment') next.delete('tab');
+    setSearchParams(next, { replace: true });
+  };
+  useEffect(() => {
+    const s = searchParams.get('section') as SectionKey | null;
+    if (s && s !== activeSection) setActiveSectionRaw(s);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
   const [selectedMode, setSelectedMode] = useState<ScoreCalculationMode>(mode);
   const [selectedDailyMethod, setSelectedDailyMethod] = useState<DailyAggregationMethod>(dailyMethod);
   const [hasChanges, setHasChanges] = useState(false);
@@ -626,13 +643,26 @@ export default function SystemSettings() {
         );
       case 'increment':
         return (
-          <Tabs defaultValue="eligibility" className="space-y-4">
+          <Tabs
+            value={incrementTab}
+            onValueChange={(v) => {
+              const next = new URLSearchParams(searchParams);
+              next.set('section', 'increment');
+              next.set('tab', v);
+              setSearchParams(next, { replace: true });
+            }}
+            className="space-y-4"
+          >
             <TabsList>
               <TabsTrigger value="eligibility">Eligibility Criteria</TabsTrigger>
               <TabsTrigger value="method">Increment Method</TabsTrigger>
+              <TabsTrigger value="general-eligibility">General Eligibility</TabsTrigger>
+              <TabsTrigger value="increment-slabs">Increment Slabs</TabsTrigger>
             </TabsList>
             <TabsContent value="eligibility"><IncrementEligibilitySection /></TabsContent>
             <TabsContent value="method"><IncrementMethodSection /></TabsContent>
+            <TabsContent value="general-eligibility"><GeneralEligibilityPage /></TabsContent>
+            <TabsContent value="increment-slabs"><IncrementSlabsPage /></TabsContent>
           </Tabs>
         );
       case 'cycles':

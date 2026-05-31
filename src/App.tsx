@@ -52,8 +52,6 @@ const PendingSelfReviews = lazy(() => import("./pages/admin/PendingSelfReviews")
 const IncentiveConfig = lazy(() => import("./pages/admin/IncentiveConfig"));
 const IncentiveDataEntry = lazy(() => import("./pages/admin/IncentiveDataEntry"));
 const IncrementInputs = lazy(() => import("./pages/incentive/IncrementInputs"));
-const GeneralEligibility = lazy(() => import("./pages/increment/GeneralEligibility"));
-const IncrementSlabsPage = lazy(() => import("./pages/increment/IncrementSlabs"));
 const EmployeeDevelopment = lazy(() => import("./pages/admin/EmployeeDevelopment"));
 const OrgKpiAuditReview = lazy(() => import("./pages/admin/OrgKpiAuditReview"));
 const EmployeeMasterBackfill = lazy(() => import("./pages/admin/EmployeeMasterBackfill"));
@@ -476,14 +474,10 @@ const App = () => (
                   </ProtectedRoute>
                 } />
                 <Route path="/admin/increment/general-eligibility" element={
-                  <ProtectedRoute allowedRoles={['admin', 'hr_pms']} menuKey="admin-increment-general-eligibility">
-                    <Suspense fallback={<PageFallback />}><GeneralEligibility /></Suspense>
-                  </ProtectedRoute>
+                  <Navigate to="/admin/system-settings?section=increment&tab=general-eligibility" replace />
                 } />
                 <Route path="/admin/increment/slabs" element={
-                  <ProtectedRoute allowedRoles={['admin', 'hr_pms']} menuKey="admin-increment-slabs">
-                    <Suspense fallback={<PageFallback />}><IncrementSlabsPage /></Suspense>
-                  </ProtectedRoute>
+                  <Navigate to="/admin/system-settings?section=increment&tab=increment-slabs" replace />
                 } />
                 <Route path="/admin/employee-development" element={
                   <ProtectedRoute allowedRoles={['admin', 'hr_pms']} menuKey="admin-employee-development">
