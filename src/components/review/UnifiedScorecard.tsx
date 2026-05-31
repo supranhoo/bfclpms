@@ -1161,9 +1161,24 @@ export function UnifiedScorecard({
           [`${prefix}_evidence_urls`]: reviewerEvidenceUrls,
         };
         if (reviewerAchievedValue !== undefined && reviewerAchievedValue !== null) {
-          updateData[`${prefix}_achieved_value`] = typeof reviewerAchievedValue === 'number' 
-            ? reviewerAchievedValue 
-            : parseFloat(reviewerAchievedValue as string) || null;
+          const uom = (selectedKpi as any)?.uom_type as 'numeric' | 'binary' | 'tiered' | undefined;
+          const qOpts = (selectedKpi as any)?.qualitative_options as QualitativeOption[] | null;
+          const isQual = uom === 'binary' || uom === 'tiered';
+          const numericVal = isQual
+            ? labelToRating(reviewerAchievedValue, uom, qOpts)
+            : (typeof reviewerAchievedValue === 'number'
+                ? reviewerAchievedValue
+                : parseFloat(reviewerAchievedValue as string) || null);
+          updateData[`${prefix}_achieved_value`] = numericVal;
+          if (isQual && numericVal !== null) {
+            // Canonicalise: keep *_score in sync with the picker selection
+            updateData[`${prefix}_score`] = numericVal;
+            updateData[`${prefix}_rating`] = scoreToRating(numericVal);
+            if (approve && config.forwardStatus === 'approved') {
+              updateData.final_score = numericVal;
+              updateData.final_rating = scoreToRating(numericVal);
+            }
+          }
         }
         // When this approval moves KPI to 'approved', sync final score
         if (approve && config.forwardStatus === 'approved') {
