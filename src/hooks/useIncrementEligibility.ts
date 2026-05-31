@@ -214,18 +214,8 @@ export function useKnownAssessmentYears() {
   });
 }
 
-/** Generates a rolling assessment-year list (current ±N) — April–March cycle. */
-export function generateAssessmentYears(spread = 4): string[] {
-  const now = new Date();
-  // Indian-style fiscal year (Apr–Mar). Current AY starts April of current year if month >= April.
-  const startYear = now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1;
-  const years: string[] = [];
-  for (let i = spread; i >= -spread; i--) {
-    const y = startYear - i;
-    years.push(`${y}-${String((y + 1) % 100).padStart(2, '0')}`);
-  }
-  return years;
-}
+/** Re-export canonical Jul–Jun AY helpers (see src/lib/assessmentYear.ts). */
+export { generateAssessmentYears, getCurrentAssessmentYear } from '@/lib/assessmentYear';
 
 /* ---------------------------- mutations ---------------------------- */
 

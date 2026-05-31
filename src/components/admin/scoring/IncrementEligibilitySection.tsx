@@ -38,6 +38,7 @@ import {
   type EligibilityConfigRow,
 } from '@/hooks/useIncrementEligibility';
 import type { ComparisonOperator } from '@/lib/incrementEligibility';
+import { getCurrentAssessmentYear } from '@/lib/assessmentYear';
 
 const OPERATORS: Array<{ value: ComparisonOperator; label: string }> = [
   { value: '>=', label: '≥' },
@@ -76,7 +77,7 @@ export function IncrementEligibilitySection() {
   const [draft, setDraft] = useState<EligibilityScope>({
     company_id: [], division_id: [], business_unit_id: [],
     level_id: [], category_id: [], location_id: [],
-    assessment_year: years[0] ?? '',
+    assessment_year: getCurrentAssessmentYear(),
   });
   const [scope, setScope] = useState<EligibilityScope | null>(null);
 
@@ -109,7 +110,7 @@ export function IncrementEligibilitySection() {
     setDraft({
       company_id: [], division_id: [], business_unit_id: [],
       level_id: [], category_id: [], location_id: [],
-      assessment_year: years[0] ?? '',
+      assessment_year: getCurrentAssessmentYear(),
     });
     setScope(null);
     setCopyMode('no');

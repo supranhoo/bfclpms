@@ -15,23 +15,13 @@ import {
 } from '@/hooks/useIncrementSlabs';
 import { ConfirmDestructiveDialog } from '@/components/ui/ConfirmDestructiveDialog';
 import { Plus, Trash2, Loader2 } from 'lucide-react';
-
-function buildAYOptions(): string[] {
-  const now = new Date();
-  const baseYear = now.getMonth() + 1 >= 7 ? now.getFullYear() : now.getFullYear() - 1;
-  const years: string[] = [];
-  for (let i = -1; i <= 2; i++) {
-    const start = baseYear + i;
-    years.push(`${start}-${String(start + 1).slice(-2)}`);
-  }
-  return years;
-}
+import { generateAssessmentYears, getCurrentAssessmentYear } from '@/lib/assessmentYear';
 
 type Draft = Partial<IncrementSlabRow> & { _key: string };
 
 export default function IncrementSlabsPage() {
-  const ayOptions = useMemo(buildAYOptions, []);
-  const [year, setYear] = useState<string>(ayOptions[1]);
+  const ayOptions = useMemo(() => generateAssessmentYears(2), []);
+  const [year, setYear] = useState<string>(getCurrentAssessmentYear());
   const { data: slabs = [], isLoading } = useIncrementSlabs(year);
   const upsert = useUpsertSlab();
   const del = useDeleteSlab();

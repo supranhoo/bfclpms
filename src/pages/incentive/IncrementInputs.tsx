@@ -19,17 +19,7 @@ import {
 } from '@/hooks/useIncrementRuns';
 import { Loader2, Upload, Play, FileSpreadsheet } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-
-function buildAYOptions(): string[] {
-  const now = new Date();
-  const baseYear = now.getMonth() + 1 >= 7 ? now.getFullYear() : now.getFullYear() - 1;
-  const years: string[] = [];
-  for (let i = -1; i <= 2; i++) {
-    const start = baseYear + i;
-    years.push(`${start}-${String(start + 1).slice(-2)}`);
-  }
-  return years;
-}
+import { generateAssessmentYears, getCurrentAssessmentYear } from '@/lib/assessmentYear';
 
 function downloadCsv(filename: string, rows: any[], headers: string[]) {
   const escape = (v: any) => {
@@ -297,8 +287,8 @@ function CalculateIncrementTab({ year }: { year: string }) {
 }
 
 export default function IncrementInputs() {
-  const ayOptions = useMemo(buildAYOptions, []);
-  const [year, setYear] = useState<string>(ayOptions[1]);
+  const ayOptions = useMemo(() => generateAssessmentYears(2), []);
+  const [year, setYear] = useState<string>(getCurrentAssessmentYear());
 
   return (
     <div className="space-y-6">
