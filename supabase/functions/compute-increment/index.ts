@@ -525,10 +525,38 @@ Deno.serve(async (req) => {
             training_compliance: Number(input.training_compliance ?? 0),
             ...((input.dynamic_metrics ?? {}) as Record<string, number>),
           };
+          // Alias resolver — mirrors src/lib/incrementCriterionMetrics.ts.
+          // Admin-edited criterion_keys (e.g. "absent", "lwp",
+          // "discipline_action") must still map to the canonical metric so
+          // disqualification rules never silently no-op. Unknown keys
+          // FAIL CLOSED (mark ineligible) instead of being skipped — this
+          // prevents a 20% increment being awarded just because the admin
+          // mistyped a key.
+          const ALIASES: Record<string, string> = {
+            absent: 'absent_days', absent_day: 'absent_days', absence: 'absent_days', absences: 'absent_days', absent_days: 'absent_days',
+            lwp: 'lwp_days', lwp_day: 'lwp_days', leave_without_pay: 'lwp_days', lwp_days: 'lwp_days',
+            discipline: 'disciplinary_actions', discipline_action: 'disciplinary_actions', disciplinary: 'disciplinary_actions', disciplinary_action: 'disciplinary_actions', disciplinary_actions: 'disciplinary_actions',
+            training: 'training_compliance', training_program: 'training_compliance', training_programs: 'training_compliance', training_compliance: 'training_compliance',
+          };
+          const resolveMetric = (rawKey: string): { key: string | null; val: number | null } => {
+            const k = String(rawKey ?? '').trim().toLowerCase();
+            if (Object.prototype.hasOwnProperty.call(metrics, k)) return { key: k, val: Number(metrics[k]) };
+            const aliased = ALIASES[k];
+            if (aliased && Object.prototype.hasOwnProperty.call(metrics, aliased)) {
+              return { key: aliased, val: Number(metrics[aliased]) };
+            }
+            return { key: null, val: null };
+          };
           const failed: string[] = [];
           for (const c of criteria) {
-            const val = metrics[c.criterion_key];
-            if (val === undefined || val === null) continue;
+            const { key: resolvedKey, val } = resolveMetric(c.criterion_key);
+            if (resolvedKey === null || val === null || Number.isNaN(val)) {
+              // Fail-closed: the criterion is configured + active but cannot
+              // be evaluated against any known input. Surface the misconfig
+              // explicitly instead of silently passing the employee.
+              failed.push(`Configuration error: criterion '${c.criterion_name}' (key='${c.criterion_key}') is not mapped to any input metric — contact admin`);
+              continue;
+            }
             const op = c.comparison_operator;
             const t = Number(c.threshold_value);
             let breach = false;

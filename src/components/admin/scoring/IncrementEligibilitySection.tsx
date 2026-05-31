@@ -38,6 +38,11 @@ import {
   type EligibilityConfigRow,
 } from '@/hooks/useIncrementEligibility';
 import type { ComparisonOperator } from '@/lib/incrementEligibility';
+import {
+  CANONICAL_METRIC_KEYS,
+  METRIC_LABELS,
+  resolveCanonicalMetricKey,
+} from '@/lib/incrementCriterionMetrics';
 import { getCurrentAssessmentYear } from '@/lib/assessmentYear';
 
 const OPERATORS: Array<{ value: ComparisonOperator; label: string }> = [
@@ -462,6 +467,7 @@ function CriterionDialog(props: {
   const editing = !!props.row;
   const [form, setForm] = useState<{
     criterion_name: string;
+    criterion_key: string;
     description: string;
     comparison_operator: ComparisonOperator;
     threshold_value: string;
@@ -470,6 +476,8 @@ function CriterionDialog(props: {
     effective_date: string;
   }>(() => ({
     criterion_name: props.row?.criterion_name ?? '',
+    criterion_key:
+      resolveCanonicalMetricKey(props.row?.criterion_key) ?? '',
     description: props.row?.description ?? '',
     comparison_operator: (props.row?.comparison_operator as ComparisonOperator) ?? '>=',
     threshold_value: props.row?.threshold_value?.toString() ?? '',
@@ -483,14 +491,17 @@ function CriterionDialog(props: {
 
   const canSave =
     form.criterion_name.trim().length > 0 &&
+    !!form.criterion_key &&
+    (CANONICAL_METRIC_KEYS as readonly string[]).includes(form.criterion_key) &&
     form.threshold_value.trim().length > 0 &&
     !Number.isNaN(Number(form.threshold_value));
 
   function handleSave() {
-    const key = (props.row?.criterion_key ?? form.criterion_name)
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '_')
-      .replace(/^_|_$/g, '');
+    // Canonical metric key is selected explicitly from a dropdown —
+    // we never derive it from the free-text name (that's what allowed
+    // "absent" to drift away from "absent_days" and silently disable the
+    // ineligibility rule).
+    const key = form.criterion_key;
     props.onSave({
       ...(props.row?.id ? { id: props.row.id } : {}),
       config_id: props.configId,
@@ -520,6 +531,30 @@ function CriterionDialog(props: {
           <div className="space-y-1.5">
             <Label className="text-xs">Criteria Name <span className="text-destructive">*</span></Label>
             <Input value={form.criterion_name} onChange={(e) => setForm((s) => ({ ...s, criterion_name: e.target.value }))} className="h-9" />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs">
+              Metric <span className="text-destructive">*</span>
+            </Label>
+            <Select
+              value={form.criterion_key}
+              onValueChange={(v) => setForm((s) => ({ ...s, criterion_key: v }))}
+            >
+              <SelectTrigger className="h-9">
+                <SelectValue placeholder="Select the input metric this rule evaluates" />
+              </SelectTrigger>
+              <SelectContent>
+                {CANONICAL_METRIC_KEYS.map((k) => (
+                  <SelectItem key={k} value={k}>
+                    {METRIC_LABELS[k]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-[11px] text-muted-foreground">
+              The increment engine evaluates the breach against this employee input. Display name above can be anything; the
+              metric binding is what makes the rule apply.
+            </p>
           </div>
           <div className="space-y-1.5">
             <Label className="text-xs">Description</Label>
@@ -572,6 +607,7 @@ function useMemoResetForm(
   row: EligibilityCriterionRow | null,
   setForm: (v: {
     criterion_name: string;
+    criterion_key: string;
     description: string;
     comparison_operator: ComparisonOperator;
     threshold_value: string;
@@ -586,6 +622,7 @@ function useMemoResetForm(
     if (!open) return;
     setForm({
       criterion_name: row?.criterion_name ?? '',
+      criterion_key: resolveCanonicalMetricKey(row?.criterion_key) ?? '',
       description: row?.description ?? '',
       comparison_operator: (row?.comparison_operator as ComparisonOperator) ?? '>=',
       threshold_value: row?.threshold_value?.toString() ?? '',
