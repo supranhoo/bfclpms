@@ -66,7 +66,7 @@ function DashboardContent() {
         </div>
       )}
       <SidebarInset className="min-w-0">
-        <main className="flex-1 overflow-y-auto overflow-x-hidden px-3 py-3 sm:px-5 sm:py-4 lg:px-6 lg:py-5 bg-muted/30 min-w-0">
+        <main className="flex-1 overflow-y-auto overflow-x-hidden px-3 py-3 sm:px-5 sm:py-4 lg:px-6 lg:py-5 bg-background min-w-0">
           <ErrorBoundary>
             <Suspense fallback={<PageLoadingOverlay open label="Please wait" />}>
               <Outlet />
