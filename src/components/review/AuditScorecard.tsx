@@ -622,15 +622,30 @@ export function AuditScorecard({
     }
     
     const rating = scoreToRating(auditorScore);
+    const uomType = (selectedKpi as any).uom_type as 'numeric' | 'binary' | 'tiered' | undefined;
+    const qualOpts = (selectedKpi as any).qualitative_options as QualitativeOption[] | null;
+    const isQualitative = uomType === 'binary' || uomType === 'tiered';
+    let auditorAchievedToSave: number | null;
+    if (isQualitative) {
+      // Convert label ("Yes"/"No"/etc.) → numeric rating. Falls back to auditorScore
+      // when no value is selected so we never persist NaN.
+      auditorAchievedToSave =
+        labelToRating(auditorAchievedValue, uomType, qualOpts) ?? auditorScore ?? null;
+    } else if (typeof auditorAchievedValue === 'number') {
+      auditorAchievedToSave = Number.isFinite(auditorAchievedValue) ? auditorAchievedValue : null;
+    } else if (auditorAchievedValue) {
+      const n = parseFloat(String(auditorAchievedValue));
+      auditorAchievedToSave = Number.isFinite(n) ? n : null;
+    } else {
+      auditorAchievedToSave = null;
+    }
     submitAuditReview.mutate({
       kpi_id: selectedKpi.id,
       auditor_rating: rating,
       auditor_score: auditorScore,
       auditor_remarks: auditorRemarks,
       auditor_evidence_url: auditorEvidenceUrls.length > 0 ? auditorEvidenceUrls[0] : null,
-      auditor_achieved_value: typeof auditorAchievedValue === 'number' 
-        ? auditorAchievedValue 
-        : auditorAchievedValue ? parseFloat(auditorAchievedValue) : null,
+      auditor_achieved_value: auditorAchievedToSave,
       approve,
     });
   };
