@@ -23,6 +23,7 @@ import {
   useKnownAssessmentYears,
   generateAssessmentYears,
 } from '@/hooks/useIncrementEligibility';
+import { getCurrentAssessmentYear } from '@/lib/assessmentYear';
 
 const METHOD_OPTIONS: { value: IncrementMethodType; label: string; description: string }[] = [
   { value: 'full', label: 'Full Increment', description: 'Employee receives the complete increment percentage from the applicable slab.' },
@@ -45,12 +46,12 @@ export function IncrementMethodSection() {
     return Array.from(new Set([...knownYears, ...seeded])).sort().reverse();
   }, [knownYears]);
 
-  const [assessmentYear, setAssessmentYear] = useState<string>('');
+  const [assessmentYear, setAssessmentYear] = useState<string>(getCurrentAssessmentYear());
   const [companyId, setCompanyId] = useState<string | null>(null);
   const [copyFromYear, setCopyFromYear] = useState<string>('');
 
   useEffect(() => {
-    if (!assessmentYear && years.length > 0) setAssessmentYear(years[0]);
+    if (!assessmentYear && years.length > 0) setAssessmentYear(getCurrentAssessmentYear());
   }, [years, assessmentYear]);
 
   const scope: IncrementMethodScope | null = assessmentYear
