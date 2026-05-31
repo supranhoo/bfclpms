@@ -353,6 +353,8 @@ export function ConfirmationIncrementSection() {
             )}
           </>
         )}
+          </>
+        )}
       </CardContent>
     </Card>
   );
