@@ -135,7 +135,7 @@ export default function SafetyPermitDetail() {
     suspend.isPending || close.isPending;
 
   return (
-    <div className="max-w-5xl mx-auto space-y-4">
+    <div className="w-full space-y-4">
       <Button variant="ghost" size="sm" onClick={() => navigate('/safety/permits')}>
         <ArrowLeft className="h-4 w-4 mr-2" /> Back to permits
       </Button>

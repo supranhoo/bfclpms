@@ -124,7 +124,7 @@ export default function SafetyHoursWorked() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6 p-6">
+    <div className="w-full space-y-6 p-6">
       <div className="flex flex-wrap items-start gap-4">
         <div className="p-3 rounded-xl bg-primary/10 text-primary">
           <Activity className="h-7 w-7" />

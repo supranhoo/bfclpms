@@ -769,7 +769,7 @@ export default function SystemSettings() {
   // Desktop layout — full-width shell so content sections (e.g. Increment Slabs)
   // can breathe edge-to-edge on large monitors.
   return (
-    <div className="mx-auto w-full px-4 lg:px-6 py-4 max-w-[1800px]">
+    <div className="w-full">
       <div className="flex items-center gap-3 mb-4">
         <Settings className="h-7 w-7 text-primary" />
         <h1 className="text-2xl font-bold">System Settings</h1>

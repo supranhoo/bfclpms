@@ -29,7 +29,7 @@ export default function SafetyHome() {
   const { data, isLoading } = useSafetyDashboardStats();
 
   return (
-    <div className="max-w-6xl mx-auto space-y-4 sm:space-y-6">
+    <div className="w-full space-y-4 sm:space-y-6">
       <div className="flex flex-wrap items-start gap-3 sm:gap-4">
         <div className="p-2.5 sm:p-3 rounded-xl bg-destructive/10 text-destructive">
           <ShieldAlert className="h-6 w-6 sm:h-7 sm:w-7" />

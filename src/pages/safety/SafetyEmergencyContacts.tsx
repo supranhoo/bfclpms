@@ -76,7 +76,7 @@ export default function SafetyEmergencyContacts() {
   };
 
   return (
-    <div className="max-w-4xl mx-auto space-y-4">
+    <div className="w-full space-y-4">
       <div className="flex items-center gap-3">
         <Button variant="ghost" size="sm" asChild>
           <Link to="/safety/emergency"><ArrowLeft className="h-4 w-4 mr-1" /> Back</Link>

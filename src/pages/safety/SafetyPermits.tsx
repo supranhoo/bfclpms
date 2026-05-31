@@ -95,7 +95,7 @@ export default function SafetyPermits() {
   }, [draft]);
 
   return (
-    <div className="max-w-6xl mx-auto space-y-4">
+    <div className="w-full space-y-4">
       <div className="flex flex-wrap items-start gap-3 sm:gap-4">
         <div className="p-2.5 sm:p-3 rounded-xl bg-primary/10 text-primary">
           <FileSignature className="h-5 w-5 sm:h-6 sm:w-6" />

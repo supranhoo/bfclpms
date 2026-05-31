@@ -62,7 +62,7 @@ export default function SafetyAuditRunDetail() {
 
   if (isLoading || !run || !template) {
     return (
-      <div className="p-3 sm:p-6 max-w-5xl mx-auto">
+      <div className="p-3 sm:p-6 w-full">
         <SafetySkeletonBlock variant="detail" />
       </div>
     );

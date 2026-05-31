@@ -25,7 +25,7 @@ export default function SafetyIncidentDetail() {
 
   if (isLoading) {
     return (
-      <div className="p-3 sm:p-6 max-w-6xl mx-auto">
+      <div className="p-3 sm:p-6 w-full">
         <SafetySkeletonBlock variant="detail" />
       </div>
     );
@@ -45,7 +45,7 @@ export default function SafetyIncidentDetail() {
   }
 
   return (
-    <div className="p-3 sm:p-6 space-y-3 sm:space-y-4 max-w-6xl mx-auto">
+    <div className="p-3 sm:p-6 space-y-3 sm:space-y-4 w-full">
       <Button variant="ghost" size="sm" className="min-h-[40px]" onClick={() => navigate('/safety/incidents')}>
         <ArrowLeft className="h-4 w-4 mr-2" />
         <span className="hidden sm:inline">Back to incidents</span>

@@ -145,7 +145,7 @@ export default function ModuleHubSettings() {
   const isEnabled = safetyModuleQuery.data?.is_enabled ?? false;
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6">
+    <div className="w-full space-y-6">
       <PageHeader
         title="Module Hub Settings"
         description="Control which modules appear on the Hub and who can access them."
