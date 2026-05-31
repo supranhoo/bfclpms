@@ -219,6 +219,112 @@ export type Database = {
         }
         Relationships: []
       }
+      annual_score_config_audit: {
+        Row: {
+          action: string
+          config_id: string
+          id: string
+          new_value: Json | null
+          performed_at: string
+          performed_by: string | null
+          prev_value: Json | null
+        }
+        Insert: {
+          action: string
+          config_id: string
+          id?: string
+          new_value?: Json | null
+          performed_at?: string
+          performed_by?: string | null
+          prev_value?: Json | null
+        }
+        Update: {
+          action?: string
+          config_id?: string
+          id?: string
+          new_value?: Json | null
+          performed_at?: string
+          performed_by?: string | null
+          prev_value?: Json | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "annual_score_config_audit_config_id_fkey"
+            columns: ["config_id"]
+            isOneToOne: false
+            referencedRelation: "annual_score_configs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      annual_score_configs: {
+        Row: {
+          assessment_year: string
+          business_unit_id: string | null
+          category_id: string | null
+          company_id: string | null
+          copied_from_config_id: string | null
+          created_at: string
+          created_by: string | null
+          custom_months: number[] | null
+          division_id: string | null
+          id: string
+          level_id: string | null
+          location_id: string | null
+          method: Database["public"]["Enums"]["annual_score_method"]
+          notes: string | null
+          status: Database["public"]["Enums"]["config_status"]
+          updated_at: string
+          version: number
+        }
+        Insert: {
+          assessment_year: string
+          business_unit_id?: string | null
+          category_id?: string | null
+          company_id?: string | null
+          copied_from_config_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          custom_months?: number[] | null
+          division_id?: string | null
+          id?: string
+          level_id?: string | null
+          location_id?: string | null
+          method?: Database["public"]["Enums"]["annual_score_method"]
+          notes?: string | null
+          status?: Database["public"]["Enums"]["config_status"]
+          updated_at?: string
+          version?: number
+        }
+        Update: {
+          assessment_year?: string
+          business_unit_id?: string | null
+          category_id?: string | null
+          company_id?: string | null
+          copied_from_config_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          custom_months?: number[] | null
+          division_id?: string | null
+          id?: string
+          level_id?: string | null
+          location_id?: string | null
+          method?: Database["public"]["Enums"]["annual_score_method"]
+          notes?: string | null
+          status?: Database["public"]["Enums"]["config_status"]
+          updated_at?: string
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "annual_score_configs_copied_from_config_id_fkey"
+            columns: ["copied_from_config_id"]
+            isOneToOne: false
+            referencedRelation: "annual_score_configs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       app_settings: {
         Row: {
           app_name: string
@@ -2531,6 +2637,109 @@ export type Database = {
             columns: ["employee_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      increment_method_configs: {
+        Row: {
+          assessment_year: string
+          business_unit_id: string | null
+          category_id: string | null
+          company_id: string | null
+          copied_from_config_id: string | null
+          created_at: string
+          created_by: string | null
+          division_id: string | null
+          id: string
+          level_id: string | null
+          location_id: string | null
+          method: Database["public"]["Enums"]["increment_method_type"]
+          notes: string | null
+          status: Database["public"]["Enums"]["config_status"]
+          updated_at: string
+          version: number
+        }
+        Insert: {
+          assessment_year: string
+          business_unit_id?: string | null
+          category_id?: string | null
+          company_id?: string | null
+          copied_from_config_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          division_id?: string | null
+          id?: string
+          level_id?: string | null
+          location_id?: string | null
+          method?: Database["public"]["Enums"]["increment_method_type"]
+          notes?: string | null
+          status?: Database["public"]["Enums"]["config_status"]
+          updated_at?: string
+          version?: number
+        }
+        Update: {
+          assessment_year?: string
+          business_unit_id?: string | null
+          category_id?: string | null
+          company_id?: string | null
+          copied_from_config_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          division_id?: string | null
+          id?: string
+          level_id?: string | null
+          location_id?: string | null
+          method?: Database["public"]["Enums"]["increment_method_type"]
+          notes?: string | null
+          status?: Database["public"]["Enums"]["config_status"]
+          updated_at?: string
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "increment_method_configs_copied_from_config_id_fkey"
+            columns: ["copied_from_config_id"]
+            isOneToOne: false
+            referencedRelation: "increment_method_configs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      increment_method_slabs: {
+        Row: {
+          created_at: string
+          from_months: number
+          id: string
+          method_config_id: string
+          percent_of_slab: number
+          sort_order: number
+          to_months: number | null
+        }
+        Insert: {
+          created_at?: string
+          from_months: number
+          id?: string
+          method_config_id: string
+          percent_of_slab: number
+          sort_order?: number
+          to_months?: number | null
+        }
+        Update: {
+          created_at?: string
+          from_months?: number
+          id?: string
+          method_config_id?: string
+          percent_of_slab?: number
+          sort_order?: number
+          to_months?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "increment_method_slabs_method_config_id_fkey"
+            columns: ["method_config_id"]
+            isOneToOne: false
+            referencedRelation: "increment_method_configs"
             referencedColumns: ["id"]
           },
         ]
@@ -9713,6 +9922,7 @@ export type Database = {
       }
     }
     Enums: {
+      annual_score_method: "avg_all" | "last_6" | "custom"
       app_role:
         | "admin"
         | "manager"
@@ -9721,7 +9931,9 @@ export type Database = {
         | "management"
         | "hr_pms"
         | "skip_level"
+      config_status: "draft" | "active" | "archived"
       iac_scope_type: "global" | "company" | "business_unit" | "department"
+      increment_method_type: "full" | "prorated_doj" | "custom"
       kpi_status: "open" | "submitted" | "approved_by_manager" | "locked"
       observation_type: "positive" | "concern" | "neutral"
       pip_milestone_status: "pending" | "met" | "partially_met" | "not_met"
@@ -9962,6 +10174,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      annual_score_method: ["avg_all", "last_6", "custom"],
       app_role: [
         "admin",
         "manager",
@@ -9971,7 +10184,9 @@ export const Constants = {
         "hr_pms",
         "skip_level",
       ],
+      config_status: ["draft", "active", "archived"],
       iac_scope_type: ["global", "company", "business_unit", "department"],
+      increment_method_type: ["full", "prorated_doj", "custom"],
       kpi_status: ["open", "submitted", "approved_by_manager", "locked"],
       observation_type: ["positive", "concern", "neutral"],
       pip_milestone_status: ["pending", "met", "partially_met", "not_met"],
