@@ -14,7 +14,7 @@ export interface IncrementSlabRow {
   division_ids: string[];
   business_unit_ids: string[];
   location_ids: string[];
-  category_ids: string[];
+  employee_category_ids: string[];
   level_ids: string[];
   extra_attributes: Record<string, any>;
   sort_order: number;
@@ -118,7 +118,7 @@ export function useCopyPreviousYearSlabs() {
         division_ids: s.division_ids,
         business_unit_ids: s.business_unit_ids,
         location_ids: s.location_ids,
-        category_ids: s.category_ids,
+        employee_category_ids: s.employee_category_ids,
         level_ids: s.level_ids,
         extra_attributes: s.extra_attributes,
         sort_order: s.sort_order,

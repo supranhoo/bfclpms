@@ -23,7 +23,7 @@ export interface SlabLike {
   division_ids?: string[] | null;
   business_unit_ids?: string[] | null;
   location_ids?: string[] | null;
-  category_ids?: string[] | null;
+  employee_category_ids?: string[] | null;
   level_ids?: string[] | null;
 }
 
@@ -32,7 +32,7 @@ export interface EmployeeDims {
   division_id?: string | null;
   business_unit_id?: string | null;
   location_id?: string | null;
-  category_id?: string | null;
+  employee_category_id?: string | null;
   level_id?: string | null;
 }
 
@@ -41,7 +41,7 @@ const DIMENSIONS: Array<{ slab: keyof SlabLike; emp: keyof EmployeeDims }> = [
   { slab: 'division_ids',      emp: 'division_id' },
   { slab: 'business_unit_ids', emp: 'business_unit_id' },
   { slab: 'location_ids',      emp: 'location_id' },
-  { slab: 'category_ids',      emp: 'category_id' },
+  { slab: 'employee_category_ids', emp: 'employee_category_id' },
   { slab: 'level_ids',         emp: 'level_id' },
 ];
 
@@ -106,7 +106,7 @@ export function describeScope(
     division_id: 'Division',
     business_unit_id: 'BU',
     location_id: 'Location',
-    category_id: 'Category',
+    employee_category_id: 'Emp Category',
     level_id: 'Level',
   };
   for (const d of DIMENSIONS) {

@@ -20,7 +20,7 @@ import {
   type IncrementSlabRow,
 } from '@/hooks/useIncrementSlabs';
 import { ConfirmDestructiveDialog } from '@/components/ui/ConfirmDestructiveDialog';
-import { Plus, Trash2, Loader2, Pencil, Building2, Network, Factory, MapPin, Tag, Layers } from 'lucide-react';
+import { Plus, Trash2, Loader2, Pencil, Building2, Network, Factory, MapPin, Users, Layers } from 'lucide-react';
 import { generateAssessmentYears, getCurrentAssessmentYear } from '@/lib/assessmentYear';
 import { useToast } from '@/hooks/use-toast';
 
@@ -33,7 +33,7 @@ type SlabDraft = Partial<IncrementSlabRow> & {
   division_ids: string[];
   business_unit_ids: string[];
   location_ids: string[];
-  category_ids: string[];
+  employee_category_ids: string[];
   level_ids: string[];
 };
 
@@ -47,7 +47,7 @@ function emptyDraft(): SlabDraft {
     division_ids: [],
     business_unit_ids: [],
     location_ids: [],
-    category_ids: [],
+    employee_category_ids: [],
     level_ids: [],
   };
 }
@@ -81,7 +81,7 @@ export default function IncrementSlabsPage() {
         division_ids: s.division_ids ?? [],
         business_unit_ids: s.business_unit_ids ?? [],
         location_ids: s.location_ids ?? [],
-        category_ids: s.category_ids ?? [],
+        employee_category_ids: s.employee_category_ids ?? [],
         level_ids: s.level_ids ?? [],
       },
     });
@@ -123,7 +123,7 @@ export default function IncrementSlabsPage() {
       division_ids: d.division_ids,
       business_unit_ids: d.business_unit_ids,
       location_ids: d.location_ids,
-      category_ids: d.category_ids,
+      employee_category_ids: d.employee_category_ids,
       level_ids: d.level_ids,
     });
     setEditing({ open: false, id: null, draft: emptyDraft() });
@@ -145,7 +145,7 @@ export default function IncrementSlabsPage() {
       { label: 'Div', values: s.division_ids ?? [],      list: masters?.divisions },
       { label: 'BU',  values: s.business_unit_ids ?? [], list: masters?.business_units },
       { label: 'Loc', values: s.location_ids ?? [],      list: masters?.locations },
-      { label: 'Cat', values: s.category_ids ?? [],      list: masters?.categories },
+      { label: 'EmpCat', values: s.employee_category_ids ?? [], list: masters?.employee_categories },
       { label: 'Lvl', values: s.level_ids ?? [],         list: masters?.levels },
     ];
     const scoped = chips.filter((c) => c.values.length > 0);
@@ -319,10 +319,10 @@ export default function IncrementSlabsPage() {
                   onChange={(v) => patchDraft({ location_ids: v })} placeholder="All locations" width={320} />
               </div>
               <div className="space-y-1.5">
-                <Label className="text-xs">Category</Label>
-                <MultiSelectFilter icon={<Tag className="h-3 w-3 text-muted-foreground" />} label="Category"
-                  options={opts(masters?.categories)} values={d.category_ids}
-                  onChange={(v) => patchDraft({ category_ids: v })} placeholder="All categories" width={320} />
+                <Label className="text-xs">Employee Category</Label>
+                <MultiSelectFilter icon={<Users className="h-3 w-3 text-muted-foreground" />} label="Employee Category"
+                  options={opts(masters?.employee_categories)} values={d.employee_category_ids}
+                  onChange={(v) => patchDraft({ employee_category_ids: v })} placeholder="All employee categories" width={320} />
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs">Level</Label>
