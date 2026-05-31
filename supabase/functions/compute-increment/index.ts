@@ -23,6 +23,31 @@ type ConfirmationTreatment =
   | 'shift_next_cycle'
   | 'carry_forward_uncovered';
 
+type ConfirmationTransition =
+  | 'trainee_to_confirmed'
+  | 'probation_to_confirmed'
+  | 'contract_to_confirmed'
+  | 'apprenticeship_to_confirmed';
+
+const TRANSITION_LABELS: Record<ConfirmationTransition, string> = {
+  trainee_to_confirmed: 'Trainee → Confirmation',
+  probation_to_confirmed: 'Probation → Confirmation',
+  contract_to_confirmed: 'Contract → Confirmation',
+  apprenticeship_to_confirmed: 'Apprenticeship → Confirmation',
+};
+
+/** Map a raw pre-confirmation status string → canonical transition key.
+ *  Mirrors src/lib/confirmationIncrementAdjuster.ts. */
+function statusToTransition(prev: string | null | undefined): ConfirmationTransition | null {
+  if (!prev) return null;
+  const k = String(prev).trim().toLowerCase();
+  if (k === 'trainee') return 'trainee_to_confirmed';
+  if (k === 'probation') return 'probation_to_confirmed';
+  if (k === 'contract') return 'contract_to_confirmed';
+  if (k === 'apprenticeship' || k === 'apprentice') return 'apprenticeship_to_confirmed';
+  return null;
+}
+
 function monthsBetweenISO(fromISO: string, toISO: string): number {
   if (!fromISO || !toISO) return 0;
   const from = new Date(fromISO + 'T00:00:00Z');
