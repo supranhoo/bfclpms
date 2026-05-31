@@ -21,6 +21,7 @@ import { Loader2, Upload, Play, FileSpreadsheet } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { generateAssessmentYears, getCurrentAssessmentYear } from '@/lib/assessmentYear';
 import * as XLSX from 'xlsx';
+import { supabase } from '@/integrations/supabase/client';
 
 function downloadXlsx(filename: string, rows: any[], headers: string[]) {
   const ws = rows.length
