@@ -34,6 +34,9 @@ export interface IncrementRunItemRow {
   revised_salary: number | null;
   remarks: string | null;
   created_at: string;
+  manually_edited?: boolean | null;
+  edited_by?: string | null;
+  edited_at?: string | null;
 }
 
 export function useIncrementRuns(assessmentYear: string | null) {
