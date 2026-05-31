@@ -14,8 +14,43 @@ export type ConfirmationTreatment =
   | 'shift_next_cycle'
   | 'carry_forward_uncovered';
 
+/**
+ * Canonical transition keys persisted in
+ * `confirmation_increment_rules.applicable_transitions`.
+ * Add new keys here AND extend `STATUS_TO_TRANSITION` below — never hardcode
+ * the human label anywhere downstream.
+ */
+export type ConfirmationTransition =
+  | 'trainee_to_confirmed'
+  | 'probation_to_confirmed'
+  | 'contract_to_confirmed'
+  | 'apprenticeship_to_confirmed';
+
+/** Maps a `profiles.previous_employment_status` value (case-insensitive)
+ *  to the canonical transition key. Unknown statuses → null. */
+export function statusToTransition(
+  prevStatus: string | null | undefined,
+): ConfirmationTransition | null {
+  if (!prevStatus) return null;
+  const k = prevStatus.trim().toLowerCase();
+  if (k === 'trainee') return 'trainee_to_confirmed';
+  if (k === 'probation') return 'probation_to_confirmed';
+  if (k === 'contract') return 'contract_to_confirmed';
+  if (k === 'apprenticeship' || k === 'apprentice') return 'apprenticeship_to_confirmed';
+  return null;
+}
+
+export const TRANSITION_LABELS: Record<ConfirmationTransition, string> = {
+  trainee_to_confirmed: 'Trainee → Confirmation',
+  probation_to_confirmed: 'Probation → Confirmation',
+  contract_to_confirmed: 'Contract → Confirmation',
+  apprenticeship_to_confirmed: 'Apprenticeship → Confirmation',
+};
+
 export interface ConfirmationRule {
   treatment: ConfirmationTreatment;
+  /** Empty array = rule inactive (engine treats as ignore). */
+  applicableTransitions?: ConfirmationTransition[];
 }
 
 export interface AdjusterInput {
@@ -30,6 +65,9 @@ export interface AdjusterInput {
   /** Naive months the slab engine would have used had there been no rule. */
   naiveEligibleMonths: number;
   rule: ConfirmationRule;
+  /** Employee's status BEFORE confirmation (e.g. 'Trainee', 'Probation').
+   *  Used to gate eligibility against `rule.applicableTransitions`. */
+  preConfirmationStatus?: string | null;
 }
 
 export interface AdjusterResult {
@@ -74,7 +112,27 @@ export function adjustConfirmationIncrement(input: AdjusterInput): AdjusterResul
     previousCycleUncoveredMonths = 0,
     naiveEligibleMonths,
     rule,
+    preConfirmationStatus,
   } = input;
+
+  // Eligibility gate: rule applies only when the employee's transition is
+  // in the configured applicability list. Backward-compatible: when the list
+  // is omitted (legacy rules), default to all transitions allowed.
+  if (rule.applicableTransitions && rule.applicableTransitions.length > 0) {
+    const txn = statusToTransition(preConfirmationStatus);
+    if (!txn || !rule.applicableTransitions.includes(txn)) {
+      return {
+        treatmentApplied: 'ignore',
+        periodCoveredMonths: 0,
+        balanceEligibleMonths: naiveEligibleMonths,
+        carryForwardMonths: 0,
+        finalEligibleMonths: naiveEligibleMonths,
+        adjustmentReason: txn
+          ? `Transition ${txn} not in rule applicability list — adjustment skipped`
+          : `Pre-confirmation status ${preConfirmationStatus ?? '(unknown)'} not mapped to a configured transition — adjustment skipped`,
+      };
+    }
+  }
 
   // Short-circuit: no confirmation increment OR treatment = ignore → naive.
   if (
