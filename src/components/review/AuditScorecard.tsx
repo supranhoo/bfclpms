@@ -401,7 +401,34 @@ export function AuditScorecard({
   const openReviewSheet = (kpi: KPI) => {
     setSelectedKpi(kpi);
     const existing = submissionMap.get(kpi.id);
-    const auditorAchieved = (existing as any)?.auditor_achieved_value ?? existing?.achieved_value ?? null;
+    const uomType = (kpi as any).uom_type as 'numeric' | 'binary' | 'tiered' | undefined;
+    const qualOpts = (kpi as any).qualitative_options as QualitativeOption[] | null;
+    const isQualitative = uomType === 'binary' || uomType === 'tiered';
+    // A draft is considered to exist when the auditor has touched any of these fields
+    const hasAuditorDraft =
+      existing?.auditor_score != null ||
+      existing?.auditor_rating != null ||
+      (typeof existing?.auditor_remarks === 'string' && existing.auditor_remarks.trim() !== '') ||
+      (existing as any)?.auditor_achieved_value != null;
+    const rawAuditorAchieved = (existing as any)?.auditor_achieved_value ?? null;
+    let auditorAchieved: number | string | null;
+    if (hasAuditorDraft) {
+      // Prefer the auditor's stored value. If qualitative and the stored numeric value
+      // is missing (legacy NaN bug), derive from auditor_score so the Yes/No tile
+      // matches what the auditor actually selected. NEVER fall back to the employee's value.
+      if (isQualitative) {
+        const numeric = rawAuditorAchieved ?? existing?.auditor_score ?? null;
+        auditorAchieved = getQualitativeAchievedLabel(numeric, uomType, qualOpts) ?? null;
+      } else {
+        auditorAchieved = rawAuditorAchieved;
+      }
+    } else {
+      // No auditor draft yet — pre-fill with the employee's submitted value
+      const employeeAchieved = existing?.achieved_value ?? null;
+      auditorAchieved = isQualitative
+        ? (getQualitativeAchievedLabel(employeeAchieved, uomType, qualOpts) ?? null)
+        : employeeAchieved;
+    }
     
     // Recalculate score from achieved value if auditor hasn't reviewed yet
     let initialAuditorScore: number | null = existing?.auditor_score ?? null;
