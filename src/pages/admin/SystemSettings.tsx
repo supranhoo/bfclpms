@@ -766,25 +766,26 @@ export default function SystemSettings() {
     );
   }
 
-  // Desktop layout
+  // Desktop layout — full-width shell so content sections (e.g. Increment Slabs)
+  // can breathe edge-to-edge on large monitors.
   return (
-    <div className="container mx-auto p-6 max-w-7xl">
-      <div className="flex items-center gap-3 mb-6">
-        <Settings className="h-8 w-8 text-primary" />
-        <h1 className="text-3xl font-bold">System Settings</h1>
+    <div className="mx-auto w-full px-4 lg:px-6 py-4 max-w-[1800px]">
+      <div className="flex items-center gap-3 mb-4">
+        <Settings className="h-7 w-7 text-primary" />
+        <h1 className="text-2xl font-bold">System Settings</h1>
       </div>
 
-      <div className="rounded-lg border bg-card" style={{ height: 'calc(100vh - 180px)' }}>
+      <div className="rounded-lg border bg-card" style={{ height: 'calc(100vh - 140px)' }}>
         <ResizablePanelGroup direction="horizontal">
-          <ResizablePanel defaultSize={18} minSize={14} maxSize={25}>
+          <ResizablePanel defaultSize={15} minSize={12} maxSize={22}>
             <div className="h-full border-r">
               <SidebarNav />
             </div>
           </ResizablePanel>
           <ResizableHandle withHandle />
-          <ResizablePanel defaultSize={82}>
+          <ResizablePanel defaultSize={85}>
             <ScrollArea className="h-full">
-              <div className="p-6">
+              <div className="p-4 lg:p-6">
                 {renderSectionContent()}
               </div>
             </ScrollArea>
