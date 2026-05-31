@@ -217,12 +217,58 @@ function monthsBetween(from: Date, to: Date): number {
   return Math.max(0, ms / (1000 * 60 * 60 * 24 * 30.4375));
 }
 
-function applyMethod(method: string, basePercent: number, monthsServed: number, customSlabs: any[]): { eligible: number; notes: string } {
+/**
+ * AY-bounded months served honoring the "Joining Month Cutoff Day" rule.
+ *
+ *   - If DOJ is after the AY end → 0 months.
+ *   - If DOJ is before the AY start → effectiveStart = AY start (cutoff
+ *     irrelevant, decision = 'pre_ay').
+ *   - Else: if DOJ day < cutoff → joining month counted (effectiveStart =
+ *     first day of DOJ month). Otherwise excluded (effectiveStart = first
+ *     day of next month).
+ *
+ * Result is whole-month inclusive, clamped to [0, 12].
+ */
+export function monthsServedInAY(
+  doj: Date,
+  cutoffDay: number,
+  ayStart: Date,
+  ayEnd: Date,
+  validationDate: Date,
+): { months: number; decision: 'included' | 'excluded' | 'pre_ay' | 'after_ay' } {
+  if (doj.getTime() > ayEnd.getTime()) return { months: 0, decision: 'after_ay' };
+  let effStart: Date;
+  let decision: 'included' | 'excluded' | 'pre_ay';
+  if (doj.getTime() < ayStart.getTime()) {
+    effStart = new Date(ayStart);
+    decision = 'pre_ay';
+  } else {
+    const joinDay = doj.getDate();
+    if (joinDay < cutoffDay) {
+      effStart = new Date(doj.getFullYear(), doj.getMonth(), 1);
+      decision = 'included';
+    } else {
+      effStart = new Date(doj.getFullYear(), doj.getMonth() + 1, 1);
+      decision = 'excluded';
+    }
+  }
+  const effEnd = validationDate.getTime() < ayEnd.getTime() ? validationDate : ayEnd;
+  if (effEnd.getTime() < effStart.getTime()) return { months: 0, decision };
+  const months =
+    (effEnd.getFullYear() - effStart.getFullYear()) * 12 +
+    (effEnd.getMonth() - effStart.getMonth()) +
+    1;
+  return { months: Math.max(0, Math.min(12, months)), decision };
+}
+
+function applyMethod(method: string, basePercent: number, monthsServed: number, customSlabs: any[], proratedNote?: string): { eligible: number; notes: string } {
   if (basePercent <= 0) return { eligible: 0, notes: 'Base 0' };
   if (method === 'full') return { eligible: basePercent, notes: 'Full' };
   if (method === 'prorated_doj') {
     const m = Math.max(0, Math.min(12, monthsServed));
-    return { eligible: +((basePercent / 12) * m).toFixed(4), notes: `Prorated ${m.toFixed(1)}/12` };
+    const base = `Prorated by DOJ · ${m.toFixed(0)}/12`;
+    const notes = proratedNote ? `${base} · ${proratedNote}` : base;
+    return { eligible: +((basePercent / 12) * m).toFixed(4), notes };
   }
   // custom
   const slab = customSlabs.find(
