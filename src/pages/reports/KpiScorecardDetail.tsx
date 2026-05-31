@@ -208,6 +208,7 @@ export default function KpiScorecardDetail() {
   const { canDownload } = useReportAccess();
   const canExport = canDownload('kpi-scorecard-detail');
   const { effectiveRole } = useAuth();
+  const { toast } = useToast();
   const ORG_WIDE_ROLES: Array<string> = ['admin', 'management', 'hr_pms', 'auditor'];
   const hasOrgWideAccess = effectiveRole ? ORG_WIDE_ROLES.includes(effectiveRole) : false;
   const { companies, selectedCompanyId, setSelectedCompanyId, filterByCompany, getCompanyName, getCompanyCode } = useCompanyFilter();
@@ -220,6 +221,14 @@ export default function KpiScorecardDetail() {
   const [pageSize, setPageSize] = useState(100);
   const [sortField, setSortField] = useState<SortField>('employeeName');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
+
+  // Range export state
+  const [rangeFromMonth, setRangeFromMonth] = useState(MONTHS[now.getMonth()]);
+  const [rangeFromYear, setRangeFromYear] = useState(now.getFullYear());
+  const [rangeToMonth, setRangeToMonth] = useState(MONTHS[now.getMonth()]);
+  const [rangeToYear, setRangeToYear] = useState(now.getFullYear());
+  const [rangeExporting, setRangeExporting] = useState(false);
+  const [rangePopoverOpen, setRangePopoverOpen] = useState(false);
 
   const years = [selectedYear - 1, selectedYear, selectedYear + 1];
 
