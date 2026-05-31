@@ -133,7 +133,7 @@ export default function ReviewPeriodOverview({ period, globalLockActive, onToggl
       {/* Stats */}
       <Card>
         <CardContent className="pt-6">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-center">
             <div>
               <p className="text-2xl font-bold">{period.kpi_count}</p>
               <p className="text-sm text-muted-foreground">Total KRAs</p>
@@ -149,6 +149,14 @@ export default function ReviewPeriodOverview({ period, globalLockActive, onToggl
             <div>
               <p className="text-2xl font-bold">{globalLockActive ? 'Active' : 'None'}</p>
               <p className="text-sm text-muted-foreground">Global Lock</p>
+            </div>
+            <div title="When the period stage reaches Closed it blocks non-admin edits, independent of Legacy/Global locks. Admins may still edit (audit-logged).">
+              <p className="text-2xl font-bold">
+                {period.current_stage === 'closed' ? '🔒' : '🔓'}
+              </p>
+              <p className="text-sm text-muted-foreground">
+                Stage Lock {period.current_stage === 'closed' ? '(Closed)' : ''}
+              </p>
             </div>
           </div>
         </CardContent>
