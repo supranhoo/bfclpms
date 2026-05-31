@@ -19,7 +19,7 @@ import { useOrgKpiDataOwnerNames, getOwnerNamesForKpi } from '@/hooks/useOrgKpiD
 import { DailySubmissionSummary } from '@/components/review/DailySubmissionSummary';
 import { ReviewLevelOverrideEditor, calculateOverriddenScore } from '@/components/review/ReviewLevelOverrideEditor';
 import { useReviewerSubPeriodOverride } from '@/hooks/useReviewerSubPeriodOverride';
-import { QualitativeOption } from '@/lib/qualitativeUom';
+import { QualitativeOption, labelToRating, getQualitativeAchievedLabel } from '@/lib/qualitativeUom';
 import { calculateRating } from '@/lib/ratingCalculation';
 import { useAuth } from '@/contexts/AuthContext';
 import { ReviewPanelSkeleton } from '@/components/ui/LoadingSkeletons';
