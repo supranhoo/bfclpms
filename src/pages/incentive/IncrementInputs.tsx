@@ -245,12 +245,47 @@ function EnterInputsTab({ year }: { year: string }) {
 function CalculateIncrementTab({ year }: { year: string }) {
   const { data: runs = [], isLoading } = useIncrementRuns(year);
   const trigger = useTriggerIncrementRun();
-  const [selectedRun, setSelectedRun] = useState<string | null>(null);
-  const { data: itemsData } = useIncrementRunItems(selectedRun, 0, 200);
+  const { toast } = useToast();
+  const { data: employees = [] } = useActiveEmployeesForCopy();
+  const empById = useMemo(() => {
+    const m = new Map<string, { name: string; code: string }>();
+    employees.forEach((e) => m.set(e.id, { name: e.name, code: e.code }));
+    return m;
+  }, [employees]);
 
-  const exportRun = () => {
-    if (!itemsData?.rows?.length) return;
-    const rows = itemsData.rows.map((r: any) => ({
+  const [scope, setScope] = useState<'all' | 'single'>('all');
+  const [selectedEmpId, setSelectedEmpId] = useState<string>('');
+  const [selectedRun, setSelectedRun] = useState<string | null>(null);
+  const [page, setPage] = useState(0);
+  const pageSize = 50;
+
+  useEffect(() => { setPage(0); }, [selectedRun]);
+  useEffect(() => { if (scope === 'all') setSelectedEmpId(''); }, [scope]);
+
+  const { data: itemsData, isLoading: itemsLoading } = useIncrementRunItems(selectedRun, page, pageSize);
+  const totalPages = Math.max(1, Math.ceil((itemsData?.total ?? 0) / pageSize));
+
+  const exportQuery = useExportIncrementRunItems(selectedRun);
+
+  const runDisabled =
+    trigger.isPending || (scope === 'single' && !selectedEmpId);
+
+  const handleRun = async () => {
+    try {
+      const result: any = await trigger.mutateAsync({
+        assessment_year: year,
+        employee_id: scope === 'single' ? selectedEmpId : null,
+      });
+      // Edge fn returns { run_id, ... } — auto-select to load details
+      const newRunId = result?.run_id ?? result?.id ?? null;
+      if (newRunId) setSelectedRun(newRunId);
+    } catch {
+      // toast already shown by hook
+    }
+  };
+
+  const buildExportRows = (items: any[]) =>
+    items.map((r: any) => ({
       employee: r.employee?.full_name ?? '',
       employee_code: r.employee?.employee_code ?? '',
       pms_score: r.pms_score ?? '',
@@ -274,29 +309,87 @@ function CalculateIncrementTab({ year }: { year: string }) {
       treatment_applied: r.confirmation_treatment ?? '',
       adjustment_reason: r.adjustment_reason ?? '',
     }));
-    downloadXlsx(`increment-run-${selectedRun}.xlsx`, rows, Object.keys(rows[0]));
+
+  const exportRun = async () => {
+    if (!selectedRun) return;
+    try {
+      const res = await exportQuery.refetch();
+      const items = (res.data ?? []) as any[];
+      if (!items.length) {
+        toast({ title: 'Nothing to export', description: 'This run has no rows.' });
+        return;
+      }
+      const rows = buildExportRows(items);
+      const run = runs.find((r) => r.id === selectedRun);
+      const scopeTag = run?.scope_snapshot?.scope === 'single'
+        ? `-single-${empById.get(run.scope_snapshot.employee_id)?.code ?? 'emp'}`
+        : '';
+      const ts = new Date().toISOString().replace(/[:T]/g, '-').slice(0, 16);
+      downloadXlsx(`increment-run-${ts}${scopeTag}.xlsx`, rows, Object.keys(rows[0]));
+    } catch (e: any) {
+      toast({ title: 'Export failed', description: e?.message ?? 'Unknown error', variant: 'destructive' });
+    }
+  };
+
+  const renderScopeCell = (r: any) => {
+    const s = r.scope_snapshot?.scope;
+    if (s === 'single') {
+      const id = r.scope_snapshot?.employee_id;
+      const e = id ? empById.get(id) : null;
+      return (
+        <Badge variant="outline">
+          Single · {e ? `${e.name}${e.code ? ` (${e.code})` : ''}` : id?.slice(0, 8) ?? '—'}
+        </Badge>
+      );
+    }
+    return <Badge variant="secondary">All</Badge>;
   };
 
   return (
     <div className="space-y-6">
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0">
-          <CardTitle>Calculate Increment % · AY {year}</CardTitle>
-          <Button onClick={() => trigger.mutate({ assessment_year: year })} disabled={trigger.isPending}>
-            {trigger.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Play className="h-4 w-4 mr-2" />}
-            Run Calculation
-          </Button>
+        <CardHeader className="space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <CardTitle>Calculate Increment % · AY {year}</CardTitle>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-sm text-muted-foreground">Scope:</span>
+              <Select value={scope} onValueChange={(v) => setScope(v as 'all' | 'single')}>
+                <SelectTrigger className="w-[180px]"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Employees</SelectItem>
+                  <SelectItem value="single">Single Employee</SelectItem>
+                </SelectContent>
+              </Select>
+              <Button onClick={handleRun} disabled={runDisabled}>
+                {trigger.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Play className="h-4 w-4 mr-2" />}
+                Run Calculation
+              </Button>
+            </div>
+          </div>
+          {scope === 'single' && (
+            <div className="w-full sm:w-[420px]">
+              <EmployeeCombobox
+                employees={employees}
+                value={selectedEmpId}
+                onChange={setSelectedEmpId}
+                placeholder="Select employee to calculate…"
+              />
+            </div>
+          )}
         </CardHeader>
         <CardContent>
           {isLoading ? (
             <Loader2 className="h-5 w-5 animate-spin" />
           ) : runs.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No runs yet. Click "Run Calculation" to start.</p>
+            <p className="text-sm text-muted-foreground">
+              No runs yet. Choose calculation scope and click "Run Calculation" to start.
+            </p>
           ) : (
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>Triggered At</TableHead>
+                  <TableHead>Scope</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Summary</TableHead>
                   <TableHead>Action</TableHead>
@@ -306,6 +399,7 @@ function CalculateIncrementTab({ year }: { year: string }) {
                 {runs.map((r) => (
                   <TableRow key={r.id} className={selectedRun === r.id ? 'bg-muted/40' : ''}>
                     <TableCell>{new Date(r.triggered_at).toLocaleString()}</TableCell>
+                    <TableCell>{renderScopeCell(r)}</TableCell>
                     <TableCell>
                       <Badge variant={r.status === 'completed' ? 'default' : r.status === 'failed' ? 'destructive' : 'secondary'}>
                         {r.status}
@@ -329,61 +423,88 @@ function CalculateIncrementTab({ year }: { year: string }) {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0">
             <CardTitle>Run Details</CardTitle>
-            <Button variant="outline" onClick={exportRun} disabled={!itemsData?.rows?.length}>
-              <FileSpreadsheet className="h-4 w-4 mr-2" />Export Excel
+            <Button variant="outline" onClick={exportRun} disabled={!itemsData?.rows?.length || exportQuery.isFetching}>
+              {exportQuery.isFetching
+                ? <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                : <FileSpreadsheet className="h-4 w-4 mr-2" />}
+              Export Excel
             </Button>
           </CardHeader>
           <CardContent>
+            {itemsLoading ? (
+              <Loader2 className="h-5 w-5 animate-spin" />
+            ) : (
+            <>
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>Employee</TableHead>
+                  <TableHead>Employee Code</TableHead>
                   <TableHead>PMS Score</TableHead>
+                  <TableHead>Rating Band</TableHead>
                   <TableHead>Slab %</TableHead>
                   <TableHead>Eligibility</TableHead>
+                  <TableHead>Ineligibility Reason</TableHead>
                   <TableHead>Method</TableHead>
                   <TableHead>Eligible %</TableHead>
-                  <TableHead>Current</TableHead>
-                  <TableHead>Increment</TableHead>
-                  <TableHead>Revised</TableHead>
-                  <TableHead>Reason</TableHead>
+                  <TableHead>Current Salary</TableHead>
+                  <TableHead>Increment Amount</TableHead>
+                  <TableHead>Revised Salary</TableHead>
                   <TableHead>Conf.Inc?</TableHead>
-                  <TableHead>Conf.Date</TableHead>
-                  <TableHead>Period Covered</TableHead>
-                  <TableHead>Balance</TableHead>
-                  <TableHead>Carry Fwd</TableHead>
-                  <TableHead>Final Months</TableHead>
-                  <TableHead>Treatment</TableHead>
+                  <TableHead>Final Eligible Months</TableHead>
+                  <TableHead>Treatment Applied</TableHead>
+                  <TableHead>Remarks</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {(itemsData?.rows ?? []).map((r: any) => (
                   <TableRow key={r.id}>
                     <TableCell>{r.employee?.full_name ?? r.employee_id}</TableCell>
+                    <TableCell className="text-xs text-muted-foreground">{r.employee?.employee_code ?? '—'}</TableCell>
                     <TableCell>{r.pms_score ?? '—'}</TableCell>
+                    <TableCell>{r.rating_band ?? '—'}</TableCell>
                     <TableCell>{r.slab_percent ?? '—'}%</TableCell>
                     <TableCell>
                       <Badge variant={r.eligibility_status === 'eligible' ? 'default' : 'destructive'}>
                         {r.eligibility_status}
                       </Badge>
                     </TableCell>
+                    <TableCell className="text-xs text-muted-foreground max-w-[200px] truncate" title={r.ineligibility_reason ?? ''}>
+                      {r.ineligibility_reason ?? '—'}
+                    </TableCell>
                     <TableCell>{r.method_used ?? '—'}</TableCell>
                     <TableCell>{r.eligible_percent ?? '—'}%</TableCell>
                     <TableCell>{r.current_salary ?? '—'}</TableCell>
                     <TableCell>{r.increment_amount ?? '—'}</TableCell>
                     <TableCell>{r.revised_salary ?? '—'}</TableCell>
-                    <TableCell className="text-xs text-muted-foreground">{r.ineligibility_reason ?? ''}</TableCell>
                     <TableCell>{r.confirmation_granted ? <Badge variant="secondary">Yes</Badge> : '—'}</TableCell>
-                    <TableCell className="text-xs">{r.confirmation_effective_date ?? '—'}</TableCell>
-                    <TableCell>{r.period_covered_months ?? '—'}</TableCell>
-                    <TableCell>{r.balance_eligible_months ?? '—'}</TableCell>
-                    <TableCell>{r.carry_forward_months ?? '—'}</TableCell>
                     <TableCell>{r.final_eligible_months ?? '—'}</TableCell>
                     <TableCell className="text-xs">{r.confirmation_treatment ?? '—'}</TableCell>
+                    <TableCell className="text-xs text-muted-foreground max-w-[200px] truncate" title={r.remarks ?? ''}>
+                      {r.remarks ?? '—'}
+                    </TableCell>
                   </TableRow>
                 ))}
+                {(itemsData?.rows ?? []).length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={16} className="text-center text-muted-foreground py-8">
+                      No items for this run.
+                    </TableCell>
+                  </TableRow>
+                )}
               </TableBody>
             </Table>
+            <div className="flex items-center justify-between mt-4">
+              <div className="text-sm text-muted-foreground">
+                Page {page + 1} of {totalPages} · {itemsData?.total ?? 0} total
+              </div>
+              <div className="flex gap-2">
+                <Button variant="outline" size="sm" disabled={page === 0} onClick={() => setPage(page - 1)}>Previous</Button>
+                <Button variant="outline" size="sm" disabled={page + 1 >= totalPages} onClick={() => setPage(page + 1)}>Next</Button>
+              </div>
+            </div>
+            </>
+            )}
           </CardContent>
         </Card>
       )}
