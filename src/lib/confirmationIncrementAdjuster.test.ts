@@ -20,6 +20,62 @@ function base(over: Partial<AdjusterInput> = {}): AdjusterInput {
 }
 
 describe('adjustConfirmationIncrement', () => {
+  describe('transition gate (RCA)', () => {
+    it('skips adjustment when pre-status maps to a transition NOT in the applicability list', () => {
+      const r = adjustConfirmationIncrement(
+        base({
+          rule: {
+            treatment: 'adjust_covered_period',
+            applicableTransitions: ['trainee_to_confirmed'],
+          },
+          preConfirmationStatus: 'Probation',
+        }),
+      );
+      expect(r.treatmentApplied).toBe('ignore');
+      expect(r.adjustmentReason).toMatch(/not in rule applicability/i);
+      expect(r.finalEligibleMonths).toBe(12);
+    });
+
+    it('skips with "data gap" reason when pre-status is missing entirely', () => {
+      const r = adjustConfirmationIncrement(
+        base({
+          rule: {
+            treatment: 'adjust_covered_period',
+            applicableTransitions: ['trainee_to_confirmed'],
+          },
+          preConfirmationStatus: null,
+        }),
+      );
+      expect(r.treatmentApplied).toBe('ignore');
+      // Either "not mapped" or "data gap" — the contract is: do NOT apply.
+      expect(r.finalEligibleMonths).toBe(12);
+    });
+
+    it('applies treatment when transition matches the allow-list', () => {
+      const r = adjustConfirmationIncrement(
+        base({
+          rule: {
+            treatment: 'adjust_covered_period',
+            applicableTransitions: ['trainee_to_confirmed'],
+          },
+          preConfirmationStatus: 'Trainee',
+        }),
+      );
+      expect(r.treatmentApplied).toBe('adjust_covered_period');
+      expect(r.periodCoveredMonths).toBe(7);
+    });
+
+    it('legacy rule (no applicableTransitions) → backward-compatible (no gate)', () => {
+      const r = adjustConfirmationIncrement(
+        base({
+          rule: { treatment: 'adjust_covered_period' },
+          preConfirmationStatus: null,
+        }),
+      );
+      expect(r.treatmentApplied).toBe('adjust_covered_period');
+    });
+  });
+
   it('Scenario 1: AY 2025-26 — Dec 2025 confirmation increment leaves 6m balance', () => {
     const r = adjustConfirmationIncrement(base());
     // Dec-2025 → Jul-2026 = 7 months covered; balance = 12 - 7 = 5
