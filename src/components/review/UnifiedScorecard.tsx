@@ -20,7 +20,7 @@ import { ManagerDailyOverrideEditor, calculateOverriddenScore } from '@/componen
 import { ReviewLevelOverrideEditor, calculateOverriddenScore as calculateReviewerOverriddenScore } from '@/components/review/ReviewLevelOverrideEditor';
 import { useManagerSubPeriodOverride } from '@/hooks/useManagerSubPeriodOverride';
 import { useReviewerSubPeriodOverride } from '@/hooks/useReviewerSubPeriodOverride';
-import { QualitativeOption } from '@/lib/qualitativeUom';
+import { QualitativeOption, labelToRating, getQualitativeAchievedLabel } from '@/lib/qualitativeUom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useKpiSorting } from '@/hooks/useKpiSorting';
 import { ReviewPanelSkeleton } from '@/components/ui/LoadingSkeletons';
