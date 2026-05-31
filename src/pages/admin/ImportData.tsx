@@ -156,6 +156,7 @@ interface EmployeeImportRow {
   employeeStatus?: string;
   groupDoj?: string; // ISO yyyy-MM-dd (normalised)
   doj?: string; // ISO yyyy-MM-dd (normalised)
+  confirmationDate?: string; // ISO yyyy-MM-dd (normalised)
 }
 
 // Parse Active/Inactive status cell into a boolean (or undefined if empty/unset).
