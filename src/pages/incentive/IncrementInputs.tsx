@@ -467,6 +467,7 @@ function CalculateIncrementTab({ year }: { year: string }) {
               <TableHead>Conf.Inc?</TableHead>
               <TableHead>Final Eligible Months</TableHead>
               <TableHead>Treatment Applied</TableHead>
+              <TableHead>Transition</TableHead>
               <TableHead>Remarks</TableHead>
               <TableHead className="text-right">Actions</TableHead>
             </TableRow>
