@@ -288,9 +288,7 @@ const App = () => (
                   </ProtectedRoute>
                 } />
               <Route path="/admin/module-hub" element={
-                <ProtectedRoute allowedRoles={['admin']}>
-                  <Suspense fallback={<PageFallback />}><ModuleHubSettings /></Suspense>
-                </ProtectedRoute>
+                <Navigate to="/admin/settings?section=module-hub" replace />
               } />
                 <Route path="/admin/settings" element={
                   <ProtectedRoute allowedRoles={['admin']} menuKey="admin-settings">

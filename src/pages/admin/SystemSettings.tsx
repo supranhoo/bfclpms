@@ -27,6 +27,7 @@ import { ReportBuilderTab } from '@/components/admin/ReportBuilderTab';
 import { UploadSettingsTab } from '@/components/admin/UploadSettingsTab';
 import { OrgKpiGovernanceSettings } from '@/components/admin/OrgKpiGovernanceSettings';
 import { FeatureFlagsTab } from '@/components/admin/FeatureFlagsTab';
+import ModuleHubSettings from '@/pages/admin/ModuleHubSettings';
 import { IncrementEligibilitySection } from '@/components/admin/scoring/IncrementEligibilitySection';
 import { AnnualScoreCalculationSection } from '@/components/admin/scoring/AnnualScoreCalculationSection';
 import { IncrementMethodSection } from '@/components/admin/scoring/IncrementMethodSection';
@@ -64,6 +65,7 @@ const SETTINGS_SECTIONS = [
   { key: 'backups', label: 'Backups', icon: Database },
   { key: 'data-repair', label: 'Data Repair', icon: Undo2 },
   { key: 'feature-flags', label: 'Feature Flags', icon: Flag },
+  { key: 'module-hub', label: 'Module Hub', icon: LayoutGrid },
 ] as const;
 
 type SectionKey = typeof SETTINGS_SECTIONS[number]['key'];
@@ -698,6 +700,8 @@ export default function SystemSettings() {
         return <DataRepairTab />;
       case 'feature-flags':
         return <FeatureFlagsTab />;
+      case 'module-hub':
+        return <ModuleHubSettings />;
       case 'workflow':
         return <WorkflowConfigPage />;
       case 'organization':
