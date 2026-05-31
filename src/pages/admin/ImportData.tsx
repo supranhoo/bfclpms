@@ -1485,6 +1485,7 @@ export default function ImportData() {
             portal_access: hasPortalAccess,
             group_doj: row.groupDoj && row.groupDoj !== 'INVALID' ? row.groupDoj : undefined,
             doj: row.doj && row.doj !== 'INVALID' ? row.doj : undefined,
+            confirmation_date: row.confirmationDate && row.confirmationDate !== 'INVALID' ? row.confirmationDate : undefined,
             ...(() => {
               const s = parseEmployeeStatus(row.employeeStatus);
               return s === true || s === false ? { is_active: s } : {};
