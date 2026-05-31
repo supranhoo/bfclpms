@@ -692,10 +692,13 @@ Deno.serve(async (req) => {
         }
 
         if (!resolvedCfg) {
-          // No method config matches this employee's scope. Surface as
-          // 'no_score' with a precise remark, and skip slab/method math.
-          eligibility = 'no_score';
-          reason = 'No increment method configured for employee scope';
+          // No method config matches this employee's scope. Skip slab/method
+          // math. Preserve any pre-existing ineligibility reason; only
+          // override the default 'eligible' state.
+          if (eligibility === 'eligible') {
+            eligibility = 'no_score';
+            reason = 'No increment method configured for employee scope';
+          }
           countNoMethodScope++;
         } else if (pmsScore === null) {
           if (eligibility === 'eligible') {
