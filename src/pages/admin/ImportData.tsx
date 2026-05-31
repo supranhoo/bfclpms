@@ -756,6 +756,8 @@ export default function ImportData() {
     const gdojNorm = normalizeDateCell(gdojRaw);
     const dojRaw = getRaw(['doj', 'dateOfJoining', 'date_of_joining', 'joiningDate', 'joining_date']);
     const dojNorm = normalizeDateCell(dojRaw);
+    const confDateRaw = getRaw(['confirmationDate', 'confirmation_date', 'confirmDate', 'confirm_date', 'dateOfConfirmation', 'date_of_confirmation']);
+    const confDateNorm = normalizeDateCell(confDateRaw);
 
     return {
       employeeCode: getValue(['employeeCode', 'employeecode', 'employee_code', 'empCode', 'empcode', 'emp_code', 'newCode', 'newcode', 'new_code', 'code', 'id', 'empId', 'empid', 'emp_id']),
@@ -778,6 +780,7 @@ export default function ImportData() {
       employeeStatus: getValue(['employeeStatus', 'employee_status', 'status', 'active', 'isActive', 'is_active']),
       groupDoj: gdojNorm === 'INVALID' ? 'INVALID' : (gdojNorm || undefined),
       doj: dojNorm === 'INVALID' ? 'INVALID' : (dojNorm || undefined),
+      confirmationDate: confDateNorm === 'INVALID' ? 'INVALID' : (confDateNorm || undefined),
     };
   };
 
