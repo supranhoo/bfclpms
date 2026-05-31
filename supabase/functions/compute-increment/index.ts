@@ -300,7 +300,17 @@ Deno.serve(async (req) => {
         scoresByEmp.get(r.employee_id)!.push({ score: r.overall_score, month: periodMonth.month });
       });
 
-      const validationDate = new Date(`${endYear}-06-30`);
+      // Resolve service-anchor date per General Eligibility config.
+      // Mirrors src/lib/serviceAnchorDate.ts — keep in sync.
+      const anchorMode: 'run_date' | 'ay_end' | 'custom' = (ge?.service_as_on_mode as any) ?? 'ay_end';
+      let validationDate: Date;
+      if (anchorMode === 'run_date') {
+        validationDate = new Date();
+      } else if (anchorMode === 'custom' && ge?.service_as_on_date) {
+        validationDate = new Date(ge.service_as_on_date);
+      } else {
+        validationDate = new Date(`${endYear}-06-30`);
+      }
       const items: any[] = [];
       const adjustmentRows: any[] = [];
       let countEligible = 0, countIneligible = 0, countExcluded = 0, countNoScore = 0;

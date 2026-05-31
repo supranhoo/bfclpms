@@ -1,111 +1,61 @@
-
 ## Goal
-Prevent duplicate increment benefits when an employee already received a salary revision on confirmation from Trainee. Calculate only the **balance eligible period** at the annual increment cycle. Build as a **configuration-driven rule engine** (no hardcoded trainee logic), scoped by Company / Category / Level / Assessment Year.
+Let Admin/HR choose the reference date used to evaluate **Minimum Service (months)** on the General Eligibility screen, instead of implicitly using "today" or run-time.
+
+## Assumptions
+- Today, `min_service_months` is compared against tenure computed at the moment the increment is run (implicit "today").
+- Business wants a fixed cutoff per Assessment Year (e.g. service computed as of 31-Mar-2026) so reruns are deterministic and auditable.
+- Anchor applies to the whole AY config row, not per-employee.
 
 ## Risk & Impact Report
-- **Data**: Adds new employee fields (confirmation date, increment-on-confirmation flag, effective date, previous status). Additive, nullable, no historical breakage.
-- **Workflow**: Affects only increment computation. Existing eligibility, slab, and method logic untouched — adjustment runs as a pre-step modifier on `eligible_months`.
-- **UI/UX**: One new tab under System Settings → Increment ("Confirmation Adjustment"). One new section on Employee Profile (Employment Lifecycle). Increment report gets 6 new columns.
-- **Regression**: Low. When config = "Ignore Confirmation Increment" (the default seed), behavior is identical to today.
-- **Scalability**: Adjustment is per-employee, O(1) lookup against config table. Report columns reuse existing pagination.
-- **Mitigation**: Feature is opt-in per scope. Pure function with full unit-test matrix covering all 4 treatments × the 3 user-supplied scenarios.
+- **Data:** Additive columns on `general_eligibility` (`service_as_on_mode`, `service_as_on_date`). No backfill needed; null = legacy "run date" behavior.
+- **Workflow:** `compute-increment` tenure calculation switches to the resolved anchor date when set. Existing AY rows without the field keep current behavior (backward compatible).
+- **UI/UX:** One new inline control next to the existing months input. No layout reflow on mobile (wraps below).
+- **Regression:** Low. Guarded by mode flag; default = `run_date` preserves today's math.
+- **Scalability:** No new queries, no new tables.
+- **Rollback:** Drop the two columns; code falls back to run date.
 
-## Schema Changes (additive)
+## UI Changes (Configuration card → "Minimum Service" row)
 
-**`employees` — new nullable columns**
-- `previous_employment_status` text
-- `confirmation_date` date
-- `confirmation_increment_granted` boolean default false
-- `confirmation_increment_effective_date` date
-(DOJ and current employment status already exist.)
+Location: `src/pages/increment/GeneralEligibility.tsx`, replacing the current single inline months input.
 
-**New table `confirmation_increment_rules`** — scope-keyed rule config
-- `assessment_year` text (required)
-- `company_id`, `category_id`, `level_id` (nullable → wildcard match)
-- `treatment` enum: `ignore` | `adjust_covered_period` | `shift_next_cycle` | `carry_forward_uncovered`
-- `version`, `status` (draft/active/archived), `created_by`, audit timestamps
-- Unique active row per (AY, company, category, level)
-- Standard GRANTs + RLS (Admin write, authenticated read)
-
-**New table `confirmation_increment_adjustments`** — immutable audit per run
-- `employee_id`, `assessment_year`, `run_id`
-- `treatment_applied`, `period_covered_months`, `balance_eligible_months`, `carry_forward_months`, `final_eligible_months`
-- `inputs_snapshot` jsonb, `created_at`
-- RLS: Admin + Management read, service_role write
-
-## Rule Engine (pure module)
-**`src/lib/confirmationIncrementAdjuster.ts`**
-
-Input: `{ employee, assessmentCycleStart, assessmentCycleEnd, eligibilityCutoff, rule }`
-Output: `{ treatment, periodCoveredMonths, balanceEligibleMonths, carryForwardMonths, finalEligibleMonths, adjustmentReason }`
-
-Treatment behavior:
-- **ignore** → finalEligible = naive months (today's behavior)
-- **adjust_covered_period** → subtract months from DOJ→confirmation increment date that fall inside the assessment cycle
-- **shift_next_cycle** → finalEligible = 0 this AY; flag employee for normal cycle next AY
-- **carry_forward_uncovered** → current-cycle balance + previous-cycle uncovered tail (read from prior `confirmation_increment_adjustments` row)
-
-All month math via existing fiscal helpers; no Date math inline.
-
-## Integration Points
-1. `compute-increment` edge function — resolve rule, call adjuster, persist adjustment row, pass `finalEligibleMonths` into existing slab/method calc.
-2. `useIncrementInputs` — surface adjustment output for the report.
-3. Increment report — add 6 columns listed in spec (Confirmation Granted, Date, Period Covered, Balance, Carry Forward, Final Months, Treatment Applied).
-
-## UI Changes
-
-### A) System Settings → Increment → new 5th tab "Confirmation Adjustment"
 ```text
-┌─ System Settings ─────────────────────────────────────────────┐
-│ [Eligibility] [Method] [General] [Slabs] [Confirmation Adj.]  │ ← NEW tab
-├───────────────────────────────────────────────────────────────┤
-│ Assessment Year: [2025-26 ▾]   Scope: Company/Cat/Level ▾     │
-│                                                               │
-│ Treatment for confirmation increments:                        │
-│  ( ) Ignore Confirmation Increment            (default)       │
-│  ( ) Adjust Covered Period                                    │
-│  ( ) Shift Employee to Next Normal Cycle                      │
-│  ( ) Carry Forward Uncovered Period                           │
-│                                                               │
-│ Notes: [____________________________________________]         │
-│                                                               │
-│ Version History (collapsible)                                 │
-│ [Copy from previous year]            [Save as new version]    │
-└───────────────────────────────────────────────────────────────┘
+Minimum Service   [ 12 ] months   evaluated as of  ( ) Run date
+                                                   ( ) AY end date (31-Mar-2026)
+                                                   (•) Custom date  [ 31-Mar-2026 📅 ]
 ```
 
-### B) Employee Profile → new card "Employment Lifecycle"
-```text
-┌─ Employment Lifecycle ─────────────────────────┐
-│ Previous Status   : Trainee                    │
-│ Current Status    : Confirmed                  │
-│ Date of Joining   : 01-Dec-2024                │
-│ Confirmation Date : 01-Dec-2025                │
-│ Conf. Increment   : ☑ Granted                  │
-│ Effective Date    : 01-Dec-2025                │
-└────────────────────────────────────────────────┘
-```
+- **Months input** — unchanged (number, min 0).
+- **"Evaluated as of" radio group** — three options:
+  1. `Run date` (default, legacy behavior — tenure computed when increment is calculated).
+  2. `AY end date` — auto-resolves to 31-Mar of the AY's closing year (e.g. AY 2025-26 → 31-Mar-2026). Read-only helper text shows the resolved date.
+  3. `Custom date` — enables a date picker (shadcn `Calendar` in a `Popover`, same pattern as other date pickers in the codebase).
+- **Validation:** if `Custom date` selected, date is required and must fall within the AY window (1-Apr-startYear … 31-Mar-endYear); otherwise Save is disabled with inline error.
+- **Version History card** — append the anchor summary: `…· 0 mo as of 31-Mar-2026`.
+- **Responsive:** controls wrap to a new line below the months input under `md` breakpoint (current row already uses `flex items-center gap-3` — switch to `flex-wrap`).
 
-### C) Increment Inputs report — 6 appended columns
-```text
-… | Conf.Inc? | Conf.Date | Period Covered | Balance | Carry Fwd | Final Months | Treatment
-```
-Existing pagination unchanged.
+No other pages change visually.
+
+## Implementation Steps
+
+1. **Schema migration** — add to `public.general_eligibility`:
+   - `service_as_on_mode text not null default 'run_date'` (check in `'run_date','ay_end','custom'`)
+   - `service_as_on_date date` (nullable; required only when mode = `custom`, enforced by trigger to keep CHECK immutable per project standards).
+2. **Hook (`useGeneralEligibility.ts`)** — extend insert/select payload with the two new fields; bump version on change.
+3. **UI (`GeneralEligibility.tsx`)** — add `RadioGroup` + conditional date picker, helper text for resolved AY-end date, wrap layout.
+4. **Resolver util (`src/lib/serviceAnchorDate.ts`, new)** — pure function `resolveServiceAnchor({mode, date, assessmentYear, runDate}) → Date`. Single source of truth, reused by edge function and UI preview.
+5. **Edge function (`compute-increment`)** — replace `new Date()` used for tenure with `resolveServiceAnchor(...)` from the AY's eligibility row.
+6. **Version History line** — render anchor summary.
 
 ## Tests
-- `confirmationIncrementAdjuster.test.ts` — all 3 user scenarios + 4 treatments + edge cases (no confirmation date, confirmation outside cycle, missing rule → default ignore).
-- `rule resolution` test — scope cascade (Level → Category → Company → Global).
-- Regression test in `bugBountyFixes.test.ts` locking Scenario 1 / 2 / 3 outputs.
+- `serviceAnchorDate.test.ts` — covers all 3 modes, AY parsing, custom-date validation, fallback when row missing.
+- `GeneralEligibility` form test — radio toggles enable/disable date picker; invalid custom date blocks Save.
+- `compute-increment` regression mock — same employee, same AY, two different anchor dates → different `eligible_months`.
 
-## SSOT Updates
-- `DOCUMENTATION.md` → new section "Confirmation Increment Adjustment Engine" with treatment matrix.
-- `POLICY.md` → policy entry + Version History append.
-- New memory file `mem/features/increment/confirmation-adjustment-engine`.
+## SSOT updates
+- `DOCUMENTATION.md` → General Eligibility section: document the three anchor modes and resolution rules.
+- `POLICY.md` → "Minimum Service Evaluation Date" policy entry; default = run date; AY-end recommended for audit determinism.
+- New memory: `mem://features/admin/general-eligibility-service-anchor`.
 
-## Rollout
-1. Migration (additive cols + 2 tables + RLS + GRANTs) — reversible.
-2. Default-seed `treatment = 'ignore'` for current AY → zero behavior change on deploy.
-3. Admin opts in per scope when ready.
-
-## Not Applicable
-- Auth / payment / storage changes.
+## Post-implementation notes
+- Default `run_date` keeps every existing AY row behaving exactly as before — zero-touch upgrade.
+- Admins opting into `ay_end` or `custom` get deterministic, replayable eligibility decisions.

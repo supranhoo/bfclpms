@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import type { ServiceAsOnMode } from '@/lib/serviceAnchorDate';
 
 export interface GeneralEligibilityConfigRow {
   id: string;
@@ -9,6 +10,8 @@ export interface GeneralEligibilityConfigRow {
   employment_statuses: string[];
   level_ids: string[];
   min_service_months: number;
+  service_as_on_mode: ServiceAsOnMode;
+  service_as_on_date: string | null;
   status: 'draft' | 'approved' | 'archived';
   version: number;
   copied_from_id: string | null;
@@ -62,6 +65,8 @@ export function useSaveGeneralEligibility() {
       employment_statuses: string[];
       level_ids: string[];
       min_service_months: number;
+      service_as_on_mode: ServiceAsOnMode;
+      service_as_on_date: string | null;
       previousId?: string | null;
     }) => {
       const { data: userData } = await supabase.auth.getUser();
@@ -93,6 +98,8 @@ export function useSaveGeneralEligibility() {
           employment_statuses: input.employment_statuses,
           level_ids: input.level_ids,
           min_service_months: input.min_service_months,
+          service_as_on_mode: input.service_as_on_mode,
+          service_as_on_date: input.service_as_on_mode === 'custom' ? input.service_as_on_date : null,
           status: 'approved',
           version: nextVersion,
           copied_from_id: input.previousId ?? null,

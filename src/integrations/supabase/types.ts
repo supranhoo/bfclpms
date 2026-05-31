@@ -1683,6 +1683,8 @@ export type Database = {
           id: string
           level_ids: string[]
           min_service_months: number
+          service_as_on_date: string | null
+          service_as_on_mode: string
           status: string
           updated_at: string
           version: number
@@ -1697,6 +1699,8 @@ export type Database = {
           id?: string
           level_ids?: string[]
           min_service_months?: number
+          service_as_on_date?: string | null
+          service_as_on_mode?: string
           status?: string
           updated_at?: string
           version?: number
@@ -1711,6 +1715,8 @@ export type Database = {
           id?: string
           level_ids?: string[]
           min_service_months?: number
+          service_as_on_date?: string | null
+          service_as_on_mode?: string
           status?: string
           updated_at?: string
           version?: number
