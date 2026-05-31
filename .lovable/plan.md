@@ -1,88 +1,122 @@
-# Increment Slabs — Compact Row + View/Edit Modal
+# RCA & Fix — "View Only" badge on closed months despite Legacy/Global Lock = Open
 
-## Assumptions
-- Keep current DB schema, hooks, matcher, and edge function untouched. UI-only change.
-- "View / Edit" modal is the single editor. Inline grid editing is removed to eliminate horizontal scroll.
-- Future scope/criteria columns (e.g. Employment Status, Service Eligibility) should appear in the modal automatically by driving the form from a config array.
+## What you're seeing
+- **Image 1:** KPI of Anil Kumar Pathak for Sep 2025 shows `Approved · View Only` and Admin Data Entry won't accept score changes.
+- **Image 2:** Review Period Governance for Sep 2025 shows `Legacy Lock 🔓 Open`, `Global Lock None`, but `Current Stage = Closed`.
+
+The two screens look contradictory — but they're reading **three different** lock systems.
+
+## Root Cause
+
+There are three independent "lock" concepts in the system:
+
+| # | Concept | Source field | Shown in Governance UI as |
+|---|---|---|---|
+| 1 | Legacy lock | `review_periods.is_locked` (boolean) | "Legacy Lock 🔓 / 🔒" |
+| 2 | Global / role / dept / employee lock | rows in `review_period_locks` | "Global Lock: None / Active" |
+| 3 | **Stage machine** | `review_periods.current_stage` | "Current Stage: Closed" (not surfaced as a lock) |
+
+The "View Only" badge and the Admin Data Entry write-block both come from one RPC: `public.check_review_period_permission`. That RPC's logic order is:
+
+```text
+1. IF current_stage = 'closed'  → return view_only=true / edit_scores=false   ← short-circuits EVERYONE
+2. IF user is admin            → return default (open)                        ← never reached when closed
+3. Check employee / dept / role / global locks (review_period_locks)
+```
+
+Because Sep 2025 was advanced to `current_stage = 'closed'` (visible in the Stage Progress strip in image 2), step 1 fires and returns `view_only = true` for **every user including admins**, regardless of Legacy Lock or Global Lock being open. The DB trigger `prevent_locked_submission_updates` has the same ordering bug — it correctly bypasses admins for the Legacy lock, then re-calls the broken RPC and re-blocks admins.
+
+So:
+- **Legacy Lock open + Global Lock none + Stage = Closed → admin still blocked.** Working as coded, but the code is wrong: admin should be exempt from the stage gate just like they are exempt from the legacy lock.
+- The Governance Overview screen also hides the real culprit: `Current Stage = Closed` is shown as a small chip in "Current Stage" but not in the "Locks" row, so an admin reasonably concludes nothing is locked.
+
+Evidence:
+- `src/components/review/KpiHeaderSection.tsx:68-135` renders the View Only badge purely from `useReviewPeriodPermissions(...).view_only` — no admin override.
+- `src/hooks/useReviewPeriodPermissions.ts:43-87` calls the RPC for every action; no admin short-circuit on the client.
+- `supabase/migrations/20260307072435_*.sql` `check_review_period_permission`: `IF v_current_stage = 'closed'` block runs **before** the admin role check.
+- `supabase/migrations/20260314145515_*.sql` `prevent_locked_submission_updates`: bypasses legacy lock for admin, then re-calls the same RPC.
 
 ## Risk & Impact Report
-- **Data Impact:** None — no schema or RLS change.
-- **Workflow Impact:** None — same save/delete/copy-year flows; only the editor surface changes.
-- **UI/UX Impact:** Removes horizontal scroll. Row becomes a summary; full configuration moves to modal. Matches preferred Option 1 in the requirement.
-- **Regression Risk:** Low. `useUpsertSlab`, `slabMatcher`, `compute-increment` edge function unchanged. Validation logic (range, %, duplicate scope) is moved verbatim from inline-Save into modal-Save.
-- **Scalability:** Modal is rendered from a `SLAB_DIMENSIONS` config array — adding a new scope dimension only requires appending to the config + (eventually) a column on the table. No layout work.
-- **Mitigation:** Keep `slabMatcher.test.ts` green; add modal tests for validation; preserve specificity badge + scope summary on the row.
 
-## UI Changes
+- **Data Impact:** None. RPC logic change only; no schema, no historical row mutation.
+- **Workflow Impact:** Admins regain the ability to edit/score KRAs in `closed` periods. Non-admin users remain fully blocked exactly as today.
+- **Regression Risk:** Low. Two surfaces use this RPC — Self/Manager/Approval screens (still blocked because they check role-specific actions like `submit_self_review`, which the admin role does not have via the role-locks path) and KpiHeaderSection/Admin Data Entry (intended target). The DB triggers fan in to the same RPC, so once the RPC is fixed the triggers automatically respect it.
+- **Security:** Admin already has full row-level UPDATE rights everywhere else; the closed-stage gate is purely a governance UX safety net, not a security boundary. Every admin edit on a closed period is still captured in the immutable audit log (`pms-audit-log` / `kpi_audit_logs`) and `final_score` immutability rules still apply (admin must explicitly Step Back from `approved` first if they want a *different* final value).
+- **Scalability:** Zero query cost change (one short branch moved).
+- **Mitigation:** Add a Governance Overview banner that clearly labels `Current Stage = Closed` as a third lock, and add an explicit "Closed period" warning inside the Admin Data Entry dialog so the admin acknowledges they are editing a closed month.
 
-Route: `/admin/increment/slabs`
+## Fix Plan
 
-**Row (no horizontal scroll, fits 929px viewport):**
-```text
-┌──────────────┬───────────┬────────────────────────────────────┬──────────┬─────────────────┐
-│ Rating Band  │ Increment │ Scope summary                      │ Specific.│ Actions         │
-├──────────────┼───────────┼────────────────────────────────────┼──────────┼─────────────────┤
-│ 4.75 → 5.00  │  12.00 %  │ BFCL · Steel · 2 BUs · Confirmed   │   4/6    │ 👁 View/Edit  🗑│
-│ 4.50 → 4.74  │  10.00 %  │ All employees                      │   0/6    │ 👁 View/Edit  🗑│
-└──────────────┴───────────┴────────────────────────────────────┴──────────┴─────────────────┘
+### 1. SQL migration — reorder the RPC
+
+Move the admin bypass to run **before** the `closed` short-circuit. Same shape as the legacy-lock trigger that already exempts admins.
+
+```sql
+CREATE OR REPLACE FUNCTION public.check_review_period_permission(
+  p_user_id uuid, p_period_name text, p_review_year int, p_action text
+) RETURNS boolean
+LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+  v_current_stage text;
+  v_user_roles text[];
+  v_default_value boolean := (p_action <> 'view_only');
+BEGIN
+  SELECT current_stage INTO v_current_stage FROM review_periods
+   WHERE period_name = p_period_name AND review_year = p_review_year;
+
+  SELECT array_agg(role::text) INTO v_user_roles FROM user_roles WHERE user_id = p_user_id;
+
+  -- ① Admin bypass BEFORE stage gate (was step 2, now step 1)
+  IF 'admin' = ANY(COALESCE(v_user_roles, ARRAY[]::text[])) THEN
+    RETURN v_default_value;
+  END IF;
+
+  -- ② Closed-stage short-circuit for everyone else
+  IF v_current_stage = 'closed' THEN
+    RETURN (p_action = 'view_only');
+  END IF;
+
+  -- ③ employee / dept / role / global lock checks (unchanged)
+  ...
+END;
+$$;
 ```
-- Scope summary uses `describeScope()` (already exists) with the masters name resolver — shows real names, truncates with tooltip when long.
-- "Prorate on DOJ" shown as a small badge in the Increment cell when true (`12.00% · pro-rata`).
-- `+ Add Slab` button in the header opens the modal in create mode (no inline blank row).
 
-**Modal (`Dialog`, max-w-3xl, scroll-y):**
-```text
-┌─ Edit Slab ──────────────────────────────────────────── ✕ ─┐
-│ Rating Band                                                │
-│  Rating From [ 4.75 ]   Rating To [ 5.00 ]   Increment % [12]│
-│  [✓] Prorate on DOJ                                        │
-│                                                            │
-│ Scope (leave blank = applies to all)                       │
-│  Company         [ MultiSelect: BFCL, GHCL …          ▾ ] │
-│  Division        [ MultiSelect: Steel …               ▾ ] │
-│  Business Unit   [ MultiSelect: 2 selected            ▾ ] │
-│  Location        [ MultiSelect: All                   ▾ ] │
-│  Employee Cat.   [ MultiSelect: Confirmed, ESI        ▾ ] │
-│  Level           [ MultiSelect: L3, L4                ▾ ] │
-│                                                            │
-│ Remarks (optional)                                         │
-│  [ stored in extra_attributes.remarks                    ] │
-│                                                            │
-│ Specificity: 4/6   ·   Matches: Company, Division, BU, Cat │
-│                                                            │
-│                              [ Cancel ]   [ Save Slab ]    │
-└────────────────────────────────────────────────────────────┘
-```
-- Form fields generated from a single `SLAB_DIMENSIONS` config array → future dimensions appear automatically.
-- Validation on Save (same rules as today): `rating_to >= rating_from`, `0 ≤ % ≤ 100`, exact-scope duplicate check vs other rows in same AY → red toast on failure, modal stays open.
-- Delete stays on the row, gated by `ConfirmDestructiveDialog` (unchanged).
-- Historical rows: open the modal in read-only mode for archived AY (later — out of scope for this change; structure supports it).
+No grants change. No data backfill. Other functions (`prevent_locked_period_updates`, `prevent_locked_submission_updates`) automatically benefit because they fan into this RPC.
 
-## Implementation
-1. `src/pages/increment/IncrementSlabs.tsx` — rewrite page:
-   - Remove inline-edit drafts, sticky columns, `min-w-[1500px]` wrapper.
-   - Render compact 5-column table (Band / Increment / Scope / Specificity / Actions).
-   - `View/Edit` button opens new `SlabEditorDialog` with the row's data; `Add Slab` opens it in create mode.
-2. New `src/components/increment/SlabEditorDialog.tsx`:
-   - Props: `open`, `onOpenChange`, `slab | null` (null = create), `assessmentYear`, `existingSlabs` (for dup check), `masters`.
-   - Renders the rating block + a loop over `SLAB_DIMENSIONS` for scope multi-selects + remarks field + footer.
-   - Owns local draft state, validation, and calls `useUpsertSlab.mutateAsync` then closes on success.
-3. New `src/lib/slabDimensions.ts`:
-   - Exports `SLAB_DIMENSIONS` array describing each scope field (`key`, `label`, `mastersKey`, `icon`). Used by the dialog and by `describeScope` callers for naming consistency. Driving config = "future criteria column" extensibility.
-4. No changes to: `useIncrementSlabs`, `useIncrementEligibility`, `slabMatcher.ts`, `compute-increment` edge function, DB schema, RLS.
+### 2. Frontend — make the lock source explicit (no behaviour change for non-admin)
 
-## Tests
-- Keep `slabMatcher.test.ts` (10/10) untouched.
-- Add `src/components/increment/__tests__/SlabEditorDialog.test.tsx`:
-  - Renders all dimension fields from `SLAB_DIMENSIONS` (proves future-column auto-appear).
-  - Blocks save when `rating_to < rating_from`.
-  - Blocks save on exact-scope duplicate within the same AY.
-  - Calls `onUpsert` with the correct payload on valid Save.
+- `src/components/management/ReviewPeriodOverview.tsx`: add a third pill **"Stage Lock"** next to Legacy Lock / Global Lock that reads `period.current_stage === 'closed' ? 'Active (Closed)' : 'None'`. Solves the visual contradiction the user reported.
+- `src/components/review/KpiHeaderSection.tsx`: when `period.current_stage === 'closed'` AND user is admin, render an amber **"Closed period — admin override"** badge instead of the red "View Only" pill. Admins keep the visual cue that this is a sensitive edit.
+- `src/components/review/AdminDataEntryDialog.tsx` (or equivalent): when the period is closed, show an inline warning `"This month is Closed. Saving will modify a finalised period and will be recorded in the audit log."` with a "Proceed" confirmation before enabling Save. Reuses `ConfirmDestructiveDialog`.
 
-## Docs / Policy
-- `DOCUMENTATION.md` → Increment Slabs section: replace "inline-edit grid" with "compact row + View/Edit modal; all scope dimensions edited inside the modal; row shows scope summary and specificity."
-- `POLICY.md` → no change (matching/specificity rules unchanged).
-- Add Version History entry: "Increment Slabs editor moved from inline grid to modal for scalability of scope dimensions."
+### 3. "How to change the score of a closed month" — supported procedure
+
+After the fix, two equivalent admin paths exist; pick whichever matches the desired audit trail:
+
+1. **Quickest (single KPI):** open the KRA → click **Admin Data Entry** → acknowledge the "Closed period" warning → edit score → Save. Audit log captures `performed_by = admin`, `period_stage_at_edit = closed`.
+2. **Reopen the whole month (multiple KPIs):** Review Period Governance → Stages → **Step Back** from `Closed` to `Approval` (or earlier). Edit normally. Re-advance back to `Closed` when done. This is the right path when many KPIs need editing or when `final_score` itself needs to change (Step Back also unfreezes `final_score`).
+
+We will surface both options inline in the new "Stage Lock" pill tooltip so admins know which to use.
+
+## Implementation Order
+
+1. New migration `…_admin_bypass_before_closed_stage.sql` updating `check_review_period_permission` (logic-only, idempotent `CREATE OR REPLACE`).
+2. Frontend updates:
+   - `ReviewPeriodOverview.tsx` — add Stage Lock pill.
+   - `KpiHeaderSection.tsx` — render amber "Admin override" for admins on closed periods.
+   - Admin Data Entry dialog — closed-period confirmation step.
+3. Unit tests:
+   - `src/lib/permissions/__tests__/checkReviewPeriodPermission.test.ts` — mock RPC contract: admin returns `view_only=false` and `edit_scores=true` on closed period; non-admin still blocked.
+   - Component test: `KpiHeaderSection` renders "Admin override" pill for admin + closed, "View Only" for non-admin + closed, no pill when stage open.
+4. DOCUMENTATION.md: update Review Period Governance section with the three-lock model and the "edit closed month" procedure.
+5. POLICY.md: clarify "Admins may edit any period at any stage; every closed-period edit is captured in the audit log; `final_score` immutability still requires explicit Step Back."
+6. Update memory `mem://features/admin/review-period-governance-system` with the new three-lock model + admin-bypass-before-stage-gate rule.
 
 ## Rollback
-Revert `IncrementSlabs.tsx`, delete `SlabEditorDialog.tsx` and `slabDimensions.ts`. No data migration to undo.
+Single SQL function — revert with `CREATE OR REPLACE` restoring the original order. Frontend pill is additive; remove file/lines if not wanted.
+
+## Tests / Verification
+- Manual: log in as admin → Sep 2025 → Anil Kumar Pathak's KPI → confirm no "View Only" pill, Admin Data Entry accepts a new score, audit log entry appears.
+- Manual: log in as employee/manager → same KPI → still "View Only", save still blocked.
+- Automated: vitest unit test against mocked RPC + KpiHeaderSection role matrix.
