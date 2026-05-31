@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { fetchAllPaged } from '@/lib/fetchAll';
 
 export interface IncrementRunRow {
   id: string;
@@ -76,9 +77,12 @@ export function useTriggerIncrementRun() {
   const qc = useQueryClient();
   const { toast } = useToast();
   return useMutation({
-    mutationFn: async ({ assessment_year }: { assessment_year: string }) => {
+    mutationFn: async ({
+      assessment_year,
+      employee_id,
+    }: { assessment_year: string; employee_id?: string | null }) => {
       const { data, error } = await supabase.functions.invoke('compute-increment', {
-        body: { assessment_year },
+        body: { assessment_year, employee_id: employee_id ?? null },
       });
       if (error) throw error;
       return data;
@@ -93,5 +97,30 @@ export function useTriggerIncrementRun() {
         description: e?.message ?? 'Unknown error',
         variant: 'destructive',
       }),
+  });
+}
+
+/**
+ * Lazy-fetch ALL items for a run (paged), used by the Export Excel button so
+ * the export always contains the full run regardless of the currently visible
+ * page in the UI. Disabled by default; call `refetch()` on demand.
+ */
+export function useExportIncrementRunItems(runId: string | null) {
+  return useQuery({
+    queryKey: ['increment-run-items-export', runId],
+    enabled: false,
+    queryFn: async () => {
+      if (!runId) return [];
+      return fetchAllPaged<any>((from, to) =>
+        supabase
+          .from('increment_run_items' as any)
+          .select(
+            '*, employee:profiles!increment_run_items_employee_id_fkey(id, full_name, employee_id)',
+          )
+          .eq('run_id', runId)
+          .order('created_at', { ascending: true })
+          .range(from, to),
+      );
+    },
   });
 }
