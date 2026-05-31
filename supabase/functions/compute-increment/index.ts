@@ -68,12 +68,39 @@ function adjustConfirmationIncrement(input: {
   naiveEligibleMonths: number;
   previousCycleUncovered: number;
   treatment: ConfirmationTreatment;
+  applicableTransitions?: ConfirmationTransition[] | null;
+  preConfirmationStatus?: string | null;
 }) {
   const {
     confirmationGranted, confirmationEffective,
     cycleStart, cycleEnd, naiveEligibleMonths,
     previousCycleUncovered, treatment,
+    applicableTransitions, preConfirmationStatus,
   } = input;
+
+  // RCA: Transition gate. Confirmation Increment Adjustment must only fire
+  // when the employee's actual prior status maps to one of the configured
+  // applicable transitions. Missing history → skip with a clear reason (the
+  // engine must NEVER treat "currently Confirmed" as proof of any prior status).
+  const transitionKey = statusToTransition(preConfirmationStatus);
+  if (Array.isArray(applicableTransitions) && applicableTransitions.length > 0) {
+    if (!transitionKey || !applicableTransitions.includes(transitionKey)) {
+      return {
+        treatmentApplied: 'ignore' as ConfirmationTreatment,
+        periodCoveredMonths: 0,
+        balanceEligibleMonths: naiveEligibleMonths,
+        carryForwardMonths: 0,
+        finalEligibleMonths: naiveEligibleMonths,
+        adjustmentReason: transitionKey
+          ? `Transition ${TRANSITION_LABELS[transitionKey]} not in rule applicability list — adjustment skipped`
+          : preConfirmationStatus
+            ? `Pre-confirmation status "${preConfirmationStatus}" not mapped to a configured transition — adjustment skipped`
+            : 'Status history missing — adjustment skipped (data gap)',
+        transitionKey: transitionKey,
+        skipped: true as const,
+      };
+    }
+  }
 
   if (treatment === 'ignore' || !confirmationGranted || !confirmationEffective) {
     return {
@@ -85,6 +112,8 @@ function adjustConfirmationIncrement(input: {
       adjustmentReason: treatment === 'ignore'
         ? 'Policy: ignore confirmation increment'
         : 'No confirmation increment recorded',
+      transitionKey,
+      skipped: false as const,
     };
   }
 
@@ -105,6 +134,8 @@ function adjustConfirmationIncrement(input: {
         carryForwardMonths: 0,
         finalEligibleMonths: balance,
         adjustmentReason: `Subtracted ${covered} month(s) covered by confirmation increment effective ${confirmationEffective}`,
+        transitionKey,
+        skipped: false as const,
       };
     case 'shift_next_cycle':
       return {
@@ -114,6 +145,8 @@ function adjustConfirmationIncrement(input: {
         carryForwardMonths: 0,
         finalEligibleMonths: 0,
         adjustmentReason: 'Employee shifted to next normal cycle — no increment this AY',
+        transitionKey,
+        skipped: false as const,
       };
     case 'carry_forward_uncovered':
       return {
@@ -123,6 +156,8 @@ function adjustConfirmationIncrement(input: {
         carryForwardMonths: previousCycleUncovered,
         finalEligibleMonths: balance + previousCycleUncovered,
         adjustmentReason: `Balance ${balance}m + carry-forward ${previousCycleUncovered}m from prior cycle`,
+        transitionKey,
+        skipped: false as const,
       };
     default:
       return {
@@ -132,6 +167,8 @@ function adjustConfirmationIncrement(input: {
         carryForwardMonths: 0,
         finalEligibleMonths: balance,
         adjustmentReason: 'Unknown treatment — defaulted to balance',
+        transitionKey,
+        skipped: false as const,
       };
   }
 }
