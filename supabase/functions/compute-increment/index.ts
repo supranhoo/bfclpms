@@ -742,6 +742,22 @@ Deno.serve(async (req) => {
         const currentSalary = input?.current_salary ?? null;
         const monthsServed = p.doj ? monthsBetween(new Date(p.doj), validationDate) : 12;
 
+        // Cutoff-aware AY-bounded whole-month count. Applies to ALL methods.
+        // Drives Final Eligible Months, prorated-DOJ math, and custom-slab
+        // matching. Falls back to the continuous `monthsServed` when DOJ is
+        // absent.
+        const cutoffDayGlobal = Number((resolvedCfg as any)?.joining_month_cutoff_day ?? 15);
+        const ayStartGlobal = new Date(`${startYear}-07-01T00:00:00Z`);
+        const ayEndGlobal = new Date(`${endYear}-06-30T00:00:00Z`);
+        const ayMonths = p.doj
+          ? monthsServedInAY(new Date(p.doj), cutoffDayGlobal, ayStartGlobal, ayEndGlobal, validationDate)
+          : { months: Math.max(0, Math.min(12, Math.round(monthsServed))), decision: 'pre_ay' as const };
+        const cutoffDecisionNote =
+          ayMonths.decision === 'included' ? `Joining month counted (cutoff day ${cutoffDayGlobal})`
+          : ayMonths.decision === 'excluded' ? `Joining month excluded (cutoff day ${cutoffDayGlobal})`
+          : ayMonths.decision === 'pre_ay' ? `DOJ before AY — full period`
+          : `DOJ after AY — no months served`;
+
         // Eligibility evaluation. Criteria-exempt employees skip the
         // absent/LWP/disciplinary/training criteria block entirely.
         let eligibility: string = 'eligible';
@@ -818,7 +834,9 @@ Deno.serve(async (req) => {
         let revisedSalary: number | null = null;
 
         // Resolve confirmation-increment rule and run adjuster (pre-method step).
-        const naiveEligibleMonths = Math.max(0, Math.min(12, monthsServed));
+        // Use the cutoff-aware whole-month count so Final Eligible Months and
+        // downstream confirmation math line up with what admins configured.
+        const naiveEligibleMonths = ayMonths.months;
         const ruleRow = resolveConfirmationRuleRow(confRules, p);
         const treatment: ConfirmationTreatment =
           (ruleRow?.treatment as ConfirmationTreatment) ?? 'ignore';
@@ -896,20 +914,16 @@ Deno.serve(async (req) => {
             const effectiveMethod = slab.prorate_on_doj ? methodType : 'full';
             // Hand the adjuster's finalEligibleMonths to the method engine so
             // proration accounts for any confirmation-increment coverage.
-            let monthsForMethod = effectiveMethod === 'full' ? monthsServed : effectiveMonths;
+            let monthsForMethod = effectiveMethod === 'full' ? ayMonths.months : effectiveMonths;
             let proratedNote: string | undefined;
             if (effectiveMethod === 'prorated_doj' && p.doj) {
-              const cutoffDay = Number((resolvedCfg as any)?.joining_month_cutoff_day ?? 15);
-              const ayStart = new Date(`${startYear}-07-01T00:00:00Z`);
-              const ayEnd = new Date(`${endYear}-06-30T00:00:00Z`);
-              const r = monthsServedInAY(new Date(p.doj), cutoffDay, ayStart, ayEnd, validationDate);
               // Honour any confirmation-adjustment ceiling already applied.
-              monthsForMethod = Math.min(r.months, effectiveMonths);
-              proratedNote =
-                r.decision === 'included' ? `Joining month counted due to cutoff day ${cutoffDay}`
-                : r.decision === 'excluded' ? `Joining month excluded due to cutoff day ${cutoffDay}`
-                : r.decision === 'pre_ay' ? `DOJ before AY — full period`
-                : `DOJ after AY — no months served`;
+              monthsForMethod = Math.min(ayMonths.months, effectiveMonths);
+              proratedNote = cutoffDecisionNote;
+            } else if (effectiveMethod === 'custom') {
+              // Custom slab matching uses the cutoff-aware whole-month count.
+              monthsForMethod = Math.min(ayMonths.months, effectiveMonths);
+              proratedNote = cutoffDecisionNote;
             }
             const res = applyMethod(effectiveMethod, slabPercent ?? 0, monthsForMethod, methodSlabs, proratedNote);
             eligiblePercent = res.eligible;
@@ -983,6 +997,8 @@ Deno.serve(async (req) => {
             applicable_transitions: applicableTransitions,
             rule_id: ruleRow?.id ?? null,
             history_effective_date: historyRow?.effective_date ?? null,
+            joining_month_cutoff_day: cutoffDayGlobal,
+            cutoff_decision: ayMonths.decision,
           },
         });
       }

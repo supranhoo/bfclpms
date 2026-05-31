@@ -74,3 +74,15 @@ Deno.test('Result clamped to 12 even on very long windows', () => {
   );
   assertEquals(r.months, 12);
 });
+
+Deno.test('DOJ 14 Aug 2025, cutoff 15 → 11 whole months (joining month counted)', () => {
+  const r = monthsServedInAY(new Date('2025-08-14T00:00:00Z'), 15, AY_START, AY_END, VAL);
+  assertEquals(r.decision, 'included');
+  assertEquals(r.months, 11);
+});
+
+Deno.test('DOJ 15 Aug 2025, cutoff 15 → 10 whole months (joining month excluded)', () => {
+  const r = monthsServedInAY(new Date('2025-08-15T00:00:00Z'), 15, AY_START, AY_END, VAL);
+  assertEquals(r.decision, 'excluded');
+  assertEquals(r.months, 10);
+});

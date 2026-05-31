@@ -145,10 +145,9 @@ export function useSaveIncrementMethod() {
           status: 'active',
           copied_from_config_id: existing?.id ?? null,
           created_by: user?.id ?? null,
-          // Persist cutoff only for prorated_doj; otherwise NULL so the field
-          // stays scoped to the method that uses it.
-          joining_month_cutoff_day:
-            method === 'prorated_doj' ? (joiningMonthCutoffDay ?? 15) : null,
+          // Cutoff applies to ALL methods (drives Final Eligible Months and
+          // custom-slab matching as well as prorated_doj math).
+          joining_month_cutoff_day: joiningMonthCutoffDay ?? 15,
         } as any])
         .select('*')
         .single();
@@ -223,10 +222,8 @@ export function useCopyIncrementMethodFromYear() {
           status: 'active',
           copied_from_config_id: (src as any).id,
           created_by: user?.id ?? null,
-          joining_month_cutoff_day:
-            (src as any).method === 'prorated_doj'
-              ? ((src as any).joining_month_cutoff_day ?? 15)
-              : null,
+          // Carry the cutoff forward regardless of method.
+          joining_month_cutoff_day: (src as any).joining_month_cutoff_day ?? 15,
         } as any])
         .select('*').single();
       if (error) throw error;
