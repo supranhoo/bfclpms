@@ -1,62 +1,38 @@
-## What the "Score Changed (Safety Net)" card actually is
+## RCA
 
-This is **not** an automatic score recalculation. It is an **audit-only catch-net** written by the DB trigger `public.log_untracked_submission_changes()` (migration `20260505134535_…`).
+`compute-increment` is throwing `column profiles.category_id does not exist`. The `profiles` table has **no** `category_id` column — the per-employee category is stored as text in `profiles.employee_category` and resolved at runtime to the master id via `catNameToId` map (lines 339–349). The previous "Failed to load profiles" guard correctly surfaced the schema mismatch — but the underlying query still references a column that does not exist, and two downstream code paths still read `p.category_id` (a value that never existed even before this round of changes).
 
-That trigger fires on every `UPDATE review_submissions` and inserts a `SUBMISSION_SCORE_CHANGED` row into `kpi_audit_logs` **only when** one of these columns actually changed:
-`self_score, manager_score, skip_level_score, hr_pms_score, auditor_score, management_score, final_score`.
+### Affected call sites
+- Line 298 & 299 — `.select('… category_id …')` on `profiles` → throws.
+- Line 120 — `r.category_id === p.category_id` in `resolveConfirmationRule` (confirmation rules cascade). `p.category_id` is always undefined → cascade silently misses category-scoped rules.
+- Line 411 — `ge.category_ids?.length && p.category_id` in general-eligibility gate. `p.category_id` undefined → category-restricted eligibility silently bypassed.
 
-It tags the row with `metadata.source = 'safety_net_trigger'` and stamps `performed_by = auth.uid()` (whichever user's session ran the UPDATE — in your screenshot, Shekhar Sharad).
+Both downstream reads have been quietly producing wrong matches; the column-doesn't-exist error simply made them visible.
 
-## Why the UI shows it as a standalone card
+## Risk & Impact Report
+- **Data Impact**: None to existing rows. Future runs will start honoring category-scoped confirmation rules and category-restricted general eligibility — that is the documented intent in `mem://features/admin/employee-category-and-status` (category stored as name on profiles, resolved to master id).
+- **Workflow Impact**: Single-employee and all-employee runs both unblocked. Counts in the summary become non-zero again.
+- **UI/UX Impact**: None.
+- **Regression Risk**: Low. Category gating was previously dead (`undefined` always). Switching to the resolved id activates the intended rule, which could newly flag an employee as "Category not eligible" or change which confirmation rule wins. Acceptable per policy.
+- **Mitigation**: Two-step plan — (1) drop the non-existent column from the select to restore service immediately; (2) thread the resolved `employee_category_id` into `p` before downstream reads so category gating works as designed. Add a Deno regression test that asserts the function source contains no `profiles.*category_id` select reference and that `resolveConfirmationRule` matches on resolved id.
 
-`src/lib/timelineGrouping.ts` groups side-effect rows under the **human action** that ran in the same transaction-second (e.g. `AUDITOR_REVIEW_*`, `MANAGER_*`, `BULK_*`, `SCORE_PERCOLATED`, `STATUS_CHANGED`, …). When a safety-net row has **no companion human-action row in the same TX-second**, it is shown as an **orphan** card titled *Score Changed (Safety Net)*.
+## Plan
 
-So the card on screen means exactly this:
+1. **`supabase/functions/compute-increment/index.ts`**
+   - Remove `category_id` from both `profiles.select(...)` lists (lines 298–299).
+   - Inside the `for (const p of profiles)` loop, compute `const dims = empDims(p);` once and attach `p.category_id = dims.employee_category_id;` (single assignment, minimal surgical change) so existing `p.category_id` reads in `resolveConfirmationRule` (line 120) and the general-eligibility gate (line 411) start receiving the resolved master id. Replace the standalone `empDims(p)` call at line 503 with the cached `dims`.
+   - No other behavior change.
 
-> "A score column on this KPI was changed by an UPDATE statement that did **not** also insert a normal human-action audit row in the same transaction. The trigger caught it so the change is not invisible."
+2. **`supabase/functions/compute-increment/index.test.ts`** (new or appended)
+   - Source-string assertion: function source MUST NOT contain `profiles.*category_id` in a select; `select('id, full_name,` block must not list `category_id`.
+   - Pure unit test for `resolveConfirmationRule` proving a rule with `category_id = X` wins over a global rule when `p.category_id = X`.
 
-That is by design — it is a regression-protection rail, not a feature that mutates data.
+3. **`DOCUMENTATION.md`** — append Version History entry: "compute-increment: removed non-existent `profiles.category_id` select; category gating now uses resolved `employee_category_id` from `employee_categories` master."
 
-## Likely sources of the orphan UPDATE (in priority order)
+4. **`POLICY.md`** — under Increment Engine § Category Gating: "Employee category on `profiles` is stored as text (`employee_category`). The compute engine resolves it to the master `employee_categories.id` and uses that id for (a) general-eligibility `category_ids` membership and (b) confirmation-increment rule cascade matching."
 
-Candidates that update score columns without writing their own audit row in the same TX-second:
-1. **Send-back / stage-clearing flow** — when a stage is sent back, downstream `*_score` fields are nulled by a code path that audits `STATUS_CHANGED` separately (often a different timestamp) → orphan safety-net row.
-2. **Workflow Change Step-Back trigger** (`mem://features/admin/workflow-change-step-back`) — structural workflow edits revert dependent KPIs via DB trigger; the structural audit is on the *workflow* row, not the KPI row.
-3. **Recall / Self-Review withdrawal** clearing higher-stage scores.
-4. **Admin bypass / N/A clearing** (`mem://features/admin/admin-data-entry-workflow-controls`) when the client forgot to write a paired `ADMIN_*` audit row.
-5. **Score percolation** running in a separate statement than its `SCORE_PERCOLATED` audit insert.
+5. **Verify** — call `compute-increment` for the same Jaspal single-employee run that just failed; expect a 2xx response and the summary tile to display non-zero counts.
 
-We can identify exactly which one applies by reading the audit row itself (it contains `old_value` and `new_value` JSONB blobs that pinpoint which column moved and from what → to what).
-
-## Investigation plan (read-only)
-
-Step 1 — Pinpoint the exact change
-- Query `kpi_audit_logs` for the affected KPI around `2026-05-28 15:53:xx` and inspect the `old_value` / `new_value` of the safety-net row. The differing key reveals **which score column** changed.
-- Query the **full audit trail for that KPI** (±2 minutes around 15:53) ordered by `created_at` to see what `STATUS_CHANGED`, `*_REVIEW_*`, `SEND_BACK`, `RECALL`, or `RECONCILE_STATUS` rows surround it. Same `performed_by` = same user session → same UI action.
-
-Step 2 — Map to code path
-- Match the column delta + surrounding actions to the code path list above. Use `rg` to confirm that path updates `review_submissions` but does **not** insert an explicit `kpi_audit_logs` row for the score change.
-
-Step 3 — Decide remediation (only after RCA confirmed)
-- If a legitimate code path is missing an audit insert → add the explicit audit row so the safety-net stops appearing orphaned (grouping will then nest it under the parent human action). No data-correction needed.
-- If an unintended UPDATE path is mutating scores → fix that path or tighten RLS/WITH-CHECK.
-- If the change was legitimate (e.g. admin correction) → no code change; document the case in `POLICY.md`.
-
-Step 4 — Update `DOCUMENTATION.md` § Audit Trail and `POLICY.md` § Safety-Net Logging with the finding and any added audit insert.
-
-Step 5 — Add a unit test to `src/lib/timelineGrouping.test.ts` covering the newly grouped pair (only if Step 3 adds an audit insert).
-
-## What I need from you to start Step 1
-
-Please share **one** of the following so I can read the exact audit row:
-- The KPI id (uuid) of the row in the screenshot, **or**
-- Employee name + KRA name + period (e.g. "Shekhar Sharad / Checking all the billing rates / April 2026") so I can look it up.
-
-Once I have that, I will run read-only queries against `kpi_audit_logs` and `review_submissions` and come back with the definitive root cause (which column changed, from what to what, by which code path) before proposing any code change.
-
-### Risk & Impact (for the investigation itself)
-- Data Impact: None. Read-only queries.
-- Workflow Impact: None.
-- UI/UX Impact: None until Step 3.
-- Regression Risk: None at investigation stage.
-- Mitigation: All actions in Step 1 are `SELECT`s only.
+## Out of scope (deliberately not touching)
+- The frontend (`IncrementInputs.tsx`, `useIncrementRuns.ts`, `useIncrementInputs.ts`) — error message will disappear once the function returns 2xx.
+- RLS, slab matcher, score rollup, adjuster — none of these reference the missing column.
