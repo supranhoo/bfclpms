@@ -14,6 +14,7 @@ import {
   useConfirmationIncrementRule,
   useConfirmationIncrementRuleHistory,
   useSaveConfirmationIncrementRule,
+  useConfirmationIncrementRuleExists,
   type ConfirmationRuleScope,
 } from '@/hooks/useConfirmationIncrementRule';
 import {
