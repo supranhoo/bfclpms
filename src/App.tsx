@@ -476,14 +476,10 @@ const App = () => (
                   </ProtectedRoute>
                 } />
                 <Route path="/admin/increment/general-eligibility" element={
-                  <ProtectedRoute allowedRoles={['admin', 'hr_pms']} menuKey="admin-increment-general-eligibility">
-                    <Suspense fallback={<PageFallback />}><GeneralEligibility /></Suspense>
-                  </ProtectedRoute>
+                  <Navigate to="/admin/system-settings?section=increment&tab=general-eligibility" replace />
                 } />
                 <Route path="/admin/increment/slabs" element={
-                  <ProtectedRoute allowedRoles={['admin', 'hr_pms']} menuKey="admin-increment-slabs">
-                    <Suspense fallback={<PageFallback />}><IncrementSlabsPage /></Suspense>
-                  </ProtectedRoute>
+                  <Navigate to="/admin/system-settings?section=increment&tab=increment-slabs" replace />
                 } />
                 <Route path="/admin/employee-development" element={
                   <ProtectedRoute allowedRoles={['admin', 'hr_pms']} menuKey="admin-employee-development">
