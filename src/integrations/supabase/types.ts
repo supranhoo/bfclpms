@@ -851,45 +851,54 @@ export type Database = {
       }
       confirmation_increment_rules: {
         Row: {
+          applicable_transitions: string[]
           assessment_year: string
           category_id: string | null
           company_id: string | null
+          company_scope_mode: string
           copied_from_rule_id: string | null
           created_at: string
           created_by: string | null
           id: string
           level_id: string | null
           notes: string | null
+          selected_company_ids: string[]
           status: string
           treatment: Database["public"]["Enums"]["confirmation_increment_treatment"]
           updated_at: string
           version: number
         }
         Insert: {
+          applicable_transitions?: string[]
           assessment_year: string
           category_id?: string | null
           company_id?: string | null
+          company_scope_mode?: string
           copied_from_rule_id?: string | null
           created_at?: string
           created_by?: string | null
           id?: string
           level_id?: string | null
           notes?: string | null
+          selected_company_ids?: string[]
           status?: string
           treatment?: Database["public"]["Enums"]["confirmation_increment_treatment"]
           updated_at?: string
           version?: number
         }
         Update: {
+          applicable_transitions?: string[]
           assessment_year?: string
           category_id?: string | null
           company_id?: string | null
+          company_scope_mode?: string
           copied_from_rule_id?: string | null
           created_at?: string
           created_by?: string | null
           id?: string
           level_id?: string | null
           notes?: string | null
+          selected_company_ids?: string[]
           status?: string
           treatment?: Database["public"]["Enums"]["confirmation_increment_treatment"]
           updated_at?: string
