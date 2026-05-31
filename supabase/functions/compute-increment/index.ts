@@ -9,6 +9,7 @@ const corsHeaders = {
 
 interface RunBody {
   assessment_year: string;
+  employee_id?: string | null;
 }
 
 // ──────────────────────────────────────────────────────────────────────────
