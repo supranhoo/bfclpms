@@ -743,21 +743,22 @@ Deno.serve(async (req) => {
         const currentSalary = input?.current_salary ?? null;
         const monthsServed = p.doj ? monthsBetween(new Date(p.doj), validationDate) : 12;
 
-        // Cutoff-aware AY-bounded whole-month count. Applies to ALL methods.
-        // Drives Final Eligible Months, prorated-DOJ math, and custom-slab
-        // matching. Falls back to the continuous `monthsServed` when DOJ is
-        // absent.
+        // Cutoff-aware AY-bounded whole-month count. Uses GDOJ
+        // (`profiles.group_doj`) — the prorated method's authoritative join
+        // date. Drives Final Eligible Months and custom-slab matching. Falls
+        // back to the continuous `monthsServed` when GDOJ is absent.
         const cutoffDayGlobal = Number((resolvedCfg as any)?.joining_month_cutoff_day ?? 15);
         const ayStartGlobal = new Date(`${startYear}-07-01T00:00:00Z`);
         const ayEndGlobal = new Date(`${endYear}-06-30T00:00:00Z`);
-        const ayMonths = p.doj
-          ? monthsServedInAY(new Date(p.doj), cutoffDayGlobal, ayStartGlobal, ayEndGlobal, validationDate)
+        const gdoj: Date | null = (p as any).group_doj ? new Date((p as any).group_doj) : null;
+        const ayMonths = gdoj
+          ? monthsServedInAY(gdoj, cutoffDayGlobal, ayStartGlobal, ayEndGlobal, validationDate)
           : { months: Math.max(0, Math.min(12, Math.round(monthsServed))), decision: 'pre_ay' as const };
         const cutoffDecisionNote =
-          ayMonths.decision === 'included' ? `Joining month counted (cutoff day ${cutoffDayGlobal})`
-          : ayMonths.decision === 'excluded' ? `Joining month excluded (cutoff day ${cutoffDayGlobal})`
-          : ayMonths.decision === 'pre_ay' ? `DOJ before AY — full period`
-          : `DOJ after AY — no months served`;
+          ayMonths.decision === 'included' ? `GDOJ month included (cutoff ${cutoffDayGlobal})`
+          : ayMonths.decision === 'excluded' ? `GDOJ month excluded (cutoff ${cutoffDayGlobal})`
+          : ayMonths.decision === 'pre_ay' ? `GDOJ before AY — counted from AY start`
+          : `GDOJ after AY — 0 months`;
 
         // Eligibility evaluation. Criteria-exempt employees skip the
         // absent/LWP/disciplinary/training criteria block entirely.
@@ -917,7 +918,45 @@ Deno.serve(async (req) => {
             // proration accounts for any confirmation-increment coverage.
             let monthsForMethod = effectiveMethod === 'full' ? ayMonths.months : effectiveMonths;
             let proratedNote: string | undefined;
-            if (effectiveMethod === 'prorated_doj' && p.doj) {
+            if (effectiveMethod === 'prorated_doj') {
+              if (!gdoj) {
+                // Explicit reason — never silently fall back to DOJ.
+                eligibility = 'ineligible';
+                reason = 'GDOJ missing for prorated increment calculation';
+                eligiblePercent = 0;
+                methodNotes = 'Prorated by GDOJ · skipped (GDOJ missing)';
+                items.push({
+                  run_id: runId,
+                  employee_id: p.id,
+                  pms_score: pmsScore,
+                  rating_band: ratingBand,
+                  slab_percent: slabPercent,
+                  eligibility_status: eligibility,
+                  ineligibility_reason: reason,
+                  method_used: null,
+                  eligible_percent: null,
+                  service_months: +monthsServed.toFixed(2),
+                  current_salary: currentSalary,
+                  increment_amount: null,
+                  revised_salary: null,
+                  remarks: input?.remarks ?? null,
+                  criteria_exempt: isCriteriaExempt,
+                  exemption_reason: exemptionReason,
+                  confirmation_treatment: adjustment.treatmentApplied,
+                  confirmation_granted: !!p.confirmation_increment_granted,
+                  confirmation_effective_date: p.confirmation_increment_effective_date ?? null,
+                  period_covered_months: adjustment.periodCoveredMonths,
+                  balance_eligible_months: adjustment.balanceEligibleMonths,
+                  carry_forward_months: adjustment.carryForwardMonths,
+                  final_eligible_months: adjustment.finalEligibleMonths,
+                  adjustment_reason: adjustment.adjustmentReason,
+                  transition_key: adjustment.transitionKey ?? null,
+                  pre_confirmation_status: preConfirmationStatus,
+                  transition_source: transitionSource,
+                });
+                countIneligible++;
+                continue;
+              }
               // Honour any confirmation-adjustment ceiling already applied.
               monthsForMethod = Math.min(ayMonths.months, effectiveMonths);
               proratedNote = cutoffDecisionNote;
