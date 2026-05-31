@@ -661,7 +661,7 @@ export default function SystemSettings() {
             className="space-y-4"
           >
             <TabsList>
-              <TabsTrigger value="eligibility">Eligibility Criteria</TabsTrigger>
+              <TabsTrigger value="eligibility">Ineligibility Criteria</TabsTrigger>
               <TabsTrigger value="method">Increment Method</TabsTrigger>
               <TabsTrigger value="general-eligibility">General Eligibility</TabsTrigger>
               <TabsTrigger value="increment-slabs">Increment Slabs</TabsTrigger>
