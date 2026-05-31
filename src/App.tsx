@@ -51,6 +51,9 @@ const KpiWeightageDashboard = lazy(() => import("./pages/admin/KpiWeightageDashb
 const PendingSelfReviews = lazy(() => import("./pages/admin/PendingSelfReviews"));
 const IncentiveConfig = lazy(() => import("./pages/admin/IncentiveConfig"));
 const IncentiveDataEntry = lazy(() => import("./pages/admin/IncentiveDataEntry"));
+const IncrementInputs = lazy(() => import("./pages/incentive/IncrementInputs"));
+const GeneralEligibility = lazy(() => import("./pages/increment/GeneralEligibility"));
+const IncrementSlabsPage = lazy(() => import("./pages/increment/IncrementSlabs"));
 const EmployeeDevelopment = lazy(() => import("./pages/admin/EmployeeDevelopment"));
 const OrgKpiAuditReview = lazy(() => import("./pages/admin/OrgKpiAuditReview"));
 const EmployeeMasterBackfill = lazy(() => import("./pages/admin/EmployeeMasterBackfill"));
@@ -465,6 +468,21 @@ const App = () => (
                 <Route path="/admin/incentive-data-entry" element={
                   <ProtectedRoute allowedRoles={['admin']} menuKey="admin-incentive-data">
                     <Suspense fallback={<PageFallback />}><IncentiveDataEntry /></Suspense>
+                  </ProtectedRoute>
+                } />
+                <Route path="/admin/increment-inputs" element={
+                  <ProtectedRoute allowedRoles={['admin', 'hr_pms']} menuKey="admin-increment-inputs">
+                    <Suspense fallback={<PageFallback />}><IncrementInputs /></Suspense>
+                  </ProtectedRoute>
+                } />
+                <Route path="/admin/increment/general-eligibility" element={
+                  <ProtectedRoute allowedRoles={['admin', 'hr_pms']} menuKey="admin-increment-general-eligibility">
+                    <Suspense fallback={<PageFallback />}><GeneralEligibility /></Suspense>
+                  </ProtectedRoute>
+                } />
+                <Route path="/admin/increment/slabs" element={
+                  <ProtectedRoute allowedRoles={['admin', 'hr_pms']} menuKey="admin-increment-slabs">
+                    <Suspense fallback={<PageFallback />}><IncrementSlabsPage /></Suspense>
                   </ProtectedRoute>
                 } />
                 <Route path="/admin/employee-development" element={
