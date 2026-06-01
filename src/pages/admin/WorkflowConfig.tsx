@@ -27,12 +27,14 @@ import {
 } from '@/hooks/useWorkflowConfig';
 import { useDepartments } from '@/hooks/useOrganization';
 import { GitBranch, Users, Building2, Award, Trash2, Search, ArrowRight, Check, Plus, Pencil, Star, Archive, RotateCcw, ChevronDown, Calendar, Globe, ChevronsRight, Info } from 'lucide-react';
+import { Scale } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { ReviewPanelSkeleton } from '@/components/ui/LoadingSkeletons';
 import CustomWorkflowDialog from '@/components/admin/CustomWorkflowDialog';
 import ReconcileOrphanedKpisDialog from '@/components/admin/ReconcileOrphanedKpisDialog';
 import { WorkflowConfigExport } from '@/components/admin/WorkflowConfigExport';
 import MigrateGlobalDefaultsDialog from '@/components/admin/MigrateGlobalDefaultsDialog';
+import { FinalScoreRulesTab } from '@/components/admin/FinalScoreRulesTab';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 
