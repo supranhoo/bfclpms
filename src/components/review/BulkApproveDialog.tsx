@@ -25,6 +25,11 @@ export interface BulkApproveSubmit {
   achievedValues?: Record<string, number | string | null>;
   /** Admin "Override carried scores" toggle was ON when submitted. */
   isOverride?: boolean;
+  /** submission_id → true when the reviewer ticked "N/A" for that row.
+   *  Only emitted in sign-off mode (Management approve RPC has no N/A). */
+  isNa?: Record<string, boolean>;
+  /** submission_id → mandatory N/A reason (reuses the shared dialog remark). */
+  naReasons?: Record<string, string>;
 }
 
 interface Props {
@@ -101,8 +106,12 @@ export function BulkApproveDialog({
     setInputs(prev => {
       const m = new Map(prev);
       const merged: CellInputs = { ...prev.get(submissionId), ...next };
-      // Strip empties so we don't keep ghost entries.
-      if (merged.achievedOverride == null || merged.achievedOverride === '') {
+      // Strip empties so we don't keep ghost entries — but keep rows that
+      // only carry an N/A flag (no achieved override).
+      const hasAchieved = !(merged.achievedOverride == null || merged.achievedOverride === '');
+      const hasManual = merged.manualScore != null;
+      const hasNa = merged.isNa === true;
+      if (!hasAchieved && !hasManual && !hasNa) {
         m.delete(submissionId);
       } else {
         m.set(submissionId, merged);
@@ -126,17 +135,27 @@ export function BulkApproveDialog({
   const handleConfirm = () => {
     if (!canSubmit) return;
     const achievedValues: Record<string, number | string | null> = {};
+    const isNa: Record<string, boolean> = {};
+    const naReasons: Record<string, string> = {};
+    const trimmedReason = reason.trim();
     inputs.forEach((v, sid) => {
+      if (v.isNa === true) {
+        isNa[sid] = true;
+        naReasons[sid] = trimmedReason;
+        return; // N/A rows skip achieved override (cleared in UI).
+      }
       if (v.achievedOverride != null && v.achievedOverride !== '') {
         achievedValues[sid] = v.achievedOverride;
       }
     });
     onConfirm({
-      reason: reason.trim(),
+      reason: trimmedReason,
       attachmentUrls: urls,
       batchId,
       achievedValues: Object.keys(achievedValues).length > 0 ? achievedValues : undefined,
       isOverride: isOverride || undefined,
+      isNa: Object.keys(isNa).length > 0 ? isNa : undefined,
+      naReasons: Object.keys(naReasons).length > 0 ? naReasons : undefined,
     });
   };
 

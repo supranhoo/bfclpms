@@ -19,6 +19,7 @@ import {
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Card, CardContent } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
 import { cn } from '@/lib/utils';
 import type { ImpactSummary, CellPreview, EmployeeRollup } from '@/lib/bulkSignoffImpact';
 import type { CarriedSource, KpiRule, CellInputs } from '@/lib/carriedScoreResolver';
@@ -116,6 +117,20 @@ export function BulkSignoffPreview({
 
   const { totals, cells, perEmployee } = preview;
 
+  // Hoist KRA · KPI banner when every selected cell shares the same KPI
+  // (common case: one bulk action targets one KPI across many employees).
+  const firstKra = cells[0]?.kra_name ?? null;
+  const firstKpi = cells[0]?.kpi_name ?? null;
+  const sharedKra =
+    cells.length > 1 && firstKra && cells.every(c => c.kra_name === firstKra)
+      ? firstKra
+      : null;
+  const sharedKpi =
+    cells.length > 1 && firstKpi && cells.every(c => c.kpi_name === firstKpi)
+      ? firstKpi
+      : null;
+  const hoistKpi = !!(sharedKra && sharedKpi);
+
   return (
     <div className="space-y-3" data-testid="signoff-preview">
       {/* ── Strip ─────────────────────────────────────────────────────── */}
@@ -153,6 +168,19 @@ export function BulkSignoffPreview({
         )}
       </div>
 
+      {/* ── Shared KRA · KPI banner (only when every row matches) ──── */}
+      {hoistKpi && (
+        <div
+          className="rounded-md border border-border bg-muted/30 px-3 py-2"
+          data-testid="signoff-preview-shared-kpi"
+        >
+          <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
+            {sharedKra}
+          </div>
+          <div className="text-sm font-medium leading-snug">{sharedKpi}</div>
+        </div>
+      )}
+
       {/* ── Per-cell collapsible table ───────────────────────────────── */}
       <div className="rounded-md border border-border">
         <button
@@ -177,6 +205,8 @@ export function BulkSignoffPreview({
             }
             isOverride={isOverride}
             targetStageLabel={mode === 'approve' ? 'Final' : stageLabel}
+            hideKraKpiCol={hoistKpi}
+            allowNa={mode !== 'approve'}
           />
         )}
       </div>
@@ -228,6 +258,10 @@ interface CellTableProps {
   onCellInputChange?: (submissionId: string, next: CellInputs) => void;
   isOverride?: boolean;
   targetStageLabel?: string;
+  /** Suppress the KRA · KPI column (banner displayed above instead). */
+  hideKraKpiCol?: boolean;
+  /** Show the "N/A" toggle per row (sign-off mode only). */
+  allowNa?: boolean;
 }
 
 type StageKey = 'self' | 'manager' | 'skip_level' | 'hr_pms' | 'auditor' | 'management' | 'final';
@@ -274,6 +308,8 @@ function StageCell({
 function CellTable({
   cells, ruleByKpiId, kpiIdBySubmissionId, inputs, onCellInputChange, isOverride = false,
   targetStageLabel,
+  hideKraKpiCol = false,
+  allowNa = false,
 }: CellTableProps) {
   const editable = !!onCellInputChange;
 
@@ -287,6 +323,20 @@ function CellTable({
     if (!editable) return false;
     // Rows with no resolvable score always need input; admin override unlocks all.
     return c.source === 'none' || isOverride;
+  };
+
+  const isRowNa = (c: CellPreview): boolean =>
+    inputs?.get(c.submission_id)?.isNa === true;
+
+  const toggleNa = (sid: string, checked: boolean) => {
+    const prev = inputs?.get(sid) ?? {};
+    const next: CellInputs = {
+      ...prev,
+      isNa: checked || undefined,
+      // Marking N/A clears any pending Achieved override; un-marking leaves it.
+      achievedOverride: checked ? null : prev.achievedOverride,
+    };
+    onCellInputChange?.(sid, next);
   };
 
   const onAch = (sid: string, raw: string) => {
@@ -354,12 +404,17 @@ function CellTable({
           <thead className="sticky top-0 bg-background z-10">
             <tr className="border-b border-border">
               <th className="text-left p-2 font-medium text-muted-foreground">Employee</th>
-              <th className="text-left p-2 font-medium text-muted-foreground">KRA · KPI</th>
+              {!hideKraKpiCol && (
+                <th className="text-left p-2 font-medium text-muted-foreground">KRA · KPI</th>
+              )}
               <th className="text-left p-2 font-medium text-muted-foreground">UoM</th>
               <th className="text-right p-2 font-medium text-muted-foreground">Target</th>
               <th className="text-right p-2 font-medium text-muted-foreground">Wt%</th>
               <th className="text-right p-2 font-medium text-muted-foreground">Achvd</th>
               {editable && <th className="text-right p-2 font-medium text-muted-foreground">Override</th>}
+              {editable && allowNa && (
+                <th className="text-center p-2 font-medium text-muted-foreground">N/A</th>
+              )}
               {STAGE_COLS.map(s => (
                 <th
                   key={s.key}
@@ -379,6 +434,7 @@ function CellTable({
           <tbody>
             {cells.map(c => {
               const stages = c.stageScores;
+              const naMarked = isRowNa(c);
               return (
                 <tr
                   key={c.submission_id}
@@ -386,17 +442,20 @@ function CellTable({
                     'border-b border-border/50 hover:bg-muted/50',
                     c.source === 'none' && 'bg-destructive/5',
                     c.source === 'override' && 'bg-amber-500/5',
+                    naMarked && 'bg-muted/40',
                   )}
                 >
                   <td className="p-2 truncate max-w-[140px]">{c.employee_name}</td>
-                  <td className="p-2 max-w-[220px]">
-                    {c.kra_name && (
-                      <div className="text-[10px] uppercase tracking-wide text-muted-foreground truncate">
-                        {c.kra_name}
-                      </div>
-                    )}
-                    <div className="truncate">{c.kpi_name}</div>
-                  </td>
+                  {!hideKraKpiCol && (
+                    <td className="p-2 max-w-[220px]">
+                      {c.kra_name && (
+                        <div className="text-[10px] uppercase tracking-wide text-muted-foreground truncate">
+                          {c.kra_name}
+                        </div>
+                      )}
+                      <div className="truncate">{c.kpi_name}</div>
+                    </td>
+                  )}
                   <td className="p-2 text-muted-foreground truncate max-w-[80px]">{c.uom ?? '—'}</td>
                   <td className="p-2 text-right tabular-nums text-muted-foreground">
                     {c.target_value == null ? '—' : c.target_value}
@@ -407,7 +466,20 @@ function CellTable({
                   </td>
                   {editable && (
                     <td className="p-2 text-right">
-                      {isRowEditable(c) ? renderAchievedInput(c) : <span className="text-muted-foreground">—</span>}
+                      {naMarked
+                        ? <span className="text-muted-foreground italic">N/A</span>
+                        : isRowEditable(c)
+                          ? renderAchievedInput(c)
+                          : <span className="text-muted-foreground">—</span>}
+                    </td>
+                  )}
+                  {editable && allowNa && (
+                    <td className="p-2 text-center">
+                      <Checkbox
+                        checked={naMarked}
+                        onCheckedChange={(v) => toggleNa(c.submission_id, v === true)}
+                        aria-label={`Mark ${c.employee_name} ${c.kpi_name} as N/A`}
+                      />
                     </td>
                   )}
                   {STAGE_COLS.map(s => (
@@ -418,16 +490,22 @@ function CellTable({
                     />
                   ))}
                   <td className="p-2 text-right tabular-nums font-semibold">
-                    {c.score == null
-                      ? <span className="inline-flex items-center gap-1 text-destructive">● —</span>
-                      : c.score.toFixed(1)}
+                    {naMarked
+                      ? <span className="text-muted-foreground italic">N/A</span>
+                      : c.score == null
+                        ? <span className="inline-flex items-center gap-1 text-destructive">● —</span>
+                        : c.score.toFixed(1)}
                   </td>
-                  <td className="p-2"><SourceBadge source={c.source} /></td>
+                  <td className="p-2">
+                    {naMarked
+                      ? <Badge variant="outline" className="h-5 px-1.5 text-[10px]">N/A</Badge>
+                      : <SourceBadge source={c.source} />}
+                  </td>
                   <td className={cn(
                     'p-2 text-right tabular-nums',
                     c.weightedImpact != null && c.weightedImpact > 0 && 'text-emerald-600 dark:text-emerald-400',
                   )}>
-                    {c.weightedImpact == null ? '—' : fmt(c.weightedImpact, true)}
+                    {naMarked || c.weightedImpact == null ? '—' : fmt(c.weightedImpact, true)}
                   </td>
                 </tr>
               );
@@ -440,21 +518,29 @@ function CellTable({
       <div className="md:hidden divide-y divide-border">
         {cells.map(c => {
           const stages = c.stageScores;
+          const naMarked = isRowNa(c);
           return (
             <Card key={c.submission_id} className={cn(
               'rounded-none border-0 shadow-none',
               c.source === 'none' && 'bg-destructive/5',
               c.source === 'override' && 'bg-amber-500/5',
+              naMarked && 'bg-muted/40',
             )}>
               <CardContent className="p-3 space-y-2">
                 <div className="flex items-center justify-between gap-2">
                   <span className="font-medium text-sm truncate">{c.employee_name}</span>
-                  <SourceBadge source={c.source} />
+                  {naMarked
+                    ? <Badge variant="outline" className="h-5 px-1.5 text-[10px]">N/A</Badge>
+                    : <SourceBadge source={c.source} />}
                 </div>
-                {c.kra_name && (
-                  <p className="text-[10px] uppercase tracking-wide text-muted-foreground truncate">{c.kra_name}</p>
+                {!hideKraKpiCol && (
+                  <>
+                    {c.kra_name && (
+                      <p className="text-[10px] uppercase tracking-wide text-muted-foreground truncate">{c.kra_name}</p>
+                    )}
+                    <p className="text-xs text-muted-foreground truncate">{c.kpi_name}</p>
+                  </>
                 )}
-                <p className="text-xs text-muted-foreground truncate">{c.kpi_name}</p>
                 {stages && (
                   <div className="grid grid-cols-3 gap-1 pt-1">
                     {STAGE_COLS.map(s => (
@@ -473,7 +559,17 @@ function CellTable({
                     ))}
                   </div>
                 )}
-                {editable && isRowEditable(c) && (
+                {editable && allowNa && (
+                  <label className="flex items-center gap-2 pt-1 text-[11px] cursor-pointer">
+                    <Checkbox
+                      checked={naMarked}
+                      onCheckedChange={(v) => toggleNa(c.submission_id, v === true)}
+                      aria-label={`Mark ${c.employee_name} ${c.kpi_name} as N/A`}
+                    />
+                    <span className="text-muted-foreground">Mark as N/A</span>
+                  </label>
+                )}
+                {editable && !naMarked && isRowEditable(c) && (
                   <div className="flex items-center gap-2 pt-1">
                     <span className="text-[10px] text-muted-foreground w-14">Achieved</span>
                     {renderAchievedInput(c)}
@@ -482,7 +578,11 @@ function CellTable({
                 <div className="flex items-center justify-between text-xs pt-1">
                   <span>Wt {c.weightage}%</span>
                   <span className="tabular-nums">
-                    Resolved {c.score == null ? <span className="text-destructive">● —</span> : c.score.toFixed(1)}
+                    Resolved {naMarked
+                      ? <span className="text-muted-foreground italic">N/A</span>
+                      : c.score == null
+                        ? <span className="text-destructive">● —</span>
+                        : c.score.toFixed(1)}
                   </span>
                   <span className={cn(
                     'tabular-nums',

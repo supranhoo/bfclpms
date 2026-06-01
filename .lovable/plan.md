@@ -1,73 +1,68 @@
-# Add Evidence Attachments to "Edit Calculated Row" (Increment)
+# Bulk Sign-off dialog — N/A toggle + KRA·KPI hoisting
 
-## Goal
-HR/Admin overriding an increment_run_items row can attach supporting evidence (upload **and** Ctrl+V paste) for screenshots, PDFs, Word, Excel, and images. Evidence is tied to the row, visible on reopen, openable/removable, and surfaced in exports as a Yes/No flag.
+Targets the "Bulk sign off N cells as <stage>" dialog (`BulkApproveDialog` + `BulkSignoffPreview`). Both changes are presentation-layer; the DB/RPC already supports N/A.
 
-## Risk & Impact
-- **Data**: additive `evidence_urls jsonb` column on `public.increment_run_items` (default `[]`). No back-fill, no destructive change. Existing rows unaffected.
-- **Workflow**: none — calculation, slab, GDOJ prorating, confirmation adjustment logic untouched.
-- **UI/UX**: one new section in the existing `IncrementResultEditDialog`; identical look/feel to other evidence sections (reuses `MultiFileUpload`).
-- **Security**: uses existing `review-evidence` bucket and its RLS. Path namespaced under `increment-overrides/<run_item_id>/...` to keep linkage explicit. File-type allowlist enforced client-side; bucket RLS already restricts who can read.
-- **Regression risk**: low — `MultiFileUpload` is widely used; extending its accepted-types via an additive prop preserves all current callers.
-- **Mitigation**: feature is opt-in (the dialog passes the new prop). All existing dialogs that use `MultiFileUpload` keep the JPEG/PNG/PDF/XLSX-only behaviour because the new prop defaults to off.
+## 1. Add N/A option per row (admin override mode)
 
-## Scalability
-- `evidence_urls` is a JSONB array of public URLs (same convention used across review_submissions). Cap at **10 files per row** in UI.
-- Excel export adds one cheap derived column (`Yes/No` based on array length). No additional query.
+### Why it works today without DB changes
+`useBulkStageWrite` already accepts `is_na: Record<submission_id, boolean>` and `na_reasons: Record<submission_id, string>` and forwards them to `bulk_write_stage_scores`. Only the UI is missing.
+(Management bulk-approve RPC does **not** accept N/A — for that mode we keep the toggle hidden.)
 
-## Plan
+### UI
+- Extend `CellInputs` (`src/lib/carriedScoreResolver.ts`) with optional `isNa?: boolean`.
+  - When `isNa === true`, `resolveWithInputs` returns `{ score: null, source: 'none' }` and the Achieved-override input is disabled.
+- `BulkSignoffPreview` (`CellTable`):
+  - Add a small "N/A" checkbox in the existing **Override** column cell, beside the Achieved input. Visible only when `editable` AND (`isRowEditable` OR `isOverride`).
+  - When ticked: hide the numeric/qualitative input, dim Resolved to "—", show a muted "N/A" pill in Source column, and the row contributes `0` weight to the per-employee rollup (`bulkSignoffImpact` already excludes `is_na: true` rows from totals — we just need to feed it the live override).
+- `BulkApproveDialog`:
+  - In `handleConfirm`, build two extra maps from `inputs`:
+    - `isNaMap[sid] = true` for every row whose `isNa === true`
+    - `naReasonsMap[sid] = reason.trim()` (reuse the mandatory shared remark; ≥10 chars already enforced)
+  - Pass via the new payload fields `isNa` and `naReasons`.
+- `BulkReviewDashboard.handleBulkApprove`:
+  - For sign-off mode (`bulkAction.kind !== 'mgmt'`), pass `is_na: extras?.isNa` and `na_reasons: extras?.naReasons` to `stageWrite.mutateAsync`.
+  - For management approve mode, the N/A column stays hidden (mode prop already known to `BulkSignoffPreview`).
+- Live impact: `bulkSignoffImpact.computeImpact` already treats `is_na: true` rows as excluded from weighted totals. Wire the override map through (`overrideIsNa: Set<submission_id>`) so the per-employee rollup updates instantly.
 
-### 1. Database migration (additive)
-Add `evidence_urls jsonb DEFAULT '[]'::jsonb` to `public.increment_run_items`. Re-grant unchanged (existing grants cover all columns). No new RLS — existing row policies apply to the new column.
+### Edge cases
+- Cannot mark N/A while the cell has an Achieved override entered — checking N/A clears `achievedOverride`.
+- Required-unfilled counter: a row marked N/A is **not** counted as `requiredUnfilled` (it's intentionally blank).
+- Disabled in `mode === 'approve'` (Management) because the RPC has no `p_is_na` parameter.
 
-### 2. Extend `MultiFileUpload` (backwards-compatible)
-Add optional prop `extraAcceptedTypes?: Record<string, { ext: string; icon: any }>`. When provided, the component merges them into `ACCEPTED_TYPES` for validation, into the `<input accept>` list, and into the icon lookup. All existing call sites unchanged.
+## 2. Hoist shared KRA · KPI to the top of the per-cell preview
 
-For pasted images without filenames, generate `increment-override-evidence-<employeeCode>-<timestamp>.png` on the *consumer* side by wrapping the upload — handled inside the dialog via a thin wrapper that renames the `File` before calling `MultiFileUpload`. The simplest approach: pass an `onBeforeUploadFilename?: (file) => string` hook.
+In `BulkSignoffPreview`, before rendering `CellTable`:
+1. Compute `sharedKra = cells.every(c => c.kra_name === cells[0].kra_name) ? cells[0].kra_name : null`.
+2. Same for `sharedKpi`.
+3. If **both** are shared and `cells.length > 1`:
+   - Render a banner above the table:
+     ```
+     ┌─ TIMELY SUBMISSION OF REPORTS ─────────────────────────────┐
+     │ On-Time Submission of Daily & Monthly Reports              │
+     └────────────────────────────────────────────────────────────┘
+     ```
+     (small uppercase KRA + KPI title, muted background, gap-2)
+   - Hide the **KRA · KPI** column in the desktop table (set `hideKraKpiCol` prop) and hide the KRA·KPI block in the mobile card.
+4. If mixed (different KPIs across rows), behave exactly as today — banner not rendered, column stays.
 
-### 3. Edit Calculated Row dialog
-In `src/components/incentive/IncrementResultEditDialog.tsx`:
-- Add state `evidenceUrls: string[]` seeded from `row.evidence_urls ?? []`.
-- Render a new section "Supporting Evidence" under Remarks using `<MultiFileUpload userId={currentUserId} contextId={row.id} folder="increment-overrides" existingUrls={evidenceUrls} onUploadComplete={setEvidenceUrls} maxFiles={10} extraAcceptedTypes={WORD_DOC_TYPES} label="Supporting Evidence" />` with helper text *"Supported: JPG, PNG, PDF, Word, Excel, screenshots. Paste with Ctrl+V."*
-- On Save include `evidence_urls` in the patch.
-- On Cancel, just close (uploaded files remain in storage but are unreferenced — same pattern as review evidence; acceptable per existing convention).
-
-### 4. Update mutation whitelist
-In `src/hooks/useIncrementRuns.ts`:
-- Add `'evidence_urls'` to `EDITABLE_RUN_ITEM_FIELDS`.
-- Extend `IncrementRunItemRow` interface with `evidence_urls?: string[] | null`.
-
-### 5. Export
-In `useExportLatestIncrementResults` (and any Excel column map for this report), add a derived column `Evidence Attached` = `(evidence_urls?.length ?? 0) > 0 ? 'Yes' : 'No'`. Also add `Evidence Count`. No file embedding.
-
-### 6. Audit trail
-`manually_edited`, `edited_by`, `edited_at` already capture the override. Because the patch now includes `evidence_urls`, the same audit fields cover evidence changes — no extra table needed.
-
-### 7. Tests
-- Unit: extend existing `useIncrementRuns` test (or add one) asserting the whitelist accepts `evidence_urls` and rejects unknown fields.
-- Unit: `MultiFileUpload` accepts DOCX when `extraAcceptedTypes` is passed; rejects `.exe`.
-- Mock data: a sample `increment_run_items` row with two evidence URLs to verify display on reopen.
+This gives back ~220px of horizontal space on the common case (one bulk action = one KPI across multiple employees).
 
 ## Files touched
-- `supabase/migrations/<new>.sql` — add column.
-- `src/components/ui/MultiFileUpload.tsx` — additive `extraAcceptedTypes` prop + filename helper.
-- `src/components/incentive/IncrementResultEditDialog.tsx` — new section + state + save.
-- `src/hooks/useIncrementRuns.ts` — whitelist + type + export column.
-- `src/components/incentive/...` export column (locate the actual export builder during build).
+- `src/lib/carriedScoreResolver.ts` — add `isNa` to `CellInputs`, short-circuit in `resolveWithInputs`.
+- `src/lib/bulkSignoffImpact.ts` — accept optional `overrideIsNa: Set<string>` and treat those rows as `is_na` for totals.
+- `src/components/review/BulkSignoffPreview.tsx` — banner hoist + N/A checkbox + column hiding.
+- `src/components/review/BulkApproveDialog.tsx` — payload extension (`isNa`, `naReasons`), passthrough to confirm.
+- `src/pages/review/BulkReviewDashboard.tsx` — forward `isNa` + `naReasons` to `stageWrite`.
+- Tests: add cases to `bulkApproveDialogSignoffMode.test.tsx` covering (a) N/A toggle emits `isNa` + `naReasons` in confirm payload; (b) approve mode hides the N/A column.
 
 ## Out of scope
-- Calculation formulas, slab, ineligibility, GDOJ prorating, confirmation logic.
-- New storage bucket (reuse `review-evidence`).
-- Permission/route changes.
-- Server-side mime sniffing (bucket already public-read; we keep client allowlist + max-size; matches existing app pattern).
+- DB / RPC changes (already support N/A).
+- Mgmt bulk-approve N/A (server doesn't accept it; would need separate RPC change).
+- Per-row remark for N/A (reuses the shared dialog remark by design).
+- Changes to non-bulk sign-off flows.
 
-## SSOT updates
-- `DOCUMENTATION.md` → Increment Inputs section: add note about the new Supporting Evidence field and Excel column.
-- `POLICY.md` → no policy change (evidence is optional; calculations unaffected).
-- Memory update: add a short entry under `mem/features/incentive/` noting evidence-on-override pattern.
-
-## Acceptance verification
-1. Open Latest Calculations → Edit row → upload PNG + paste screenshot + drop a .docx → Save → reopen row → all three files visible, openable, removable.
-2. Reject `.exe` and >max-size files with toast.
-3. Excel export shows `Evidence Attached` Yes/No and `Evidence Count`.
-4. Editing a row without attachments still works exactly as before.
+## Acceptance
+1. As HR PMS in override mode, tick "N/A" on 1 of 3 rows → Resolved shows "—", per-employee rollup excludes that row, and Sign off confirms successfully; DB row has `is_na = true`, `hr_pms_score = NULL`, `na_marked_by_role = 'hr_pms'`.
+2. All 3 rows share KPI → banner appears at the top, the KRA·KPI column disappears from the table.
+3. Mixed-KPI batch → banner hidden, table unchanged.
+4. Management approve mode → N/A column hidden, no regression.
