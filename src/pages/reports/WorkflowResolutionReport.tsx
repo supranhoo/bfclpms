@@ -65,21 +65,19 @@ function exportToExcel(rows: ResolutionRow[], period: string, year: number, dept
       if (s.naReason) return `N/A — ${NA_REASON_LABEL[s.naReason]}`;
       return s.users.map(u => u.full_name || u.email).join('; ');
     };
-    return {
+    const base: Record<string, string> = {
       'Employee Code': r.employee.employee_code || '—',
       'Employee Name': r.employee.full_name || r.employee.email,
       'Department': deptName(r.employee.department_id),
       'PMS Grade': r.employee.pms_grade || '—',
       'Resolved Template': r.templateName || '—',
       'Source': r.source,
-      'Self': cell('self'),
-      'L1 Manager': cell('manager'),
-      'Skip-Level': cell('skip_level'),
-      'HR PMS': cell('hr_pms'),
-      'Auditor': cell('auditor'),
-      'Management': cell('management'),
-      'Has N/A': r.hasAnyNa ? 'Yes' : 'No',
     };
+    for (const st of CHAIN_STAGES) {
+      base[CHAIN_STAGE_LABEL[st]] = cell(st);
+    }
+    base['Has N/A'] = r.hasAnyNa ? 'Yes' : 'No';
+    return base;
   });
   const wb = XLSX.utils.book_new();
   const ws = XLSX.utils.aoa_to_sheet([
@@ -90,7 +88,8 @@ function exportToExcel(rows: ResolutionRow[], period: string, year: number, dept
   XLSX.utils.sheet_add_json(ws, data, { origin: 'A4' });
   ws['!cols'] = [
     { wch: 14 }, { wch: 24 }, { wch: 20 }, { wch: 12 }, { wch: 22 }, { wch: 12 },
-    { wch: 22 }, { wch: 22 }, { wch: 22 }, { wch: 22 }, { wch: 22 }, { wch: 22 }, { wch: 10 },
+    ...CHAIN_STAGES.map(() => ({ wch: 22 })),
+    { wch: 10 },
   ];
   XLSX.utils.book_append_sheet(wb, ws, 'Resolved Chains');
   XLSX.writeFile(wb, `Workflow_Resolution_${period}_${year}.xlsx`);
