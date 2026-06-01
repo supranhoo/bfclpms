@@ -1,100 +1,80 @@
-# Performance & Billing Audit Fixes
+## Goal
 
-Implements the 6 fixes from the audit in one pass. All visible UI and Supabase query logic stay identical; the changes target redundant intervals, duplicate hook instances, and over-broad realtime subscriptions.
+In **Workflow Config → Configure Final Score Rule**, make the **Applied To** field dynamic and multi-selectable based on the chosen **Scope**, while preserving all existing rule storage, precedence, and resolution logic.
 
-## Risk & Impact Report
+## Scope (frontend-only)
 
-- **Data impact:** None. No schema, query, RLS, or payload changes. Only call frequency and subscription scope change.
-- **Workflow impact:** None. Offline queue, training read-time gating, notifications, compression panel, and Safety realtime behavior remain functionally identical.
-- **UI impact:** None visible. The SafetyTraining seconds counter still ticks every 1s — the tick is just moved into a tiny child component so the parent page no longer re-renders.
-- **Regression risk:** Medium for FIX 1 (offline sync singleton) and FIX 2 (Safety realtime scoping) because they touch shell-level wiring. Mitigated by keeping the same hook surface (`useSafetyOfflineSync()` continues to return the same shape, just delegating to context).
-- **Mitigation:** Existing vitest suites in `src/components/admin` and `src/hooks` must continue to pass; do not touch `useRealtimeKpiSync` or `useProfilesVersion`.
+- File: `src/components/admin/FinalScoreRulesTab.tsx` (RuleBuilderSheet).
+- Reuse existing patterns:
+  - `EmployeeCombobox` (already supports multi-select, checkbox, chips, search by name/code/department).
+  - `MultiSelectFilter` (checkbox-based multi-select with search) for Department and PMS Grade.
+- Data sources (existing hooks, no new queries):
+  - Employees: `useProfiles()` (already paged-correctly, filter `is_active`).
+  - Departments: `useDepartments()` (already loaded; show `name` + parent BU).
+  - PMS Grades: `usePmsGrades()` from `useOrganization`.
+  - Workflow Templates: existing `useWorkflowTemplates()` — kept single-select (DB column `workflow_template_id` is one per row; admin can clone rule across templates via repeat save if needed — out of scope here).
 
-## Implementation Plan
+## Storage model
 
-### FIX 1 — Singleton `useSafetyOfflineSync` via context
+The `workflow_final_score_rules` table stores **one row per (scope_type, scope_value, template, period)**. We will not change the schema. Multi-select in the UI simply creates/updates **N rows** in one save action — one per selected scope value — keyed by `(scope_type, scope_value, workflow_template_id, review_period, review_year)` so re-saves update in place and never overwrite unrelated scopes.
 
-1. Create `src/contexts/SafetyOfflineSyncContext.tsx`:
-   - Rename the existing implementation in `src/hooks/useSafetyOfflineSync.ts` to an internal `useSafetyOfflineSyncInternal()` (keep all logic — listeners, 15s interval, `flushInternal`, `flushNow`, `flushOne`).
-   - Provider calls `useSafetyOfflineSyncInternal()` once and exposes the result via context.
-   - Export a thin consumer `useSafetyOfflineSync()` that reads the context (throws a friendly error if used outside the provider). Return shape unchanged: `{ pendingCount, isSyncing, isOnline, flushNow, flushOne, refreshCount }`.
-2. Mount `<SafetyOfflineSyncProvider>` inside `SafetyLayout` (wrapping `SafetyModuleRoute` children) so it runs once for the whole Safety shell.
-3. `src/hooks/useSafetyOfflineSync.ts` becomes a re-export of the context consumer to keep all 3 call sites working without import changes.
-4. Verify only one `setInterval(refreshCount, 15_000)` and one set of online/offline listeners are registered.
+For **Edit existing rule**: the sheet still edits exactly that one row (Applied To remains single in edit mode). Multi-select is only available in **Create** mode, to avoid silently splitting/merging an existing record.
 
-### FIX 2 — Per-page Safety realtime scoping
+## UI behavior
 
-1. Change signature to `useSafetyRealtimeSync(enabled: boolean = true, tables?: SafetyRealtimeTable[])` where `SafetyRealtimeTable` is a string union of the 20 supported table names.
-2. Inside the hook, build the subscription chain dynamically: iterate a constant array of `{ table, group, filter? }` descriptors and call `.on('postgres_changes', …)` only for tables included in `tables` (or all when `tables` is undefined).
-3. Leave existing call in `SafetyLayout.tsx` as `useSafetyRealtimeSync()` (full 20-table set) for the dashboard route only — but the dashboard is the default landing, so move the call out of `SafetyLayout` and into the actual `SafetyDashboard` page. The layout itself stops subscribing.
-4. Add the scoped call in each list/detail page that currently relies on shell-level invalidation:
-   - `SafetyIncidentList`: `['safety_incidents', 'safety_incident_status_history']`
-   - `SafetyIncidentDetail`: `['safety_incidents','safety_incident_status_history','safety_incident_evidence','safety_incident_progress_log']`
-   - `SafetyPermits`: `['safety_permits','safety_permit_approvals']`
-   - `SafetyAssets`: `['safety_assets','safety_asset_calibrations','safety_asset_evidence']`
-   - `SafetyTraining`: `['safety_training_assignments','safety_training_attempts']`
-   - `SafetyAudits`: `['safety_audit_runs','safety_audit_run_responses','safety_audit_templates','safety_audit_template_items']`
-   - `SafetyEmergency`: `['safety_emergency_drills','safety_drill_participants','safety_drill_findings','safety_emergency_contacts']`
-   - SLA / notifications consumers: `['safety_sla_escalations']` / `['safety_notifications']`
-5. Keep `removeChannel(channel)` cleanup intact (it already exists).
+### Applied To (Create mode)
 
-### FIX 3 — `ServerCompressionPanel` polling
+| Scope | Component | Display | Search |
+|---|---|---|---|
+| Employee | `EmployeeCombobox multiple` | Name · Code · Department | name/code/department |
+| Department | `MultiSelectFilter` | Name (+ BU subtitle if available) | name |
+| PMS Grade | `MultiSelectFilter` | Grade name/code | name/code |
+| Template | (hidden — Applied To = the selected Workflow Template) | — | — |
 
-1. In `useCompressionStats` (inside `src/components/admin/ServerCompressionPanel.tsx`), change `refetchInterval: 30_000` → `refetchInterval: 120_000`.
-2. Add a small "Refresh" button (existing `Button` + `RefreshCw` icon already imported in admin panels — reuse design tokens) next to the queue status section that calls `query.refetch()`. Disable while `query.isFetching`.
+- Checkbox-based selection, Select All / Clear All, selected chips with remove (`X`), selected count badge.
+- Changing Scope clears `scopeValues`.
+- Required-field validation: if `scopeType !== 'template'` and `scopeValues.length === 0`, disable Save and show inline error `Please select at least one [employee/department/PMS grade].`
 
-### FIX 4 — `useOpenQueryCount`
+### Edit mode
 
-1. In `src/hooks/useOpenQueryCount.ts` remove the `refetchOnWindowFocus: true` line. Keep `refetchInterval: 120_000`.
+- Applied To stays single-value (current behavior) — shown with the same component in single-select form so the admin can change the target if needed.
 
-### FIX 5 — `useUnreadNotificationCount`
-
-1. In `src/hooks/useNotifications.ts`, remove `refetchInterval: 120_000` and `refetchOnWindowFocus: true` from `useUnreadNotificationCount`. Add a brief comment noting that `useNotifications` already invalidates this key from its Realtime subscription, so polling is redundant.
-
-### FIX 6 — `SafetyTraining` 1s tick isolation
-
-The label `Reading time: {readSeconds}s / {minRead}s required` and the progress bar driven by `readPct` are visible UI. Removing `readSeconds` entirely would freeze that display, which violates the "do not change UI visuals" constraint.
-
-Plan instead:
-
-1. Extract a tiny presentational component `ReadingTimer` in the same file that owns its own `useState` + `setInterval` ticking every 1s and a `startTimeRef = useRef(Date.now())` that resets on phase change (via prop).
-2. `ReadingTimer` renders only the seconds label + the progress bar. The parent `SafetyTraining` no longer holds `readSeconds` state, so the parent re-render cascade is eliminated — only this leaf re-renders each second.
-3. The gating check that previously read `readSeconds >= minRead` becomes a `ref`-based check the parent reads on submit: `Math.floor((Date.now() - startTimeRef.current) / 1000) >= minRead`. The `startTimeRef` is hoisted to the parent and passed to `ReadingTimer` so both share the same anchor.
-4. Phase changes call `startTimeRef.current = Date.now()` to reset the timer (matches current behavior).
-
-Net effect: heavy parent (~410-line component) stops re-rendering every second; only the small label sub-component does. The user sees the exact same ticking counter.
-
-## Files Touched
+### Save flow
 
 ```text
-src/contexts/SafetyOfflineSyncContext.tsx     [NEW]
-src/hooks/useSafetyOfflineSync.ts             [refactor → context consumer]
-src/hooks/useSafetyRealtimeSync.ts            [add tables param + dynamic chain]
-src/components/safety/SafetyLayout.tsx        [mount provider, remove default realtime call]
-src/pages/safety/SafetyDashboard.tsx          [add full-set realtime call]
-src/pages/safety/SafetyIncidentList.tsx       [scoped realtime call]
-src/pages/safety/SafetyIncidentDetail.tsx     [scoped realtime call]
-src/pages/safety/SafetyPermits.tsx            [scoped realtime call]
-src/pages/safety/SafetyAssets.tsx             [scoped realtime call]
-src/pages/safety/SafetyAudits.tsx             [scoped realtime call]
-src/pages/safety/SafetyEmergency.tsx          [scoped realtime call]
-src/pages/safety/SafetyTraining.tsx           [scoped realtime call + ReadingTimer extraction]
-src/components/admin/ServerCompressionPanel.tsx  [120s interval + manual Refresh button]
-src/hooks/useOpenQueryCount.ts                [drop refetchOnWindowFocus]
-src/hooks/useNotifications.ts                 [drop refetch fields on count hook]
+Create + N selected values
+  for each value in scopeValues:
+    upsert({ scope_type, scope_value: value, workflow_template_id, ... })
+Toast: "Final score rule applied to N selected items."
+
+Edit
+  upsert({ id, scope_type, scope_value, ... })  // unchanged
 ```
 
-(If any of the listed Safety pages don't currently exist or use a different filename, the scoped realtime call will go into the closest equivalent list/detail component — confirmed during build.)
+- Loop uses the existing `useUpsertFinalScoreRule` mutation (`Promise.all`). On partial failure, show per-item failure count in the toast and keep successful rows.
 
-## Verification
+## Out of scope (unchanged)
 
-- `bunx vitest run src/hooks src/components/admin` must stay green.
-- Grep `setInterval` under `src/components/safety` + `src/pages/safety` + `src/contexts/SafetyOfflineSyncContext.tsx` → expect exactly 1 occurrence (offline sync 15s).
-- Grep `useSafetyRealtimeSync(` → expect one full-set call (dashboard) and N scoped calls on individual pages; no call at layout level.
-- Manual smoke: navigate Safety pages, confirm bell + offline badge + training timer + compression panel still behave as before.
+- `finalScoreResolver`, `applyFinalScoreRule`, DB triggers, RLS, rule precedence (Employee > Department > PMS Grade > Template).
+- Score calculation, historical scores, reports.
+- DB schema (`workflow_final_score_rules` columns and unique key remain as-is).
 
-## Out of Scope
+## Risk & impact
 
-- No changes to `useRealtimeKpiSync`, `useProfilesVersion`, or any non-Safety realtime hook.
-- No query shape, filter, RLS, or schema changes.
-- No visual redesign of any panel beyond adding the single "Refresh" button to the existing ServerCompressionPanel queue section.
+- **Data**: additive only — N independent upserts; unique key prevents duplicates.
+- **Workflow**: no change to resolution/precedence.
+- **UI**: limited to RuleBuilderSheet; list view, filters, delete, and edit-of-existing-rule unchanged.
+- **Regression**: low — single-select edit path is preserved; only Create mode changes from string → string[] in the dialog's local state.
+
+## Test plan
+
+- `bunx vitest` continues to pass.
+- Unit test `FinalScoreRulesTab` (new lightweight test, or extend existing) — render Create sheet, switch each scope, verify the correct picker appears and Save invokes upsert N times with distinct `scope_value` values.
+
+## Files to touch
+
+- `src/components/admin/FinalScoreRulesTab.tsx` — replace Applied To block, add `usePmsGrades` + `useProfiles` imports, switch `scopeValue: string` → `scopeValues: string[]` (Create only), update `handleSave` to loop, add inline validation message.
+- `.lovable/plan.md` — update with this scope.
+- Memory: append note under `mem://features/admin/configurable-final-score-rules` that Applied To is multi-select in Create mode and single-value in Edit.
+
+No DB migration. No changes to types, RPCs, resolver, or triggers.
