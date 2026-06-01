@@ -1,142 +1,154 @@
-# Dummy/System Employee Visibility
-
 ## Assumptions
 
-- "Profiles" table is the canonical employee master (consistent with rest of project).
-- Flag name: **`is_dummy_employee boolean NOT NULL DEFAULT false`** on `public.profiles`.
-- Two new `system_settings` keys (JSON string values, matching the existing `useSystemSettings` pattern):
-  - `show_dummy_in_excel` → `"yes" | "no"` (default `"no"`)
-  - `show_dummy_in_frontend` → `"yes" | "no"` (default `"no"`)
-- Defaults = **No** (hide dummies) — matches the spec and is safe (existing dummies like auditor001 disappear from business views immediately once marked).
-- Dummies remain fully functional for login, RLS, scoring, audit logs, notifications, backups. Only **visibility** in business selectors/reports changes.
-- Admin User Management always shows everyone (with a "Dummy/System" badge + filter).
+- Setting stored via existing `system_settings` mechanism with key `employee_master_field_requirements`, value = JSON object (booleans per field). Default: `{ full_name: true, employee_code: true, ...all others: false }`.
+- "General" section of System Settings is currently a single scrolling page (not nested tabs). I'll add a new **card section** titled "Employee Master Fields" inside the General view (consistent with existing styling). If you'd prefer a true sub-tab, say the word and I'll switch the layout.
+- The Add New User dialog lives in `src/pages/admin/UserManagement.tsx` (lines ~1644+). Validation is currently ad-hoc (only Full Name has a `*`). I'll replace the `*` with the red lowercase `l` indicator on all configured-mandatory fields and add config-driven validation.
+- Edit User dialog: out of scope for the red-`l` indicator (spec mentions only Add New User). Validation in Edit dialog stays unchanged.
+- Backend hard floor: `full_name` and `employee_code` remain non-nullable in DB / required by `create-employee` edge function — admin cannot disable these in the UI (toggle shown but disabled with note "Required by system.").
+- Server-side enforcement: the `create-employee` edge function will read `employee_master_field_requirements` and reject creates that violate it (so admins can't bypass via direct API).
+- The "Is this a dummy/system employee?" toggle from the prior in-progress feature is included in the configurable list — when that field doesn't exist yet in the dialog (build still broken from previous step), it's silently skipped. Same for any field not yet rendered.
 
 ## Risk & Impact Report
 
-- **Data Impact**: Additive. One nullable-safe boolean column on `profiles` (default false). Two new rows in `system_settings`. No backfill of `true` — admins mark dummies manually. Historical data, audit logs, PMS scores untouched.
-- **Workflow Impact**: None for real employees. Dummies stay logged-in, keep roles, keep RLS access. Only UI lists and Excel rows filter them out.
-- **UI/UX Impact**: 
-  - New Yes/No switch in Add/Edit User dialog.
-  - New "Dummy/System Employee Visibility" card in System Settings → General.
-  - New "Dummy/System" badge + status filter (All / Real / Dummy) in User Management table.
-- **Regression Risk**: Medium-low. The risk is silently dropping rows from a report. Mitigation: central helper `applyDummyEmployeeFilter()` used everywhere, gated by the setting, with the setting **defaulting to "no"** — but only filtering rows where `is_dummy_employee === true` (so until admin marks anyone, behaviour is byte-identical to today).
-- **Scalability**: O(n) client-side filter on already-fetched lists. No extra queries (the flag is added to existing `profiles` selects). Indexed `WHERE is_dummy_employee = true` partial index for future server-side filtering.
-- **Rollback**: Drop column + 2 settings rows; remove helper call sites. Filter helper no-ops when column missing.
-- **Backup**: `profiles` is already covered by the automatic `get_backup_table_order()` allowlist — no change needed (per Core memory).
+- **Data Impact**: 1 new row in `public.system_settings` (`employee_master_field_requirements`). No schema changes. Additive.
+- **Workflow Impact**: None for existing users. Add User flow gains stricter validation only for fields admin explicitly marks mandatory.
+- **UI/UX Impact**:
+  - New "Employee Master Fields" card in System Settings → General (table of 18 rows, each with a Yes/No switch).
+  - Add New User dialog: existing red `*` on Full Name is replaced with a small red lowercase `l` glyph; same glyph appears on every other configured-mandatory label. Layout unchanged.
+- **Regression Risk**: Low. Default config keeps today's behaviour byte-identical (only Full Name & Employee Code required). All other validation is opt-in.
+- **Scalability**: Constant-size config (18 booleans). Single `useSystemSetting` fetch, cached. No new queries on save.
+- **Rollback**: Delete the settings row; dialog falls back to defaults (`full_name`, `employee_code` mandatory).
+- **Backup**: `system_settings` is already covered by the automatic backup allowlist — no change.
 
-## Placement Decisions
+## UI — Employee Master Fields card (System Settings → General)
 
-- **Flag column**: `public.profiles.is_dummy_employee` (not a separate table — single boolean, profile-scoped).
-- **Settings UI**: System Settings → General tab (new card below existing cards).
-- **Admin filter UI**: User Management toolbar — new "Employee Type" dropdown (All / Real / Dummy-System), with a badge on each row.
-- **Filter helper**: `src/lib/dummyEmployeeFilter.ts` — pure, mirrors the pattern of `src/lib/reportEmployeeFilter.ts`.
+Placement: bottom of the General page, after the existing cards.
+
+```text
+┌─ Employee Master Fields ─────────────────────────────────────────┐
+│ Configure which fields are required when creating a new user.   │
+│                                                                  │
+│ Field                              Mandatory                     │
+│ ──────────────────────────────────  ───────────                  │
+│ Full Name                          [ON]  Required by system.     │  ← disabled
+│ Employee Code                      [ON]  Required by system.     │  ← disabled
+│ Email                              [ ● ]                         │
+│ Group Date of Joining (GDOJ)       [ ● ]                         │
+│ Date of Joining (DOJ)              [ ● ]                         │
+│ Confirmation Date                  [ ● ]                         │
+│ Company                            [ ● ]                         │
+│ Division                           [ ● ]                         │
+│ Department                         [ ● ]                         │
+│ Designation                        [ ● ]                         │
+│ PMS Grade                          [ ● ]                         │
+│ Employee Category                  [ ● ]                         │
+│ Employment Status                  [ ● ]                         │
+│ Location                           [ ● ]                         │
+│ Reporting Manager                  [ ● ]                         │
+│ Role                               [ ● ]                         │
+│ Portal Access                      [ ● ]                         │
+│ Dummy/System Employee              [ ● ]                         │
+│                                                                  │
+│ Note: Fields marked mandatory show a small red 'l' indicator    │
+│ next to their label on the Add New User page.                   │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+Each switch debounces a single `useUpdateSystemSetting` write of the full JSON object (read-modify-write).
+
+## UI — Add New User dialog
+
+Before (today):
+```text
+Full Name *
+[__________________]
+```
+
+After:
+```text
+Full Namel              Locationl              Departmentl
+[_______________]       [▼ Select location]    [▼ Select dept]
+```
+
+- The `l` is a `<span class="text-destructive ml-0.5 lowercase font-medium">l</span>` placed immediately after the label text. No asterisk. Same glyph used everywhere — never capital `I`.
+- On Save:
+  - Iterate the config; for each `mandatory === true` field, check the corresponding form state is non-empty.
+  - First failure → toast `"<Field Name> is mandatory."` and abort the create.
+  - Email format check runs whenever email is non-empty (unchanged), and additionally is required when `email: true`.
 
 ## Plan
 
-### 1. Schema (single migration)
+### 1. Schema / settings seed (single migration)
 
 ```sql
-ALTER TABLE public.profiles
-  ADD COLUMN IF NOT EXISTS is_dummy_employee boolean NOT NULL DEFAULT false;
-
-CREATE INDEX IF NOT EXISTS idx_profiles_is_dummy_employee
-  ON public.profiles (is_dummy_employee) WHERE is_dummy_employee = true;
-
 INSERT INTO public.system_settings (setting_key, setting_value, description)
-VALUES
-  ('show_dummy_in_excel',    '"no"', 'Show dummy/system employees in Excel reports/exports'),
-  ('show_dummy_in_frontend', '"no"', 'Show dummy/system employees in frontend business views/selectors')
+VALUES (
+  'employee_master_field_requirements',
+  '{"full_name":true,"email":false,"employee_code":true,"group_doj":false,"doj":false,"confirmation_date":false,"company_id":false,"division_id":false,"department_id":false,"designation":false,"pms_grade":false,"employee_category":false,"employment_status":false,"location_id":false,"reporting_manager_id":false,"role":false,"portal_access":false,"is_dummy_employee":false}'::jsonb,
+  'Per-field mandatory flag for the Add New User page'
+)
 ON CONFLICT (setting_key) DO NOTHING;
 ```
 
-No RLS/GRANT changes (column inherits existing `profiles` policies; `system_settings` already covered).
+### 2. Pure module — `src/lib/employeeMasterFields.ts`
 
-### 2. Pure helper + hooks
+- `EMPLOYEE_MASTER_FIELDS: { key, label, alwaysRequired }[]` — single source of truth (18 entries; `full_name` and `employee_code` have `alwaysRequired: true`).
+- `DEFAULT_REQUIREMENTS` — derived from the list.
+- `parseRequirements(raw)` — merges saved JSON over defaults; forces `alwaysRequired` keys to `true`.
+- `validateRequiredFields(values, reqs)` → `{ ok: true } | { ok: false, fieldKey, label, message }`.
+- Unit tests in `src/lib/employeeMasterFields.test.ts`.
 
-**`src/lib/dummyEmployeeFilter.ts`**
-```ts
-export function applyDummyEmployeeFilter<T>(
-  rows: T[],
-  showDummies: boolean,
-  getIsDummy: (row: T) => boolean | null | undefined,
-): T[] {
-  if (showDummies) return rows;
-  return rows.filter(r => getIsDummy(r) !== true);
-}
+### 3. Hook — `src/hooks/useEmployeeMasterFieldRequirements.ts`
+
+Wraps `useSystemSetting('employee_master_field_requirements')` → `{ requirements, isLoading }` using `parseRequirements`.
+
+### 4. Reusable mandatory glyph — `src/components/ui/RequiredMark.tsx`
+
+```tsx
+export const RequiredMark = () => (
+  <span aria-label="required" className="text-destructive font-medium ml-0.5 lowercase select-none">l</span>
+);
 ```
 
-**`src/hooks/useDummyEmployeeVisibility.ts`** — reads the two settings via existing `useSystemSetting('show_dummy_in_excel' | 'show_dummy_in_frontend')`. Returns `{ showInExcel, showInFrontend, isLoading }`. Defaults to `false` while loading and when setting is missing.
+### 5. Admin UI card — `src/components/admin/EmployeeMasterFieldsCard.tsx`
 
-### 3. Admin: Add/Edit User dialog
+- Table of 18 rows. Each row: label + `<Switch>`.
+- `alwaysRequired` rows: switch checked, disabled, helper text "Required by system."
+- Debounced save (300 ms) → `useUpdateSystemSetting` with full merged object.
+- Mounted at the bottom of the General section in `SystemSettings.tsx`.
 
-File: `src/components/admin/users/UserFormDialog.tsx` (or current equivalent — confirm during impl). Add:
-- Switch: **"Is this a dummy/system employee?"** (default off)
-- Helper text per spec
-- Wire to `is_dummy_employee` in the upsert payload + `profiles` row.
+### 6. Add New User dialog (`src/pages/admin/UserManagement.tsx`)
 
-### 4. Admin: User Management table
+- Read `useEmployeeMasterFieldRequirements()`.
+- Replace existing `<span className="text-destructive">*</span>` on Full Name with `<RequiredMark />`.
+- Add `<RequiredMark />` after each label whose key is mandatory in the config.
+- Pre-save: run `validateRequiredFields`; on failure show toast and return.
+- Keep all existing logic (combobox, role assignment, dummy flag) intact — surgical changes only.
 
-- Add **"Dummy/System"** badge (subtle muted variant) next to name when `is_dummy_employee === true`.
-- Add toolbar filter: **Employee Type** — `All | Real Employees | Dummy/System` (client-side filter on the existing list).
-- **Never** apply the global visibility setting here — admins always see everyone.
+### 7. Server-side guard — `supabase/functions/create-employee/index.ts`
 
-### 5. System Settings → General
-
-File: `src/pages/admin/GeneralSettings.tsx` (or current equivalent). New card:
-- Title: **"Dummy/System Employee Visibility"**
-- Switch 1: "Show dummy/system employees in Excel reports?" → writes `show_dummy_in_excel`
-- Switch 2: "Show dummy/system employees on frontend views?" → writes `show_dummy_in_frontend`
-- Uses existing `useUpdateSystemSetting` mutation.
-
-### 6. Apply frontend filter (`showInFrontend === false`)
-
-Apply `applyDummyEmployeeFilter` in selectors/lists that surface real employees for business use. Targets (each only filters when the setting fetch is ready):
-- `EmployeePickerCombobox` (review notes)
-- Dashboard employee lists / reviewer grids (`useMyVisibleEmployeeIds` consumers — filter at the component layer, not the hook, so admin screens stay unaffected)
-- Report filter dropdowns (`CompanyFilter` siblings — the employee picker)
-- KPI assignment employee lists
-- Increment input employee search (`IncrementInputs.tsx`)
-- Incentive input employee search (`IncentiveDataEntry.tsx`)
-- Management / audit employee views
-
-Approach: each list component already selects `profiles` rows — add `is_dummy_employee` to the select, then pipe the array through the helper using `useDummyEmployeeVisibility().showInFrontend`. **Do not** filter inside shared hooks like `useMyVisibleEmployeeIds` (those are also used by admin screens).
-
-### 7. Apply Excel filter (`showInExcel === false`)
-
-In every Excel export path, filter the export rows just before `XLSX.writeFile`. Targets confirmed from codebase:
-- `OrgKpiBulkExport` (and other admin exports)
-- `MonthlyIncentiveTable` / `RetroactiveAdjustmentTable` exports
-- `IncrementInputs` Run Details + summary exports
-- `PerformanceReport`, `DepartmentReport`, `KRAIssuance`, `IssuesReport`, `QueryReport`, `CustomReport`, `MonthlyTrendTable`, `KPI Employee Matrix Report`
-- Any other `downloadXlsx` / `XLSX.writeFile` call site
-
-Each export resolves `is_dummy_employee` on its row (joining via employee_id where needed), then applies the helper.
+- After auth check, fetch the setting via service-role client.
+- Validate incoming payload against the requirements; respond `400 { error: "<Label> is mandatory" }` on violation.
+- `full_name` + `employee_code` checks remain regardless of config.
 
 ### 8. Tests
 
-- `src/lib/dummyEmployeeFilter.test.ts` — pure helper: setting on/off, mixed rows, missing flag, empty list.
-- Component test for User Management filter toggle (real / dummy / all).
+- `employeeMasterFields.test.ts` — defaults, merge, alwaysRequired override, validate ok/fail cases.
+- Smoke test: card renders 18 rows, `full_name`/`employee_code` switches disabled.
 
 ### 9. Docs
 
-- `DOCUMENTATION.md` — new section "Dummy/System Employees" + version-history entry.
-- `POLICY.md` — new rule describing flag semantics, default OFF, visibility-only impact, admin override in User Management.
-
-## UI Changes Summary
-
-- **Add/Edit User dialog**: new switch + helper text below the existing fields.
-- **User Management table**: new badge column treatment + new "Employee Type" dropdown in the toolbar.
-- **System Settings → General**: new card with two switches.
-- **All business employee selectors / Excel exports**: silently drop dummy rows when the corresponding setting is "no". No layout change.
+- `DOCUMENTATION.md` — new v2.68.0 entry describing setting, card, glyph, validation, and server guard.
+- `POLICY.md` — new §: "Employee Master Field Requirements" (default-OFF except 2 system-required fields; visual indicator = lowercase red `l`, never `*` or `I`).
 
 ## Out of Scope
 
-- Server-side RLS filtering of dummies (visibility is presentation-layer only, per spec part 7).
-- Bulk-mark UI (admins flip the flag per-user as needed).
-- Migration of any existing user — defaults stay `false`; admins mark `auditor001/002` themselves.
+- Edit User dialog visual indicators (spec only covers Add New User).
+- Bulk import validation (CSV importer keeps its own existing rules).
+- Per-role or per-company override of requirements.
 
-## Open Questions (confirm before build)
+## Open Questions
 
-1. **Field name**: confirm `is_dummy_employee` (vs `is_system_employee`). I'll use `is_dummy_employee` unless you say otherwise.
-2. **Reviewer/Auditor assignment dropdowns**: if a dummy `auditor001` is currently *assigned* as an auditor on real KPIs and we hide them from selectors, admins won't see them in the picker to reassign. OK to still show **already-assigned** dummies as static text (just hidden from the *picker*)? My default: yes — never break existing assignments, only filter the searchable list.
-3. **Login / auth screens**: spec says "Do not block login". Confirmed — filter applies only to *lists of employees*, never to the logged-in user's own profile/menus.
+1. **Sub-tab vs in-page card** in System Settings → General? Default: in-page card (lower-risk, matches today's layout). Switch to a real sub-tab only if you confirm.
+2. **Edit User dialog**: keep unchanged (default), or mirror the same red-`l` indicators there too?
+3. **Server-side rejection vs warning**: hard `400` rejection (default) or soft warning that still allows admin override?
