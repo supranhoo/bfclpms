@@ -19,7 +19,9 @@ export function EmployeeMasterFieldsCard() {
     }
     update.mutate({
       key: EMPLOYEE_MASTER_FIELDS_SETTING_KEY,
-      value: JSON.stringify(next) as unknown as string,
+      // useUpdateSystemSetting deep-clones via JSON.parse(JSON.stringify(value)),
+      // so passing the object directly stores it as a JSON object (not a string).
+      value: next as unknown as string,
     });
   };
 
