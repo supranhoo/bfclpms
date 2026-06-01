@@ -1,98 +1,97 @@
-## 1. Assumptions
-- Custom fields are an additive layer; built-in fixed fields (Full Name, Employee Code, etc.) stay unchanged in schema/UI.
-- Values are stored as JSON keyed by `field_key` per employee — no new physical columns per field.
-- Edit User page integration is in scope only if `show_on_edit_user` toggle is on. Employee Master table column rendering is out of scope for this iteration (toggle stored but not rendered) to keep change surgical; we'll note that in the UI.
-- Only Admin can manage definitions (RLS via `has_role(auth.uid(),'admin')`); authenticated users may read active definitions and read/write their own values? No — values are written by the create-user flow, so values are admin-managed for now. RLS: read by authenticated, write by admin only.
 
-## 2. Clarifications
-None blocking. Reasonable defaults chosen above; will surface "Employee Master table column" toggle as a stored-but-not-yet-rendered preference with a helper note.
+# Backup Feature — RCA and Fix Plan
 
-## 3. Risk & Impact Report
-- **Data Impact**: Two new tables (`employee_master_custom_fields`, `employee_master_custom_field_values`). No alteration to `profiles` or existing fixed-field flow.
-- **Workflow Impact**: Add New User gains additional dynamic inputs only when admin enables them. Existing validation and creation paths unchanged.
-- **UI/UX Impact**: New `+ Add Field` button + modal in System Settings > General > Employee Master Fields. Custom fields rendered in the same 3-col grid with extra action menu (Edit/Deactivate). On Add New User, custom fields render in a new "Additional Information" section below built-ins.
-- **Regression Risk**: Low — built-in fixed fields, validation, and createUser RPC are untouched. New code paths only activate when at least one active custom field exists.
-- **Scalability Impact**: Definitions are admin-bounded (dozens at most). Values stored as a single JSONB row per employee — bounded and indexed by `employee_id`.
-- **Mitigation Plan**: Strict zod validation of `field_key`, unique constraint in DB, deactivate-not-delete by default, hard-delete requires a typed confirm.
-- **Rollback Strategy**: Disable the feature by deactivating all custom fields; tables are additive and can be dropped without affecting profiles.
+## What's actually broken
 
-## 4. Step-by-step Plan
+I queried `backup_logs` and read `supabase/functions/create-backup/index.ts`. Two separate, independent bugs:
 
-### A. Database (migration)
-1. Create `public.employee_master_custom_fields`:
-   - `id uuid pk`, `field_key text unique not null` (lowercase, snake_case enforced), `field_label text not null`, `field_type text not null check in ('text','number','date','dropdown','yes_no','email','phone','long_text')`, `is_mandatory boolean default false`, `show_on_add_user boolean default true`, `show_on_edit_user boolean default true`, `show_in_employee_master boolean default false`, `dropdown_options jsonb` (array of `{value,label}`), `placeholder text`, `help_text text`, `is_active boolean default true`, `sort_order integer default 0`, timestamps.
-   - GRANTs: read for authenticated, full for service_role.
-   - RLS: SELECT for authenticated; INSERT/UPDATE/DELETE only when `has_role(auth.uid(),'admin')`.
-2. Create `public.employee_master_custom_field_values`:
-   - `id uuid pk`, `employee_id uuid not null references profiles(id) on delete cascade`, `values jsonb not null default '{}'::jsonb`, timestamps, `unique(employee_id)`.
-   - Indexes: `(employee_id)`, GIN on `values`.
-   - GRANTs: read for authenticated, full for service_role.
-   - RLS: SELECT for authenticated (employee directory is already broadly readable in this app); INSERT/UPDATE/DELETE only when `has_role(auth.uid(),'admin')`.
-3. Trigger `update_updated_at_column` on both tables.
+### Bug A — Manual backup stuck in `running` (the 31 May 11:24 PM row)
 
-### B. Domain layer
-1. `src/lib/employeeMasterCustomFields.ts`:
-   - Types: `CustomFieldType`, `CustomFieldDef`, `CustomFieldValues`.
-   - `sanitizeFieldKey(label)` → lowercase snake_case, strips unsafe chars.
-   - `zod` schemas: `CustomFieldDefSchema` (with conditional dropdown_options.min(1)) and `validateCustomFieldValues(defs, values)` returning `{ok}|{ok:false, fieldKey, label, message}` mirroring built-in validator. Validates: mandatory, email format, number numeric, dropdown value ∈ options.
-2. `src/hooks/useEmployeeMasterCustomFields.ts`:
-   - `useCustomFieldDefs({ activeOnly, addUserOnly })` — react-query, sorted by `sort_order, field_label`.
-   - `useUpsertCustomFieldDef()`, `useDeactivateCustomFieldDef()`, `useDeleteCustomFieldDef()` (with usage-count check via aggregate query).
-   - `useSaveEmployeeCustomFieldValues(employeeId)` — upsert into values table.
+- Row `534ffe1c…` shows `status=running` for ~17 hours, `file_size_bytes=130 MB`, `tables_count=161`, `total_rows=169179`, `completed_at=NULL`, no error message.
+- These counters are populated **only by the finalize step**. So the batches did upload and finalize updated counters, but the very next `.update({ status: 'completed' })` either never ran or the row was re-set to `running` by a later code path. Looking at `handleInit` / `handleFinalize`, the most likely cause: finalize wrote counters and integrity ran, but the worker hit its 150 s wall-clock or OOM at the final integrity-check write, leaving the row in `running`.
+- **There is a 30-minute stuck-row watchdog in `handleScheduled` (lines 666-674), but no equivalent watchdog on the manual path.** So a stuck manual row stays stuck forever until another scheduled run happens to flip it — except scheduled is also broken (Bug B), so nothing ever cleans it.
 
-### C. Admin UI — System Settings > General > Employee Master Fields
-1. Update `EmployeeMasterFieldsCard.tsx`:
-   - Header gains a `+ Add Field` button (right-aligned).
-   - Below the existing fixed-fields grid, render a second "Custom Fields" 3-col grid with the same card style. Each card shows label, type badge, mandatory `Switch`, and an inline ellipsis menu with Edit / Deactivate (Activate) / Delete.
-   - "Delete" uses `ConfirmDestructiveDialog` and warns when stored values exist.
-2. New component `EmployeeMasterCustomFieldDialog.tsx` (modal):
-   - Inputs per spec; `field_key` auto-derived from label, editable, validated unique (debounced check via query).
-   - Conditional dropdown_options editor (add/remove rows, drag-free).
-   - `Show on Employee Master table` shown with helper text "Used by employee table column visibility (coming soon)".
-   - Save calls upsert; on success, closes and refreshes list.
+### Bug B — Every scheduled backup since 22 May fails with `RateLimitError` at batch ~31/37
 
-### D. Add New User integration
-1. New component `CustomFieldRenderer.tsx` that switches on `field_type` and renders the correct shadcn input with the `RequiredMark` lowercase red `l` when mandatory.
-2. In `src/pages/admin/UserManagement.tsx` Add New User dialog:
-   - Local state `customValues: Record<string, unknown>`.
-   - Fetch `useCustomFieldDefs({ activeOnly:true, addUserOnly:true })`. If non-empty, render a new section "Additional Information" with the 2-col responsive grid already used elsewhere.
-   - In `handleCreateUser`, after built-in validation, run `validateCustomFieldValues(defs, customValues)` and abort with toast on failure.
-   - After `createUser.mutate` resolves with new `profile.id`, call `useSaveEmployeeCustomFieldValues` to persist values.
-   - `resetCreateForm` clears `customValues`.
-3. Edit User dialog is out of scope this iteration (toggle stored only). Add a TODO comment so the next iteration can follow up.
+- `runScheduledChunked` calls `callSelf(...)` in a **tight sequential for-loop** for ~37 batches plus 1 finalize. That's 30–40 self-invocations of `create-backup` within ~30 s through `fetch(/functions/v1/create-backup)`.
+- Supabase Edge Functions enforce a per-trace invocation rate limit. The logs confirm it: `RateLimitError: Rate limit exceeded for trace … Retry after ~30s` on batch 31 every single night, then finalize also rate-limits.
+- The manual path uses the same `callSelf` pattern from `handleDispatch`, which is why **large manual runs are at the same risk** — they're just below the threshold today.
 
-### E. Edge cases / safety
-- Reserved keys: refuse `field_key` collisions with any built-in `EmployeeMasterFieldKey`.
-- `field_key` regex: `^[a-z][a-z0-9_]{1,40}$`.
-- Dropdown without ≥1 option → save disabled.
-- Deactivated fields hide from Add New User but are preserved in values JSON.
-- Hard delete only after typed confirm; values JSON keys are left intact (orphan-tolerant).
+## Root causes (one sentence each)
 
-## 5. UI Changes
-- **System Settings > General > Employee Master Fields**:
-  - Card header: `+ Add Field` button (top-right, `variant="outline"`, `Plus` icon).
-  - Existing built-in fields grid unchanged.
-  - New "Custom Fields" subsection (`<h4>` + helper text) using identical 3-col grid; each card shows label, small type pill, mandatory `Switch`, ellipsis menu.
-- **Modal**: shadcn `Dialog`, max-w-lg, all spec'd inputs, inline zod errors via `text-destructive`, footer Save/Cancel.
-- **Add New User dialog**: New "Additional Information" section appears only if active add-user custom fields exist, rendered in the existing 2-col responsive grid pattern. Mandatory custom fields show the red lowercase `l` (no asterisk).
+1. **No stuck-row watchdog on the manual dispatch path.**
+2. **`runScheduledChunked` (and the manual dispatcher) fire too many self-invocations in too short a window with no spacing, no concurrency cap, and no retry-after handling.**
 
-## 6. Implementation
-Pending approval; will execute in this order: migration → domain lib + hooks → admin card/modal → Add New User integration → docs/policy update → tests.
+## Fix Plan
 
-## 7. Tests
-- `employeeMasterCustomFields.test.ts`:
-  - `sanitizeFieldKey` produces safe keys, strips unicode/symbols, collapses spaces.
-  - `CustomFieldDefSchema` rejects invalid type, empty dropdown options, reserved keys.
-  - `validateCustomFieldValues` enforces mandatory/email/number/dropdown rules; ignores inactive/hidden fields.
-- Mock data factory `mockCustomFieldDef(overrides)` for reuse.
+### Fix 1 — Recover the stuck row (one-time)
 
-## 8. DOCUMENTATION.md updates
-- New section under "Admin → System Settings": Employee Master Custom Fields — definitions table, values table, validation rules, RLS posture, dynamic rendering on Add New User.
-- Version history entry.
+Manual SQL via approved migration / insert tool:
+- Mark `534ffe1c…` as `completed_with_errors` with `error_message='Recovered: orchestrator did not reach final status update'` and `completed_at=now()`. Counters and file_size are intact, so the snapshot is usable.
 
-## 9. POLICY.md updates
-- Add policy: "Custom Employee Master fields must use deactivate-by-default. Hard delete requires explicit admin confirmation. Field keys are immutable in practice (rename only via deactivate + recreate) to preserve historical values."
+### Fix 2 — Add stuck-row watchdog to manual path
 
-## 10. Post-implementation notes
-- Will verify: build passes, unit tests pass, and Add New User renders/saves a sample custom field end-to-end.
-- Follow-up (not in this iteration): render custom fields on Edit User and as optional columns in Employee Master table.
+In `handleInit` (manual entry point), run the same cleanup block currently in `handleScheduled` (lines 666-674) so any `running` row older than 30 min is auto-failed before a new manual run is created. Single source of truth: extract into one `reapStuckRunningBackups(supabase)` helper called from both entry points.
+
+### Fix 3 — Add a separate periodic reaper (cron, every 15 min)
+
+A new tiny edge function `reap-stuck-backups` (or a scheduled DB function) that flips any `status='running'` row older than 30 min to `failed`. This way a stuck row clears even if the user never triggers a new backup. Lightweight, idempotent.
+
+### Fix 4 — Respect Edge Function rate limits in `callSelf` orchestration
+
+Modify `runScheduledChunked` and the manual dispatcher equivalent:
+
+1. **Throttle**: insert a small delay between `callSelf` invocations (e.g. `await sleep(800ms)` between batches). At 37 batches that adds ~30 s — well within the orchestrator's wall-clock budget since it runs under `EdgeRuntime.waitUntil`.
+2. **Retry-after honoring**: when `callSelf` returns a 429 or the error body contains `Retry after Xms`, parse `X`, `await sleep(X + 500)`, retry up to 3 times before recording the batch as failed.
+3. **Optional bounded concurrency**: process batches in groups of 2 with `Promise.allSettled` + same delay between groups. Cuts wall-clock roughly in half while staying well under the rate-limit envelope.
+4. **Finalize retry**: wrap the finalize `callSelf` in the same retry-after loop — currently a single rate-limit on finalize wastes the entire run.
+
+### Fix 5 — Make partial runs recoverable instead of `failed`
+
+Today, when finalize hits the rate limit, the run is marked `failed` even though all 37 batch JSON files are sitting in storage. Change behavior: if all batches succeeded but finalize rate-limited after 3 retries, mark as `completed_with_errors` with `error_message='Finalize deferred; rerun finalize from backup row id …'` and expose a "Retry finalize" admin action. Avoids re-uploading 45 MB nightly just to retry one call.
+
+### Fix 6 — Tighten the UI
+
+- Show a "Cancel / Mark Failed" action on rows stuck in `running` > 30 min (admin only, audit-logged).
+- Add a "Retry finalize" action for rows in `completed_with_errors` whose error_message starts with `Finalize deferred`.
+
+## What I will NOT change
+
+- `BATCH_SIZE=4` (it exists for the 256 MB OOM ceiling — out of scope).
+- `get_backup_table_order()` coverage logic (per Core memory, must stay automatic).
+- The `chunked` format itself or `assertCoverageNotShrunk` guard.
+- Restore flow (not implicated in either bug).
+
+## Risk & Impact Report
+
+| Area | Impact | Mitigation |
+|---|---|---|
+| Data | None — fixes don't touch row contents, only status/orchestration. Existing snapshots in Storage are preserved. | One-time SQL recovery is a single-row update with explicit id. |
+| Workflow | Nightly scheduled backups will start succeeding again. | Throttle delay (~30 s) keeps total runtime under 2 min — well within Edge background budget. |
+| UI | Two new admin actions (cancel-stuck, retry-finalize). | Both gated by admin role + `ConfirmDestructiveDialog` per project policy. |
+| Regression | Manual backups gain a watchdog; could in theory reap a legitimate >30 min in-progress run. | 30 min already the chosen threshold; current largest manual run took ~8 min, so safe. Watchdog only triggers on a *new* invocation, never mid-flight. |
+| Scalability | Throttle scales linearly with table count. At 161 tables / BATCH_SIZE 4 = ~40 batches × 800 ms ≈ 32 s overhead. Acceptable. | Configurable constant `INTER_BATCH_DELAY_MS` so we can tune. |
+| Backup coverage | Unchanged — still `get_backup_table_order()`-driven. | `assertCoverageNotShrunk` retained. |
+| Audit | Recovery row gets explicit `error_message`; reaper marks `error_message='Reaped: stuck >30min'`. | Visible in Backup History. |
+
+## Rollback
+
+- All changes are in `supabase/functions/create-backup/index.ts` (revertable) plus one new tiny edge function `reap-stuck-backups` (deletable) and two small UI buttons (revertable).
+- No schema changes. No RLS changes. No data migration beyond the one recovery UPDATE.
+
+## Test / Verification Plan
+
+1. Unit-test the new `parseRetryAfterMs(errString)` helper (Vitest, covers `Retry after 30111ms`, `Retry after 1s`, missing field).
+2. Unit-test `reapStuckRunningBackups` with a fixture row older than 30 min.
+3. Manual smoke: trigger a manual backup, watch it complete; trigger via scheduled cron, watch it complete without rate-limit errors.
+4. Confirm Backup History shows all green for the next 3 nightly runs before declaring done.
+
+## Documentation Updates
+
+- `DOCUMENTATION.md` — version-history entry `v2.68 — Backup orchestration rate-limit hardening + stuck-row watchdog`.
+- `POLICY.md` — extend the Backup section: "Manual and scheduled paths share a single `reapStuckRunningBackups` watchdog. Self-invocations must be throttled and honor `Retry-After`."
+- Memory update: add `mem://infrastructure/database/backup-orchestration-throttling` referencing this change.
+
+---
+
+**Please approve and I'll implement in this order:** Fix 1 (recover row) → Fix 2 + 4 + 5 (single PR to `create-backup/index.ts`) → Fix 3 (reaper) → Fix 6 (UI actions) → docs + tests.
