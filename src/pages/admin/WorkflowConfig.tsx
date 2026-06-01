@@ -27,12 +27,14 @@ import {
 } from '@/hooks/useWorkflowConfig';
 import { useDepartments } from '@/hooks/useOrganization';
 import { GitBranch, Users, Building2, Award, Trash2, Search, ArrowRight, Check, Plus, Pencil, Star, Archive, RotateCcw, ChevronDown, Calendar, Globe, ChevronsRight, Info } from 'lucide-react';
+import { Scale } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { ReviewPanelSkeleton } from '@/components/ui/LoadingSkeletons';
 import CustomWorkflowDialog from '@/components/admin/CustomWorkflowDialog';
 import ReconcileOrphanedKpisDialog from '@/components/admin/ReconcileOrphanedKpisDialog';
 import { WorkflowConfigExport } from '@/components/admin/WorkflowConfigExport';
 import MigrateGlobalDefaultsDialog from '@/components/admin/MigrateGlobalDefaultsDialog';
+import { FinalScoreRulesTab } from '@/components/admin/FinalScoreRulesTab';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 
@@ -484,7 +486,7 @@ export default function WorkflowConfig() {
       </Card>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="templates">
             <Check className="h-4 w-4 mr-2" />
             Templates
@@ -500,6 +502,10 @@ export default function WorkflowConfig() {
           <TabsTrigger value="pms_grade">
             <Award className="h-4 w-4 mr-2" />
             Per PMS Grade
+          </TabsTrigger>
+          <TabsTrigger value="final_score_rules">
+            <Scale className="h-4 w-4 mr-2" />
+            Final Score Rules
           </TabsTrigger>
         </TabsList>
 
@@ -937,6 +943,10 @@ export default function WorkflowConfig() {
               )}
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="final_score_rules" className="space-y-4">
+          <FinalScoreRulesTab />
         </TabsContent>
       </Tabs>
 

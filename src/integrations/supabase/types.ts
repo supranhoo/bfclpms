@@ -6599,6 +6599,10 @@ export type Database = {
           final_rating: Database["public"]["Enums"]["rating_level"] | null
           final_revision_no: number
           final_score: number | null
+          final_score_calculated_at: string | null
+          final_score_explanation: string | null
+          final_score_rule_snapshot: Json | null
+          final_score_rule_type: string | null
           functional_manager_evidence_urls: Json
           functional_manager_rating:
             | Database["public"]["Enums"]["rating_level"]
@@ -6661,6 +6665,10 @@ export type Database = {
           final_rating?: Database["public"]["Enums"]["rating_level"] | null
           final_revision_no?: number
           final_score?: number | null
+          final_score_calculated_at?: string | null
+          final_score_explanation?: string | null
+          final_score_rule_snapshot?: Json | null
+          final_score_rule_type?: string | null
           functional_manager_evidence_urls?: Json
           functional_manager_rating?:
             | Database["public"]["Enums"]["rating_level"]
@@ -6723,6 +6731,10 @@ export type Database = {
           final_rating?: Database["public"]["Enums"]["rating_level"] | null
           final_revision_no?: number
           final_score?: number | null
+          final_score_calculated_at?: string | null
+          final_score_explanation?: string | null
+          final_score_rule_snapshot?: Json | null
+          final_score_rule_type?: string | null
           functional_manager_evidence_urls?: Json
           functional_manager_rating?:
             | Database["public"]["Enums"]["rating_level"]
@@ -9261,6 +9273,68 @@ export type Database = {
           },
         ]
       }
+      workflow_final_score_rules: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          id: string
+          is_active: boolean
+          missing_score_policy: string
+          notes: string | null
+          review_period: string | null
+          review_year: number | null
+          rule_type: string
+          scope_type: string
+          scope_value: string | null
+          stage_weights: Json | null
+          updated_at: string
+          updated_by: string | null
+          workflow_template_id: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          is_active?: boolean
+          missing_score_policy?: string
+          notes?: string | null
+          review_period?: string | null
+          review_year?: number | null
+          rule_type: string
+          scope_type: string
+          scope_value?: string | null
+          stage_weights?: Json | null
+          updated_at?: string
+          updated_by?: string | null
+          workflow_template_id: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          is_active?: boolean
+          missing_score_policy?: string
+          notes?: string | null
+          review_period?: string | null
+          review_year?: number | null
+          rule_type?: string
+          scope_type?: string
+          scope_value?: string | null
+          stage_weights?: Json | null
+          updated_at?: string
+          updated_by?: string | null
+          workflow_template_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "workflow_final_score_rules_workflow_template_id_fkey"
+            columns: ["workflow_template_id"]
+            isOneToOne: false
+            referencedRelation: "workflow_templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       workflow_settings: {
         Row: {
           category: string
@@ -9920,6 +9994,15 @@ export type Database = {
         }
         Returns: number
       }
+      fn_resolve_final_score: {
+        Args: {
+          p_is_na?: boolean
+          p_rule: Json
+          p_stage_scores: Json
+          p_workflow_stages: string[]
+        }
+        Returns: Json
+      }
       generate_bundles_from_kpis: { Args: never; Returns: Json }
       get_active_send_back_markers: {
         Args: { p_kpi_ids: string[] }
@@ -10477,6 +10560,37 @@ export type Database = {
       resolve_cycle_anchor: {
         Args: { p_frequency: string; p_month_idx: number }
         Returns: string
+      }
+      resolve_final_score_rule: {
+        Args: {
+          p_employee_id: string
+          p_review_period: string
+          p_review_year: number
+          p_template_id: string
+        }
+        Returns: {
+          created_at: string
+          created_by: string | null
+          id: string
+          is_active: boolean
+          missing_score_policy: string
+          notes: string | null
+          review_period: string | null
+          review_year: number | null
+          rule_type: string
+          scope_type: string
+          scope_value: string | null
+          stage_weights: Json | null
+          updated_at: string
+          updated_by: string | null
+          workflow_template_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "workflow_final_score_rules"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       resolve_org_kpi_target_kpis: {
         Args: {
