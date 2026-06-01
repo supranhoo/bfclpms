@@ -946,6 +946,7 @@ export default function UserManagement() {
       role: newRole,
       portal_access: newPortalAccess,
       is_dummy_employee: newIsDummy,
+      mobile_number: newMobileNumber,
     };
     const v = validateRequiredFields(fieldValues, emfReqs);
     if (v.ok === false) {
