@@ -171,6 +171,12 @@ export default function UserManagement() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
+  // Employee Master Field Requirements (admin-configurable mandatory flags
+  // for the Add New User page).
+  const { requirements: emfReqs } = useEmployeeMasterFieldRequirements();
+  const ReqMark = ({ k }: { k: EmployeeMasterFieldKey }) =>
+    emfReqs[k] ? <RequiredMark /> : null;
+
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState<string>('all');
