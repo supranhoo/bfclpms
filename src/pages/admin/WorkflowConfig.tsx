@@ -193,6 +193,19 @@ export default function WorkflowConfig() {
     () => filteredProfiles.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE),
     [filteredProfiles, safePage]
   );
+
+  // FM mapping coverage — surfaced as a banner inside the Employee tab so
+  // admins are warned when templates include the Functional Manager stage
+  // but employees lack a functional_manager_id (the stage would resolve to
+  // N/A — `no_functional_manager_on_profile`).
+  const fmTemplatesCount = useMemo(
+    () => (templates || []).filter(t => t.stages?.includes('functional_manager_check')).length,
+    [templates],
+  );
+  const employeesMissingFm = useMemo(
+    () => (profiles || []).filter(p => !p.functional_manager_id).length,
+    [profiles],
+  );
   const startIdx = filteredProfiles.length === 0 ? 0 : (safePage - 1) * PAGE_SIZE + 1;
   const endIdx = Math.min(safePage * PAGE_SIZE, filteredProfiles.length);
   
