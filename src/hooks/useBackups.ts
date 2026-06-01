@@ -552,3 +552,135 @@ export function useUploadAndRestore() {
     },
   });
 }
+
+/**
+ * Force-fails a backup row that's been stuck in `running` for too long.
+ * Admin-only safety valve when the periodic reaper hasn't yet picked it up.
+ */
+export function useCancelStuckBackup() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (backupId: string) => {
+      const { error } = await supabase
+        .from('backup_logs')
+        .update({
+          status: 'failed',
+          error_message: 'Cancelled by admin: backup was stuck in running state',
+          completed_at: new Date().toISOString(),
+        })
+        .eq('id', backupId)
+        .eq('status', 'running');
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success('Stuck backup marked as failed');
+      queryClient.invalidateQueries({ queryKey: ['backup-logs'] });
+    },
+    onError: (error: Error) => {
+      toast.error(`Cancel failed: ${error.message}`);
+    },
+  });
+}
+
+/**
+ * Retries the finalize step for a backup whose batch files all uploaded
+ * but whose finalize call was rate-limited (status =
+ * `completed_with_errors`, error_message starts with `Finalize deferred`).
+ * Reads the existing chunk JSON files from storage to rebuild the
+ * table_manifest, then re-invokes the finalize mode of create-backup.
+ */
+export function useRetryFinalize() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (backupId: string) => {
+      const { data: row, error: rowErr } = await supabase
+        .from('backup_logs')
+        .select('id, backup_type, error_message, tables_count, total_rows, file_size_bytes')
+        .eq('id', backupId)
+        .single();
+      if (rowErr || !row) throw rowErr ?? new Error('Backup row not found');
+
+      // Find the storage folder by listing for the backup id reference.
+      // Stored convention: chunked/<timestamp>/<table>.json. We need the
+      // folder; derive it by listing chunked/ and matching the most
+      // recent folder whose creation aligns with this backup.
+      const { data: folders, error: listErr } = await supabase.storage
+        .from('database-backups')
+        .list('chunked', { limit: 100, sortBy: { column: 'created_at', order: 'desc' } });
+      if (listErr) throw listErr;
+
+      // Reconstruct manifest from the most recent folder that contains JSON files
+      let folderPath: string | null = null;
+      let tableFiles: Array<{ table: string; rows: number; file: string }> = [];
+      let totalSize = 0;
+      let totalRows = 0;
+
+      for (const folder of folders ?? []) {
+        const candidate = `chunked/${folder.name}`;
+        const { data: files } = await supabase.storage
+          .from('database-backups')
+          .list(candidate, { limit: 1000 });
+        if (!files || files.length === 0) continue;
+        const jsonFiles = files.filter(
+          (f) => f.name.endsWith('.json') && f.name !== 'manifest.json' && f.name !== 'storage-manifest.json'
+        );
+        if (jsonFiles.length === 0) continue;
+
+        // Read each chunk to count rows (small overhead, only on retry)
+        const manifestEntries: Array<{ table: string; rows: number; file: string }> = [];
+        let sizeSum = 0;
+        let rowSum = 0;
+        for (const f of jsonFiles) {
+          const tableName = f.name.replace(/\.json$/, '');
+          const filePath = `${candidate}/${f.name}`;
+          const { data: blob } = await supabase.storage
+            .from('database-backups')
+            .download(filePath);
+          if (!blob) continue;
+          const text = await blob.text();
+          let rows = 0;
+          try {
+            const parsed = JSON.parse(text);
+            rows = Array.isArray(parsed) ? parsed.length : 0;
+          } catch {
+            rows = 0;
+          }
+          manifestEntries.push({ table: tableName, rows, file: filePath });
+          sizeSum += blob.size;
+          rowSum += rows;
+        }
+        folderPath = candidate;
+        tableFiles = manifestEntries;
+        totalSize = sizeSum;
+        totalRows = rowSum;
+        break;
+      }
+
+      if (!folderPath || tableFiles.length === 0) {
+        throw new Error('Could not locate batch files in storage for retry');
+      }
+
+      const finalizeResponse = await supabase.functions.invoke('create-backup', {
+        body: {
+          backup_id: backupId,
+          folder_path: folderPath,
+          finalize: true,
+          backup_type: row.backup_type,
+          tables_count: tableFiles.length,
+          total_rows: totalRows,
+          total_size_bytes: totalSize,
+          table_manifest: tableFiles,
+        },
+      });
+      if (finalizeResponse.error) throw finalizeResponse.error;
+      return finalizeResponse.data;
+    },
+    onSuccess: () => {
+      toast.success('Finalize retry succeeded');
+      queryClient.invalidateQueries({ queryKey: ['backup-logs'] });
+    },
+    onError: (error: Error) => {
+      toast.error(`Finalize retry failed: ${error.message}`);
+    },
+  });
+}
