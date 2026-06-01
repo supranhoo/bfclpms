@@ -72,6 +72,9 @@ export interface CellInputs {
   achievedOverride?: number | string | null;
   /** Reviewer-entered manual rating (0–5). Wins over achievedOverride. */
   manualScore?: number | null;
+  /** Reviewer ticked "N/A" for this row in the bulk sign-off dialog.
+   *  Wins over every other input — resolved score is null, source 'none'. */
+  isNa?: boolean;
 }
 
 /**
@@ -90,6 +93,8 @@ export function resolveWithInputs(
   isOverride: boolean,
 ): ResolveResult {
   if (submission.is_na === true) return { score: null, source: 'none' };
+  // Reviewer-marked N/A (admin override) — short-circuits every other input.
+  if (inputs?.isNa === true) return { score: null, source: 'none' };
 
   const manual = inputs?.manualScore;
   if (manual != null && Number.isFinite(manual)) {
