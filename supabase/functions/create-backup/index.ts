@@ -349,16 +349,9 @@ async function handleInit(
   const authResponse = await authenticateRequest(req, supabase, backupType)
   if (authResponse) return authResponse
 
-  // Clean up stuck backups (running > 30 min)
-  await supabase
-    .from('backup_logs')
-    .update({
-      status: 'failed',
-      error_message: 'Timed out: backup was running for more than 30 minutes',
-      completed_at: new Date().toISOString(),
-    })
-    .eq('status', 'running')
-    .lt('created_at', new Date(Date.now() - 30 * 60 * 1000).toISOString())
+  // Clean up stuck backups (running > 30 min). Shared with handleScheduled
+  // and the standalone reap-stuck-backups cron — single source of truth.
+  await reapStuckRunningBackups(supabase)
 
   // Create backup log entry
   const { data: logEntry, error: logError } = await supabase
@@ -546,24 +539,89 @@ async function handleFinalize(
 
 declare const EdgeRuntime: { waitUntil: (p: Promise<unknown>) => void } | undefined
 
-async function callSelf(payload: Record<string, unknown>): Promise<{ ok: boolean; data?: any; error?: string }> {
+// Shared stuck-row watchdog. Any backup_logs row still in `running` after
+// 30 minutes is force-failed so it doesn't block the UI or future runs.
+export async function reapStuckRunningBackups(
+  supabase: ReturnType<typeof createClient>
+): Promise<void> {
+  await supabase
+    .from('backup_logs')
+    .update({
+      status: 'failed',
+      error_message: 'Timed out: backup was running for more than 30 minutes',
+      completed_at: new Date().toISOString(),
+    })
+    .eq('status', 'running')
+    .lt('created_at', new Date(Date.now() - 30 * 60 * 1000).toISOString())
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+// Parses Supabase Edge Function rate-limit error bodies like
+//   "RateLimitError: Rate limit exceeded for trace XYZ. Retry after 30111ms."
+// Returns the wait in ms, or null when no Retry-After hint is present.
+export function parseRetryAfterMs(errString: string | undefined): number | null {
+  if (!errString) return null
+  const m = errString.match(/Retry after\s+(\d+)\s*ms/i)
+  if (m) return parseInt(m[1], 10)
+  const s = errString.match(/Retry after\s+(\d+)\s*s/i)
+  if (s) return parseInt(s[1], 10) * 1000
+  return null
+}
+
+// Spacing between self-invocations to stay under the Edge Function
+// per-trace rate limit (observed ~30 invocations / 30 s).
+const INTER_BATCH_DELAY_MS = 900
+
+async function callSelf(
+  payload: Record<string, unknown>,
+  opts: { maxRetries?: number } = {}
+): Promise<{ ok: boolean; data?: any; error?: string; rateLimited?: boolean }> {
   const supabaseUrl = Deno.env.get('SUPABASE_URL')!
   const internalSecret = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-  try {
-    const res = await fetch(`${supabaseUrl}/functions/v1/create-backup`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${internalSecret}`,
-        'X-Backup-Internal': internalSecret,
-      },
-      body: JSON.stringify(payload),
-    })
-    const data = await res.json().catch(() => ({}))
-    return { ok: res.ok, data, error: res.ok ? undefined : (data?.error || `HTTP ${res.status}`) }
-  } catch (err) {
-    return { ok: false, error: String(err) }
+  const maxRetries = opts.maxRetries ?? 3
+  let lastError: string | undefined
+  let lastRateLimited = false
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const res = await fetch(`${supabaseUrl}/functions/v1/create-backup`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${internalSecret}`,
+          'X-Backup-Internal': internalSecret,
+        },
+        body: JSON.stringify(payload),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (res.ok) return { ok: true, data }
+
+      const errMsg: string = data?.error || `HTTP ${res.status}`
+      const retryAfterHeader = res.headers.get('Retry-After')
+      const headerMs = retryAfterHeader ? parseInt(retryAfterHeader, 10) * 1000 : null
+      const bodyMs = parseRetryAfterMs(errMsg)
+      const isRateLimit = res.status === 429 || /RateLimitError|Rate limit/i.test(errMsg)
+      lastError = errMsg
+      lastRateLimited = isRateLimit
+
+      if (isRateLimit && attempt < maxRetries) {
+        const waitMs = (headerMs ?? bodyMs ?? 30_000) + 500
+        console.warn(`callSelf rate-limited (attempt ${attempt + 1}/${maxRetries + 1}); sleeping ${waitMs}ms`)
+        await sleep(waitMs)
+        continue
+      }
+      return { ok: false, data, error: errMsg, rateLimited: isRateLimit }
+    } catch (err) {
+      lastError = String(err)
+      if (attempt < maxRetries) {
+        await sleep(1500)
+        continue
+      }
+    }
   }
+  return { ok: false, error: lastError, rateLimited: lastRateLimited }
 }
 
 async function runScheduledChunked(
@@ -599,6 +657,8 @@ async function runScheduledChunked(
     if (!result.ok) {
       errors.push(`Batch ${i + 1}/${batches.length} failed: ${result.error}`)
       console.error(`Scheduled backup batch ${i + 1} failed:`, result.error)
+      // Brief pause before next batch even on failure
+      await sleep(INTER_BATCH_DELAY_MS)
       continue
     }
 
@@ -610,7 +670,16 @@ async function runScheduledChunked(
       tablesCount++
     }
     if (result.data?.errors?.length) errors.push(...result.data.errors)
+
+    // Throttle between batches to stay under the per-trace edge-function
+    // rate limit. Without this, runs of 30+ batches consistently get a
+    // RateLimitError around batch 31.
+    if (i < batches.length - 1) await sleep(INTER_BATCH_DELAY_MS)
   }
+
+  // Pause before finalize so it doesn't share the same window as the
+  // last batch invocation.
+  await sleep(INTER_BATCH_DELAY_MS * 2)
 
   const finalizeResult = await callSelf({
     backup_type: 'scheduled',
@@ -624,11 +693,27 @@ async function runScheduledChunked(
   })
 
   if (!finalizeResult.ok) {
-    await supabase.from('backup_logs').update({
-      status: 'failed',
-      error_message: `Finalize failed: ${finalizeResult.error}. Batch errors: ${errors.slice(0, 5).join('; ')}`,
-      completed_at: new Date().toISOString(),
-    }).eq('id', backupId)
+    // If batches succeeded but finalize couldn't run (e.g. persistent rate
+    // limit), the snapshot files are already in storage — mark as
+    // recoverable so an admin can "Retry finalize" instead of re-uploading
+    // everything. Otherwise treat as hard failure.
+    const allBatchesOk = errors.length === 0 && tablesCount === discoveredCount
+    if (allBatchesOk && finalizeResult.rateLimited) {
+      await supabase.from('backup_logs').update({
+        status: 'completed_with_errors',
+        error_message: `Finalize deferred (rate-limited): ${finalizeResult.error}. All ${tablesCount} batch files uploaded; admin can retry finalize.`,
+        completed_at: new Date().toISOString(),
+        file_size_bytes: totalSize,
+        tables_count: tablesCount,
+        total_rows: totalRows,
+      }).eq('id', backupId)
+    } else {
+      await supabase.from('backup_logs').update({
+        status: 'failed',
+        error_message: `Finalize failed: ${finalizeResult.error}. Batch errors: ${errors.slice(0, 5).join('; ')}`,
+        completed_at: new Date().toISOString(),
+      }).eq('id', backupId)
+    }
     console.error('Scheduled backup finalize failed:', finalizeResult.error)
     return
   }
@@ -662,16 +747,8 @@ async function handleScheduled(
   const authResponse = await authenticateRequest(req, supabase, 'scheduled')
   if (authResponse) return authResponse
 
-  // Clean up stuck backups (running > 30 min)
-  await supabase
-    .from('backup_logs')
-    .update({
-      status: 'failed',
-      error_message: 'Timed out: backup was running for more than 30 minutes',
-      completed_at: new Date().toISOString(),
-    })
-    .eq('status', 'running')
-    .lt('created_at', new Date(Date.now() - 30 * 60 * 1000).toISOString())
+  // Clean up stuck backups (running > 30 min) — shared watchdog.
+  await reapStuckRunningBackups(supabase)
 
   const { data: logEntry, error: logError } = await supabase
     .from('backup_logs')
