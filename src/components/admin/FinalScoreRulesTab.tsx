@@ -22,7 +22,11 @@ import {
   type FinalScoreScopeType,
 } from '@/hooks/useFinalScoreRules';
 import { useWorkflowTemplates, getStageLabel, type WorkflowTemplate } from '@/hooks/useWorkflowConfig';
-import { useDepartments } from '@/hooks/useOrganization';
+import { useDepartments, usePmsGrades } from '@/hooks/useOrganization';
+import { useActiveEmployeesForCopy } from '@/hooks/useActiveEmployeesForCopy';
+import { EmployeeCombobox, type EmployeeOption } from '@/components/admin/EmployeeCombobox';
+import { MultiSelectFilter } from '@/components/ui/multi-select-filter';
+import { useToast } from '@/hooks/use-toast';
 import {
   resolveFinalScore,
   type FinalScoreRuleType,
