@@ -7,6 +7,7 @@
  * 
  * Default full pipeline: ['kra_set', 'self_review', 'manager_check', 'audit', 'management_review', 'approved']
  * 8-stage pipeline: ['kra_set', 'self_review', 'manager_check', 'skip_level_check', 'hr_pms_review', 'audit', 'management_review', 'approved']
+ * 9-stage (with Functional Manager): adds 'functional_manager_check' after 'manager_check'.
  */
 
 export const DEFAULT_WORKFLOW_STAGES = [
@@ -44,25 +45,32 @@ export function resolvePreviousStatus(
  * Only returns targets for stages that exist in the workflow.
  */
 export function resolveSendBackTargets(
-  viewLevel: 'manager' | 'auditor' | 'management' | 'skip_level' | 'hr_pms',
+  viewLevel: 'manager' | 'functional_manager' | 'auditor' | 'management' | 'skip_level' | 'hr_pms',
   workflowStages: string[] = DEFAULT_WORKFLOW_STAGES
 ): Array<{ value: string; label: string }> {
   const allTargets: Record<string, Array<{ value: string; label: string; requiredStage?: string }>> = {
     manager: [
       { value: 'employee', label: 'Employee' },
     ],
+    functional_manager: [
+      { value: 'manager', label: 'Manager', requiredStage: 'manager_check' },
+      { value: 'employee', label: 'Employee' },
+    ],
     skip_level: [
+      { value: 'functional_manager', label: 'Functional Manager', requiredStage: 'functional_manager_check' },
       { value: 'manager', label: 'Manager', requiredStage: 'manager_check' },
       { value: 'employee', label: 'Employee' },
     ],
     hr_pms: [
       { value: 'skip_level', label: 'Skip-Level Manager', requiredStage: 'skip_level_check' },
+      { value: 'functional_manager', label: 'Functional Manager', requiredStage: 'functional_manager_check' },
       { value: 'manager', label: 'Manager', requiredStage: 'manager_check' },
       { value: 'employee', label: 'Employee' },
     ],
     auditor: [
       { value: 'hr_pms', label: 'HR PMS Team', requiredStage: 'hr_pms_review' },
       { value: 'skip_level', label: 'Skip-Level Manager', requiredStage: 'skip_level_check' },
+      { value: 'functional_manager', label: 'Functional Manager', requiredStage: 'functional_manager_check' },
       { value: 'manager', label: 'Manager', requiredStage: 'manager_check' },
       { value: 'employee', label: 'Employee' },
     ],
@@ -70,6 +78,7 @@ export function resolveSendBackTargets(
       { value: 'auditor', label: 'Auditor', requiredStage: 'audit' },
       { value: 'hr_pms', label: 'HR PMS Team', requiredStage: 'hr_pms_review' },
       { value: 'skip_level', label: 'Skip-Level Manager', requiredStage: 'skip_level_check' },
+      { value: 'functional_manager', label: 'Functional Manager', requiredStage: 'functional_manager_check' },
       { value: 'manager', label: 'Manager', requiredStage: 'manager_check' },
       { value: 'employee', label: 'Employee' },
     ],
@@ -86,7 +95,7 @@ export function resolveSendBackTargets(
  */
 export function resolveSendBackStatus(
   target: string,
-  viewLevel: 'manager' | 'auditor' | 'management' | 'skip_level' | 'hr_pms',
+  viewLevel: 'manager' | 'functional_manager' | 'auditor' | 'management' | 'skip_level' | 'hr_pms',
   workflowStages: string[] = DEFAULT_WORKFLOW_STAGES
 ): string {
   // Send back to employee always goes to kra_set
@@ -95,6 +104,7 @@ export function resolveSendBackStatus(
   // Map each target to the workflow stage they OWN (their "completed" status)
   const targetStageMap: Record<string, string> = {
     manager: 'manager_check',
+    functional_manager: 'functional_manager_check',
     skip_level: 'skip_level_check',
     hr_pms: 'hr_pms_review',
     auditor: 'audit',
@@ -114,12 +124,17 @@ export function resolveSendBackStatus(
  * for this reviewer to see them as pending.
  */
 export function resolvePendingStatuses(
-  viewLevel: 'manager' | 'auditor' | 'management' | 'skip_level' | 'hr_pms',
+  viewLevel: 'manager' | 'functional_manager' | 'auditor' | 'management' | 'skip_level' | 'hr_pms',
   workflowStages: string[] = DEFAULT_WORKFLOW_STAGES
 ): string[] {
   switch (viewLevel) {
     case 'manager':
       return ['self_review'];
+    case 'functional_manager': {
+      const idx = workflowStages.indexOf('functional_manager_check');
+      if (idx === -1) return [];
+      return [workflowStages[idx - 1]];
+    }
     case 'skip_level': {
       const idx = workflowStages.indexOf('skip_level_check');
       if (idx === -1) return [];
@@ -163,12 +178,13 @@ export function resolvePendingStatuses(
  * management_review…) so resolveNextStatus is used to advance dynamically.
  */
 export function resolveForwardStatus(
-  viewLevel: 'manager' | 'auditor' | 'management' | 'skip_level' | 'hr_pms',
+  viewLevel: 'manager' | 'functional_manager' | 'auditor' | 'management' | 'skip_level' | 'hr_pms',
   workflowStages: string[] = DEFAULT_WORKFLOW_STAGES
 ): string | null {
   // Map each role to the stage it owns in the workflow
   const roleStageMap: Record<string, string> = {
     manager: 'manager_check',
+    functional_manager: 'functional_manager_check',
     skip_level: 'skip_level_check',
     hr_pms: 'hr_pms_review',
     auditor: 'audit',
@@ -188,6 +204,8 @@ export function resolveForwardStatus(
       const next = resolveNextStatus('manager_check', workflowStages);
       return next === 'approved' ? 'approved' : 'manager_check';
     }
+    case 'functional_manager':
+      return resolveNextStatus('functional_manager_check', workflowStages) || 'approved';
     case 'skip_level':
       return resolveNextStatus('skip_level_check', workflowStages) || 'approved';
     case 'hr_pms':
@@ -205,12 +223,17 @@ export function resolveForwardStatus(
  * Get reviewable statuses — which KPI statuses this view level can act on.
  */
 export function resolveReviewableStatuses(
-  viewLevel: 'manager' | 'auditor' | 'management' | 'skip_level' | 'hr_pms',
+  viewLevel: 'manager' | 'functional_manager' | 'auditor' | 'management' | 'skip_level' | 'hr_pms',
   workflowStages: string[] = DEFAULT_WORKFLOW_STAGES
 ): string[] {
   switch (viewLevel) {
     case 'manager':
       return ['self_review'];
+    case 'functional_manager': {
+      const idx = workflowStages.indexOf('functional_manager_check');
+      if (idx === -1) return [];
+      return [workflowStages[idx - 1]];
+    }
     case 'skip_level': {
       const idx = workflowStages.indexOf('skip_level_check');
       if (idx === -1) return [];
@@ -243,17 +266,18 @@ export function resolveReviewableStatuses(
  */
 export function getVisibleJourneyStages(
   workflowStages: string[] = DEFAULT_WORKFLOW_STAGES
-): ('self' | 'manager' | 'skip_level' | 'hr_pms' | 'auditor' | 'management')[] {
-  const stageMap: Record<string, 'self' | 'manager' | 'skip_level' | 'hr_pms' | 'auditor' | 'management'> = {
+): ('self' | 'manager' | 'functional_manager' | 'skip_level' | 'hr_pms' | 'auditor' | 'management')[] {
+  const stageMap: Record<string, 'self' | 'manager' | 'functional_manager' | 'skip_level' | 'hr_pms' | 'auditor' | 'management'> = {
     self_review: 'self',
     manager_check: 'manager',
+    functional_manager_check: 'functional_manager',
     skip_level_check: 'skip_level',
     hr_pms_review: 'hr_pms',
     audit: 'auditor',
     management_review: 'management',
   };
 
-  const visible: ('self' | 'manager' | 'skip_level' | 'hr_pms' | 'auditor' | 'management')[] = [];
+  const visible: ('self' | 'manager' | 'functional_manager' | 'skip_level' | 'hr_pms' | 'auditor' | 'management')[] = [];
   for (const status of workflowStages) {
     const journeyStage = stageMap[status];
     if (journeyStage && !visible.includes(journeyStage)) {
@@ -285,11 +309,12 @@ export function getVisibleTrackerStages(
  *   - activeReviewStage = 'audit' (reviewer-owned stage)
  */
 export function resolveActiveReviewStage(
-  viewLevel: 'manager' | 'auditor' | 'management' | 'skip_level' | 'hr_pms',
+  viewLevel: 'manager' | 'functional_manager' | 'auditor' | 'management' | 'skip_level' | 'hr_pms',
   workflowStages: string[] = DEFAULT_WORKFLOW_STAGES
 ): string {
   const stageMap: Record<string, string> = {
     manager: 'manager_check',
+    functional_manager: 'functional_manager_check',
     skip_level: 'skip_level_check',
     hr_pms: 'hr_pms_review',
     auditor: 'audit',
@@ -319,7 +344,7 @@ export function hasStage(
  */
 export function canReviewKpi(
   kpiStatus: string,
-  viewType: 'my-kpis' | 'team-review' | 'audit' | 'management' | 'skip-level-review' | 'hr-pms-review',
+  viewType: 'my-kpis' | 'team-review' | 'functional-manager-review' | 'audit' | 'management' | 'skip-level-review' | 'hr-pms-review',
   workflowStages: string[] = DEFAULT_WORKFLOW_STAGES
 ): boolean {
   switch (viewType) {
@@ -327,6 +352,11 @@ export function canReviewKpi(
       return kpiStatus === 'kra_set';
     case 'team-review':
       return kpiStatus === 'self_review';
+    case 'functional-manager-review': {
+      const idx = workflowStages.indexOf('functional_manager_check');
+      if (idx === -1) return false;
+      return kpiStatus === workflowStages[idx - 1];
+    }
     case 'skip-level-review': {
       const idx = workflowStages.indexOf('skip_level_check');
       if (idx === -1) return false;

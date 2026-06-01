@@ -121,6 +121,7 @@ export function getStatusLabel(status: string): string {
     kra_set: 'KRA Set',
     self_review: 'Self Review',
     manager_check: 'Manager Review',
+    functional_manager_check: 'Functional Manager Review',
     skip_level_check: 'Skip-Level Review',
     hr_pms_check: 'HR PMS Review',
     audit: 'Audit',

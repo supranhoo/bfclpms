@@ -15,6 +15,7 @@
 export type ResolvedStageKey =
   | 'awaiting_self_review'
   | 'awaiting_manager'
+  | 'awaiting_functional_manager'
   | 'awaiting_skip_level'
   | 'awaiting_hr_pms'
   | 'awaiting_audit'
@@ -38,6 +39,11 @@ const NEXT_STAGE_MAP: Record<string, ResolvedBottleneckStage> = {
     stageKey: 'awaiting_manager',
     stageLabel: 'Awaiting Manager Review',
     responsibleRole: 'Manager',
+  },
+  functional_manager_check: {
+    stageKey: 'awaiting_functional_manager',
+    stageLabel: 'Awaiting Functional Manager Review',
+    responsibleRole: 'Functional Manager',
   },
   skip_level_check: {
     stageKey: 'awaiting_skip_level',
@@ -92,6 +98,7 @@ export function resolveBottleneckStage(
   if (kpiStatus === 'management_review') return NEXT_STAGE_MAP['management_review'];
   if (kpiStatus === 'hr_pms_review') return NEXT_STAGE_MAP['hr_pms_review'];
   if (kpiStatus === 'skip_level_check') return NEXT_STAGE_MAP['skip_level_check'];
+  if (kpiStatus === 'functional_manager_check') return NEXT_STAGE_MAP['functional_manager_check'];
 
   const currentIndex = stages.indexOf(kpiStatus);
 
@@ -135,6 +142,8 @@ export function resolveResponsiblePerson(
       return employeeName;
     case 'awaiting_manager':
       return managerName || 'Reporting Manager';
+    case 'awaiting_functional_manager':
+      return 'Functional Manager';
     case 'awaiting_skip_level':
       return 'Skip-Level Manager';
     case 'awaiting_hr_pms':

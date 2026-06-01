@@ -13,6 +13,7 @@
 export type ChainStage =
   | 'self'
   | 'manager'
+  | 'functional_manager'
   | 'skip_level'
   | 'hr_pms'
   | 'auditor'
@@ -21,6 +22,7 @@ export type ChainStage =
 export const CHAIN_STAGES: ChainStage[] = [
   'self',
   'manager',
+  'functional_manager',
   'skip_level',
   'hr_pms',
   'auditor',
@@ -30,6 +32,7 @@ export const CHAIN_STAGES: ChainStage[] = [
 export const CHAIN_STAGE_LABEL: Record<ChainStage, string> = {
   self: 'Self',
   manager: 'L1 Manager',
+  functional_manager: 'Functional Manager',
   skip_level: 'Skip-Level',
   hr_pms: 'HR PMS',
   auditor: 'Auditor',
@@ -40,6 +43,7 @@ export const CHAIN_STAGE_LABEL: Record<ChainStage, string> = {
 const STAGE_TO_CHAIN: Record<string, ChainStage> = {
   self_review: 'self',
   manager_check: 'manager',
+  functional_manager_check: 'functional_manager',
   skip_level_check: 'skip_level',
   hr_pms_review: 'hr_pms',
   audit: 'auditor',
@@ -49,6 +53,7 @@ const STAGE_TO_CHAIN: Record<string, ChainStage> = {
 export type NaReason =
   | 'stage_not_in_template'
   | 'no_manager_on_profile'
+  | 'no_functional_manager_on_profile'
   | 'skip_level_loop'
   | 'resolved_user_inactive'
   | 'role_unassigned';
@@ -56,6 +61,7 @@ export type NaReason =
 export const NA_REASON_LABEL: Record<NaReason, string> = {
   stage_not_in_template: 'Stage not in template',
   no_manager_on_profile: 'No manager_id on profile',
+  no_functional_manager_on_profile: 'No functional_manager_id on profile',
   skip_level_loop: 'Skip-level = manager (loop)',
   resolved_user_inactive: 'Resolved user inactive',
   role_unassigned: 'Stage role unassigned',
@@ -69,6 +75,7 @@ export interface ResolverProfile {
   pms_grade: string | null;
   department_id: string | null;
   reporting_manager_id: string | null;
+  functional_manager_id: string | null;
   is_active: boolean;
 }
 
@@ -119,6 +126,15 @@ function resolveStageUser(
       const m = ctx.profilesById.get(employee.reporting_manager_id);
       if (!m) return { users: [], naReason: 'resolved_user_inactive' };
       return { users: [m], naReason: null };
+    }
+
+    case 'functional_manager': {
+      if (!employee.functional_manager_id) {
+        return { users: [], naReason: 'no_functional_manager_on_profile' };
+      }
+      const fm = ctx.profilesById.get(employee.functional_manager_id);
+      if (!fm) return { users: [], naReason: 'resolved_user_inactive' };
+      return { users: [fm], naReason: null };
     }
 
     case 'skip_level': {
