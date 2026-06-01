@@ -283,12 +283,19 @@ function RuleBuilderSheet({
   onClose: () => void;
   existing: WorkflowFinalScoreRule | null;
   templates: WorkflowTemplate[];
-  departments: Array<{ name: string }>;
+  departments: Array<{ name: string; business_units?: { name?: string | null } | null }>;
 }) {
   const upsert = useUpsertFinalScoreRule();
+  const { toast } = useToast();
+  const isEdit = !!existing;
+  const { data: pmsGrades } = usePmsGrades();
+  const { data: employeeRoster } = useActiveEmployeesForCopy({ enabled: !isEdit });
 
   const [scopeType, setScopeType] = useState<FinalScoreScopeType>(existing?.scope_type ?? 'template');
   const [scopeValue, setScopeValue] = useState<string>(existing?.scope_value ?? '');
+  // Multi-select buffer used in Create mode only. Edit mode continues to use
+  // the single `scopeValue` so the existing row is updated in place.
+  const [scopeValues, setScopeValues] = useState<string[]>([]);
   const [templateId, setTemplateId] = useState<string>(existing?.workflow_template_id ?? '');
   const [reviewPeriod, setReviewPeriod] = useState<string>(existing?.review_period ?? '');
   const [reviewYear, setReviewYear] = useState<string>(existing?.review_year ? String(existing.review_year) : '');
@@ -320,7 +327,12 @@ function RuleBuilderSheet({
   );
   const weightedValid = ruleType !== 'weighted_custom' || totalWeight === 100;
 
-  const scopeValueValid = scopeType === 'template' ? true : !!scopeValue.trim();
+  const scopeValueValid =
+    scopeType === 'template'
+      ? true
+      : isEdit
+        ? !!scopeValue.trim()
+        : scopeValues.length > 0;
   const periodValid = ongoing || (!!reviewPeriod && !!reviewYear);
   const canSave = !!templateId && scopeValueValid && periodValid && weightedValid && !upsert.isPending;
 
@@ -337,18 +349,56 @@ function RuleBuilderSheet({
     rule: { type: ruleType, stage_weights: weights, missing_score_policy: policy },
   });
 
-  function handleSave() {
-    upsert.mutate({
-      id: existing?.id,
+  async function handleSave() {
+    const basePayload = {
       scope_type: scopeType,
-      scope_value: scopeType === 'template' ? null : scopeValue.trim() || null,
       workflow_template_id: templateId,
       review_period: ongoing ? null : reviewPeriod,
       review_year: ongoing ? null : Number(reviewYear),
       rule_type: ruleType,
       stage_weights: ruleType === 'weighted_custom' ? weights : null,
       missing_score_policy: policy,
-    }, { onSuccess: onClose });
+    } as const;
+
+    // Edit mode: update the existing single row.
+    if (isEdit) {
+      upsert.mutate(
+        {
+          ...basePayload,
+          id: existing!.id,
+          scope_value: scopeType === 'template' ? null : scopeValue.trim() || null,
+        },
+        { onSuccess: onClose },
+      );
+      return;
+    }
+
+    // Create mode (template scope): one row.
+    if (scopeType === 'template') {
+      upsert.mutate(
+        { ...basePayload, scope_value: null },
+        { onSuccess: onClose },
+      );
+      return;
+    }
+
+    // Create mode (employee / department / pms_grade): N rows.
+    const values = scopeValues.map(v => v.trim()).filter(Boolean);
+    const results = await Promise.allSettled(
+      values.map(v => upsert.mutateAsync({ ...basePayload, scope_value: v })),
+    );
+    const ok = results.filter(r => r.status === 'fulfilled').length;
+    const failed = results.length - ok;
+    if (ok > 0) {
+      toast({
+        title: 'Final score rule applied',
+        description:
+          failed === 0
+            ? `Applied to ${ok} selected item${ok === 1 ? '' : 's'}.`
+            : `Applied to ${ok} item${ok === 1 ? '' : 's'}; ${failed} failed (likely duplicate or conflicting rule).`,
+      });
+    }
+    if (failed === 0) onClose();
   }
 
   return (
