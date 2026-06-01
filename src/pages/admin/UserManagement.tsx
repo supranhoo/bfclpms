@@ -311,6 +311,10 @@ export default function UserManagement() {
   // Admins receive `visibleIds === null` → no narrowing.
   const { visibleIds, isAdmin: viewerIsAdmin } = useMyVisibleEmployeeIds();
 
+  // Admin-side dummy/system employee map — drives badge + Employee Type filter.
+  // Admins ALWAYS see everyone here regardless of the global visibility setting.
+  const { dummyIds } = useDummyEmployees();
+
   const filteredProfiles = useMemo(() => {
     const q = debouncedSearch.toLowerCase();
     const scoped = (!viewerIsAdmin && visibleIds)
@@ -332,8 +336,14 @@ export default function UserManagement() {
       const matchesStatus = statusFilter === 'all' || 
         (statusFilter === 'active' && isActive) || 
         (statusFilter === 'inactive' && !isActive);
-      
-      return matchesSearch && matchesRole && matchesDepartment && matchesStatus;
+
+      const isDummy = dummyIds.has(p.id);
+      const matchesType =
+        employeeTypeFilter === 'all' ||
+        (employeeTypeFilter === 'real' && !isDummy) ||
+        (employeeTypeFilter === 'dummy' && isDummy);
+
+      return matchesSearch && matchesRole && matchesDepartment && matchesStatus && matchesType;
     });
     // Sort: active first, then inactive — both alphabetical by full_name
     return [...filtered].sort((a, b) => {
@@ -342,7 +352,7 @@ export default function UserManagement() {
       if (aActive !== bActive) return aActive - bActive;
       return (a.full_name || '').localeCompare(b.full_name || '');
     });
-  }, [profiles, debouncedSearch, roleFilter, departmentFilter, statusFilter, viewerIsAdmin, visibleIds]);
+  }, [profiles, debouncedSearch, roleFilter, departmentFilter, statusFilter, viewerIsAdmin, visibleIds, employeeTypeFilter, dummyIds]);
 
   // Helper: derive division ID from a department ID
   const deriveDivisionFromDept = (deptId: string | null): string => {
