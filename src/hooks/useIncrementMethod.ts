@@ -246,6 +246,10 @@ export function useCopyIncrementMethodFromYear() {
           created_by: user?.id ?? null,
           // Carry the cutoff forward regardless of method.
           joining_month_cutoff_day: (src as any).joining_month_cutoff_day ?? 15,
+          // Carry post-cutoff fields forward so the copied AY is a true clone.
+          eligibility_cutoff_month: (src as any).eligibility_cutoff_month ?? null,
+          eligibility_cutoff_day: (src as any).eligibility_cutoff_day ?? null,
+          carry_forward_post_cutoff: !!(src as any).carry_forward_post_cutoff,
         } as any])
         .select('*').single();
       if (error) throw error;
