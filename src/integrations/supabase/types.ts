@@ -5938,6 +5938,7 @@ export type Database = {
           employee_code: string | null
           employment_status: string | null
           full_name: string | null
+          functional_manager_id: string | null
           group_doj: string | null
           has_real_email: boolean
           id: string
@@ -5970,6 +5971,7 @@ export type Database = {
           employee_code?: string | null
           employment_status?: string | null
           full_name?: string | null
+          functional_manager_id?: string | null
           group_doj?: string | null
           has_real_email?: boolean
           id: string
@@ -6002,6 +6004,7 @@ export type Database = {
           employee_code?: string | null
           employment_status?: string | null
           full_name?: string | null
+          functional_manager_id?: string | null
           group_doj?: string | null
           has_real_email?: boolean
           id?: string
@@ -6031,6 +6034,20 @@ export type Database = {
             columns: ["department_id"]
             isOneToOne: false
             referencedRelation: "departments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "profiles_functional_manager_id_fkey"
+            columns: ["functional_manager_id"]
+            isOneToOne: false
+            referencedRelation: "eligible_login_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "profiles_functional_manager_id_fkey"
+            columns: ["functional_manager_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
           {
@@ -10215,6 +10232,10 @@ export type Database = {
       }
       is_feature_flag_enabled_for_me: {
         Args: { p_key: string }
+        Returns: boolean
+      }
+      is_functional_manager_of: {
+        Args: { _employee_id: string }
         Returns: boolean
       }
       is_image_url: { Args: { p_url: string }; Returns: boolean }
