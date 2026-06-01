@@ -297,8 +297,8 @@ function scoreTone(v: number | null | undefined): string {
 }
 
 function StageCell({
-  value, highlighted,
-}: { value: number | null | undefined; highlighted: boolean }) {
+  value, highlighted, isNa = false,
+}: { value: number | null | undefined; highlighted: boolean; isNa?: boolean }) {
   return (
     <td
       className={cn(
@@ -307,7 +307,11 @@ function StageCell({
         highlighted && 'bg-primary/5 border-l border-r border-primary/40',
       )}
     >
-      {value == null ? '—' : value.toFixed(1)}
+      {value == null
+        ? (isNa
+            ? <span className="text-muted-foreground italic">N/A</span>
+            : '—')
+        : value.toFixed(1)}
     </td>
   );
 }
@@ -494,17 +498,18 @@ function CellTable({
                       key={s.key}
                       value={stages?.[s.key] ?? null}
                       highlighted={targetKey === s.key}
+                      isNa={c.isNa === true || naMarked}
                     />
                   ))}
                   <td className="p-2 text-right tabular-nums font-semibold">
-                    {naMarked
+                    {naMarked || c.source === 'na'
                       ? <span className="text-muted-foreground italic">N/A</span>
                       : c.score == null
                         ? <span className="inline-flex items-center gap-1 text-destructive">● —</span>
                         : c.score.toFixed(1)}
                   </td>
                   <td className="p-2">
-                    {naMarked
+                    {naMarked || c.source === 'na'
                       ? <Badge variant="outline" className="h-5 px-1.5 text-[10px]">N/A</Badge>
                       : <SourceBadge source={c.source} />}
                   </td>
@@ -512,7 +517,7 @@ function CellTable({
                     'p-2 text-right tabular-nums',
                     c.weightedImpact != null && c.weightedImpact > 0 && 'text-emerald-600 dark:text-emerald-400',
                   )}>
-                    {naMarked || c.weightedImpact == null ? '—' : fmt(c.weightedImpact, true)}
+                    {naMarked || c.source === 'na' || c.weightedImpact == null ? '—' : fmt(c.weightedImpact, true)}
                   </td>
                 </tr>
               );
