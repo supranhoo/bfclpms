@@ -156,7 +156,7 @@ export default function WorkflowConfig() {
       return await fetchAllPaged<any>((from, to) =>
         supabase
           .from('profiles')
-          .select('id, full_name, email, employee_code, pms_grade, department_id, reporting_manager_id')
+          .select('id, full_name, email, employee_code, pms_grade, department_id, reporting_manager_id, functional_manager_id')
           .order('full_name')
           .range(from, to)
       );
