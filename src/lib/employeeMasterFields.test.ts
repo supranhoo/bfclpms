@@ -58,7 +58,7 @@ describe('employeeMasterFields', () => {
     expect(r.ok).toBe(false);
   });
 
-  it('all 18 fields are listed', () => {
-    expect(EMPLOYEE_MASTER_FIELDS.length).toBe(18);
+  it('all 19 fields are listed', () => {
+    expect(EMPLOYEE_MASTER_FIELDS.length).toBe(19);
   });
 });
