@@ -270,6 +270,7 @@ export default function UserManagement() {
   const [selectedUser, setSelectedUser] = useState<NonNullable<typeof profiles>[number] | null>(null);
   const [editRole, setEditRole] = useState<AppRole>('employee');
   const [editManagerId, setEditManagerId] = useState<string>('');
+  const [editFunctionalManagerId, setEditFunctionalManagerId] = useState<string>('');
   const [editDepartmentId, setEditDepartmentId] = useState<string>('');
   const [editDesignation, setEditDesignation] = useState('');
   const [editPmsGrade, setEditPmsGrade] = useState('');
@@ -311,6 +312,7 @@ export default function UserManagement() {
   const [newEmployeeCategory, setNewEmployeeCategory] = useState('');
   const [newEmploymentStatus, setNewEmploymentStatus] = useState('');
   const [newManagerId, setNewManagerId] = useState('');
+  const [newFunctionalManagerId, setNewFunctionalManagerId] = useState('');
   const [newDivisionId, setNewDivisionId] = useState('');  // UI-only cascading filter
   const [newCompanyId, setNewCompanyId] = useState('');
   const [newPortalAccess, setNewPortalAccess] = useState(true);
