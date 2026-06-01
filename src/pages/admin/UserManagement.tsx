@@ -694,6 +694,7 @@ export default function UserManagement() {
     setEditEmail(user.email || '');
     setEditMobile('');
     setEditIsActive((user as any).is_active !== false);
+    setEditIsDummy(dummyIds.has(user.id));
     setEditGroupDoj('');
     setEditDoj('');
     setEditConfirmationDate('');
@@ -769,6 +770,7 @@ export default function UserManagement() {
       doj: editDoj || null,
       confirmationDate: editConfirmationDate || null,
       locationId: editLocationId || null,
+      isDummyEmployee: editIsDummy,
     });
   };
 
