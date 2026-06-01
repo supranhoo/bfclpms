@@ -325,12 +325,14 @@ Deno.serve(async (req) => {
     const targetMonthIdx = MONTHS.indexOf(targetMonth);
 
     // Fetch existing target KPIs for all relevant employees (paginated)
-    // We need to check ALL possible cycle months, not just the raw target
+    // We need to check ALL possible cycle months, not just the raw target.
+    // CRITICAL: build the month set from the actual source KPIs (honouring each
+    // KPI's own frequency_cycle_start), otherwise non-standard cycle anchors
+    // resolve to months we never queried and the unique index trips on insert.
     const possibleTargetMonths = new Set<string>();
     possibleTargetMonths.add(targetMonth);
-    // Add all possible cycle months that multi-month frequencies could resolve to
-    for (const freq of ['Bi-Monthly', 'Quarterly', 'Half-Yearly', 'Yearly']) {
-      const cycleMonths = getCycleMonthsForTarget(targetMonthIdx, freq);
+    for (const kpi of sourceKpis) {
+      const cycleMonths = getCycleMonthsForTarget(targetMonthIdx, kpi.frequency, kpi.frequency_cycle_start);
       for (const m of cycleMonths) {
         if (m >= targetMonthIdx) possibleTargetMonths.add(MONTHS[m]);
       }
