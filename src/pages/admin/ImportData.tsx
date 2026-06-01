@@ -2216,6 +2216,8 @@ export default function ImportData() {
                   <li><code>portalAccess</code> - Portal Login Access: <span className="text-xs ml-1 text-muted-foreground">(Yes/No, default: Yes if email provided)</span></li>
                   <li><code>managerEmployeeId</code> - Manager's Employee Code</li>
                   <li><code>managerName</code> - Manager's Full Name</li>
+                  <li><code>functionalManagerEmployeeId</code> / <code>functional_manager_code</code> - Functional Manager's Employee Code <span className="text-xs ml-1 text-muted-foreground">(optional; used by Functional Manager review stage)</span></li>
+                  <li><code>functionalManagerName</code> / <code>functional_manager</code> - Functional Manager's Full Name <span className="text-xs ml-1 text-muted-foreground">(optional; falls back when code is blank)</span></li>
                   <li><code>gdoj</code> / <code>groupDoj</code> - Group Date of Joining (yyyy-MM-dd or dd/MM/yyyy)</li>
                   <li><code>doj</code> / <code>dateOfJoining</code> - Date of Joining (yyyy-MM-dd or dd/MM/yyyy)</li>
                   <li><code>confirmationDate</code> - Confirmation Date (yyyy-MM-dd or dd/MM/yyyy)</li>
