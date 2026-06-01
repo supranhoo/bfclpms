@@ -19,6 +19,7 @@ import {
   type SafetyTrainingAssignmentRow,
 } from '@/hooks/useSafetyTraining';
 import { canStartAttempt, formatDueIn } from '@/lib/safetyTraining';
+import { useSafetyRealtimeSync } from '@/hooks/useSafetyRealtimeSync';
 
 /**
  * Worker-facing Training page.
@@ -32,6 +33,11 @@ import { canStartAttempt, formatDueIn } from '@/lib/safetyTraining';
  * mid-attempt state by accident.
  */
 export default function SafetyTraining() {
+  // Scoped realtime: assignments + attempts only.
+  useSafetyRealtimeSync(true, [
+    'safety_training_assignments',
+    'safety_training_attempts',
+  ]);
   const [openAssignmentId, setOpenAssignmentId] = useState<string | null>(null);
 
   if (openAssignmentId) {
