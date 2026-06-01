@@ -125,6 +125,16 @@ actionConfig['BULK_OVERRIDE_STAGE_RESTAMPED'] = { icon: Edit, color: 'bg-teal-50
 actionConfig['TOP_LEVEL_VALUE_OVERWRITTEN'] = { icon: UserCog, color: 'bg-rose-500', label: 'Top-Level Value Overwritten' };
 actionConfig['STAGE_VALUES_REVERTED'] = { icon: Undo2, color: 'bg-amber-500', label: 'Stage Values Reverted' };
 
+// Backfilled stage rows (POLICY §<next>): historical-import gap repair.
+// Same icon/colour as the canonical counterpart, label suffixed " (backfilled)".
+// Rows are tagged metadata.source='submission_backfill' and metadata.run_id=<uuid>.
+actionConfig['BACKFILL_SELF_REVIEW_SUBMITTED'] = { icon: Send,           color: 'bg-blue-500',     label: 'Self Review Submitted (backfilled)' };
+actionConfig['BACKFILL_MANAGER_REVIEWED']      = { icon: User,           color: 'bg-purple-500',   label: 'Manager Reviewed (backfilled)' };
+actionConfig['BACKFILL_SKIP_LEVEL_REVIEWED']   = { icon: UserCog,        color: 'bg-purple-500',   label: 'Skip-Level Reviewed (backfilled)' };
+actionConfig['BACKFILL_HR_PMS_REVIEWED']       = { icon: ClipboardCheck, color: 'bg-teal-500',     label: 'HR PMS Reviewed (backfilled)' };
+actionConfig['BACKFILL_AUDITOR_REVIEWED']      = { icon: Shield,         color: 'bg-indigo-500',   label: 'Auditor Reviewed (backfilled)' };
+actionConfig['BACKFILL_MANAGEMENT_REVIEWED']   = { icon: Briefcase,      color: 'bg-emerald-500',  label: 'Management Reviewed (backfilled)' };
+
 export function KpiTimeline({ isOpen, onClose, kpi, workflowStages: propStages }: KpiTimelineProps) {
   // Fetch audit logs for this KPI
   const { data: auditLogs = [], isLoading } = useQuery({
