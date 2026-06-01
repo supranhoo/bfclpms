@@ -48,10 +48,8 @@ describe('employeeMasterFields', () => {
       reqs,
     );
     expect(r.ok).toBe(false);
-    if (!r.ok) {
-      expect(r.fieldKey).toBe('department_id');
-      expect(r.message).toBe('Department is mandatory.');
-    }
+    expect(r.ok === false && r.fieldKey).toBe('department_id');
+    expect(r.ok === false && r.message).toBe('Department is mandatory.');
   });
 
   it('validateRequiredFields: whitespace counts as blank', () => {
