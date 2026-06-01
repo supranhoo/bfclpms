@@ -70,14 +70,25 @@ export function IncrementMethodSection() {
   const [method, setMethod] = useState<IncrementMethodType>('full');
   const [slabs, setSlabs] = useState<SlabDraft[]>(DEFAULT_SLABS);
   const [cutoffDay, setCutoffDay] = useState<number>(DEFAULT_CUTOFF_DAY);
+  // Increment Eligibility Cutoff (full date, e.g. 31 Dec) — independent of
+  // the existing GDOJ-month cutoff above.
+  const [eligibilityMonth, setEligibilityMonth] = useState<number | null>(null);
+  const [eligibilityDay, setEligibilityDay] = useState<number | null>(null);
+  const [carryForward, setCarryForward] = useState<boolean>(false);
 
   useEffect(() => {
     if (config) {
       setMethod(config.method);
       setCutoffDay(config.joining_month_cutoff_day ?? DEFAULT_CUTOFF_DAY);
+      setEligibilityMonth((config as any).eligibility_cutoff_month ?? null);
+      setEligibilityDay((config as any).eligibility_cutoff_day ?? null);
+      setCarryForward(!!(config as any).carry_forward_post_cutoff);
     } else {
       setMethod('full');
       setCutoffDay(DEFAULT_CUTOFF_DAY);
+      setEligibilityMonth(null);
+      setEligibilityDay(null);
+      setCarryForward(false);
     }
   }, [config]);
 
@@ -108,7 +119,25 @@ export function IncrementMethodSection() {
   }
   // Cutoff applies to ALL methods now — always validate.
   const cutoffValid = Number.isInteger(cutoffDay) && cutoffDay >= 1 && cutoffDay <= 31;
-  const isValid = (method !== 'custom' || slabErrors.length === 0) && cutoffValid;
+  // Eligibility cutoff: when carry-forward is enabled, BOTH month and day
+  // must be set. When carry-forward is off but partial values are entered,
+  // both must still be present (or both null) to keep the row sane.
+  const eligibilityMonthValid =
+    eligibilityMonth === null || (Number.isInteger(eligibilityMonth) && eligibilityMonth >= 1 && eligibilityMonth <= 12);
+  const eligibilityDayValid =
+    eligibilityDay === null || (Number.isInteger(eligibilityDay) && eligibilityDay >= 1 && eligibilityDay <= 31);
+  const eligibilityComplete =
+    (eligibilityMonth === null && eligibilityDay === null) ||
+    (eligibilityMonth !== null && eligibilityDay !== null);
+  const carryForwardValid =
+    !carryForward || (eligibilityMonth !== null && eligibilityDay !== null);
+  const isValid =
+    (method !== 'custom' || slabErrors.length === 0) &&
+    cutoffValid &&
+    eligibilityMonthValid &&
+    eligibilityDayValid &&
+    eligibilityComplete &&
+    carryForwardValid;
 
   const handleSave = () => {
     if (!scope || !isValid) return;
@@ -118,6 +147,9 @@ export function IncrementMethodSection() {
       slabs: method === 'custom' ? slabs : [],
       existing: config ?? null,
       joiningMonthCutoffDay: cutoffDay,
+      eligibilityCutoffMonth: eligibilityMonth,
+      eligibilityCutoffDay: eligibilityDay,
+      carryForwardPostCutoff: carryForward,
     });
   };
 
