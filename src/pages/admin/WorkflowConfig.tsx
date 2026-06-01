@@ -85,10 +85,12 @@ export default function WorkflowConfig() {
 
   // Period selector state: 'global' or specific period
   const currentYear = new Date().getFullYear();
-  const [periodMode, setPeriodMode] = useState<'global' | 'specific'>('global');
+  // Default to 'specific'. 'global' is now read-only legacy fallback view only.
+  const [periodMode, setPeriodMode] = useState<'global' | 'specific'>('specific');
   const [selectedMonth, setSelectedMonth] = useState(MONTHS[new Date().getMonth()]);
   const [selectedYear, setSelectedYear] = useState(currentYear);
   const years = [currentYear - 1, currentYear, currentYear + 1];
+  const [migrateOpen, setMigrateOpen] = useState(false);
 
   const { data: allTemplates, isLoading: templatesLoading } = useWorkflowTemplates(true);
   const { data: configs, isLoading: configsLoading } = useWorkflowConfigs();
