@@ -1471,6 +1471,16 @@ export default function ImportData() {
           (row.managerName && p.full_name?.toLowerCase() === row.managerName?.toLowerCase())
         )?.id || null;
 
+        const functionalManagerId = (row.functionalManagerEmployeeId || row.functionalManagerName)
+          ? (profiles?.find(p =>
+              (row.functionalManagerEmployeeId && p.employee_code === row.functionalManagerEmployeeId) ||
+              (row.functionalManagerName && p.full_name?.toLowerCase() === row.functionalManagerName.toLowerCase())
+            )?.id || null)
+          : null;
+        if ((row.functionalManagerEmployeeId || row.functionalManagerName) && !functionalManagerId) {
+          throw new Error(`Functional Manager '${row.functionalManagerEmployeeId || row.functionalManagerName}' not found`);
+        }
+
         // Resolve company by code or name (case-insensitive)
         const newCompanyId = row.companyCode
           ? (companiesList || []).find((c: any) =>
@@ -1495,6 +1505,7 @@ export default function ImportData() {
             employee_category: sanitizeText(row.employeeCategory) || undefined,
             employment_status: sanitizeText(row.employmentStatus) || undefined,
             reporting_manager_id: managerId || undefined,
+            functional_manager_id: functionalManagerId || undefined,
             company_id: newCompanyId,
             location: sanitizeText(row.location) || undefined,
             portal_access: hasPortalAccess,
