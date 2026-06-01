@@ -432,6 +432,7 @@ export default function UserManagement() {
       doj,
       confirmationDate,
       locationId,
+      isDummyEmployee,
     }: {
       userId: string;
       role: AppRole;
@@ -466,11 +467,8 @@ export default function UserManagement() {
         confirmation_date: confirmationDate !== undefined ? (confirmationDate || null) : undefined,
         location_id: locationId !== undefined ? (locationId || null) : undefined,
       };
-      // v2.67.x — Dummy/System Employee flag (admin-only field).
-      // Captured as one of the params from the function signature above.
-      const _args = arguments[0] as { isDummyEmployee?: boolean };
-      if (_args.isDummyEmployee !== undefined) {
-        updatePayload.is_dummy_employee = !!_args.isDummyEmployee;
+      if (isDummyEmployee !== undefined) {
+        updatePayload.is_dummy_employee = !!isDummyEmployee;
       }
 
       if (isActive !== undefined) {
