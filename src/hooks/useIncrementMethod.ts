@@ -126,8 +126,14 @@ export function useSaveIncrementMethod() {
       slabs: SlabDraft[];
       existing?: IncrementMethodConfigRow | null;
       joiningMonthCutoffDay?: number | null;
+      eligibilityCutoffMonth?: number | null;
+      eligibilityCutoffDay?: number | null;
+      carryForwardPostCutoff?: boolean;
     }) => {
-      const { scope, method, slabs, existing, joiningMonthCutoffDay } = args;
+      const {
+        scope, method, slabs, existing, joiningMonthCutoffDay,
+        eligibilityCutoffMonth, eligibilityCutoffDay, carryForwardPostCutoff,
+      } = args;
       const user = (await supabase.auth.getUser()).data.user;
       // Archive ALL currently-active rows for the scope, not just the
       // `existing` row the caller fetched. Prevents duplicate active rows
@@ -159,6 +165,11 @@ export function useSaveIncrementMethod() {
           // Cutoff applies to ALL methods (drives Final Eligible Months and
           // custom-slab matching as well as prorated_doj math).
           joining_month_cutoff_day: joiningMonthCutoffDay ?? 15,
+          // Post-cutoff carry-forward configuration (additive — defaults keep
+          // legacy rows behaving exactly as before).
+          eligibility_cutoff_month: eligibilityCutoffMonth ?? null,
+          eligibility_cutoff_day: eligibilityCutoffDay ?? null,
+          carry_forward_post_cutoff: !!carryForwardPostCutoff,
         } as any])
         .select('*')
         .single();
