@@ -4,8 +4,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Server, AlertTriangle } from 'lucide-react';
+import { Server, AlertTriangle, RefreshCw } from 'lucide-react';
 import { useSystemSetting, useUpdateSystemSetting } from '@/hooks/useSystemSettings';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -29,7 +30,10 @@ function parseBool(raw: unknown, dflt: boolean): boolean {
 function useCompressionStats() {
   return useQuery({
     queryKey: ['admin', 'compression-stats'],
-    refetchInterval: 30_000,
+    // Polling cadence reduced from 30s → 120s (two 1k-row scans were
+    // running every 30 seconds). Admins can hit the Refresh button on
+    // the panel for an on-demand update.
+    refetchInterval: 120_000,
     queryFn: async () => {
       const safety = await supabase
         .from('safety_incident_evidence')
@@ -128,10 +132,24 @@ export function ServerCompressionPanel() {
         </div>
 
         <div className="space-y-2 p-3 rounded-lg border">
-          <Label className="text-sm font-semibold">Queue status</Label>
+          <div className="flex items-center justify-between gap-2">
+            <Label className="text-sm font-semibold">Queue status</Label>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => stats.refetch()}
+              disabled={stats.isFetching}
+              className="h-8"
+            >
+              <RefreshCw
+                className={`h-3.5 w-3.5 mr-1.5 ${stats.isFetching ? 'animate-spin' : ''}`}
+              />
+              Refresh
+            </Button>
+          </div>
           <StatRow title="Safety" t={stats.data?.safety} />
           <StatRow title="PMS" t={stats.data?.pms} />
-          <p className="text-xs text-muted-foreground">Auto-refreshes every 30s. Failures retry up to 3 times.</p>
+          <p className="text-xs text-muted-foreground">Auto-refreshes every 2 minutes. Failures retry up to 3 times.</p>
         </div>
       </CardContent>
     </Card>
