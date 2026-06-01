@@ -1767,7 +1767,7 @@ export default function UserManagement() {
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                   <div className="space-y-1.5">
-                    <Label>Company</Label>
+                    <Label>Company<ReqMark k="company_id" /></Label>
                     <OrgFilterCombobox
                       value={newCompanyId}
                       onValueChange={setNewCompanyId}
@@ -1776,7 +1776,7 @@ export default function UserManagement() {
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <Label>Division</Label>
+                    <Label>Division<ReqMark k="division_id" /></Label>
                     <OrgFilterCombobox
                       value={newDivisionId}
                       onValueChange={(val) => {
@@ -1794,7 +1794,7 @@ export default function UserManagement() {
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <Label>Department</Label>
+                    <Label>Department<ReqMark k="department_id" /></Label>
                     <OrgFilterCombobox
                       value={newDepartmentId}
                       onValueChange={setNewDepartmentId}
@@ -1803,7 +1803,7 @@ export default function UserManagement() {
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <Label>Designation</Label>
+                    <Label>Designation<ReqMark k="designation" /></Label>
                     <OrgFilterCombobox
                       value={newDesignation}
                       onValueChange={setNewDesignation}
@@ -1812,7 +1812,7 @@ export default function UserManagement() {
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <Label>PMS Grade</Label>
+                    <Label>PMS Grade<ReqMark k="pms_grade" /></Label>
                     <OrgFilterCombobox
                       value={newPmsGrade}
                       onValueChange={setNewPmsGrade}
@@ -1821,7 +1821,7 @@ export default function UserManagement() {
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <Label>Employee Category</Label>
+                    <Label>Employee Category<ReqMark k="employee_category" /></Label>
                     <OrgFilterCombobox
                       value={newEmployeeCategory}
                       onValueChange={setNewEmployeeCategory}
@@ -1830,7 +1830,7 @@ export default function UserManagement() {
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <Label>Employment Status</Label>
+                    <Label>Employment Status<ReqMark k="employment_status" /></Label>
                     <OrgFilterCombobox
                       value={newEmploymentStatus}
                       onValueChange={setNewEmploymentStatus}
@@ -1839,7 +1839,7 @@ export default function UserManagement() {
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <Label>Location</Label>
+                    <Label>Location<ReqMark k="location_id" /></Label>
                     <OrgFilterCombobox
                       value={newLocationId}
                       onValueChange={setNewLocationId}
@@ -1848,7 +1848,7 @@ export default function UserManagement() {
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <Label>Reporting Manager</Label>
+                    <Label>Reporting Manager<ReqMark k="reporting_manager_id" /></Label>
                     <ManagerCombobox
                       value={newManagerId}
                       onValueChange={setNewManagerId}
