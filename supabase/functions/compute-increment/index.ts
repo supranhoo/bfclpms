@@ -860,6 +860,26 @@ Deno.serve(async (req) => {
           : ayMonths.decision === 'pre_ay' ? `GDOJ before AY — counted from AY start`
           : `GDOJ after AY — 0 months`;
 
+        // ────────────────────────────────────────────────────────────
+        // Post-Cutoff Carry-Forward evaluation. Reads the resolved
+        // method config's eligibility cutoff (full date, e.g. 31 Dec)
+        // and the carry_forward toggle. Post-cutoff joiners are
+        // skipped THIS AY; their carry months are persisted so the
+        // next AY's run can pick them up via `carryInByEmp`.
+        // ────────────────────────────────────────────────────────────
+        const eligibilityCutoffMonth = (resolvedCfg as any)?.eligibility_cutoff_month ?? null;
+        const eligibilityCutoffDay = (resolvedCfg as any)?.eligibility_cutoff_day ?? null;
+        const carryForwardPostCutoff = !!(resolvedCfg as any)?.carry_forward_post_cutoff;
+        const postCutoff = evaluatePostCutoff({
+          gdoj,
+          ayStart: ayStartGlobal,
+          ayEnd: ayEndGlobal,
+          cutoffMonth: eligibilityCutoffMonth,
+          cutoffDay: eligibilityCutoffDay,
+          carryForwardEnabled: carryForwardPostCutoff,
+        });
+        const carryInMonths = carryInByEmp.get(p.id) ?? 0;
+
         // Eligibility evaluation. Criteria-exempt employees skip the
         // absent/LWP/disciplinary/training criteria block entirely.
         let eligibility: string = 'eligible';
