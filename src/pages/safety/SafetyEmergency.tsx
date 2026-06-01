@@ -8,6 +8,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Plus, Siren, Loader2, ArrowRight, Phone } from 'lucide-react';
 import { useDrills } from '@/hooks/useSafetyEmergency';
+import { useSafetyRealtimeSync } from '@/hooks/useSafetyRealtimeSync';
 import {
   SAFETY_DRILL_STATUSES,
   SAFETY_DRILL_STATUS_LABEL,
@@ -25,6 +26,13 @@ import { format } from 'date-fns';
  * the contact directory + new drill wizard.
  */
 export default function SafetyEmergency() {
+  // Scoped realtime: drills + participants + findings + contacts.
+  useSafetyRealtimeSync(true, [
+    'safety_emergency_drills',
+    'safety_drill_participants',
+    'safety_drill_findings',
+    'safety_emergency_contacts',
+  ]);
   const [status, setStatus] = useState<SafetyDrillStatus | 'all'>('all');
   const [type, setType] = useState<SafetyDrillType | 'all'>('all');
   const { data: drills = [], isLoading } = useDrills({ status, type });

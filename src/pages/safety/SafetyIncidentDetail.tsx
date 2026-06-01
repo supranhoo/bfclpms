@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Loader2, ArrowLeft } from 'lucide-react';
 import { useSafetyIncident } from '@/hooks/useSafetyIncidents';
+import { useSafetyRealtimeSync } from '@/hooks/useSafetyRealtimeSync';
 import { SafetyStatusBadge } from '@/components/safety/StatusBadge';
 import { SlaBadge } from '@/components/safety/SlaBadge';
 import { StageActionPanel } from '@/components/safety/StageActionPanel';
@@ -19,6 +20,14 @@ import { SafetySkeletonBlock } from '@/components/safety/SafetySkeletonBlock';
 export default function SafetyIncidentDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  // Scoped realtime: incidents row + everything the timeline/evidence
+  // sections render. Avoids subscribing to permits/training/etc.
+  useSafetyRealtimeSync(true, [
+    'safety_incidents',
+    'safety_incident_status_history',
+    'safety_incident_evidence',
+    'safety_incident_progress_log',
+  ]);
   const { data: incident, isLoading, error } = useSafetyIncident(id);
   const { data: settings = [] } = useSafetySettings();
   const uiV2 = settings.find((r) => r.key === 'ui_incident_v2')?.value === true;

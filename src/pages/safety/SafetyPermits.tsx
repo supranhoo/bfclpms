@@ -11,6 +11,7 @@ import {
 import { Plus, FileSignature } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useManualQuery, type ManualQueryFetcherArgs } from '@/hooks/useManualQuery';
+import { useSafetyRealtimeSync } from '@/hooks/useSafetyRealtimeSync';
 import { SafetyFilterSheet } from '@/components/safety/SafetyFilterSheet';
 import { SafetyResponsiveList } from '@/components/safety/SafetyResponsiveList';
 import { SafetyMobileListCard } from '@/components/safety/SafetyMobileListCard';
@@ -78,6 +79,8 @@ async function fetchPermitsPage({
 }
 
 export default function SafetyPermits() {
+  // Scoped realtime: only permits + their approval rows.
+  useSafetyRealtimeSync(true, ['safety_permits', 'safety_permit_approvals']);
   const navigate = useNavigate();
   const [draft, setDraft] = useState<PermitFilters>(INITIAL);
   const {

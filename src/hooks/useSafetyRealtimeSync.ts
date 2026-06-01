@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -83,11 +83,95 @@ const KEY_GROUPS = {
 
 type GroupName = keyof typeof KEY_GROUPS;
 
-export function useSafetyRealtimeSync(enabled: boolean = true) {
+/**
+ * Subscription descriptor table. Each row maps a Postgres table to the
+ * cache-key group it should invalidate. The `useSafetyRealtimeSync` hook
+ * iterates this once per mount and only attaches the rows whose table
+ * appears in the caller's `tables` filter (or all rows when `tables` is
+ * undefined — used by the Safety dashboard which needs every table).
+ */
+type SubscriptionDescriptor = {
+  table: SafetyRealtimeTable;
+  group: GroupName;
+  /** Optional row filter; uses user.id at runtime. */
+  filter?: (userId: string) => string;
+};
+
+export type SafetyRealtimeTable =
+  | 'safety_incidents'
+  | 'safety_incident_status_history'
+  | 'safety_incident_evidence'
+  | 'safety_incident_progress_log'
+  | 'safety_notifications'
+  | 'safety_sla_escalations'
+  | 'safety_permits'
+  | 'safety_permit_approvals'
+  | 'safety_training_assignments'
+  | 'safety_training_attempts'
+  | 'safety_assets'
+  | 'safety_asset_calibrations'
+  | 'safety_asset_evidence'
+  | 'safety_audit_runs'
+  | 'safety_audit_run_responses'
+  | 'safety_audit_templates'
+  | 'safety_audit_template_items'
+  | 'safety_emergency_drills'
+  | 'safety_drill_participants'
+  | 'safety_drill_findings'
+  | 'safety_emergency_contacts';
+
+const SUBSCRIPTIONS: SubscriptionDescriptor[] = [
+  { table: 'safety_incidents', group: 'incidents' },
+  { table: 'safety_incident_status_history', group: 'timeline' },
+  { table: 'safety_incident_evidence', group: 'evidence' },
+  { table: 'safety_incident_progress_log', group: 'progress' },
+  {
+    table: 'safety_notifications',
+    group: 'notifications',
+    filter: (userId) => `recipient_id=eq.${userId}`,
+  },
+  { table: 'safety_sla_escalations', group: 'sla' },
+  { table: 'safety_permits', group: 'permits' },
+  { table: 'safety_permit_approvals', group: 'permitApprovals' },
+  { table: 'safety_training_assignments', group: 'training' },
+  { table: 'safety_training_attempts', group: 'training' },
+  { table: 'safety_assets', group: 'assets' },
+  { table: 'safety_asset_calibrations', group: 'assets' },
+  { table: 'safety_asset_evidence', group: 'assets' },
+  { table: 'safety_audit_runs', group: 'audits' },
+  { table: 'safety_audit_run_responses', group: 'audits' },
+  { table: 'safety_audit_templates', group: 'audits' },
+  { table: 'safety_audit_template_items', group: 'audits' },
+  { table: 'safety_emergency_drills', group: 'emergency' },
+  { table: 'safety_drill_participants', group: 'emergency' },
+  { table: 'safety_drill_findings', group: 'emergency' },
+  { table: 'safety_emergency_contacts', group: 'emergency' },
+];
+
+/**
+ * Subscribe to Safety realtime updates for the caller-specified tables.
+ *
+ * @param enabled  Toggle the whole subscription off (e.g. role gating).
+ * @param tables   Optional whitelist. When omitted, subscribes to ALL
+ *                 20 Safety tables — reserved for the Safety dashboard.
+ *                 List pages should pass only the tables they render to
+ *                 avoid paying for cross-module realtime events.
+ */
+export function useSafetyRealtimeSync(
+  enabled: boolean = true,
+  tables?: ReadonlyArray<SafetyRealtimeTable>,
+) {
   const qc = useQueryClient();
   const { user } = useAuth();
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingRef = useRef<Set<GroupName>>(new Set());
+
+  // Stable signature for the dependency array so the effect doesn't tear
+  // down on every render when callers pass an inline array literal.
+  const tablesKey = useMemo(
+    () => (tables ? [...tables].sort().join(',') : '*'),
+    [tables],
+  );
 
   useEffect(() => {
     if (!enabled || !user?.id) return;
@@ -110,124 +194,31 @@ export function useSafetyRealtimeSync(enabled: boolean = true) {
       }, DEBOUNCE_MS);
     }
 
-    const channel = supabase
-      .channel(`safety-realtime-sync-${user.id}`)
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'safety_incidents' },
-        () => schedule('incidents'),
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'safety_incident_status_history' },
-        () => schedule('timeline'),
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'safety_incident_evidence' },
-        () => schedule('evidence'),
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'safety_incident_progress_log' },
-        () => schedule('progress'),
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'safety_notifications',
-          filter: `recipient_id=eq.${user.id}`,
-        },
-        () => schedule('notifications'),
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'safety_sla_escalations' },
-        () => schedule('sla'),
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'safety_permits' },
-        () => schedule('permits'),
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'safety_permit_approvals' },
-        () => schedule('permitApprovals'),
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'safety_training_assignments' },
-        () => schedule('training'),
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'safety_training_attempts' },
-        () => schedule('training'),
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'safety_assets' },
-        () => schedule('assets'),
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'safety_asset_calibrations' },
-        () => schedule('assets'),
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'safety_asset_evidence' },
-        () => schedule('assets'),
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'safety_audit_runs' },
-        () => schedule('audits'),
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'safety_audit_run_responses' },
-        () => schedule('audits'),
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'safety_audit_templates' },
-        () => schedule('audits'),
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'safety_audit_template_items' },
-        () => schedule('audits'),
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'safety_emergency_drills' },
-        () => schedule('emergency'),
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'safety_drill_participants' },
-        () => schedule('emergency'),
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'safety_drill_findings' },
-        () => schedule('emergency'),
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'safety_emergency_contacts' },
-        () => schedule('emergency'),
-      )
-      .subscribe();
+    const wanted = tables ? new Set<string>(tables) : null;
+    const subs = wanted
+      ? SUBSCRIPTIONS.filter((s) => wanted.has(s.table))
+      : SUBSCRIPTIONS;
+    // Channel name differentiates dashboard (full set) from per-page
+    // scoped subscriptions so Supabase Realtime tracks them separately.
+    const channelName = wanted
+      ? `safety-realtime-${user.id}-${tablesKey}`
+      : `safety-realtime-sync-${user.id}`;
+    let chan = supabase.channel(channelName);
+    for (const s of subs) {
+      const cfg: { event: '*'; schema: 'public'; table: string; filter?: string } = {
+        event: '*',
+        schema: 'public',
+        table: s.table,
+      };
+      if (s.filter) cfg.filter = s.filter(user.id);
+      chan = chan.on('postgres_changes', cfg, () => schedule(s.group));
+    }
+    const channel = chan.subscribe();
 
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);
       pendingRef.current.clear();
       supabase.removeChannel(channel);
     };
-  }, [enabled, user?.id, qc]);
+  }, [enabled, user?.id, qc, tablesKey]);
 }

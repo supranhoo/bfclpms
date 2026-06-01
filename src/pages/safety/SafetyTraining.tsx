@@ -19,6 +19,7 @@ import {
   type SafetyTrainingAssignmentRow,
 } from '@/hooks/useSafetyTraining';
 import { canStartAttempt, formatDueIn } from '@/lib/safetyTraining';
+import { useSafetyRealtimeSync } from '@/hooks/useSafetyRealtimeSync';
 
 /**
  * Worker-facing Training page.
@@ -32,6 +33,11 @@ import { canStartAttempt, formatDueIn } from '@/lib/safetyTraining';
  * mid-attempt state by accident.
  */
 export default function SafetyTraining() {
+  // Scoped realtime: assignments + attempts only.
+  useSafetyRealtimeSync(true, [
+    'safety_training_assignments',
+    'safety_training_attempts',
+  ]);
   const [openAssignmentId, setOpenAssignmentId] = useState<string | null>(null);
 
   if (openAssignmentId) {
@@ -139,7 +145,6 @@ function AssignmentRunner({
   const { data: quiz } = useSafetyQuizForSop(assignment?.sop_id);
 
   const [phase, setPhase] = useState<Phase>('reader');
-  const [readSeconds, setReadSeconds] = useState(0);
   const [attempt, setAttempt] = useState<AttemptRuntime | null>(null);
   const [answers, setAnswers] = useState<Record<string, number>>({});
   const [result, setResult] = useState<{ score: number; passed: boolean; pass_threshold: number } | null>(
@@ -150,12 +155,20 @@ function AssignmentRunner({
   const submitMut = useSubmitTrainingAttempt();
   const { toast } = useToast();
 
-  // Reading timer
+  // Reading timer anchor — Date.now() snapshot when the reader phase
+  // began. The visible 1s counter lives inside <ReadingTimer> so the
+  // parent component (which is ~400 lines and renders the SOP body, the
+  // quiz, and the result view) is NOT re-rendered every second.
+  // Re-arming on phase change preserves the legacy behavior: the timer
+  // resets each time the user re-enters the reader.
+  const readerStartRef = useRef<number>(Date.now());
   useEffect(() => {
-    if (phase !== 'reader') return;
-    const t = window.setInterval(() => setReadSeconds((s) => s + 1), 1000);
-    return () => window.clearInterval(t);
+    if (phase === 'reader') {
+      readerStartRef.current = Date.now();
+    }
   }, [phase]);
+  const elapsedSeconds = () =>
+    Math.floor((Date.now() - readerStartRef.current) / 1000);
 
   if (!assignment || !sop) {
     return (
@@ -167,13 +180,13 @@ function AssignmentRunner({
   }
 
   const minRead = sop.min_read_seconds ?? 60;
-  const readPct = Math.min(100, Math.round((readSeconds / minRead) * 100));
-  const canStart =
-    readSeconds >= minRead &&
-    !!quiz &&
-    canStartAttempt(assignment.status, assignment.attempts_count, quiz.max_attempts);
+  // `canStart` is evaluated synchronously from the ref-backed elapsed
+  // value when the user clicks Start Quiz; ReadingTimer toggles its own
+  // local "ready" state every second so the button enable/disable still
+  // updates visually without re-rendering the parent.
 
   async function handleStartQuiz() {
+    if (elapsedSeconds() < minRead) return;
     try {
       const rt = await startMut.mutateAsync(assignmentId);
       setAttempt(rt);
@@ -201,7 +214,7 @@ function AssignmentRunner({
       const r = await submitMut.mutateAsync({
         attemptId: attempt.attempt_id,
         answers,
-        readingSeconds: readSeconds,
+        readingSeconds: elapsedSeconds(),
       });
       setResult(r);
       setPhase('result');
@@ -246,12 +259,13 @@ function AssignmentRunner({
         <ReaderView
           bodyMd={sop.body_md}
           minRead={minRead}
-          readSeconds={readSeconds}
-          readPct={readPct}
-          canStart={canStart}
+          hasQuiz={!!quiz}
+          startGate={
+            !!quiz &&
+            canStartAttempt(assignment.status, assignment.attempts_count, quiz.max_attempts)
+          }
           starting={startMut.isPending}
           onStart={handleStartQuiz}
-          hasQuiz={!!quiz}
         />
       )}
 
@@ -275,11 +289,10 @@ function AssignmentRunner({
 function ReaderView(props: {
   bodyMd: string;
   minRead: number;
-  readSeconds: number;
-  readPct: number;
-  canStart: boolean;
-  starting: boolean;
   hasQuiz: boolean;
+  /** Non-time-based eligibility (status, attempts left, quiz exists). */
+  startGate: boolean;
+  starting: boolean;
   onStart: () => void;
 }) {
   return (
@@ -293,36 +306,84 @@ function ReaderView(props: {
 
         <Separator />
 
-        <div className="space-y-2">
-          <div className="flex items-center justify-between text-sm">
-            <span className="text-muted-foreground">
-              Reading time: {props.readSeconds}s / {props.minRead}s required
-            </span>
-            <span className="text-muted-foreground">{props.readPct}%</span>
-          </div>
-          <Progress value={props.readPct} />
-        </div>
-
-        <div className="flex justify-end">
-          <Button
-            onClick={props.onStart}
-            disabled={!props.canStart || props.starting || !props.hasQuiz}
-          >
-            {props.starting ? (
-              <>
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Starting…
-              </>
-            ) : !props.hasQuiz ? (
-              'No quiz configured'
-            ) : !props.canStart ? (
-              'Read first to unlock quiz'
-            ) : (
-              'Start Quiz'
-            )}
-          </Button>
-        </div>
+        <ReadingTimer
+          minRead={props.minRead}
+          hasQuiz={props.hasQuiz}
+          startGate={props.startGate}
+          starting={props.starting}
+          onStart={props.onStart}
+        />
       </CardContent>
     </Card>
+  );
+}
+
+/**
+ * ReadingTimer
+ * ------------
+ * Isolated 1s-tick component. Owns its own `setInterval` so the parent
+ * AssignmentRunner (which renders the SOP body, the quiz, and the
+ * result screen) is no longer re-rendered every second while the user
+ * reads. The visible counter and progress bar update at the same
+ * cadence as before — only this small leaf re-renders.
+ */
+function ReadingTimer({
+  minRead,
+  hasQuiz,
+  startGate,
+  starting,
+  onStart,
+}: {
+  minRead: number;
+  hasQuiz: boolean;
+  startGate: boolean;
+  starting: boolean;
+  onStart: () => void;
+}) {
+  const startRef = useRef<number>(Date.now());
+  const [readSeconds, setReadSeconds] = useState(0);
+
+  useEffect(() => {
+    const t = window.setInterval(() => {
+      setReadSeconds(Math.floor((Date.now() - startRef.current) / 1000));
+    }, 1000);
+    return () => window.clearInterval(t);
+  }, []);
+
+  const readPct = Math.min(100, Math.round((readSeconds / minRead) * 100));
+  const canStart = readSeconds >= minRead && startGate;
+
+  return (
+    <>
+      <div className="space-y-2">
+        <div className="flex items-center justify-between text-sm">
+          <span className="text-muted-foreground">
+            Reading time: {readSeconds}s / {minRead}s required
+          </span>
+          <span className="text-muted-foreground">{readPct}%</span>
+        </div>
+        <Progress value={readPct} />
+      </div>
+
+      <div className="flex justify-end">
+        <Button
+          onClick={onStart}
+          disabled={!canStart || starting || !hasQuiz}
+        >
+          {starting ? (
+            <>
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Starting…
+            </>
+          ) : !hasQuiz ? (
+            'No quiz configured'
+          ) : !canStart ? (
+            'Read first to unlock quiz'
+          ) : (
+            'Start Quiz'
+          )}
+        </Button>
+      </div>
+    </>
   );
 }
 
