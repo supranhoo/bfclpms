@@ -1223,6 +1223,9 @@ export default function UserManagement() {
                         {(profile as any).portal_access === false && (
                           <Badge variant="secondary" className="text-xs ml-1">No Portal</Badge>
                         )}
+                        {dummyIds.has(profile.id) && (
+                          <Badge variant="secondary" className="text-xs ml-1" title="Dummy/System employee">Dummy/System</Badge>
+                        )}
                       </TableCell>
                       <TableCell>{manager ? formatManagerLabel(manager.full_name, manager.employee_code) : '-'}</TableCell>
                       <TableCell>
