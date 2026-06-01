@@ -217,22 +217,28 @@ export default function WorkflowConfig() {
     configValue: string,
     templateId: string
   ) => {
+    if (periodMode !== 'specific') {
+      toast({
+        title: 'Read-only legacy view',
+        description: 'New workflow mappings must be Period-Specific. Switch Scope to "Specific Period" first.',
+        variant: 'destructive',
+      });
+      return;
+    }
     try {
       await upsertConfig.mutateAsync({
         configType,
         configValue,
         workflowTemplateId: templateId,
-        reviewPeriod: periodMode === 'specific' ? selectedMonth : null,
-        reviewYear: periodMode === 'specific' ? selectedYear : null,
-        isOngoing: periodMode === 'specific' ? isOngoing : false,
+        reviewPeriod: selectedMonth,
+        reviewYear: selectedYear,
+        isOngoing,
       });
       toast({
         title: 'Workflow assigned',
-        description: periodMode === 'specific' 
-          ? isOngoing
-            ? `Workflow assigned from ${selectedMonth} ${selectedYear} onward.`
-            : `Workflow assigned for ${selectedMonth} ${selectedYear}.`
-          : 'The workflow configuration has been saved.',
+        description: isOngoing
+          ? `Workflow assigned from ${selectedMonth} ${selectedYear} onward.`
+          : `Workflow assigned for ${selectedMonth} ${selectedYear}.`,
       });
     } catch {
       toast({
