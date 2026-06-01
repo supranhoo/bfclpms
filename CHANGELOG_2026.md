@@ -5,6 +5,11 @@
 > **Sources:** `DOCUMENTATION.md` Version History, `supabase/migrations/`, `mem/*`.
 
 ---
+## 🌱 February 2026
+
+## §Phase19-AddUserAccessParity Add User → Access & Login parity with Edit User (2026-06-01)
+
+The Create User dialog's **Access** tab is renamed **Access & Login** and now mirrors Edit User in label and sequence: an `Access & Status` block (Role, Account Status switch defaulting ON, Login credentials switch, Dummy/system employee switch) followed by a `Module Access & Login` block of four cards (Grant module roles, Send / reset password, View access history, Workflow mapping). The first three cards are visually disabled with an "Available after the user is created" hint; the Workflow mapping card is optional and lets admins assign a period-specific workflow at create-time. Validation: any one of Period / Year / Workflow Template filled requires all three. Persistence: `is_active=false` and the workflow row are written post-create in the same mutation; workflow insert failure is non-fatal (profile creation succeeds, toast surfaces). Regression: `src/test/userManagement.addUserAccess.test.ts`.
 
 ## 🌱 February 2026
 

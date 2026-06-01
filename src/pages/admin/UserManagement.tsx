@@ -320,6 +320,13 @@ export default function UserManagement() {
   const [newLocationId, setNewLocationId] = useState<string>('');
   const [newIsDummy, setNewIsDummy] = useState<boolean>(false);
   const [newMobileNumber, setNewMobileNumber] = useState<string>('');
+  // Access & Login parity with Edit User (v2.68.x)
+  const [newIsActive, setNewIsActive] = useState<boolean>(true);
+  const MONTHS_CREATE = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const [newWorkflowPeriod, setNewWorkflowPeriod] = useState<string>('');
+  const [newWorkflowYear, setNewWorkflowYear] = useState<number | ''>('');
+  const [newWorkflowTemplateId, setNewWorkflowTemplateId] = useState<string>('');
+  const { data: createWorkflowTemplates } = useWorkflowTemplates(false);
 
   // Bulk Action Dialog
   const [bulkDialogOpen, setBulkDialogOpen] = useState(false);
@@ -668,6 +675,44 @@ export default function UserManagement() {
         if (mobErr) throw mobErr;
       }
 
+      // Persist Account Status if admin deactivated at create-time (parity
+      // with Edit User → Access & Login → Account Status switch).
+      if (newIsActive === false && response.data?.profile?.id) {
+        const { error: actErr } = await supabase
+          .from('profiles')
+          .update({ is_active: false } as any)
+          .eq('id', response.data.profile.id);
+        if (actErr) throw actErr;
+      }
+
+      // Optional period-specific workflow mapping (parity with Edit User
+      // → Workflow mapping card). Non-fatal: profile creation succeeds even
+      // if this insert fails — surface a toast and let admin retry from
+      // Edit User.
+      if (
+        newWorkflowTemplateId &&
+        newWorkflowPeriod &&
+        newWorkflowYear &&
+        response.data?.profile?.id
+      ) {
+        try {
+          await supabase.from('workflow_config').insert({
+            config_type: 'employee',
+            config_value: response.data.profile.id,
+            workflow_template_id: newWorkflowTemplateId,
+            review_period: newWorkflowPeriod,
+            review_year: newWorkflowYear,
+            is_ongoing: false,
+          } as any);
+        } catch (e: any) {
+          toast({
+            title: 'User created, but workflow mapping failed',
+            description: `${e?.message ?? 'Unknown error'} — set it from Edit User → Access & Login.`,
+            variant: 'destructive',
+          });
+        }
+      }
+
       // Persist admin-defined custom field values (if any active fields exist).
       if (response.data?.profile?.id && customFieldDefs.length > 0) {
         const normalized = normalizeCustomFieldValues(customFieldDefs, customValues);
@@ -962,6 +1007,19 @@ export default function UserManagement() {
       toast({ title: 'Invalid email format', variant: 'destructive' });
       return;
     }
+    // Workflow mapping is optional, but partial-fill is invalid.
+    const wfFilledCount =
+      (newWorkflowPeriod ? 1 : 0) +
+      (newWorkflowYear ? 1 : 0) +
+      (newWorkflowTemplateId ? 1 : 0);
+    if (wfFilledCount > 0 && wfFilledCount < 3) {
+      toast({
+        title: 'Incomplete workflow mapping',
+        description: 'Select Review Period, Year and Workflow Template — or clear all three.',
+        variant: 'destructive',
+      });
+      return;
+    }
     createUser.mutate({
       full_name: newFullName,
       email: newPortalAccess ? newEmail : '',
@@ -1002,6 +1060,10 @@ export default function UserManagement() {
     setNewLocationId('');
     setNewIsDummy(false);
     setNewMobileNumber('');
+    setNewIsActive(true);
+    setNewWorkflowPeriod('');
+    setNewWorkflowYear('');
+    setNewWorkflowTemplateId('');
     setCustomValues({});
   };
 
@@ -1839,7 +1901,7 @@ export default function UserManagement() {
           <Tabs defaultValue="profile" className="flex-1 flex flex-col min-h-0">
             <TabsList className="grid w-full grid-cols-2">
               <TabsTrigger value="profile" className="gap-1.5"><Users className="h-3.5 w-3.5" /> Profile</TabsTrigger>
-              <TabsTrigger value="access" className="gap-1.5"><Shield className="h-3.5 w-3.5" /> Access</TabsTrigger>
+              <TabsTrigger value="access" className="gap-1.5"><Shield className="h-3.5 w-3.5" /> Access & Login</TabsTrigger>
             </TabsList>
 
             <ScrollArea className="flex-1 pr-4 -mr-4 mt-3">
@@ -2059,7 +2121,7 @@ export default function UserManagement() {
               <div className="space-y-3">
                 <div className="flex items-center gap-2 mb-2">
                   <Shield className="h-4 w-4 text-muted-foreground" />
-                  <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Access</h3>
+                  <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Access & Status</h3>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <div className="space-y-1.5">
@@ -2073,16 +2135,30 @@ export default function UserManagement() {
                   </div>
                   <div className="flex items-center justify-between rounded-lg border p-3 h-fit">
                     <div className="space-y-0.5">
-                      <Label>Portal Access<ReqMark k="portal_access" /></Label>
+                      <Label>Account Status</Label>
                       <p className="text-xs text-muted-foreground">
-                        {newPortalAccess ? 'User can log in to the portal' : 'Data-only user — no login access'}
+                        {newIsActive ? 'User can log in and access the system' : 'User is blocked from logging in'}
                       </p>
                     </div>
                     <Switch
-                      checked={newPortalAccess}
-                      onCheckedChange={setNewPortalAccess}
+                      checked={newIsActive}
+                      onCheckedChange={setNewIsActive}
                     />
                   </div>
+                </div>
+                <div className="flex items-center justify-between rounded-lg border p-3">
+                  <div className="space-y-0.5">
+                    <Label>Login credentials<ReqMark k="portal_access" /></Label>
+                    <p className="text-xs text-muted-foreground">
+                      {newPortalAccess
+                        ? 'User will be provisioned with portal login (email required).'
+                        : 'Data-only user — no login account will be created.'}
+                    </p>
+                  </div>
+                  <Switch
+                    checked={newPortalAccess}
+                    onCheckedChange={setNewPortalAccess}
+                  />
                 </div>
                 <div className="flex items-center justify-between rounded-lg border p-3">
                   <div className="space-y-0.5">
@@ -2094,9 +2170,89 @@ export default function UserManagement() {
                   </div>
                   <Switch checked={newIsDummy} onCheckedChange={setNewIsDummy} />
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  Tip: after creating the user, open <span className="font-medium">Manage Access</span> from the user row to grant additional module roles (PMS, Safety, HR) and send the welcome password.
-                </p>
+              </div>
+
+              {/* Section: Module Access & Login — mirrors Edit User in label
+                  and sequence. The first three actions are post-create only;
+                  Workflow mapping is editable at create-time and persisted in
+                  the same mutation. */}
+              <div className="space-y-4">
+                <div className="flex items-center gap-2">
+                  <KeyRound className="h-4 w-4 text-muted-foreground" />
+                  <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Module Access & Login</h3>
+                </div>
+                <Separator />
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+                  <div className="rounded-lg border p-4 opacity-60 cursor-not-allowed" aria-disabled>
+                    <Shield className="h-5 w-5 text-primary mb-2" />
+                    <p className="text-sm font-semibold">Grant module roles</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">Assign PMS, Safety, HR roles. Multiple allowed.</p>
+                    <p className="text-[10px] text-muted-foreground mt-2 italic">Available after the user is created.</p>
+                  </div>
+                  <div className="rounded-lg border p-4 opacity-60 cursor-not-allowed" aria-disabled>
+                    <KeyRound className="h-5 w-5 text-primary mb-2" />
+                    <p className="text-sm font-semibold">Send / reset password</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">Email credentials or generate manually.</p>
+                    <p className="text-[10px] text-muted-foreground mt-2 italic">Available after the user is created.</p>
+                  </div>
+                  <div className="rounded-lg border p-4 opacity-60 cursor-not-allowed" aria-disabled>
+                    <Search className="h-5 w-5 text-primary mb-2" />
+                    <p className="text-sm font-semibold">View access history</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">Recent grants, revokes, and email changes.</p>
+                    <p className="text-[10px] text-muted-foreground mt-2 italic">Available after the user is created.</p>
+                  </div>
+                  <div className="rounded-lg border p-4 md:col-span-2 lg:col-span-1">
+                    <div className="flex items-center gap-2 mb-2">
+                      <GitBranch className="h-5 w-5 text-primary" />
+                      <p className="text-sm font-semibold">Workflow mapping</p>
+                    </div>
+                    <p className="text-xs text-muted-foreground mb-2">
+                      Optional. If set, assigns the workflow only for the selected review period.
+                    </p>
+                    <div className="grid grid-cols-2 gap-2 mb-3">
+                      <div>
+                        <Label className="text-xs text-muted-foreground">Review Period</Label>
+                        <Select value={newWorkflowPeriod} onValueChange={setNewWorkflowPeriod}>
+                          <SelectTrigger className="mt-1 h-9"><SelectValue placeholder="Select" /></SelectTrigger>
+                          <SelectContent>
+                            {MONTHS_CREATE.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <Label className="text-xs text-muted-foreground">Year</Label>
+                        <Select
+                          value={newWorkflowYear ? String(newWorkflowYear) : ''}
+                          onValueChange={(v) => setNewWorkflowYear(parseInt(v))}
+                        >
+                          <SelectTrigger className="mt-1 h-9"><SelectValue placeholder="Select" /></SelectTrigger>
+                          <SelectContent>
+                            {[new Date().getFullYear() - 1, new Date().getFullYear(), new Date().getFullYear() + 1].map(y => (
+                              <SelectItem key={y} value={String(y)}>{y}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                    <Label className="text-xs text-muted-foreground">Assigned Workflow</Label>
+                    <Select
+                      value={newWorkflowTemplateId}
+                      onValueChange={setNewWorkflowTemplateId}
+                    >
+                      <SelectTrigger className="mt-1 h-9">
+                        <SelectValue placeholder="Inherit period default" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {createWorkflowTemplates?.map(t => (
+                          <SelectItem key={t.id} value={t.id}>{t.display_name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {!newWorkflowTemplateId && (
+                      <p className="mt-2 text-xs text-muted-foreground">Leave empty to inherit the period default.</p>
+                    )}
+                  </div>
+                </div>
               </div>
             </TabsContent>
             </ScrollArea>
