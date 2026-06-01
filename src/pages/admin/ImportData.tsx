@@ -1825,7 +1825,7 @@ export default function ImportData() {
       const allProfiles = await fetchAllPaged<any>((from, to) =>
         supabase
           .from('profiles')
-          .select('id, employee_code, full_name, email, designation, company_id, pms_grade, level, employee_category, employment_status, department_id, reporting_manager_id, is_active, group_doj, doj, confirmation_date, location_id')
+          .select('id, employee_code, full_name, email, designation, company_id, pms_grade, level, employee_category, employment_status, department_id, reporting_manager_id, functional_manager_id, is_active, group_doj, doj, confirmation_date, location_id')
           .order('id')
           .range(from, to)
       );
@@ -1868,6 +1868,7 @@ export default function ImportData() {
         const bu: any = dept?.business_unit_id ? buMap.get(dept.business_unit_id) : null;
         const div: any = bu?.division_id ? divMap.get(bu.division_id) : null;
         const manager: any = profile.reporting_manager_id ? profileMap.get(profile.reporting_manager_id) : null;
+        const fm: any = (profile as any).functional_manager_id ? profileMap.get((profile as any).functional_manager_id) : null;
         
         // Resolve company name from company_id
         const companyId = (profile as any).company_id;
@@ -1891,6 +1892,8 @@ export default function ImportData() {
           location: (locMap.get((profile as any).location_id) as any)?.name || '',
           managerEmployeeId: manager?.employee_code || '',
           managerName: manager?.full_name || '',
+          functionalManagerEmployeeId: fm?.employee_code || '',
+          functionalManagerName: fm?.full_name || '',
           groupDoj: (profile as any).group_doj || '',
           doj: (profile as any).doj || '',
           confirmationDate: (profile as any).confirmation_date || '',
