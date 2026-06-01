@@ -2941,12 +2941,15 @@ export type Database = {
         Row: {
           assessment_year: string
           business_unit_id: string | null
+          carry_forward_post_cutoff: boolean
           category_id: string | null
           company_id: string | null
           copied_from_config_id: string | null
           created_at: string
           created_by: string | null
           division_id: string | null
+          eligibility_cutoff_day: number | null
+          eligibility_cutoff_month: number | null
           id: string
           joining_month_cutoff_day: number | null
           level_id: string | null
@@ -2960,12 +2963,15 @@ export type Database = {
         Insert: {
           assessment_year: string
           business_unit_id?: string | null
+          carry_forward_post_cutoff?: boolean
           category_id?: string | null
           company_id?: string | null
           copied_from_config_id?: string | null
           created_at?: string
           created_by?: string | null
           division_id?: string | null
+          eligibility_cutoff_day?: number | null
+          eligibility_cutoff_month?: number | null
           id?: string
           joining_month_cutoff_day?: number | null
           level_id?: string | null
@@ -2979,12 +2985,15 @@ export type Database = {
         Update: {
           assessment_year?: string
           business_unit_id?: string | null
+          carry_forward_post_cutoff?: boolean
           category_id?: string | null
           company_id?: string | null
           copied_from_config_id?: string | null
           created_at?: string
           created_by?: string | null
           division_id?: string | null
+          eligibility_cutoff_day?: number | null
+          eligibility_cutoff_month?: number | null
           id?: string
           joining_month_cutoff_day?: number | null
           level_id?: string | null
@@ -3071,6 +3080,8 @@ export type Database = {
           method_used: string | null
           period_covered_months: number | null
           pms_score: number | null
+          post_cutoff_carry_forward_months: number | null
+          post_cutoff_joiner: boolean | null
           pre_confirmation_status: string | null
           rating_band: string | null
           remarks: string | null
@@ -3108,6 +3119,8 @@ export type Database = {
           method_used?: string | null
           period_covered_months?: number | null
           pms_score?: number | null
+          post_cutoff_carry_forward_months?: number | null
+          post_cutoff_joiner?: boolean | null
           pre_confirmation_status?: string | null
           rating_band?: string | null
           remarks?: string | null
@@ -3145,6 +3158,8 @@ export type Database = {
           method_used?: string | null
           period_covered_months?: number | null
           pms_score?: number | null
+          post_cutoff_carry_forward_months?: number | null
+          post_cutoff_joiner?: boolean | null
           pre_confirmation_status?: string | null
           rating_band?: string | null
           remarks?: string | null
