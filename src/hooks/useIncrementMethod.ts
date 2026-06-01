@@ -28,6 +28,16 @@ export interface IncrementMethodConfigRow {
    * skipped with an explicit "GDOJ missing" reason.
    */
   joining_month_cutoff_day: number | null;
+  /**
+   * Increment Eligibility Cutoff (month 1-12 + day 1-31). When set together
+   * with `carry_forward_post_cutoff = true`, employees whose GDOJ falls
+   * after this cutoff date inside the joining AY are excluded from that AY
+   * and their balance months are carried into the next AY's calculation.
+   * Either null → feature disabled.
+   */
+  eligibility_cutoff_month: number | null;
+  eligibility_cutoff_day: number | null;
+  carry_forward_post_cutoff: boolean;
 }
 
 export interface IncrementMethodSlabRow {
