@@ -1,16 +1,17 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { 
-  Target, 
-  Users, 
-  GraduationCap, 
-  BarChart3, 
+import {
+  Target,
+  Users,
+  GraduationCap,
+  BarChart3,
   Building2,
   Briefcase,
   Settings,
   ShieldAlert,
-  LucideIcon
+  ArrowUpRight,
+  LucideIcon,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -57,37 +58,67 @@ export const ModuleCard = React.forwardRef<HTMLDivElement, ModuleCardProps>(func
   return (
     <Card
       ref={ref}
-      className={cn(
-        'relative overflow-hidden transition-all duration-300 cursor-pointer group',
-        'hover:shadow-lg hover:scale-[1.02] hover:border-primary/50',
-        isComingSoon && 'opacity-60 cursor-not-allowed hover:scale-100 hover:shadow-none'
-      )}
       onClick={handleClick}
+      role={isComingSoon ? undefined : 'button'}
+      tabIndex={isComingSoon ? -1 : 0}
+      aria-disabled={isComingSoon || undefined}
+      aria-label={isComingSoon ? `${name} (Coming soon)` : `Open ${name}`}
+      onKeyDown={(e) => {
+        if (isComingSoon) return;
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          navigate(route);
+        }
+      }}
+      className={cn(
+        'group relative overflow-hidden rounded-xl border border-border/60 bg-card',
+        'shadow-sm transition-all duration-300 ease-out',
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:ring-offset-2',
+        isComingSoon
+          ? 'cursor-not-allowed bg-muted/30 hover:shadow-sm'
+          : 'cursor-pointer hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-lg'
+      )}
     >
-      {/* Gradient background on hover */}
-      <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-secondary/5 opacity-0 group-hover:opacity-100 transition-opacity" />
-      
+      {/* Subtle premium sheen on hover (active cards only) */}
+      {!isComingSoon && (
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 bg-gradient-to-br from-primary/[0.04] via-transparent to-transparent opacity-0 transition-opacity duration-500 group-hover:opacity-100"
+        />
+      )}
+
       {/* Coming Soon Badge */}
       {isComingSoon && (
-        <div className="absolute top-3 right-3 px-2 py-1 text-xs font-medium rounded-full bg-muted text-muted-foreground">
+        <div className="absolute right-3 top-3 z-10 rounded-full border border-border bg-background/80 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-muted-foreground backdrop-blur">
           Coming Soon
         </div>
       )}
 
-      <CardHeader className="relative pb-2">
-        <div className={cn(
-          'w-14 h-14 rounded-xl flex items-center justify-center mb-3 transition-colors',
-          'bg-primary/10 text-primary group-hover:bg-primary group-hover:text-primary-foreground'
-        )}>
-          <IconComponent className="h-7 w-7" />
+      <CardHeader className="relative pb-3">
+        <div
+          className={cn(
+            'mb-4 flex h-12 w-12 items-center justify-center rounded-xl ring-1 transition-all duration-300',
+            isComingSoon
+              ? 'bg-muted text-muted-foreground ring-border/60'
+              : 'bg-primary/[0.08] text-primary ring-primary/15 group-hover:bg-primary group-hover:text-primary-foreground group-hover:ring-primary/30 group-hover:shadow-[0_8px_24px_-8px_hsl(var(--primary)/0.45)]'
+          )}
+        >
+          <IconComponent className="h-6 w-6" />
         </div>
-        <CardTitle className="text-xl font-semibold">{name}</CardTitle>
+        <CardTitle className="text-lg font-semibold tracking-tight">{name}</CardTitle>
       </CardHeader>
-      
+
       <CardContent className="relative pt-0">
-        <CardDescription className="text-sm text-muted-foreground line-clamp-2">
-          {description || 'Access this module to get started.'}
+        <CardDescription className="line-clamp-2 min-h-[2.5rem] text-sm leading-relaxed text-muted-foreground">
+          {description || 'Access this workspace to get started.'}
         </CardDescription>
+
+        {!isComingSoon && (
+          <div className="mt-4 flex items-center gap-1.5 text-xs font-medium text-muted-foreground transition-colors group-hover:text-primary">
+            <span>Open workspace</span>
+            <ArrowUpRight className="h-3.5 w-3.5 transition-transform duration-300 group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+          </div>
+        )}
       </CardContent>
     </Card>
   );

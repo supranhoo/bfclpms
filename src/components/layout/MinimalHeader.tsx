@@ -33,30 +33,30 @@ export function MinimalHeader() {
   };
 
   return (
-    <header className="w-full border-b border-border bg-background">
+    <header className="sticky top-0 z-40 w-full border-b border-border/60 bg-background/80 shadow-sm backdrop-blur-md supports-[backdrop-filter]:bg-background/70">
       <div className="container mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex h-16 items-center justify-between">
           {/* Logo & App Name */}
           <div className="flex items-center gap-3">
             {appSettings?.logo_url ? (
-              <img 
-                src={appSettings.logo_url} 
-                alt="Logo" 
-                className="h-9 w-9 rounded-lg object-contain" 
+              <img
+                src={appSettings.logo_url}
+                alt="Logo"
+                className="h-9 w-9 rounded-lg object-contain ring-1 ring-border/60"
               />
             ) : (
-              <div className="p-2 rounded-lg bg-primary text-primary-foreground">
+              <div className="rounded-lg bg-primary p-2 text-primary-foreground shadow-sm ring-1 ring-primary/30">
                 <BarChart3 className="h-5 w-5" />
               </div>
             )}
-            <div>
-              <h1 className="font-semibold text-foreground">{displayAppName}</h1>
-              <p className="text-xs text-muted-foreground">{displayOrgName}</p>
+            <div className="leading-tight">
+              <h1 className="text-sm font-semibold tracking-tight text-foreground sm:text-base">{displayAppName}</h1>
+              <p className="text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground">{displayOrgName}</p>
             </div>
           </div>
 
           {/* Theme Toggle & User Menu */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 sm:gap-2">
             <ThemeToggle />
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
