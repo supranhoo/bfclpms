@@ -18,6 +18,23 @@ interface MultiFileUploadProps {
   maxFiles?: number;
   disabled?: boolean;
   label?: string;
+  /**
+   * Optional additional MIME types to accept beyond the default
+   * JPEG/PNG/PDF/Excel set. Merged into validation, the file picker
+   * `accept` attribute, and the icon lookup.
+   */
+  extraAcceptedTypes?: Record<string, { ext: string; icon: any }>;
+  /**
+   * Optional helper text shown below the dropzone. Defaults to the
+   * standard "Supported: JPEG, PNG, PDF, Excel" message.
+   */
+  helperText?: string;
+  /**
+   * Optional rename hook applied to every file before upload. Useful
+   * for pasted screenshots that arrive as `image.png` so callers can
+   * inject context (e.g. employee code + timestamp).
+   */
+  pasteFilenameFor?: (file: File) => string | null | undefined;
 }
 
 interface UploadingFile {
@@ -26,7 +43,7 @@ interface UploadingFile {
   progress: number;
 }
 
-const ACCEPTED_TYPES = {
+const DEFAULT_ACCEPTED_TYPES = {
   'image/jpeg': { ext: 'jpg', icon: Image },
   'image/jpg': { ext: 'jpg', icon: Image },
   'image/png': { ext: 'png', icon: Image },
@@ -35,7 +52,7 @@ const ACCEPTED_TYPES = {
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': { ext: 'xlsx', icon: FileSpreadsheet },
 };
 
-const ACCEPTED_EXTENSIONS = '.jpg,.jpeg,.png,.pdf,.xls,.xlsx';
+const DEFAULT_ACCEPTED_EXTENSIONS = '.jpg,.jpeg,.png,.pdf,.xls,.xlsx';
 
 export function MultiFileUpload({
   userId,
@@ -46,12 +63,26 @@ export function MultiFileUpload({
   maxFiles = 5,
   disabled = false,
   label = 'Evidence Attachments',
+  extraAcceptedTypes,
+  helperText,
+  pasteFilenameFor,
 }: MultiFileUploadProps) {
   const [uploadingFiles, setUploadingFiles] = useState<UploadingFile[]>([]);
   const [isDragOver, setIsDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
   const { maxFileSizeMb, maxFileSizeBytes } = useUploadLimits();
+
+  const ACCEPTED_TYPES: Record<string, { ext: string; icon: any }> = {
+    ...DEFAULT_ACCEPTED_TYPES,
+    ...(extraAcceptedTypes ?? {}),
+  };
+  const ACCEPTED_EXTENSIONS = Array.from(
+    new Set([
+      ...DEFAULT_ACCEPTED_EXTENSIONS.split(','),
+      ...Object.values(ACCEPTED_TYPES).map((v) => `.${v.ext}`),
+    ]),
+  ).join(',');
 
   const currentCount = existingUrls.length;
   const canUploadMore = currentCount < maxFiles && !disabled;
@@ -60,6 +91,7 @@ export function MultiFileUpload({
   const getFileIcon = (url: string) => {
     if (url.includes('.pdf')) return FileText;
     if (url.includes('.xls')) return FileSpreadsheet;
+    if (url.includes('.doc')) return FileText;
     return Image;
   };
 
@@ -76,12 +108,24 @@ export function MultiFileUpload({
 
   const uploadFile = async (file: File): Promise<string | null> => {
     const fileId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-    
+
+    // Apply consumer-supplied rename (e.g. for pasted screenshots).
+    if (pasteFilenameFor) {
+      try {
+        const renamed = pasteFilenameFor(file);
+        if (renamed && renamed !== file.name) {
+          file = new File([file], renamed, { type: file.type });
+        }
+      } catch {
+        /* fall back to original filename */
+      }
+    }
+
     // Validate file type
     if (!Object.keys(ACCEPTED_TYPES).includes(file.type)) {
       toast({
         title: 'Invalid file type',
-        description: `"${file.name}" is not a supported format. Use JPEG, PNG, PDF, or Excel.`,
+        description: `"${file.name}" is not a supported format.`,
         variant: 'destructive',
       });
       return null;
@@ -318,7 +362,7 @@ export function MultiFileUpload({
 
       {/* Help Text */}
       <p className="text-xs text-muted-foreground">
-        Supported: JPEG, PNG, PDF, Excel (max {maxFileSizeMb}MB each)
+        {helperText ?? `Supported: JPEG, PNG, PDF, Excel (max ${maxFileSizeMb}MB each)`}
       </p>
     </div>
   );

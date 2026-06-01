@@ -1,54 +1,73 @@
-# Fix: Bulk Review filters (Designation / Grade / Reporting Manager) not affecting results
+# Add Evidence Attachments to "Edit Calculated Row" (Increment)
 
-## Symptom
-On `/review/bulk` (HR PMS view, Apr-2026), the filter bar shows **All Designations / All Grades / All Reporting Managers** dropdowns, but selecting values does not reduce the **27 emp / 269 KPI / 269/269 rows** count or hide employee columns.
+## Goal
+HR/Admin overriding an increment_run_items row can attach supporting evidence (upload **and** Ctrl+V paste) for screenshots, PDFs, Word, Excel, and images. Evidence is tied to the row, visible on reopen, openable/removable, and surfaced in exports as a Yes/No flag.
 
 ## Risk & Impact
-- Data Impact: none — pure client-side presentation filter.
-- Workflow Impact: none.
-- UI/UX: filters become functional; employee columns and row counts shrink as expected.
-- Regression Risk: low — change confined to `BulkReviewDashboard.tsx` filter wiring; KRA / search / hide-processed filters use the same path.
-- Mitigation: keep existing unit tests for `bulkEmployeeFilter` green; add one more for the new path if logic changes.
+- **Data**: additive `evidence_urls jsonb` column on `public.increment_run_items` (default `[]`). No back-fill, no destructive change. Existing rows unaffected.
+- **Workflow**: none — calculation, slab, GDOJ prorating, confirmation adjustment logic untouched.
+- **UI/UX**: one new section in the existing `IncrementResultEditDialog`; identical look/feel to other evidence sections (reuses `MultiFileUpload`).
+- **Security**: uses existing `review-evidence` bucket and its RLS. Path namespaced under `increment-overrides/<run_item_id>/...` to keep linkage explicit. File-type allowlist enforced client-side; bucket RLS already restricts who can read.
+- **Regression risk**: low — `MultiFileUpload` is widely used; extending its accepted-types via an additive prop preserves all current callers.
+- **Mitigation**: feature is opt-in (the dialog passes the new prop). All existing dialogs that use `MultiFileUpload` keep the JPEG/PNG/PDF/XLSX-only behaviour because the new prop defaults to off.
 
-## Likely root cause (to confirm before patching)
-The wiring exists (`allowedEmpSet` → `loadedRows.filter`), but one of the following breaks it:
-1. **`useBulkEmployeeAttrs` returns empty** for non-admin viewers (HR PMS) because RLS on `profiles` blocks the join to `profiles!reporting_manager_id` for rows the viewer cannot directly access — making `attrsByEmp` empty, so `allowedEmployeeIds(...)` returns `∅` and selecting any value collapses to "0 rows"… BUT here the bar still says 269/269, which instead means selections are not being applied.
-2. **`MultiSelectFilter` onSelect not firing** for these three filters specifically (cmdk `value` collision when option labels duplicate, e.g. several blank designations).
-3. **State setters not wired** — `setDesignations` / `setGrades` / `setManagerIds` are passed but the parent `useEffect` prune (lines 339-349) immediately strips them because `attrsByEmp` is empty (point 1), giving the illusion of a no-op.
+## Scalability
+- `evidence_urls` is a JSONB array of public URLs (same convention used across review_submissions). Cap at **10 files per row** in UI.
+- Excel export adds one cheap derived column (`Yes/No` based on array length). No additional query.
 
 ## Plan
 
-### Step 1 — Confirm the failure mode (read-only)
-- Open `/review/bulk` as HR PMS, load scope, open the Designation dropdown, click an option, watch `attrsByEmp.size`, `designations`, and `allowedEmpSet.size` via a one-shot `console.debug` already-present or via React DevTools.
-- If `attrsByEmp.size === 0` → root cause is RLS on the `profiles` self-join.
-- If `attrsByEmp.size > 0` but `designations` resets to `[]` immediately → the prune effect is the culprit.
-- If `designations` updates but `loadedRows` doesn't shrink → the filter predicate is wrong.
+### 1. Database migration (additive)
+Add `evidence_urls jsonb DEFAULT '[]'::jsonb` to `public.increment_run_items`. Re-grant unchanged (existing grants cover all columns). No new RLS — existing row policies apply to the new column.
 
-### Step 2 — Fix
+### 2. Extend `MultiFileUpload` (backwards-compatible)
+Add optional prop `extraAcceptedTypes?: Record<string, { ext: string; icon: any }>`. When provided, the component merges them into `ACCEPTED_TYPES` for validation, into the `<input accept>` list, and into the icon lookup. All existing call sites unchanged.
 
-**If RLS / empty attrs (most likely):** switch `useBulkEmployeeAttrs` to the same SECURITY DEFINER pattern already used for `useBulkOrgKpiFlags` — add an RPC `rpc_bulk_employee_attrs(p_employee_ids uuid[])` returning `(id, designation, pms_grade, reporting_manager_id, reporting_manager_name)`, SQL-only, `SECURITY DEFINER`, `STABLE`, `search_path = public`, granted to `authenticated`. Replace the direct `profiles` select in `useBulkReview.ts` with `supabase.rpc(...)`.
+For pasted images without filenames, generate `increment-override-evidence-<employeeCode>-<timestamp>.png` on the *consumer* side by wrapping the upload — handled inside the dialog via a thin wrapper that renames the `File` before calling `MultiFileUpload`. The simplest approach: pass an `onBeforeUploadFilename?: (file) => string` hook.
 
-**If prune effect strips values:** guard the prune `useEffect` so it does not run while `attrsByEmp.size === 0` (it already does — verify) and only prunes when the loaded option set is non-empty.
+### 3. Edit Calculated Row dialog
+In `src/components/incentive/IncrementResultEditDialog.tsx`:
+- Add state `evidenceUrls: string[]` seeded from `row.evidence_urls ?? []`.
+- Render a new section "Supporting Evidence" under Remarks using `<MultiFileUpload userId={currentUserId} contextId={row.id} folder="increment-overrides" existingUrls={evidenceUrls} onUploadComplete={setEvidenceUrls} maxFiles={10} extraAcceptedTypes={WORD_DOC_TYPES} label="Supporting Evidence" />` with helper text *"Supported: JPG, PNG, PDF, Word, Excel, screenshots. Paste with Ctrl+V."*
+- On Save include `evidence_urls` in the patch.
+- On Cancel, just close (uploaded files remain in storage but are unreferenced — same pattern as review evidence; acceptable per existing convention).
 
-**If MultiSelect toggle is broken:** make the `CommandItem.value` deterministic (`opt.value`) and pass the value through `onSelect`'s argument.
+### 4. Update mutation whitelist
+In `src/hooks/useIncrementRuns.ts`:
+- Add `'evidence_urls'` to `EDITABLE_RUN_ITEM_FIELDS`.
+- Extend `IncrementRunItemRow` interface with `evidence_urls?: string[] | null`.
 
-### Step 3 — Verify
-- Manual: as HR PMS, select one Designation → row count drops, employee columns shrink, KPI cards re-derive.
-- Combine with Grades and Reporting Manager (AND across axes).
-- Deep-link survives reload (URL state already includes `desigs/grades/mgrs`).
-- Unit: extend `src/lib/bulkEmployeeFilter.test.ts` only if the predicate changes (not expected).
+### 5. Export
+In `useExportLatestIncrementResults` (and any Excel column map for this report), add a derived column `Evidence Attached` = `(evidence_urls?.length ?? 0) > 0 ? 'Yes' : 'No'`. Also add `Evidence Count`. No file embedding.
 
-## Files touched (worst case)
-- `src/hooks/useBulkReview.ts` — swap profile select → RPC.
-- `supabase/migrations/<new>.sql` — add `rpc_bulk_employee_attrs` + GRANT.
-- `src/pages/review/BulkReviewDashboard.tsx` — only if prune guard needs tightening.
-- `src/components/review/MultiSelectFilter.tsx` — only if cmdk value collision is the cause.
+### 6. Audit trail
+`manually_edited`, `edited_by`, `edited_at` already capture the override. Because the patch now includes `evidence_urls`, the same audit fields cover evidence changes — no extra table needed.
+
+### 7. Tests
+- Unit: extend existing `useIncrementRuns` test (or add one) asserting the whitelist accepts `evidence_urls` and rejects unknown fields.
+- Unit: `MultiFileUpload` accepts DOCX when `extraAcceptedTypes` is passed; rejects `.exe`.
+- Mock data: a sample `increment_run_items` row with two evidence URLs to verify display on reopen.
+
+## Files touched
+- `supabase/migrations/<new>.sql` — add column.
+- `src/components/ui/MultiFileUpload.tsx` — additive `extraAcceptedTypes` prop + filename helper.
+- `src/components/incentive/IncrementResultEditDialog.tsx` — new section + state + save.
+- `src/hooks/useIncrementRuns.ts` — whitelist + type + export column.
+- `src/components/incentive/...` export column (locate the actual export builder during build).
 
 ## Out of scope
-- KRA filter, KPI search, hide-processed toggle — already working.
-- Sidebar / route changes.
-- Any backend write paths.
+- Calculation formulas, slab, ineligibility, GDOJ prorating, confirmation logic.
+- New storage bucket (reuse `review-evidence`).
+- Permission/route changes.
+- Server-side mime sniffing (bucket already public-read; we keep client allowlist + max-size; matches existing app pattern).
 
-## SSOT updates (after fix)
-- Append to `DOCUMENTATION.md` Bulk Review section: "Employee-axis filters read profile attrs via SECURITY DEFINER RPC to bypass RLS gaps for non-admin viewers."
-- No POLICY change (presentation-only).
+## SSOT updates
+- `DOCUMENTATION.md` → Increment Inputs section: add note about the new Supporting Evidence field and Excel column.
+- `POLICY.md` → no policy change (evidence is optional; calculations unaffected).
+- Memory update: add a short entry under `mem/features/incentive/` noting evidence-on-override pattern.
+
+## Acceptance verification
+1. Open Latest Calculations → Edit row → upload PNG + paste screenshot + drop a .docx → Save → reopen row → all three files visible, openable, removable.
+2. Reject `.exe` and >max-size files with toast.
+3. Excel export shows `Evidence Attached` Yes/No and `Evidence Count`.
+4. Editing a row without attachments still works exactly as before.

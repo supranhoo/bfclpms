@@ -3061,6 +3061,7 @@ export type Database = {
           eligibility_status: string
           eligible_percent: number | null
           employee_id: string
+          evidence_urls: Json
           exemption_reason: string | null
           final_eligible_months: number | null
           id: string
@@ -3097,6 +3098,7 @@ export type Database = {
           eligibility_status: string
           eligible_percent?: number | null
           employee_id: string
+          evidence_urls?: Json
           exemption_reason?: string | null
           final_eligible_months?: number | null
           id?: string
@@ -3133,6 +3135,7 @@ export type Database = {
           eligibility_status?: string
           eligible_percent?: number | null
           employee_id?: string
+          evidence_urls?: Json
           exemption_reason?: string | null
           final_eligible_months?: number | null
           id?: string

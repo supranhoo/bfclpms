@@ -49,6 +49,7 @@ export interface IncrementRunItemRow {
   transition_key?: string | null;
   pre_confirmation_status?: string | null;
   transition_source?: 'history' | 'profile_snapshot' | 'none' | null;
+  evidence_urls?: string[] | null;
 }
 
 export function useIncrementRuns(assessmentYear: string | null) {
@@ -204,6 +205,7 @@ const EDITABLE_RUN_ITEM_FIELDS = [
   'revised_salary',
   'remarks',
   'eligibility_status',
+  'evidence_urls',
 ] as const;
 
 export function useUpdateIncrementRunItem() {

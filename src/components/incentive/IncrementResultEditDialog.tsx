@@ -20,6 +20,17 @@ import {
 } from '@/components/ui/select';
 import { useUpdateIncrementRunItem } from '@/hooks/useIncrementRuns';
 import { Loader2 } from 'lucide-react';
+import { MultiFileUpload } from '@/components/ui/MultiFileUpload';
+import { FileText } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
+
+const WORD_DOC_TYPES = {
+  'application/msword': { ext: 'doc', icon: FileText },
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': {
+    ext: 'docx',
+    icon: FileText,
+  },
+};
 
 interface Props {
   open: boolean;
@@ -39,6 +50,14 @@ export function IncrementResultEditDialog({ open, onOpenChange, row }: Props) {
   const [revisedSalary, setRevisedSalary] = useState<string>('');
   const [remarks, setRemarks] = useState<string>('');
   const [status, setStatus] = useState<string>('');
+  const [evidenceUrls, setEvidenceUrls] = useState<string[]>([]);
+  const [currentUserId, setCurrentUserId] = useState<string>('');
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => {
+      setCurrentUserId(data.user?.id ?? '');
+    });
+  }, []);
 
   useEffect(() => {
     if (!row) return;
@@ -47,6 +66,7 @@ export function IncrementResultEditDialog({ open, onOpenChange, row }: Props) {
     setRevisedSalary(row.revised_salary != null ? String(row.revised_salary) : '');
     setRemarks(row.remarks ?? '');
     setStatus(row.eligibility_status ?? 'eligible');
+    setEvidenceUrls(Array.isArray(row.evidence_urls) ? row.evidence_urls : []);
   }, [row]);
 
   if (!row) return null;
@@ -62,6 +82,7 @@ export function IncrementResultEditDialog({ open, onOpenChange, row }: Props) {
         revised_salary: numOrNull(revisedSalary),
         remarks: remarks.trim() || null,
         eligibility_status: status as any,
+        evidence_urls: evidenceUrls,
       },
     });
     onOpenChange(false);
@@ -69,7 +90,7 @@ export function IncrementResultEditDialog({ open, onOpenChange, row }: Props) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Edit Calculated Row</DialogTitle>
           <DialogDescription>
@@ -132,6 +153,27 @@ export function IncrementResultEditDialog({ open, onOpenChange, row }: Props) {
               placeholder="Reason for override (optional)"
             />
           </div>
+          {currentUserId && (
+            <MultiFileUpload
+              userId={currentUserId}
+              contextId={row.id}
+              folder="increment-overrides"
+              existingUrls={evidenceUrls}
+              onUploadComplete={setEvidenceUrls}
+              maxFiles={10}
+              label="Supporting Evidence"
+              extraAcceptedTypes={WORD_DOC_TYPES}
+              helperText="Supported: JPG, PNG, PDF, Word, Excel, screenshots. Paste with Ctrl+V."
+              pasteFilenameFor={(file) => {
+                if (!file.type.startsWith('image/')) return null;
+                // Pasted screenshots typically arrive as 'image.png'.
+                if (file.name && file.name !== 'image.png') return null;
+                const ext = file.type === 'image/jpeg' ? 'jpg' : 'png';
+                const code = row.employee?.employee_code ?? row.employee_id?.slice(0, 8) ?? 'emp';
+                return `increment-override-evidence-${code}-${Date.now()}.${ext}`;
+              }}
+            />
+          )}
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={update.isPending}>

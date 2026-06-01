@@ -356,6 +356,8 @@ function CalculateIncrementTab({ year }: { year: string }) {
       transition: transitionLabel(r),
       pre_confirmation_status: r.pre_confirmation_status ?? '',
       transition_source: r.transition_source ?? '',
+      evidence_attached: Array.isArray(r.evidence_urls) && r.evidence_urls.length > 0 ? 'Yes' : 'No',
+      evidence_count: Array.isArray(r.evidence_urls) ? r.evidence_urls.length : 0,
     }));
 
   const exportRun = async () => {
