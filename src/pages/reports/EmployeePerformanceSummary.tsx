@@ -20,6 +20,7 @@ import { FrequencyLockToggle } from '@/components/ui/FrequencyLockToggle';
 import { useBulkEmployeeWorkflows } from '@/hooks/useWorkflowConfig';
 import { EmployeeStatusFilter } from '@/components/reports/EmployeeStatusFilter';
 import { applyEmployeeStatusFilter, employeeStatusLabel, type EmployeeStatusMode } from '@/lib/reportEmployeeFilter';
+import { useEmployeeFilterOptions } from '@/hooks/useEmployeeFilterOptions';
 import * as XLSX from 'xlsx';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 
@@ -71,6 +72,8 @@ interface EmployeePerformance {
   department: string;
   designation: string;
   reportingManager: string;
+  functionalManager: string;
+  functionalManagerId: string | null;
   reviewPeriod: string;
   reviewYear: number;
   statusCounts: Record<string, number>;
@@ -99,8 +102,10 @@ export default function EmployeePerformanceSummary() {
   const [activeTab, setActiveTab] = useState('summary');
   const [comparisonEmployee, setComparisonEmployee] = useState<string | null>(null);
   const [selectedStatus, setSelectedStatus] = useState('all');
+  const [selectedFm, setSelectedFm] = useState('all');
   const [showFreqLocked, setShowFreqLocked] = useState(false);
   const [empStatusMode, setEmpStatusMode] = useState<EmployeeStatusMode>('active');
+  const { functionalManagers } = useEmployeeFilterOptions();
 
   // (review_periods query removed – month filter is now static)
 
@@ -173,6 +178,7 @@ export default function EmployeePerformanceSummary() {
             full_name,
             designation,
             reporting_manager_id,
+            functional_manager_id,
             is_active,
             departments (name, business_units (name, divisions (name)))
           `)
@@ -204,6 +210,9 @@ export default function EmployeePerformanceSummary() {
 
         const manager = profile.reporting_manager_id 
           ? profileMap.get(profile.reporting_manager_id) 
+          : null;
+        const fm = (profile as any).functional_manager_id
+          ? profileMap.get((profile as any).functional_manager_id)
           : null;
 
         const key = `${kpi.employee_id}-${kpi.review_period}`;
@@ -237,6 +246,8 @@ export default function EmployeePerformanceSummary() {
             department: (profile.departments as any)?.name || '-',
             designation: profile.designation || '-',
             reportingManager: manager?.full_name || '-',
+            functionalManager: (fm as any)?.full_name || '-',
+            functionalManagerId: (profile as any).functional_manager_id || null,
             reviewPeriod: kpi.review_period || '-',
             reviewYear: kpi.review_year || year,
             statusCounts: { [kpiStatus]: 1 },
@@ -405,6 +416,8 @@ export default function EmployeePerformanceSummary() {
         if (!showFreqLocked && row.kpiCount === 0 && row.lockedKpiCount > 0) return false;
         // Status filter
         if (selectedStatus !== 'all' && !(row.statusCounts[selectedStatus] > 0)) return false;
+        // Functional Manager filter
+        if (selectedFm !== 'all' && row.functionalManagerId !== selectedFm) return false;
         // Search filter
         return (
       row.fullName.toLowerCase().includes(term) ||
@@ -412,7 +425,8 @@ export default function EmployeePerformanceSummary() {
           row.division.toLowerCase().includes(term) ||
           row.department.toLowerCase().includes(term) ||
           row.designation.toLowerCase().includes(term) ||
-          row.reportingManager.toLowerCase().includes(term)
+          row.reportingManager.toLowerCase().includes(term) ||
+          row.functionalManager.toLowerCase().includes(term)
         );
       })
       .sort((a, b) => {
@@ -420,7 +434,7 @@ export default function EmployeePerformanceSummary() {
         const pctB = b.outOfScore > 0 ? (b.totalScore / b.outOfScore) * 100 : 0;
         return pctB - pctA;
       });
-  }, [enrichedPerformanceData, searchTerm, selectedStatus, showFreqLocked, empStatusMode]);
+  }, [enrichedPerformanceData, searchTerm, selectedStatus, selectedFm, showFreqLocked, empStatusMode]);
 
   // Pagination
   const totalPages = Math.ceil(filteredData.length / pageSize);
@@ -432,7 +446,7 @@ export default function EmployeePerformanceSummary() {
   // Reset page when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, selectedYear, selectedPeriod, selectedStatus, pageSize, showFreqLocked]);
+  }, [searchTerm, selectedYear, selectedPeriod, selectedStatus, selectedFm, pageSize, showFreqLocked]);
 
   // Get unique employees for comparison
   const uniqueEmployees = useMemo(() => {
@@ -540,6 +554,7 @@ export default function EmployeePerformanceSummary() {
         'Department': row.department,
         'Designation': row.designation,
         'Reporting Manager': row.reportingManager,
+        'Functional Manager': row.functionalManager,
         'Review Status': STATUS_PRIORITY_ORDER
           .filter(s => (row.statusCounts[s] || 0) > 0)
           .map(s => {
@@ -563,7 +578,7 @@ export default function EmployeePerformanceSummary() {
     
     ws['!cols'] = [
       { wch: 10 }, { wch: 12 }, { wch: 30 }, { wch: 25 }, { wch: 35 }, { wch: 30 },
-      { wch: 30 }, { wch: 18 }, { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 12 },
+      { wch: 30 }, { wch: 25 }, { wch: 18 }, { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 12 },
     ];
 
     XLSX.writeFile(wb, `Employee_Performance_Summary${selectedPeriod !== 'all' ? `_${selectedPeriod}` : ''}_${selectedYear}.xlsx`);
