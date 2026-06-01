@@ -840,6 +840,11 @@ export default function UserManagement() {
       toast({ title: v.message, variant: 'destructive' });
       return;
     }
+    const cv = validateCustomFieldValues(customFieldDefs, customValues);
+    if (cv.ok === false) {
+      toast({ title: cv.message, variant: 'destructive' });
+      return;
+    }
     if (newEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail.trim())) {
       toast({ title: 'Invalid email format', variant: 'destructive' });
       return;
