@@ -822,6 +822,7 @@ export default function UserManagement() {
     setNewDoj('');
     setNewConfirmationDate('');
     setNewLocationId('');
+    setNewIsDummy(false);
   };
 
   const handleBulkUpdate = () => {
