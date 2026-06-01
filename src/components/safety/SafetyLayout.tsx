@@ -9,10 +9,10 @@ import {
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
 import { Loader2 } from 'lucide-react';
 import { useIdleTimeout } from '@/hooks/useIdleTimeout';
-import { useSafetyRealtimeSync } from '@/hooks/useSafetyRealtimeSync';
 import { SafetySidebar } from './SafetySidebar';
 import { SafetyModuleRoute } from './SafetyModuleRoute';
 import { EmergencyFab } from './EmergencyFab';
+import { SafetyOfflineSyncProvider } from '@/contexts/SafetyOfflineSyncContext';
 
 /**
  * SafetyLayout
@@ -62,16 +62,17 @@ function SafetyContent() {
 
 export function SafetyLayout() {
   useIdleTimeout();
-  useSafetyRealtimeSync();
 
   return (
     <SafetyModuleRoute>
-      <div data-testid="safety-shell">
-        <SidebarProvider>
-          <SafetySidebar />
-          <SafetyContent />
-        </SidebarProvider>
-      </div>
+      <SafetyOfflineSyncProvider>
+        <div data-testid="safety-shell">
+          <SidebarProvider>
+            <SafetySidebar />
+            <SafetyContent />
+          </SidebarProvider>
+        </div>
+      </SafetyOfflineSyncProvider>
     </SafetyModuleRoute>
   );
 }
