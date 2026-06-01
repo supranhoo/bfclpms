@@ -85,3 +85,6 @@ verify_jwt = false
 
 [functions.check-safety-sla]
 verify_jwt = false
+
+[functions.reap-stuck-backups]
+verify_jwt = false
