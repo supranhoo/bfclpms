@@ -1,0 +1,14 @@
+---
+name: functional-manager-reviewer
+description: Functional Manager as a per-employee peer reviewer level; profiles.functional_manager_id + functional_manager_check stage; FM RLS via is_functional_manager_of()
+type: feature
+---
+Functional Manager (FM) is a per-employee reviewer relationship, **not** an `app_role`. Mapping lives on `profiles.functional_manager_id` (nullable, FK → profiles, ON DELETE SET NULL). Workflow stage is `functional_manager_check` in the `review_status` enum, positioned between `manager_check` and `skip_level_check`. SSOT chain stage is `functional_manager` (extended in `workflowResolver`, `workflowEngine`, `bottleneckResolver`, `reviewConstants`, `inboxUtils`, `multimonthCycle`, `EMPLOYEE_MASTER_FIELDS` → 20 fields).
+
+**Access:** RLS gated by `public.is_functional_manager_of(uuid)` SECURITY DEFINER helper (avoids recursion on profiles). FM can SELECT on `kpis` / `review_submissions` / `kpi_observations` / `kpi_queries` for mapped employees; UPDATE on `kpis` + `review_submissions` ONLY while `status = 'functional_manager_check'`; INSERT permitted on observations + queries for mapped employees. Hot-path partial index: `idx_profiles_functional_manager_id` WHERE NOT NULL.
+
+**Import/Export:** Header aliases `functionalManagerEmployeeId` / `functional_manager_code` / `fmCode` and `functionalManagerName` / `functional_manager` / `fm`. Resolution = employee_code → full_name. Unknown identifier → row error ("Functional Manager '<X>' not found"), row skipped. `create-employee` edge function persists `functional_manager_id`. Export emits both columns (round-trip safe). `useEmployeeFilterOptions` exposes `functionalManagers` list.
+
+**NaReason:** `'no_functional_manager_on_profile'` when the workflow template includes FM stage but the employee has no `functional_manager_id`. Templates without `functional_manager_check` skip cleanly — purely additive.
+
+**Deferred (not yet shipped):** bulk_review RPCs (`bulk_review_snapshot`, `bulk_scope_preview`, `bulk_write_stage_scores`, `rpc_bulk_employee_attrs`) — need server-side viewer-stage wiring + status advancement from `functional_manager_check`. `review_submissions.functional_manager_score/_rating/_remarks` columns + universal scoring fallback. Reports filter chips + "Group by FM" + Workflow Resolution column. See ADR-071.
