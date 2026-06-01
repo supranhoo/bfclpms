@@ -511,6 +511,17 @@ export function KpiJourneySection({
       buildEvidenceUrls(submission?.manager_evidence_urls, submission?.manager_evidence_url),
       submission?.manager_achieved_value ?? null
     ),
+    functional_manager: buildStage(
+      Briefcase, 'purple', 'Functional Manager',
+      (submission as any)?.functional_manager_score ?? null,
+      (submission as any)?.functional_manager_rating ?? null,
+      (submission as any)?.functional_manager_remarks ?? null,
+      buildEvidenceUrls(
+        (submission as any)?.functional_manager_evidence_urls,
+        (submission as any)?.functional_manager_evidence_url,
+      ),
+      (submission as any)?.functional_manager_achieved_value ?? null,
+    ),
     skip_level: buildStage(
       UserCheck, 'teal', 'Skip-Level',
       submission?.skip_level_score ?? null, submission?.skip_level_rating ?? null,
