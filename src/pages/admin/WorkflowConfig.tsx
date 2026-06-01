@@ -486,7 +486,7 @@ export default function WorkflowConfig() {
       </Card>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="templates">
             <Check className="h-4 w-4 mr-2" />
             Templates
@@ -502,6 +502,10 @@ export default function WorkflowConfig() {
           <TabsTrigger value="pms_grade">
             <Award className="h-4 w-4 mr-2" />
             Per PMS Grade
+          </TabsTrigger>
+          <TabsTrigger value="final_score_rules">
+            <Scale className="h-4 w-4 mr-2" />
+            Final Score Rules
           </TabsTrigger>
         </TabsList>
 
