@@ -26,17 +26,21 @@ export function useBulkEmployeeAttrs(employeeIds: string[], enabled: boolean) {
     enabled: enabled && sorted.length > 0,
     staleTime: 5 * 60 * 1000,
     queryFn: async (): Promise<BulkEmployeeAttr[]> => {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('id, designation, pms_grade, reporting_manager_id, reporting_manager:profiles!profiles_reporting_manager_id_fkey(full_name)')
-        .in('id', sorted);
+      // SECURITY DEFINER RPC — bypasses RLS gaps on public.profiles for
+      // non-admin viewers (HR PMS / Manager / Skip / Auditor / Management)
+      // so the Designation / Grade / Reporting Manager filter dropdowns
+      // are populated for every employee in the loaded snapshot. Mirrors
+      // the rpc_kpi_org_flags pattern. (v2.67 — Bulk filters fix.)
+      const { data, error } = await supabase.rpc('rpc_bulk_employee_attrs', {
+        p_employee_ids: sorted,
+      });
       if (error) throw error;
-      return (data ?? []).map((r: any) => ({
+      return ((data ?? []) as any[]).map((r) => ({
         id: r.id,
         designation: r.designation ?? null,
         pms_grade: r.pms_grade ?? null,
         reporting_manager_id: r.reporting_manager_id ?? null,
-        reporting_manager_name: r.reporting_manager?.full_name ?? null,
+        reporting_manager_name: r.reporting_manager_name ?? null,
       }));
     },
   });
