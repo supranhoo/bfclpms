@@ -22,7 +22,11 @@ import {
   type FinalScoreScopeType,
 } from '@/hooks/useFinalScoreRules';
 import { useWorkflowTemplates, getStageLabel, type WorkflowTemplate } from '@/hooks/useWorkflowConfig';
-import { useDepartments } from '@/hooks/useOrganization';
+import { useDepartments, usePmsGrades } from '@/hooks/useOrganization';
+import { useActiveEmployeesForCopy } from '@/hooks/useActiveEmployeesForCopy';
+import { EmployeeCombobox, type EmployeeOption } from '@/components/admin/EmployeeCombobox';
+import { MultiSelectFilter } from '@/components/ui/multi-select-filter';
+import { useToast } from '@/hooks/use-toast';
 import {
   resolveFinalScore,
   type FinalScoreRuleType,
@@ -279,12 +283,19 @@ function RuleBuilderSheet({
   onClose: () => void;
   existing: WorkflowFinalScoreRule | null;
   templates: WorkflowTemplate[];
-  departments: Array<{ name: string }>;
+  departments: Array<{ name: string; business_units?: { name?: string | null } | null }>;
 }) {
   const upsert = useUpsertFinalScoreRule();
+  const { toast } = useToast();
+  const isEdit = !!existing;
+  const { data: pmsGrades } = usePmsGrades();
+  const { data: employeeRoster } = useActiveEmployeesForCopy({ enabled: !isEdit });
 
   const [scopeType, setScopeType] = useState<FinalScoreScopeType>(existing?.scope_type ?? 'template');
   const [scopeValue, setScopeValue] = useState<string>(existing?.scope_value ?? '');
+  // Multi-select buffer used in Create mode only. Edit mode continues to use
+  // the single `scopeValue` so the existing row is updated in place.
+  const [scopeValues, setScopeValues] = useState<string[]>([]);
   const [templateId, setTemplateId] = useState<string>(existing?.workflow_template_id ?? '');
   const [reviewPeriod, setReviewPeriod] = useState<string>(existing?.review_period ?? '');
   const [reviewYear, setReviewYear] = useState<string>(existing?.review_year ? String(existing.review_year) : '');
@@ -316,7 +327,12 @@ function RuleBuilderSheet({
   );
   const weightedValid = ruleType !== 'weighted_custom' || totalWeight === 100;
 
-  const scopeValueValid = scopeType === 'template' ? true : !!scopeValue.trim();
+  const scopeValueValid =
+    scopeType === 'template'
+      ? true
+      : isEdit
+        ? !!scopeValue.trim()
+        : scopeValues.length > 0;
   const periodValid = ongoing || (!!reviewPeriod && !!reviewYear);
   const canSave = !!templateId && scopeValueValid && periodValid && weightedValid && !upsert.isPending;
 
@@ -333,18 +349,56 @@ function RuleBuilderSheet({
     rule: { type: ruleType, stage_weights: weights, missing_score_policy: policy },
   });
 
-  function handleSave() {
-    upsert.mutate({
-      id: existing?.id,
+  async function handleSave() {
+    const basePayload = {
       scope_type: scopeType,
-      scope_value: scopeType === 'template' ? null : scopeValue.trim() || null,
       workflow_template_id: templateId,
       review_period: ongoing ? null : reviewPeriod,
       review_year: ongoing ? null : Number(reviewYear),
       rule_type: ruleType,
       stage_weights: ruleType === 'weighted_custom' ? weights : null,
       missing_score_policy: policy,
-    }, { onSuccess: onClose });
+    } as const;
+
+    // Edit mode: update the existing single row.
+    if (isEdit) {
+      upsert.mutate(
+        {
+          ...basePayload,
+          id: existing!.id,
+          scope_value: scopeType === 'template' ? null : scopeValue.trim() || null,
+        },
+        { onSuccess: onClose },
+      );
+      return;
+    }
+
+    // Create mode (template scope): one row.
+    if (scopeType === 'template') {
+      upsert.mutate(
+        { ...basePayload, scope_value: null },
+        { onSuccess: onClose },
+      );
+      return;
+    }
+
+    // Create mode (employee / department / pms_grade): N rows.
+    const values = scopeValues.map(v => v.trim()).filter(Boolean);
+    const results = await Promise.allSettled(
+      values.map(v => upsert.mutateAsync({ ...basePayload, scope_value: v })),
+    );
+    const ok = results.filter(r => r.status === 'fulfilled').length;
+    const failed = results.length - ok;
+    if (ok > 0) {
+      toast({
+        title: 'Final score rule applied',
+        description:
+          failed === 0
+            ? `Applied to ${ok} selected item${ok === 1 ? '' : 's'}.`
+            : `Applied to ${ok} item${ok === 1 ? '' : 's'}; ${failed} failed (likely duplicate or conflicting rule).`,
+      });
+    }
+    if (failed === 0) onClose();
   }
 
   return (
@@ -363,7 +417,7 @@ function RuleBuilderSheet({
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label>Scope</Label>
-              <Select value={scopeType} onValueChange={(v) => { setScopeType(v as FinalScoreScopeType); setScopeValue(''); }}>
+              <Select value={scopeType} onValueChange={(v) => { setScopeType(v as FinalScoreScopeType); setScopeValue(''); setScopeValues([]); }}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="template">Workflow Template (default)</SelectItem>
@@ -387,22 +441,30 @@ function RuleBuilderSheet({
 
             {scopeType !== 'template' && (
               <div className="space-y-2 col-span-2">
-                <Label>Applied To</Label>
-                {scopeType === 'department' ? (
-                  <Select value={scopeValue} onValueChange={setScopeValue}>
-                    <SelectTrigger><SelectValue placeholder="Select department…" /></SelectTrigger>
-                    <SelectContent>
-                      {departments.map(d => (
-                        <SelectItem key={d.name} value={d.name}>{d.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                ) : (
-                  <Input
-                    value={scopeValue}
-                    onChange={(e) => setScopeValue(e.target.value)}
-                    placeholder={scopeType === 'employee' ? 'Employee UUID or code' : 'PMS grade name'}
-                  />
+                <Label>
+                  Applied To <span className="text-destructive">*</span>
+                </Label>
+                <AppliedToPicker
+                  scopeType={scopeType}
+                  isEdit={isEdit}
+                  scopeValue={scopeValue}
+                  setScopeValue={setScopeValue}
+                  scopeValues={scopeValues}
+                  setScopeValues={setScopeValues}
+                  departments={departments}
+                  pmsGrades={(pmsGrades || []) as Array<{ name: string; code?: string | null }>}
+                  employees={employeeRoster || []}
+                />
+                {!scopeValueValid && (
+                  <p className="text-xs text-destructive">
+                    Please select at least one{' '}
+                    {scopeType === 'employee'
+                      ? 'employee'
+                      : scopeType === 'department'
+                        ? 'department'
+                        : 'PMS grade'}
+                    .
+                  </p>
                 )}
               </div>
             )}
@@ -597,3 +659,120 @@ const SINGLE_STAGE_MAP: Partial<Record<FinalScoreRuleType, WorkflowStageKey>> = 
   hr_calibration_final: 'hr_calibration',
   mgmt_calibration_final: 'mgmt_calibration',
 };
+
+// =========================================================================
+// Applied-To picker — dynamic by scope
+// =========================================================================
+function AppliedToPicker({
+  scopeType,
+  isEdit,
+  scopeValue,
+  setScopeValue,
+  scopeValues,
+  setScopeValues,
+  departments,
+  pmsGrades,
+  employees,
+}: {
+  scopeType: FinalScoreScopeType;
+  isEdit: boolean;
+  scopeValue: string;
+  setScopeValue: (v: string) => void;
+  scopeValues: string[];
+  setScopeValues: (v: string[]) => void;
+  departments: Array<{ name: string; business_units?: { name?: string | null } | null }>;
+  pmsGrades: Array<{ name: string; code?: string | null }>;
+  employees: EmployeeOption[];
+}) {
+  // -------------------- EMPLOYEE --------------------
+  if (scopeType === 'employee') {
+    if (isEdit) {
+      return (
+        <EmployeeCombobox
+          employees={employees}
+          value={scopeValue}
+          onChange={(id) => setScopeValue(id)}
+          placeholder="Search by name, code, or department…"
+        />
+      );
+    }
+    return (
+      <EmployeeCombobox
+        multiple
+        employees={employees}
+        value={scopeValues}
+        onChange={setScopeValues}
+        placeholder="Search by name, code, or department…"
+      />
+    );
+  }
+
+  // -------------------- DEPARTMENT --------------------
+  if (scopeType === 'department') {
+    const options = departments.map(d => d.name);
+    const subtitleMap = new Map(
+      departments.map(d => [d.name, d.business_units?.name || ''] as const),
+    );
+    if (isEdit) {
+      return (
+        <MultiSelectFilter
+          options={options}
+          value={scopeValue ? [scopeValue] : []}
+          onChange={(v) => setScopeValue(v[v.length - 1] || '')}
+          placeholder="Select department…"
+          searchPlaceholder="Search department…"
+        />
+      );
+    }
+    return (
+      <div className="space-y-1">
+        <MultiSelectFilter
+          options={options}
+          value={scopeValues}
+          onChange={setScopeValues}
+          placeholder="Select departments…"
+          searchPlaceholder="Search department…"
+          className="w-full"
+        />
+        {scopeValues.length > 0 && (
+          <p className="text-xs text-muted-foreground">
+            {scopeValues
+              .map(n => {
+                const bu = subtitleMap.get(n);
+                return bu ? `${n} (${bu})` : n;
+              })
+              .join(' · ')}
+          </p>
+        )}
+      </div>
+    );
+  }
+
+  // -------------------- PMS GRADE --------------------
+  if (scopeType === 'pms_grade') {
+    const options = pmsGrades.map(g => g.name);
+    if (isEdit) {
+      return (
+        <MultiSelectFilter
+          options={options}
+          value={scopeValue ? [scopeValue] : []}
+          onChange={(v) => setScopeValue(v[v.length - 1] || '')}
+          placeholder="Select PMS grade…"
+          searchPlaceholder="Search grade…"
+        />
+      );
+    }
+    return (
+      <MultiSelectFilter
+        options={options}
+        value={scopeValues}
+        onChange={setScopeValues}
+        placeholder="Select PMS grades…"
+        searchPlaceholder="Search grade…"
+        className="w-full"
+      />
+    );
+  }
+
+  return null;
+}
