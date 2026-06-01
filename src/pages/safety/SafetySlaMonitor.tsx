@@ -21,6 +21,7 @@ import { Badge } from '@/components/ui/badge';
 import { Loader2, Play, Timer } from 'lucide-react';
 import { useRunSafetySlaCheck } from '@/hooks/useSafetyNotifications';
 import { useManualQuery, type ManualQueryFetcherArgs } from '@/hooks/useManualQuery';
+import { useSafetyRealtimeSync } from '@/hooks/useSafetyRealtimeSync';
 import { SafetyFilterBar } from '@/components/safety/SafetyFilterBar';
 import { SafetyDataTable } from '@/components/safety/SafetyDataTable';
 import { useSafetySettings } from '@/hooks/useSafetySettings';
@@ -63,6 +64,8 @@ async function fetchSlaPage({
  * automatically every 5 minutes via pg_cron — this page is just a viewer.
  */
 export default function SafetySlaMonitor() {
+  // Scoped realtime: only SLA escalation rows.
+  useSafetyRealtimeSync(true, ['safety_sla_escalations']);
   const { toast } = useToast();
   const runCheck = useRunSafetySlaCheck();
   const { data: settings } = useSafetySettings();
