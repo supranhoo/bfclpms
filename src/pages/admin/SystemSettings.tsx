@@ -27,6 +27,8 @@ import { ReportBuilderTab } from '@/components/admin/ReportBuilderTab';
 import { UploadSettingsTab } from '@/components/admin/UploadSettingsTab';
 import { OrgKpiGovernanceSettings } from '@/components/admin/OrgKpiGovernanceSettings';
 import { FeatureFlagsTab } from '@/components/admin/FeatureFlagsTab';
+import { DummyEmployeeVisibilityCard } from '@/components/admin/DummyEmployeeVisibilityCard';
+import { EmployeeMasterFieldsCard } from '@/components/admin/EmployeeMasterFieldsCard';
 import ModuleHubSettings from '@/pages/admin/ModuleHubSettings';
 import { IncrementEligibilitySection } from '@/components/admin/scoring/IncrementEligibilitySection';
 import { AnnualScoreCalculationSection } from '@/components/admin/scoring/AnnualScoreCalculationSection';
@@ -522,6 +524,8 @@ export default function SystemSettings() {
             <OrgKpiGovernanceSettings />
 
             <DummyEmployeeVisibilityCard />
+
+            <EmployeeMasterFieldsCard />
           </>
         );
       case 'scoring':
