@@ -171,6 +171,10 @@ export default function UserManagement() {
   const [departmentFilter, setDepartmentFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [currentPage, setCurrentPage] = useState(1);
+  // v2.67.x — Dummy/System Employee filter (admin-only; never gated by the
+  // global visibility setting because admins must always be able to manage
+  // these flags). See POLICY: Dummy/System Employee Visibility.
+  const [employeeTypeFilter, setEmployeeTypeFilter] = useState<'all' | 'real' | 'dummy'>('all');
 
   // Selection
   const [selectedUserIds, setSelectedUserIds] = useState<Set<string>>(new Set());
