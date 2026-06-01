@@ -356,6 +356,12 @@ function CalculateIncrementTab({ year }: { year: string }) {
       transition: transitionLabel(r),
       pre_confirmation_status: r.pre_confirmation_status ?? '',
       transition_source: r.transition_source ?? '',
+      gdoj: r.employee?.group_doj ?? '',
+      post_cutoff_joiner: r.post_cutoff_joiner === true ? 'Yes' : r.post_cutoff_joiner === false ? 'No' : '',
+      post_cutoff_carry_forward_months: r.post_cutoff_carry_forward_months ?? '',
+      carry_forward_reason: r.post_cutoff_joiner
+        ? (r.ineligibility_reason ?? '')
+        : '',
       evidence_attached: Array.isArray(r.evidence_urls) && r.evidence_urls.length > 0 ? 'Yes' : 'No',
       evidence_count: Array.isArray(r.evidence_urls) ? r.evidence_urls.length : 0,
     }));
