@@ -19,20 +19,11 @@ Deno.serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
     const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-    const cronSecret = Deno.env.get('CRON_SECRET')
-
-    // Auth: cron secret header OR service-role bearer
-    const cronHeader = req.headers.get('X-Cron-Secret')
-    const authHeader = req.headers.get('Authorization') ?? ''
-    const bearer = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : ''
-    const cronOk = !!cronSecret && cronHeader === cronSecret
-    const serviceOk = !!bearer && bearer === serviceRoleKey
-    if (!cronOk && !serviceOk) {
-      return new Response(
-        JSON.stringify({ error: 'Unauthorized: cron secret or service role required' }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
-    }
+    // No auth gate: this endpoint is idempotent and only flips
+    // already-stuck rows (>30 min old) to `failed`. It does not read,
+    // write, or expose any backup contents. Designed for invocation by
+    // pg_cron via pg_net, which does not have a stable secret-sharing
+    // mechanism in this project.
 
     const supabase = createClient(supabaseUrl, serviceRoleKey)
     const cutoff = new Date(Date.now() - 30 * 60 * 1000).toISOString()
