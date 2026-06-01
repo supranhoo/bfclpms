@@ -12,6 +12,14 @@
 - Master Fields registry: 20 fields. Optional by default; can be marked mandatory via Employee Master Field Requirements.
 - Follow-up phases (import/export columns, bulk-review wiring, FM RLS on submissions, reports filters, `functional_manager_score` column) tracked in ADR-071.
 
+## 2026-06-01 — Functional Manager (Phase 4 + Phase 6)
+- DB enum: `review_status` now includes `functional_manager_check` (positioned after `manager_check`), enabling KPIs to sit on the FM review stage.
+- RLS: FM users can SELECT KPIs / review_submissions / kpi_observations / kpi_queries of employees mapped to them via `profiles.functional_manager_id`, and UPDATE `kpis` + `review_submissions` only while the row is on `functional_manager_check`. INSERT permitted on observations/queries for mapped employees. All policies enforced via the new `is_functional_manager_of(uuid)` SECURITY DEFINER helper to avoid recursion. Hot-path partial index added on `profiles.functional_manager_id`.
+- Import: Employee import accepts `functionalManagerEmployeeId` / `functional_manager_code` and `functionalManagerName` / `functional_manager` (plus aliases `fmCode`, `fm`). Resolution priority = employee_code, then full_name fallback. Invalid identifier → row-level error ("Functional Manager '<X>' not found"), row is skipped. Applied to both create and update paths.
+- Export: Employee export now emits `functionalManagerEmployeeId` and `functionalManagerName` columns. Round-trip safe with the import template.
+- Edge function: `create-employee` accepts and persists `functional_manager_id`.
+- Follow-up phases (bulk-review RPC server-side stage wiring, reports filters/columns, ADR-071 writeup) deferred.
+
 ---
 ## 🌱 February 2026
 

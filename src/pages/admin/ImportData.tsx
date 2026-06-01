@@ -151,6 +151,8 @@ interface EmployeeImportRow {
   employmentStatus?: string;
   managerEmployeeId?: string;
   managerName?: string;
+  functionalManagerEmployeeId?: string;
+  functionalManagerName?: string;
   role?: string;
   portalAccess?: string;
   employeeStatus?: string;
@@ -775,6 +777,8 @@ export default function ImportData() {
       employmentStatus: getValue(['employmentStatus', 'employmentstatus', 'employment_status']),
       managerEmployeeId: getValue(['managerEmployeeId', 'manageremployeeid', 'manager_employee_id', 'managerId', 'managerid', 'manager_id', 'reportingTo', 'reportingto', 'reporting_to', 'reportsTo', 'reportsto', 'reports_to']),
       managerName: getValue(['managerName', 'managername', 'manager_name', 'reportingManager', 'reportingmanager', 'reporting_manager', 'supervisor']),
+      functionalManagerEmployeeId: getValue(['functionalManagerEmployeeId', 'functionalmanageremployeeid', 'functional_manager_employee_id', 'functionalManagerCode', 'functionalmanagercode', 'functional_manager_code', 'functionalManagerId', 'functional_manager_id', 'fmCode', 'fm_code', 'fmEmployeeId', 'fm_employee_id']),
+      functionalManagerName: getValue(['functionalManagerName', 'functionalmanagername', 'functional_manager_name', 'functionalManager', 'functionalmanager', 'functional_manager', 'fm', 'fmName', 'fm_name']),
       role: getValue(['role', 'appRole', 'approle', 'app_role', 'userRole', 'userrole', 'user_role', 'systemRole', 'systemrole', 'system_role']),
       portalAccess: getValue(['portalAccess', 'portalaccess', 'portal_access', 'loginAccess', 'loginaccess', 'login_access']),
       employeeStatus: getValue(['employeeStatus', 'employee_status', 'status', 'active', 'isActive', 'is_active']),
@@ -1389,6 +1393,16 @@ export default function ImportData() {
           (row.managerName && p.full_name?.toLowerCase() === row.managerName?.toLowerCase())
         )?.id || null;
 
+        const functionalManagerId = (row.functionalManagerEmployeeId || row.functionalManagerName)
+          ? (profiles?.find(p =>
+              (row.functionalManagerEmployeeId && p.employee_code === row.functionalManagerEmployeeId) ||
+              (row.functionalManagerName && p.full_name?.toLowerCase() === row.functionalManagerName.toLowerCase())
+            )?.id || null)
+          : null;
+        if ((row.functionalManagerEmployeeId || row.functionalManagerName) && !functionalManagerId) {
+          throw new Error(`Functional Manager '${row.functionalManagerEmployeeId || row.functionalManagerName}' not found`);
+        }
+
         // Resolve company by code or name (case-insensitive)
         const resolvedCompanyId = row.companyCode
           ? (companiesList || []).find((c: any) =>
@@ -1409,6 +1423,7 @@ export default function ImportData() {
             ...(row.employeeCategory ? { employee_category: row.employeeCategory } : {}),
             ...(row.employmentStatus ? { employment_status: row.employmentStatus } : {}),
             reporting_manager_id: managerId || existingEmployee.reporting_manager_id,
+            ...(functionalManagerId !== null ? { functional_manager_id: functionalManagerId } : {}),
             ...(resolvedCompanyId ? { company_id: resolvedCompanyId } : {}),
             ...(row.groupDoj && row.groupDoj !== 'INVALID' ? { group_doj: row.groupDoj } : {}),
             ...(row.doj && row.doj !== 'INVALID' ? { doj: row.doj } : {}),
@@ -1456,6 +1471,16 @@ export default function ImportData() {
           (row.managerName && p.full_name?.toLowerCase() === row.managerName?.toLowerCase())
         )?.id || null;
 
+        const functionalManagerId = (row.functionalManagerEmployeeId || row.functionalManagerName)
+          ? (profiles?.find(p =>
+              (row.functionalManagerEmployeeId && p.employee_code === row.functionalManagerEmployeeId) ||
+              (row.functionalManagerName && p.full_name?.toLowerCase() === row.functionalManagerName.toLowerCase())
+            )?.id || null)
+          : null;
+        if ((row.functionalManagerEmployeeId || row.functionalManagerName) && !functionalManagerId) {
+          throw new Error(`Functional Manager '${row.functionalManagerEmployeeId || row.functionalManagerName}' not found`);
+        }
+
         // Resolve company by code or name (case-insensitive)
         const newCompanyId = row.companyCode
           ? (companiesList || []).find((c: any) =>
@@ -1480,6 +1505,7 @@ export default function ImportData() {
             employee_category: sanitizeText(row.employeeCategory) || undefined,
             employment_status: sanitizeText(row.employmentStatus) || undefined,
             reporting_manager_id: managerId || undefined,
+            functional_manager_id: functionalManagerId || undefined,
             company_id: newCompanyId,
             location: sanitizeText(row.location) || undefined,
             portal_access: hasPortalAccess,
@@ -1775,6 +1801,8 @@ export default function ImportData() {
         location: 'Mumbai',
         managerEmployeeId: '100002',
         managerName: 'Jane Smith',
+        functionalManagerEmployeeId: '100003',
+        functionalManagerName: 'Alex Cross',
         employeeStatus: 'Active',
         groupDoj: '2020-04-15',
         doj: '2020-04-15',
@@ -1797,7 +1825,7 @@ export default function ImportData() {
       const allProfiles = await fetchAllPaged<any>((from, to) =>
         supabase
           .from('profiles')
-          .select('id, employee_code, full_name, email, designation, company_id, pms_grade, level, employee_category, employment_status, department_id, reporting_manager_id, is_active, group_doj, doj, confirmation_date, location_id')
+          .select('id, employee_code, full_name, email, designation, company_id, pms_grade, level, employee_category, employment_status, department_id, reporting_manager_id, functional_manager_id, is_active, group_doj, doj, confirmation_date, location_id')
           .order('id')
           .range(from, to)
       );
@@ -1840,6 +1868,7 @@ export default function ImportData() {
         const bu: any = dept?.business_unit_id ? buMap.get(dept.business_unit_id) : null;
         const div: any = bu?.division_id ? divMap.get(bu.division_id) : null;
         const manager: any = profile.reporting_manager_id ? profileMap.get(profile.reporting_manager_id) : null;
+        const fm: any = (profile as any).functional_manager_id ? profileMap.get((profile as any).functional_manager_id) : null;
         
         // Resolve company name from company_id
         const companyId = (profile as any).company_id;
@@ -1863,6 +1892,8 @@ export default function ImportData() {
           location: (locMap.get((profile as any).location_id) as any)?.name || '',
           managerEmployeeId: manager?.employee_code || '',
           managerName: manager?.full_name || '',
+          functionalManagerEmployeeId: fm?.employee_code || '',
+          functionalManagerName: fm?.full_name || '',
           groupDoj: (profile as any).group_doj || '',
           doj: (profile as any).doj || '',
           confirmationDate: (profile as any).confirmation_date || '',
@@ -2185,6 +2216,8 @@ export default function ImportData() {
                   <li><code>portalAccess</code> - Portal Login Access: <span className="text-xs ml-1 text-muted-foreground">(Yes/No, default: Yes if email provided)</span></li>
                   <li><code>managerEmployeeId</code> - Manager's Employee Code</li>
                   <li><code>managerName</code> - Manager's Full Name</li>
+                  <li><code>functionalManagerEmployeeId</code> / <code>functional_manager_code</code> - Functional Manager's Employee Code <span className="text-xs ml-1 text-muted-foreground">(optional; used by Functional Manager review stage)</span></li>
+                  <li><code>functionalManagerName</code> / <code>functional_manager</code> - Functional Manager's Full Name <span className="text-xs ml-1 text-muted-foreground">(optional; falls back when code is blank)</span></li>
                   <li><code>gdoj</code> / <code>groupDoj</code> - Group Date of Joining (yyyy-MM-dd or dd/MM/yyyy)</li>
                   <li><code>doj</code> / <code>dateOfJoining</code> - Date of Joining (yyyy-MM-dd or dd/MM/yyyy)</li>
                   <li><code>confirmationDate</code> - Confirmation Date (yyyy-MM-dd or dd/MM/yyyy)</li>

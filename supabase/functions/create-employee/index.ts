@@ -17,6 +17,7 @@ interface CreateEmployeeRequest {
   employee_category?: string | null;
   employment_status?: string | null;
   reporting_manager_id?: string;
+  functional_manager_id?: string;
   company_id?: string;
   location?: string;
   location_id?: string;
@@ -140,6 +141,7 @@ Deno.serve(async (req) => {
       employee_category: body.employee_category ? body.employee_category.trim() : null,
       employment_status: body.employment_status ? body.employment_status.trim() : null,
       reporting_manager_id: body.reporting_manager_id || null,
+      functional_manager_id: body.functional_manager_id || null,
       company_id: body.company_id || null,
       location_id: locationId,
       portal_access: portalAccess,
