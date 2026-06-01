@@ -1869,7 +1869,7 @@ export default function UserManagement() {
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <div className="space-y-1.5">
-                    <Label>Role</Label>
+                    <Label>Role<ReqMark k="role" /></Label>
                     <OrgFilterCombobox
                       value={newRole}
                       onValueChange={(v) => v && setNewRole(v as AppRole)}
@@ -1879,7 +1879,7 @@ export default function UserManagement() {
                   </div>
                   <div className="flex items-center justify-between rounded-lg border p-3 h-fit">
                     <div className="space-y-0.5">
-                      <Label>Portal Access</Label>
+                      <Label>Portal Access<ReqMark k="portal_access" /></Label>
                       <p className="text-xs text-muted-foreground">
                         {newPortalAccess ? 'User can log in to the portal' : 'Data-only user — no login access'}
                       </p>
@@ -1892,7 +1892,7 @@ export default function UserManagement() {
                 </div>
                 <div className="flex items-center justify-between rounded-lg border p-3">
                   <div className="space-y-0.5">
-                    <Label>Is this a dummy/system employee?</Label>
+                    <Label>Is this a dummy/system employee?<ReqMark k="is_dummy_employee" /></Label>
                     <p className="text-xs text-muted-foreground">
                       Dummy/system employees are used for system access, audit, testing, or non-real employee records.
                       They can be hidden from reports and frontend employee views based on General Settings.
