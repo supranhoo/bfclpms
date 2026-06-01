@@ -536,12 +536,12 @@ function CellTable({
               'rounded-none border-0 shadow-none',
               c.source === 'none' && 'bg-destructive/5',
               c.source === 'override' && 'bg-amber-500/5',
-              naMarked && 'bg-muted/40',
+              (naMarked || c.source === 'na') && 'bg-muted/40',
             )}>
               <CardContent className="p-3 space-y-2">
                 <div className="flex items-center justify-between gap-2">
                   <span className="font-medium text-sm truncate">{c.employee_name}</span>
-                  {naMarked
+                  {naMarked || c.source === 'na'
                     ? <Badge variant="outline" className="h-5 px-1.5 text-[10px]">N/A</Badge>
                     : <SourceBadge source={c.source} />}
                 </div>
@@ -565,7 +565,11 @@ function CellTable({
                       >
                         <span className="text-muted-foreground">{s.label}</span>
                         <span className={cn('tabular-nums font-medium', scoreTone(stages[s.key]))}>
-                          {stages[s.key] == null ? '—' : stages[s.key]!.toFixed(1)}
+                          {stages[s.key] == null
+                            ? ((c.isNa === true || naMarked)
+                                ? <span className="italic">N/A</span>
+                                : '—')
+                            : stages[s.key]!.toFixed(1)}
                         </span>
                       </div>
                     ))}
@@ -590,7 +594,7 @@ function CellTable({
                 <div className="flex items-center justify-between text-xs pt-1">
                   <span>Wt {c.weightage}%</span>
                   <span className="tabular-nums">
-                    Resolved {naMarked
+                    Resolved {naMarked || c.source === 'na'
                       ? <span className="text-muted-foreground italic">N/A</span>
                       : c.score == null
                         ? <span className="text-destructive">● —</span>
@@ -600,7 +604,8 @@ function CellTable({
                     'tabular-nums',
                     c.weightedImpact != null && c.weightedImpact > 0 && 'text-emerald-600 dark:text-emerald-400',
                   )}>
-                    Impact {c.weightedImpact == null ? '—' : fmt(c.weightedImpact, true)}
+                    Impact {(naMarked || c.source === 'na' || c.weightedImpact == null)
+                      ? '—' : fmt(c.weightedImpact, true)}
                   </span>
                 </div>
               </CardContent>
