@@ -54,6 +54,7 @@ const SOURCE_LABEL: Record<CarriedSource, string> = {
   computed: 'computed',
   manual: 'manual',
   override: 'override',
+  na: 'N/A',
   none: 'no data',
 };
 
@@ -62,6 +63,7 @@ function sourceTone(s: CarriedSource): 'default' | 'secondary' | 'outline' | 'de
   if (s === 'computed') return 'outline';
   if (s === 'manual') return 'default';
   if (s === 'override') return 'default';
+  if (s === 'na') return 'outline';
   return 'secondary';
 }
 
@@ -164,6 +166,11 @@ export function BulkSignoffPreview({
           <Badge variant="destructive" className="h-7 px-2 tabular-nums gap-1">
             <AlertTriangle className="h-3 w-3" aria-hidden />
             {totals.requiredUnfilled} need score
+          </Badge>
+        )}
+        {totals.naCount > 0 && (
+          <Badge variant="outline" className="h-7 px-2 tabular-nums">
+            {totals.naCount} N/A
           </Badge>
         )}
       </div>
