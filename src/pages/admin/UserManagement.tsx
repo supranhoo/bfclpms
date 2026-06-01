@@ -1007,6 +1007,19 @@ export default function UserManagement() {
       toast({ title: 'Invalid email format', variant: 'destructive' });
       return;
     }
+    // Workflow mapping is optional, but partial-fill is invalid.
+    const wfFilledCount =
+      (newWorkflowPeriod ? 1 : 0) +
+      (newWorkflowYear ? 1 : 0) +
+      (newWorkflowTemplateId ? 1 : 0);
+    if (wfFilledCount > 0 && wfFilledCount < 3) {
+      toast({
+        title: 'Incomplete workflow mapping',
+        description: 'Select Review Period, Year and Workflow Template — or clear all three.',
+        variant: 'destructive',
+      });
+      return;
+    }
     createUser.mutate({
       full_name: newFullName,
       email: newPortalAccess ? newEmail : '',
