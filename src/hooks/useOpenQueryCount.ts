@@ -21,7 +21,9 @@ export function useOpenQueryCount() {
       return count || 0;
     },
     enabled: !!user?.id,
-    refetchInterval: 120_000, // Refresh every 120 seconds (reduced from 30s for cost optimization)
-    refetchOnWindowFocus: true,
+    // Refresh every 120 seconds. refetchOnWindowFocus removed — tab-switch
+    // storms were triggering a DB count() on every focus event, far more
+    // often than intended. The 120s interval is sufficient.
+    refetchInterval: 120_000,
   });
 }
