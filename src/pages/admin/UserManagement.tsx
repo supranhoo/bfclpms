@@ -1915,6 +1915,19 @@ export default function UserManagement() {
                       />
                     </div>
                   </div>
+                  <div className="space-y-1.5">
+                    <Label>Mobile Number<ReqMark k="mobile_number" /></Label>
+                    <div className="relative">
+                      <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+                      <Input
+                        type="tel"
+                        value={newMobileNumber}
+                        onChange={(e) => setNewMobileNumber(e.target.value)}
+                        placeholder="+91 9876543210"
+                        className="pl-9 h-9"
+                      />
+                    </div>
+                  </div>
                 </div>
               </div>
 
