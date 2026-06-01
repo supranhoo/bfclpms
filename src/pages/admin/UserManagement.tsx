@@ -1559,6 +1559,16 @@ export default function UserManagement() {
                     />
                   </div>
                 </div>
+                <div className="flex items-center justify-between rounded-lg border p-3">
+                  <div className="space-y-0.5">
+                    <Label>Is this a dummy/system employee?</Label>
+                    <p className="text-xs text-muted-foreground">
+                      Dummy/system employees are used for system access, audit, testing, or non-real employee records.
+                      They can be hidden from reports and frontend employee views based on General Settings.
+                    </p>
+                  </div>
+                  <Switch checked={editIsDummy} onCheckedChange={setEditIsDummy} />
+                </div>
               </div>
 
               {/* Section: Module Access & Login (shortcuts to UserAccessSheet) */}
