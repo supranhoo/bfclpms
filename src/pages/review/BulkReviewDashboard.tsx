@@ -70,6 +70,7 @@ const CALENDAR_MONTHS = [
 
 const VIEWER_STAGES = [
   { value: 'manager', label: 'Manager' },
+  { value: 'functional_manager', label: 'Functional Manager' },
   { value: 'skip_level', label: 'Skip-Level' },
   { value: 'hr_pms', label: 'HR PMS' },
   { value: 'auditor', label: 'Auditor' },
@@ -393,7 +394,7 @@ export default function BulkReviewDashboard() {
   const impactPreview: ImpactSummary | null = useMemo(() => {
     if (!confirmApprove || !bulkAction || !previewDataQ.data) return null;
     const stage = bulkAction.kind === 'stage'
-      ? (bulkAction.stage as 'manager' | 'skip_level' | 'hr_pms' | 'auditor')
+      ? (bulkAction.stage as 'manager' | 'functional_manager' | 'skip_level' | 'hr_pms' | 'auditor')
       : 'management';
     return buildBulkSignoffImpact({
       stage,

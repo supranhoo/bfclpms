@@ -320,7 +320,7 @@ export function useBulkWriteStageScores() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (args: {
-      stage: 'manager' | 'skip_level' | 'hr_pms' | 'auditor';
+      stage: 'manager' | 'functional_manager' | 'skip_level' | 'hr_pms' | 'auditor';
       cells: BulkWriteCell[];
       reason?: string;
       attachment_urls?: string[];
@@ -395,7 +395,7 @@ export function useBulkReopenCells() {
   return useMutation({
     mutationFn: async (args: {
       cells: Array<{ submission_id: string }>;
-      stages_to_unlock: Array<'manager' | 'skip_level' | 'hr_pms' | 'auditor'>;
+      stages_to_unlock: Array<'manager' | 'functional_manager' | 'skip_level' | 'hr_pms' | 'auditor'>;
       reason: string;
     }): Promise<BulkWriteResult> => {
       const { data, error } = await supabase.rpc('bulk_reopen_cells' as any, {

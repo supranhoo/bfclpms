@@ -6599,6 +6599,12 @@ export type Database = {
           final_rating: Database["public"]["Enums"]["rating_level"] | null
           final_revision_no: number
           final_score: number | null
+          functional_manager_evidence_urls: Json
+          functional_manager_rating:
+            | Database["public"]["Enums"]["rating_level"]
+            | null
+          functional_manager_remarks: string | null
+          functional_manager_score: number | null
           group_write_batch_id: string | null
           hr_pms_achieved_value: number | null
           hr_pms_evidence_url: string | null
@@ -6655,6 +6661,12 @@ export type Database = {
           final_rating?: Database["public"]["Enums"]["rating_level"] | null
           final_revision_no?: number
           final_score?: number | null
+          functional_manager_evidence_urls?: Json
+          functional_manager_rating?:
+            | Database["public"]["Enums"]["rating_level"]
+            | null
+          functional_manager_remarks?: string | null
+          functional_manager_score?: number | null
           group_write_batch_id?: string | null
           hr_pms_achieved_value?: number | null
           hr_pms_evidence_url?: string | null
@@ -6711,6 +6723,12 @@ export type Database = {
           final_rating?: Database["public"]["Enums"]["rating_level"] | null
           final_revision_no?: number
           final_score?: number | null
+          functional_manager_evidence_urls?: Json
+          functional_manager_rating?:
+            | Database["public"]["Enums"]["rating_level"]
+            | null
+          functional_manager_remarks?: string | null
+          functional_manager_score?: number | null
           group_write_batch_id?: string | null
           hr_pms_achieved_value?: number | null
           hr_pms_evidence_url?: string | null

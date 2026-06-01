@@ -14,11 +14,12 @@
 import { calculateRating } from '@/lib/ratingCalculation';
 import type { QualitativeOption } from '@/lib/qualitativeUom';
 
-export type SignoffStage = 'manager' | 'skip_level' | 'hr_pms' | 'auditor' | 'management';
+export type SignoffStage = 'manager' | 'functional_manager' | 'skip_level' | 'hr_pms' | 'auditor' | 'management';
 
 export type CarriedSource =
   | 'self'
   | 'manager'
+  | 'functional_manager'
   | 'skip_level'
   | 'hr_pms'
   | 'auditor'
