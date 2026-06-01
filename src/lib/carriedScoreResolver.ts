@@ -25,6 +25,7 @@ export type CarriedSource =
   | 'computed'
   | 'manual'
   | 'override'
+  | 'na'
   | 'none';
 
 export interface KpiRule {
@@ -92,9 +93,10 @@ export function resolveWithInputs(
   inputs: CellInputs | undefined,
   isOverride: boolean,
 ): ResolveResult {
-  if (submission.is_na === true) return { score: null, source: 'none' };
-  // Reviewer-marked N/A (admin override) — short-circuits every other input.
-  if (inputs?.isNa === true) return { score: null, source: 'none' };
+  // Pre-existing N/A on the row (any prior stage already marked it).
+  if (submission.is_na === true) return { score: null, source: 'na' };
+  // Reviewer-marked N/A in this bulk action — short-circuits every other input.
+  if (inputs?.isNa === true) return { score: null, source: 'na' };
 
   const manual = inputs?.manualScore;
   if (manual != null && Number.isFinite(manual)) {
@@ -123,8 +125,9 @@ export function resolveWithInputs(
  * Returns { score: null, source: 'none' } only when achievement is also missing.
  */
 export function resolveCarriedScore({ stage, submission, kpi }: ResolveInput): ResolveResult {
-  // N/A cells must not be advanced — preview surfaces them as 'none'.
-  if (submission.is_na === true) return { score: null, source: 'none' };
+  // N/A cells must not be advanced — preview surfaces them as 'na' so the UI
+  // can render the muted N/A pill instead of the destructive "no data" state.
+  if (submission.is_na === true) return { score: null, source: 'na' };
 
   // Stage cascade (mirrors DB exactly, see bulk_write_stage_scores lines 89-114).
   if (stage === 'manager') {
