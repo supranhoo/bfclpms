@@ -9737,6 +9737,7 @@ export type Database = {
           source_config_id: string
         }[]
       }
+      apply_final_score_rule: { Args: { p_kpi_id: string }; Returns: undefined }
       apply_workflow_global_default_migration: {
         Args: never
         Returns: {
