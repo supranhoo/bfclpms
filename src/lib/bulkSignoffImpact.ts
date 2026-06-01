@@ -111,6 +111,7 @@ function bestScore(r: SnapshotCell): number | null {
 /** Stage column for the "score after sign-off" projection. */
 function stageScoreOf(stage: SignoffStage, r: SnapshotCell): number | null {
   if (stage === 'manager') return r.manager_score;
+  if (stage === 'functional_manager') return (r as any).functional_manager_score ?? null;
   if (stage === 'skip_level') return r.skip_level_score;
   if (stage === 'hr_pms') return r.hr_pms_score;
   if (stage === 'auditor') return r.auditor_score;
