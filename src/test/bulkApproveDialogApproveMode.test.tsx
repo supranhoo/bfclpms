@@ -34,7 +34,7 @@ const preview: ImpactSummary = {
   }],
   totals: {
     cellCount: 1, employeeCount: 1, computedCount: 0,
-    skippedCount: 0, overrideCount: 0, requiredUnfilled: 0, weightedDelta: 0,
+    skippedCount: 0, overrideCount: 0, requiredUnfilled: 0, naCount: 0, weightedDelta: 0,
   },
 };
 
