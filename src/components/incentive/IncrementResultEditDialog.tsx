@@ -21,9 +21,8 @@ import {
 import { useUpdateIncrementRunItem } from '@/hooks/useIncrementRuns';
 import { Loader2 } from 'lucide-react';
 import { MultiFileUpload } from '@/components/ui/MultiFileUpload';
-import { FileSpreadsheet, FileText } from 'lucide-react';
+import { FileText } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
-import { useEffect as useEffectAlias } from 'react';
 
 const WORD_DOC_TYPES = {
   'application/msword': { ext: 'doc', icon: FileText },
