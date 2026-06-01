@@ -1699,6 +1699,29 @@ export default function UserManagement() {
                 </div>
               </div>
 
+              {editCustomFieldDefs.length > 0 && (
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Users className="h-4 w-4 text-muted-foreground" />
+                    <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+                      Additional Information
+                    </h3>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    {editCustomFieldDefs.map((def) => (
+                      <CustomFieldRenderer
+                        key={def.id}
+                        def={def}
+                        value={editCustomValues[def.field_key]}
+                        onChange={(v) =>
+                          setEditCustomValues((prev) => ({ ...prev, [def.field_key]: v }))
+                        }
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* Section: Module Access & Login (shortcuts to UserAccessSheet) */}
               {selectedUser && (
                 <div className="space-y-4">
