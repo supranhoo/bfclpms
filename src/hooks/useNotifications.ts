@@ -87,8 +87,13 @@ export function useUnreadNotificationCount() {
       return count || 0;
     },
     enabled: !!user?.id,
-    refetchInterval: 120_000, // Refetch every 120 seconds as backup (realtime handles instant updates)
-    refetchOnWindowFocus: true,
+    // No polling here: useNotifications() already maintains a Realtime
+    // INSERT subscription on `notifications` and invalidates this query
+    // key when a new row arrives. Background polling was redundant and
+    // also fired on every tab-focus, doubling the query cost. If you
+    // ever need a true fallback, gate refetchInterval behind a
+    // `isRealtimeConnected === false` flag rather than re-enabling it
+    // unconditionally.
   });
 }
 
