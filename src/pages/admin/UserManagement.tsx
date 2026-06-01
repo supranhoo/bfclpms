@@ -492,6 +492,7 @@ export default function UserManagement() {
     },
     onSuccess: () => {
       invalidateProfileCaches(queryClient);
+      queryClient.invalidateQueries({ queryKey: ['dummy-employee-ids'] });
       toast({ title: 'User updated successfully' });
       setEditDialogOpen(false);
     },
