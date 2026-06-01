@@ -151,6 +151,8 @@ interface EmployeeImportRow {
   employmentStatus?: string;
   managerEmployeeId?: string;
   managerName?: string;
+  functionalManagerEmployeeId?: string;
+  functionalManagerName?: string;
   role?: string;
   portalAccess?: string;
   employeeStatus?: string;
