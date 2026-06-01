@@ -819,7 +819,7 @@ export default function UserManagement() {
       is_dummy_employee: newIsDummy,
     };
     const v = validateRequiredFields(fieldValues, emfReqs);
-    if (!v.ok) {
+    if (v.ok === false) {
       toast({ title: v.message, variant: 'destructive' });
       return;
     }
