@@ -741,6 +741,48 @@ Deno.serve(async (req) => {
         scoresByEmp.get(empId)!.push({ score: monthly, month: v.month });
       });
 
+      // ────────────────────────────────────────────────────────────────
+      // Post-cutoff carry-IN map. For each employee in this AY's run,
+      // look up the most recent COMPLETED prior-AY run and pull their
+      // recorded `post_cutoff_carry_forward_months` (if any). Those
+      // months are added to the current AY's eligible-month count so
+      // employees who joined after the prior-AY cutoff have their
+      // balance months counted in the next AY, per policy.
+      // ────────────────────────────────────────────────────────────────
+      const priorAY = `${startYear - 1}-${String(startYear).slice(-2).padStart(2, '0')}`;
+      const carryInByEmp = new Map<string, number>();
+      try {
+        const { data: priorRunRows } = await admin
+          .from('increment_runs')
+          .select('id')
+          .eq('assessment_year', priorAY)
+          .eq('status', 'completed')
+          .order('completed_at', { ascending: false })
+          .limit(1);
+        const priorRunId = (priorRunRows as any[] | null)?.[0]?.id ?? null;
+        if (priorRunId) {
+          const empIds = profiles.map((p: any) => p.id);
+          for (let i = 0; i < empIds.length; i += 500) {
+            const batch = empIds.slice(i, i + 500);
+            if (!batch.length) continue;
+            const { data: rows } = await admin
+              .from('increment_run_items')
+              .select('employee_id, post_cutoff_carry_forward_months')
+              .eq('run_id', priorRunId)
+              .in('employee_id', batch)
+              .gt('post_cutoff_carry_forward_months', 0);
+            ((rows as any[]) ?? []).forEach((r) => {
+              const m = Number(r.post_cutoff_carry_forward_months) || 0;
+              if (m > 0) carryInByEmp.set(r.employee_id, m);
+            });
+          }
+        }
+      } catch (e) {
+        // Best-effort: log and continue with empty carry-IN map. A read
+        // failure here must not abort the whole AY run.
+        console.error('post-cutoff carry-in lookup failed', e);
+      }
+
       // Resolve service-anchor date per General Eligibility config.
       // Mirrors src/lib/serviceAnchorDate.ts — keep in sync.
       const anchorMode: 'run_date' | 'ay_end' | 'custom' = (ge?.service_as_on_mode as any) ?? 'ay_end';
