@@ -357,7 +357,7 @@ export default function WorkflowConfig() {
                 <SelectItem value="global">
                   <span className="flex items-center gap-2">
                     <Globe className="h-3.5 w-3.5" />
-                    Global Default
+                    Legacy Fallback (read-only)
                   </span>
                 </SelectItem>
                 <SelectItem value="specific">
