@@ -1047,6 +1047,10 @@ export default function UserManagement() {
     setNewLocationId('');
     setNewIsDummy(false);
     setNewMobileNumber('');
+    setNewIsActive(true);
+    setNewWorkflowPeriod('');
+    setNewWorkflowYear('');
+    setNewWorkflowTemplateId('');
     setCustomValues({});
   };
 
