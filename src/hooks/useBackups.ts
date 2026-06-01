@@ -448,7 +448,7 @@ export function useDownloadBackup() {
         const combinedJson = JSON.stringify({
           metadata: { ...manifest, tables: undefined },
           data: combinedData,
-        }, null, 2);
+        });
         const blob = new Blob([combinedJson], { type: 'application/json' });
         const fileName = filePath.replace('/manifest.json', '').split('/').pop() + '-backup.json';
         return { blob, fileName };
