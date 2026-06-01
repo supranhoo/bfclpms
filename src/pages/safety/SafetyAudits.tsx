@@ -11,6 +11,7 @@ import {
 import { Plus, ClipboardCheck, ArrowRight, BarChart3, FileText } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useManualQuery, type ManualQueryFetcherArgs } from '@/hooks/useManualQuery';
+import { useSafetyRealtimeSync } from '@/hooks/useSafetyRealtimeSync';
 import { SafetyFilterBar } from '@/components/safety/SafetyFilterBar';
 import { SafetyDataTable } from '@/components/safety/SafetyDataTable';
 import {
@@ -76,6 +77,13 @@ async function fetchRunsPage({
 }
 
 export default function SafetyAudits() {
+  // Scoped realtime: audit runs, responses, and template metadata.
+  useSafetyRealtimeSync(true, [
+    'safety_audit_runs',
+    'safety_audit_run_responses',
+    'safety_audit_templates',
+    'safety_audit_template_items',
+  ]);
   const [draft, setDraft] = useState<RunFilters>(INITIAL);
   const {
     rows, total, page, pageSize, totalPages,
