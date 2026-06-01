@@ -1000,6 +1000,7 @@ export default function UserManagement() {
     setNewConfirmationDate('');
     setNewLocationId('');
     setNewIsDummy(false);
+    setNewMobileNumber('');
     setCustomValues({});
   };
 
