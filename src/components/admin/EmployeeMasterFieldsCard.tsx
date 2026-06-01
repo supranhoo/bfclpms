@@ -39,23 +39,19 @@ export function EmployeeMasterFieldsCard() {
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <div className="rounded-md border divide-y">
-          <div className="grid grid-cols-[1fr,auto] px-4 py-2 text-xs font-medium uppercase tracking-wide text-muted-foreground bg-muted/40">
-            <span>Field</span>
-            <span>Mandatory</span>
-          </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
           {EMPLOYEE_MASTER_FIELDS.map((f) => {
             const checked = !!requirements[f.key];
             const disabled = !!f.alwaysRequired || isLoading || update.isPending;
             return (
               <div
                 key={f.key}
-                className="grid grid-cols-[1fr,auto] items-center px-4 py-3 gap-4"
+                className="flex items-center justify-between gap-3 rounded-lg border bg-card px-3 py-2.5 min-h-[56px]"
               >
-                <div className="space-y-0.5">
-                  <Label className="text-sm font-medium">{f.label}</Label>
+                <div className="min-w-0 space-y-0.5">
+                  <Label className="text-sm font-medium block truncate">{f.label}</Label>
                   {f.alwaysRequired && (
-                    <p className="text-xs text-muted-foreground">Required by system.</p>
+                    <p className="text-xs text-muted-foreground">Required by system</p>
                   )}
                 </div>
                 <Switch
