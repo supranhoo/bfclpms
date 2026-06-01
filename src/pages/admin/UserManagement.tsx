@@ -6,6 +6,16 @@ import { Separator } from '@/components/ui/separator';
 import { RequiredMark } from '@/components/ui/RequiredMark';
 import { useEmployeeMasterFieldRequirements } from '@/hooks/useEmployeeMasterFieldRequirements';
 import { validateRequiredFields, type EmployeeMasterFieldKey } from '@/lib/employeeMasterFields';
+import {
+  useEmployeeMasterCustomFieldDefs,
+  saveEmployeeMasterCustomFieldValues,
+} from '@/hooks/useEmployeeMasterCustomFields';
+import {
+  validateCustomFieldValues,
+  normalizeCustomFieldValues,
+  type CustomFieldValues,
+} from '@/lib/employeeMasterCustomFields';
+import { CustomFieldRenderer } from '@/components/admin/CustomFieldRenderer';
 import { useProfiles, useDepartments, useDesignations, usePmsGrades, useDivisions, useBusinessUnits, useEmployeeCategories, useEmploymentStatuses, useLocations } from '@/hooks/useOrganization';
 import { useCompanies } from '@/hooks/useCompanies';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -176,6 +186,13 @@ export default function UserManagement() {
   const { requirements: emfReqs } = useEmployeeMasterFieldRequirements();
   const ReqMark = ({ k }: { k: EmployeeMasterFieldKey }) =>
     emfReqs[k] ? <RequiredMark /> : null;
+
+  // Admin-defined custom Employee Master fields (active + show_on_add_user).
+  const { data: customFieldDefs = [] } = useEmployeeMasterCustomFieldDefs({
+    activeOnly: true,
+    addUserOnly: true,
+  });
+  const [customValues, setCustomValues] = useState<CustomFieldValues>({});
 
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
@@ -575,6 +592,23 @@ export default function UserManagement() {
         if (dummyErr) throw dummyErr;
       }
 
+      // Persist admin-defined custom field values (if any active fields exist).
+      if (response.data?.profile?.id && customFieldDefs.length > 0) {
+        const normalized = normalizeCustomFieldValues(customFieldDefs, customValues);
+        if (Object.keys(normalized).length > 0) {
+          try {
+            await saveEmployeeMasterCustomFieldValues(response.data.profile.id, normalized);
+          } catch (e: any) {
+            // Non-fatal: user is created. Surface a toast only.
+            toast({
+              title: 'User created, but custom fields failed to save',
+              description: e?.message,
+              variant: 'destructive',
+            });
+          }
+        }
+      }
+
       return response.data;
     },
     onSuccess: (data) => {
@@ -823,6 +857,11 @@ export default function UserManagement() {
       toast({ title: v.message, variant: 'destructive' });
       return;
     }
+    const cv = validateCustomFieldValues(customFieldDefs, customValues);
+    if (cv.ok === false) {
+      toast({ title: cv.message, variant: 'destructive' });
+      return;
+    }
     if (newEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail.trim())) {
       toast({ title: 'Invalid email format', variant: 'destructive' });
       return;
@@ -866,6 +905,7 @@ export default function UserManagement() {
     setNewConfirmationDate('');
     setNewLocationId('');
     setNewIsDummy(false);
+    setCustomValues({});
   };
 
   const handleBulkUpdate = () => {
@@ -1859,6 +1899,27 @@ export default function UserManagement() {
                   </div>
                 </div>
               </div>
+
+              {customFieldDefs.length > 0 && (
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Package className="h-4 w-4 text-muted-foreground" />
+                    <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Additional Information</h3>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    {customFieldDefs.map((def) => (
+                      <CustomFieldRenderer
+                        key={def.id}
+                        def={def}
+                        value={customValues[def.field_key]}
+                        onChange={(v) =>
+                          setCustomValues((prev) => ({ ...prev, [def.field_key]: v }))
+                        }
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
             </TabsContent>
 
             <TabsContent value="access" className="mt-0 space-y-4">

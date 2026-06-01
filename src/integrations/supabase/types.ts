@@ -1483,6 +1483,99 @@ export type Database = {
         }
         Relationships: []
       }
+      employee_master_custom_field_values: {
+        Row: {
+          created_at: string
+          employee_id: string
+          id: string
+          updated_at: string
+          values: Json
+        }
+        Insert: {
+          created_at?: string
+          employee_id: string
+          id?: string
+          updated_at?: string
+          values?: Json
+        }
+        Update: {
+          created_at?: string
+          employee_id?: string
+          id?: string
+          updated_at?: string
+          values?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "employee_master_custom_field_values_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: true
+            referencedRelation: "eligible_login_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "employee_master_custom_field_values_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      employee_master_custom_fields: {
+        Row: {
+          created_at: string
+          dropdown_options: Json | null
+          field_key: string
+          field_label: string
+          field_type: string
+          help_text: string | null
+          id: string
+          is_active: boolean
+          is_mandatory: boolean
+          placeholder: string | null
+          show_in_employee_master: boolean
+          show_on_add_user: boolean
+          show_on_edit_user: boolean
+          sort_order: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          dropdown_options?: Json | null
+          field_key: string
+          field_label: string
+          field_type: string
+          help_text?: string | null
+          id?: string
+          is_active?: boolean
+          is_mandatory?: boolean
+          placeholder?: string | null
+          show_in_employee_master?: boolean
+          show_on_add_user?: boolean
+          show_on_edit_user?: boolean
+          sort_order?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          dropdown_options?: Json | null
+          field_key?: string
+          field_label?: string
+          field_type?: string
+          help_text?: string | null
+          id?: string
+          is_active?: boolean
+          is_mandatory?: boolean
+          placeholder?: string | null
+          show_in_employee_master?: boolean
+          show_on_add_user?: boolean
+          show_on_edit_user?: boolean
+          sort_order?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       employee_working_days: {
         Row: {
           created_at: string | null
