@@ -6,6 +6,16 @@ import { Separator } from '@/components/ui/separator';
 import { RequiredMark } from '@/components/ui/RequiredMark';
 import { useEmployeeMasterFieldRequirements } from '@/hooks/useEmployeeMasterFieldRequirements';
 import { validateRequiredFields, type EmployeeMasterFieldKey } from '@/lib/employeeMasterFields';
+import {
+  useEmployeeMasterCustomFieldDefs,
+  saveEmployeeMasterCustomFieldValues,
+} from '@/hooks/useEmployeeMasterCustomFields';
+import {
+  validateCustomFieldValues,
+  normalizeCustomFieldValues,
+  type CustomFieldValues,
+} from '@/lib/employeeMasterCustomFields';
+import { CustomFieldRenderer } from '@/components/admin/CustomFieldRenderer';
 import { useProfiles, useDepartments, useDesignations, usePmsGrades, useDivisions, useBusinessUnits, useEmployeeCategories, useEmploymentStatuses, useLocations } from '@/hooks/useOrganization';
 import { useCompanies } from '@/hooks/useCompanies';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
