@@ -16,6 +16,7 @@ export type StageKey = ResolvedStageKey;
 export const STAGE_LABELS: Record<StageKey, string> = {
   awaiting_self_review: 'Awaiting Self Review',
   awaiting_manager: 'Awaiting Manager Review',
+  awaiting_functional_manager: 'Awaiting Functional Manager Review',
   awaiting_skip_level: 'Awaiting Skip-Level Review',
   awaiting_hr_pms: 'Awaiting HR PMS Review',
   awaiting_audit: 'Awaiting Audit',

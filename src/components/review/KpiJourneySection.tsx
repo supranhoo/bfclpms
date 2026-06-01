@@ -81,7 +81,7 @@ function useEmployeeProfileForPdf(employeeId: string | undefined) {
 }
 
 type ViewLevel = 'employee' | 'manager' | 'auditor' | 'management' | 'skip_level' | 'hr_pms' | 'admin';
-type JourneyStage = 'self' | 'manager' | 'skip_level' | 'hr_pms' | 'auditor' | 'management';
+type JourneyStage = 'self' | 'manager' | 'functional_manager' | 'skip_level' | 'hr_pms' | 'auditor' | 'management';
 
 interface KpiJourneySectionProps {
   kpi: KPI;
@@ -107,6 +107,7 @@ function getStageStatus(
   const stageToStatus: Record<string, string> = {
     self: 'self_review',
     manager: 'manager_check',
+    functional_manager: 'functional_manager_check',
     skip_level: 'skip_level_check',
     hr_pms: 'hr_pms_review',
     auditor: 'audit',

@@ -75,7 +75,9 @@ export interface ResolverProfile {
   pms_grade: string | null;
   department_id: string | null;
   reporting_manager_id: string | null;
-  functional_manager_id: string | null;
+  /** Optional: callers built before the FM rollout may omit this field.
+   *  When undefined, the FM stage resolves to `no_functional_manager_on_profile`. */
+  functional_manager_id?: string | null;
   is_active: boolean;
 }
 
