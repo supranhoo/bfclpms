@@ -176,7 +176,7 @@ export function useLatestIncrementResults(assessmentYear: string | null) {
         supabase
           .from('increment_run_items' as any)
           .select(
-            '*, employee:profiles!increment_run_items_employee_id_fkey(id, full_name, employee_code)',
+            '*, employee:profiles!increment_run_items_employee_id_fkey(id, full_name, employee_code, group_doj)',
           )
           .in('run_id', runIds)
           .order('created_at', { ascending: false })
@@ -289,7 +289,7 @@ export function useExportLatestIncrementResults(assessmentYear: string | null) {
         supabase
           .from('increment_run_items' as any)
           .select(
-            '*, employee:profiles!increment_run_items_employee_id_fkey(id, full_name, employee_code)',
+            '*, employee:profiles!increment_run_items_employee_id_fkey(id, full_name, employee_code, group_doj)',
           )
           .in('run_id', runIds)
           .range(from, to),
