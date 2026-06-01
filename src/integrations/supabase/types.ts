@@ -10304,6 +10304,16 @@ export type Database = {
         Args: { _action: string; _user_id: string }
         Returns: boolean
       }
+      rpc_bulk_employee_attrs: {
+        Args: { p_employee_ids: string[] }
+        Returns: {
+          designation: string
+          id: string
+          pms_grade: string
+          reporting_manager_id: string
+          reporting_manager_name: string
+        }[]
+      }
       rpc_distinct_kpi_periods: {
         Args: never
         Returns: {
