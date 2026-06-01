@@ -43,6 +43,7 @@ interface RolloverResponse {
   conflicts: EmployeeResult[];
   total_kpis_copied: number;
   total_employees_affected: number;
+  duplicates_skipped?: number;
   source_period: string;
   source_year: number;
   target_period: string;
@@ -204,7 +205,14 @@ export function RolloverDialog({ open, onOpenChange, scopedEmployee, defaultTarg
       setStep('results');
       queryClient.invalidateQueries({ queryKey: ['rollover-logs'] });
       queryClient.invalidateQueries({ queryKey: ['kpis'] });
-      toast({ title: 'Rollover Complete', description: `${data.total_kpis_copied} KPIs copied for ${data.total_employees_affected} employees.` });
+      {
+        const dups = data.duplicates_skipped ?? 0;
+        const base = `${data.total_kpis_copied} KPIs copied for ${data.total_employees_affected} employees.`;
+        toast({
+          title: 'Rollover Complete',
+          description: dups > 0 ? `${base} ${dups} pre-existing duplicate(s) skipped.` : base,
+        });
+      }
     },
     onError: (err: Error) => {
       toast({ title: 'Rollover Failed', description: err.message, variant: 'destructive' });

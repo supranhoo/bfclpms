@@ -325,12 +325,14 @@ Deno.serve(async (req) => {
     const targetMonthIdx = MONTHS.indexOf(targetMonth);
 
     // Fetch existing target KPIs for all relevant employees (paginated)
-    // We need to check ALL possible cycle months, not just the raw target
+    // We need to check ALL possible cycle months, not just the raw target.
+    // CRITICAL: build the month set from the actual source KPIs (honouring each
+    // KPI's own frequency_cycle_start), otherwise non-standard cycle anchors
+    // resolve to months we never queried and the unique index trips on insert.
     const possibleTargetMonths = new Set<string>();
     possibleTargetMonths.add(targetMonth);
-    // Add all possible cycle months that multi-month frequencies could resolve to
-    for (const freq of ['Bi-Monthly', 'Quarterly', 'Half-Yearly', 'Yearly']) {
-      const cycleMonths = getCycleMonthsForTarget(targetMonthIdx, freq);
+    for (const kpi of sourceKpis) {
+      const cycleMonths = getCycleMonthsForTarget(targetMonthIdx, kpi.frequency, kpi.frequency_cycle_start);
       for (const m of cycleMonths) {
         if (m >= targetMonthIdx) possibleTargetMonths.add(MONTHS[m]);
       }
@@ -524,11 +526,15 @@ Deno.serve(async (req) => {
 
     // Insert KPIs in batches of 500
     let totalInserted = 0;
+    let duplicatesSkipped = 0;
     for (let i = 0; i < kpisToInsert.length; i += 500) {
       const batch = kpisToInsert.slice(i, i + 500);
 
       // Use the batch insert function that sets the rollover flag,
-      // suppressing per-KPI notification triggers
+      // suppressing per-KPI notification triggers. The RPC uses
+      // ON CONFLICT ON CONSTRAINT idx_kpis_no_duplicates DO NOTHING,
+      // so pre-existing rows are silently skipped instead of aborting
+      // the entire batch.
       const { data: insertedCount, error: insertError } = await supabase
         .rpc('batch_insert_kpis_with_rollover_flag', {
           kpis_json: batch,
@@ -544,7 +550,9 @@ Deno.serve(async (req) => {
         });
         throw new Error(`Insert failed: ${insertError.message}`);
       }
-      totalInserted += insertedCount || 0;
+      const inserted = insertedCount || 0;
+      totalInserted += inserted;
+      duplicatesSkipped += batch.length - inserted;
     }
 
     // ── Optional: carry forward auditor mappings (audit_kpi_level_assignments) ──
@@ -747,7 +755,10 @@ Deno.serve(async (req) => {
       employees_affected: rolledOver.length,
       triggered_by,
       status: 'completed',
-      details: { rolled_over: rolledOver, skipped: skippedEmployees },
+      error_message: duplicatesSkipped > 0
+        ? `Skipped ${duplicatesSkipped} pre-existing duplicate KPI(s).`
+        : null,
+      details: { rolled_over: rolledOver, skipped: skippedEmployees, duplicates_skipped: duplicatesSkipped },
     });
 
     return new Response(
@@ -757,6 +768,7 @@ Deno.serve(async (req) => {
         skipped_employees: skippedEmployees,
         conflicts: [],
         total_kpis_copied: totalInserted,
+        duplicates_skipped: duplicatesSkipped,
         total_employees_affected: rolledOver.length,
         source_period: sourceMonth,
         source_year: sourceYear,
