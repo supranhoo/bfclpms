@@ -80,3 +80,10 @@
 4. **Granularity** — group small follow-ups under the parent feature row (sub-bullets); don't multiply rows.
 5. **Monthly rollover** — at month end, archive the month section to `docs/changelogs/2026-MM.md` if the file gets too long.
 6. **Export** — file lives at repo root → easy to `cat`, paste into email, or convert to PDF/PPT for execs.
+
+## 2026-06-01 — Workflow Config period-only migration tool (Phases 1–4)
+- DB: new `workflow_config_migration_log` table + `analyze_workflow_global_default_migration()` (read-only dry-run, 4-bucket classification) + `apply_workflow_global_default_migration()` (single-TX, idempotent, audited).
+- Admin: System Settings → Workflow Configuration now defaults to Specific Period; Global Default option renamed to "Legacy Fallback (read-only)" and disables save; new "Convert Global Defaults to Period-Specific" dialog with bucket summary, CSV export, and Apply.
+- Edit User → Workflow mapping card is now period-scoped: requires Review Period + Year selection, pre-fills from existing mapping for that period, Reset clears only the selected period.
+- Rollback: `DELETE FROM workflow_config WHERE id IN (SELECT created_period_config_id FROM workflow_config_migration_log WHERE run_id = '<uuid>');`
+- Phase 5 (Add/Edit User field parity) deferred to a follow-up change set.

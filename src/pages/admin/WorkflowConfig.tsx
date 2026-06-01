@@ -32,6 +32,7 @@ import { ReviewPanelSkeleton } from '@/components/ui/LoadingSkeletons';
 import CustomWorkflowDialog from '@/components/admin/CustomWorkflowDialog';
 import ReconcileOrphanedKpisDialog from '@/components/admin/ReconcileOrphanedKpisDialog';
 import { WorkflowConfigExport } from '@/components/admin/WorkflowConfigExport';
+import MigrateGlobalDefaultsDialog from '@/components/admin/MigrateGlobalDefaultsDialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 
@@ -84,10 +85,12 @@ export default function WorkflowConfig() {
 
   // Period selector state: 'global' or specific period
   const currentYear = new Date().getFullYear();
-  const [periodMode, setPeriodMode] = useState<'global' | 'specific'>('global');
+  // Default to 'specific'. 'global' is now read-only legacy fallback view only.
+  const [periodMode, setPeriodMode] = useState<'global' | 'specific'>('specific');
   const [selectedMonth, setSelectedMonth] = useState(MONTHS[new Date().getMonth()]);
   const [selectedYear, setSelectedYear] = useState(currentYear);
   const years = [currentYear - 1, currentYear, currentYear + 1];
+  const [migrateOpen, setMigrateOpen] = useState(false);
 
   const { data: allTemplates, isLoading: templatesLoading } = useWorkflowTemplates(true);
   const { data: configs, isLoading: configsLoading } = useWorkflowConfigs();
@@ -214,22 +217,28 @@ export default function WorkflowConfig() {
     configValue: string,
     templateId: string
   ) => {
+    if (periodMode !== 'specific') {
+      toast({
+        title: 'Read-only legacy view',
+        description: 'New workflow mappings must be Period-Specific. Switch Scope to "Specific Period" first.',
+        variant: 'destructive',
+      });
+      return;
+    }
     try {
       await upsertConfig.mutateAsync({
         configType,
         configValue,
         workflowTemplateId: templateId,
-        reviewPeriod: periodMode === 'specific' ? selectedMonth : null,
-        reviewYear: periodMode === 'specific' ? selectedYear : null,
-        isOngoing: periodMode === 'specific' ? isOngoing : false,
+        reviewPeriod: selectedMonth,
+        reviewYear: selectedYear,
+        isOngoing,
       });
       toast({
         title: 'Workflow assigned',
-        description: periodMode === 'specific' 
-          ? isOngoing
-            ? `Workflow assigned from ${selectedMonth} ${selectedYear} onward.`
-            : `Workflow assigned for ${selectedMonth} ${selectedYear}.`
-          : 'The workflow configuration has been saved.',
+        description: isOngoing
+          ? `Workflow assigned from ${selectedMonth} ${selectedYear} onward.`
+          : `Workflow assigned for ${selectedMonth} ${selectedYear}.`,
       });
     } catch {
       toast({
@@ -308,12 +317,19 @@ export default function WorkflowConfig() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">Workflow Configuration</h1>
-        <p className="text-muted-foreground">
-          Configure review workflows per employee, department, or PMS grade
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold">Workflow Configuration</h1>
+          <p className="text-muted-foreground">
+            Configure review workflows per employee, department, or PMS grade for a specific review period.
+          </p>
+        </div>
+        <Button variant="outline" onClick={() => setMigrateOpen(true)}>
+          <GitBranch className="h-4 w-4 mr-1" />
+          Convert Global Defaults to Period-Specific
+        </Button>
       </div>
+      <MigrateGlobalDefaultsDialog open={migrateOpen} onOpenChange={setMigrateOpen} />
 
       <Alert className="border-primary/30 bg-primary/5">
         <Info className="h-4 w-4 text-primary" />
@@ -331,8 +347,8 @@ export default function WorkflowConfig() {
           </CardTitle>
           <CardDescription>
             {periodMode === 'specific' 
-              ? `Resolution: Period-specific (Employee > Dept > Grade) → Global (Employee > Dept > Grade) → Default`
-              : `Workflows are resolved in this order: Employee > Department > PMS Grade > Default`
+              ? `Workflows are resolved for the selected review period in this order: Employee > Department > PMS Grade > Period Default`
+              : `Legacy fallback view (read-only). New mappings must be Period-Specific.`
             }
           </CardDescription>
         </CardHeader>
@@ -354,7 +370,7 @@ export default function WorkflowConfig() {
                 <SelectItem value="global">
                   <span className="flex items-center gap-2">
                     <Globe className="h-3.5 w-3.5" />
-                    Global Default
+                    Legacy Fallback (read-only)
                   </span>
                 </SelectItem>
                 <SelectItem value="specific">

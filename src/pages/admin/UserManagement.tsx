@@ -64,9 +64,22 @@ function InlineWorkflowMappingCard({ employeeId }: { employeeId: string }) {
   const upsert = useUpsertWorkflowConfig();
   const remove = useDeleteWorkflowConfig();
 
+  const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const now = new Date();
+  const [period, setPeriod] = useState<string>(MONTHS[now.getMonth()]);
+  const [year, setYear] = useState<number>(now.getFullYear());
+  const years = [now.getFullYear() - 1, now.getFullYear(), now.getFullYear() + 1];
+
   const existing = useMemo(
-    () => configs?.find(c => c.config_type === 'employee' && c.config_value === employeeId && !c.review_period) ?? null,
-    [configs, employeeId]
+    () =>
+      configs?.find(
+        c =>
+          c.config_type === 'employee' &&
+          c.config_value === employeeId &&
+          c.review_period === period &&
+          c.review_year === year,
+      ) ?? null,
+    [configs, employeeId, period, year],
   );
   const selectedTemplate = useMemo(
     () => templates?.find(t => t.id === existing?.workflow_template_id) ?? null,
@@ -76,10 +89,14 @@ function InlineWorkflowMappingCard({ employeeId }: { employeeId: string }) {
   const loading = tLoading || cLoading;
 
   const onChange = (value: string) => {
+    if (!period || !year) {
+      toast({ title: 'Select a review period first', description: 'Workflow mapping is period-specific.', variant: 'destructive' });
+      return;
+    }
     upsert.mutate(
-      { configType: 'employee', configValue: employeeId, workflowTemplateId: value },
+      { configType: 'employee', configValue: employeeId, workflowTemplateId: value, reviewPeriod: period, reviewYear: year },
       {
-        onSuccess: () => toast({ title: 'Workflow assigned', description: 'This user now uses the selected workflow.' }),
+        onSuccess: () => toast({ title: 'Workflow assigned', description: `Saved for ${period} ${year}.` }),
         onError: (e: any) => toast({ title: 'Failed to assign workflow', description: e?.message ?? 'Try again.', variant: 'destructive' }),
       }
     );
@@ -88,7 +105,7 @@ function InlineWorkflowMappingCard({ employeeId }: { employeeId: string }) {
   const onReset = () => {
     if (!existing) return;
     remove.mutate(existing.id, {
-      onSuccess: () => toast({ title: 'Reset to default', description: 'This user now inherits the default workflow.' }),
+      onSuccess: () => toast({ title: 'Reset for this period', description: `Cleared mapping for ${period} ${year}. Other periods unchanged.` }),
       onError: (e: any) => toast({ title: 'Failed to reset', description: e?.message ?? 'Try again.', variant: 'destructive' }),
     });
   };
@@ -109,9 +126,32 @@ function InlineWorkflowMappingCard({ employeeId }: { employeeId: string }) {
             onClick={onReset}
             disabled={remove.isPending}
           >
-            Reset to default
+            Reset this period
           </Button>
         )}
+      </div>
+      <p className="text-xs text-muted-foreground mb-2">
+        Workflow mapping is period-specific. Select a review period before assigning workflow.
+      </p>
+      <div className="grid grid-cols-2 gap-2 mb-3">
+        <div>
+          <Label className="text-xs text-muted-foreground">Review Period</Label>
+          <Select value={period} onValueChange={setPeriod}>
+            <SelectTrigger className="mt-1 h-9"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {MONTHS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+        <div>
+          <Label className="text-xs text-muted-foreground">Year</Label>
+          <Select value={String(year)} onValueChange={(v) => setYear(parseInt(v))}>
+            <SelectTrigger className="mt-1 h-9"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {years.map(y => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
       <Label className="text-xs text-muted-foreground">Assigned Workflow</Label>
       <Select
@@ -120,7 +160,7 @@ function InlineWorkflowMappingCard({ employeeId }: { employeeId: string }) {
         disabled={loading || upsert.isPending}
       >
         <SelectTrigger className="mt-1 h-9">
-          <SelectValue placeholder={loading ? 'Loading…' : 'Inherit (default)'} />
+          <SelectValue placeholder={loading ? 'Loading…' : 'Inherit period default'} />
         </SelectTrigger>
         <SelectContent>
           {templates?.map(t => (
@@ -138,7 +178,7 @@ function InlineWorkflowMappingCard({ employeeId }: { employeeId: string }) {
         </div>
       )}
       {!existing && !loading && (
-        <p className="mt-2 text-xs text-muted-foreground">Currently inheriting the default workflow.</p>
+        <p className="mt-2 text-xs text-muted-foreground">No mapping for {period} {year} — currently inheriting the period default.</p>
       )}
     </div>
   );
