@@ -777,6 +777,8 @@ export default function ImportData() {
       employmentStatus: getValue(['employmentStatus', 'employmentstatus', 'employment_status']),
       managerEmployeeId: getValue(['managerEmployeeId', 'manageremployeeid', 'manager_employee_id', 'managerId', 'managerid', 'manager_id', 'reportingTo', 'reportingto', 'reporting_to', 'reportsTo', 'reportsto', 'reports_to']),
       managerName: getValue(['managerName', 'managername', 'manager_name', 'reportingManager', 'reportingmanager', 'reporting_manager', 'supervisor']),
+      functionalManagerEmployeeId: getValue(['functionalManagerEmployeeId', 'functionalmanageremployeeid', 'functional_manager_employee_id', 'functionalManagerCode', 'functionalmanagercode', 'functional_manager_code', 'functionalManagerId', 'functional_manager_id', 'fmCode', 'fm_code', 'fmEmployeeId', 'fm_employee_id']),
+      functionalManagerName: getValue(['functionalManagerName', 'functionalmanagername', 'functional_manager_name', 'functionalManager', 'functionalmanager', 'functional_manager', 'fm', 'fmName', 'fm_name']),
       role: getValue(['role', 'appRole', 'approle', 'app_role', 'userRole', 'userrole', 'user_role', 'systemRole', 'systemrole', 'system_role']),
       portalAccess: getValue(['portalAccess', 'portalaccess', 'portal_access', 'loginAccess', 'loginaccess', 'login_access']),
       employeeStatus: getValue(['employeeStatus', 'employee_status', 'status', 'active', 'isActive', 'is_active']),
