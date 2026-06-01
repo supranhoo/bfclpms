@@ -37,6 +37,9 @@ import { ALL_APP_ROLES, type AppRole } from '@/lib/roles';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { useMyVisibleEmployeeIds } from '@/hooks/useMyVisibleEmployeeIds';
 import { useWorkflowTemplates, useWorkflowConfigs, useUpsertWorkflowConfig, useDeleteWorkflowConfig, getStageLabel } from '@/hooks/useWorkflowConfig';
+// v2.67.x — Dummy/System Employee Visibility (admin-side: always shows
+// everyone with a badge + filter; never gated by the global setting).
+import { useDummyEmployees } from '@/hooks/useDummyEmployees';
 
 // Inline card used inside Edit User → Access & Login to view/change the
 // employee's assigned (global) workflow template without leaving the dialog.
@@ -171,6 +174,10 @@ export default function UserManagement() {
   const [departmentFilter, setDepartmentFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [currentPage, setCurrentPage] = useState(1);
+  // v2.67.x — Dummy/System Employee filter (admin-only; never gated by the
+  // global visibility setting because admins must always be able to manage
+  // these flags). See POLICY: Dummy/System Employee Visibility.
+  const [employeeTypeFilter, setEmployeeTypeFilter] = useState<'all' | 'real' | 'dummy'>('all');
 
   // Selection
   const [selectedUserIds, setSelectedUserIds] = useState<Set<string>>(new Set());
@@ -200,6 +207,7 @@ export default function UserManagement() {
   const [editDoj, setEditDoj] = useState<string>(''); // yyyy-MM-dd or ''
   const [editConfirmationDate, setEditConfirmationDate] = useState<string>(''); // yyyy-MM-dd or ''
   const [editLocationId, setEditLocationId] = useState<string>('');
+  const [editIsDummy, setEditIsDummy] = useState<boolean>(false);
   // Create Dialog
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [newFullName, setNewFullName] = useState('');
@@ -219,6 +227,7 @@ export default function UserManagement() {
   const [newDoj, setNewDoj] = useState<string>(''); // yyyy-MM-dd or ''
   const [newConfirmationDate, setNewConfirmationDate] = useState<string>(''); // yyyy-MM-dd or ''
   const [newLocationId, setNewLocationId] = useState<string>('');
+  const [newIsDummy, setNewIsDummy] = useState<boolean>(false);
 
   // Bulk Action Dialog
   const [bulkDialogOpen, setBulkDialogOpen] = useState(false);
@@ -302,6 +311,10 @@ export default function UserManagement() {
   // Admins receive `visibleIds === null` → no narrowing.
   const { visibleIds, isAdmin: viewerIsAdmin } = useMyVisibleEmployeeIds();
 
+  // Admin-side dummy/system employee map — drives badge + Employee Type filter.
+  // Admins ALWAYS see everyone here regardless of the global visibility setting.
+  const { dummyIds } = useDummyEmployees();
+
   const filteredProfiles = useMemo(() => {
     const q = debouncedSearch.toLowerCase();
     const scoped = (!viewerIsAdmin && visibleIds)
@@ -323,8 +336,14 @@ export default function UserManagement() {
       const matchesStatus = statusFilter === 'all' || 
         (statusFilter === 'active' && isActive) || 
         (statusFilter === 'inactive' && !isActive);
-      
-      return matchesSearch && matchesRole && matchesDepartment && matchesStatus;
+
+      const isDummy = dummyIds.has(p.id);
+      const matchesType =
+        employeeTypeFilter === 'all' ||
+        (employeeTypeFilter === 'real' && !isDummy) ||
+        (employeeTypeFilter === 'dummy' && isDummy);
+
+      return matchesSearch && matchesRole && matchesDepartment && matchesStatus && matchesType;
     });
     // Sort: active first, then inactive — both alphabetical by full_name
     return [...filtered].sort((a, b) => {
@@ -333,7 +352,7 @@ export default function UserManagement() {
       if (aActive !== bActive) return aActive - bActive;
       return (a.full_name || '').localeCompare(b.full_name || '');
     });
-  }, [profiles, debouncedSearch, roleFilter, departmentFilter, statusFilter, viewerIsAdmin, visibleIds]);
+  }, [profiles, debouncedSearch, roleFilter, departmentFilter, statusFilter, viewerIsAdmin, visibleIds, employeeTypeFilter, dummyIds]);
 
   // Helper: derive division ID from a department ID
   const deriveDivisionFromDept = (deptId: string | null): string => {
@@ -413,6 +432,7 @@ export default function UserManagement() {
       doj,
       confirmationDate,
       locationId,
+      isDummyEmployee,
     }: {
       userId: string;
       role: AppRole;
@@ -430,6 +450,7 @@ export default function UserManagement() {
       doj?: string | null;
       confirmationDate?: string | null;
       locationId?: string | null;
+      isDummyEmployee?: boolean;
     }) => {
       const updatePayload: Record<string, any> = {
         full_name: fullName || null,
@@ -446,6 +467,9 @@ export default function UserManagement() {
         confirmation_date: confirmationDate !== undefined ? (confirmationDate || null) : undefined,
         location_id: locationId !== undefined ? (locationId || null) : undefined,
       };
+      if (isDummyEmployee !== undefined) {
+        updatePayload.is_dummy_employee = !!isDummyEmployee;
+      }
 
       if (isActive !== undefined) {
         updatePayload.is_active = isActive;
@@ -468,6 +492,7 @@ export default function UserManagement() {
     },
     onSuccess: () => {
       invalidateProfileCaches(queryClient);
+      queryClient.invalidateQueries({ queryKey: ['dummy-employee-ids'] });
       toast({ title: 'User updated successfully' });
       setEditDialogOpen(false);
     },
@@ -530,10 +555,22 @@ export default function UserManagement() {
         if (roleError) throw roleError;
       }
 
+      // v2.67.x — Persist Dummy/System Employee flag post-create. The
+      // `create-employee` edge function does not accept this field yet, so
+      // we write it directly to `profiles` after the row exists.
+      if (newIsDummy && response.data?.profile?.id) {
+        const { error: dummyErr } = await supabase
+          .from('profiles')
+          .update({ is_dummy_employee: true } as any)
+          .eq('id', response.data.profile.id);
+        if (dummyErr) throw dummyErr;
+      }
+
       return response.data;
     },
     onSuccess: (data) => {
       invalidateProfileCaches(queryClient);
+      queryClient.invalidateQueries({ queryKey: ['dummy-employee-ids'] });
       toast({ title: 'User created successfully' });
       setCreateDialogOpen(false);
       
@@ -670,6 +707,7 @@ export default function UserManagement() {
     setEditEmail(user.email || '');
     setEditMobile('');
     setEditIsActive((user as any).is_active !== false);
+    setEditIsDummy(dummyIds.has(user.id));
     setEditGroupDoj('');
     setEditDoj('');
     setEditConfirmationDate('');
@@ -745,6 +783,7 @@ export default function UserManagement() {
       doj: editDoj || null,
       confirmationDate: editConfirmationDate || null,
       locationId: editLocationId || null,
+      isDummyEmployee: editIsDummy,
     });
   };
 
@@ -795,6 +834,7 @@ export default function UserManagement() {
     setNewDoj('');
     setNewConfirmationDate('');
     setNewLocationId('');
+    setNewIsDummy(false);
   };
 
   const handleBulkUpdate = () => {
@@ -1021,6 +1061,19 @@ export default function UserManagement() {
             <SelectItem value="inactive">Inactive</SelectItem>
           </SelectContent>
         </Select>
+        <Select
+          value={employeeTypeFilter}
+          onValueChange={(v) => { setEmployeeTypeFilter(v as 'all' | 'real' | 'dummy'); handleFilterChange(); }}
+        >
+          <SelectTrigger className="w-[170px]" title="Employee Type">
+            <SelectValue placeholder="Employee Type" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Employees</SelectItem>
+            <SelectItem value="real">Real Employees</SelectItem>
+            <SelectItem value="dummy">Dummy / System</SelectItem>
+          </SelectContent>
+        </Select>
 
         {selectedUserIds.size > 0 && (
           <Button variant="secondary" onClick={() => setBulkDialogOpen(true)}>
@@ -1190,6 +1243,9 @@ export default function UserManagement() {
                         )}
                         {(profile as any).portal_access === false && (
                           <Badge variant="secondary" className="text-xs ml-1">No Portal</Badge>
+                        )}
+                        {dummyIds.has(profile.id) && (
+                          <Badge variant="secondary" className="text-xs ml-1" title="Dummy/System employee">Dummy/System</Badge>
                         )}
                       </TableCell>
                       <TableCell>{manager ? formatManagerLabel(manager.full_name, manager.employee_code) : '-'}</TableCell>
@@ -1516,6 +1572,16 @@ export default function UserManagement() {
                     />
                   </div>
                 </div>
+                <div className="flex items-center justify-between rounded-lg border p-3">
+                  <div className="space-y-0.5">
+                    <Label>Is this a dummy/system employee?</Label>
+                    <p className="text-xs text-muted-foreground">
+                      Dummy/system employees are used for system access, audit, testing, or non-real employee records.
+                      They can be hidden from reports and frontend employee views based on General Settings.
+                    </p>
+                  </div>
+                  <Switch checked={editIsDummy} onCheckedChange={setEditIsDummy} />
+                </div>
               </div>
 
               {/* Section: Module Access & Login (shortcuts to UserAccessSheet) */}
@@ -1792,6 +1858,16 @@ export default function UserManagement() {
                       onCheckedChange={setNewPortalAccess}
                     />
                   </div>
+                </div>
+                <div className="flex items-center justify-between rounded-lg border p-3">
+                  <div className="space-y-0.5">
+                    <Label>Is this a dummy/system employee?</Label>
+                    <p className="text-xs text-muted-foreground">
+                      Dummy/system employees are used for system access, audit, testing, or non-real employee records.
+                      They can be hidden from reports and frontend employee views based on General Settings.
+                    </p>
+                  </div>
+                  <Switch checked={newIsDummy} onCheckedChange={setNewIsDummy} />
                 </div>
                 <p className="text-xs text-muted-foreground">
                   Tip: after creating the user, open <span className="font-medium">Manage Access</span> from the user row to grant additional module roles (PMS, Safety, HR) and send the welcome password.
