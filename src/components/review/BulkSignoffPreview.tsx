@@ -404,12 +404,17 @@ function CellTable({
           <thead className="sticky top-0 bg-background z-10">
             <tr className="border-b border-border">
               <th className="text-left p-2 font-medium text-muted-foreground">Employee</th>
-              <th className="text-left p-2 font-medium text-muted-foreground">KRA · KPI</th>
+              {!hideKraKpiCol && (
+                <th className="text-left p-2 font-medium text-muted-foreground">KRA · KPI</th>
+              )}
               <th className="text-left p-2 font-medium text-muted-foreground">UoM</th>
               <th className="text-right p-2 font-medium text-muted-foreground">Target</th>
               <th className="text-right p-2 font-medium text-muted-foreground">Wt%</th>
               <th className="text-right p-2 font-medium text-muted-foreground">Achvd</th>
               {editable && <th className="text-right p-2 font-medium text-muted-foreground">Override</th>}
+              {editable && allowNa && (
+                <th className="text-center p-2 font-medium text-muted-foreground">N/A</th>
+              )}
               {STAGE_COLS.map(s => (
                 <th
                   key={s.key}
@@ -429,6 +434,7 @@ function CellTable({
           <tbody>
             {cells.map(c => {
               const stages = c.stageScores;
+              const naMarked = isRowNa(c);
               return (
                 <tr
                   key={c.submission_id}
@@ -436,17 +442,20 @@ function CellTable({
                     'border-b border-border/50 hover:bg-muted/50',
                     c.source === 'none' && 'bg-destructive/5',
                     c.source === 'override' && 'bg-amber-500/5',
+                    naMarked && 'bg-muted/40',
                   )}
                 >
                   <td className="p-2 truncate max-w-[140px]">{c.employee_name}</td>
-                  <td className="p-2 max-w-[220px]">
-                    {c.kra_name && (
-                      <div className="text-[10px] uppercase tracking-wide text-muted-foreground truncate">
-                        {c.kra_name}
-                      </div>
-                    )}
-                    <div className="truncate">{c.kpi_name}</div>
-                  </td>
+                  {!hideKraKpiCol && (
+                    <td className="p-2 max-w-[220px]">
+                      {c.kra_name && (
+                        <div className="text-[10px] uppercase tracking-wide text-muted-foreground truncate">
+                          {c.kra_name}
+                        </div>
+                      )}
+                      <div className="truncate">{c.kpi_name}</div>
+                    </td>
+                  )}
                   <td className="p-2 text-muted-foreground truncate max-w-[80px]">{c.uom ?? '—'}</td>
                   <td className="p-2 text-right tabular-nums text-muted-foreground">
                     {c.target_value == null ? '—' : c.target_value}
@@ -457,7 +466,20 @@ function CellTable({
                   </td>
                   {editable && (
                     <td className="p-2 text-right">
-                      {isRowEditable(c) ? renderAchievedInput(c) : <span className="text-muted-foreground">—</span>}
+                      {naMarked
+                        ? <span className="text-muted-foreground italic">N/A</span>
+                        : isRowEditable(c)
+                          ? renderAchievedInput(c)
+                          : <span className="text-muted-foreground">—</span>}
+                    </td>
+                  )}
+                  {editable && allowNa && (
+                    <td className="p-2 text-center">
+                      <Checkbox
+                        checked={naMarked}
+                        onCheckedChange={(v) => toggleNa(c.submission_id, v === true)}
+                        aria-label={`Mark ${c.employee_name} ${c.kpi_name} as N/A`}
+                      />
                     </td>
                   )}
                   {STAGE_COLS.map(s => (
