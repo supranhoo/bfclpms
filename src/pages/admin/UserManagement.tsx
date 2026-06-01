@@ -905,6 +905,7 @@ export default function UserManagement() {
     setNewConfirmationDate('');
     setNewLocationId('');
     setNewIsDummy(false);
+    setCustomValues({});
   };
 
   const handleBulkUpdate = () => {
