@@ -477,7 +477,7 @@ function CellTable({
                   </td>
                   {editable && (
                     <td className="p-2 text-right">
-                      {naMarked
+                      {naMarked || c.source === 'na'
                         ? <span className="text-muted-foreground italic">N/A</span>
                         : isRowEditable(c)
                           ? renderAchievedInput(c)
