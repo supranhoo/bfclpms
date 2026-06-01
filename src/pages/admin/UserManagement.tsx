@@ -9,6 +9,7 @@ import { validateRequiredFields, type EmployeeMasterFieldKey } from '@/lib/emplo
 import {
   useEmployeeMasterCustomFieldDefs,
   saveEmployeeMasterCustomFieldValues,
+  useEmployeeMasterCustomFieldValues,
 } from '@/hooks/useEmployeeMasterCustomFields';
 import {
   validateCustomFieldValues,
@@ -194,6 +195,17 @@ export default function UserManagement() {
   });
   const [customValues, setCustomValues] = useState<CustomFieldValues>({});
 
+  // Edit User custom fields — separate def query (active, scoped to
+  // show_on_edit_user) plus per-employee values fetched on demand.
+  const { data: editCustomFieldDefsAll = [] } = useEmployeeMasterCustomFieldDefs({
+    activeOnly: true,
+  });
+  const editCustomFieldDefs = useMemo(
+    () => editCustomFieldDefsAll.filter((d) => d.show_on_edit_user),
+    [editCustomFieldDefsAll],
+  );
+  const [editCustomValues, setEditCustomValues] = useState<CustomFieldValues>({});
+
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState<string>('all');
@@ -234,6 +246,19 @@ export default function UserManagement() {
   const [editConfirmationDate, setEditConfirmationDate] = useState<string>(''); // yyyy-MM-dd or ''
   const [editLocationId, setEditLocationId] = useState<string>('');
   const [editIsDummy, setEditIsDummy] = useState<boolean>(false);
+  // Custom-field values for Edit User; hydrated from the values table when
+  // the dialog opens, and persisted alongside `handleSaveUser`.
+  const { data: editCustomValuesFetched } = useEmployeeMasterCustomFieldValues(
+    editDialogOpen ? selectedUser?.id : null,
+  );
+  useEffect(() => {
+    if (editDialogOpen) {
+      setEditCustomValues(editCustomValuesFetched || {});
+    } else {
+      setEditCustomValues({});
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editDialogOpen, editCustomValuesFetched, selectedUser?.id]);
   // Create Dialog
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [newFullName, setNewFullName] = useState('');
@@ -789,6 +814,25 @@ export default function UserManagement() {
 
   const handleSaveUser = async () => {
     if (!selectedUser) return;
+
+    if (editCustomFieldDefs.length > 0) {
+      const cv = validateCustomFieldValues(editCustomFieldDefs, editCustomValues);
+      if (cv.ok === false) {
+        toast({ title: cv.message, variant: 'destructive' });
+        return;
+      }
+      try {
+        const normalized = normalizeCustomFieldValues(editCustomFieldDefs, editCustomValues);
+        await saveEmployeeMasterCustomFieldValues(selectedUser.id, normalized);
+      } catch (err: any) {
+        toast({
+          title: 'Failed to save additional fields',
+          description: err?.message,
+          variant: 'destructive',
+        });
+        return;
+      }
+    }
 
     // If email changed, update via edge function first
     const emailChanged = (editEmail.trim().toLowerCase()) !== (selectedUser.email?.trim().toLowerCase() || '');
@@ -1654,6 +1698,29 @@ export default function UserManagement() {
                   <Switch checked={editIsDummy} onCheckedChange={setEditIsDummy} />
                 </div>
               </div>
+
+              {editCustomFieldDefs.length > 0 && (
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Users className="h-4 w-4 text-muted-foreground" />
+                    <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+                      Additional Information
+                    </h3>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    {editCustomFieldDefs.map((def) => (
+                      <CustomFieldRenderer
+                        key={def.id}
+                        def={def}
+                        value={editCustomValues[def.field_key]}
+                        onChange={(v) =>
+                          setEditCustomValues((prev) => ({ ...prev, [def.field_key]: v }))
+                        }
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Section: Module Access & Login (shortcuts to UserAccessSheet) */}
               {selectedUser && (

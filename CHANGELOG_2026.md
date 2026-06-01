@@ -63,6 +63,14 @@
 
 ---
 
+## 🌻 June 2026
+
+| 🗓 Week | 🧩 Feature / Module | 🛠 Development Highlights | 📌 Status | 🚀 Impact |
+|---|---|---|---|---|
+| **W1** Jun 1–7 | 🧩 Employee Master Custom Fields (POLICY §129) | • System Settings > General > Employee Master Fields gains `+ Add Field` (8 types: text/number/date/dropdown/yes_no/email/phone/long_text) with mandatory + visibility toggles + dropdown options + help text<br>• New tables `employee_master_custom_fields` (definitions, admin-write RLS) + `employee_master_custom_field_values` (JSONB per employee, unique(employee_id), cascade delete)<br>• Add New User & Edit User dialogs render an "Additional Information" 3-col section, validate mandatory/email/number/dropdown rules, persist via `saveEmployeeMasterCustomFieldValues`<br>• `field_key` regex-guarded, reserved against built-in keys, immutable in practice; deactivate-by-default with hard-delete confirm<br>• Tests: `src/test/employeeMasterCustomFields.test.ts` (15 cases) | 🟢 Completed | Admins can extend the employee form per-org without code changes; built-in fixed-field flow untouched |
+
+---
+
 ## 🛡 Maintenance Protocol
 
 1. **SSOT rule** — every shipped change appends one row to the **current week** here in the same step that you update `DOCUMENTATION.md` Version History (per project Atomic Sync rule).
