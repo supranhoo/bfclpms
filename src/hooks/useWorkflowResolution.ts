@@ -26,7 +26,7 @@ export function useWorkflowResolution(period: string, year: number) {
         supabase
           .from('profiles')
           .select(
-            'id, full_name, email, employee_code, pms_grade, department_id, reporting_manager_id, is_active',
+            'id, full_name, email, employee_code, pms_grade, department_id, reporting_manager_id, functional_manager_id, is_active',
           )
           .eq('is_active', true)
           .order('full_name')

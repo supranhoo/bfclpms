@@ -19,6 +19,7 @@ const MASTER_ORDER = [
   'kra_set',
   'self_review',
   'manager_check',
+  'functional_manager_check',
   'skip_level_check',
   'hr_pms_review',
   'audit',

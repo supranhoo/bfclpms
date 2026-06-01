@@ -22,6 +22,7 @@ import { DEFAULT_WORKFLOW_STAGES } from '@/lib/workflowEngine';
 const STAGE_TO_SCORE_FIELD: Record<string, string> = {
   self_review: 'self_score',
   manager_check: 'manager_score',
+  functional_manager_check: 'functional_manager_score',
   skip_level_check: 'skip_level_score',
   hr_pms_review: 'hr_pms_score',
   audit: 'auditor_score',
@@ -65,7 +66,7 @@ export function inferChainFromSubmission(
 
   // Order stages by the canonical ordering in fallbackStages so we keep the
   // visual progression consistent across all rendered chains.
-  const canonical = ['kra_set', 'self_review', 'manager_check', 'skip_level_check', 'hr_pms_review', 'audit', 'management_review', 'approved'];
+  const canonical = ['kra_set', 'self_review', 'manager_check', 'functional_manager_check', 'skip_level_check', 'hr_pms_review', 'audit', 'management_review', 'approved'];
   const set = new Set<string>(['kra_set', ...scored, 'approved']);
   return canonical.filter(s => set.has(s));
 }

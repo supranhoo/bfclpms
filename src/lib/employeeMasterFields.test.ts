@@ -58,7 +58,14 @@ describe('employeeMasterFields', () => {
     expect(r.ok).toBe(false);
   });
 
-  it('all 19 fields are listed', () => {
-    expect(EMPLOYEE_MASTER_FIELDS.length).toBe(19);
+  it('all 20 fields are listed', () => {
+    expect(EMPLOYEE_MASTER_FIELDS.length).toBe(20);
+  });
+
+  it('functional_manager_id is registered and optional by default', () => {
+    const fm = EMPLOYEE_MASTER_FIELDS.find(f => f.key === 'functional_manager_id');
+    expect(fm).toBeDefined();
+    expect(fm?.label).toBe('Functional Manager');
+    expect(DEFAULT_REQUIREMENTS.functional_manager_id).toBe(false);
   });
 });

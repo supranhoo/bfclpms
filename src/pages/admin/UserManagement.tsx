@@ -270,6 +270,7 @@ export default function UserManagement() {
   const [selectedUser, setSelectedUser] = useState<NonNullable<typeof profiles>[number] | null>(null);
   const [editRole, setEditRole] = useState<AppRole>('employee');
   const [editManagerId, setEditManagerId] = useState<string>('');
+  const [editFunctionalManagerId, setEditFunctionalManagerId] = useState<string>('');
   const [editDepartmentId, setEditDepartmentId] = useState<string>('');
   const [editDesignation, setEditDesignation] = useState('');
   const [editPmsGrade, setEditPmsGrade] = useState('');
@@ -311,6 +312,7 @@ export default function UserManagement() {
   const [newEmployeeCategory, setNewEmployeeCategory] = useState('');
   const [newEmploymentStatus, setNewEmploymentStatus] = useState('');
   const [newManagerId, setNewManagerId] = useState('');
+  const [newFunctionalManagerId, setNewFunctionalManagerId] = useState('');
   const [newDivisionId, setNewDivisionId] = useState('');  // UI-only cascading filter
   const [newCompanyId, setNewCompanyId] = useState('');
   const [newPortalAccess, setNewPortalAccess] = useState(true);
@@ -519,6 +521,7 @@ export default function UserManagement() {
       role,
       fullName,
       reportingManagerId,
+      functionalManagerId,
       departmentId,
       designation,
       pmsGrade,
@@ -537,6 +540,7 @@ export default function UserManagement() {
       role: AppRole;
       fullName: string;
       reportingManagerId: string | null;
+      functionalManagerId?: string | null;
       departmentId: string | null;
       designation: string;
       pmsGrade: string;
@@ -554,6 +558,8 @@ export default function UserManagement() {
       const updatePayload: Record<string, any> = {
         full_name: fullName || null,
         reporting_manager_id: reportingManagerId || null,
+        functional_manager_id:
+          functionalManagerId === undefined ? undefined : (functionalManagerId || null),
         department_id: departmentId || null,
         designation,
         pms_grade: pmsGrade,
@@ -673,6 +679,16 @@ export default function UserManagement() {
           .update({ mobile_number: newMobileNumber } as any)
           .eq('id', response.data.profile.id);
         if (mobErr) throw mobErr;
+      }
+
+      // Persist Functional Manager post-create (parity with Edit User).
+      // `create-employee` edge function does not accept this field yet.
+      if (newFunctionalManagerId && response.data?.profile?.id) {
+        const { error: fmErr } = await supabase
+          .from('profiles')
+          .update({ functional_manager_id: newFunctionalManagerId } as any)
+          .eq('id', response.data.profile.id);
+        if (fmErr) throw fmErr;
       }
 
       // Persist Account Status if admin deactivated at create-time (parity
@@ -859,6 +875,7 @@ export default function UserManagement() {
     const userRole = (user.user_roles as any)?.[0]?.role || 'employee';
     setEditRole(userRole);
     setEditManagerId(user.reporting_manager_id || '');
+    setEditFunctionalManagerId((user as any).functional_manager_id || '');
     setEditDepartmentId(user.department_id || '');
     setEditDivisionId(deriveDivisionFromDept(user.department_id));
     setEditDesignation(user.designation || '');
@@ -954,6 +971,7 @@ export default function UserManagement() {
       role: editRole,
       fullName: editFullName,
       reportingManagerId: editManagerId === 'none' ? null : editManagerId || null,
+      functionalManagerId: editFunctionalManagerId === 'none' ? null : editFunctionalManagerId || null,
       departmentId: editDepartmentId === 'none' ? null : editDepartmentId || null,
       designation: editDesignation,
       pmsGrade: editPmsGrade,
@@ -988,6 +1006,7 @@ export default function UserManagement() {
       employment_status: newEmploymentStatus,
       location_id: newLocationId,
       reporting_manager_id: newManagerId,
+      functional_manager_id: newFunctionalManagerId,
       role: newRole,
       portal_access: newPortalAccess,
       is_dummy_employee: newIsDummy,
@@ -1060,6 +1079,7 @@ export default function UserManagement() {
     setNewLocationId('');
     setNewIsDummy(false);
     setNewMobileNumber('');
+    setNewFunctionalManagerId('');
     setNewIsActive(true);
     setNewWorkflowPeriod('');
     setNewWorkflowYear('');
@@ -1769,6 +1789,18 @@ export default function UserManagement() {
                       placeholder="Search by name or code..."
                     />
                   </div>
+                  <div className="space-y-1.5">
+                    <Label>Functional Manager</Label>
+                    <ManagerCombobox
+                      value={editFunctionalManagerId}
+                      onValueChange={setEditFunctionalManagerId}
+                      profiles={profiles?.filter(p => (p as any).is_active !== false) || []}
+                      excludeId={selectedUser?.id}
+                      placeholder="Search functional manager..."
+                      showNone={true}
+                      noneLabel="No Functional Manager"
+                    />
+                  </div>
                 </div>
               </div>
             </TabsContent>
@@ -2090,6 +2122,17 @@ export default function UserManagement() {
                       profiles={profiles?.filter(p => (p as any).is_active !== false) || []}
                       placeholder="Search by name or code..."
                       showNone={false}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Functional Manager<ReqMark k="functional_manager_id" /></Label>
+                    <ManagerCombobox
+                      value={newFunctionalManagerId}
+                      onValueChange={setNewFunctionalManagerId}
+                      profiles={profiles?.filter(p => (p as any).is_active !== false) || []}
+                      placeholder="Search functional manager..."
+                      showNone={true}
+                      noneLabel="No Functional Manager"
                     />
                   </div>
                 </div>

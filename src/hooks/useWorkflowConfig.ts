@@ -576,6 +576,7 @@ export function getStageLabel(stage: string): string {
     kra_set: 'KRA Set',
     self_review: 'Self Review',
     manager_check: 'Manager Review',
+    functional_manager_check: 'Functional Manager Review',
     skip_level_check: 'Skip-Level Review',
     hr_pms_review: 'HR PMS Review',
     audit: 'Audit Review',

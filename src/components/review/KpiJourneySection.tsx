@@ -81,7 +81,7 @@ function useEmployeeProfileForPdf(employeeId: string | undefined) {
 }
 
 type ViewLevel = 'employee' | 'manager' | 'auditor' | 'management' | 'skip_level' | 'hr_pms' | 'admin';
-type JourneyStage = 'self' | 'manager' | 'skip_level' | 'hr_pms' | 'auditor' | 'management';
+type JourneyStage = 'self' | 'manager' | 'functional_manager' | 'skip_level' | 'hr_pms' | 'auditor' | 'management';
 
 interface KpiJourneySectionProps {
   kpi: KPI;
@@ -107,6 +107,7 @@ function getStageStatus(
   const stageToStatus: Record<string, string> = {
     self: 'self_review',
     manager: 'manager_check',
+    functional_manager: 'functional_manager_check',
     skip_level: 'skip_level_check',
     hr_pms: 'hr_pms_review',
     auditor: 'audit',
@@ -509,6 +510,17 @@ export function KpiJourneySection({
       submission?.manager_remarks ?? null,
       buildEvidenceUrls(submission?.manager_evidence_urls, submission?.manager_evidence_url),
       submission?.manager_achieved_value ?? null
+    ),
+    functional_manager: buildStage(
+      Briefcase, 'purple', 'Functional Manager',
+      (submission as any)?.functional_manager_score ?? null,
+      (submission as any)?.functional_manager_rating ?? null,
+      (submission as any)?.functional_manager_remarks ?? null,
+      buildEvidenceUrls(
+        (submission as any)?.functional_manager_evidence_urls,
+        (submission as any)?.functional_manager_evidence_url,
+      ),
+      (submission as any)?.functional_manager_achieved_value ?? null,
     ),
     skip_level: buildStage(
       UserCheck, 'teal', 'Skip-Level',
