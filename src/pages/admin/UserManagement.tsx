@@ -187,6 +187,13 @@ export default function UserManagement() {
   const ReqMark = ({ k }: { k: EmployeeMasterFieldKey }) =>
     emfReqs[k] ? <RequiredMark /> : null;
 
+  // Admin-defined custom Employee Master fields (active + show_on_add_user).
+  const { data: customFieldDefs = [] } = useEmployeeMasterCustomFieldDefs({
+    activeOnly: true,
+    addUserOnly: true,
+  });
+  const [customValues, setCustomValues] = useState<CustomFieldValues>({});
+
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState<string>('all');
