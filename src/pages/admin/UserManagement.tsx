@@ -592,6 +592,23 @@ export default function UserManagement() {
         if (dummyErr) throw dummyErr;
       }
 
+      // Persist admin-defined custom field values (if any active fields exist).
+      if (response.data?.profile?.id && customFieldDefs.length > 0) {
+        const normalized = normalizeCustomFieldValues(customFieldDefs, customValues);
+        if (Object.keys(normalized).length > 0) {
+          try {
+            await saveEmployeeMasterCustomFieldValues(response.data.profile.id, normalized);
+          } catch (e: any) {
+            // Non-fatal: user is created. Surface a toast only.
+            toast({
+              title: 'User created, but custom fields failed to save',
+              description: e?.message,
+              variant: 'destructive',
+            });
+          }
+        }
+      }
+
       return response.data;
     },
     onSuccess: (data) => {
