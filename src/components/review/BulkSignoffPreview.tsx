@@ -48,6 +48,7 @@ interface Props {
 const SOURCE_LABEL: Record<CarriedSource, string> = {
   self: 'self',
   manager: 'manager',
+  functional_manager: 'fn-mgr',
   skip_level: 'skip-lvl',
   hr_pms: 'hr_pms',
   auditor: 'auditor',
