@@ -145,7 +145,6 @@ function AssignmentRunner({
   const { data: quiz } = useSafetyQuizForSop(assignment?.sop_id);
 
   const [phase, setPhase] = useState<Phase>('reader');
-  const [readSeconds, setReadSeconds] = useState(0);
   const [attempt, setAttempt] = useState<AttemptRuntime | null>(null);
   const [answers, setAnswers] = useState<Record<string, number>>({});
   const [result, setResult] = useState<{ score: number; passed: boolean; pass_threshold: number } | null>(
@@ -156,12 +155,20 @@ function AssignmentRunner({
   const submitMut = useSubmitTrainingAttempt();
   const { toast } = useToast();
 
-  // Reading timer
+  // Reading timer anchor — Date.now() snapshot when the reader phase
+  // began. The visible 1s counter lives inside <ReadingTimer> so the
+  // parent component (which is ~400 lines and renders the SOP body, the
+  // quiz, and the result view) is NOT re-rendered every second.
+  // Re-arming on phase change preserves the legacy behavior: the timer
+  // resets each time the user re-enters the reader.
+  const readerStartRef = useRef<number>(Date.now());
   useEffect(() => {
-    if (phase !== 'reader') return;
-    const t = window.setInterval(() => setReadSeconds((s) => s + 1), 1000);
-    return () => window.clearInterval(t);
+    if (phase === 'reader') {
+      readerStartRef.current = Date.now();
+    }
   }, [phase]);
+  const elapsedSeconds = () =>
+    Math.floor((Date.now() - readerStartRef.current) / 1000);
 
   if (!assignment || !sop) {
     return (
@@ -173,13 +180,13 @@ function AssignmentRunner({
   }
 
   const minRead = sop.min_read_seconds ?? 60;
-  const readPct = Math.min(100, Math.round((readSeconds / minRead) * 100));
-  const canStart =
-    readSeconds >= minRead &&
-    !!quiz &&
-    canStartAttempt(assignment.status, assignment.attempts_count, quiz.max_attempts);
+  // `canStart` is evaluated synchronously from the ref-backed elapsed
+  // value when the user clicks Start Quiz; ReadingTimer toggles its own
+  // local "ready" state every second so the button enable/disable still
+  // updates visually without re-rendering the parent.
 
   async function handleStartQuiz() {
+    if (elapsedSeconds() < minRead) return;
     try {
       const rt = await startMut.mutateAsync(assignmentId);
       setAttempt(rt);
@@ -207,7 +214,7 @@ function AssignmentRunner({
       const r = await submitMut.mutateAsync({
         attemptId: attempt.attempt_id,
         answers,
-        readingSeconds: readSeconds,
+        readingSeconds: elapsedSeconds(),
       });
       setResult(r);
       setPhase('result');
@@ -252,12 +259,13 @@ function AssignmentRunner({
         <ReaderView
           bodyMd={sop.body_md}
           minRead={minRead}
-          readSeconds={readSeconds}
-          readPct={readPct}
-          canStart={canStart}
+          hasQuiz={!!quiz}
+          startGate={
+            !!quiz &&
+            canStartAttempt(assignment.status, assignment.attempts_count, quiz.max_attempts)
+          }
           starting={startMut.isPending}
           onStart={handleStartQuiz}
-          hasQuiz={!!quiz}
         />
       )}
 
