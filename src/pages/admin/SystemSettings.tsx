@@ -520,6 +520,8 @@ export default function SystemSettings() {
             </Card>
 
             <OrgKpiGovernanceSettings />
+
+            <DummyEmployeeVisibilityCard />
           </>
         );
       case 'scoring':
