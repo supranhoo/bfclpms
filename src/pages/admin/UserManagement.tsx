@@ -555,10 +555,22 @@ export default function UserManagement() {
         if (roleError) throw roleError;
       }
 
+      // v2.67.x — Persist Dummy/System Employee flag post-create. The
+      // `create-employee` edge function does not accept this field yet, so
+      // we write it directly to `profiles` after the row exists.
+      if (newIsDummy && response.data?.profile?.id) {
+        const { error: dummyErr } = await supabase
+          .from('profiles')
+          .update({ is_dummy_employee: true } as any)
+          .eq('id', response.data.profile.id);
+        if (dummyErr) throw dummyErr;
+      }
+
       return response.data;
     },
     onSuccess: (data) => {
       invalidateProfileCaches(queryClient);
+      queryClient.invalidateQueries({ queryKey: ['dummy-employee-ids'] });
       toast({ title: 'User created successfully' });
       setCreateDialogOpen(false);
       
