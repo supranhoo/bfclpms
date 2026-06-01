@@ -31,7 +31,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Database, Download, RotateCcw, HardDrive, Clock, AlertTriangle, Upload, CalendarClock, X } from 'lucide-react';
+import { Database, Download, RotateCcw, HardDrive, Clock, AlertTriangle, Upload, CalendarClock, X, XCircle, RefreshCcw } from 'lucide-react';
 import { format } from 'date-fns';
 import { SafetyDrillCard } from '@/components/admin/SafetyDrillCard';
 import {
@@ -43,6 +43,8 @@ import {
   useUploadAndRestore,
   useBackupSchedule,
   useUpdateBackupSchedule,
+  useCancelStuckBackup,
+  useRetryFinalize,
   type BackupSchedule,
 } from '@/hooks/useBackups';
 
@@ -62,6 +64,8 @@ export function BackupRestoreTab() {
   const uploadRestore = useUploadAndRestore();
   const { data: savedSchedule, isLoading: scheduleLoading } = useBackupSchedule();
   const updateSchedule = useUpdateBackupSchedule();
+  const cancelStuck = useCancelStuckBackup();
+  const retryFinalize = useRetryFinalize();
 
   const [restoreId, setRestoreId] = useState<string | null>(null);
   const [confirmRestore, setConfirmRestore] = useState(false);
@@ -427,6 +431,34 @@ export function BackupRestoreTab() {
                             {backup.error_message}
                           </span>
                         )}
+                        {backup.status === 'running' &&
+                          new Date(backup.created_at).getTime() < Date.now() - 30 * 60 * 1000 && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                if (confirm('Mark this stuck backup as failed?')) {
+                                  cancelStuck.mutate(backup.id);
+                                }
+                              }}
+                              disabled={cancelStuck.isPending}
+                              title="Cancel stuck backup"
+                            >
+                              <XCircle className="h-4 w-4 text-destructive" />
+                            </Button>
+                          )}
+                        {backup.status === 'completed_with_errors' &&
+                          backup.error_message?.startsWith('Finalize deferred') && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => retryFinalize.mutate(backup.id)}
+                              disabled={retryFinalize.isPending}
+                              title="Retry finalize step"
+                            >
+                              <RefreshCcw className="h-4 w-4 text-amber-600" />
+                            </Button>
+                          )}
                       </div>
                     </TableCell>
                   </TableRow>
