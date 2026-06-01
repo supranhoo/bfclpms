@@ -195,6 +195,17 @@ export default function UserManagement() {
   });
   const [customValues, setCustomValues] = useState<CustomFieldValues>({});
 
+  // Edit User custom fields — separate def query (active, scoped to
+  // show_on_edit_user) plus per-employee values fetched on demand.
+  const { data: editCustomFieldDefsAll = [] } = useEmployeeMasterCustomFieldDefs({
+    activeOnly: true,
+  });
+  const editCustomFieldDefs = useMemo(
+    () => editCustomFieldDefsAll.filter((d) => d.show_on_edit_user),
+    [editCustomFieldDefsAll],
+  );
+  const [editCustomValues, setEditCustomValues] = useState<CustomFieldValues>({});
+
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState<string>('all');
