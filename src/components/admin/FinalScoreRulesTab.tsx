@@ -659,3 +659,120 @@ const SINGLE_STAGE_MAP: Partial<Record<FinalScoreRuleType, WorkflowStageKey>> = 
   hr_calibration_final: 'hr_calibration',
   mgmt_calibration_final: 'mgmt_calibration',
 };
+
+// =========================================================================
+// Applied-To picker — dynamic by scope
+// =========================================================================
+function AppliedToPicker({
+  scopeType,
+  isEdit,
+  scopeValue,
+  setScopeValue,
+  scopeValues,
+  setScopeValues,
+  departments,
+  pmsGrades,
+  employees,
+}: {
+  scopeType: FinalScoreScopeType;
+  isEdit: boolean;
+  scopeValue: string;
+  setScopeValue: (v: string) => void;
+  scopeValues: string[];
+  setScopeValues: (v: string[]) => void;
+  departments: Array<{ name: string; business_units?: { name?: string | null } | null }>;
+  pmsGrades: Array<{ name: string; code?: string | null }>;
+  employees: EmployeeOption[];
+}) {
+  // -------------------- EMPLOYEE --------------------
+  if (scopeType === 'employee') {
+    if (isEdit) {
+      return (
+        <EmployeeCombobox
+          employees={employees}
+          value={scopeValue}
+          onChange={(id) => setScopeValue(id)}
+          placeholder="Search by name, code, or department…"
+        />
+      );
+    }
+    return (
+      <EmployeeCombobox
+        multiple
+        employees={employees}
+        value={scopeValues}
+        onChange={setScopeValues}
+        placeholder="Search by name, code, or department…"
+      />
+    );
+  }
+
+  // -------------------- DEPARTMENT --------------------
+  if (scopeType === 'department') {
+    const options = departments.map(d => d.name);
+    const subtitleMap = new Map(
+      departments.map(d => [d.name, d.business_units?.name || ''] as const),
+    );
+    if (isEdit) {
+      return (
+        <MultiSelectFilter
+          options={options}
+          value={scopeValue ? [scopeValue] : []}
+          onChange={(v) => setScopeValue(v[v.length - 1] || '')}
+          placeholder="Select department…"
+          searchPlaceholder="Search department…"
+        />
+      );
+    }
+    return (
+      <div className="space-y-1">
+        <MultiSelectFilter
+          options={options}
+          value={scopeValues}
+          onChange={setScopeValues}
+          placeholder="Select departments…"
+          searchPlaceholder="Search department…"
+          className="w-full"
+        />
+        {scopeValues.length > 0 && (
+          <p className="text-xs text-muted-foreground">
+            {scopeValues
+              .map(n => {
+                const bu = subtitleMap.get(n);
+                return bu ? `${n} (${bu})` : n;
+              })
+              .join(' · ')}
+          </p>
+        )}
+      </div>
+    );
+  }
+
+  // -------------------- PMS GRADE --------------------
+  if (scopeType === 'pms_grade') {
+    const options = pmsGrades.map(g => g.name);
+    if (isEdit) {
+      return (
+        <MultiSelectFilter
+          options={options}
+          value={scopeValue ? [scopeValue] : []}
+          onChange={(v) => setScopeValue(v[v.length - 1] || '')}
+          placeholder="Select PMS grade…"
+          searchPlaceholder="Search grade…"
+        />
+      );
+    }
+    return (
+      <MultiSelectFilter
+        options={options}
+        value={scopeValues}
+        onChange={setScopeValues}
+        placeholder="Select PMS grades…"
+        searchPlaceholder="Search grade…"
+        className="w-full"
+      />
+    );
+  }
+
+  return null;
+}
