@@ -246,6 +246,19 @@ export default function UserManagement() {
   const [editConfirmationDate, setEditConfirmationDate] = useState<string>(''); // yyyy-MM-dd or ''
   const [editLocationId, setEditLocationId] = useState<string>('');
   const [editIsDummy, setEditIsDummy] = useState<boolean>(false);
+  // Custom-field values for Edit User; hydrated from the values table when
+  // the dialog opens, and persisted alongside `handleSaveUser`.
+  const { data: editCustomValuesFetched } = useEmployeeMasterCustomFieldValues(
+    editDialogOpen ? selectedUser?.id : null,
+  );
+  useEffect(() => {
+    if (editDialogOpen) {
+      setEditCustomValues(editCustomValuesFetched || {});
+    } else {
+      setEditCustomValues({});
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editDialogOpen, editCustomValuesFetched, selectedUser?.id]);
   // Create Dialog
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [newFullName, setNewFullName] = useState('');
