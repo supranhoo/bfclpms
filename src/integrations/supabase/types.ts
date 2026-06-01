@@ -9152,6 +9152,80 @@ export type Database = {
           },
         ]
       }
+      workflow_config_migration_log: {
+        Row: {
+          config_type: string
+          config_value: string
+          created_period_config_id: string | null
+          id: string
+          notes: string | null
+          performed_at: string
+          performed_by: string | null
+          resolved_template_id: string
+          review_period: string
+          review_year: number
+          run_id: string
+          source_config_id: string
+        }
+        Insert: {
+          config_type: string
+          config_value: string
+          created_period_config_id?: string | null
+          id?: string
+          notes?: string | null
+          performed_at?: string
+          performed_by?: string | null
+          resolved_template_id: string
+          review_period: string
+          review_year: number
+          run_id: string
+          source_config_id: string
+        }
+        Update: {
+          config_type?: string
+          config_value?: string
+          created_period_config_id?: string | null
+          id?: string
+          notes?: string | null
+          performed_at?: string
+          performed_by?: string | null
+          resolved_template_id?: string
+          review_period?: string
+          review_year?: number
+          run_id?: string
+          source_config_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "workflow_config_migration_log_created_period_config_id_fkey"
+            columns: ["created_period_config_id"]
+            isOneToOne: false
+            referencedRelation: "workflow_config"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "workflow_config_migration_log_performed_by_fkey"
+            columns: ["performed_by"]
+            isOneToOne: false
+            referencedRelation: "eligible_login_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "workflow_config_migration_log_performed_by_fkey"
+            columns: ["performed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "workflow_config_migration_log_source_config_id_fkey"
+            columns: ["source_config_id"]
+            isOneToOne: false
+            referencedRelation: "workflow_config"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       workflow_settings: {
         Row: {
           category: string
@@ -9539,6 +9613,28 @@ export type Database = {
       aggregate_sub_period_scores: {
         Args: { p_kpi_id: string; p_month: string; p_year: number }
         Returns: number
+      }
+      analyze_workflow_global_default_migration: {
+        Args: never
+        Returns: {
+          bucket: string
+          config_type: string
+          config_value: string
+          existing_period_template_id: string
+          global_template_id: string
+          reason: string
+          review_period: string
+          review_year: number
+          source_config_id: string
+        }[]
+      }
+      apply_workflow_global_default_migration: {
+        Args: never
+        Returns: {
+          rows_inserted: number
+          rows_skipped: number
+          run_id: string
+        }[]
       }
       assign_sop_to_role: {
         Args: {
