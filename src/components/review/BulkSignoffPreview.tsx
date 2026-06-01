@@ -308,6 +308,8 @@ function StageCell({
 function CellTable({
   cells, ruleByKpiId, kpiIdBySubmissionId, inputs, onCellInputChange, isOverride = false,
   targetStageLabel,
+  hideKraKpiCol = false,
+  allowNa = false,
 }: CellTableProps) {
   const editable = !!onCellInputChange;
 
@@ -321,6 +323,20 @@ function CellTable({
     if (!editable) return false;
     // Rows with no resolvable score always need input; admin override unlocks all.
     return c.source === 'none' || isOverride;
+  };
+
+  const isRowNa = (c: CellPreview): boolean =>
+    inputs?.get(c.submission_id)?.isNa === true;
+
+  const toggleNa = (sid: string, checked: boolean) => {
+    const prev = inputs?.get(sid) ?? {};
+    const next: CellInputs = {
+      ...prev,
+      isNa: checked || undefined,
+      // Marking N/A clears any pending Achieved override; un-marking leaves it.
+      achievedOverride: checked ? null : prev.achievedOverride,
+    };
+    onCellInputChange?.(sid, next);
   };
 
   const onAch = (sid: string, raw: string) => {
