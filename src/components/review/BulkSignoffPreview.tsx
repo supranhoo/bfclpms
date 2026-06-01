@@ -117,6 +117,20 @@ export function BulkSignoffPreview({
 
   const { totals, cells, perEmployee } = preview;
 
+  // Hoist KRA · KPI banner when every selected cell shares the same KPI
+  // (common case: one bulk action targets one KPI across many employees).
+  const firstKra = cells[0]?.kra_name ?? null;
+  const firstKpi = cells[0]?.kpi_name ?? null;
+  const sharedKra =
+    cells.length > 1 && firstKra && cells.every(c => c.kra_name === firstKra)
+      ? firstKra
+      : null;
+  const sharedKpi =
+    cells.length > 1 && firstKpi && cells.every(c => c.kpi_name === firstKpi)
+      ? firstKpi
+      : null;
+  const hoistKpi = !!(sharedKra && sharedKpi);
+
   return (
     <div className="space-y-3" data-testid="signoff-preview">
       {/* ── Strip ─────────────────────────────────────────────────────── */}
@@ -154,6 +168,19 @@ export function BulkSignoffPreview({
         )}
       </div>
 
+      {/* ── Shared KRA · KPI banner (only when every row matches) ──── */}
+      {hoistKpi && (
+        <div
+          className="rounded-md border border-border bg-muted/30 px-3 py-2"
+          data-testid="signoff-preview-shared-kpi"
+        >
+          <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
+            {sharedKra}
+          </div>
+          <div className="text-sm font-medium leading-snug">{sharedKpi}</div>
+        </div>
+      )}
+
       {/* ── Per-cell collapsible table ───────────────────────────────── */}
       <div className="rounded-md border border-border">
         <button
@@ -178,6 +205,8 @@ export function BulkSignoffPreview({
             }
             isOverride={isOverride}
             targetStageLabel={mode === 'approve' ? 'Final' : stageLabel}
+            hideKraKpiCol={hoistKpi}
+            allowNa={mode !== 'approve'}
           />
         )}
       </div>
