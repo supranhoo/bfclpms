@@ -4,6 +4,14 @@
 > **Status:** Living document. Append new ships under the **current week's row**, in the same step that you update `DOCUMENTATION.md` Version History.
 > **Sources:** `DOCUMENTATION.md` Version History, `supabase/migrations/`, `mem/*`.
 
+
+## 2026-06-01 — Functional Manager (Phase 1 foundation)
+- DB: `profiles.functional_manager_id` (nullable, ON DELETE SET NULL) + `public.is_functional_manager_of(uuid)` SECURITY DEFINER helper.
+- SSOT: `workflowResolver`, `workflowEngine`, `bottleneckResolver`, `reviewConstants`, `inboxUtils`, `multimonthCycle`, `useWorkflowConfig.getStageLabel` extended with new `functional_manager` chain stage / `functional_manager_check` workflow stage.
+- UI: Add User & Edit User now expose **Functional Manager** combobox (parity with Reporting Manager). Workflow Config template builder lists `Functional Manager Review` as a selectable optional stage. ReportingStructureCard renders FM when set. KpiJourneySection renders FM stage card.
+- Master Fields registry: 20 fields. Optional by default; can be marked mandatory via Employee Master Field Requirements.
+- Follow-up phases (import/export columns, bulk-review wiring, FM RLS on submissions, reports filters, `functional_manager_score` column) tracked in ADR-071.
+
 ---
 ## 🌱 February 2026
 
