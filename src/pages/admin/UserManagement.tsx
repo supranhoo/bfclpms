@@ -675,6 +675,44 @@ export default function UserManagement() {
         if (mobErr) throw mobErr;
       }
 
+      // Persist Account Status if admin deactivated at create-time (parity
+      // with Edit User → Access & Login → Account Status switch).
+      if (newIsActive === false && response.data?.profile?.id) {
+        const { error: actErr } = await supabase
+          .from('profiles')
+          .update({ is_active: false } as any)
+          .eq('id', response.data.profile.id);
+        if (actErr) throw actErr;
+      }
+
+      // Optional period-specific workflow mapping (parity with Edit User
+      // → Workflow mapping card). Non-fatal: profile creation succeeds even
+      // if this insert fails — surface a toast and let admin retry from
+      // Edit User.
+      if (
+        newWorkflowTemplateId &&
+        newWorkflowPeriod &&
+        newWorkflowYear &&
+        response.data?.profile?.id
+      ) {
+        try {
+          await supabase.from('workflow_config').insert({
+            config_type: 'employee',
+            config_value: response.data.profile.id,
+            workflow_template_id: newWorkflowTemplateId,
+            review_period: newWorkflowPeriod,
+            review_year: newWorkflowYear,
+            is_ongoing: false,
+          } as any);
+        } catch (e: any) {
+          toast({
+            title: 'User created, but workflow mapping failed',
+            description: `${e?.message ?? 'Unknown error'} — set it from Edit User → Access & Login.`,
+            variant: 'destructive',
+          });
+        }
+      }
+
       // Persist admin-defined custom field values (if any active fields exist).
       if (response.data?.profile?.id && customFieldDefs.length > 0) {
         const normalized = normalizeCustomFieldValues(customFieldDefs, customValues);
