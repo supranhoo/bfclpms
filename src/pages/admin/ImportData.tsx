@@ -1393,6 +1393,16 @@ export default function ImportData() {
           (row.managerName && p.full_name?.toLowerCase() === row.managerName?.toLowerCase())
         )?.id || null;
 
+        const functionalManagerId = (row.functionalManagerEmployeeId || row.functionalManagerName)
+          ? (profiles?.find(p =>
+              (row.functionalManagerEmployeeId && p.employee_code === row.functionalManagerEmployeeId) ||
+              (row.functionalManagerName && p.full_name?.toLowerCase() === row.functionalManagerName.toLowerCase())
+            )?.id || null)
+          : null;
+        if ((row.functionalManagerEmployeeId || row.functionalManagerName) && !functionalManagerId) {
+          throw new Error(`Functional Manager '${row.functionalManagerEmployeeId || row.functionalManagerName}' not found`);
+        }
+
         // Resolve company by code or name (case-insensitive)
         const resolvedCompanyId = row.companyCode
           ? (companiesList || []).find((c: any) =>
@@ -1413,6 +1423,7 @@ export default function ImportData() {
             ...(row.employeeCategory ? { employee_category: row.employeeCategory } : {}),
             ...(row.employmentStatus ? { employment_status: row.employmentStatus } : {}),
             reporting_manager_id: managerId || existingEmployee.reporting_manager_id,
+            ...(functionalManagerId !== null ? { functional_manager_id: functionalManagerId } : {}),
             ...(resolvedCompanyId ? { company_id: resolvedCompanyId } : {}),
             ...(row.groupDoj && row.groupDoj !== 'INVALID' ? { group_doj: row.groupDoj } : {}),
             ...(row.doj && row.doj !== 'INVALID' ? { doj: row.doj } : {}),
