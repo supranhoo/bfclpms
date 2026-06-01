@@ -681,6 +681,19 @@ export default function EmployeePerformanceSummary() {
                     ))}
                   </SelectContent>
                 </Select>
+                <Select value={selectedFm} onValueChange={setSelectedFm}>
+                  <SelectTrigger className="w-[220px]">
+                    <SelectValue placeholder="Functional Manager" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Functional Managers</SelectItem>
+                    {functionalManagers.map(fm => (
+                      <SelectItem key={fm.id} value={fm.id}>
+                        {fm.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
                 <FrequencyLockToggle
                   checked={showFreqLocked}
                   onCheckedChange={v => { setShowFreqLocked(v); setCurrentPage(1); }}
@@ -750,6 +763,7 @@ export default function EmployeePerformanceSummary() {
                           <TableHead>Department</TableHead>
                           <TableHead>Designation</TableHead>
                           <TableHead>Reporting Manager</TableHead>
+                          <TableHead>Functional Manager</TableHead>
                           <TableHead>Review Status</TableHead>
                           <TableHead className="text-right">Total Score</TableHead>
                           <TableHead className="text-right">Out of Score</TableHead>
@@ -760,7 +774,7 @@ export default function EmployeePerformanceSummary() {
                       <TableBody>
                         {paginatedData.length === 0 ? (
                           <TableRow>
-                            <TableCell colSpan={12} className="text-center py-8 text-muted-foreground">
+                            <TableCell colSpan={13} className="text-center py-8 text-muted-foreground">
                               No data found for the selected filters
                             </TableCell>
                           </TableRow>
@@ -782,6 +796,7 @@ export default function EmployeePerformanceSummary() {
                                 <TableCell>{row.department}</TableCell>
                                 <TableCell>{row.designation}</TableCell>
                                 <TableCell>{row.reportingManager}</TableCell>
+                                <TableCell className="text-muted-foreground">{row.functionalManager}</TableCell>
                                 <TableCell>
                                   <div className="flex flex-wrap gap-1">
                                     {(() => {
