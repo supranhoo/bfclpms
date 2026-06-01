@@ -441,22 +441,30 @@ function RuleBuilderSheet({
 
             {scopeType !== 'template' && (
               <div className="space-y-2 col-span-2">
-                <Label>Applied To</Label>
-                {scopeType === 'department' ? (
-                  <Select value={scopeValue} onValueChange={setScopeValue}>
-                    <SelectTrigger><SelectValue placeholder="Select department…" /></SelectTrigger>
-                    <SelectContent>
-                      {departments.map(d => (
-                        <SelectItem key={d.name} value={d.name}>{d.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                ) : (
-                  <Input
-                    value={scopeValue}
-                    onChange={(e) => setScopeValue(e.target.value)}
-                    placeholder={scopeType === 'employee' ? 'Employee UUID or code' : 'PMS grade name'}
-                  />
+                <Label>
+                  Applied To <span className="text-destructive">*</span>
+                </Label>
+                <AppliedToPicker
+                  scopeType={scopeType}
+                  isEdit={isEdit}
+                  scopeValue={scopeValue}
+                  setScopeValue={setScopeValue}
+                  scopeValues={scopeValues}
+                  setScopeValues={setScopeValues}
+                  departments={departments}
+                  pmsGrades={(pmsGrades || []) as Array<{ name: string; code?: string | null }>}
+                  employees={employeeRoster || []}
+                />
+                {!scopeValueValid && (
+                  <p className="text-xs text-destructive">
+                    Please select at least one{' '}
+                    {scopeType === 'employee'
+                      ? 'employee'
+                      : scopeType === 'department'
+                        ? 'department'
+                        : 'PMS grade'}
+                    .
+                  </p>
                 )}
               </div>
             )}
