@@ -272,3 +272,12 @@ All criteria in the request are covered: configurable per scope with precedence,
 - Bulk retroactive recalculation of historical approvals (separate Admin tool, future).
 - New rule types beyond the listed enum.
 - Per-KPI-category rules (only per workflow scope as requested).
+
+---
+
+## 10. Implementation Status
+
+- **Phase 1 (DB):** ✅ `workflow_final_score_rules` table, audit columns on `review_submissions`, `resolve_final_score_rule` + `fn_resolve_final_score`.
+- **Phase 2 (UI):** ✅ Final Score Rules tab in Workflow Config with Rule Builder sheet, weight validator, live preview.
+- **Phase 3 (Client write path):** ✅ `src/lib/applyFinalScoreRule.ts` bridges TS resolver with the SQL rule lookup. `useAdminDataEntry.ts` now resolves `final_score`, `final_rating`, `final_score_rule_type/snapshot/explanation/calculated_at` through the configured rule. Approvals blocked by `missing_score_policy='block'` surface an error and abort.
+- **Phase 4 (Bulk RPCs — pending):** `bulk_write_stage_scores`, `bulk_finalize_stage`, repair RPCs to call `fn_resolve_final_score` server-side for parity with the client path. Until then, bulk approvals continue using the legacy COALESCE cascade (equivalent to `terminal_stage` rule), so behavior is unchanged when no custom rule exists.
