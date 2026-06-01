@@ -334,8 +334,8 @@ export default function WorkflowConfig() {
           </CardTitle>
           <CardDescription>
             {periodMode === 'specific' 
-              ? `Resolution: Period-specific (Employee > Dept > Grade) → Global (Employee > Dept > Grade) → Default`
-              : `Workflows are resolved in this order: Employee > Department > PMS Grade > Default`
+              ? `Workflows are resolved for the selected review period in this order: Employee > Department > PMS Grade > Period Default`
+              : `Legacy fallback view (read-only). New mappings must be Period-Specific.`
             }
           </CardDescription>
         </CardHeader>
