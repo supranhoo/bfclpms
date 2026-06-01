@@ -156,7 +156,7 @@ export default function WorkflowConfig() {
       return await fetchAllPaged<any>((from, to) =>
         supabase
           .from('profiles')
-          .select('id, full_name, email, employee_code, pms_grade, department_id, reporting_manager_id')
+          .select('id, full_name, email, employee_code, pms_grade, department_id, reporting_manager_id, functional_manager_id')
           .order('full_name')
           .range(from, to)
       );
@@ -192,6 +192,19 @@ export default function WorkflowConfig() {
   const pagedProfiles = useMemo(
     () => filteredProfiles.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE),
     [filteredProfiles, safePage]
+  );
+
+  // FM mapping coverage — surfaced as a banner inside the Employee tab so
+  // admins are warned when templates include the Functional Manager stage
+  // but employees lack a functional_manager_id (the stage would resolve to
+  // N/A — `no_functional_manager_on_profile`).
+  const fmTemplatesCount = useMemo(
+    () => (templates || []).filter(t => t.stages?.includes('functional_manager_check')).length,
+    [templates],
+  );
+  const employeesMissingFm = useMemo(
+    () => (profiles || []).filter(p => !p.functional_manager_id).length,
+    [profiles],
   );
   const startIdx = filteredProfiles.length === 0 ? 0 : (safePage - 1) * PAGE_SIZE + 1;
   const endIdx = Math.min(safePage * PAGE_SIZE, filteredProfiles.length);
@@ -661,7 +674,21 @@ export default function WorkflowConfig() {
                   </Label>
                 </div>
               </div>
-              
+
+              {fmTemplatesCount > 0 && employeesMissingFm > 0 && (
+                <Alert variant="default" className="mb-4 border-amber-500/40 bg-amber-500/5">
+                  <Info className="h-4 w-4 text-amber-600" />
+                  <AlertDescription className="text-sm">
+                    <span className="font-medium">{employeesMissingFm}</span> employee
+                    {employeesMissingFm === 1 ? '' : 's'} have no Functional Manager assigned.{' '}
+                    {fmTemplatesCount} active template{fmTemplatesCount === 1 ? '' : 's'} include
+                    the Functional Manager review stage — that stage will resolve to
+                    <span className="font-mono text-xs mx-1">N/A</span>
+                    for these employees. Assign a Functional Manager from User Management to enable the stage.
+                  </AlertDescription>
+                </Alert>
+              )}
+
               <Table>
                 <TableHeader>
                   <TableRow>
