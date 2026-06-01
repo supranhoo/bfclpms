@@ -658,6 +658,16 @@ export default function UserManagement() {
         if (dummyErr) throw dummyErr;
       }
 
+      // Persist Mobile Number post-create (parity with Edit User). The
+      // `create-employee` edge function does not accept this field yet.
+      if (newMobileNumber && response.data?.profile?.id) {
+        const { error: mobErr } = await supabase
+          .from('profiles')
+          .update({ mobile_number: newMobileNumber } as any)
+          .eq('id', response.data.profile.id);
+        if (mobErr) throw mobErr;
+      }
+
       // Persist admin-defined custom field values (if any active fields exist).
       if (response.data?.profile?.id && customFieldDefs.length > 0) {
         const normalized = normalizeCustomFieldValues(customFieldDefs, customValues);
