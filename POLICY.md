@@ -3418,3 +3418,32 @@ Governance source: `docs/safety-integration-governance.md` §Phase 5.
 - **Import behaviour.** Import Employees uses **strict mode**: unknown master values surface as per-row errors and the row is skipped. The importer NEVER auto-creates master rows.
 - **Export round-trip.** Export Employees emits `employeeCategory` / `employmentStatus` header columns whose casing matches importer aliases, so an exported file can be re-imported without diff on these fields.
 - **Rollback.** Drop `profiles.employee_category`, `profiles.employment_status`, `public.employee_categories`, `public.employment_statuses` — no dependent data.
+
+## §129 — Employee Master Custom Fields (v2.67.1, 2026-06-01)
+
+**Intent.** Allow admins to extend the Add New User / Edit User form with organisation-specific data fields without code changes, while preserving the built-in fixed-field schema and existing validation.
+
+**Storage.**
+- `public.employee_master_custom_fields` — one row per definition. Admin-only writes (`has_role(auth.uid(),'admin')`); authenticated read.
+- `public.employee_master_custom_field_values` — one row per employee with a single JSONB `values` column keyed by `field_key`. Admin-only writes; authenticated read. `unique(employee_id)` + `ON DELETE CASCADE` to `profiles.id`.
+
+**Field key rules.**
+- Regex `^[a-z][a-z0-9_]{1,40}$`; auto-derived from label via `sanitizeFieldKey`.
+- Reserved keys (every built-in `EmployeeMasterFieldKey`) are rejected at schema-validation time.
+- **`field_key` is immutable in practice.** Renaming a key would orphan stored JSONB values; admins must deactivate and recreate instead.
+
+**Lifecycle.**
+- **Deactivate by default.** The action menu offers Deactivate (preferred) and Delete. Deactivating hides the field from Add/Edit User but preserves historical JSONB values.
+- **Hard delete** requires the `ConfirmDestructiveDialog` typed-confirm step. Hard delete drops the definition row only — stored value keys remain in JSONB and are silently ignored by readers (orphan-tolerant).
+
+**Validation.**
+- Mandatory fields blocked on blank input.
+- `email` enforced via `EMAIL_RE`, `number` via `Number.isFinite`, `dropdown` constrained to defined option values, `yes_no` coerced to boolean.
+- Dropdown definitions require ≥ 1 option and unique option values.
+
+**Surfaces.**
+- Add New User: only `is_active && show_on_add_user` defs render; mandatory indicator is the standard red lowercase `l` (`RequiredMark`).
+- Edit User: only `is_active && show_on_edit_user` defs render; values hydrated via `useEmployeeMasterCustomFieldValues(employeeId)` when the dialog opens; saved before profile UPDATE so a save failure aborts the whole change.
+- `show_in_employee_master` is stored but not yet rendered as a grid column (follow-up).
+
+**Rollback.** Deactivate all definitions to hide the surface; drop the two tables to remove the feature entirely — `profiles` and built-in flows are unaffected.
