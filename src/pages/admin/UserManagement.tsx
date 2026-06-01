@@ -1899,6 +1899,27 @@ export default function UserManagement() {
                   </div>
                 </div>
               </div>
+
+              {customFieldDefs.length > 0 && (
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Package className="h-4 w-4 text-muted-foreground" />
+                    <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Additional Information</h3>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    {customFieldDefs.map((def) => (
+                      <CustomFieldRenderer
+                        key={def.id}
+                        def={def}
+                        value={customValues[def.field_key]}
+                        onChange={(v) =>
+                          setCustomValues((prev) => ({ ...prev, [def.field_key]: v }))
+                        }
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
             </TabsContent>
 
             <TabsContent value="access" className="mt-0 space-y-4">
