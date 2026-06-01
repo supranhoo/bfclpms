@@ -3476,3 +3476,17 @@ Governance source: `docs/safety-integration-governance.md` §Phase 5.
 - `show_in_employee_master` is stored but not yet rendered as a grid column (follow-up).
 
 **Rollback.** Deactivate all definitions to hide the surface; drop the two tables to remove the feature entirely — `profiles` and built-in flows are unaffected.
+
+## §Phase19-AddUserAccessParity — Add User Access & Login Parity (2026-06-01)
+
+**Rule.** The Add New User dialog's `Access & Login` tab MUST mirror Edit User's `Access & Login` tab in section label and sequence:
+
+1. **Access & Status** — Role, Account Status switch (defaults ON at create-time), Login credentials switch (Add-only, controls auth provisioning), Dummy/system employee switch.
+2. **Module Access & Login** — four cards in fixed order: Grant module roles, Send / reset password, View access history, Workflow mapping.
+
+**Create-time behaviour.**
+- The first three module cards are visually disabled with an "Available after the user is created" hint. Real entry points are reached from the user row after creation.
+- The **Workflow mapping** card is editable and optional. If filled, all three fields (Review Period, Year, Workflow Template) are mandatory; partial fill is rejected with a toast.
+- `is_active=false` and the `workflow_config` row are persisted post-create in the same mutation. Workflow insert failure is **non-fatal** — the profile is kept, a destructive toast surfaces, and the admin can re-attempt from Edit User.
+
+**Rollback.** Revert `src/pages/admin/UserManagement.tsx` Access tab JSX; the Edit User dialog and `workflow_config` schema are unaffected. Regression: `src/test/userManagement.addUserAccess.test.ts`.
