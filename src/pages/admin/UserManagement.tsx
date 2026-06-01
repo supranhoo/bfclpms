@@ -2121,7 +2121,7 @@ export default function UserManagement() {
               <div className="space-y-3">
                 <div className="flex items-center gap-2 mb-2">
                   <Shield className="h-4 w-4 text-muted-foreground" />
-                  <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Access</h3>
+                  <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Access & Status</h3>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <div className="space-y-1.5">
@@ -2135,16 +2135,30 @@ export default function UserManagement() {
                   </div>
                   <div className="flex items-center justify-between rounded-lg border p-3 h-fit">
                     <div className="space-y-0.5">
-                      <Label>Portal Access<ReqMark k="portal_access" /></Label>
+                      <Label>Account Status</Label>
                       <p className="text-xs text-muted-foreground">
-                        {newPortalAccess ? 'User can log in to the portal' : 'Data-only user — no login access'}
+                        {newIsActive ? 'User can log in and access the system' : 'User is blocked from logging in'}
                       </p>
                     </div>
                     <Switch
-                      checked={newPortalAccess}
-                      onCheckedChange={setNewPortalAccess}
+                      checked={newIsActive}
+                      onCheckedChange={setNewIsActive}
                     />
                   </div>
+                </div>
+                <div className="flex items-center justify-between rounded-lg border p-3">
+                  <div className="space-y-0.5">
+                    <Label>Login credentials<ReqMark k="portal_access" /></Label>
+                    <p className="text-xs text-muted-foreground">
+                      {newPortalAccess
+                        ? 'User will be provisioned with portal login (email required).'
+                        : 'Data-only user — no login account will be created.'}
+                    </p>
+                  </div>
+                  <Switch
+                    checked={newPortalAccess}
+                    onCheckedChange={setNewPortalAccess}
+                  />
                 </div>
                 <div className="flex items-center justify-between rounded-lg border p-3">
                   <div className="space-y-0.5">
@@ -2156,9 +2170,89 @@ export default function UserManagement() {
                   </div>
                   <Switch checked={newIsDummy} onCheckedChange={setNewIsDummy} />
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  Tip: after creating the user, open <span className="font-medium">Manage Access</span> from the user row to grant additional module roles (PMS, Safety, HR) and send the welcome password.
-                </p>
+              </div>
+
+              {/* Section: Module Access & Login — mirrors Edit User in label
+                  and sequence. The first three actions are post-create only;
+                  Workflow mapping is editable at create-time and persisted in
+                  the same mutation. */}
+              <div className="space-y-4">
+                <div className="flex items-center gap-2">
+                  <KeyRound className="h-4 w-4 text-muted-foreground" />
+                  <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Module Access & Login</h3>
+                </div>
+                <Separator />
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+                  <div className="rounded-lg border p-4 opacity-60 cursor-not-allowed" aria-disabled>
+                    <Shield className="h-5 w-5 text-primary mb-2" />
+                    <p className="text-sm font-semibold">Grant module roles</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">Assign PMS, Safety, HR roles. Multiple allowed.</p>
+                    <p className="text-[10px] text-muted-foreground mt-2 italic">Available after the user is created.</p>
+                  </div>
+                  <div className="rounded-lg border p-4 opacity-60 cursor-not-allowed" aria-disabled>
+                    <KeyRound className="h-5 w-5 text-primary mb-2" />
+                    <p className="text-sm font-semibold">Send / reset password</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">Email credentials or generate manually.</p>
+                    <p className="text-[10px] text-muted-foreground mt-2 italic">Available after the user is created.</p>
+                  </div>
+                  <div className="rounded-lg border p-4 opacity-60 cursor-not-allowed" aria-disabled>
+                    <Search className="h-5 w-5 text-primary mb-2" />
+                    <p className="text-sm font-semibold">View access history</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">Recent grants, revokes, and email changes.</p>
+                    <p className="text-[10px] text-muted-foreground mt-2 italic">Available after the user is created.</p>
+                  </div>
+                  <div className="rounded-lg border p-4 md:col-span-2 lg:col-span-1">
+                    <div className="flex items-center gap-2 mb-2">
+                      <GitBranch className="h-5 w-5 text-primary" />
+                      <p className="text-sm font-semibold">Workflow mapping</p>
+                    </div>
+                    <p className="text-xs text-muted-foreground mb-2">
+                      Optional. If set, assigns the workflow only for the selected review period.
+                    </p>
+                    <div className="grid grid-cols-2 gap-2 mb-3">
+                      <div>
+                        <Label className="text-xs text-muted-foreground">Review Period</Label>
+                        <Select value={newWorkflowPeriod} onValueChange={setNewWorkflowPeriod}>
+                          <SelectTrigger className="mt-1 h-9"><SelectValue placeholder="Select" /></SelectTrigger>
+                          <SelectContent>
+                            {MONTHS_CREATE.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <Label className="text-xs text-muted-foreground">Year</Label>
+                        <Select
+                          value={newWorkflowYear ? String(newWorkflowYear) : ''}
+                          onValueChange={(v) => setNewWorkflowYear(parseInt(v))}
+                        >
+                          <SelectTrigger className="mt-1 h-9"><SelectValue placeholder="Select" /></SelectTrigger>
+                          <SelectContent>
+                            {[new Date().getFullYear() - 1, new Date().getFullYear(), new Date().getFullYear() + 1].map(y => (
+                              <SelectItem key={y} value={String(y)}>{y}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                    <Label className="text-xs text-muted-foreground">Assigned Workflow</Label>
+                    <Select
+                      value={newWorkflowTemplateId}
+                      onValueChange={setNewWorkflowTemplateId}
+                    >
+                      <SelectTrigger className="mt-1 h-9">
+                        <SelectValue placeholder="Inherit period default" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {createWorkflowTemplates?.map(t => (
+                          <SelectItem key={t.id} value={t.id}>{t.display_name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {!newWorkflowTemplateId && (
+                      <p className="mt-2 text-xs text-muted-foreground">Leave empty to inherit the period default.</p>
+                    )}
+                  </div>
+                </div>
               </div>
             </TabsContent>
             </ScrollArea>
