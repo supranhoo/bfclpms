@@ -12,6 +12,7 @@ import {
 import { Plus, Wrench } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useManualQuery, type ManualQueryFetcherArgs } from '@/hooks/useManualQuery';
+import { useSafetyRealtimeSync } from '@/hooks/useSafetyRealtimeSync';
 import { SafetyFilterBar } from '@/components/safety/SafetyFilterBar';
 import { SafetyDataTable } from '@/components/safety/SafetyDataTable';
 import { SafetySkeletonBlock } from '@/components/safety/SafetySkeletonBlock';
@@ -74,6 +75,12 @@ async function fetchAssetsPage({
 }
 
 export default function SafetyAssets() {
+  // Scoped realtime: asset register + calibration / evidence updates.
+  useSafetyRealtimeSync(true, [
+    'safety_assets',
+    'safety_asset_calibrations',
+    'safety_asset_evidence',
+  ]);
   const navigate = useNavigate();
   const [draft, setDraft] = useState<AssetFiltersDraft>(INITIAL);
 
