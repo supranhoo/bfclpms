@@ -258,6 +258,10 @@ interface CellTableProps {
   onCellInputChange?: (submissionId: string, next: CellInputs) => void;
   isOverride?: boolean;
   targetStageLabel?: string;
+  /** Suppress the KRA · KPI column (banner displayed above instead). */
+  hideKraKpiCol?: boolean;
+  /** Show the "N/A" toggle per row (sign-off mode only). */
+  allowNa?: boolean;
 }
 
 type StageKey = 'self' | 'manager' | 'skip_level' | 'hr_pms' | 'auditor' | 'management' | 'final';
