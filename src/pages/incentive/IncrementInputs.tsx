@@ -356,6 +356,12 @@ function CalculateIncrementTab({ year }: { year: string }) {
       transition: transitionLabel(r),
       pre_confirmation_status: r.pre_confirmation_status ?? '',
       transition_source: r.transition_source ?? '',
+      gdoj: r.employee?.group_doj ?? '',
+      post_cutoff_joiner: r.post_cutoff_joiner === true ? 'Yes' : r.post_cutoff_joiner === false ? 'No' : '',
+      post_cutoff_carry_forward_months: r.post_cutoff_carry_forward_months ?? '',
+      carry_forward_reason: r.post_cutoff_joiner
+        ? (r.ineligibility_reason ?? '')
+        : '',
       evidence_attached: Array.isArray(r.evidence_urls) && r.evidence_urls.length > 0 ? 'Yes' : 'No',
       evidence_count: Array.isArray(r.evidence_urls) ? r.evidence_urls.length : 0,
     }));
@@ -468,6 +474,9 @@ function CalculateIncrementTab({ year }: { year: string }) {
               <TableHead>Revised Salary</TableHead>
               <TableHead>Conf.Inc?</TableHead>
               <TableHead>Final Eligible Months</TableHead>
+              <TableHead>GDOJ</TableHead>
+              <TableHead>Post-Cutoff Joiner</TableHead>
+              <TableHead>Carried Forward Months</TableHead>
               <TableHead>Treatment Applied</TableHead>
               <TableHead>Transition</TableHead>
               <TableHead>Remarks</TableHead>
@@ -515,6 +524,13 @@ function CalculateIncrementTab({ year }: { year: string }) {
                 <TableCell>{r.revised_salary ?? '—'}</TableCell>
                 <TableCell>{r.confirmation_granted ? <Badge variant="secondary">Yes</Badge> : '—'}</TableCell>
                 <TableCell>{r.final_eligible_months ?? '—'}</TableCell>
+                <TableCell className="text-xs text-muted-foreground">{r.employee?.group_doj ?? '—'}</TableCell>
+                <TableCell>
+                  {r.post_cutoff_joiner
+                    ? <Badge variant="destructive">Yes</Badge>
+                    : <span className="text-muted-foreground">—</span>}
+                </TableCell>
+                <TableCell>{r.post_cutoff_carry_forward_months ?? '—'}</TableCell>
                 <TableCell className="text-xs">{r.confirmation_treatment ?? '—'}</TableCell>
                 <TableCell
                   className="text-xs text-muted-foreground max-w-[180px] truncate"
@@ -541,7 +557,7 @@ function CalculateIncrementTab({ year }: { year: string }) {
             ))}
             {rows.length === 0 && (
               <TableRow>
-                <TableCell colSpan={18} className="text-center text-muted-foreground py-8">
+                <TableCell colSpan={21} className="text-center text-muted-foreground py-8">
                   {emptyText}
                 </TableCell>
               </TableRow>

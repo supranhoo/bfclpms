@@ -28,6 +28,16 @@ export interface IncrementMethodConfigRow {
    * skipped with an explicit "GDOJ missing" reason.
    */
   joining_month_cutoff_day: number | null;
+  /**
+   * Increment Eligibility Cutoff (month 1-12 + day 1-31). When set together
+   * with `carry_forward_post_cutoff = true`, employees whose GDOJ falls
+   * after this cutoff date inside the joining AY are excluded from that AY
+   * and their balance months are carried into the next AY's calculation.
+   * Either null → feature disabled.
+   */
+  eligibility_cutoff_month: number | null;
+  eligibility_cutoff_day: number | null;
+  carry_forward_post_cutoff: boolean;
 }
 
 export interface IncrementMethodSlabRow {
@@ -116,8 +126,14 @@ export function useSaveIncrementMethod() {
       slabs: SlabDraft[];
       existing?: IncrementMethodConfigRow | null;
       joiningMonthCutoffDay?: number | null;
+      eligibilityCutoffMonth?: number | null;
+      eligibilityCutoffDay?: number | null;
+      carryForwardPostCutoff?: boolean;
     }) => {
-      const { scope, method, slabs, existing, joiningMonthCutoffDay } = args;
+      const {
+        scope, method, slabs, existing, joiningMonthCutoffDay,
+        eligibilityCutoffMonth, eligibilityCutoffDay, carryForwardPostCutoff,
+      } = args;
       const user = (await supabase.auth.getUser()).data.user;
       // Archive ALL currently-active rows for the scope, not just the
       // `existing` row the caller fetched. Prevents duplicate active rows
@@ -149,6 +165,11 @@ export function useSaveIncrementMethod() {
           // Cutoff applies to ALL methods (drives Final Eligible Months and
           // custom-slab matching as well as prorated_doj math).
           joining_month_cutoff_day: joiningMonthCutoffDay ?? 15,
+          // Post-cutoff carry-forward configuration (additive — defaults keep
+          // legacy rows behaving exactly as before).
+          eligibility_cutoff_month: eligibilityCutoffMonth ?? null,
+          eligibility_cutoff_day: eligibilityCutoffDay ?? null,
+          carry_forward_post_cutoff: !!carryForwardPostCutoff,
         } as any])
         .select('*')
         .single();
@@ -225,6 +246,10 @@ export function useCopyIncrementMethodFromYear() {
           created_by: user?.id ?? null,
           // Carry the cutoff forward regardless of method.
           joining_month_cutoff_day: (src as any).joining_month_cutoff_day ?? 15,
+          // Carry post-cutoff fields forward so the copied AY is a true clone.
+          eligibility_cutoff_month: (src as any).eligibility_cutoff_month ?? null,
+          eligibility_cutoff_day: (src as any).eligibility_cutoff_day ?? null,
+          carry_forward_post_cutoff: !!(src as any).carry_forward_post_cutoff,
         } as any])
         .select('*').single();
       if (error) throw error;

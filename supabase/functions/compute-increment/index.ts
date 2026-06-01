@@ -262,6 +262,64 @@ export function monthsServedInAY(
   return { months: Math.max(0, Math.min(12, months)), decision };
 }
 
+// ──────────────────────────────────────────────────────────────────────────
+// Post-Cutoff Carry-Forward evaluator (inlined for Deno edge runtime).
+// Mirrors src/lib/postCutoffCarryForward.ts — keep in sync.
+// ──────────────────────────────────────────────────────────────────────────
+function _clampDayUTC(year: number, monthIdx0: number, day: number): Date {
+  const lastDay = new Date(Date.UTC(year, monthIdx0 + 1, 0)).getUTCDate();
+  return new Date(Date.UTC(year, monthIdx0, Math.min(day, lastDay)));
+}
+function _resolveCutoffInsideAY(cutoffMonth: number, cutoffDay: number, ayStart: Date, ayEnd: Date): Date {
+  const startYear = ayStart.getUTCFullYear();
+  let cand = _clampDayUTC(startYear, cutoffMonth - 1, cutoffDay);
+  if (cand.getTime() < ayStart.getTime()) cand = _clampDayUTC(startYear + 1, cutoffMonth - 1, cutoffDay);
+  if (cand.getTime() > ayEnd.getTime()) return ayEnd;
+  return cand;
+}
+function _wholeMonthsFromNextMonth(gdoj: Date, ayEnd: Date): number {
+  const startOfNext = new Date(Date.UTC(gdoj.getUTCFullYear(), gdoj.getUTCMonth() + 1, 1));
+  if (startOfNext.getTime() > ayEnd.getTime()) return 0;
+  const years = ayEnd.getUTCFullYear() - startOfNext.getUTCFullYear();
+  const months = ayEnd.getUTCMonth() - startOfNext.getUTCMonth();
+  return Math.max(0, Math.min(12, years * 12 + months + 1));
+}
+export function evaluatePostCutoff(input: {
+  gdoj: Date | null; ayStart: Date; ayEnd: Date;
+  cutoffMonth: number | null; cutoffDay: number | null;
+  carryForwardEnabled: boolean;
+}): { isPostCutoffJoiner: boolean; carryForwardMonths: number; cutoffDateISO: string | null; reason: string } {
+  const { gdoj, ayStart, ayEnd, cutoffMonth, cutoffDay, carryForwardEnabled } = input;
+  if (
+    !gdoj || cutoffMonth == null || cutoffDay == null ||
+    !Number.isFinite(cutoffMonth) || !Number.isFinite(cutoffDay) ||
+    cutoffMonth < 1 || cutoffMonth > 12 || cutoffDay < 1 || cutoffDay > 31
+  ) {
+    return { isPostCutoffJoiner: false, carryForwardMonths: 0, cutoffDateISO: null,
+      reason: 'Cutoff not configured or GDOJ missing — feature inactive' };
+  }
+  if (gdoj.getTime() < ayStart.getTime() || gdoj.getTime() > ayEnd.getTime()) {
+    const cutoff = _resolveCutoffInsideAY(cutoffMonth, cutoffDay, ayStart, ayEnd);
+    return { isPostCutoffJoiner: false, carryForwardMonths: 0,
+      cutoffDateISO: cutoff.toISOString().slice(0, 10),
+      reason: 'GDOJ outside joining AY — post-cutoff rule does not apply' };
+  }
+  const cutoff = _resolveCutoffInsideAY(cutoffMonth, cutoffDay, ayStart, ayEnd);
+  const cutoffISO = cutoff.toISOString().slice(0, 10);
+  if (gdoj.getTime() <= cutoff.getTime()) {
+    return { isPostCutoffJoiner: false, carryForwardMonths: 0, cutoffDateISO: cutoffISO,
+      reason: `GDOJ ${gdoj.toISOString().slice(0,10)} on/before cutoff ${cutoffISO} — normal calculation applies` };
+  }
+  const balance = _wholeMonthsFromNextMonth(gdoj, ayEnd);
+  const carry = carryForwardEnabled ? balance : 0;
+  return {
+    isPostCutoffJoiner: true, carryForwardMonths: carry, cutoffDateISO: cutoffISO,
+    reason: carryForwardEnabled
+      ? `Post-cutoff joiner (GDOJ ${gdoj.toISOString().slice(0,10)} > cutoff ${cutoffISO}). ${balance} month(s) carried forward to next AY.`
+      : `Post-cutoff joiner (GDOJ ${gdoj.toISOString().slice(0,10)} > cutoff ${cutoffISO}). Carry-forward disabled — no balance months carried.`,
+  };
+}
+
 function applyMethod(method: string, basePercent: number, monthsServed: number, customSlabs: any[], proratedNote?: string): { eligible: number; notes: string } {
   if (basePercent <= 0) return { eligible: 0, notes: 'Base 0' };
   if (method === 'full') return { eligible: basePercent, notes: 'Full' };
@@ -683,6 +741,48 @@ Deno.serve(async (req) => {
         scoresByEmp.get(empId)!.push({ score: monthly, month: v.month });
       });
 
+      // ────────────────────────────────────────────────────────────────
+      // Post-cutoff carry-IN map. For each employee in this AY's run,
+      // look up the most recent COMPLETED prior-AY run and pull their
+      // recorded `post_cutoff_carry_forward_months` (if any). Those
+      // months are added to the current AY's eligible-month count so
+      // employees who joined after the prior-AY cutoff have their
+      // balance months counted in the next AY, per policy.
+      // ────────────────────────────────────────────────────────────────
+      const priorAY = `${startYear - 1}-${String(startYear).slice(-2).padStart(2, '0')}`;
+      const carryInByEmp = new Map<string, number>();
+      try {
+        const { data: priorRunRows } = await admin
+          .from('increment_runs')
+          .select('id')
+          .eq('assessment_year', priorAY)
+          .eq('status', 'completed')
+          .order('completed_at', { ascending: false })
+          .limit(1);
+        const priorRunId = (priorRunRows as any[] | null)?.[0]?.id ?? null;
+        if (priorRunId) {
+          const empIds = profiles.map((p: any) => p.id);
+          for (let i = 0; i < empIds.length; i += 500) {
+            const batch = empIds.slice(i, i + 500);
+            if (!batch.length) continue;
+            const { data: rows } = await admin
+              .from('increment_run_items')
+              .select('employee_id, post_cutoff_carry_forward_months')
+              .eq('run_id', priorRunId)
+              .in('employee_id', batch)
+              .gt('post_cutoff_carry_forward_months', 0);
+            ((rows as any[]) ?? []).forEach((r) => {
+              const m = Number(r.post_cutoff_carry_forward_months) || 0;
+              if (m > 0) carryInByEmp.set(r.employee_id, m);
+            });
+          }
+        }
+      } catch (e) {
+        // Best-effort: log and continue with empty carry-IN map. A read
+        // failure here must not abort the whole AY run.
+        console.error('post-cutoff carry-in lookup failed', e);
+      }
+
       // Resolve service-anchor date per General Eligibility config.
       // Mirrors src/lib/serviceAnchorDate.ts — keep in sync.
       const anchorMode: 'run_date' | 'ay_end' | 'custom' = (ge?.service_as_on_mode as any) ?? 'ay_end';
@@ -759,6 +859,26 @@ Deno.serve(async (req) => {
           : ayMonths.decision === 'excluded' ? `GDOJ month excluded (cutoff ${cutoffDayGlobal})`
           : ayMonths.decision === 'pre_ay' ? `GDOJ before AY — counted from AY start`
           : `GDOJ after AY — 0 months`;
+
+        // ────────────────────────────────────────────────────────────
+        // Post-Cutoff Carry-Forward evaluation. Reads the resolved
+        // method config's eligibility cutoff (full date, e.g. 31 Dec)
+        // and the carry_forward toggle. Post-cutoff joiners are
+        // skipped THIS AY; their carry months are persisted so the
+        // next AY's run can pick them up via `carryInByEmp`.
+        // ────────────────────────────────────────────────────────────
+        const eligibilityCutoffMonth = (resolvedCfg as any)?.eligibility_cutoff_month ?? null;
+        const eligibilityCutoffDay = (resolvedCfg as any)?.eligibility_cutoff_day ?? null;
+        const carryForwardPostCutoff = !!(resolvedCfg as any)?.carry_forward_post_cutoff;
+        const postCutoff = evaluatePostCutoff({
+          gdoj,
+          ayStart: ayStartGlobal,
+          ayEnd: ayEndGlobal,
+          cutoffMonth: eligibilityCutoffMonth,
+          cutoffDay: eligibilityCutoffDay,
+          carryForwardEnabled: carryForwardPostCutoff,
+        });
+        const carryInMonths = carryInByEmp.get(p.id) ?? 0;
 
         // Eligibility evaluation. Criteria-exempt employees skip the
         // absent/LWP/disciplinary/training criteria block entirely.
@@ -892,6 +1012,14 @@ Deno.serve(async (req) => {
           reason = adjustment.adjustmentReason;
         }
 
+        // Post-cutoff joiner gate: skip the joining-AY increment for the
+        // employee. The carry months are persisted on the item so the
+        // NEXT AY's run can pick them up via `carryInByEmp`.
+        if (postCutoff.isPostCutoffJoiner && eligibility === 'eligible') {
+          eligibility = 'ineligible';
+          reason = postCutoff.reason;
+        }
+
         if (!resolvedCfg) {
           // No method config matches this employee's scope. Skip slab/method
           // math. Preserve any pre-existing ineligibility reason; only
@@ -936,6 +1064,14 @@ Deno.serve(async (req) => {
               // Custom slab matching uses the cutoff-aware whole-month count.
               monthsForMethod = Math.min(ayMonths.months, effectiveMonths);
               proratedNote = cutoffDecisionNote;
+            }
+            // Add carry-IN months from prior AY post-cutoff joiners.
+            // Applies to prorated_doj and custom only; `full` ignores
+            // months by design. Per policy the bumped count is NOT
+            // capped at 12 so an 18-month calculation is possible.
+            if (carryInMonths > 0 && (effectiveMethod === 'prorated_doj' || effectiveMethod === 'custom')) {
+              monthsForMethod = monthsForMethod + carryInMonths;
+              proratedNote = `${proratedNote ?? ''}${proratedNote ? ' · ' : ''}+${carryInMonths}m carried from prior AY (post-cutoff joiner)`;
             }
             if (eligibility === 'eligible') {
               const res = applyMethod(effectiveMethod, slabPercent ?? 0, monthsForMethod, methodSlabs, proratedNote);
@@ -984,6 +1120,8 @@ Deno.serve(async (req) => {
           transition_key: adjustment.transitionKey ?? null,
           pre_confirmation_status: preConfirmationStatus,
           transition_source: transitionSource,
+          post_cutoff_joiner: postCutoff.isPostCutoffJoiner,
+          post_cutoff_carry_forward_months: postCutoff.carryForwardMonths,
         });
 
         adjustmentRows.push({
@@ -1014,6 +1152,13 @@ Deno.serve(async (req) => {
             history_effective_date: historyRow?.effective_date ?? null,
             joining_month_cutoff_day: cutoffDayGlobal,
             cutoff_decision: ayMonths.decision,
+            eligibility_cutoff_month: eligibilityCutoffMonth,
+            eligibility_cutoff_day: eligibilityCutoffDay,
+            carry_forward_post_cutoff: carryForwardPostCutoff,
+            eligibility_cutoff_date_iso: postCutoff.cutoffDateISO,
+            post_cutoff_joiner: postCutoff.isPostCutoffJoiner,
+            post_cutoff_carry_forward_months_out: postCutoff.carryForwardMonths,
+            post_cutoff_carry_in_months: carryInMonths,
           },
         });
       }

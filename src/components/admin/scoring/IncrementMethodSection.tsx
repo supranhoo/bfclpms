@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Calculator, Save, History, Copy, Plus, Trash2 } from 'lucide-react';
 import { useCompanies } from '@/hooks/useCompanies';
+import { Switch } from '@/components/ui/switch';
 import {
   useIncrementMethodConfig,
   useIncrementMethodSlabs,
@@ -69,14 +70,25 @@ export function IncrementMethodSection() {
   const [method, setMethod] = useState<IncrementMethodType>('full');
   const [slabs, setSlabs] = useState<SlabDraft[]>(DEFAULT_SLABS);
   const [cutoffDay, setCutoffDay] = useState<number>(DEFAULT_CUTOFF_DAY);
+  // Increment Eligibility Cutoff (full date, e.g. 31 Dec) — independent of
+  // the existing GDOJ-month cutoff above.
+  const [eligibilityMonth, setEligibilityMonth] = useState<number | null>(null);
+  const [eligibilityDay, setEligibilityDay] = useState<number | null>(null);
+  const [carryForward, setCarryForward] = useState<boolean>(false);
 
   useEffect(() => {
     if (config) {
       setMethod(config.method);
       setCutoffDay(config.joining_month_cutoff_day ?? DEFAULT_CUTOFF_DAY);
+      setEligibilityMonth((config as any).eligibility_cutoff_month ?? null);
+      setEligibilityDay((config as any).eligibility_cutoff_day ?? null);
+      setCarryForward(!!(config as any).carry_forward_post_cutoff);
     } else {
       setMethod('full');
       setCutoffDay(DEFAULT_CUTOFF_DAY);
+      setEligibilityMonth(null);
+      setEligibilityDay(null);
+      setCarryForward(false);
     }
   }, [config]);
 
@@ -107,7 +119,25 @@ export function IncrementMethodSection() {
   }
   // Cutoff applies to ALL methods now — always validate.
   const cutoffValid = Number.isInteger(cutoffDay) && cutoffDay >= 1 && cutoffDay <= 31;
-  const isValid = (method !== 'custom' || slabErrors.length === 0) && cutoffValid;
+  // Eligibility cutoff: when carry-forward is enabled, BOTH month and day
+  // must be set. When carry-forward is off but partial values are entered,
+  // both must still be present (or both null) to keep the row sane.
+  const eligibilityMonthValid =
+    eligibilityMonth === null || (Number.isInteger(eligibilityMonth) && eligibilityMonth >= 1 && eligibilityMonth <= 12);
+  const eligibilityDayValid =
+    eligibilityDay === null || (Number.isInteger(eligibilityDay) && eligibilityDay >= 1 && eligibilityDay <= 31);
+  const eligibilityComplete =
+    (eligibilityMonth === null && eligibilityDay === null) ||
+    (eligibilityMonth !== null && eligibilityDay !== null);
+  const carryForwardValid =
+    !carryForward || (eligibilityMonth !== null && eligibilityDay !== null);
+  const isValid =
+    (method !== 'custom' || slabErrors.length === 0) &&
+    cutoffValid &&
+    eligibilityMonthValid &&
+    eligibilityDayValid &&
+    eligibilityComplete &&
+    carryForwardValid;
 
   const handleSave = () => {
     if (!scope || !isValid) return;
@@ -117,6 +147,9 @@ export function IncrementMethodSection() {
       slabs: method === 'custom' ? slabs : [],
       existing: config ?? null,
       joiningMonthCutoffDay: cutoffDay,
+      eligibilityCutoffMonth: eligibilityMonth,
+      eligibilityCutoffDay: eligibilityDay,
+      carryForwardPostCutoff: carryForward,
     });
   };
 
@@ -217,6 +250,84 @@ export function IncrementMethodSection() {
           </div>
           {!cutoffValid && (
             <p className="mt-1 text-xs text-destructive">Enter a whole number between 1 and 31.</p>
+          )}
+        </div>
+
+        {/* Increment Eligibility Cutoff Date + Carry-Forward toggle */}
+        <div className="rounded-lg border p-4">
+          <div className="mb-2 flex items-center justify-between">
+            <h3 className="text-sm font-medium">Increment Eligibility Cutoff Date</h3>
+            <Badge variant="outline" className="text-[10px]">Post-cutoff joiners</Badge>
+          </div>
+          <p className="mb-3 text-sm text-muted-foreground">
+            Employees joining after this cutoff date may be excluded from
+            increment in the joining AY. If carry-forward is enabled, their
+            balance months are added to next AY increment calculation using
+            next AY performance rating.
+          </p>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="eligibility-cutoff-month">Cutoff Month</Label>
+              <Select
+                value={eligibilityMonth === null ? '__none__' : String(eligibilityMonth)}
+                onValueChange={(v) =>
+                  setEligibilityMonth(v === '__none__' ? null : parseInt(v, 10))
+                }
+              >
+                <SelectTrigger id="eligibility-cutoff-month" className="h-9">
+                  <SelectValue placeholder="Not set" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">Not set</SelectItem>
+                  {['January','February','March','April','May','June','July','August','September','October','November','December'].map((m, i) => (
+                    <SelectItem key={m} value={String(i + 1)}>{m}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="eligibility-cutoff-day">Cutoff Day</Label>
+              <Input
+                id="eligibility-cutoff-day"
+                type="number"
+                min={1}
+                max={31}
+                step={1}
+                placeholder="e.g. 31"
+                value={eligibilityDay ?? ''}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  if (v === '') { setEligibilityDay(null); return; }
+                  const n = parseInt(v, 10);
+                  setEligibilityDay(Number.isFinite(n) ? n : null);
+                }}
+                className="h-9 w-28"
+                aria-invalid={!eligibilityDayValid}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="carry-forward-toggle">Carry forward post-cutoff joining months to next AY?</Label>
+              <div className="flex h-9 items-center gap-3">
+                <Switch
+                  id="carry-forward-toggle"
+                  checked={carryForward}
+                  onCheckedChange={setCarryForward}
+                />
+                <span className="text-sm text-muted-foreground">
+                  {carryForward ? 'Yes' : 'No (default)'}
+                </span>
+              </div>
+            </div>
+          </div>
+          {!eligibilityComplete && (
+            <p className="mt-2 text-xs text-destructive">
+              Set both cutoff month and day, or clear both.
+            </p>
+          )}
+          {!carryForwardValid && (
+            <p className="mt-2 text-xs text-destructive">
+              Carry-forward is enabled but the cutoff date is not configured. Set the month and day above.
+            </p>
           )}
         </div>
 
