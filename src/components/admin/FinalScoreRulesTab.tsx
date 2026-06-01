@@ -417,7 +417,7 @@ function RuleBuilderSheet({
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label>Scope</Label>
-              <Select value={scopeType} onValueChange={(v) => { setScopeType(v as FinalScoreScopeType); setScopeValue(''); }}>
+              <Select value={scopeType} onValueChange={(v) => { setScopeType(v as FinalScoreScopeType); setScopeValue(''); setScopeValues([]); }}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="template">Workflow Template (default)</SelectItem>
