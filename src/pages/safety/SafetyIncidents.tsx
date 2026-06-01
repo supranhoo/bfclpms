@@ -11,6 +11,7 @@ import {
 import { AlertTriangle, Plus } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useManualQuery, type ManualQueryFetcherArgs } from '@/hooks/useManualQuery';
+import { useSafetyRealtimeSync } from '@/hooks/useSafetyRealtimeSync';
 import { SafetyFilterSheet } from '@/components/safety/SafetyFilterSheet';
 import { SafetyResponsiveList } from '@/components/safety/SafetyResponsiveList';
 import { SafetyMobileListCard } from '@/components/safety/SafetyMobileListCard';
@@ -76,6 +77,9 @@ async function fetchIncidentsPage({
 }
 
 export default function SafetyIncidents() {
+  // Scoped realtime: only the tables this page renders. Cuts per-user
+  // realtime cost vs. the legacy shell-level 20-table subscription.
+  useSafetyRealtimeSync(true, ['safety_incidents', 'safety_incident_status_history']);
   const navigate = useNavigate();
   const [draft, setDraft] = useState<IncidentFilters>(INITIAL);
 
