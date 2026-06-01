@@ -311,12 +311,19 @@ export default function WorkflowConfig() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">Workflow Configuration</h1>
-        <p className="text-muted-foreground">
-          Configure review workflows per employee, department, or PMS grade
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold">Workflow Configuration</h1>
+          <p className="text-muted-foreground">
+            Configure review workflows per employee, department, or PMS grade for a specific review period.
+          </p>
+        </div>
+        <Button variant="outline" onClick={() => setMigrateOpen(true)}>
+          <GitBranch className="h-4 w-4 mr-1" />
+          Convert Global Defaults to Period-Specific
+        </Button>
       </div>
+      <MigrateGlobalDefaultsDialog open={migrateOpen} onOpenChange={setMigrateOpen} />
 
       <Alert className="border-primary/30 bg-primary/5">
         <Info className="h-4 w-4 text-primary" />
