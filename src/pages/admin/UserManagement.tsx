@@ -205,17 +205,6 @@ export default function UserManagement() {
     [editCustomFieldDefsAll],
   );
   const [editCustomValues, setEditCustomValues] = useState<CustomFieldValues>({});
-  const { data: editCustomValuesFetched } = useEmployeeMasterCustomFieldValues(
-    editDialogOpen ? selectedUser?.id : null,
-  );
-  useEffect(() => {
-    if (editDialogOpen) {
-      setEditCustomValues(editCustomValuesFetched || {});
-    } else {
-      setEditCustomValues({});
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editDialogOpen, editCustomValuesFetched, selectedUser?.id]);
 
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
