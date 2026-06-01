@@ -1,0 +1,1 @@
+ALTER TABLE public.review_submissions ADD COLUMN IF NOT EXISTS na_reason text;
