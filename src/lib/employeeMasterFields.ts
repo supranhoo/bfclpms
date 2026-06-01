@@ -21,6 +21,7 @@ export type EmployeeMasterFieldKey =
   | 'employment_status'
   | 'location_id'
   | 'reporting_manager_id'
+  | 'functional_manager_id'
   | 'role'
   | 'portal_access'
   | 'mobile_number'
@@ -48,6 +49,7 @@ export const EMPLOYEE_MASTER_FIELDS: EmployeeMasterFieldDef[] = [
   { key: 'employment_status', label: 'Employment Status' },
   { key: 'location_id', label: 'Location' },
   { key: 'reporting_manager_id', label: 'Reporting Manager' },
+  { key: 'functional_manager_id', label: 'Functional Manager' },
   { key: 'role', label: 'Role' },
   { key: 'portal_access', label: 'Portal Access' },
   { key: 'mobile_number', label: 'Mobile Number' },
