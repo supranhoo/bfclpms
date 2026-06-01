@@ -10783,6 +10783,7 @@ export type Database = {
         | "kra_set"
         | "self_review"
         | "manager_check"
+        | "functional_manager_check"
         | "audit"
         | "approved"
         | "management_review"
@@ -11043,6 +11044,7 @@ export const Constants = {
         "kra_set",
         "self_review",
         "manager_check",
+        "functional_manager_check",
         "audit",
         "approved",
         "management_review",
