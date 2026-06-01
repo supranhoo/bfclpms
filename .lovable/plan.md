@@ -1,89 +1,54 @@
-## Goal
-Introduce a new sidebar group **"KRA Settings"** and move the following entries out of **Administration** into it:
+# Fix: Bulk Review filters (Designation / Grade / Reporting Manager) not affecting results
 
-- KRA Library (`/admin/templates`)
-- KRA Bundles (`/admin/bundles`)
-- All KRAs (`/admin/kpis`)
-- KRA Categories (`/admin/categories`)
-- KPI Mapping (`/admin/kpi-mapping`)
-- Weightage Matrix (`/admin/kpi-weightage`)
-- KPI Standardization (`/admin/kpi-standardization`)
+## Symptom
+On `/review/bulk` (HR PMS view, Apr-2026), the filter bar shows **All Designations / All Grades / All Reporting Managers** dropdowns, but selecting values does not reduce the **27 emp / 269 KPI / 269/269 rows** count or hide employee columns.
 
-## Changes — `src/components/layout/AppSidebar.tsx`
+## Risk & Impact
+- Data Impact: none — pure client-side presentation filter.
+- Workflow Impact: none.
+- UI/UX: filters become functional; employee columns and row counts shrink as expected.
+- Regression Risk: low — change confined to `BulkReviewDashboard.tsx` filter wiring; KRA / search / hide-processed filters use the same path.
+- Mitigation: keep existing unit tests for `bulkEmployeeFilter` green; add one more for the new path if logic changes.
 
-1. **Add new menu group** in `getStaticMenuItems`:
-   ```ts
-   kraSettings: [
-     { title: 'KRA Library',        icon: Library,        path: '/admin/templates',           menuKey: 'admin-templates',            roles: ['admin'] },
-     { title: 'KRA Bundles',        icon: Package,        path: '/admin/bundles',             menuKey: 'admin-bundles',              roles: ['admin'] },
-     { title: 'All KRAs',           icon: Target,         path: '/admin/kpis',                menuKey: 'admin-kpis',                 roles: ['admin'] },
-     { title: 'KRA Categories',     icon: ClipboardList,  path: '/admin/categories',          menuKey: 'admin-categories',           roles: ['admin'] },
-     { title: 'KPI Mapping',        icon: Target,         path: '/admin/kpi-mapping',         menuKey: 'admin-kpi-mapping',          roles: ['admin'] },
-     { title: 'Weightage Matrix',   icon: Percent,        path: '/admin/kpi-weightage',       menuKey: 'admin-weightage',            roles: ['admin'] },
-     { title: 'KPI Standardization',icon: GitMerge,       path: '/admin/kpi-standardization', menuKey: 'admin-kpi-standardization',  roles: ['admin'] },
-   ],
-   ```
+## Likely root cause (to confirm before patching)
+The wiring exists (`allowedEmpSet` → `loadedRows.filter`), but one of the following breaks it:
+1. **`useBulkEmployeeAttrs` returns empty** for non-admin viewers (HR PMS) because RLS on `profiles` blocks the join to `profiles!reporting_manager_id` for rows the viewer cannot directly access — making `attrsByEmp` empty, so `allowedEmployeeIds(...)` returns `∅` and selecting any value collapses to "0 rows"… BUT here the bar still says 269/269, which instead means selections are not being applied.
+2. **`MultiSelectFilter` onSelect not firing** for these three filters specifically (cmdk `value` collision when option labels duplicate, e.g. several blank designations).
+3. **State setters not wired** — `setDesignations` / `setGrades` / `setManagerIds` are passed but the parent `useEffect` prune (lines 339-349) immediately strips them because `attrsByEmp` is empty (point 1), giving the illusion of a no-op.
 
-2. **Remove those 7 entries** from `menuItems.admin`. Administration retains everything else (Admin Dashboard, User Management, Org KPI Data Entry, Org KPI Overview, PIP Management, Import Data, System Settings, Audit Logs, Observations, Rollback Requests, Email Logs, Pending Reviews, Incentive Config/Data, Increment Inputs, Employee Development).
+## Plan
 
-3. **Route classification** — extend `getSectionForPath` so the moved routes resolve to the new group (so it auto-expands on direct nav):
-   ```ts
-   const KRA_SETTINGS_PATHS = new Set([
-     '/admin/templates','/admin/bundles','/admin/kpis','/admin/categories',
-     '/admin/kpi-mapping','/admin/kpi-weightage','/admin/kpi-standardization',
-   ]);
-   if (KRA_SETTINGS_PATHS.has(pathname)) return 'kraSettings';
-   ```
-   (Checked before the generic `/admin` → `admin` fallback.)
+### Step 1 — Confirm the failure mode (read-only)
+- Open `/review/bulk` as HR PMS, load scope, open the Designation dropdown, click an option, watch `attrsByEmp.size`, `designations`, and `allowedEmpSet.size` via a one-shot `console.debug` already-present or via React DevTools.
+- If `attrsByEmp.size === 0` → root cause is RLS on the `profiles` self-join.
+- If `attrsByEmp.size > 0` but `designations` resets to `[]` immediately → the prune effect is the culprit.
+- If `designations` updates but `loadedRows` doesn't shrink → the filter predicate is wrong.
 
-4. **Render the group** — add a `<CollapsibleSidebarGroup label="KRA Settings" …>` block in the SidebarContent JSX, placed **immediately above the Administration group**.
+### Step 2 — Fix
 
-## UI Preview
+**If RLS / empty attrs (most likely):** switch `useBulkEmployeeAttrs` to the same SECURITY DEFINER pattern already used for `useBulkOrgKpiFlags` — add an RPC `rpc_bulk_employee_attrs(p_employee_ids uuid[])` returning `(id, designation, pms_grade, reporting_manager_id, reporting_manager_name)`, SQL-only, `SECURITY DEFINER`, `STABLE`, `search_path = public`, granted to `authenticated`. Replace the direct `profiles` select in `useBulkReview.ts` with `supabase.rpc(...)`.
 
-```text
-SIDEBAR
-─────────────────────────────
-Main
-Manager Review
-Management
-HR PMS
-Audit
-Data Entry
+**If prune effect strips values:** guard the prune `useEffect` so it does not run while `attrsByEmp.size === 0` (it already does — verify) and only prunes when the loaded option set is non-empty.
 
-KRA SETTINGS              ▾   ← NEW collapsible group
-  📚 KRA Library
-  📦 KRA Bundles
-  🎯 All KRAs
-  📋 KRA Categories
-  🎯 KPI Mapping
-  % Weightage Matrix
-  ⇆ KPI Standardization
+**If MultiSelect toggle is broken:** make the `CommandItem.value` deterministic (`opt.value`) and pass the value through `onSelect`'s argument.
 
-ADMINISTRATION            ▾   ← these 7 items removed from here
-  Admin Dashboard
-  User Management
-  Org KPI Data Entry
-  Org KPI Overview
-  PIP Management
-  Import Data
-  System Settings
-  Audit Logs
-  Observations
-  Rollback Requests
-  Email Logs
-  Pending Reviews
-  Incentive Config
-  Incentive Data Entry
-  Increment Inputs
-  Employee Development
+### Step 3 — Verify
+- Manual: as HR PMS, select one Designation → row count drops, employee columns shrink, KPI cards re-derive.
+- Combine with Grades and Reporting Manager (AND across axes).
+- Deep-link survives reload (URL state already includes `desigs/grades/mgrs`).
+- Unit: extend `src/lib/bulkEmployeeFilter.test.ts` only if the predicate changes (not expected).
 
-Reports
-```
+## Files touched (worst case)
+- `src/hooks/useBulkReview.ts` — swap profile select → RPC.
+- `supabase/migrations/<new>.sql` — add `rpc_bulk_employee_attrs` + GRANT.
+- `src/pages/review/BulkReviewDashboard.tsx` — only if prune guard needs tightening.
+- `src/components/review/MultiSelectFilter.tsx` — only if cmdk value collision is the cause.
 
 ## Out of scope
-- No route changes — URLs, pages, and permissions (`menuKey` access via `useMenuAccess`) are preserved exactly.
-- No DB/menu-access-rights schema changes; existing menu keys continue to gate visibility.
-- No changes to PageHeader titles on the individual pages.
+- KRA filter, KPI search, hide-processed toggle — already working.
+- Sidebar / route changes.
+- Any backend write paths.
 
-## Risk
-Low — pure sidebar reorganization. Existing `menuKey` access control, deep-links, and routes continue to work; only the visual grouping changes.
+## SSOT updates (after fix)
+- Append to `DOCUMENTATION.md` Bulk Review section: "Employee-axis filters read profile attrs via SECURITY DEFINER RPC to bypass RLS gaps for non-admin viewers."
+- No POLICY change (presentation-only).
