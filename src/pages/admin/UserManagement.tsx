@@ -37,6 +37,9 @@ import { ALL_APP_ROLES, type AppRole } from '@/lib/roles';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { useMyVisibleEmployeeIds } from '@/hooks/useMyVisibleEmployeeIds';
 import { useWorkflowTemplates, useWorkflowConfigs, useUpsertWorkflowConfig, useDeleteWorkflowConfig, getStageLabel } from '@/hooks/useWorkflowConfig';
+// v2.67.x — Dummy/System Employee Visibility (admin-side: always shows
+// everyone with a badge + filter; never gated by the global setting).
+import { useDummyEmployees } from '@/hooks/useDummyEmployees';
 
 // Inline card used inside Edit User → Access & Login to view/change the
 // employee's assigned (global) workflow template without leaving the dialog.
