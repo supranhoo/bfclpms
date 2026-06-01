@@ -3,6 +3,9 @@ import { invokeAdminEdgeFunction } from '@/lib/adminEdgeFunction';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
+import { RequiredMark } from '@/components/ui/RequiredMark';
+import { useEmployeeMasterFieldRequirements } from '@/hooks/useEmployeeMasterFieldRequirements';
+import { validateRequiredFields, type EmployeeMasterFieldKey } from '@/lib/employeeMasterFields';
 import { useProfiles, useDepartments, useDesignations, usePmsGrades, useDivisions, useBusinessUnits, useEmployeeCategories, useEmploymentStatuses, useLocations } from '@/hooks/useOrganization';
 import { useCompanies } from '@/hooks/useCompanies';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -167,6 +170,12 @@ export default function UserManagement() {
   const { data: locationsList } = useLocations();
   const queryClient = useQueryClient();
   const { toast } = useToast();
+
+  // Employee Master Field Requirements (admin-configurable mandatory flags
+  // for the Add New User page).
+  const { requirements: emfReqs } = useEmployeeMasterFieldRequirements();
+  const ReqMark = ({ k }: { k: EmployeeMasterFieldKey }) =>
+    emfReqs[k] ? <RequiredMark /> : null;
 
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
@@ -788,8 +797,30 @@ export default function UserManagement() {
   };
 
   const handleCreateUser = () => {
-    if (!newFullName.trim() || !newEmployeeCode.trim()) {
-      toast({ title: 'Full name and employee code are required', variant: 'destructive' });
+    // Validate against admin-configured Employee Master Field Requirements.
+    const fieldValues = {
+      full_name: newFullName,
+      email: newPortalAccess ? newEmail : (emfReqs.email ? newEmail : 'n/a'),
+      employee_code: newEmployeeCode,
+      group_doj: newGroupDoj,
+      doj: newDoj,
+      confirmation_date: newConfirmationDate,
+      company_id: newCompanyId,
+      division_id: newDivisionId,
+      department_id: newDepartmentId,
+      designation: newDesignation,
+      pms_grade: newPmsGrade,
+      employee_category: newEmployeeCategory,
+      employment_status: newEmploymentStatus,
+      location_id: newLocationId,
+      reporting_manager_id: newManagerId,
+      role: newRole,
+      portal_access: newPortalAccess,
+      is_dummy_employee: newIsDummy,
+    };
+    const v = validateRequiredFields(fieldValues, emfReqs);
+    if (v.ok === false) {
+      toast({ title: v.message, variant: 'destructive' });
       return;
     }
     if (newEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail.trim())) {
@@ -1660,7 +1691,7 @@ export default function UserManagement() {
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                    <div className="space-y-1.5">
-                    <Label>Full Name <span className="text-destructive">*</span></Label>
+                    <Label>Full Name<ReqMark k="full_name" /></Label>
                     <Input
                       value={newFullName}
                       onChange={(e) => setNewFullName(e.target.value)}
@@ -1670,7 +1701,7 @@ export default function UserManagement() {
                   </div>
                   {newPortalAccess && (
                     <div className="space-y-1.5">
-                      <Label>Email</Label>
+                      <Label>Email<ReqMark k="email" /></Label>
                       <Input
                         type="email"
                         value={newEmail}
@@ -1681,7 +1712,7 @@ export default function UserManagement() {
                     </div>
                   )}
                   <div className="space-y-1.5">
-                    <Label>Employee Code <span className="text-destructive">*</span></Label>
+                    <Label>Employee Code<ReqMark k="employee_code" /></Label>
                     <Input
                       value={newEmployeeCode}
                       onChange={(e) => setNewEmployeeCode(e.target.value)}
@@ -1690,7 +1721,7 @@ export default function UserManagement() {
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <Label>Group Date of Joining (GDOJ)</Label>
+                    <Label>Group Date of Joining (GDOJ)<ReqMark k="group_doj" /></Label>
                     <div className="relative">
                       <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
                       <Input
@@ -1702,7 +1733,7 @@ export default function UserManagement() {
                     </div>
                   </div>
                   <div className="space-y-1.5">
-                    <Label>Date of Joining (DOJ)</Label>
+                    <Label>Date of Joining (DOJ)<ReqMark k="doj" /></Label>
                     <div className="relative">
                       <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
                       <Input
@@ -1714,7 +1745,7 @@ export default function UserManagement() {
                     </div>
                   </div>
                   <div className="space-y-1.5">
-                    <Label>Confirmation Date</Label>
+                    <Label>Confirmation Date<ReqMark k="confirmation_date" /></Label>
                     <div className="relative">
                       <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
                       <Input
@@ -1736,7 +1767,7 @@ export default function UserManagement() {
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                   <div className="space-y-1.5">
-                    <Label>Company</Label>
+                    <Label>Company<ReqMark k="company_id" /></Label>
                     <OrgFilterCombobox
                       value={newCompanyId}
                       onValueChange={setNewCompanyId}
@@ -1745,7 +1776,7 @@ export default function UserManagement() {
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <Label>Division</Label>
+                    <Label>Division<ReqMark k="division_id" /></Label>
                     <OrgFilterCombobox
                       value={newDivisionId}
                       onValueChange={(val) => {
@@ -1763,7 +1794,7 @@ export default function UserManagement() {
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <Label>Department</Label>
+                    <Label>Department<ReqMark k="department_id" /></Label>
                     <OrgFilterCombobox
                       value={newDepartmentId}
                       onValueChange={setNewDepartmentId}
@@ -1772,7 +1803,7 @@ export default function UserManagement() {
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <Label>Designation</Label>
+                    <Label>Designation<ReqMark k="designation" /></Label>
                     <OrgFilterCombobox
                       value={newDesignation}
                       onValueChange={setNewDesignation}
@@ -1781,7 +1812,7 @@ export default function UserManagement() {
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <Label>PMS Grade</Label>
+                    <Label>PMS Grade<ReqMark k="pms_grade" /></Label>
                     <OrgFilterCombobox
                       value={newPmsGrade}
                       onValueChange={setNewPmsGrade}
@@ -1790,7 +1821,7 @@ export default function UserManagement() {
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <Label>Employee Category</Label>
+                    <Label>Employee Category<ReqMark k="employee_category" /></Label>
                     <OrgFilterCombobox
                       value={newEmployeeCategory}
                       onValueChange={setNewEmployeeCategory}
@@ -1799,7 +1830,7 @@ export default function UserManagement() {
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <Label>Employment Status</Label>
+                    <Label>Employment Status<ReqMark k="employment_status" /></Label>
                     <OrgFilterCombobox
                       value={newEmploymentStatus}
                       onValueChange={setNewEmploymentStatus}
@@ -1808,7 +1839,7 @@ export default function UserManagement() {
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <Label>Location</Label>
+                    <Label>Location<ReqMark k="location_id" /></Label>
                     <OrgFilterCombobox
                       value={newLocationId}
                       onValueChange={setNewLocationId}
@@ -1817,7 +1848,7 @@ export default function UserManagement() {
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <Label>Reporting Manager</Label>
+                    <Label>Reporting Manager<ReqMark k="reporting_manager_id" /></Label>
                     <ManagerCombobox
                       value={newManagerId}
                       onValueChange={setNewManagerId}
@@ -1838,7 +1869,7 @@ export default function UserManagement() {
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <div className="space-y-1.5">
-                    <Label>Role</Label>
+                    <Label>Role<ReqMark k="role" /></Label>
                     <OrgFilterCombobox
                       value={newRole}
                       onValueChange={(v) => v && setNewRole(v as AppRole)}
@@ -1848,7 +1879,7 @@ export default function UserManagement() {
                   </div>
                   <div className="flex items-center justify-between rounded-lg border p-3 h-fit">
                     <div className="space-y-0.5">
-                      <Label>Portal Access</Label>
+                      <Label>Portal Access<ReqMark k="portal_access" /></Label>
                       <p className="text-xs text-muted-foreground">
                         {newPortalAccess ? 'User can log in to the portal' : 'Data-only user — no login access'}
                       </p>
@@ -1861,7 +1892,7 @@ export default function UserManagement() {
                 </div>
                 <div className="flex items-center justify-between rounded-lg border p-3">
                   <div className="space-y-0.5">
-                    <Label>Is this a dummy/system employee?</Label>
+                    <Label>Is this a dummy/system employee?<ReqMark k="is_dummy_employee" /></Label>
                     <p className="text-xs text-muted-foreground">
                       Dummy/system employees are used for system access, audit, testing, or non-real employee records.
                       They can be hidden from reports and frontend employee views based on General Settings.
