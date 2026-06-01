@@ -7,6 +7,7 @@ import {
   TrendingUp, Clock, CheckCircle2, AlertOctagon, Loader2,
 } from 'lucide-react';
 import { useSafetyDashboardStats } from '@/hooks/useSafetyDashboardStats';
+import { useSafetyRealtimeSync } from '@/hooks/useSafetyRealtimeSync';
 import { SafetyStickyActionBar } from '@/components/safety/SafetyStickyActionBar';
 import {
   SAFETY_STATUS_LABELS,
@@ -26,6 +27,11 @@ import { format } from 'date-fns';
  * `['safety', ...]` cache prefix per POLICY §110.
  */
 export default function SafetyHome() {
+  // Dashboard subscribes to the FULL set (all 20 Safety tables) because
+  // it surfaces aggregate KPI tiles, severity/stage breakdowns, overdue
+  // queues, and recent activity across every Safety module. Per-page
+  // scoped subscriptions are used everywhere else.
+  useSafetyRealtimeSync();
   const { data, isLoading } = useSafetyDashboardStats();
 
   return (
