@@ -490,16 +490,22 @@ function CellTable({
                     />
                   ))}
                   <td className="p-2 text-right tabular-nums font-semibold">
-                    {c.score == null
-                      ? <span className="inline-flex items-center gap-1 text-destructive">● —</span>
-                      : c.score.toFixed(1)}
+                    {naMarked
+                      ? <span className="text-muted-foreground italic">N/A</span>
+                      : c.score == null
+                        ? <span className="inline-flex items-center gap-1 text-destructive">● —</span>
+                        : c.score.toFixed(1)}
                   </td>
-                  <td className="p-2"><SourceBadge source={c.source} /></td>
+                  <td className="p-2">
+                    {naMarked
+                      ? <Badge variant="outline" className="h-5 px-1.5 text-[10px]">N/A</Badge>
+                      : <SourceBadge source={c.source} />}
+                  </td>
                   <td className={cn(
                     'p-2 text-right tabular-nums',
                     c.weightedImpact != null && c.weightedImpact > 0 && 'text-emerald-600 dark:text-emerald-400',
                   )}>
-                    {c.weightedImpact == null ? '—' : fmt(c.weightedImpact, true)}
+                    {naMarked || c.weightedImpact == null ? '—' : fmt(c.weightedImpact, true)}
                   </td>
                 </tr>
               );
@@ -512,21 +518,29 @@ function CellTable({
       <div className="md:hidden divide-y divide-border">
         {cells.map(c => {
           const stages = c.stageScores;
+          const naMarked = isRowNa(c);
           return (
             <Card key={c.submission_id} className={cn(
               'rounded-none border-0 shadow-none',
               c.source === 'none' && 'bg-destructive/5',
               c.source === 'override' && 'bg-amber-500/5',
+              naMarked && 'bg-muted/40',
             )}>
               <CardContent className="p-3 space-y-2">
                 <div className="flex items-center justify-between gap-2">
                   <span className="font-medium text-sm truncate">{c.employee_name}</span>
-                  <SourceBadge source={c.source} />
+                  {naMarked
+                    ? <Badge variant="outline" className="h-5 px-1.5 text-[10px]">N/A</Badge>
+                    : <SourceBadge source={c.source} />}
                 </div>
-                {c.kra_name && (
-                  <p className="text-[10px] uppercase tracking-wide text-muted-foreground truncate">{c.kra_name}</p>
+                {!hideKraKpiCol && (
+                  <>
+                    {c.kra_name && (
+                      <p className="text-[10px] uppercase tracking-wide text-muted-foreground truncate">{c.kra_name}</p>
+                    )}
+                    <p className="text-xs text-muted-foreground truncate">{c.kpi_name}</p>
+                  </>
                 )}
-                <p className="text-xs text-muted-foreground truncate">{c.kpi_name}</p>
                 {stages && (
                   <div className="grid grid-cols-3 gap-1 pt-1">
                     {STAGE_COLS.map(s => (
@@ -545,7 +559,17 @@ function CellTable({
                     ))}
                   </div>
                 )}
-                {editable && isRowEditable(c) && (
+                {editable && allowNa && (
+                  <label className="flex items-center gap-2 pt-1 text-[11px] cursor-pointer">
+                    <Checkbox
+                      checked={naMarked}
+                      onCheckedChange={(v) => toggleNa(c.submission_id, v === true)}
+                      aria-label={`Mark ${c.employee_name} ${c.kpi_name} as N/A`}
+                    />
+                    <span className="text-muted-foreground">Mark as N/A</span>
+                  </label>
+                )}
+                {editable && !naMarked && isRowEditable(c) && (
                   <div className="flex items-center gap-2 pt-1">
                     <span className="text-[10px] text-muted-foreground w-14">Achieved</span>
                     {renderAchievedInput(c)}
@@ -554,7 +578,11 @@ function CellTable({
                 <div className="flex items-center justify-between text-xs pt-1">
                   <span>Wt {c.weightage}%</span>
                   <span className="tabular-nums">
-                    Resolved {c.score == null ? <span className="text-destructive">● —</span> : c.score.toFixed(1)}
+                    Resolved {naMarked
+                      ? <span className="text-muted-foreground italic">N/A</span>
+                      : c.score == null
+                        ? <span className="text-destructive">● —</span>
+                        : c.score.toFixed(1)}
                   </span>
                   <span className={cn(
                     'tabular-nums',
