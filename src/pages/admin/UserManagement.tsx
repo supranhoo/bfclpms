@@ -1691,7 +1691,7 @@ export default function UserManagement() {
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                    <div className="space-y-1.5">
-                    <Label>Full Name <span className="text-destructive">*</span></Label>
+                    <Label>Full Name<ReqMark k="full_name" /></Label>
                     <Input
                       value={newFullName}
                       onChange={(e) => setNewFullName(e.target.value)}
@@ -1701,7 +1701,7 @@ export default function UserManagement() {
                   </div>
                   {newPortalAccess && (
                     <div className="space-y-1.5">
-                      <Label>Email</Label>
+                      <Label>Email<ReqMark k="email" /></Label>
                       <Input
                         type="email"
                         value={newEmail}
@@ -1712,7 +1712,7 @@ export default function UserManagement() {
                     </div>
                   )}
                   <div className="space-y-1.5">
-                    <Label>Employee Code <span className="text-destructive">*</span></Label>
+                    <Label>Employee Code<ReqMark k="employee_code" /></Label>
                     <Input
                       value={newEmployeeCode}
                       onChange={(e) => setNewEmployeeCode(e.target.value)}
@@ -1721,7 +1721,7 @@ export default function UserManagement() {
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <Label>Group Date of Joining (GDOJ)</Label>
+                    <Label>Group Date of Joining (GDOJ)<ReqMark k="group_doj" /></Label>
                     <div className="relative">
                       <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
                       <Input
@@ -1733,7 +1733,7 @@ export default function UserManagement() {
                     </div>
                   </div>
                   <div className="space-y-1.5">
-                    <Label>Date of Joining (DOJ)</Label>
+                    <Label>Date of Joining (DOJ)<ReqMark k="doj" /></Label>
                     <div className="relative">
                       <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
                       <Input
@@ -1745,7 +1745,7 @@ export default function UserManagement() {
                     </div>
                   </div>
                   <div className="space-y-1.5">
-                    <Label>Confirmation Date</Label>
+                    <Label>Confirmation Date<ReqMark k="confirmation_date" /></Label>
                     <div className="relative">
                       <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
                       <Input
