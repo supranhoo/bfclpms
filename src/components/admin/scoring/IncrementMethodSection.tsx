@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Calculator, Save, History, Copy, Plus, Trash2 } from 'lucide-react';
 import { useCompanies } from '@/hooks/useCompanies';
+import { Switch } from '@/components/ui/switch';
 import {
   useIncrementMethodConfig,
   useIncrementMethodSlabs,
