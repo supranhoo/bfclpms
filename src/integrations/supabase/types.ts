@@ -6497,6 +6497,7 @@ export type Database = {
           manager_remarks: string | null
           manager_score: number | null
           na_marked_by_role: string | null
+          na_reason: string | null
           performance_review_id: string | null
           row_version: number
           self_evidence_url: string | null
@@ -6552,6 +6553,7 @@ export type Database = {
           manager_remarks?: string | null
           manager_score?: number | null
           na_marked_by_role?: string | null
+          na_reason?: string | null
           performance_review_id?: string | null
           row_version?: number
           self_evidence_url?: string | null
@@ -6607,6 +6609,7 @@ export type Database = {
           manager_remarks?: string | null
           manager_score?: number | null
           na_marked_by_role?: string | null
+          na_reason?: string | null
           performance_review_id?: string | null
           row_version?: number
           self_evidence_url?: string | null
