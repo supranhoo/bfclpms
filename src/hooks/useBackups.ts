@@ -149,6 +149,13 @@ export function useTriggerBackup() {
           currentBatch: i + 1,
           tablesProcessed,
         }));
+
+        // Throttle between batches to avoid the per-trace Edge Function
+        // rate limit that breaks scheduled runs at ~batch 31. Manual runs
+        // are smaller today but the limit applies equally.
+        if (i < batches.length - 1) {
+          await new Promise((r) => setTimeout(r, 600));
+        }
       }
 
       // Phase 3: FINALIZE — generate manifest and update log
