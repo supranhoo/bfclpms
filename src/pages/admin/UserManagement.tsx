@@ -815,6 +815,25 @@ export default function UserManagement() {
   const handleSaveUser = async () => {
     if (!selectedUser) return;
 
+    if (editCustomFieldDefs.length > 0) {
+      const cv = validateCustomFieldValues(editCustomFieldDefs, editCustomValues);
+      if (cv.ok === false) {
+        toast({ title: cv.message, variant: 'destructive' });
+        return;
+      }
+      try {
+        const normalized = normalizeCustomFieldValues(editCustomFieldDefs, editCustomValues);
+        await saveEmployeeMasterCustomFieldValues(selectedUser.id, normalized);
+      } catch (err: any) {
+        toast({
+          title: 'Failed to save additional fields',
+          description: err?.message,
+          variant: 'destructive',
+        });
+        return;
+      }
+    }
+
     // If email changed, update via edge function first
     const emailChanged = (editEmail.trim().toLowerCase()) !== (selectedUser.email?.trim().toLowerCase() || '');
     if (emailChanged) {
