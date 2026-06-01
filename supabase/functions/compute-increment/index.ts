@@ -262,6 +262,64 @@ export function monthsServedInAY(
   return { months: Math.max(0, Math.min(12, months)), decision };
 }
 
+// ──────────────────────────────────────────────────────────────────────────
+// Post-Cutoff Carry-Forward evaluator (inlined for Deno edge runtime).
+// Mirrors src/lib/postCutoffCarryForward.ts — keep in sync.
+// ──────────────────────────────────────────────────────────────────────────
+function _clampDayUTC(year: number, monthIdx0: number, day: number): Date {
+  const lastDay = new Date(Date.UTC(year, monthIdx0 + 1, 0)).getUTCDate();
+  return new Date(Date.UTC(year, monthIdx0, Math.min(day, lastDay)));
+}
+function _resolveCutoffInsideAY(cutoffMonth: number, cutoffDay: number, ayStart: Date, ayEnd: Date): Date {
+  const startYear = ayStart.getUTCFullYear();
+  let cand = _clampDayUTC(startYear, cutoffMonth - 1, cutoffDay);
+  if (cand.getTime() < ayStart.getTime()) cand = _clampDayUTC(startYear + 1, cutoffMonth - 1, cutoffDay);
+  if (cand.getTime() > ayEnd.getTime()) return ayEnd;
+  return cand;
+}
+function _wholeMonthsFromNextMonth(gdoj: Date, ayEnd: Date): number {
+  const startOfNext = new Date(Date.UTC(gdoj.getUTCFullYear(), gdoj.getUTCMonth() + 1, 1));
+  if (startOfNext.getTime() > ayEnd.getTime()) return 0;
+  const years = ayEnd.getUTCFullYear() - startOfNext.getUTCFullYear();
+  const months = ayEnd.getUTCMonth() - startOfNext.getUTCMonth();
+  return Math.max(0, Math.min(12, years * 12 + months + 1));
+}
+export function evaluatePostCutoff(input: {
+  gdoj: Date | null; ayStart: Date; ayEnd: Date;
+  cutoffMonth: number | null; cutoffDay: number | null;
+  carryForwardEnabled: boolean;
+}): { isPostCutoffJoiner: boolean; carryForwardMonths: number; cutoffDateISO: string | null; reason: string } {
+  const { gdoj, ayStart, ayEnd, cutoffMonth, cutoffDay, carryForwardEnabled } = input;
+  if (
+    !gdoj || cutoffMonth == null || cutoffDay == null ||
+    !Number.isFinite(cutoffMonth) || !Number.isFinite(cutoffDay) ||
+    cutoffMonth < 1 || cutoffMonth > 12 || cutoffDay < 1 || cutoffDay > 31
+  ) {
+    return { isPostCutoffJoiner: false, carryForwardMonths: 0, cutoffDateISO: null,
+      reason: 'Cutoff not configured or GDOJ missing — feature inactive' };
+  }
+  if (gdoj.getTime() < ayStart.getTime() || gdoj.getTime() > ayEnd.getTime()) {
+    const cutoff = _resolveCutoffInsideAY(cutoffMonth, cutoffDay, ayStart, ayEnd);
+    return { isPostCutoffJoiner: false, carryForwardMonths: 0,
+      cutoffDateISO: cutoff.toISOString().slice(0, 10),
+      reason: 'GDOJ outside joining AY — post-cutoff rule does not apply' };
+  }
+  const cutoff = _resolveCutoffInsideAY(cutoffMonth, cutoffDay, ayStart, ayEnd);
+  const cutoffISO = cutoff.toISOString().slice(0, 10);
+  if (gdoj.getTime() <= cutoff.getTime()) {
+    return { isPostCutoffJoiner: false, carryForwardMonths: 0, cutoffDateISO: cutoffISO,
+      reason: `GDOJ ${gdoj.toISOString().slice(0,10)} on/before cutoff ${cutoffISO} — normal calculation applies` };
+  }
+  const balance = _wholeMonthsFromNextMonth(gdoj, ayEnd);
+  const carry = carryForwardEnabled ? balance : 0;
+  return {
+    isPostCutoffJoiner: true, carryForwardMonths: carry, cutoffDateISO: cutoffISO,
+    reason: carryForwardEnabled
+      ? `Post-cutoff joiner (GDOJ ${gdoj.toISOString().slice(0,10)} > cutoff ${cutoffISO}). ${balance} month(s) carried forward to next AY.`
+      : `Post-cutoff joiner (GDOJ ${gdoj.toISOString().slice(0,10)} > cutoff ${cutoffISO}). Carry-forward disabled — no balance months carried.`,
+  };
+}
+
 function applyMethod(method: string, basePercent: number, monthsServed: number, customSlabs: any[], proratedNote?: string): { eligible: number; notes: string } {
   if (basePercent <= 0) return { eligible: 0, notes: 'Base 0' };
   if (method === 'full') return { eligible: basePercent, notes: 'Full' };
