@@ -320,6 +320,13 @@ export default function UserManagement() {
   const [newLocationId, setNewLocationId] = useState<string>('');
   const [newIsDummy, setNewIsDummy] = useState<boolean>(false);
   const [newMobileNumber, setNewMobileNumber] = useState<string>('');
+  // Access & Login parity with Edit User (v2.68.x)
+  const [newIsActive, setNewIsActive] = useState<boolean>(true);
+  const MONTHS_CREATE = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const [newWorkflowPeriod, setNewWorkflowPeriod] = useState<string>('');
+  const [newWorkflowYear, setNewWorkflowYear] = useState<number | ''>('');
+  const [newWorkflowTemplateId, setNewWorkflowTemplateId] = useState<string>('');
+  const { data: createWorkflowTemplates } = useWorkflowTemplates(false);
 
   // Bulk Action Dialog
   const [bulkDialogOpen, setBulkDialogOpen] = useState(false);
