@@ -797,8 +797,30 @@ export default function UserManagement() {
   };
 
   const handleCreateUser = () => {
-    if (!newFullName.trim() || !newEmployeeCode.trim()) {
-      toast({ title: 'Full name and employee code are required', variant: 'destructive' });
+    // Validate against admin-configured Employee Master Field Requirements.
+    const fieldValues = {
+      full_name: newFullName,
+      email: newPortalAccess ? newEmail : (emfReqs.email ? newEmail : 'n/a'),
+      employee_code: newEmployeeCode,
+      group_doj: newGroupDoj,
+      doj: newDoj,
+      confirmation_date: newConfirmationDate,
+      company_id: newCompanyId,
+      division_id: newDivisionId,
+      department_id: newDepartmentId,
+      designation: newDesignation,
+      pms_grade: newPmsGrade,
+      employee_category: newEmployeeCategory,
+      employment_status: newEmploymentStatus,
+      location_id: newLocationId,
+      reporting_manager_id: newManagerId,
+      role: newRole,
+      portal_access: newPortalAccess,
+      is_dummy_employee: newIsDummy,
+    };
+    const v = validateRequiredFields(fieldValues, emfReqs);
+    if (!v.ok) {
+      toast({ title: v.message, variant: 'destructive' });
       return;
     }
     if (newEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail.trim())) {
