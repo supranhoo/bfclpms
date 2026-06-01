@@ -204,6 +204,7 @@ export default function UserManagement() {
   const [editDoj, setEditDoj] = useState<string>(''); // yyyy-MM-dd or ''
   const [editConfirmationDate, setEditConfirmationDate] = useState<string>(''); // yyyy-MM-dd or ''
   const [editLocationId, setEditLocationId] = useState<string>('');
+  const [editIsDummy, setEditIsDummy] = useState<boolean>(false);
   // Create Dialog
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [newFullName, setNewFullName] = useState('');
@@ -223,6 +224,7 @@ export default function UserManagement() {
   const [newDoj, setNewDoj] = useState<string>(''); // yyyy-MM-dd or ''
   const [newConfirmationDate, setNewConfirmationDate] = useState<string>(''); // yyyy-MM-dd or ''
   const [newLocationId, setNewLocationId] = useState<string>('');
+  const [newIsDummy, setNewIsDummy] = useState<boolean>(false);
 
   // Bulk Action Dialog
   const [bulkDialogOpen, setBulkDialogOpen] = useState(false);
