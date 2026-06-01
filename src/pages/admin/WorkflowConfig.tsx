@@ -674,7 +674,21 @@ export default function WorkflowConfig() {
                   </Label>
                 </div>
               </div>
-              
+
+              {fmTemplatesCount > 0 && employeesMissingFm > 0 && (
+                <Alert variant="default" className="mb-4 border-amber-500/40 bg-amber-500/5">
+                  <Info className="h-4 w-4 text-amber-600" />
+                  <AlertDescription className="text-sm">
+                    <span className="font-medium">{employeesMissingFm}</span> employee
+                    {employeesMissingFm === 1 ? '' : 's'} have no Functional Manager assigned.{' '}
+                    {fmTemplatesCount} active template{fmTemplatesCount === 1 ? '' : 's'} include
+                    the Functional Manager review stage — that stage will resolve to
+                    <span className="font-mono text-xs mx-1">N/A</span>
+                    for these employees. Assign a Functional Manager from User Management to enable the stage.
+                  </AlertDescription>
+                </Alert>
+              )}
+
               <Table>
                 <TableHeader>
                   <TableRow>
