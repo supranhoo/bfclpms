@@ -1801,6 +1801,8 @@ export default function ImportData() {
         location: 'Mumbai',
         managerEmployeeId: '100002',
         managerName: 'Jane Smith',
+        functionalManagerEmployeeId: '100003',
+        functionalManagerName: 'Alex Cross',
         employeeStatus: 'Active',
         groupDoj: '2020-04-15',
         doj: '2020-04-15',
