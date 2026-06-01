@@ -1040,6 +1040,19 @@ export default function UserManagement() {
             <SelectItem value="inactive">Inactive</SelectItem>
           </SelectContent>
         </Select>
+        <Select
+          value={employeeTypeFilter}
+          onValueChange={(v) => { setEmployeeTypeFilter(v as 'all' | 'real' | 'dummy'); handleFilterChange(); }}
+        >
+          <SelectTrigger className="w-[170px]" title="Employee Type">
+            <SelectValue placeholder="Employee Type" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Employees</SelectItem>
+            <SelectItem value="real">Real Employees</SelectItem>
+            <SelectItem value="dummy">Dummy / System</SelectItem>
+          </SelectContent>
+        </Select>
 
         {selectedUserIds.size > 0 && (
           <Button variant="secondary" onClick={() => setBulkDialogOpen(true)}>
