@@ -1901,7 +1901,7 @@ export default function UserManagement() {
           <Tabs defaultValue="profile" className="flex-1 flex flex-col min-h-0">
             <TabsList className="grid w-full grid-cols-2">
               <TabsTrigger value="profile" className="gap-1.5"><Users className="h-3.5 w-3.5" /> Profile</TabsTrigger>
-              <TabsTrigger value="access" className="gap-1.5"><Shield className="h-3.5 w-3.5" /> Access</TabsTrigger>
+              <TabsTrigger value="access" className="gap-1.5"><Shield className="h-3.5 w-3.5" /> Access & Login</TabsTrigger>
             </TabsList>
 
             <ScrollArea className="flex-1 pr-4 -mr-4 mt-3">
