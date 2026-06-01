@@ -319,6 +319,7 @@ export default function UserManagement() {
   const [newConfirmationDate, setNewConfirmationDate] = useState<string>(''); // yyyy-MM-dd or ''
   const [newLocationId, setNewLocationId] = useState<string>('');
   const [newIsDummy, setNewIsDummy] = useState<boolean>(false);
+  const [newMobileNumber, setNewMobileNumber] = useState<string>('');
 
   // Bulk Action Dialog
   const [bulkDialogOpen, setBulkDialogOpen] = useState(false);
@@ -657,6 +658,16 @@ export default function UserManagement() {
         if (dummyErr) throw dummyErr;
       }
 
+      // Persist Mobile Number post-create (parity with Edit User). The
+      // `create-employee` edge function does not accept this field yet.
+      if (newMobileNumber && response.data?.profile?.id) {
+        const { error: mobErr } = await supabase
+          .from('profiles')
+          .update({ mobile_number: newMobileNumber } as any)
+          .eq('id', response.data.profile.id);
+        if (mobErr) throw mobErr;
+      }
+
       // Persist admin-defined custom field values (if any active fields exist).
       if (response.data?.profile?.id && customFieldDefs.length > 0) {
         const normalized = normalizeCustomFieldValues(customFieldDefs, customValues);
@@ -935,6 +946,7 @@ export default function UserManagement() {
       role: newRole,
       portal_access: newPortalAccess,
       is_dummy_employee: newIsDummy,
+      mobile_number: newMobileNumber,
     };
     const v = validateRequiredFields(fieldValues, emfReqs);
     if (v.ok === false) {
@@ -989,6 +1001,7 @@ export default function UserManagement() {
     setNewConfirmationDate('');
     setNewLocationId('');
     setNewIsDummy(false);
+    setNewMobileNumber('');
     setCustomValues({});
   };
 
@@ -1899,6 +1912,19 @@ export default function UserManagement() {
                         type="date"
                         value={newConfirmationDate}
                         onChange={(e) => setNewConfirmationDate(e.target.value)}
+                        className="pl-9 h-9"
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Mobile Number<ReqMark k="mobile_number" /></Label>
+                    <div className="relative">
+                      <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+                      <Input
+                        type="tel"
+                        value={newMobileNumber}
+                        onChange={(e) => setNewMobileNumber(e.target.value)}
+                        placeholder="+91 9876543210"
                         className="pl-9 h-9"
                       />
                     </div>

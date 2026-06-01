@@ -23,6 +23,7 @@ export type EmployeeMasterFieldKey =
   | 'reporting_manager_id'
   | 'role'
   | 'portal_access'
+  | 'mobile_number'
   | 'is_dummy_employee';
 
 export interface EmployeeMasterFieldDef {
@@ -49,6 +50,7 @@ export const EMPLOYEE_MASTER_FIELDS: EmployeeMasterFieldDef[] = [
   { key: 'reporting_manager_id', label: 'Reporting Manager' },
   { key: 'role', label: 'Role' },
   { key: 'portal_access', label: 'Portal Access' },
+  { key: 'mobile_number', label: 'Mobile Number' },
   { key: 'is_dummy_employee', label: 'Dummy/System Employee' },
 ];
 
