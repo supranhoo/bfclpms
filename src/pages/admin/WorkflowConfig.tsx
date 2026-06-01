@@ -944,6 +944,10 @@ export default function WorkflowConfig() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        <TabsContent value="final_score_rules" className="space-y-4">
+          <FinalScoreRulesTab />
+        </TabsContent>
       </Tabs>
 
       {/* Custom Workflow Dialog */}
