@@ -51,6 +51,11 @@ export interface CellPreview {
   uom?: string | null;
   target_value?: number | null;
   achieved_current?: number | string | null;
+  /** Row-level N/A from the snapshot (i.e. set by a prior stage). Used by
+   *  the preview to render a muted N/A pill in every stage column whose
+   *  score is null on an N/A row — making "N/A from Self / Manager /
+   *  Skip-Level" visible to the next reviewer. */
+  isNa?: boolean;
   stageScores?: {
     self: number | null;
     manager: number | null;
@@ -87,6 +92,7 @@ export interface ImpactSummary {
     skippedCount: number;
     overrideCount: number;
     requiredUnfilled: number;
+    naCount: number;
     weightedDelta: number;
   };
 }
@@ -168,6 +174,7 @@ export function buildBulkSignoffImpact(input: BuildImpactInput): ImpactSummary {
       uom: rule.uom ?? null,
       target_value: rule.target_value ?? null,
       achieved_current: achievedBySubmissionId.get(r.submission_id) ?? null,
+      isNa: r.is_na === true || inputs?.isNa === true,
       stageScores: {
         self: r.self_score,
         manager: r.manager_score,
@@ -282,9 +289,14 @@ export function buildBulkSignoffImpact(input: BuildImpactInput): ImpactSummary {
   );
 
   const computedCount = cells.filter(c => c.source === 'computed').length;
+  // 'na' is an intentional write — not a skip.
   const skippedCount = cells.filter(c => c.source === 'none').length;
+  const naCount = cells.filter(c => c.source === 'na').length;
   const overrideCount = cells.filter(c => c.source === 'override' || c.source === 'manual').length;
-  const requiredUnfilled = cells.filter(c => c.source === 'none' || (c.source === 'override' && c.score == null)).length;
+  // N/A rows do NOT require an Achieved value — exclude them from the gate.
+  const requiredUnfilled = cells.filter(
+    c => c.source === 'none' || (c.source === 'override' && c.score == null),
+  ).length;
   const weightedDelta = perEmployee.reduce((s, e) => s + e.delta, 0);
 
   return {
@@ -297,6 +309,7 @@ export function buildBulkSignoffImpact(input: BuildImpactInput): ImpactSummary {
       skippedCount,
       overrideCount,
       requiredUnfilled,
+      naCount,
       weightedDelta: Math.round(weightedDelta * 100) / 100,
     },
   };

@@ -124,6 +124,7 @@ export function BulkApproveDialog({
   const remarkValid = trimmedLen >= MIN_REMARK;
   const skippedCount = preview?.totals.skippedCount ?? 0;
   const requiredUnfilled = preview?.totals.requiredUnfilled ?? skippedCount;
+  const naCount = preview?.totals.naCount ?? 0;
   const actionableCount = Math.max(0, cellCount - requiredUnfilled);
   const canSubmit = remarkValid && !isLoading && actionableCount > 0;
 
@@ -328,9 +329,11 @@ export function BulkApproveDialog({
                 ? `${verbing}…`
                 : requiredUnfilled > 0 && actionableCount > 0
                   ? `${verb} ${actionableCount} of ${cellCount}`
-                  : `${verb} ${actionableCount} cell${actionableCount === 1 ? '' : 's'}`}
+                  : `${verb} ${actionableCount} cell${actionableCount === 1 ? '' : 's'}${
+                      naCount > 0 ? ` (includes ${naCount} N/A)` : ''
+                    }`}
             </Button>
-            {actionableCount === 0 && cellCount > 0 && (
+            {actionableCount === 0 && cellCount > 0 && requiredUnfilled > 0 && (
               <p className="text-[11px] text-destructive">
                 {isSignoff
                   ? 'Enter an Achieved value for each row marked ●.'
