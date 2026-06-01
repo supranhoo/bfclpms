@@ -444,6 +444,8 @@ export default function BulkReviewDashboard() {
     extras?: {
       achievedValues?: Record<string, number | string | null>;
       isOverride?: boolean;
+      isNa?: Record<string, boolean>;
+      naReasons?: Record<string, string>;
     },
   ) => {
     const cells = loadedRows
@@ -486,6 +488,8 @@ export default function BulkReviewDashboard() {
           attachment_urls: attachmentUrls,
           achieved_values: extras?.achievedValues,
           is_override: extras?.isOverride,
+          is_na: extras?.isNa,
+          na_reasons: extras?.naReasons,
         });
         // POLICY §111.7.c — toast must distinguish applied vs advanced vs
         // skipped instead of conflating them into a misleading "Signed off
