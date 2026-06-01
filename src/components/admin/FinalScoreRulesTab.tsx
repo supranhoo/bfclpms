@@ -254,10 +254,11 @@ export function FinalScoreRulesTab() {
 
       <ConfirmDestructiveDialog
         open={!!deleteTarget}
-        onOpenChange={(open) => !open && setDeleteTarget(null)}
         title="Delete final score rule?"
         description="Existing approved scores will not change. Future approvals in this scope will use the default last-completed-stage behavior unless another rule applies."
-        confirmText="Delete rule"
+        confirmLabel="Delete rule"
+        isLoading={deleteMut.isPending}
+        onCancel={() => setDeleteTarget(null)}
         onConfirm={async () => {
           if (!deleteTarget) return;
           await deleteMut.mutateAsync(deleteTarget.id);
