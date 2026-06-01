@@ -319,6 +319,7 @@ export default function UserManagement() {
   const [newConfirmationDate, setNewConfirmationDate] = useState<string>(''); // yyyy-MM-dd or ''
   const [newLocationId, setNewLocationId] = useState<string>('');
   const [newIsDummy, setNewIsDummy] = useState<boolean>(false);
+  const [newMobileNumber, setNewMobileNumber] = useState<string>('');
 
   // Bulk Action Dialog
   const [bulkDialogOpen, setBulkDialogOpen] = useState(false);
