@@ -3405,6 +3405,35 @@ Governance source: `docs/safety-integration-governance.md` §Phase 5.
 - **Rollback:** restore the previous policy with a single migration that re-creates `Safety users can report incidents` (WITH CHECK `has_safety_module_access(auth.uid()) AND reporter_id = auth.uid()`) and drops `Authenticated users can report incidents`. No data migration needed.
 - **Regression lock:** `src/test/safety/incidentReportRlsPolicy.test.ts`. RLS matrix updated under §F-RLS-03 in `docs/safety/phase1/rls-matrix.md`.
 
+## §130 — `BACKFILL_*` Audit Log Action Vocabulary (Historical Import Gap Repair)
+
+**Context.** KPIs imported via the pre-instrumentation data path (Sep 2025 – May 2026) carry full `review_submissions` rows (scores, ratings, remarks) but their per-stage `kpi_audit_logs` entries were never emitted, so the in-app Review Timeline appeared to skip directly to the Auditor stage. Per the Jan-2026 governance cutoff (`mem://infrastructure/database/migration-governance`), a single, fully-reversible repair run was executed for the **Jan-2026-onwards cohort only**; Sep–Dec 2025 (~2,646 KPIs) is intentionally untouched.
+
+**Action vocabulary.** Six new action keys are introduced. They are **additive** — no canonical workflow consumer (status aggregator, scoring formula, report RPC) filters on them, so they cannot perturb computed values:
+
+- `BACKFILL_SELF_REVIEW_SUBMITTED` → canonical status `self_review`
+- `BACKFILL_MANAGER_REVIEWED` → canonical status `manager_check`
+- `BACKFILL_SKIP_LEVEL_REVIEWED` → canonical status `skip_level_check`
+- `BACKFILL_HR_PMS_REVIEWED` → canonical status `hr_pms_review`
+- `BACKFILL_AUDITOR_REVIEWED` → canonical status `audit`
+- `BACKFILL_MANAGEMENT_REVIEWED` → canonical status `management_review`
+
+**Row contract.** Every row inserted under this policy MUST satisfy:
+- `performed_by = NULL` (system-attributed per Core rule and §88 / System Performer Attribution).
+- `old_value = NULL`.
+- `new_value` mirrors the live `*_REVIEWED` payload shape — `stage_score`, `stage_rating`, `achieved_value`, `stage_remarks`, `status` (canonical literal) — copied **verbatim** from `review_submissions`. No recomputation, no interpolation, no inference.
+- `metadata = { source: 'submission_backfill', reason: 'historical_import_gap_jan2026_onwards', run_id: <uuid>, timestamp_known: <bool>, observed_submitted_at: <ts>, observed_updated_at: <ts> }`.
+
+**Timestamp policy (don't-assume rule).** `created_at` is anchored only to fields that physically exist in `review_submissions`. For the Self stage it equals `submitted_at` (real, `timestamp_known = true`). For the chronologically-last completed stage of each KPI it equals `updated_at` (real, `timestamp_known = true`). For all intermediate stages it equals `submitted_at` with `timestamp_known = false` so auditors can identify approximate anchors. Fabrication of synthetic offsets (e.g. `+N minutes`) is forbidden.
+
+**Idempotency & rollback.** Every insert is guarded by `WHERE NOT EXISTS` against both the canonical action family and the matching `BACKFILL_*` key, so re-running the migration is a no-op. Rollback is one statement: `DELETE FROM kpi_audit_logs WHERE action LIKE 'BACKFILL_%' AND metadata->>'run_id' = '<uuid>';`.
+
+**UI contract.** `src/components/dashboard/KpiTimeline.tsx` registers each `BACKFILL_*` key with the same icon and colour as its canonical counterpart and a label suffix of `(backfilled)`. `groupTimelineEvents` (`src/lib/timelineGrouping.ts`) continues to treat them as primary human-style events (never cascade rows).
+
+**Out of scope.** `review_submissions`, `kpis`, `performance_reviews`, `workflow_config`, `org_kpi_*`, scores, ratings, remarks, achieved values, statuses, `final_score`, evidence URLs, RLS policies, triggers, RPCs, and the backup denylist are NEVER mutated by this policy. The Sep–Dec 2025 cohort is out of scope; any future extension requires a separate approved migration with its own `run_id`.
+
+**Anchor.** DOCUMENTATION.md v2.66.13.30 · CHANGELOG_2026.md June W1 row · regression test `src/test/kpiTimelineBackfillActions.test.ts`.
+
 ## §Phase19.1-Safety — Access UX hardening (2026-05-30)
 - **Incident submission contract.** All safety incident writes from the app MUST go through the `report_safety_incident` SECURITY DEFINER RPC. The frontend MUST validate (and, if needed, refresh) the auth session before invoking the RPC so 42501 / RLS failures cannot reach the user. Any RLS / not_authenticated / permission-denied error from the RPC is rendered to the user as "Your session expired or your account no longer has permission to report incidents. Please sign in again and retry." Direct `.from('safety_incidents').insert(...)` is forbidden in non-test code and locked by `src/test/safety/noDirectIncidentInsert.test.ts`.
 - **Safety-admin profiles read.** Safety admins (holders of `safety_app_role = 'admin'`) MAY read **active** profiles (`is_active = true`) via the dedicated SELECT policy `Safety admins can view active profiles for role grants` on `public.profiles`. This is required by the role-grant UX on `/safety/settings/users`. SELECT-only — Safety admins still cannot modify profiles. Mutations remain restricted to the PMS admin / HR PMS / management policies.
