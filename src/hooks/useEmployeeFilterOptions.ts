@@ -65,7 +65,7 @@ export function useEmployeeFilterOptions(args: UseEmployeeFilterOptionsArgs = {}
       const data = await fetchAllPaged<any>((from, to) =>
         supabase
           .from('profiles')
-          .select('id, full_name, reporting_manager_id, employee_code')
+          .select('id, full_name, reporting_manager_id, functional_manager_id, employee_code')
           .eq('is_active', true)
           .order('full_name')
           .range(from, to)
@@ -82,10 +82,36 @@ export function useEmployeeFilterOptions(args: UseEmployeeFilterOptionsArgs = {}
     enabled: isReady && !!user,
   });
 
+  // Functional Managers — distinct list of profiles referenced as anyone's
+  // functional_manager_id. Mirrors the `managers` shape so the same filter UI
+  // pattern can reuse it (Custom Report builder, Reports filters).
+  const { data: functionalManagers } = useQuery({
+    queryKey: ['functional-managers-list', profilesVersion, user?.id],
+    queryFn: async () => {
+      const data = await fetchAllPaged<any>((from, to) =>
+        supabase
+          .from('profiles')
+          .select('id, full_name, functional_manager_id, employee_code')
+          .eq('is_active', true)
+          .order('full_name')
+          .range(from, to)
+      );
+      const fmIds = new Set(data?.map(p => (p as any).functional_manager_id).filter(Boolean));
+      return data
+        ?.filter(p => fmIds.has(p.id))
+        .map(p => ({
+          id: p.id,
+          name: p.employee_code ? `${p.full_name || 'Unknown'} (${p.employee_code})` : (p.full_name || 'Unknown'),
+        })) || [];
+    },
+    enabled: isReady && !!user,
+  });
+
   return {
     departments: departments || [],
     designations: designations || [],
     grades: grades || [],
     managers: managers || [],
+    functionalManagers: functionalManagers || [],
   };
 }
