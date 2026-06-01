@@ -1,132 +1,142 @@
-## Goal
-
-Add a configurable provision so that employees who join AFTER a configured Increment Eligibility Cutoff Date are skipped for the joining AY, and (when enabled) their unused balance months are carried forward and added to the next AY's eligible months using the next AY's rating/slab.
-
-This is distinct from the existing `joining_month_cutoff_day` (1–31), which only decides whether the GDOJ month itself counts. It must remain unchanged.
+# Dummy/System Employee Visibility
 
 ## Assumptions
 
-- Cutoff is one full date (month + day) per AY/scope, e.g. 31 Dec. Year is implied by the AY.
-- "Post-cutoff" means `GDOJ > cutoffDate` AND `GDOJ` falls inside the joining AY.
-- Setting lives on the existing `increment_method_configs` row (same per-AY, per-company scope as the Method tab) — no new scope plumbing.
-- Carry-forward affects ONLY service-month counts; PMS score, slab band, criteria, confirmation-adjustment logic stay untouched.
-- Default carry-forward = `No` (additive, zero impact on historical runs).
-- Next AY's method (full / prorated_doj / custom) decides whether/how the extra months are usable: `full` ignores months by design, `prorated_doj` caps at 12 (carry-forward cannot exceed the prorated ceiling, see Open Question 1), `custom` uses the bumped month count to match its slab.
+- "Profiles" table is the canonical employee master (consistent with rest of project).
+- Flag name: **`is_dummy_employee boolean NOT NULL DEFAULT false`** on `public.profiles`.
+- Two new `system_settings` keys (JSON string values, matching the existing `useSystemSettings` pattern):
+  - `show_dummy_in_excel` → `"yes" | "no"` (default `"no"`)
+  - `show_dummy_in_frontend` → `"yes" | "no"` (default `"no"`)
+- Defaults = **No** (hide dummies) — matches the spec and is safe (existing dummies like auditor001 disappear from business views immediately once marked).
+- Dummies remain fully functional for login, RLS, scoring, audit logs, notifications, backups. Only **visibility** in business selectors/reports changes.
+- Admin User Management always shows everyone (with a "Dummy/System" badge + filter).
 
 ## Risk & Impact Report
 
-- **Data Impact**: Additive. 3 nullable columns on `increment_method_configs`; 2 nullable columns on `increment_run_items` and `confirmation_increment_adjustments.inputs_snapshot` JSON. No backfill needed; legacy rows behave exactly as today (carry-forward = false, cutoff = null → feature disabled).
-- **Workflow Impact**: New admin checkbox + date inputs in the Increment Method tab. No permission changes.
-- **UI/UX Impact**: Adds one row to Method tab; adds 3 columns to the Run Details table and 4 columns to Excel exports. No layout regression.
-- **Regression Risk**: Low. Engine branch is gated by `carry_forward_post_cutoff = true` AND cutoff present AND GDOJ in joining AY AND GDOJ > cutoff. All other paths unchanged.
-- **Scalability Impact**: One extra `select` per run to fetch the prior-AY post-cutoff carry rows (scoped by `assessment_year` and `employee_id IN (...)`). O(n) over the run population, batched.
-- **Mitigation**: Feature flag is the config column itself (default false); unit tests cover the 3 examples in the spec plus edge cases.
-- **Rollback**: Drop the 3 columns (or set `carry_forward_post_cutoff = false`); engine no-ops.
+- **Data Impact**: Additive. One nullable-safe boolean column on `profiles` (default false). Two new rows in `system_settings`. No backfill of `true` — admins mark dummies manually. Historical data, audit logs, PMS scores untouched.
+- **Workflow Impact**: None for real employees. Dummies stay logged-in, keep roles, keep RLS access. Only UI lists and Excel rows filter them out.
+- **UI/UX Impact**: 
+  - New Yes/No switch in Add/Edit User dialog.
+  - New "Dummy/System Employee Visibility" card in System Settings → General.
+  - New "Dummy/System" badge + status filter (All / Real / Dummy) in User Management table.
+- **Regression Risk**: Medium-low. The risk is silently dropping rows from a report. Mitigation: central helper `applyDummyEmployeeFilter()` used everywhere, gated by the setting, with the setting **defaulting to "no"** — but only filtering rows where `is_dummy_employee === true` (so until admin marks anyone, behaviour is byte-identical to today).
+- **Scalability**: O(n) client-side filter on already-fetched lists. No extra queries (the flag is added to existing `profiles` selects). Indexed `WHERE is_dummy_employee = true` partial index for future server-side filtering.
+- **Rollback**: Drop column + 2 settings rows; remove helper call sites. Filter helper no-ops when column missing.
+- **Backup**: `profiles` is already covered by the automatic `get_backup_table_order()` allowlist — no change needed (per Core memory).
 
-## Placement Decision
+## Placement Decisions
 
-Increment Method tab in System Settings > Increment. Rationale: the rule directly drives "Final Eligible Months" / method math, which is what the Method tab already owns (it also already holds `joining_month_cutoff_day`). General Eligibility tab is about who is allowed, not how months are counted.
+- **Flag column**: `public.profiles.is_dummy_employee` (not a separate table — single boolean, profile-scoped).
+- **Settings UI**: System Settings → General tab (new card below existing cards).
+- **Admin filter UI**: User Management toolbar — new "Employee Type" dropdown (All / Real / Dummy-System), with a badge on each row.
+- **Filter helper**: `src/lib/dummyEmployeeFilter.ts` — pure, mirrors the pattern of `src/lib/reportEmployeeFilter.ts`.
 
 ## Plan
 
 ### 1. Schema (single migration)
 
 ```sql
-ALTER TABLE public.increment_method_configs
-  ADD COLUMN IF NOT EXISTS eligibility_cutoff_month smallint
-    CHECK (eligibility_cutoff_month BETWEEN 1 AND 12),
-  ADD COLUMN IF NOT EXISTS eligibility_cutoff_day   smallint
-    CHECK (eligibility_cutoff_day   BETWEEN 1 AND 31),
-  ADD COLUMN IF NOT EXISTS carry_forward_post_cutoff boolean NOT NULL DEFAULT false;
+ALTER TABLE public.profiles
+  ADD COLUMN IF NOT EXISTS is_dummy_employee boolean NOT NULL DEFAULT false;
 
-ALTER TABLE public.increment_run_items
-  ADD COLUMN IF NOT EXISTS post_cutoff_joiner boolean,
-  ADD COLUMN IF NOT EXISTS post_cutoff_carry_forward_months smallint;
+CREATE INDEX IF NOT EXISTS idx_profiles_is_dummy_employee
+  ON public.profiles (is_dummy_employee) WHERE is_dummy_employee = true;
+
+INSERT INTO public.system_settings (setting_key, setting_value, description)
+VALUES
+  ('show_dummy_in_excel',    '"no"', 'Show dummy/system employees in Excel reports/exports'),
+  ('show_dummy_in_frontend', '"no"', 'Show dummy/system employees in frontend business views/selectors')
+ON CONFLICT (setting_key) DO NOTHING;
 ```
 
-No new tables, no RLS/GRANT changes (existing row policies cover the columns).
+No RLS/GRANT changes (column inherits existing `profiles` policies; `system_settings` already covered).
 
-### 2. Pure helper (testable, no DB)
+### 2. Pure helper + hooks
 
-`src/lib/postCutoffCarryForward.ts`
-
+**`src/lib/dummyEmployeeFilter.ts`**
 ```ts
-export interface PostCutoffInput {
-  gdoj: Date | null;
-  ayStart: Date;           // Jul 1
-  ayEnd: Date;             // Jun 30
-  cutoffMonth: number | null;   // 1-12
-  cutoffDay: number | null;     // 1-31
-  carryForwardEnabled: boolean;
+export function applyDummyEmployeeFilter<T>(
+  rows: T[],
+  showDummies: boolean,
+  getIsDummy: (row: T) => boolean | null | undefined,
+): T[] {
+  if (showDummies) return rows;
+  return rows.filter(r => getIsDummy(r) !== true);
 }
-export interface PostCutoffResult {
-  isPostCutoffJoiner: boolean;
-  carryForwardMonths: number;   // 0 when disabled or not applicable
-  cutoffDateISO: string | null;
-  reason: string;               // human-readable for run details
-}
-export function evaluatePostCutoff(i: PostCutoffInput): PostCutoffResult;
 ```
 
-Logic:
-1. If cutoff month/day missing or `gdoj` missing → `{ isPostCutoffJoiner: false, carryForwardMonths: 0 }`.
-2. Cutoff date = `Date(ayStart.year, cutoffMonth-1, cutoffDay)`; if that date < ayStart, roll to next calendar year so it stays inside the AY window.
-3. If `gdoj` outside `[ayStart, ayEnd]` → not a post-cutoff scenario.
-4. If `gdoj <= cutoffDate` → not post-cutoff; carry = 0.
-5. If `gdoj > cutoffDate` → post-cutoff. Carry months = whole months from start of month-after-GDOJ through `ayEnd`, capped at 12.
-6. Carry returned ONLY when `carryForwardEnabled`; otherwise carry = 0 but `isPostCutoffJoiner = true` (so we can still surface the reason).
+**`src/hooks/useDummyEmployeeVisibility.ts`** — reads the two settings via existing `useSystemSetting('show_dummy_in_excel' | 'show_dummy_in_frontend')`. Returns `{ showInExcel, showInFrontend, isLoading }`. Defaults to `false` while loading and when setting is missing.
 
-### 3. Edge function (`supabase/functions/compute-increment/index.ts`)
+### 3. Admin: Add/Edit User dialog
 
-- After resolving `resolvedCfg` per employee, call `evaluatePostCutoff` with the resolved cutoff and `carry_forward_post_cutoff` flag.
-- **If post-cutoff joiner**: set `eligibility = 'ineligible'`, `reason = 'Joined after eligibility cutoff (DD-MMM)'`. Persist `post_cutoff_joiner=true`, `post_cutoff_carry_forward_months = result.carryForwardMonths` on `increment_run_items` (and inside `inputs_snapshot`).
-- **Carry-forward lookup**: BEFORE the per-employee loop, fetch prior AY (`startYear - 1`) `increment_run_items` rows with `post_cutoff_carry_forward_months > 0` for the same employee population from the most recent *completed* prior run, into a `Map<employee_id, number>`.
-- During normal employees' calculation, add the looked-up months to `ayMonths.months` (capped at 12 for `prorated_doj`; uncapped for `custom`). Note the addition in `methodNotes` so it shows in Run Details.
-- Persist both numbers (carry IN + carry OUT) in `inputs_snapshot` for audit traceability.
+File: `src/components/admin/users/UserFormDialog.tsx` (or current equivalent — confirm during impl). Add:
+- Switch: **"Is this a dummy/system employee?"** (default off)
+- Helper text per spec
+- Wire to `is_dummy_employee` in the upsert payload + `profiles` row.
 
-Note: We do NOT mutate the `confirmation_increment_adjustments` table semantics — the existing `carry_forward_months` column there remains confirmation-only.
+### 4. Admin: User Management table
 
-### 4. UI – Increment Method tab (`src/components/admin/scoring/IncrementMethodSection.tsx`)
+- Add **"Dummy/System"** badge (subtle muted variant) next to name when `is_dummy_employee === true`.
+- Add toolbar filter: **Employee Type** — `All | Real Employees | Dummy/System` (client-side filter on the existing list).
+- **Never** apply the global visibility setting here — admins always see everyone.
 
-Add below the existing "Joining Month Cutoff Day" row:
+### 5. System Settings → General
 
-- **Eligibility Cutoff Date**: a Month dropdown + Day number input (1–31). Helper text: "Employees joining after this date may be excluded from increment in the joining AY."
-- **Carry forward post-cutoff joining months to next AY?**: a Switch with Yes/No. Default off. Helper text quoted verbatim from the spec.
-- Validation: if Switch=Yes, both month and day must be set (block save with inline error).
-- Wire through `useSaveIncrementMethod` and `useCopyIncrementMethodFromYear` so the three new fields are preserved on save and copy.
+File: `src/pages/admin/GeneralSettings.tsx` (or current equivalent). New card:
+- Title: **"Dummy/System Employee Visibility"**
+- Switch 1: "Show dummy/system employees in Excel reports?" → writes `show_dummy_in_excel`
+- Switch 2: "Show dummy/system employees on frontend views?" → writes `show_dummy_in_frontend`
+- Uses existing `useUpdateSystemSetting` mutation.
 
-Mirror the new fields in `IncrementMethodConfigRow` (`src/hooks/useIncrementMethod.ts`).
+### 6. Apply frontend filter (`showInFrontend === false`)
 
-### 5. Run Details + Excel (`src/pages/incentive/IncrementInputs.tsx`)
+Apply `applyDummyEmployeeFilter` in selectors/lists that surface real employees for business use. Targets (each only filters when the setting fetch is ready):
+- `EmployeePickerCombobox` (review notes)
+- Dashboard employee lists / reviewer grids (`useMyVisibleEmployeeIds` consumers — filter at the component layer, not the hook, so admin screens stay unaffected)
+- Report filter dropdowns (`CompanyFilter` siblings — the employee picker)
+- KPI assignment employee lists
+- Increment input employee search (`IncrementInputs.tsx`)
+- Incentive input employee search (`IncentiveDataEntry.tsx`)
+- Management / audit employee views
 
-- Add three TableHead columns near "Final Eligible Months": **GDOJ**, **Cutoff Date**, **Post-Cutoff Joiner**, **Carried-Forward Months**. Treatment/Reason is already shown via existing `adjustment_reason` / `ineligibility_reason`.
-- Excel exports (both `downloadXlsx` calls): add columns **GDOJ, Increment Eligibility Cutoff Date, Post-Cutoff Joiner, Carried Forward Months, Final Eligible Months, Carry Forward Applied, Carry Forward Reason**. Pull from the new `increment_run_items` columns + the config snapshot embedded in the run.
+Approach: each list component already selects `profiles` rows — add `is_dummy_employee` to the select, then pipe the array through the helper using `useDummyEmployeeVisibility().showInFrontend`. **Do not** filter inside shared hooks like `useMyVisibleEmployeeIds` (those are also used by admin screens).
 
-### 6. Tests (Deno + Vitest)
+### 7. Apply Excel filter (`showInExcel === false`)
 
-- `supabase/functions/compute-increment/post_cutoff_carry_forward_test.ts` — covers the 3 spec examples + edge cases: cutoff null, carry-off, GDOJ outside AY, prorated_doj cap at 12, custom-method slab bumping, missing GDOJ.
-- `src/lib/postCutoffCarryForward.test.ts` — pure helper unit tests.
+In every Excel export path, filter the export rows just before `XLSX.writeFile`. Targets confirmed from codebase:
+- `OrgKpiBulkExport` (and other admin exports)
+- `MonthlyIncentiveTable` / `RetroactiveAdjustmentTable` exports
+- `IncrementInputs` Run Details + summary exports
+- `PerformanceReport`, `DepartmentReport`, `KRAIssuance`, `IssuesReport`, `QueryReport`, `CustomReport`, `MonthlyTrendTable`, `KPI Employee Matrix Report`
+- Any other `downloadXlsx` / `XLSX.writeFile` call site
 
-### 7. Docs
+Each export resolves `is_dummy_employee` on its row (joining via employee_id where needed), then applies the helper.
 
-- `DOCUMENTATION.md`: new section under Increment Method.
-- `POLICY.md`: append rule + version-history entry.
+### 8. Tests
+
+- `src/lib/dummyEmployeeFilter.test.ts` — pure helper: setting on/off, mixed rows, missing flag, empty list.
+- Component test for User Management filter toggle (real / dummy / all).
+
+### 9. Docs
+
+- `DOCUMENTATION.md` — new section "Dummy/System Employees" + version-history entry.
+- `POLICY.md` — new rule describing flag semantics, default OFF, visibility-only impact, admin override in User Management.
 
 ## UI Changes Summary
 
-- **Location**: System Settings → Increment → "Increment Method" tab, directly below the existing Joining Month Cutoff Day field.
-- **Interactions**: Toggling the Switch off disables the date inputs visually; toggling on requires a valid date before Save is enabled.
-- **Responsiveness**: Single-row layout on desktop, stacks on mobile (matches existing tab pattern).
+- **Add/Edit User dialog**: new switch + helper text below the existing fields.
+- **User Management table**: new badge column treatment + new "Employee Type" dropdown in the toolbar.
+- **System Settings → General**: new card with two switches.
+- **All business employee selectors / Excel exports**: silently drop dummy rows when the corresponding setting is "no". No layout change.
 
 ## Out of Scope
 
-- Confirmation-Increment Adjustment tab (untouched).
-- PMS score / rating slab / criteria evaluation (untouched).
-- The pre-existing `joining_month_cutoff_day` (untouched).
-- No retroactive recomputation of historical runs.
+- Server-side RLS filtering of dummies (visibility is presentation-layer only, per spec part 7).
+- Bulk-mark UI (admins flip the flag per-user as needed).
+- Migration of any existing user — defaults stay `false`; admins mark `auditor001/002` themselves.
 
-## Open Questions (please confirm before build)
+## Open Questions (confirm before build)
 
-1. **prorated_doj cap**: when `carry_forward_post_cutoff = true` and the employee in the next AY uses `prorated_doj`, should the engine allow `monthsForMethod > 12` (which would exceed 100% of `slabPercent` — e.g. 18/12 × 10% = 15%), or cap at 12 (carry-forward effectively no-ops for fully-served next-AY employees)? Spec example 1 says "18 months considered for next AY calculation" → I assume **no cap** for `prorated_doj` and `custom`; please confirm.
-2. **Scope cascade**: cutoff/carry-forward fields will follow the same scope hierarchy as the rest of `increment_method_configs` (per-AY, optionally per-company). OK?
-3. **Multiple runs in prior AY**: when picking "carry IN" months, use the row from the **latest completed** prior-AY run for that employee. Correct?
+1. **Field name**: confirm `is_dummy_employee` (vs `is_system_employee`). I'll use `is_dummy_employee` unless you say otherwise.
+2. **Reviewer/Auditor assignment dropdowns**: if a dummy `auditor001` is currently *assigned* as an auditor on real KPIs and we hide them from selectors, admins won't see them in the picker to reassign. OK to still show **already-assigned** dummies as static text (just hidden from the *picker*)? My default: yes — never break existing assignments, only filter the searchable list.
+3. **Login / auth screens**: spec says "Do not block login". Confirmed — filter applies only to *lists of employees*, never to the logged-in user's own profile/menus.

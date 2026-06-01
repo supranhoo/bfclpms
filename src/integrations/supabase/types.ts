@@ -5849,6 +5849,7 @@ export type Database = {
           has_real_email: boolean
           id: string
           is_active: boolean
+          is_dummy_employee: boolean
           level: string | null
           level_id: string | null
           location_id: string | null
@@ -5880,6 +5881,7 @@ export type Database = {
           has_real_email?: boolean
           id: string
           is_active?: boolean
+          is_dummy_employee?: boolean
           level?: string | null
           level_id?: string | null
           location_id?: string | null
@@ -5911,6 +5913,7 @@ export type Database = {
           has_real_email?: boolean
           id?: string
           is_active?: boolean
+          is_dummy_employee?: boolean
           level?: string | null
           level_id?: string | null
           location_id?: string | null
