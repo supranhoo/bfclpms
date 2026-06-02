@@ -384,8 +384,9 @@ export function AppSidebar() {
         {/* Manager Section */}
         <CollapsibleSidebarGroup
           label="Manager"
-          items={applyResolved([
+          items={resolveGroupItems('manager', [
             { title: 'Team Reviews', icon: Users, path: '/dashboard?view=team', menuKey: 'team-reviews', roles: ['manager', 'admin', 'management', 'skip_level'] },
+            ...menuItems.manager.filter(i => i.menuKey !== 'team-reviews'),
           ])}
           isOpen={openSections.has('manager')}
           onToggle={() => toggleSection('manager')}
