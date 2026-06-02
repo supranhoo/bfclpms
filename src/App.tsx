@@ -18,6 +18,7 @@ const ResetPassword = lazy(() => import("./pages/ResetPassword"));
 const ProfileSettings = lazy(() => import("./pages/ProfileSettings"));
 const ModuleHub = lazy(() => import("./pages/ModuleHub"));
 const Dashboard = lazy(() => import("./pages/Dashboard"));
+const ReportShortlink = lazy(() => import("./pages/ReportShortlink"));
 const MyKpis = lazy(() => import("./pages/MyKpis"));
 const QueryInbox = lazy(() => import("./pages/QueryInbox"));
 const PMSPolicy = lazy(() => import("./pages/PMSPolicy"));
