@@ -350,17 +350,21 @@ function ModuleSection(props: {
         {props.moduleKey}
       </div>
       <div className="overflow-x-auto">
-        <div className="min-w-[860px]">
-          {/* Column headers — align with TreeRow grid below */}
-          <div className="flex items-center gap-1.5 px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground border-b bg-muted/30">
-            <div className="w-5" />
-            <div className="w-5" />
-            <div className="w-4" />
-            <div className="flex-1 min-w-0 px-2">Menu Name</div>
-            <div className="w-[240px] shrink-0">Menu_Key</div>
-            <div className="w-[200px] shrink-0">Route</div>
-            <div className="w-[110px] shrink-0 text-right pr-1">Status</div>
-            <div className="w-[60px] shrink-0 text-right">Actions</div>
+        <div className="min-w-[1000px]">
+          {/* Column headers — share grid template with every TreeRow */}
+          <div
+            className="grid items-center gap-x-4 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground border-b bg-muted/30 text-left"
+            style={{
+              gridTemplateColumns:
+                '96px minmax(280px,1.4fr) minmax(220px,0.8fr) minmax(260px,1fr) 150px 96px',
+            }}
+          >
+            <div>Controls</div>
+            <div>Menu Name</div>
+            <div>Menu_Key</div>
+            <div>Route</div>
+            <div>Status</div>
+            <div>Actions</div>
           </div>
           <div className="p-2 space-y-0.5">
         {props.roots.length === 0 && (
@@ -493,56 +497,57 @@ function RowBody(props: {
       style={{
         transform: CSS.Translate.toString(drag.transform),
         opacity: dragging ? 0.4 : 1,
+        gridTemplateColumns:
+          '96px minmax(280px,1.4fr) minmax(220px,0.8fr) minmax(260px,1fr) 150px 96px',
       }}
       className={cn(
-        'group flex items-center gap-1.5 py-1 pr-2 rounded-md min-h-[36px]',
+        'group grid items-center gap-x-4 py-1 px-3 rounded-md min-h-[36px]',
         isDirty && 'bg-primary/5 ring-1 ring-primary/30',
         isSelected && 'bg-primary/10 ring-1 ring-primary/40',
       )}
     >
-      {/* selection checkbox (hidden when not selectable) */}
-      <div className="w-5 shrink-0 flex items-center justify-center">
-        {selectable ? (
-          <Checkbox
-            checked={isSelected}
-            onCheckedChange={() => props.onToggleSelect?.(node.menu_key)}
-            aria-label={`Select ${node.label}`}
-          />
-        ) : null}
+      {/* Controls cell: checkbox + expand + drag handle */}
+      <div className="flex items-center gap-1 min-w-0 justify-start">
+        <div className="w-5 shrink-0 flex items-center justify-center">
+          {selectable ? (
+            <Checkbox
+              checked={isSelected}
+              onCheckedChange={() => props.onToggleSelect?.(node.menu_key)}
+              aria-label={`Select ${node.label}`}
+            />
+          ) : null}
+        </div>
+        <button
+          type="button"
+          className="w-5 h-5 shrink-0 flex items-center justify-center text-muted-foreground hover:text-foreground"
+          onClick={(e) => {
+            e.stopPropagation();
+            props.setExpanded((prev) => ({ ...prev, [node.menu_key]: !isExpanded }));
+          }}
+          aria-label={isExpanded ? 'Collapse' : 'Expand'}
+        >
+          {hasKids ? (isExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />) : null}
+        </button>
+        <button
+          type="button"
+          {...drag.attributes}
+          {...drag.listeners}
+          className={cn(
+            'cursor-grab active:cursor-grabbing text-muted-foreground hover:text-foreground shrink-0 w-4',
+            (!reg?.is_movable || reg?.is_system_required) && 'opacity-30 cursor-not-allowed',
+          )}
+          aria-label="Drag"
+        >
+          <GripVertical className="h-4 w-4" />
+        </button>
       </div>
-      {/* expand toggle */}
-      <button
-        type="button"
-        className="w-5 h-5 shrink-0 flex items-center justify-center text-muted-foreground hover:text-foreground"
-        onClick={(e) => {
-          e.stopPropagation();
-          props.setExpanded((prev) => ({ ...prev, [node.menu_key]: !isExpanded }));
-        }}
-        aria-label={isExpanded ? 'Collapse' : 'Expand'}
-      >
-        {hasKids ? (isExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />) : null}
-      </button>
 
-      {/* drag handle */}
-      <button
-        type="button"
-        {...drag.attributes}
-        {...drag.listeners}
-        className={cn(
-          'cursor-grab active:cursor-grabbing text-muted-foreground hover:text-foreground shrink-0 w-4',
-          (!reg?.is_movable || reg?.is_system_required) && 'opacity-30 cursor-not-allowed',
-        )}
-        aria-label="Drag"
-      >
-        <GripVertical className="h-4 w-4" />
-      </button>
-
-      {/* "inside" droppable wraps the label area so dropping ON the row nests */}
+      {/* Menu Name cell — "inside" droppable; indentation lives here only */}
       <div
         ref={inside.setNodeRef}
         style={{ paddingLeft: depth * 18 }}
         className={cn(
-          'flex-1 min-w-0 flex items-center gap-2 px-2 py-1 rounded-md border transition-colors',
+          'min-w-0 flex items-center gap-2 px-2 py-1 rounded-md border transition-colors justify-start',
           isInsideHover && props.validationOk && 'border-primary bg-primary/10',
           isInsideHover && !props.validationOk && 'border-destructive bg-destructive/10',
           !isInsideHover && isContainerHint && 'border-dashed border-primary/30',
@@ -556,19 +561,19 @@ function RowBody(props: {
             className="h-7 text-sm border-0 shadow-none focus-visible:ring-1 px-1 bg-transparent min-w-0 flex-1"
           />
         ) : (
-          <span className="text-sm truncate min-w-0 flex-1" title={node.label}>
+          <span className="text-sm truncate min-w-0 flex-1 text-left" title={node.label}>
             {node.label}
           </span>
         )}
       </div>
 
-      {/* Menu_Key column */}
-      <div className="flex w-[240px] shrink-0 items-center">
+      {/* Menu_Key cell */}
+      <div className="min-w-0 flex items-center justify-start overflow-hidden">
         <CopyableField value={node.menu_key} label="menu key" />
       </div>
 
-      {/* Route column */}
-      <div className="flex w-[200px] shrink-0 items-center">
+      {/* Route cell */}
+      <div className="min-w-0 flex items-center justify-start overflow-hidden">
         {node.route_path ? (
           <CopyableField value={node.route_path} label="route" />
         ) : (
@@ -578,49 +583,54 @@ function RowBody(props: {
         )}
       </div>
 
-      <Badge variant={movability.tone} className="text-[10px] gap-1 shrink-0">
-        {movability.icon && <movability.icon className="h-3 w-3" />}
-        {movability.label}
-      </Badge>
+      {/* Status cell */}
+      <div className="flex items-center justify-start min-w-0">
+        <Badge variant={movability.tone} className="text-[10px] gap-1 shrink-0">
+          {movability.icon && <movability.icon className="h-3 w-3" />}
+          {movability.label}
+        </Badge>
+      </div>
 
-      {/* "Create shortcut" — for locked/system rows that aren't sidebar groups. */}
-      {props.onCreateShortcut
-        && reg
-        && (!reg.is_movable || reg.is_system_required)
-        && reg.default_parent_key !== null /* skip top-level group nodes */
-        && (
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              type="button" variant="ghost" size="icon"
-              className="h-6 w-6 shrink-0"
-              onClick={() => props.onCreateShortcut?.(node.menu_key)}
-              aria-label="Create shortcut"
-            >
-              <Link2 className="h-3.5 w-3.5" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>Create shortcut under a container</TooltipContent>
-        </Tooltip>
-      )}
+      {/* Actions cell */}
+      <div className="flex items-center justify-start gap-1 min-w-0">
+        {props.onCreateShortcut
+          && reg
+          && (!reg.is_movable || reg.is_system_required)
+          && reg.default_parent_key !== null /* skip top-level group nodes */
+          && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                type="button" variant="ghost" size="icon"
+                className="h-6 w-6 shrink-0"
+                onClick={() => props.onCreateShortcut?.(node.menu_key)}
+                aria-label="Create shortcut"
+              >
+                <Link2 className="h-3.5 w-3.5" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Create shortcut under a container</TooltipContent>
+          </Tooltip>
+        )}
 
-      {isDirty && (
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              type="button" variant="ghost" size="icon"
-              className="h-6 w-6 shrink-0"
-              onClick={() => props.onResetItem(node.menu_key)}
-            >
-              <RotateCcw className="h-3.5 w-3.5" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>Revert pending change</TooltipContent>
-        </Tooltip>
-      )}
+        {isDirty && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                type="button" variant="ghost" size="icon"
+                className="h-6 w-6 shrink-0"
+                onClick={() => props.onResetItem(node.menu_key)}
+              >
+                <RotateCcw className="h-3.5 w-3.5" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Revert pending change</TooltipContent>
+          </Tooltip>
+        )}
 
-      {/* "after" drop zone below the row */}
-      <div ref={after.setNodeRef} className="sr-only">after</div>
+        {/* "after" drop zone below the row */}
+        <div ref={after.setNodeRef} className="sr-only">after</div>
+      </div>
     </div>
   );
 }
