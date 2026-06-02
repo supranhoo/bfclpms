@@ -27,7 +27,8 @@ type: feature
   - `RPT-TVM-001` Team Vs Manager Monthly Score (Phase 6c)
   - `RPT-KJN-001` KPI Journey Timeline (Phase 6d)
   - `RPT-MSR-001` Monthly Scorecard (Phase 6e — summary export only; PDF and Monthly Trend tab remain hardcoded)
-  Remaining Tier B reports (Incentive, KPI-Employee Matrix) keep hardcoded columns until their own Phase 6 wiring. Both are pivot/matrix layouts whose dynamic columns can't be enumerated in the registry — only their identity columns will be wired.
+  - `RPT-MAT-001` KPI-Employee Score Matrix (Phase 6f — fixed prefix columns only: Sr.No/Category/KRA/KPI/Weightage/Employee Count. Per-employee `(Wt%)`/`(Score)` columns stay dynamic and are appended after the resolver-driven prefix.)
+  Remaining Tier B: Incentive (pivot layout inside `MonthlyIncentiveTable` — Phase 6g pending).
 
 ## DB
 - `report_registry` — admin write, authenticated read.
