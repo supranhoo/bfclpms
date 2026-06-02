@@ -174,7 +174,7 @@ export default function IssuesReport() {
       </Card>
 
       {/* Issues Table */}
-      <IssuesTable issues={filteredIssues} onViewIssue={handleViewIssue} />
+      <IssuesTable issues={filteredIssues} onViewIssue={handleViewIssue} fields={resolvedFields} />
 
       {/* Detail Sheet */}
       <IssueDetailSheet
