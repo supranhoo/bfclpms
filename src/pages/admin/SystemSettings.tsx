@@ -719,6 +719,8 @@ export default function SystemSettings() {
         return <FeatureFlagsTab />;
       case 'module-hub':
         return <ModuleHubSettings />;
+      case 'menu-setting':
+        return <MenuSettingTab />;
       case 'workflow':
         return <WorkflowConfigPage />;
       case 'organization':
