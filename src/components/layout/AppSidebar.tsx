@@ -164,9 +164,32 @@ export function AppSidebar() {
   const { data: isDataOwner } = useIsAnyOrgKpiDataOwner();
   const { canAccess, canPerform, userOverrides } = useMenuAccess();
   const { data: bulkReviewFlagOn } = useBulkReviewFlag();
+  const { data: resolvedMenu } = useResolvedMenu();
 
   const policyVisibleRoles = appSettings?.pms_policy_visible_roles || ['admin', 'manager', 'employee', 'auditor', 'management', 'hr_pms'];
   const menuItems = getStaticMenuItems(policyVisibleRoles);
+
+  // Apply resolved labels + sort to every group's items. menu_key is the
+  // stable identity; when overrides exist, override → default; sort_order
+  // re-sorts within the group.
+  const applyResolved = useCallback(
+    <T extends { title: string; menuKey?: string }>(items: T[], groupParentKey?: string): T[] => {
+      if (!resolvedMenu) return items;
+      return [...items]
+        .map((it, idx) => {
+          const mk = it.menuKey;
+          if (!mk) return { item: it, sort: (idx + 1) * 10 };
+          const node = resolvedMenu.byKey[mk];
+          return {
+            item: { ...it, title: node?.label ?? it.title } as T,
+            sort: node?.sort_order ?? (idx + 1) * 10,
+          };
+        })
+        .sort((a, b) => a.sort - b.sort)
+        .map((x) => x.item);
+    },
+    [resolvedMenu],
+  );
 
   // Flag-gated additive entry — PRD v2.0 §0 Non-Regression Contract.
   // Hidden unless `feature_bulk_review_dashboard = true` AND user is a reviewer.
