@@ -4625,6 +4625,8 @@ export type Database = {
           client_id: string | null
           created_at: string
           custom_label: string | null
+          custom_menu_level: number | null
+          custom_module_key: string | null
           custom_parent_key: string | null
           custom_sort_order: number | null
           id: string
@@ -4637,6 +4639,8 @@ export type Database = {
           client_id?: string | null
           created_at?: string
           custom_label?: string | null
+          custom_menu_level?: number | null
+          custom_module_key?: string | null
           custom_parent_key?: string | null
           custom_sort_order?: number | null
           id?: string
@@ -4649,6 +4653,8 @@ export type Database = {
           client_id?: string | null
           created_at?: string
           custom_label?: string | null
+          custom_menu_level?: number | null
+          custom_module_key?: string | null
           custom_parent_key?: string | null
           custom_sort_order?: number | null
           id?: string
