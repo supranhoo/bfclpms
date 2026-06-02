@@ -109,3 +109,44 @@ export function useSortFor(): (menuKey: string | undefined, fallback: number) =>
     return data.byKey[menuKey]?.sort_order ?? fallback;
   };
 }
+
+/**
+ * Resolves an ordered list of child tabs for a given parent menu_key.
+ * Caller passes hardcoded defaults `[{key, menuKey, label}]`. When the menu
+ * overrides flag is on, each entry's label and order are replaced by the
+ * resolver; otherwise defaults are returned unchanged. Children whose
+ * registry entry is missing (e.g. registry not seeded) fall back to defaults.
+ */
+export interface ResolvedTabDef<K extends string = string> {
+  key: K;
+  menuKey: string;
+  label: string;
+}
+
+export function useResolvedTabs<K extends string>(
+  defaults: ReadonlyArray<{ key: K; menuKey: string; label: string }>,
+): ResolvedTabDef<K>[] {
+  const { data } = useResolvedMenu();
+  if (!data) return defaults.map((d) => ({ ...d }));
+
+  return [...defaults]
+    .map((d) => {
+      const node = data.byKey[d.menuKey];
+      return {
+        key: d.key,
+        menuKey: d.menuKey,
+        label: node?.label ?? d.label,
+        _sort: node?.sort_order ?? null,
+      };
+    })
+    .sort((a, b) => {
+      // entries with resolved sort come first in their resolved order; entries
+      // without a registry row keep their original relative order.
+      const ai = defaults.findIndex((d) => d.menuKey === a.menuKey);
+      const bi = defaults.findIndex((d) => d.menuKey === b.menuKey);
+      const av = a._sort ?? 1_000_000 + ai;
+      const bv = b._sort ?? 1_000_000 + bi;
+      return av - bv;
+    })
+    .map(({ _sort, ...rest }) => rest);
+}
