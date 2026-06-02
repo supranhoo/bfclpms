@@ -325,7 +325,14 @@ export const REPORT_CATALOG: ReportSeed[] = [
     f('final_score',       'Final Score',      280, { data_type: 'number' }),
     f('status',            'Status',           290, { data_type: 'string' }),
   ], 190),
-  r('RPT-MAT-001',  'kpi-employee-matrix','MAT', 'KPI-Employee Score Matrix','/reports/kpi-employee-matrix', null, [], 200),
+  r('RPT-MAT-001',  'kpi-employee-matrix','MAT', 'KPI-Employee Score Matrix','/reports/kpi-employee-matrix', null, [
+    f('sr_no',          'Sr. No.',        10, { is_required: true, data_type: 'number' }),
+    f('category',       'Category',       20, { data_type: 'string' }),
+    f('kra',            'KRA',            30, { data_type: 'string' }),
+    f('kpi',            'KPI',            40, { is_required: true, data_type: 'string' }),
+    f('weightage',      'Weightage',      50, { data_type: 'number' }),
+    f('employee_count', 'Employee Count', 60, { data_type: 'number' }),
+  ], 200),
 ];
 
 export const REPORT_CATALOG_BY_ID: Record<string, ReportSeed> = Object.fromEntries(
