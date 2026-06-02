@@ -90,14 +90,24 @@ export default function KRAIssuance() {
   })) || [];
 
   const { toast } = useToast();
+  const resolvedFields = useResolvedReportFields('RPT-KRA-001', KRA_DEFAULT_FIELDS);
 
   const handleExportExcel = useCallback(() => {
-    const exportData = categoryBreakdown.map(cat => ({
-      'Category': cat.name,
-      'Total KPIs': cat.total,
-      'Approved': cat.approved,
-      'Completion': cat.total > 0 ? `${Math.round((cat.approved / cat.total) * 100)}%` : '0%',
-    }));
+    const visible = resolvedFields.filter((f) => !f.is_hidden);
+    const valueFor = (cat: typeof categoryBreakdown[number], key: string): string | number => {
+      switch (key) {
+        case 'category':   return cat.name;
+        case 'total':      return cat.total;
+        case 'approved':   return cat.approved;
+        case 'completion': return cat.total > 0 ? `${Math.round((cat.approved / cat.total) * 100)}%` : '0%';
+        default: return '';
+      }
+    };
+    const exportData = categoryBreakdown.map((cat) => {
+      const row: Record<string, string | number> = {};
+      for (const fld of visible) row[fld.label] = valueFor(cat, fld.field_key);
+      return row;
+    });
 
     // Add status summary
     const statusData = [
@@ -108,14 +118,14 @@ export default function KRAIssuance() {
       { Status: 'Approved', Count: statusCounts.approved },
     ];
 
-    const ws1 = XLSX.utils.json_to_sheet(exportData);
+    const ws1 = XLSX.utils.json_to_sheet(exportData, { header: visible.map((f) => f.label) });
     const ws2 = XLSX.utils.json_to_sheet(statusData);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws1, 'By Category');
     XLSX.utils.book_append_sheet(wb, ws2, 'By Status');
     XLSX.writeFile(wb, `KRA_Issuance_Report_${new Date().toISOString().split('T')[0]}.xlsx`);
     toast({ title: 'Report downloaded successfully' });
-  }, [categoryBreakdown, statusCounts, toast]);
+  }, [categoryBreakdown, statusCounts, resolvedFields, toast]);
 
   if (isLoading) {
     return <div className="space-y-6"><Skeleton className="h-8 w-48" /><Skeleton className="h-96" /></div>;
