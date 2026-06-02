@@ -95,10 +95,13 @@ const getStaticMenuItems = (policyVisibleRoles: string[]) => ({
     { title: 'Observations', icon: Eye, path: '/admin/observations', menuKey: 'admin-observations', roles: ['admin'] },
     { title: 'Rollback Requests', icon: Undo2, path: '/admin/rollback-requests', menuKey: 'admin-rollback', roles: ['admin'] },
     { title: 'Pending Reviews', icon: ClipboardCheck, path: '/admin/pending-reviews', menuKey: 'admin-pending-reviews', roles: ['admin'] },
-    { title: 'Incentive Config', icon: Percent, path: '/admin/incentive-config', menuKey: 'admin-incentive', roles: ['admin'] },
-    { title: 'Incentive Data Entry', icon: FileInput, path: '/admin/incentive-data-entry', menuKey: 'admin-incentive-data', roles: ['admin'] },
     { title: 'Increment Inputs', icon: FileInput, path: '/admin/increment-inputs', menuKey: 'admin-increment-inputs', roles: ['admin', 'hr_pms'] },
     { title: 'Employee Development', icon: GraduationCap, path: '/admin/employee-development', menuKey: 'admin-development', roles: ['admin', 'hr_pms'] },
+  ],
+  incentive: [
+    { title: 'Incentive Config', icon: Percent, path: '/admin/incentive-config', menuKey: 'admin-incentive', roles: ['admin'] },
+    { title: 'Incentive Data Entry', icon: FileInput, path: '/admin/incentive-data-entry', menuKey: 'admin-incentive-data', roles: ['admin'] },
+    { title: 'Incentive Report', icon: Percent, path: '/reports/incentive', menuKey: 'reports-incentive', roles: ['admin', 'management', 'hr_pms'] },
   ],
   kraSettings: [
     { title: 'KRA Library', icon: Library, path: '/admin/templates', menuKey: 'admin-templates', roles: ['admin'] },
@@ -118,7 +121,6 @@ const getStaticMenuItems = (policyVisibleRoles: string[]) => ({
     { title: 'Performance Report', icon: BarChart3, path: '/reports/performance', menuKey: 'reports-performance', roles: ['admin', 'manager', 'auditor'] },
     { title: 'KRA Issuance', icon: FileText, path: '/reports/kra-issuance', menuKey: 'reports-kra-issuance', roles: ['admin', 'manager', 'auditor'] },
     { title: 'TNI Report', icon: GraduationCap, path: '/reports/tni', menuKey: 'reports-tni', roles: ['admin', 'manager', 'auditor'] },
-    { title: 'Incentive Report', icon: Percent, path: '/reports/incentive', menuKey: 'reports-incentive', roles: ['admin', 'management', 'hr_pms'] },
   ],
 });
 
