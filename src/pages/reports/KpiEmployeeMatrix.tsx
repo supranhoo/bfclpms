@@ -244,17 +244,12 @@ export default function KpiEmployeeMatrix() {
     const labelIdx = kpiIdx >= 0 ? kpiIdx : Math.max(0, visiblePrefix.length - 1);
     if (visiblePrefix.length > 0) totalsRow[labelIdx] = 'TOTAL';
     filteredEmployees.forEach(emp => {
-      let totalWt = 0;
       let total = 0;
       let hasScore = false;
-      let hasWt = false;
       filteredRows.forEach(row => {
         const s = row.employeeScores[emp.id];
         if (s != null) { total += s; hasScore = true; }
-        const w = row.employeeWeightages[emp.id];
-        if (w != null) { totalWt += w; hasWt = true; }
       });
-      totalsRow.push(hasWt ? Math.round(totalWt * 100) / 100 : '');
       totalsRow.push(hasScore ? Math.round(total * 100) / 100 : '');
     });
     wsData.push(totalsRow);
