@@ -17,6 +17,35 @@ import { format } from 'date-fns';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useQuery } from '@tanstack/react-query';
+import { useResolvedReportFields } from '@/hooks/useResolvedReportFields';
+
+const KJN_DEFAULT_FIELDS = [
+  { field_key: 'company',            default_label: 'Company',             default_sort: 10 },
+  { field_key: 'employee_code',      default_label: 'Emp Code',            default_sort: 20, is_required: true },
+  { field_key: 'employee_name',      default_label: 'Employee',            default_sort: 30, is_required: true },
+  { field_key: 'department',         default_label: 'Department',          default_sort: 40 },
+  { field_key: 'reporting_manager',  default_label: 'Reporting Manager',   default_sort: 50 },
+  { field_key: 'category',           default_label: 'Category',            default_sort: 60 },
+  { field_key: 'kra',                default_label: 'KRA',                 default_sort: 70 },
+  { field_key: 'kpi',                default_label: 'KPI',                 default_sort: 80, is_required: true },
+  { field_key: 'frequency',          default_label: 'Frequency',           default_sort: 90 },
+  { field_key: 'workflow_chain',     default_label: 'Assigned Workflow',   default_sort: 100 },
+  { field_key: 'review_period',      default_label: 'Month',               default_sort: 110 },
+  { field_key: 'kra_assigned_at',    default_label: 'KRA Assigned',        default_sort: 120 },
+  { field_key: 'self_submitted_at',  default_label: 'Self Submitted',      default_sort: 130 },
+  { field_key: 'manager_action_at',  default_label: 'Manager Action',      default_sort: 140 },
+  { field_key: 'skip_level_at',      default_label: 'Skip-Level',          default_sort: 150 },
+  { field_key: 'hr_pms_at',          default_label: 'HR PMS',              default_sort: 160 },
+  { field_key: 'auditor_at',         default_label: 'Auditor',             default_sort: 170 },
+  { field_key: 'management_at',      default_label: 'Management',          default_sort: 180 },
+  { field_key: 'final_approved_at',  default_label: 'Final Approved',      default_sort: 190 },
+  { field_key: 'total_days',         default_label: 'Total Days',          default_sort: 200 },
+  { field_key: 'status',             default_label: 'Status',              default_sort: 210 },
+  { field_key: 'timeline_compliant', default_label: 'Timeline Compliant',  default_sort: 220 },
+  { field_key: 'type',               default_label: 'Type',                default_sort: 230 },
+  { field_key: 'send_back_count',    default_label: 'Send-Back Count',     default_sort: 240 },
+  { field_key: 'send_back_history',  default_label: 'Send-Back History',   default_sort: 250 },
+] as const;
 
 const FULL_MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -72,6 +101,7 @@ export default function KpiJourneyReport() {
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [isExporting, setIsExporting] = useState(false);
+  const resolvedFields = useResolvedReportFields('RPT-KJN-001', KJN_DEFAULT_FIELDS);
 
   const years = Array.from({ length: 5 }, (_, i) => currentYear - 2 + i);
 
@@ -134,38 +164,46 @@ export default function KpiJourneyReport() {
         return dateStr ? format(new Date(dateStr), 'dd-MMM-yyyy HH:mm') : '';
       };
 
-      const exportData = allRows.map(r => ({
-        'Company': getCompanyCodeByEmpCode(r.employeeCode),
-        'Emp Code': r.employeeCode,
-        'Employee': r.employeeName,
-        'Department': r.department,
-        'Reporting Manager': r.reportingManager,
-        'Category': r.category,
-        'KRA': r.kraName,
-        'KPI': r.kpiName,
-        'Frequency': r.frequency,
-        'Assigned Workflow': r.workflowChain || '—',
-        'Month': r.reviewPeriod,
-        'KRA Assigned': r.kraAssignedAt ? format(new Date(r.kraAssignedAt), 'dd-MMM-yyyy HH:mm') : '',
-        'Self Submitted': fmtCell(r.selfSubmittedAt, r.isNa),
-        'Manager Action': fmtCell(r.managerActionAt, r.isNa),
-        'Skip-Level': fmtCell(r.skipLevelAt, r.isNa),
-        'HR PMS': fmtCell(r.hrPmsAt, r.isNa),
-        'Auditor': fmtCell(r.auditorAt, r.isNa),
-        'Management': fmtCell(r.managementAt, r.isNa),
-        'Final Approved': fmtCell(r.finalApprovedAt, r.isNa),
-        'Total Days': r.isNa ? 'N/A' : r.totalDays,
-        'Status': r.isNa ? 'N/A' : (STATUS_LABELS[r.status] ?? r.status),
-        'Timeline Compliant': r.isCompliant ? 'Yes' : 'No',
-        'Type': r.isOrgKpi ? 'Org KPI' : 'Individual',
-        'Send-Back Count': r.sendBackCount ?? 0,
-        'Send-Back History': (r.sendBacks ?? []).map((sb: any) => {
-          const d = sb.date ? format(new Date(sb.date), 'dd-MMM-yyyy') : '';
-          return `${d} by ${sb.raisedBy}: ${sb.reason}`;
-        }).join('; '),
-      }));
-
-      const ws = XLSX.utils.json_to_sheet(exportData);
+      const visible = resolvedFields.filter(fld => !fld.is_hidden);
+      const valueFor = (r: any, key: string): unknown => {
+        switch (key) {
+          case 'company':            return getCompanyCodeByEmpCode(r.employeeCode);
+          case 'employee_code':      return r.employeeCode;
+          case 'employee_name':      return r.employeeName;
+          case 'department':         return r.department;
+          case 'reporting_manager':  return r.reportingManager;
+          case 'category':           return r.category;
+          case 'kra':                return r.kraName;
+          case 'kpi':                return r.kpiName;
+          case 'frequency':          return r.frequency;
+          case 'workflow_chain':     return r.workflowChain || '—';
+          case 'review_period':      return r.reviewPeriod;
+          case 'kra_assigned_at':    return r.kraAssignedAt ? format(new Date(r.kraAssignedAt), 'dd-MMM-yyyy HH:mm') : '';
+          case 'self_submitted_at':  return fmtCell(r.selfSubmittedAt, r.isNa);
+          case 'manager_action_at':  return fmtCell(r.managerActionAt, r.isNa);
+          case 'skip_level_at':      return fmtCell(r.skipLevelAt, r.isNa);
+          case 'hr_pms_at':          return fmtCell(r.hrPmsAt, r.isNa);
+          case 'auditor_at':         return fmtCell(r.auditorAt, r.isNa);
+          case 'management_at':      return fmtCell(r.managementAt, r.isNa);
+          case 'final_approved_at':  return fmtCell(r.finalApprovedAt, r.isNa);
+          case 'total_days':         return r.isNa ? 'N/A' : r.totalDays;
+          case 'status':             return r.isNa ? 'N/A' : (STATUS_LABELS[r.status] ?? r.status);
+          case 'timeline_compliant': return r.isCompliant ? 'Yes' : 'No';
+          case 'type':               return r.isOrgKpi ? 'Org KPI' : 'Individual';
+          case 'send_back_count':    return r.sendBackCount ?? 0;
+          case 'send_back_history':  return (r.sendBacks ?? []).map((sb: any) => {
+            const d = sb.date ? format(new Date(sb.date), 'dd-MMM-yyyy') : '';
+            return `${d} by ${sb.raisedBy}: ${sb.reason}`;
+          }).join('; ');
+          default: return '';
+        }
+      };
+      const exportData = allRows.map(r => {
+        const out: Record<string, unknown> = {};
+        for (const fld of visible) out[fld.label] = valueFor(r, fld.field_key);
+        return out;
+      });
+      const ws = XLSX.utils.json_to_sheet(exportData, { header: visible.map(fld => fld.label) });
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, 'KPI Journey');
       XLSX.writeFile(wb, `KPI_Journey_${selectedPeriod}_${selectedYear}.xlsx`);
@@ -176,7 +214,7 @@ export default function KpiJourneyReport() {
     } finally {
       setIsExporting(false);
     }
-  }, [selectedPeriod, selectedYear, filters, isExporting]);
+  }, [selectedPeriod, selectedYear, filters, isExporting, resolvedFields, getCompanyCodeByEmpCode]);
 
   const resetPage = useCallback(() => setCurrentPage(1), []);
 

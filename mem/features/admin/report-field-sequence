@@ -25,7 +25,8 @@ type: feature
   - `RPT-KSD-001` KPI Scorecard Detail (Phase 6a — both single-month and multi-month range exports share the same resolved field set)
   - `RPT-MTK-001` Same KPI — Manager vs Team (Phase 6b)
   - `RPT-TVM-001` Team Vs Manager Monthly Score (Phase 6c)
-  Remaining Tier B reports (Incentive, KPI-Employee Matrix, Monthly Scorecard, KPI Journey) keep hardcoded columns until their own Phase 6 wiring.
+  - `RPT-KJN-001` KPI Journey Timeline (Phase 6d)
+  Remaining Tier B reports (Incentive, KPI-Employee Matrix, Monthly Scorecard) keep hardcoded columns until their own Phase 6 wiring.
 
 ## DB
 - `report_registry` — admin write, authenticated read.
