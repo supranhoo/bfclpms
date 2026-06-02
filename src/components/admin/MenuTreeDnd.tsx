@@ -8,6 +8,7 @@ import { ChevronRight, ChevronDown, GripVertical, Lock, RotateCcw, Pencil, Alert
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import { validateMove } from '@/lib/menu/validateMove';
@@ -48,6 +49,9 @@ type Props = {
   /** Optional filter to a single module. */
   filterModule?: string | null;
   searchTerm: string;
+  /** Multi-select state for the "Move under..." bulk action. */
+  selectedKeys?: Set<string>;
+  onToggleSelect?: (menuKey: string) => void;
 };
 
 /** Knows how to render and DnD-edit the full resolved menu tree. */
