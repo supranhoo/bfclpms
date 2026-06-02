@@ -18,6 +18,16 @@ import { useCompanyFilter } from '@/hooks/useCompanyFilter';
 import { CompanyFilter } from '@/components/reports/CompanyFilter';
 import { useToast } from '@/hooks/use-toast';
 import * as XLSX from 'xlsx';
+import { useResolvedReportFields } from '@/hooks/useResolvedReportFields';
+
+const MAT_DEFAULT_FIELDS = [
+  { field_key: 'sr_no',          default_label: 'Sr. No.',        default_sort: 10, is_required: true },
+  { field_key: 'category',       default_label: 'Category',       default_sort: 20 },
+  { field_key: 'kra',            default_label: 'KRA',            default_sort: 30 },
+  { field_key: 'kpi',            default_label: 'KPI',            default_sort: 40, is_required: true },
+  { field_key: 'weightage',      default_label: 'Weightage',      default_sort: 50 },
+  { field_key: 'employee_count', default_label: 'Employee Count', default_sort: 60 },
+] as const;
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 const ROW_PAGE_OPTIONS = [25, 50, 100] as const;
@@ -48,6 +58,7 @@ export default function KpiEmployeeMatrix() {
   const now = new Date();
   const currentMonth = format(now, 'MMMM');
   const currentYear = now.getFullYear();
+  const resolvedMatFields = useResolvedReportFields('RPT-MAT-001', MAT_DEFAULT_FIELDS);
 
   // Filters state
   const [reviewPeriod, setReviewPeriod] = useState(currentMonth);
@@ -192,20 +203,32 @@ export default function KpiEmployeeMatrix() {
       return;
     }
 
-    const headers = ['Sr. No.', 'Category', 'KRA', 'KPI', 'Weightage', 'Employee Count',
-      ...filteredEmployees.flatMap(e => [`${e.fullName} (Wt%)`, `${e.fullName} (Score)`])
+    // Resolver-driven prefix columns; per-employee columns remain dynamic
+    const visiblePrefix = resolvedMatFields.filter(fld => !fld.is_hidden);
+    const prefixValueFor = (
+      row: typeof filteredRows[number],
+      idx: number,
+      key: string,
+    ): any => {
+      switch (key) {
+        case 'sr_no':          return idx + 1;
+        case 'category':       return row.categoryName;
+        case 'kra':            return row.kraName;
+        case 'kpi':            return row.kpiName;
+        case 'weightage':      return row.weightage;
+        case 'employee_count': return row.employeeCount;
+        default:               return '';
+      }
+    };
+
+    const headers = [
+      ...visiblePrefix.map(fld => fld.label),
+      ...filteredEmployees.flatMap(e => [`${e.fullName} (Wt%)`, `${e.fullName} (Score)`]),
     ];
 
     const wsData: any[][] = [headers];
     filteredRows.forEach((row, idx) => {
-      const rowData: any[] = [
-        idx + 1,
-        row.categoryName,
-        row.kraName,
-        row.kpiName,
-        row.weightage,
-        row.employeeCount,
-      ];
+      const rowData: any[] = visiblePrefix.map(fld => prefixValueFor(row, idx, fld.field_key));
       filteredEmployees.forEach(emp => {
         const wt = row.employeeWeightages[emp.id];
         const score = row.employeeScores[emp.id];
@@ -215,8 +238,11 @@ export default function KpiEmployeeMatrix() {
       wsData.push(rowData);
     });
 
-    // Totals row
-    const totalsRow: any[] = ['', '', '', 'TOTAL', '', ''];
+    // Totals row — anchor 'TOTAL' label to the KPI column if visible, else last prefix
+    const totalsRow: any[] = visiblePrefix.map(() => '');
+    const kpiIdx = visiblePrefix.findIndex(fld => fld.field_key === 'kpi');
+    const labelIdx = kpiIdx >= 0 ? kpiIdx : Math.max(0, visiblePrefix.length - 1);
+    if (visiblePrefix.length > 0) totalsRow[labelIdx] = 'TOTAL';
     filteredEmployees.forEach(emp => {
       let total = 0;
       let hasScore = false;
@@ -259,7 +285,7 @@ export default function KpiEmployeeMatrix() {
 
     XLSX.writeFile(wb, `KPI_Employee_Matrix_${reviewPeriod}_${reviewYear}.xlsx`);
     toast({ title: 'Excel exported successfully' });
-  }, [filteredRows, filteredEmployees, reviewPeriod, reviewYear, departmentId, departments, toast]);
+  }, [filteredRows, filteredEmployees, reviewPeriod, reviewYear, departmentId, departments, toast, resolvedMatFields]);
 
   // Summary stats
   const summary = useMemo(() => {
