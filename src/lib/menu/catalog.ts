@@ -63,7 +63,10 @@ function item(
     route_path,
     icon_name: null,
     default_sort_order,
-    accepts_children: false,
+    // Universal nesting: every non-system L2 item may host children (e.g. nest
+    // "Performance Report" under "Admin Dashboard"). Depth cap (4) is enforced
+    // by validateMove + DB trigger, not by this flag.
+    accepts_children: true,
     is_renamable: true,
     is_movable: true,
     is_cross_app_movable: false,
@@ -88,7 +91,7 @@ function tab(
     route_path: null,
     icon_name: null,
     default_sort_order,
-    accepts_children: false,
+    accepts_children: true,
     is_renamable: true,
     is_movable: true,
     is_cross_app_movable: false,
@@ -115,7 +118,9 @@ function subtab(
     route_path: null,
     icon_name: null,
     default_sort_order,
-    accepts_children: false,
+    // L4 leaves: validateMove blocks depth>4 so dropping here is a no-op,
+    // but the flag stays true for symmetry should max-depth ever be raised.
+    accepts_children: false, // hard leaf — depth would exceed cap
     is_renamable: true,
     is_movable: true,
     is_cross_app_movable: false,
