@@ -20,6 +20,40 @@ import { IncentiveDryRunDialog } from './IncentiveDryRunDialog';
 import { IncentiveStatusOverride } from './IncentiveStatusOverride';
 import { RatingBadge } from '@/components/ui/RatingBadge';
 import * as XLSX from 'xlsx';
+import { useResolvedReportFields } from '@/hooks/useResolvedReportFields';
+
+const INC_DEFAULT_FIELDS = [
+  { field_key: 'employee_code',            default_label: 'Employee Code',            default_sort: 10,  is_required: true },
+  { field_key: 'employee_name',            default_label: 'Employee Name',            default_sort: 20,  is_required: true },
+  { field_key: 'designation',              default_label: 'Designation',              default_sort: 30 },
+  { field_key: 'department',               default_label: 'Department',               default_sort: 40 },
+  { field_key: 'business_unit',            default_label: 'Business Unit',            default_sort: 50 },
+  { field_key: 'division',                 default_label: 'Division',                 default_sort: 60 },
+  { field_key: 'month',                    default_label: 'Month',                    default_sort: 70 },
+  { field_key: 'year',                     default_label: 'Year',                     default_sort: 80 },
+  { field_key: 'period',                   default_label: 'Period',                   default_sort: 90 },
+  { field_key: 'programme_name',           default_label: 'Programme Name',           default_sort: 100 },
+  { field_key: 'pms_score',                default_label: 'PMS Score',                default_sort: 110 },
+  { field_key: 'slab_range',               default_label: 'Slab Range',               default_sort: 120 },
+  { field_key: 'slab_rating',              default_label: 'Slab Rating',              default_sort: 130 },
+  { field_key: 'base_incentive_percent',   default_label: 'Base Incentive %',         default_sort: 140 },
+  { field_key: 'is_disqualified',          default_label: 'Is Disqualified',          default_sort: 150 },
+  { field_key: 'dq_reasons',               default_label: 'DQ Reasons',               default_sort: 160 },
+  { field_key: 'lti_penalty_percent',      default_label: 'LTI Penalty %',            default_sort: 170 },
+  { field_key: 'pro_rata_factor',          default_label: 'Pro-rata Factor',          default_sort: 180 },
+  { field_key: 'production_value',         default_label: 'Production Value',         default_sort: 190 },
+  { field_key: 'original_score',           default_label: 'Original Score',           default_sort: 200 },
+  { field_key: 'adjusted_score',           default_label: 'Adjusted Score',           default_sort: 210 },
+  { field_key: 'final_incentive_percent',  default_label: 'Final Incentive %',        default_sort: 220 },
+  { field_key: 'incentive_amount',         default_label: 'Incentive Amount',         default_sort: 230, is_required: true },
+  { field_key: 'incentive_status',         default_label: 'Incentive Status',         default_sort: 240 },
+  { field_key: 'record_status',            default_label: 'Record Status',            default_sort: 250 },
+  { field_key: 'incentive_base',           default_label: 'Incentive Base',           default_sort: 260 },
+  { field_key: 'retroactive_adjustment',   default_label: 'Retroactive Adjustment',   default_sort: 270 },
+  { field_key: 'adjustment_source_period', default_label: 'Adjustment Source Period', default_sort: 280 },
+  { field_key: 'computed_at',              default_label: 'Computed At',              default_sort: 290 },
+  { field_key: 'confirmed_by',             default_label: 'Confirmed By',             default_sort: 300 },
+] as const;
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 const YEARS = Array.from({ length: 5 }, (_, i) => String(2024 + i));
