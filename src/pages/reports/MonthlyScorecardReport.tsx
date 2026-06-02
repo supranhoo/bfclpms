@@ -625,88 +625,105 @@ export default function MonthlyScorecardReport() {
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Employee</TableHead>
-                    <TableHead>Department</TableHead>
-                    <TableHead className="text-center">KPIs</TableHead>
-                    <TableHead className="text-center">Self</TableHead>
-                    <TableHead className="text-center">Manager</TableHead>
-                    <TableHead className="text-center">Skip-Level</TableHead>
-                    <TableHead className="text-center">HR PMS</TableHead>
-                    <TableHead className="text-center">Auditor</TableHead>
-                    <TableHead className="text-center">Mgmt</TableHead>
-                    <TableHead className="text-center">Final</TableHead>
-                    <TableHead className="text-center w-[80px]">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredScorecards.map((scorecard) => (
-                    <TableRow key={scorecard.employeeId}>
-                      <TableCell>
-                        <div>
-                          <div className="font-medium">{scorecard.employeeName}</div>
-                          <div className="text-xs text-muted-foreground">
-                            {scorecard.employeeCode} • {scorecard.designation}
-                          </div>
-                        </div>
-                      </TableCell>
-                      <TableCell>{scorecard.department}</TableCell>
-                      <TableCell className="text-center">
-                        <div className="text-sm">
-                          {scorecard.approvedKpis}/{scorecard.totalKpis}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-center">
-                        {displayScore(scorecard.avgSelfScore, scorecard.hasSelfData)}
-                      </TableCell>
-                      <TableCell className="text-center">
-                        {displayScore(scorecard.avgManagerScore, scorecard.hasManagerData)}
-                      </TableCell>
-                      <TableCell className="text-center">
-                        {displayScore(scorecard.avgSkipLevelScore, scorecard.hasSkipLevelData)}
-                      </TableCell>
-                      <TableCell className="text-center">
-                        {displayScore(scorecard.avgHrPmsScore, scorecard.hasHrPmsData)}
-                      </TableCell>
-                      <TableCell className="text-center">
-                        {displayScore(scorecard.avgAuditorScore, scorecard.hasAuditorData)}
-                      </TableCell>
-                      <TableCell className="text-center">
-                        {displayScore(scorecard.avgManagementScore, scorecard.hasManagementData)}
-                      </TableCell>
-                      <TableCell className="text-center">
-                        <span className="font-semibold">
-                          {scorecard.avgFinalScore != null ? scorecard.avgFinalScore.toFixed(2) : '-'}
-                        </span>
-                      </TableCell>
-                      <TableCell className="text-center">
-                        <div className="flex items-center justify-center gap-1">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8"
-                            onClick={() => handlePreviewPdf(scorecard)}
-                            title="Preview PDF"
-                          >
-                            <Eye className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8"
-                            onClick={() => handleExportSinglePdf(scorecard)}
-                            title="Download PDF"
-                          >
-                            <Download className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+              {(() => {
+                // Map registry field keys -> display columns. "Employee" composite
+                // cell uses the resolved label of `employee_name`. Score cells map
+                // 1:1 to `avg_*_score` registry fields. `total_kpis` and
+                // `approved_kpis` collapse into a single "X/Y" column whose header
+                // follows whichever of the two is visible (defaults to total_kpis
+                // label). "Actions" is UI-only and always rendered when not all
+                // score columns are hidden.
+                const byKey = new Map(resolvedMsrFields.map(f => [f.field_key, f]));
+                const isVisible = (key: string) => {
+                  const f = byKey.get(key);
+                  return !!f && !f.is_hidden;
+                };
+                const labelOf = (key: string, fallback: string) =>
+                  byKey.get(key)?.label ?? fallback;
+                const showEmployee = isVisible('employee_name') || isVisible('employee_code');
+                const showDept = isVisible('department');
+                const showKpis = isVisible('total_kpis') || isVisible('approved_kpis');
+                const scoreCols: { key: string; fallback: string; getter: (s: typeof filteredScorecards[number]) => React.ReactNode }[] = [
+                  { key: 'avg_self_score',       fallback: 'Self',       getter: s => displayScore(s.avgSelfScore, s.hasSelfData) },
+                  { key: 'avg_manager_score',    fallback: 'Manager',    getter: s => displayScore(s.avgManagerScore, s.hasManagerData) },
+                  { key: 'avg_skip_level_score', fallback: 'Skip-Level', getter: s => displayScore(s.avgSkipLevelScore, s.hasSkipLevelData) },
+                  { key: 'avg_hr_pms_score',     fallback: 'HR PMS',     getter: s => displayScore(s.avgHrPmsScore, s.hasHrPmsData) },
+                  { key: 'avg_auditor_score',    fallback: 'Auditor',    getter: s => displayScore(s.avgAuditorScore, s.hasAuditorData) },
+                  { key: 'avg_management_score', fallback: 'Mgmt',       getter: s => displayScore(s.avgManagementScore, s.hasManagementData) },
+                  { key: 'avg_final_score',      fallback: 'Final',      getter: s => (
+                    <span className="font-semibold">{s.avgFinalScore != null ? s.avgFinalScore.toFixed(2) : '-'}</span>
+                  )},
+                ];
+                const visibleScoreCols = scoreCols.filter(c => isVisible(c.key));
+                return (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        {showEmployee && <TableHead>{labelOf('employee_name', 'Employee')}</TableHead>}
+                        {showDept && <TableHead>{labelOf('department', 'Department')}</TableHead>}
+                        {showKpis && (
+                          <TableHead className="text-center">
+                            {isVisible('total_kpis') ? labelOf('total_kpis', 'KPIs') : labelOf('approved_kpis', 'KPIs')}
+                          </TableHead>
+                        )}
+                        {visibleScoreCols.map(c => (
+                          <TableHead key={c.key} className="text-center">{labelOf(c.key, c.fallback)}</TableHead>
+                        ))}
+                        <TableHead className="text-center w-[80px]">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredScorecards.map((scorecard) => (
+                        <TableRow key={scorecard.employeeId}>
+                          {showEmployee && (
+                            <TableCell>
+                              <div>
+                                <div className="font-medium">{scorecard.employeeName}</div>
+                                <div className="text-xs text-muted-foreground">
+                                  {scorecard.employeeCode} • {scorecard.designation}
+                                </div>
+                              </div>
+                            </TableCell>
+                          )}
+                          {showDept && <TableCell>{scorecard.department}</TableCell>}
+                          {showKpis && (
+                            <TableCell className="text-center">
+                              <div className="text-sm">
+                                {scorecard.approvedKpis}/{scorecard.totalKpis}
+                              </div>
+                            </TableCell>
+                          )}
+                          {visibleScoreCols.map(c => (
+                            <TableCell key={c.key} className="text-center">{c.getter(scorecard)}</TableCell>
+                          ))}
+                          <TableCell className="text-center">
+                            <div className="flex items-center justify-center gap-1">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8"
+                                onClick={() => handlePreviewPdf(scorecard)}
+                                title="Preview PDF"
+                              >
+                                <Eye className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8"
+                                onClick={() => handleExportSinglePdf(scorecard)}
+                                title="Download PDF"
+                              >
+                                <Download className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                );
+              })()}
             </div>
           )}
         </CardContent>
