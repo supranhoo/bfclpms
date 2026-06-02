@@ -15,6 +15,20 @@ import { IssuesByTypeChart } from '@/components/issues/IssuesByTypeChart';
 import { TableSkeleton } from '@/components/ui/LoadingSkeletons';
 import { toast } from 'sonner';
 import * as XLSX from 'xlsx';
+import { useResolvedReportFields } from '@/hooks/useResolvedReportFields';
+
+const ISS_DEFAULT_FIELDS = [
+  { field_key: 'issue_type',   default_label: 'Issue Type',   default_sort: 10, is_required: true },
+  { field_key: 'subject',      default_label: 'Subject',      default_sort: 20, is_required: true },
+  { field_key: 'description',  default_label: 'Description',  default_sort: 30 },
+  { field_key: 'employee',     default_label: 'Employee',     default_sort: 40 },
+  { field_key: 'department',   default_label: 'Department',   default_sort: 50 },
+  { field_key: 'assigned_to',  default_label: 'Assigned To',  default_sort: 60 },
+  { field_key: 'status',       default_label: 'Status',       default_sort: 70 },
+  { field_key: 'priority',     default_label: 'Priority',     default_sort: 80 },
+  { field_key: 'age_days',     default_label: 'Age (Days)',   default_sort: 90 },
+  { field_key: 'created_date', default_label: 'Created Date', default_sort: 100 },
+] as const;
 
 export default function IssuesReport() {
   const { canDownload } = useReportAccess();
@@ -22,6 +36,7 @@ export default function IssuesReport() {
   const { issues, summary, isLoading } = useSystemIssues();
   const [selectedIssue, setSelectedIssue] = useState<SystemIssue | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
+  const resolvedFields = useResolvedReportFields('RPT-ISS-001', ISS_DEFAULT_FIELDS);
   
   const [filters, setFilters] = useState<IssueFiltersState>({
     issueType: 'all',
@@ -77,21 +92,28 @@ export default function IssuesReport() {
       toast.error('No data to export');
       return;
     }
-
-    const exportData = filteredIssues.map(issue => ({
-      'Issue Type': issue.issueType.replace('_', ' ').toUpperCase(),
-      'Subject': issue.subject,
-      'Description': issue.description,
-      'Employee': issue.employeeName,
-      'Department': issue.departmentName,
-      'Assigned To': issue.assignedToName,
-      'Status': issue.status,
-      'Priority': issue.priority,
-      'Age (Days)': issue.ageInDays,
-      'Created Date': format(issue.createdAt, 'dd MMM yyyy'),
-    }));
-
-    const ws = XLSX.utils.json_to_sheet(exportData);
+    const visible = resolvedFields.filter((f) => !f.is_hidden);
+    const valueFor = (issue: SystemIssue, key: string): string | number => {
+      switch (key) {
+        case 'issue_type':   return issue.issueType.replace('_', ' ').toUpperCase();
+        case 'subject':      return issue.subject;
+        case 'description':  return issue.description;
+        case 'employee':     return issue.employeeName;
+        case 'department':   return issue.departmentName;
+        case 'assigned_to':  return issue.assignedToName;
+        case 'status':       return issue.status;
+        case 'priority':     return issue.priority;
+        case 'age_days':     return issue.ageInDays;
+        case 'created_date': return format(issue.createdAt, 'dd MMM yyyy');
+        default: return '';
+      }
+    };
+    const exportData = filteredIssues.map((issue) => {
+      const row: Record<string, string | number> = {};
+      for (const fld of visible) row[fld.label] = valueFor(issue, fld.field_key);
+      return row;
+    });
+    const ws = XLSX.utils.json_to_sheet(exportData, { header: visible.map((f) => f.label) });
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Issues Report');
     XLSX.writeFile(wb, `Issues_Report_${new Date().toISOString().split('T')[0]}.xlsx`);
