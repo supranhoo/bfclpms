@@ -14,6 +14,20 @@ import { Badge } from '@/components/ui/badge';
 import { Download, Search, ChevronLeft, ChevronRight, Users, TrendingUp, BarChart3 } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import * as XLSX from 'xlsx';
+import { useResolvedReportFields } from '@/hooks/useResolvedReportFields';
+
+const MTK_DEFAULT_FIELDS = [
+  { field_key: 'month',          default_label: 'Month',           default_sort: 10 },
+  { field_key: 'company',        default_label: 'Company',         default_sort: 20 },
+  { field_key: 'employee_code',  default_label: 'Employee Code',   default_sort: 30, is_required: true },
+  { field_key: 'employee_name',  default_label: 'Employee Name',   default_sort: 40, is_required: true },
+  { field_key: 'department',     default_label: 'Department',      default_sort: 50 },
+  { field_key: 'kpi_name',       default_label: 'KPI Name',        default_sort: 60, is_required: true },
+  { field_key: 'manager_name',   default_label: 'Manager Name',    default_sort: 70 },
+  { field_key: 'employee_score', default_label: 'Employee Score',  default_sort: 80 },
+  { field_key: 'manager_score',  default_label: 'Manager Score',   default_sort: 90 },
+  { field_key: 'variance',       default_label: 'Variance',       default_sort: 100 },
+] as const;
 
 const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -43,6 +57,7 @@ export default function ManagerTeamKpiReport() {
   const [page, setPage] = useState(0);
   const { canDownload } = useReportAccess();
   const { getCompanyCode } = useCompanyFilter();
+  const resolvedFields = useResolvedReportFields('RPT-MTK-001', MTK_DEFAULT_FIELDS);
 
   const { data: rawData, isLoading } = useQuery({
     queryKey: ['manager-team-kpi-report', month, year],
@@ -156,19 +171,29 @@ export default function ManagerTeamKpiReport() {
 
   const handleExport = () => {
     if (!filtered.length) return;
+    const visible = resolvedFields.filter((fld) => !fld.is_hidden);
+    const valueFor = (row: MismatchRow, key: string): unknown => {
+      switch (key) {
+        case 'month':          return month;
+        case 'company':        return getCompanyCode(row.employeeId);
+        case 'employee_code':  return row.employeeCode;
+        case 'employee_name':  return row.employeeName;
+        case 'department':     return row.department;
+        case 'kpi_name':       return row.kpiName;
+        case 'manager_name':   return row.managerName;
+        case 'employee_score': return row.employeeScore;
+        case 'manager_score':  return row.managerScore;
+        case 'variance':       return row.variance;
+        default:               return '';
+      }
+    };
     const ws = XLSX.utils.json_to_sheet(
-      filtered.map((r) => ({
-        'Month': month,
-        'Company': getCompanyCode(r.employeeId),
-        'Employee Code': r.employeeCode,
-        'Employee Name': r.employeeName,
-        Department: r.department,
-        'KPI Name': r.kpiName,
-        'Manager Name': r.managerName,
-        'Employee Score': r.employeeScore,
-        'Manager Score': r.managerScore,
-        Variance: r.variance,
-      }))
+      filtered.map((r) => {
+        const out: Record<string, unknown> = {};
+        for (const fld of visible) out[fld.label] = valueFor(r, fld.field_key);
+        return out;
+      }),
+      { header: visible.map((fld) => fld.label) },
     );
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Manager vs Team KPI');

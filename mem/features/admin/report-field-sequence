@@ -23,7 +23,8 @@ type: feature
   - `RPT-KRA-001` KRA Issuance, `RPT-DEP-001` Department, `RPT-VAR-001` Variance, `RPT-ISS-001` Issues (Phase 5a)
   - `RPT-TNI-001` TNI, `RPT-EPS-001` Employee Performance Summary, `RPT-CMP-001` Completion, `RPT-AUD-001` Audit Trail, `RPT-QRY-001` Query, `RPT-KPID-001` KPI Detail, `RPT-KST-001` KPI Status Tracker, `RPT-BNK-001` Bottleneck (Phase 5b — all Tier A flat-table reports now wired)
   - `RPT-KSD-001` KPI Scorecard Detail (Phase 6a — both single-month and multi-month range exports share the same resolved field set)
-  Remaining Tier B reports (Incentive, KPI-Employee Matrix, Monthly Scorecard, KPI Journey, Manager-vs-Team) keep hardcoded columns until their own Phase 6 wiring.
+  - `RPT-MTK-001` Same KPI — Manager vs Team (Phase 6b)
+  Remaining Tier B reports (Incentive, KPI-Employee Matrix, Monthly Scorecard, KPI Journey, Team-vs-Manager Score) keep hardcoded columns until their own Phase 6 wiring.
 
 ## DB
 - `report_registry` — admin write, authenticated read.
