@@ -14,6 +14,21 @@ import { Badge } from '@/components/ui/badge';
 import { Download, Search, ChevronLeft, ChevronRight, AlertTriangle, TrendingUp, BarChart3 } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import * as XLSX from 'xlsx';
+import { useResolvedReportFields } from '@/hooks/useResolvedReportFields';
+
+const VAR_DEFAULT_FIELDS = [
+  { field_key: 'company',          default_label: 'Company',          default_sort: 10 },
+  { field_key: 'employee_code',    default_label: 'Employee Code',    default_sort: 20, is_required: true },
+  { field_key: 'employee_name',    default_label: 'Employee Name',    default_sort: 30, is_required: true },
+  { field_key: 'department',       default_label: 'Department',       default_sort: 40 },
+  { field_key: 'category',         default_label: 'Category',         default_sort: 50 },
+  { field_key: 'kra',              default_label: 'KRA',              default_sort: 60 },
+  { field_key: 'kpi',              default_label: 'KPI',              default_sort: 70 },
+  { field_key: 'month',            default_label: 'Month',            default_sort: 80 },
+  { field_key: 'auditor_score',    default_label: 'Auditor Score',    default_sort: 90 },
+  { field_key: 'management_score', default_label: 'Management Score', default_sort: 100 },
+  { field_key: 'variance',         default_label: 'Variance',         default_sort: 110 },
+] as const;
 
 const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -127,23 +142,33 @@ export default function VarianceReport() {
       : 0;
   const maxVariance = filtered.length > 0 ? Math.max(...filtered.map((r) => Math.abs(r.variance))) : 0;
 
+  const resolvedFields = useResolvedReportFields('RPT-VAR-001', VAR_DEFAULT_FIELDS);
+
   const handleExport = () => {
     if (!filtered.length) return;
-    const ws = XLSX.utils.json_to_sheet(
-      filtered.map((r) => ({
-        'Company': getCompanyCode(r.employeeId),
-        'Employee Code': r.employeeCode,
-        'Employee Name': r.employeeName,
-        Department: r.department,
-        Category: r.category,
-        KRA: r.kraName,
-        KPI: r.kpiName,
-        Month: r.month,
-        'Auditor Score': r.auditorScore,
-        'Management Score': r.managementScore,
-        Variance: r.variance,
-      }))
-    );
+    const visible = resolvedFields.filter((f) => !f.is_hidden);
+    const valueFor = (r: VarianceRow, key: string): string | number => {
+      switch (key) {
+        case 'company':          return getCompanyCode(r.employeeId);
+        case 'employee_code':    return r.employeeCode;
+        case 'employee_name':    return r.employeeName;
+        case 'department':       return r.department;
+        case 'category':         return r.category;
+        case 'kra':              return r.kraName;
+        case 'kpi':              return r.kpiName;
+        case 'month':            return r.month;
+        case 'auditor_score':    return r.auditorScore;
+        case 'management_score': return r.managementScore;
+        case 'variance':         return r.variance;
+        default: return '';
+      }
+    };
+    const exportData = filtered.map((r) => {
+      const row: Record<string, string | number> = {};
+      for (const fld of visible) row[fld.label] = valueFor(r, fld.field_key);
+      return row;
+    });
+    const ws = XLSX.utils.json_to_sheet(exportData, { header: visible.map((f) => f.label) });
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Variance Report');
     XLSX.writeFile(wb, `Variance_Report_${month}_${year}.xlsx`);

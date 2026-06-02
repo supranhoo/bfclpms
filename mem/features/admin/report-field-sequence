@@ -18,7 +18,10 @@ type: feature
 - `src/hooks/useResolvedReportFields.ts` — feature-flag-gated; takes `(reportId, defaults)`, falls back to defaults when registry not seeded or flag off. Admin helpers: `useReportRegistry`, `useReportFieldRegistry`, `useReportFieldOverridesAll`.
 - `src/components/admin/ReportFieldSequenceTab.tsx` — admin UI inside System Settings → Report Builder → "Field Sequence" tab. Per-report collapsible card with @dnd-kit sortable column list, inline rename, eye toggle for hide, per-report and global reset, audit-logged save.
 - `src/pages/ReportShortlink.tsx` + route `/r/:reportId` — resolves to canonical route (DB lookup with TS catalog fallback) and preserves query string + appends `?rpt=<id>`. 404 view for unknown IDs.
-- Wired consumer: `PerformanceReport` Excel export columns driven by resolver (`RPT-PERF-001` → category / kpi_count / avg_score). Other reports keep their hardcoded columns until they wire `useResolvedReportFields()`.
+- Wired consumers (XLSX export only — table rendering wiring is per-page follow-up):
+  - `RPT-PERF-001` Performance (Phase 4)
+  - `RPT-KRA-001` KRA Issuance, `RPT-DEP-001` Department, `RPT-VAR-001` Variance, `RPT-ISS-001` Issues (Phase 5a)
+  Other reports keep their hardcoded columns until they wire `useResolvedReportFields()` (Phase 5b for Tier A flat-table reports, Phase 6 for composite/tabbed/matrix reports).
 
 ## DB
 - `report_registry` — admin write, authenticated read.
