@@ -142,23 +142,33 @@ export default function VarianceReport() {
       : 0;
   const maxVariance = filtered.length > 0 ? Math.max(...filtered.map((r) => Math.abs(r.variance))) : 0;
 
+  const resolvedFields = useResolvedReportFields('RPT-VAR-001', VAR_DEFAULT_FIELDS);
+
   const handleExport = () => {
     if (!filtered.length) return;
-    const ws = XLSX.utils.json_to_sheet(
-      filtered.map((r) => ({
-        'Company': getCompanyCode(r.employeeId),
-        'Employee Code': r.employeeCode,
-        'Employee Name': r.employeeName,
-        Department: r.department,
-        Category: r.category,
-        KRA: r.kraName,
-        KPI: r.kpiName,
-        Month: r.month,
-        'Auditor Score': r.auditorScore,
-        'Management Score': r.managementScore,
-        Variance: r.variance,
-      }))
-    );
+    const visible = resolvedFields.filter((f) => !f.is_hidden);
+    const valueFor = (r: VarianceRow, key: string): string | number => {
+      switch (key) {
+        case 'company':          return getCompanyCode(r.employeeId);
+        case 'employee_code':    return r.employeeCode;
+        case 'employee_name':    return r.employeeName;
+        case 'department':       return r.department;
+        case 'category':         return r.category;
+        case 'kra':              return r.kraName;
+        case 'kpi':              return r.kpiName;
+        case 'month':            return r.month;
+        case 'auditor_score':    return r.auditorScore;
+        case 'management_score': return r.managementScore;
+        case 'variance':         return r.variance;
+        default: return '';
+      }
+    };
+    const exportData = filtered.map((r) => {
+      const row: Record<string, string | number> = {};
+      for (const fld of visible) row[fld.label] = valueFor(r, fld.field_key);
+      return row;
+    });
+    const ws = XLSX.utils.json_to_sheet(exportData, { header: visible.map((f) => f.label) });
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Variance Report');
     XLSX.writeFile(wb, `Variance_Report_${month}_${year}.xlsx`);
