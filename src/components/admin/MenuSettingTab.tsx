@@ -15,7 +15,7 @@ import { TooltipProvider } from '@/components/ui/tooltip';
 import { ConfirmDestructiveDialog } from '@/components/ui/ConfirmDestructiveDialog';
 import {
   Menu as MenuIcon, RotateCcw, Save, History,
-  AlertCircle, Eye, Sparkles, Database, Search, Plus,
+  AlertCircle, Eye, Sparkles, Database, Search, Plus, FolderInput,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
@@ -27,6 +27,7 @@ import { MENU_CATALOG, MENU_CATALOG_BY_KEY } from '@/lib/menu/catalog';
 import type { MenuOverrideRow, MenuRegistryRow, ResolvedMenuNode } from '@/lib/menu/types';
 import { MenuTreeDnd, type PendingMove, type LabelDraft } from './MenuTreeDnd';
 import { CreateMenuItemDialog } from './CreateMenuItemDialog';
+import { MoveUnderDialog } from './MoveUnderDialog';
 
 /** Menu Setting tab — Phase 3: full DnD reposition + rename + audit + reset. */
 export function MenuSettingTab() {
@@ -52,6 +53,18 @@ export function MenuSettingTab() {
   const [seeding, setSeeding] = useState(false);
   const [search, setSearch] = useState('');
   const [createOpen, setCreateOpen] = useState(false);
+  const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
+  const [moveUnderOpen, setMoveUnderOpen] = useState(false);
+
+  function toggleSelect(menuKey: string) {
+    setSelectedKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(menuKey)) next.delete(menuKey);
+      else next.add(menuKey);
+      return next;
+    });
+  }
+  function clearSelection() { setSelectedKeys(new Set()); }
 
   const resolved = useMemo<ResolvedMenuNode[]>(() => {
     if (!registry.data) return [];
@@ -319,6 +332,16 @@ export function MenuSettingTab() {
           resolvedByKey={resolvedByKey}
         />
 
+        <MoveUnderDialog
+          open={moveUnderOpen}
+          onOpenChange={setMoveUnderOpen}
+          selectedKeys={Array.from(selectedKeys)}
+          registryByKey={registryByKey}
+          effective={effective}
+          effectiveByKey={Object.fromEntries(effective.map((n) => [n.menu_key, n]))}
+          onApplyMove={applyMove}
+        />
+
         {/* Empty-state seed */}
         {isEmpty && (
           <Card className="border-dashed">
@@ -386,9 +409,24 @@ export function MenuSettingTab() {
                     className="h-8 pl-7"
                   />
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  Drag the handle to reorder, drop on a row to nest, drop on a module to move across apps.
-                </p>
+                <div className="flex items-center gap-2 ml-auto">
+                  {selectedKeys.size > 0 && (
+                    <>
+                      <span className="text-xs text-muted-foreground">
+                        {selectedKeys.size} selected
+                      </span>
+                      <Button variant="ghost" size="sm" onClick={clearSelection}>
+                        Clear
+                      </Button>
+                      <Button size="sm" className="gap-2" onClick={() => setMoveUnderOpen(true)}>
+                        <FolderInput className="h-4 w-4" /> Move under…
+                      </Button>
+                    </>
+                  )}
+                  <p className="text-xs text-muted-foreground hidden lg:block">
+                    Tick rows to bulk-nest, or drag a row onto a container.
+                  </p>
+                </div>
               </div>
 
               <MenuTreeDnd
@@ -401,6 +439,8 @@ export function MenuSettingTab() {
                 onLabelChange={setLabelDraft}
                 onResetItem={resetItem}
                 searchTerm={search}
+                selectedKeys={selectedKeys}
+                onToggleSelect={toggleSelect}
               />
             </CardContent>
           </Card>
