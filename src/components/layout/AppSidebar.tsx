@@ -185,26 +185,83 @@ export function AppSidebar() {
   const policyVisibleRoles = appSettings?.pms_policy_visible_roles || ['admin', 'manager', 'employee', 'auditor', 'management', 'hr_pms'];
   const menuItems = getStaticMenuItems(policyVisibleRoles);
 
-  // Apply resolved labels + sort to every group's items. menu_key is the
-  // stable identity; when overrides exist, override → default; sort_order
-  // re-sorts within the group.
-  const applyResolved = useCallback(
-    <T extends { title: string; menuKey?: string }>(items: T[], groupParentKey?: string): T[] => {
-      if (!resolvedMenu) return items;
-      return [...items]
-        .map((it, idx) => {
-          const mk = it.menuKey;
-          if (!mk) return { item: it, sort: (idx + 1) * 10 };
-          const node = resolvedMenu.byKey[mk];
-          return {
-            item: { ...it, title: node?.label ?? it.title } as T,
+  // Parent-aware resolver. menu_key is the stable identity; when overrides
+  // exist, label + sort + PARENT come from the resolver. Items can therefore
+  // move across sidebar groups (e.g. Admin Dashboard → Main).
+  //
+  // Pinning rule: menu_keys that intentionally appear in MULTIPLE hardcoded
+  // groups (Data Entry duplicates: admin-incentive-data, etc.) stay pinned to
+  // their native group regardless of resolved parent — moving them is a
+  // registry-level decision out of scope for this fix.
+  const { keyOccurrences, flatPool } = (() => {
+    const groupOrder = ['main','manager','management','hr_pms','audit','dataEntry','kraSettings','incentive','admin','reports'] as const;
+    type Item = (typeof menuItems.main)[number];
+    const counts = new Map<string, number>();
+    const pool: Array<{ item: Item; nativeGroup: string }> = [];
+    const seen = new Set<string>();
+    for (const g of groupOrder) {
+      for (const it of (menuItems as any)[g] as Item[]) {
+        if (it.menuKey) counts.set(it.menuKey, (counts.get(it.menuKey) ?? 0) + 1);
+        if (it.menuKey && seen.has(it.menuKey)) continue;
+        if (it.menuKey) seen.add(it.menuKey);
+        pool.push({ item: it, nativeGroup: g });
+      }
+    }
+    return { keyOccurrences: counts, flatPool: pool };
+  })();
+
+  const resolveGroupItems = useCallback(
+    <T extends { title: string; menuKey?: string }>(groupKey: string, fallback: T[]): T[] => {
+      const parentKey = GROUP_PARENT_KEY[groupKey];
+      if (!resolvedMenu || !parentKey) return fallback;
+      const isPinned = (mk?: string) => !!mk && (keyOccurrences.get(mk) ?? 0) > 1;
+      const acc: Array<{ item: T; sort: number }> = [];
+      const added = new Set<string>();
+      // 1) Native items: pinned items or items not in registry stay in this group.
+      fallback.forEach((it, idx) => {
+        const node = it.menuKey ? resolvedMenu.byKey[it.menuKey] : null;
+        if (!node || isPinned(it.menuKey)) {
+          acc.push({
+            item: node ? ({ ...it, title: node.label } as T) : it,
             sort: node?.sort_order ?? (idx + 1) * 10,
-          };
-        })
-        .sort((a, b) => a.sort - b.sort)
-        .map((x) => x.item);
+          });
+          if (it.menuKey) added.add(it.menuKey);
+        }
+      });
+      // 2) Items from any group whose resolved parent now points to THIS group.
+      for (const { item } of flatPool) {
+        const mk = item.menuKey;
+        if (!mk || isPinned(mk) || added.has(mk)) continue;
+        const node = resolvedMenu.byKey[mk];
+        if (!node || node.parent_key !== parentKey) continue;
+        acc.push({ item: { ...(item as unknown as T), title: node.label }, sort: node.sort_order });
+        added.add(mk);
+      }
+      acc.sort((a, b) => a.sort - b.sort);
+      return acc.map((x) => x.item);
     },
-    [resolvedMenu],
+    [resolvedMenu, keyOccurrences, flatPool],
+  );
+
+  // Resolved section for a given path — honours moved items by looking up the
+  // matched menu_key's resolved parent_key. Falls back to legacy URL rules.
+  const resolvedSectionForPath = useCallback(
+    (pathname: string, search: string): string => {
+      const fullPath = pathname + search;
+      if (resolvedMenu) {
+        const match = flatPool.find(({ item }) => {
+          if (!item.path) return false;
+          return item.path === fullPath || item.path === pathname;
+        });
+        const mk = match?.item.menuKey;
+        const node = mk ? resolvedMenu.byKey[mk] : null;
+        if (node?.parent_key && PARENT_KEY_TO_GROUP[node.parent_key]) {
+          return PARENT_KEY_TO_GROUP[node.parent_key];
+        }
+      }
+      return getSectionForPath(pathname, search);
+    },
+    [resolvedMenu, flatPool],
   );
 
   // Flag-gated additive entry — PRD v2.0 §0 Non-Regression Contract.
