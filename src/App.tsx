@@ -18,6 +18,7 @@ const ResetPassword = lazy(() => import("./pages/ResetPassword"));
 const ProfileSettings = lazy(() => import("./pages/ProfileSettings"));
 const ModuleHub = lazy(() => import("./pages/ModuleHub"));
 const Dashboard = lazy(() => import("./pages/Dashboard"));
+const ReportShortlink = lazy(() => import("./pages/ReportShortlink"));
 const MyKpis = lazy(() => import("./pages/MyKpis"));
 const QueryInbox = lazy(() => import("./pages/QueryInbox"));
 const PMSPolicy = lazy(() => import("./pages/PMSPolicy"));
@@ -338,6 +339,12 @@ const App = () => (
                 <Route path="/reports" element={
                   <ProtectedRoute allowedRoles={['manager', 'admin', 'auditor', 'management', 'employee', 'hr_pms', 'skip_level']}>
                     <ReportsHub />
+                  </ProtectedRoute>
+                } />
+                {/* Stable Report ID shortlink: /r/RPT-PERF-001 → canonical route */}
+                <Route path="/r/:reportId" element={
+                  <ProtectedRoute allowedRoles={['manager', 'admin', 'auditor', 'management', 'employee', 'hr_pms', 'skip_level']}>
+                    <ReportShortlink />
                   </ProtectedRoute>
                 } />
                 <Route path="/reports/performance" element={

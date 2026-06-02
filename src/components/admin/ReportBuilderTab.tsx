@@ -13,6 +13,7 @@ import { useCustomReports, useCreateCustomReport, useUpdateCustomReport, useDele
 import { ReportSequenceConfig } from './ReportSequenceConfig';
 import { ReportFieldPicker } from './ReportFieldPicker';
 import { ReportFilterConfig } from './ReportFilterConfig';
+import { ReportFieldSequenceTab } from './ReportFieldSequenceTab';
 import { ALL_APP_ROLES } from '@/lib/roles';
 import { Plus, Pencil, Trash2, FileText, GripVertical, Eye, EyeOff } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
@@ -69,14 +70,19 @@ export function ReportBuilderTab() {
       </div>
 
       <Tabs defaultValue="custom" className="w-full">
-        <TabsList className="grid w-full grid-cols-3">
+        <TabsList className="grid w-full grid-cols-4">
           <TabsTrigger value="sequence">Report Sequence</TabsTrigger>
+          <TabsTrigger value="field-sequence">Field Sequence</TabsTrigger>
           <TabsTrigger value="customize">Customize Columns</TabsTrigger>
           <TabsTrigger value="custom">Custom Reports</TabsTrigger>
         </TabsList>
 
         <TabsContent value="sequence" className="mt-4">
           <ReportSequenceConfig />
+        </TabsContent>
+
+        <TabsContent value="field-sequence" className="mt-4">
+          <ReportFieldSequenceTab />
         </TabsContent>
 
         <TabsContent value="customize" className="mt-4">

@@ -6364,6 +6364,169 @@ export type Database = {
           },
         ]
       }
+      report_field_override_audit: {
+        Row: {
+          changed_at: string
+          changed_by: string | null
+          client_id: string | null
+          field: string
+          field_key: string | null
+          id: string
+          new_value: string | null
+          old_value: string | null
+          report_id: string
+        }
+        Insert: {
+          changed_at?: string
+          changed_by?: string | null
+          client_id?: string | null
+          field: string
+          field_key?: string | null
+          id?: string
+          new_value?: string | null
+          old_value?: string | null
+          report_id: string
+        }
+        Update: {
+          changed_at?: string
+          changed_by?: string | null
+          client_id?: string | null
+          field?: string
+          field_key?: string | null
+          id?: string
+          new_value?: string | null
+          old_value?: string | null
+          report_id?: string
+        }
+        Relationships: []
+      }
+      report_field_overrides: {
+        Row: {
+          client_id: string | null
+          custom_label: string | null
+          custom_sort: number | null
+          field_key: string
+          id: string
+          is_active: boolean
+          is_hidden: boolean
+          report_id: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          client_id?: string | null
+          custom_label?: string | null
+          custom_sort?: number | null
+          field_key: string
+          id?: string
+          is_active?: boolean
+          is_hidden?: boolean
+          report_id: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          client_id?: string | null
+          custom_label?: string | null
+          custom_sort?: number | null
+          field_key?: string
+          id?: string
+          is_active?: boolean
+          is_hidden?: boolean
+          report_id?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "report_field_overrides_report_id_fkey"
+            columns: ["report_id"]
+            isOneToOne: false
+            referencedRelation: "report_registry"
+            referencedColumns: ["report_id"]
+          },
+        ]
+      }
+      report_field_registry: {
+        Row: {
+          data_type: string | null
+          default_label: string
+          default_sort: number
+          field_key: string
+          id: string
+          is_renamable: boolean
+          is_required: boolean
+          report_id: string
+        }
+        Insert: {
+          data_type?: string | null
+          default_label: string
+          default_sort: number
+          field_key: string
+          id?: string
+          is_renamable?: boolean
+          is_required?: boolean
+          report_id: string
+        }
+        Update: {
+          data_type?: string | null
+          default_label?: string
+          default_sort?: number
+          field_key?: string
+          id?: string
+          is_renamable?: boolean
+          is_required?: boolean
+          report_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "report_field_registry_report_id_fkey"
+            columns: ["report_id"]
+            isOneToOne: false
+            referencedRelation: "report_registry"
+            referencedColumns: ["report_id"]
+          },
+        ]
+      }
+      report_registry: {
+        Row: {
+          canonical_route: string
+          created_at: string
+          description: string | null
+          display_name: string
+          is_active: boolean
+          menu_key: string | null
+          module_prefix: string
+          report_id: string
+          report_key: string
+          sort_order: number
+        }
+        Insert: {
+          canonical_route: string
+          created_at?: string
+          description?: string | null
+          display_name: string
+          is_active?: boolean
+          menu_key?: string | null
+          module_prefix: string
+          report_id: string
+          report_key: string
+          sort_order?: number
+        }
+        Update: {
+          canonical_route?: string
+          created_at?: string
+          description?: string | null
+          display_name?: string
+          is_active?: boolean
+          menu_key?: string | null
+          module_prefix?: string
+          report_id?: string
+          report_key?: string
+          sort_order?: number
+        }
+        Relationships: []
+      }
       review_action_notes: {
         Row: {
           applicable_from: string | null
