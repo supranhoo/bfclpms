@@ -631,8 +631,15 @@ function CopyableField({ value, label }: { value: string; label: string }) {
     }
   };
   return (
-    <div className="flex items-center gap-1 min-w-0">
-      <code className="text-[10px] font-mono text-muted-foreground break-all leading-tight">{value}</code>
+    <div className="flex items-center gap-1 min-w-0 w-full">
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <code className="text-[11px] font-mono text-muted-foreground truncate leading-tight flex-1 min-w-0 cursor-default">
+            {value}
+          </code>
+        </TooltipTrigger>
+        <TooltipContent className="font-mono text-xs max-w-md break-all">{value}</TooltipContent>
+      </Tooltip>
       <Tooltip>
         <TooltipTrigger asChild>
           <button
