@@ -341,6 +341,12 @@ const App = () => (
                     <ReportsHub />
                   </ProtectedRoute>
                 } />
+                {/* Stable Report ID shortlink: /r/RPT-PERF-001 → canonical route */}
+                <Route path="/r/:reportId" element={
+                  <ProtectedRoute allowedRoles={['manager', 'admin', 'auditor', 'management', 'employee', 'hr_pms', 'skip_level']}>
+                    <ReportShortlink />
+                  </ProtectedRoute>
+                } />
                 <Route path="/reports/performance" element={
                   <ReportRoute reportKey="performance">
                     <PerformanceReport />
