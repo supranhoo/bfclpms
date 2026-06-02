@@ -28,7 +28,8 @@ type: feature
   - `RPT-KJN-001` KPI Journey Timeline (Phase 6d)
   - `RPT-MSR-001` Monthly Scorecard (Phase 6e — summary export only; PDF and Monthly Trend tab remain hardcoded)
   - `RPT-MAT-001` KPI-Employee Score Matrix (Phase 6f — fixed prefix columns only: Sr.No/Category/KRA/KPI/Weightage/Employee Count. Per-employee `(Wt%)`/`(Score)` columns stay dynamic and are appended after the resolver-driven prefix.)
-  Remaining Tier B: Incentive (pivot layout inside `MonthlyIncentiveTable` — Phase 6g pending).
+  - `RPT-INC-001` Incentive Report (Phase 6g — `MonthlyIncentiveTable` XLSX export wired through resolver; 30 fields with employee_code/employee_name/incentive_amount as required. Retroactive Adjustment tab and table UI remain hardcoded.)
+  All Tier A + Tier B XLSX exports are now resolver-driven. Remaining hardcoded exports are non-tabular: MSR PDF, MSR Monthly Trend tab, Incentive Retroactive Adjustment tab.
 
 ## DB
 - `report_registry` — admin write, authenticated read.

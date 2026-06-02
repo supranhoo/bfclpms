@@ -20,12 +20,47 @@ import { IncentiveDryRunDialog } from './IncentiveDryRunDialog';
 import { IncentiveStatusOverride } from './IncentiveStatusOverride';
 import { RatingBadge } from '@/components/ui/RatingBadge';
 import * as XLSX from 'xlsx';
+import { useResolvedReportFields } from '@/hooks/useResolvedReportFields';
+
+const INC_DEFAULT_FIELDS = [
+  { field_key: 'employee_code',            default_label: 'Employee Code',            default_sort: 10,  is_required: true },
+  { field_key: 'employee_name',            default_label: 'Employee Name',            default_sort: 20,  is_required: true },
+  { field_key: 'designation',              default_label: 'Designation',              default_sort: 30 },
+  { field_key: 'department',               default_label: 'Department',               default_sort: 40 },
+  { field_key: 'business_unit',            default_label: 'Business Unit',            default_sort: 50 },
+  { field_key: 'division',                 default_label: 'Division',                 default_sort: 60 },
+  { field_key: 'month',                    default_label: 'Month',                    default_sort: 70 },
+  { field_key: 'year',                     default_label: 'Year',                     default_sort: 80 },
+  { field_key: 'period',                   default_label: 'Period',                   default_sort: 90 },
+  { field_key: 'programme_name',           default_label: 'Programme Name',           default_sort: 100 },
+  { field_key: 'pms_score',                default_label: 'PMS Score',                default_sort: 110 },
+  { field_key: 'slab_range',               default_label: 'Slab Range',               default_sort: 120 },
+  { field_key: 'slab_rating',              default_label: 'Slab Rating',              default_sort: 130 },
+  { field_key: 'base_incentive_percent',   default_label: 'Base Incentive %',         default_sort: 140 },
+  { field_key: 'is_disqualified',          default_label: 'Is Disqualified',          default_sort: 150 },
+  { field_key: 'dq_reasons',               default_label: 'DQ Reasons',               default_sort: 160 },
+  { field_key: 'lti_penalty_percent',      default_label: 'LTI Penalty %',            default_sort: 170 },
+  { field_key: 'pro_rata_factor',          default_label: 'Pro-rata Factor',          default_sort: 180 },
+  { field_key: 'production_value',         default_label: 'Production Value',         default_sort: 190 },
+  { field_key: 'original_score',           default_label: 'Original Score',           default_sort: 200 },
+  { field_key: 'adjusted_score',           default_label: 'Adjusted Score',           default_sort: 210 },
+  { field_key: 'final_incentive_percent',  default_label: 'Final Incentive %',        default_sort: 220 },
+  { field_key: 'incentive_amount',         default_label: 'Incentive Amount',         default_sort: 230, is_required: true },
+  { field_key: 'incentive_status',         default_label: 'Incentive Status',         default_sort: 240 },
+  { field_key: 'record_status',            default_label: 'Record Status',            default_sort: 250 },
+  { field_key: 'incentive_base',           default_label: 'Incentive Base',           default_sort: 260 },
+  { field_key: 'retroactive_adjustment',   default_label: 'Retroactive Adjustment',   default_sort: 270 },
+  { field_key: 'adjustment_source_period', default_label: 'Adjustment Source Period', default_sort: 280 },
+  { field_key: 'computed_at',              default_label: 'Computed At',              default_sort: 290 },
+  { field_key: 'confirmed_by',             default_label: 'Confirmed By',             default_sort: 300 },
+] as const;
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 const YEARS = Array.from({ length: 5 }, (_, i) => String(2024 + i));
 
 export function MonthlyIncentiveTable() {
   const { user } = useAuth();
+  const resolvedIncFields = useResolvedReportFields('RPT-INC-001', INC_DEFAULT_FIELDS);
   const currentDate = new Date();
   const [selectedMonth, setSelectedMonth] = useState(MONTHS[currentDate.getMonth()]);
   const [selectedYear, setSelectedYear] = useState(String(currentDate.getFullYear()));
@@ -291,48 +326,55 @@ export function MonthlyIncentiveTable() {
 
   const handleExport = () => {
     if (!filteredRecords.length) return;
-    const exportData = filteredRecords.map((r: any) => {
+    const visible = resolvedIncFields.filter(fld => !fld.is_hidden);
+    const valueFor = (r: any, key: string): unknown => {
       const p = r.profiles;
       const dept = p?.departments;
       const bu = dept?.business_units;
       const div = bu?.divisions;
       const slab = r.incentive_slabs;
       const prog = r.incentive_programs;
-      return {
-        'Employee Code': p?.employee_code ?? '',
-        'Employee Name': p?.full_name ?? '',
-        'Designation': p?.designation ?? '',
-        'Department': dept?.name ?? '',
-        'Business Unit': bu?.name ?? '',
-        'Division': div?.name ?? '',
-        'Month': r.review_period,
-        'Year': r.review_year,
-        'Period': r.payment_period || 'Full Month',
-        'Programme Name': prog?.name ?? '',
-        'PMS Score': r.pms_score ?? '',
-        'Slab Range': slab ? `${slab.min_value}–${slab.max_value}` : '',
-        'Slab Rating': slab?.rating_label ?? '',
-        'Base Incentive %': r.base_incentive_percent,
-        'Is Disqualified': r.is_disqualified ? 'Yes' : 'No',
-        'DQ Reasons': (r.disqualification_reasons || []).join(', '),
-        'LTI Penalty %': r.lti_penalty_percent,
-        'Pro-rata Factor': r.pro_rata_factor,
-        'Production Value': r.production_value ?? '',
-        'Original Score': r.original_score ?? '',
-        'Adjusted Score': r.adjusted_score ?? '',
-        'Final Incentive %': r.final_incentive_percent,
-        'Incentive Amount': Math.round(r.incentive_amount || 0),
-        'Incentive Status': r.incentive_status,
-        'Record Status': r.status,
-        'Incentive Base': prog?.incentive_base ?? '',
-        'Retroactive Adjustment': r.is_retroactive_adjustment ? 'Yes' : 'No',
-        'Adjustment Source Period': r.adjustment_source_period ?? '',
-        'Computed At': r.computed_at ?? '',
-        'Confirmed By': r.confirmed_by ?? '',
-      };
+      switch (key) {
+        case 'employee_code':            return p?.employee_code ?? '';
+        case 'employee_name':            return p?.full_name ?? '';
+        case 'designation':              return p?.designation ?? '';
+        case 'department':               return dept?.name ?? '';
+        case 'business_unit':            return bu?.name ?? '';
+        case 'division':                 return div?.name ?? '';
+        case 'month':                    return r.review_period;
+        case 'year':                     return r.review_year;
+        case 'period':                   return r.payment_period || 'Full Month';
+        case 'programme_name':           return prog?.name ?? '';
+        case 'pms_score':                return r.pms_score ?? '';
+        case 'slab_range':               return slab ? `${slab.min_value}–${slab.max_value}` : '';
+        case 'slab_rating':              return slab?.rating_label ?? '';
+        case 'base_incentive_percent':   return r.base_incentive_percent;
+        case 'is_disqualified':          return r.is_disqualified ? 'Yes' : 'No';
+        case 'dq_reasons':               return (r.disqualification_reasons || []).join(', ');
+        case 'lti_penalty_percent':      return r.lti_penalty_percent;
+        case 'pro_rata_factor':          return r.pro_rata_factor;
+        case 'production_value':         return r.production_value ?? '';
+        case 'original_score':           return r.original_score ?? '';
+        case 'adjusted_score':           return r.adjusted_score ?? '';
+        case 'final_incentive_percent':  return r.final_incentive_percent;
+        case 'incentive_amount':         return Math.round(r.incentive_amount || 0);
+        case 'incentive_status':         return r.incentive_status;
+        case 'record_status':            return r.status;
+        case 'incentive_base':           return prog?.incentive_base ?? '';
+        case 'retroactive_adjustment':   return r.is_retroactive_adjustment ? 'Yes' : 'No';
+        case 'adjustment_source_period': return r.adjustment_source_period ?? '';
+        case 'computed_at':              return r.computed_at ?? '';
+        case 'confirmed_by':             return r.confirmed_by ?? '';
+        default:                         return '';
+      }
+    };
+    const exportData = filteredRecords.map((r: any) => {
+      const out: Record<string, unknown> = {};
+      for (const fld of visible) out[fld.label] = valueFor(r, fld.field_key);
+      return out;
     });
-    const ws = XLSX.utils.json_to_sheet(exportData);
-    ws['!cols'] = Object.keys(exportData[0]).map(() => ({ wch: 18 }));
+    const ws = XLSX.utils.json_to_sheet(exportData, { header: visible.map(fld => fld.label) });
+    ws['!cols'] = visible.map(() => ({ wch: 18 }));
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Incentive Report');
     const suffix = selectedMonth !== 'all' ? `_${selectedMonth}` : '';
