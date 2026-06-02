@@ -13,6 +13,22 @@ import { PageHeader } from '@/components/layout/PageHeader';
 import { Calendar, Download, TrendingUp, Target, CheckCircle } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import * as XLSX from 'xlsx';
+import { useResolvedReportFields } from '@/hooks/useResolvedReportFields';
+
+const CMP_DEFAULT_FIELDS = [
+  { field_key: 'period',                default_label: 'Period',                default_sort: 10, is_required: true },
+  { field_key: 'year',                  default_label: 'Year',                  default_sort: 20, is_required: true },
+  { field_key: 'total_kpis',            default_label: 'Total KPIs',            default_sort: 30 },
+  { field_key: 'self_review_submitted', default_label: 'Self Review Submitted', default_sort: 40 },
+  { field_key: 'manager_reviewed',      default_label: 'Manager Reviewed',      default_sort: 50 },
+  { field_key: 'skip_level_reviewed',   default_label: 'Skip-Level Reviewed',   default_sort: 60 },
+  { field_key: 'hr_pms_reviewed',       default_label: 'HR PMS Reviewed',       default_sort: 70 },
+  { field_key: 'auditor_reviewed',      default_label: 'Auditor Reviewed',      default_sort: 80 },
+  { field_key: 'approved',              default_label: 'Approved',              default_sort: 90 },
+  { field_key: 'not_submitted',         default_label: 'Not Submitted',         default_sort: 100 },
+  { field_key: 'self_review_rate',      default_label: 'Self Review Rate',      default_sort: 110 },
+  { field_key: 'completion_rate',       default_label: 'Completion Rate',       default_sort: 120 },
+] as const;
 import { useToast } from '@/hooks/use-toast';
 
 const MONTH_ORDER = ['January', 'February', 'March', 'April', 'May', 'June', 
