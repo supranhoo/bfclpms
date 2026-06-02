@@ -14,6 +14,14 @@ import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip, BarChart, Ba
 import { BarChart3, Users, Target, TrendingUp, Download, ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { useToast } from '@/hooks/use-toast';
+import { useResolvedReportFields } from '@/hooks/useResolvedReportFields';
+
+/** Default column set for RPT-PERF-001 — mirrors report_field_registry seed. */
+const PERF_DEFAULT_FIELDS = [
+  { field_key: 'category',  default_label: 'Category',      default_sort: 10, is_required: true },
+  { field_key: 'kpi_count', default_label: 'KPI Count',     default_sort: 20 },
+  { field_key: 'avg_score', default_label: 'Average Score', default_sort: 30 },
+] as const;
 
 const ratingColors = {
   red: '#EF4444',
@@ -102,20 +110,31 @@ export default function PerformanceReport() {
   }, 0) / submissions.length) : 0;
 
   const { toast } = useToast();
+  const resolvedFields = useResolvedReportFields('RPT-PERF-001', PERF_DEFAULT_FIELDS);
 
   const handleExportExcel = useCallback(() => {
-    const exportData = categoryPerformance.map(cat => ({
-      'Category': cat.name,
-      'KPI Count': cat.kpiCount,
-      'Average Score': `${cat.avgScore}%`,
-    }));
-
-    const ws = XLSX.utils.json_to_sheet(exportData);
+    const visibleFields = resolvedFields.filter((f) => !f.is_hidden);
+    const valueFor = (cat: typeof categoryPerformance[number], key: string): string | number => {
+      switch (key) {
+        case 'category':  return cat.name;
+        case 'kpi_count': return cat.kpiCount;
+        case 'avg_score': return `${cat.avgScore}%`;
+        default: return '';
+      }
+    };
+    const exportData = categoryPerformance.map((cat) => {
+      const row: Record<string, string | number> = {};
+      for (const f of visibleFields) row[f.label] = valueFor(cat, f.field_key);
+      return row;
+    });
+    const ws = XLSX.utils.json_to_sheet(exportData, {
+      header: visibleFields.map((f) => f.label),
+    });
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Performance Report');
     XLSX.writeFile(wb, `Performance_Report_${new Date().toISOString().split('T')[0]}.xlsx`);
     toast({ title: 'Report downloaded successfully' });
-  }, [categoryPerformance, toast]);
+  }, [categoryPerformance, resolvedFields, toast]);
 
   if (kpisLoading) {
     return <div className="space-y-6"><Skeleton className="h-8 w-48" /><Skeleton className="h-96" /></div>;
