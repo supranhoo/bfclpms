@@ -59,6 +59,11 @@ export default function KpiEmployeeMatrix() {
   const currentMonth = format(now, 'MMMM');
   const currentYear = now.getFullYear();
   const resolvedMatFields = useResolvedReportFields('RPT-MAT-001', MAT_DEFAULT_FIELDS);
+  const hiddenMatKeys = useMemo(
+    () => new Set(resolvedMatFields.filter(f => f.is_hidden).map(f => f.field_key)),
+    [resolvedMatFields],
+  );
+  const showWeightage = !hiddenMatKeys.has('weightage');
 
   // Filters state
   const [reviewPeriod, setReviewPeriod] = useState(currentMonth);
@@ -734,7 +739,9 @@ export default function KpiEmployeeMatrix() {
                                 <div className="cursor-default py-1.5 pl-7 pr-1" style={{ width: COL.kpi - 4 }}>
                                   <div className="flex items-baseline gap-1.5">
                                     <span className="font-medium text-foreground leading-snug text-xs line-clamp-2 break-words">{row.kpiName}</span>
-                                    <span className="shrink-0 text-[10px] text-muted-foreground tabular-nums ml-auto">{row.weightage}%</span>
+                                    {showWeightage && (
+                                      <span className="shrink-0 text-[10px] text-muted-foreground tabular-nums ml-auto">{row.weightage}%</span>
+                                    )}
                                   </div>
                                   {row.description && (
                                     <div className="text-[10px] text-muted-foreground leading-snug mt-0.5 line-clamp-2 break-words whitespace-normal">
@@ -747,7 +754,9 @@ export default function KpiEmployeeMatrix() {
                                 <div className="font-medium">{row.kpiName}</div>
                                 <div className="text-xs opacity-80 mt-1">KRA: {row.kraName}</div>
                                 <div className="text-xs opacity-80">Category: {row.categoryName}</div>
-                                <div className="text-xs opacity-80">Base Weightage: {row.weightage}%</div>
+                                {showWeightage && (
+                                  <div className="text-xs opacity-80">Base Weightage: {row.weightage}%</div>
+                                )}
                                 {row.description && (
                                   <div className="text-xs opacity-80 mt-1 whitespace-pre-wrap">{row.description}</div>
                                 )}
