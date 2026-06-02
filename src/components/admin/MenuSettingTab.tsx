@@ -433,86 +433,9 @@ function GroupEditor(props: {
   group: ResolvedMenuNode;
   children: ResolvedMenuNode[];
   registryByKey: Record<string, MenuRegistryRow>;
-  drafts: Record<string, Draft>;
-  onLabelChange: (menuKey: string, value: string) => void;
-  onMove: (menuKey: string, dir: -1 | 1) => void;
-  onReset: (menuKey: string) => void;
 }) {
-  const { group, children, registryByKey, drafts, onLabelChange, onMove, onReset } = props;
-
-  return (
-    <Card>
-      <CardHeader className="pb-3">
-        <div className="flex items-center justify-between gap-3">
-          <CardTitle className="text-base flex items-center gap-2">
-            {group.label}
-            {group.is_system_required && (
-              <Tooltip><TooltipTrigger><Lock className="h-3.5 w-3.5 text-muted-foreground" /></TooltipTrigger>
-                <TooltipContent>System group — cannot be moved</TooltipContent></Tooltip>
-            )}
-          </CardTitle>
-          <Badge variant="outline" className="text-xs">{children.length} item{children.length === 1 ? '' : 's'}</Badge>
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-2">
-        {children.length === 0 && (
-          <p className="text-sm text-muted-foreground italic">No items.</p>
-        )}
-        {children.map((node, idx) => {
-          const reg = registryByKey[node.menu_key];
-          const draft = drafts[node.menu_key];
-          const isDirty = !!draft;
-          const isLast = idx === children.length - 1;
-          return (
-            <div
-              key={node.menu_key}
-              className={`flex items-center gap-2 p-2 rounded-md border ${
-                isDirty ? 'border-primary/40 bg-primary/5' : 'border-border'
-              }`}
-            >
-              <div className="flex flex-col">
-                <Button
-                  variant="ghost" size="icon" className="h-5 w-5"
-                  onClick={() => onMove(node.menu_key, -1)}
-                  disabled={idx === 0 || !reg?.is_movable}
-                  aria-label="Move up"
-                >
-                  <ChevronUp className="h-3.5 w-3.5" />
-                </Button>
-                <Button
-                  variant="ghost" size="icon" className="h-5 w-5"
-                  onClick={() => onMove(node.menu_key, 1)}
-                  disabled={isLast || !reg?.is_movable}
-                  aria-label="Move down"
-                >
-                  <ChevronDown className="h-3.5 w-3.5" />
-                </Button>
-              </div>
-              <div className="flex-1 min-w-0">
-                <Input
-                  value={draft?.label ?? node.label}
-                  onChange={(e) => onLabelChange(node.menu_key, e.target.value)}
-                  disabled={!reg?.is_renamable}
-                  className="h-8"
-                />
-                <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
-                  <code className="font-mono">{node.menu_key}</code>
-                  {node.route_path && <span>· {node.route_path}</span>}
-                  {!reg?.is_renamable && <Badge variant="secondary" className="text-xs">locked</Badge>}
-                  {reg?.is_system_required && <Badge variant="secondary" className="text-xs">system</Badge>}
-                </div>
-              </div>
-              {isDirty && (
-                <Button variant="ghost" size="sm" onClick={() => onReset(node.menu_key)} className="gap-1">
-                  <RotateCcw className="h-3.5 w-3.5" /> Revert
-                </Button>
-              )}
-            </div>
-          );
-        })}
-      </CardContent>
-    </Card>
-  );
+  // (legacy GroupEditor removed — replaced by MenuTreeDnd)
+  return null;
 }
 
 function PreviewDialog({ grouped }: { grouped: Map<string | null, ResolvedMenuNode[]> }) {
