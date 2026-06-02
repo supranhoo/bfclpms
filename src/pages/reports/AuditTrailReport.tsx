@@ -13,6 +13,22 @@ import { PageHeader } from '@/components/layout/PageHeader';
 import { Download, Search, ClipboardList, CheckCircle2, AlertTriangle, Edit, UserCog, User } from 'lucide-react';
 import { format } from 'date-fns';
 import * as XLSX from 'xlsx';
+import { useResolvedReportFields } from '@/hooks/useResolvedReportFields';
+
+const AUD_DEFAULT_FIELDS = [
+  { field_key: 'timestamp',       default_label: 'Timestamp',       default_sort: 10, is_required: true },
+  { field_key: 'action',          default_label: 'Action',          default_sort: 20, is_required: true },
+  { field_key: 'kpi_name',        default_label: 'KPI Name',        default_sort: 30 },
+  { field_key: 'kra_name',        default_label: 'KRA Name',        default_sort: 40 },
+  { field_key: 'review_period',   default_label: 'Review Period',   default_sort: 50 },
+  { field_key: 'review_year',     default_label: 'Review Year',     default_sort: 60 },
+  { field_key: 'performed_by',    default_label: 'Performed By',    default_sort: 70 },
+  { field_key: 'performer_email', default_label: 'Performer Email', default_sort: 80 },
+  { field_key: 'on_behalf_of',    default_label: 'On Behalf Of',    default_sort: 90 },
+  { field_key: 'on_behalf_role',  default_label: 'On Behalf Role',  default_sort: 100 },
+  { field_key: 'admin_reason',    default_label: 'Admin Reason',    default_sort: 110 },
+  { field_key: 'details',         default_label: 'Details',         default_sort: 120 },
+] as const;
 
 interface AuditLog {
   id: string;
