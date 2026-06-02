@@ -600,6 +600,37 @@ function RowBody(props: {
   );
 }
 
+function CopyableField({ value, label }: { value: string; label: string }) {
+  const [copied, setCopied] = useState(false);
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // ignore clipboard errors
+    }
+  };
+  return (
+    <div className="flex items-center gap-1 min-w-0">
+      <code className="text-[10px] font-mono text-muted-foreground break-all leading-tight">{value}</code>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            type="button"
+            onClick={handleCopy}
+            className="inline-flex items-center justify-center rounded p-0.5 hover:bg-accent hover:text-accent-foreground transition-colors shrink-0"
+            aria-label={copied ? 'Copied' : `Copy ${label}`}
+          >
+            {copied ? <Check className="h-3 w-3 text-green-600" /> : <Copy className="h-3 w-3" />}
+          </button>
+        </TooltipTrigger>
+        <TooltipContent>{copied ? 'Copied' : `Copy ${label}`}</TooltipContent>
+      </Tooltip>
+    </div>
+  );
+}
+
 function DropZone(props: {
   id: string;
   data: DropIntent;
