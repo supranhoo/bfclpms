@@ -351,52 +351,82 @@ export default function CompletionReport() {
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Period</TableHead>
-                  <TableHead>Year</TableHead>
-                  <TableHead className="text-center">Total KPIs</TableHead>
-                  <TableHead className="text-center">Self Review</TableHead>
-                  <TableHead className="text-center">Manager</TableHead>
-                  <TableHead className="text-center">Skip-Level</TableHead>
-                  <TableHead className="text-center">HR PMS</TableHead>
-                  <TableHead className="text-center">Auditor</TableHead>
-                  <TableHead className="text-center">Approved</TableHead>
-                  <TableHead className="text-center">Not Submitted</TableHead>
-                  <TableHead>Completion</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {periodData.map(p => (
-                  <TableRow key={`${p.period}-${p.year}`}>
-                    <TableCell className="font-medium">{p.period}</TableCell>
-                    <TableCell>{p.year}</TableCell>
-                    <TableCell className="text-center">{p.total}</TableCell>
-                    <TableCell className="text-center text-blue-600">{p.selfReviewSubmitted}</TableCell>
-                    <TableCell className="text-center text-amber-600">{p.managerReviewed}</TableCell>
-                    <TableCell className="text-center text-teal-600">{p.skipLevelReviewed}</TableCell>
-                    <TableCell className="text-center text-rose-600">{p.hrPmsReviewed}</TableCell>
-                    <TableCell className="text-center text-purple-600">{p.auditorReviewed}</TableCell>
-                    <TableCell className="text-center text-emerald-600">{p.approved}</TableCell>
-                    <TableCell className="text-center text-muted-foreground">{p.notSubmitted}</TableCell>
-                    <TableCell>
+            {(() => {
+              const visibleFields = resolvedFields.filter((f) => !f.is_hidden);
+              const headClassFor = (key: string) =>
+                key === 'period' || key === 'year' || key === 'completion_rate'
+                  ? undefined
+                  : 'text-center';
+              const cellClassFor = (key: string) => {
+                switch (key) {
+                  case 'period':                return 'font-medium';
+                  case 'year':                  return undefined;
+                  case 'self_review_submitted': return 'text-center text-blue-600';
+                  case 'manager_reviewed':      return 'text-center text-amber-600';
+                  case 'skip_level_reviewed':   return 'text-center text-teal-600';
+                  case 'hr_pms_reviewed':       return 'text-center text-rose-600';
+                  case 'auditor_reviewed':      return 'text-center text-purple-600';
+                  case 'approved':              return 'text-center text-emerald-600';
+                  case 'not_submitted':         return 'text-center text-muted-foreground';
+                  case 'completion_rate':       return undefined;
+                  default:                      return 'text-center';
+                }
+              };
+              const renderCell = (p: typeof periodData[number], key: string) => {
+                switch (key) {
+                  case 'period':                return p.period;
+                  case 'year':                  return p.year;
+                  case 'total_kpis':            return p.total;
+                  case 'self_review_submitted': return p.selfReviewSubmitted;
+                  case 'manager_reviewed':      return p.managerReviewed;
+                  case 'skip_level_reviewed':   return p.skipLevelReviewed;
+                  case 'hr_pms_reviewed':       return p.hrPmsReviewed;
+                  case 'auditor_reviewed':      return p.auditorReviewed;
+                  case 'approved':              return p.approved;
+                  case 'not_submitted':         return p.notSubmitted;
+                  case 'self_review_rate':      return `${p.selfReviewRate}%`;
+                  case 'completion_rate':
+                    return (
                       <div className="flex items-center gap-3">
                         <Progress value={p.completionRate} className="w-24 h-2" />
                         <span className="text-sm font-medium w-12">{p.completionRate}%</span>
                       </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-                {periodData.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={11} className="text-center py-8 text-muted-foreground">
-                      No period data found
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
+                    );
+                  default: return null;
+                }
+              };
+              return (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      {visibleFields.map((f) => (
+                        <TableHead key={f.field_key} className={headClassFor(f.field_key)}>
+                          {f.label}
+                        </TableHead>
+                      ))}
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {periodData.map((p) => (
+                      <TableRow key={`${p.period}-${p.year}`}>
+                        {visibleFields.map((f) => (
+                          <TableCell key={f.field_key} className={cellClassFor(f.field_key)}>
+                            {renderCell(p, f.field_key)}
+                          </TableCell>
+                        ))}
+                      </TableRow>
+                    ))}
+                    {periodData.length === 0 && (
+                      <TableRow>
+                        <TableCell colSpan={visibleFields.length} className="text-center py-8 text-muted-foreground">
+                          No period data found
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              );
+            })()}
           </div>
         </CardContent>
       </Card>
