@@ -71,6 +71,7 @@ const SETTINGS_SECTIONS = [
   { key: 'data-repair', label: 'Data Repair', icon: Undo2 },
   { key: 'feature-flags', label: 'Feature Flags', icon: Flag },
   { key: 'module-hub', label: 'Module Hub', icon: LayoutGrid },
+  { key: 'logs', label: 'Logs', icon: ScrollText },
 ] as const;
 
 type SectionKey = typeof SETTINGS_SECTIONS[number]['key'];
