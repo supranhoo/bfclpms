@@ -60,6 +60,7 @@ const YEARS = Array.from({ length: 5 }, (_, i) => String(2024 + i));
 
 export function MonthlyIncentiveTable() {
   const { user } = useAuth();
+  const resolvedIncFields = useResolvedReportFields('RPT-INC-001', INC_DEFAULT_FIELDS);
   const currentDate = new Date();
   const [selectedMonth, setSelectedMonth] = useState(MONTHS[currentDate.getMonth()]);
   const [selectedYear, setSelectedYear] = useState(String(currentDate.getFullYear()));
