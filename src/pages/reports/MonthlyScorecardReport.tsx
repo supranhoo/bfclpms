@@ -19,6 +19,24 @@ import { generateBulkScorecardPdf, generateDetailedScorecardPdf, generateDetaile
 import { useSystemSettings } from '@/hooks/useSystemSettings';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { MonthlyTrendView } from '@/components/reports/MonthlyTrendView';
+import { useResolvedReportFields } from '@/hooks/useResolvedReportFields';
+
+const MSR_DEFAULT_FIELDS = [
+  { field_key: 'company',              default_label: 'Company',              default_sort: 10 },
+  { field_key: 'employee_code',        default_label: 'Employee Code',        default_sort: 20, is_required: true },
+  { field_key: 'employee_name',        default_label: 'Employee Name',        default_sort: 30, is_required: true },
+  { field_key: 'designation',          default_label: 'Designation',          default_sort: 40 },
+  { field_key: 'department',           default_label: 'Department',           default_sort: 50 },
+  { field_key: 'total_kpis',           default_label: 'Total KPIs',           default_sort: 60 },
+  { field_key: 'approved_kpis',        default_label: 'Approved KPIs',        default_sort: 70 },
+  { field_key: 'avg_self_score',       default_label: 'Avg Self Score',       default_sort: 80 },
+  { field_key: 'avg_manager_score',    default_label: 'Avg Manager Score',    default_sort: 90 },
+  { field_key: 'avg_skip_level_score', default_label: 'Avg Skip-Level Score', default_sort: 100 },
+  { field_key: 'avg_hr_pms_score',     default_label: 'Avg HR PMS Score',     default_sort: 110 },
+  { field_key: 'avg_auditor_score',    default_label: 'Avg Auditor Score',    default_sort: 120 },
+  { field_key: 'avg_management_score', default_label: 'Avg Management Score', default_sort: 130 },
+  { field_key: 'avg_final_score',      default_label: 'Avg Final Score',      default_sort: 140 },
+] as const;
 
 const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
