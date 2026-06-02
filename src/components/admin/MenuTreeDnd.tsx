@@ -487,18 +487,17 @@ function RowBody(props: {
     <div
       ref={drag.setNodeRef}
       style={{
-        marginLeft: depth * 18,
         transform: CSS.Translate.toString(drag.transform),
         opacity: dragging ? 0.4 : 1,
       }}
       className={cn(
-        'group flex items-start gap-1.5 py-1.5 pr-2 rounded-md',
+        'group flex items-center gap-1.5 py-1 pr-2 rounded-md min-h-[36px]',
         isDirty && 'bg-primary/5 ring-1 ring-primary/30',
         isSelected && 'bg-primary/10 ring-1 ring-primary/40',
       )}
     >
       {/* selection checkbox (hidden when not selectable) */}
-      <div className="w-5 flex items-center justify-center">
+      <div className="w-5 shrink-0 flex items-center justify-center">
         {selectable ? (
           <Checkbox
             checked={isSelected}
@@ -510,7 +509,7 @@ function RowBody(props: {
       {/* expand toggle */}
       <button
         type="button"
-        className="w-5 h-5 flex items-center justify-center text-muted-foreground hover:text-foreground"
+        className="w-5 h-5 shrink-0 flex items-center justify-center text-muted-foreground hover:text-foreground"
         onClick={(e) => {
           e.stopPropagation();
           props.setExpanded((prev) => ({ ...prev, [node.menu_key]: !isExpanded }));
@@ -526,7 +525,7 @@ function RowBody(props: {
         {...drag.attributes}
         {...drag.listeners}
         className={cn(
-          'cursor-grab active:cursor-grabbing text-muted-foreground hover:text-foreground',
+          'cursor-grab active:cursor-grabbing text-muted-foreground hover:text-foreground shrink-0 w-4',
           (!reg?.is_movable || reg?.is_system_required) && 'opacity-30 cursor-not-allowed',
         )}
         aria-label="Drag"
@@ -537,31 +536,40 @@ function RowBody(props: {
       {/* "inside" droppable wraps the label area so dropping ON the row nests */}
       <div
         ref={inside.setNodeRef}
+        style={{ paddingLeft: depth * 18 }}
         className={cn(
-          'flex-1 min-w-0 flex flex-col gap-0.5 px-2 py-1 rounded-md border transition-colors',
+          'flex-1 min-w-0 flex items-center gap-2 px-2 py-1 rounded-md border transition-colors',
           isInsideHover && props.validationOk && 'border-primary bg-primary/10',
           isInsideHover && !props.validationOk && 'border-destructive bg-destructive/10',
           !isInsideHover && isContainerHint && 'border-dashed border-primary/30',
           !isInsideHover && !isContainerHint && 'border-transparent',
         )}
       >
-        <div className="flex items-center gap-2 min-w-0">
-          {reg?.is_renamable ? (
-            <Input
-              value={labelDraft?.label ?? node.label}
-              onChange={(e) => props.onLabelChange(node.menu_key, e.target.value)}
-              className="h-7 text-sm border-0 shadow-none focus-visible:ring-1 px-1 bg-transparent"
-            />
-          ) : (
-            <span className="text-sm truncate flex items-center gap-1">
-              <Pencil className="h-3 w-3 opacity-0" /> {node.label}
-            </span>
-          )}
-        </div>
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5">
-          <CopyableField value={node.menu_key} label="menu key" />
-          {node.route_path ? <CopyableField value={node.route_path} label="route" /> : null}
-        </div>
+        {reg?.is_renamable ? (
+          <Input
+            value={labelDraft?.label ?? node.label}
+            onChange={(e) => props.onLabelChange(node.menu_key, e.target.value)}
+            className="h-7 text-sm border-0 shadow-none focus-visible:ring-1 px-1 bg-transparent min-w-0 flex-1"
+          />
+        ) : (
+          <span className="text-sm truncate min-w-0 flex-1" title={node.label}>
+            {node.label}
+          </span>
+        )}
+      </div>
+
+      {/* Menu_Key column */}
+      <div className="hidden md:flex w-[240px] shrink-0 items-center">
+        <CopyableField value={node.menu_key} label="menu key" />
+      </div>
+
+      {/* Route column */}
+      <div className="hidden md:flex w-[200px] shrink-0 items-center">
+        {node.route_path ? (
+          <CopyableField value={node.route_path} label="route" />
+        ) : (
+          <span className="text-[10px] text-muted-foreground/50 italic">—</span>
+        )}
       </div>
 
       <Badge variant={movability.tone} className="text-[10px] gap-1 shrink-0">
