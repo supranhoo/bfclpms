@@ -54,6 +54,7 @@ export default function MonthlyScorecardReport() {
   const { canDownload } = useReportAccess();
   const canExport = canDownload('monthly-scorecard');
   const { getCompanyCode } = useCompanyFilter();
+  const resolvedMsrFields = useResolvedReportFields('RPT-MSR-001', MSR_DEFAULT_FIELDS);
   const currentYear = new Date().getFullYear();
   const currentMonth = MONTHS[new Date().getMonth()];
   
@@ -411,25 +412,33 @@ export default function MonthlyScorecardReport() {
   }, [filteredScorecards]);
 
   const handleExportExcel = () => {
-    const exportData = filteredScorecards.map(sc => ({
-      'Company': getCompanyCode(sc.employeeId),
-      'Employee Code': sc.employeeCode,
-      'Employee Name': sc.employeeName,
-      'Designation': sc.designation,
-      'Department': sc.department,
-      'Total KPIs': sc.totalKpis,
-      'Approved KPIs': sc.approvedKpis,
-      'Avg Self Score': sc.avgSelfScore.toFixed(2),
-      'Avg Manager Score': sc.avgManagerScore.toFixed(2),
-      'Avg Skip-Level Score': sc.avgSkipLevelScore != null ? sc.avgSkipLevelScore.toFixed(2) : '-',
-      'Avg HR PMS Score': sc.avgHrPmsScore != null ? sc.avgHrPmsScore.toFixed(2) : '-',
-      'Avg Auditor Score': sc.avgAuditorScore.toFixed(2),
-      'Avg Management Score': sc.avgManagementScore.toFixed(2),
-      'Avg Final Score': sc.avgFinalScore.toFixed(2),
-    }));
-
+    const visible = resolvedMsrFields.filter(fld => !fld.is_hidden);
+    const valueFor = (sc: EmployeeScorecard, key: string): unknown => {
+      switch (key) {
+        case 'company':              return getCompanyCode(sc.employeeId);
+        case 'employee_code':        return sc.employeeCode;
+        case 'employee_name':        return sc.employeeName;
+        case 'designation':          return sc.designation;
+        case 'department':           return sc.department;
+        case 'total_kpis':           return sc.totalKpis;
+        case 'approved_kpis':        return sc.approvedKpis;
+        case 'avg_self_score':       return sc.avgSelfScore.toFixed(2);
+        case 'avg_manager_score':    return sc.avgManagerScore.toFixed(2);
+        case 'avg_skip_level_score': return sc.avgSkipLevelScore != null ? sc.avgSkipLevelScore.toFixed(2) : '-';
+        case 'avg_hr_pms_score':     return sc.avgHrPmsScore != null ? sc.avgHrPmsScore.toFixed(2) : '-';
+        case 'avg_auditor_score':    return sc.avgAuditorScore.toFixed(2);
+        case 'avg_management_score': return sc.avgManagementScore.toFixed(2);
+        case 'avg_final_score':      return sc.avgFinalScore.toFixed(2);
+        default:                     return '';
+      }
+    };
+    const exportData = filteredScorecards.map(sc => {
+      const out: Record<string, unknown> = {};
+      for (const fld of visible) out[fld.label] = valueFor(sc, fld.field_key);
+      return out;
+    });
     const wb = XLSX.utils.book_new();
-    const ws = XLSX.utils.json_to_sheet(exportData);
+    const ws = XLSX.utils.json_to_sheet(exportData, { header: visible.map(fld => fld.label) });
     XLSX.utils.book_append_sheet(wb, ws, 'Monthly Scorecard');
     XLSX.writeFile(wb, `Monthly_Scorecard_${selectedPeriod}_${selectedYear}.xlsx`);
   };
