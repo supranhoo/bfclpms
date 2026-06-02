@@ -326,6 +326,8 @@ function ModuleSection(props: {
   activeKey: string | null;
   hoverIntent: DropIntent | null;
   validationOk: boolean;
+  selectedKeys?: Set<string>;
+  onToggleSelect?: (menuKey: string) => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({
     id: `module-${props.moduleKey}`,
