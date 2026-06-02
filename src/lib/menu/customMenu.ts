@@ -10,6 +10,7 @@
  */
 import { supabase } from '@/integrations/supabase/client';
 import type { MenuRegistryRow, ResolvedMenuNode } from './types';
+import { SETTINGS_SECTION_KEY_TO_MENU_KEY } from './catalog';
 
 export type DestinationType = 'container' | 'existing-route' | 'custom-page' | 'external-link';
 
@@ -188,6 +189,134 @@ export async function createCustomMenuItem(
       menu_key: menuKey,
       menu_name: input.name.trim(),
       section: input.parentKey,
+      allowed_roles: ['admin'],
+      display_order: 1000,
+    },
+    { onConflict: 'menu_key' },
+  );
+  if (accessErr) throw accessErr;
+
+  return { menuKey };
+}
+
+// ---------------------------------------------------------------------------
+// Shortcuts — safe re-exposure of locked / system-required menu items under
+// any valid container. Original registry row is left untouched; we insert a
+// NEW custom row that mirrors label/route/icon but is fully movable.
+// ---------------------------------------------------------------------------
+
+/** Reverse map: menu_key -> System Settings ?section= key. */
+const MENU_KEY_TO_SETTINGS_SECTION: Record<string, string> = Object.fromEntries(
+  Object.entries(SETTINGS_SECTION_KEY_TO_MENU_KEY).map(([k, v]) => [v, k]),
+);
+
+/**
+ * Derives a navigable route for a shortcut pointing at `source`.
+ *   1. source.route_path wins when present (most items).
+ *   2. Settings tabs (no route_path) map to `/admin/settings?section=<key>`.
+ *   3. Group / pure-container nodes return null → shortcut becomes container-only.
+ */
+export function deriveShortcutRoute(source: MenuRegistryRow): string | null {
+  if (source.route_path && source.route_path.trim() !== '') return source.route_path;
+  const section = MENU_KEY_TO_SETTINGS_SECTION[source.menu_key];
+  if (section) return `/admin/settings?section=${section}`;
+  return null;
+}
+
+/** Generates `custom-shortcut-<sourceKey>[-N]` not already in existingKeys. */
+export function generateShortcutKey(
+  sourceMenuKey: string,
+  existingKeys: ReadonlyArray<string>,
+): string {
+  // sourceMenuKey already follows the slug pattern; prepend custom-shortcut-.
+  const base = `custom-shortcut-${sourceMenuKey}`;
+  const set = new Set(existingKeys);
+  if (!set.has(base)) return base;
+  let n = 2;
+  while (set.has(`${base}-${n}`)) n++;
+  return `${base}-${n}`;
+}
+
+export interface CreateShortcutInput {
+  source: MenuRegistryRow;
+  parentKey: string;
+  createdBy?: string | null;
+  /** Optional override label; defaults to `source.default_label`. */
+  label?: string;
+}
+
+export interface ValidateShortcutArgs {
+  source: MenuRegistryRow;
+  parentKey: string;
+  registryByKey: Record<string, MenuRegistryRow>;
+  resolvedByKey: Record<string, ResolvedMenuNode>;
+}
+
+/** Mirrors DB trigger checks for shortcut placement. */
+export function validateShortcut(args: ValidateShortcutArgs): Validation {
+  const { source, parentKey, registryByKey, resolvedByKey } = args;
+  if (!source) return { ok: false, reason: 'Source item missing.' };
+  if (!parentKey) return { ok: false, reason: 'Parent is required.' };
+  const parent = registryByKey[parentKey];
+  if (!parent) return { ok: false, reason: 'Parent does not exist.' };
+  if (!parent.accepts_children) {
+    return { ok: false, reason: `Parent "${parent.default_label}" cannot contain children.` };
+  }
+  const parentDepth = computeDepth(parentKey, registryByKey, resolvedByKey);
+  if (parentDepth + 1 > 4) {
+    return { ok: false, reason: 'Nesting too deep (max 4 levels).' };
+  }
+  // Prevent shortcut-to-self chain (parent === source)
+  if (parent.menu_key === source.menu_key) {
+    return { ok: false, reason: 'A shortcut cannot live inside itself.' };
+  }
+  return { ok: true };
+}
+
+/**
+ * Creates a shortcut registry row + admin-only access entry. Returns the new
+ * menu_key. Caller invalidates react-query caches.
+ */
+export async function createShortcutMenuItem(
+  input: CreateShortcutInput,
+  existingKeys: ReadonlyArray<string>,
+  parentDepth: number,
+): Promise<CreateResult> {
+  const { source, parentKey, createdBy, label } = input;
+  const menuKey = generateShortcutKey(source.menu_key, existingKeys);
+  const menuLevel = Math.min(4, parentDepth + 1) as 2 | 3 | 4;
+  const route = deriveShortcutRoute(source);
+  const resolvedLabel = (label?.trim() || source.default_label).slice(0, 60);
+
+  const row: any = {
+    menu_key: menuKey,
+    default_label: resolvedLabel,
+    module_key: 'pms',
+    default_parent_key: parentKey,
+    menu_level: menuLevel,
+    route_path: route,
+    icon_name: source.icon_name,
+    default_sort_order: 1000,
+    accepts_children: false,
+    is_renamable: true,
+    is_movable: true,
+    is_cross_app_movable: false,
+    is_system_required: false,
+    feature_key: null,
+    permission_key: null,
+    is_custom: true,
+    color: null,
+    created_by: createdBy ?? null,
+  };
+
+  const { error: regErr } = await supabase.from('menu_registry' as any).insert(row);
+  if (regErr) throw regErr;
+
+  const { error: accessErr } = await supabase.from('menu_access_config' as any).upsert(
+    {
+      menu_key: menuKey,
+      menu_name: resolvedLabel,
+      section: parentKey,
       allowed_roles: ['admin'],
       display_order: 1000,
     },
