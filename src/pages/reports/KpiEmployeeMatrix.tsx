@@ -58,6 +58,7 @@ export default function KpiEmployeeMatrix() {
   const now = new Date();
   const currentMonth = format(now, 'MMMM');
   const currentYear = now.getFullYear();
+  const resolvedMatFields = useResolvedReportFields('RPT-MAT-001', MAT_DEFAULT_FIELDS);
 
   // Filters state
   const [reviewPeriod, setReviewPeriod] = useState(currentMonth);
