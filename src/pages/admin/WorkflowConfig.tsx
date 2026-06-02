@@ -1017,3 +1017,20 @@ export default function WorkflowConfig() {
     </div>
   );
 }
+
+function WfTabsList() {
+  const tabs = useResolvedTabs(WF_TAB_DEFS);
+  return (
+    <TabsList className="grid w-full" style={{ gridTemplateColumns: `repeat(${tabs.length}, minmax(0, 1fr))` }}>
+      {tabs.map((t) => {
+        const Icon = WF_ICON_BY_KEY[t.key as WfTabKey] ?? Check;
+        return (
+          <TabsTrigger key={t.key} value={t.key}>
+            <Icon className="h-4 w-4 mr-2" />
+            {t.label}
+          </TabsTrigger>
+        );
+      })}
+    </TabsList>
+  );
+}
