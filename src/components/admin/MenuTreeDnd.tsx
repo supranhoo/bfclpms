@@ -435,6 +435,8 @@ function RowBody(props: {
   setExpanded: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
   onLabelChange: (menuKey: string, value: string) => void;
   onResetItem: (menuKey: string) => void;
+  selectedKeys?: Set<string>;
+  onToggleSelect?: (menuKey: string) => void;
 }) {
   const { node, depth, reg, hasKids, isExpanded, isDirty, labelDraft } = props;
 
@@ -451,6 +453,10 @@ function RowBody(props: {
 
   const dragging = props.activeKey === node.menu_key;
   const isInsideHover = props.hoverIntent?.kind === 'inside' && props.hoverIntent.targetKey === node.menu_key;
+  // Subtle "drop inside" affordance for container rows whenever ANY drag is active.
+  const isContainerHint = !!props.activeKey && !dragging && (reg?.accepts_children ?? false);
+  const selectable = !!props.onToggleSelect && !!reg && reg.is_movable && !reg.is_system_required;
+  const isSelected = !!props.selectedKeys?.has(node.menu_key);
 
   const movability = !reg?.is_movable
     ? { label: 'Locked', tone: 'secondary' as const, icon: Lock }
@@ -471,8 +477,19 @@ function RowBody(props: {
       className={cn(
         'group flex items-center gap-1.5 py-1 pr-2 rounded-md',
         isDirty && 'bg-primary/5 ring-1 ring-primary/30',
+        isSelected && 'bg-primary/10 ring-1 ring-primary/40',
       )}
     >
+      {/* selection checkbox (hidden when not selectable) */}
+      <div className="w-5 flex items-center justify-center">
+        {selectable ? (
+          <Checkbox
+            checked={isSelected}
+            onCheckedChange={() => props.onToggleSelect?.(node.menu_key)}
+            aria-label={`Select ${node.label}`}
+          />
+        ) : null}
+      </div>
       {/* expand toggle */}
       <button
         type="button"
@@ -507,7 +524,8 @@ function RowBody(props: {
           'flex-1 min-w-0 flex items-center gap-2 px-2 py-1 rounded-md border transition-colors',
           isInsideHover && props.validationOk && 'border-primary bg-primary/10',
           isInsideHover && !props.validationOk && 'border-destructive bg-destructive/10',
-          !isInsideHover && 'border-transparent',
+          !isInsideHover && isContainerHint && 'border-dashed border-primary/30',
+          !isInsideHover && !isContainerHint && 'border-transparent',
         )}
       >
         {reg?.is_renamable ? (
