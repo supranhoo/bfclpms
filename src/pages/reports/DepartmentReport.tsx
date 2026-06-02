@@ -239,42 +239,79 @@ export default function DepartmentReport() {
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Department</TableHead>
-                  <TableHead>Division</TableHead>
-                  <TableHead className="text-center">Employees</TableHead>
-                  <TableHead className="text-center">Total KPIs</TableHead>
-                  <TableHead className="text-center">Approved</TableHead>
-                  <TableHead>Completion Rate</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {departmentData.map(dept => (
-                  <TableRow key={dept.id}>
-                    <TableCell className="font-medium">{dept.name}</TableCell>
-                    <TableCell className="text-muted-foreground">{dept.divisionName}</TableCell>
-                    <TableCell className="text-center">{dept.uniqueEmployees}</TableCell>
-                    <TableCell className="text-center">{dept.totalKpis}</TableCell>
-                    <TableCell className="text-center text-green-600">{dept.approvedKpis}</TableCell>
-                    <TableCell>
+            {(() => {
+              const visibleFields = resolvedFields.filter((f) => !f.is_hidden);
+              const centerKeys = new Set([
+                'total_employees', 'total_kpis', 'approved',
+                'kra_set', 'self_review', 'manager_check',
+                'skip_level_check', 'hr_pms_review', 'audit', 'management_review',
+              ]);
+              const headClassFor = (key: string) =>
+                centerKeys.has(key) ? 'text-center' : undefined;
+              const cellClassFor = (key: string) => {
+                if (key === 'department') return 'font-medium';
+                if (key === 'division' || key === 'business_unit') return 'text-muted-foreground';
+                if (key === 'approved') return 'text-center text-green-600';
+                if (centerKeys.has(key)) return 'text-center';
+                return undefined;
+              };
+              const renderCell = (d: typeof departmentData[number], key: string) => {
+                switch (key) {
+                  case 'department':        return d.name;
+                  case 'division':          return d.divisionName;
+                  case 'business_unit':     return d.businessUnitName;
+                  case 'total_employees':   return d.uniqueEmployees;
+                  case 'total_kpis':        return d.totalKpis;
+                  case 'approved':          return d.approvedKpis;
+                  case 'completion_rate':
+                    return (
                       <div className="flex items-center gap-3">
-                        <Progress value={dept.completionRate} className="w-24 h-2" />
-                        <span className="text-sm font-medium w-12">{dept.completionRate}%</span>
+                        <Progress value={d.completionRate} className="w-24 h-2" />
+                        <span className="text-sm font-medium w-12">{d.completionRate}%</span>
                       </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-                {departmentData.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
-                      No department data found
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
+                    );
+                  case 'kra_set':           return d.statusBreakdown.kra_set;
+                  case 'self_review':       return d.statusBreakdown.self_review;
+                  case 'manager_check':     return d.statusBreakdown.manager_check;
+                  case 'skip_level_check':  return d.statusBreakdown.skip_level_check;
+                  case 'hr_pms_review':     return d.statusBreakdown.hr_pms_review;
+                  case 'audit':             return d.statusBreakdown.audit;
+                  case 'management_review': return d.statusBreakdown.management_review;
+                  default: return null;
+                }
+              };
+              return (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      {visibleFields.map((f) => (
+                        <TableHead key={f.field_key} className={headClassFor(f.field_key)}>
+                          {f.label}
+                        </TableHead>
+                      ))}
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {departmentData.map((dept) => (
+                      <TableRow key={dept.id}>
+                        {visibleFields.map((f) => (
+                          <TableCell key={f.field_key} className={cellClassFor(f.field_key)}>
+                            {renderCell(dept, f.field_key)}
+                          </TableCell>
+                        ))}
+                      </TableRow>
+                    ))}
+                    {departmentData.length === 0 && (
+                      <TableRow>
+                        <TableCell colSpan={visibleFields.length} className="text-center py-8 text-muted-foreground">
+                          No department data found
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              );
+            })()}
           </div>
         </CardContent>
       </Card>
