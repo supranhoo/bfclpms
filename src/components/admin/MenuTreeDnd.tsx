@@ -4,7 +4,7 @@ import {
   useDraggable, useDroppable, closestCenter, type DragEndEvent, type DragStartEvent,
 } from '@dnd-kit/core';
 import { CSS } from '@dnd-kit/utilities';
-import { ChevronRight, ChevronDown, GripVertical, Lock, RotateCcw, Pencil, AlertCircle, Link2, Copy, Check } from 'lucide-react';
+import { ChevronRight, ChevronDown, GripVertical, Lock, RotateCcw, AlertCircle, Link2, Copy, Check } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -349,6 +349,17 @@ function ModuleSection(props: {
       <div className="px-3 py-2 text-xs font-bold uppercase tracking-wider text-muted-foreground border-b">
         {props.moduleKey}
       </div>
+      {/* Column headers — align with TreeRow grid below */}
+      <div className="hidden md:flex items-center gap-1.5 px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground border-b bg-muted/30">
+        <div className="w-5" />
+        <div className="w-5" />
+        <div className="w-4" />
+        <div className="flex-1 min-w-0 px-2">Menu Name</div>
+        <div className="w-[240px] shrink-0">Menu_Key</div>
+        <div className="w-[200px] shrink-0">Route</div>
+        <div className="w-[110px] shrink-0 text-right pr-1">Status</div>
+        <div className="w-[60px] shrink-0 text-right">Actions</div>
+      </div>
       <div className="p-2 space-y-0.5">
         {props.roots.length === 0 && (
           <div className="text-xs italic text-muted-foreground px-2 py-3">
@@ -476,18 +487,17 @@ function RowBody(props: {
     <div
       ref={drag.setNodeRef}
       style={{
-        marginLeft: depth * 18,
         transform: CSS.Translate.toString(drag.transform),
         opacity: dragging ? 0.4 : 1,
       }}
       className={cn(
-        'group flex items-start gap-1.5 py-1.5 pr-2 rounded-md',
+        'group flex items-center gap-1.5 py-1 pr-2 rounded-md min-h-[36px]',
         isDirty && 'bg-primary/5 ring-1 ring-primary/30',
         isSelected && 'bg-primary/10 ring-1 ring-primary/40',
       )}
     >
       {/* selection checkbox (hidden when not selectable) */}
-      <div className="w-5 flex items-center justify-center">
+      <div className="w-5 shrink-0 flex items-center justify-center">
         {selectable ? (
           <Checkbox
             checked={isSelected}
@@ -499,7 +509,7 @@ function RowBody(props: {
       {/* expand toggle */}
       <button
         type="button"
-        className="w-5 h-5 flex items-center justify-center text-muted-foreground hover:text-foreground"
+        className="w-5 h-5 shrink-0 flex items-center justify-center text-muted-foreground hover:text-foreground"
         onClick={(e) => {
           e.stopPropagation();
           props.setExpanded((prev) => ({ ...prev, [node.menu_key]: !isExpanded }));
@@ -515,7 +525,7 @@ function RowBody(props: {
         {...drag.attributes}
         {...drag.listeners}
         className={cn(
-          'cursor-grab active:cursor-grabbing text-muted-foreground hover:text-foreground',
+          'cursor-grab active:cursor-grabbing text-muted-foreground hover:text-foreground shrink-0 w-4',
           (!reg?.is_movable || reg?.is_system_required) && 'opacity-30 cursor-not-allowed',
         )}
         aria-label="Drag"
@@ -526,31 +536,40 @@ function RowBody(props: {
       {/* "inside" droppable wraps the label area so dropping ON the row nests */}
       <div
         ref={inside.setNodeRef}
+        style={{ paddingLeft: depth * 18 }}
         className={cn(
-          'flex-1 min-w-0 flex flex-col gap-0.5 px-2 py-1 rounded-md border transition-colors',
+          'flex-1 min-w-0 flex items-center gap-2 px-2 py-1 rounded-md border transition-colors',
           isInsideHover && props.validationOk && 'border-primary bg-primary/10',
           isInsideHover && !props.validationOk && 'border-destructive bg-destructive/10',
           !isInsideHover && isContainerHint && 'border-dashed border-primary/30',
           !isInsideHover && !isContainerHint && 'border-transparent',
         )}
       >
-        <div className="flex items-center gap-2 min-w-0">
-          {reg?.is_renamable ? (
-            <Input
-              value={labelDraft?.label ?? node.label}
-              onChange={(e) => props.onLabelChange(node.menu_key, e.target.value)}
-              className="h-7 text-sm border-0 shadow-none focus-visible:ring-1 px-1 bg-transparent"
-            />
-          ) : (
-            <span className="text-sm truncate flex items-center gap-1">
-              <Pencil className="h-3 w-3 opacity-0" /> {node.label}
-            </span>
-          )}
-        </div>
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5">
-          <CopyableField value={node.menu_key} label="menu key" />
-          {node.route_path ? <CopyableField value={node.route_path} label="route" /> : null}
-        </div>
+        {reg?.is_renamable ? (
+          <Input
+            value={labelDraft?.label ?? node.label}
+            onChange={(e) => props.onLabelChange(node.menu_key, e.target.value)}
+            className="h-7 text-sm border-0 shadow-none focus-visible:ring-1 px-1 bg-transparent min-w-0 flex-1"
+          />
+        ) : (
+          <span className="text-sm truncate min-w-0 flex-1" title={node.label}>
+            {node.label}
+          </span>
+        )}
+      </div>
+
+      {/* Menu_Key column */}
+      <div className="hidden md:flex w-[240px] shrink-0 items-center">
+        <CopyableField value={node.menu_key} label="menu key" />
+      </div>
+
+      {/* Route column */}
+      <div className="hidden md:flex w-[200px] shrink-0 items-center">
+        {node.route_path ? (
+          <CopyableField value={node.route_path} label="route" />
+        ) : (
+          <span className="text-[10px] text-muted-foreground/50 italic">—</span>
+        )}
       </div>
 
       <Badge variant={movability.tone} className="text-[10px] gap-1 shrink-0">
@@ -612,8 +631,15 @@ function CopyableField({ value, label }: { value: string; label: string }) {
     }
   };
   return (
-    <div className="flex items-center gap-1 min-w-0">
-      <code className="text-[10px] font-mono text-muted-foreground break-all leading-tight">{value}</code>
+    <div className="flex items-center gap-1 min-w-0 w-full">
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <code className="text-[11px] font-mono text-muted-foreground truncate leading-tight flex-1 min-w-0 cursor-default">
+            {value}
+          </code>
+        </TooltipTrigger>
+        <TooltipContent className="font-mono text-xs max-w-md break-all">{value}</TooltipContent>
+      </Tooltip>
       <Tooltip>
         <TooltipTrigger asChild>
           <button
