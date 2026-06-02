@@ -4,7 +4,7 @@ import {
   useDraggable, useDroppable, closestCenter, type DragEndEvent, type DragStartEvent,
 } from '@dnd-kit/core';
 import { CSS } from '@dnd-kit/utilities';
-import { ChevronRight, ChevronDown, GripVertical, Lock, RotateCcw, Pencil, AlertCircle } from 'lucide-react';
+import { ChevronRight, ChevronDown, GripVertical, Lock, RotateCcw, Pencil, AlertCircle, Link2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -52,6 +52,8 @@ type Props = {
   /** Multi-select state for the "Move under..." bulk action. */
   selectedKeys?: Set<string>;
   onToggleSelect?: (menuKey: string) => void;
+  /** Called when admin clicks "Shortcut" on a locked/system row. */
+  onCreateShortcut?: (menuKey: string) => void;
 };
 
 /** Knows how to render and DnD-edit the full resolved menu tree. */
@@ -283,6 +285,7 @@ export function MenuTreeDnd(p: Props) {
                 validationOk={validation?.ok ?? true}
                 selectedKeys={p.selectedKeys}
                 onToggleSelect={p.onToggleSelect}
+                onCreateShortcut={p.onCreateShortcut}
               />
             );
           })}
@@ -328,6 +331,7 @@ function ModuleSection(props: {
   validationOk: boolean;
   selectedKeys?: Set<string>;
   onToggleSelect?: (menuKey: string) => void;
+  onCreateShortcut?: (menuKey: string) => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({
     id: `module-${props.moduleKey}`,
@@ -381,6 +385,7 @@ function TreeRow(props: {
   validationOk: boolean;
   selectedKeys?: Set<string>;
   onToggleSelect?: (menuKey: string) => void;
+  onCreateShortcut?: (menuKey: string) => void;
 }) {
   const { node, depth } = props;
   const reg = props.registryByKey[node.menu_key];
@@ -437,6 +442,7 @@ function RowBody(props: {
   onResetItem: (menuKey: string) => void;
   selectedKeys?: Set<string>;
   onToggleSelect?: (menuKey: string) => void;
+  onCreateShortcut?: (menuKey: string) => void;
 }) {
   const { node, depth, reg, hasKids, isExpanded, isDirty, labelDraft } = props;
 
@@ -546,6 +552,27 @@ function RowBody(props: {
         {movability.icon && <movability.icon className="h-3 w-3" />}
         {movability.label}
       </Badge>
+
+      {/* "Create shortcut" — for locked/system rows that aren't sidebar groups. */}
+      {props.onCreateShortcut
+        && reg
+        && (!reg.is_movable || reg.is_system_required)
+        && reg.default_parent_key !== null /* skip top-level group nodes */
+        && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              type="button" variant="ghost" size="icon"
+              className="h-6 w-6 shrink-0"
+              onClick={() => props.onCreateShortcut?.(node.menu_key)}
+              aria-label="Create shortcut"
+            >
+              <Link2 className="h-3.5 w-3.5" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Create shortcut under a container</TooltipContent>
+        </Tooltip>
+      )}
 
       {isDirty && (
         <Tooltip>
