@@ -1088,3 +1088,16 @@ export default function Organization() {
     </div>
   );
 }
+
+function OrgTabsList({ counts }: { counts: Record<OrgTabKey, number> }) {
+  const tabs = useResolvedTabs(ORG_TAB_DEFS);
+  return (
+    <TabsList className="flex-wrap">
+      {tabs.map((t) => (
+        <TabsTrigger key={t.key} value={t.key}>
+          {t.label} ({counts[t.key as OrgTabKey] ?? 0})
+        </TabsTrigger>
+      ))}
+    </TabsList>
+  );
+}
