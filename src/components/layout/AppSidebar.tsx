@@ -215,14 +215,53 @@ export function AppSidebar() {
       const parentKey = GROUP_PARENT_KEY[groupKey];
       if (!resolvedMenu || !parentKey) return fallback;
       const isPinned = (mk?: string) => !!mk && (keyOccurrences.get(mk) ?? 0) > 1;
+      // Pool of EVERY known sidebar item across all hardcoded groups, indexed
+      // by menu_key — used to attach moved items as nested children of any
+      // resolved parent (universal nesting, max depth = 4).
+      const itemByKey = new Map<string, any>();
+      for (const { item } of flatPool) {
+        if (item.menuKey) itemByKey.set(item.menuKey, item);
+      }
+      // Recursive child attacher — for each resolved child of `parentMk`,
+      // clone the matching pool item, set its resolved label, and recurse.
+      const buildChildren = (parentMk: string, depthLeft: number): any[] => {
+        if (depthLeft <= 0) return [];
+        const kids = (resolvedMenu.byParent.get(parentMk) ?? [])
+          .filter((n) => !!itemByKey.get(n.menu_key))
+          .filter((n) => !isPinned(n.menu_key));
+        return kids
+          .slice()
+          .sort((a, b) => a.sort_order - b.sort_order)
+          .map((n) => {
+            const src = itemByKey.get(n.menu_key);
+            return {
+              ...src,
+              title: n.label,
+              children: buildChildren(n.menu_key, depthLeft - 1),
+            };
+          });
+      };
+      // Once an item is rendered as a nested child, it must NOT also appear at
+      // its group's top-level. Walk the planned tree to collect those keys.
+      const collectKeys = (arr: any[], out: Set<string>) => {
+        for (const it of arr) {
+          if (it?.menuKey) out.add(it.menuKey);
+          if (Array.isArray(it.children)) collectKeys(it.children, out);
+        }
+      };
       const acc: Array<{ item: T; sort: number }> = [];
       const added = new Set<string>();
       // 1) Native items: pinned items or items not in registry stay in this group.
       fallback.forEach((it, idx) => {
         const node = it.menuKey ? resolvedMenu.byKey[it.menuKey] : null;
         if (!node || isPinned(it.menuKey)) {
+          // Native rows can still host resolved children (e.g. group-admin
+          // items hosting reports moved under them).
+          const kids = it.menuKey ? buildChildren(it.menuKey, 3) : [];
           acc.push({
-            item: node ? ({ ...it, title: node.label } as T) : it,
+            item: node
+              ? ({ ...it, title: node.label, children: kids } as T)
+              : ({ ...(it as any), children: kids } as T),
             sort: node?.sort_order ?? (idx + 1) * 10,
           });
           if (it.menuKey) added.add(it.menuKey);
@@ -234,11 +273,25 @@ export function AppSidebar() {
         if (!mk || isPinned(mk) || added.has(mk)) continue;
         const node = resolvedMenu.byKey[mk];
         if (!node || node.parent_key !== parentKey) continue;
-        acc.push({ item: { ...(item as unknown as T), title: node.label }, sort: node.sort_order });
+        acc.push({
+          item: {
+            ...(item as unknown as T),
+            title: node.label,
+            children: buildChildren(mk, 3),
+          } as T,
+          sort: node.sort_order,
+        });
         added.add(mk);
       }
       acc.sort((a, b) => a.sort - b.sort);
-      return acc.map((x) => x.item);
+      const result = acc.map((x) => x.item);
+      // De-dup: any key now appearing nested in this group should not also
+      // appear at the top of this group as a sibling.
+      const nestedKeys = new Set<string>();
+      result.forEach((it: any) => {
+        if (Array.isArray(it.children)) collectKeys(it.children, nestedKeys);
+      });
+      return result.filter((it: any) => !it.menuKey || !nestedKeys.has(it.menuKey));
     },
     [resolvedMenu, keyOccurrences, flatPool],
   );
@@ -254,9 +307,19 @@ export function AppSidebar() {
           return item.path === fullPath || item.path === pathname;
         });
         const mk = match?.item.menuKey;
-        const node = mk ? resolvedMenu.byKey[mk] : null;
-        if (node?.parent_key && PARENT_KEY_TO_GROUP[node.parent_key]) {
-          return PARENT_KEY_TO_GROUP[node.parent_key];
+        // Walk the resolved parent chain upward until we hit a `group-*` key
+        // — that's the sidebar section that should be expanded. Falls back to
+        // legacy URL heuristic when the chain can't be resolved.
+        let cursor: string | null | undefined = mk;
+        let guard = 0;
+        while (cursor && guard < 10) {
+          const node = resolvedMenu.byKey[cursor];
+          if (!node) break;
+          if (PARENT_KEY_TO_GROUP[node.parent_key ?? '']) {
+            return PARENT_KEY_TO_GROUP[node.parent_key as string];
+          }
+          cursor = node.parent_key ?? null;
+          guard++;
         }
       }
       return getSectionForPath(pathname, search);
