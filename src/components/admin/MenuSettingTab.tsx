@@ -29,6 +29,7 @@ import { MenuTreeDnd, type PendingMove, type LabelDraft } from './MenuTreeDnd';
 import { CreateMenuItemDialog } from './CreateMenuItemDialog';
 import { MoveUnderDialog } from './MoveUnderDialog';
 import { CreateShortcutDialog } from './CreateShortcutDialog';
+import { deleteCustomMenuItem } from '@/lib/menu/customMenu';
 
 /** Menu Setting tab — Phase 3: full DnD reposition + rename + audit + reset. */
 export function MenuSettingTab() {
@@ -57,6 +58,8 @@ export function MenuSettingTab() {
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
   const [moveUnderOpen, setMoveUnderOpen] = useState(false);
   const [shortcutSourceKey, setShortcutSourceKey] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<{ menuKey: string; label: string } | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   function toggleSelect(menuKey: string) {
     setSelectedKeys((prev) => {
@@ -454,6 +457,9 @@ export function MenuSettingTab() {
                 selectedKeys={selectedKeys}
                 onToggleSelect={toggleSelect}
                 onCreateShortcut={(k) => setShortcutSourceKey(k)}
+                onDeleteCustom={(k) =>
+                  setDeleteTarget({ menuKey: k, label: effective.find((n) => n.menu_key === k)?.label ?? k })
+                }
               />
             </CardContent>
           </Card>
@@ -465,6 +471,46 @@ export function MenuSettingTab() {
             <ResetAllButton onConfirm={resetAllOverrides} />
           </div>
         )}
+
+        <ConfirmDestructiveDialog
+          open={!!deleteTarget}
+          isLoading={deleting}
+          title="Delete custom tab?"
+          description={
+            deleteTarget
+              ? `This will remove "${deleteTarget.label}" (${deleteTarget.menuKey}) from Menu Setting and the sidebar. Existing PMS pages, routes, reports, permissions, workflows, KPI data, and scoring data will not be deleted.`
+              : ''
+          }
+          confirmLabel="Delete tab"
+          onCancel={() => { if (!deleting) setDeleteTarget(null); }}
+          onConfirm={async () => {
+            if (!deleteTarget) return;
+            const { menuKey } = deleteTarget;
+            const reg = registryByKey[menuKey];
+            if (!reg) { toast.error('Menu item not found'); setDeleteTarget(null); return; }
+            setDeleting(true);
+            try {
+              await deleteCustomMenuItem(menuKey, reg, profile?.id ?? null);
+              // Defensive: drop any pending drafts for the key
+              setPendingMoves((prev) => { const n = { ...prev }; delete n[menuKey]; return n; });
+              setPendingLabels((prev) => { const n = { ...prev }; delete n[menuKey]; return n; });
+              setSelectedKeys((prev) => { const n = new Set(prev); n.delete(menuKey); return n; });
+              toast.success('Custom tab deleted');
+              await Promise.all([
+                qc.invalidateQueries({ queryKey: ['menu-registry-admin'] }),
+                qc.invalidateQueries({ queryKey: ['menu-overrides-admin'] }),
+                qc.invalidateQueries({ queryKey: ['resolved-menu'] }),
+                qc.invalidateQueries({ queryKey: ['menu-access-config'] }),
+                qc.invalidateQueries({ queryKey: ['menu-access-user-overrides'] }),
+              ]);
+              setDeleteTarget(null);
+            } catch (e: any) {
+              toast.error(`Delete failed: ${e.message ?? e}`);
+            } finally {
+              setDeleting(false);
+            }
+          }}
+        />
       </div>
     </TooltipProvider>
   );

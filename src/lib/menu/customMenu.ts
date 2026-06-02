@@ -140,6 +140,71 @@ export interface CreateResult {
   menuKey: string;
 }
 
+// ---------------------------------------------------------------------------
+// Delete — custom menu items only. Guarded both in TS and by DB trigger
+// `menu_registry_protect_seeded_delete`. Cleans up access + override + audit.
+// ---------------------------------------------------------------------------
+
+export async function deleteCustomMenuItem(
+  menuKey: string,
+  registryRow: MenuRegistryRow,
+  performedBy: string | null,
+): Promise<void> {
+  if (!registryRow || registryRow.menu_key !== menuKey) {
+    throw new Error('Menu item not found.');
+  }
+  if (!registryRow.is_custom) {
+    throw new Error('Only custom menu tabs can be deleted.');
+  }
+  if (registryRow.is_system_required) {
+    throw new Error('System-required menu tabs cannot be deleted.');
+  }
+
+  // Capture pre-delete snapshot for audit.
+  const snapshot = JSON.stringify(registryRow);
+
+  // 1. User-level access overrides
+  const { error: uoErr } = await supabase
+    .from('menu_access_user_overrides' as any)
+    .delete()
+    .eq('menu_key', menuKey);
+  if (uoErr) throw uoErr;
+
+  // 2. Role-level access config
+  const { error: acErr } = await supabase
+    .from('menu_access_config' as any)
+    .delete()
+    .eq('menu_key', menuKey);
+  if (acErr) throw acErr;
+
+  // 3. Menu Setting overrides (label / parent / sort)
+  const { error: ovErr } = await supabase
+    .from('menu_overrides' as any)
+    .delete()
+    .eq('menu_key', menuKey);
+  if (ovErr) throw ovErr;
+
+  // 4. Registry row (DB trigger enforces is_custom)
+  const { error: regErr } = await supabase
+    .from('menu_registry' as any)
+    .delete()
+    .eq('menu_key', menuKey);
+  if (regErr) throw regErr;
+
+  // 5. Audit
+  const { error: auErr } = await supabase
+    .from('menu_override_audit' as any)
+    .insert({
+      menu_key: menuKey,
+      client_id: null,
+      field: 'delete_custom_menu_item',
+      old_value: snapshot,
+      new_value: null,
+      changed_by: performedBy,
+    });
+  if (auErr) throw auErr;
+}
+
 /**
  * Creates the registry row and a default admin-only access row. Caller is
  * responsible for invalidating react-query caches afterwards.

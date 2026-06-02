@@ -4,7 +4,7 @@ import {
   useDraggable, useDroppable, closestCenter, type DragEndEvent, type DragStartEvent,
 } from '@dnd-kit/core';
 import { CSS } from '@dnd-kit/utilities';
-import { ChevronRight, ChevronDown, GripVertical, Lock, RotateCcw, AlertCircle, Link2, Copy, Check } from 'lucide-react';
+import { ChevronRight, ChevronDown, GripVertical, Lock, RotateCcw, AlertCircle, Link2, Copy, Check, Trash2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -54,6 +54,8 @@ type Props = {
   onToggleSelect?: (menuKey: string) => void;
   /** Called when admin clicks "Shortcut" on a locked/system row. */
   onCreateShortcut?: (menuKey: string) => void;
+  /** Called when admin clicks "Delete" on a custom row. */
+  onDeleteCustom?: (menuKey: string) => void;
 };
 
 /** Knows how to render and DnD-edit the full resolved menu tree. */
@@ -286,6 +288,7 @@ export function MenuTreeDnd(p: Props) {
                 selectedKeys={p.selectedKeys}
                 onToggleSelect={p.onToggleSelect}
                 onCreateShortcut={p.onCreateShortcut}
+                onDeleteCustom={p.onDeleteCustom}
               />
             );
           })}
@@ -332,6 +335,7 @@ function ModuleSection(props: {
   selectedKeys?: Set<string>;
   onToggleSelect?: (menuKey: string) => void;
   onCreateShortcut?: (menuKey: string) => void;
+  onDeleteCustom?: (menuKey: string) => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({
     id: `module-${props.moduleKey}`,
@@ -405,6 +409,7 @@ function TreeRow(props: {
   selectedKeys?: Set<string>;
   onToggleSelect?: (menuKey: string) => void;
   onCreateShortcut?: (menuKey: string) => void;
+  onDeleteCustom?: (menuKey: string) => void;
 }) {
   const { node, depth } = props;
   const reg = props.registryByKey[node.menu_key];
@@ -462,6 +467,8 @@ function RowBody(props: {
   selectedKeys?: Set<string>;
   onToggleSelect?: (menuKey: string) => void;
   onCreateShortcut?: (menuKey: string) => void;
+  onDeleteCustom?: (menuKey: string) => void;
+  childrenByParent?: Map<string, ResolvedMenuNode[]>;
 }) {
   const { node, depth, reg, hasKids, isExpanded, isDirty, labelDraft } = props;
 
@@ -627,6 +634,35 @@ function RowBody(props: {
             <TooltipContent>Revert pending change</TooltipContent>
           </Tooltip>
         )}
+
+        {props.onDeleteCustom
+          && reg
+          && reg.is_custom
+          && !reg.is_system_required
+          && (() => {
+            const childCount = props.childrenByParent?.get(node.menu_key)?.length ?? 0;
+            const blocked = childCount > 0;
+            return (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span>
+                    <Button
+                      type="button" variant="ghost" size="icon"
+                      className="h-6 w-6 shrink-0 text-destructive hover:text-destructive hover:bg-destructive/10 disabled:opacity-40"
+                      onClick={() => !blocked && props.onDeleteCustom?.(node.menu_key)}
+                      disabled={blocked}
+                      aria-label="Delete custom tab"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent>
+                  {blocked ? 'Move or delete child items before deleting this tab.' : 'Delete custom tab'}
+                </TooltipContent>
+              </Tooltip>
+            );
+          })()}
 
         {/* "after" drop zone below the row */}
         <div ref={after.setNodeRef} className="sr-only">after</div>
