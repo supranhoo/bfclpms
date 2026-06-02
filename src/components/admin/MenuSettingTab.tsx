@@ -399,9 +399,24 @@ export function MenuSettingTab() {
                     className="h-8 pl-7"
                   />
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  Drag the handle to reorder, drop on a row to nest, drop on a module to move across apps.
-                </p>
+                <div className="flex items-center gap-2 ml-auto">
+                  {selectedKeys.size > 0 && (
+                    <>
+                      <span className="text-xs text-muted-foreground">
+                        {selectedKeys.size} selected
+                      </span>
+                      <Button variant="ghost" size="sm" onClick={clearSelection}>
+                        Clear
+                      </Button>
+                      <Button size="sm" className="gap-2" onClick={() => setMoveUnderOpen(true)}>
+                        <FolderInput className="h-4 w-4" /> Move under…
+                      </Button>
+                    </>
+                  )}
+                  <p className="text-xs text-muted-foreground hidden lg:block">
+                    Tick rows to bulk-nest, or drag a row onto a container.
+                  </p>
+                </div>
               </div>
 
               <MenuTreeDnd
