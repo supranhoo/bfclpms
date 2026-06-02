@@ -280,12 +280,12 @@ export function AppSidebar() {
 
   // Track which sections are open
   const [openSections, setOpenSections] = useState<Set<string>>(() => {
-    return new Set([getSectionForPath(location.pathname, location.search)]);
+    return new Set([resolvedSectionForPath(location.pathname, location.search)]);
   });
 
   // Auto-expand section when route changes
   useEffect(() => {
-    const section = getSectionForPath(location.pathname, location.search);
+    const section = resolvedSectionForPath(location.pathname, location.search);
     setOpenSections(prev => {
       if (prev.has(section)) return prev;
       return new Set([...prev, section]);
@@ -371,13 +371,13 @@ export function AppSidebar() {
         {/* Main Section */}
         <CollapsibleSidebarGroup
           label="Main"
-          items={applyResolved(menuItems.main)}
+          items={resolveGroupItems("main", menuItems.main)}
           isOpen={openSections.has('main')}
           onToggle={() => toggleSection('main')}
           filterByRole={filterByRole}
           currentPath={location.pathname + location.search}
           onNavigate={handleNavigation}
-          hasActiveRoute={getSectionForPath(location.pathname, location.search) === 'main'}
+          hasActiveRoute={resolvedSectionForPath(location.pathname, location.search) === 'main'}
           inboxBadgeCount={inboxBadgeCount}
         />
 
@@ -392,49 +392,49 @@ export function AppSidebar() {
           filterByRole={filterByRole}
           currentPath={location.pathname + location.search}
           onNavigate={handleNavigation}
-          hasActiveRoute={getSectionForPath(location.pathname, location.search) === 'manager'}
+          hasActiveRoute={resolvedSectionForPath(location.pathname, location.search) === 'manager'}
         />
 
         {/* Management Section */}
         <CollapsibleSidebarGroup
           label="Management"
-          items={applyResolved(menuItems.management)}
+          items={resolveGroupItems("management", menuItems.management)}
           isOpen={openSections.has('management')}
           onToggle={() => toggleSection('management')}
           filterByRole={filterByRole}
           currentPath={location.pathname + location.search}
           onNavigate={handleNavigation}
-          hasActiveRoute={getSectionForPath(location.pathname, location.search) === 'management'}
+          hasActiveRoute={resolvedSectionForPath(location.pathname, location.search) === 'management'}
         />
 
         {/* HR PMS Section */}
         <CollapsibleSidebarGroup
           label="HR PMS"
-          items={applyResolved(menuItems.hr_pms)}
+          items={resolveGroupItems("hr_pms", menuItems.hr_pms)}
           isOpen={openSections.has('hr_pms')}
           onToggle={() => toggleSection('hr_pms')}
           filterByRole={filterByRole}
           currentPath={location.pathname + location.search}
           onNavigate={handleNavigation}
-          hasActiveRoute={getSectionForPath(location.pathname, location.search) === 'hr_pms'}
+          hasActiveRoute={resolvedSectionForPath(location.pathname, location.search) === 'hr_pms'}
         />
 
         {/* Audit Section */}
         <CollapsibleSidebarGroup
           label="Audit"
-          items={applyResolved(menuItems.audit)}
+          items={resolveGroupItems("audit", menuItems.audit)}
           isOpen={openSections.has('audit')}
           onToggle={() => toggleSection('audit')}
           filterByRole={filterByRole}
           currentPath={location.pathname + location.search}
           onNavigate={handleNavigation}
-          hasActiveRoute={getSectionForPath(location.pathname, location.search) === 'audit'}
+          hasActiveRoute={resolvedSectionForPath(location.pathname, location.search) === 'audit'}
         />
 
         {/* Data Entry section for data owners or users with override */}
         <CollapsibleSidebarGroup
           label="Data Entry"
-          items={applyResolved(menuItems.dataEntry)}
+          items={resolveGroupItems("dataEntry", menuItems.dataEntry)}
           isOpen={openSections.has('dataEntry')}
           onToggle={() => toggleSection('dataEntry')}
           filterByRole={(items) => {
@@ -457,55 +457,55 @@ export function AppSidebar() {
           }}
           currentPath={location.pathname + location.search}
           onNavigate={handleNavigation}
-          hasActiveRoute={getSectionForPath(location.pathname, location.search) === 'dataEntry'}
+          hasActiveRoute={resolvedSectionForPath(location.pathname, location.search) === 'dataEntry'}
         />
 
         {/* KRA Settings Section */}
         <CollapsibleSidebarGroup
           label="KRA Settings"
-          items={applyResolved(menuItems.kraSettings)}
+          items={resolveGroupItems("kraSettings", menuItems.kraSettings)}
           isOpen={openSections.has('kraSettings')}
           onToggle={() => toggleSection('kraSettings')}
           filterByRole={filterByRole}
           currentPath={location.pathname + location.search}
           onNavigate={handleNavigation}
-          hasActiveRoute={getSectionForPath(location.pathname, location.search) === 'kraSettings'}
+          hasActiveRoute={resolvedSectionForPath(location.pathname, location.search) === 'kraSettings'}
         />
 
         {/* Incentive Section */}
         <CollapsibleSidebarGroup
           label="Incentive"
-          items={applyResolved(menuItems.incentive)}
+          items={resolveGroupItems("incentive", menuItems.incentive)}
           isOpen={openSections.has('incentive')}
           onToggle={() => toggleSection('incentive')}
           filterByRole={filterByRole}
           currentPath={location.pathname + location.search}
           onNavigate={handleNavigation}
-          hasActiveRoute={getSectionForPath(location.pathname, location.search) === 'incentive'}
+          hasActiveRoute={resolvedSectionForPath(location.pathname, location.search) === 'incentive'}
         />
 
         {/* Administration Section */}
         <CollapsibleSidebarGroup
           label="Administration"
-          items={applyResolved(menuItems.admin)}
+          items={resolveGroupItems("admin", menuItems.admin)}
           isOpen={openSections.has('admin')}
           onToggle={() => toggleSection('admin')}
           filterByRole={filterByRole}
           currentPath={location.pathname + location.search}
           onNavigate={handleNavigation}
-          hasActiveRoute={getSectionForPath(location.pathname, location.search) === 'admin'}
+          hasActiveRoute={resolvedSectionForPath(location.pathname, location.search) === 'admin'}
         />
 
         {/* Reports Section */}
         <CollapsibleSidebarGroup
           label="Reports"
-          items={applyResolved(menuItems.reports)}
+          items={resolveGroupItems("reports", menuItems.reports)}
           isOpen={openSections.has('reports')}
           onToggle={() => toggleSection('reports')}
           filterByRole={filterByRole}
           currentPath={location.pathname + location.search}
           onNavigate={handleNavigation}
-          hasActiveRoute={getSectionForPath(location.pathname, location.search) === 'reports'}
+          hasActiveRoute={resolvedSectionForPath(location.pathname, location.search) === 'reports'}
         />
       </SidebarContent>
 
