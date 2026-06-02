@@ -41,6 +41,25 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import { ChartContainer, ChartTooltipContent } from '@/components/ui/chart';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import * as XLSX from 'xlsx';
+import { useResolvedReportFields } from '@/hooks/useResolvedReportFields';
+
+const TNI_DEFAULT_FIELDS = [
+  { field_key: 'company',                 default_label: 'Company',                 default_sort: 10 },
+  { field_key: 'employee_name',           default_label: 'Employee Name',           default_sort: 20, is_required: true },
+  { field_key: 'employee_code',           default_label: 'Employee Code',           default_sort: 30, is_required: true },
+  { field_key: 'department',              default_label: 'Department',              default_sort: 40 },
+  { field_key: 'designation',             default_label: 'Designation',             default_sort: 50 },
+  { field_key: 'kpi',                     default_label: 'KPI',                     default_sort: 60 },
+  { field_key: 'kra',                     default_label: 'KRA',                     default_sort: 70 },
+  { field_key: 'category',                default_label: 'Category',                default_sort: 80 },
+  { field_key: 'score',                   default_label: 'Score',                   default_sort: 90 },
+  { field_key: 'gap_type',                default_label: 'Gap Type',                default_sort: 100 },
+  { field_key: 'priority',                default_label: 'Priority',                default_sort: 110 },
+  { field_key: 'status',                  default_label: 'Status',                  default_sort: 120 },
+  { field_key: 'training_recommendation', default_label: 'Training Recommendation', default_sort: 130 },
+  { field_key: 'period',                  default_label: 'Period',                  default_sort: 140 },
+  { field_key: 'year',                    default_label: 'Year',                    default_sort: 150 },
+] as const;
 
 const PRIORITY_COLORS = {
   high: 'hsl(var(--destructive))',
