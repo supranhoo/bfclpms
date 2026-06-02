@@ -18,7 +18,7 @@ import {
 } from '@/hooks/useSystemIssues';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
-import type { ResolvedReportField } from '@/hooks/useResolvedReportFields';
+import type { ResolvedReportField } from '@/lib/reports/types';
 
 interface IssuesTableProps {
   issues: SystemIssue[];
