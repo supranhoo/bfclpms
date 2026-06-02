@@ -478,7 +478,7 @@ export function MenuSettingTab() {
           title="Delete custom tab?"
           description={
             deleteTarget
-              ? `This will remove the custom menu tab from Menu Setting and the sidebar. Existing PMS pages, routes, reports, permissions, workflows, KPI data, and scoring data will not be deleted.\n\nName: ${deleteTarget.label}\nKey: ${deleteTarget.menuKey}`
+              ? `This will remove "${deleteTarget.label}" (${deleteTarget.menuKey}) from Menu Setting and the sidebar. Existing PMS pages, routes, reports, permissions, workflows, KPI data, and scoring data will not be deleted.`
               : ''
           }
           confirmLabel="Delete tab"
