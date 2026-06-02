@@ -28,6 +28,19 @@ import {
 import { useDepartments } from '@/hooks/useOrganization';
 import { GitBranch, Users, Building2, Award, Trash2, Search, ArrowRight, Check, Plus, Pencil, Star, Archive, RotateCcw, ChevronDown, Calendar, Globe, ChevronsRight, Info } from 'lucide-react';
 import { Scale } from 'lucide-react';
+import { useResolvedTabs } from '@/hooks/useResolvedMenu';
+
+type WfTabKey = 'templates' | 'employee' | 'department' | 'pms_grade' | 'final_score_rules';
+const WF_TAB_DEFS: ReadonlyArray<{ key: WfTabKey; menuKey: string; label: string; icon: typeof Check }> = [
+  { key: 'templates',         menuKey: 'wf-tab-templates',         label: 'Templates',         icon: Check },
+  { key: 'employee',          menuKey: 'wf-tab-employee',          label: 'Per Employee',      icon: Users },
+  { key: 'department',        menuKey: 'wf-tab-department',        label: 'Per Department',    icon: Building2 },
+  { key: 'pms_grade',         menuKey: 'wf-tab-pms-grade',         label: 'Per PMS Grade',     icon: Award },
+  { key: 'final_score_rules', menuKey: 'wf-tab-final-score-rules', label: 'Final Score Rules', icon: Scale },
+];
+const WF_ICON_BY_KEY: Record<WfTabKey, typeof Check> = Object.fromEntries(
+  WF_TAB_DEFS.map((d) => [d.key, d.icon]),
+) as Record<WfTabKey, typeof Check>;
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { ReviewPanelSkeleton } from '@/components/ui/LoadingSkeletons';
 import CustomWorkflowDialog from '@/components/admin/CustomWorkflowDialog';
@@ -486,28 +499,7 @@ export default function WorkflowConfig() {
       </Card>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid w-full grid-cols-5">
-          <TabsTrigger value="templates">
-            <Check className="h-4 w-4 mr-2" />
-            Templates
-          </TabsTrigger>
-          <TabsTrigger value="employee">
-            <Users className="h-4 w-4 mr-2" />
-            Per Employee
-          </TabsTrigger>
-          <TabsTrigger value="department">
-            <Building2 className="h-4 w-4 mr-2" />
-            Per Department
-          </TabsTrigger>
-          <TabsTrigger value="pms_grade">
-            <Award className="h-4 w-4 mr-2" />
-            Per PMS Grade
-          </TabsTrigger>
-          <TabsTrigger value="final_score_rules">
-            <Scale className="h-4 w-4 mr-2" />
-            Final Score Rules
-          </TabsTrigger>
-        </TabsList>
+        <WfTabsList />
 
         {/* Templates Tab */}
         <TabsContent value="templates" className="space-y-4">
@@ -1023,5 +1015,22 @@ export default function WorkflowConfig() {
         </AlertDialogContent>
       </AlertDialog>
     </div>
+  );
+}
+
+function WfTabsList() {
+  const tabs = useResolvedTabs(WF_TAB_DEFS);
+  return (
+    <TabsList className="grid w-full" style={{ gridTemplateColumns: `repeat(${tabs.length}, minmax(0, 1fr))` }}>
+      {tabs.map((t) => {
+        const Icon = WF_ICON_BY_KEY[t.key as WfTabKey] ?? Check;
+        return (
+          <TabsTrigger key={t.key} value={t.key}>
+            <Icon className="h-4 w-4 mr-2" />
+            {t.label}
+          </TabsTrigger>
+        );
+      })}
+    </TabsList>
   );
 }

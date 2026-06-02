@@ -17,6 +17,25 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { Building2, Plus, Trash2, Pencil, Check, X, Copy, Settings } from 'lucide-react';
+import { useResolvedTabs } from '@/hooks/useResolvedMenu';
+
+type OrgTabKey =
+  | 'divisions' | 'business-units' | 'departments' | 'sub-branches'
+  | 'locations' | 'designations' | 'pms-grades' | 'levels'
+  | 'employee-categories' | 'employment-statuses';
+
+const ORG_TAB_DEFS: ReadonlyArray<{ key: OrgTabKey; menuKey: string; label: string }> = [
+  { key: 'divisions',            menuKey: 'org-tab-divisions',           label: 'Divisions' },
+  { key: 'business-units',       menuKey: 'org-tab-business-units',      label: 'Business Units' },
+  { key: 'departments',          menuKey: 'org-tab-departments',         label: 'Departments' },
+  { key: 'sub-branches',         menuKey: 'org-tab-sub-branches',        label: 'Sub-Branches' },
+  { key: 'locations',            menuKey: 'org-tab-locations',           label: 'Locations' },
+  { key: 'designations',         menuKey: 'org-tab-designations',        label: 'Designations' },
+  { key: 'pms-grades',           menuKey: 'org-tab-pms-grades',          label: 'PMS Grades' },
+  { key: 'levels',               menuKey: 'org-tab-levels',              label: 'Levels' },
+  { key: 'employee-categories',  menuKey: 'org-tab-employee-categories', label: 'Employee Categories' },
+  { key: 'employment-statuses',  menuKey: 'org-tab-employment-statuses', label: 'Employment Statuses' },
+];
 
 export default function Organization() {
   const { data: companies, isLoading: companiesLoading } = useCompanies();
@@ -400,18 +419,20 @@ export default function Organization() {
       </div>
 
       <Tabs defaultValue="divisions">
-        <TabsList className="flex-wrap">
-          <TabsTrigger value="divisions">Divisions ({divisions?.length || 0})</TabsTrigger>
-          <TabsTrigger value="business-units">Business Units ({filteredBUs.length})</TabsTrigger>
-          <TabsTrigger value="departments">Departments ({filteredDepts.length})</TabsTrigger>
-          <TabsTrigger value="sub-branches">Sub-Branches ({filteredSubBranches.length})</TabsTrigger>
-          <TabsTrigger value="locations">Locations ({locations?.length || 0})</TabsTrigger>
-          <TabsTrigger value="designations">Designations ({designations?.length || 0})</TabsTrigger>
-          <TabsTrigger value="pms-grades">PMS Grades ({pmsGrades?.length || 0})</TabsTrigger>
-          <TabsTrigger value="levels">Levels ({levels?.length || 0})</TabsTrigger>
-          <TabsTrigger value="employee-categories">Employee Categories ({employeeCategories?.length || 0})</TabsTrigger>
-          <TabsTrigger value="employment-statuses">Employment Statuses ({employmentStatuses?.length || 0})</TabsTrigger>
-        </TabsList>
+        <OrgTabsList
+          counts={{
+            'divisions':            divisions?.length || 0,
+            'business-units':       filteredBUs.length,
+            'departments':          filteredDepts.length,
+            'sub-branches':         filteredSubBranches.length,
+            'locations':            locations?.length || 0,
+            'designations':         designations?.length || 0,
+            'pms-grades':           pmsGrades?.length || 0,
+            'levels':               levels?.length || 0,
+            'employee-categories':  employeeCategories?.length || 0,
+            'employment-statuses':  employmentStatuses?.length || 0,
+          }}
+        />
 
         <TabsContent value="divisions">
           <Card>
@@ -1065,5 +1086,18 @@ export default function Organization() {
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+function OrgTabsList({ counts }: { counts: Record<OrgTabKey, number> }) {
+  const tabs = useResolvedTabs(ORG_TAB_DEFS);
+  return (
+    <TabsList className="flex-wrap">
+      {tabs.map((t) => (
+        <TabsTrigger key={t.key} value={t.key}>
+          {t.label} ({counts[t.key as OrgTabKey] ?? 0})
+        </TabsTrigger>
+      ))}
+    </TabsList>
   );
 }
