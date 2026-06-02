@@ -553,6 +553,27 @@ function RowBody(props: {
         {movability.label}
       </Badge>
 
+      {/* "Create shortcut" — for locked/system rows that aren't sidebar groups. */}
+      {props.onCreateShortcut
+        && reg
+        && (!reg.is_movable || reg.is_system_required)
+        && reg.default_parent_key !== null /* skip top-level group nodes */
+        && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              type="button" variant="ghost" size="icon"
+              className="h-6 w-6 shrink-0"
+              onClick={() => props.onCreateShortcut?.(node.menu_key)}
+              aria-label="Create shortcut"
+            >
+              <Link2 className="h-3.5 w-3.5" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Create shortcut under a container</TooltipContent>
+        </Tooltip>
+      )}
+
       {isDirty && (
         <Tooltip>
           <TooltipTrigger asChild>
