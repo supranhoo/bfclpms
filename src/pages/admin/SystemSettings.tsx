@@ -132,6 +132,7 @@ export default function SystemSettings() {
   const { hours: recallWindowHours, isLoading: recallWindowLoading } = useRecallWindowHours();
   const updateSetting = useUpdateSystemSetting();
   const isMobile = useIsMobile();
+  const { canAccess } = useMenuAccess();
   const [searchParams, setSearchParams] = useSearchParams();
   const initialSection = (searchParams.get('section') as SectionKey) || 'branding';
   const [activeSection, setActiveSectionRaw] = useState<SectionKey>(initialSection);
