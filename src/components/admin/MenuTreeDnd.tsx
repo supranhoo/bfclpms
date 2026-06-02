@@ -133,7 +133,7 @@ export function MenuTreeDnd(p: Props) {
       registryByKey: p.registryByKey,
       resolvedByKey: effectiveByKey,
     });
-    if (!v.ok) return { ok: false as const, reason: v.reason };
+    if (!v.ok) return { ok: false as const, reason: (v as { ok: false; reason: string }).reason };
     return { ok: true as const, parentKey, targetModule };
   }, [activeKey, hoverIntent, p.registryByKey, effectiveByKey]);
 
