@@ -99,6 +99,33 @@ function tab(
   };
 }
 
+/** L4 sub-tab under a Settings L3 tab (e.g. Organization > Divisions). */
+function subtab(
+  menu_key: string,
+  default_label: string,
+  default_parent_key: string,
+  default_sort_order: number,
+  opts: Partial<CatalogEntry> = {},
+): CatalogEntry {
+  return {
+    menu_key,
+    default_label,
+    default_parent_key,
+    menu_level: 4,
+    route_path: null,
+    icon_name: null,
+    default_sort_order,
+    accepts_children: false,
+    is_renamable: true,
+    is_movable: true,
+    is_cross_app_movable: false,
+    is_system_required: false,
+    feature_key: null,
+    permission_key: menu_key,
+    ...opts,
+  };
+}
+
 // --- Sidebar L2 items (must match AppSidebar.menuItems) ---------------------
 const SIDEBAR_ITEMS: CatalogEntry[] = [
   // main
@@ -176,6 +203,29 @@ const SETTINGS_TABS: CatalogEntry[] = [
   tab('admin-settings-logs',           'Logs',             220),
 ];
 
+// --- L4: Organization sub-tabs (must match Organization.tsx TAB_DEFS) -------
+const ORGANIZATION_SUBTABS: CatalogEntry[] = [
+  subtab('org-tab-divisions',            'Divisions',            'admin-settings-organization',  10),
+  subtab('org-tab-business-units',       'Business Units',       'admin-settings-organization',  20),
+  subtab('org-tab-departments',          'Departments',          'admin-settings-organization',  30),
+  subtab('org-tab-sub-branches',         'Sub-Branches',         'admin-settings-organization',  40),
+  subtab('org-tab-locations',            'Locations',            'admin-settings-organization',  50),
+  subtab('org-tab-designations',         'Designations',         'admin-settings-organization',  60),
+  subtab('org-tab-pms-grades',           'PMS Grades',           'admin-settings-organization',  70),
+  subtab('org-tab-levels',               'Levels',               'admin-settings-organization',  80),
+  subtab('org-tab-employee-categories',  'Employee Categories',  'admin-settings-organization',  90),
+  subtab('org-tab-employment-statuses',  'Employment Statuses',  'admin-settings-organization', 100),
+];
+
+// --- L4: Workflow Config sub-tabs (must match WorkflowConfig.tsx TAB_DEFS) --
+const WORKFLOW_SUBTABS: CatalogEntry[] = [
+  subtab('wf-tab-templates',          'Templates',         'admin-settings-workflow', 10),
+  subtab('wf-tab-employee',           'Per Employee',      'admin-settings-workflow', 20),
+  subtab('wf-tab-department',         'Per Department',    'admin-settings-workflow', 30),
+  subtab('wf-tab-pms-grade',          'Per PMS Grade',     'admin-settings-workflow', 40),
+  subtab('wf-tab-final-score-rules',  'Final Score Rules', 'admin-settings-workflow', 50),
+];
+
 /** Maps the System Settings section.key (in SystemSettings.tsx) → menu_key. */
 export const SETTINGS_SECTION_KEY_TO_MENU_KEY: Record<string, string> = {
   'branding':       'admin-settings-branding',
@@ -206,6 +256,8 @@ export const MENU_CATALOG: MenuRegistryRow[] = [
   ...SIDEBAR_GROUPS,
   ...SIDEBAR_ITEMS,
   ...SETTINGS_TABS,
+  ...ORGANIZATION_SUBTABS,
+  ...WORKFLOW_SUBTABS,
 ].map((e) => ({ module_key: 'pms', ...e })) as MenuRegistryRow[];
 
 export const MENU_CATALOG_BY_KEY: Record<string, MenuRegistryRow> = Object.fromEntries(
