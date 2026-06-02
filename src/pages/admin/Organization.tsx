@@ -419,18 +419,20 @@ export default function Organization() {
       </div>
 
       <Tabs defaultValue="divisions">
-        <TabsList className="flex-wrap">
-          <TabsTrigger value="divisions">Divisions ({divisions?.length || 0})</TabsTrigger>
-          <TabsTrigger value="business-units">Business Units ({filteredBUs.length})</TabsTrigger>
-          <TabsTrigger value="departments">Departments ({filteredDepts.length})</TabsTrigger>
-          <TabsTrigger value="sub-branches">Sub-Branches ({filteredSubBranches.length})</TabsTrigger>
-          <TabsTrigger value="locations">Locations ({locations?.length || 0})</TabsTrigger>
-          <TabsTrigger value="designations">Designations ({designations?.length || 0})</TabsTrigger>
-          <TabsTrigger value="pms-grades">PMS Grades ({pmsGrades?.length || 0})</TabsTrigger>
-          <TabsTrigger value="levels">Levels ({levels?.length || 0})</TabsTrigger>
-          <TabsTrigger value="employee-categories">Employee Categories ({employeeCategories?.length || 0})</TabsTrigger>
-          <TabsTrigger value="employment-statuses">Employment Statuses ({employmentStatuses?.length || 0})</TabsTrigger>
-        </TabsList>
+        <OrgTabsList
+          counts={{
+            'divisions':            divisions?.length || 0,
+            'business-units':       filteredBUs.length,
+            'departments':          filteredDepts.length,
+            'sub-branches':         filteredSubBranches.length,
+            'locations':            locations?.length || 0,
+            'designations':         designations?.length || 0,
+            'pms-grades':           pmsGrades?.length || 0,
+            'levels':               levels?.length || 0,
+            'employee-categories':  employeeCategories?.length || 0,
+            'employment-statuses':  employmentStatuses?.length || 0,
+          }}
+        />
 
         <TabsContent value="divisions">
           <Card>
