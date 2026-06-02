@@ -281,6 +281,8 @@ export function MenuTreeDnd(p: Props) {
                 activeKey={activeKey}
                 hoverIntent={hoverIntent}
                 validationOk={validation?.ok ?? true}
+                selectedKeys={p.selectedKeys}
+                onToggleSelect={p.onToggleSelect}
               />
             );
           })}
