@@ -332,6 +332,16 @@ export function MenuSettingTab() {
           resolvedByKey={resolvedByKey}
         />
 
+        <MoveUnderDialog
+          open={moveUnderOpen}
+          onOpenChange={setMoveUnderOpen}
+          selectedKeys={Array.from(selectedKeys)}
+          registryByKey={registryByKey}
+          effective={effective}
+          effectiveByKey={Object.fromEntries(effective.map((n) => [n.menu_key, n]))}
+          onApplyMove={applyMove}
+        />
+
         {/* Empty-state seed */}
         {isEmpty && (
           <Card className="border-dashed">
