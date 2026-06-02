@@ -349,18 +349,20 @@ function ModuleSection(props: {
       <div className="px-3 py-2 text-xs font-bold uppercase tracking-wider text-muted-foreground border-b">
         {props.moduleKey}
       </div>
-      {/* Column headers — align with TreeRow grid below */}
-      <div className="hidden md:flex items-center gap-1.5 px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground border-b bg-muted/30">
-        <div className="w-5" />
-        <div className="w-5" />
-        <div className="w-4" />
-        <div className="flex-1 min-w-0 px-2">Menu Name</div>
-        <div className="w-[240px] shrink-0">Menu_Key</div>
-        <div className="w-[200px] shrink-0">Route</div>
-        <div className="w-[110px] shrink-0 text-right pr-1">Status</div>
-        <div className="w-[60px] shrink-0 text-right">Actions</div>
-      </div>
-      <div className="p-2 space-y-0.5">
+      <div className="overflow-x-auto">
+        <div className="min-w-[860px]">
+          {/* Column headers — align with TreeRow grid below */}
+          <div className="flex items-center gap-1.5 px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground border-b bg-muted/30">
+            <div className="w-5" />
+            <div className="w-5" />
+            <div className="w-4" />
+            <div className="flex-1 min-w-0 px-2">Menu Name</div>
+            <div className="w-[240px] shrink-0">Menu_Key</div>
+            <div className="w-[200px] shrink-0">Route</div>
+            <div className="w-[110px] shrink-0 text-right pr-1">Status</div>
+            <div className="w-[60px] shrink-0 text-right">Actions</div>
+          </div>
+          <div className="p-2 space-y-0.5">
         {props.roots.length === 0 && (
           <div className="text-xs italic text-muted-foreground px-2 py-3">
             Empty — drop items here to add to this module.
@@ -374,6 +376,8 @@ function ModuleSection(props: {
             {...props}
           />
         ))}
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -559,16 +563,18 @@ function RowBody(props: {
       </div>
 
       {/* Menu_Key column */}
-      <div className="hidden md:flex w-[240px] shrink-0 items-center">
+      <div className="flex w-[240px] shrink-0 items-center">
         <CopyableField value={node.menu_key} label="menu key" />
       </div>
 
       {/* Route column */}
-      <div className="hidden md:flex w-[200px] shrink-0 items-center">
+      <div className="flex w-[200px] shrink-0 items-center">
         {node.route_path ? (
           <CopyableField value={node.route_path} label="route" />
         ) : (
-          <span className="text-[10px] text-muted-foreground/50 italic">—</span>
+          <span className="text-[11px] font-mono text-muted-foreground/60 italic truncate">
+            {reg?.accepts_children ? 'Container' : '—'}
+          </span>
         )}
       </div>
 
