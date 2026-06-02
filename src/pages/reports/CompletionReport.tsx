@@ -39,6 +39,7 @@ export default function CompletionReport() {
   const canExport = canDownload('completion');
   const { data: allKpis, isLoading } = useAllKpis();
   const { toast } = useToast();
+  const resolvedFields = useResolvedReportFields('RPT-CMP-001', CMP_DEFAULT_FIELDS);
 
   const [selectedYear, setSelectedYear] = useState<string>('all');
   const { companies, selectedCompanyId, setSelectedCompanyId, filterByCompany } = useCompanyFilter();
@@ -182,28 +183,35 @@ export default function CompletionReport() {
       toast({ title: 'No data to export', variant: 'destructive' });
       return;
     }
-
-    const exportData = periodData.map(p => ({
-      'Period': p.period,
-      'Year': p.year,
-      'Total KPIs': p.total,
-      'Self Review Submitted': p.selfReviewSubmitted,
-      'Manager Reviewed': p.managerReviewed,
-      'Skip-Level Reviewed': p.skipLevelReviewed,
-      'HR PMS Reviewed': p.hrPmsReviewed,
-      'Auditor Reviewed': p.auditorReviewed,
-      'Approved': p.approved,
-      'Not Submitted': p.notSubmitted,
-      'Self Review Rate': `${p.selfReviewRate}%`,
-      'Completion Rate': `${p.completionRate}%`,
-    }));
-
-    const ws = XLSX.utils.json_to_sheet(exportData);
+    const visible = resolvedFields.filter((f) => !f.is_hidden);
+    const valueFor = (p: typeof periodData[number], key: string): string | number => {
+      switch (key) {
+        case 'period':                return p.period;
+        case 'year':                  return p.year;
+        case 'total_kpis':            return p.total;
+        case 'self_review_submitted': return p.selfReviewSubmitted;
+        case 'manager_reviewed':      return p.managerReviewed;
+        case 'skip_level_reviewed':   return p.skipLevelReviewed;
+        case 'hr_pms_reviewed':       return p.hrPmsReviewed;
+        case 'auditor_reviewed':      return p.auditorReviewed;
+        case 'approved':              return p.approved;
+        case 'not_submitted':         return p.notSubmitted;
+        case 'self_review_rate':      return `${p.selfReviewRate}%`;
+        case 'completion_rate':       return `${p.completionRate}%`;
+        default: return '';
+      }
+    };
+    const exportData = periodData.map((p) => {
+      const row: Record<string, string | number> = {};
+      for (const fld of visible) row[fld.label] = valueFor(p, fld.field_key);
+      return row;
+    });
+    const ws = XLSX.utils.json_to_sheet(exportData, { header: visible.map((f) => f.label) });
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Completion Report');
     XLSX.writeFile(wb, `Completion_Report_${new Date().toISOString().split('T')[0]}.xlsx`);
     toast({ title: 'Report downloaded successfully' });
-  }, [periodData, toast]);
+  }, [periodData, toast, resolvedFields]);
 
   if (isLoading) {
     return (
