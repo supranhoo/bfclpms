@@ -19,6 +19,14 @@ import {
   type ChainStage,
 } from '@/lib/workflowResolver';
 import { useProfiles } from '@/hooks/useOrganization';
+import { useResolvedReportFields } from '@/hooks/useResolvedReportFields';
+
+const WFR_DEFAULT_FIELDS = [
+  { field_key: 'employee',   default_label: 'Employee',   default_sort: 10, is_required: true },
+  { field_key: 'department', default_label: 'Department', default_sort: 20 },
+  { field_key: 'template',   default_label: 'Template',   default_sort: 30 },
+  { field_key: 'source',     default_label: 'Source',     default_sort: 40 },
+] as const;
 
 const MONTHS = [
   'January','February','March','April','May','June',
@@ -106,6 +114,7 @@ export default function WorkflowResolutionReport() {
 
   const { data: profiles } = useProfiles();
   const { data: rows = [], isLoading } = useWorkflowResolution(period, year);
+  const resolvedFields = useResolvedReportFields('RPT-WFR-001', WFR_DEFAULT_FIELDS);
 
   const departments = useMemo(() => {
     const map = new Map<string, string>();
@@ -234,10 +243,9 @@ export default function WorkflowResolutionReport() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Employee</TableHead>
-                  <TableHead>Department</TableHead>
-                  <TableHead>Template</TableHead>
-                  <TableHead>Source</TableHead>
+                  {resolvedFields.filter(f => !f.is_hidden).map(f => (
+                    <TableHead key={f.field_key}>{f.label}</TableHead>
+                  ))}
                   {CHAIN_STAGES.map(s => (
                     <TableHead key={s}>{CHAIN_STAGE_LABEL[s]}</TableHead>
                   ))}
@@ -250,15 +258,29 @@ export default function WorkflowResolutionReport() {
                     className="cursor-pointer hover:bg-muted/40"
                     onClick={() => setOpenRow(r)}
                   >
-                    <TableCell>
-                      <div className="font-medium text-sm">{r.employee.full_name || r.employee.email}</div>
-                      <div className="text-xs text-muted-foreground">{r.employee.employee_code || '—'}</div>
-                    </TableCell>
-                    <TableCell className="text-sm">{deptName(r.employee.department_id)}</TableCell>
-                    <TableCell className="text-sm">{r.templateName || '—'}</TableCell>
-                    <TableCell>
-                      <Badge variant="outline" className="text-xs capitalize">{r.source}</Badge>
-                    </TableCell>
+                    {resolvedFields.filter(f => !f.is_hidden).map(f => {
+                      switch (f.field_key) {
+                        case 'employee':
+                          return (
+                            <TableCell key={f.field_key}>
+                              <div className="font-medium text-sm">{r.employee.full_name || r.employee.email}</div>
+                              <div className="text-xs text-muted-foreground">{r.employee.employee_code || '—'}</div>
+                            </TableCell>
+                          );
+                        case 'department':
+                          return <TableCell key={f.field_key} className="text-sm">{deptName(r.employee.department_id)}</TableCell>;
+                        case 'template':
+                          return <TableCell key={f.field_key} className="text-sm">{r.templateName || '—'}</TableCell>;
+                        case 'source':
+                          return (
+                            <TableCell key={f.field_key}>
+                              <Badge variant="outline" className="text-xs capitalize">{r.source}</Badge>
+                            </TableCell>
+                          );
+                        default:
+                          return <TableCell key={f.field_key} />;
+                      }
+                    })}
                     {CHAIN_STAGES.map(s => (
                       <TableCell key={s}><StageCell row={r} stage={s} /></TableCell>
                     ))}
@@ -266,7 +288,7 @@ export default function WorkflowResolutionReport() {
                 ))}
                 {filtered.length === 0 && !isLoading && (
                   <TableRow>
-                    <TableCell colSpan={4 + CHAIN_STAGES.length} className="text-center text-sm text-muted-foreground py-8">
+                    <TableCell colSpan={resolvedFields.filter(f => !f.is_hidden).length + CHAIN_STAGES.length} className="text-center text-sm text-muted-foreground py-8">
                       No employees match the current filters.
                     </TableCell>
                   </TableRow>
