@@ -19,6 +19,24 @@ import { generateBulkScorecardPdf, generateDetailedScorecardPdf, generateDetaile
 import { useSystemSettings } from '@/hooks/useSystemSettings';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { MonthlyTrendView } from '@/components/reports/MonthlyTrendView';
+import { useResolvedReportFields } from '@/hooks/useResolvedReportFields';
+
+const MSR_DEFAULT_FIELDS = [
+  { field_key: 'company',              default_label: 'Company',              default_sort: 10 },
+  { field_key: 'employee_code',        default_label: 'Employee Code',        default_sort: 20, is_required: true },
+  { field_key: 'employee_name',        default_label: 'Employee Name',        default_sort: 30, is_required: true },
+  { field_key: 'designation',          default_label: 'Designation',          default_sort: 40 },
+  { field_key: 'department',           default_label: 'Department',           default_sort: 50 },
+  { field_key: 'total_kpis',           default_label: 'Total KPIs',           default_sort: 60 },
+  { field_key: 'approved_kpis',        default_label: 'Approved KPIs',        default_sort: 70 },
+  { field_key: 'avg_self_score',       default_label: 'Avg Self Score',       default_sort: 80 },
+  { field_key: 'avg_manager_score',    default_label: 'Avg Manager Score',    default_sort: 90 },
+  { field_key: 'avg_skip_level_score', default_label: 'Avg Skip-Level Score', default_sort: 100 },
+  { field_key: 'avg_hr_pms_score',     default_label: 'Avg HR PMS Score',     default_sort: 110 },
+  { field_key: 'avg_auditor_score',    default_label: 'Avg Auditor Score',    default_sort: 120 },
+  { field_key: 'avg_management_score', default_label: 'Avg Management Score', default_sort: 130 },
+  { field_key: 'avg_final_score',      default_label: 'Avg Final Score',      default_sort: 140 },
+] as const;
 
 const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -36,6 +54,7 @@ export default function MonthlyScorecardReport() {
   const { canDownload } = useReportAccess();
   const canExport = canDownload('monthly-scorecard');
   const { getCompanyCode } = useCompanyFilter();
+  const resolvedMsrFields = useResolvedReportFields('RPT-MSR-001', MSR_DEFAULT_FIELDS);
   const currentYear = new Date().getFullYear();
   const currentMonth = MONTHS[new Date().getMonth()];
   
@@ -393,25 +412,33 @@ export default function MonthlyScorecardReport() {
   }, [filteredScorecards]);
 
   const handleExportExcel = () => {
-    const exportData = filteredScorecards.map(sc => ({
-      'Company': getCompanyCode(sc.employeeId),
-      'Employee Code': sc.employeeCode,
-      'Employee Name': sc.employeeName,
-      'Designation': sc.designation,
-      'Department': sc.department,
-      'Total KPIs': sc.totalKpis,
-      'Approved KPIs': sc.approvedKpis,
-      'Avg Self Score': sc.avgSelfScore.toFixed(2),
-      'Avg Manager Score': sc.avgManagerScore.toFixed(2),
-      'Avg Skip-Level Score': sc.avgSkipLevelScore != null ? sc.avgSkipLevelScore.toFixed(2) : '-',
-      'Avg HR PMS Score': sc.avgHrPmsScore != null ? sc.avgHrPmsScore.toFixed(2) : '-',
-      'Avg Auditor Score': sc.avgAuditorScore.toFixed(2),
-      'Avg Management Score': sc.avgManagementScore.toFixed(2),
-      'Avg Final Score': sc.avgFinalScore.toFixed(2),
-    }));
-
+    const visible = resolvedMsrFields.filter(fld => !fld.is_hidden);
+    const valueFor = (sc: EmployeeScorecard, key: string): unknown => {
+      switch (key) {
+        case 'company':              return getCompanyCode(sc.employeeId);
+        case 'employee_code':        return sc.employeeCode;
+        case 'employee_name':        return sc.employeeName;
+        case 'designation':          return sc.designation;
+        case 'department':           return sc.department;
+        case 'total_kpis':           return sc.totalKpis;
+        case 'approved_kpis':        return sc.approvedKpis;
+        case 'avg_self_score':       return sc.avgSelfScore.toFixed(2);
+        case 'avg_manager_score':    return sc.avgManagerScore.toFixed(2);
+        case 'avg_skip_level_score': return sc.avgSkipLevelScore != null ? sc.avgSkipLevelScore.toFixed(2) : '-';
+        case 'avg_hr_pms_score':     return sc.avgHrPmsScore != null ? sc.avgHrPmsScore.toFixed(2) : '-';
+        case 'avg_auditor_score':    return sc.avgAuditorScore.toFixed(2);
+        case 'avg_management_score': return sc.avgManagementScore.toFixed(2);
+        case 'avg_final_score':      return sc.avgFinalScore.toFixed(2);
+        default:                     return '';
+      }
+    };
+    const exportData = filteredScorecards.map(sc => {
+      const out: Record<string, unknown> = {};
+      for (const fld of visible) out[fld.label] = valueFor(sc, fld.field_key);
+      return out;
+    });
     const wb = XLSX.utils.book_new();
-    const ws = XLSX.utils.json_to_sheet(exportData);
+    const ws = XLSX.utils.json_to_sheet(exportData, { header: visible.map(fld => fld.label) });
     XLSX.utils.book_append_sheet(wb, ws, 'Monthly Scorecard');
     XLSX.writeFile(wb, `Monthly_Scorecard_${selectedPeriod}_${selectedYear}.xlsx`);
   };
