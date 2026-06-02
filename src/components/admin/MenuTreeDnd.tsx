@@ -379,6 +379,8 @@ function TreeRow(props: {
   activeKey: string | null;
   hoverIntent: DropIntent | null;
   validationOk: boolean;
+  selectedKeys?: Set<string>;
+  onToggleSelect?: (menuKey: string) => void;
 }) {
   const { node, depth } = props;
   const reg = props.registryByKey[node.menu_key];
