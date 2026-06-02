@@ -721,6 +721,74 @@ export default function SystemSettings() {
         return <OrganizationPage />;
       case 'review-periods':
         return <ReviewPeriodsPage />;
+      case 'logs': {
+        const canAudit = canAccess('admin-audit-logs');
+        const canEmail = canAccess('admin-email-logs');
+        const available: Array<'audit' | 'email'> = [];
+        if (canAudit) available.push('audit');
+        if (canEmail) available.push('email');
+        if (available.length === 0) {
+          return (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <ScrollText className="h-5 w-5" />
+                  Logs
+                </CardTitle>
+                <CardDescription>You do not have access to any log views.</CardDescription>
+              </CardHeader>
+            </Card>
+          );
+        }
+        const activeLogsTab = (available as string[]).includes(logsTab) ? logsTab : available[0];
+        const handleLogsTabChange = (v: string) => {
+          const next = new URLSearchParams(searchParams);
+          next.set('section', 'logs');
+          next.set('logs', v);
+          setSearchParams(next, { replace: true });
+        };
+        return (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <ScrollText className="h-5 w-5" />
+                Logs
+              </CardTitle>
+              <CardDescription>
+                Review system audit trail and outgoing email delivery records.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Tabs value={activeLogsTab} onValueChange={handleLogsTabChange}>
+                <TabsList>
+                  {canAudit && (
+                    <TabsTrigger value="audit" className="gap-2">
+                      <History className="h-4 w-4" />
+                      Audit Logs
+                    </TabsTrigger>
+                  )}
+                  {canEmail && (
+                    <TabsTrigger value="email" className="gap-2">
+                      <Mail className="h-4 w-4" />
+                      Email Logs
+                    </TabsTrigger>
+                  )}
+                </TabsList>
+                {canAudit && (
+                  <TabsContent value="audit" className="mt-4">
+                    <AuditLogsPage />
+                  </TabsContent>
+                )}
+                {canEmail && (
+                  <TabsContent value="email" className="mt-4">
+                    <EmailLogsPage />
+                  </TabsContent>
+                )}
+              </Tabs>
+            </CardContent>
+          </Card>
+        );
+      }
       default:
         return null;
     }
