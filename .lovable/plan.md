@@ -1,80 +1,127 @@
-# Universal Menu Nesting & Repositioning
+# Custom Menu Tab Creation — Implementation Plan
 
-Goal: turn Menu Setting + sidebar into a **single resolved recursive tree** so any movable item can be re-parented across levels (L2↔L3↔L4) and the live sidebar matches the saved tree exactly.
+## Goal
+Allow admins to create new custom menu items (L2/L3/L4) from System Settings → Menu Setting, place them under any valid parent, pick icon + color + destination, and have them render in the live sidebar after save/refresh. Existing seeded items, permissions, and overrides must remain unaffected.
 
-## Risk & Impact
+## Risk & Impact Report
+- **Data Impact:** Additive only — new `menu_registry` rows flagged `is_custom=true` plus 2 optional columns (`color`, `is_custom`). No change to existing rows. Backed up automatically via `get_backup_table_order()` (already includes `menu_registry`).
+- **Workflow Impact:** None. KPI / review / scoring / auth logic untouched.
+- **UI/UX Impact:** New "Create Tab" button + dialog in MenuSettingTab toolbar. Sidebar renders new items per resolved tree (already wired). Custom-page route added at `/custom-menu/:menuKey`.
+- **Regression Risk:** Low. Sidebar already resolves via `resolveGroupItems`; we only add new sources. DB trigger `menu_overrides_validate` unchanged. New trigger `menu_registry_custom_validate` only fires on `is_custom=true` inserts.
+- **Mitigation:** Feature gated by existing `menu_overrides_enabled` flag. Custom rows can be soft-deleted (`is_active=false`). All inserts go through admin RLS.
+- **Scalability:** Custom items expected in tens, not thousands. No pagination needed. Resolver already O(n).
 
-- **Data**: no schema change required — `menu_overrides` already has `custom_parent_key`, `custom_menu_level`, `custom_module_key`, `custom_sort_order`. Catalog flags (`accepts_children`) change for many L2 leaves → purely additive.
-- **Workflow**: route, permission_key, report_key, RLS, role gates **unchanged**. Only visual placement.
-- **UI/UX**: sidebar groups now render recursively; nested children get L3/L4 indent. Active-route expansion walks resolved parent chain.
-- **Regression risk (medium)**: pinned duplicates (`admin-incentive-data`, `admin-org-kpi-data`, `admin-org-kpi-audit`) must keep working; role filtering must still apply per resolved node; flag-off path must stay byte-identical.
-- **Mitigation**: feature stays gated by `menu_overrides_enabled`; hardcoded fallback unchanged when flag off; pinning rule preserved; unit tests for validator + resolver tree; manual QA via the 6 test cases in the brief.
-- **Scalability**: tree size ~150 nodes, cached 5 min — negligible.
+## Architecture
 
-## Plan (step → verification)
+### 1. DB migration — additive
+Extend `public.menu_registry`:
+- `is_custom boolean NOT NULL DEFAULT false`
+- `color text NULL` (hex or token name)
+- `created_by uuid NULL`, `created_at timestamptz DEFAULT now()`, `updated_at timestamptz DEFAULT now()`
 
-### 1. Catalog: open up `accepts_children`
-File: `src/lib/menu/catalog.ts`
-- Default `accepts_children = true` for every **L2 non-system** item (dashboards, reports, admin tiles, settings tabs).
-- Keep `false` only for: pure action buttons (logout-like), and any item explicitly flagged `is_system_required`.
-- Keep `is_movable=false` + `is_system_required=true` on: module roots, `group-*` parents, Dashboard, Inbox, System Settings, Menu Setting.
-- ✅ Verify: visual inspection + a unit test asserting `>=80%` of L2 items now accept children.
+New trigger `menu_registry_custom_validate` (BEFORE INSERT/UPDATE on `menu_registry`):
+- If `is_custom=true`:
+  - `menu_key` must match `^custom-[a-z0-9-]+(-\d+)?$`
+  - `menu_level` ∈ {2,3,4}
+  - `default_parent_key` must exist, `accepts_children=true`, and parent.menu_level = menu_level - 1
+  - cycle check, depth ≤ 4
+  - `is_renamable=true`, `is_movable=true`, `is_system_required=false`
+- If `is_custom=false`: no-op (protects seeded rows from accidental edit).
 
-### 2. Validator: flexible nesting
-File: `src/lib/menu/validateMove.ts`
-- Allow target parent of **any** level (L1 group, L2 item, L3 item) as long as `accepts_children=true`.
-- Compute new `menu_level = parent.menu_level + 1`; reject if `> 4`.
-- Keep: not-movable, system-required, cross-app block, cycle detection, unknown-parent.
-- Mirror exact rules in DB trigger `menu_overrides_validate` (new migration).
-- ✅ Verify: new unit tests for L2→L3, L3→L2, L4→L2, cycle, depth>4, leaf-as-parent, system-locked.
+Also: BEFORE DELETE trigger blocks deleting non-custom rows.
 
-### 3. DB trigger parity
-New migration updating `menu_overrides_validate` to match step 2 (depth check via recursive resolved chain, leaf-parent rejection via registry lookup).
-- ✅ Verify: SQL test inserts in migration comment; client validateMove + trigger return same verdicts on the 6 brief examples.
+RLS: SELECT=authenticated (already), INSERT/UPDATE/DELETE limited to `has_role(auth.uid(),'admin')` (already on registry — verify).
 
-### 4. Resolver: build recursive tree
-File: `src/lib/menu/applyOverrides.ts` (+ `useResolvedMenu`)
-- Already returns `byParent`. Add `buildTree(rootKey)` helper returning `{ node, children[] }` recursively, ordered by `sort_order`.
-- ✅ Verify: unit test on a fixture proves moving `reports-performance` under `admin-dashboard` produces nested child.
+Menu access default: insert `menu_access_config` row for new key with admin-only visibility via post-insert trigger or service-layer step.
 
-### 5. Sidebar: render recursive tree
-File: `src/components/layout/AppSidebar.tsx` + `CollapsibleSidebarGroup.tsx`
-- Replace `resolveGroupItems` with `resolveGroupTree(groupKey)` returning the full subtree for each `group-*` parent.
-- Render L2 = `SidebarMenuButton`, L3/L4 = nested `SidebarMenuSub` / indented buttons.
-- Active-route detection: walk resolved `parent_key` chain from active `menu_key` up to the `group-*` root → that group expands.
-- Preserve **pinning rule** for the 3 duplicate keys (still rendered in their native group regardless of resolved parent).
-- Role filter applied per node before render.
-- Flag off → unchanged hardcoded path.
-- ✅ Verify: manual QA on the 6 test cases (move Performance Report to Main, under Admin Dashboard, back, cycle blocked, locked blocked, role-gated still hidden).
+### 2. Catalog & types
+- `src/lib/menu/types.ts`: add `is_custom?: boolean`, `color?: string | null` to `MenuRegistryRow` and `ResolvedMenuNode`.
+- `applyOverrides.ts`: pass `color` and `is_custom` through resolver.
 
-### 6. Menu Setting DnD parity
-File: `src/components/admin/MenuTreeDnd.tsx`
-- Allow drop-as-child on **any** row whose registry node has `accepts_children=true` (currently only L1/L2 containers).
-- Badges per row: `Locked` (system_required), `Can contain items` (accepts_children), `Leaf item` (else).
-- Warning toast when moving a report-* key under an admin-* parent: "Route & access unchanged, only placement moves."
-- ✅ Verify: drag Performance Report → Admin Dashboard succeeds; cycle blocked; depth-cap blocked.
+### 3. Service layer — `src/lib/menu/customMenu.ts` (new)
+Pure functions:
+- `slugify(name)` → lowercase, hyphens.
+- `generateMenuKey(name, existingKeys)` → `custom-<slug>`, suffix `-2`, `-3` on collision.
+- `validateCreate({name, level, parentKey, destinationType, routePath, registryByKey, resolvedByKey})` → returns `{ok:true}` or `{ok:false, reason}` mirroring DB trigger + route format check.
+- `createCustomMenuItem(payload)` → upserts `menu_registry` row + default `menu_access_config` row (admin-only) in a single supabase call sequence; invalidates `menu-registry-admin`, `resolved-menu` queries.
 
-### 7. Tests
-- `validateMove.test.ts` — 8 cases listed in step 2.
-- `applyOverrides.tree.test.ts` — recursive tree assembly + sort.
-- `AppSidebar.resolved.test.tsx` (lightweight) — given a mock resolver, asserts Performance Report renders inside the chosen group.
+### 4. UI — `src/components/admin/CreateMenuItemDialog.tsx` (new)
+Compact admin dialog with:
+- Name (text)
+- Level radio (2/3/4)
+- Parent combobox (filtered: `accepts_children=true` AND `menu_level = selectedLevel - 1`; module-scoped per parent)
+- Destination select: Container / Existing Route / Custom Page / External Link
+  - Existing Route → searchable picker over a static `KNOWN_ROUTES` list (export from `src/lib/menu/knownRoutes.ts` — extracted from `src/App.tsx`)
+  - Custom Page → auto sets `route_path=/custom-menu/<menuKey>`
+  - External Link → URL input, validated `https://` only; renders as `<a target="_blank" rel="noopener noreferrer">`
+- Icon picker: curated Lucide list (~40 icons) in a grid popover
+- Color: 8 PMS tokens (primary/secondary/accent/muted/destructive/success/warning/info) + optional hex input
+- Live preview line: `Main > Admin Dashboard > New Tab`
+- Submit → calls `createCustomMenuItem`; toast on success/error.
 
-### 8. Docs / memory
-- Update `mem/features/admin/menu-setting` (depth=4 cap, leaf-vs-parent rule, badges).
-- Update `mem/features/admin/menu-setting-sidebar-rendering` (recursive render, parent-chain active detection).
-- Append `docs/adr/ADR-0xx.md` describing the move to a universal tree.
+### 5. MenuSettingTab — wire the button
+Add "Create Tab" button in toolbar next to existing Save/Reset. Open dialog. After create → refetch.
 
-## UI Changes
+### 6. Sidebar rendering
+Already group-aware via prior refactor. Additions:
+- `CollapsibleSidebarGroup.tsx`: support dynamic icon lookup (`icons[icon_name]` from `lucide-react`) and apply `color` (text-only tint) when present.
+- `AppSidebar.tsx`: resolver tree already drives children; ensure custom items participate (they will, via registry → resolver).
 
-- **Sidebar**: items can now appear nested 1–2 levels deep under another item (indent + smaller chevron). Group still collapsible.
-- **Menu Setting**: every eligible row shows a drop-as-child zone + new badges. Warning toast on cross-domain placement.
-- **No new pages, no new routes.**
+### 7. Custom-page route
+- `src/pages/CustomMenuPage.tsx`: reads `:menuKey`, looks up node from `useResolvedMenu`, renders `<PageHeader title={label}/>` and a placeholder card "This page is reserved for custom content."
+- Register `/custom-menu/:menuKey` in `src/App.tsx` inside the authenticated layout.
 
-## Out of scope
+### 8. External link rendering
+`CollapsibleSidebarGroup.tsx`: if node has `route_path` starting with `http(s)://`, render as anchor with `target="_blank" rel="noopener noreferrer"`.
 
-- Renaming `menu_key`s, changing routes/permissions, multi-tenant `client_id` UI, L1 module ordering, report registry refactor.
+### 9. Permissions
+New custom item gets a row in `menu_access_config` with `allowed_roles=['admin']`. Existing `useMenuAccess` already filters sidebar items by role → no sidebar changes needed.
+
+### 10. Tests (Vitest)
+`src/lib/menu/customMenu.test.ts`:
+- generateMenuKey: unique + collision suffix
+- validateCreate: L2/L3/L4 happy paths, depth>4 rejected, missing parent rejected, non-acceptsChildren parent rejected, level mismatch rejected, system key collision rejected, invalid URL rejected
+- slugify edge cases
+
+`src/lib/menu/applyOverrides.tree.test.ts` (extend): custom rows appear under resolved parent with `is_custom=true`.
+
+UI smoke test deferred (existing project pattern — unit tests on pure logic only).
+
+## Files to add/edit
+**New:**
+- `supabase/migrations/<ts>_menu_registry_custom_support.sql`
+- `src/lib/menu/customMenu.ts`
+- `src/lib/menu/knownRoutes.ts`
+- `src/lib/menu/customMenu.test.ts`
+- `src/components/admin/CreateMenuItemDialog.tsx`
+- `src/pages/CustomMenuPage.tsx`
+
+**Edit:**
+- `src/lib/menu/types.ts` (add `is_custom`, `color`)
+- `src/lib/menu/applyOverrides.ts` (pass-through new fields)
+- `src/components/admin/MenuSettingTab.tsx` (toolbar button)
+- `src/components/layout/CollapsibleSidebarGroup.tsx` (dynamic icon + color + external link)
+- `src/App.tsx` (route)
+- `mem/features/admin/menu-setting` (doc)
+- `docs/adr/ADR-072.md` (decision record)
+- `.lovable/plan.md` (sync)
 
 ## Rollback
+- Migration is purely additive (new columns default to `false`/`null`). Drop columns + trigger to revert.
+- Toggle `menu_overrides_enabled=false` to revert sidebar to hardcoded defaults; custom rows become invisible but data preserved.
 
-- Toggle `system_settings.menu_overrides_enabled = false` → sidebar instantly returns to hardcoded layout.
-- Revert migration #3 if trigger rejects valid moves; client validator is a pure file revert.
+## Verification steps
+1. Run migration → verify columns + triggers via `\d menu_registry`.
+2. Open Menu Setting → click "Create Tab" → create L2 "Test Hub" under Main as Container.
+3. Confirm sidebar shows "Test Hub" after auto-refetch (no page reload needed).
+4. Create L3 under "Test Hub" → confirm nests with indentation.
+5. Create L4 with Custom Page → click → `/custom-menu/...` renders with header.
+6. Try L4 under L2 → blocked with toast.
+7. Refresh page + re-login → items persist.
+8. Run `vitest src/lib/menu/customMenu.test.ts` → all pass.
+
+## Out of scope
+- Editing custom item route/destination post-create (only label/parent/order via existing DnD).
+- Multi-tenant `client_id`-scoped custom items.
+- Drag-to-create — only dialog-based creation in this phase.
+- Icon upload / non-Lucide icons.
