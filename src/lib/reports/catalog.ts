@@ -366,6 +366,21 @@ export const REPORT_CATALOG: ReportSeed[] = [
   ], 200),
 ];
 
+// NOTE: Workflow Resolution Report (RPT-WFR-001) registers only its FIXED base
+// columns. The per-stage reviewer columns (Self / Manager / Skip-Level / HR PMS
+// / Auditor / Management / Final) are derived at runtime from `CHAIN_STAGES`
+// and intentionally NOT in the registry — they reflect workflow template
+// configuration, not labelling preferences.
+REPORT_CATALOG.push(
+  r('RPT-WFR-001', 'workflow-resolution', 'WFR', 'Workflow Resolution Report',
+    '/reports/workflow-resolution', null, [
+    f('employee',   'Employee',   10, { is_required: true, data_type: 'string' }),
+    f('department', 'Department', 20, { data_type: 'string' }),
+    f('template',   'Template',   30, { data_type: 'string' }),
+    f('source',     'Source',     40, { data_type: 'string' }),
+  ], 210),
+);
+
 export const REPORT_CATALOG_BY_ID: Record<string, ReportSeed> = Object.fromEntries(
   REPORT_CATALOG.map((rep) => [rep.report_id, rep]),
 );
