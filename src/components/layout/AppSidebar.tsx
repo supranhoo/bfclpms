@@ -7,6 +7,7 @@ import { useAppSettings } from '@/hooks/useAppSettings';
 import { useIsAnyOrgKpiDataOwner } from '@/hooks/useOrgKpiDataOwner';
 import { useMenuAccess } from '@/hooks/useMenuAccess';
 import { useBulkReviewFlag } from '@/hooks/useBulkReview';
+import { useResolvedMenu } from '@/hooks/useResolvedMenu';
 import {
   Sidebar,
   SidebarContent,
