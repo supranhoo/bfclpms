@@ -23,6 +23,9 @@ export type MenuRegistryRow = {
   is_system_required: boolean;
   feature_key: string | null;
   permission_key: string | null;
+  is_custom?: boolean;
+  color?: string | null;
+  created_by?: string | null;
 };
 
 export type MenuOverrideRow = {
@@ -55,4 +58,6 @@ export type ResolvedMenuNode = {
   is_system_required: boolean;
   /** True when ANY of label/parent/sort was overridden vs default. */
   is_overridden: boolean;
+  is_custom?: boolean;
+  color?: string | null;
 };
