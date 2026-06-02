@@ -1,5 +1,4 @@
-import { LucideIcon } from 'lucide-react';
-import { ChevronDown } from 'lucide-react';
+import { LucideIcon, ChevronDown, Folder, icons as LucideIcons } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { prefetchRoute } from '@/hooks/usePrefetchRoute';
@@ -19,13 +18,17 @@ import {
 
 interface MenuItem {
   title: string;
-  icon: LucideIcon;
+  icon: LucideIcon | string | null;
   path: string;
   roles: string[];
   menuKey?: string;
   showBadge?: boolean;
   /** Resolved nested children (universal nesting). Rendered indented. */
   children?: MenuItem[];
+  /** Semantic color token (e.g. 'primary') applied to icon. */
+  color?: string | null;
+  /** When true, render as external <a target="_blank"> instead of router nav. */
+  external?: boolean;
 }
 
 interface CollapsibleSidebarGroupProps {
@@ -56,17 +59,38 @@ export function CollapsibleSidebarGroup({
 
   const renderRow = (item: MenuItem, depth: number) => {
     const filteredKids = item.children ? filterByRole(item.children) : [];
+    const IconCmp: LucideIcon = (() => {
+      if (!item.icon) return Folder;
+      if (typeof item.icon === 'string') {
+        const fromMap = (LucideIcons as Record<string, LucideIcon>)[item.icon];
+        return fromMap ?? Folder;
+      }
+      return item.icon;
+    })();
+    const colorCls = item.color === 'primary' ? 'text-primary'
+      : item.color === 'secondary' ? 'text-secondary-foreground'
+      : item.color === 'accent' ? 'text-accent-foreground'
+      : item.color === 'destructive' ? 'text-destructive'
+      : item.color === 'muted' ? 'text-muted-foreground'
+      : '';
+    const isExternal = item.external || /^https?:\/\//i.test(item.path || '');
     return (
       <SidebarMenuItem key={`${depth}:${item.path}`}>
         <SidebarMenuButton
-          isActive={currentPath === item.path}
-          onClick={() => onNavigate(item.path)}
-          onMouseEnter={() => prefetchRoute(item.path)}
-          onFocus={() => prefetchRoute(item.path)}
+          isActive={!isExternal && currentPath === item.path}
+          onClick={() => {
+            if (isExternal && item.path) {
+              window.open(item.path, '_blank', 'noopener,noreferrer');
+            } else if (item.path) {
+              onNavigate(item.path);
+            }
+          }}
+          onMouseEnter={() => !isExternal && item.path && prefetchRoute(item.path)}
+          onFocus={() => !isExternal && item.path && prefetchRoute(item.path)}
           className="transition-colors duration-150 data-[active=true]:font-semibold data-[active=true]:bg-sidebar-accent/15 data-[active=true]:text-sidebar-primary"
           style={depth > 0 ? { paddingLeft: `${0.5 + depth * 0.75}rem` } : undefined}
         >
-          <item.icon className="h-4 w-4" />
+          <IconCmp className={cn('h-4 w-4', colorCls)} />
           <span>{item.title}</span>
           {item.showBadge && inboxBadgeCount && inboxBadgeCount > 0 && (
             <Badge
