@@ -499,28 +499,7 @@ export default function WorkflowConfig() {
       </Card>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid w-full grid-cols-5">
-          <TabsTrigger value="templates">
-            <Check className="h-4 w-4 mr-2" />
-            Templates
-          </TabsTrigger>
-          <TabsTrigger value="employee">
-            <Users className="h-4 w-4 mr-2" />
-            Per Employee
-          </TabsTrigger>
-          <TabsTrigger value="department">
-            <Building2 className="h-4 w-4 mr-2" />
-            Per Department
-          </TabsTrigger>
-          <TabsTrigger value="pms_grade">
-            <Award className="h-4 w-4 mr-2" />
-            Per PMS Grade
-          </TabsTrigger>
-          <TabsTrigger value="final_score_rules">
-            <Scale className="h-4 w-4 mr-2" />
-            Final Score Rules
-          </TabsTrigger>
-        </TabsList>
+        <WfTabsList />
 
         {/* Templates Tab */}
         <TabsContent value="templates" className="space-y-4">
