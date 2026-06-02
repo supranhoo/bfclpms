@@ -15,6 +15,21 @@ import { Download, Search, ChevronLeft, ChevronRight, ArrowUpDown, ArrowUp, Arro
 import { Skeleton } from '@/components/ui/skeleton';
 import { getScoreBadgeClass, getScoreLabel } from '@/lib/reviewConstants';
 import * as XLSX from 'xlsx';
+import { useResolvedReportFields } from '@/hooks/useResolvedReportFields';
+
+const TVM_DEFAULT_FIELDS = [
+  { field_key: 'company',                 default_label: 'Company',                 default_sort: 10 },
+  { field_key: 'employee_code',           default_label: 'Employee Code',           default_sort: 20, is_required: true },
+  { field_key: 'employee_name',           default_label: 'Employee Name',           default_sort: 30, is_required: true },
+  { field_key: 'designation',             default_label: 'Designation',             default_sort: 40 },
+  { field_key: 'department',              default_label: 'Department',              default_sort: 50 },
+  { field_key: 'month',                   default_label: 'Month',                   default_sort: 60 },
+  { field_key: 'year',                    default_label: 'Year',                    default_sort: 70 },
+  { field_key: 'avg_final_score',         default_label: 'Avg Final Score',         default_sort: 80 },
+  { field_key: 'manager_code',            default_label: 'Reporting Manager Code',  default_sort: 90 },
+  { field_key: 'manager_name',            default_label: 'Reporting Manager Name',  default_sort: 100 },
+  { field_key: 'manager_avg_final_score', default_label: 'Manager Avg Final Score', default_sort: 110 },
+] as const;
 
 const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -71,6 +86,7 @@ export default function TeamVsManagerScoreReport() {
   );
   const { canDownload } = useReportAccess();
   const { getCompanyCode } = useCompanyFilter();
+  const resolvedFields = useResolvedReportFields('RPT-TVM-001', TVM_DEFAULT_FIELDS);
 
   const { data: rawData, isLoading } = useQuery({
     queryKey: ['team-vs-manager-score-report', month, year],
@@ -218,20 +234,29 @@ export default function TeamVsManagerScoreReport() {
   const paged = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
 
   const handleExport = () => {
-    const exportData = filtered.map(r => ({
-      'Company': getCompanyCode(r.employeeId),
-      'Employee Code': r.employeeCode,
-      'Employee Name': r.employeeName,
-      'Designation': r.designation,
-      'Department': r.department,
-      'Month': r.month,
-      'Year': r.year,
-      'Avg Final Score': r.avgFinalScore ?? '—',
-      'Reporting Manager Code': r.managerCode,
-      'Reporting Manager Name': r.managerName,
-      'Manager Avg Final Score': r.managerAvgFinalScore ?? '—',
-    }));
-    const ws = XLSX.utils.json_to_sheet(exportData);
+    const visible = resolvedFields.filter(fld => !fld.is_hidden);
+    const valueFor = (r: SummaryRow, key: string): unknown => {
+      switch (key) {
+        case 'company':                 return getCompanyCode(r.employeeId);
+        case 'employee_code':           return r.employeeCode;
+        case 'employee_name':           return r.employeeName;
+        case 'designation':             return r.designation;
+        case 'department':              return r.department;
+        case 'month':                   return r.month;
+        case 'year':                    return r.year;
+        case 'avg_final_score':         return r.avgFinalScore ?? '—';
+        case 'manager_code':            return r.managerCode;
+        case 'manager_name':            return r.managerName;
+        case 'manager_avg_final_score': return r.managerAvgFinalScore ?? '—';
+        default:                        return '';
+      }
+    };
+    const exportData = filtered.map(r => {
+      const out: Record<string, unknown> = {};
+      for (const fld of visible) out[fld.label] = valueFor(r, fld.field_key);
+      return out;
+    });
+    const ws = XLSX.utils.json_to_sheet(exportData, { header: visible.map(fld => fld.label) });
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Team Vs Manager Score');
     XLSX.writeFile(wb, `Team_Vs_Manager_Score_${month}_${year}.xlsx`);
