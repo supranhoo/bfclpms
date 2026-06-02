@@ -15,6 +15,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { PageHeader } from '@/components/layout/PageHeader';
 import { FileText, CheckCircle2, Clock, AlertCircle, Download, AlertTriangle } from 'lucide-react';
 import * as XLSX from 'xlsx';
+import { useResolvedReportFields } from '@/hooks/useResolvedReportFields';
+
+const KRA_DEFAULT_FIELDS = [
+  { field_key: 'category',   default_label: 'Category',   default_sort: 10, is_required: true },
+  { field_key: 'total',      default_label: 'Total KPIs', default_sort: 20 },
+  { field_key: 'approved',   default_label: 'Approved',   default_sort: 30 },
+  { field_key: 'completion', default_label: 'Completion', default_sort: 40 },
+] as const;
 import { useToast } from '@/hooks/use-toast';
 
 const statusColors: Record<string, string> = {
