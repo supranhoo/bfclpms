@@ -13,6 +13,22 @@ import { PageHeader } from '@/components/layout/PageHeader';
 import { Download, Search, ClipboardList, CheckCircle2, AlertTriangle, Edit, UserCog, User } from 'lucide-react';
 import { format } from 'date-fns';
 import * as XLSX from 'xlsx';
+import { useResolvedReportFields } from '@/hooks/useResolvedReportFields';
+
+const AUD_DEFAULT_FIELDS = [
+  { field_key: 'timestamp',       default_label: 'Timestamp',       default_sort: 10, is_required: true },
+  { field_key: 'action',          default_label: 'Action',          default_sort: 20, is_required: true },
+  { field_key: 'kpi_name',        default_label: 'KPI Name',        default_sort: 30 },
+  { field_key: 'kra_name',        default_label: 'KRA Name',        default_sort: 40 },
+  { field_key: 'review_period',   default_label: 'Review Period',   default_sort: 50 },
+  { field_key: 'review_year',     default_label: 'Review Year',     default_sort: 60 },
+  { field_key: 'performed_by',    default_label: 'Performed By',    default_sort: 70 },
+  { field_key: 'performer_email', default_label: 'Performer Email', default_sort: 80 },
+  { field_key: 'on_behalf_of',    default_label: 'On Behalf Of',    default_sort: 90 },
+  { field_key: 'on_behalf_role',  default_label: 'On Behalf Role',  default_sort: 100 },
+  { field_key: 'admin_reason',    default_label: 'Admin Reason',    default_sort: 110 },
+  { field_key: 'details',         default_label: 'Details',         default_sort: 120 },
+] as const;
 
 interface AuditLog {
   id: string;
@@ -131,6 +147,7 @@ const actionColors: Record<string, string> = {
 export default function AuditTrailReport() {
   const { canDownload } = useReportAccess();
   const canExport = canDownload('audit-trail');
+  const resolvedFields = useResolvedReportFields('RPT-AUD-001', AUD_DEFAULT_FIELDS);
   const [selectedPeriod, setSelectedPeriod] = useState<string>('all');
   const [selectedYear, setSelectedYear] = useState<string>('all');
   const [selectedAction, setSelectedAction] = useState<string>('all');
@@ -273,22 +290,30 @@ export default function AuditTrailReport() {
 
   // Export to Excel - include on_behalf info
   const handleExport = () => {
-    const exportData = filteredLogs.map(log => ({
-      'Timestamp': format(new Date(log.created_at), 'yyyy-MM-dd HH:mm:ss'),
-      'Action': actionLabels[log.action] || log.action,
-      'KPI Name': log.kpi?.kpi_name || 'N/A',
-      'KRA Name': log.kpi?.kra_name || 'N/A',
-      'Review Period': log.kpi?.review_period || 'N/A',
-      'Review Year': log.kpi?.review_year || 'N/A',
-      'Performed By': log.performer?.full_name || 'N/A',
-      'Performer Email': log.performer?.email || 'N/A',
-      'On Behalf Of': log.on_behalf_profile?.full_name || '',
-      'On Behalf Role': log.on_behalf_role || '',
-      'Admin Reason': log.metadata?.reason ? String(log.metadata.reason) : '',
-      'Details': log.new_value ? JSON.stringify(log.new_value) : '',
-    }));
-
-    const ws = XLSX.utils.json_to_sheet(exportData);
+    const visible = resolvedFields.filter((f) => !f.is_hidden);
+    const valueFor = (log: typeof filteredLogs[number], key: string): string | number => {
+      switch (key) {
+        case 'timestamp':       return format(new Date(log.created_at), 'yyyy-MM-dd HH:mm:ss');
+        case 'action':          return actionLabels[log.action] || log.action;
+        case 'kpi_name':        return log.kpi?.kpi_name || 'N/A';
+        case 'kra_name':        return log.kpi?.kra_name || 'N/A';
+        case 'review_period':   return log.kpi?.review_period || 'N/A';
+        case 'review_year':     return log.kpi?.review_year || 'N/A';
+        case 'performed_by':    return log.performer?.full_name || 'N/A';
+        case 'performer_email': return log.performer?.email || 'N/A';
+        case 'on_behalf_of':    return log.on_behalf_profile?.full_name || '';
+        case 'on_behalf_role':  return log.on_behalf_role || '';
+        case 'admin_reason':    return log.metadata?.reason ? String(log.metadata.reason) : '';
+        case 'details':         return log.new_value ? JSON.stringify(log.new_value) : '';
+        default: return '';
+      }
+    };
+    const exportData = filteredLogs.map((log) => {
+      const row: Record<string, string | number> = {};
+      for (const fld of visible) row[fld.label] = valueFor(log, fld.field_key);
+      return row;
+    });
+    const ws = XLSX.utils.json_to_sheet(exportData, { header: visible.map((f) => f.label) });
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Audit Trail');
     XLSX.writeFile(wb, `Audit_Trail_Report_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);

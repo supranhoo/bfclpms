@@ -41,6 +41,25 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import { ChartContainer, ChartTooltipContent } from '@/components/ui/chart';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import * as XLSX from 'xlsx';
+import { useResolvedReportFields } from '@/hooks/useResolvedReportFields';
+
+const TNI_DEFAULT_FIELDS = [
+  { field_key: 'company',                 default_label: 'Company',                 default_sort: 10 },
+  { field_key: 'employee_name',           default_label: 'Employee Name',           default_sort: 20, is_required: true },
+  { field_key: 'employee_code',           default_label: 'Employee Code',           default_sort: 30, is_required: true },
+  { field_key: 'department',              default_label: 'Department',              default_sort: 40 },
+  { field_key: 'designation',             default_label: 'Designation',             default_sort: 50 },
+  { field_key: 'kpi',                     default_label: 'KPI',                     default_sort: 60 },
+  { field_key: 'kra',                     default_label: 'KRA',                     default_sort: 70 },
+  { field_key: 'category',                default_label: 'Category',                default_sort: 80 },
+  { field_key: 'score',                   default_label: 'Score',                   default_sort: 90 },
+  { field_key: 'gap_type',                default_label: 'Gap Type',                default_sort: 100 },
+  { field_key: 'priority',                default_label: 'Priority',                default_sort: 110 },
+  { field_key: 'status',                  default_label: 'Status',                  default_sort: 120 },
+  { field_key: 'training_recommendation', default_label: 'Training Recommendation', default_sort: 130 },
+  { field_key: 'period',                  default_label: 'Period',                  default_sort: 140 },
+  { field_key: 'year',                    default_label: 'Year',                    default_sort: 150 },
+] as const;
 
 const PRIORITY_COLORS = {
   high: 'hsl(var(--destructive))',
@@ -138,6 +157,7 @@ export default function TNIReport() {
   const { canDownload } = useReportAccess();
   const canExport = canDownload('tni');
   const { getCompanyCode } = useCompanyFilter();
+  const resolvedFields = useResolvedReportFields('RPT-TNI-001', TNI_DEFAULT_FIELDS);
   const currentYear = new Date().getFullYear();
   const currentMonth = MONTHS[new Date().getMonth()];
   const [periodMode, setPeriodMode] = useState<PeriodMode>('single');
@@ -227,26 +247,39 @@ export default function TNIReport() {
 
   const handleExport = () => {
     if (!trainingNeeds) return;
-    const exportData = trainingNeeds.map(tn => ({
-      'Company': getCompanyCode(tn.employee_id || ''),
-      'Employee Name': tn.employee?.full_name || '',
-      'Employee Code': tn.employee?.employee_code || '',
-      'Department': (tn.employee as any)?.department?.name || '',
-      'Designation': tn.employee?.designation || '',
-      'KPI': tn.kpi?.kpi_name || '',
-      'KRA': tn.kpi?.kra_name || '',
-      'Category': tn.category?.name || '',
-      'Score': tn.score,
-      'Gap Type': tn.gap_type,
-      'Priority': tn.priority,
-      'Status': tn.status,
-      'Training Recommendation': tn.training_recommendation || '',
-      'Period': tn.review_period,
-      'Year': tn.review_year,
-    }));
+    const visible = resolvedFields.filter((f) => !f.is_hidden);
+    const valueFor = (tn: typeof trainingNeeds[number], key: string): string | number => {
+      switch (key) {
+        case 'company':                 return getCompanyCode(tn.employee_id || '');
+        case 'employee_name':           return tn.employee?.full_name || '';
+        case 'employee_code':           return tn.employee?.employee_code || '';
+        case 'department':              return (tn.employee as any)?.department?.name || '';
+        case 'designation':             return tn.employee?.designation || '';
+        case 'kpi':                     return tn.kpi?.kpi_name || '';
+        case 'kra':                     return tn.kpi?.kra_name || '';
+        case 'category':                return tn.category?.name || '';
+        case 'score':                   return tn.score;
+        case 'gap_type':                return tn.gap_type;
+        case 'priority':                return tn.priority;
+        case 'status':                  return tn.status;
+        case 'training_recommendation': return tn.training_recommendation || '';
+        case 'period':                  return tn.review_period;
+        case 'year':                    return tn.review_year;
+        default: return '';
+      }
+    };
+    const exportData = trainingNeeds.map((tn) => {
+      const row: Record<string, string | number> = {};
+      for (const fld of visible) row[fld.label] = valueFor(tn, fld.field_key);
+      return row;
+    });
 
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(exportData), 'Detail');
+    XLSX.utils.book_append_sheet(
+      wb,
+      XLSX.utils.json_to_sheet(exportData, { header: visible.map((f) => f.label) }),
+      'Detail',
+    );
 
     // Monthly Summary sheet — pivot by (Year, Month)
     const buckets = new Map<string, {

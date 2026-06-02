@@ -22,6 +22,24 @@ import { EmployeeStatusFilter } from '@/components/reports/EmployeeStatusFilter'
 import { applyEmployeeStatusFilter, employeeStatusLabel, type EmployeeStatusMode } from '@/lib/reportEmployeeFilter';
 import { useEmployeeFilterOptions } from '@/hooks/useEmployeeFilterOptions';
 import * as XLSX from 'xlsx';
+import { useResolvedReportFields } from '@/hooks/useResolvedReportFields';
+
+const EPS_DEFAULT_FIELDS = [
+  { field_key: 'company',            default_label: 'Company',            default_sort: 10 },
+  { field_key: 'month',              default_label: 'Month',              default_sort: 20 },
+  { field_key: 'employee_id',        default_label: 'Employee ID',        default_sort: 30, is_required: true },
+  { field_key: 'full_name',          default_label: 'Full Name',          default_sort: 40, is_required: true },
+  { field_key: 'division',           default_label: 'Division',           default_sort: 50 },
+  { field_key: 'department',         default_label: 'Department',         default_sort: 60 },
+  { field_key: 'designation',        default_label: 'Designation',        default_sort: 70 },
+  { field_key: 'reporting_manager',  default_label: 'Reporting Manager',  default_sort: 80 },
+  { field_key: 'functional_manager', default_label: 'Functional Manager', default_sort: 90 },
+  { field_key: 'review_status',      default_label: 'Review Status',      default_sort: 100 },
+  { field_key: 'total_score',        default_label: 'Total Score',        default_sort: 110 },
+  { field_key: 'out_of_score',       default_label: 'Out of Score',       default_sort: 120 },
+  { field_key: 'overall_rating',     default_label: 'Overall Rating',     default_sort: 130 },
+  { field_key: 'percentage',         default_label: 'Percentage',         default_sort: 140 },
+] as const;
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 
 const MONTHS = [
@@ -91,6 +109,7 @@ export default function EmployeePerformanceSummary() {
   const { canDownload } = useReportAccess();
   const canExport = canDownload('employee-summary');
   const { getCompanyCode } = useCompanyFilter();
+  const resolvedFields = useResolvedReportFields('RPT-EPS-001', EPS_DEFAULT_FIELDS);
   const { isReady, user } = useAuth();
   const currentYear = new Date().getFullYear();
   
@@ -538,48 +557,48 @@ export default function EmployeePerformanceSummary() {
 
   const handleExport = () => {
     if (!filteredData.length) return;
-
-    const exportData = filteredData.map(row => {
-      const percentage = row.outOfScore > 0 
+    const visible = resolvedFields.filter((f) => !f.is_hidden);
+    const valueFor = (row: typeof filteredData[number], key: string): string | number => {
+      const percentage = row.outOfScore > 0
         ? ((row.totalScore / row.outOfScore) * 100).toFixed(2) + '%'
         : '0.00%';
       const rating = calculateRating(row.totalScore, row.outOfScore, row.totalWeight);
-
-      return {
-        'Company': getCompanyCode(row.employeeId),
-        'Month': formatPeriod(row.reviewPeriod, row.reviewYear),
-        'Employee ID': row.employeeCode,
-        'Full Name': row.fullName,
-        'Division': row.division,
-        'Department': row.department,
-        'Designation': row.designation,
-        'Reporting Manager': row.reportingManager,
-        'Functional Manager': row.functionalManager,
-        'Review Status': STATUS_PRIORITY_ORDER
-          .filter(s => (row.statusCounts[s] || 0) > 0)
-          .map(s => {
-            const count = row.statusCounts[s];
-            const label = STATUS_LABELS[s] || s;
-            return count > 1 ? `${label} (${count})` : label;
-          })
-          .join(', '),
-        'Total Score': row.totalScore,
-        'Out of Score': row.outOfScore,
-        'Overall Rating': rating,
-        'Percentage': percentage,
-      };
+      const reviewStatus = STATUS_PRIORITY_ORDER
+        .filter(s => (row.statusCounts[s] || 0) > 0)
+        .map(s => {
+          const count = row.statusCounts[s];
+          const label = STATUS_LABELS[s] || s;
+          return count > 1 ? `${label} (${count})` : label;
+        })
+        .join(', ');
+      switch (key) {
+        case 'company':            return getCompanyCode(row.employeeId);
+        case 'month':              return formatPeriod(row.reviewPeriod, row.reviewYear);
+        case 'employee_id':        return row.employeeCode;
+        case 'full_name':          return row.fullName;
+        case 'division':           return row.division;
+        case 'department':         return row.department;
+        case 'designation':        return row.designation;
+        case 'reporting_manager':  return row.reportingManager;
+        case 'functional_manager': return row.functionalManager;
+        case 'review_status':      return reviewStatus;
+        case 'total_score':        return row.totalScore;
+        case 'out_of_score':       return row.outOfScore;
+        case 'overall_rating':     return rating;
+        case 'percentage':         return percentage;
+        default: return '';
+      }
+    };
+    const exportData = filteredData.map((row) => {
+      const out: Record<string, string | number> = {};
+      for (const fld of visible) out[fld.label] = valueFor(row, fld.field_key);
+      return out;
     });
-
-    const ws = XLSX.utils.json_to_sheet(exportData);
+    const ws = XLSX.utils.json_to_sheet(exportData, { header: visible.map((f) => f.label) });
     const wb = XLSX.utils.book_new();
     // Prepend metadata header row indicating filter scope
     XLSX.utils.sheet_add_aoa(ws, [[`Filter: ${employeeStatusLabel(empStatusMode)}`]], { origin: -1 });
     XLSX.utils.book_append_sheet(wb, ws, 'Employee Performance Summary');
-    
-    ws['!cols'] = [
-      { wch: 10 }, { wch: 12 }, { wch: 30 }, { wch: 25 }, { wch: 35 }, { wch: 30 },
-      { wch: 30 }, { wch: 25 }, { wch: 18 }, { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 12 },
-    ];
 
     XLSX.writeFile(wb, `Employee_Performance_Summary${selectedPeriod !== 'all' ? `_${selectedPeriod}` : ''}_${selectedYear}.xlsx`);
   };

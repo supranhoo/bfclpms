@@ -21,7 +21,8 @@ type: feature
 - Wired consumers (XLSX export only — table rendering wiring is per-page follow-up):
   - `RPT-PERF-001` Performance (Phase 4)
   - `RPT-KRA-001` KRA Issuance, `RPT-DEP-001` Department, `RPT-VAR-001` Variance, `RPT-ISS-001` Issues (Phase 5a)
-  Other reports keep their hardcoded columns until they wire `useResolvedReportFields()` (Phase 5b for Tier A flat-table reports, Phase 6 for composite/tabbed/matrix reports).
+  - `RPT-TNI-001` TNI, `RPT-EPS-001` Employee Performance Summary, `RPT-CMP-001` Completion, `RPT-AUD-001` Audit Trail, `RPT-QRY-001` Query, `RPT-KPID-001` KPI Detail, `RPT-KST-001` KPI Status Tracker, `RPT-BNK-001` Bottleneck (Phase 5b — all Tier A flat-table reports now wired)
+  Tier B reports (Incentive, KPI-Employee Matrix, Monthly Scorecard, KPI Journey, KPI Scorecard Detail, Manager-vs-Team) keep hardcoded columns until Phase 6.
 
 ## DB
 - `report_registry` — admin write, authenticated read.

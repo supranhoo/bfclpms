@@ -18,6 +18,26 @@ import { FrequencyLockToggle } from '@/components/ui/FrequencyLockToggle';
 import { isKpiLockedForPeriod } from '@/lib/frequencyUtils';
 import { useBulkEmployeeWorkflows } from '@/hooks/useWorkflowConfig';
 import * as XLSX from 'xlsx';
+import { useResolvedReportFields } from '@/hooks/useResolvedReportFields';
+
+const KST_DEFAULT_FIELDS = [
+  { field_key: 'row_num',          default_label: '#',                default_sort: 10,  is_required: true, is_renamable: false },
+  { field_key: 'company',          default_label: 'Company',          default_sort: 20 },
+  { field_key: 'employee_code',    default_label: 'Employee Code',    default_sort: 30,  is_required: true },
+  { field_key: 'employee_name',    default_label: 'Employee Name',    default_sort: 40,  is_required: true },
+  { field_key: 'designation',      default_label: 'Designation',      default_sort: 50 },
+  { field_key: 'department',       default_label: 'Department',       default_sort: 60 },
+  { field_key: 'division',         default_label: 'Division',         default_sort: 70 },
+  { field_key: 'category',         default_label: 'Category',         default_sort: 80 },
+  { field_key: 'kra',              default_label: 'KRA',              default_sort: 90 },
+  { field_key: 'kpi',              default_label: 'KPI',              default_sort: 100 },
+  { field_key: 'weightage',        default_label: 'Weightage',        default_sort: 110 },
+  { field_key: 'frequency',        default_label: 'Frequency',        default_sort: 120 },
+  { field_key: 'current_status',   default_label: 'Current Status',   default_sort: 130 },
+  { field_key: 'pending_at_level', default_label: 'Pending At Level', default_sort: 140 },
+  { field_key: 'days_in_stage',    default_label: 'Days in Stage',    default_sort: 150 },
+  { field_key: 'org_level',        default_label: 'Org-Level',        default_sort: 160 },
+] as const;
 import { differenceInDays } from 'date-fns';
 
 const FULL_MONTHS = [
@@ -100,6 +120,7 @@ export default function KpiStatusTracker() {
   const { canDownload } = useReportAccess();
   const canExport = canDownload('kpi-status-tracker');
   const { getCompanyCode } = useCompanyFilter();
+  const resolvedFields = useResolvedReportFields('RPT-KST-001', KST_DEFAULT_FIELDS);
   const currentYear = new Date().getFullYear();
   const currentMonthIdx = new Date().getMonth();
 
@@ -287,31 +308,34 @@ export default function KpiStatusTracker() {
   // Excel export
   const handleExport = () => {
     if (!filteredRows.length) return;
-    const exportData = filteredRows.map((r, i) => ({
-      '#': i + 1,
-      'Company': getCompanyCode(r.employeeId),
-      'Employee Code': r.employeeCode,
-      'Employee Name': r.employeeName,
-      'Designation': r.designation,
-      'Department': r.department,
-      'Division': r.division,
-      'Category': r.category,
-      'KRA': r.kraName,
-      'KPI': r.kpiName,
-      'Weightage': r.weightage,
-      'Frequency': r.frequency,
-      'Current Status': r.statusLabel,
-      'Pending At Level': r.pendingAt,
-      'Days in Stage': r.daysPending,
-      'Org-Level': r.isOrgLevel ? 'Yes' : 'No',
-    }));
-
-    const ws = XLSX.utils.json_to_sheet(exportData);
-    ws['!cols'] = [
-      { wch: 5 }, { wch: 14 }, { wch: 28 }, { wch: 20 }, { wch: 22 }, { wch: 20 },
-      { wch: 20 }, { wch: 30 }, { wch: 35 }, { wch: 10 }, { wch: 14 }, { wch: 20 },
-      { wch: 22 }, { wch: 12 }, { wch: 10 },
-    ];
+    const visible = resolvedFields.filter((f) => !f.is_hidden);
+    const valueFor = (r: typeof filteredRows[number], i: number, key: string): string | number => {
+      switch (key) {
+        case 'row_num':          return i + 1;
+        case 'company':          return getCompanyCode(r.employeeId);
+        case 'employee_code':    return r.employeeCode;
+        case 'employee_name':    return r.employeeName;
+        case 'designation':      return r.designation;
+        case 'department':       return r.department;
+        case 'division':         return r.division;
+        case 'category':         return r.category;
+        case 'kra':              return r.kraName;
+        case 'kpi':              return r.kpiName;
+        case 'weightage':        return r.weightage;
+        case 'frequency':        return r.frequency;
+        case 'current_status':   return r.statusLabel;
+        case 'pending_at_level': return r.pendingAt;
+        case 'days_in_stage':    return r.daysPending;
+        case 'org_level':        return r.isOrgLevel ? 'Yes' : 'No';
+        default: return '';
+      }
+    };
+    const exportData = filteredRows.map((r, i) => {
+      const row: Record<string, string | number> = {};
+      for (const fld of visible) row[fld.label] = valueFor(r, i, fld.field_key);
+      return row;
+    });
+    const ws = XLSX.utils.json_to_sheet(exportData, { header: visible.map((f) => f.label) });
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'KPI Status Tracker');
     XLSX.writeFile(wb, `KPI_Status_Tracker_${selectedPeriod}_${selectedYear}.xlsx`);

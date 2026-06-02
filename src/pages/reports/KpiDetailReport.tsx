@@ -19,6 +19,30 @@ import { FrequencyLockToggle } from '@/components/ui/FrequencyLockToggle';
 import { isKpiLockedForPeriod } from '@/lib/frequencyUtils';
 import { useBulkEmployeeWorkflows } from '@/hooks/useWorkflowConfig';
 import * as XLSX from 'xlsx';
+import { useResolvedReportFields } from '@/hooks/useResolvedReportFields';
+
+const KPID_DEFAULT_FIELDS = [
+  { field_key: 'company',        default_label: 'Company',        default_sort: 10 },
+  { field_key: 'employee_code',  default_label: 'Employee Code',  default_sort: 20, is_required: true },
+  { field_key: 'employee_name',  default_label: 'Employee Name',  default_sort: 30, is_required: true },
+  { field_key: 'department',     default_label: 'Department',     default_sort: 40 },
+  { field_key: 'category',       default_label: 'Category',       default_sort: 50 },
+  { field_key: 'kra',            default_label: 'KRA',            default_sort: 60 },
+  { field_key: 'kpi',            default_label: 'KPI',            default_sort: 70 },
+  { field_key: 'month',          default_label: 'Month',          default_sort: 80 },
+  { field_key: 'weightage',      default_label: 'Weightage',      default_sort: 90 },
+  { field_key: 'self',           default_label: 'Self',           default_sort: 100 },
+  { field_key: 'manager',        default_label: 'Manager',        default_sort: 110 },
+  { field_key: 'skip_level',     default_label: 'Skip-Level',     default_sort: 120 },
+  { field_key: 'hr_pms',         default_label: 'HR PMS',         default_sort: 130 },
+  { field_key: 'auditor',        default_label: 'Auditor',        default_sort: 140 },
+  { field_key: 'mgmt',           default_label: 'Mgmt',           default_sort: 150 },
+  { field_key: 'final',          default_label: 'Final',          default_sort: 160 },
+  { field_key: 'total_score',    default_label: 'Total Score',    default_sort: 170 },
+  { field_key: 'out_of_score',   default_label: 'Out of Score',   default_sort: 180 },
+  { field_key: 'overall_rating', default_label: 'Overall Rating', default_sort: 190 },
+  { field_key: 'percentage',     default_label: 'Percentage',     default_sort: 200 },
+] as const;
 
 const FULL_MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -97,6 +121,7 @@ export default function KpiDetailReport() {
   const { canDownload } = useReportAccess();
   const canExport = canDownload('kpi-detail');
   const { getCompanyCode } = useCompanyFilter();
+  const resolvedFields = useResolvedReportFields('RPT-KPID-001', KPID_DEFAULT_FIELDS);
   const currentYear = new Date().getFullYear();
 
   const [selectedYear, setSelectedYear] = useState(currentYear.toString());
@@ -366,35 +391,38 @@ export default function KpiDetailReport() {
   // Excel export
   const handleExport = () => {
     if (!filteredRows.length) return;
-    const exportData = filteredRows.map(r => ({
-      'Company': getCompanyCode(r.employeeId),
-      'Employee Code': r.employeeCode,
-      'Employee Name': r.employeeName,
-      'Department': r.department,
-      'Category': r.category,
-      'KRA': r.kraName,
-      'KPI': r.kpiName,
-      'Month': r.reviewPeriod,
-      'Weightage': r.weightage,
-      'Self': r.isNa ? 'N/A' : (r.selfScore ?? ''),
-      'Manager': r.isNa ? 'N/A' : (r.managerScore ?? ''),
-      'Skip-Level': r.isNa ? 'N/A' : (r.skipLevelScore ?? ''),
-      'HR PMS': r.isNa ? 'N/A' : (r.hrPmsScore ?? ''),
-      'Auditor': r.isNa ? 'N/A' : (r.auditorScore ?? ''),
-      'Mgmt': r.isNa ? 'N/A' : (r.managementScore ?? ''),
-      'Final': r.isNa ? 'N/A' : (r.finalScore ?? ''),
-      'Total Score': r.isNa ? '' : (r.totalScore !== null ? r.totalScore.toFixed(2) : ''),
-      'Out of Score': r.isNa ? '' : (r.outOfScore ?? ''),
-      'Overall Rating': r.isNa ? 'N/A' : (r.overallRating ?? ''),
-      'Percentage': r.isNa ? '' : (r.percentage !== null ? r.percentage.toFixed(1) + '%' : ''),
-    }));
-
-    const ws = XLSX.utils.json_to_sheet(exportData);
-    ws['!cols'] = [
-      { wch: 14 }, { wch: 28 }, { wch: 22 }, { wch: 22 }, { wch: 30 }, { wch: 35 },
-      { wch: 12 }, { wch: 10 }, { wch: 8 }, { wch: 10 }, { wch: 12 }, { wch: 10 },
-      { wch: 10 }, { wch: 8 }, { wch: 8 }, { wch: 12 }, { wch: 12 }, { wch: 22 }, { wch: 12 },
-    ];
+    const visible = resolvedFields.filter((f) => !f.is_hidden);
+    const valueFor = (r: typeof filteredRows[number], key: string): string | number => {
+      switch (key) {
+        case 'company':        return getCompanyCode(r.employeeId);
+        case 'employee_code':  return r.employeeCode;
+        case 'employee_name':  return r.employeeName;
+        case 'department':     return r.department;
+        case 'category':       return r.category;
+        case 'kra':            return r.kraName;
+        case 'kpi':            return r.kpiName;
+        case 'month':          return r.reviewPeriod;
+        case 'weightage':      return r.weightage;
+        case 'self':           return r.isNa ? 'N/A' : (r.selfScore ?? '');
+        case 'manager':        return r.isNa ? 'N/A' : (r.managerScore ?? '');
+        case 'skip_level':     return r.isNa ? 'N/A' : (r.skipLevelScore ?? '');
+        case 'hr_pms':         return r.isNa ? 'N/A' : (r.hrPmsScore ?? '');
+        case 'auditor':        return r.isNa ? 'N/A' : (r.auditorScore ?? '');
+        case 'mgmt':           return r.isNa ? 'N/A' : (r.managementScore ?? '');
+        case 'final':          return r.isNa ? 'N/A' : (r.finalScore ?? '');
+        case 'total_score':    return r.isNa ? '' : (r.totalScore !== null ? r.totalScore.toFixed(2) : '');
+        case 'out_of_score':   return r.isNa ? '' : (r.outOfScore ?? '');
+        case 'overall_rating': return r.isNa ? 'N/A' : (r.overallRating ?? '');
+        case 'percentage':     return r.isNa ? '' : (r.percentage !== null ? r.percentage.toFixed(1) + '%' : '');
+        default: return '';
+      }
+    };
+    const exportData = filteredRows.map((r) => {
+      const row: Record<string, string | number> = {};
+      for (const fld of visible) row[fld.label] = valueFor(r, fld.field_key);
+      return row;
+    });
+    const ws = XLSX.utils.json_to_sheet(exportData, { header: visible.map((f) => f.label) });
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'KPI Detail');
     XLSX.writeFile(wb, `KPI_Detail_Report_${selectedYear}${selectedPeriod !== 'all' ? `_${selectedPeriod}` : ''}.xlsx`);

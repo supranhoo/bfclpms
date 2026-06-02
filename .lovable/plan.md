@@ -81,6 +81,10 @@ Then in the Report Builder tab:
 - `src/lib/reports/catalog.test.ts` guards required-field presence and field_key uniqueness.
 - Admins must click **Seed** in System Settings → Report Builder to push the new field rows into `report_field_registry`. Flag stays off by default → zero behaviour change.
 
-**Remaining Tier A (Phase 5b):** TNI, Employee Performance Summary, Completion, Audit Trail, Query, KPI Detail, KPI Status Tracker, Bottleneck. Same pattern — catalog seed + export switch.
+**Shipped (Phase 5b):**
+- Catalog + XLSX export wired for the remaining 8 Tier A reports: TNI (`RPT-TNI-001`), Employee Performance Summary (`RPT-EPS-001`), Completion (`RPT-CMP-001`), Audit Trail (`RPT-AUD-001`), Query (`RPT-QRY-001`), KPI Detail (`RPT-KPID-001`), KPI Status Tracker (`RPT-KST-001`), Bottleneck (`RPT-BNK-001`).
+- All 12 Tier A reports now resolve their export columns via `useResolvedReportFields(reportId, DEFAULT_FIELDS)`; flag-off path returns hardcoded defaults — zero behaviour change.
+- KST `#` column is marked `is_required: true, is_renamable: false` so the row counter can't be hidden or renamed.
+- Admins must re-run **Seed** in System Settings → Report Builder to upsert the new field rows.
 
 **Tier B (Phase 6):** Incentive, KPI-Employee Matrix, Monthly Scorecard, KPI Journey, KPI Scorecard Detail, Manager-vs-Team views. These need bespoke field-discovery passes; not flat tables.

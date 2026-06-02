@@ -12,6 +12,22 @@ import { PageHeader } from '@/components/layout/PageHeader';
 import { Download, Clock, Users, Timer, ChevronLeft, ChevronRight, UserCheck, ShieldCheck, Eye, Gavel } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import * as XLSX from 'xlsx';
+import { useResolvedReportFields } from '@/hooks/useResolvedReportFields';
+
+const BNK_DEFAULT_FIELDS = [
+  { field_key: 'company',            default_label: 'Company',            default_sort: 10 },
+  { field_key: 'emp_code',           default_label: 'Emp Code',           default_sort: 20, is_required: true },
+  { field_key: 'employee_name',      default_label: 'Employee Name',      default_sort: 30, is_required: true },
+  { field_key: 'department',         default_label: 'Department',         default_sort: 40 },
+  { field_key: 'kra',                default_label: 'KRA',                default_sort: 50 },
+  { field_key: 'kpi_name',           default_label: 'KPI Name',           default_sort: 60 },
+  { field_key: 'period',             default_label: 'Period',             default_sort: 70 },
+  { field_key: 'year',               default_label: 'Year',               default_sort: 80 },
+  { field_key: 'current_stage',      default_label: 'Current Stage',      default_sort: 90 },
+  { field_key: 'responsible_person', default_label: 'Responsible Person', default_sort: 100 },
+  { field_key: 'days_pending',       default_label: 'Days Pending',       default_sort: 110 },
+  { field_key: 'last_updated',       default_label: 'Last Updated',       default_sort: 120 },
+] as const;
 import { useToast } from '@/hooks/use-toast';
 import { useBottleneckReport, ALL_STAGES, STAGE_LABELS, type BottleneckRow, type TopHolder } from '@/hooks/useBottleneckReport';
 import { format } from 'date-fns';
@@ -67,6 +83,7 @@ export default function BottleneckReport() {
   const canExport = canDownload('bottleneck');
   const { getCompanyCode } = useCompanyFilter();
   const { toast } = useToast();
+  const resolvedFields = useResolvedReportFields('RPT-BNK-001', BNK_DEFAULT_FIELDS);
   const {
     rows, allFilteredRows, stats, urgencyStats, topHolders, chartData, isLoading,
     selectedYear, setSelectedYear,
@@ -107,26 +124,35 @@ export default function BottleneckReport() {
       toast({ title: 'No data to export', variant: 'destructive' });
       return;
     }
-    const data = allFilteredRows.map((r: BottleneckRow) => ({
-      'Company': getCompanyCode(r.employeeId),
-      'Emp Code': r.employeeCode,
-      'Employee Name': r.employeeName,
-      'Department': r.departmentName,
-      'KRA': r.kraName,
-      'KPI Name': r.kpiName,
-      'Period': r.period,
-      'Year': r.year,
-      'Current Stage': r.currentStage,
-      'Responsible Person': r.responsiblePerson,
-      'Days Pending': r.daysPending,
-      'Last Updated': format(new Date(r.lastUpdated), 'dd-MMM-yyyy'),
-    }));
-    const ws = XLSX.utils.json_to_sheet(data);
+    const visible = resolvedFields.filter((f) => !f.is_hidden);
+    const valueFor = (r: BottleneckRow, key: string): string | number => {
+      switch (key) {
+        case 'company':            return getCompanyCode(r.employeeId);
+        case 'emp_code':           return r.employeeCode;
+        case 'employee_name':      return r.employeeName;
+        case 'department':         return r.departmentName;
+        case 'kra':                return r.kraName;
+        case 'kpi_name':           return r.kpiName;
+        case 'period':             return r.period;
+        case 'year':               return r.year;
+        case 'current_stage':      return r.currentStage;
+        case 'responsible_person': return r.responsiblePerson;
+        case 'days_pending':       return r.daysPending;
+        case 'last_updated':       return format(new Date(r.lastUpdated), 'dd-MMM-yyyy');
+        default: return '';
+      }
+    };
+    const data = allFilteredRows.map((r: BottleneckRow) => {
+      const row: Record<string, string | number> = {};
+      for (const fld of visible) row[fld.label] = valueFor(r, fld.field_key);
+      return row;
+    });
+    const ws = XLSX.utils.json_to_sheet(data, { header: visible.map((f) => f.label) });
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Bottleneck Report');
     XLSX.writeFile(wb, `Bottleneck_Report_${new Date().toISOString().split('T')[0]}.xlsx`);
     toast({ title: 'Report downloaded successfully' });
-  }, [allFilteredRows, toast]);
+  }, [allFilteredRows, toast, resolvedFields, getCompanyCode]);
 
   const urgencyChartData = [
     { name: '0-3 days', value: urgencyStats.green, color: URGENCY_COLORS.green },
