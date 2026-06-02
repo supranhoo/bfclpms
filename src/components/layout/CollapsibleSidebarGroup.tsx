@@ -1,4 +1,5 @@
-import { LucideIcon, ChevronDown, Folder, icons as LucideIcons } from 'lucide-react';
+import { useState } from 'react';
+import { LucideIcon, ChevronDown, ChevronRight, Folder, icons as LucideIcons } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { prefetchRoute } from '@/hooks/usePrefetchRoute';
@@ -59,6 +60,7 @@ export function CollapsibleSidebarGroup({
 
   const renderRow = (item: MenuItem, depth: number) => {
     const filteredKids = item.children ? filterByRole(item.children) : [];
+    const hasChildren = filteredKids.length > 0;
     const IconCmp: LucideIcon = (() => {
       if (!item.icon) return Folder;
       if (typeof item.icon === 'string') {
@@ -74,38 +76,23 @@ export function CollapsibleSidebarGroup({
       : item.color === 'muted' ? 'text-muted-foreground'
       : '';
     const isExternal = item.external || /^https?:\/\//i.test(item.path || '');
+    const hasPath = !!item.path && !isExternal;
     return (
       <SidebarMenuItem key={`${depth}:${item.path}`}>
-        <SidebarMenuButton
-          isActive={!isExternal && currentPath === item.path}
-          onClick={() => {
-            if (isExternal && item.path) {
-              window.open(item.path, '_blank', 'noopener,noreferrer');
-            } else if (item.path) {
-              onNavigate(item.path);
-            }
-          }}
-          onMouseEnter={() => !isExternal && item.path && prefetchRoute(item.path)}
-          onFocus={() => !isExternal && item.path && prefetchRoute(item.path)}
-          className="transition-colors duration-150 data-[active=true]:font-semibold data-[active=true]:bg-sidebar-accent/15 data-[active=true]:text-sidebar-primary"
-          style={depth > 0 ? { paddingLeft: `${0.5 + depth * 0.75}rem` } : undefined}
-        >
-          <IconCmp className={cn('h-4 w-4', colorCls)} />
-          <span>{item.title}</span>
-          {item.showBadge && inboxBadgeCount && inboxBadgeCount > 0 && (
-            <Badge
-              variant="destructive"
-              className="ml-auto h-5 min-w-5 px-1 flex items-center justify-center text-xs"
-            >
-              {inboxBadgeCount}
-            </Badge>
-          )}
-        </SidebarMenuButton>
-        {filteredKids.length > 0 && (
-          <SidebarMenu className="gap-0.5 ml-1 border-l border-sidebar-border/40 pl-1">
-            {filteredKids.map((c) => renderRow(c, depth + 1))}
-          </SidebarMenu>
-        )}
+        <NestedRow
+          item={item}
+          depth={depth}
+          IconCmp={IconCmp}
+          colorCls={colorCls}
+          isExternal={isExternal}
+          hasPath={hasPath}
+          hasChildren={hasChildren}
+          currentPath={currentPath}
+          onNavigate={onNavigate}
+          inboxBadgeCount={inboxBadgeCount}
+          renderRow={renderRow}
+          filteredKids={filteredKids}
+        />
       </SidebarMenuItem>
     );
   };
@@ -140,5 +127,95 @@ export function CollapsibleSidebarGroup({
         </CollapsibleContent>
       </SidebarGroup>
     </Collapsible>
+  );
+}
+
+interface NestedRowProps {
+  item: MenuItem;
+  depth: number;
+  IconCmp: LucideIcon;
+  colorCls: string;
+  isExternal: boolean;
+  hasPath: boolean;
+  hasChildren: boolean;
+  currentPath: string;
+  onNavigate: (path: string) => void;
+  inboxBadgeCount?: number;
+  renderRow: (item: MenuItem, depth: number) => JSX.Element;
+  filteredKids: MenuItem[];
+}
+
+function NestedRow({
+  item,
+  depth,
+  IconCmp,
+  colorCls,
+  isExternal,
+  hasPath,
+  hasChildren,
+  currentPath,
+  onNavigate,
+  inboxBadgeCount,
+  renderRow,
+  filteredKids,
+}: NestedRowProps) {
+  // Default expanded so existing menus do not disappear.
+  const [expanded, setExpanded] = useState(true);
+  const ChevCmp = expanded ? ChevronDown : ChevronRight;
+
+  return (
+    <>
+      <div className="relative flex items-center">
+        <SidebarMenuButton
+          isActive={!isExternal && currentPath === item.path}
+          onClick={() => {
+            if (hasChildren && !hasPath) {
+              setExpanded((v) => !v);
+              return;
+            }
+            if (isExternal && item.path) {
+              window.open(item.path, '_blank', 'noopener,noreferrer');
+            } else if (item.path) {
+              onNavigate(item.path);
+            }
+          }}
+          onMouseEnter={() => hasPath && prefetchRoute(item.path)}
+          onFocus={() => hasPath && prefetchRoute(item.path)}
+          className="transition-colors duration-150 data-[active=true]:font-semibold data-[active=true]:bg-sidebar-accent/15 data-[active=true]:text-sidebar-primary"
+          style={depth > 0 ? { paddingLeft: `${0.5 + depth * 0.75}rem` } : undefined}
+        >
+          <IconCmp className={cn('h-4 w-4', colorCls)} />
+          <span>{item.title}</span>
+          {item.showBadge && inboxBadgeCount && inboxBadgeCount > 0 && (
+            <Badge
+              variant="destructive"
+              className="ml-auto h-5 min-w-5 px-1 flex items-center justify-center text-xs"
+            >
+              {inboxBadgeCount}
+            </Badge>
+          )}
+        </SidebarMenuButton>
+        {hasChildren && (
+          <button
+            type="button"
+            aria-label={expanded ? 'Collapse' : 'Expand'}
+            aria-expanded={expanded}
+            onClick={(e) => {
+              e.stopPropagation();
+              e.preventDefault();
+              setExpanded((v) => !v);
+            }}
+            className="absolute right-1 top-1/2 -translate-y-1/2 p-1 rounded hover:bg-sidebar-accent/20 text-sidebar-foreground/60 hover:text-sidebar-foreground transition-colors"
+          >
+            <ChevCmp className="h-3.5 w-3.5" />
+          </button>
+        )}
+      </div>
+      {hasChildren && expanded && (
+          <SidebarMenu className="gap-0.5 ml-1 border-l border-sidebar-border/40 pl-1">
+            {filteredKids.map((c) => renderRow(c, depth + 1))}
+          </SidebarMenu>
+      )}
+    </>
   );
 }
