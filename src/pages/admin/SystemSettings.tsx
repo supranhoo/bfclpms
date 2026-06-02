@@ -817,7 +817,7 @@ export default function SystemSettings() {
   const SidebarNav = () => (
     <ScrollArea className="h-full">
       <nav className="space-y-1 p-3">
-        {SETTINGS_SECTIONS.map((section) => {
+        {sectionsResolved.map((section) => {
           const Icon = section.icon;
           const isActive = activeSection === section.key;
           return (
@@ -853,7 +853,7 @@ export default function SystemSettings() {
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            {SETTINGS_SECTIONS.map((section) => {
+            {sectionsResolved.map((section) => {
               const Icon = section.icon;
               return (
                 <SelectItem key={section.key} value={section.key}>
