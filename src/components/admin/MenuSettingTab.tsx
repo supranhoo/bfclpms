@@ -15,7 +15,7 @@ import { TooltipProvider } from '@/components/ui/tooltip';
 import { ConfirmDestructiveDialog } from '@/components/ui/ConfirmDestructiveDialog';
 import {
   Menu as MenuIcon, RotateCcw, Save, History,
-  AlertCircle, Eye, Sparkles, Database, Search, Plus,
+  AlertCircle, Eye, Sparkles, Database, Search, Plus, FolderInput,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
@@ -27,6 +27,7 @@ import { MENU_CATALOG, MENU_CATALOG_BY_KEY } from '@/lib/menu/catalog';
 import type { MenuOverrideRow, MenuRegistryRow, ResolvedMenuNode } from '@/lib/menu/types';
 import { MenuTreeDnd, type PendingMove, type LabelDraft } from './MenuTreeDnd';
 import { CreateMenuItemDialog } from './CreateMenuItemDialog';
+import { MoveUnderDialog } from './MoveUnderDialog';
 
 /** Menu Setting tab — Phase 3: full DnD reposition + rename + audit + reset. */
 export function MenuSettingTab() {
