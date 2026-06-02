@@ -31,6 +31,12 @@ type: feature
   - `RPT-INC-001` Incentive Report (Phase 6g — `MonthlyIncentiveTable` XLSX export wired through resolver; 30 fields with employee_code/employee_name/incentive_amount as required. Retroactive Adjustment tab and table UI remain hardcoded.)
   All Tier A + Tier B XLSX exports are now resolver-driven. Remaining hardcoded exports are non-tabular: MSR PDF, MSR Monthly Trend tab, Incentive Retroactive Adjustment tab.
 
+## Phase 7 — on-screen table rendering
+- Pattern: derive `visibleFields = resolvedFields.filter(f => !f.is_hidden)`; render `<TableHead>` per visible field and `<TableCell>` via a `renderCell(row, key)` helper that returns the JSX cell (badge/progress/formatted text). The XLSX `valueFor` and on-screen `renderCell` MUST stay symmetric on field_key — same keys back both surfaces.
+- Sort/filter UI tied to a specific column must keep referencing field_key, never index. If the field is hidden, hide the sort affordance.
+- Wired pages:
+  - `RPT-KRA-001` KRA Issuance — By Category table (Phase 7a). Second table (Managers Without KRAs) stays static; it's an unrelated diagnostic, not part of the registry.
+
 ## DB
 - `report_registry` — admin write, authenticated read.
 - `report_field_registry` — UNIQUE (`report_id`, `field_key`). Admin write, authenticated read.

@@ -91,9 +91,32 @@ export default function KRAIssuance() {
 
   const { toast } = useToast();
   const resolvedFields = useResolvedReportFields('RPT-KRA-001', KRA_DEFAULT_FIELDS);
+  const visibleFields = resolvedFields.filter((f) => !f.is_hidden);
+
+  // Resolver-driven cell renderer — same field keys back the XLSX export.
+  const renderCell = (cat: typeof categoryBreakdown[number], key: string) => {
+    switch (key) {
+      case 'category':
+        return (
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 rounded-full" style={{ backgroundColor: cat.color }} />
+            {cat.name}
+          </div>
+        );
+      case 'total':      return cat.total;
+      case 'approved':   return cat.approved;
+      case 'completion': return (
+        <Progress
+          value={cat.total > 0 ? (cat.approved / cat.total) * 100 : 0}
+          className="w-24 h-2"
+        />
+      );
+      default: return null;
+    }
+  };
 
   const handleExportExcel = useCallback(() => {
-    const visible = resolvedFields.filter((f) => !f.is_hidden);
+    const visible = visibleFields;
     const valueFor = (cat: typeof categoryBreakdown[number], key: string): string | number => {
       switch (key) {
         case 'category':   return cat.name;
@@ -209,19 +232,17 @@ export default function KRAIssuance() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Category</TableHead>
-                <TableHead>Total KPIs</TableHead>
-                <TableHead>Approved</TableHead>
-                <TableHead>Completion</TableHead>
+                {visibleFields.map((f) => (
+                  <TableHead key={f.field_key}>{f.label}</TableHead>
+                ))}
               </TableRow>
             </TableHeader>
             <TableBody>
               {categoryBreakdown.map(cat => (
                 <TableRow key={cat.name}>
-                  <TableCell><div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full" style={{ backgroundColor: cat.color }} />{cat.name}</div></TableCell>
-                  <TableCell>{cat.total}</TableCell>
-                  <TableCell>{cat.approved}</TableCell>
-                  <TableCell><Progress value={cat.total > 0 ? (cat.approved / cat.total) * 100 : 0} className="w-24 h-2" /></TableCell>
+                  {visibleFields.map((f) => (
+                    <TableCell key={f.field_key}>{renderCell(cat, f.field_key)}</TableCell>
+                  ))}
                 </TableRow>
               ))}
             </TableBody>
