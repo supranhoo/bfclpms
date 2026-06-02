@@ -81,9 +81,12 @@ export function validateCreate(args: ValidateCreateArgs): Validation {
   if (!parent) return { ok: false, reason: 'Selected parent does not exist.' };
   if (!parent.accepts_children) return { ok: false, reason: `Parent "${parent.default_label}" cannot contain children.` };
 
-  const parentLevel = resolvedByKey[parentKey]?.menu_level ?? parent.menu_level;
-  if (parentLevel + 1 !== level) {
-    return { ok: false, reason: `Level ${level} requires a level-${level - 1} parent (selected is level ${parentLevel}).` };
+  // Depth = position in the parent_key chain (root = 1). This matches how the
+  // sidebar actually nests items and is independent of the historical
+  // `menu_level` column (where seeded groups + items can both be level 2).
+  const parentDepth = computeDepth(parentKey, registryByKey, resolvedByKey);
+  if (parentDepth + 1 !== level) {
+    return { ok: false, reason: `Level ${level} requires a depth-${level - 1} parent (selected is depth ${parentDepth}).` };
   }
   if (level > 4) return { ok: false, reason: 'Nesting too deep (max 4 levels).' };
 
@@ -105,6 +108,31 @@ export function validateCreate(args: ValidateCreateArgs): Validation {
   }
 
   return { ok: true };
+}
+
+/**
+ * Computes the depth of a registry node by walking its `default_parent_key`
+ * chain. Root nodes (no parent) have depth 1. Resolved overrides take
+ * precedence over default parent. Cycle-safe (cap 10).
+ */
+export function computeDepth(
+  menuKey: string,
+  registryByKey: Record<string, MenuRegistryRow>,
+  resolvedByKey: Record<string, ResolvedMenuNode>,
+): number {
+  let depth = 1;
+  let current: string | null | undefined = menuKey;
+  const seen = new Set<string>();
+  for (let i = 0; i < 10 && current; i++) {
+    if (seen.has(current)) break;
+    seen.add(current);
+    const parent =
+      resolvedByKey[current]?.parent_key ?? registryByKey[current]?.default_parent_key ?? null;
+    if (!parent) return depth;
+    depth += 1;
+    current = parent;
+  }
+  return depth;
 }
 
 export interface CreateResult {

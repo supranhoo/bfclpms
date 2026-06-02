@@ -22,6 +22,7 @@ import {
 import type { MenuRegistryRow, ResolvedMenuNode } from '@/lib/menu/types';
 import {
   validateCreate, createCustomMenuItem, type DestinationType, generateMenuKey,
+  computeDepth,
 } from '@/lib/menu/customMenu';
 import { KNOWN_ROUTES } from '@/lib/menu/knownRoutes';
 
@@ -69,10 +70,10 @@ export function CreateMenuItemDialog({ open, onOpenChange, registry, resolvedByK
 
   const parentOptions = useMemo(() => {
     return registry.filter((r) => {
-      const resolvedLvl = resolvedByKey[r.menu_key]?.menu_level ?? r.menu_level;
-      return r.accepts_children && resolvedLvl === level - 1;
+      if (!r.accepts_children) return false;
+      return computeDepth(r.menu_key, registryByKey, resolvedByKey) === level - 1;
     });
-  }, [registry, resolvedByKey, level]);
+  }, [registry, registryByKey, resolvedByKey, level]);
 
   const parentLabel = parentKey ? (resolvedByKey[parentKey]?.label ?? registryByKey[parentKey]?.default_label ?? parentKey) : '';
   const previewPath = parentLabel ? `${parentLabel} > ${name || 'New Tab'}` : (name || 'New Tab');
@@ -149,20 +150,20 @@ export function CreateMenuItemDialog({ open, onOpenChange, registry, resolvedByK
               <Select value={String(level)} onValueChange={(v) => { setLevel(Number(v) as 2|3|4); setParentKey(''); }}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="2">Level 2 (top of section)</SelectItem>
-                  <SelectItem value="3">Level 3 (sub-tab)</SelectItem>
-                  <SelectItem value="4">Level 4 (deep tab)</SelectItem>
+                  <SelectItem value="2">Section item (inside a top group)</SelectItem>
+                  <SelectItem value="3">Sub-tab (inside a section item)</SelectItem>
+                  <SelectItem value="4">Deep tab (inside a sub-tab)</SelectItem>
                 </SelectContent>
               </Select>
             </div>
             <div className="space-y-1.5">
               <Label>Parent / location</Label>
               <Select value={parentKey} onValueChange={setParentKey}>
-                <SelectTrigger><SelectValue placeholder={`Choose level-${level - 1} parent…`} /></SelectTrigger>
+                <SelectTrigger><SelectValue placeholder={`Choose a depth-${level - 1} parent…`} /></SelectTrigger>
                 <SelectContent>
                   {parentOptions.length === 0 && (
                     <div className="px-2 py-1.5 text-xs text-muted-foreground">
-                      No eligible parents at level {level - 1}.
+                      No container at depth {level - 1} can accept children.
                     </div>
                   )}
                   {parentOptions.map((p) => (
