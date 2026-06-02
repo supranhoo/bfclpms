@@ -137,6 +137,20 @@ export default function SystemSettings() {
   const updateSetting = useUpdateSystemSetting();
   const isMobile = useIsMobile();
   const { canAccess } = useMenuAccess();
+  const { data: resolvedMenu } = useResolvedMenu();
+  const sectionsResolved = (() => {
+    const labelFor = (key: string, fallback: string) => {
+      const mk = SETTINGS_SECTION_KEY_TO_MENU_KEY[key];
+      return (mk && resolvedMenu?.labelByKey[mk]) || fallback;
+    };
+    const sortFor = (key: string, fallback: number) => {
+      const mk = SETTINGS_SECTION_KEY_TO_MENU_KEY[key];
+      return (mk && resolvedMenu?.byKey[mk]?.sort_order) ?? fallback;
+    };
+    return [...SETTINGS_SECTIONS]
+      .map((s, i) => ({ ...s, label: labelFor(s.key, s.label), _sort: sortFor(s.key, (i + 1) * 10) }))
+      .sort((a, b) => a._sort - b._sort);
+  })();
   const [searchParams, setSearchParams] = useSearchParams();
   const initialSection = (searchParams.get('section') as SectionKey) || 'branding';
   const [activeSection, setActiveSectionRaw] = useState<SectionKey>(initialSection);
