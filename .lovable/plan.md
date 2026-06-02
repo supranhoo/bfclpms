@@ -87,4 +87,6 @@ Then in the Report Builder tab:
 - KST `#` column is marked `is_required: true, is_renamable: false` so the row counter can't be hidden or renamed.
 - Admins must re-run **Seed** in System Settings → Report Builder to upsert the new field rows.
 
-**Tier B (Phase 6):** Incentive, KPI-Employee Matrix, Monthly Scorecard, KPI Journey, KPI Scorecard Detail, Manager-vs-Team views. These need bespoke field-discovery passes; not flat tables.
+**Tier B (Phase 6) — in progress:**
+- Shipped: `RPT-KSD-001` KPI Scorecard Detail — single-month and range XLSX exports both now flow through `useResolvedReportFields`; range path reuses the same resolved field set across all enumerated periods so column order/labels stay consistent.
+- Remaining: Incentive, KPI-Employee Matrix, Monthly Scorecard, KPI Journey, Manager-vs-Team views. Each needs its own field-discovery pass before wiring.
