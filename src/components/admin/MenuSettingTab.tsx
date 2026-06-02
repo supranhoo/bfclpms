@@ -8,17 +8,14 @@ import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger,
 } from '@/components/ui/dialog';
-import {
-  Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
-} from '@/components/ui/tooltip';
+import { TooltipProvider } from '@/components/ui/tooltip';
 import { ConfirmDestructiveDialog } from '@/components/ui/ConfirmDestructiveDialog';
 import {
-  Menu as MenuIcon, ChevronUp, ChevronDown, RotateCcw, Save, History,
-  AlertCircle, Lock, Eye, Sparkles, Database,
+  Menu as MenuIcon, RotateCcw, Save, History,
+  AlertCircle, Eye, Sparkles, Database, Search,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
@@ -28,13 +25,9 @@ import { useMenuRegistryAdmin } from '@/hooks/useResolvedMenu';
 import { applyOverrides, groupByParent } from '@/lib/menu/applyOverrides';
 import { MENU_CATALOG, MENU_CATALOG_BY_KEY } from '@/lib/menu/catalog';
 import type { MenuOverrideRow, MenuRegistryRow, ResolvedMenuNode } from '@/lib/menu/types';
+import { MenuTreeDnd, type PendingMove, type LabelDraft } from './MenuTreeDnd';
 
-type Draft = {
-  label: string | null;
-  sort_order: number | null;
-};
-
-/** Menu Setting tab — Phase 2 MVP: rename + reorder within parent + reset + audit. */
+/** Menu Setting tab — Phase 3: full DnD reposition + rename + audit + reset. */
 export function MenuSettingTab() {
   const qc = useQueryClient();
   const { profile } = useAuth();
@@ -52,37 +45,42 @@ export function MenuSettingTab() {
   const isEmpty = !registry.isLoading && (registry.data?.length ?? 0) === 0;
 
   // Drafts keyed by menu_key
-  const [drafts, setDrafts] = useState<Record<string, Draft>>({});
+  const [pendingMoves, setPendingMoves] = useState<Record<string, PendingMove>>({});
+  const [pendingLabels, setPendingLabels] = useState<Record<string, LabelDraft>>({});
   const [saving, setSaving] = useState(false);
   const [seeding, setSeeding] = useState(false);
+  const [search, setSearch] = useState('');
 
   const resolved = useMemo<ResolvedMenuNode[]>(() => {
     if (!registry.data) return [];
     return applyOverrides(registry.data, overrides.data ?? []);
   }, [registry.data, overrides.data]);
 
-  const grouped = useMemo(() => groupByParent(resolved), [resolved]);
   const registryByKey = useMemo<Record<string, MenuRegistryRow>>(
     () => Object.fromEntries((registry.data ?? []).map((r) => [r.menu_key, r])),
     [registry.data],
   );
 
-  // Apply pending drafts on top of resolved for the preview list
+  // Apply pending drafts on top of resolved for the live tree.
   const effective = useMemo<ResolvedMenuNode[]>(() => {
     return resolved.map((n) => {
-      const d = drafts[n.menu_key];
-      if (!d) return n;
+      const mv = pendingMoves[n.menu_key];
+      const lb = pendingLabels[n.menu_key];
+      if (!mv && !lb) return n;
       return {
         ...n,
-        label: d.label ?? n.label,
-        sort_order: d.sort_order ?? n.sort_order,
-        is_overridden: n.is_overridden || d.label !== null || d.sort_order !== null,
+        label: lb?.label ?? n.label,
+        parent_key: mv?.parent_key ?? n.parent_key,
+        sort_order: mv?.sort_order ?? n.sort_order,
+        menu_level: (mv?.menu_level ?? n.menu_level) as 1|2|3|4,
+        module_key: mv?.module_key ?? n.module_key,
+        is_overridden: true,
       };
     });
-  }, [resolved, drafts]);
+  }, [resolved, pendingMoves, pendingLabels]);
 
   const effectiveGrouped = useMemo(() => groupByParent(effective), [effective]);
-  const dirtyCount = Object.keys(drafts).length;
+  const dirtyCount = Object.keys(pendingMoves).length + Object.keys(pendingLabels).length;
 
   // ---- mutations -----------------------------------------------------------
   async function seedRegistry() {
@@ -105,51 +103,27 @@ export function MenuSettingTab() {
   }
 
   function setLabelDraft(menuKey: string, value: string) {
-    setDrafts((prev) => {
+    setPendingLabels((prev) => {
       const next = { ...prev };
       const reg = registryByKey[menuKey];
       const trimmed = value.trim();
       const matchesDefault = reg && trimmed === reg.default_label;
-      const cur = next[menuKey] ?? { label: null, sort_order: null };
-      cur.label = matchesDefault ? null : trimmed;
-      if (cur.label === null && cur.sort_order === null) delete next[menuKey];
-      else next[menuKey] = cur;
+      if (matchesDefault) delete next[menuKey];
+      else next[menuKey] = { label: trimmed };
       return next;
     });
   }
 
-  function moveItem(menuKey: string, direction: -1 | 1) {
-    const node = effective.find((n) => n.menu_key === menuKey);
-    if (!node) return;
-    const siblings = (effectiveGrouped.get(node.parent_key) ?? [])
-      .filter((s) => s.menu_key !== menuKey || true);
-    const idx = siblings.findIndex((s) => s.menu_key === menuKey);
-    const swapIdx = idx + direction;
-    if (swapIdx < 0 || swapIdx >= siblings.length) return;
-
-    // Renumber siblings 10,20,30… and swap.
-    const reordered = [...siblings];
-    [reordered[idx], reordered[swapIdx]] = [reordered[swapIdx], reordered[idx]];
-    setDrafts((prev) => {
-      const next = { ...prev };
-      reordered.forEach((n, i) => {
-        const newSort = (i + 1) * 10;
-        const reg = registryByKey[n.menu_key];
-        const matchesDefault = reg && newSort === reg.default_sort_order;
-        const cur = next[n.menu_key] ?? { label: null, sort_order: null };
-        cur.sort_order = matchesDefault ? null : newSort;
-        if (cur.label === null && cur.sort_order === null) delete next[n.menu_key];
-        else next[n.menu_key] = cur;
-      });
-      return next;
-    });
+  function applyMove(menuKey: string, move: PendingMove) {
+    setPendingMoves((prev) => ({ ...prev, [menuKey]: move }));
   }
 
   function resetItem(menuKey: string) {
-    setDrafts((prev) => {
-      const next = { ...prev };
-      delete next[menuKey];
-      return next;
+    setPendingMoves((prev) => {
+      const n = { ...prev }; delete n[menuKey]; return n;
+    });
+    setPendingLabels((prev) => {
+      const n = { ...prev }; delete n[menuKey]; return n;
     });
   }
 
@@ -160,34 +134,46 @@ export function MenuSettingTab() {
       const existingByKey = new Map<string, MenuOverrideRow>(
         (overrides.data ?? []).map((o) => [o.menu_key, o]),
       );
-      const rows = Object.entries(drafts).map(([menu_key, d]) => {
+      const touchedKeys = new Set<string>([
+        ...Object.keys(pendingMoves),
+        ...Object.keys(pendingLabels),
+      ]);
+      const rows = Array.from(touchedKeys).map((menu_key) => {
         const reg = registryByKey[menu_key];
+        const mv = pendingMoves[menu_key];
+        const lb = pendingLabels[menu_key];
+        const existing = existingByKey.get(menu_key);
         return {
           menu_key,
           client_id: null,
-          custom_label: d.label ?? reg?.default_label ?? null,
-          custom_parent_key: existingByKey.get(menu_key)?.custom_parent_key ?? reg?.default_parent_key ?? null,
-          custom_sort_order: d.sort_order ?? reg?.default_sort_order ?? null,
+          custom_label: lb?.label
+            ?? existing?.custom_label
+            ?? reg?.default_label
+            ?? null,
+          custom_parent_key: mv ? mv.parent_key : (existing?.custom_parent_key ?? reg?.default_parent_key ?? null),
+          custom_sort_order: mv ? mv.sort_order : (existing?.custom_sort_order ?? reg?.default_sort_order ?? null),
+          custom_menu_level: mv ? mv.menu_level : (existing?.custom_menu_level ?? null),
+          custom_module_key: mv ? mv.module_key : (existing?.custom_module_key ?? null),
           is_active: true,
           updated_by: profile?.id ?? null,
           updated_at: new Date().toISOString(),
         };
       });
 
-      // Upsert overrides by (menu_key, client_id IS NULL)
-      const { error: upErr } = await supabase
-        .from('menu_overrides' as any)
-        .upsert(rows as any, { onConflict: 'menu_key,client_id' });
-      // NOTE: PG UNIQUE on a COALESCE expression means we may need delete-then-insert.
-      // Fall back to per-row delete + insert if upsert chokes on the partial unique.
-      if (upErr) {
-        for (const r of rows) {
-          const existing = existingByKey.get(r.menu_key);
-          if (existing) {
-            await supabase.from('menu_overrides' as any).update(r).eq('id', existing.id);
-          } else {
-            await supabase.from('menu_overrides' as any).insert(r);
-          }
+      // Per-row upsert (the UNIQUE INDEX is on a COALESCE expression, so plain
+      // upsert can't target it). Update existing rows; insert new ones.
+      for (const r of rows) {
+        const existing = existingByKey.get(r.menu_key);
+        if (existing) {
+          const { error } = await supabase
+            .from('menu_overrides' as any)
+            .update(r).eq('id', existing.id);
+          if (error) throw error;
+        } else {
+          const { error } = await supabase
+            .from('menu_overrides' as any)
+            .insert(r);
+          if (error) throw error;
         }
       }
 
@@ -198,6 +184,9 @@ export function MenuSettingTab() {
         const entries: any[] = [];
         const prevLabel = prevO?.custom_label ?? reg?.default_label ?? null;
         const prevSort  = prevO?.custom_sort_order ?? reg?.default_sort_order ?? null;
+        const prevParent = prevO?.custom_parent_key ?? reg?.default_parent_key ?? null;
+        const prevLevel = prevO?.custom_menu_level ?? reg?.menu_level ?? null;
+        const prevModule = prevO?.custom_module_key ?? reg?.module_key ?? null;
         if (r.custom_label !== prevLabel) {
           entries.push({
             menu_key: r.menu_key, client_id: null, field: 'label',
@@ -210,6 +199,24 @@ export function MenuSettingTab() {
             old_value: String(prevSort), new_value: String(r.custom_sort_order), changed_by: profile?.id ?? null,
           });
         }
+        if (r.custom_parent_key !== prevParent) {
+          entries.push({
+            menu_key: r.menu_key, client_id: null, field: 'parent',
+            old_value: prevParent, new_value: r.custom_parent_key, changed_by: profile?.id ?? null,
+          });
+        }
+        if (r.custom_menu_level !== prevLevel && r.custom_menu_level !== null) {
+          entries.push({
+            menu_key: r.menu_key, client_id: null, field: 'menu_level',
+            old_value: String(prevLevel), new_value: String(r.custom_menu_level), changed_by: profile?.id ?? null,
+          });
+        }
+        if (r.custom_module_key !== prevModule && r.custom_module_key !== null) {
+          entries.push({
+            menu_key: r.menu_key, client_id: null, field: 'module_key',
+            old_value: prevModule, new_value: r.custom_module_key, changed_by: profile?.id ?? null,
+          });
+        }
         return entries;
       });
       if (auditRows.length > 0) {
@@ -217,7 +224,8 @@ export function MenuSettingTab() {
       }
 
       toast.success(`Saved ${rows.length} change${rows.length === 1 ? '' : 's'}`);
-      setDrafts({});
+      setPendingMoves({});
+      setPendingLabels({});
       await Promise.all([
         qc.invalidateQueries({ queryKey: ['menu-overrides-admin'] }),
         qc.invalidateQueries({ queryKey: ['resolved-menu'] }),
@@ -242,7 +250,8 @@ export function MenuSettingTab() {
         old_value: null, new_value: 'reset_all', changed_by: profile?.id ?? null,
       });
       toast.success('All menu customizations reset to defaults');
-      setDrafts({});
+      setPendingMoves({});
+      setPendingLabels({});
       await Promise.all([
         qc.invalidateQueries({ queryKey: ['menu-overrides-admin'] }),
         qc.invalidateQueries({ queryKey: ['resolved-menu'] }),
@@ -270,7 +279,7 @@ export function MenuSettingTab() {
                   Menu Setting
                 </CardTitle>
                 <CardDescription>
-                  Rename and reorder menu items. Internal keys, routes, and permissions never change.
+                  Drag to reorder, nest, or shift between modules. Rename inline. Routes, permissions, and report keys never change.
                 </CardDescription>
               </div>
               <div className="flex items-center gap-3">
@@ -338,7 +347,7 @@ export function MenuSettingTab() {
               <span className="font-medium">{dirtyCount}</span> pending change{dirtyCount === 1 ? '' : 's'}
             </div>
             <div className="flex items-center gap-2">
-              <Button variant="ghost" size="sm" onClick={() => setDrafts({})}>Discard</Button>
+              <Button variant="ghost" size="sm" onClick={() => { setPendingMoves({}); setPendingLabels({}); }}>Discard</Button>
               <Button size="sm" onClick={saveAll} disabled={saving} className="gap-2">
                 <Save className="h-4 w-4" /> {saving ? 'Saving…' : 'Save'}
               </Button>
@@ -346,45 +355,38 @@ export function MenuSettingTab() {
           </div>
         )}
 
-        {/* Editor */}
+        {/* DnD tree */}
         {!isEmpty && (
-          <Tabs defaultValue="sidebar" className="space-y-4">
-            <TabsList>
-              <TabsTrigger value="sidebar">Sidebar</TabsTrigger>
-              <TabsTrigger value="settings">System Settings tabs</TabsTrigger>
-            </TabsList>
-
-            <TabsContent value="sidebar" className="space-y-4">
-              {/* Sidebar groups */}
-              {effective
-                .filter((n) => n.parent_key === null && n.accepts_children)
-                .sort((a, b) => a.sort_order - b.sort_order)
-                .map((group) => (
-                  <GroupEditor
-                    key={group.menu_key}
-                    group={group}
-                    children={effectiveGrouped.get(group.menu_key) ?? []}
-                    registryByKey={registryByKey}
-                    drafts={drafts}
-                    onLabelChange={setLabelDraft}
-                    onMove={moveItem}
-                    onReset={resetItem}
+          <Card>
+            <CardContent className="pt-4 space-y-3">
+              <div className="flex items-center gap-2">
+                <div className="relative flex-1 max-w-sm">
+                  <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                  <Input
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    placeholder="Search menu by name, key, or route…"
+                    className="h-8 pl-7"
                   />
-                ))}
-            </TabsContent>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Drag the handle to reorder, drop on a row to nest, drop on a module to move across apps.
+                </p>
+              </div>
 
-            <TabsContent value="settings">
-              <GroupEditor
-                group={effective.find((n) => n.menu_key === 'admin-settings')!}
-                children={(effectiveGrouped.get('admin-settings') ?? [])}
+              <MenuTreeDnd
+                resolved={resolved}
+                effective={effective}
                 registryByKey={registryByKey}
-                drafts={drafts}
+                pendingMoves={pendingMoves}
+                pendingLabels={pendingLabels}
+                onApplyMove={applyMove}
                 onLabelChange={setLabelDraft}
-                onMove={moveItem}
-                onReset={resetItem}
+                onResetItem={resetItem}
+                searchTerm={search}
               />
-            </TabsContent>
-          </Tabs>
+            </CardContent>
+          </Card>
         )}
 
         {/* Footer actions */}
@@ -431,86 +433,9 @@ function GroupEditor(props: {
   group: ResolvedMenuNode;
   children: ResolvedMenuNode[];
   registryByKey: Record<string, MenuRegistryRow>;
-  drafts: Record<string, Draft>;
-  onLabelChange: (menuKey: string, value: string) => void;
-  onMove: (menuKey: string, dir: -1 | 1) => void;
-  onReset: (menuKey: string) => void;
 }) {
-  const { group, children, registryByKey, drafts, onLabelChange, onMove, onReset } = props;
-
-  return (
-    <Card>
-      <CardHeader className="pb-3">
-        <div className="flex items-center justify-between gap-3">
-          <CardTitle className="text-base flex items-center gap-2">
-            {group.label}
-            {group.is_system_required && (
-              <Tooltip><TooltipTrigger><Lock className="h-3.5 w-3.5 text-muted-foreground" /></TooltipTrigger>
-                <TooltipContent>System group — cannot be moved</TooltipContent></Tooltip>
-            )}
-          </CardTitle>
-          <Badge variant="outline" className="text-xs">{children.length} item{children.length === 1 ? '' : 's'}</Badge>
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-2">
-        {children.length === 0 && (
-          <p className="text-sm text-muted-foreground italic">No items.</p>
-        )}
-        {children.map((node, idx) => {
-          const reg = registryByKey[node.menu_key];
-          const draft = drafts[node.menu_key];
-          const isDirty = !!draft;
-          const isLast = idx === children.length - 1;
-          return (
-            <div
-              key={node.menu_key}
-              className={`flex items-center gap-2 p-2 rounded-md border ${
-                isDirty ? 'border-primary/40 bg-primary/5' : 'border-border'
-              }`}
-            >
-              <div className="flex flex-col">
-                <Button
-                  variant="ghost" size="icon" className="h-5 w-5"
-                  onClick={() => onMove(node.menu_key, -1)}
-                  disabled={idx === 0 || !reg?.is_movable}
-                  aria-label="Move up"
-                >
-                  <ChevronUp className="h-3.5 w-3.5" />
-                </Button>
-                <Button
-                  variant="ghost" size="icon" className="h-5 w-5"
-                  onClick={() => onMove(node.menu_key, 1)}
-                  disabled={isLast || !reg?.is_movable}
-                  aria-label="Move down"
-                >
-                  <ChevronDown className="h-3.5 w-3.5" />
-                </Button>
-              </div>
-              <div className="flex-1 min-w-0">
-                <Input
-                  value={draft?.label ?? node.label}
-                  onChange={(e) => onLabelChange(node.menu_key, e.target.value)}
-                  disabled={!reg?.is_renamable}
-                  className="h-8"
-                />
-                <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
-                  <code className="font-mono">{node.menu_key}</code>
-                  {node.route_path && <span>· {node.route_path}</span>}
-                  {!reg?.is_renamable && <Badge variant="secondary" className="text-xs">locked</Badge>}
-                  {reg?.is_system_required && <Badge variant="secondary" className="text-xs">system</Badge>}
-                </div>
-              </div>
-              {isDirty && (
-                <Button variant="ghost" size="sm" onClick={() => onReset(node.menu_key)} className="gap-1">
-                  <RotateCcw className="h-3.5 w-3.5" /> Revert
-                </Button>
-              )}
-            </div>
-          );
-        })}
-      </CardContent>
-    </Card>
-  );
+  // (legacy GroupEditor removed — replaced by MenuTreeDnd)
+  return null;
 }
 
 function PreviewDialog({ grouped }: { grouped: Map<string | null, ResolvedMenuNode[]> }) {

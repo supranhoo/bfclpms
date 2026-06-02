@@ -32,6 +32,8 @@ export type MenuOverrideRow = {
   custom_label: string | null;
   custom_parent_key: string | null;
   custom_sort_order: number | null;
+  custom_menu_level: number | null;
+  custom_module_key: string | null;
   is_active: boolean;
   updated_by: string | null;
   updated_at: string;

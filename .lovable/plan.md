@@ -1,288 +1,145 @@
+# Menu Setting — Full Drag-and-Drop Repositioning (Phase 3)
 
-# Plan: Configurable Menu Architecture + Report ID & Field Sequence
-
-Feasibility study + safe architecture. No code yet — this plan defines the contract, risks, and phased rollout. Three large concerns are addressed: (A) **Menu Setting** under System Settings, (B) **stable Report IDs in URLs**, (C) **Report Field Sequence** tile in Report Builder.
-
----
-
-## 1. Feasibility analysis
-
-| Capability | Feasibility | Notes |
-|---|---|---|
-| Rename L2/L3/L4 labels | High | Pure display layer over `menu_key`. Zero risk. |
-| Reorder within same parent | High | Sort key only. |
-| Reposition L3 → L2 within same module | Medium | Requires registry flag `is_movable` + parent-compatibility check. Some L3 tabs share a host page's state (e.g. Organization sub-tabs share a `<Tabs>` shell); promoting them to L2 needs a standalone route. |
-| Move L3 between L2 hosts (same module) | Medium | Only safe when the target L2 is a generic `<Tabs>` host. Most current L2 entries are dedicated pages — flag them `accepts_children=false`. |
-| Cross-app/module move (PMS↔HRMS) | **Low–Medium** | Routes, permissions, and feature licensing are module-scoped today. Defer to Phase 3 with explicit `is_cross_app_movable` allowlist (initially empty). |
-| Stable Report IDs in URL | High | Add backwards-compatible `?reportId=RPT-001` query param; old routes keep working. |
-| Per-report column sequence (UI + export) | High | Mechanism exists today (`useReportColumnOverrides` + `report_columns_{key}`). Extend to ID-keyed registry. |
-| Client-wise overrides (SaaS) | High (forward-compat) | `client_id NULL` column ships now; resolver uses `NULL` for single-tenant. |
-
-**Verdict:** Phase 1 (rename/reorder + reposition within a module) and Report ID + Field Sequence are safe to ship. **Cross-app movement is feasible only as a controlled allowlist** — not free-form.
+Extend the existing Menu Setting tab (Phase 1+2) from ▲/▼ reorder + rename into a full **drag-and-drop tree** that can move any item to any technically safe level, parent, or module — without ever changing route, permission, report, or workflow keys.
 
 ---
 
-## 2. Current menu architecture findings
+## 1. Assumptions
 
-- Sidebar is hardcoded in `src/components/layout/AppSidebar.tsx` (~10 groups, each an array of `{ title, url, icon, menuKey, roles }`).
-- System Settings tabs are a hardcoded `SETTINGS_SECTIONS` array in `src/pages/admin/SystemSettings.tsx` (22 entries).
-- L4 tabs (Organization sub-tabs, Workflow Config sub-tabs, etc.) are local `<Tabs>` literals inside each section component.
-- Visibility/permissions live in `menu_access_config` + `menu_access_user_overrides` + profile-based rights — **already DB-driven**. We will **not duplicate** this; Menu Setting governs only **label / parent / order**.
-- `ReportRoute` already maps menu access via the convention `reports-{reportKey}` — same convention will be reused for the report registry.
+- Phase 1+2 foundation is live: `menu_registry`, `menu_overrides`, `menu_override_audit`, `menu_overrides_validate` trigger, `useResolvedMenu`, `applyOverrides`, `validateMove`, feature flag `menu_overrides_enabled`.
+- `menu_key`, `permission_key`, `route_path`, `feature_key` remain **immutable**. DnD only changes `custom_parent_key`, `custom_sort_order`, and (new) `custom_menu_level` + `custom_module_key`.
+- L4 items (Organization sub-tabs, Workflow Config sub-tabs, etc.) need to be added to the catalog/registry as part of this phase so they can participate in DnD.
+- Cross-module moves stay gated by `is_cross_app_movable` (still defaults to `false` per Phase 1 decision — admin opts in per item).
+- Access control (RBAC, Menu Access, Report Access, licensing) is **never derived from menu position**. Moving an item never grants access; the existing `permission_key` continues to gate it.
 
-**Risk hotspots:** routes are bound to component imports; moving a page = routing change, not config change. We therefore separate **structure** (config) from **routing** (code).
+## 2. Risk & Impact Report
 
-## 3. Current report architecture findings
-
-- Hardcoded report list in `src/components/admin/ReportSequenceConfig.tsx` (`PREBUILT_REPORTS`, 20 entries) and custom reports from `useCustomReports`.
-- Display order already DB-backed via `report_display_order` system setting.
-- Column overrides already DB-backed per report via `report_columns_{reportKey}` (alias + visible + width). **`reportKey` ≠ `reportId`** today — there is no stable Report ID surface.
-- No Report ID exists anywhere in URL, metadata, exports, or UI.
-- Excel/PDF exports do NOT consistently honor column overrides today (varies by report). Will be hardened.
-
-## 4. Recommended menu registry model
-
-`public.menu_registry` (defaults, seeded from code):
-
-| column | type | purpose |
+| Area | Impact | Mitigation |
 |---|---|---|
-| `menu_key` | text PK | **Immutable identity** (permission key) |
-| `default_label`, `default_parent_key`, `default_sort_order`, `module_key` | — | defaults |
-| `menu_level` | smallint | 1/2/3/4 |
-| `route_path` | text | nullable for grouping nodes |
-| `icon_name` | text | lucide name |
-| `accepts_children` | bool | gates drop targets |
-| `is_renamable`, `is_movable`, `is_cross_app_movable`, `is_system_required` | bool | move/rename gates |
-| `feature_key`, `permission_key` | text | for licensing/permission preservation |
+| **Data** | Adds `custom_menu_level`, `custom_module_key` to `menu_overrides`; seeds L4 rows into `menu_registry`. Additive only. | Additive migration, defaults NULL, resolver falls back to registry. |
+| **Workflow** | None. Routes and permission keys are immutable. | Resolver tests assert key stability. |
+| **UI/UX** | New DnD tree replaces ▲/▼ in Menu Setting. Sidebar + Settings tabs must honor a 4-level resolved tree. | Phased: tree first, then wire L4 consumers (Organization, Workflow Config sub-tab strips) to `useResolvedMenu`. |
+| **Regression** | Misconfigured move could "hide" an item from its current consumer (e.g. Organization tabs strip stops finding a child). | Resolver always returns the item; consumers render by `menu_key`, not by hardcoded order. Preview + dry-run validation before save. |
+| **Security** | An admin could try to surface a restricted item under a permissive parent. | Permission check stays on `permission_key` at render + route guard time, independent of parent. RLS on `menu_overrides` stays admin-only. |
+| **Scalability** | Registry grows from ~70 to ~150 rows with L4. Trivial. | Single query, cached 5min in React Query. |
+| **Rollback** | Feature flag `menu_overrides_enabled` disables resolver instantly. Per-item and full reset already exist. | Keep flag; add per-item reset in DnD UI. |
 
-`public.menu_overrides` (per client, nullable today):
+## 3. Architecture
 
-| column | type |
-|---|---|
-| `menu_key` FK, `client_id` (nullable), `custom_label`, `custom_parent_key`, `custom_sort_order`, `is_active`, `updated_by`, `updated_at` |
-| UNIQUE (`menu_key`, `client_id`) |
+### 3.1 Database (additive migration)
 
-`public.menu_override_audit` — immutable log of every label/parent/order/reset change with old/new values.
+```sql
+ALTER TABLE public.menu_overrides
+  ADD COLUMN custom_menu_level smallint NULL,
+  ADD COLUMN custom_module_key text NULL;
 
-**Resolver:** `src/hooks/useResolvedMenu.ts` returns the tree with overrides applied. AppSidebar + SystemSettings consume the resolver. **`menu_key` is never overridable.**
-
-## 5. Recommended Report ID model
-
-`public.report_registry`:
-
-| column | type | purpose |
-|---|---|---|
-| `report_id` | text PK | Stable, human-readable: `RPT-PERF-001`, `RPT-EMP-MATRIX-007` |
-| `report_key` | text UNIQUE | Existing string key (e.g. `performance`) — kept for backwards compat |
-| `name`, `module_key`, `route_path`, `category` | — | metadata |
-| `default_field_sequence` | text[] | ordered field keys |
-| `is_active`, `is_custom`, `source_id` (FK to `custom_reports.id` when custom) |
-
-**URL contract** (backwards compatible):
-
-- Existing route stays: `/reports/performance` ✅
-- ALSO accepts: `/reports/performance?reportId=RPT-PERF-001` ✅
-- ALSO accepts canonical: `/reports/RPT-PERF-001` → 301-style internal redirect to existing route + reportId param ✅
-- Old bookmarks never break.
-
-Report ID is surfaced in: Reports Hub card, Report Builder header, Report Access list, exports (footer cell), Field Sequence editor.
-
-## 6. Recommended Report Field Sequence model
-
-`public.report_field_sequence`:
-
-| column | type |
-|---|---|
-| `id` uuid PK, `report_id` FK → `report_registry`, `client_id` nullable, `field_key` text, `field_label` text (override-only, optional), `sequence_order` int, `is_hidden` bool, `updated_by`, `updated_at` |
-| UNIQUE (`report_id`, `client_id`, `field_key`) |
-
-Resolver hook `useResolvedReportFields(reportId)` returns the ordered field list. **Both table render and export builders consume this resolver** (this is the hardening step — today only some exports do).
-
-## 7. Safe movement rules (validation pipeline)
-
-Reject the save when ANY of these fail:
-
-1. Source row `is_movable = false`.
-2. Target parent `accepts_children = false`.
-3. Target parent in a different `module_key` AND source `is_cross_app_movable = false`.
-4. Move would change `menu_level` to a value outside `{2,3,4}`.
-5. Cycle detected (target is descendant of source).
-6. Target parent path would render the source's route in an invalid `<Outlet>` slot (validated against a route-graph manifest emitted at build time).
-7. Source `is_system_required = true` AND change touches `parent` or `module`.
-
-Same pipeline runs in DB trigger (`menu_overrides_validate`) **and** in the UI before save (instant feedback). PL/pgSQL is the authority; the UI mirror is for UX.
-
-## 8. Cross-app movement — feasibility & risks
-
-| Concern | Resolution |
-|---|---|
-| Routes are bound to module folder structure | Cross-app move does NOT physically move a route. The page stays mounted at its original route; only **where it appears in the sidebar** changes. Breadcrumbs use the override tree. |
-| Permission keys (`menuKey`) are module-flavored | `menu_key` stays unchanged; permission resolution unchanged. |
-| Feature licensing per module | Override is rejected if source `feature_key` is not licensed for the target module's tenant. |
-| Active highlighting / breadcrumbs | Resolver always returns the override-tree path; AppSidebar highlight is driven by override path, not original. |
-| Risk of exposing a page to users who shouldn't see it | Visibility = Menu Access ∩ Resolved Position. Moving a node never grants access — Menu Access is the gate. |
-| Initial allowlist | **Empty** in Phase 1–2. Phase 3 turns on a curated set: Incentive group, specific Reports. Each entry approved with a written reason. |
-
-## 9. UI design proposal
-
-### 9.1 Menu Setting tab (System Settings, below Organization)
-
-```text
-┌─ Menu Setting ────────────────────────────────────────────────────────┐
-│ Module: [PMS ▼]  Scope: [Global ▼]  [Preview]  [Reset All…]  [Save]  │
-├──────────────────────────────────┬────────────────────────────────────┤
-│ TREE (60%)  [search…]            │ EDIT PANEL (40%)                   │
-│                                  │                                    │
-│ ▾ PMS                            │ Selected: Organization             │
-│   ▾ Administration               │ ───────────────────────────────    │
-│     ▾ System Settings 🔒         │ menu_key:  admin-organization      │
-│       • Branding                 │ route:     /admin/settings?…       │
-│       • General                  │ level:     3                       │
-│       • Workflow Config          │                                    │
-│       • Organization      ← sel  │ Label:    [Organization Structure] │
-│         ▾ Divisions              │ Default:  "Organization" [Reset]   │
-│         ▾ Business Units         │                                    │
-│         ▾ Departments            │ Parent:   [System Settings ▼]      │
-│         ▾ Locations              │   (only compatible parents shown)  │
-│         ▾ PMS Grades             │                                    │
-│         ▾ Levels                 │ Module:   [PMS ▼]                  │
-│       • Menu Setting (new)       │   (locked unless cross-app)        │
-│       • Review Periods           │                                    │
-│       …                          │ Sort:     [4]  [▲]  [▼]            │
-│     • Increment Inputs           │                                    │
-│     • Employee Development       │ Flags                              │
-│   ▸ Incentive                    │  ☑ Movable  ☑ Renamable            │
-│   ▸ Reports                      │  ☐ Cross-app movable               │
-│ ▸ HRMS  (greyed if not licensed) │  🔒 System required (read-only)    │
-│                                  │                                    │
-│ Legend                           │ [ Reset this item ]                │
-│  🔒 system  ⊘ non-movable        │                                    │
-└──────────────────────────────────┴────────────────────────────────────┘
-[ Sticky banner when dirty:  "N pending changes  [Discard]  [Save]" ]
+-- Extend trigger menu_overrides_validate to:
+--   - reject custom_menu_level outside 1..4
+--   - reject custom_module_key change when source.is_cross_app_movable = false
+--   - reject parent whose resolved level >= dragged item resolved level when
+--     the drop is "make child" (parent must be one level shallower)
+--   - keep existing cycle + is_movable + is_system_required + accepts_children checks
 ```
 
-- Drag-and-drop via `@dnd-kit/sortable`. Invalid drops show a red border + toast with the failing rule.
-- Double-click label = inline rename.
-- "Preview" opens a `Sheet` rendering the resolved sidebar exactly as end users will see it.
+Seed L4 rows for Organization (Divisions, Departments, Locations, PMS Grades, …), Workflow Config sub-tabs, and any other existing L4 strip — all with `is_movable=true`, `is_cross_app_movable=false`, `is_system_required=false` unless the consumer truly requires the item.
 
-### 9.2 Report Builder → "Report Field Sequence" tile
+### 3.2 Resolver layer
 
-```text
-┌─ Report Builder ─────────────────────────────────────────────────────┐
-│ Tiles: [Custom Reports] [Column Overrides] [Display Order]           │
-│        [Report Field Sequence ★ new]                                 │
-└──────────────────────────────────────────────────────────────────────┘
-```
+- Extend `ResolvedMenuNode` with effective `menu_level` and `module_key` (override → default).
+- `applyOverrides` already cycle-checks parent; add level + module resolution.
+- `validateMove` gains:
+  - `targetLevel` (drop intent: `before|after|inside`),
+  - cross-module guard,
+  - level-derivation rule (`inside` ⇒ child level = parent.level + 1, clamped 2..4),
+  - "parent must accept children" + L1 (modules) only acceptable when source is `is_cross_app_movable`.
+- Pure functions, fully unit-tested.
 
-Inside the tile:
+### 3.3 UI — DnD Tree
 
-```text
-┌─ Report Field Sequence ──────────────────────────────────────────────┐
-│ [search reports…]   Module: [All ▼]   Type: [All / Built-in / Custom]│
-├──────────────────────────────────────────────────────────────────────┤
-│ Report ID       Name                       Module    Fields  Action │
-│ RPT-PERF-001    Performance Report         PMS         18    [Edit] │
-│ RPT-EMP-001     Employee Summary           PMS         12    [Edit] │
-│ RPT-MATRIX-007  KPI-Employee Matrix        PMS         dyn   [Edit] │
-│ RPT-CUSTOM-…    My Custom Report           Custom      9     [Edit] │
-└──────────────────────────────────────────────────────────────────────┘
-```
-
-Edit Sequence dialog:
+Replace ▲/▼ block in `MenuSettingTab.tsx` with a `@dnd-kit/core` + `@dnd-kit/sortable` tree (already used elsewhere in the project for slab DnD).
 
 ```text
-┌─ RPT-PERF-001 · Performance Report — Field Sequence ─────────────────┐
-│  [Reset to default]                              [Cancel] [Save]     │
-├──────────────────────────────────────────────────────────────────────┤
-│  #  ⋮⋮  Field                  Label override    Hidden?            │
-│  1  ⋮⋮  employee_code          [—]              ☐                   │
-│  2  ⋮⋮  employee_name          [—]              ☐                   │
-│  3  ⋮⋮  department             [Dept.]          ☐                   │
-│  4  ⋮⋮  final_score            [—]              ☐                   │
-│  …                                                                   │
-└──────────────────────────────────────────────────────────────────────┘
+┌─ Menu Setting ────────────────────────────────────────────┐
+│ [ Master switch: Enabled ]   [ Reset all ]  [ Preview ]   │
+│                                                           │
+│ Search: [______________]   Filter: [All modules ▼]        │
+│                                                           │
+│ ▼ PMS                                  (module, L1)       │
+│   ▼ Main                               (group, L2)        │
+│     ⋮⋮ My Dashboard           [Locked]   ✎                 │
+│     ⋮⋮ Inbox                            ✎                 │
+│   ▼ Administration                                        │
+│     ▼ ⋮⋮ System Settings                ✎                 │
+│       ▼ ⋮⋮ Organization                 ✎                 │
+│         ⋮⋮ Divisions          [Movable] ✎                 │
+│         ⋮⋮ Departments        [Movable] ✎  ← dragging     │
+│         ⋮⋮ Locations          [Movable] ✎                 │
+│       ⋮⋮ Menu Setting         [Locked]  ✎                 │
+│ ▼ HRMS                                  (module, L1)      │
+│   ▶ Payroll                             ← drop zone hover │
+│ ▼ Safety                                                  │
+│                                                           │
+│ Pending changes (3): Departments → HRMS/Payroll  ⟲        │
+│ [Cancel]                          [Preview & Save changes]│
+└───────────────────────────────────────────────────────────┘
 ```
 
-Hidden toggle reuses existing column-overrides mechanism (no new permission layer).
+Interactions:
+- **Drag handle** (`⋮⋮`) on every row.
+- **Drop indicators**: thin line between rows = reorder; highlighted row body = make child; module header highlight = cross-module move.
+- **Live validation**: invalid drop targets dim and show tooltip `"Cannot drop here — <reason>"` from `validateMove`.
+- **Movability badge** per row: `Locked`, `Within module`, `Display only`, `Fully movable`.
+- **Pending changes panel**: list of staged moves with per-item ⟲ (revert) before save.
+- **Preview dialog**: side-by-side "Current structure" vs "New structure" trees + a diff list (`Item · old level → new level · old parent → new parent · old module → new module · old order → new order`).
+- **Save**: bulk upsert into `menu_overrides`; trigger validates each row server-side; audit rows written automatically by existing trigger.
+- **Reset**: per item (right-click / row menu) + global "Reset all" (existing).
+- **Search** filters tree but keeps ancestors expanded.
+- No ▲/▼ buttons anywhere.
 
-## 10. Data model changes required
+### 3.4 Consumers wired to resolver
 
-New tables (single migration each), all with `GRANT` blocks + RLS (admin write, authenticated read):
+Phase 2 already wired `AppSidebar` and `SystemSettings`. Phase 3 adds:
+- `Organization` page sub-tab strip → renders by `useResolvedMenu().byParent['admin-settings-organization']`.
+- `Workflow Config` sub-tab strip → same pattern.
+- `ModuleHub` (L1) → reads module order from resolver (modules are L1 registry rows).
 
-1. `menu_registry`, `menu_overrides`, `menu_override_audit`
-2. `report_registry`, `report_field_sequence`, `report_sequence_audit`
+Each consumer falls back to its hardcoded order when the flag is off or the key is unknown — zero behavior change for non-admin tenants.
 
-Seeders:
+## 4. Step-by-Step Plan
 
-- One-time edge function `seed-menu-registry` introspects current AppSidebar/SystemSettings code-as-data export and writes registry rows.
-- One-time edge function `seed-report-registry` writes the 20 prebuilt reports with deterministic `RPT-…-NNN` IDs + imports `custom_reports.id` as `source_id`.
+1. **Migration**: add `custom_menu_level`, `custom_module_key`; extend `menu_overrides_validate` trigger; seed L4 + L1-module registry rows. *Verify*: trigger unit tests via `supabase--read_query`.
+2. **Types & resolver**: extend `MenuOverrideRow`, `ResolvedMenuNode`, `applyOverrides`, `validateMove`. *Verify*: extend `applyOverrides.test.ts` + `validateMove.test.ts` (cycle, cross-module, level derivation, locked items, license-respecting moves).
+3. **DnD tree component** (`MenuTreeDnd.tsx`): `@dnd-kit` sortable tree with drop indicators, badges, search, pending-changes panel. *Verify*: component test for drag → validate → stage flow.
+4. **Preview dialog** (`MenuChangesPreviewDialog.tsx`): old vs new tree + diff list. *Verify*: snapshot test on a fixed mock diff.
+5. **Bulk save** path in `MenuSettingTab.tsx`: upsert pending overrides, invalidate `resolved-menu` cache. *Verify*: integration test with mocked supabase client.
+6. **Wire L4 consumers** (Organization, Workflow Config, ModuleHub). *Verify*: render test asserts order follows resolver when flag on, hardcoded when off.
+7. **Docs**: update `DOCUMENTATION.md` (Menu Setting section), `POLICY.md` (movability classification + access invariance rule), `mem://features/admin/menu-setting`.
 
-Trigger: `menu_overrides_validate` (PL/pgSQL) enforces rules from §7.
+## 5. UI Changes Summary
 
-Both `menu_overrides` and `report_field_sequence` ship with `client_id uuid NULL` for forward SaaS compatibility — single-tenant uses NULL.
+- **Location**: System Settings → Menu Setting tab.
+- **Visual change**: ▲/▼ list replaced by DnD tree with drag handles, drop indicators, movability badges, search, pending-changes drawer, and Preview & Save flow. Reset-all button retained; per-item reset added.
+- **Interaction**: drag rows to reorder, nest under a new parent, or drop onto a module header to move across modules. Invalid targets dim with a tooltip reason. Nothing persists until Preview & Save.
+- **Responsiveness**: tree uses horizontal scroll on <md viewports; drag handle stays sticky-left so the gesture works on the 1107px preview and on tablet.
+- **Downstream visible change** (only when flag on): Sidebar groups, System Settings tabs, Organization sub-tabs, Workflow Config sub-tabs, and Module Hub order all reflect the saved tree.
 
-**Backup**: Tables live in `public`, so the existing `get_backup_table_order()` includes them automatically. No denylist changes.
+## 6. Tests
 
-## 11. Phased implementation plan
+- `applyOverrides.test.ts`: level/module override resolution, parent-chain cycle across modules, fallback when override row is inactive.
+- `validateMove.test.ts`: drop-inside derives level, cross-module blocked unless flag, system-required rejected, license/feature_key preserved, level clamped to 1..4.
+- `MenuTreeDnd.test.tsx`: drag-stage-revert flow; invalid drop disabled.
+- `MenuChangesPreviewDialog.test.tsx`: diff list matches staged moves.
+- DB trigger test (`supabase--read_query`): insert override violating cross-module rule → expects raise.
 
-**Phase 1 — Foundations (no behavioural change)**
-- Create `menu_registry`, `menu_overrides`, `menu_override_audit` (RLS + GRANT).
-- Seed registry from current code.
-- Add `useResolvedMenu()` + `applyOverrides()` + `validateMove()` (unit-tested).
-- Wire AppSidebar + SystemSettings `SETTINGS_SECTIONS` to the resolver.
-- Resolver short-circuits to defaults until a feature flag flips on.
-- Ship behind `feature_flags.menu_overrides_enabled = false`. **Zero visible change.**
+## 7. Out of Scope (deferred)
 
-**Phase 2 — Menu Setting UI**
-- Add `Menu Setting` tab below Organization.
-- Tree + Edit panel + Preview + Reset + Audit view.
-- Phase-2 scope is **L2/L3 within the same module**; L4 rename only (no L4 move).
-- Flip flag ON.
+- Multi-tenant `client_id` scoping of overrides (column already exists, UI stays single-tenant).
+- L1 module rename (module names are brand-controlled).
+- Report Field Sequence builder (separate Phase 4 plan).
+- Importing/exporting menu layouts.
 
-**Phase 3 — Report Registry + Report IDs in URLs**
-- Create `report_registry`, seed.
-- Add `?reportId=…` param handling + optional `/reports/:reportId` alias route → resolves to existing route.
-- Surface Report ID in Reports Hub, Report Builder, Report Access, exports.
+## 8. Rollback
 
-**Phase 4 — Report Field Sequence tile**
-- Create `report_field_sequence` + audit.
-- Build tile + Edit Sequence dialog.
-- Harden every report's table + Excel/PDF export to consume `useResolvedReportFields(reportId)` (this is the bulk of the work — one report at a time, with regression tests per report).
-
-**Phase 5 — L4 rename/reorder + curated cross-app allowlist**
-- Enable L4 moves where `accepts_children = true`.
-- Open `is_cross_app_movable` allowlist (initially: Incentive group, Reports). Each entry approved manually.
-
-**Phase 6 — Multi-tenant client scope (when SaaS lands)**
-- Add `client_id` scoping UI + RLS by tenant.
-
-## 12. Risks & safeguards
-
-| Risk | Safeguard |
-|---|---|
-| Admin misorders sidebar → users disoriented | Sticky preview, audit log, one-click "Reset to default", per-item reset. |
-| Move breaks a route render | DB trigger + UI mirror validation against route-graph manifest; offending moves rejected before save. |
-| Cross-app move grants unintended access | Visibility always = Menu Access ∩ Position. Menu Access untouched. Cross-app allowlist starts empty. |
-| Field sequence hides a critical export column | "Hidden" only available on reports that already supported hiding; required fields tagged `is_required=true` in registry and not toggleable. |
-| Override layer adds latency | `useResolvedMenu` cached 5 min; `useResolvedReportFields` cached per report. One query per page load max. |
-| Report ID change breaks bookmarks | Old `report_key` routes preserved indefinitely; Report ID is **additive**. |
-| Backup regression | New tables auto-included via `get_backup_table_order()`; restore drill covers them. |
-| Migration ordering / Jan-2026 cutoff | All new schema is **additive** (new tables only), no destructive edits → cutoff rule satisfied. |
-| Test debt | Each phase ships with: pure-fn unit tests (`applyOverrides`, `validateMove`, `resolveFields`), component test for the editor, regression test per migrated report. |
-
-## Documentation, Policy, Memory
-
-- `DOCUMENTATION.md` — new sections "Menu Resolver Layer", "Report Registry & ID Contract", "Report Field Sequence Resolver".
-- `POLICY.md` — invariants: *menu_key is immutable; cross-app moves require explicit registry flag; Menu Access governs visibility; Report ID is additive, never breaking; field sequence cannot bypass column-level permissions.*
-- New memories on apply:
-  - `mem://features/admin/menu-setting`
-  - `mem://architecture/report-registry-and-ids`
-  - `mem://features/admin/report-field-sequence`
-- Index entry added in `mem://index.md`.
-
-## What I need from you before Phase 1 build starts
-
-1. **Confirm Phase 1 scope** = AppSidebar + SystemSettings tabs only (Organization sub-tabs and other L4 wait for Phase 5).
-2. **Confirm cross-app allowlist** starts empty.
-3. **Report ID format** preference: `RPT-PERF-001` (module-prefixed, recommended) vs `RPT-001` (flat).
-4. Whether to ship Phase 1 + Phase 2 together (recommended — they are useless apart) or gate Phase 2 behind a separate approval.
+- Toggle `menu_overrides_enabled` off → every consumer reverts to hardcoded defaults instantly.
+- `Reset all` clears `menu_overrides` rows (audit retained).
+- Migration is additive — no destructive schema change to revert.

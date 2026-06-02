@@ -30,6 +30,7 @@ function override(partial: Partial<MenuOverrideRow>): MenuOverrideRow {
   return {
     id: 'x', menu_key: 'a', client_id: null, custom_label: null,
     custom_parent_key: null, custom_sort_order: null, is_active: true,
+    custom_menu_level: null, custom_module_key: null,
     updated_by: null, updated_at: '2026-01-01T00:00:00Z',
     ...partial,
   };
@@ -65,5 +66,15 @@ describe('applyOverrides', () => {
     const map = buildLabelMap(applyOverrides(registry, []));
     expect(map['a']).toBe('Alpha');
     expect(map['b']).toBe('Beta');
+  });
+
+  it('applies module + level overrides', () => {
+    const r = applyOverrides(registry, [
+      override({ custom_module_key: 'hrms', custom_menu_level: 3 }),
+    ]);
+    const a = r.find((n) => n.menu_key === 'a')!;
+    expect(a.module_key).toBe('hrms');
+    expect(a.menu_level).toBe(3);
+    expect(a.is_overridden).toBe(true);
   });
 });
