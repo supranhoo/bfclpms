@@ -245,6 +245,7 @@ export default function KpiScorecardDetail() {
   const ORG_WIDE_ROLES: Array<string> = ['admin', 'management', 'hr_pms', 'auditor'];
   const hasOrgWideAccess = effectiveRole ? ORG_WIDE_ROLES.includes(effectiveRole) : false;
   const { companies, selectedCompanyId, setSelectedCompanyId, filterByCompany, getCompanyName, getCompanyCode } = useCompanyFilter();
+  const resolvedFields = useResolvedReportFields('RPT-KSD-001', KSD_DEFAULT_FIELDS);
   const now = new Date();
   const [selectedMonth, setSelectedMonth] = useState(MONTHS[now.getMonth()]);
   const [selectedYear, setSelectedYear] = useState(now.getFullYear());
@@ -366,46 +367,55 @@ export default function KpiScorecardDetail() {
 
   const handleExport = () => {
     if (!filtered.length) return;
-    const exportData = filtered.map(r => toExportRecord(r, selectedYear));
-    const ws = XLSX.utils.json_to_sheet(exportData);
+    const visible = resolvedFields.filter((f) => !f.is_hidden);
+    const headers = visible.map((f) => f.label);
+    const exportData = filtered.map((r) => toExportRecord(r, selectedYear, visible));
+    const ws = XLSX.utils.json_to_sheet(exportData, { header: headers });
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'KPI Scorecard');
     XLSX.writeFile(wb, `KPI_Scorecard_${selectedMonth}_${selectedYear}.xlsx`);
   };
 
   /** Shared row → XLSX record mapping. Used by both single-month and range exports. */
-  function toExportRecord(r: FlatRow, year: number) {
-    return {
-      'Company': getCompanyCode(r.employeeId),
-      'Employee Code': r.employeeCode,
-      'Name': r.employeeName,
-      'Designation': r.designation,
-      'Department': r.department,
-      'Month': r.month,
-      'Year': year,
-      'Category': r.category,
-      'KRA': r.kraName,
-      'KPI': r.kpiName,
-      'Frequency': r.frequency,
-      'Type': getOrgTypeLabel(r),
-      'Data Owner': r.dataOwnerNames || '',
-      'Weightage': r.weightage,
-      'Target': r.targetValue ?? '',
-      'Self Actual': r.isNa ? 'N/A' : (r.selfActual ?? ''),
-      'Manager Actual': r.isNa ? 'N/A' : (r.managerActual ?? ''),
-      'Skip-Level Actual': r.isNa ? 'N/A' : (r.skipLevelActual ?? ''),
-      'HR PMS Actual': r.isNa ? 'N/A' : (r.hrPmsActual ?? ''),
-      'Auditor Actual': r.isNa ? 'N/A' : (r.auditorActual ?? ''),
-      'Management Actual': r.isNa ? 'N/A' : (r.managementActual ?? ''),
-      'Self Score': r.isNa ? 'N/A' : (r.selfScore ?? ''),
-      'Manager Score': r.isNa ? 'N/A' : (r.managerScore ?? ''),
-      'Skip-Level Score': r.isNa ? 'N/A' : (r.skipLevelScore ?? ''),
-      'HR PMS Score': r.isNa ? 'N/A' : (r.hrPmsScore ?? ''),
-      'Auditor Score': r.isNa ? 'N/A' : (r.auditorScore ?? ''),
-      'Management Score': r.isNa ? 'N/A' : (r.managementScore ?? ''),
-      'Final Score': r.isNa ? 'N/A' : (r.finalScore ?? ''),
-      'Status': statusLabels[r.status] ?? r.status,
-    };
+  function ksdValueFor(r: FlatRow, year: number, key: string): string | number {
+    switch (key) {
+      case 'company':           return getCompanyCode(r.employeeId);
+      case 'employee_code':     return r.employeeCode;
+      case 'name':              return r.employeeName;
+      case 'designation':       return r.designation;
+      case 'department':        return r.department;
+      case 'month':             return r.month;
+      case 'year':              return year;
+      case 'category':          return r.category;
+      case 'kra':               return r.kraName;
+      case 'kpi':               return r.kpiName;
+      case 'frequency':         return r.frequency;
+      case 'type':              return getOrgTypeLabel(r);
+      case 'data_owner':        return r.dataOwnerNames || '';
+      case 'weightage':         return r.weightage;
+      case 'target':            return r.targetValue ?? '';
+      case 'self_actual':       return r.isNa ? 'N/A' : (r.selfActual ?? '');
+      case 'manager_actual':    return r.isNa ? 'N/A' : (r.managerActual ?? '');
+      case 'skip_level_actual': return r.isNa ? 'N/A' : (r.skipLevelActual ?? '');
+      case 'hr_pms_actual':     return r.isNa ? 'N/A' : (r.hrPmsActual ?? '');
+      case 'auditor_actual':    return r.isNa ? 'N/A' : (r.auditorActual ?? '');
+      case 'management_actual': return r.isNa ? 'N/A' : (r.managementActual ?? '');
+      case 'self_score':        return r.isNa ? 'N/A' : (r.selfScore ?? '');
+      case 'manager_score':     return r.isNa ? 'N/A' : (r.managerScore ?? '');
+      case 'skip_level_score':  return r.isNa ? 'N/A' : (r.skipLevelScore ?? '');
+      case 'hr_pms_score':      return r.isNa ? 'N/A' : (r.hrPmsScore ?? '');
+      case 'auditor_score':     return r.isNa ? 'N/A' : (r.auditorScore ?? '');
+      case 'management_score':  return r.isNa ? 'N/A' : (r.managementScore ?? '');
+      case 'final_score':       return r.isNa ? 'N/A' : (r.finalScore ?? '');
+      case 'status':            return statusLabels[r.status] ?? r.status;
+      default: return '';
+    }
+  }
+  function toExportRecord(r: FlatRow, year: number, visible?: typeof resolvedFields) {
+    const fields = visible ?? resolvedFields.filter((f) => !f.is_hidden);
+    const out: Record<string, string | number> = {};
+    for (const fld of fields) out[fld.label] = ksdValueFor(r, year, fld.field_key);
+    return out;
   }
 
   const rangeValidation = useMemo(
@@ -425,6 +435,8 @@ export default function KpiScorecardDetail() {
     setRangeExporting(true);
     try {
       const allRecords: ReturnType<typeof toExportRecord>[] = [];
+      const visible = resolvedFields.filter((f) => !f.is_hidden);
+      const headers = visible.map((f) => f.label);
       const search = searchTerm.toLowerCase();
       for (let i = 0; i < periods.length; i++) {
         const p = periods[i];
@@ -447,7 +459,7 @@ export default function KpiScorecardDetail() {
           }
           return true;
         });
-        filteredPeriod.forEach(r => allRecords.push(toExportRecord(r, p.year)));
+        filteredPeriod.forEach(r => allRecords.push(toExportRecord(r, p.year, visible)));
       }
 
       if (allRecords.length === 0) {
@@ -459,7 +471,7 @@ export default function KpiScorecardDetail() {
         return;
       }
 
-      const ws = XLSX.utils.json_to_sheet(allRecords);
+      const ws = XLSX.utils.json_to_sheet(allRecords, { header: headers });
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, 'KPI Scorecard');
       const first = periods[0];
