@@ -635,6 +635,35 @@ function RowBody(props: {
           </Tooltip>
         )}
 
+        {props.onDeleteCustom
+          && reg
+          && reg.is_custom
+          && !reg.is_system_required
+          && (() => {
+            const childCount = props.childrenByParent?.get(node.menu_key)?.length ?? 0;
+            const blocked = childCount > 0;
+            return (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span>
+                    <Button
+                      type="button" variant="ghost" size="icon"
+                      className="h-6 w-6 shrink-0 text-destructive hover:text-destructive hover:bg-destructive/10 disabled:opacity-40"
+                      onClick={() => !blocked && props.onDeleteCustom?.(node.menu_key)}
+                      disabled={blocked}
+                      aria-label="Delete custom tab"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent>
+                  {blocked ? 'Move or delete child items before deleting this tab.' : 'Delete custom tab'}
+                </TooltipContent>
+              </Tooltip>
+            );
+          })()}
+
         {/* "after" drop zone below the row */}
         <div ref={after.setNodeRef} className="sr-only">after</div>
       </div>
