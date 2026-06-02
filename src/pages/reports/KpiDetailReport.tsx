@@ -19,6 +19,30 @@ import { FrequencyLockToggle } from '@/components/ui/FrequencyLockToggle';
 import { isKpiLockedForPeriod } from '@/lib/frequencyUtils';
 import { useBulkEmployeeWorkflows } from '@/hooks/useWorkflowConfig';
 import * as XLSX from 'xlsx';
+import { useResolvedReportFields } from '@/hooks/useResolvedReportFields';
+
+const KPID_DEFAULT_FIELDS = [
+  { field_key: 'company',        default_label: 'Company',        default_sort: 10 },
+  { field_key: 'employee_code',  default_label: 'Employee Code',  default_sort: 20, is_required: true },
+  { field_key: 'employee_name',  default_label: 'Employee Name',  default_sort: 30, is_required: true },
+  { field_key: 'department',     default_label: 'Department',     default_sort: 40 },
+  { field_key: 'category',       default_label: 'Category',       default_sort: 50 },
+  { field_key: 'kra',            default_label: 'KRA',            default_sort: 60 },
+  { field_key: 'kpi',            default_label: 'KPI',            default_sort: 70 },
+  { field_key: 'month',          default_label: 'Month',          default_sort: 80 },
+  { field_key: 'weightage',      default_label: 'Weightage',      default_sort: 90 },
+  { field_key: 'self',           default_label: 'Self',           default_sort: 100 },
+  { field_key: 'manager',        default_label: 'Manager',        default_sort: 110 },
+  { field_key: 'skip_level',     default_label: 'Skip-Level',     default_sort: 120 },
+  { field_key: 'hr_pms',         default_label: 'HR PMS',         default_sort: 130 },
+  { field_key: 'auditor',        default_label: 'Auditor',        default_sort: 140 },
+  { field_key: 'mgmt',           default_label: 'Mgmt',           default_sort: 150 },
+  { field_key: 'final',          default_label: 'Final',          default_sort: 160 },
+  { field_key: 'total_score',    default_label: 'Total Score',    default_sort: 170 },
+  { field_key: 'out_of_score',   default_label: 'Out of Score',   default_sort: 180 },
+  { field_key: 'overall_rating', default_label: 'Overall Rating', default_sort: 190 },
+  { field_key: 'percentage',     default_label: 'Percentage',     default_sort: 200 },
+] as const;
 
 const FULL_MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
