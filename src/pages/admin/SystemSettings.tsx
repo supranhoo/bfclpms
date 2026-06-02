@@ -136,11 +136,13 @@ export default function SystemSettings() {
   const initialSection = (searchParams.get('section') as SectionKey) || 'branding';
   const [activeSection, setActiveSectionRaw] = useState<SectionKey>(initialSection);
   const incrementTab = searchParams.get('tab') || 'eligibility';
+  const logsTab = searchParams.get('logs') || 'audit';
   const setActiveSection = (key: SectionKey) => {
     setActiveSectionRaw(key);
     const next = new URLSearchParams(searchParams);
     next.set('section', key);
     if (key !== 'increment') next.delete('tab');
+    if (key !== 'logs') next.delete('logs');
     setSearchParams(next, { replace: true });
   };
   useEffect(() => {
