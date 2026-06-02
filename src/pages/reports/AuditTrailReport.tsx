@@ -450,80 +450,95 @@ export default function AuditTrailReport() {
       {/* Audit Log Table */}
       <Card>
         <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Timestamp</TableHead>
-                <TableHead>Action</TableHead>
-                <TableHead>KPI</TableHead>
-                <TableHead>Performed By</TableHead>
-                <TableHead>On Behalf Of</TableHead>
-                <TableHead>Details</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredLogs.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
-                    No audit logs found
-                  </TableCell>
-                </TableRow>
-              ) : (
-                filteredLogs.slice(0, 100).map(log => (
-                  <TableRow key={log.id}>
-                    <TableCell className="whitespace-nowrap text-sm">
-                      {format(new Date(log.created_at), 'dd MMM yyyy HH:mm')}
-                    </TableCell>
-                    <TableCell>
-                      <Badge className={actionColors[log.action] || 'bg-gray-100 text-gray-800'}>
-                        {actionLabels[log.action] || log.action}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <div className="max-w-[200px]">
-                        <p className="font-medium truncate">{log.kpi?.kpi_name || 'N/A'}</p>
-                        <p className="text-xs text-muted-foreground truncate">{log.kpi?.kra_name}</p>
+          {(() => {
+            const visibleFields = resolvedFields.filter((f) => !f.is_hidden);
+            const cellClassFor = (key: string) => {
+              switch (key) {
+                case 'timestamp':       return 'whitespace-nowrap text-sm';
+                case 'kpi_name':        return 'max-w-[200px]';
+                case 'kra_name':        return 'max-w-[200px] text-xs text-muted-foreground';
+                case 'performed_by':    return 'font-medium';
+                case 'performer_email': return 'text-xs text-muted-foreground';
+                case 'admin_reason':    return 'max-w-[200px] text-rose-600 dark:text-rose-400 truncate';
+                case 'details':         return 'max-w-[260px] text-sm text-muted-foreground truncate';
+                case 'on_behalf_role':  return 'text-xs text-muted-foreground';
+                default:                return undefined;
+              }
+            };
+            const renderCell = (log: typeof filteredLogs[number], key: string) => {
+              switch (key) {
+                case 'timestamp':
+                  return format(new Date(log.created_at), 'dd MMM yyyy HH:mm');
+                case 'action':
+                  return (
+                    <Badge className={actionColors[log.action] || 'bg-gray-100 text-gray-800'}>
+                      {actionLabels[log.action] || log.action}
+                    </Badge>
+                  );
+                case 'kpi_name':
+                  return <span className="font-medium truncate">{log.kpi?.kpi_name || 'N/A'}</span>;
+                case 'kra_name':
+                  return <span className="truncate">{log.kpi?.kra_name || 'N/A'}</span>;
+                case 'review_period':   return log.kpi?.review_period || 'N/A';
+                case 'review_year':     return log.kpi?.review_year || 'N/A';
+                case 'performed_by':    return log.performer?.full_name || 'System';
+                case 'performer_email': return log.performer?.email || '';
+                case 'on_behalf_of':
+                  if (log.on_behalf_of && log.on_behalf_profile) {
+                    return (
+                      <div className="flex items-center gap-2">
+                        <User className="h-4 w-4 text-rose-500" />
+                        <span className="font-medium text-rose-600 dark:text-rose-400">
+                          {log.on_behalf_profile.full_name || log.on_behalf_profile.email}
+                        </span>
                       </div>
-                    </TableCell>
-                    <TableCell>
-                      <p className="font-medium">{log.performer?.full_name || 'System'}</p>
-                      <p className="text-xs text-muted-foreground">{log.performer?.email}</p>
-                    </TableCell>
-                    <TableCell>
-                      {log.on_behalf_of && log.on_behalf_profile ? (
-                        <div className="flex items-center gap-2">
-                          <User className="h-4 w-4 text-rose-500" />
-                          <div>
-                            <p className="font-medium text-rose-600 dark:text-rose-400">
-                              {log.on_behalf_profile.full_name || log.on_behalf_profile.email}
-                            </p>
-                            {log.on_behalf_role && (
-                              <p className="text-xs text-muted-foreground">{log.on_behalf_role} level</p>
-                            )}
-                          </div>
-                        </div>
-                      ) : (
-                        <span className="text-muted-foreground">—</span>
-                      )}
-                    </TableCell>
-                    <TableCell className="max-w-[200px]">
-                      <div className="text-sm text-muted-foreground space-y-0.5">
-                        {log.metadata?.reason && (
-                          <p className="truncate text-rose-600 dark:text-rose-400">
-                            Reason: {String(log.metadata.reason)}
-                          </p>
-                        )}
-                        <p className="truncate">
-                          {String(log.new_value?.remarks || log.new_value?.reason || 
-                           (log.new_value?.score ? `Score: ${log.new_value.score}` : '-'))}
-                        </p>
-                      </div>
-                    </TableCell>
+                    );
+                  }
+                  return <span className="text-muted-foreground">—</span>;
+                case 'on_behalf_role':
+                  return log.on_behalf_role ? `${log.on_behalf_role} level` : '';
+                case 'admin_reason':
+                  return log.metadata?.reason ? String(log.metadata.reason) : '';
+                case 'details':
+                  return String(
+                    log.new_value?.remarks
+                      || log.new_value?.reason
+                      || (log.new_value?.score ? `Score: ${log.new_value.score}` : '-')
+                  );
+                default: return null;
+              }
+            };
+            return (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    {visibleFields.map((f) => (
+                      <TableHead key={f.field_key}>{f.label}</TableHead>
+                    ))}
                   </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
+                </TableHeader>
+                <TableBody>
+                  {filteredLogs.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={visibleFields.length} className="text-center py-8 text-muted-foreground">
+                        No audit logs found
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    filteredLogs.slice(0, 100).map((log) => (
+                      <TableRow key={log.id}>
+                        {visibleFields.map((f) => (
+                          <TableCell key={f.field_key} className={cellClassFor(f.field_key)}>
+                            {renderCell(log, f.field_key)}
+                          </TableCell>
+                        ))}
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            );
+          })()}
           {filteredLogs.length > 100 && (
             <div className="p-4 text-center text-sm text-muted-foreground border-t">
               Showing 100 of {filteredLogs.length} records. Export to Excel for complete data.
