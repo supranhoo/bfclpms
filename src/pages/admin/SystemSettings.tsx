@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
-import { Settings, Calculator, Edit3, Lightbulb, Save, RefreshCw, Calendar, Users, FileText, AlertCircle, Mail, Building2, CalendarDays, SlidersHorizontal, Database, KeyRound, Upload, Shield, Menu, LogOut, Undo2, LayoutGrid, Flag, TrendingUp, GitBranch } from 'lucide-react';
+import { Settings, Calculator, Edit3, Lightbulb, Save, RefreshCw, Calendar, Users, FileText, AlertCircle, Mail, Building2, CalendarDays, SlidersHorizontal, Database, KeyRound, Upload, Shield, Menu, LogOut, Undo2, LayoutGrid, Flag, TrendingUp, GitBranch, ScrollText, History } from 'lucide-react';
 import { useScoreCalculationMode, useUpdateSystemSetting, ScoreCalculationMode, useAutoRolloverSetting, useRolloverLogs, useDailyAggregationMethod, DailyAggregationMethod, useSystemSetting, useAutoLogoutMinutes } from '@/hooks/useSystemSettings';
 import { useRecallWindowHours } from '@/hooks/useRecallSubmission';
 import { useState, useEffect } from 'react';
@@ -38,6 +38,9 @@ import IncrementSlabsPage from '@/pages/increment/IncrementSlabs';
 import WorkflowConfigPage from '@/pages/admin/WorkflowConfig';
 import OrganizationPage from '@/pages/admin/Organization';
 import ReviewPeriodsPage from '@/pages/admin/ReviewPeriods';
+import AuditLogsPage from '@/pages/AuditLogs';
+import EmailLogsPage from '@/pages/admin/EmailLogs';
+import { useMenuAccess } from '@/hooks/useMenuAccess';
 import { ConfirmationIncrementSection } from '@/components/admin/scoring/ConfirmationIncrementSection';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable';
@@ -68,6 +71,7 @@ const SETTINGS_SECTIONS = [
   { key: 'data-repair', label: 'Data Repair', icon: Undo2 },
   { key: 'feature-flags', label: 'Feature Flags', icon: Flag },
   { key: 'module-hub', label: 'Module Hub', icon: LayoutGrid },
+  { key: 'logs', label: 'Logs', icon: ScrollText },
 ] as const;
 
 type SectionKey = typeof SETTINGS_SECTIONS[number]['key'];
@@ -128,15 +132,18 @@ export default function SystemSettings() {
   const { hours: recallWindowHours, isLoading: recallWindowLoading } = useRecallWindowHours();
   const updateSetting = useUpdateSystemSetting();
   const isMobile = useIsMobile();
+  const { canAccess } = useMenuAccess();
   const [searchParams, setSearchParams] = useSearchParams();
   const initialSection = (searchParams.get('section') as SectionKey) || 'branding';
   const [activeSection, setActiveSectionRaw] = useState<SectionKey>(initialSection);
   const incrementTab = searchParams.get('tab') || 'eligibility';
+  const logsTab = searchParams.get('logs') || 'audit';
   const setActiveSection = (key: SectionKey) => {
     setActiveSectionRaw(key);
     const next = new URLSearchParams(searchParams);
     next.set('section', key);
     if (key !== 'increment') next.delete('tab');
+    if (key !== 'logs') next.delete('logs');
     setSearchParams(next, { replace: true });
   };
   useEffect(() => {
@@ -714,6 +721,74 @@ export default function SystemSettings() {
         return <OrganizationPage />;
       case 'review-periods':
         return <ReviewPeriodsPage />;
+      case 'logs': {
+        const canAudit = canAccess('admin-audit-logs');
+        const canEmail = canAccess('admin-email-logs');
+        const available: Array<'audit' | 'email'> = [];
+        if (canAudit) available.push('audit');
+        if (canEmail) available.push('email');
+        if (available.length === 0) {
+          return (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <ScrollText className="h-5 w-5" />
+                  Logs
+                </CardTitle>
+                <CardDescription>You do not have access to any log views.</CardDescription>
+              </CardHeader>
+            </Card>
+          );
+        }
+        const activeLogsTab = (available as string[]).includes(logsTab) ? logsTab : available[0];
+        const handleLogsTabChange = (v: string) => {
+          const next = new URLSearchParams(searchParams);
+          next.set('section', 'logs');
+          next.set('logs', v);
+          setSearchParams(next, { replace: true });
+        };
+        return (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <ScrollText className="h-5 w-5" />
+                Logs
+              </CardTitle>
+              <CardDescription>
+                Review system audit trail and outgoing email delivery records.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Tabs value={activeLogsTab} onValueChange={handleLogsTabChange}>
+                <TabsList>
+                  {canAudit && (
+                    <TabsTrigger value="audit" className="gap-2">
+                      <History className="h-4 w-4" />
+                      Audit Logs
+                    </TabsTrigger>
+                  )}
+                  {canEmail && (
+                    <TabsTrigger value="email" className="gap-2">
+                      <Mail className="h-4 w-4" />
+                      Email Logs
+                    </TabsTrigger>
+                  )}
+                </TabsList>
+                {canAudit && (
+                  <TabsContent value="audit" className="mt-4">
+                    <AuditLogsPage />
+                  </TabsContent>
+                )}
+                {canEmail && (
+                  <TabsContent value="email" className="mt-4">
+                    <EmailLogsPage />
+                  </TabsContent>
+                )}
+              </Tabs>
+            </CardContent>
+          </Card>
+        );
+      }
       default:
         return null;
     }
