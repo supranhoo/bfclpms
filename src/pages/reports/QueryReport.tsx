@@ -40,6 +40,7 @@ export default function QueryReport() {
   const kpiIds = useMemo(() => allKpis?.map(k => k.id) || [], [allKpis]);
   const { data: queries, isLoading: queriesLoading } = useKpiQueries(kpiIds);
   const { toast } = useToast();
+  const resolvedFields = useResolvedReportFields('RPT-QRY-001', QRY_DEFAULT_FIELDS);
 
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const { companies, selectedCompanyId, setSelectedCompanyId, filterByCompany, getCompanyCode } = useCompanyFilter();
@@ -107,31 +108,36 @@ export default function QueryReport() {
       toast({ title: 'No data to export', variant: 'destructive' });
       return;
     }
-
-    const exportData = enrichedQueries.map(q => {
+    const visible = resolvedFields.filter((f) => !f.is_hidden);
+    const valueFor = (q: typeof enrichedQueries[number], key: string): string | number => {
       const kpi = kpiMap.get(q.kpi_id);
-      return {
-      'Company': getCompanyCode(kpi?.employee_id || ''),
-      'Ticket #': (q as any).ticket_number || '',
-      'KPI': q.kpiName,
-      'KRA': q.kraName,
-      'Employee': q.employeeName,
-      'Raised By': q.raisedByName,
-      'Raised To': q.raisedToName,
-      'Reason': q.reason,
-      'Status': q.status === 'open' ? 'Open' : 'Resolved',
-      'Created Date': format(new Date(q.created_at), 'dd MMM yyyy'),
-      'Days Open': q.status === 'open' ? q.daysSinceCreated : q.daysToResolve,
-      'Resolution Notes': q.resolution_notes || '',
+      switch (key) {
+        case 'company':          return getCompanyCode(kpi?.employee_id || '');
+        case 'ticket_number':    return (q as any).ticket_number || '';
+        case 'kpi':              return q.kpiName;
+        case 'kra':              return q.kraName;
+        case 'employee':         return q.employeeName;
+        case 'raised_by':        return q.raisedByName;
+        case 'raised_to':        return q.raisedToName;
+        case 'reason':           return q.reason;
+        case 'status':           return q.status === 'open' ? 'Open' : 'Resolved';
+        case 'created_date':     return format(new Date(q.created_at), 'dd MMM yyyy');
+        case 'days_open':        return (q.status === 'open' ? q.daysSinceCreated : q.daysToResolve) ?? '';
+        case 'resolution_notes': return q.resolution_notes || '';
+        default: return '';
+      }
     };
+    const exportData = enrichedQueries.map((q) => {
+      const row: Record<string, string | number> = {};
+      for (const fld of visible) row[fld.label] = valueFor(q, fld.field_key);
+      return row;
     });
-
-    const ws = XLSX.utils.json_to_sheet(exportData);
+    const ws = XLSX.utils.json_to_sheet(exportData, { header: visible.map((f) => f.label) });
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Queries');
     XLSX.writeFile(wb, `Query_Report_${new Date().toISOString().split('T')[0]}.xlsx`);
     toast({ title: 'Report downloaded successfully' });
-  }, [enrichedQueries, toast]);
+  }, [enrichedQueries, toast, resolvedFields, kpiMap, getCompanyCode]);
 
   const isLoading = kpisLoading || queriesLoading;
 
