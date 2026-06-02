@@ -77,7 +77,7 @@ export function MenuSettingTab() {
         is_overridden: true,
       };
     });
-  }, [resolved, drafts]);
+  }, [resolved, pendingMoves, pendingLabels]);
 
   const effectiveGrouped = useMemo(() => groupByParent(effective), [effective]);
   const dirtyCount = Object.keys(pendingMoves).length + Object.keys(pendingLabels).length;
