@@ -563,16 +563,18 @@ function RowBody(props: {
       </div>
 
       {/* Menu_Key column */}
-      <div className="hidden md:flex w-[240px] shrink-0 items-center">
+      <div className="flex w-[240px] shrink-0 items-center">
         <CopyableField value={node.menu_key} label="menu key" />
       </div>
 
       {/* Route column */}
-      <div className="hidden md:flex w-[200px] shrink-0 items-center">
+      <div className="flex w-[200px] shrink-0 items-center">
         {node.route_path ? (
           <CopyableField value={node.route_path} label="route" />
         ) : (
-          <span className="text-[10px] text-muted-foreground/50 italic">—</span>
+          <span className="text-[11px] font-mono text-muted-foreground/60 italic truncate">
+            {reg?.accepts_children ? 'Container' : '—'}
+          </span>
         )}
       </div>
 
