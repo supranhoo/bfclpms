@@ -53,6 +53,18 @@ export function MenuSettingTab() {
   const [seeding, setSeeding] = useState(false);
   const [search, setSearch] = useState('');
   const [createOpen, setCreateOpen] = useState(false);
+  const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
+  const [moveUnderOpen, setMoveUnderOpen] = useState(false);
+
+  function toggleSelect(menuKey: string) {
+    setSelectedKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(menuKey)) next.delete(menuKey);
+      else next.add(menuKey);
+      return next;
+    });
+  }
+  function clearSelection() { setSelectedKeys(new Set()); }
 
   const resolved = useMemo<ResolvedMenuNode[]>(() => {
     if (!registry.data) return [];
@@ -402,6 +414,8 @@ export function MenuSettingTab() {
                 onLabelChange={setLabelDraft}
                 onResetItem={resetItem}
                 searchTerm={search}
+                selectedKeys={selectedKeys}
+                onToggleSelect={toggleSelect}
               />
             </CardContent>
           </Card>
