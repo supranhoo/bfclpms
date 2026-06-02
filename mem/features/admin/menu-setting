@@ -1,0 +1,33 @@
+---
+name: Menu Setting (configurable menu)
+description: Phase 1–3 of configurable menus — resolver, menu_registry/overrides/audit, MenuSettingTab DnD tree for cross-level + cross-module repositioning
+type: feature
+---
+# Menu Setting — configurable menu architecture
+
+## Invariants
+- `menu_key` is **immutable identity** = permission key = audit key. Never rename or reuse a `menu_key`.
+- Menu Access (`menu_access_config`) governs **visibility**. Menu Setting governs **label / parent / order / level / module only**. The two layers compose: visible = access ∩ resolved position.
+- Master switch: `system_settings.menu_overrides_enabled` (jsonb `"false"` by default). When OFF, `useResolvedMenu()` returns no data and sidebar/settings fall back to hardcoded defaults — zero behaviour change.
+- DB trigger `menu_overrides_validate` is the authority: non-renamable rejection, non-movable rejection, cross-app block (initial allowlist empty — `is_cross_app_movable=false` everywhere), `accepts_children=false` parent rejection, cycle detection, level range 1..4, module change gating. TS `validateMove` mirrors it for instant UI feedback only.
+- DnD UI never bypasses the trigger; saves are per-row upserts so the trigger fires per item. Invalid drops blocked client-side AND server-side.
+
+## Architecture
+- `src/lib/menu/catalog.ts` — TS source of truth for the seed (every sidebar L2 item + every System Settings L3 tab). Admin clicks "Seed" to populate `menu_registry`. Upsert idempotent.
+- `src/lib/menu/applyOverrides.ts` — pure: merges defaults + active overrides (label / parent / sort / **level / module**) → `ResolvedMenuNode[]`.
+- `src/lib/menu/validateMove.ts` — pure: client-side mirror of DB trigger.
+- `src/hooks/useResolvedMenu.ts` — gated by feature flag; returns `{ nodes, byKey, labelByKey, byParent }` cached 5 min.
+- `src/components/admin/MenuSettingTab.tsx` + `MenuTreeDnd.tsx` — Phase 3: full @dnd-kit tree. Drag handle per row; drop zones above each row (reorder), on row body (nest as child), and on module headers (cross-module move). Inline rename, per-item revert, search, preview dialog, audit dialog, global reset, master switch. **No up/down buttons.**
+- Consumers wired: `AppSidebar` and `SystemSettings`.
+
+## DB
+- `menu_registry` — RLS: read=authenticated, write=admin.
+- `menu_overrides` — UNIQUE (`menu_key`, `COALESCE(client_id,'__global__')`). Columns: `custom_label`, `custom_parent_key`, `custom_sort_order`, `custom_menu_level`, `custom_module_key`. RLS: read=authenticated, write=admin.
+- `menu_override_audit` — admin-only read/insert, append-only. `field` ∈ {label, parent, sort_order, menu_level, module_key, reset, is_active}.
+- Backup: auto-included via `get_backup_table_order()`.
+
+## Out of scope (deferred)
+- L4 sub-tab consumers (Organization, Workflow Config) reading from resolver — registry rows need seeding + strips wiring.
+- Cross-app allowlist UI (today every item ships `is_cross_app_movable=false`; admins flip via direct registry edit).
+- Report Registry / Report IDs in URLs (Phase 4) and Report Field Sequence tile.
+- Multi-tenant `client_id` UI.
