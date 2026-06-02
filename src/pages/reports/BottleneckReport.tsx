@@ -12,6 +12,22 @@ import { PageHeader } from '@/components/layout/PageHeader';
 import { Download, Clock, Users, Timer, ChevronLeft, ChevronRight, UserCheck, ShieldCheck, Eye, Gavel } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import * as XLSX from 'xlsx';
+import { useResolvedReportFields } from '@/hooks/useResolvedReportFields';
+
+const BNK_DEFAULT_FIELDS = [
+  { field_key: 'company',            default_label: 'Company',            default_sort: 10 },
+  { field_key: 'emp_code',           default_label: 'Emp Code',           default_sort: 20, is_required: true },
+  { field_key: 'employee_name',      default_label: 'Employee Name',      default_sort: 30, is_required: true },
+  { field_key: 'department',         default_label: 'Department',         default_sort: 40 },
+  { field_key: 'kra',                default_label: 'KRA',                default_sort: 50 },
+  { field_key: 'kpi_name',           default_label: 'KPI Name',           default_sort: 60 },
+  { field_key: 'period',             default_label: 'Period',             default_sort: 70 },
+  { field_key: 'year',               default_label: 'Year',               default_sort: 80 },
+  { field_key: 'current_stage',      default_label: 'Current Stage',      default_sort: 90 },
+  { field_key: 'responsible_person', default_label: 'Responsible Person', default_sort: 100 },
+  { field_key: 'days_pending',       default_label: 'Days Pending',       default_sort: 110 },
+  { field_key: 'last_updated',       default_label: 'Last Updated',       default_sort: 120 },
+] as const;
 import { useToast } from '@/hooks/use-toast';
 import { useBottleneckReport, ALL_STAGES, STAGE_LABELS, type BottleneckRow, type TopHolder } from '@/hooks/useBottleneckReport';
 import { format } from 'date-fns';
