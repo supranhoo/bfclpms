@@ -335,6 +335,7 @@ function ModuleSection(props: {
   selectedKeys?: Set<string>;
   onToggleSelect?: (menuKey: string) => void;
   onCreateShortcut?: (menuKey: string) => void;
+  onDeleteCustom?: (menuKey: string) => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({
     id: `module-${props.moduleKey}`,
@@ -408,6 +409,7 @@ function TreeRow(props: {
   selectedKeys?: Set<string>;
   onToggleSelect?: (menuKey: string) => void;
   onCreateShortcut?: (menuKey: string) => void;
+  onDeleteCustom?: (menuKey: string) => void;
 }) {
   const { node, depth } = props;
   const reg = props.registryByKey[node.menu_key];
@@ -465,6 +467,8 @@ function RowBody(props: {
   selectedKeys?: Set<string>;
   onToggleSelect?: (menuKey: string) => void;
   onCreateShortcut?: (menuKey: string) => void;
+  onDeleteCustom?: (menuKey: string) => void;
+  childrenByParent?: Map<string, ResolvedMenuNode[]>;
 }) {
   const { node, depth, reg, hasKids, isExpanded, isDirty, labelDraft } = props;
 
