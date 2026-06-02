@@ -70,3 +70,17 @@ Then in the Report Builder tab:
 - Toggle flag off → every report instantly renders its hardcoded defaults.
 - Per-report Reset in the Report Builder clears overrides.
 - Catalog additions are additive; removing them later just falls back to page defaults.
+
+---
+
+## Phase 5 — Progress Log
+
+**Shipped (Phase 5a):**
+- Field catalog seeded for 4 Tier A reports: KRA Issuance, Department Summary, Variance, Unified Issues (Performance already wired in Phase 4).
+- XLSX export of all 4 now drives header order + labels through `useResolvedReportFields`. Cell access is by field key, not index.
+- `src/lib/reports/catalog.test.ts` guards required-field presence and field_key uniqueness.
+- Admins must click **Seed** in System Settings → Report Builder to push the new field rows into `report_field_registry`. Flag stays off by default → zero behaviour change.
+
+**Remaining Tier A (Phase 5b):** TNI, Employee Performance Summary, Completion, Audit Trail, Query, KPI Detail, KPI Status Tracker, Bottleneck. Same pattern — catalog seed + export switch.
+
+**Tier B (Phase 6):** Incentive, KPI-Employee Matrix, Monthly Scorecard, KPI Journey, KPI Scorecard Detail, Manager-vs-Team views. These need bespoke field-discovery passes; not flat tables.
