@@ -298,7 +298,7 @@ export function AppSidebar() {
         {/* Main Section */}
         <CollapsibleSidebarGroup
           label="Main"
-          items={menuItems.main}
+          items={applyResolved(menuItems.main)}
           isOpen={openSections.has('main')}
           onToggle={() => toggleSection('main')}
           filterByRole={filterByRole}
@@ -325,7 +325,7 @@ export function AppSidebar() {
         {/* Management Section */}
         <CollapsibleSidebarGroup
           label="Management"
-          items={menuItems.management}
+          items={applyResolved(menuItems.management)}
           isOpen={openSections.has('management')}
           onToggle={() => toggleSection('management')}
           filterByRole={filterByRole}
@@ -337,7 +337,7 @@ export function AppSidebar() {
         {/* HR PMS Section */}
         <CollapsibleSidebarGroup
           label="HR PMS"
-          items={menuItems.hr_pms}
+          items={applyResolved(menuItems.hr_pms)}
           isOpen={openSections.has('hr_pms')}
           onToggle={() => toggleSection('hr_pms')}
           filterByRole={filterByRole}
@@ -349,7 +349,7 @@ export function AppSidebar() {
         {/* Audit Section */}
         <CollapsibleSidebarGroup
           label="Audit"
-          items={menuItems.audit}
+          items={applyResolved(menuItems.audit)}
           isOpen={openSections.has('audit')}
           onToggle={() => toggleSection('audit')}
           filterByRole={filterByRole}
@@ -361,7 +361,7 @@ export function AppSidebar() {
         {/* Data Entry section for data owners or users with override */}
         <CollapsibleSidebarGroup
           label="Data Entry"
-          items={menuItems.dataEntry}
+          items={applyResolved(menuItems.dataEntry)}
           isOpen={openSections.has('dataEntry')}
           onToggle={() => toggleSection('dataEntry')}
           filterByRole={(items) => {
@@ -390,7 +390,7 @@ export function AppSidebar() {
         {/* KRA Settings Section */}
         <CollapsibleSidebarGroup
           label="KRA Settings"
-          items={menuItems.kraSettings}
+          items={applyResolved(menuItems.kraSettings)}
           isOpen={openSections.has('kraSettings')}
           onToggle={() => toggleSection('kraSettings')}
           filterByRole={filterByRole}
@@ -402,7 +402,7 @@ export function AppSidebar() {
         {/* Incentive Section */}
         <CollapsibleSidebarGroup
           label="Incentive"
-          items={menuItems.incentive}
+          items={applyResolved(menuItems.incentive)}
           isOpen={openSections.has('incentive')}
           onToggle={() => toggleSection('incentive')}
           filterByRole={filterByRole}
@@ -414,7 +414,7 @@ export function AppSidebar() {
         {/* Administration Section */}
         <CollapsibleSidebarGroup
           label="Administration"
-          items={menuItems.admin}
+          items={applyResolved(menuItems.admin)}
           isOpen={openSections.has('admin')}
           onToggle={() => toggleSection('admin')}
           filterByRole={filterByRole}
@@ -426,7 +426,7 @@ export function AppSidebar() {
         {/* Reports Section */}
         <CollapsibleSidebarGroup
           label="Reports"
-          items={menuItems.reports}
+          items={applyResolved(menuItems.reports)}
           isOpen={openSections.has('reports')}
           onToggle={() => toggleSection('reports')}
           filterByRole={filterByRole}
