@@ -41,6 +41,9 @@ import ReviewPeriodsPage from '@/pages/admin/ReviewPeriods';
 import AuditLogsPage from '@/pages/AuditLogs';
 import EmailLogsPage from '@/pages/admin/EmailLogs';
 import { useMenuAccess } from '@/hooks/useMenuAccess';
+import { MenuSettingTab } from '@/components/admin/MenuSettingTab';
+import { useResolvedMenu } from '@/hooks/useResolvedMenu';
+import { SETTINGS_SECTION_KEY_TO_MENU_KEY } from '@/lib/menu/catalog';
 import { ConfirmationIncrementSection } from '@/components/admin/scoring/ConfirmationIncrementSection';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable';
@@ -55,6 +58,7 @@ const SETTINGS_SECTIONS = [
   { key: 'general', label: 'General', icon: RefreshCw },
   { key: 'workflow', label: 'Workflow Config', icon: GitBranch },
   { key: 'organization', label: 'Organization', icon: Building2 },
+  { key: 'menu-setting', label: 'Menu Setting', icon: Menu },
   { key: 'review-periods', label: 'Review Periods', icon: Calendar },
   { key: 'scoring', label: 'Scoring', icon: Calculator },
   { key: 'increment', label: 'Increment', icon: TrendingUp },
