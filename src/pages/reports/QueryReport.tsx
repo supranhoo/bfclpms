@@ -14,6 +14,22 @@ import { PageHeader } from '@/components/layout/PageHeader';
 import { AlertTriangle, CheckCircle, Clock, Download, MessageSquare } from 'lucide-react';
 import { format, differenceInDays } from 'date-fns';
 import * as XLSX from 'xlsx';
+import { useResolvedReportFields } from '@/hooks/useResolvedReportFields';
+
+const QRY_DEFAULT_FIELDS = [
+  { field_key: 'company',          default_label: 'Company',          default_sort: 10 },
+  { field_key: 'ticket_number',    default_label: 'Ticket #',         default_sort: 20 },
+  { field_key: 'kpi',              default_label: 'KPI',              default_sort: 30, is_required: true },
+  { field_key: 'kra',              default_label: 'KRA',              default_sort: 40 },
+  { field_key: 'employee',         default_label: 'Employee',         default_sort: 50 },
+  { field_key: 'raised_by',        default_label: 'Raised By',        default_sort: 60 },
+  { field_key: 'raised_to',        default_label: 'Raised To',        default_sort: 70 },
+  { field_key: 'reason',           default_label: 'Reason',           default_sort: 80 },
+  { field_key: 'status',           default_label: 'Status',           default_sort: 90 },
+  { field_key: 'created_date',     default_label: 'Created Date',     default_sort: 100 },
+  { field_key: 'days_open',        default_label: 'Days Open',        default_sort: 110 },
+  { field_key: 'resolution_notes', default_label: 'Resolution Notes', default_sort: 120 },
+] as const;
 import { useToast } from '@/hooks/use-toast';
 
 export default function QueryReport() {
