@@ -62,6 +62,7 @@ const IdentityAccessConsole = lazy(() => import("./pages/admin/IdentityAccessCon
 const KpiStandardization = lazy(() => import("./pages/admin/KpiStandardization"));
 const RegistryBrowser = lazy(() => import("./pages/RegistryBrowser"));
 const BulkReviewDashboard = lazy(() => import("./pages/review/BulkReviewDashboard"));
+const CustomMenuPage = lazy(() => import("./pages/CustomMenuPage"));
 
 // Safety module shell + pages
 const SafetyLayout = lazy(() =>
