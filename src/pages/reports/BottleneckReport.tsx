@@ -83,6 +83,7 @@ export default function BottleneckReport() {
   const canExport = canDownload('bottleneck');
   const { getCompanyCode } = useCompanyFilter();
   const { toast } = useToast();
+  const resolvedFields = useResolvedReportFields('RPT-BNK-001', BNK_DEFAULT_FIELDS);
   const {
     rows, allFilteredRows, stats, urgencyStats, topHolders, chartData, isLoading,
     selectedYear, setSelectedYear,
@@ -123,26 +124,35 @@ export default function BottleneckReport() {
       toast({ title: 'No data to export', variant: 'destructive' });
       return;
     }
-    const data = allFilteredRows.map((r: BottleneckRow) => ({
-      'Company': getCompanyCode(r.employeeId),
-      'Emp Code': r.employeeCode,
-      'Employee Name': r.employeeName,
-      'Department': r.departmentName,
-      'KRA': r.kraName,
-      'KPI Name': r.kpiName,
-      'Period': r.period,
-      'Year': r.year,
-      'Current Stage': r.currentStage,
-      'Responsible Person': r.responsiblePerson,
-      'Days Pending': r.daysPending,
-      'Last Updated': format(new Date(r.lastUpdated), 'dd-MMM-yyyy'),
-    }));
-    const ws = XLSX.utils.json_to_sheet(data);
+    const visible = resolvedFields.filter((f) => !f.is_hidden);
+    const valueFor = (r: BottleneckRow, key: string): string | number => {
+      switch (key) {
+        case 'company':            return getCompanyCode(r.employeeId);
+        case 'emp_code':           return r.employeeCode;
+        case 'employee_name':      return r.employeeName;
+        case 'department':         return r.departmentName;
+        case 'kra':                return r.kraName;
+        case 'kpi_name':           return r.kpiName;
+        case 'period':             return r.period;
+        case 'year':               return r.year;
+        case 'current_stage':      return r.currentStage;
+        case 'responsible_person': return r.responsiblePerson;
+        case 'days_pending':       return r.daysPending;
+        case 'last_updated':       return format(new Date(r.lastUpdated), 'dd-MMM-yyyy');
+        default: return '';
+      }
+    };
+    const data = allFilteredRows.map((r: BottleneckRow) => {
+      const row: Record<string, string | number> = {};
+      for (const fld of visible) row[fld.label] = valueFor(r, fld.field_key);
+      return row;
+    });
+    const ws = XLSX.utils.json_to_sheet(data, { header: visible.map((f) => f.label) });
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Bottleneck Report');
     XLSX.writeFile(wb, `Bottleneck_Report_${new Date().toISOString().split('T')[0]}.xlsx`);
     toast({ title: 'Report downloaded successfully' });
-  }, [allFilteredRows, toast]);
+  }, [allFilteredRows, toast, resolvedFields, getCompanyCode]);
 
   const urgencyChartData = [
     { name: '0-3 days', value: urgencyStats.green, color: URGENCY_COLORS.green },
