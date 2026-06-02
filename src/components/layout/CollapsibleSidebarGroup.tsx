@@ -24,6 +24,8 @@ interface MenuItem {
   roles: string[];
   menuKey?: string;
   showBadge?: boolean;
+  /** Resolved nested children (universal nesting). Rendered indented. */
+  children?: MenuItem[];
 }
 
 interface CollapsibleSidebarGroupProps {
@@ -52,6 +54,38 @@ export function CollapsibleSidebarGroup({
   const filteredItems = filterByRole(items);
   if (filteredItems.length === 0) return null;
 
+  const renderRow = (item: MenuItem, depth: number) => {
+    const filteredKids = item.children ? filterByRole(item.children) : [];
+    return (
+      <SidebarMenuItem key={`${depth}:${item.path}`}>
+        <SidebarMenuButton
+          isActive={currentPath === item.path}
+          onClick={() => onNavigate(item.path)}
+          onMouseEnter={() => prefetchRoute(item.path)}
+          onFocus={() => prefetchRoute(item.path)}
+          className="transition-colors duration-150 data-[active=true]:font-semibold data-[active=true]:bg-sidebar-accent/15 data-[active=true]:text-sidebar-primary"
+          style={depth > 0 ? { paddingLeft: `${0.5 + depth * 0.75}rem` } : undefined}
+        >
+          <item.icon className="h-4 w-4" />
+          <span>{item.title}</span>
+          {item.showBadge && inboxBadgeCount && inboxBadgeCount > 0 && (
+            <Badge
+              variant="destructive"
+              className="ml-auto h-5 min-w-5 px-1 flex items-center justify-center text-xs"
+            >
+              {inboxBadgeCount}
+            </Badge>
+          )}
+        </SidebarMenuButton>
+        {filteredKids.length > 0 && (
+          <SidebarMenu className="gap-0.5 ml-1 border-l border-sidebar-border/40 pl-1">
+            {filteredKids.map((c) => renderRow(c, depth + 1))}
+          </SidebarMenu>
+        )}
+      </SidebarMenuItem>
+    );
+  };
+
   return (
     <Collapsible open={isOpen} onOpenChange={onToggle}>
       <SidebarGroup className="py-0">
@@ -76,28 +110,7 @@ export function CollapsibleSidebarGroup({
         <CollapsibleContent>
           <SidebarGroupContent className="mt-1">
             <SidebarMenu className="gap-0.5">
-              {filteredItems.map((item) => (
-                <SidebarMenuItem key={item.path}>
-                  <SidebarMenuButton
-                    isActive={currentPath === item.path}
-                    onClick={() => onNavigate(item.path)}
-                    onMouseEnter={() => prefetchRoute(item.path)}
-                    onFocus={() => prefetchRoute(item.path)}
-                className="transition-colors duration-150 data-[active=true]:font-semibold data-[active=true]:bg-sidebar-accent/15 data-[active=true]:text-sidebar-primary"
-                  >
-                    <item.icon className="h-4 w-4" />
-                    <span>{item.title}</span>
-                    {item.showBadge && inboxBadgeCount && inboxBadgeCount > 0 && (
-                      <Badge
-                        variant="destructive"
-                        className="ml-auto h-5 min-w-5 px-1 flex items-center justify-center text-xs"
-                      >
-                        {inboxBadgeCount}
-                      </Badge>
-                    )}
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
+              {filteredItems.map((item) => renderRow(item, 0))}
             </SidebarMenu>
           </SidebarGroupContent>
         </CollapsibleContent>

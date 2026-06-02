@@ -1,10 +1,12 @@
 ---
 name: Menu Setting — sidebar respects resolved parent_key
-description: AppSidebar renders groups from resolved menu tree (parent_key + sort_order), enabling cross-group moves from Menu Setting
+description: AppSidebar renders groups + nested children from the resolved menu tree; universal nesting up to depth 4
 type: feature
 ---
 - `AppSidebar` uses `resolveGroupItems(groupKey, fallback)` per group. With resolver loaded, each group is populated by ALL items whose resolved `parent_key === GROUP_PARENT_KEY[groupKey]`, sorted by resolved `sort_order`. Without resolver (flag off / not loaded), hardcoded fallback arrays render unchanged — zero-regression.
+- **Universal nesting (max depth = 4):** every L2 item with `accepts_children=true` (now the default in `catalog.ts`) can host children. `resolveGroupItems` walks `resolvedMenu.byParent` recursively and attaches resolved children onto each rendered row as `children`. `CollapsibleSidebarGroup` renders them indented under their parent (`SidebarMenu` nested with `pl-1` border-l). De-dup guard removes any key that ended up nested from also appearing at the group's top level.
+- Validator (`src/lib/menu/validateMove.ts`) + DB trigger `menu_overrides_validate` both enforce: source movable, target accepts children, same module (unless `is_cross_app_movable`), no cycles, and `target.menu_level + 1 ≤ MAX_MENU_DEPTH (4)`.
 - `GROUP_PARENT_KEY` / `PARENT_KEY_TO_GROUP` are the SSOT mapping between sidebar group slugs and registry `group-*` parent keys. Update both when adding a sidebar group.
 - **Pinning rule:** menu_keys appearing in MULTIPLE hardcoded groups (Data Entry duplicates: `admin-incentive-data`, `admin-org-kpi-data`, `admin-org-kpi-audit`) stay pinned to their native group regardless of resolved parent. Moving these is a registry/role-architecture decision out of scope.
-- `resolvedSectionForPath()` looks up the active route's menu_key in the registry pool and returns the resolved parent's group slug. Falls back to legacy URL-prefix `getSectionForPath()` when no match or resolver unavailable. Powers auto-expand + active-route indicator.
-- Menu Setting (drag Admin Dashboard from Administration → Main) now reflects live in the sidebar after the 5-min `useResolvedMenu` cache refresh / page refresh.
+- `resolvedSectionForPath()` walks the active route's menu_key UP the resolved `parent_key` chain until it hits a `group-*` parent — handles items nested 2+ levels deep. Falls back to legacy URL-prefix `getSectionForPath()` when no match or resolver unavailable.
+- Menu Setting (drag Admin Dashboard from Administration → Main, OR drop Performance Report INSIDE Admin Dashboard) now reflects live in the sidebar after the 5-min `useResolvedMenu` cache refresh / page refresh.

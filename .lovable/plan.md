@@ -1,92 +1,80 @@
-# Phase 5 — Extend Report Field Sequence to Remaining Reports
+# Universal Menu Nesting & Repositioning
 
-Phase 4 shipped the registry, resolver, shortlink route, and Report Builder DnD UI, with **Performance Report** as the reference wiring. Phase 5 rolls the resolver out to the rest of the reports without changing the resolver contract.
+Goal: turn Menu Setting + sidebar into a **single resolved recursive tree** so any movable item can be re-parented across levels (L2↔L3↔L4) and the live sidebar matches the saved tree exactly.
 
-## 1. Assumptions
-- Phase 4 contract is frozen: `useResolvedReportFields(reportId, defaults)` is the only consumer API. Flag `report_overrides_enabled` stays the master switch.
-- Each report keeps its own hardcoded `DEFAULT_FIELDS` (key, label, sort, required?). The catalog seed mirrors those defaults.
-- "Wiring" means: (a) seed fields in `src/lib/reports/catalog.ts`, (b) read `useResolvedReportFields` for header order + label, (c) reuse same list in CSV/XLSX export.
+## Risk & Impact
 
-## 2. Risk & Impact
-| Area | Impact | Mitigation |
-|---|---|---|
-| Reports UI | Header order/labels driven by resolver | Flag-off fallback to defaults, identical behaviour today |
-| Exports | Same resolver drives export headers | Snapshot test per report |
-| Data | Catalog additions only — re-running seed is idempotent | Seeder uses `ON CONFLICT DO UPDATE` on registry, leaves overrides untouched |
-| Regression | Pages that read row data by index would break | All target pages already read by object key (verified Phase 4) |
-| Scope | 19 remaining reports — risk of bloat | Group by complexity: Tier A (simple table reports) first, Tier B (composite/tabbed) later |
+- **Data**: no schema change required — `menu_overrides` already has `custom_parent_key`, `custom_menu_level`, `custom_module_key`, `custom_sort_order`. Catalog flags (`accepts_children`) change for many L2 leaves → purely additive.
+- **Workflow**: route, permission_key, report_key, RLS, role gates **unchanged**. Only visual placement.
+- **UI/UX**: sidebar groups now render recursively; nested children get L3/L4 indent. Active-route expansion walks resolved parent chain.
+- **Regression risk (medium)**: pinned duplicates (`admin-incentive-data`, `admin-org-kpi-data`, `admin-org-kpi-audit`) must keep working; role filtering must still apply per resolved node; flag-off path must stay byte-identical.
+- **Mitigation**: feature stays gated by `menu_overrides_enabled`; hardcoded fallback unchanged when flag off; pinning rule preserved; unit tests for validator + resolver tree; manual QA via the 6 test cases in the brief.
+- **Scalability**: tree size ~150 nodes, cached 5 min — negligible.
 
-## 3. Rollout Tiers
+## Plan (step → verification)
 
-**Tier A — single flat table, low risk (this phase)**
-- `RPT-KRA-001` KRA Issuance
-- `RPT-TNI-001` Training Needs
-- `RPT-EPS-001` Employee Performance Summary
-- `RPT-CMP-001` Completion Rate
-- `RPT-DEP-001` Department Summary
-- `RPT-AUD-001` Audit Trail
-- `RPT-VAR-001` Variance
-- `RPT-QRY-001` Query Report
-- `RPT-ISS-001` Issues
-- `RPT-KPID-001` KPI Detail
-- `RPT-KST-001` KPI Status Tracker
-- `RPT-BNK-001` Bottleneck
+### 1. Catalog: open up `accepts_children`
+File: `src/lib/menu/catalog.ts`
+- Default `accepts_children = true` for every **L2 non-system** item (dashboards, reports, admin tiles, settings tabs).
+- Keep `false` only for: pure action buttons (logout-like), and any item explicitly flagged `is_system_required`.
+- Keep `is_movable=false` + `is_system_required=true` on: module roots, `group-*` parents, Dashboard, Inbox, System Settings, Menu Setting.
+- ✅ Verify: visual inspection + a unit test asserting `>=80%` of L2 items now accept children.
 
-**Tier B — composite / tabbed / matrix (deferred to Phase 6)**
-- `RPT-INC-001` Incentive (901-line `MonthlyIncentiveTable` + retroactive sub-report — needs its own field discovery pass)
-- `RPT-MAT-001` KPI-Employee Matrix (pivoted columns)
-- `RPT-MSR-001` Monthly Scorecard (multi-section)
-- `RPT-KJN-001` KPI Journey (timeline view, not tabular)
-- `RPT-KSD-001` KPI Scorecard Detail
-- `RPT-MTK-001`, `RPT-TVM-001` (manager-vs-team comparison views)
+### 2. Validator: flexible nesting
+File: `src/lib/menu/validateMove.ts`
+- Allow target parent of **any** level (L1 group, L2 item, L3 item) as long as `accepts_children=true`.
+- Compute new `menu_level = parent.menu_level + 1`; reject if `> 4`.
+- Keep: not-movable, system-required, cross-app block, cycle detection, unknown-parent.
+- Mirror exact rules in DB trigger `menu_overrides_validate` (new migration).
+- ✅ Verify: new unit tests for L2→L3, L3→L2, L4→L2, cycle, depth>4, leaf-as-parent, system-locked.
 
-## 4. Step-by-Step (Tier A)
+### 3. DB trigger parity
+New migration updating `menu_overrides_validate` to match step 2 (depth check via recursive resolved chain, leaf-parent rejection via registry lookup).
+- ✅ Verify: SQL test inserts in migration comment; client validateMove + trigger return same verdicts on the 6 brief examples.
 
-For each Tier A report:
-1. Open the page, extract the existing column list into `<REPORT>_DEFAULT_FIELDS` const (key/label/sort, mark identity columns `is_required: true`).
-2. Add the field array to its `REPORT_CATALOG` entry in `src/lib/reports/catalog.ts`.
-3. Replace header render with `useResolvedReportFields('RPT-XXX-001', DEFAULT_FIELDS)`; map cells by `field.key`.
-4. Update its export builder to use the same resolved list.
-5. Add a snapshot test: with override `{ field_key: X, custom_sort: 0, custom_label: 'Y' }`, header order matches.
+### 4. Resolver: build recursive tree
+File: `src/lib/menu/applyOverrides.ts` (+ `useResolvedMenu`)
+- Already returns `byParent`. Add `buildTree(rootKey)` helper returning `{ node, children[] }` recursively, ordered by `sort_order`.
+- ✅ Verify: unit test on a fixture proves moving `reports-performance` under `admin-dashboard` produces nested child.
 
-Then in the Report Builder tab:
-6. Re-run **Seed** to upsert new field rows for all Tier A reports.
+### 5. Sidebar: render recursive tree
+File: `src/components/layout/AppSidebar.tsx` + `CollapsibleSidebarGroup.tsx`
+- Replace `resolveGroupItems` with `resolveGroupTree(groupKey)` returning the full subtree for each `group-*` parent.
+- Render L2 = `SidebarMenuButton`, L3/L4 = nested `SidebarMenuSub` / indented buttons.
+- Active-route detection: walk resolved `parent_key` chain from active `menu_key` up to the `group-*` root → that group expands.
+- Preserve **pinning rule** for the 3 duplicate keys (still rendered in their native group regardless of resolved parent).
+- Role filter applied per node before render.
+- Flag off → unchanged hardcoded path.
+- ✅ Verify: manual QA on the 6 test cases (move Performance Report to Main, under Admin Dashboard, back, cycle blocked, locked blocked, role-gated still hidden).
 
-## 5. UI Changes
-- No new screens. Tier A reports now respect admin re-ordering / renaming / hide via the existing Report Builder tile.
-- Admins see the same reports as in Phase 4 but expanding each Tier A row now shows its real columns instead of an empty list.
+### 6. Menu Setting DnD parity
+File: `src/components/admin/MenuTreeDnd.tsx`
+- Allow drop-as-child on **any** row whose registry node has `accepts_children=true` (currently only L1/L2 containers).
+- Badges per row: `Locked` (system_required), `Can contain items` (accepts_children), `Leaf item` (else).
+- Warning toast when moving a report-* key under an admin-* parent: "Route & access unchanged, only placement moves."
+- ✅ Verify: drag Performance Report → Admin Dashboard succeeds; cycle blocked; depth-cap blocked.
 
-## 6. Tests
-- One header-order snapshot per Tier A report (12 tests).
-- `catalog.test.ts`: every Tier A report has ≥1 required field and unique `field_key`s.
-- Idempotency: seeder run twice produces no-op (already covered, re-asserted).
+### 7. Tests
+- `validateMove.test.ts` — 8 cases listed in step 2.
+- `applyOverrides.tree.test.ts` — recursive tree assembly + sort.
+- `AppSidebar.resolved.test.tsx` (lightweight) — given a mock resolver, asserts Performance Report renders inside the chosen group.
 
-## 7. Out of Scope
-- Tier B reports (Phase 6).
-- New computed columns from the UI.
-- Per-user column preferences.
+### 8. Docs / memory
+- Update `mem/features/admin/menu-setting` (depth=4 cap, leaf-vs-parent rule, badges).
+- Update `mem/features/admin/menu-setting-sidebar-rendering` (recursive render, parent-chain active detection).
+- Append `docs/adr/ADR-0xx.md` describing the move to a universal tree.
 
-## 8. Rollback
-- Toggle flag off → every report instantly renders its hardcoded defaults.
-- Per-report Reset in the Report Builder clears overrides.
-- Catalog additions are additive; removing them later just falls back to page defaults.
+## UI Changes
 
----
+- **Sidebar**: items can now appear nested 1–2 levels deep under another item (indent + smaller chevron). Group still collapsible.
+- **Menu Setting**: every eligible row shows a drop-as-child zone + new badges. Warning toast on cross-domain placement.
+- **No new pages, no new routes.**
 
-## Phase 5 — Progress Log
+## Out of scope
 
-**Shipped (Phase 5a):**
-- Field catalog seeded for 4 Tier A reports: KRA Issuance, Department Summary, Variance, Unified Issues (Performance already wired in Phase 4).
-- XLSX export of all 4 now drives header order + labels through `useResolvedReportFields`. Cell access is by field key, not index.
-- `src/lib/reports/catalog.test.ts` guards required-field presence and field_key uniqueness.
-- Admins must click **Seed** in System Settings → Report Builder to push the new field rows into `report_field_registry`. Flag stays off by default → zero behaviour change.
+- Renaming `menu_key`s, changing routes/permissions, multi-tenant `client_id` UI, L1 module ordering, report registry refactor.
 
-**Shipped (Phase 5b):**
-- Catalog + XLSX export wired for the remaining 8 Tier A reports: TNI (`RPT-TNI-001`), Employee Performance Summary (`RPT-EPS-001`), Completion (`RPT-CMP-001`), Audit Trail (`RPT-AUD-001`), Query (`RPT-QRY-001`), KPI Detail (`RPT-KPID-001`), KPI Status Tracker (`RPT-KST-001`), Bottleneck (`RPT-BNK-001`).
-- All 12 Tier A reports now resolve their export columns via `useResolvedReportFields(reportId, DEFAULT_FIELDS)`; flag-off path returns hardcoded defaults — zero behaviour change.
-- KST `#` column is marked `is_required: true, is_renamable: false` so the row counter can't be hidden or renamed.
-- Admins must re-run **Seed** in System Settings → Report Builder to upsert the new field rows.
+## Rollback
 
-**Tier B (Phase 6) — in progress:**
-- Shipped: `RPT-KSD-001` KPI Scorecard Detail — single-month and range XLSX exports both now flow through `useResolvedReportFields`; range path reuses the same resolved field set across all enumerated periods so column order/labels stay consistent.
-- Remaining: Incentive, KPI-Employee Matrix, Monthly Scorecard, KPI Journey, Manager-vs-Team views. Each needs its own field-discovery pass before wiring.
+- Toggle `system_settings.menu_overrides_enabled = false` → sidebar instantly returns to hardcoded layout.
+- Revert migration #3 if trigger rejects valid moves; client validator is a pure file revert.
