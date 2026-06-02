@@ -390,20 +390,40 @@ export function MenuSettingTab() {
         {/* Footer actions */}
         {!isEmpty && (
           <div className="flex items-center justify-end">
-            <ConfirmDestructiveDialog
-              title="Reset all menu customizations?"
-              description="Every rename and reorder will revert to defaults. This action is logged in the audit trail."
-              confirmLabel="Reset everything"
-              onConfirm={resetAllOverrides}
-            >
-              <Button variant="outline" size="sm" className="gap-2">
-                <RotateCcw className="h-4 w-4" /> Reset all to defaults
-              </Button>
-            </ConfirmDestructiveDialog>
+            <ResetAllButton onConfirm={resetAllOverrides} />
           </div>
         )}
       </div>
     </TooltipProvider>
+  );
+}
+
+function ResetAllButton({ onConfirm }: { onConfirm: () => Promise<void> }) {
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  return (
+    <>
+      <Button variant="outline" size="sm" className="gap-2" onClick={() => setOpen(true)}>
+        <RotateCcw className="h-4 w-4" /> Reset all to defaults
+      </Button>
+      <ConfirmDestructiveDialog
+        open={open}
+        title="Reset all menu customizations?"
+        description="Every rename and reorder will revert to defaults. This action is logged in the audit trail."
+        confirmLabel="Reset everything"
+        isLoading={busy}
+        onCancel={() => setOpen(false)}
+        onConfirm={async () => {
+          setBusy(true);
+          try {
+            await onConfirm();
+          } finally {
+            setBusy(false);
+            setOpen(false);
+          }
+        }}
+      />
+    </>
   );
 }
 
