@@ -349,6 +349,17 @@ function ModuleSection(props: {
       <div className="px-3 py-2 text-xs font-bold uppercase tracking-wider text-muted-foreground border-b">
         {props.moduleKey}
       </div>
+      {/* Column headers — align with TreeRow grid below */}
+      <div className="hidden md:flex items-center gap-1.5 px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground border-b bg-muted/30">
+        <div className="w-5" />
+        <div className="w-5" />
+        <div className="w-4" />
+        <div className="flex-1 min-w-0 px-2">Menu Name</div>
+        <div className="w-[240px] shrink-0">Menu_Key</div>
+        <div className="w-[200px] shrink-0">Route</div>
+        <div className="w-[110px] shrink-0 text-right pr-1">Status</div>
+        <div className="w-[60px] shrink-0 text-right">Actions</div>
+      </div>
       <div className="p-2 space-y-0.5">
         {props.roots.length === 0 && (
           <div className="text-xs italic text-muted-foreground px-2 py-3">
