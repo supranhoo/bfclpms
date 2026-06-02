@@ -23,7 +23,7 @@ async function fetchRegistry(): Promise<MenuRegistryRow[]> {
     .from('menu_registry' as any)
     .select('*');
   if (error) throw error;
-  return (data ?? []) as MenuRegistryRow[];
+  return ((data ?? []) as unknown) as MenuRegistryRow[];
 }
 
 async function fetchOverrides(): Promise<MenuOverrideRow[]> {
@@ -32,7 +32,7 @@ async function fetchOverrides(): Promise<MenuOverrideRow[]> {
     .select('*')
     .eq('is_active', true);
   if (error) throw error;
-  return (data ?? []) as MenuOverrideRow[];
+  return ((data ?? []) as unknown) as MenuOverrideRow[];
 }
 
 /** Master switch — when false, the app uses default labels everywhere. */
@@ -82,7 +82,7 @@ export function useMenuRegistryAdmin() {
     queryFn: async () => {
       const { data, error } = await supabase.from('menu_overrides' as any).select('*');
       if (error) throw error;
-      return (data ?? []) as MenuOverrideRow[];
+      return ((data ?? []) as unknown) as MenuOverrideRow[];
     },
     staleTime: STALE_MS,
   });
