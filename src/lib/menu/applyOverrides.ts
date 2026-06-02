@@ -24,14 +24,16 @@ export function applyOverrides(
     const labelOverridden  = !!o && o.custom_label !== null && o.custom_label !== r.default_label;
     const parentOverridden = !!o && o.custom_parent_key !== null && o.custom_parent_key !== r.default_parent_key;
     const sortOverridden   = !!o && o.custom_sort_order !== null && o.custom_sort_order !== r.default_sort_order;
+    const levelOverridden  = !!o && o.custom_menu_level !== null && o.custom_menu_level !== r.menu_level;
+    const moduleOverridden = !!o && o.custom_module_key !== null && o.custom_module_key !== r.module_key;
 
     return {
       menu_key: r.menu_key,
       label: labelOverridden ? (o!.custom_label as string) : r.default_label,
       parent_key: parentOverridden ? o!.custom_parent_key : r.default_parent_key,
       sort_order: sortOverridden ? (o!.custom_sort_order as number) : r.default_sort_order,
-      module_key: r.module_key,
-      menu_level: r.menu_level,
+      module_key: moduleOverridden ? (o!.custom_module_key as string) : r.module_key,
+      menu_level: (levelOverridden ? (o!.custom_menu_level as number) : r.menu_level) as 1 | 2 | 3 | 4,
       route_path: r.route_path,
       icon_name: r.icon_name,
       accepts_children: r.accepts_children,
@@ -39,7 +41,7 @@ export function applyOverrides(
       is_movable: r.is_movable,
       is_cross_app_movable: r.is_cross_app_movable,
       is_system_required: r.is_system_required,
-      is_overridden: labelOverridden || parentOverridden || sortOverridden,
+      is_overridden: labelOverridden || parentOverridden || sortOverridden || levelOverridden || moduleOverridden,
     };
   });
 }
