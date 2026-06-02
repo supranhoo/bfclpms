@@ -28,6 +28,7 @@ import type { MenuOverrideRow, MenuRegistryRow, ResolvedMenuNode } from '@/lib/m
 import { MenuTreeDnd, type PendingMove, type LabelDraft } from './MenuTreeDnd';
 import { CreateMenuItemDialog } from './CreateMenuItemDialog';
 import { MoveUnderDialog } from './MoveUnderDialog';
+import { CreateShortcutDialog } from './CreateShortcutDialog';
 
 /** Menu Setting tab — Phase 3: full DnD reposition + rename + audit + reset. */
 export function MenuSettingTab() {
@@ -55,6 +56,7 @@ export function MenuSettingTab() {
   const [createOpen, setCreateOpen] = useState(false);
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
   const [moveUnderOpen, setMoveUnderOpen] = useState(false);
+  const [shortcutSourceKey, setShortcutSourceKey] = useState<string | null>(null);
 
   function toggleSelect(menuKey: string) {
     setSelectedKeys((prev) => {
@@ -342,6 +344,16 @@ export function MenuSettingTab() {
           onApplyMove={applyMove}
         />
 
+        <CreateShortcutDialog
+          open={!!shortcutSourceKey}
+          onOpenChange={(v) => { if (!v) setShortcutSourceKey(null); }}
+          source={shortcutSourceKey ? registryByKey[shortcutSourceKey] ?? null : null}
+          registry={registry.data ?? []}
+          registryByKey={registryByKey}
+          resolvedByKey={resolvedByKey}
+          effective={effective}
+        />
+
         {/* Empty-state seed */}
         {isEmpty && (
           <Card className="border-dashed">
@@ -441,6 +453,7 @@ export function MenuSettingTab() {
                 searchTerm={search}
                 selectedKeys={selectedKeys}
                 onToggleSelect={toggleSelect}
+                onCreateShortcut={(k) => setShortcutSourceKey(k)}
               />
             </CardContent>
           </Card>
