@@ -80,7 +80,7 @@ describe('validateMove — universal nesting', () => {
     const res2 = { ...resolved, 'deep-parent': node(deepParent) };
     const v = validateMove({ source: perfReport, targetParentKey: 'deep-parent', registryByKey: reg2, resolvedByKey: res2 });
     expect(v.ok).toBe(false);
-    if (!v.ok) expect(v.reason).toMatch(/too deep/i);
+    expect(v.ok === false && /too deep/i.test(v.reason)).toBe(true);
   });
 
   it('rejects cycles', () => {
@@ -88,7 +88,7 @@ describe('validateMove — universal nesting', () => {
     const res2 = { ...resolved, 'admin-dashboard': node(adminDash, { parent_key: 'reports-perf' }) };
     const v = validateMove({ source: perfReport, targetParentKey: 'admin-dashboard', registryByKey: registry, resolvedByKey: res2 });
     expect(v.ok).toBe(false);
-    if (!v.ok) expect(v.reason).toMatch(/cycle/i);
+    expect(v.ok === false && /cycle/i.test(v.reason)).toBe(true);
   });
 
   it('rejects system-required items', () => {
