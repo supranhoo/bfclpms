@@ -4587,6 +4587,161 @@ export type Database = {
         }
         Relationships: []
       }
+      menu_override_audit: {
+        Row: {
+          changed_at: string
+          changed_by: string | null
+          client_id: string | null
+          field: string
+          id: string
+          menu_key: string
+          new_value: string | null
+          old_value: string | null
+        }
+        Insert: {
+          changed_at?: string
+          changed_by?: string | null
+          client_id?: string | null
+          field: string
+          id?: string
+          menu_key: string
+          new_value?: string | null
+          old_value?: string | null
+        }
+        Update: {
+          changed_at?: string
+          changed_by?: string | null
+          client_id?: string | null
+          field?: string
+          id?: string
+          menu_key?: string
+          new_value?: string | null
+          old_value?: string | null
+        }
+        Relationships: []
+      }
+      menu_overrides: {
+        Row: {
+          client_id: string | null
+          created_at: string
+          custom_label: string | null
+          custom_parent_key: string | null
+          custom_sort_order: number | null
+          id: string
+          is_active: boolean
+          menu_key: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          client_id?: string | null
+          created_at?: string
+          custom_label?: string | null
+          custom_parent_key?: string | null
+          custom_sort_order?: number | null
+          id?: string
+          is_active?: boolean
+          menu_key: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          client_id?: string | null
+          created_at?: string
+          custom_label?: string | null
+          custom_parent_key?: string | null
+          custom_sort_order?: number | null
+          id?: string
+          is_active?: boolean
+          menu_key?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "menu_overrides_custom_parent_key_fkey"
+            columns: ["custom_parent_key"]
+            isOneToOne: false
+            referencedRelation: "menu_registry"
+            referencedColumns: ["menu_key"]
+          },
+          {
+            foreignKeyName: "menu_overrides_menu_key_fkey"
+            columns: ["menu_key"]
+            isOneToOne: false
+            referencedRelation: "menu_registry"
+            referencedColumns: ["menu_key"]
+          },
+        ]
+      }
+      menu_registry: {
+        Row: {
+          accepts_children: boolean
+          created_at: string
+          default_label: string
+          default_parent_key: string | null
+          default_sort_order: number
+          feature_key: string | null
+          icon_name: string | null
+          is_cross_app_movable: boolean
+          is_movable: boolean
+          is_renamable: boolean
+          is_system_required: boolean
+          menu_key: string
+          menu_level: number
+          module_key: string
+          permission_key: string | null
+          route_path: string | null
+          updated_at: string
+        }
+        Insert: {
+          accepts_children?: boolean
+          created_at?: string
+          default_label: string
+          default_parent_key?: string | null
+          default_sort_order?: number
+          feature_key?: string | null
+          icon_name?: string | null
+          is_cross_app_movable?: boolean
+          is_movable?: boolean
+          is_renamable?: boolean
+          is_system_required?: boolean
+          menu_key: string
+          menu_level: number
+          module_key?: string
+          permission_key?: string | null
+          route_path?: string | null
+          updated_at?: string
+        }
+        Update: {
+          accepts_children?: boolean
+          created_at?: string
+          default_label?: string
+          default_parent_key?: string | null
+          default_sort_order?: number
+          feature_key?: string | null
+          icon_name?: string | null
+          is_cross_app_movable?: boolean
+          is_movable?: boolean
+          is_renamable?: boolean
+          is_system_required?: boolean
+          menu_key?: string
+          menu_level?: number
+          module_key?: string
+          permission_key?: string | null
+          route_path?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "menu_registry_default_parent_key_fkey"
+            columns: ["default_parent_key"]
+            isOneToOne: false
+            referencedRelation: "menu_registry"
+            referencedColumns: ["menu_key"]
+          },
+        ]
+      }
       modules: {
         Row: {
           code: string

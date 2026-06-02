@@ -41,6 +41,9 @@ import ReviewPeriodsPage from '@/pages/admin/ReviewPeriods';
 import AuditLogsPage from '@/pages/AuditLogs';
 import EmailLogsPage from '@/pages/admin/EmailLogs';
 import { useMenuAccess } from '@/hooks/useMenuAccess';
+import { MenuSettingTab } from '@/components/admin/MenuSettingTab';
+import { useResolvedMenu } from '@/hooks/useResolvedMenu';
+import { SETTINGS_SECTION_KEY_TO_MENU_KEY } from '@/lib/menu/catalog';
 import { ConfirmationIncrementSection } from '@/components/admin/scoring/ConfirmationIncrementSection';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable';
@@ -55,6 +58,7 @@ const SETTINGS_SECTIONS = [
   { key: 'general', label: 'General', icon: RefreshCw },
   { key: 'workflow', label: 'Workflow Config', icon: GitBranch },
   { key: 'organization', label: 'Organization', icon: Building2 },
+  { key: 'menu-setting', label: 'Menu Setting', icon: Menu },
   { key: 'review-periods', label: 'Review Periods', icon: Calendar },
   { key: 'scoring', label: 'Scoring', icon: Calculator },
   { key: 'increment', label: 'Increment', icon: TrendingUp },
@@ -133,6 +137,20 @@ export default function SystemSettings() {
   const updateSetting = useUpdateSystemSetting();
   const isMobile = useIsMobile();
   const { canAccess } = useMenuAccess();
+  const { data: resolvedMenu } = useResolvedMenu();
+  const sectionsResolved = (() => {
+    const labelFor = (key: string, fallback: string) => {
+      const mk = SETTINGS_SECTION_KEY_TO_MENU_KEY[key];
+      return (mk && resolvedMenu?.labelByKey[mk]) || fallback;
+    };
+    const sortFor = (key: string, fallback: number) => {
+      const mk = SETTINGS_SECTION_KEY_TO_MENU_KEY[key];
+      return (mk && resolvedMenu?.byKey[mk]?.sort_order) ?? fallback;
+    };
+    return [...SETTINGS_SECTIONS]
+      .map((s, i) => ({ ...s, label: labelFor(s.key, s.label), _sort: sortFor(s.key, (i + 1) * 10) }))
+      .sort((a, b) => a._sort - b._sort);
+  })();
   const [searchParams, setSearchParams] = useSearchParams();
   const initialSection = (searchParams.get('section') as SectionKey) || 'branding';
   const [activeSection, setActiveSectionRaw] = useState<SectionKey>(initialSection);
@@ -715,6 +733,8 @@ export default function SystemSettings() {
         return <FeatureFlagsTab />;
       case 'module-hub':
         return <ModuleHubSettings />;
+      case 'menu-setting':
+        return <MenuSettingTab />;
       case 'workflow':
         return <WorkflowConfigPage />;
       case 'organization':
@@ -797,7 +817,7 @@ export default function SystemSettings() {
   const SidebarNav = () => (
     <ScrollArea className="h-full">
       <nav className="space-y-1 p-3">
-        {SETTINGS_SECTIONS.map((section) => {
+        {sectionsResolved.map((section) => {
           const Icon = section.icon;
           const isActive = activeSection === section.key;
           return (
@@ -833,7 +853,7 @@ export default function SystemSettings() {
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            {SETTINGS_SECTIONS.map((section) => {
+            {sectionsResolved.map((section) => {
               const Icon = section.icon;
               return (
                 <SelectItem key={section.key} value={section.key}>

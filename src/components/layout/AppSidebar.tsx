@@ -7,6 +7,7 @@ import { useAppSettings } from '@/hooks/useAppSettings';
 import { useIsAnyOrgKpiDataOwner } from '@/hooks/useOrgKpiDataOwner';
 import { useMenuAccess } from '@/hooks/useMenuAccess';
 import { useBulkReviewFlag } from '@/hooks/useBulkReview';
+import { useResolvedMenu } from '@/hooks/useResolvedMenu';
 import {
   Sidebar,
   SidebarContent,
@@ -163,9 +164,32 @@ export function AppSidebar() {
   const { data: isDataOwner } = useIsAnyOrgKpiDataOwner();
   const { canAccess, canPerform, userOverrides } = useMenuAccess();
   const { data: bulkReviewFlagOn } = useBulkReviewFlag();
+  const { data: resolvedMenu } = useResolvedMenu();
 
   const policyVisibleRoles = appSettings?.pms_policy_visible_roles || ['admin', 'manager', 'employee', 'auditor', 'management', 'hr_pms'];
   const menuItems = getStaticMenuItems(policyVisibleRoles);
+
+  // Apply resolved labels + sort to every group's items. menu_key is the
+  // stable identity; when overrides exist, override → default; sort_order
+  // re-sorts within the group.
+  const applyResolved = useCallback(
+    <T extends { title: string; menuKey?: string }>(items: T[], groupParentKey?: string): T[] => {
+      if (!resolvedMenu) return items;
+      return [...items]
+        .map((it, idx) => {
+          const mk = it.menuKey;
+          if (!mk) return { item: it, sort: (idx + 1) * 10 };
+          const node = resolvedMenu.byKey[mk];
+          return {
+            item: { ...it, title: node?.label ?? it.title } as T,
+            sort: node?.sort_order ?? (idx + 1) * 10,
+          };
+        })
+        .sort((a, b) => a.sort - b.sort)
+        .map((x) => x.item);
+    },
+    [resolvedMenu],
+  );
 
   // Flag-gated additive entry — PRD v2.0 §0 Non-Regression Contract.
   // Hidden unless `feature_bulk_review_dashboard = true` AND user is a reviewer.
@@ -274,7 +298,7 @@ export function AppSidebar() {
         {/* Main Section */}
         <CollapsibleSidebarGroup
           label="Main"
-          items={menuItems.main}
+          items={applyResolved(menuItems.main)}
           isOpen={openSections.has('main')}
           onToggle={() => toggleSection('main')}
           filterByRole={filterByRole}
@@ -287,9 +311,9 @@ export function AppSidebar() {
         {/* Manager Section */}
         <CollapsibleSidebarGroup
           label="Manager"
-          items={[
+          items={applyResolved([
             { title: 'Team Reviews', icon: Users, path: '/dashboard?view=team', menuKey: 'team-reviews', roles: ['manager', 'admin', 'management', 'skip_level'] },
-          ]}
+          ])}
           isOpen={openSections.has('manager')}
           onToggle={() => toggleSection('manager')}
           filterByRole={filterByRole}
@@ -301,7 +325,7 @@ export function AppSidebar() {
         {/* Management Section */}
         <CollapsibleSidebarGroup
           label="Management"
-          items={menuItems.management}
+          items={applyResolved(menuItems.management)}
           isOpen={openSections.has('management')}
           onToggle={() => toggleSection('management')}
           filterByRole={filterByRole}
@@ -313,7 +337,7 @@ export function AppSidebar() {
         {/* HR PMS Section */}
         <CollapsibleSidebarGroup
           label="HR PMS"
-          items={menuItems.hr_pms}
+          items={applyResolved(menuItems.hr_pms)}
           isOpen={openSections.has('hr_pms')}
           onToggle={() => toggleSection('hr_pms')}
           filterByRole={filterByRole}
@@ -325,7 +349,7 @@ export function AppSidebar() {
         {/* Audit Section */}
         <CollapsibleSidebarGroup
           label="Audit"
-          items={menuItems.audit}
+          items={applyResolved(menuItems.audit)}
           isOpen={openSections.has('audit')}
           onToggle={() => toggleSection('audit')}
           filterByRole={filterByRole}
@@ -337,7 +361,7 @@ export function AppSidebar() {
         {/* Data Entry section for data owners or users with override */}
         <CollapsibleSidebarGroup
           label="Data Entry"
-          items={menuItems.dataEntry}
+          items={applyResolved(menuItems.dataEntry)}
           isOpen={openSections.has('dataEntry')}
           onToggle={() => toggleSection('dataEntry')}
           filterByRole={(items) => {
@@ -366,7 +390,7 @@ export function AppSidebar() {
         {/* KRA Settings Section */}
         <CollapsibleSidebarGroup
           label="KRA Settings"
-          items={menuItems.kraSettings}
+          items={applyResolved(menuItems.kraSettings)}
           isOpen={openSections.has('kraSettings')}
           onToggle={() => toggleSection('kraSettings')}
           filterByRole={filterByRole}
@@ -378,7 +402,7 @@ export function AppSidebar() {
         {/* Incentive Section */}
         <CollapsibleSidebarGroup
           label="Incentive"
-          items={menuItems.incentive}
+          items={applyResolved(menuItems.incentive)}
           isOpen={openSections.has('incentive')}
           onToggle={() => toggleSection('incentive')}
           filterByRole={filterByRole}
@@ -390,7 +414,7 @@ export function AppSidebar() {
         {/* Administration Section */}
         <CollapsibleSidebarGroup
           label="Administration"
-          items={menuItems.admin}
+          items={applyResolved(menuItems.admin)}
           isOpen={openSections.has('admin')}
           onToggle={() => toggleSection('admin')}
           filterByRole={filterByRole}
@@ -402,7 +426,7 @@ export function AppSidebar() {
         {/* Reports Section */}
         <CollapsibleSidebarGroup
           label="Reports"
-          items={menuItems.reports}
+          items={applyResolved(menuItems.reports)}
           isOpen={openSections.has('reports')}
           onToggle={() => toggleSection('reports')}
           filterByRole={filterByRole}
