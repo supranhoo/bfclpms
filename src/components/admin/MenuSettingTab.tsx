@@ -15,7 +15,7 @@ import { TooltipProvider } from '@/components/ui/tooltip';
 import { ConfirmDestructiveDialog } from '@/components/ui/ConfirmDestructiveDialog';
 import {
   Menu as MenuIcon, RotateCcw, Save, History,
-  AlertCircle, Eye, Sparkles, Database, Search,
+  AlertCircle, Eye, Sparkles, Database, Search, Plus,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
@@ -26,6 +26,7 @@ import { applyOverrides, groupByParent } from '@/lib/menu/applyOverrides';
 import { MENU_CATALOG, MENU_CATALOG_BY_KEY } from '@/lib/menu/catalog';
 import type { MenuOverrideRow, MenuRegistryRow, ResolvedMenuNode } from '@/lib/menu/types';
 import { MenuTreeDnd, type PendingMove, type LabelDraft } from './MenuTreeDnd';
+import { CreateMenuItemDialog } from './CreateMenuItemDialog';
 
 /** Menu Setting tab — Phase 3: full DnD reposition + rename + audit + reset. */
 export function MenuSettingTab() {
@@ -50,6 +51,7 @@ export function MenuSettingTab() {
   const [saving, setSaving] = useState(false);
   const [seeding, setSeeding] = useState(false);
   const [search, setSearch] = useState('');
+  const [createOpen, setCreateOpen] = useState(false);
 
   const resolved = useMemo<ResolvedMenuNode[]>(() => {
     if (!registry.data) return [];
@@ -59,6 +61,11 @@ export function MenuSettingTab() {
   const registryByKey = useMemo<Record<string, MenuRegistryRow>>(
     () => Object.fromEntries((registry.data ?? []).map((r) => [r.menu_key, r])),
     [registry.data],
+  );
+
+  const resolvedByKey = useMemo<Record<string, ResolvedMenuNode>>(
+    () => Object.fromEntries(resolved.map((n) => [n.menu_key, n])),
+    [resolved],
   );
 
   // Apply pending drafts on top of resolved for the live tree.
@@ -297,10 +304,20 @@ export function MenuSettingTab() {
                 </div>
                 <PreviewDialog grouped={effectiveGrouped} />
                 <AuditDialog />
+                <Button size="sm" className="gap-2" onClick={() => setCreateOpen(true)} disabled={isEmpty}>
+                  <Plus className="h-4 w-4" /> Create tab
+                </Button>
               </div>
             </div>
           </CardHeader>
         </Card>
+
+        <CreateMenuItemDialog
+          open={createOpen}
+          onOpenChange={setCreateOpen}
+          registry={registry.data ?? []}
+          resolvedByKey={resolvedByKey}
+        />
 
         {/* Empty-state seed */}
         {isEmpty && (

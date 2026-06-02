@@ -93,7 +93,7 @@ export function CreateMenuItemDialog({ open, onOpenChange, registry, resolvedByK
       registryByKey, resolvedByKey, existingKeys,
     });
     if (!v.ok) {
-      toast.error(v.reason);
+      toast.error((v as { ok: false; reason: string }).reason);
       return;
     }
 
