@@ -28,6 +28,19 @@ import {
 import { useDepartments } from '@/hooks/useOrganization';
 import { GitBranch, Users, Building2, Award, Trash2, Search, ArrowRight, Check, Plus, Pencil, Star, Archive, RotateCcw, ChevronDown, Calendar, Globe, ChevronsRight, Info } from 'lucide-react';
 import { Scale } from 'lucide-react';
+import { useResolvedTabs } from '@/hooks/useResolvedMenu';
+
+type WfTabKey = 'templates' | 'employee' | 'department' | 'pms_grade' | 'final_score_rules';
+const WF_TAB_DEFS: ReadonlyArray<{ key: WfTabKey; menuKey: string; label: string; icon: typeof Check }> = [
+  { key: 'templates',         menuKey: 'wf-tab-templates',         label: 'Templates',         icon: Check },
+  { key: 'employee',          menuKey: 'wf-tab-employee',          label: 'Per Employee',      icon: Users },
+  { key: 'department',        menuKey: 'wf-tab-department',        label: 'Per Department',    icon: Building2 },
+  { key: 'pms_grade',         menuKey: 'wf-tab-pms-grade',         label: 'Per PMS Grade',     icon: Award },
+  { key: 'final_score_rules', menuKey: 'wf-tab-final-score-rules', label: 'Final Score Rules', icon: Scale },
+];
+const WF_ICON_BY_KEY: Record<WfTabKey, typeof Check> = Object.fromEntries(
+  WF_TAB_DEFS.map((d) => [d.key, d.icon]),
+) as Record<WfTabKey, typeof Check>;
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { ReviewPanelSkeleton } from '@/components/ui/LoadingSkeletons';
 import CustomWorkflowDialog from '@/components/admin/CustomWorkflowDialog';
