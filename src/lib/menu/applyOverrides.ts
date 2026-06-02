@@ -42,6 +42,8 @@ export function applyOverrides(
       is_cross_app_movable: r.is_cross_app_movable,
       is_system_required: r.is_system_required,
       is_overridden: labelOverridden || parentOverridden || sortOverridden || levelOverridden || moduleOverridden,
+      is_custom: (r as any).is_custom ?? false,
+      color: (r as any).color ?? null,
     };
   });
 }

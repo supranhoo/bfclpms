@@ -57,6 +57,7 @@ import {
   Percent,
   FileInput,
   Layers,
+  Folder,
 } from 'lucide-react';
 import { CollapsibleSidebarGroup } from './CollapsibleSidebarGroup';
 
@@ -222,18 +223,35 @@ export function AppSidebar() {
       for (const { item } of flatPool) {
         if (item.menuKey) itemByKey.set(item.menuKey, item);
       }
+      // Synthesize a sidebar item from a resolved custom menu node. Custom
+      // items aren't in the hardcoded pool — they come from menu_registry.
+      const synthFromNode = (n: any) => ({
+        title: n.label,
+        icon: n.icon_name || 'Folder',          // string → resolved dynamically in row renderer
+        path: n.route_path ?? '',               // empty = container only
+        menuKey: n.menu_key,
+        roles: ['admin'],                       // DB access config is the real gate
+        color: n.color ?? null,
+        external: !!n.route_path && /^https?:\/\//i.test(n.route_path),
+      });
       // Recursive child attacher — for each resolved child of `parentMk`,
       // clone the matching pool item, set its resolved label, and recurse.
       const buildChildren = (parentMk: string, depthLeft: number): any[] => {
         if (depthLeft <= 0) return [];
         const kids = (resolvedMenu.byParent.get(parentMk) ?? [])
-          .filter((n) => !!itemByKey.get(n.menu_key))
+          .filter((n) => itemByKey.get(n.menu_key) || (n as any).is_custom)
           .filter((n) => !isPinned(n.menu_key));
         return kids
           .slice()
           .sort((a, b) => a.sort_order - b.sort_order)
           .map((n) => {
             const src = itemByKey.get(n.menu_key);
+            if (!src && (n as any).is_custom) {
+              return {
+                ...synthFromNode(n),
+                children: buildChildren(n.menu_key, depthLeft - 1),
+              };
+            }
             return {
               ...src,
               title: n.label,
@@ -282,6 +300,20 @@ export function AppSidebar() {
           sort: node.sort_order,
         });
         added.add(mk);
+      }
+      // 3) Custom items (not in hardcoded pool) whose resolved parent is this group.
+      for (const node of resolvedMenu.nodes) {
+        if (!(node as any).is_custom) continue;
+        if (added.has(node.menu_key)) continue;
+        if (node.parent_key !== parentKey) continue;
+        acc.push({
+          item: {
+            ...synthFromNode(node),
+            children: buildChildren(node.menu_key, 3),
+          } as unknown as T,
+          sort: node.sort_order,
+        });
+        added.add(node.menu_key);
       }
       acc.sort((a, b) => a.sort - b.sort);
       const result = acc.map((x) => x.item);

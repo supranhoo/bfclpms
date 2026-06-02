@@ -62,6 +62,7 @@ const IdentityAccessConsole = lazy(() => import("./pages/admin/IdentityAccessCon
 const KpiStandardization = lazy(() => import("./pages/admin/KpiStandardization"));
 const RegistryBrowser = lazy(() => import("./pages/RegistryBrowser"));
 const BulkReviewDashboard = lazy(() => import("./pages/review/BulkReviewDashboard"));
+const CustomMenuPage = lazy(() => import("./pages/CustomMenuPage"));
 
 // Safety module shell + pages
 const SafetyLayout = lazy(() =>
@@ -211,6 +212,11 @@ const App = () => (
                 <Route path="/pms-policy" element={
                   <ProtectedRoute allowedRoles={['admin', 'manager', 'employee', 'auditor', 'management', 'hr_pms', 'skip_level']}>
                     <PMSPolicy />
+                  </ProtectedRoute>
+                } />
+                <Route path="/custom-menu/:menuKey" element={
+                  <ProtectedRoute allowedRoles={['admin', 'manager', 'employee', 'auditor', 'management', 'hr_pms', 'skip_level']}>
+                    <Suspense fallback={<PageFallback />}><CustomMenuPage /></Suspense>
                   </ProtectedRoute>
                 } />
                 

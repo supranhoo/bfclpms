@@ -4683,13 +4683,16 @@ export type Database = {
       menu_registry: {
         Row: {
           accepts_children: boolean
+          color: string | null
           created_at: string
+          created_by: string | null
           default_label: string
           default_parent_key: string | null
           default_sort_order: number
           feature_key: string | null
           icon_name: string | null
           is_cross_app_movable: boolean
+          is_custom: boolean
           is_movable: boolean
           is_renamable: boolean
           is_system_required: boolean
@@ -4702,13 +4705,16 @@ export type Database = {
         }
         Insert: {
           accepts_children?: boolean
+          color?: string | null
           created_at?: string
+          created_by?: string | null
           default_label: string
           default_parent_key?: string | null
           default_sort_order?: number
           feature_key?: string | null
           icon_name?: string | null
           is_cross_app_movable?: boolean
+          is_custom?: boolean
           is_movable?: boolean
           is_renamable?: boolean
           is_system_required?: boolean
@@ -4721,13 +4727,16 @@ export type Database = {
         }
         Update: {
           accepts_children?: boolean
+          color?: string | null
           created_at?: string
+          created_by?: string | null
           default_label?: string
           default_parent_key?: string | null
           default_sort_order?: number
           feature_key?: string | null
           icon_name?: string | null
           is_cross_app_movable?: boolean
+          is_custom?: boolean
           is_movable?: boolean
           is_renamable?: boolean
           is_system_required?: boolean

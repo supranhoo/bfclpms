@@ -1,0 +1,36 @@
+---
+name: Menu Setting — Custom Tab Creation
+description: Admin-created custom L2/L3/L4 menu tabs persisted in menu_registry with is_custom=true, default admin-only access, and dynamic sidebar rendering
+type: feature
+---
+# Custom menu tabs (L2/L3/L4) — admin-created
+
+## Invariants
+- Custom items live in `menu_registry` with `is_custom = true`. menu_key format: `custom-<slug>[-N]`, immutable.
+- DB trigger `menu_registry_custom_validate` enforces: key pattern, level ∈ {2,3,4}, real parent that accepts children, parent.level + 1 = item.level, never system-required.
+- Trigger `menu_registry_protect_seeded_delete` blocks deletion of any non-custom row.
+- Default access: `menu_access_config` row inserted with `allowed_roles: ['admin']` on create. Visibility = standard `useMenuAccess.canAccess` pipeline.
+- Custom items honour the same `menu_overrides_enabled` flag and DnD/rename/reorder pipeline as seeded items.
+
+## Architecture
+- Service: `src/lib/menu/customMenu.ts` — `slugify`, `generateMenuKey` (collision suffix), `validateCreate` (mirrors DB trigger + URL safety), `createCustomMenuItem` (registry insert + access upsert).
+- Route catalog: `src/lib/menu/knownRoutes.ts` — curated list shown in the "Existing route" picker; prevents exposing internal/edit routes.
+- UI: `src/components/admin/CreateMenuItemDialog.tsx` — opened from MenuSettingTab toolbar "Create tab" button. Fields: name, level, parent (filtered by `accepts_children && resolvedLevel = level-1`), destination type (Container / Existing route / Custom page / External link), icon (curated Lucide set), color (semantic tokens), live preview.
+- Custom page route: `/custom-menu/:menuKey` → `src/pages/CustomMenuPage.tsx`. Auto-assigned when destinationType = "custom-page".
+- External link: validated `^https?://` only; rendered via `window.open(..., '_blank', 'noopener,noreferrer')` inside CollapsibleSidebarGroup.
+- Sidebar rendering: `AppSidebar.resolveGroupItems` synthesizes a sidebar entry from each custom `ResolvedMenuNode` (icon resolved by name string via `lucide-react.icons` map; color tokens mapped to tailwind classes). Custom items participate in the recursive nested-children tree.
+
+## Validation chain (must stay in sync)
+1. Client: `validateCreate(...)` before insert (instant toast feedback).
+2. Server: trigger `menu_registry_custom_validate` — last line of defence.
+3. URL guard: `isValidHttpUrl` (http/https only, blocks javascript:/data:) and `isValidInternalRoute` (must start with `/`).
+
+## Cache keys to invalidate after create
+- `['menu-registry-admin']`
+- `['resolved-menu']`
+- `['menu-access-config']`
+
+## Out of scope
+- Editing route/destination/parent of a custom item post-create (use DnD for parent/order/label; delete + recreate for destination change).
+- Renaming menu_key (immutable — only `default_label` is editable).
+- Per-client (multi-tenant) custom items.
