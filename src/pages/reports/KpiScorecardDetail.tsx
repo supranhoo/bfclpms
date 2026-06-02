@@ -17,6 +17,39 @@ import { Download, Search, ChevronLeft, ChevronRight, ArrowUp, ArrowDown, ArrowU
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import * as XLSX from 'xlsx';
+import { useResolvedReportFields } from '@/hooks/useResolvedReportFields';
+
+const KSD_DEFAULT_FIELDS = [
+  { field_key: 'company',           default_label: 'Company',            default_sort: 10 },
+  { field_key: 'employee_code',     default_label: 'Employee Code',      default_sort: 20, is_required: true },
+  { field_key: 'name',              default_label: 'Name',               default_sort: 30, is_required: true },
+  { field_key: 'designation',       default_label: 'Designation',        default_sort: 40 },
+  { field_key: 'department',        default_label: 'Department',         default_sort: 50 },
+  { field_key: 'month',             default_label: 'Month',              default_sort: 60 },
+  { field_key: 'year',              default_label: 'Year',               default_sort: 70 },
+  { field_key: 'category',          default_label: 'Category',           default_sort: 80 },
+  { field_key: 'kra',               default_label: 'KRA',                default_sort: 90 },
+  { field_key: 'kpi',               default_label: 'KPI',                default_sort: 100 },
+  { field_key: 'frequency',         default_label: 'Frequency',          default_sort: 110 },
+  { field_key: 'type',              default_label: 'Type',               default_sort: 120 },
+  { field_key: 'data_owner',        default_label: 'Data Owner',         default_sort: 130 },
+  { field_key: 'weightage',         default_label: 'Weightage',          default_sort: 140 },
+  { field_key: 'target',            default_label: 'Target',             default_sort: 150 },
+  { field_key: 'self_actual',       default_label: 'Self Actual',        default_sort: 160 },
+  { field_key: 'manager_actual',    default_label: 'Manager Actual',     default_sort: 170 },
+  { field_key: 'skip_level_actual', default_label: 'Skip-Level Actual',  default_sort: 180 },
+  { field_key: 'hr_pms_actual',     default_label: 'HR PMS Actual',      default_sort: 190 },
+  { field_key: 'auditor_actual',    default_label: 'Auditor Actual',     default_sort: 200 },
+  { field_key: 'management_actual', default_label: 'Management Actual',  default_sort: 210 },
+  { field_key: 'self_score',        default_label: 'Self Score',         default_sort: 220 },
+  { field_key: 'manager_score',     default_label: 'Manager Score',      default_sort: 230 },
+  { field_key: 'skip_level_score',  default_label: 'Skip-Level Score',   default_sort: 240 },
+  { field_key: 'hr_pms_score',      default_label: 'HR PMS Score',       default_sort: 250 },
+  { field_key: 'auditor_score',     default_label: 'Auditor Score',      default_sort: 260 },
+  { field_key: 'management_score',  default_label: 'Management Score',   default_sort: 270 },
+  { field_key: 'final_score',       default_label: 'Final Score',        default_sort: 280 },
+  { field_key: 'status',            default_label: 'Status',             default_sort: 290 },
+] as const;
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
 import { useToast } from '@/hooks/use-toast';
 import { enumeratePeriods, validateRange, MAX_RANGE_MONTHS } from '@/lib/kpiScorecardRange';
