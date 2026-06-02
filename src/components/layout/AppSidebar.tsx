@@ -145,6 +145,7 @@ const getSectionForPath = (pathname: string, search: string = ''): string => {
   if (pathname === '/management-dashboard') return 'management';
   if (['/dashboard', '/queries', '/pms-policy', '/registry'].includes(pathname)) return 'main';
   if (KRA_SETTINGS_PATHS.has(pathname)) return 'kraSettings';
+  if (pathname === '/admin/incentive-config' || pathname === '/admin/incentive-data-entry' || pathname === '/reports/incentive') return 'incentive';
   if (pathname.startsWith('/admin')) return 'admin';
   if (pathname.startsWith('/reports')) return 'reports';
   if (pathname === '/audit-logs') return 'admin';
