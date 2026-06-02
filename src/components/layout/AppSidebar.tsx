@@ -136,6 +136,22 @@ const KRA_SETTINGS_PATHS = new Set([
   '/admin/kpi-standardization',
 ]);
 
+const GROUP_PARENT_KEY: Record<string, string> = {
+  main: 'group-main',
+  manager: 'group-manager',
+  management: 'group-management',
+  hr_pms: 'group-hr-pms',
+  audit: 'group-audit',
+  dataEntry: 'group-data-entry',
+  kraSettings: 'group-kra-settings',
+  incentive: 'group-incentive',
+  admin: 'group-admin',
+  reports: 'group-reports',
+};
+const PARENT_KEY_TO_GROUP: Record<string, string> = Object.fromEntries(
+  Object.entries(GROUP_PARENT_KEY).map(([g, p]) => [p, g]),
+);
+
 const getSectionForPath = (pathname: string, search: string = ''): string => {
   const fullPath = pathname + search;
   if (fullPath.includes('view=team')) return 'manager';
