@@ -82,3 +82,4 @@ Lean-Load: debounce search inputs (>200 rows / network); paginate new lists with
 - [Increment criterion_key canonical binding](mem://features/incentive/criterion-key-canonical-binding) — Criterion keys MUST resolve to canonical metric keys; engine fails closed on unknown keys (ADR-070, Vivek 101784 RCA)
 - [Auditor Draft Qualitative Hydration](mem://features/review/auditor-draft-qualitative-hydration) — Save/reopen contract for Yes/No / tiered audit drafts; never inherit employee value
 - [Functional Manager Reviewer](mem://features/admin/functional-manager-reviewer) — Per-employee FM relationship + functional_manager_check stage + is_functional_manager_of() RLS helper
+- [Report Field Sequence](mem://features/admin/report-field-sequence) — Stable Report IDs (RPT-MOD-NNN), /r/:reportId shortlink, resolver for per-report column order/label/hide, admin tile in Report Builder
