@@ -350,17 +350,21 @@ function ModuleSection(props: {
         {props.moduleKey}
       </div>
       <div className="overflow-x-auto">
-        <div className="min-w-[860px]">
-          {/* Column headers — align with TreeRow grid below */}
-          <div className="flex items-center gap-1.5 px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground border-b bg-muted/30">
-            <div className="w-5" />
-            <div className="w-5" />
-            <div className="w-4" />
-            <div className="flex-1 min-w-0 px-2">Menu Name</div>
-            <div className="w-[240px] shrink-0">Menu_Key</div>
-            <div className="w-[200px] shrink-0">Route</div>
-            <div className="w-[110px] shrink-0 text-right pr-1">Status</div>
-            <div className="w-[60px] shrink-0 text-right">Actions</div>
+        <div className="min-w-[1000px]">
+          {/* Column headers — share grid template with every TreeRow */}
+          <div
+            className="grid items-center gap-x-4 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground border-b bg-muted/30 text-left"
+            style={{
+              gridTemplateColumns:
+                '96px minmax(280px,1.4fr) minmax(220px,0.8fr) minmax(260px,1fr) 150px 96px',
+            }}
+          >
+            <div>Controls</div>
+            <div>Menu Name</div>
+            <div>Menu_Key</div>
+            <div>Route</div>
+            <div>Status</div>
+            <div>Actions</div>
           </div>
           <div className="p-2 space-y-0.5">
         {props.roots.length === 0 && (
