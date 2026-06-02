@@ -18,6 +18,16 @@ import { useCompanyFilter } from '@/hooks/useCompanyFilter';
 import { CompanyFilter } from '@/components/reports/CompanyFilter';
 import { useToast } from '@/hooks/use-toast';
 import * as XLSX from 'xlsx';
+import { useResolvedReportFields } from '@/hooks/useResolvedReportFields';
+
+const MAT_DEFAULT_FIELDS = [
+  { field_key: 'sr_no',          default_label: 'Sr. No.',        default_sort: 10, is_required: true },
+  { field_key: 'category',       default_label: 'Category',       default_sort: 20 },
+  { field_key: 'kra',            default_label: 'KRA',            default_sort: 30 },
+  { field_key: 'kpi',            default_label: 'KPI',            default_sort: 40, is_required: true },
+  { field_key: 'weightage',      default_label: 'Weightage',      default_sort: 50 },
+  { field_key: 'employee_count', default_label: 'Employee Count', default_sort: 60 },
+] as const;
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 const ROW_PAGE_OPTIONS = [25, 50, 100] as const;
