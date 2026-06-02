@@ -95,10 +95,13 @@ const getStaticMenuItems = (policyVisibleRoles: string[]) => ({
     { title: 'Observations', icon: Eye, path: '/admin/observations', menuKey: 'admin-observations', roles: ['admin'] },
     { title: 'Rollback Requests', icon: Undo2, path: '/admin/rollback-requests', menuKey: 'admin-rollback', roles: ['admin'] },
     { title: 'Pending Reviews', icon: ClipboardCheck, path: '/admin/pending-reviews', menuKey: 'admin-pending-reviews', roles: ['admin'] },
-    { title: 'Incentive Config', icon: Percent, path: '/admin/incentive-config', menuKey: 'admin-incentive', roles: ['admin'] },
-    { title: 'Incentive Data Entry', icon: FileInput, path: '/admin/incentive-data-entry', menuKey: 'admin-incentive-data', roles: ['admin'] },
     { title: 'Increment Inputs', icon: FileInput, path: '/admin/increment-inputs', menuKey: 'admin-increment-inputs', roles: ['admin', 'hr_pms'] },
     { title: 'Employee Development', icon: GraduationCap, path: '/admin/employee-development', menuKey: 'admin-development', roles: ['admin', 'hr_pms'] },
+  ],
+  incentive: [
+    { title: 'Incentive Config', icon: Percent, path: '/admin/incentive-config', menuKey: 'admin-incentive', roles: ['admin'] },
+    { title: 'Incentive Data Entry', icon: FileInput, path: '/admin/incentive-data-entry', menuKey: 'admin-incentive-data', roles: ['admin'] },
+    { title: 'Incentive Report', icon: Percent, path: '/reports/incentive', menuKey: 'reports-incentive', roles: ['admin', 'management', 'hr_pms'] },
   ],
   kraSettings: [
     { title: 'KRA Library', icon: Library, path: '/admin/templates', menuKey: 'admin-templates', roles: ['admin'] },
@@ -118,7 +121,6 @@ const getStaticMenuItems = (policyVisibleRoles: string[]) => ({
     { title: 'Performance Report', icon: BarChart3, path: '/reports/performance', menuKey: 'reports-performance', roles: ['admin', 'manager', 'auditor'] },
     { title: 'KRA Issuance', icon: FileText, path: '/reports/kra-issuance', menuKey: 'reports-kra-issuance', roles: ['admin', 'manager', 'auditor'] },
     { title: 'TNI Report', icon: GraduationCap, path: '/reports/tni', menuKey: 'reports-tni', roles: ['admin', 'manager', 'auditor'] },
-    { title: 'Incentive Report', icon: Percent, path: '/reports/incentive', menuKey: 'reports-incentive', roles: ['admin', 'management', 'hr_pms'] },
   ],
 });
 
@@ -143,6 +145,7 @@ const getSectionForPath = (pathname: string, search: string = ''): string => {
   if (pathname === '/management-dashboard') return 'management';
   if (['/dashboard', '/queries', '/pms-policy', '/registry'].includes(pathname)) return 'main';
   if (KRA_SETTINGS_PATHS.has(pathname)) return 'kraSettings';
+  if (pathname === '/admin/incentive-config' || pathname === '/admin/incentive-data-entry' || pathname === '/reports/incentive') return 'incentive';
   if (pathname.startsWith('/admin')) return 'admin';
   if (pathname.startsWith('/reports')) return 'reports';
   if (pathname === '/audit-logs') return 'admin';
@@ -370,6 +373,18 @@ export function AppSidebar() {
           currentPath={location.pathname + location.search}
           onNavigate={handleNavigation}
           hasActiveRoute={getSectionForPath(location.pathname, location.search) === 'kraSettings'}
+        />
+
+        {/* Incentive Section */}
+        <CollapsibleSidebarGroup
+          label="Incentive"
+          items={menuItems.incentive}
+          isOpen={openSections.has('incentive')}
+          onToggle={() => toggleSection('incentive')}
+          filterByRole={filterByRole}
+          currentPath={location.pathname + location.search}
+          onNavigate={handleNavigation}
+          hasActiveRoute={getSectionForPath(location.pathname, location.search) === 'incentive'}
         />
 
         {/* Administration Section */}
