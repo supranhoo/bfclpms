@@ -4,7 +4,7 @@ import {
   useDraggable, useDroppable, closestCenter, type DragEndEvent, type DragStartEvent,
 } from '@dnd-kit/core';
 import { CSS } from '@dnd-kit/utilities';
-import { ChevronRight, ChevronDown, GripVertical, Lock, RotateCcw, Pencil, AlertCircle, Link2 } from 'lucide-react';
+import { ChevronRight, ChevronDown, GripVertical, Lock, RotateCcw, Pencil, AlertCircle, Link2, Copy, Check } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
