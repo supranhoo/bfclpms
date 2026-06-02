@@ -772,100 +772,129 @@ export default function EmployeePerformanceSummary() {
               ) : (
                 <>
                   <div className="overflow-x-auto">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Month</TableHead>
-                          <TableHead>Employee ID</TableHead>
-                          <TableHead>Full Name</TableHead>
-                          <TableHead>Division</TableHead>
-                          <TableHead>Department</TableHead>
-                          <TableHead>Designation</TableHead>
-                          <TableHead>Reporting Manager</TableHead>
-                          <TableHead>Functional Manager</TableHead>
-                          <TableHead>Review Status</TableHead>
-                          <TableHead className="text-right">Total Score</TableHead>
-                          <TableHead className="text-right">Out of Score</TableHead>
-                          <TableHead className="text-right">Overall Rating</TableHead>
-                          <TableHead className="text-right">Percentage</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {paginatedData.length === 0 ? (
-                          <TableRow>
-                            <TableCell colSpan={13} className="text-center py-8 text-muted-foreground">
-                              No data found for the selected filters
-                            </TableCell>
-                          </TableRow>
-                        ) : (
-                          paginatedData.map((row, index) => {
-                            const percentage = row.outOfScore > 0 
-                              ? ((row.totalScore / row.outOfScore) * 100)
-                              : 0;
-                            const rating = calculateRating(row.totalScore, row.outOfScore, row.totalWeight);
-
+                    {(() => {
+                      const visibleFields = resolvedFields.filter((f) => !f.is_hidden);
+                      const rightAligned = new Set([
+                        'total_score', 'out_of_score', 'overall_rating', 'percentage',
+                      ]);
+                      const headClassFor = (key: string) =>
+                        rightAligned.has(key) ? 'text-right' : undefined;
+                      const cellClassFor = (key: string) => {
+                        switch (key) {
+                          case 'month':              return 'font-medium';
+                          case 'functional_manager': return 'text-muted-foreground';
+                          case 'total_score':        return 'text-right font-medium';
+                          case 'out_of_score':       return 'text-right';
+                          case 'overall_rating':     return 'text-right font-medium';
+                          case 'percentage':         return 'text-right';
+                          default:                   return undefined;
+                        }
+                      };
+                      const renderCell = (
+                        row: typeof paginatedData[number],
+                        key: string,
+                      ) => {
+                        const percentage = row.outOfScore > 0
+                          ? (row.totalScore / row.outOfScore) * 100
+                          : 0;
+                        const rating = calculateRating(row.totalScore, row.outOfScore, row.totalWeight);
+                        switch (key) {
+                          case 'company':            return getCompanyCode(row.employeeId);
+                          case 'month':              return formatPeriod(row.reviewPeriod, row.reviewYear);
+                          case 'employee_id':        return row.employeeCode;
+                          case 'full_name':          return row.fullName;
+                          case 'division':           return row.division;
+                          case 'department':         return row.department;
+                          case 'designation':        return row.designation;
+                          case 'reporting_manager':  return row.reportingManager;
+                          case 'functional_manager': return row.functionalManager;
+                          case 'review_status': {
+                            const statuses = Object.keys(row.statusCounts);
+                            const allApproved = statuses.length === 1 && statuses[0] === 'approved';
+                            if (allApproved) {
+                              return (
+                                <div className="flex flex-wrap gap-1">
+                                  <Badge variant="outline" className={STATUS_COLORS['approved']}>
+                                    Approved
+                                  </Badge>
+                                </div>
+                              );
+                            }
                             return (
-                              <TableRow key={`${row.employeeId}-${row.reviewPeriod}-${index}`}>
-                                <TableCell className="font-medium">
-                                  {formatPeriod(row.reviewPeriod, row.reviewYear)}
-                                </TableCell>
-                                <TableCell>{row.employeeCode}</TableCell>
-                                <TableCell>{row.fullName}</TableCell>
-                                <TableCell>{row.division}</TableCell>
-                                <TableCell>{row.department}</TableCell>
-                                <TableCell>{row.designation}</TableCell>
-                                <TableCell>{row.reportingManager}</TableCell>
-                                <TableCell className="text-muted-foreground">{row.functionalManager}</TableCell>
-                                <TableCell>
-                                  <div className="flex flex-wrap gap-1">
-                                    {(() => {
-                                      const statuses = Object.keys(row.statusCounts);
-                                      const allApproved = statuses.length === 1 && statuses[0] === 'approved';
-                                      if (allApproved) {
-                                        return (
-                                          <Badge variant="outline" className={STATUS_COLORS['approved']}>
-                                            Approved
-                                          </Badge>
-                                        );
-                                      }
-                                      const badges = STATUS_PRIORITY_ORDER
-                                        .filter(s => (row.statusCounts[s] || 0) > 0)
-                                        .map(s => {
-                                          const isOrphaned = row.orphanedStatuses?.has(s);
-                                          return (
-                                            <Badge key={s} variant="outline" className={`text-[11px] px-1.5 py-0 ${isOrphaned ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400' : (STATUS_COLORS[s] || 'bg-muted')}`}>
-                                              {isOrphaned ? '⚠ ' : ''}{STATUS_LABELS[s] || s}{row.statusCounts[s] > 1 ? ` (${row.statusCounts[s]})` : ''}
-                                            </Badge>
-                                          );
-                                        });
-                                      return badges;
-                                    })()}
-                                  </div>
-                                </TableCell>
-                                <TableCell className="text-right font-medium">
-                                  {row.totalScore.toFixed(1)}
-                                </TableCell>
-                                <TableCell className="text-right">
-                                  {row.outOfScore.toFixed(1)}
-                                </TableCell>
-                                <TableCell className="text-right font-medium">
-                                  {rating.toFixed(2)}
-                                </TableCell>
-                                <TableCell className="text-right">
-                                  <span className={
-                                    percentage >= 80 ? 'text-green-600 dark:text-green-400' :
-                                    percentage >= 60 ? 'text-yellow-600 dark:text-yellow-400' :
-                                    'text-destructive'
-                                  }>
-                                    {percentage.toFixed(2)}%
-                                  </span>
+                              <div className="flex flex-wrap gap-1">
+                                {STATUS_PRIORITY_ORDER
+                                  .filter((s) => (row.statusCounts[s] || 0) > 0)
+                                  .map((s) => {
+                                    const isOrphaned = row.orphanedStatuses?.has(s);
+                                    return (
+                                      <Badge
+                                        key={s}
+                                        variant="outline"
+                                        className={`text-[11px] px-1.5 py-0 ${isOrphaned ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400' : (STATUS_COLORS[s] || 'bg-muted')}`}
+                                      >
+                                        {isOrphaned ? '⚠ ' : ''}{STATUS_LABELS[s] || s}{row.statusCounts[s] > 1 ? ` (${row.statusCounts[s]})` : ''}
+                                      </Badge>
+                                    );
+                                  })}
+                              </div>
+                            );
+                          }
+                          case 'total_score':    return row.totalScore.toFixed(1);
+                          case 'out_of_score':   return row.outOfScore.toFixed(1);
+                          case 'overall_rating': return rating.toFixed(2);
+                          case 'percentage':
+                            return (
+                              <span
+                                className={
+                                  percentage >= 80
+                                    ? 'text-green-600 dark:text-green-400'
+                                    : percentage >= 60
+                                      ? 'text-yellow-600 dark:text-yellow-400'
+                                      : 'text-destructive'
+                                }
+                              >
+                                {percentage.toFixed(2)}%
+                              </span>
+                            );
+                          default: return null;
+                        }
+                      };
+                      return (
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              {visibleFields.map((f) => (
+                                <TableHead key={f.field_key} className={headClassFor(f.field_key)}>
+                                  {f.label}
+                                </TableHead>
+                              ))}
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {paginatedData.length === 0 ? (
+                              <TableRow>
+                                <TableCell
+                                  colSpan={visibleFields.length}
+                                  className="text-center py-8 text-muted-foreground"
+                                >
+                                  No data found for the selected filters
                                 </TableCell>
                               </TableRow>
-                            );
-                          })
-                        )}
-                      </TableBody>
-                    </Table>
+                            ) : (
+                              paginatedData.map((row, index) => (
+                                <TableRow key={`${row.employeeId}-${row.reviewPeriod}-${index}`}>
+                                  {visibleFields.map((f) => (
+                                    <TableCell key={f.field_key} className={cellClassFor(f.field_key)}>
+                                      {renderCell(row, f.field_key)}
+                                    </TableCell>
+                                  ))}
+                                </TableRow>
+                              ))
+                            )}
+                          </TableBody>
+                        </Table>
+                      );
+                    })()}
                   </div>
 
                   {/* Pagination Controls */}
