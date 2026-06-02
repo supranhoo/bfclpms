@@ -12,11 +12,27 @@ import { useDetectRetroactiveChanges } from '@/hooks/useIncentiveRecords';
 import { useIncentivePrograms } from '@/hooks/useIncentivePrograms';
 import { useCompanyFilter } from '@/hooks/useCompanyFilter';
 import { MultiSelectFilter } from '@/components/ui/multi-select-filter';
+import { useResolvedReportFields } from '@/hooks/useResolvedReportFields';
 import * as XLSX from 'xlsx';
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
+// Subset of RPT-INC-001 fields that map cleanly to this table's columns.
+// Other columns (Δ Score, Δ Incentive, Status, Action) are derived/runtime and
+// intentionally not registry-driven.
+const RETRO_DEFAULT_FIELDS = [
+  { field_key: 'employee_code',  default_label: 'Employee Code',  default_sort: 10, is_required: true },
+  { field_key: 'employee_name',  default_label: 'Employee Name',  default_sort: 20, is_required: true },
+  { field_key: 'department',     default_label: 'Department',     default_sort: 40 },
+  { field_key: 'period',         default_label: 'Period',         default_sort: 90 },
+  { field_key: 'original_score', default_label: 'Original Score', default_sort: 200 },
+  { field_key: 'adjusted_score', default_label: 'Revised Score',  default_sort: 210 },
+] as const;
+
 export function RetroactiveAdjustmentTable() {
+  const resolvedFields = useResolvedReportFields('RPT-INC-001', RETRO_DEFAULT_FIELDS);
+  const labelOf = (key: string, fallback: string) =>
+    resolvedFields.find(f => f.field_key === key)?.label ?? fallback;
   const [affectedYear, setAffectedYear] = useState(new Date().getFullYear());
   const [slabChangeOnly, setSlabChangeOnly] = useState(false);
   const [detectMonth, setDetectMonth] = useState(MONTHS[new Date().getMonth()]);
@@ -57,12 +73,12 @@ export function RetroactiveAdjustmentTable() {
 
   const handleExport = () => {
     const exportData = (revisions as any[]).map((r: any) => ({
-      'Employee Code': r.profiles?.employee_code,
-      'Employee Name': r.profiles?.full_name,
-      'Department': r.profiles?.departments?.name,
-      'Affected Month': r.affected_period,
-      'Original Score': r.original_score?.toFixed(2),
-      'Revised Score': r.revised_score?.toFixed(2),
+      [labelOf('employee_code', 'Employee Code')]: r.profiles?.employee_code,
+      [labelOf('employee_name', 'Employee Name')]: r.profiles?.full_name,
+      [labelOf('department', 'Department')]: r.profiles?.departments?.name,
+      [labelOf('period', 'Affected Month')]: r.affected_period,
+      [labelOf('original_score', 'Original Score')]: r.original_score?.toFixed(2),
+      [labelOf('adjusted_score', 'Revised Score')]: r.revised_score?.toFixed(2),
       'Score Delta': ((r.revised_score || 0) - (r.original_score || 0)).toFixed(2),
       'Original Slab %': r.original_slab_percent,
       'New Slab %': r.revised_slab_percent,
@@ -142,11 +158,11 @@ export function RetroactiveAdjustmentTable() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Employee</TableHead>
-                  <TableHead>Department</TableHead>
-                  <TableHead>Affected Month</TableHead>
-                  <TableHead>Original Score</TableHead>
-                  <TableHead>Revised Score</TableHead>
+                  <TableHead>{labelOf('employee_name', 'Employee')}</TableHead>
+                  <TableHead>{labelOf('department', 'Department')}</TableHead>
+                  <TableHead>{labelOf('period', 'Affected Month')}</TableHead>
+                  <TableHead>{labelOf('original_score', 'Original Score')}</TableHead>
+                  <TableHead>{labelOf('adjusted_score', 'Revised Score')}</TableHead>
                   <TableHead>Δ Score</TableHead>
                   <TableHead>Original → New Slab</TableHead>
                   <TableHead>Δ Incentive</TableHead>
