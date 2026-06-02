@@ -16,9 +16,9 @@ type: feature
 - `src/lib/menu/catalog.ts` — TS source of truth for the seed (every sidebar L2 item + every System Settings L3 tab). Admin clicks "Seed" to populate `menu_registry`. Upsert idempotent.
 - `src/lib/menu/applyOverrides.ts` — pure: merges defaults + active overrides (label / parent / sort / **level / module**) → `ResolvedMenuNode[]`.
 - `src/lib/menu/validateMove.ts` — pure: client-side mirror of DB trigger.
-- `src/hooks/useResolvedMenu.ts` — gated by feature flag; returns `{ nodes, byKey, labelByKey, byParent }` cached 5 min.
+- `src/hooks/useResolvedMenu.ts` — gated by feature flag; returns `{ nodes, byKey, labelByKey, byParent }` cached 5 min. Exposes `useResolvedTabs(defaults)` helper for L4 strips: takes `[{key,menuKey,label}]`, returns the same shape re-labelled and re-ordered by overrides when flag is on, defaults when off.
 - `src/components/admin/MenuSettingTab.tsx` + `MenuTreeDnd.tsx` — Phase 3: full @dnd-kit tree. Drag handle per row; drop zones above each row (reorder), on row body (nest as child), and on module headers (cross-module move). Inline rename, per-item revert, search, preview dialog, audit dialog, global reset, master switch. **No up/down buttons.**
-- Consumers wired: `AppSidebar` and `SystemSettings`.
+- Consumers wired: `AppSidebar`, `SystemSettings` (L3), `Organization` sub-tab strip (L4 under `admin-settings-organization`), `WorkflowConfig` sub-tab strip (L4 under `admin-settings-workflow`). All L4 consumers use `useResolvedTabs(DEF_LIST)`; counts/icons stay in the page, only label + order come from the resolver.
 
 ## DB
 - `menu_registry` — RLS: read=authenticated, write=admin.
@@ -27,7 +27,7 @@ type: feature
 - Backup: auto-included via `get_backup_table_order()`.
 
 ## Out of scope (deferred)
-- L4 sub-tab consumers (Organization, Workflow Config) reading from resolver — registry rows need seeding + strips wiring.
 - Cross-app allowlist UI (today every item ships `is_cross_app_movable=false`; admins flip via direct registry edit).
+- Module Hub (L1) ordering — modules come from `useModules` master data, not menu_registry; renaming/reordering modules is a separate domain.
 - Report Registry / Report IDs in URLs (Phase 4) and Report Field Sequence tile.
 - Multi-tenant `client_id` UI.
