@@ -375,6 +375,18 @@ export function AppSidebar() {
           hasActiveRoute={getSectionForPath(location.pathname, location.search) === 'kraSettings'}
         />
 
+        {/* Incentive Section */}
+        <CollapsibleSidebarGroup
+          label="Incentive"
+          items={menuItems.incentive}
+          isOpen={openSections.has('incentive')}
+          onToggle={() => toggleSection('incentive')}
+          filterByRole={filterByRole}
+          currentPath={location.pathname + location.search}
+          onNavigate={handleNavigation}
+          hasActiveRoute={getSectionForPath(location.pathname, location.search) === 'incentive'}
+        />
+
         {/* Administration Section */}
         <CollapsibleSidebarGroup
           label="Administration"
