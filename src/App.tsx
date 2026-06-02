@@ -214,6 +214,11 @@ const App = () => (
                     <PMSPolicy />
                   </ProtectedRoute>
                 } />
+                <Route path="/custom-menu/:menuKey" element={
+                  <ProtectedRoute allowedRoles={['admin', 'manager', 'employee', 'auditor', 'management', 'hr_pms', 'skip_level']}>
+                    <Suspense fallback={<PageFallback />}><CustomMenuPage /></Suspense>
+                  </ProtectedRoute>
+                } />
                 
                 {/* Legacy routes - redirect to unified dashboard with view mode */}
                 <Route path="/team-review" element={<Navigate to="/dashboard?view=team" replace />} />
