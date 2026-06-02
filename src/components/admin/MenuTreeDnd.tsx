@@ -481,7 +481,7 @@ function RowBody(props: {
         opacity: dragging ? 0.4 : 1,
       }}
       className={cn(
-        'group flex items-center gap-1.5 py-1 pr-2 rounded-md',
+        'group flex items-start gap-1.5 py-1.5 pr-2 rounded-md',
         isDirty && 'bg-primary/5 ring-1 ring-primary/30',
         isSelected && 'bg-primary/10 ring-1 ring-primary/40',
       )}
@@ -527,25 +527,30 @@ function RowBody(props: {
       <div
         ref={inside.setNodeRef}
         className={cn(
-          'flex-1 min-w-0 flex items-center gap-2 px-2 py-1 rounded-md border transition-colors',
+          'flex-1 min-w-0 flex flex-col gap-0.5 px-2 py-1 rounded-md border transition-colors',
           isInsideHover && props.validationOk && 'border-primary bg-primary/10',
           isInsideHover && !props.validationOk && 'border-destructive bg-destructive/10',
           !isInsideHover && isContainerHint && 'border-dashed border-primary/30',
           !isInsideHover && !isContainerHint && 'border-transparent',
         )}
       >
-        {reg?.is_renamable ? (
-          <Input
-            value={labelDraft?.label ?? node.label}
-            onChange={(e) => props.onLabelChange(node.menu_key, e.target.value)}
-            className="h-7 text-sm border-0 shadow-none focus-visible:ring-1 px-1 bg-transparent"
-          />
-        ) : (
-          <span className="text-sm truncate flex items-center gap-1">
-            <Pencil className="h-3 w-3 opacity-0" /> {node.label}
-          </span>
-        )}
-        <code className="text-[10px] text-muted-foreground font-mono truncate hidden md:inline">{node.menu_key}</code>
+        <div className="flex items-center gap-2 min-w-0">
+          {reg?.is_renamable ? (
+            <Input
+              value={labelDraft?.label ?? node.label}
+              onChange={(e) => props.onLabelChange(node.menu_key, e.target.value)}
+              className="h-7 text-sm border-0 shadow-none focus-visible:ring-1 px-1 bg-transparent"
+            />
+          ) : (
+            <span className="text-sm truncate flex items-center gap-1">
+              <Pencil className="h-3 w-3 opacity-0" /> {node.label}
+            </span>
+          )}
+        </div>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5">
+          <CopyableField value={node.menu_key} label="menu key" />
+          {node.route_path ? <CopyableField value={node.route_path} label="route" /> : null}
+        </div>
       </div>
 
       <Badge variant={movability.tone} className="text-[10px] gap-1 shrink-0">
