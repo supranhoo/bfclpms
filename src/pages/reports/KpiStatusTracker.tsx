@@ -18,6 +18,26 @@ import { FrequencyLockToggle } from '@/components/ui/FrequencyLockToggle';
 import { isKpiLockedForPeriod } from '@/lib/frequencyUtils';
 import { useBulkEmployeeWorkflows } from '@/hooks/useWorkflowConfig';
 import * as XLSX from 'xlsx';
+import { useResolvedReportFields } from '@/hooks/useResolvedReportFields';
+
+const KST_DEFAULT_FIELDS = [
+  { field_key: 'row_num',          default_label: '#',                default_sort: 10,  is_required: true, is_renamable: false },
+  { field_key: 'company',          default_label: 'Company',          default_sort: 20 },
+  { field_key: 'employee_code',    default_label: 'Employee Code',    default_sort: 30,  is_required: true },
+  { field_key: 'employee_name',    default_label: 'Employee Name',    default_sort: 40,  is_required: true },
+  { field_key: 'designation',      default_label: 'Designation',      default_sort: 50 },
+  { field_key: 'department',       default_label: 'Department',       default_sort: 60 },
+  { field_key: 'division',         default_label: 'Division',         default_sort: 70 },
+  { field_key: 'category',         default_label: 'Category',         default_sort: 80 },
+  { field_key: 'kra',              default_label: 'KRA',              default_sort: 90 },
+  { field_key: 'kpi',              default_label: 'KPI',              default_sort: 100 },
+  { field_key: 'weightage',        default_label: 'Weightage',        default_sort: 110 },
+  { field_key: 'frequency',        default_label: 'Frequency',        default_sort: 120 },
+  { field_key: 'current_status',   default_label: 'Current Status',   default_sort: 130 },
+  { field_key: 'pending_at_level', default_label: 'Pending At Level', default_sort: 140 },
+  { field_key: 'days_in_stage',    default_label: 'Days in Stage',    default_sort: 150 },
+  { field_key: 'org_level',        default_label: 'Org-Level',        default_sort: 160 },
+] as const;
 import { differenceInDays } from 'date-fns';
 
 const FULL_MONTHS = [
