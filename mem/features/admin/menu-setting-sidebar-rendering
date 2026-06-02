@@ -1,0 +1,10 @@
+---
+name: Menu Setting — sidebar respects resolved parent_key
+description: AppSidebar renders groups from resolved menu tree (parent_key + sort_order), enabling cross-group moves from Menu Setting
+type: feature
+---
+- `AppSidebar` uses `resolveGroupItems(groupKey, fallback)` per group. With resolver loaded, each group is populated by ALL items whose resolved `parent_key === GROUP_PARENT_KEY[groupKey]`, sorted by resolved `sort_order`. Without resolver (flag off / not loaded), hardcoded fallback arrays render unchanged — zero-regression.
+- `GROUP_PARENT_KEY` / `PARENT_KEY_TO_GROUP` are the SSOT mapping between sidebar group slugs and registry `group-*` parent keys. Update both when adding a sidebar group.
+- **Pinning rule:** menu_keys appearing in MULTIPLE hardcoded groups (Data Entry duplicates: `admin-incentive-data`, `admin-org-kpi-data`, `admin-org-kpi-audit`) stay pinned to their native group regardless of resolved parent. Moving these is a registry/role-architecture decision out of scope.
+- `resolvedSectionForPath()` looks up the active route's menu_key in the registry pool and returns the resolved parent's group slug. Falls back to legacy URL-prefix `getSectionForPath()` when no match or resolver unavailable. Powers auto-expand + active-route indicator.
+- Menu Setting (drag Admin Dashboard from Administration → Main) now reflects live in the sidebar after the 5-min `useResolvedMenu` cache refresh / page refresh.
