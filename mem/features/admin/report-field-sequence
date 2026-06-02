@@ -1,0 +1,34 @@
+---
+name: Report Field Sequence (Phase 4)
+description: Stable Report IDs (RPT-MOD-NNN), report shortlink /r/:reportId, and configurable per-report column order/label/visibility resolver + admin UI
+type: feature
+---
+# Report Field Sequence — configurable report columns
+
+## Invariants
+- `report_id` (e.g. `RPT-PERF-001`) and `field_key` are **immutable identity** = permission key = audit key. Never rename or reuse them.
+- Report Access (`report_access_config`) governs **visibility**. Report Field Sequence governs **column label / order / hide-show only**. The two layers compose — never derive access from a sequence override.
+- Master switch: `system_settings.report_overrides_enabled` (jsonb `"false"` default). When OFF, `useResolvedReportFields()` returns defaults and every report renders its hardcoded columns — zero behaviour change.
+- DB trigger `report_field_overrides_validate` is the authority: required fields cannot be hidden, non-renamable fields keep their default label, `custom_sort >= 0`. UI mirrors these rules for instant feedback.
+- Field keys passed to a report's table cells / exports are stable identifiers; the resolver only changes display label and column order. Pages **must read by `field.field_key`**, never by index.
+
+## Architecture
+- `src/lib/reports/catalog.ts` — TS source of truth: `REPORT_CATALOG` seeds `report_registry` + `report_field_registry`. Module prefixes: PERF, INC, KRA, TNI, MAT, EPS, MSR, QRY, ISS, CMP, DEP, AUD, KPID, BNK, KST, KJN, VAR, MTK, TVM, KSD. Helpers `getReportIdFromRoute`, `getRouteFromReportId`.
+- `src/lib/reports/applyFieldOverrides.ts` — pure: merges defaults + active overrides → `ResolvedReportField[]`. Sorted ascending by resolved `sort`. `applyAndFilter` strips hidden.
+- `src/hooks/useResolvedReportFields.ts` — feature-flag-gated; takes `(reportId, defaults)`, falls back to defaults when registry not seeded or flag off. Admin helpers: `useReportRegistry`, `useReportFieldRegistry`, `useReportFieldOverridesAll`.
+- `src/components/admin/ReportFieldSequenceTab.tsx` — admin UI inside System Settings → Report Builder → "Field Sequence" tab. Per-report collapsible card with @dnd-kit sortable column list, inline rename, eye toggle for hide, per-report and global reset, audit-logged save.
+- `src/pages/ReportShortlink.tsx` + route `/r/:reportId` — resolves to canonical route (DB lookup with TS catalog fallback) and preserves query string + appends `?rpt=<id>`. 404 view for unknown IDs.
+- Wired consumer: `PerformanceReport` Excel export columns driven by resolver (`RPT-PERF-001` → category / kpi_count / avg_score). Other reports keep their hardcoded columns until they wire `useResolvedReportFields()`.
+
+## DB
+- `report_registry` — admin write, authenticated read.
+- `report_field_registry` — UNIQUE (`report_id`, `field_key`). Admin write, authenticated read.
+- `report_field_overrides` — UNIQUE (`report_id`, `field_key`, `COALESCE(client_id,'__global__')`) where `is_active=true`. Soft-delete via `is_active=false`. Admin write, authenticated read.
+- `report_field_override_audit` — append-only. `field` ∈ {label, sort, is_hidden, reset}.
+- Backup: auto-included via `get_backup_table_order()`.
+
+## Out of scope (deferred)
+- Wiring remaining report pages — only Performance is fully wired in Phase 4. Each page wires by adding a `DEFAULT_FIELDS` constant + `useResolvedReportFields(id, DEFAULT_FIELDS)`.
+- Per-user (vs per-client) column preferences.
+- Adding brand-new fields from the UI (catalog-driven only).
+- Multi-tenant `client_id` UI for overrides (column exists, UI stays global).
