@@ -37,15 +37,26 @@ export function MoveUnderDialog(p: Props) {
     [p.selectedKeys, p.registryByKey],
   );
 
+  // Split selection: movable rows go through bulk move; locked/system rows
+  // must be re-exposed via the "Create shortcut" action instead.
+  const movableSources = useMemo(
+    () => selectedSources.filter((s) => s.is_movable && !s.is_system_required),
+    [selectedSources],
+  );
+  const lockedSources = useMemo(
+    () => selectedSources.filter((s) => !s.is_movable || s.is_system_required),
+    [selectedSources],
+  );
+
   // Candidate parents: anything that accepts children AND passes validateMove
-  // for EVERY selected source. Exclude the selected items themselves.
+  // for EVERY MOVABLE source. Exclude the selected items themselves.
   const candidates = useMemo(() => {
-    if (selectedSources.length === 0) return [] as ResolvedMenuNode[];
+    if (movableSources.length === 0) return [] as ResolvedMenuNode[];
     return p.effective
       .filter((n) => n.accepts_children)
       .filter((n) => !p.selectedKeys.includes(n.menu_key))
       .filter((n) =>
-        selectedSources.every(
+        movableSources.every(
           (src) =>
             validateMove({
               source: src,
@@ -55,7 +66,7 @@ export function MoveUnderDialog(p: Props) {
             }).ok,
         ),
       );
-  }, [p.effective, p.effectiveByKey, p.registryByKey, p.selectedKeys, selectedSources]);
+  }, [p.effective, p.effectiveByKey, p.registryByKey, p.selectedKeys, movableSources]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -73,7 +84,7 @@ export function MoveUnderDialog(p: Props) {
     if (!target) return;
     const newLevel = Math.min(4, (target.menu_level ?? 1) + 1);
     // Stage moves with sequential sort (10,20,30…) under the chosen parent.
-    selectedSources.forEach((src, i) => {
+    movableSources.forEach((src, i) => {
       const cur = p.effectiveByKey[src.menu_key];
       if (!cur) return;
       p.onApplyMove(src.menu_key, {
@@ -105,12 +116,33 @@ export function MoveUnderDialog(p: Props) {
 
         <div className="space-y-3">
           <div className="flex flex-wrap gap-1.5">
-            {selectedSources.map((s) => (
+            {movableSources.map((s) => (
               <Badge key={s.menu_key} variant="secondary" className="text-xs">
                 {s.default_label}
               </Badge>
             ))}
           </div>
+
+          {lockedSources.length > 0 && (
+            <div className="flex items-start gap-2 p-3 rounded-md border border-amber-200 bg-amber-50 dark:border-amber-900/40 dark:bg-amber-900/10 text-xs">
+              <AlertCircle className="h-4 w-4 mt-0.5 text-amber-600 flex-shrink-0" />
+              <div className="space-y-1">
+                <p className="font-medium">
+                  {lockedSources.length} locked item{lockedSources.length === 1 ? '' : 's'} cannot be moved
+                </p>
+                <div className="flex flex-wrap gap-1">
+                  {lockedSources.map((s) => (
+                    <Badge key={s.menu_key} variant="outline" className="text-[10px]">
+                      {s.default_label}
+                    </Badge>
+                  ))}
+                </div>
+                <p className="text-muted-foreground">
+                  Use “Create shortcut” on each locked row to expose it under a container instead.
+                </p>
+              </div>
+            </div>
+          )}
 
           <div className="relative">
             <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
@@ -166,8 +198,8 @@ export function MoveUnderDialog(p: Props) {
 
         <DialogFooter>
           <Button variant="ghost" onClick={() => p.onOpenChange(false)}>Cancel</Button>
-          <Button onClick={apply} disabled={!targetKey}>
-            Move under selected
+          <Button onClick={apply} disabled={!targetKey || movableSources.length === 0}>
+            Move {movableSources.length} item{movableSources.length === 1 ? '' : 's'} under selected
           </Button>
         </DialogFooter>
       </DialogContent>
