@@ -567,13 +567,19 @@ export default function KpiEmployeeMatrix() {
                   <thead className="sticky top-0 z-30">
                     <tr style={{ height: COL.headerH }}>
                       <th className="sticky left-0 z-40 bg-background border-b border-r text-xs font-semibold text-muted-foreground align-bottom pb-2">
-                        <div className="text-center">Sr.</div>
+                        <div className="text-center">
+                          {resolvedMatFields.find(f => f.field_key === 'sr_no')?.label ?? 'Sr.'}
+                        </div>
                       </th>
                       <th
                         style={{ left: STICKY_KPI_LEFT }}
                         className="sticky z-40 bg-background border-b text-xs font-semibold text-muted-foreground align-bottom pb-2 px-2.5 text-left shadow-[4px_0_8px_-4px_hsl(var(--foreground)/0.12)]"
                       >
-                        KPI / KRA
+                        {(() => {
+                          const kpiLabel = resolvedMatFields.find(f => f.field_key === 'kpi')?.label ?? 'KPI';
+                          const kraLabel = resolvedMatFields.find(f => f.field_key === 'kra')?.label ?? 'KRA';
+                          return `${kpiLabel} / ${kraLabel}`;
+                        })()}
                       </th>
                       {empSlice.map(emp => {
                         const isHover = hoverEmpId === emp.id;
