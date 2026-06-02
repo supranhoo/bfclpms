@@ -311,9 +311,9 @@ export function AppSidebar() {
         {/* Manager Section */}
         <CollapsibleSidebarGroup
           label="Manager"
-          items={[
+          items={applyResolved([
             { title: 'Team Reviews', icon: Users, path: '/dashboard?view=team', menuKey: 'team-reviews', roles: ['manager', 'admin', 'management', 'skip_level'] },
-          ]}
+          ])}
           isOpen={openSections.has('manager')}
           onToggle={() => toggleSection('manager')}
           filterByRole={filterByRole}
