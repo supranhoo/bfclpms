@@ -102,6 +102,32 @@ export function useEntitlement() {
 }
 
 /**
+ * Phase 3 pilot flag. Read from `system_settings.hub_enforcement_pilot_enabled`.
+ * When false (default), enforcement is OFF for every action — instant rollback.
+ */
+async function fetchPilotFlag(): Promise<boolean> {
+  const { data } = await supabase
+    .from('system_settings')
+    .select('setting_value')
+    .eq('setting_key', 'hub_enforcement_pilot_enabled')
+    .maybeSingle();
+  const raw = data?.setting_value;
+  return raw === true || raw === 'true' || raw === '"true"';
+}
+
+export function useEnforcementPilot() {
+  const query = useQuery({
+    queryKey: ['hub-enforcement-pilot'],
+    queryFn: fetchPilotFlag,
+    staleTime: 10 * 60 * 1000,
+  });
+  return {
+    loading: query.isLoading,
+    pilotEnabled: query.data ?? false,
+  };
+}
+
+/**
  * Best-effort observe-mode logger. Inserts a `would_deny` row in
  * `entitlement_audit` without throwing. Safe to call from render paths.
  *
@@ -126,5 +152,31 @@ export async function logWouldDeny(
     await supabase.from('entitlement_audit').insert(row as never);
   } catch {
     /* observe-only: never throw from a guard */
+  }
+}
+
+/**
+ * Phase 3 enforcement logger — mirrors `logWouldDeny` but writes
+ * `event_type='deny'` so platform_owner can distinguish observed-vs-blocked.
+ * Best-effort; never throws.
+ */
+export async function logDeny(
+  actionKey: string,
+  reason?: string,
+  metadata?: Record<string, unknown>,
+) {
+  try {
+    const { data: userData } = await supabase.auth.getUser();
+    const row: Record<string, unknown> = {
+      actor_id: userData?.user?.id ?? null,
+      event_type: 'deny',
+      entity_type: 'action',
+      entity_key: actionKey,
+      reason: reason ?? null,
+    };
+    if (metadata) row.after = metadata;
+    await supabase.from('entitlement_audit').insert(row as never);
+  } catch {
+    /* enforcement should never throw — UI is already blocked */
   }
 }
