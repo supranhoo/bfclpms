@@ -9,6 +9,7 @@ import { ThemeProvider } from "./components/ThemeProvider";
 import { DashboardLayout } from "./components/layout/DashboardLayout";
 import { ProtectedRoute } from "./components/layout/ProtectedRoute";
 import { DataOwnerRoute } from "./components/layout/DataOwnerRoute";
+import { PlatformOwnerRoute } from "./components/layout/PlatformOwnerRoute";
 import { ErrorBoundary } from "./components/ui/ErrorBoundary";
 import { Loader2 } from 'lucide-react';
 
@@ -168,17 +169,9 @@ const App = () => (
               <Route
                 path="/platform-settings"
                 element={
-                  <Suspense fallback={<PageFallback />}>
-                    {/* lazy import to keep circular-safety */}
-                    {(() => {
-                      const PlatformOwnerRoute = require('./components/layout/PlatformOwnerRoute').PlatformOwnerRoute;
-                      return (
-                        <PlatformOwnerRoute>
-                          <PlatformSettings />
-                        </PlatformOwnerRoute>
-                      );
-                    })()}
-                  </Suspense>
+                  <PlatformOwnerRoute>
+                    <Suspense fallback={<PageFallback />}><PlatformSettings /></Suspense>
+                  </PlatformOwnerRoute>
                 }
               />
               {/* Safety module — fully decoupled shell. Sibling of /home so PMS chrome never renders here. */}
