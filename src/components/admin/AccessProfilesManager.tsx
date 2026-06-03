@@ -13,6 +13,9 @@ import { Shield, Plus, Trash2, Save, Users, Settings2, Search } from 'lucide-rea
 import { useAccessProfiles, type AccessProfileMenuRight } from '@/hooks/useAccessProfiles';
 import { ReviewNotesAccessInline } from './ReviewNotesAccessInline';
 import { useMenuAccess, type MenuAccessConfig } from '@/hooks/useMenuAccess';
+import { useMenuRegistryAdmin } from '@/hooks/useResolvedMenu';
+import { applyOverrides, groupByParent } from '@/lib/menu/applyOverrides';
+import type { ResolvedMenuNode } from '@/lib/menu/types';
 import { useCompanies } from '@/hooks/useCompanies';
 import { useDivisions, useBusinessUnits, useDepartments, useSubBranches } from '@/hooks/useOrganization';
 import { useEmployeeFilterOptions } from '@/hooks/useEmployeeFilterOptions';
