@@ -1,78 +1,93 @@
-## Phase 3A.3 — Export Policies registry (config only, no enforcement)
+## Phase 3A.4 — Audit Policy registry (config only, no enforcement)
 
 ### Assumptions
 - Platform-owner only writes; authenticated reads.
-- Registry expresses **policy intent** by classification — what *should* happen on export. No exporter reads it yet.
-- Lives under the existing **Data Governance** section as a third sub-tab.
+- One row per **module × event category**. Captures *what should be audited and how long it should be kept*. No existing audit writer reads this yet.
+- Lives under **Data Governance** as a fourth sub-tab.
 
 ### Risk & Impact
-- **Data**: 1 new table `public.export_policies`. No FK back-pressure on existing tables.
-- **Workflow / UI / Reports**: zero impact. No existing export path is touched.
+- **Data**: 1 new table `public.audit_policies`. No FK to existing audit tables.
+- **Workflow / audit / reports**: zero impact — no current audit code path is touched.
 - **Regression**: negligible (additive table + isolated sub-tab).
-- **Scalability**: one row per classification — trivial.
+- **Scalability**: ~6 modules × ~8 categories ≈ small. Pre-seed only common pairs.
 - **Rollback**: drop table, remove sub-tab.
 
-### Schema — `public.export_policies`
+### Schema — `public.audit_policies`
 - `id uuid pk`
-- `classification_key text not null UNIQUE references data_classifications(classification_key)` (one policy per classification — keeps the model simple and matches "policy per sensitivity tier")
-- `export_allowed boolean not null default true`
-- `allowed_formats text[] not null default '{csv,xlsx,pdf}'` (registry list; no enforcement)
-- `max_rows_per_export integer` (null = unlimited)
-- `watermark_required boolean not null default false`
-- `download_reason_required boolean not null default false`
-- `approval_required boolean not null default false`
-- `approver_role text` (free text, e.g. `manager`, `hr_pms`, `platform_owner` — not validated against `app_role` to keep loose coupling)
-- `retain_export_log_days integer` (null = forever)
+- `module_key text not null` (`pms`, `hrms`, `lms`, `safety`, `incentive`, `platform`)
+- `event_category text not null` (`auth`, `data_read`, `data_write`, `export`, `permission_change`, `score_change`, `workflow_change`, `config_change`, `admin_action`, `notification`)
+- `enabled boolean not null default true`
+- `retention_days integer` (null = forever)
+- `min_severity text not null default 'info'` — `info` | `notice` | `warn` | `critical`
+- `include_payload boolean not null default true` (intent flag — do we keep before/after JSON)
+- `pii_redaction boolean not null default false` (intent flag — strip PII fields before persisting)
+- `alert_on_failure boolean not null default false` (intent flag — page someone when audit insert fails)
 - `notes text`
 - `is_active boolean not null default true`
-- `created_at`, `updated_at`, `created_by`, `updated_by`
+- audit cols `created_at`/`updated_at`/`created_by`/`updated_by`
+- UNIQUE `(module_key, event_category)`
+- CHECK `retention_days IS NULL OR retention_days >= 0`
+- CHECK `min_severity IN ('info','notice','warn','critical')`
 
 GRANTs: `SELECT` to `authenticated`, `ALL` to `service_role`.
 RLS: read = authenticated; write = `platform_owner`.
 Trigger: standard `updated_at`.
+Indexes: `(module_key)`, `(event_category)`.
 
 ### Seed
-Seed one row per existing classification with **defaults derived from `data_classifications`** flags so the registry starts coherent:
-- `export_allowed`, `watermark_required`, `download_reason_required`, `approval_required`, `max_rows_per_export` ← copied from the matching `data_classifications` row at seed time.
-- `allowed_formats` defaults to `{csv,xlsx,pdf}` for `export_allowed=true`, else `{}`.
-- `approver_role` defaults to `platform_owner` when `approval_required=true`, else `null`.
-- `retain_export_log_days` defaults to `null`.
-- `is_active=true`.
+Seed a sensible default matrix so the table is usable on day one. Inserted with `ON CONFLICT (module_key, event_category) DO NOTHING` so it's idempotent and never overwrites user changes on re-apply.
 
-Seed runs once in the migration via `INSERT ... ON CONFLICT (classification_key) DO NOTHING`.
+| module     | category           | retention | severity  | payload | redact PII | alert |
+|------------|--------------------|-----------|-----------|---------|------------|-------|
+| platform   | auth               | 365       | notice    | false   | true       | true  |
+| platform   | permission_change  | 730       | warn      | true    | false      | true  |
+| platform   | config_change      | 730       | notice    | true    | false      | false |
+| platform   | admin_action       | 730       | warn      | true    | false      | true  |
+| pms        | score_change       | 1825      | notice    | true    | false      | false |
+| pms        | workflow_change    | 1825      | notice    | true    | false      | false |
+| pms        | data_write         | 365       | info      | true    | true       | false |
+| pms        | export             | 365       | warn      | true    | true       | true  |
+| hrms       | data_write         | 730       | info      | true    | true       | false |
+| hrms       | export             | 730       | warn      | true    | true       | true  |
+| safety     | data_write         | 1825      | notice    | true    | false      | false |
+| safety     | export             | 1825      | warn      | true    | false      | true  |
+| incentive  | score_change       | 1825      | notice    | true    | false      | false |
+| incentive  | data_write         | 1825      | info      | true    | true       | false |
+| lms        | data_write         | 365       | info      | true    | true       | false |
+
+(15 seed rows. Numbers are policy *intent*; no system reads them yet.)
 
 ### UI — `DataGovernanceTab.tsx`
-Add third sub-tab **Export Policies**:
-- Table: Classification · Export · Formats · Max rows · Watermark · Reason · Approval · Approver · Retain log · Active · Edit
-- Edit dialog only (no Add / no Delete — registry mirrors classifications, so rows are created automatically when a new classification is added; absence of a row falls back to the classification's own flags conceptually but enforcement comes later).
-- `classification_key` read-only in dialog.
-- All other fields editable.
+Add fourth sub-tab **Audit Policy**:
+- Filter bar: module + category + show-inactive.
+- Table: Module · Category · Enabled · Retention · Severity · Payload · PII Redact · Alert · Active · Edit.
+- Add and Edit dialogs (no Delete — toggle `is_active`).
+- `(module_key, event_category)` immutable after creation (server enforces unique).
 - "Config only — not enforced yet" banner reused.
 
 ### Audit
-`entitlement_audit` on every update:
-- `event_type='update'`
-- `entity_type='export_policy'`
-- `entity_key=classification_key`
-- `before` / `after` JSON snapshot
-- `reason='platform_settings_export_policy_update'`
+`entitlement_audit` write per create/update:
+- `event_type`: `create` | `update`
+- `entity_type`: `audit_policy`
+- `entity_key`: `${module_key}.${event_category}`
+- `before` / `after` JSON (null on create)
+- `reason`: `platform_settings_audit_policy_(create|update)`
 
 ### Out of scope
-- No changes to any existing exporter, report, CSV/XLSX/PDF code path.
-- No enforcement of `max_rows_per_export`, `watermark_required`, `approval_required`.
-- No approval workflow UI.
-- No export log table (retention setting is captured as intent only).
-- No automatic row-creation trigger when a new classification is added — handled in a later phase when enforcement lands.
+- No audit writer (e.g. `entitlement_audit`, `iac_audit_log`, `kpi_audit_logs`, `safety_audit_log`) is rewired to consult this table.
+- No retention purge job.
+- No PII redactor.
+- No alerting pipeline. All four are deferred to the enforcement phase.
 
 ### Files
-- New migration: `<ts>_create_export_policies.sql` (table + RLS + grants + seed).
-- `src/components/platform/DataGovernanceTab.tsx` — add `ExportPoliciesSubTab` + tab trigger.
-- `CHANGELOG_2026.md` — 3A.3 entry.
+- New migration `<ts>_create_audit_policies.sql` — table + RLS + grants + seed.
+- `src/components/platform/DataGovernanceTab.tsx` — add `AuditPolicySubTab` + tab trigger.
+- `CHANGELOG_2026.md` — 3A.4 entry.
 
 ### Verification
 - `platformFoundation` smoke 12/12 still pass.
-- Manually: platform_owner can edit each policy; non-platform_owner gets read-only.
+- Manual: platform_owner can add + edit a row; non-platform_owner gets read-only.
 - One `entitlement_audit` row per save.
-- No PMS surface changes anywhere.
+- No change in any PMS / audit / reports / export surface.
 
 Ready to implement on approval.

@@ -4,6 +4,15 @@
 > **Status:** Living document. Append new ships under the **current week's row**, in the same step that you update `DOCUMENTATION.md` Version History.
 > **Sources:** `DOCUMENTATION.md` Version History, `supabase/migrations/`, `mem/*`.
 
+## 2026-06-03 — Phase 3A.4 Data Governance: Audit Policy registry (config only)
+- DB: new `public.audit_policies` — one row per `(module_key, event_category)`. Columns: `enabled`, `retention_days`, `min_severity` (`info|notice|warn|critical`), `include_payload`, `pii_redaction`, `alert_on_failure`, `notes`, `is_active`, audit cols. CHECKs: non-negative retention; severity whitelist. UNIQUE composite key. Indexes on `module_key` and `event_category`. RLS: read = authenticated, write = `platform_owner`. Standard `updated_at` trigger.
+- Seed: 15 default rows across `pms/hrms/lms/safety/incentive/platform` × `auth/permission_change/config_change/admin_action/score_change/workflow_change/data_write/export`. `ON CONFLICT DO NOTHING` — idempotent and never overwrites user changes.
+- UI: `DataGovernanceTab` gets a fourth sub-tab **Audit Policy** — module/category/show-inactive filters, Add + Edit dialogs (no delete, toggle `is_active`). Module and category are read-only after creation (server enforces unique). Same "Config only — not enforced yet" banner. No existing audit writer (`entitlement_audit`, `iac_audit_log`, `kpi_audit_logs`, `safety_audit_log`, etc.) consults this table yet.
+- Audit: `entitlement_audit` write per create/update — `entity_type='audit_policy'`, `entity_key='<module>.<category>'`, before/after JSON, reason `platform_settings_audit_policy_(create|update)`.
+- Out of scope: retention purge job, PII redactor, alerting pipeline — deferred to the enforcement phase.
+- Smoke: `platformFoundation` 12/12 pass.
+
+
 ## 2026-06-03 — Phase 3A.3 Data Governance: Export Policies registry (config only)
 - DB: new `public.export_policies` — one row per `data_classifications.classification_key` (UNIQUE FK). Columns: `export_allowed`, `allowed_formats text[]`, `max_rows_per_export`, `watermark_required`, `download_reason_required`, `approval_required`, `approver_role` (free text), `retain_export_log_days`, `notes`, `is_active`, audit cols. CHECK guards keep `max_rows_per_export` and `retain_export_log_days` non-negative. RLS: read = authenticated, write = `platform_owner`. Standard `updated_at` trigger.
 - Seed: one row per existing classification with defaults derived from the classification's own flags (export/watermark/reason/approval/max-rows copied; formats default `{csv,xlsx,pdf}` when export allowed, else empty; approver_role defaults to `platform_owner` when approval required). `INSERT … ON CONFLICT DO NOTHING` keeps the migration idempotent.
