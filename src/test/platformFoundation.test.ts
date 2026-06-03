@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { ALL_APP_ROLES } from '@/lib/roles';
 import { resolveModule, resolveAction, type EntitlementSnapshot } from '@/hooks/useEntitlement';
+import { toCsv } from '@/pages/platform/PlatformSettings';
 
 describe('Hub Platform Foundation — Phase 1', () => {
   describe('app roles', () => {
@@ -63,6 +64,27 @@ describe('Hub Platform Foundation — Phase 1', () => {
     });
     it('empty roles → primary is null', () => {
       expect(pickPrimary([])).toBeNull();
+    });
+  });
+
+  describe('audit CSV export (Phase 2)', () => {
+    it('emits header + rows in column order', () => {
+      const csv = toCsv(
+        [{ a: 1, b: 'x' }, { a: 2, b: 'y' }],
+        ['a', 'b'],
+      );
+      expect(csv).toBe('a,b\n1,x\n2,y');
+    });
+    it('escapes commas, quotes, and newlines per RFC 4180', () => {
+      const csv = toCsv(
+        [{ k: 'a,b', v: 'he said "hi"' }, { k: 'line1\nline2', v: null }],
+        ['k', 'v'],
+      );
+      expect(csv).toBe('k,v\n"a,b","he said ""hi"""\n"line1\nline2",');
+    });
+    it('serializes JSON for object cells (before/after diffs)', () => {
+      const csv = toCsv([{ before: { is_enabled: true }, after: { is_enabled: false } }], ['before', 'after']);
+      expect(csv).toBe('before,after\n"{""is_enabled"":true}","{""is_enabled"":false}"');
     });
   });
 });
