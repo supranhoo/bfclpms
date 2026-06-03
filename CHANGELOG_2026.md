@@ -4,6 +4,12 @@
 > **Status:** Living document. Append new ships under the **current week's row**, in the same step that you update `DOCUMENTATION.md` Version History.
 > **Sources:** `DOCUMENTATION.md` Version History, `supabase/migrations/`, `mem/*`.
 
+## 2026-06-03 — Phase 3A.2 Data Governance: Sensitive Field Registry (config only)
+- DB: new `public.sensitive_fields` table — `(module_key, table_name, column_name)` unique, FK to `data_classifications.classification_key`, with PII / PHI / Financial flags, `field_label`, `notes`, `is_active`, audit columns. RLS: read = authenticated; write = `platform_owner`. Standard `updated_at` trigger + indexes on `module_key` and `classification_key`.
+- UI: `DataGovernanceTab` gains a **Sensitive Fields** sub-tab with filters (module / classification / show-inactive), `Add Field` (platform_owner only), and Edit dialog. Module/table/column are read-only after creation (server enforces unique key); everything else (label, classification, flags, notes, active) is editable. Same "Config only — not enforced yet" banner — no masking, no RLS change elsewhere, no PMS surface changes.
+- Audit: every create/update writes to `entitlement_audit` with `entity_type='sensitive_field'`, `entity_key='<module>.<table>.<column>'`, before/after JSON, reason `platform_settings_sensitive_field_(create|update)`.
+- No seeds. No deletes — toggle `is_active`. Smoke tests: `platformFoundation` 12/12 pass.
+
 
 ## 2026-06-01 — Functional Manager (Phase 1 foundation)
 - DB: `profiles.functional_manager_id` (nullable, ON DELETE SET NULL) + `public.is_functional_manager_of(uuid)` SECURITY DEFINER helper.

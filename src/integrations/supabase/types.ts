@@ -9457,6 +9457,68 @@ export type Database = {
         }
         Relationships: []
       }
+      sensitive_fields: {
+        Row: {
+          classification_key: string
+          column_name: string
+          created_at: string
+          created_by: string | null
+          field_label: string | null
+          financial: boolean
+          id: string
+          is_active: boolean
+          module_key: string
+          notes: string | null
+          phi: boolean
+          pii: boolean
+          table_name: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          classification_key: string
+          column_name: string
+          created_at?: string
+          created_by?: string | null
+          field_label?: string | null
+          financial?: boolean
+          id?: string
+          is_active?: boolean
+          module_key: string
+          notes?: string | null
+          phi?: boolean
+          pii?: boolean
+          table_name: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          classification_key?: string
+          column_name?: string
+          created_at?: string
+          created_by?: string | null
+          field_label?: string | null
+          financial?: boolean
+          id?: string
+          is_active?: boolean
+          module_key?: string
+          notes?: string | null
+          phi?: boolean
+          pii?: boolean
+          table_name?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sensitive_fields_classification_key_fkey"
+            columns: ["classification_key"]
+            isOneToOne: false
+            referencedRelation: "data_classifications"
+            referencedColumns: ["classification_key"]
+          },
+        ]
+      }
       skill_competencies: {
         Row: {
           assessed_at: string | null

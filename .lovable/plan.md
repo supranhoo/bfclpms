@@ -1,76 +1,87 @@
-## Phase 2.66.18.3 — Clients tab: Edit mode + active status (safe phase)
+## Phase 3A.2 — Sensitive Field Registry (config only, no enforcement)
 
-Extend the existing **Edit Client** dialog in Platform Settings → Clients so platform_owner can change `deployment_mode` and `is_active` in addition to `display_name`. Key, source, timestamps stay immutable. No Delete. No PMS behaviour change.
+### Assumptions
+- Platform-owner only writes; authenticated reads.
+- Registry is descriptive metadata. No masking, no RLS change, no UI field hiding anywhere in PMS.
+- New tab lives under the existing **Data Governance** section in `PlatformSettings.tsx`, next to **Classifications** (added in 3A.1).
+- Audit goes to existing `entitlement_audit` table, matching 3A.1 conventions.
 
-### Scope
+### Risk & Impact Report
+- **Data**: 1 new table `public.sensitive_fields`. No changes to existing tables.
+- **Workflow**: None. Registry is not read by any runtime path.
+- **UI**: 1 new sub-tab inside Data Governance. No other surface changes.
+- **Regression**: Negligible — additive table + isolated UI component.
+- **Mitigation**: Reversible by dropping the table + removing the sub-tab. Smoke tests rerun.
+- **Scalability**: Tiny dataset (tens to low hundreds of rows). Client-side paginate if > 50.
 
-**Single file: `src/pages/platform/PlatformSettings.tsx` (ClientsTab only).**
+### Scope (exactly what ships)
 
-No DB migration — `clients` already has `is_active` (boolean, default true) and `deployment_mode` (text, CHECK saas/on_prem/hybrid); `clients_write` RLS already gates writes to platform_owner; `entitlement_audit` already accepts `event_type='update'`.
+**1. Schema — new table `public.sensitive_fields`**
+Columns:
+- `id uuid pk`
+- `module_key text not null` (e.g. `pms`, `hrms`, `lms`, `safety`)
+- `table_name text not null` (descriptive, free text — no FK to information_schema)
+- `column_name text not null`
+- `field_label text` (human label)
+- `classification_key text not null` references `data_classifications(classification_key)`
+- `pii boolean not null default false`
+- `phi boolean not null default false`
+- `financial boolean not null default false`
+- `notes text`
+- `is_active boolean not null default true`
+- `created_at`, `updated_at`, `created_by`, `updated_by`
+- Unique: `(module_key, table_name, column_name)`
 
-### UI changes
+GRANTs: `SELECT` to `authenticated`; `ALL` to `service_role`.
+RLS: read = authenticated; write = `platform_owner` only (mirrors 3A.1 policy shape).
+Trigger: standard `updated_at`.
 
-Edit dialog grows two fields below the existing read-only key + display-name input:
+**2. Seed** — empty. No fields seeded. Platform owner adds entries manually. (Avoids accidentally implying enforcement.)
 
-1. **Mode** — `Select` with options `saas` / `on_prem` / `hybrid`.
-2. **Active** — `Switch` labelled "Active" with a muted "Inactive tenants stay in the list but are flagged" helper line.
+**3. UI — `src/components/platform/DataGovernanceTab.tsx`**
+Add a second sub-tab **Sensitive Fields**:
+- Table columns: Module · Table · Column · Label · Classification · PII/PHI/Financial badges · Active · Edit
+- "Add Field" button (platform_owner only) → dialog with all editable fields
+- Edit dialog reuses same form; `module_key`/`table_name`/`column_name` editable until first save then read-only (server enforces unique key)
+- "Config only — not enforced yet" alert reused at top of section
+- Client-side filter by module + classification + active
 
-Title becomes "Edit Client". Description updated to "Display name, mode, and active status are editable. Key, source, and timestamps are immutable."
+**4. Audit**
+Every create/update writes to `entitlement_audit`:
+- `event_type`: `create` | `update`
+- `entity_type`: `sensitive_field`
+- `entity_key`: `${module_key}.${table_name}.${column_name}`
+- `before` / `after`: JSON snapshot (null for create)
+- `reason`: `platform_settings_sensitive_field_create` | `..._update`
 
-Clients table row gets an **Inactive** badge (`variant="secondary"`, muted) next to the display name when `is_active = false`. The existing `✓ / —` Active column stays as-is for at-a-glance scan.
-
-### Safety rules for the default/BFCL client
-
-- The `default` row can **never** be deactivated. If the user flips the Active switch off while editing `client_key = 'default'`, an `AlertDialog` reading "You are about to deactivate the default deployment client. This will hide it from new Platform Settings flows but does not affect PMS users. Type DEFAULT to confirm." appears. Cancel reverts. (The requirement said "strong confirmation unless protected" — we go with strong typed confirmation rather than a hard block, so the platform_owner is never permanently locked out of their own tenant config but cannot do it by accident.)
-- Mode change on `default` is allowed without extra confirmation (low blast radius).
-- All other clients: Save button is enabled as soon as anything is dirty + valid.
-
-### Validation / dirty tracking
-
-- `name`: trim, non-blank, ≤80 chars (already enforced).
-- `mode`: must be one of the three (Select constrains it).
-- `active`: boolean.
-- Save disabled unless at least one of `{name, mode, active}` differs from the loaded row.
-- Save also disabled when `!canWrite` or the mutation is pending.
-
-### Audit
-
-Single audit row per save (even when multiple fields change), so the change set stays atomic:
-
-- `event_type = 'update'`
-- `entity_type = 'client'`
-- `entity_key = <row.client_key>`
-- `before = { name, deployment_mode, is_active }` — only the fields actually present in the form
-- `after  = { name, deployment_mode, is_active }`
-- `reason = 'platform_settings_client_update'`
-
-Existing name-only edits previously used `reason='platform_settings_client_name_update'`. We keep both reason codes in the codebase; the new combined save always emits `..._client_update` so historic name-only rows remain distinguishable.
+**5. No deletes.** Toggle `is_active` instead.
 
 ### Out of scope (explicit)
+- No masking
+- No RLS changes on existing tables
+- No PMS UI changes
+- No export/report changes
+- No introspection of `information_schema` (free-text table/column avoids tight coupling)
+- No bulk import (manual entry only for this micro-phase)
 
-- No Delete Client.
-- No edits to `client_key`, `entitlement_source`, `valid_from/valid_until`, `signature_hash`, timestamps.
-- No PMS enforcement of `is_active = false`. Inactive simply means flagged in the UI; entitlements and telemetry remain queryable.
-- No workflow / scoring / menu / report / RLS / role / enforcement-pilot / observe-mode changes.
-
-### Risk & rollback
-
-- **Data impact**: Two columns on a single row can change. No cascade. Existing entitlement rows untouched (no FK action on `is_active`).
-- **Regression risk**: Very low — write path already proven by name-edit; we add two form controls + one branch for the default-deactivate confirmation.
-- **Rollback**: Revert the single-file `ClientsTab` diff. To restore the row, the audit `before` JSON contains the exact prior state.
+### Files to touch
+- New migration: `supabase/migrations/<ts>_create_sensitive_fields.sql`
+- `src/components/platform/DataGovernanceTab.tsx` — add sub-tab + table + dialog
+- `DOCUMENTATION.md` — bump to v2.66.18.5, document table + UI
+- `CHANGELOG_2026.md` — 3A.2 entry
 
 ### Verification
+- 27/27 smoke tests still pass
+- Manually: platform_owner can add a row, edit it, toggle active; non-platform_owner sees read-only
+- `entitlement_audit` row created for both create and update
+- No change in any other PMS screen
 
-- Re-run the 27-test smoke suite: `platformEnforcement`, `platformTelemetryMeta`, `platformTelemetryAgg`.
-- Manual smoke in preview:
-  1. Edit BFCL name only → 1 audit row, mode/active unchanged.
-  2. Edit BFCL mode → saas → hybrid → 1 audit row with both before/after.
-  3. Try to deactivate `default` → typed confirmation appears; cancel keeps active=true.
-  4. Create a throwaway client (from prior phase), deactivate it → Inactive badge appears, audit row present, entitlement toggles in Module/Action tabs still load that client.
-  5. Audit Logs tab shows new `update` rows with the new reason code.
+### Rollback
+- Drop table `public.sensitive_fields`
+- Remove sub-tab from `DataGovernanceTab.tsx`
 
-### Docs / memory
+### Documentation & Policy
+- DOCUMENTATION.md: add "Sensitive Field Registry" subsection under Data Governance
+- POLICY.md: note registry exists but is non-enforcing; enforcement deferred to later phase
 
-- `DOCUMENTATION.md`: version `2.66.18.3` entry.
-- `CHANGELOG_2026.md`: new W1 row.
-- `mem/features/platform/hub-foundation.md`: append "Edit mode + active" to the Clients-tab section; note the default-deactivate typed-confirmation rule.
+Ready to implement on approval.
