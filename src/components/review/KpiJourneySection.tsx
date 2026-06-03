@@ -584,7 +584,9 @@ export function KpiJourneySection({
       if (log.new_value.reason) details.push(`Reason: ${log.new_value.reason}`);
       if (log.new_value.resolution_notes) details.push(`Resolution: ${log.new_value.resolution_notes}`);
       if (log.new_value.target) details.push(`Sent to: ${log.new_value.target}`);
-      if (log.new_value.status) {
+      const suppressStatusLine =
+        log.action === 'ADMIN_OVERRIDE' && log.metadata?.status_changed === false;
+      if (log.new_value.status && !suppressStatusLine) {
         const label = statusLabels[String(log.new_value.status)] || String(log.new_value.status).replace(/_/g, ' ');
         details.push(`New Status: ${label}`);
       }
@@ -593,6 +595,15 @@ export function KpiJourneySection({
       if (log.new_value.manager_remarks) details.push(`Manager Remarks: ${log.new_value.manager_remarks}`);
       if (log.new_value.auditor_remarks) details.push(`Auditor Remarks: ${log.new_value.auditor_remarks}`);
       if (log.new_value.management_remarks) details.push(`Management Remarks: ${log.new_value.management_remarks}`);
+    }
+    if (
+      log.action === 'ADMIN_OVERRIDE' &&
+      log.metadata?.source === 'admin_edit_dialog' &&
+      Array.isArray(log.metadata?.changed_fields)
+    ) {
+      const cf = (log.metadata.changed_fields as string[]).filter((f: string) => f !== 'status');
+      const summary = describeChangedFields(cf);
+      if (summary) details.push(`Updated fields: ${summary}`);
     }
     return details;
   };
