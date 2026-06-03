@@ -591,6 +591,60 @@ export type Database = {
           },
         ]
       }
+      audit_policies: {
+        Row: {
+          alert_on_failure: boolean
+          created_at: string
+          created_by: string | null
+          enabled: boolean
+          event_category: string
+          id: string
+          include_payload: boolean
+          is_active: boolean
+          min_severity: string
+          module_key: string
+          notes: string | null
+          pii_redaction: boolean
+          retention_days: number | null
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          alert_on_failure?: boolean
+          created_at?: string
+          created_by?: string | null
+          enabled?: boolean
+          event_category: string
+          id?: string
+          include_payload?: boolean
+          is_active?: boolean
+          min_severity?: string
+          module_key: string
+          notes?: string | null
+          pii_redaction?: boolean
+          retention_days?: number | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          alert_on_failure?: boolean
+          created_at?: string
+          created_by?: string | null
+          enabled?: boolean
+          event_category?: string
+          id?: string
+          include_payload?: boolean
+          is_active?: boolean
+          min_severity?: string
+          module_key?: string
+          notes?: string | null
+          pii_redaction?: boolean
+          retention_days?: number | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
       auth_lookup_attempts: {
         Row: {
           attempted_at: string
