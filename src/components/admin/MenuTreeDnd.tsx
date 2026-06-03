@@ -383,6 +383,7 @@ function ModuleSection(props: {
   onLabelChange: (menuKey: string, value: string) => void;
   onResetItem: (menuKey: string) => void;
   matchesSearch: (n: ResolvedMenuNode) => boolean;
+  matchesLevel: (n: ResolvedMenuNode) => boolean;
   activeKey: string | null;
   hoverIntent: DropIntent | null;
   validationOk: boolean;
@@ -457,6 +458,7 @@ function TreeRow(props: {
   onLabelChange: (menuKey: string, value: string) => void;
   onResetItem: (menuKey: string) => void;
   matchesSearch: (n: ResolvedMenuNode) => boolean;
+  matchesLevel: (n: ResolvedMenuNode) => boolean;
   activeKey: string | null;
   hoverIntent: DropIntent | null;
   validationOk: boolean;
