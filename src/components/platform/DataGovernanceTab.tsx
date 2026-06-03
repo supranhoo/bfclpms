@@ -38,8 +38,13 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { DataGovernanceOverviewSubTab } from './DataGovernanceOverviewSubTab';
+import { LayoutDashboard } from 'lucide-react';
 
 export function DataGovernanceTab() {
+  const [activeTab, setActiveTab] = useState<
+    'overview' | 'classifications' | 'sensitive-fields' | 'export-policies' | 'audit-policy' | 'retention-policy' | 'privacy-consent'
+  >('overview');
   return (
     <div className="space-y-4">
       <Alert>
@@ -55,8 +60,11 @@ export function DataGovernanceTab() {
         </AlertDescription>
       </Alert>
 
-      <Tabs defaultValue="classifications" className="space-y-4">
+      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as typeof activeTab)} className="space-y-4">
         <TabsList className="flex-wrap h-auto gap-1">
+          <TabsTrigger value="overview">
+            <LayoutDashboard className="h-4 w-4 mr-1" /> Overview
+          </TabsTrigger>
           <TabsTrigger value="classifications">
             <ShieldAlert className="h-4 w-4 mr-1" /> Classifications
           </TabsTrigger>
@@ -76,6 +84,7 @@ export function DataGovernanceTab() {
             <ShieldCheck className="h-4 w-4 mr-1" /> Privacy &amp; Consent
           </TabsTrigger>
         </TabsList>
+        <TabsContent value="overview"><DataGovernanceOverviewSubTab onNavigate={setActiveTab} /></TabsContent>
         <TabsContent value="classifications"><ClassificationsSubTab /></TabsContent>
         <TabsContent value="sensitive-fields"><SensitiveFieldsSubTab /></TabsContent>
         <TabsContent value="export-policies"><ExportPoliciesSubTab /></TabsContent>
