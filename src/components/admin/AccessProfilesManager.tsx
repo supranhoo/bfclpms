@@ -203,6 +203,26 @@ export function ProfilesTab({ profiles, assignments, createProfile, updateProfil
 /* ─── Tab 2: Profile Mapping ─── */
 export function MappingTab({ profiles, orgScopes, menuRights, configs, saveOrgScope, deleteOrgScope, saveMenuRights, toast }: any) {
   const [selectedProfileId, setSelectedProfileId] = useState('');
+  const [rightsSearch, setRightsSearch] = useState('');
+  // Admin always loads the full menu registry + overrides so Level 2/3/4
+  // tabs (Organization sub-tabs, Workflow Config sub-tabs, custom menus)
+  // appear in the Menu Access Rights grid — independent of the
+  // `menu_overrides_enabled` feature flag.
+  const { registry: registryQ, overrides: overridesQ } = useMenuRegistryAdmin();
+  const resolvedNodes: ResolvedMenuNode[] = useMemo(() => {
+    return applyOverrides(registryQ.data ?? [], overridesQ.data ?? []);
+  }, [registryQ.data, overridesQ.data]);
+  const nodeByKey = useMemo(() => {
+    const m = new Map<string, ResolvedMenuNode>();
+    for (const n of resolvedNodes) m.set(n.menu_key, n);
+    return m;
+  }, [resolvedNodes]);
+  const childrenByParent = useMemo(() => groupByParent(resolvedNodes), [resolvedNodes]);
+  const configByKey = useMemo(() => {
+    const m = new Map<string, MenuAccessConfig>();
+    for (const c of configs as MenuAccessConfig[]) m.set(c.menu_key, c);
+    return m;
+  }, [configs]);
   const { data: companies = [] } = useCompanies();
   const { data: divisions = [] } = useDivisions();
   const { data: businessUnits = [] } = useBusinessUnits();
