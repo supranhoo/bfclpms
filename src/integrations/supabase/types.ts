@@ -7179,6 +7179,63 @@ export type Database = {
           },
         ]
       }
+      retention_policies: {
+        Row: {
+          archive_after_days: number | null
+          created_at: string
+          created_by: string | null
+          domain_key: string
+          domain_label: string
+          id: string
+          is_active: boolean
+          legal_hold: boolean
+          module_key: string
+          notes: string | null
+          owner_role: string | null
+          purge_strategy: string
+          regulatory_basis: string | null
+          retention_days: number | null
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          archive_after_days?: number | null
+          created_at?: string
+          created_by?: string | null
+          domain_key: string
+          domain_label: string
+          id?: string
+          is_active?: boolean
+          legal_hold?: boolean
+          module_key: string
+          notes?: string | null
+          owner_role?: string | null
+          purge_strategy?: string
+          regulatory_basis?: string | null
+          retention_days?: number | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          archive_after_days?: number | null
+          created_at?: string
+          created_by?: string | null
+          domain_key?: string
+          domain_label?: string
+          id?: string
+          is_active?: boolean
+          legal_hold?: boolean
+          module_key?: string
+          notes?: string | null
+          owner_role?: string | null
+          purge_strategy?: string
+          regulatory_basis?: string | null
+          retention_days?: number | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
       review_action_notes: {
         Row: {
           applicable_from: string | null
