@@ -11,7 +11,7 @@ import { Switch } from '@/components/ui/switch';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useState } from 'react';
-import { Building2, Boxes, KeyRound, ShieldCheck, ScrollText, Layers, Download, ChevronLeft, ChevronRight, AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { Building2, Boxes, KeyRound, ShieldCheck, ScrollText, Layers, Download, ChevronLeft, ChevronRight, AlertTriangle, CheckCircle2, BarChart3 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
