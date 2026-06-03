@@ -57,6 +57,11 @@ export function MentionTextarea({
       prevDisplayRef.current = newDisplayText;
       onChange(newRaw);
 
+      // Keep mentioned user IDs in sync after any edit (including deletions)
+      if (onMentionsChange) {
+        onMentionsChange(parseMentions(newRaw).map((m) => m.userId));
+      }
+
       // Detect @ trigger in the display text
       const textBeforeCursor = newDisplayText.slice(0, cursor);
       const atIndex = textBeforeCursor.lastIndexOf('@');
@@ -78,7 +83,7 @@ export function MentionTextarea({
       setMentionQuery('');
       setTriggerStart(null);
     },
-    [onChange, value]
+    [onChange, value, onMentionsChange]
   );
 
   const selectUser = useCallback(

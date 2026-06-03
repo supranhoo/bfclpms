@@ -166,28 +166,45 @@ export function applyDisplayEditToRaw(
   }
 
   // The changed region in old display text
-  const oldChangeStart = prefixLen;
-  const oldChangeEnd = oldDisplay.length - suffixLen;
+  let oldChangeStart = prefixLen;
+  let oldChangeEnd = oldDisplay.length - suffixLen;
 
   // The replacement text from new display
   const insertedText = newDisplay.slice(prefixLen, newDisplay.length - suffixLen);
 
-  // Map display positions to raw positions
   const segments = getMentionSegments(oldRaw);
 
-  // Expand the change region to include any mentions that are partially overlapped
-  let rawDeleteStart = displayPosToRawPos(oldRaw, oldChangeStart);
-  let rawDeleteEnd = displayPosToRawPos(oldRaw, oldChangeEnd);
-
-  // If delete start/end falls inside a mention, expand to cover the whole mention
+  // Expand the changed region (in display space) to fully cover any mention it
+  // overlaps. This is the only way to safely delete a mention because the raw
+  // text `@[Name](uuid)` is much longer than the displayed `@Name`, and any
+  // partial deletion would leave broken syntax behind.
   for (const seg of segments) {
-    if (rawDeleteStart > seg.rawStart && rawDeleteStart < seg.rawEnd) {
-      rawDeleteStart = seg.rawStart;
-    }
-    if (rawDeleteEnd > seg.rawStart && rawDeleteEnd < seg.rawEnd) {
-      rawDeleteEnd = seg.rawEnd;
+    const overlaps =
+      oldChangeStart < seg.displayEnd && oldChangeEnd > seg.displayStart;
+    if (overlaps) {
+      if (seg.displayStart < oldChangeStart) oldChangeStart = seg.displayStart;
+      if (seg.displayEnd > oldChangeEnd) oldChangeEnd = seg.displayEnd;
     }
   }
+
+  // Map display positions to raw positions. Because we've aligned the range to
+  // segment boundaries (or it never touched a segment), this mapping is exact.
+  const mapDisplayToRaw = (displayPos: number): number => {
+    let offset = 0;
+    for (const seg of segments) {
+      if (displayPos <= seg.displayStart) return displayPos + offset;
+      if (displayPos >= seg.displayEnd) {
+        offset += (seg.rawEnd - seg.rawStart) - (seg.displayEnd - seg.displayStart);
+        continue;
+      }
+      // Should not happen after expansion above; snap to raw end as safety.
+      return seg.rawEnd;
+    }
+    return displayPos + offset;
+  };
+
+  const rawDeleteStart = mapDisplayToRaw(oldChangeStart);
+  const rawDeleteEnd = mapDisplayToRaw(oldChangeEnd);
 
   return oldRaw.slice(0, rawDeleteStart) + insertedText + oldRaw.slice(rawDeleteEnd);
 }
