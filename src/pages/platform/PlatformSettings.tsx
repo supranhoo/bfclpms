@@ -716,6 +716,18 @@ function TelemetryTab() {
   const last30 = new Date(Date.now() - 29 * 24 * 60 * 60 * 1000);
   last30.setHours(0, 0, 0, 0);
 
+  // Aggregate window (trend + breakdown cards). `custom` uses the events-table
+  // From/Until inputs; otherwise the chip-driven 7d/30d window.
+  const aggFromDate =
+    trendRange === '7d' ? presetRange('last7').from
+    : trendRange === '30d' ? presetRange('last30').from
+    : from;
+  const aggUntilDate =
+    trendRange === 'custom' ? until
+    : presetRange('last30').until; // today
+  const aggFromISO = new Date(`${aggFromDate}T00:00:00`).toISOString();
+  const aggUntilEnd = new Date(`${aggUntilDate}T23:59:59.999`).toISOString();
+
   const kpiQ = useQuery({
     queryKey: ['telemetry', 'kpi'],
     queryFn: async () => {
@@ -734,15 +746,16 @@ function TelemetryTab() {
     },
   });
 
-  // 30-day window rows for aggregates + sparkline (capped at 5000, more than enough at current volume).
+  // Window rows for aggregates + trend chart (capped at 5000).
   const aggQ = useQuery({
-    queryKey: ['telemetry', 'agg-30d'],
+    queryKey: ['telemetry', 'agg', aggFromISO, aggUntilEnd],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('entitlement_audit')
         .select('id, created_at, actor_id, entity_key, client_id, after')
         .eq('event_type', 'would_deny')
-        .gte('created_at', last30.toISOString())
+        .gte('created_at', aggFromISO)
+        .lte('created_at', aggUntilEnd)
         .order('created_at', { ascending: false })
         .limit(5000);
       if (error) throw error;
