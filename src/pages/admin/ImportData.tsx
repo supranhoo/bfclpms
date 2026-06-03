@@ -24,6 +24,7 @@ import * as XLSX from 'xlsx';
 import { validateFileSize, IMPORT_LIMITS, sanitizeText, normalizeRole, VALID_ROLES } from '@/lib/importValidation';
 import { scoreToRatingLevel } from '@/lib/reviewConstants';
 import { fetchAllPaged } from '@/lib/fetchAll';
+import { CanAction } from '@/components/platform/CanAction';
 
 /** Map technical DB/edge-function errors to admin-friendly messages */
 function friendlyImportError(msg: string): string {
@@ -2297,17 +2298,19 @@ export default function ImportData() {
                     )}
                   </CardDescription>
                 </div>
-                <Button
-                  onClick={handleEmployeeImport}
-                  disabled={isImportingEmployees || (employeeData.length - employeeRowErrors.size) === 0}
-                >
-                  {isImportingEmployees ? (
-                    <><Loader2 className="h-4 w-4 animate-spin mr-2" />Processing {employeeImportProgress.current}/{employeeImportProgress.total}...</>
-                  ) : employeeRowErrors.size > 0
-                    ? `Import ${employeeData.length - employeeRowErrors.size} of ${employeeData.length} Employees`
-                    : `Import ${employeeData.length} Employees`
-                  }
-                </Button>
+                <CanAction actionKey="pms.data.import">
+                  <Button
+                    onClick={handleEmployeeImport}
+                    disabled={isImportingEmployees || (employeeData.length - employeeRowErrors.size) === 0}
+                  >
+                    {isImportingEmployees ? (
+                      <><Loader2 className="h-4 w-4 animate-spin mr-2" />Processing {employeeImportProgress.current}/{employeeImportProgress.total}...</>
+                    ) : employeeRowErrors.size > 0
+                      ? `Import ${employeeData.length - employeeRowErrors.size} of ${employeeData.length} Employees`
+                      : `Import ${employeeData.length} Employees`
+                    }
+                  </Button>
+                </CanAction>
               </CardHeader>
               {isImportingEmployees && (
                 <div className="px-6 pb-4">
@@ -2764,9 +2767,11 @@ export default function ImportData() {
                     <CardTitle>Preview</CardTitle>
                     <CardDescription>{importData.length} rows to import</CardDescription>
                   </div>
-                  <Button onClick={handleImport} disabled={isImporting || errors.length > 0}>
-                    {isImporting ? 'Importing...' : `Import ${importData.length} KPIs`}
-                  </Button>
+                  <CanAction actionKey="pms.data.import">
+                    <Button onClick={handleImport} disabled={isImporting || errors.length > 0}>
+                      {isImporting ? 'Importing...' : `Import ${importData.length} KPIs`}
+                    </Button>
+                  </CanAction>
                 </CardHeader>
                 <CardContent>
                   <div className="overflow-x-auto">
