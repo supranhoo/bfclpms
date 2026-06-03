@@ -607,6 +607,7 @@ type WouldDenyRow = {
   entity_key: string;
   client_id: string | null;
   reason: string | null;
+  after?: Record<string, unknown> | null;
 };
 
 function Sparkline({ data }: { data: { date: string; count: number }[] }) {
