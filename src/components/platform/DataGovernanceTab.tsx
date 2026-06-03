@@ -32,7 +32,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Pencil, ShieldAlert, Info, Plus, FileLock2, Download, ClipboardList } from 'lucide-react';
+import { Pencil, ShieldAlert, Info, Plus, FileLock2, Download, ClipboardList, Archive } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -69,12 +69,16 @@ export function DataGovernanceTab() {
           <TabsTrigger value="audit-policy">
             <ClipboardList className="h-4 w-4 mr-1" /> Audit Policy
           </TabsTrigger>
-          {/* 3A.5–3A.6 tabs will be added in subsequent micro-phases. */}
+          <TabsTrigger value="retention-policy">
+            <Archive className="h-4 w-4 mr-1" /> Retention Policy
+          </TabsTrigger>
+          {/* 3A.6 tab will be added in a subsequent micro-phase. */}
         </TabsList>
         <TabsContent value="classifications"><ClassificationsSubTab /></TabsContent>
         <TabsContent value="sensitive-fields"><SensitiveFieldsSubTab /></TabsContent>
         <TabsContent value="export-policies"><ExportPoliciesSubTab /></TabsContent>
         <TabsContent value="audit-policy"><AuditPolicySubTab /></TabsContent>
+        <TabsContent value="retention-policy"><RetentionPolicySubTab /></TabsContent>
       </Tabs>
     </div>
   );
