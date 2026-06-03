@@ -1,88 +1,72 @@
-## Phase 3A.6 — Privacy / Consent Settings (config only, no enforcement)
+
+## Phase 3B — Data Governance Overview (read-only summary, no enforcement)
+
+Phase 3A shipped 6 metadata registries (classifications, sensitive fields, export policies, audit policies, retention policies, privacy/consent). They are useful only if the platform_owner can see them holistically. Phase 3B adds a **single read-only Overview sub-tab** that surfaces coverage and last-changed signals across all six registries — no new tables, no enforcement, no behavior change.
 
 ### Assumptions
-- Sixth and final sub-tab under **Data Governance**.
-- Registry of privacy/consent policies the platform must honor (cookie consent, marketing comms, analytics, AI training, data sharing, DSAR contact, etc.). No runtime enforcement, no consent capture UI yet.
-- Platform-owner writes; authenticated reads. Same banner: "Config only — not enforced yet".
+- First sub-tab in `DataGovernanceTab.tsx` (rename current order: Overview → Classifications → Sensitive Fields → Export Policies → Audit Policies → Retention → Privacy/Consent).
+- Platform_owner only writes; authenticated reads (same as the 6 registries).
+- Pure read-only aggregation; no scheduled jobs, no exports yet.
 
 ### Risk & Impact
-- **Data**: 1 new additive table `public.privacy_consent_settings`. No FK to existing tables.
-- **Workflow / reports / backup**: zero impact — nothing reads it. Auto-included in backups via `get_backup_table_order()`.
-- **Regression**: negligible (isolated sub-tab).
-- **Scalability**: ~15–25 rows total.
-- **Rollback**: drop table, remove sub-tab.
+- **Data**: zero schema changes. Pure SELECTs against existing tables.
+- **Workflow / reports / backup / RLS**: zero impact.
+- **Regression**: negligible — isolated sub-tab.
+- **Scalability**: ≤ a few hundred rows total across registries; one paginated query per card is unnecessary. Use simple `select count` + last `updated_at` per registry.
+- **Rollback**: remove sub-tab and helper hook.
 
-### Schema — `public.privacy_consent_settings`
-- `id uuid pk`
-- `module_key text not null` (`platform`, `pms`, `hrms`, `safety`, `incentive`, `lms`)
-- `consent_key text not null` — slug, e.g. `platform.cookies.analytics`, `platform.marketing.email`, `hrms.data_sharing.payroll_vendor`, `platform.ai.training_optout`
-- `consent_label text not null`
-- `purpose text not null` — short description of why data is processed
-- `data_categories text` — comma list (e.g. "email, device_id, ip")
-- `lawful_basis text not null default 'consent'` — `consent` | `contract` | `legitimate_interest` | `legal_obligation` | `vital_interest` | `public_task`
-- `required boolean not null default false` (true = strictly necessary, no opt-out)
-- `default_state text not null default 'opt_out'` — `opt_in` | `opt_out`
-- `dsar_contact_email text`
-- `policy_url text`
-- `notes text`
-- `is_active boolean not null default true`
-- standard audit cols
-- UNIQUE `(consent_key)`
-- CHECK `lawful_basis IN ('consent','contract','legitimate_interest','legal_obligation','vital_interest','public_task')`
-- CHECK `default_state IN ('opt_in','opt_out')`
+### UI — new `OverviewSubTab` in `DataGovernanceTab.tsx`
+1. **Header banner** (reuse existing "Config only — not enforced yet" tone).
+2. **6 KPI cards** (one per registry):
+   - Title (e.g. "Sensitive Fields")
+   - Total rows · Active rows · Inactive rows
+   - Last updated (relative timestamp, from `max(updated_at)`)
+   - "Manage →" link that selects the matching sub-tab via existing `Tabs` state.
+3. **Coverage strip** (1 row, plain text, no charts):
+   - `Classifications by level` — counts grouped by `classification_level` (e.g. public/internal/confidential/restricted).
+   - `Sensitive fields by category` — counts grouped by `category` (or whichever column exists; fall back to `module_key`).
+   - `Export policies by purge strategy` / `Retention by purge_strategy` — counts grouped by `purge_strategy`.
+   - `Audit policies by retention bucket` — counts grouped by coarse bucket (≤90d / ≤1y / >1y / forever).
+   - `Privacy/Consent by lawful_basis` — counts grouped by `lawful_basis`.
+4. **Recent changes** (last 10 rows from `entitlement_audit` where `entity_type IN ('data_classification','sensitive_field','export_policy','audit_policy','retention_policy','privacy_consent_setting')`): timestamp · actor · event_type · entity_type · entity_key · reason. Click row → open relevant sub-tab.
 
-GRANTs: `SELECT` to `authenticated`, `ALL` to `service_role`.
-RLS: read = authenticated; write = `platform_owner`.
-Trigger: standard `updated_at`.
-Index: `(module_key)`.
+All cards/strips show a skeleton while React Query loads; empty registries render "No entries yet — go to <tab> to add one."
 
-### Seed (idempotent, ~14 rows)
-- `platform.cookies.strictly_necessary` — required, contract
-- `platform.cookies.analytics` — opt_out, consent
-- `platform.cookies.marketing` — opt_out, consent
-- `platform.marketing.email` — opt_out, consent
-- `platform.marketing.sms` — opt_out, consent
-- `platform.ai.training_optout` — opt_out, legitimate_interest
-- `platform.ai.assistant_logging` — opt_out, consent
-- `platform.dsar.contact` — required, legal_obligation
-- `platform.telemetry.crash_reports` — opt_out, consent
-- `pms.feedback.anonymous_share` — opt_out, consent
-- `hrms.data_sharing.payroll_vendor` — required, contract
-- `hrms.data_sharing.background_check` — opt_in, consent
-- `safety.incident.publish_anonymized` — opt_out, legitimate_interest
-- `incentive.payout.bank_share` — required, contract
+### Data fetching
+- One React Query key: `['data-governance', 'overview']`.
+- Single fetch function that runs 6 `select id,is_active,updated_at` + 6 `select <group_col>` queries in parallel via `Promise.all`. Total ≤ 12 small queries, all already RLS-allowed.
+- Audit list: one query `from('entitlement_audit').select(...).in('entity_type', [...]).order('created_at', desc).limit(10)`.
+- 60s `staleTime` (matches other governance tabs).
 
-### UI — `DataGovernanceTab.tsx`
-Add sixth sub-tab **Privacy & Consent**:
-- Filter bar: module + show-inactive.
-- Table: Module · Consent Key · Label · Lawful Basis · Default · Required · Active · Edit.
-- Add and Edit dialogs (no Delete — toggle `is_active`).
-- `consent_key` and `module_key` immutable after creation.
-- Reuse "Config only — not enforced yet" banner.
+### Code
+- New file `src/components/platform/DataGovernanceOverviewSubTab.tsx`.
+- Edit `src/components/platform/DataGovernanceTab.tsx` to:
+  - Add `<TabsTrigger value="overview">Overview</TabsTrigger>` as the first trigger.
+  - Default `value="overview"` on the inner `<Tabs>`.
+  - Pass a `setActiveTab(tabId)` setter into the overview so "Manage →" links work.
+- Reuse existing `card`, `badge`, `table`, `skeleton`, and `formatDistanceToNow` patterns from the audit tab.
 
 ### Audit
-`entitlement_audit` per create/update:
-- `event_type`: `create` | `update`
-- `entity_type`: `privacy_consent_setting`
-- `entity_key`: `consent_key`
-- `before` / `after` JSON snapshots
-- `reason`: `platform_settings_privacy_consent_(create|update)`
+- Read-only — no writes to `entitlement_audit`. (Existing `admin_view` events for the registry tabs remain unchanged.)
 
 ### Out of scope
-- No consent banner, no cookie blocker, no DSAR workflow, no opt-in/out capture per user.
-- No integration with marketing/analytics tools.
-- All deferred to enforcement phase.
+- No charts library work (no Recharts); pure text/badge layout to stay light.
+- No CSV export of the overview (registries already export inside their own tabs).
+- No new enforcement, no new wrap, no new menu entry, no RLS / schema / role changes.
+- No PMS / safety / incentive / reports surface change.
 
 ### Files
-- New migration `<ts>_create_privacy_consent_settings.sql` — table + RLS + grants + seed.
-- `src/components/platform/DataGovernanceTab.tsx` — add `PrivacyConsentSubTab` + tab trigger.
-- `CHANGELOG_2026.md` — 3A.6 entry.
-- `.lovable/plan.md` — replace with this plan.
+- New: `src/components/platform/DataGovernanceOverviewSubTab.tsx`
+- Edited: `src/components/platform/DataGovernanceTab.tsx`, `CHANGELOG_2026.md`, `.lovable/plan.md`
 
 ### Verification
 - `platformFoundation` smoke 12/12 still pass.
-- Manual: platform_owner can add + edit; non-platform_owner read-only.
-- One `entitlement_audit` row per save.
-- No change in any PMS / audit / reports / export / backup surface.
+- Manual on Platform Settings → Data Governance:
+  - Overview loads with 6 cards, counts match the per-tab tables.
+  - Toggling a registry row's `is_active` and reloading flips the Active/Inactive counts.
+  - "Recent changes" lists the latest audit rows; clicking a row jumps to the right tab.
+  - Non-platform_owner can still read (no privilege escalation).
+- No new console warnings.
+- No diff in any non-Data-Governance file.
 
-Ready to implement on approval.
+Ready to implement on approval. Say "next" to ship Phase 3B.
