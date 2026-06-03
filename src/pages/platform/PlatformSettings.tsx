@@ -1068,9 +1068,59 @@ function TelemetryTab() {
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-sm">Recent would_deny events</CardTitle>
-          <CardDescription>Filtered, paginated. Source column reflects <code>reason</code>; per-route attribution will arrive in a later phase.</CardDescription>
+          <CardDescription>Filtered, paginated. Click breakdown rows above to drill in.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs text-muted-foreground">Presets:</span>
+            {(['today', 'last7', 'last30'] as PresetKey[]).map((p) => (
+              <Button
+                key={p}
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  const r = presetRange(p);
+                  setFrom(r.from);
+                  setUntil(r.until);
+                  setPage(0);
+                }}
+              >
+                {p === 'today' ? 'Today' : p === 'last7' ? 'Last 7 days' : 'Last 30 days'}
+              </Button>
+            ))}
+            <Button size="sm" variant={risk === 'high' ? 'default' : 'outline'} onClick={() => { setRisk(risk === 'high' ? 'all' : 'high'); setPage(0); }}>High-risk</Button>
+            <Button size="sm" variant={risk === 'critical' ? 'default' : 'outline'} onClick={() => { setRisk(risk === 'critical' ? 'all' : 'critical'); setPage(0); }}>Critical</Button>
+            {snapshot.clientId && (
+              <Button
+                size="sm"
+                variant={clientId === snapshot.clientId ? 'default' : 'outline'}
+                onClick={() => { setClientId(clientId === snapshot.clientId ? 'all' : snapshot.clientId!); setPage(0); }}
+              >
+                Current client
+              </Button>
+            )}
+            <Button
+              size="sm"
+              variant="ghost"
+              className="ml-auto"
+              onClick={() => {
+                const d = defaultFilters();
+                setFrom(d.from); setUntil(d.until);
+                setClientId(d.clientId); setModuleKey(d.moduleKey); setRisk(d.risk);
+                setActionSearch(d.actionSearch); setUserSearch(d.userSearch);
+                setRouteFilter(d.routeFilter); setPage(0);
+              }}
+            >
+              Clear all filters
+            </Button>
+          </div>
+          {routeFilter && (
+            <div className="flex items-center gap-2 text-xs">
+              <Badge variant="secondary">Route filter</Badge>
+              <code className="text-[11px]">{routeFilter}</code>
+              <Button size="sm" variant="ghost" className="h-6 px-2" onClick={() => { setRouteFilter(''); setPage(0); }}>clear</Button>
+            </div>
+          )}
           <div className="flex flex-wrap items-end gap-2">
             <div className="space-y-1">
               <label className="text-xs text-muted-foreground">From</label>
