@@ -28,14 +28,13 @@ import { EmployeeCombobox, type EmployeeOption } from '@/components/admin/Employ
 import { MultiSelectFilter } from '@/components/ui/multi-select-filter';
 import { useToast } from '@/hooks/use-toast';
 import {
-  // (existing imports below)
-} from '@/components/admin/__noop_placeholder_unused__';
   resolveFinalScore,
   type FinalScoreRuleType,
   type MissingScorePolicy,
   type WorkflowStageKey,
 } from '@/lib/finalScoreResolver';
 import { ConfirmDestructiveDialog } from '@/components/ui/ConfirmDestructiveDialog';
+import { CanAction } from '@/components/platform/CanAction';
 
 const ALL_STAGE_KEYS: WorkflowStageKey[] = [
   'self', 'manager', 'functional_manager', 'skip_level',
