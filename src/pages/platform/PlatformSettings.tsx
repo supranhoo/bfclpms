@@ -830,18 +830,11 @@ function TelemetryTab() {
     aggRows.map((r) => ({ module_key: actionMeta[r.entity_key]?.module_key ?? '—' })),
     'module_key',
   ).slice(0, 10);
+  const byRoute = aggregateByPathname(aggRows).slice(0, 10);
 
-  // 30-day sparkline buckets
-  const daily: { date: string; count: number }[] = [];
-  for (let i = 29; i >= 0; i--) {
-    const d = new Date(Date.now() - i * 24 * 60 * 60 * 1000);
-    daily.push({ date: d.toISOString().slice(0, 10), count: 0 });
-  }
-  for (const r of aggRows) {
-    const day = r.created_at.slice(0, 10);
-    const bucket = daily.find((b) => b.date === day);
-    if (bucket) bucket.count++;
-  }
+  // Daily trend buckets across the selected aggregation window
+  const daily = bucketByDay(aggRows, aggFromDate, aggUntilDate);
+  const aggCapped = aggRows.length >= 5000;
 
   const exportCsv = async () => {
     try {
