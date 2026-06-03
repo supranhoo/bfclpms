@@ -1,0 +1,3 @@
+ALTER TABLE public.entitlement_audit DROP CONSTRAINT entitlement_audit_event_type_check;
+ALTER TABLE public.entitlement_audit ADD CONSTRAINT entitlement_audit_event_type_check CHECK (event_type = ANY (ARRAY['grant'::text, 'revoke'::text, 'update'::text, 'would_deny'::text, 'admin_view'::text, 'deny'::text]));
+INSERT INTO public.system_settings (setting_key, setting_value) VALUES ('hub_enforcement_pilot_enabled', '"false"'::jsonb) ON CONFLICT (setting_key) DO NOTHING;
