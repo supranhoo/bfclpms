@@ -63,6 +63,7 @@ const KpiStandardization = lazy(() => import("./pages/admin/KpiStandardization")
 const RegistryBrowser = lazy(() => import("./pages/RegistryBrowser"));
 const BulkReviewDashboard = lazy(() => import("./pages/review/BulkReviewDashboard"));
 const CustomMenuPage = lazy(() => import("./pages/CustomMenuPage"));
+const PlatformSettings = lazy(() => import("./pages/platform/PlatformSettings"));
 
 // Safety module shell + pages
 const SafetyLayout = lazy(() =>
@@ -164,6 +165,22 @@ const App = () => (
               <Route path="/reset-password" element={<Suspense fallback={<PageFallback />}><ResetPassword /></Suspense>} />
               <Route path="/home" element={<Suspense fallback={<PageFallback />}><ModuleHub /></Suspense>} />
               <Route path="/" element={<Navigate to="/home" replace />} />
+              <Route
+                path="/platform-settings"
+                element={
+                  <Suspense fallback={<PageFallback />}>
+                    {/* lazy import to keep circular-safety */}
+                    {(() => {
+                      const PlatformOwnerRoute = require('./components/layout/PlatformOwnerRoute').PlatformOwnerRoute;
+                      return (
+                        <PlatformOwnerRoute>
+                          <PlatformSettings />
+                        </PlatformOwnerRoute>
+                      );
+                    })()}
+                  </Suspense>
+                }
+              />
               {/* Safety module — fully decoupled shell. Sibling of /home so PMS chrome never renders here. */}
               <Route
                 path="/safety"
