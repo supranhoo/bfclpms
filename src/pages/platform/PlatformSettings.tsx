@@ -171,6 +171,9 @@ function OverviewTab() {
   const flag = useHubFlag();
   const enabled = parseFlag(flag.data);
   const [confirmOff, setConfirmOff] = useState(false);
+  const pilotFlag = usePilotFlag();
+  const pilotEnabled = parseFlag(pilotFlag.data);
+  const [confirmPilot, setConfirmPilot] = useState<null | boolean>(null);
 
   const mut = useMutation({
     mutationFn: async (next: boolean) => {
@@ -199,6 +202,35 @@ function OverviewTab() {
       toast.success('Master switch updated');
     },
     onError: (e: Error) => toast.error(`Update failed: ${e.message}`),
+  });
+
+  const pilotMut = useMutation({
+    mutationFn: async (next: boolean) => {
+      const before = pilotEnabled;
+      const { error: upErr } = await supabase
+        .from('system_settings')
+        .upsert(
+          { setting_key: 'hub_enforcement_pilot_enabled', setting_value: next as unknown as never },
+          { onConflict: 'setting_key' },
+        );
+      if (upErr) throw upErr;
+      await supabase.from('entitlement_audit').insert({
+        actor_id: user?.id ?? null,
+        event_type: 'update',
+        entity_type: 'flag',
+        entity_key: 'hub_enforcement_pilot_enabled',
+        before: { is_enabled: before },
+        after: { is_enabled: next, allowlist: ['pms.data.export'] },
+        reason: 'platform_settings enforcement pilot toggle',
+      });
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['platform-settings', 'pilot-flag'] });
+      qc.invalidateQueries({ queryKey: ['platform-settings', 'audit'] });
+      qc.invalidateQueries({ queryKey: ['hub-enforcement-pilot'] });
+      toast.success('Enforcement pilot updated');
+    },
+    onError: (e: Error) => toast.error(`Pilot update failed: ${e.message}`),
   });
 
   const handleToggle = (next: boolean) => {
