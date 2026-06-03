@@ -965,7 +965,7 @@ function TelemetryTab() {
                 {topActions.length === 0 ? (
                   <TableRow><TableCell colSpan={3} className="text-center text-muted-foreground py-4">No data</TableCell></TableRow>
                 ) : topActions.map((t) => (
-                  <TableRow key={t.key}>
+                  <TableRow key={t.key} className="cursor-pointer hover:bg-muted/40" onClick={() => { setActionSearch(t.key); setPage(0); }}>
                     <TableCell><div className="font-medium text-xs">{actionMeta[t.key]?.label ?? t.key}</div><code className="text-[10px] text-muted-foreground">{t.key}</code></TableCell>
                     <TableCell className="text-xs">{actionMeta[t.key]?.module_key ?? '—'}</TableCell>
                     <TableCell className="text-right">{t.count}</TableCell>
@@ -985,7 +985,7 @@ function TelemetryTab() {
                 {topUsers.length === 0 ? (
                   <TableRow><TableCell colSpan={2} className="text-center text-muted-foreground py-4">No data</TableCell></TableRow>
                 ) : topUsers.map((u) => (
-                  <TableRow key={u.key}>
+                  <TableRow key={u.key} className="cursor-pointer hover:bg-muted/40" onClick={() => { setUserSearch(profileMeta[u.key]?.email ?? profileMeta[u.key]?.full_name ?? u.key); setPage(0); }}>
                     <TableCell className="text-xs">
                       <div className="font-medium">{profileMeta[u.key]?.full_name ?? '—'}</div>
                       <div className="text-muted-foreground">{profileMeta[u.key]?.email ?? u.key}</div>
@@ -1008,7 +1008,7 @@ function TelemetryTab() {
                   {byClient.length === 0 ? (
                     <TableRow><TableCell colSpan={2} className="text-center text-muted-foreground py-2 text-xs">No data</TableCell></TableRow>
                   ) : byClient.map((c) => (
-                    <TableRow key={c.key}>
+                    <TableRow key={c.key} className="cursor-pointer hover:bg-muted/40" onClick={() => { if (c.key !== '—') { setClientId(c.key); setPage(0); } }}>
                       <TableCell className="text-xs">{c.key === '—' ? '— (none)' : clientMeta[c.key]?.client_key ?? c.key}</TableCell>
                       <TableCell className="text-right text-xs">{c.count}</TableCell>
                     </TableRow>
@@ -1023,7 +1023,7 @@ function TelemetryTab() {
                   {byModule.length === 0 ? (
                     <TableRow><TableCell colSpan={2} className="text-center text-muted-foreground py-2 text-xs">No data</TableCell></TableRow>
                   ) : byModule.map((m) => (
-                    <TableRow key={m.key}>
+                    <TableRow key={m.key} className="cursor-pointer hover:bg-muted/40" onClick={() => { if (m.key !== '—') { setModuleKey(m.key); setPage(0); } }}>
                       <TableCell className="text-xs">{m.key}</TableCell>
                       <TableCell className="text-right text-xs">{m.count}</TableCell>
                     </TableRow>
@@ -1034,6 +1034,36 @@ function TelemetryTab() {
           </CardContent>
         </Card>
       </div>
+
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm">By page / route</CardTitle>
+          <CardDescription>Click a row to filter the events table. Rows captured before Phase 2D are grouped under "Not captured".</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader><TableRow><TableHead>Page / Route</TableHead><TableHead className="text-right">Count</TableHead></TableRow></TableHeader>
+            <TableBody>
+              {byRoute.length === 0 ? (
+                <TableRow><TableCell colSpan={2} className="text-center text-muted-foreground py-4">No data</TableCell></TableRow>
+              ) : byRoute.map((r) => (
+                <TableRow
+                  key={r.key}
+                  className={r.key === 'Not captured' ? '' : 'cursor-pointer hover:bg-muted/40'}
+                  onClick={() => { if (r.key !== 'Not captured') { setRouteFilter(r.key); setPage(0); } }}
+                >
+                  <TableCell className="text-xs">
+                    {r.key === 'Not captured'
+                      ? <span className="text-muted-foreground italic">Not captured</span>
+                      : <code className="text-[11px]">{r.key}</code>}
+                  </TableCell>
+                  <TableCell className="text-right text-xs">{r.count}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader className="pb-2">
