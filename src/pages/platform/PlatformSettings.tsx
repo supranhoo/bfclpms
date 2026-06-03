@@ -162,72 +162,225 @@ function ClientsTab() {
   );
 }
 
+/**
+ * Writes a `entitlement_audit` row capturing the before/after state of an
+ * entitlement toggle. Observe-mode: this does not enforce anything — it is
+ * only telemetry. RLS restricts the write to platform_owner.
+ */
+async function toggleEntitlement(opts: {
+  table: 'client_module_entitlements' | 'client_action_entitlements';
+  id: string;
+  clientId: string | null;
+  entityType: 'module' | 'action';
+  entityKey: string;
+  nextEnabled: boolean;
+  actorId: string | null;
+}) {
+  const { table, id, clientId, entityType, entityKey, nextEnabled, actorId } = opts;
+  const { data: before, error: readErr } = await supabase
+    .from(table)
+    .select('id, is_enabled')
+    .eq('id', id)
+    .maybeSingle();
+  if (readErr) throw readErr;
+
+  const { error: updErr } = await supabase
+    .from(table)
+    .update({ is_enabled: nextEnabled })
+    .eq('id', id);
+  if (updErr) throw updErr;
+
+  const { error: auditErr } = await supabase.from('entitlement_audit').insert({
+    actor_id: actorId,
+    event_type: 'update',
+    entity_type: entityType,
+    entity_key: entityKey,
+    client_id: clientId,
+    before: { is_enabled: before?.is_enabled ?? null },
+    after: { is_enabled: nextEnabled },
+    reason: 'platform_settings toggle',
+  });
+  if (auditErr) throw auditErr;
+}
+
 function ModuleEntitlementsTab() {
+  const qc = useQueryClient();
+  const { user, hasRole } = useAuth();
+  const canWrite = hasRole('platform_owner');
+  const [q, setQ] = useState('');
+
   const { data, isLoading } = useQuery({
     queryKey: ['platform-settings', 'cme-joined'],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('client_module_entitlements')
-        .select('id, module_key, is_enabled, valid_from, valid_until, clients(client_key, display_name)')
+        .select('id, module_key, is_enabled, valid_from, valid_until, client_id, clients(client_key, display_name)')
+        .order('module_key', { ascending: true })
         .limit(PAGE_SIZE);
       if (error) throw error;
-      type Row = { id: string; module_key: string; is_enabled: boolean; valid_from: string | null; valid_until: string | null; clients: { client_key: string; display_name: string } | null };
-      return (data ?? []).map((r: Row) => ({
-        ...r,
-        client_key: r.clients?.client_key ?? '—',
-        client_name: r.clients?.display_name ?? '—',
-      }));
+      return data ?? [];
     },
   });
+
+  const mut = useMutation({
+    mutationFn: toggleEntitlement,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['platform-settings', 'cme-joined'] });
+      qc.invalidateQueries({ queryKey: ['platform-settings', 'audit'] });
+      qc.invalidateQueries({ queryKey: ['hub-entitlement-snapshot'] });
+      toast.success('Entitlement updated (observe-only, not enforced)');
+    },
+    onError: (e: Error) => toast.error(`Toggle failed: ${e.message}`),
+  });
+
+  const rows = (data ?? []).filter((r) =>
+    !q || r.module_key.toLowerCase().includes(q.toLowerCase()) ||
+    (r.clients?.client_key ?? '').toLowerCase().includes(q.toLowerCase()),
+  );
+
   if (isLoading) return <LoadingRows />;
   return (
-    <SearchableTable
-      rows={(data ?? []) as Array<Record<string, unknown>>}
-      searchKeys={['client_key', 'module_key'] as never}
-      columns={[
-        { key: 'client_name' as never, label: 'Client' },
-        { key: 'module_key' as never, label: 'Module' },
-        { key: 'is_enabled' as never, label: 'Enabled', render: (v) => v ? <Badge>ON</Badge> : <Badge variant="secondary">OFF</Badge> },
-        { key: 'valid_from' as never, label: 'Valid from' },
-        { key: 'valid_until' as never, label: 'Valid until' },
-      ]}
-    />
+    <div className="space-y-3">
+      <Input placeholder="Search module or client…" value={q} onChange={(e) => setQ(e.target.value)} className="max-w-sm" />
+      <div className="overflow-x-auto rounded-md border">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Client</TableHead>
+              <TableHead>Module</TableHead>
+              <TableHead>Valid from</TableHead>
+              <TableHead>Valid until</TableHead>
+              <TableHead className="text-right">Enabled</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {rows.length === 0 ? (
+              <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground py-6">No rows</TableCell></TableRow>
+            ) : rows.map((r) => (
+              <TableRow key={r.id}>
+                <TableCell>{r.clients?.display_name ?? '—'} <span className="text-muted-foreground">({r.clients?.client_key ?? '—'})</span></TableCell>
+                <TableCell><code className="text-xs">{r.module_key}</code></TableCell>
+                <TableCell className="text-xs text-muted-foreground">{r.valid_from ?? '—'}</TableCell>
+                <TableCell className="text-xs text-muted-foreground">{r.valid_until ?? '—'}</TableCell>
+                <TableCell className="text-right">
+                  <Switch
+                    checked={!!r.is_enabled}
+                    disabled={!canWrite || mut.isPending}
+                    onCheckedChange={(next) => mut.mutate({
+                      table: 'client_module_entitlements',
+                      id: r.id,
+                      clientId: r.client_id,
+                      entityType: 'module',
+                      entityKey: r.module_key,
+                      nextEnabled: next,
+                      actorId: user?.id ?? null,
+                    })}
+                  />
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+      <p className="text-xs text-muted-foreground">
+        Observe-only — flipping OFF logs a record but does NOT block any PMS behavior. Enforcement begins in a future phase.
+      </p>
+    </div>
   );
 }
 
 function ActionEntitlementsTab() {
+  const qc = useQueryClient();
+  const { user, hasRole } = useAuth();
+  const canWrite = hasRole('platform_owner');
+  const [q, setQ] = useState('');
+
   const { data, isLoading } = useQuery({
     queryKey: ['platform-settings', 'cae-joined'],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('client_action_entitlements')
-        .select('id, action_key, is_enabled, clients(client_key), action_registry(label, risk_level, module_key)')
+        .select('id, action_key, is_enabled, client_id, clients(client_key), action_registry(label, risk_level, module_key)')
+        .order('action_key', { ascending: true })
         .limit(500);
       if (error) throw error;
-      type Row = { id: string; action_key: string; is_enabled: boolean; clients: { client_key: string } | null; action_registry: { label: string; risk_level: string; module_key: string } | null };
-      return (data ?? []).map((r: Row) => ({
-        ...r,
-        client_key: r.clients?.client_key ?? '—',
-        label: r.action_registry?.label ?? r.action_key,
-        module_key: r.action_registry?.module_key ?? '—',
-        risk_level: r.action_registry?.risk_level ?? '—',
-      }));
+      return data ?? [];
     },
   });
+
+  const mut = useMutation({
+    mutationFn: toggleEntitlement,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['platform-settings', 'cae-joined'] });
+      qc.invalidateQueries({ queryKey: ['platform-settings', 'audit'] });
+      qc.invalidateQueries({ queryKey: ['hub-entitlement-snapshot'] });
+      toast.success('Entitlement updated (observe-only, not enforced)');
+    },
+    onError: (e: Error) => toast.error(`Toggle failed: ${e.message}`),
+  });
+
+  const rows = (data ?? []).filter((r) => {
+    if (!q) return true;
+    const needle = q.toLowerCase();
+    return (
+      r.action_key.toLowerCase().includes(needle) ||
+      (r.action_registry?.label ?? '').toLowerCase().includes(needle) ||
+      (r.action_registry?.module_key ?? '').toLowerCase().includes(needle) ||
+      (r.clients?.client_key ?? '').toLowerCase().includes(needle)
+    );
+  });
+
   if (isLoading) return <LoadingRows />;
   return (
-    <SearchableTable
-      rows={(data ?? []) as Array<Record<string, unknown>>}
-      searchKeys={['action_key', 'label', 'module_key', 'client_key'] as never}
-      columns={[
-        { key: 'client_key' as never, label: 'Client' },
-        { key: 'module_key' as never, label: 'Module' },
-        { key: 'action_key' as never, label: 'Action key' },
-        { key: 'label' as never, label: 'Label' },
-        { key: 'risk_level' as never, label: 'Risk', render: (v) => <Badge variant="outline">{String(v)}</Badge> },
-        { key: 'is_enabled' as never, label: 'Enabled', render: (v) => v ? <Badge>ON</Badge> : <Badge variant="secondary">OFF</Badge> },
-      ]}
-    />
+    <div className="space-y-3">
+      <Input placeholder="Search action, module or client…" value={q} onChange={(e) => setQ(e.target.value)} className="max-w-sm" />
+      <div className="overflow-x-auto rounded-md border">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Client</TableHead>
+              <TableHead>Module</TableHead>
+              <TableHead>Action</TableHead>
+              <TableHead>Risk</TableHead>
+              <TableHead className="text-right">Enabled</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {rows.length === 0 ? (
+              <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground py-6">No rows</TableCell></TableRow>
+            ) : rows.map((r) => (
+              <TableRow key={r.id}>
+                <TableCell>{r.clients?.client_key ?? '—'}</TableCell>
+                <TableCell>{r.action_registry?.module_key ?? '—'}</TableCell>
+                <TableCell>
+                  <div className="font-medium">{r.action_registry?.label ?? r.action_key}</div>
+                  <code className="text-xs text-muted-foreground">{r.action_key}</code>
+                </TableCell>
+                <TableCell><Badge variant="outline">{r.action_registry?.risk_level ?? '—'}</Badge></TableCell>
+                <TableCell className="text-right">
+                  <Switch
+                    checked={!!r.is_enabled}
+                    disabled={!canWrite || mut.isPending}
+                    onCheckedChange={(next) => mut.mutate({
+                      table: 'client_action_entitlements',
+                      id: r.id,
+                      clientId: r.client_id,
+                      entityType: 'action',
+                      entityKey: r.action_key,
+                      nextEnabled: next,
+                      actorId: user?.id ?? null,
+                    })}
+                  />
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+      <p className="text-xs text-muted-foreground">
+        Observe-only — toggling does NOT block the action in PMS. Phase 3 will enforce one action at a time.
+      </p>
+    </div>
   );
 }
 
