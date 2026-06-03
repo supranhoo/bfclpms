@@ -21,6 +21,8 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ReviewPeriodSelectorEnhanced, type PeriodSelection } from '@/components/ui/ReviewPeriodSelectorEnhanced';
 import { EmployeeFilters } from '@/components/review/EmployeeFilters';
+import { EmployeeStatusFilter } from '@/components/reports/EmployeeStatusFilter';
+import { applyEmployeeStatusFilter, type EmployeeStatusMode } from '@/lib/reportEmployeeFilter';
 import { EmployeeContactCard } from '@/components/review/EmployeeContactCard';
 import { TeamReviewsZeroDiagnostic } from '@/components/review/TeamReviewsZeroDiagnostic';
 import { supabase } from '@/integrations/supabase/client';
@@ -46,6 +48,7 @@ interface EmployeeProfile {
   reporting_manager_id: string | null;
   pms_grade?: string | null;
   mobile_number?: string | null;
+  is_active?: boolean | null;
   relationship?: 'direct' | 'indirect';
   departments?: { id: string; name: string; code: string | null } | null;
 }
