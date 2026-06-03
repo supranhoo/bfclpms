@@ -14,6 +14,9 @@ import { useState } from 'react';
 import { Building2, Boxes, KeyRound, ShieldCheck, ScrollText, Layers, Download, ChevronLeft, ChevronRight, AlertTriangle, CheckCircle2, BarChart3 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
+import { useEntitlement } from '@/hooks/useEntitlement';
+import { bucketByDay, aggregateByPathname, presetRange, defaultFilters, type PresetKey } from '@/lib/platformTelemetryAgg';
+import { LineChart, Line, XAxis, YAxis, Tooltip as RTooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import {
   AlertDialog,
@@ -651,6 +654,7 @@ function KpiCard({ label, value, loading }: { label: string; value: number; load
 
 function TelemetryTab() {
   const { hasRole } = useAuth();
+  const { snapshot } = useEntitlement();
   const isOwner = hasRole('platform_owner');
   const [page, setPage] = useState(0);
   const today = new Date().toISOString().slice(0, 10);
@@ -662,6 +666,8 @@ function TelemetryTab() {
   const [risk, setRisk] = useState<string>('all');
   const [actionSearch, setActionSearch] = useState('');
   const [userSearch, setUserSearch] = useState('');
+  const [routeFilter, setRouteFilter] = useState<string>('');
+  const [trendRange, setTrendRange] = useState<'7d' | '30d' | 'custom'>('30d');
 
   const clientsQ = useQuery({
     queryKey: ['telemetry', 'clients'],
@@ -710,6 +716,18 @@ function TelemetryTab() {
   const last30 = new Date(Date.now() - 29 * 24 * 60 * 60 * 1000);
   last30.setHours(0, 0, 0, 0);
 
+  // Aggregate window (trend + breakdown cards). `custom` uses the events-table
+  // From/Until inputs; otherwise the chip-driven 7d/30d window.
+  const aggFromDate =
+    trendRange === '7d' ? presetRange('last7').from
+    : trendRange === '30d' ? presetRange('last30').from
+    : from;
+  const aggUntilDate =
+    trendRange === 'custom' ? until
+    : presetRange('last30').until; // today
+  const aggFromISO = new Date(`${aggFromDate}T00:00:00`).toISOString();
+  const aggUntilEnd = new Date(`${aggUntilDate}T23:59:59.999`).toISOString();
+
   const kpiQ = useQuery({
     queryKey: ['telemetry', 'kpi'],
     queryFn: async () => {
@@ -728,15 +746,16 @@ function TelemetryTab() {
     },
   });
 
-  // 30-day window rows for aggregates + sparkline (capped at 5000, more than enough at current volume).
+  // Window rows for aggregates + trend chart (capped at 5000).
   const aggQ = useQuery({
-    queryKey: ['telemetry', 'agg-30d'],
+    queryKey: ['telemetry', 'agg', aggFromISO, aggUntilEnd],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('entitlement_audit')
         .select('id, created_at, actor_id, entity_key, client_id, after')
         .eq('event_type', 'would_deny')
-        .gte('created_at', last30.toISOString())
+        .gte('created_at', aggFromISO)
+        .lte('created_at', aggUntilEnd)
         .order('created_at', { ascending: false })
         .limit(5000);
       if (error) throw error;
@@ -761,7 +780,7 @@ function TelemetryTab() {
 
   // Recent events (server-side filtered + paginated)
   const eventsQ = useQuery({
-    queryKey: ['telemetry', 'events', { page, from, until, clientId, moduleKey, risk, actionSearch, userSearch, akeys: constrainByActionKeys ? filteredActionKeys.length : 0 }],
+    queryKey: ['telemetry', 'events', { page, from, until, clientId, moduleKey, risk, actionSearch, userSearch, routeFilter, akeys: constrainByActionKeys ? filteredActionKeys.length : 0 }],
     queryFn: async () => {
       let q = supabase
         .from('entitlement_audit')
@@ -778,6 +797,9 @@ function TelemetryTab() {
       if (constrainByActionKeys) {
         if (filteredActionKeys.length === 0) return { rows: [] as WouldDenyRow[], total: 0 };
         q = q.in('entity_key', filteredActionKeys);
+      }
+      if (routeFilter.trim()) {
+        q = q.eq('after->>pathname', routeFilter.trim());
       }
       const start = page * PAGE_SIZE;
       const { data, count, error } = await q.range(start, start + PAGE_SIZE - 1);
@@ -808,18 +830,11 @@ function TelemetryTab() {
     aggRows.map((r) => ({ module_key: actionMeta[r.entity_key]?.module_key ?? '—' })),
     'module_key',
   ).slice(0, 10);
+  const byRoute = aggregateByPathname(aggRows).slice(0, 10);
 
-  // 30-day sparkline buckets
-  const daily: { date: string; count: number }[] = [];
-  for (let i = 29; i >= 0; i--) {
-    const d = new Date(Date.now() - i * 24 * 60 * 60 * 1000);
-    daily.push({ date: d.toISOString().slice(0, 10), count: 0 });
-  }
-  for (const r of aggRows) {
-    const day = r.created_at.slice(0, 10);
-    const bucket = daily.find((b) => b.date === day);
-    if (bucket) bucket.count++;
-  }
+  // Daily trend buckets across the selected aggregation window
+  const daily = bucketByDay(aggRows, aggFromDate, aggUntilDate);
+  const aggCapped = aggRows.length >= 5000;
 
   const exportCsv = async () => {
     try {
@@ -837,6 +852,7 @@ function TelemetryTab() {
       }
       if (clientId !== 'all') q = q.eq('client_id', clientId);
       if (constrainByActionKeys) q = q.in('entity_key', filteredActionKeys);
+      if (routeFilter.trim()) q = q.eq('after->>pathname', routeFilter.trim());
       const { data, error } = await q;
       if (error) throw error;
       const enriched = ((data ?? []) as WouldDenyRow[]).filter(userFilter).map((r) => ({
@@ -903,11 +919,39 @@ function TelemetryTab() {
 
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm">would_deny — last 30 days</CardTitle>
-          <CardDescription>Daily volume</CardDescription>
+          <div className="flex items-center justify-between gap-2">
+            <div>
+              <CardTitle className="text-sm">would_deny — daily trend</CardTitle>
+              <CardDescription>
+                {trendRange === 'custom'
+                  ? `Custom: ${aggFromDate} → ${aggUntilDate}`
+                  : trendRange === '7d' ? 'Last 7 days' : 'Last 30 days'}
+                {aggCapped && ' · showing first 5000 events in window'}
+              </CardDescription>
+            </div>
+            <div className="flex gap-1">
+              <Button variant={trendRange === '7d' ? 'default' : 'outline'} size="sm" onClick={() => setTrendRange('7d')}>7d</Button>
+              <Button variant={trendRange === '30d' ? 'default' : 'outline'} size="sm" onClick={() => setTrendRange('30d')}>30d</Button>
+              <Button variant={trendRange === 'custom' ? 'default' : 'outline'} size="sm" onClick={() => setTrendRange('custom')}>Custom</Button>
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
-          {aggQ.isLoading ? <Skeleton className="h-16 w-full" /> : <Sparkline data={daily} />}
+          {aggQ.isLoading ? (
+            <Skeleton className="h-48 w-full" />
+          ) : (
+            <div className="h-48 w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={daily} margin={{ top: 8, right: 8, bottom: 0, left: -16 }}>
+                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                  <XAxis dataKey="date" fontSize={10} tickFormatter={(v: string) => v.slice(5)} />
+                  <YAxis fontSize={10} allowDecimals={false} />
+                  <RTooltip contentStyle={{ fontSize: 12 }} />
+                  <Line type="monotone" dataKey="count" stroke="hsl(var(--primary))" strokeWidth={2} dot={false} />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -921,7 +965,7 @@ function TelemetryTab() {
                 {topActions.length === 0 ? (
                   <TableRow><TableCell colSpan={3} className="text-center text-muted-foreground py-4">No data</TableCell></TableRow>
                 ) : topActions.map((t) => (
-                  <TableRow key={t.key}>
+                  <TableRow key={t.key} className="cursor-pointer hover:bg-muted/40" onClick={() => { setActionSearch(t.key); setPage(0); }}>
                     <TableCell><div className="font-medium text-xs">{actionMeta[t.key]?.label ?? t.key}</div><code className="text-[10px] text-muted-foreground">{t.key}</code></TableCell>
                     <TableCell className="text-xs">{actionMeta[t.key]?.module_key ?? '—'}</TableCell>
                     <TableCell className="text-right">{t.count}</TableCell>
@@ -941,7 +985,7 @@ function TelemetryTab() {
                 {topUsers.length === 0 ? (
                   <TableRow><TableCell colSpan={2} className="text-center text-muted-foreground py-4">No data</TableCell></TableRow>
                 ) : topUsers.map((u) => (
-                  <TableRow key={u.key}>
+                  <TableRow key={u.key} className="cursor-pointer hover:bg-muted/40" onClick={() => { setUserSearch(profileMeta[u.key]?.email ?? profileMeta[u.key]?.full_name ?? u.key); setPage(0); }}>
                     <TableCell className="text-xs">
                       <div className="font-medium">{profileMeta[u.key]?.full_name ?? '—'}</div>
                       <div className="text-muted-foreground">{profileMeta[u.key]?.email ?? u.key}</div>
@@ -964,7 +1008,7 @@ function TelemetryTab() {
                   {byClient.length === 0 ? (
                     <TableRow><TableCell colSpan={2} className="text-center text-muted-foreground py-2 text-xs">No data</TableCell></TableRow>
                   ) : byClient.map((c) => (
-                    <TableRow key={c.key}>
+                    <TableRow key={c.key} className="cursor-pointer hover:bg-muted/40" onClick={() => { if (c.key !== '—') { setClientId(c.key); setPage(0); } }}>
                       <TableCell className="text-xs">{c.key === '—' ? '— (none)' : clientMeta[c.key]?.client_key ?? c.key}</TableCell>
                       <TableCell className="text-right text-xs">{c.count}</TableCell>
                     </TableRow>
@@ -979,7 +1023,7 @@ function TelemetryTab() {
                   {byModule.length === 0 ? (
                     <TableRow><TableCell colSpan={2} className="text-center text-muted-foreground py-2 text-xs">No data</TableCell></TableRow>
                   ) : byModule.map((m) => (
-                    <TableRow key={m.key}>
+                    <TableRow key={m.key} className="cursor-pointer hover:bg-muted/40" onClick={() => { if (m.key !== '—') { setModuleKey(m.key); setPage(0); } }}>
                       <TableCell className="text-xs">{m.key}</TableCell>
                       <TableCell className="text-right text-xs">{m.count}</TableCell>
                     </TableRow>
@@ -993,10 +1037,90 @@ function TelemetryTab() {
 
       <Card>
         <CardHeader className="pb-2">
+          <CardTitle className="text-sm">By page / route</CardTitle>
+          <CardDescription>Click a row to filter the events table. Rows captured before Phase 2D are grouped under "Not captured".</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader><TableRow><TableHead>Page / Route</TableHead><TableHead className="text-right">Count</TableHead></TableRow></TableHeader>
+            <TableBody>
+              {byRoute.length === 0 ? (
+                <TableRow><TableCell colSpan={2} className="text-center text-muted-foreground py-4">No data</TableCell></TableRow>
+              ) : byRoute.map((r) => (
+                <TableRow
+                  key={r.key}
+                  className={r.key === 'Not captured' ? '' : 'cursor-pointer hover:bg-muted/40'}
+                  onClick={() => { if (r.key !== 'Not captured') { setRouteFilter(r.key); setPage(0); } }}
+                >
+                  <TableCell className="text-xs">
+                    {r.key === 'Not captured'
+                      ? <span className="text-muted-foreground italic">Not captured</span>
+                      : <code className="text-[11px]">{r.key}</code>}
+                  </TableCell>
+                  <TableCell className="text-right text-xs">{r.count}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-2">
           <CardTitle className="text-sm">Recent would_deny events</CardTitle>
-          <CardDescription>Filtered, paginated. Source column reflects <code>reason</code>; per-route attribution will arrive in a later phase.</CardDescription>
+          <CardDescription>Filtered, paginated. Click breakdown rows above to drill in.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs text-muted-foreground">Presets:</span>
+            {(['today', 'last7', 'last30'] as PresetKey[]).map((p) => (
+              <Button
+                key={p}
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  const r = presetRange(p);
+                  setFrom(r.from);
+                  setUntil(r.until);
+                  setPage(0);
+                }}
+              >
+                {p === 'today' ? 'Today' : p === 'last7' ? 'Last 7 days' : 'Last 30 days'}
+              </Button>
+            ))}
+            <Button size="sm" variant={risk === 'high' ? 'default' : 'outline'} onClick={() => { setRisk(risk === 'high' ? 'all' : 'high'); setPage(0); }}>High-risk</Button>
+            <Button size="sm" variant={risk === 'critical' ? 'default' : 'outline'} onClick={() => { setRisk(risk === 'critical' ? 'all' : 'critical'); setPage(0); }}>Critical</Button>
+            {snapshot.clientId && (
+              <Button
+                size="sm"
+                variant={clientId === snapshot.clientId ? 'default' : 'outline'}
+                onClick={() => { setClientId(clientId === snapshot.clientId ? 'all' : snapshot.clientId!); setPage(0); }}
+              >
+                Current client
+              </Button>
+            )}
+            <Button
+              size="sm"
+              variant="ghost"
+              className="ml-auto"
+              onClick={() => {
+                const d = defaultFilters();
+                setFrom(d.from); setUntil(d.until);
+                setClientId(d.clientId); setModuleKey(d.moduleKey); setRisk(d.risk);
+                setActionSearch(d.actionSearch); setUserSearch(d.userSearch);
+                setRouteFilter(d.routeFilter); setPage(0);
+              }}
+            >
+              Clear all filters
+            </Button>
+          </div>
+          {routeFilter && (
+            <div className="flex items-center gap-2 text-xs">
+              <Badge variant="secondary">Route filter</Badge>
+              <code className="text-[11px]">{routeFilter}</code>
+              <Button size="sm" variant="ghost" className="h-6 px-2" onClick={() => { setRouteFilter(''); setPage(0); }}>clear</Button>
+            </div>
+          )}
           <div className="flex flex-wrap items-end gap-2">
             <div className="space-y-1">
               <label className="text-xs text-muted-foreground">From</label>
@@ -1090,7 +1214,9 @@ function TelemetryTab() {
                         <code className="text-[10px] text-muted-foreground">{r.entity_key}</code>
                       </TableCell>
                       <TableCell className="text-xs max-w-[12rem] truncate" title={`${pathname}${search}`}>
-                        {pathname ? <code className="text-[10px]">{pathname}{search}</code> : '—'}
+                        {pathname
+                          ? <code className="text-[10px]">{pathname}{search}</code>
+                          : <span className="text-muted-foreground italic">Not captured</span>}
                       </TableCell>
                       <TableCell><Badge variant="outline">{meta.risk_level ?? '—'}</Badge></TableCell>
                       <TableCell className="text-xs text-muted-foreground">{source || r.reason || '—'}</TableCell>

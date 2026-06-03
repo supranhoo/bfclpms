@@ -1,101 +1,95 @@
-## 1. Assumptions
+## Phase 2E — Telemetry Dashboard Enhancements
 
-- No schema change needed: `entitlement_audit.after` is `jsonb` and currently `NULL` on every `would_deny` row — we'll reuse it as the metadata bucket. Keeps it backward compatible, no migration, no RLS changes.
-- `reason` becomes a fixed string `observe-mode CanAction render` (unchanged for existing rows; future rows match the same constant).
-- Snapshot reads (`clientId`) are already available in `useEntitlement()` — `CanAction` will pass them down to the logger so no extra DB roundtrip.
-- `module_key` per action is derivable from `action_registry`; the dashboard already loads this map, so we won't duplicate the join in the writer. The metadata captured at write time stays UI-only.
-- Old rows without `after` metadata remain valid; the dashboard renders `—` for Page when absent.
+Read-only refinement of the existing Telemetry tab in `src/pages/platform/PlatformSettings.tsx`. No PMS behavior changes, no new wrappers, no enforcement, no DB schema changes, no RLS/permissions/menus/reports/workflow/scoring changes. Existing Audit Logs tab is untouched.
 
-## 2. Clarifications
+### Assumptions
+- Data source remains `entitlement_audit` filtered by `event_type = 'would_deny'`. Route/page lives in `after->>pathname` and `after->>search` (Phase 2D).
+- Platform-owner-only gating is already enforced inside `TelemetryTab`.
+- Existing 30-day aggregate query (cap 5000) is sufficient for trend + breakdowns. Custom ranges that exceed 30 days will run a second bounded query (cap 5000).
+- "Role" per row is not reliably resolvable from `entitlement_audit` alone; we will surface role via the actor's current `profiles.role` when available and label it "Current role" to avoid implying it was the role at the time of the event. If user prefers to omit, we drop the Role card.
 
-- **Query string safety:** capture `location.search` only when it does not match a deny-list of sensitive keys (`token`, `access_token`, `refresh_token`, `code`, `apikey`, `api_key`, `password`, `secret`, `id_token`, `key`, `signature`). On match → strip just those keys; if anything was redacted, store `search: "[redacted]"` (no partial leakage). Also truncate pathname/search to 256 chars to avoid jumbo rows.
-- **Metadata shape** (stored in `entitlement_audit.after`):
-  ```json
-  {
-    "pathname": "/dashboard",
-    "search": "?view=team",
-    "source": "CanAction",
-    "mode": "observe_only",
-    "client_id": "<uuid|null>",
-    "action_key": "pms.users.edit",
-    "captured_at": "2026-06-03T20:40:00.000Z"
-  }
-  ```
-  (`actor_id`, `entity_key`, `created_at`, `event_type` already live as first-class columns — not duplicated except `action_key` for self-contained JSON consumers.)
+### Risk & Impact Report
+- **Data**: read-only SELECTs against `entitlement_audit`, `profiles`, `clients`, `module_registry`, `action_registry`. No writes.
+- **Workflow**: none.
+- **UI/UX**: changes confined to the Telemetry tab. New trend chart, new "By page/route" card, new "By role" card, preset-filter chips, clickable rows in breakdown cards that push filters into the events table.
+- **Regression risk**: low — additive; existing filters, pagination, CSV export retained. Page column and pathname/search export already present.
+- **Scalability**: bucket aggregation done client-side over the same capped 5000-row window already in use. Custom ranges over the cap show a "Showing first 5000 events in range" notice; KPI counts continue to use `count: 'exact', head: true` so totals stay accurate.
 
-## 3. Risk & Impact Report
+### Implementation Plan
 
-- **Data impact:** writes one extra small JSON blob per `would_deny` row in `after`. No new tables, no migration.
-- **Workflow / scoring / menus / reports / RLS / permissions:** zero changes.
-- **UI/UX:** Telemetry tab gains one column `Page` and one CSV column `pathname`. No other UI changes.
-- **Regression risk:** Very low — only `logWouldDeny` and `CanAction` props change; existing call sites continue to work (new args are optional).
-- **Scalability:** Metadata payload is bounded (<512 B/row after truncation) → no impact on existing query plans or storage growth.
-- **Privacy:** Redaction list above prevents accidental token leakage. Pathname itself may include UUIDs (e.g. `/reviews/<id>`); we accept that since it mirrors what the user already sees in their address bar and is already inside the `platform_owner`-only audit table.
+1. **Range selector for trend & breakdowns** (state added inside `TelemetryTab`)
+   - Add `trendRange: '7d' | '30d' | 'custom'` (default `30d`).
+   - Replace `aggQ` `last30` literal with a derived `aggFrom`/`aggUntil` driven by `trendRange` (custom uses the existing `from`/`until` inputs).
+   - Query stays a single bounded SELECT (`limit 5000`). KPI cards unchanged.
 
-## 4. Step-by-step Plan
+2. **Trend chart**
+   - Replace the existing `Sparkline` with a Recharts `LineChart` (already in the project) showing daily `would_deny` count over the selected range. Tooltip + day axis. Keeps the existing `daily` bucket logic.
+   - Verify Recharts dep: if missing in `package.json`, fall back to keeping `Sparkline` and add a simple SVG bar/line with day labels — no new dep.
 
-1. **`src/lib/platformTelemetryMeta.ts` (new)** — pure helpers, fully unit-testable:
-   - `SENSITIVE_QS_KEYS: readonly string[]`.
-   - `sanitizeSearch(search: string): string` — parse, drop sensitive keys, return `"[redacted]"` if any dropped, else cleaned `?…` string, else `""`.
-   - `truncate(s: string, max = 256): string`.
-   - `buildWouldDenyMetadata(input: { actionKey; clientId; pathname; search; source? }): Record<string, unknown>` — assembles the JSON shape above.
-2. **`src/hooks/useEntitlement.ts`** — extend `logWouldDeny` signature:
-   ```ts
-   logWouldDeny(actionKey, reason?, metadata?: Record<string, unknown>)
-   ```
-   When `metadata` is provided, insert it into the `after` column. Keep `reason` text fixed when called from `CanAction`. No throw, no behavior change for callers omitting `metadata`.
-3. **`src/components/platform/CanAction.tsx`** — in the same `useEffect` that fires once per mount:
-   - Read `pathname` + `search` from `window.location` (guarded for SSR/test env via `typeof window !== 'undefined'`).
-   - Read `clientId` from `useEntitlement().snapshot.clientId`.
-   - Call `buildWouldDenyMetadata({...})` and pass to `logWouldDeny(actionKey, 'observe-mode CanAction render', metadata)`.
-   - `loggedRef` semantics unchanged → still once per mount.
-4. **`src/pages/platform/PlatformSettings.tsx` — TelemetryTab**:
-   - Add a `Page` column to the Recent events table (renders `r.after?.pathname` truncated with full path on hover via `<span title>`); when missing, render `—`.
-   - Include `pathname` and `search` in the CSV export.
-   - Reuse the existing `WouldDenyRow` type with an optional `after?: Record<string, unknown> | null` field.
-5. **Tests** (`src/test/platformTelemetryMeta.test.ts`):
-   - `sanitizeSearch` strips each sensitive key, preserves benign keys, handles empty/undefined.
-   - `buildWouldDenyMetadata` shape, truncation at 256, `mode === 'observe_only'`.
-6. **Docs/Memory/Changelog:**
-   - `DOCUMENTATION.md` — Version History entry `v2.66.16.0`: route/page capture, sanitization, no schema change.
-   - `POLICY.md` — append to §Phase20: metadata invariants, sensitive-key list, observe-only contract preserved.
-   - `mem/features/platform/hub-foundation.md` — one-line addition under Phase 2C: "Route/page metadata captured in `entitlement_audit.after`; pathname displayed in Telemetry tab."
-   - `CHANGELOG_2026.md` — sub-bullet under Hub Platform.
-7. **Manual verification:** load any wrapped surface with master switch ON + that action disabled, then inspect the latest `entitlement_audit` row: `after.pathname` matches the route, `after.search` is sanitized; verify the Page column shows up in the Telemetry tab.
+3. **New breakdown card: By page/route (30d window)**
+   - Aggregate `aggRows` by `after.pathname` (blank pathname → label "Not captured").
+   - Top 10. Each row clickable → sets a new `routeFilter` state and re-queries `eventsQ` with `.like('after->>pathname', routeFilter)`.
 
-## 5. UI Changes
+4. **By role card (optional)**
+   - Resolve `profiles.role` for actors already fetched in `profilesQ`. Aggregate counts. If `profiles.role` is null for >50% of actors, hide the card (with a "Role data unavailable" note) to avoid misleading numbers.
 
-- **Location:** `/platform-settings` → `Telemetry` tab → Recent events table.
-- **Visual change:** one new column **Page** between "Action" and "Risk"; small text, truncated with tooltip showing full path. CSV gains `pathname` and `search` columns.
-- **Interaction:** no new interactions. Old rows show `—` in Page.
-- **Responsiveness:** column inherits existing `overflow-x-auto` table wrapper.
+5. **Drill-down**
+   - Top-actions rows: click sets `actionSearch = action_key` (already a filter) and scrolls to the events table.
+   - Top-users rows: click sets `userSearch = email`.
+   - By client / By module rows: click sets the existing `clientId` / `moduleKey` selects.
+   - By page/route rows: click sets the new `routeFilter`.
+   - Add a single "Clear all filters" button in the events-table toolbar.
 
-## 6. Tests
+6. **Preset filter chips** (above events table)
+   - Chips: `Today`, `Last 7 days`, `Last 30 days`, `High-risk actions`, `Critical actions`, `Current client` (if `snapshot.clientId` present from `useEntitlement`).
+   - Each chip writes the existing filter state (`from`, `until`, `risk`, `clientId`). Pure UI sugar over existing filters.
 
-- Unit tests for `sanitizeSearch` (token strip, multi-key, no-match passthrough, empty input).
-- Unit test for `buildWouldDenyMetadata` (shape, truncation, mode constant).
-- Existing `aggregateByKey` / `toCsv` tests untouched.
+7. **Route column + export**
+   - Page column already exists (Phase 2D). Confirm "Not captured" rendering for older rows where `after.pathname` is missing — replace the current `—` with `Not captured` (muted) and keep the `code` chip for present values.
+   - CSV export already includes `pathname`, `search`, `source` — no change.
 
-## 7. DOCUMENTATION.md / POLICY.md / Memory updates
+8. **Events query filter extension**
+   - `eventsQ` accepts the new `routeFilter`. When set, add `.like('after->>pathname', routeFilter)`. Add to query key.
+   - `exportCsv` mirrors the same filter.
 
-- `DOCUMENTATION.md` — `v2.66.16.0` Version History entry.
-- `POLICY.md` — extension under §Phase20-HubPlatformObserveOnly: metadata schema, sensitive-key deny-list, truncation rule, observe-only invariant preserved.
-- `mem/features/platform/hub-foundation.md` — one bullet (no invariant change).
-- `CHANGELOG_2026.md` — sub-bullet under Hub Platform.
+9. **Safety guards**
+   - All new UI inside the existing `if (!isOwner)` gate.
+   - No mutations, no new tables, no edge functions.
+   - No changes to `useEntitlement`, `CanAction`, or any PMS files.
 
-## 8. Post-implementation notes
+### Tests
+- Extend `src/test/platformTelemetry.test.ts` (or add `platformTelemetryAgg.test.ts`) for pure helpers only:
+  - `bucketByDay(rows, from, until)` returns one entry per day with zero-fills.
+  - `aggregateByPathname` treats null/empty as `"Not captured"`.
+  - Preset-chip date math (Today / 7d / 30d) returns expected ISO bounds.
+  - Drill-down state transitions: clicking a route sets `routeFilter`; "Clear all filters" resets every filter to defaults.
 
-- **Out of scope:** no new schema column, no migration, no new `CanAction` wraps, no enforcement, no change to PMS workflow/scoring/menu/reports/RLS/permissions, no change to Audit Logs tab.
-- **Rollback:** revert `CanAction.tsx` + `useEntitlement.ts` to drop the extra arg; the `after` column simply stops being populated. Existing rows with metadata remain readable. Telemetry column gracefully degrades to `—`.
-- **Backward compat:** rows without `after` continue to display safely (existing dashboard already tolerates `null`).
+### Documentation & Memory
+- `DOCUMENTATION.md` — bump Version History `v2.66.17.0` (Phase 2E telemetry enhancements).
+- `POLICY.md` — extend §Phase 2 with: trend chart range, route breakdown, drill-down, preset chips; reaffirm read-only / platform_owner / no enforcement.
+- `CHANGELOG_2026.md` — sub-bullet under Platform Hub.
+- `mem://features/platform/hub-foundation.md` — append Phase 2E summary.
 
-## Files to be changed
+### Out of Scope
+- No new CanAction wrappers (Phase 2F or later).
+- No enforcement variant (Phase 3 later).
+- No changes to PMS workflow, scoring, reports, menus, RLS, or permissions.
+- No DB migrations.
 
-- `src/lib/platformTelemetryMeta.ts` *(new)*
-- `src/hooks/useEntitlement.ts` — extend `logWouldDeny` signature
-- `src/components/platform/CanAction.tsx` — pass route/source metadata
-- `src/pages/platform/PlatformSettings.tsx` — add Page column + CSV fields
-- `src/test/platformTelemetryMeta.test.ts` *(new)*
+### Rollback
+- All changes are additive UI in one file plus one helpers/tests file. Revert by removing the new chart/cards and restoring the previous `Sparkline` block and event-query filter shape.
+
+### Files to change
+- `src/pages/platform/PlatformSettings.tsx` (TelemetryTab only)
+- `src/lib/platformTelemetryAgg.ts` (new — pure helpers for buckets, route agg, preset ranges)
+- `src/test/platformTelemetryAgg.test.ts` (new)
 - `DOCUMENTATION.md`, `POLICY.md`, `CHANGELOG_2026.md`, `mem/features/platform/hub-foundation.md`
 
-No DB migrations. No edge functions. No new dependencies.
+### Acceptance check
+- Platform owner sees daily would_deny trend with 7d/30d/custom range.
+- Top actions, users, clients, modules, routes, (optional) roles shown for 30d window.
+- Clicking a row in any breakdown filters the events table.
+- Preset chips quickly apply Today / 7d / 30d / High-risk / Critical / Current client.
+- Old rows without route metadata display "Not captured".
+- CSV export includes route/page metadata (already shipped in 2D).
+- Audit Logs tab unchanged. PMS behavior unchanged.
