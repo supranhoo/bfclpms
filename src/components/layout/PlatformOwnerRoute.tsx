@@ -9,7 +9,7 @@ import { Loader2 } from 'lucide-react';
  * When either is missing, returns 404 (Navigate to /home).
  */
 export function PlatformOwnerRoute({ children }: { children: React.ReactNode }) {
-  const { role, loading } = useAuth();
+  const { hasRole, loading } = useAuth();
   const { hubEnabled, loading: entLoading } = useEntitlement();
 
   if (loading || entLoading) {
@@ -20,7 +20,7 @@ export function PlatformOwnerRoute({ children }: { children: React.ReactNode }) 
     );
   }
 
-  if (!hubEnabled || role !== 'platform_owner') {
+  if (!hubEnabled || !hasRole('platform_owner')) {
     return <Navigate to="/home" replace />;
   }
 

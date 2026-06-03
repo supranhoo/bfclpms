@@ -42,4 +42,27 @@ describe('Hub Platform Foundation — Phase 1', () => {
       expect(resolveAction(enabled, 'pms.workflow.final_score_rules.edit')).toBe(false);
     });
   });
+
+  describe('multi-role primary derivation (AuthContext priority)', () => {
+    const ROLE_PRIORITY = [
+      'admin','platform_owner','hr_pms','management','auditor','skip_level','manager','employee',
+    ] as const;
+    const pickPrimary = (roles: string[]) => {
+      for (const r of ROLE_PRIORITY) if (roles.includes(r)) return r;
+      return roles[0] ?? null;
+    };
+
+    it('admin+platform_owner → primary is admin (backward compat)', () => {
+      expect(pickPrimary(['platform_owner','admin'])).toBe('admin');
+    });
+    it('platform_owner alone → primary is platform_owner', () => {
+      expect(pickPrimary(['platform_owner'])).toBe('platform_owner');
+    });
+    it('manager alone → primary is manager', () => {
+      expect(pickPrimary(['manager'])).toBe('manager');
+    });
+    it('empty roles → primary is null', () => {
+      expect(pickPrimary([])).toBeNull();
+    });
+  });
 });
