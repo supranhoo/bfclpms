@@ -4,6 +4,14 @@
 > **Status:** Living document. Append new ships under the **current week's row**, in the same step that you update `DOCUMENTATION.md` Version History.
 > **Sources:** `DOCUMENTATION.md` Version History, `supabase/migrations/`, `mem/*`.
 
+## 2026-06-03 — Phase 3A.6 Data Governance: Privacy / Consent registry (config only)
+- DB: new `public.privacy_consent_settings` — one row per consent. Columns: `module_key`, `consent_key` (UNIQUE), `consent_label`, `purpose`, `data_categories`, `lawful_basis` (`consent|contract|legitimate_interest|legal_obligation|vital_interest|public_task`), `required`, `default_state` (`opt_in|opt_out`), `dsar_contact_email`, `policy_url`, `notes`, `is_active`, audit cols. CHECKs: lawful_basis and default_state whitelists. Index on `module_key`. RLS: read = authenticated, write = `platform_owner`. Standard `updated_at` trigger.
+- Seed: 14 default rows — cookies (strict/analytics/marketing), marketing email/SMS, AI training opt-out + assistant logging, DSAR contact, crash telemetry, PMS anonymous feedback share, HRMS payroll/background-check sharing, Safety anonymized incident publication, Incentive payout bank share. `ON CONFLICT (consent_key) DO NOTHING` — idempotent.
+- UI: `DataGovernanceTab` gets a sixth sub-tab **Privacy & Consent** — module/show-inactive filters, Add + Edit dialogs (no delete, toggle `is_active`). Module and `consent_key` are read-only after creation. Same "Config only — not enforced yet" banner.
+- Audit: `entitlement_audit` write per create/update — `entity_type='privacy_consent_setting'`, `entity_key=consent_key`, before/after JSON, reason `platform_settings_privacy_consent_(create|update)`.
+- Out of scope: cookie banner, marketing opt-out enforcement, DSAR workflow, per-user consent capture. Deferred to enforcement phase.
+- Smoke: `platformFoundation` 12/12 pass. Completes Phase 3A foundation (3A.1–3A.6).
+
 ## 2026-06-03 — Phase 3A.5 Data Governance: Retention Policy registry (config only)
 - DB: new `public.retention_policies` — one row per data domain. Columns: `module_key`, `domain_key` (UNIQUE), `domain_label`, `retention_days` (null=forever), `archive_after_days` (null=no archive stage), `purge_strategy` (`soft_delete|hard_delete|anonymize|archive_only`), `legal_hold`, `regulatory_basis`, `owner_role`, `notes`, `is_active`, audit cols. CHECKs: non-negative retention/archive; `archive_after_days <= retention_days` when both set; strategy whitelist. Index on `module_key`. RLS: read = authenticated, write = `platform_owner`. Standard `updated_at` trigger.
 - Seed: 17 default rows across `pms/hrms/lms/safety/incentive/platform` (review_submissions 7y archive-only, employee_master forever, safety incidents 10y, notifications 180d hard-delete, etc.). `ON CONFLICT (domain_key) DO NOTHING` — idempotent.
