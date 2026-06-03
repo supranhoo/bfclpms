@@ -1277,6 +1277,57 @@ export type Database = {
           },
         ]
       }
+      data_classifications: {
+        Row: {
+          approval_required: boolean
+          audit_view_required: boolean
+          classification_key: string
+          created_at: string
+          description: string | null
+          download_reason_required: boolean
+          export_allowed: boolean
+          id: string
+          is_active: boolean
+          label: string
+          max_rows_allowed: number | null
+          sort_order: number
+          updated_at: string
+          watermark_required: boolean
+        }
+        Insert: {
+          approval_required?: boolean
+          audit_view_required?: boolean
+          classification_key: string
+          created_at?: string
+          description?: string | null
+          download_reason_required?: boolean
+          export_allowed?: boolean
+          id?: string
+          is_active?: boolean
+          label: string
+          max_rows_allowed?: number | null
+          sort_order?: number
+          updated_at?: string
+          watermark_required?: boolean
+        }
+        Update: {
+          approval_required?: boolean
+          audit_view_required?: boolean
+          classification_key?: string
+          created_at?: string
+          description?: string | null
+          download_reason_required?: boolean
+          export_allowed?: boolean
+          id?: string
+          is_active?: boolean
+          label?: string
+          max_rows_allowed?: number | null
+          sort_order?: number
+          updated_at?: string
+          watermark_required?: boolean
+        }
+        Relationships: []
+      }
       departments: {
         Row: {
           business_unit_id: string | null

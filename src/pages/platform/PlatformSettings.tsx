@@ -11,8 +11,9 @@ import { Switch } from '@/components/ui/switch';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useState, useEffect } from 'react';
-import { Building2, Boxes, KeyRound, ShieldCheck, ScrollText, Layers, Download, ChevronLeft, ChevronRight, AlertTriangle, CheckCircle2, BarChart3, Pencil, Plus } from 'lucide-react';
+import { Building2, Boxes, KeyRound, ShieldCheck, ScrollText, Layers, Download, ChevronLeft, ChevronRight, AlertTriangle, CheckCircle2, BarChart3, Pencil, Plus, Database } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
+import { DataGovernanceTab } from '@/components/platform/DataGovernanceTab';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
 import { useEntitlement } from '@/hooks/useEntitlement';
@@ -1969,6 +1970,7 @@ export default function PlatformSettings() {
             <TabsTrigger value="modules"><Boxes className="h-4 w-4 mr-1" />Module Entitlements</TabsTrigger>
             <TabsTrigger value="actions"><KeyRound className="h-4 w-4 mr-1" />Action Entitlements</TabsTrigger>
             <TabsTrigger value="registries"><ShieldCheck className="h-4 w-4 mr-1" />Registries</TabsTrigger>
+            <TabsTrigger value="data-governance"><Database className="h-4 w-4 mr-1" />Data Governance</TabsTrigger>
             <TabsTrigger value="audit"><ScrollText className="h-4 w-4 mr-1" />Audit Logs</TabsTrigger>
             <TabsTrigger value="telemetry"><BarChart3 className="h-4 w-4 mr-1" />Telemetry</TabsTrigger>
           </TabsList>
@@ -1977,6 +1979,7 @@ export default function PlatformSettings() {
           <TabsContent value="modules"><Card><CardContent className="pt-6"><ModuleEntitlementsTab /></CardContent></Card></TabsContent>
           <TabsContent value="actions"><Card><CardContent className="pt-6"><ActionEntitlementsTab /></CardContent></Card></TabsContent>
           <TabsContent value="registries"><Card><CardContent className="pt-6"><RegistriesTab /></CardContent></Card></TabsContent>
+            <TabsContent value="data-governance"><Card><CardContent className="pt-6"><DataGovernanceTab /></CardContent></Card></TabsContent>
           <TabsContent value="audit"><Card><CardContent className="pt-6"><AuditTab /></CardContent></Card></TabsContent>
           <TabsContent value="telemetry"><Card><CardContent className="pt-6"><TelemetryTab /></CardContent></Card></TabsContent>
         </Tabs>
