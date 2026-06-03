@@ -654,6 +654,7 @@ function KpiCard({ label, value, loading }: { label: string; value: number; load
 
 function TelemetryTab() {
   const { hasRole } = useAuth();
+  const { snapshot } = useEntitlement();
   const isOwner = hasRole('platform_owner');
   const [page, setPage] = useState(0);
   const today = new Date().toISOString().slice(0, 10);
@@ -665,6 +666,8 @@ function TelemetryTab() {
   const [risk, setRisk] = useState<string>('all');
   const [actionSearch, setActionSearch] = useState('');
   const [userSearch, setUserSearch] = useState('');
+  const [routeFilter, setRouteFilter] = useState<string>('');
+  const [trendRange, setTrendRange] = useState<'7d' | '30d' | 'custom'>('30d');
 
   const clientsQ = useQuery({
     queryKey: ['telemetry', 'clients'],
