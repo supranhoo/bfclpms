@@ -15,6 +15,7 @@ import { calculateRating, RatingThresholds } from '@/lib/ratingCalculation';
 import { UomType } from '@/lib/qualitativeUom';
 import { exportReviewTimelinePdf, ReviewTimelinePdfData } from '@/lib/pdfExport';
 import { statusLabels } from '@/lib/reviewConstants';
+import { classifyAdminOverride, ADMIN_OVERRIDE_LABELS, describeChangedFields } from '@/lib/auditLabels';
 import { format } from 'date-fns';
 import { isComplianceKpi, useComplianceSubFactors } from '@/hooks/useComplianceSubFactors';
 import { isKpiLockedForPeriod, getActiveMonthForCycle } from '@/lib/frequencyUtils';
