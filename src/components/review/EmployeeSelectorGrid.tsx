@@ -21,6 +21,8 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ReviewPeriodSelectorEnhanced, type PeriodSelection } from '@/components/ui/ReviewPeriodSelectorEnhanced';
 import { EmployeeFilters } from '@/components/review/EmployeeFilters';
+import { EmployeeStatusFilter } from '@/components/reports/EmployeeStatusFilter';
+import { applyEmployeeStatusFilter, type EmployeeStatusMode } from '@/lib/reportEmployeeFilter';
 import { EmployeeContactCard } from '@/components/review/EmployeeContactCard';
 import { TeamReviewsZeroDiagnostic } from '@/components/review/TeamReviewsZeroDiagnostic';
 import { supabase } from '@/integrations/supabase/client';
@@ -46,6 +48,7 @@ interface EmployeeProfile {
   reporting_manager_id: string | null;
   pms_grade?: string | null;
   mobile_number?: string | null;
+  is_active?: boolean | null;
   relationship?: 'direct' | 'indirect';
   departments?: { id: string; name: string; code: string | null } | null;
 }
@@ -271,6 +274,16 @@ export function EmployeeSelectorGrid({
   const [auditorFilter, setAuditorFilter] = useUrlFilterStateNullable('auditor');
   const [auditorWorkloadExpanded, setAuditorWorkloadExpanded] = useState(true);
 
+  // Universal employee Active / Inactive / All filter.
+  // Defaults to Active (POLICY §EMP-STATUS). Exposed only for full-access
+  // roles (admin / hr_pms / auditor / management); manager/skip views remain
+  // active-only because their hooks already enforce is_active = true.
+  const [empStatusRaw, setEmpStatusRaw] = useUrlFilterState('emp_status', 'active');
+  const empStatus: EmployeeStatusMode =
+    (['active', 'inactive', 'all'] as const).includes(empStatusRaw as EmployeeStatusMode)
+      ? (empStatusRaw as EmployeeStatusMode)
+      : 'active';
+
   // Pagination state — windowed rendering for large reviewer grids (>2500 employees).
   // Search/sort/filter still operate on the FULL set; only the rendered slice is windowed.
   const PAGE_SIZE_OPTIONS = [12, 24, 48, 96];
@@ -436,8 +449,13 @@ export function EmployeeSelectorGrid({
     }
     // POLICY §107 — strip the viewer from every reviewer panel.
     if (!resolved || !user?.id) return resolved;
-    return resolved.filter(m => m.id !== user.id);
-  }, [viewLevel, teamMembers, skipLevelMembers, allProfiles, isFullAccess, requiredStage, stageFilteredProfiles, statusFilter, user?.id]);
+    const withoutViewer = resolved.filter(m => m.id !== user.id);
+    // Universal employee status filter — only meaningful for full-access
+    // roles whose roster includes inactive employees. Manager/skip hooks
+    // already filter is_active=true, so this is a no-op for them.
+    if (!isFullAccess) return withoutViewer;
+    return applyEmployeeStatusFilter(withoutViewer, empStatus, (p) => p.is_active);
+  }, [viewLevel, teamMembers, skipLevelMembers, allProfiles, isFullAccess, requiredStage, stageFilteredProfiles, statusFilter, user?.id, empStatus]);
 
   // Auto-open KPI from URL
   useEffect(() => {
@@ -2092,6 +2110,16 @@ export function EmployeeSelectorGrid({
         </div>
       )}
 
+
+      {isFullAccess && (
+        <div className="flex items-center justify-end">
+          <EmployeeStatusFilter
+            syncToUrl={false}
+            value={empStatus}
+            onChange={(mode) => setEmpStatusRaw(mode)}
+          />
+        </div>
+      )}
 
       <EmployeeFilters
         searchQuery={searchQuery}
