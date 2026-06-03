@@ -16,6 +16,7 @@ import { ConfirmDestructiveDialog } from '@/components/ui/ConfirmDestructiveDial
 import {
   Menu as MenuIcon, RotateCcw, Save, History,
   AlertCircle, Eye, Sparkles, Database, Search, Plus, FolderInput,
+  ChevronsDownUp, ChevronsUpDown, List, TreePine, ArrowRightLeft,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
@@ -28,6 +29,8 @@ import type { MenuOverrideRow, MenuRegistryRow, ResolvedMenuNode } from '@/lib/m
 import { MenuTreeDnd, type PendingMove, type LabelDraft } from './MenuTreeDnd';
 import { CreateMenuItemDialog } from './CreateMenuItemDialog';
 import { MoveUnderDialog } from './MoveUnderDialog';
+import { MoveToDialog } from './MoveToDialog';
+import { MenuTable } from './MenuTable';
 import { CreateShortcutDialog } from './CreateShortcutDialog';
 import { deleteCustomMenuItem } from '@/lib/menu/customMenu';
 
@@ -57,9 +60,28 @@ export function MenuSettingTab() {
   const [createOpen, setCreateOpen] = useState(false);
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
   const [moveUnderOpen, setMoveUnderOpen] = useState(false);
+  const [moveToOpen, setMoveToOpen] = useState(false);
+  const [singleMoveKey, setSingleMoveKey] = useState<string | null>(null);
   const [shortcutSourceKey, setShortcutSourceKey] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<{ menuKey: string; label: string } | null>(null);
   const [deleting, setDeleting] = useState(false);
+
+  // View & visibility controls
+  const [view, setView] = useState<'tree' | 'table'>('tree');
+  const [visibleLevels, setVisibleLevels] = useState<Set<2 | 3 | 4>>(new Set([2, 3, 4]));
+  const [expandAllSignal, setExpandAllSignal] = useState(0);
+  const [collapseAllSignal, setCollapseAllSignal] = useState(0);
+
+  function toggleLevel(lvl: 2 | 3 | 4) {
+    setVisibleLevels((prev) => {
+      const next = new Set(prev);
+      if (next.has(lvl)) next.delete(lvl);
+      else next.add(lvl);
+      // keep at least one level on
+      if (next.size === 0) next.add(lvl);
+      return next;
+    });
+  }
 
   function toggleSelect(menuKey: string) {
     setSelectedKeys((prev) => {
@@ -347,6 +369,18 @@ export function MenuSettingTab() {
           onApplyMove={applyMove}
         />
 
+        <MoveToDialog
+          open={moveToOpen || !!singleMoveKey}
+          onOpenChange={(v) => {
+            if (!v) { setMoveToOpen(false); setSingleMoveKey(null); }
+          }}
+          selectedKeys={singleMoveKey ? [singleMoveKey] : Array.from(selectedKeys)}
+          registryByKey={registryByKey}
+          effective={effective}
+          effectiveByKey={Object.fromEntries(effective.map((n) => [n.menu_key, n]))}
+          onApplyMove={applyMove}
+        />
+
         <CreateShortcutDialog
           open={!!shortcutSourceKey}
           onOpenChange={(v) => { if (!v) setShortcutSourceKey(null); }}
@@ -436,6 +470,9 @@ export function MenuSettingTab() {
                       <Button size="sm" className="gap-2" onClick={() => setMoveUnderOpen(true)}>
                         <FolderInput className="h-4 w-4" /> Move under…
                       </Button>
+                      <Button size="sm" variant="outline" className="gap-2" onClick={() => setMoveToOpen(true)}>
+                        <ArrowRightLeft className="h-4 w-4" /> Move to level…
+                      </Button>
                     </>
                   )}
                   <p className="text-xs text-muted-foreground hidden lg:block">
@@ -444,23 +481,106 @@ export function MenuSettingTab() {
                 </div>
               </div>
 
-              <MenuTreeDnd
-                resolved={resolved}
-                effective={effective}
-                registryByKey={registryByKey}
-                pendingMoves={pendingMoves}
-                pendingLabels={pendingLabels}
-                onApplyMove={applyMove}
-                onLabelChange={setLabelDraft}
-                onResetItem={resetItem}
-                searchTerm={search}
-                selectedKeys={selectedKeys}
-                onToggleSelect={toggleSelect}
-                onCreateShortcut={(k) => setShortcutSourceKey(k)}
-                onDeleteCustom={(k) =>
-                  setDeleteTarget({ menuKey: k, label: effective.find((n) => n.menu_key === k)?.label ?? k })
-                }
-              />
+              {/* Level visibility + expand/collapse + view toggle */}
+              <div className="flex items-center gap-2 flex-wrap">
+                <div className="flex items-center gap-1 border rounded-md p-0.5">
+                  {([2, 3, 4] as const).map((lvl) => (
+                    <Button
+                      key={lvl}
+                      type="button"
+                      size="sm"
+                      variant={visibleLevels.has(lvl) ? 'secondary' : 'ghost'}
+                      className="h-7 px-2 text-xs"
+                      onClick={() => toggleLevel(lvl)}
+                    >
+                      L{lvl}
+                    </Button>
+                  ))}
+                </div>
+                <Button
+                  type="button" size="sm" variant="ghost" className="h-7 gap-1 text-xs"
+                  onClick={() => setVisibleLevels(new Set([2, 3, 4]))}
+                >
+                  All levels
+                </Button>
+                {view === 'tree' && (
+                  <>
+                    <Button
+                      type="button" size="sm" variant="outline" className="h-7 gap-1 text-xs"
+                      onClick={() => setExpandAllSignal((x) => x + 1)}
+                    >
+                      <ChevronsUpDown className="h-3.5 w-3.5" /> Expand all
+                    </Button>
+                    <Button
+                      type="button" size="sm" variant="outline" className="h-7 gap-1 text-xs"
+                      onClick={() => setCollapseAllSignal((x) => x + 1)}
+                    >
+                      <ChevronsDownUp className="h-3.5 w-3.5" /> Collapse all
+                    </Button>
+                  </>
+                )}
+                <div className="ml-auto flex items-center gap-1 border rounded-md p-0.5">
+                  <Button
+                    type="button" size="sm"
+                    variant={view === 'tree' ? 'secondary' : 'ghost'}
+                    className="h-7 px-2 gap-1 text-xs"
+                    onClick={() => setView('tree')}
+                  >
+                    <TreePine className="h-3.5 w-3.5" /> Tree
+                  </Button>
+                  <Button
+                    type="button" size="sm"
+                    variant={view === 'table' ? 'secondary' : 'ghost'}
+                    className="h-7 px-2 gap-1 text-xs"
+                    onClick={() => setView('table')}
+                  >
+                    <List className="h-3.5 w-3.5" /> Table
+                  </Button>
+                </div>
+              </div>
+
+              {view === 'tree' ? (
+                <MenuTreeDnd
+                  resolved={resolved}
+                  effective={effective}
+                  registryByKey={registryByKey}
+                  pendingMoves={pendingMoves}
+                  pendingLabels={pendingLabels}
+                  onApplyMove={applyMove}
+                  onLabelChange={setLabelDraft}
+                  onResetItem={resetItem}
+                  searchTerm={search}
+                  selectedKeys={selectedKeys}
+                  onToggleSelect={toggleSelect}
+                  onCreateShortcut={(k) => setShortcutSourceKey(k)}
+                  onDeleteCustom={(k) =>
+                    setDeleteTarget({ menuKey: k, label: effective.find((n) => n.menu_key === k)?.label ?? k })
+                  }
+                  visibleLevels={visibleLevels}
+                  expandAllSignal={expandAllSignal}
+                  collapseAllSignal={collapseAllSignal}
+                  autoExpandKey="admin-settings-menu-setting"
+                />
+              ) : (
+                <MenuTable
+                  effective={effective}
+                  registryByKey={registryByKey}
+                  effectiveByKey={Object.fromEntries(effective.map((n) => [n.menu_key, n]))}
+                  pendingMoves={pendingMoves}
+                  pendingLabels={pendingLabels}
+                  visibleLevels={visibleLevels}
+                  searchTerm={search}
+                  selectedKeys={selectedKeys}
+                  onToggleSelect={toggleSelect}
+                  onLabelChange={setLabelDraft}
+                  onResetItem={resetItem}
+                  onMoveItem={(k) => setSingleMoveKey(k)}
+                  onCreateShortcut={(k) => setShortcutSourceKey(k)}
+                  onDeleteCustom={(k) =>
+                    setDeleteTarget({ menuKey: k, label: effective.find((n) => n.menu_key === k)?.label ?? k })
+                  }
+                />
+              )}
             </CardContent>
           </Card>
         )}
