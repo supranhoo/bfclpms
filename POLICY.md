@@ -3490,3 +3490,34 @@ Governance source: `docs/safety-integration-governance.md` §Phase 5.
 - `is_active=false` and the `workflow_config` row are persisted post-create in the same mutation. Workflow insert failure is **non-fatal** — the profile is kept, a destructive toast surfaces, and the admin can re-attempt from Edit User.
 
 **Rollback.** Revert `src/pages/admin/UserManagement.tsx` Access tab JSX; the Edit User dialog and `workflow_config` schema are unaffected. Regression: `src/test/userManagement.addUserAccess.test.ts`.
+
+---
+
+## §Phase20-HubPlatformObserveOnly — Hub Platform Phase 2B Action Wraps (2026-06-03)
+
+**Rule.** When `hub_platform_settings_enabled = true`, every high-risk PMS action trigger button wrapped with `<CanAction actionKey="...">` MUST emit exactly one `would_deny` row in `entitlement_audit` per mounted surface if the corresponding `client_action_entitlements` row has `is_enabled = false`. The action itself MUST remain unblocked — this is telemetry only, not enforcement.
+
+**Wrapped action keys (13 total):**
+1. `pms.users.add` — User Management "Create User" save button
+2. `pms.users.edit` — User Management "Save Changes" edit button
+3. `pms.users.manage_access` — User Access Sheet "Grant" roles button
+4. `pms.users.password_rollout` — User Access Sheet "Generate & email password" button
+5. `pms.users.working_days` — Employee Working Days "Save Changes" button
+6. `pms.kra.assign` — Smart Assignment "Assign N KPIs" button
+7. `pms.workflow.final_score_rules.edit` — Final Score Rules "Save Rule" button
+8. `pms.workflow.template.edit` — Template Form "Update / Save & Propagate / Create" button
+9. `pms.menu.create_tab` — Menu Setting "Create tab" button
+10. `pms.menu.delete_custom_tab` — Menu Setting delete custom tab confirmation dialog
+11. `pms.reports.performance.export` — Reports export button (already wrapped in Phase 2A pilot)
+12. `pms.data.import` — Import Data "Import" buttons (KPI + Employees tabs)
+13. `pms.data.export` — Data export buttons (already wrapped in Phase 2A pilot)
+
+**Invariants:**
+- `CanAction.tsx` always renders children; never blocks.
+- `loggedRef` guarantees once-per-mount logging; re-renders without unmount do NOT create additional rows.
+- When `hub_platform_settings_enabled = false`, zero audit rows are produced (observe-off mode).
+- No PMS workflow, scoring, menu, reports, RLS, or permission behavior changes.
+
+**Rollback.** Flip `hub_platform_settings_enabled = "false"` (instant silence, zero migration). Or revert the 7 file edits that add `<CanAction>` wrappers. No data migration required.
+
+**Regression coverage.** Verified live for `pms.data.export`, `pms.reports.performance.export`, `pms.workflow.final_score_rules.edit`: Master switch ON + entitlement OFF produces exactly 1 `would_deny` row; action continues to work; re-render produces 0 additional rows.
