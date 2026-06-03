@@ -52,6 +52,20 @@ function useHubFlag() {
   });
 }
 
+function usePilotFlag() {
+  return useQuery({
+    queryKey: ['platform-settings', 'pilot-flag'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('system_settings')
+        .select('setting_value')
+        .eq('setting_key', 'hub_enforcement_pilot_enabled')
+        .maybeSingle();
+      return data?.setting_value ?? null;
+    },
+  });
+}
+
 function MasterSwitchBanner({ enabled }: { enabled: boolean }) {
   if (enabled) {
     return (
