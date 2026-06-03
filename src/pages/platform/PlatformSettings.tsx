@@ -10,14 +10,23 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Switch } from '@/components/ui/switch';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { useState } from 'react';
-import { Building2, Boxes, KeyRound, ShieldCheck, ScrollText, Layers, Download, ChevronLeft, ChevronRight, AlertTriangle, CheckCircle2, BarChart3 } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Building2, Boxes, KeyRound, ShieldCheck, ScrollText, Layers, Download, ChevronLeft, ChevronRight, AlertTriangle, CheckCircle2, BarChart3, Pencil } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
 import { useEntitlement } from '@/hooks/useEntitlement';
 import { bucketByDay, aggregateByPathname, presetRange, defaultFilters, type PresetKey } from '@/lib/platformTelemetryAgg';
 import { LineChart, Line, XAxis, YAxis, Tooltip as RTooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -374,21 +383,145 @@ function OverviewTab() {
   );
 }
 
+type ClientRow = {
+  client_key: string;
+  display_name: string;
+  deployment_mode: string;
+  is_active: boolean;
+  entitlement_source: string | null;
+};
+
+const CLIENT_NAME_MAX = 80;
+
 function ClientsTab() {
-  const { data, isLoading } = useRows<Record<string, unknown>>('clients', 'client_key');
+  const qc = useQueryClient();
+  const { user, hasRole } = useAuth();
+  const canWrite = hasRole('platform_owner');
+  const { data, isLoading } = useRows<ClientRow>('clients', 'client_key');
+  const [editing, setEditing] = useState<ClientRow | null>(null);
+  const [name, setName] = useState('');
+
+  useEffect(() => {
+    if (editing) setName(editing.display_name ?? '');
+  }, [editing]);
+
+  const mut = useMutation({
+    mutationFn: async (next: string) => {
+      if (!editing) return;
+      const before = editing.display_name;
+      const { error } = await supabase
+        .from('clients')
+        .update({ display_name: next })
+        .eq('client_key', editing.client_key);
+      if (error) throw error;
+      await supabase.from('entitlement_audit').insert({
+        actor_id: user?.id ?? null,
+        event_type: 'update',
+        entity_type: 'client',
+        entity_key: editing.client_key,
+        before: { name: before },
+        after: { name: next },
+        reason: 'platform_settings_client_name_update',
+      });
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['platform-settings', 'clients'] });
+      qc.invalidateQueries({ queryKey: ['platform-settings', 'audit'] });
+      setEditing(null);
+      toast.success('Client name updated');
+    },
+    onError: (e: Error) => toast.error(`Update failed: ${e.message}`),
+  });
+
+  const trimmed = name.trim();
+  const valid = trimmed.length > 0 && trimmed.length <= CLIENT_NAME_MAX;
+  const dirty = editing ? trimmed !== editing.display_name : false;
+
   if (isLoading) return <LoadingRows />;
   return (
-    <SearchableTable
-      rows={data ?? []}
-      searchKeys={['client_key', 'display_name'] as never}
-      columns={[
-        { key: 'client_key' as never, label: 'Key' },
-        { key: 'display_name' as never, label: 'Name' },
-        { key: 'deployment_mode' as never, label: 'Mode', render: (v) => <Badge variant="outline">{String(v)}</Badge> },
-        { key: 'is_active' as never, label: 'Active', render: (v) => v ? '✓' : '—' },
-        { key: 'entitlement_source' as never, label: 'Source' },
-      ]}
-    />
+    <>
+      <div className="overflow-x-auto rounded-md border">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Key</TableHead>
+              <TableHead>Name</TableHead>
+              <TableHead>Mode</TableHead>
+              <TableHead>Active</TableHead>
+              <TableHead>Source</TableHead>
+              <TableHead className="w-20 text-right">Actions</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {(data ?? []).length === 0 ? (
+              <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-6">No rows</TableCell></TableRow>
+            ) : (data ?? []).map((c) => (
+              <TableRow key={c.client_key}>
+                <TableCell className="font-mono text-xs">{c.client_key}</TableCell>
+                <TableCell>{c.display_name}</TableCell>
+                <TableCell><Badge variant="outline">{c.deployment_mode}</Badge></TableCell>
+                <TableCell>{c.is_active ? '✓' : '—'}</TableCell>
+                <TableCell>{c.entitlement_source ?? '—'}</TableCell>
+                <TableCell className="text-right">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setEditing(c)}
+                    disabled={!canWrite}
+                    aria-label={`Edit ${c.client_key} name`}
+                    title={canWrite ? 'Edit display name' : 'platform_owner only'}
+                  >
+                    <Pencil className="h-4 w-4" />
+                  </Button>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+
+      <Dialog open={editing !== null} onOpenChange={(o) => { if (!o) setEditing(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Client Name</DialogTitle>
+            <DialogDescription>
+              Only the display name can be changed. Key, mode, status, and source are immutable in this phase.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <Label className="text-xs text-muted-foreground">Client key (read-only)</Label>
+              <Input value={editing?.client_key ?? ''} readOnly disabled className="font-mono" />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="client-display-name">Display name</Label>
+              <Input
+                id="client-display-name"
+                value={name}
+                maxLength={CLIENT_NAME_MAX}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="e.g. BFCL"
+                autoFocus
+              />
+              <p className="text-xs text-muted-foreground">
+                {trimmed.length}/{CLIENT_NAME_MAX} characters · cannot be blank
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditing(null)} disabled={mut.isPending}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => mut.mutate(trimmed)}
+              disabled={!valid || !dirty || !canWrite || mut.isPending}
+            >
+              {mut.isPending ? 'Saving…' : 'Save'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 
