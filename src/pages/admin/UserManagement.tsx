@@ -46,6 +46,7 @@ import { OrgFilterCombobox } from '@/components/admin/OrgFilterCombobox';
 import { UserAccessSheet, type UserAccessSheetTab, type UserAccessSheetUser } from '@/components/admin/UserAccessSheet';
 import { BulkGrantAccessDialog, type BulkGrantTarget } from '@/components/admin/BulkGrantAccessDialog';
 import { useSearchParams } from 'react-router-dom';
+import { CanAction } from '@/components/platform/CanAction';
 
 import { ALL_APP_ROLES, type AppRole } from '@/lib/roles';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
@@ -1917,9 +1918,11 @@ export default function UserManagement() {
 
           <DialogFooter className="pt-4 border-t">
             <Button variant="outline" onClick={() => setEditDialogOpen(false)}>Cancel</Button>
-            <Button onClick={handleSaveUser} disabled={updateUser.isPending || editHydrating}>
-              {editHydrating ? 'Loading…' : updateUser.isPending ? 'Saving...' : 'Save Changes'}
-            </Button>
+            <CanAction actionKey="pms.users.edit">
+              <Button onClick={handleSaveUser} disabled={updateUser.isPending || editHydrating}>
+                {editHydrating ? 'Loading…' : updateUser.isPending ? 'Saving...' : 'Save Changes'}
+              </Button>
+            </CanAction>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -2305,9 +2308,11 @@ export default function UserManagement() {
 
           <DialogFooter className="pt-4 border-t">
             <Button variant="outline" onClick={() => { setCreateDialogOpen(false); resetCreateForm(); }}>Cancel</Button>
-            <Button onClick={handleCreateUser} disabled={createUser.isPending}>
-              {createUser.isPending ? 'Creating...' : 'Create User'}
-            </Button>
+            <CanAction actionKey="pms.users.add">
+              <Button onClick={handleCreateUser} disabled={createUser.isPending}>
+                {createUser.isPending ? 'Creating...' : 'Create User'}
+              </Button>
+            </CanAction>
           </DialogFooter>
         </DialogContent>
       </Dialog>
