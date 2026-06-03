@@ -680,8 +680,13 @@ export function KpiJourneySection({
       isNA: globalIsNA,
       auditLogs: auditLogs.map((log: any) => {
         const performer = auditProfileMap.get(log.performed_by);
+        let label = actionLabelMap[log.action] || log.action.replace(/_/g, ' ');
+        if (log.action === 'ADMIN_OVERRIDE') {
+          const kind = classifyAdminOverride(log);
+          if (kind !== 'admin_override') label = ADMIN_OVERRIDE_LABELS[kind];
+        }
         return {
-          label: actionLabelMap[log.action] || log.action.replace(/_/g, ' '),
+          label,
           performerName: performer?.full_name || performer?.email || 'System',
           date: format(new Date(log.created_at), 'dd MMM yyyy, hh:mm a'),
           details: formatAuditDetails(log),
