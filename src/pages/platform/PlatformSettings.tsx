@@ -11,12 +11,67 @@ import { Switch } from '@/components/ui/switch';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useState } from 'react';
-import { Building2, Boxes, KeyRound, ShieldCheck, ScrollText, Layers, Download, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Building2, Boxes, KeyRound, ShieldCheck, ScrollText, Layers, Download, ChevronLeft, ChevronRight, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
 const PAGE_SIZE = 50;
 const AUDIT_EVENT_TYPES = ['grant', 'revoke', 'update', 'would_deny', 'admin_view'] as const;
+
+/** Loose parser matching `useEntitlement` — JSONB can decode to boolean, plain
+ *  string `"true"`, or a double-quoted string `"\"true\""`. */
+function parseFlag(raw: unknown): boolean {
+  return raw === true || raw === 'true' || raw === '"true"';
+}
+
+function useHubFlag() {
+  return useQuery({
+    queryKey: ['platform-settings', 'flag'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('system_settings')
+        .select('setting_value')
+        .eq('setting_key', 'hub_platform_settings_enabled')
+        .maybeSingle();
+      return data?.setting_value ?? null;
+    },
+  });
+}
+
+function MasterSwitchBanner({ enabled }: { enabled: boolean }) {
+  if (enabled) {
+    return (
+      <Alert className="border-green-500/40">
+        <CheckCircle2 className="h-4 w-4 text-green-600" />
+        <AlertTitle>Master switch is ON</AlertTitle>
+        <AlertDescription>
+          Toggles are saved and observe-mode logging is active. No PMS behavior is blocked.
+        </AlertDescription>
+      </Alert>
+    );
+  }
+  return (
+    <Alert variant="destructive">
+      <AlertTriangle className="h-4 w-4" />
+      <AlertTitle>Master switch is OFF</AlertTitle>
+      <AlertDescription>
+        Toggles are saved, but observe-mode logging is inactive and PMS behavior is unchanged.
+        Turn the Master switch ON in the Overview tab to activate logging.
+      </AlertDescription>
+    </Alert>
+  );
+}
 
 function useRows<T = Record<string, unknown>>(table: string, orderBy = 'created_at') {
   return useQuery({
@@ -93,17 +148,50 @@ function SearchableTable<T extends Record<string, unknown>>({
 }
 
 function OverviewTab() {
-  const flag = useQuery({
-    queryKey: ['platform-settings', 'flag'],
-    queryFn: async () => {
-      const { data } = await supabase
+  const qc = useQueryClient();
+  const { user, hasRole } = useAuth();
+  const canWrite = hasRole('platform_owner');
+  const flag = useHubFlag();
+  const enabled = parseFlag(flag.data);
+  const [confirmOff, setConfirmOff] = useState(false);
+
+  const mut = useMutation({
+    mutationFn: async (next: boolean) => {
+      const before = enabled;
+      const { error: upErr } = await supabase
         .from('system_settings')
-        .select('setting_value')
-        .eq('setting_key', 'hub_platform_settings_enabled')
-        .maybeSingle();
-      return data?.setting_value ?? null;
+        .upsert(
+          { setting_key: 'hub_platform_settings_enabled', setting_value: next as unknown as never },
+          { onConflict: 'setting_key' },
+        );
+      if (upErr) throw upErr;
+      await supabase.from('entitlement_audit').insert({
+        actor_id: user?.id ?? null,
+        event_type: 'update',
+        entity_type: 'flag',
+        entity_key: 'hub_platform_settings_enabled',
+        before: { is_enabled: before },
+        after: { is_enabled: next },
+        reason: 'platform_settings master switch',
+      });
     },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['platform-settings', 'flag'] });
+      qc.invalidateQueries({ queryKey: ['platform-settings', 'audit'] });
+      qc.invalidateQueries({ queryKey: ['hub-entitlement-snapshot'] });
+      toast.success('Master switch updated');
+    },
+    onError: (e: Error) => toast.error(`Update failed: ${e.message}`),
   });
+
+  const handleToggle = (next: boolean) => {
+    if (!next) {
+      setConfirmOff(true);
+      return;
+    }
+    mut.mutate(true);
+  };
+
   const clients = useRows<{ client_key: string; display_name: string; deployment_mode: string; is_active: boolean }>('clients', 'client_key');
 
   return (
@@ -114,12 +202,48 @@ function OverviewTab() {
           <CardDescription>Hub Platform Settings shell</CardDescription>
         </CardHeader>
         <CardContent>
-          <Badge variant={String(flag.data) === '"true"' || flag.data === true ? 'default' : 'secondary'}>
-            {String(flag.data) === '"true"' || flag.data === true ? 'ENABLED' : 'DISABLED'}
-          </Badge>
+          <div className="flex items-center gap-3">
+            <Badge variant={enabled ? 'default' : 'secondary'}>
+              {enabled ? 'ENABLED' : 'DISABLED'}
+            </Badge>
+            <Switch
+              checked={enabled}
+              disabled={!canWrite || mut.isPending || flag.isLoading}
+              onCheckedChange={handleToggle}
+              aria-label="Toggle Hub Platform master switch"
+            />
+            {!canWrite && (
+              <span className="text-xs text-muted-foreground">platform_owner only</span>
+            )}
+          </div>
           <p className="mt-3 text-sm text-muted-foreground">
-            When disabled, this page is hidden and the entitlement resolver returns allow-all — PMS behavior is identical to pre-Phase-1.
+            {enabled
+              ? 'Entitlement toggles are saved and observe-mode logging is active. No PMS behavior is blocked.'
+              : 'Entitlement toggles are saved but observe-mode logging is inactive. The entitlement resolver returns allow-all — PMS behavior is identical to pre-Phase-1. Turning this ON does not block any PMS action; it only enables would_deny telemetry.'}
           </p>
+          <AlertDialog open={confirmOff} onOpenChange={setConfirmOff}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Turn Master switch OFF?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This hides the Platform Settings page on next reload and stops all observe-mode
+                  logging. Existing entitlement rows are preserved. PMS behavior is unaffected
+                  either way.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={() => {
+                    setConfirmOff(false);
+                    mut.mutate(false);
+                  }}
+                >
+                  Turn OFF
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </CardContent>
       </Card>
       <Card>
@@ -208,6 +332,8 @@ function ModuleEntitlementsTab() {
   const { user, hasRole } = useAuth();
   const canWrite = hasRole('platform_owner');
   const [q, setQ] = useState('');
+  const flag = useHubFlag();
+  const hubOn = parseFlag(flag.data);
 
   const { data, isLoading } = useQuery({
     queryKey: ['platform-settings', 'cme-joined'],
@@ -241,6 +367,7 @@ function ModuleEntitlementsTab() {
   if (isLoading) return <LoadingRows />;
   return (
     <div className="space-y-3">
+      <MasterSwitchBanner enabled={hubOn} />
       <Input placeholder="Search module or client…" value={q} onChange={(e) => setQ(e.target.value)} className="max-w-sm" />
       <div className="overflow-x-auto rounded-md border">
         <Table>
@@ -294,6 +421,8 @@ function ActionEntitlementsTab() {
   const { user, hasRole } = useAuth();
   const canWrite = hasRole('platform_owner');
   const [q, setQ] = useState('');
+  const flag = useHubFlag();
+  const hubOn = parseFlag(flag.data);
 
   const { data, isLoading } = useQuery({
     queryKey: ['platform-settings', 'cae-joined'],
@@ -333,6 +462,7 @@ function ActionEntitlementsTab() {
   if (isLoading) return <LoadingRows />;
   return (
     <div className="space-y-3">
+      <MasterSwitchBanner enabled={hubOn} />
       <Input placeholder="Search action, module or client…" value={q} onChange={(e) => setQ(e.target.value)} className="max-w-sm" />
       <div className="overflow-x-auto rounded-md border">
         <Table>
