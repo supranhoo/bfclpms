@@ -13,6 +13,9 @@ import { Shield, Plus, Trash2, Save, Users, Settings2, Search } from 'lucide-rea
 import { useAccessProfiles, type AccessProfileMenuRight } from '@/hooks/useAccessProfiles';
 import { ReviewNotesAccessInline } from './ReviewNotesAccessInline';
 import { useMenuAccess, type MenuAccessConfig } from '@/hooks/useMenuAccess';
+import { useMenuRegistryAdmin } from '@/hooks/useResolvedMenu';
+import { applyOverrides, groupByParent } from '@/lib/menu/applyOverrides';
+import type { ResolvedMenuNode } from '@/lib/menu/types';
 import { useCompanies } from '@/hooks/useCompanies';
 import { useDivisions, useBusinessUnits, useDepartments, useSubBranches } from '@/hooks/useOrganization';
 import { useEmployeeFilterOptions } from '@/hooks/useEmployeeFilterOptions';
@@ -200,6 +203,26 @@ export function ProfilesTab({ profiles, assignments, createProfile, updateProfil
 /* ─── Tab 2: Profile Mapping ─── */
 export function MappingTab({ profiles, orgScopes, menuRights, configs, saveOrgScope, deleteOrgScope, saveMenuRights, toast }: any) {
   const [selectedProfileId, setSelectedProfileId] = useState('');
+  const [rightsSearch, setRightsSearch] = useState('');
+  // Admin always loads the full menu registry + overrides so Level 2/3/4
+  // tabs (Organization sub-tabs, Workflow Config sub-tabs, custom menus)
+  // appear in the Menu Access Rights grid — independent of the
+  // `menu_overrides_enabled` feature flag.
+  const { registry: registryQ, overrides: overridesQ } = useMenuRegistryAdmin();
+  const resolvedNodes: ResolvedMenuNode[] = useMemo(() => {
+    return applyOverrides(registryQ.data ?? [], overridesQ.data ?? []);
+  }, [registryQ.data, overridesQ.data]);
+  const nodeByKey = useMemo(() => {
+    const m = new Map<string, ResolvedMenuNode>();
+    for (const n of resolvedNodes) m.set(n.menu_key, n);
+    return m;
+  }, [resolvedNodes]);
+  const childrenByParent = useMemo(() => groupByParent(resolvedNodes), [resolvedNodes]);
+  const configByKey = useMemo(() => {
+    const m = new Map<string, MenuAccessConfig>();
+    for (const c of configs as MenuAccessConfig[]) m.set(c.menu_key, c);
+    return m;
+  }, [configs]);
   const { data: companies = [] } = useCompanies();
   const { data: divisions = [] } = useDivisions();
   const { data: businessUnits = [] } = useBusinessUnits();
@@ -370,12 +393,21 @@ export function MappingTab({ profiles, orgScopes, menuRights, configs, saveOrgSc
 
   const handleSaveRights = async () => {
     if (!selectedProfileId) return;
-    const allRights = (configs as MenuAccessConfig[]).map(c => {
-      const r = editedRights[c.menu_key] || (() => {
-        const ex = profileMenuRights.get(c.menu_key);
+    // Build a union of every menu_key we know about so saving never wipes
+    // rights for rows that are not currently visible (hidden by search,
+    // not yet in configs, or only present in the registry / existing
+    // saved rights). Storage layer skips entries with no granted rights.
+    const allKeys = new Set<string>();
+    for (const c of configs as MenuAccessConfig[]) allKeys.add(c.menu_key);
+    for (const n of resolvedNodes) allKeys.add(n.menu_key);
+    for (const k of profileMenuRights.keys()) allKeys.add(k);
+    for (const k of Object.keys(editedRights)) allKeys.add(k);
+    const allRights = Array.from(allKeys).map(menu_key => {
+      const r = editedRights[menu_key] || (() => {
+        const ex = profileMenuRights.get(menu_key);
         return ex ? { can_view: ex.can_view, can_add: ex.can_add, can_update: ex.can_update, can_delete: ex.can_delete } : { can_view: false, can_add: false, can_update: false, can_delete: false };
       })();
-      return { menu_key: c.menu_key, ...r };
+      return { menu_key, ...r };
     });
     try {
       await saveMenuRights.mutateAsync({ profileId: selectedProfileId, rights: allRights });
@@ -386,11 +418,55 @@ export function MappingTab({ profiles, orgScopes, menuRights, configs, saveOrgSc
     }
   };
 
-  // Group configs by section
-  const sections = (configs as MenuAccessConfig[]).reduce<Record<string, MenuAccessConfig[]>>((acc, c) => {
-    (acc[c.section] ||= []).push(c);
-    return acc;
-  }, {});
+  // Group configs by section — used only for the "Legacy / unmapped" tail
+  // (rows in menu_access_config that have no corresponding menu_registry entry).
+  const sections = (configs as MenuAccessConfig[])
+    .filter(c => !nodeByKey.has(c.menu_key))
+    .reduce<Record<string, MenuAccessConfig[]>>((acc, c) => {
+      (acc[c.section] ||= []).push(c);
+      return acc;
+    }, {});
+
+  // Flatten the resolved menu tree depth-first so the rights grid mirrors
+  // sidebar + System Settings hierarchy (Level 2 → Level 3 → Level 4).
+  type FlatRow = { node: ResolvedMenuNode; depth: number };
+  const flatRows: FlatRow[] = useMemo(() => {
+    const out: FlatRow[] = [];
+    const visit = (parentKey: string | null, depth: number) => {
+      const kids = childrenByParent.get(parentKey) ?? [];
+      for (const n of kids) {
+        out.push({ node: n, depth });
+        visit(n.menu_key, depth + 1);
+      }
+    };
+    visit(null, 0);
+    return out;
+  }, [childrenByParent]);
+
+  const matchesSearch = (n: ResolvedMenuNode) => {
+    if (!rightsSearch.trim()) return true;
+    const q = rightsSearch.toLowerCase();
+    return n.label.toLowerCase().includes(q) || n.menu_key.toLowerCase().includes(q);
+  };
+  // A row is visible if it matches search OR any descendant matches
+  // (so parent context stays visible).
+  const descendantMatches = useMemo(() => {
+    const cache = new Map<string, boolean>();
+    const walk = (key: string): boolean => {
+      if (cache.has(key)) return cache.get(key)!;
+      const kids = childrenByParent.get(key) ?? [];
+      const any = kids.some(k => matchesSearch(k) || walk(k.menu_key));
+      cache.set(key, any);
+      return any;
+    };
+    for (const n of resolvedNodes) walk(n.menu_key);
+    return cache;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resolvedNodes, childrenByParent, rightsSearch]);
+
+  const visibleFlatRows = flatRows.filter(({ node }) =>
+    matchesSearch(node) || descendantMatches.get(node.menu_key)
+  );
 
   // Resolve scope labels
   const getScopeLabel = (scope: any) => {
@@ -467,13 +543,25 @@ export function MappingTab({ profiles, orgScopes, menuRights, configs, saveOrgSc
 
           {/* Menu Access Rights */}
           <div className="space-y-3">
-            <h4 className="text-sm font-semibold">Menu Access Rights</h4>
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <h4 className="text-sm font-semibold">Menu Access Rights</h4>
+              <div className="relative w-full sm:w-72">
+                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search menu name or key..."
+                  value={rightsSearch}
+                  onChange={e => setRightsSearch(e.target.value)}
+                  className="pl-9 h-9"
+                />
+              </div>
+            </div>
             <div className="rounded-md border max-h-[60vh] overflow-auto [&>div]:overflow-visible">
               <Table>
                 <TableHeader className="sticky top-0 z-10 bg-background">
                   <TableRow>
-                    <TableHead className="w-[120px]">Section</TableHead>
                     <TableHead>Menu Item</TableHead>
+                    <TableHead className="w-[60px] text-center">Level</TableHead>
+                    <TableHead className="w-[220px]">Menu Key</TableHead>
                     <TableHead className="w-[60px] text-center">View</TableHead>
                     <TableHead className="w-[60px] text-center">Add</TableHead>
                     <TableHead className="w-[60px] text-center">Update</TableHead>
@@ -481,34 +569,86 @@ export function MappingTab({ profiles, orgScopes, menuRights, configs, saveOrgSc
                   </TableRow>
                 </TableHeader>
                 <TableBody>
+                  {/* Hierarchical rows from the resolved menu registry */}
+                  {visibleFlatRows.map(({ node, depth }) => {
+                    const r = getRights(node.menu_key);
+                    const cfg = configByKey.get(node.menu_key);
+                    const hasChildren = (childrenByParent.get(node.menu_key)?.length ?? 0) > 0;
+                    // Container = grouping node with no permission config and children.
+                    const isContainer = hasChildren && !cfg && !node.route_path;
+                    return (
+                      <TableRow key={`reg-${node.menu_key}`}>
+                        <TableCell className="text-sm">
+                          <span style={{ paddingLeft: `${depth * 16}px` }} className="inline-block">
+                            {hasChildren && <span className="text-muted-foreground mr-1">▸</span>}
+                            <span className={isContainer ? 'font-medium' : ''}>{node.label}</span>
+                            {node.is_custom && (
+                              <Badge variant="outline" className="ml-2 text-[10px] py-0 px-1">Custom</Badge>
+                            )}
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <Badge variant="secondary" className="text-[10px] py-0 px-1.5">L{node.menu_level}</Badge>
+                        </TableCell>
+                        <TableCell className="font-mono text-[11px] text-muted-foreground">{node.menu_key}</TableCell>
+                        {isContainer ? (
+                          <TableCell colSpan={4} className="text-center text-xs text-muted-foreground italic">
+                            Container
+                          </TableCell>
+                        ) : (
+                          (['can_view', 'can_add', 'can_update', 'can_delete'] as const).map(field => (
+                            <TableCell key={field} className="text-center">
+                              <Checkbox checked={r[field]} onCheckedChange={() => toggleRight(node.menu_key, field)} />
+                            </TableCell>
+                          ))
+                        )}
+                      </TableRow>
+                    );
+                  })}
+
+                  {/* Legacy / unmapped menu_access_config rows not present
+                      in the registry — preserve original grouped layout. */}
                   {SECTION_ORDER.filter(s => sections[s]?.length).map(section =>
                     <Fragment key={section}>
-                    {sections[section].map((cfg: MenuAccessConfig, idx: number) => {
-                      const r = getRights(cfg.menu_key);
-                      return (
-                        <TableRow key={cfg.menu_key}>
-                          {idx === 0 && (
-                            <TableCell rowSpan={sections[section].length} className="font-medium text-xs align-top">
-                              {SECTION_LABELS[section] || section}
+                    {sections[section]
+                      .filter(cfg => !rightsSearch.trim() ||
+                        cfg.menu_name.toLowerCase().includes(rightsSearch.toLowerCase()) ||
+                        cfg.menu_key.toLowerCase().includes(rightsSearch.toLowerCase()))
+                      .map((cfg: MenuAccessConfig) => {
+                        const r = getRights(cfg.menu_key);
+                        return (
+                          <TableRow key={`cfg-${cfg.menu_key}`}>
+                            <TableCell className="text-sm">
+                              <span className="text-muted-foreground text-[10px] mr-2">[{SECTION_LABELS[section] || section}]</span>
+                              {cfg.menu_name}
                             </TableCell>
-                          )}
-                          <TableCell className="text-sm">{cfg.menu_name}</TableCell>
-                          {(['can_view', 'can_add', 'can_update', 'can_delete'] as const).map(field => (
-                            <TableCell key={field} className="text-center">
-                              <Checkbox checked={r[field]} onCheckedChange={() => toggleRight(cfg.menu_key, field)} />
+                            <TableCell className="text-center">
+                              <Badge variant="outline" className="text-[10px] py-0 px-1.5">—</Badge>
                             </TableCell>
-                          ))}
-                        </TableRow>
-                      );
-                    })}
-                    {section === 'hr_pms' && (
-                      <TableRow key="review-notes-access-inline">
-                        <TableCell colSpan={6} className="p-0">
-                          <ReviewNotesAccessInline />
-                        </TableCell>
-                      </TableRow>
-                    )}
+                            <TableCell className="font-mono text-[11px] text-muted-foreground">{cfg.menu_key}</TableCell>
+                            {(['can_view', 'can_add', 'can_update', 'can_delete'] as const).map(field => (
+                              <TableCell key={field} className="text-center">
+                                <Checkbox checked={r[field]} onCheckedChange={() => toggleRight(cfg.menu_key, field)} />
+                              </TableCell>
+                            ))}
+                          </TableRow>
+                        );
+                      })}
                     </Fragment>
+                  )}
+                  {/* Review-notes access — always render regardless of
+                      whether hr_pms section has legacy rows. */}
+                  <TableRow key="review-notes-access-inline">
+                    <TableCell colSpan={7} className="p-0">
+                      <ReviewNotesAccessInline />
+                    </TableCell>
+                  </TableRow>
+                  {visibleFlatRows.length === 0 && Object.keys(sections).length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={7} className="text-center text-sm text-muted-foreground py-6">
+                        {registryQ.isLoading ? 'Loading menu…' : 'No menu items match the search.'}
+                      </TableCell>
+                    </TableRow>
                   )}
                 </TableBody>
               </Table>
