@@ -3521,3 +3521,5 @@ Governance source: `docs/safety-integration-governance.md` §Phase 5.
 **Rollback.** Flip `hub_platform_settings_enabled = "false"` (instant silence, zero migration). Or revert the 7 file edits that add `<CanAction>` wrappers. No data migration required.
 
 **Regression coverage.** Verified live for `pms.data.export`, `pms.reports.performance.export`, `pms.workflow.final_score_rules.edit`: Master switch ON + entitlement OFF produces exactly 1 `would_deny` row; action continues to work; re-render produces 0 additional rows.
+
+**Telemetry view (read-only).** A `Telemetry` tab inside `/platform-settings` exposes aggregates of `entitlement_audit` rows where `event_type = 'would_deny'`: KPI counts (today / 7d / 30d / all time), top would-be-blocked actions, top users, by-client and by-module breakdowns, a 30-day daily sparkline, and a server-side paginated event table with filters (date range, client, module, action key, user, risk level). Export CSV is capped at 10 000 rows. Access gated to `platform_owner`. The view is strictly read-only and performs zero writes; it never enforces anything.
