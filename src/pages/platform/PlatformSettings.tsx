@@ -30,7 +30,7 @@ import {
 } from '@/components/ui/alert-dialog';
 
 const PAGE_SIZE = 50;
-const AUDIT_EVENT_TYPES = ['grant', 'revoke', 'update', 'would_deny', 'admin_view'] as const;
+const AUDIT_EVENT_TYPES = ['grant', 'revoke', 'update', 'would_deny', 'admin_view', 'deny'] as const;
 
 /** Loose parser matching `useEntitlement` — JSONB can decode to boolean, plain
  *  string `"true"`, or a double-quoted string `"\"true\""`. */
