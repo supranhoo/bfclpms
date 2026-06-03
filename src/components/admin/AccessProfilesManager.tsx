@@ -543,13 +543,25 @@ export function MappingTab({ profiles, orgScopes, menuRights, configs, saveOrgSc
 
           {/* Menu Access Rights */}
           <div className="space-y-3">
-            <h4 className="text-sm font-semibold">Menu Access Rights</h4>
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <h4 className="text-sm font-semibold">Menu Access Rights</h4>
+              <div className="relative w-full sm:w-72">
+                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search menu name or key..."
+                  value={rightsSearch}
+                  onChange={e => setRightsSearch(e.target.value)}
+                  className="pl-9 h-9"
+                />
+              </div>
+            </div>
             <div className="rounded-md border max-h-[60vh] overflow-auto [&>div]:overflow-visible">
               <Table>
                 <TableHeader className="sticky top-0 z-10 bg-background">
                   <TableRow>
-                    <TableHead className="w-[120px]">Section</TableHead>
                     <TableHead>Menu Item</TableHead>
+                    <TableHead className="w-[60px] text-center">Level</TableHead>
+                    <TableHead className="w-[220px]">Menu Key</TableHead>
                     <TableHead className="w-[60px] text-center">View</TableHead>
                     <TableHead className="w-[60px] text-center">Add</TableHead>
                     <TableHead className="w-[60px] text-center">Update</TableHead>
@@ -557,34 +569,86 @@ export function MappingTab({ profiles, orgScopes, menuRights, configs, saveOrgSc
                   </TableRow>
                 </TableHeader>
                 <TableBody>
+                  {/* Hierarchical rows from the resolved menu registry */}
+                  {visibleFlatRows.map(({ node, depth }) => {
+                    const r = getRights(node.menu_key);
+                    const cfg = configByKey.get(node.menu_key);
+                    const hasChildren = (childrenByParent.get(node.menu_key)?.length ?? 0) > 0;
+                    // Container = grouping node with no permission config and children.
+                    const isContainer = hasChildren && !cfg && !node.route_path;
+                    return (
+                      <TableRow key={`reg-${node.menu_key}`}>
+                        <TableCell className="text-sm">
+                          <span style={{ paddingLeft: `${depth * 16}px` }} className="inline-block">
+                            {hasChildren && <span className="text-muted-foreground mr-1">▸</span>}
+                            <span className={isContainer ? 'font-medium' : ''}>{node.label}</span>
+                            {node.is_custom && (
+                              <Badge variant="outline" className="ml-2 text-[10px] py-0 px-1">Custom</Badge>
+                            )}
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <Badge variant="secondary" className="text-[10px] py-0 px-1.5">L{node.menu_level}</Badge>
+                        </TableCell>
+                        <TableCell className="font-mono text-[11px] text-muted-foreground">{node.menu_key}</TableCell>
+                        {isContainer ? (
+                          <TableCell colSpan={4} className="text-center text-xs text-muted-foreground italic">
+                            Container
+                          </TableCell>
+                        ) : (
+                          (['can_view', 'can_add', 'can_update', 'can_delete'] as const).map(field => (
+                            <TableCell key={field} className="text-center">
+                              <Checkbox checked={r[field]} onCheckedChange={() => toggleRight(node.menu_key, field)} />
+                            </TableCell>
+                          ))
+                        )}
+                      </TableRow>
+                    );
+                  })}
+
+                  {/* Legacy / unmapped menu_access_config rows not present
+                      in the registry — preserve original grouped layout. */}
                   {SECTION_ORDER.filter(s => sections[s]?.length).map(section =>
                     <Fragment key={section}>
-                    {sections[section].map((cfg: MenuAccessConfig, idx: number) => {
-                      const r = getRights(cfg.menu_key);
-                      return (
-                        <TableRow key={cfg.menu_key}>
-                          {idx === 0 && (
-                            <TableCell rowSpan={sections[section].length} className="font-medium text-xs align-top">
-                              {SECTION_LABELS[section] || section}
+                    {sections[section]
+                      .filter(cfg => !rightsSearch.trim() ||
+                        cfg.menu_name.toLowerCase().includes(rightsSearch.toLowerCase()) ||
+                        cfg.menu_key.toLowerCase().includes(rightsSearch.toLowerCase()))
+                      .map((cfg: MenuAccessConfig) => {
+                        const r = getRights(cfg.menu_key);
+                        return (
+                          <TableRow key={`cfg-${cfg.menu_key}`}>
+                            <TableCell className="text-sm">
+                              <span className="text-muted-foreground text-[10px] mr-2">[{SECTION_LABELS[section] || section}]</span>
+                              {cfg.menu_name}
                             </TableCell>
-                          )}
-                          <TableCell className="text-sm">{cfg.menu_name}</TableCell>
-                          {(['can_view', 'can_add', 'can_update', 'can_delete'] as const).map(field => (
-                            <TableCell key={field} className="text-center">
-                              <Checkbox checked={r[field]} onCheckedChange={() => toggleRight(cfg.menu_key, field)} />
+                            <TableCell className="text-center">
+                              <Badge variant="outline" className="text-[10px] py-0 px-1.5">—</Badge>
                             </TableCell>
-                          ))}
-                        </TableRow>
-                      );
-                    })}
+                            <TableCell className="font-mono text-[11px] text-muted-foreground">{cfg.menu_key}</TableCell>
+                            {(['can_view', 'can_add', 'can_update', 'can_delete'] as const).map(field => (
+                              <TableCell key={field} className="text-center">
+                                <Checkbox checked={r[field]} onCheckedChange={() => toggleRight(cfg.menu_key, field)} />
+                              </TableCell>
+                            ))}
+                          </TableRow>
+                        );
+                      })}
                     {section === 'hr_pms' && (
                       <TableRow key="review-notes-access-inline">
-                        <TableCell colSpan={6} className="p-0">
+                        <TableCell colSpan={7} className="p-0">
                           <ReviewNotesAccessInline />
                         </TableCell>
                       </TableRow>
                     )}
                     </Fragment>
+                  )}
+                  {visibleFlatRows.length === 0 && Object.keys(sections).length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={7} className="text-center text-sm text-muted-foreground py-6">
+                        {registryQ.isLoading ? 'Loading menu…' : 'No menu items match the search.'}
+                      </TableCell>
+                    </TableRow>
                   )}
                 </TableBody>
               </Table>
