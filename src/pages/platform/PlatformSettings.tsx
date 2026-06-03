@@ -607,6 +607,7 @@ type WouldDenyRow = {
   entity_key: string;
   client_id: string | null;
   reason: string | null;
+  after?: Record<string, unknown> | null;
 };
 
 function Sparkline({ data }: { data: { date: string; count: number }[] }) {
@@ -733,7 +734,7 @@ function TelemetryTab() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('entitlement_audit')
-        .select('id, created_at, actor_id, entity_key, client_id')
+        .select('id, created_at, actor_id, entity_key, client_id, after')
         .eq('event_type', 'would_deny')
         .gte('created_at', last30.toISOString())
         .order('created_at', { ascending: false })
@@ -764,7 +765,7 @@ function TelemetryTab() {
     queryFn: async () => {
       let q = supabase
         .from('entitlement_audit')
-        .select('id, created_at, actor_id, entity_key, client_id, reason', { count: 'exact' })
+        .select('id, created_at, actor_id, entity_key, client_id, reason, after', { count: 'exact' })
         .eq('event_type', 'would_deny')
         .order('created_at', { ascending: false });
       if (from) q = q.gte('created_at', new Date(from).toISOString());
@@ -824,7 +825,7 @@ function TelemetryTab() {
     try {
       let q = supabase
         .from('entitlement_audit')
-        .select('id, created_at, actor_id, entity_key, client_id, reason')
+        .select('id, created_at, actor_id, entity_key, client_id, reason, after')
         .eq('event_type', 'would_deny')
         .order('created_at', { ascending: false })
         .limit(10000);
@@ -848,9 +849,12 @@ function TelemetryTab() {
         actor_id: r.actor_id ?? '',
         user_name: r.actor_id ? profileMeta[r.actor_id]?.full_name ?? '' : '',
         user_email: r.actor_id ? profileMeta[r.actor_id]?.email ?? '' : '',
+        pathname: (r.after?.pathname as string | undefined) ?? '',
+        search: (r.after?.search as string | undefined) ?? '',
+        source: (r.after?.source as string | undefined) ?? '',
         reason: r.reason ?? '',
       }));
-      const cols = ['created_at', 'action_key', 'action_label', 'module_key', 'risk_level', 'client_key', 'user_name', 'user_email', 'actor_id', 'reason'];
+      const cols = ['created_at', 'action_key', 'action_label', 'module_key', 'risk_level', 'client_key', 'user_name', 'user_email', 'actor_id', 'pathname', 'search', 'source', 'reason'];
       const csv = toCsv(enriched, cols);
       const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
       const url = URL.createObjectURL(blob);
@@ -1056,18 +1060,22 @@ function TelemetryTab() {
                   <TableHead>Client</TableHead>
                   <TableHead>Module</TableHead>
                   <TableHead>Action</TableHead>
+                  <TableHead>Page</TableHead>
                   <TableHead>Risk</TableHead>
                   <TableHead>Source</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {eventsQ.isLoading ? (
-                  <TableRow><TableCell colSpan={7}><LoadingRows /></TableCell></TableRow>
+                  <TableRow><TableCell colSpan={8}><LoadingRows /></TableCell></TableRow>
                 ) : rows.length === 0 ? (
-                  <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground py-6">No rows</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground py-6">No rows</TableCell></TableRow>
                 ) : rows.map((r) => {
                   const meta = actionMeta[r.entity_key] ?? {};
                   const prof = r.actor_id ? profileMeta[r.actor_id] : undefined;
+                  const pathname = (r.after?.pathname as string | undefined) ?? '';
+                  const search = (r.after?.search as string | undefined) ?? '';
+                  const source = (r.after?.source as string | undefined) ?? '';
                   return (
                     <TableRow key={r.id}>
                       <TableCell className="text-xs whitespace-nowrap">{new Date(r.created_at).toLocaleString()}</TableCell>
@@ -1081,8 +1089,11 @@ function TelemetryTab() {
                         <div className="font-medium">{meta.label ?? r.entity_key}</div>
                         <code className="text-[10px] text-muted-foreground">{r.entity_key}</code>
                       </TableCell>
+                      <TableCell className="text-xs max-w-[12rem] truncate" title={`${pathname}${search}`}>
+                        {pathname ? <code className="text-[10px]">{pathname}{search}</code> : '—'}
+                      </TableCell>
                       <TableCell><Badge variant="outline">{meta.risk_level ?? '—'}</Badge></TableCell>
-                      <TableCell className="text-xs text-muted-foreground">{r.reason ?? '—'}</TableCell>
+                      <TableCell className="text-xs text-muted-foreground">{source || r.reason || '—'}</TableCell>
                     </TableRow>
                   );
                 })}

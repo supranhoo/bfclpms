@@ -7,6 +7,7 @@
  */
 import { useEffect, useRef } from 'react';
 import { useEntitlement, logWouldDeny } from '@/hooks/useEntitlement';
+import { buildWouldDenyMetadata } from '@/lib/platformTelemetryMeta';
 
 interface CanActionProps {
   actionKey: string;
@@ -14,16 +15,24 @@ interface CanActionProps {
 }
 
 export function CanAction({ actionKey, children }: CanActionProps) {
-  const { hubEnabled, isActionEntitled, loading } = useEntitlement();
+  const { hubEnabled, isActionEntitled, loading, snapshot } = useEntitlement();
   const loggedRef = useRef(false);
 
   useEffect(() => {
     if (loading || !hubEnabled || loggedRef.current) return;
     if (!isActionEntitled(actionKey)) {
       loggedRef.current = true;
-      logWouldDeny(actionKey, 'observe-mode CanAction render');
+      const hasWindow = typeof window !== 'undefined';
+      const metadata = buildWouldDenyMetadata({
+        actionKey,
+        clientId: snapshot.clientId,
+        pathname: hasWindow ? window.location.pathname : '',
+        search: hasWindow ? window.location.search : '',
+        source: 'CanAction',
+      });
+      logWouldDeny(actionKey, 'observe-mode CanAction render', metadata);
     }
-  }, [loading, hubEnabled, actionKey, isActionEntitled]);
+  }, [loading, hubEnabled, actionKey, isActionEntitled, snapshot.clientId]);
 
   return <>{children}</>;
 }

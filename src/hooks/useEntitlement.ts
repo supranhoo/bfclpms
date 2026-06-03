@@ -104,17 +104,26 @@ export function useEntitlement() {
 /**
  * Best-effort observe-mode logger. Inserts a `would_deny` row in
  * `entitlement_audit` without throwing. Safe to call from render paths.
+ *
+ * `metadata` (when supplied) is written to the `after` JSONB column —
+ * intended for route/page context. Old callers that omit it keep working.
  */
-export async function logWouldDeny(actionKey: string, reason?: string) {
+export async function logWouldDeny(
+  actionKey: string,
+  reason?: string,
+  metadata?: Record<string, unknown>,
+) {
   try {
     const { data: userData } = await supabase.auth.getUser();
-    await supabase.from('entitlement_audit').insert({
+    const row: Record<string, unknown> = {
       actor_id: userData?.user?.id ?? null,
       event_type: 'would_deny',
       entity_type: 'action',
       entity_key: actionKey,
       reason: reason ?? null,
-    });
+    };
+    if (metadata) row.after = metadata;
+    await supabase.from('entitlement_audit').insert(row as never);
   } catch {
     /* observe-only: never throw from a guard */
   }
