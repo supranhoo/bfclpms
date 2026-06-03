@@ -852,6 +852,7 @@ function TelemetryTab() {
       }
       if (clientId !== 'all') q = q.eq('client_id', clientId);
       if (constrainByActionKeys) q = q.in('entity_key', filteredActionKeys);
+      if (routeFilter.trim()) q = q.eq('after->>pathname', routeFilter.trim());
       const { data, error } = await q;
       if (error) throw error;
       const enriched = ((data ?? []) as WouldDenyRow[]).filter(userFilter).map((r) => ({
