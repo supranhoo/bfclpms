@@ -7,10 +7,10 @@ import { ModuleCard } from '@/components/modules/ModuleCard';
 import { Loader2 } from 'lucide-react';
 
 export default function ModuleHub() {
-  const { user, profile, role, loading: authLoading } = useAuth();
+  const { user, profile, hasRole, loading: authLoading } = useAuth();
   const { data: modules, isLoading: modulesLoading } = useModules();
   const { hubEnabled } = useEntitlement();
-  const showPlatformCard = hubEnabled && role === 'platform_owner';
+  const showPlatformCard = hubEnabled && hasRole('platform_owner');
 
   if (authLoading || modulesLoading) {
     return (

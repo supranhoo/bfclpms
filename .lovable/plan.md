@@ -1,140 +1,107 @@
-# Hub Platform Foundation — Phase 1 (Observe-Only)
-
 ## Goal
-Lay the Hub-level platform foundation (super-admin role, global registries, entitlements, Platform Settings shell) **seeded read-only from current PMS** with **zero enforcement** against live PMS. Every existing PMS route, menu_key, role, workflow, score, dashboard, and report behaves identically after this phase.
+Verify the new Platform Owner implementation is safe and grant Platform Owner to the existing PMS admin(s) **without removing or breaking their `admin` role**. Keep enforcement OFF (`hub_platform_settings_enabled = "false"`) until you explicitly confirm activation in a follow-up turn.
 
-## Non-Goals (deferred to later phases)
-- Backend enforcement of action/entitlement denials (Phase 5–6)
-- Workflow/scoring/dashboard config adapters (Phase 7)
-- HRMS/LMS/Safety registration API (Phase 8)
-- Signed on-prem entitlement package import/verify (Phase 9)
-- Analytics/BI registry, AI registry, integration hub (Phases 10–11)
+## Findings (read-only checks already done)
+
+1. **Enum** — `app_role` already contains `platform_owner` (8 roles total). ✅
+2. **`user_roles` table** — Unique constraint is `(user_id, role)` (composite). The schema **does support multiple roles per user**. ✅
+3. **`AuthContext.fetchRole`** — Uses `.single()` on `user_roles`. ❌ This is the **single biggest risk**: if we naively insert a second `user_roles` row for an existing admin, `.single()` will throw and the admin can no longer log in.
+4. **`PlatformOwnerRoute`** — Checks `role !== 'platform_owner'` strictly. An admin who is also platform_owner would either lose admin (if we swap) or fail this check (if we keep admin as primary). Needs `hasRole()` style check.
+5. **Existing admins in DB** — 3 rows: Jaspal, Ankit Choudhary, Vivek Kumar Dansena. None currently have `platform_owner`.
+6. **Feature flag** — `hub_platform_settings_enabled` is OFF, so `useEntitlement` returns allow-all and `/platform-settings` returns 404 even after role grants. Good safety net.
 
 ## Risk & Impact Report
-| Dimension | Impact | Mitigation |
-|---|---|---|
-| Existing PMS workflows / scoring / final scores | None | No code path reads new tables yet |
-| Routes / menu_keys / menu access | None | Registries are additive; existing `menu_registry` / `menu_access_config` untouched |
-| Auth | Adds one new app_role value (`platform_owner`); existing roles unchanged | Enum extension only — no role removed or renamed |
-| RLS | New tables ship with RLS + GRANTs from day one | Follows project public-schema grants policy |
-| Backup | Auto-included via `get_backup_table_order()` | No denylist entries |
-| Regression risk | Very low — new tables, new page, new hook all gated by feature flag `hub_platform_settings_enabled` (default OFF) | Master switch lets ops disable the entire shell instantly |
-| Scalability | Registry tables are small (<10k rows lifetime); entitlement lookup memoized in hook | Indexed on `(client_id, key)` |
 
-## Architecture (SSOT layering)
-```text
-                  Hub (Platform Owner)
-                         |
-   +---------------------+---------------------+
-   |          GLOBAL REGISTRIES (observe)      |
-   |  module_registry                          |
-   |  action_registry                          |
-   |  capability_registry                      |
-   |  (notif/report/dashboard/ai/integration   |
-   |   registries stubbed, populated later)    |
-   +---------------------+---------------------+
-                         |
-   +---------------------+---------------------+
-   |       ENTITLEMENT LAYER (observe)         |
-   |  clients                                  |
-   |  client_module_entitlements               |
-   |  client_action_entitlements               |
-   |  entitlement_audit                        |
-   +---------------------+---------------------+
-                         |
-              Existing PMS (unchanged)
-              menu_registry / menu_access_config
-              user_roles / workflows / kpis / ...
+- **Data impact**: Only additive `user_roles` rows. No deletes, no schema breaks.
+- **Workflow impact**: None. PMS workflow, KPI, scoring, menu, RLS for admin remain unchanged.
+- **Auth impact (HIGH if mishandled)**: `.single()` must be replaced with multi-row fetch **before** inserting the second role row, or admin login breaks. Mitigation: ship the auth refactor in the same change set, behind a safe "primary role" derivation that preserves existing behavior.
+- **Regression risk**: Low — `role` continues to expose a single primary `AppRole` (priority: `admin` > `platform_owner` > others), so every existing `role === 'admin'` check keeps working unchanged.
+- **Scalability**: Trivial — one extra row read per session.
+- **Rollback**: Delete the new `user_roles` rows; revert AuthContext patch. Both reversible.
+
+## Plan (Phase A — safety refactor, no activation)
+
+### Step 1 — Refactor `AuthContext` to support multi-role (backward compatible)
+File: `src/contexts/AuthContext.tsx`
+- Replace `.single()` with a list fetch: `.from('user_roles').select('role').eq('user_id', userId)`.
+- Add new state `roles: AppRole[]`.
+- Derive **primary `role`** from a fixed priority list so existing PMS checks keep working:
+  `['admin', 'platform_owner', 'hr_pms', 'management', 'auditor', 'skip_level', 'manager', 'employee']`.
+  An admin+platform_owner user → `role === 'admin'` exactly as today.
+- Expose new helpers on context:
+  - `roles: AppRole[]`
+  - `hasRole(r: AppRole): boolean`
+  - `isAdmin: boolean`
+  - `isPlatformOwner: boolean`
+- Keep existing `role`, `effectiveRole`, `naturalRole`, `isAdminMode`, `toggleAdminMode` exactly as today.
+- Verification: existing admin logs in → `role==='admin'`, all PMS pages load.
+
+### Step 2 — Update `PlatformOwnerRoute` to use `hasRole`
+File: `src/components/layout/PlatformOwnerRoute.tsx`
+- Change `role !== 'platform_owner'` → `!hasRole('platform_owner')`.
+- Keep the `hubEnabled` master switch gate (feature flag still OFF, so route stays 404 for everyone until activated).
+- Verification: with flag OFF, route 404s for all users including admins.
+
+### Step 3 — Update Module Hub card visibility
+File: `src/pages/ModuleHub.tsx` (and any spot showing the Platform Settings card)
+- Replace `role === 'platform_owner'` with `hasRole('platform_owner') && hubEnabled`.
+- Verification: with flag OFF, card hidden for everyone. With flag ON, visible only to users explicitly granted `platform_owner`.
+
+### Step 4 — Grant `platform_owner` to existing PMS admins (additive)
+Database `insert` (NOT a migration — pure data):
+```sql
+INSERT INTO public.user_roles (user_id, role)
+SELECT ur.user_id, 'platform_owner'::app_role
+FROM public.user_roles ur
+WHERE ur.role = 'admin'
+  AND NOT EXISTS (
+    SELECT 1 FROM public.user_roles ur2
+    WHERE ur2.user_id = ur.user_id AND ur2.role = 'platform_owner'
+  );
+```
+- Idempotent (skips users who already have it).
+- Only touches existing admins (Jaspal, Ankit, Vivek). New future admins do NOT auto-get platform_owner.
+- Verification: re-query `user_roles` shows each admin has both `admin` and `platform_owner` rows; their primary `role` in app is still `admin` (priority).
+
+### Step 5 — Recovery / break-glass note
+Append a commented SQL block to `mem://features/platform/hub-foundation` so an operator can re-grant platform_owner from `psql` if needed:
+```sql
+-- Break-glass: grant platform_owner to a specific admin by email
+INSERT INTO public.user_roles (user_id, role)
+SELECT p.id, 'platform_owner'::app_role
+FROM public.profiles p
+WHERE p.email = '<admin-email>'
+ON CONFLICT (user_id, role) DO NOTHING;
 ```
 
-Code = engines (resolver hooks, guards). DB = behavior (registry rows, entitlement flags). Frontend = UI only.
+### Step 6 — Tests (extend `src/test/platformFoundation.test.ts`)
+- Primary-role derivation: `[admin, platform_owner]` → `admin`.
+- `hasRole('platform_owner')` true for admins after grant.
+- `hasRole('platform_owner')` false for manager/employee.
+- Existing 5 tests still pass.
 
-## Step-by-step Plan
+### Step 7 — Documentation
+- `DOCUMENTATION.md`: note multi-role support, priority order, and `hasRole/isPlatformOwner` API.
+- `POLICY.md`: note that `platform_owner` is additive, never replaces `admin`, and that Hub routes require BOTH role grant AND the `hub_platform_settings_enabled` flag.
+- Update `mem://features/platform/hub-foundation`.
 
-### Step 1 — Identity: `platform_owner` role
-- Migration: add `'platform_owner'` to `public.app_role` enum.
-- Add to `src/lib/roles.ts` `ALL_APP_ROLES` (SSOT).
-- Seed one row in `user_roles` for the designated owner (UI prompt later; not in this PR).
-- **Verification:** existing role checks compile; `effectiveRole` typing widens; no existing branch references the new role.
+## What this plan does NOT do (deferred to your explicit go-ahead)
 
-### Step 2 — Global registry tables (Hub-scoped, multi-tenant ready)
-All tables carry `client_id uuid NULL` (NULL = global default). All ship with RLS + GRANTs in the same migration.
+- Does **NOT** flip `hub_platform_settings_enabled` to `"true"`. The Hub Settings UI stays 404 / hidden until you confirm activation in the next turn.
+- Does **NOT** enforce any entitlement against PMS. Observe-only mode remains intact.
+- Does **NOT** change RLS on PMS tables, menu_access, workflow, scoring, or reports.
+- Does **NOT** grant `platform_owner` to managers, employees, or future admins automatically.
 
-- `module_registry` — `module_key` PK, `label`, `description`, `is_system`, `sort_order`, `client_id` NULL, `entitlement_source`, `entitlement_version`, `valid_from`, `valid_until`, `signature_hash` NULL. Seeded: `pms` (system, always on).
-- `action_registry` — `action_key` PK (e.g. `pms.admin.users.add`), `module_key` FK, `label`, `description`, `risk_level` (`low|medium|high|critical`), `is_system`, `client_id` NULL. Seeded with the high-risk PMS actions enumerated in the spec (users.add/edit/manage_access/password_rollout, workflow.final_score_rules.edit, reports.performance.export, menu.create_tab, menu.delete_custom_tab, working_days.edit, kra.assign, import, export). Read-only registry — not yet wired to UI guards.
-- `capability_registry` — `capability_key` PK, `module_key`, `label`, `description`, `client_id` NULL. Stubbed with one capability per existing PMS role for backward-compat mapping.
-- Stub tables (created empty, no UI this phase): `dashboard_registry`, `report_registry_v2`, `notification_event_registry`, `ai_feature_registry`, `integration_connector_registry`. Empty rows + RLS only — establishes namespace, no code reads them.
+## Activation handshake (next turn)
+After this plan is implemented and you have confirmed login still works for the three admins, I will ask again:
+> "Ready to activate? Set `hub_platform_settings_enabled = 'true'` so admins (now also platform_owner) can open `/platform-settings`?"
+Only then will the Hub UI become reachable.
 
-### Step 3 — Entitlement tables (observe)
-- `clients` — `id` PK, `client_key` UNIQUE, `display_name`, `deployment_mode` (`saas|on_prem|hybrid`), `is_active`, future-ready fields (`entitlement_source`, `entitlement_version`, `valid_from`, `valid_until`, `signature_hash` NULL — no signing logic this phase).
-- `client_module_entitlements` — `(client_id, module_key)` UNIQUE, `is_enabled`, `valid_from`, `valid_until`, `granted_by`, audit ts.
-- `client_action_entitlements` — `(client_id, action_key)` UNIQUE, `is_enabled`, same audit columns.
-- `entitlement_audit` — append-only log of every entitlement change (`actor_id`, `entity_type`, `entity_key`, `before`, `after`, `reason`, `created_at`). Admin-read, insert via trigger only.
-- Seed one row in `clients` for current deployment (`default`), with PMS module entitlement = TRUE, all PMS actions entitled = TRUE. Result: **observe mode = everything allowed = no behavior change**.
-
-### Step 4 — Resolver hook + observe-only guard
-- `src/hooks/useEntitlement.ts` — gated by `system_settings.hub_platform_settings_enabled` (default `"false"`). Returns `{ isModuleEntitled(moduleKey), isActionEntitled(actionKey), loading }`. When flag OFF, returns `true` for everything (zero behavior change).
-- `src/components/platform/CanAction.tsx` — render-prop wrapper with **observe-only** behavior: always renders children, but when entitlement would deny, logs to `entitlement_audit` via debounced background insert (`would_deny` event type). No UI hidden. Not wired anywhere this phase — shipped as a primitive for Phase 5.
-- **Verification:** unit tests (`src/test/entitlement.test.ts`) covering: flag OFF → all true; flag ON + entitled → true; flag ON + denied → false but no throw; observe-mode logs `would_deny` event.
-
-### Step 5 — Hub Platform Settings shell
-- New route `/platform-settings` (Hub-level, **not** under `/admin`).
-- `ProtectedRoute` variant `PlatformOwnerRoute` that checks `effectiveRole === 'platform_owner'` — admins explicitly cannot see it.
-- Page `src/pages/platform/PlatformSettings.tsx` with read-only tabs (every tab shows seeded registry data, no edit UI):
-  - Overview (client info, deployment mode, flag status)
-  - Clients & Deployment (read-only list)
-  - Module Entitlements (read-only matrix client × module)
-  - Action Entitlements (read-only table with filter by module/risk)
-  - Registries (modules / actions / capabilities — read-only with search)
-  - Audit Logs (entitlement_audit viewer, paginated server-side)
-- Module Hub: add a **Platform Settings** card visible only when `effectiveRole === 'platform_owner'`. No change for any other role.
-
-### Step 6 — Feature flag + master switch
-- Add `hub_platform_settings_enabled` to `system_settings` (default `"false"`). When OFF: route returns 404, hub card hidden, resolver hook returns all-true, observe logger no-ops.
-- Document toggle in `DOCUMENTATION.md` + add row to `mem/features/admin/hub-platform-foundation`.
-
-### Step 7 — Pagination & lean-load compliance
-- All Platform Settings tables: server-side pagination (page size 50), search via ILIKE on key/label, sortable columns. Follows existing `mem/architecture/performance/lean-load-policy`.
-
-### Step 8 — Tests
-- `src/test/platformFoundation.test.ts`:
-  - `platform_owner` role added to enum and `ALL_APP_ROLES`
-  - Existing 7 roles unchanged (snapshot test)
-  - Entitlement resolver: flag OFF → all true
-  - Entitlement resolver: missing key → deny (when flag ON)
-  - Observe-mode `would_deny` writes audit row, never throws
-  - PMS module seeded entitled
-  - PMS action seeds present (assert each high-risk key)
-- Existing test suites must pass unchanged (regression gate).
-
-### Step 9 — Documentation
-- `docs/adr/ADR-072.md` — Hub platform foundation architecture decision.
-- `DOCUMENTATION.md` — new "Hub Platform Layer" section.
-- `POLICY.md` — entitlement layering, observe-mode contract, super-admin boundary, on-prem deferral note.
-- `mem://features/platform/hub-foundation` — capture invariants (multi-tenant client_id NULL, observe-only, flag-gated, action_key immutable, no enforcement yet).
-
-## UI Changes
-| Where | What | Visible to |
-|---|---|---|
-| Module Hub | New "Platform Settings" card (only when flag ON) | `platform_owner` only |
-| `/platform-settings` | New page with 6 read-only tabs | `platform_owner` only |
-| Everywhere else | No change | All users |
-
-Responsive: tabs collapse to dropdown <md; tables horizontally scrollable; follows existing `responsive-ui-strategy`.
-
-## Rollback Strategy
-- All changes additive. Rollback = set `hub_platform_settings_enabled = "false"` (instant) and revoke the platform_owner role row.
-- Migration is non-destructive (new tables, new enum value — no drops, no renames). Reversible by `DROP TABLE` on new tables + leaving the enum value (Postgres cannot drop enum values safely — accepted residual).
-
-## Acceptance Criteria
-- All existing PMS tests pass.
-- Existing PMS user (admin) sees zero UI change.
-- With flag OFF, `/platform-settings` returns 404 and Hub card is hidden.
-- With flag ON + platform_owner role, the 6 read-only tabs render seeded data.
-- `useEntitlement` returns true for every action with flag OFF.
-- `CanAction` in observe mode never hides children and logs `would_deny` events when applicable.
-- New tables have RLS + GRANTs and appear in backup coverage automatically.
-- No new hardcoded business values — every seed row lives in the DB.
-
-## Out of scope confirmation (for the user)
-This plan deliberately does **not** touch: workflow engine, KPI scoring, final score rules, menu_access enforcement, dashboard logic, report builder, AI features, integrations, on-prem signing, HRMS/LMS/Safety registration. Those are later phases and will each get their own plan + observe→enforce gate.
+## Acceptance criteria
+- All 3 existing PMS admins retain `admin` and gain `platform_owner` (additive).
+- Existing admin login, dashboard, system settings, menus — unchanged.
+- `useAuth().role` still returns `'admin'` for them (no broken `role === 'admin'` checks anywhere).
+- `useAuth().hasRole('platform_owner')` returns `true` for them, `false` for others.
+- With flag OFF (current state), `/platform-settings` returns 404 for everyone — no behavior change yet.
+- Managers, employees, auditors, etc. are not Platform Owners.
+- Refactor is reversible by removing the new `user_roles` rows and reverting the AuthContext patch.

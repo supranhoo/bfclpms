@@ -4,7 +4,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useQueryClient } from '@tanstack/react-query';
 // NOTE: AppRole is the single source of truth — update src/lib/roles.ts when adding roles.
-import type { AppRole } from '@/lib/roles';
+import { type AppRole, ALL_APP_ROLES } from '@/lib/roles';
 export type { AppRole } from '@/lib/roles';
 
 interface Profile {
@@ -27,6 +27,13 @@ interface AuthContextType {
   session: Session | null;
   profile: Profile | null;
   role: AppRole | null;
+  /** All roles assigned to the user (multi-role support). */
+  roles: AppRole[];
+  /** True if the user has the given role assigned. */
+  hasRole: (role: AppRole) => boolean;
+  /** Convenience flags. `isAdmin` mirrors the legacy `role === 'admin'` check. */
+  isAdmin: boolean;
+  isPlatformOwner: boolean;
   /** The UI-effective role: when admin mode is off, returns the natural hierarchy role */
   effectiveRole: AppRole | null;
   /** The admin's natural role based on org hierarchy (manager or employee) */
@@ -55,6 +62,28 @@ interface AuthContextType {
 
 const ADMIN_MODE_KEY = 'pms_admin_mode';
 
+/**
+ * Priority order used to pick the SINGLE primary `role` exposed for backward
+ * compatibility with all existing `role === 'admin'` style checks across PMS.
+ * `admin` MUST come first so an admin who is also `platform_owner` keeps the
+ * same effective behavior as before this refactor.
+ */
+const ROLE_PRIORITY: AppRole[] = [
+  'admin',
+  'platform_owner',
+  'hr_pms',
+  'management',
+  'auditor',
+  'skip_level',
+  'manager',
+  'employee',
+];
+
+function pickPrimaryRole(roles: AppRole[]): AppRole | null {
+  for (const r of ROLE_PRIORITY) if (roles.includes(r)) return r;
+  return roles[0] ?? null;
+}
+
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -62,6 +91,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [role, setRole] = useState<AppRole | null>(null);
+  const [roles, setRoles] = useState<AppRole[]>([]);
   const [naturalRole, setNaturalRole] = useState<AppRole | null>(null);
   const [isAdminMode, setIsAdminMode] = useState<boolean>(() => {
     const saved = localStorage.getItem(ADMIN_MODE_KEY);
@@ -121,6 +151,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setSession(null);
         setProfile(null);
         setRole(null);
+        setRoles([]);
         setNaturalRole(null);
         return false;
       }
@@ -141,20 +172,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const fetchRole = async (userId: string) => {
     try {
-      const { data: roleData } = await supabase
+      const { data: roleRows, error } = await supabase
         .from('user_roles')
         .select('role')
-        .eq('user_id', userId)
-        .single();
-      
-      if (roleData) {
-        const fetchedRole = roleData.role as AppRole;
-        setRole(fetchedRole);
-        
-        // If admin, detect natural role
-        if (fetchedRole === 'admin') {
-          fetchNaturalRole(userId);
-        }
+        .eq('user_id', userId);
+
+      if (error) throw error;
+
+      const validRoles = (roleRows ?? [])
+        .map((r) => r.role as AppRole)
+        .filter((r): r is AppRole => (ALL_APP_ROLES as readonly string[]).includes(r));
+
+      setRoles(validRoles);
+      const primary = pickPrimaryRole(validRoles);
+      setRole(primary);
+
+      if (primary === 'admin') {
+        fetchNaturalRole(userId);
       }
     } catch (error) {
       console.error('Failed to fetch role:', error);
@@ -222,6 +256,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           } else {
             setProfile(null);
             setRole(null);
+            setRoles([]);
             setNaturalRole(null);
             setLoading(false);
           }
@@ -361,6 +396,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setSession(null);
     setProfile(null);
     setRole(null);
+    setRoles([]);
     setNaturalRole(null);
   };
 
@@ -382,7 +418,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <AuthContext.Provider value={{
-      user, session, profile, role, effectiveRole, naturalRole,
+      user, session, profile, role, roles,
+      hasRole: (r: AppRole) => roles.includes(r),
+      isAdmin: roles.includes('admin'),
+      isPlatformOwner: roles.includes('platform_owner'),
+      effectiveRole, naturalRole,
       isAdminMode, toggleAdminMode, loading, isReady, profileError, signIn, signUp, signOut, fetchProfile,
     }}>
       {children}
