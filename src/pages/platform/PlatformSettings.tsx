@@ -14,6 +14,9 @@ import { useState } from 'react';
 import { Building2, Boxes, KeyRound, ShieldCheck, ScrollText, Layers, Download, ChevronLeft, ChevronRight, AlertTriangle, CheckCircle2, BarChart3 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
+import { useEntitlement } from '@/hooks/useEntitlement';
+import { bucketByDay, aggregateByPathname, presetRange, defaultFilters, type PresetKey } from '@/lib/platformTelemetryAgg';
+import { LineChart, Line, XAxis, YAxis, Tooltip as RTooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import {
   AlertDialog,
