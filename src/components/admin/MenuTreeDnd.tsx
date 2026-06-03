@@ -1,4 +1,4 @@
-import { useMemo, useState, useCallback } from 'react';
+import { useMemo, useState, useCallback, useEffect } from 'react';
 import {
   DndContext, DragOverlay, PointerSensor, useSensor, useSensors,
   useDraggable, useDroppable, closestCenter, type DragEndEvent, type DragStartEvent,
@@ -56,6 +56,14 @@ type Props = {
   onCreateShortcut?: (menuKey: string) => void;
   /** Called when admin clicks "Delete" on a custom row. */
   onDeleteCustom?: (menuKey: string) => void;
+  /** Bumps to expand-all / collapse-all every node. */
+  expandAllSignal?: number;
+  collapseAllSignal?: number;
+  /** Only render nodes whose menu_level ∈ set (ancestors of visible nodes still
+   *  render so the chain is intact). Group nodes (L1) always render. */
+  visibleLevels?: Set<2 | 3 | 4>;
+  /** One-shot: on mount expand the ancestor chain of this menu_key. */
+  autoExpandKey?: string | null;
 };
 
 /** Knows how to render and DnD-edit the full resolved menu tree. */
@@ -64,6 +72,37 @@ export function MenuTreeDnd(p: Props) {
   const [activeKey, setActiveKey] = useState<string | null>(null);
   const [hoverIntent, setHoverIntent] = useState<DropIntent | null>(null);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+
+  // Expand all / collapse all signals.
+  useEffect(() => {
+    if (p.expandAllSignal === undefined || p.expandAllSignal === 0) return;
+    const all: Record<string, boolean> = {};
+    for (const n of p.effective) all[n.menu_key] = true;
+    setExpanded(all);
+  }, [p.expandAllSignal]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (p.collapseAllSignal === undefined || p.collapseAllSignal === 0) return;
+    setExpanded({});
+  }, [p.collapseAllSignal]);
+
+  // Auto-expand ancestor chain (one-shot).
+  const effectiveByKeyForEffect = useMemo(
+    () => Object.fromEntries(p.effective.map((n) => [n.menu_key, n])),
+    [p.effective],
+  );
+  useEffect(() => {
+    if (!p.autoExpandKey) return;
+    const next: Record<string, boolean> = {};
+    let cur: string | null = p.autoExpandKey;
+    let guard = 0;
+    while (cur && guard < 20) {
+      next[cur] = true;
+      cur = effectiveByKeyForEffect[cur]?.parent_key ?? null;
+      guard++;
+    }
+    setExpanded((prev) => ({ ...prev, ...next }));
+    // run once per autoExpandKey value when tree is loaded
+  }, [p.autoExpandKey, p.effective.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const effectiveByKey = useMemo(
     () => Object.fromEntries(p.effective.map((n) => [n.menu_key, n])),
@@ -100,6 +139,20 @@ export function MenuTreeDnd(p: Props) {
       );
     },
     [p.searchTerm],
+  );
+
+  // Visible-level filter: a node passes if its level is in the set OR any
+  // descendant passes (ancestors of visible nodes always render).
+  const matchesLevel = useCallback(
+    (n: ResolvedMenuNode): boolean => {
+      const levels = p.visibleLevels;
+      if (!levels) return true;
+      if (n.menu_level === 1) return true; // group nodes always render
+      if (levels.has(n.menu_level as 2 | 3 | 4)) return true;
+      const kids = childrenByParent.get(n.menu_key) ?? [];
+      return kids.some((k) => matchesLevel(k));
+    },
+    [p.visibleLevels, childrenByParent],
   );
 
   // Compute drop validity for current activeKey + intent (mirrors DB trigger).
@@ -282,6 +335,7 @@ export function MenuTreeDnd(p: Props) {
                 onLabelChange={p.onLabelChange}
                 onResetItem={p.onResetItem}
                 matchesSearch={matchesSearch}
+                matchesLevel={matchesLevel}
                 activeKey={activeKey}
                 hoverIntent={hoverIntent}
                 validationOk={validation?.ok ?? true}
