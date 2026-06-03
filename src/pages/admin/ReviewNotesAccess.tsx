@@ -21,6 +21,7 @@ const ROLE_LABELS: Record<AppRole, string> = {
   management: 'Management',
   hr_pms: 'HR PMS',
   skip_level: 'Skip-Level Manager',
+  platform_owner: 'Platform Owner',
 };
 
 const ACTIONS: Array<{ key: keyof ReviewNoteAccessConfig; label: string; help: string }> = [

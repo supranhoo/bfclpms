@@ -84,3 +84,4 @@ Lean-Load: debounce search inputs (>200 rows / network); paginate new lists with
 - [Functional Manager Reviewer](mem://features/admin/functional-manager-reviewer) — Per-employee FM relationship + functional_manager_check stage + is_functional_manager_of() RLS helper
 - [Report Field Sequence](mem://features/admin/report-field-sequence) — Stable Report IDs (RPT-MOD-NNN), /r/:reportId shortlink, resolver for per-report column order/label/hide, admin tile in Report Builder
 - [Menu Setting — Custom Tab Creation](mem://features/admin/menu-setting-custom-tabs) — Admin-created L2/L3/L4 tabs via menu_registry.is_custom + default admin-only access + dynamic sidebar synthesis
+- [Hub Platform Foundation](mem://features/platform/hub-foundation) — Phase 1 observe-only Hub: module/action/capability registries, client entitlements, audit, /platform-settings shell, flag-gated, multi-tenant ready, platform_owner role

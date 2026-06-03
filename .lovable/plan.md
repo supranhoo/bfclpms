@@ -1,80 +1,140 @@
+# Hub Platform Foundation — Phase 1 (Observe-Only)
+
 ## Goal
-Bring PMS Menu Setting up to Beehive-style flexibility: surface Level 4 children, give explicit level/parent controls, add a Beehive-style flat table, and a deterministic "Move to level / parent" dialog. Reuse the existing override pipeline (`menu_overrides` columns: `custom_parent_key`, `custom_menu_level`, `custom_sort_order`, `custom_module_key`) and existing safeguards (`validateMove`, DB trigger `menu_overrides_validate`, `CreateShortcutDialog`, `deleteCustomMenuItem`). No DB schema change. No route/permission/workflow/KPI/scoring/auth/business-data change.
+Lay the Hub-level platform foundation (super-admin role, global registries, entitlements, Platform Settings shell) **seeded read-only from current PMS** with **zero enforcement** against live PMS. Every existing PMS route, menu_key, role, workflow, score, dashboard, and report behaves identically after this phase.
 
-## What is already in place (do not rebuild)
-- Override save pipeline, audit logging, reset-all, master switch — `MenuSettingTab.tsx`.
-- Shortcut creation for locked/system rows — `CreateShortcutDialog`, wired via `onCreateShortcut`.
-- Custom delete with children-block + multi-table cleanup — `deleteCustomMenuItem`, wired via `onDeleteCustom`.
-- Cross-level validation (depth ≤ 4, cycles, cross-app, accepts_children, system-required) — `validateMove.ts` + DB trigger.
-- Bulk "Move under…" dialog — `MoveUnderDialog.tsx`.
-- DnD tree with multi-select — `MenuTreeDnd.tsx`.
+## Non-Goals (deferred to later phases)
+- Backend enforcement of action/entitlement denials (Phase 5–6)
+- Workflow/scoring/dashboard config adapters (Phase 7)
+- HRMS/LMS/Safety registration API (Phase 8)
+- Signed on-prem entitlement package import/verify (Phase 9)
+- Analytics/BI registry, AI registry, integration hub (Phases 10–11)
 
-## What changes (UI only)
+## Risk & Impact Report
+| Dimension | Impact | Mitigation |
+|---|---|---|
+| Existing PMS workflows / scoring / final scores | None | No code path reads new tables yet |
+| Routes / menu_keys / menu access | None | Registries are additive; existing `menu_registry` / `menu_access_config` untouched |
+| Auth | Adds one new app_role value (`platform_owner`); existing roles unchanged | Enum extension only — no role removed or renamed |
+| RLS | New tables ship with RLS + GRANTs from day one | Follows project public-schema grants policy |
+| Backup | Auto-included via `get_backup_table_order()` | No denylist entries |
+| Regression risk | Very low — new tables, new page, new hook all gated by feature flag `hub_platform_settings_enabled` (default OFF) | Master switch lets ops disable the entire shell instantly |
+| Scalability | Registry tables are small (<10k rows lifetime); entitlement lookup memoized in hook | Indexed on `(client_id, key)` |
 
-### 1. Level-visibility & expansion controls (`MenuSettingTab.tsx` + `MenuTreeDnd.tsx`)
-Add a single toolbar row above the tree:
-- Buttons: **Expand all**, **Collapse all**.
-- Toggle group (multi-select chips): **L2**, **L3**, **L4**, default all on. Filters which nodes render; ancestors of a visible node always render so the chain is intact.
-- A **View** segmented control: **Tree** | **Table** (Beehive-style flat list).
+## Architecture (SSOT layering)
+```text
+                  Hub (Platform Owner)
+                         |
+   +---------------------+---------------------+
+   |          GLOBAL REGISTRIES (observe)      |
+   |  module_registry                          |
+   |  action_registry                          |
+   |  capability_registry                      |
+   |  (notif/report/dashboard/ai/integration   |
+   |   registries stubbed, populated later)    |
+   +---------------------+---------------------+
+                         |
+   +---------------------+---------------------+
+   |       ENTITLEMENT LAYER (observe)         |
+   |  clients                                  |
+   |  client_module_entitlements               |
+   |  client_action_entitlements               |
+   |  entitlement_audit                        |
+   +---------------------+---------------------+
+                         |
+              Existing PMS (unchanged)
+              menu_registry / menu_access_config
+              user_roles / workflows / kpis / ...
+```
 
-`MenuTreeDnd` props extended with `expandAll?: boolean`, `collapseAll?: boolean`, `visibleLevels: Set<2|3|4>`. Existing local `expanded` state seeded from those signals (effect re-runs on toggle). No change to drag/drop or validation.
+Code = engines (resolver hooks, guards). DB = behavior (registry rows, entitlement flags). Frontend = UI only.
 
-Auto-expand chain when the page mounts inside Menu Setting: on first render, expand ancestors of `admin-settings-menu-setting` (walk `parent_key` upward via `effectiveByKey`). One-shot, doesn't fight user collapse afterwards.
+## Step-by-step Plan
 
-### 2. Beehive-style flat table view (new `MenuTable.tsx`)
-Compact table with columns: **Select · Menu Name · Menu_Key · Route · Level · Parent · Icon · Order · Status · Actions**.
-- Pagination: page size 25, client-side (registry is small, ≤ a few hundred). Sort by Level then Order by default; column header click toggles sort.
-- Search reuses the existing `search` input (filter by name/key/route).
-- Status badge: `Protected` for `is_system_required || !is_movable`, `Custom` for `is_custom`, `Active` otherwise; greyed when `is_active === false`.
-- Actions per row (reuse existing handlers): **Move**, **Rename** (inline), **Shortcut** (locked/system only), **Reset** (if dirty), **Delete** (custom only, hidden when row has children — same gate as DnD).
-- No drag-drop in table view (table is for clarity & explicit moves). DnD remains in Tree view.
+### Step 1 — Identity: `platform_owner` role
+- Migration: add `'platform_owner'` to `public.app_role` enum.
+- Add to `src/lib/roles.ts` `ALL_APP_ROLES` (SSOT).
+- Seed one row in `user_roles` for the designated owner (UI prompt later; not in this PR).
+- **Verification:** existing role checks compile; `effectiveRole` typing widens; no existing branch references the new role.
 
-### 3. Explicit "Move to level / parent" dialog (new `MoveToDialog.tsx`)
-Triggered from a row's **Move** action (both tree and table) and from the existing bulk action button next to "Move under…" (renamed to **Move…** with a small dropdown: "Move under parent…" / "Move to level…"). Fields:
-- Selected item(s) chip list (read-only).
-- **Target level**: L2 / L3 / L4 radio (disabled levels are those that would exceed depth or violate `validateMove` for any selected source).
-- **Target parent**: combobox filtered to nodes whose effective `menu_level === target-1` AND `accepts_children` AND pass `validateMove` for every selected source. Search included.
-- **Order**: numeric input, default = max(sibling sort_order)+10.
-- **Preview** block: `Current: <ancestor chain>` → `New: <ancestor chain>` using `effectiveByKey`.
-- Footer: **Cancel** / **Apply**. On Apply, stage `PendingMove` for each selected key (same shape used today); admin still has to click **Save** to commit (preserves the "dirty banner" UX and audit pipeline).
+### Step 2 — Global registry tables (Hub-scoped, multi-tenant ready)
+All tables carry `client_id uuid NULL` (NULL = global default). All ship with RLS + GRANTs in the same migration.
 
-Locked / system-required sources are listed in a yellow callout exactly like `MoveUnderDialog` does today and are routed to **Create shortcut** instead of being moved.
+- `module_registry` — `module_key` PK, `label`, `description`, `is_system`, `sort_order`, `client_id` NULL, `entitlement_source`, `entitlement_version`, `valid_from`, `valid_until`, `signature_hash` NULL. Seeded: `pms` (system, always on).
+- `action_registry` — `action_key` PK (e.g. `pms.admin.users.add`), `module_key` FK, `label`, `description`, `risk_level` (`low|medium|high|critical`), `is_system`, `client_id` NULL. Seeded with the high-risk PMS actions enumerated in the spec (users.add/edit/manage_access/password_rollout, workflow.final_score_rules.edit, reports.performance.export, menu.create_tab, menu.delete_custom_tab, working_days.edit, kra.assign, import, export). Read-only registry — not yet wired to UI guards.
+- `capability_registry` — `capability_key` PK, `module_key`, `label`, `description`, `client_id` NULL. Stubbed with one capability per existing PMS role for backward-compat mapping.
+- Stub tables (created empty, no UI this phase): `dashboard_registry`, `report_registry_v2`, `notification_event_registry`, `ai_feature_registry`, `integration_connector_registry`. Empty rows + RLS only — establishes namespace, no code reads them.
 
-### 4. Status terminology
-Replace `Locked` badge text with `Protected` everywhere it currently appears (`MenuTreeDnd.tsx` row badge + `MoveUnderDialog.tsx` callout). Tooltip clarifies: "System-required or non-movable. Use Create shortcut to expose under another parent."
+### Step 3 — Entitlement tables (observe)
+- `clients` — `id` PK, `client_key` UNIQUE, `display_name`, `deployment_mode` (`saas|on_prem|hybrid`), `is_active`, future-ready fields (`entitlement_source`, `entitlement_version`, `valid_from`, `valid_until`, `signature_hash` NULL — no signing logic this phase).
+- `client_module_entitlements` — `(client_id, module_key)` UNIQUE, `is_enabled`, `valid_from`, `valid_until`, `granted_by`, audit ts.
+- `client_action_entitlements` — `(client_id, action_key)` UNIQUE, `is_enabled`, same audit columns.
+- `entitlement_audit` — append-only log of every entitlement change (`actor_id`, `entity_type`, `entity_key`, `before`, `after`, `reason`, `created_at`). Admin-read, insert via trigger only.
+- Seed one row in `clients` for current deployment (`default`), with PMS module entitlement = TRUE, all PMS actions entitled = TRUE. Result: **observe mode = everything allowed = no behavior change**.
 
-### 5. Sidebar parity (no logic change, verify only)
-Confirm `AppSidebar` already uses `useResolvedMenu()` recursively. Add a small test in `applyOverrides.test.ts` asserting that a saved `custom_menu_level` change moves a node between L3↔L4 in the resolved tree — guards future regressions.
+### Step 4 — Resolver hook + observe-only guard
+- `src/hooks/useEntitlement.ts` — gated by `system_settings.hub_platform_settings_enabled` (default `"false"`). Returns `{ isModuleEntitled(moduleKey), isActionEntitled(actionKey), loading }`. When flag OFF, returns `true` for everything (zero behavior change).
+- `src/components/platform/CanAction.tsx` — render-prop wrapper with **observe-only** behavior: always renders children, but when entitlement would deny, logs to `entitlement_audit` via debounced background insert (`would_deny` event type). No UI hidden. Not wired anywhere this phase — shipped as a primitive for Phase 5.
+- **Verification:** unit tests (`src/test/entitlement.test.ts`) covering: flag OFF → all true; flag ON + entitled → true; flag ON + denied → false but no throw; observe-mode logs `would_deny` event.
 
-## Out of scope (explicit)
-- DB schema changes, new RPCs, new tables.
-- Beehive-style separate L1/L2/L3 screens — we keep one unified screen with level filters instead (matches our richer tree model).
-- Editing `menu_key`, `route_path`, `permission_key`, `report_key`, role access, icon set, colour token list (those exist already on Create dialog; not expanded here).
-- Cross-app movable allowlist UI (still requires direct registry edit, as documented in `mem://features/admin/menu-setting`).
-- Server-side pagination (registry is bounded; client-side is acceptable).
+### Step 5 — Hub Platform Settings shell
+- New route `/platform-settings` (Hub-level, **not** under `/admin`).
+- `ProtectedRoute` variant `PlatformOwnerRoute` that checks `effectiveRole === 'platform_owner'` — admins explicitly cannot see it.
+- Page `src/pages/platform/PlatformSettings.tsx` with read-only tabs (every tab shows seeded registry data, no edit UI):
+  - Overview (client info, deployment mode, flag status)
+  - Clients & Deployment (read-only list)
+  - Module Entitlements (read-only matrix client × module)
+  - Action Entitlements (read-only table with filter by module/risk)
+  - Registries (modules / actions / capabilities — read-only with search)
+  - Audit Logs (entitlement_audit viewer, paginated server-side)
+- Module Hub: add a **Platform Settings** card visible only when `effectiveRole === 'platform_owner'`. No change for any other role.
 
-## Risk & impact
-- **Data**: none — no schema/data writes added beyond the existing `menu_overrides` + `menu_override_audit` pipeline.
-- **Workflow / KPI / scoring / auth**: none.
-- **UI**: new toolbar row above tree; new Table view behind a toggle; new dialog. Defaults render the existing tree, so users opening the page see the same layout plus the new controls.
-- **Regression**: low — all new code is additive; existing handlers (`applyMove`, `setLabelDraft`, `deleteCustomMenuItem`, `CreateShortcutDialog`) are reused unchanged.
-- **Rollback**: revert four files (`MenuSettingTab.tsx`, `MenuTreeDnd.tsx`, new `MenuTable.tsx`, new `MoveToDialog.tsx`).
+### Step 6 — Feature flag + master switch
+- Add `hub_platform_settings_enabled` to `system_settings` (default `"false"`). When OFF: route returns 404, hub card hidden, resolver hook returns all-true, observe logger no-ops.
+- Document toggle in `DOCUMENTATION.md` + add row to `mem/features/admin/hub-platform-foundation`.
 
-## Test plan
-- Unit: `validateMove` already covered; add a case for `custom_menu_level` round-trip in `applyOverrides.test.ts`.
-- Manual:
-  1. Toggle L2/L3/L4 filters — only matching depths render, ancestors stay visible.
-  2. Expand all / Collapse all toggles every node.
-  3. Switch to Table view → search, sort, paginate, Move, Rename, Delete.
-  4. Move dialog: move a movable L4 item to L2 under a different parent → Save → verify sidebar after reload.
-  5. Try to move a Protected item → blocked with shortcut suggestion.
-  6. Create shortcut for "System Settings > Menu Setting" under "Main > Dashboards" → both appear, original unchanged.
-  7. Delete a custom tab with no children → succeeds; with children → blocked.
+### Step 7 — Pagination & lean-load compliance
+- All Platform Settings tables: server-side pagination (page size 50), search via ILIKE on key/label, sortable columns. Follows existing `mem/architecture/performance/lean-load-policy`.
 
-## Files
-- Edit: `src/components/admin/MenuSettingTab.tsx`, `src/components/admin/MenuTreeDnd.tsx`, `src/components/admin/MoveUnderDialog.tsx` (label tweak only).
-- Add: `src/components/admin/MenuTable.tsx`, `src/components/admin/MoveToDialog.tsx`.
-- Extend test: `src/lib/menu/applyOverrides.test.ts`.
+### Step 8 — Tests
+- `src/test/platformFoundation.test.ts`:
+  - `platform_owner` role added to enum and `ALL_APP_ROLES`
+  - Existing 7 roles unchanged (snapshot test)
+  - Entitlement resolver: flag OFF → all true
+  - Entitlement resolver: missing key → deny (when flag ON)
+  - Observe-mode `would_deny` writes audit row, never throws
+  - PMS module seeded entitled
+  - PMS action seeds present (assert each high-risk key)
+- Existing test suites must pass unchanged (regression gate).
 
-## Docs
-Append one line each to `DOCUMENTATION.md` (Menu Setting section) and `POLICY.md` (`§menu-governance`): "Protected items can be reordered among siblings only; cross-parent or cross-level moves require Create shortcut. Level-filter + Move dialog are presentational and write only `custom_parent_key`, `custom_menu_level`, `custom_sort_order`, `custom_module_key`."
+### Step 9 — Documentation
+- `docs/adr/ADR-072.md` — Hub platform foundation architecture decision.
+- `DOCUMENTATION.md` — new "Hub Platform Layer" section.
+- `POLICY.md` — entitlement layering, observe-mode contract, super-admin boundary, on-prem deferral note.
+- `mem://features/platform/hub-foundation` — capture invariants (multi-tenant client_id NULL, observe-only, flag-gated, action_key immutable, no enforcement yet).
+
+## UI Changes
+| Where | What | Visible to |
+|---|---|---|
+| Module Hub | New "Platform Settings" card (only when flag ON) | `platform_owner` only |
+| `/platform-settings` | New page with 6 read-only tabs | `platform_owner` only |
+| Everywhere else | No change | All users |
+
+Responsive: tabs collapse to dropdown <md; tables horizontally scrollable; follows existing `responsive-ui-strategy`.
+
+## Rollback Strategy
+- All changes additive. Rollback = set `hub_platform_settings_enabled = "false"` (instant) and revoke the platform_owner role row.
+- Migration is non-destructive (new tables, new enum value — no drops, no renames). Reversible by `DROP TABLE` on new tables + leaving the enum value (Postgres cannot drop enum values safely — accepted residual).
+
+## Acceptance Criteria
+- All existing PMS tests pass.
+- Existing PMS user (admin) sees zero UI change.
+- With flag OFF, `/platform-settings` returns 404 and Hub card is hidden.
+- With flag ON + platform_owner role, the 6 read-only tabs render seeded data.
+- `useEntitlement` returns true for every action with flag OFF.
+- `CanAction` in observe mode never hides children and logs `would_deny` events when applicable.
+- New tables have RLS + GRANTs and appear in backup coverage automatically.
+- No new hardcoded business values — every seed row lives in the DB.
+
+## Out of scope confirmation (for the user)
+This plan deliberately does **not** touch: workflow engine, KPI scoring, final score rules, menu_access enforcement, dashboard logic, report builder, AI features, integrations, on-prem signing, HRMS/LMS/Safety registration. Those are later phases and will each get their own plan + observe→enforce gate.

@@ -9,6 +9,7 @@ import { ThemeProvider } from "./components/ThemeProvider";
 import { DashboardLayout } from "./components/layout/DashboardLayout";
 import { ProtectedRoute } from "./components/layout/ProtectedRoute";
 import { DataOwnerRoute } from "./components/layout/DataOwnerRoute";
+import { PlatformOwnerRoute } from "./components/layout/PlatformOwnerRoute";
 import { ErrorBoundary } from "./components/ui/ErrorBoundary";
 import { Loader2 } from 'lucide-react';
 
@@ -63,6 +64,7 @@ const KpiStandardization = lazy(() => import("./pages/admin/KpiStandardization")
 const RegistryBrowser = lazy(() => import("./pages/RegistryBrowser"));
 const BulkReviewDashboard = lazy(() => import("./pages/review/BulkReviewDashboard"));
 const CustomMenuPage = lazy(() => import("./pages/CustomMenuPage"));
+const PlatformSettings = lazy(() => import("./pages/platform/PlatformSettings"));
 
 // Safety module shell + pages
 const SafetyLayout = lazy(() =>
@@ -164,6 +166,14 @@ const App = () => (
               <Route path="/reset-password" element={<Suspense fallback={<PageFallback />}><ResetPassword /></Suspense>} />
               <Route path="/home" element={<Suspense fallback={<PageFallback />}><ModuleHub /></Suspense>} />
               <Route path="/" element={<Navigate to="/home" replace />} />
+              <Route
+                path="/platform-settings"
+                element={
+                  <PlatformOwnerRoute>
+                    <Suspense fallback={<PageFallback />}><PlatformSettings /></Suspense>
+                  </PlatformOwnerRoute>
+                }
+              />
               {/* Safety module — fully decoupled shell. Sibling of /home so PMS chrome never renders here. */}
               <Route
                 path="/safety"

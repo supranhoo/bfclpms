@@ -1,13 +1,16 @@
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useModules } from '@/hooks/useModules';
+import { useEntitlement } from '@/hooks/useEntitlement';
 import { MinimalHeader } from '@/components/layout/MinimalHeader';
 import { ModuleCard } from '@/components/modules/ModuleCard';
 import { Loader2 } from 'lucide-react';
 
 export default function ModuleHub() {
-  const { user, profile, loading: authLoading } = useAuth();
+  const { user, profile, role, loading: authLoading } = useAuth();
   const { data: modules, isLoading: modulesLoading } = useModules();
+  const { hubEnabled } = useEntitlement();
+  const showPlatformCard = hubEnabled && role === 'platform_owner';
 
   if (authLoading || modulesLoading) {
     return (
@@ -72,6 +75,16 @@ export default function ModuleHub() {
               route="/lms"
               isComingSoon
             />
+            {showPlatformCard && (
+              <ModuleCard
+                code="platform"
+                name="Platform Settings"
+                description="Hub-level configuration: clients, modules, entitlements, registries, audit"
+                icon="Settings"
+                color="primary"
+                route="/platform-settings"
+              />
+            )}
           </div>
         </div>
       </main>

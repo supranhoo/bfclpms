@@ -186,6 +186,50 @@ export type Database = {
         }
         Relationships: []
       }
+      action_registry: {
+        Row: {
+          action_key: string
+          client_id: string | null
+          created_at: string
+          description: string | null
+          is_system: boolean
+          label: string
+          module_key: string
+          risk_level: string
+          updated_at: string
+        }
+        Insert: {
+          action_key: string
+          client_id?: string | null
+          created_at?: string
+          description?: string | null
+          is_system?: boolean
+          label: string
+          module_key: string
+          risk_level?: string
+          updated_at?: string
+        }
+        Update: {
+          action_key?: string
+          client_id?: string | null
+          created_at?: string
+          description?: string | null
+          is_system?: boolean
+          label?: string
+          module_key?: string
+          risk_level?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "action_registry_module_key_fkey"
+            columns: ["module_key"]
+            isOneToOne: false
+            referencedRelation: "module_registry"
+            referencedColumns: ["module_key"]
+          },
+        ]
+      }
       admin_feature_flags: {
         Row: {
           created_at: string
@@ -218,6 +262,38 @@ export type Database = {
           value?: Json
         }
         Relationships: []
+      }
+      ai_feature_registry: {
+        Row: {
+          client_id: string | null
+          created_at: string
+          feature_key: string
+          label: string
+          module_key: string
+        }
+        Insert: {
+          client_id?: string | null
+          created_at?: string
+          feature_key: string
+          label: string
+          module_key: string
+        }
+        Update: {
+          client_id?: string | null
+          created_at?: string
+          feature_key?: string
+          label?: string
+          module_key?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_feature_registry_module_key_fkey"
+            columns: ["module_key"]
+            isOneToOne: false
+            referencedRelation: "module_registry"
+            referencedColumns: ["module_key"]
+          },
+        ]
       }
       annual_score_config_audit: {
         Row: {
@@ -780,6 +856,188 @@ export type Database = {
           },
         ]
       }
+      capability_registry: {
+        Row: {
+          capability_key: string
+          client_id: string | null
+          created_at: string
+          description: string | null
+          label: string
+          module_key: string
+        }
+        Insert: {
+          capability_key: string
+          client_id?: string | null
+          created_at?: string
+          description?: string | null
+          label: string
+          module_key: string
+        }
+        Update: {
+          capability_key?: string
+          client_id?: string | null
+          created_at?: string
+          description?: string | null
+          label?: string
+          module_key?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "capability_registry_module_key_fkey"
+            columns: ["module_key"]
+            isOneToOne: false
+            referencedRelation: "module_registry"
+            referencedColumns: ["module_key"]
+          },
+        ]
+      }
+      client_action_entitlements: {
+        Row: {
+          action_key: string
+          client_id: string
+          created_at: string
+          granted_by: string | null
+          id: string
+          is_enabled: boolean
+          updated_at: string
+          valid_from: string | null
+          valid_until: string | null
+        }
+        Insert: {
+          action_key: string
+          client_id: string
+          created_at?: string
+          granted_by?: string | null
+          id?: string
+          is_enabled?: boolean
+          updated_at?: string
+          valid_from?: string | null
+          valid_until?: string | null
+        }
+        Update: {
+          action_key?: string
+          client_id?: string
+          created_at?: string
+          granted_by?: string | null
+          id?: string
+          is_enabled?: boolean
+          updated_at?: string
+          valid_from?: string | null
+          valid_until?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_action_entitlements_action_key_fkey"
+            columns: ["action_key"]
+            isOneToOne: false
+            referencedRelation: "action_registry"
+            referencedColumns: ["action_key"]
+          },
+          {
+            foreignKeyName: "client_action_entitlements_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      client_module_entitlements: {
+        Row: {
+          client_id: string
+          created_at: string
+          granted_by: string | null
+          id: string
+          is_enabled: boolean
+          module_key: string
+          updated_at: string
+          valid_from: string | null
+          valid_until: string | null
+        }
+        Insert: {
+          client_id: string
+          created_at?: string
+          granted_by?: string | null
+          id?: string
+          is_enabled?: boolean
+          module_key: string
+          updated_at?: string
+          valid_from?: string | null
+          valid_until?: string | null
+        }
+        Update: {
+          client_id?: string
+          created_at?: string
+          granted_by?: string | null
+          id?: string
+          is_enabled?: boolean
+          module_key?: string
+          updated_at?: string
+          valid_from?: string | null
+          valid_until?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_module_entitlements_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_module_entitlements_module_key_fkey"
+            columns: ["module_key"]
+            isOneToOne: false
+            referencedRelation: "module_registry"
+            referencedColumns: ["module_key"]
+          },
+        ]
+      }
+      clients: {
+        Row: {
+          client_key: string
+          created_at: string
+          deployment_mode: string
+          display_name: string
+          entitlement_source: string
+          entitlement_version: string | null
+          id: string
+          is_active: boolean
+          signature_hash: string | null
+          updated_at: string
+          valid_from: string | null
+          valid_until: string | null
+        }
+        Insert: {
+          client_key: string
+          created_at?: string
+          deployment_mode?: string
+          display_name: string
+          entitlement_source?: string
+          entitlement_version?: string | null
+          id?: string
+          is_active?: boolean
+          signature_hash?: string | null
+          updated_at?: string
+          valid_from?: string | null
+          valid_until?: string | null
+        }
+        Update: {
+          client_key?: string
+          created_at?: string
+          deployment_mode?: string
+          display_name?: string
+          entitlement_source?: string
+          entitlement_version?: string | null
+          id?: string
+          is_active?: boolean
+          signature_hash?: string | null
+          updated_at?: string
+          valid_from?: string | null
+          valid_until?: string | null
+        }
+        Relationships: []
+      }
       companies: {
         Row: {
           code: string | null
@@ -984,6 +1242,38 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
+          },
+        ]
+      }
+      dashboard_registry: {
+        Row: {
+          client_id: string | null
+          created_at: string
+          dashboard_key: string
+          label: string
+          module_key: string
+        }
+        Insert: {
+          client_id?: string | null
+          created_at?: string
+          dashboard_key: string
+          label: string
+          module_key: string
+        }
+        Update: {
+          client_id?: string | null
+          created_at?: string
+          dashboard_key?: string
+          label?: string
+          module_key?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "dashboard_registry_module_key_fkey"
+            columns: ["module_key"]
+            isOneToOne: false
+            referencedRelation: "module_registry"
+            referencedColumns: ["module_key"]
           },
         ]
       }
@@ -1699,6 +1989,45 @@ export type Database = {
           name?: string
           sort_order?: number
           updated_at?: string
+        }
+        Relationships: []
+      }
+      entitlement_audit: {
+        Row: {
+          actor_id: string | null
+          after: Json | null
+          before: Json | null
+          client_id: string | null
+          created_at: string
+          entity_key: string
+          entity_type: string
+          event_type: string
+          id: string
+          reason: string | null
+        }
+        Insert: {
+          actor_id?: string | null
+          after?: Json | null
+          before?: Json | null
+          client_id?: string | null
+          created_at?: string
+          entity_key: string
+          entity_type: string
+          event_type: string
+          id?: string
+          reason?: string | null
+        }
+        Update: {
+          actor_id?: string | null
+          after?: Json | null
+          before?: Json | null
+          client_id?: string | null
+          created_at?: string
+          entity_key?: string
+          entity_type?: string
+          event_type?: string
+          id?: string
+          reason?: string | null
         }
         Relationships: []
       }
@@ -3425,6 +3754,38 @@ export type Database = {
         }
         Relationships: []
       }
+      integration_connector_registry: {
+        Row: {
+          client_id: string | null
+          connector_key: string
+          created_at: string
+          label: string
+          module_key: string
+        }
+        Insert: {
+          client_id?: string | null
+          connector_key: string
+          created_at?: string
+          label: string
+          module_key: string
+        }
+        Update: {
+          client_id?: string | null
+          connector_key?: string
+          created_at?: string
+          label?: string
+          module_key?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "integration_connector_registry_module_key_fkey"
+            columns: ["module_key"]
+            isOneToOne: false
+            referencedRelation: "module_registry"
+            referencedColumns: ["module_key"]
+          },
+        ]
+      }
       kpi_audit_logs: {
         Row: {
           action: string
@@ -4757,6 +5118,54 @@ export type Database = {
           },
         ]
       }
+      module_registry: {
+        Row: {
+          client_id: string | null
+          created_at: string
+          description: string | null
+          entitlement_source: string
+          entitlement_version: string | null
+          is_system: boolean
+          label: string
+          module_key: string
+          signature_hash: string | null
+          sort_order: number
+          updated_at: string
+          valid_from: string | null
+          valid_until: string | null
+        }
+        Insert: {
+          client_id?: string | null
+          created_at?: string
+          description?: string | null
+          entitlement_source?: string
+          entitlement_version?: string | null
+          is_system?: boolean
+          label: string
+          module_key: string
+          signature_hash?: string | null
+          sort_order?: number
+          updated_at?: string
+          valid_from?: string | null
+          valid_until?: string | null
+        }
+        Update: {
+          client_id?: string | null
+          created_at?: string
+          description?: string | null
+          entitlement_source?: string
+          entitlement_version?: string | null
+          is_system?: boolean
+          label?: string
+          module_key?: string
+          signature_hash?: string | null
+          sort_order?: number
+          updated_at?: string
+          valid_from?: string | null
+          valid_until?: string | null
+        }
+        Relationships: []
+      }
       modules: {
         Row: {
           code: string
@@ -4795,6 +5204,38 @@ export type Database = {
           route?: string
         }
         Relationships: []
+      }
+      notification_event_registry: {
+        Row: {
+          client_id: string | null
+          created_at: string
+          event_key: string
+          label: string
+          module_key: string
+        }
+        Insert: {
+          client_id?: string | null
+          created_at?: string
+          event_key: string
+          label: string
+          module_key: string
+        }
+        Update: {
+          client_id?: string | null
+          created_at?: string
+          event_key?: string
+          label?: string
+          module_key?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notification_event_registry_module_key_fkey"
+            columns: ["module_key"]
+            isOneToOne: false
+            referencedRelation: "module_registry"
+            referencedColumns: ["module_key"]
+          },
+        ]
       }
       notifications: {
         Row: {
@@ -6535,6 +6976,38 @@ export type Database = {
           sort_order?: number
         }
         Relationships: []
+      }
+      report_registry_v2: {
+        Row: {
+          client_id: string | null
+          created_at: string
+          label: string
+          module_key: string
+          report_key: string
+        }
+        Insert: {
+          client_id?: string | null
+          created_at?: string
+          label: string
+          module_key: string
+          report_key: string
+        }
+        Update: {
+          client_id?: string | null
+          created_at?: string
+          label?: string
+          module_key?: string
+          report_key?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "report_registry_v2_module_key_fkey"
+            columns: ["module_key"]
+            isOneToOne: false
+            referencedRelation: "module_registry"
+            referencedColumns: ["module_key"]
+          },
+        ]
       }
       review_action_notes: {
         Row: {
@@ -11223,6 +11696,7 @@ export type Database = {
         | "management"
         | "hr_pms"
         | "skip_level"
+        | "platform_owner"
       config_status: "draft" | "active" | "archived"
       confirmation_increment_treatment:
         | "ignore"
@@ -11481,6 +11955,7 @@ export const Constants = {
         "management",
         "hr_pms",
         "skip_level",
+        "platform_owner",
       ],
       config_status: ["draft", "active", "archived"],
       confirmation_increment_treatment: [

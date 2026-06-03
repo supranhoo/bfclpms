@@ -192,6 +192,7 @@ const roleColors: Record<AppRole, string> = {
   management: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200',
   hr_pms: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200',
   skip_level: 'bg-teal-100 text-teal-800 dark:bg-teal-900 dark:text-teal-200',
+  platform_owner: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200',
 };
 
 const ROLE_LABELS: Record<AppRole, string> = {
@@ -202,6 +203,7 @@ const ROLE_LABELS: Record<AppRole, string> = {
   management: 'Management',
   hr_pms: 'HR PMS',
   skip_level: 'Skip Level',
+  platform_owner: 'Platform Owner',
 };
 
 const ITEMS_PER_PAGE = 10;
