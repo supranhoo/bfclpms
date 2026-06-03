@@ -19,6 +19,7 @@ export const ALL_APP_ROLES = [
   'management',
   'hr_pms',
   'skip_level',
+  'platform_owner',
 ] as const;
 
 export type AppRole = typeof ALL_APP_ROLES[number];
