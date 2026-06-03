@@ -734,7 +734,7 @@ function TelemetryTab() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('entitlement_audit')
-        .select('id, created_at, actor_id, entity_key, client_id')
+        .select('id, created_at, actor_id, entity_key, client_id, after')
         .eq('event_type', 'would_deny')
         .gte('created_at', last30.toISOString())
         .order('created_at', { ascending: false })
@@ -765,7 +765,7 @@ function TelemetryTab() {
     queryFn: async () => {
       let q = supabase
         .from('entitlement_audit')
-        .select('id, created_at, actor_id, entity_key, client_id, reason', { count: 'exact' })
+        .select('id, created_at, actor_id, entity_key, client_id, reason, after', { count: 'exact' })
         .eq('event_type', 'would_deny')
         .order('created_at', { ascending: false });
       if (from) q = q.gte('created_at', new Date(from).toISOString());
