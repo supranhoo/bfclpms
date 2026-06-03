@@ -20,6 +20,7 @@ import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Loader2, UserPlus, Trash2, Mail, KeyRound, ShieldCheck, History, Inbox, Search, ExternalLink, AlertTriangle } from 'lucide-react';
 import { useIacAssignments, useIacRoles, useGrantRole, useRevokeAssignment } from '@/hooks/useIac';
+import { CanAction } from '@/components/platform/CanAction';
 
 export interface UserAccessSheetUser {
   id: string;
@@ -231,13 +232,15 @@ function RolesPanel({ user }: { user: UserAccessSheetUser }) {
           <span className="text-xs text-muted-foreground">
             {selected.size} selected
           </span>
-          <Button onClick={handleGrantAll} disabled={selected.size === 0 || granting} size="sm">
-            {granting ? (
-              <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Granting…</>
-            ) : (
-              <><UserPlus className="h-4 w-4 mr-2" />Grant {selected.size || ''}</>
-            )}
-          </Button>
+          <CanAction actionKey="pms.users.manage_access">
+            <Button onClick={handleGrantAll} disabled={selected.size === 0 || granting} size="sm">
+              {granting ? (
+                <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Granting…</>
+              ) : (
+                <><UserPlus className="h-4 w-4 mr-2" />Grant {selected.size || ''}</>
+              )}
+            </Button>
+          </CanAction>
         </div>
         <p className="text-[11px] text-muted-foreground mt-2 flex items-center gap-1">
           Need to assign roles to many users at once?{' '}
@@ -374,16 +377,18 @@ function PasswordPanel({ user }: { user: UserAccessSheetUser }) {
       </section>
 
       <section className="space-y-2">
-        <Button
-          className="w-full"
-          onClick={() => run(true)}
-          disabled={busy !== null || !hasRealEmail}
-          title={!hasRealEmail ? 'No real email — use "Generate without email" instead' : undefined}
-        >
-          {busy === 'email'
-            ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Generating & emailing…</>
-            : <><Mail className="h-4 w-4 mr-2" />Generate & email password</>}
-        </Button>
+        <CanAction actionKey="pms.users.password_rollout">
+          <Button
+            className="w-full"
+            onClick={() => run(true)}
+            disabled={busy !== null || !hasRealEmail}
+            title={!hasRealEmail ? 'No real email — use "Generate without email" instead' : undefined}
+          >
+            {busy === 'email'
+              ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Generating & emailing…</>
+              : <><Mail className="h-4 w-4 mr-2" />Generate & email password</>}
+          </Button>
+        </CanAction>
         <Button
           variant="outline"
           className="w-full"
