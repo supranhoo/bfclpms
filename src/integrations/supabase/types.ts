@@ -6544,6 +6544,63 @@ export type Database = {
           },
         ]
       }
+      privacy_consent_settings: {
+        Row: {
+          consent_key: string
+          consent_label: string
+          created_at: string
+          created_by: string | null
+          data_categories: string | null
+          default_state: string
+          dsar_contact_email: string | null
+          id: string
+          is_active: boolean
+          lawful_basis: string
+          module_key: string
+          notes: string | null
+          policy_url: string | null
+          purpose: string
+          required: boolean
+          updated_at: string
+        }
+        Insert: {
+          consent_key: string
+          consent_label: string
+          created_at?: string
+          created_by?: string | null
+          data_categories?: string | null
+          default_state?: string
+          dsar_contact_email?: string | null
+          id?: string
+          is_active?: boolean
+          lawful_basis?: string
+          module_key: string
+          notes?: string | null
+          policy_url?: string | null
+          purpose: string
+          required?: boolean
+          updated_at?: string
+        }
+        Update: {
+          consent_key?: string
+          consent_label?: string
+          created_at?: string
+          created_by?: string | null
+          data_categories?: string | null
+          default_state?: string
+          dsar_contact_email?: string | null
+          id?: string
+          is_active?: boolean
+          lawful_basis?: string
+          module_key?: string
+          notes?: string | null
+          policy_url?: string | null
+          purpose?: string
+          required?: boolean
+          updated_at?: string
+        }
+        Relationships: []
+      }
       production_daily_entries: {
         Row: {
           created_at: string | null

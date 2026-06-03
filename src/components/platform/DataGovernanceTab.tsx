@@ -32,7 +32,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Pencil, ShieldAlert, Info, Plus, FileLock2, Download, ClipboardList, Archive } from 'lucide-react';
+import { Pencil, ShieldAlert, Info, Plus, FileLock2, Download, ClipboardList, Archive, ShieldCheck } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -72,13 +72,16 @@ export function DataGovernanceTab() {
           <TabsTrigger value="retention-policy">
             <Archive className="h-4 w-4 mr-1" /> Retention Policy
           </TabsTrigger>
-          {/* 3A.6 tab will be added in a subsequent micro-phase. */}
+          <TabsTrigger value="privacy-consent">
+            <ShieldCheck className="h-4 w-4 mr-1" /> Privacy &amp; Consent
+          </TabsTrigger>
         </TabsList>
         <TabsContent value="classifications"><ClassificationsSubTab /></TabsContent>
         <TabsContent value="sensitive-fields"><SensitiveFieldsSubTab /></TabsContent>
         <TabsContent value="export-policies"><ExportPoliciesSubTab /></TabsContent>
         <TabsContent value="audit-policy"><AuditPolicySubTab /></TabsContent>
         <TabsContent value="retention-policy"><RetentionPolicySubTab /></TabsContent>
+        <TabsContent value="privacy-consent"><PrivacyConsentSubTab /></TabsContent>
       </Tabs>
     </div>
   );
@@ -304,6 +307,428 @@ function ClassificationsSubTab() {
               disabled={!valid || !dirty || !canWrite || mut.isPending}
             >
               {mut.isPending ? 'Saving…' : 'Save'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
+/* ────────────────────────── 3A.6: Privacy / Consent ────────────────────── */
+
+type PrivacyConsent = {
+  id: string;
+  module_key: string;
+  consent_key: string;
+  consent_label: string;
+  purpose: string;
+  data_categories: string | null;
+  lawful_basis: 'consent' | 'contract' | 'legitimate_interest' | 'legal_obligation' | 'vital_interest' | 'public_task';
+  required: boolean;
+  default_state: 'opt_in' | 'opt_out';
+  dsar_contact_email: string | null;
+  policy_url: string | null;
+  notes: string | null;
+  is_active: boolean;
+};
+type PrivacyConsentDraft = Omit<PrivacyConsent, 'id'> & { id?: string };
+
+const PC_MODULES = ['platform', 'pms', 'hrms', 'lms', 'safety', 'incentive'] as const;
+const PC_BASES = ['consent', 'contract', 'legitimate_interest', 'legal_obligation', 'vital_interest', 'public_task'] as const;
+const PC_DEFAULTS = ['opt_in', 'opt_out'] as const;
+const PC_KEY_MAX = 100;
+const PC_LABEL_MAX = 120;
+const PC_PURPOSE_MAX = 500;
+const PC_NOTES_MAX = 500;
+
+function emptyPc(): PrivacyConsentDraft {
+  return {
+    module_key: 'platform',
+    consent_key: '',
+    consent_label: '',
+    purpose: '',
+    data_categories: '',
+    lawful_basis: 'consent',
+    required: false,
+    default_state: 'opt_out',
+    dsar_contact_email: '',
+    policy_url: '',
+    notes: '',
+    is_active: true,
+  };
+}
+
+function pickPcAuditable(p: PrivacyConsentDraft) {
+  return {
+    module_key: p.module_key,
+    consent_key: p.consent_key,
+    consent_label: p.consent_label,
+    purpose: p.purpose,
+    data_categories: p.data_categories,
+    lawful_basis: p.lawful_basis,
+    required: p.required,
+    default_state: p.default_state,
+    dsar_contact_email: p.dsar_contact_email,
+    policy_url: p.policy_url,
+    notes: p.notes,
+    is_active: p.is_active,
+  };
+}
+
+function PrivacyConsentSubTab() {
+  const qc = useQueryClient();
+  const { user, hasRole } = useAuth();
+  const canWrite = hasRole('platform_owner');
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['platform-settings', 'data-governance', 'privacy-consent'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('privacy_consent_settings')
+        .select('*')
+        .order('module_key', { ascending: true })
+        .order('consent_key', { ascending: true });
+      if (error) throw error;
+      return (data ?? []) as PrivacyConsent[];
+    },
+  });
+
+  const [filterModule, setFilterModule] = useState<string>('all');
+  const [showInactive, setShowInactive] = useState(false);
+
+  const [editing, setEditing] = useState<PrivacyConsent | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [form, setForm] = useState<PrivacyConsentDraft | null>(null);
+
+  useEffect(() => {
+    if (creating) setForm(emptyPc());
+    else if (editing) setForm({ ...editing });
+    else setForm(null);
+  }, [editing, creating]);
+
+  const mut = useMutation({
+    mutationFn: async () => {
+      if (!form) return;
+      if (creating) {
+        const payload = pickPcAuditable(form);
+        const { error } = await supabase
+          .from('privacy_consent_settings')
+          .insert({ ...payload, created_by: user?.id ?? null });
+        if (error) throw error;
+        const { error: audErr } = await supabase.from('entitlement_audit').insert({
+          actor_id: user?.id ?? null,
+          event_type: 'create',
+          entity_type: 'privacy_consent_setting',
+          entity_key: form.consent_key,
+          before: null,
+          after: payload,
+          reason: 'platform_settings_privacy_consent_create',
+        });
+        if (audErr) throw audErr;
+        return;
+      }
+      if (!editing) return;
+      const before = pickPcAuditable(editing);
+      const after = pickPcAuditable(form);
+      const { error } = await supabase
+        .from('privacy_consent_settings')
+        .update({
+          consent_label: form.consent_label,
+          purpose: form.purpose,
+          data_categories: form.data_categories,
+          lawful_basis: form.lawful_basis,
+          required: form.required,
+          default_state: form.default_state,
+          dsar_contact_email: form.dsar_contact_email,
+          policy_url: form.policy_url,
+          notes: form.notes,
+          is_active: form.is_active,
+        })
+        .eq('id', editing.id);
+      if (error) throw error;
+      const { error: audErr } = await supabase.from('entitlement_audit').insert({
+        actor_id: user?.id ?? null,
+        event_type: 'update',
+        entity_type: 'privacy_consent_setting',
+        entity_key: editing.consent_key,
+        before,
+        after,
+        reason: 'platform_settings_privacy_consent_update',
+      });
+      if (audErr) throw audErr;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['platform-settings', 'data-governance', 'privacy-consent'] });
+      toast.success(creating ? 'Consent setting added' : 'Consent setting updated');
+      setEditing(null);
+      setCreating(false);
+    },
+    onError: (e: Error) => toast.error(`Save failed: ${e.message}`),
+  });
+
+  if (isLoading) return <LoadingRows />;
+
+  const isEditMode = !!editing && !creating;
+  const keyLen = (form?.consent_key ?? '').length;
+  const labelLen = (form?.consent_label ?? '').length;
+  const purposeLen = (form?.purpose ?? '').length;
+  const notesLen = (form?.notes ?? '').length;
+
+  const valid =
+    !!form &&
+    !!form.module_key &&
+    !!form.consent_key.trim() &&
+    !!form.consent_label.trim() &&
+    !!form.purpose.trim() &&
+    keyLen <= PC_KEY_MAX &&
+    labelLen <= PC_LABEL_MAX &&
+    purposeLen <= PC_PURPOSE_MAX &&
+    notesLen <= PC_NOTES_MAX;
+
+  const dirty = creating
+    ? true
+    : !!editing && !!form && JSON.stringify(pickPcAuditable(editing)) !== JSON.stringify(pickPcAuditable(form));
+
+  const filtered = (data ?? []).filter((p) => {
+    if (filterModule !== 'all' && p.module_key !== filterModule) return false;
+    if (!showInactive && !p.is_active) return false;
+    return true;
+  });
+
+  return (
+    <>
+      <div className="flex flex-wrap items-end gap-3 pb-3">
+        <div className="space-y-1">
+          <Label className="text-xs text-muted-foreground">Module</Label>
+          <Select value={filterModule} onValueChange={setFilterModule}>
+            <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All modules</SelectItem>
+              {PC_MODULES.map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="flex items-center gap-2 pb-2">
+          <Switch checked={showInactive} onCheckedChange={setShowInactive} id="pc-show-inactive" />
+          <Label htmlFor="pc-show-inactive" className="text-sm cursor-pointer">Show inactive</Label>
+        </div>
+        <div className="ml-auto">
+          <Button
+            onClick={() => setCreating(true)}
+            disabled={!canWrite}
+            title={canWrite ? 'Add consent setting' : 'platform_owner only'}
+          >
+            <Plus className="h-4 w-4 mr-1" /> Add Consent
+          </Button>
+        </div>
+      </div>
+
+      <div className="overflow-x-auto rounded-md border">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Module</TableHead>
+              <TableHead>Consent</TableHead>
+              <TableHead>Lawful Basis</TableHead>
+              <TableHead>Default</TableHead>
+              <TableHead className="text-center">Required</TableHead>
+              <TableHead className="text-center">Active</TableHead>
+              <TableHead className="w-16 text-right">Edit</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {filtered.length === 0 ? (
+              <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground py-6">No consent settings</TableCell></TableRow>
+            ) : filtered.map((p) => (
+              <TableRow key={p.id}>
+                <TableCell className="font-mono text-xs">{p.module_key}</TableCell>
+                <TableCell>
+                  <div className="font-medium">{p.consent_label}</div>
+                  <div className="font-mono text-xs text-muted-foreground">{p.consent_key}</div>
+                </TableCell>
+                <TableCell><Badge variant="outline" className="text-xs">{p.lawful_basis}</Badge></TableCell>
+                <TableCell><Badge variant="secondary" className="text-xs">{p.default_state}</Badge></TableCell>
+                <TableCell className="text-center">{boolDash(p.required)}</TableCell>
+                <TableCell className="text-center">{p.is_active ? '✓' : '—'}</TableCell>
+                <TableCell className="text-right">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setEditing(p)}
+                    disabled={!canWrite}
+                    aria-label={`Edit ${p.consent_key}`}
+                    title={canWrite ? 'Edit consent setting' : 'platform_owner only'}
+                  >
+                    <Pencil className="h-4 w-4" />
+                  </Button>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+
+      <Dialog
+        open={editing !== null || creating}
+        onOpenChange={(o) => { if (!o && !mut.isPending) { setEditing(null); setCreating(false); } }}
+      >
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{creating ? 'Add consent setting' : 'Edit consent setting'}</DialogTitle>
+            <DialogDescription>
+              Registry only. Saved values are recorded with an audit row but no consent banner,
+              cookie blocker, or marketing opt-out is enforced yet.
+            </DialogDescription>
+          </DialogHeader>
+          {form && (
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label htmlFor="pc-module">Module</Label>
+                  <Select
+                    value={form.module_key}
+                    onValueChange={(v) => setForm({ ...form, module_key: v })}
+                    disabled={isEditMode}
+                  >
+                    <SelectTrigger id="pc-module"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {PC_MODULES.map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="pc-key">Consent key</Label>
+                  <Input
+                    id="pc-key"
+                    value={form.consent_key}
+                    maxLength={PC_KEY_MAX}
+                    disabled={isEditMode}
+                    placeholder="e.g. platform.cookies.analytics"
+                    onChange={(e) => setForm({ ...form, consent_key: e.target.value })}
+                  />
+                  <p className="text-xs text-muted-foreground">{keyLen}/{PC_KEY_MAX}</p>
+                </div>
+              </div>
+              {isEditMode && (
+                <p className="text-xs text-muted-foreground">
+                  Module and consent key are immutable after creation.
+                </p>
+              )}
+
+              <div className="space-y-1">
+                <Label htmlFor="pc-label">Label</Label>
+                <Input
+                  id="pc-label"
+                  value={form.consent_label}
+                  maxLength={PC_LABEL_MAX}
+                  onChange={(e) => setForm({ ...form, consent_label: e.target.value })}
+                />
+                <p className="text-xs text-muted-foreground">{labelLen}/{PC_LABEL_MAX}</p>
+              </div>
+
+              <div className="space-y-1">
+                <Label htmlFor="pc-purpose">Purpose</Label>
+                <Textarea
+                  id="pc-purpose"
+                  value={form.purpose}
+                  maxLength={PC_PURPOSE_MAX}
+                  rows={2}
+                  onChange={(e) => setForm({ ...form, purpose: e.target.value })}
+                />
+                <p className="text-xs text-muted-foreground">{purposeLen}/{PC_PURPOSE_MAX}</p>
+              </div>
+
+              <div className="space-y-1">
+                <Label htmlFor="pc-cats">Data categories</Label>
+                <Input
+                  id="pc-cats"
+                  value={form.data_categories ?? ''}
+                  placeholder="e.g. email, device_id, ip"
+                  onChange={(e) => setForm({ ...form, data_categories: e.target.value })}
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label htmlFor="pc-basis">Lawful basis</Label>
+                  <Select
+                    value={form.lawful_basis}
+                    onValueChange={(v) => setForm({ ...form, lawful_basis: v as PrivacyConsent['lawful_basis'] })}
+                  >
+                    <SelectTrigger id="pc-basis"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {PC_BASES.map((b) => <SelectItem key={b} value={b}>{b}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="pc-default">Default state</Label>
+                  <Select
+                    value={form.default_state}
+                    onValueChange={(v) => setForm({ ...form, default_state: v as PrivacyConsent['default_state'] })}
+                  >
+                    <SelectTrigger id="pc-default"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {PC_DEFAULTS.map((d) => <SelectItem key={d} value={d}>{d}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label htmlFor="pc-dsar">DSAR contact email</Label>
+                  <Input
+                    id="pc-dsar"
+                    type="email"
+                    value={form.dsar_contact_email ?? ''}
+                    placeholder="privacy@example.com"
+                    onChange={(e) => setForm({ ...form, dsar_contact_email: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="pc-url">Policy URL</Label>
+                  <Input
+                    id="pc-url"
+                    value={form.policy_url ?? ''}
+                    placeholder="https://…"
+                    onChange={(e) => setForm({ ...form, policy_url: e.target.value })}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <SwitchRow label="Required (no opt-out)" checked={form.required}  onChange={(v) => setForm({ ...form, required: v })} />
+                <SwitchRow label="Active"                checked={form.is_active} onChange={(v) => setForm({ ...form, is_active: v })} />
+              </div>
+
+              <div className="space-y-1">
+                <Label htmlFor="pc-notes">Notes</Label>
+                <Textarea
+                  id="pc-notes"
+                  value={form.notes ?? ''}
+                  maxLength={PC_NOTES_MAX}
+                  rows={2}
+                  onChange={(e) => setForm({ ...form, notes: e.target.value })}
+                />
+                <p className="text-xs text-muted-foreground">{notesLen}/{PC_NOTES_MAX}</p>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => { setEditing(null); setCreating(false); }}
+              disabled={mut.isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => mut.mutate()}
+              disabled={!valid || !dirty || !canWrite || mut.isPending}
+            >
+              {mut.isPending ? 'Saving…' : creating ? 'Add' : 'Save'}
             </Button>
           </DialogFooter>
         </DialogContent>
