@@ -297,6 +297,63 @@ function OverviewTab() {
       </Card>
       <Card>
         <CardHeader>
+          <CardTitle>Enforcement pilot</CardTitle>
+          <CardDescription>Phase 3 — single action: <code>pms.data.export</code></CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center gap-3">
+            <Badge variant={pilotEnabled ? 'destructive' : 'secondary'}>
+              {pilotEnabled ? 'ENABLED' : 'DISABLED'}
+            </Badge>
+            <Switch
+              checked={pilotEnabled}
+              disabled={!canWrite || !enabled || pilotMut.isPending || pilotFlag.isLoading}
+              onCheckedChange={(next) => setConfirmPilot(next)}
+              aria-label="Toggle enforcement pilot"
+            />
+            {!canWrite && (
+              <span className="text-xs text-muted-foreground">platform_owner only</span>
+            )}
+            {!enabled && canWrite && (
+              <span className="text-xs text-muted-foreground">Master switch must be ON</span>
+            )}
+          </div>
+          <p className="mt-3 text-sm text-muted-foreground">
+            When ON, the <strong>Export Pending</strong> button (<code>pms.data.export</code>) is blocked
+            in the UI for users whose action entitlement is OFF. All other wrapped actions remain
+            observe-only. Kill-switch: turn this OFF for instant rollback — the button returns to
+            normal behavior on the next render.
+          </p>
+          <AlertDialog open={confirmPilot !== null} onOpenChange={(o) => !o && setConfirmPilot(null)}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>
+                  {confirmPilot ? 'Enable enforcement pilot?' : 'Disable enforcement pilot?'}
+                </AlertDialogTitle>
+                <AlertDialogDescription>
+                  {confirmPilot
+                    ? 'Enabling will start blocking pms.data.export in UI for users whose action entitlement is OFF. No other action is affected. You can disable instantly to roll back.'
+                    : 'Disabling restores observe-only behavior immediately. pms.data.export will work again on the next render.'}
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={() => {
+                    const next = !!confirmPilot;
+                    setConfirmPilot(null);
+                    pilotMut.mutate(next);
+                  }}
+                >
+                  {confirmPilot ? 'Enable' : 'Disable'}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader>
           <CardTitle>Deployment</CardTitle>
           <CardDescription>Active clients</CardDescription>
         </CardHeader>
