@@ -1,51 +1,80 @@
-## RCA
 
-I traced the full provider/routing tree:
+## Observe-only contract (unchanged from pilot)
 
-- `src/App.tsx` mounts **one** `<AuthProvider>` at the root, wrapping `<BrowserRouter>` and every route — including `/dashboard`, `/home` (ModuleHub), all admin routes, and the new `/platform-settings` route.
-- `/platform-settings` is registered as a direct child of `<Routes>` inside that same `<AuthProvider>`. `<PlatformOwnerRoute>` renders `<PlatformSettings>` inside the provider tree.
-- `src/contexts/AuthContext.tsx` exports `AuthProvider` and `useAuth` correctly. `useAuth()` throws only when `useContext(AuthContext)` returns `undefined`.
-- `PlatformOwnerRoute.tsx`, `ModuleHub.tsx`, and `PlatformSettings.tsx` all import `useAuth` from `@/contexts/AuthContext` (single canonical path — no duplicate module).
+`CanAction` already guarantees:
+- Renders children unconditionally (never blocks).
+- Logs `would_deny` exactly once per mount via `loggedRef` (no re-render spam).
+- Skips logging entirely when `hubEnabled === false`.
 
-There is **no second React tree, no portal, no nested provider, and no route outside `<AuthProvider>`**.
+Each wrap is a pure tree wrap around one `<Button>` — no prop, handler, disabled, styling, or tooltip changes.
 
-The error in the runtime snapshot was thrown from **`Dashboard.tsx` line 70**, not from `/platform-settings`, and the file URL carried a Vite HMR cache-busting timestamp (`AuthContext.tsx?t=1780511571702`). This is the classic Vite Fast Refresh signature: when `AuthContext.tsx` was edited mid-session during the recent multi-role refactor, the running `Dashboard` instance held a reference to the **old** `AuthContext` object while the freshly re-imported `AuthProvider` registered a **new** one — so `useContext` returned `undefined` for that one component instance.
+## Menu actions clarification
 
-The flag is currently `false`, so `/platform-settings` is not even mounted right now — yet the error still shows in the snapshot. That confirms the error is unrelated to the Platform Owner code and is purely an HMR identity-loss artifact that a single hard reload clears.
+Verified: `pms.menu.create_tab` and `pms.menu.delete_custom_tab` are the **PMS admin Menu Setting** custom tabs (`src/components/admin/MenuSettingTab.tsx` + `CreateMenuItemDialog.tsx`). The Incentive `CustomTabManager.tsx` is a different surface and is **not** wrapped.
 
-## Risk & Impact Report
+## The 10 wraps
 
-- **Data**: none
-- **Workflow / RLS / permissions**: unchanged
-- **Regression risk**: zero for the verification path; very low for the optional defensive log
-- **Rollback**: keep flag `false`; revert the one optional file change
+| # | action_key | File | Exact trigger button | Type |
+|---|---|---|---|---|
+| 1 | `pms.users.add` | `src/pages/admin/UserManagement.tsx` L2308 | "Create User" button (footer of Add-User dialog, `onClick={handleCreateUser}`) | Add |
+| 2 | `pms.users.edit` | `src/pages/admin/UserManagement.tsx` L316 | "Save Changes" button in Edit-User dialog (`onClick={handleSaveUser}`) | Edit |
+| 3 | `pms.users.manage_access` | `src/components/admin/UserAccessSheet.tsx` L234 | "Grant" button in Roles tab (`onClick={handleGrantAll}`) | Config |
+| 4 | `pms.users.password_rollout` | `src/components/admin/UserAccessSheet.tsx` L377 | "Generate & email password" primary button (`onClick={() => run(true)}`) | Config |
+| 5 | `pms.users.working_days` | `src/components/admin/EmployeeWorkingDaysDialog.tsx` L226 | "Save Changes" button (`onClick={handleSave}`) | Edit |
+| 6 | `pms.kra.assign` | `src/components/admin/SmartAssignmentDialog.tsx` L650 | "Assign N KPIs" footer button (`onClick={handleAssign}`) | Add |
+| 7 | `pms.workflow.template.edit` | `src/components/admin/TemplateFormDialog.tsx` L973 | "Update Template Only / Save & Propagate / Create Template" footer button (`onClick={handleSubmitClick}`) | Edit |
+| 8 | `pms.menu.create_tab` | `src/components/admin/MenuSettingTab.tsx` L347 | "Create tab" toolbar button (`onClick={() => setCreateOpen(true)}`) | Add |
+| 9 | `pms.menu.delete_custom_tab` | `src/components/admin/MenuSettingTab.tsx` (~L605 `ConfirmDestructiveDialog`'s onConfirm) | **See note below** | Delete |
+| 10 | `pms.data.import` | `src/pages/admin/ImportData.tsx` L2767 + L2301 | "Import" button on KPI tab (`onClick={handleImport}`) and "Import" button on Employees tab (`onClick={handleEmployeeImport}`) — both wrapped | Import |
 
-## Plan (Step → Verification)
+### Note on #9 (delete custom tab)
 
-1. **Hard reload `/dashboard` once** (you, in the browser). → Verify the AuthProvider error is gone. Expected: yes, because the error is stale HMR state.
-2. **No structural code change is required.** The provider tree is already correct. (If step 1 still shows the error after a hard reload, I will re-investigate — but based on the code, it will not.)
-3. **(Optional, recommended) Add a defensive `console.error` inside `useAuth`** before the existing `throw`, with a hint that the most common cause is an HMR/duplicate-module situation. Keeps the throw (do **not** silently return a stub — that would mask real bugs). No runtime behavior change.
-4. **Re-enable the flag** `hub_platform_settings_enabled = "true"` only after step 1 passes. → Verify:
-   - Jaspal/Ankit/Vivek: `/platform-settings` renders; `useAuth().role === 'admin'`; `hasRole('platform_owner') === true`; existing admin pages unchanged.
-   - A non–platform-owner user: `/platform-settings` redirects to `/home` (existing `<Navigate to="/home" replace />` in `PlatformOwnerRoute`).
-   - `/dashboard`, admin menus, workflows, scoring, reports, RLS — unchanged.
-5. **If anything in step 4 fails**, immediately flip the flag back to `"false"` (one `UPDATE` on `system_settings`) — `/platform-settings` becomes unreachable again and PMS is fully unaffected.
+The actual delete-trigger button is the per-row delete icon inside `MenuTable`/`MenuTreeDnd` that calls `onDeleteCustom(menuKey)`. That callback only opens a `ConfirmDestructiveDialog`; the real DB write happens in the dialog's `onConfirm` (~L607). To stay surgical and avoid touching child components or the destructive dialog wiring, I'll wrap the **`ConfirmDestructiveDialog` itself** in `MenuSettingTab.tsx` with `<CanAction actionKey="pms.menu.delete_custom_tab">`. The dialog mounts only when a delete is initiated, so `loggedRef` fires at most once per delete attempt — matching the observe-only intent without altering the row-level buttons or child components.
 
-## UI Changes
+### Note on #10 (data import)
 
-None.
+Two separate trigger buttons exist (Employees tab + KPIs tab), both gated by the same `pms.data.import` key. Each gets its own wrap so a `would_deny` fires once per mounted tab.
 
-## Tests
+## Out of scope (explicitly NOT wrapped)
+- Row-level icon buttons (Edit, Assign, Working Days, Password Rollout pencil icons) — these only open dialogs (read-only navigation). Save buttons inside the dialog are the actual write triggers.
+- "Add User" toolbar button (only opens dialog) — wrapped at "Create User" save instead.
+- Bulk actions, dialogs, forms, tables, pages, menu nav, read-only buttons.
+- Revoke per-role button in UserAccessSheet (different action; not in 10-list).
+- Secondary "Generate without email" button (different sub-flow; primary CTA covers the action).
+- Incentive custom tab manager (`src/components/incentive/CustomTabManager.tsx`).
+- No CanAction.tsx changes, no useEntitlement changes, no RLS/policy/migration, no PMS workflow/scoring/menu/reports changes.
 
-`src/test/platformFoundation.test.ts` already covers `pickPrimaryRole` backward compatibility (admin + platform_owner → primary `admin`). No new tests needed for a console-log-only change.
+## Implementation
+Add one `import { CanAction } from '@/components/platform/CanAction';` per file (if not already imported) and wrap each listed `<Button>` JSX node:
 
-## DOCUMENTATION.md / POLICY.md
+```tsx
+<CanAction actionKey="pms.<key>">
+  <Button ...>...</Button>
+</CanAction>
+```
 
-One-line note in DOCUMENTATION.md under the Platform Foundation section: "After editing `AuthContext.tsx`, hard-reload the preview — Vite Fast Refresh can otherwise show a stale 'useAuth must be used within an AuthProvider' error from a single pre-existing component instance." No POLICY.md change (no behavior change).
+No other lines change.
 
-## Post-implementation
+## Verification (post-implementation, per user contract)
 
-Awaiting two things from you before any code/flag change:
+Pick 3 newly-wrapped actions (e.g. `pms.kra.assign`, `pms.users.password_rollout`, `pms.menu.create_tab`) and verify in `entitlement_audit`:
 
-1. **Hard-reload `/dashboard`** and confirm whether the AuthProvider error disappears. If yes → root cause is confirmed as HMR-only and no structural fix is needed.
-2. **Approve this plan** so I can (a) add the optional defensive log in `useAuth`, (b) flip `hub_platform_settings_enabled` back to `"true"`, and (c) run the step-4 verifications.
+1. Master switch OFF → trigger each action → **0 audit rows**, action works.
+2. Master switch ON + entitlement ON → trigger → **0 `would_deny` rows**, action works.
+3. Master switch ON + entitlement OFF → mount each surface once → **exactly 1 `would_deny` row** per mounted surface, action still works.
+4. Re-render the surface without unmount → **no additional rows** (confirms `loggedRef` once-per-mount).
+5. No regression in PMS workflow/scoring/menu/reports/RLS.
+
+After verification I'll post the audit query results for the 3 sampled actions and the final wrapped-list summary.
+
+## Rollback
+Revert the file edits (pure JSX wrapper additions — no schema or behavior change). Or flip `hub_platform_settings_enabled = "false"` to silence all logging instantly.
+
+## Risk
+- **Data:** none (additive audit-row inserts only when flag ON + entitlement OFF).
+- **Workflow/Scoring/RLS/Menus/Reports:** none (CanAction is observe-only, children always rendered).
+- **Performance:** one extra `useQuery` already shared via TanStack cache key `hub-entitlement-snapshot`; one insert per mount when denied. Negligible.
+- **Regression:** wraps are pure tree additions; no handlers/props changed.
+
+## Not Applicable
+DOCUMENTATION.md / POLICY.md: existing Hub Foundation docs already cover the observe-only contract; this is the same contract applied to 10 more keys. Memory file `mem/features/platform/hub-foundation.md` already lists these action keys as seeded — no new behavior to document.

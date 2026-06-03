@@ -33,6 +33,7 @@ import { MoveToDialog } from './MoveToDialog';
 import { MenuTable } from './MenuTable';
 import { CreateShortcutDialog } from './CreateShortcutDialog';
 import { deleteCustomMenuItem } from '@/lib/menu/customMenu';
+import { CanAction } from '@/components/platform/CanAction';
 
 /** Menu Setting tab — Phase 3: full DnD reposition + rename + audit + reset. */
 export function MenuSettingTab() {
@@ -344,9 +345,11 @@ export function MenuSettingTab() {
                 </div>
                 <PreviewDialog grouped={effectiveGrouped} />
                 <AuditDialog />
-                <Button size="sm" className="gap-2" onClick={() => setCreateOpen(true)} disabled={isEmpty}>
-                  <Plus className="h-4 w-4" /> Create tab
-                </Button>
+                <CanAction actionKey="pms.menu.create_tab">
+                  <Button size="sm" className="gap-2" onClick={() => setCreateOpen(true)} disabled={isEmpty}>
+                    <Plus className="h-4 w-4" /> Create tab
+                  </Button>
+                </CanAction>
               </div>
             </div>
           </CardHeader>
@@ -592,10 +595,11 @@ export function MenuSettingTab() {
           </div>
         )}
 
-        <ConfirmDestructiveDialog
-          open={!!deleteTarget}
-          isLoading={deleting}
-          title="Delete custom tab?"
+        <CanAction actionKey="pms.menu.delete_custom_tab">
+          <ConfirmDestructiveDialog
+            open={!!deleteTarget}
+            isLoading={deleting}
+            title="Delete custom tab?"
           description={
             deleteTarget
               ? `This will remove "${deleteTarget.label}" (${deleteTarget.menuKey}) from Menu Setting and the sidebar. Existing PMS pages, routes, reports, permissions, workflows, KPI data, and scoring data will not be deleted.`
@@ -603,7 +607,7 @@ export function MenuSettingTab() {
           }
           confirmLabel="Delete tab"
           onCancel={() => { if (!deleting) setDeleteTarget(null); }}
-          onConfirm={async () => {
+            onConfirm={async () => {
             if (!deleteTarget) return;
             const { menuKey } = deleteTarget;
             const reg = registryByKey[menuKey];
@@ -629,8 +633,9 @@ export function MenuSettingTab() {
             } finally {
               setDeleting(false);
             }
-          }}
-        />
+            }}
+          />
+        </CanAction>
       </div>
     </TooltipProvider>
   );

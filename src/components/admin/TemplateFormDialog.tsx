@@ -25,6 +25,7 @@ import { AlertTriangle, ArrowRight, Info, Loader2, Users } from 'lucide-react';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { supabase } from '@/integrations/supabase/client';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { CanAction } from '@/components/platform/CanAction';
 
 /** Structural fields that should be back-filled from a linked KPI when null on template */
 const BACKFILL_FIELDS = [
@@ -970,19 +971,21 @@ export function TemplateFormDialog({ isOpen, onClose, template }: TemplateFormDi
           <Button variant="outline" onClick={handleClose}>
             Cancel
           </Button>
-          <Button
-            onClick={handleSubmitClick}
-            disabled={isSubmitting || !formData.title || !formData.kra_name || !formData.kpi_name}
-          >
-            {isSubmitting ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin mr-1" />
-                {propagate.isPending ? 'Propagating...' : 'Saving...'}
-              </>
-            ) : template 
-              ? (shouldPropagate && hasPropagableChanges ? 'Save & Propagate' : 'Update Template Only') 
-              : 'Create Template'}
-          </Button>
+          <CanAction actionKey="pms.workflow.template.edit">
+            <Button
+              onClick={handleSubmitClick}
+              disabled={isSubmitting || !formData.title || !formData.kra_name || !formData.kpi_name}
+            >
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin mr-1" />
+                  {propagate.isPending ? 'Propagating...' : 'Saving...'}
+                </>
+              ) : template 
+                ? (shouldPropagate && hasPropagableChanges ? 'Save & Propagate' : 'Update Template Only') 
+                : 'Create Template'}
+            </Button>
+          </CanAction>
         </DialogFooter>
       </DialogContent>
     </Dialog>
