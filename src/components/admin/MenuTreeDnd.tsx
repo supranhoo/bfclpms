@@ -476,8 +476,9 @@ function TreeRow(props: {
   const labelDraft = props.pendingLabels[node.menu_key];
   const matched = props.matchesSearch(node) ||
     kids.some((k) => walkMatch(k, props));
+  const levelOk = props.matchesLevel(node);
 
-  if (!matched) return null;
+  if (!matched || !levelOk) return null;
 
   return (
     <div>
@@ -547,9 +548,9 @@ function RowBody(props: {
   const isSelected = !!props.selectedKeys?.has(node.menu_key);
 
   const movability = !reg?.is_movable
-    ? { label: 'Locked', tone: 'secondary' as const, icon: Lock }
+    ? { label: 'Protected', tone: 'secondary' as const, icon: Lock }
     : reg.is_system_required
-    ? { label: 'System', tone: 'secondary' as const, icon: Lock }
+    ? { label: 'Protected', tone: 'secondary' as const, icon: Lock }
     : reg.is_cross_app_movable
     ? { label: 'Fully movable', tone: 'default' as const, icon: null }
     : { label: 'Within module', tone: 'outline' as const, icon: null };
