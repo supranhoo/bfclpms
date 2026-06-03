@@ -433,6 +433,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 export function useAuth() {
   const context = useContext(AuthContext);
   if (context === undefined) {
+    // Almost always caused by a Vite Fast Refresh / HMR identity-loss after
+    // editing AuthContext.tsx mid-session, or by a duplicate import path that
+    // creates a second AuthContext module. A hard reload clears the HMR case.
+    console.error(
+      '[useAuth] AuthContext is undefined. Likely a stale Vite Fast Refresh ' +
+      'after editing AuthContext.tsx, or a duplicate import path. Hard-reload the page.'
+    );
     throw new Error('useAuth must be used within an AuthProvider');
   }
   return context;

@@ -1,107 +1,51 @@
-## Goal
-Verify the new Platform Owner implementation is safe and grant Platform Owner to the existing PMS admin(s) **without removing or breaking their `admin` role**. Keep enforcement OFF (`hub_platform_settings_enabled = "false"`) until you explicitly confirm activation in a follow-up turn.
+## RCA
 
-## Findings (read-only checks already done)
+I traced the full provider/routing tree:
 
-1. **Enum** — `app_role` already contains `platform_owner` (8 roles total). ✅
-2. **`user_roles` table** — Unique constraint is `(user_id, role)` (composite). The schema **does support multiple roles per user**. ✅
-3. **`AuthContext.fetchRole`** — Uses `.single()` on `user_roles`. ❌ This is the **single biggest risk**: if we naively insert a second `user_roles` row for an existing admin, `.single()` will throw and the admin can no longer log in.
-4. **`PlatformOwnerRoute`** — Checks `role !== 'platform_owner'` strictly. An admin who is also platform_owner would either lose admin (if we swap) or fail this check (if we keep admin as primary). Needs `hasRole()` style check.
-5. **Existing admins in DB** — 3 rows: Jaspal, Ankit Choudhary, Vivek Kumar Dansena. None currently have `platform_owner`.
-6. **Feature flag** — `hub_platform_settings_enabled` is OFF, so `useEntitlement` returns allow-all and `/platform-settings` returns 404 even after role grants. Good safety net.
+- `src/App.tsx` mounts **one** `<AuthProvider>` at the root, wrapping `<BrowserRouter>` and every route — including `/dashboard`, `/home` (ModuleHub), all admin routes, and the new `/platform-settings` route.
+- `/platform-settings` is registered as a direct child of `<Routes>` inside that same `<AuthProvider>`. `<PlatformOwnerRoute>` renders `<PlatformSettings>` inside the provider tree.
+- `src/contexts/AuthContext.tsx` exports `AuthProvider` and `useAuth` correctly. `useAuth()` throws only when `useContext(AuthContext)` returns `undefined`.
+- `PlatformOwnerRoute.tsx`, `ModuleHub.tsx`, and `PlatformSettings.tsx` all import `useAuth` from `@/contexts/AuthContext` (single canonical path — no duplicate module).
+
+There is **no second React tree, no portal, no nested provider, and no route outside `<AuthProvider>`**.
+
+The error in the runtime snapshot was thrown from **`Dashboard.tsx` line 70**, not from `/platform-settings`, and the file URL carried a Vite HMR cache-busting timestamp (`AuthContext.tsx?t=1780511571702`). This is the classic Vite Fast Refresh signature: when `AuthContext.tsx` was edited mid-session during the recent multi-role refactor, the running `Dashboard` instance held a reference to the **old** `AuthContext` object while the freshly re-imported `AuthProvider` registered a **new** one — so `useContext` returned `undefined` for that one component instance.
+
+The flag is currently `false`, so `/platform-settings` is not even mounted right now — yet the error still shows in the snapshot. That confirms the error is unrelated to the Platform Owner code and is purely an HMR identity-loss artifact that a single hard reload clears.
 
 ## Risk & Impact Report
 
-- **Data impact**: Only additive `user_roles` rows. No deletes, no schema breaks.
-- **Workflow impact**: None. PMS workflow, KPI, scoring, menu, RLS for admin remain unchanged.
-- **Auth impact (HIGH if mishandled)**: `.single()` must be replaced with multi-row fetch **before** inserting the second role row, or admin login breaks. Mitigation: ship the auth refactor in the same change set, behind a safe "primary role" derivation that preserves existing behavior.
-- **Regression risk**: Low — `role` continues to expose a single primary `AppRole` (priority: `admin` > `platform_owner` > others), so every existing `role === 'admin'` check keeps working unchanged.
-- **Scalability**: Trivial — one extra row read per session.
-- **Rollback**: Delete the new `user_roles` rows; revert AuthContext patch. Both reversible.
+- **Data**: none
+- **Workflow / RLS / permissions**: unchanged
+- **Regression risk**: zero for the verification path; very low for the optional defensive log
+- **Rollback**: keep flag `false`; revert the one optional file change
 
-## Plan (Phase A — safety refactor, no activation)
+## Plan (Step → Verification)
 
-### Step 1 — Refactor `AuthContext` to support multi-role (backward compatible)
-File: `src/contexts/AuthContext.tsx`
-- Replace `.single()` with a list fetch: `.from('user_roles').select('role').eq('user_id', userId)`.
-- Add new state `roles: AppRole[]`.
-- Derive **primary `role`** from a fixed priority list so existing PMS checks keep working:
-  `['admin', 'platform_owner', 'hr_pms', 'management', 'auditor', 'skip_level', 'manager', 'employee']`.
-  An admin+platform_owner user → `role === 'admin'` exactly as today.
-- Expose new helpers on context:
-  - `roles: AppRole[]`
-  - `hasRole(r: AppRole): boolean`
-  - `isAdmin: boolean`
-  - `isPlatformOwner: boolean`
-- Keep existing `role`, `effectiveRole`, `naturalRole`, `isAdminMode`, `toggleAdminMode` exactly as today.
-- Verification: existing admin logs in → `role==='admin'`, all PMS pages load.
+1. **Hard reload `/dashboard` once** (you, in the browser). → Verify the AuthProvider error is gone. Expected: yes, because the error is stale HMR state.
+2. **No structural code change is required.** The provider tree is already correct. (If step 1 still shows the error after a hard reload, I will re-investigate — but based on the code, it will not.)
+3. **(Optional, recommended) Add a defensive `console.error` inside `useAuth`** before the existing `throw`, with a hint that the most common cause is an HMR/duplicate-module situation. Keeps the throw (do **not** silently return a stub — that would mask real bugs). No runtime behavior change.
+4. **Re-enable the flag** `hub_platform_settings_enabled = "true"` only after step 1 passes. → Verify:
+   - Jaspal/Ankit/Vivek: `/platform-settings` renders; `useAuth().role === 'admin'`; `hasRole('platform_owner') === true`; existing admin pages unchanged.
+   - A non–platform-owner user: `/platform-settings` redirects to `/home` (existing `<Navigate to="/home" replace />` in `PlatformOwnerRoute`).
+   - `/dashboard`, admin menus, workflows, scoring, reports, RLS — unchanged.
+5. **If anything in step 4 fails**, immediately flip the flag back to `"false"` (one `UPDATE` on `system_settings`) — `/platform-settings` becomes unreachable again and PMS is fully unaffected.
 
-### Step 2 — Update `PlatformOwnerRoute` to use `hasRole`
-File: `src/components/layout/PlatformOwnerRoute.tsx`
-- Change `role !== 'platform_owner'` → `!hasRole('platform_owner')`.
-- Keep the `hubEnabled` master switch gate (feature flag still OFF, so route stays 404 for everyone until activated).
-- Verification: with flag OFF, route 404s for all users including admins.
+## UI Changes
 
-### Step 3 — Update Module Hub card visibility
-File: `src/pages/ModuleHub.tsx` (and any spot showing the Platform Settings card)
-- Replace `role === 'platform_owner'` with `hasRole('platform_owner') && hubEnabled`.
-- Verification: with flag OFF, card hidden for everyone. With flag ON, visible only to users explicitly granted `platform_owner`.
+None.
 
-### Step 4 — Grant `platform_owner` to existing PMS admins (additive)
-Database `insert` (NOT a migration — pure data):
-```sql
-INSERT INTO public.user_roles (user_id, role)
-SELECT ur.user_id, 'platform_owner'::app_role
-FROM public.user_roles ur
-WHERE ur.role = 'admin'
-  AND NOT EXISTS (
-    SELECT 1 FROM public.user_roles ur2
-    WHERE ur2.user_id = ur.user_id AND ur2.role = 'platform_owner'
-  );
-```
-- Idempotent (skips users who already have it).
-- Only touches existing admins (Jaspal, Ankit, Vivek). New future admins do NOT auto-get platform_owner.
-- Verification: re-query `user_roles` shows each admin has both `admin` and `platform_owner` rows; their primary `role` in app is still `admin` (priority).
+## Tests
 
-### Step 5 — Recovery / break-glass note
-Append a commented SQL block to `mem://features/platform/hub-foundation` so an operator can re-grant platform_owner from `psql` if needed:
-```sql
--- Break-glass: grant platform_owner to a specific admin by email
-INSERT INTO public.user_roles (user_id, role)
-SELECT p.id, 'platform_owner'::app_role
-FROM public.profiles p
-WHERE p.email = '<admin-email>'
-ON CONFLICT (user_id, role) DO NOTHING;
-```
+`src/test/platformFoundation.test.ts` already covers `pickPrimaryRole` backward compatibility (admin + platform_owner → primary `admin`). No new tests needed for a console-log-only change.
 
-### Step 6 — Tests (extend `src/test/platformFoundation.test.ts`)
-- Primary-role derivation: `[admin, platform_owner]` → `admin`.
-- `hasRole('platform_owner')` true for admins after grant.
-- `hasRole('platform_owner')` false for manager/employee.
-- Existing 5 tests still pass.
+## DOCUMENTATION.md / POLICY.md
 
-### Step 7 — Documentation
-- `DOCUMENTATION.md`: note multi-role support, priority order, and `hasRole/isPlatformOwner` API.
-- `POLICY.md`: note that `platform_owner` is additive, never replaces `admin`, and that Hub routes require BOTH role grant AND the `hub_platform_settings_enabled` flag.
-- Update `mem://features/platform/hub-foundation`.
+One-line note in DOCUMENTATION.md under the Platform Foundation section: "After editing `AuthContext.tsx`, hard-reload the preview — Vite Fast Refresh can otherwise show a stale 'useAuth must be used within an AuthProvider' error from a single pre-existing component instance." No POLICY.md change (no behavior change).
 
-## What this plan does NOT do (deferred to your explicit go-ahead)
+## Post-implementation
 
-- Does **NOT** flip `hub_platform_settings_enabled` to `"true"`. The Hub Settings UI stays 404 / hidden until you confirm activation in the next turn.
-- Does **NOT** enforce any entitlement against PMS. Observe-only mode remains intact.
-- Does **NOT** change RLS on PMS tables, menu_access, workflow, scoring, or reports.
-- Does **NOT** grant `platform_owner` to managers, employees, or future admins automatically.
+Awaiting two things from you before any code/flag change:
 
-## Activation handshake (next turn)
-After this plan is implemented and you have confirmed login still works for the three admins, I will ask again:
-> "Ready to activate? Set `hub_platform_settings_enabled = 'true'` so admins (now also platform_owner) can open `/platform-settings`?"
-Only then will the Hub UI become reachable.
-
-## Acceptance criteria
-- All 3 existing PMS admins retain `admin` and gain `platform_owner` (additive).
-- Existing admin login, dashboard, system settings, menus — unchanged.
-- `useAuth().role` still returns `'admin'` for them (no broken `role === 'admin'` checks anywhere).
-- `useAuth().hasRole('platform_owner')` returns `true` for them, `false` for others.
-- With flag OFF (current state), `/platform-settings` returns 404 for everyone — no behavior change yet.
-- Managers, employees, auditors, etc. are not Platform Owners.
-- Refactor is reversible by removing the new `user_roles` rows and reverting the AuthContext patch.
+1. **Hard-reload `/dashboard`** and confirm whether the AuthProvider error disappears. If yes → root cause is confirmed as HMR-only and no structural fix is needed.
+2. **Approve this plan** so I can (a) add the optional defensive log in `useAuth`, (b) flip `hub_platform_settings_enabled` back to `"true"`, and (c) run the step-4 verifications.
