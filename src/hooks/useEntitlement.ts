@@ -115,14 +115,15 @@ export async function logWouldDeny(
 ) {
   try {
     const { data: userData } = await supabase.auth.getUser();
-    await supabase.from('entitlement_audit').insert({
+    const row: Record<string, unknown> = {
       actor_id: userData?.user?.id ?? null,
       event_type: 'would_deny',
       entity_type: 'action',
       entity_key: actionKey,
       reason: reason ?? null,
-      after: metadata ?? null,
-    });
+    };
+    if (metadata) row.after = metadata;
+    await supabase.from('entitlement_audit').insert(row as never);
   } catch {
     /* observe-only: never throw from a guard */
   }
