@@ -1,80 +1,78 @@
+## 1. Assumptions
 
-## Observe-only contract (unchanged from pilot)
+- Source of truth: `public.entitlement_audit` rows where `event_type = 'would_deny'`.
+- Available fields per row: `created_at`, `actor_id`, `entity_type='action'`, `entity_key` (= action_key), `client_id`, `reason`, `before/after` (null for would_deny). There is **no `source/page` column** captured today.
+- Joinable lookups: `action_registry(action_key → label, module_key, risk_level)`, `clients(client_id → client_key, display_name)`, `profiles(actor_id → full_name, email)`, `user_roles(user_id → role)`.
+- Access gate: `hasRole('platform_owner')`. Route is already wrapped in `PlatformOwnerRoute`; the tab will additionally render an empty state for non-owners as a defense-in-depth check.
+- Observe-only: zero behavior changes outside this tab. No new wraps, no enforcement, no schema changes, no migrations.
 
-`CanAction` already guarantees:
-- Renders children unconditionally (never blocks).
-- Logs `would_deny` exactly once per mount via `loggedRef` (no re-render spam).
-- Skips logging entirely when `hubEnabled === false`.
+## 2. Clarifications
 
-Each wrap is a pure tree wrap around one `<Button>` — no prop, handler, disabled, styling, or tooltip changes.
+- "Page/source if available" — currently not captured. The dashboard will show `reason` (e.g., `observe-mode CanAction render`) as the closest proxy and mark `Source` as `—` when absent. A future phase can extend `CanAction` to include a route path in `reason`; out of scope here.
+- "Risk level" filter — derived from `action_registry.risk_level`.
+- "Client/Module" filter — `client_id` and `action_registry.module_key`.
 
-## Menu actions clarification
+## 3. Risk & Impact Report
 
-Verified: `pms.menu.create_tab` and `pms.menu.delete_custom_tab` are the **PMS admin Menu Setting** custom tabs (`src/components/admin/MenuSettingTab.tsx` + `CreateMenuItemDialog.tsx`). The Incentive `CustomTabManager.tsx` is a different surface and is **not** wrapped.
+- **Data impact:** read-only SELECTs on `entitlement_audit` + joins. No writes.
+- **Workflow impact:** None. PMS unaffected.
+- **UI/UX impact:** One new tab `Telemetry` inside `/platform-settings`, after `Audit Logs`. No changes to existing tabs.
+- **Regression risk:** Minimal — new code is isolated to `PlatformSettings.tsx` and one new component file.
+- **Scalability:** All queries scoped to `event_type='would_deny'`, server-side filters (date, client, module, action, user, risk), default range = last 30 days, table paginated server-side (PAGE_SIZE=50), export capped at 10 000 rows (matches existing Audit Logs export). Aggregations use `count` head queries (no row download) and a single 30-day fetch for the time-series sparkline (currently ~tens of rows, safely bounded).
+- **Mitigation:** Reuse the existing `toCsv` helper; reuse `useQuery` with stable keys; respect existing RLS on `entitlement_audit`.
 
-## The 10 wraps
+## 4. Step-by-step Plan
 
-| # | action_key | File | Exact trigger button | Type |
-|---|---|---|---|---|
-| 1 | `pms.users.add` | `src/pages/admin/UserManagement.tsx` L2308 | "Create User" button (footer of Add-User dialog, `onClick={handleCreateUser}`) | Add |
-| 2 | `pms.users.edit` | `src/pages/admin/UserManagement.tsx` L316 | "Save Changes" button in Edit-User dialog (`onClick={handleSaveUser}`) | Edit |
-| 3 | `pms.users.manage_access` | `src/components/admin/UserAccessSheet.tsx` L234 | "Grant" button in Roles tab (`onClick={handleGrantAll}`) | Config |
-| 4 | `pms.users.password_rollout` | `src/components/admin/UserAccessSheet.tsx` L377 | "Generate & email password" primary button (`onClick={() => run(true)}`) | Config |
-| 5 | `pms.users.working_days` | `src/components/admin/EmployeeWorkingDaysDialog.tsx` L226 | "Save Changes" button (`onClick={handleSave}`) | Edit |
-| 6 | `pms.kra.assign` | `src/components/admin/SmartAssignmentDialog.tsx` L650 | "Assign N KPIs" footer button (`onClick={handleAssign}`) | Add |
-| 7 | `pms.workflow.template.edit` | `src/components/admin/TemplateFormDialog.tsx` L973 | "Update Template Only / Save & Propagate / Create Template" footer button (`onClick={handleSubmitClick}`) | Edit |
-| 8 | `pms.menu.create_tab` | `src/components/admin/MenuSettingTab.tsx` L347 | "Create tab" toolbar button (`onClick={() => setCreateOpen(true)}`) | Add |
-| 9 | `pms.menu.delete_custom_tab` | `src/components/admin/MenuSettingTab.tsx` (~L605 `ConfirmDestructiveDialog`'s onConfirm) | **See note below** | Delete |
-| 10 | `pms.data.import` | `src/pages/admin/ImportData.tsx` L2767 + L2301 | "Import" button on KPI tab (`onClick={handleImport}`) and "Import" button on Employees tab (`onClick={handleEmployeeImport}`) — both wrapped | Import |
+1. **Add a new `TelemetryTab`** in `src/pages/platform/PlatformSettings.tsx`:
+   - Top KPI cards: Today / Last 7d / Last 30d / All-time would_deny counts (4 `count: 'exact', head: true` queries).
+   - "Top would-be-blocked actions" table: aggregates the last-30-days rows in memory grouped by `entity_key` → count, joined to `action_registry` for label, module, risk.
+   - "By user" mini-table: top 10 actors by would_deny count (last 30 days), joined to `profiles`.
+   - "By client/module" mini-table: counts grouped by `client_id` and `module_key`.
+   - 30-day sparkline (simple inline SVG bars, no new dependency) showing daily would_deny counts.
+   - Filters bar: date range (from/until), client (select from `clients`), module (select from `module_registry`), action_key (text contains), user (text contains email/name), risk level (select low/medium/high/critical from distinct `action_registry.risk_level`).
+   - Recent events table (server-side paginated, PAGE_SIZE=50): When, User (name + email), Role, Client, Module, Action key + label, Risk, Reason.
+   - "Export CSV" button (platform_owner only) — reuses `toCsv`, exports current filter set up to 10 000 rows with all derived columns.
+   - Banner at the top: "Observe-only telemetry — no PMS action is currently blocked. Data sourced from `entitlement_audit` (`event_type = would_deny`)."
+2. **Wire the tab** into the `Tabs` list in `PlatformSettings` between Audit Logs and the end (label: `Telemetry`, icon: `BarChart3`).
+3. **Defensive role check** inside `TelemetryTab` — render a small "Platform owner only" alert if `hasRole('platform_owner')` is false.
+4. **Docs/Memory/Changelog:**
+   - `DOCUMENTATION.md` — Version History entry `v2.66.15.0` describing the dashboard, data sources, and the explicit "no source/page captured yet" gap.
+   - `POLICY.md` — add a short note under §Phase20 that the platform_owner Telemetry view is read-only and exposes `would_deny` aggregates only.
+   - `mem/features/platform/hub-foundation.md` — one-line addition under Phase 2B note: "Platform_owner Telemetry tab added (read-only would_deny aggregates)."
+   - `CHANGELOG_2026.md` — June W1 sub-bullet under Hub Platform.
+5. **Tests:** add a small unit test for a new `aggregateByKey` helper (top-N counter) co-located near `toCsv`.
+6. **Manual verification:** load `/platform-settings`, open `Telemetry`, confirm KPI numbers match `select count(*) from entitlement_audit where event_type='would_deny'` for matching ranges, confirm filters work, export 10–20 rows.
 
-### Note on #9 (delete custom tab)
+## 5. UI Changes
 
-The actual delete-trigger button is the per-row delete icon inside `MenuTable`/`MenuTreeDnd` that calls `onDeleteCustom(menuKey)`. That callback only opens a `ConfirmDestructiveDialog`; the real DB write happens in the dialog's `onConfirm` (~L607). To stay surgical and avoid touching child components or the destructive dialog wiring, I'll wrap the **`ConfirmDestructiveDialog` itself** in `MenuSettingTab.tsx` with `<CanAction actionKey="pms.menu.delete_custom_tab">`. The dialog mounts only when a delete is initiated, so `loggedRef` fires at most once per delete attempt — matching the observe-only intent without altering the row-level buttons or child components.
+- **Location:** `/platform-settings` → new last tab `Telemetry` (after `Audit Logs`).
+- **Visual changes:** 4 KPI cards (top row), one sparkline card, three small aggregate tables (Top actions / Top users / By client+module) in a responsive grid, then filters bar + paginated event table + Export CSV button.
+- **Interaction:** filter changes refetch the event table and recompute aggregates; pagination via existing chevron pattern; CSV download via blob.
+- **Responsiveness:** KPI cards `grid-cols-2 md:grid-cols-4`; aggregate tables `md:grid-cols-3`; table wrapped in `overflow-x-auto`.
+- No changes to any other tab or PMS UI.
 
-### Note on #10 (data import)
+## 6. Tests
 
-Two separate trigger buttons exist (Employees tab + KPIs tab), both gated by the same `pms.data.import` key. Each gets its own wrap so a `would_deny` fires once per mounted tab.
+- Unit test for `aggregateByKey([{k:'a'},{k:'a'},{k:'b'}], 'k')` → `[{key:'a',count:2},{key:'b',count:1}]`.
+- Existing `toCsv` already covered.
 
-## Out of scope (explicitly NOT wrapped)
-- Row-level icon buttons (Edit, Assign, Working Days, Password Rollout pencil icons) — these only open dialogs (read-only navigation). Save buttons inside the dialog are the actual write triggers.
-- "Add User" toolbar button (only opens dialog) — wrapped at "Create User" save instead.
-- Bulk actions, dialogs, forms, tables, pages, menu nav, read-only buttons.
-- Revoke per-role button in UserAccessSheet (different action; not in 10-list).
-- Secondary "Generate without email" button (different sub-flow; primary CTA covers the action).
-- Incentive custom tab manager (`src/components/incentive/CustomTabManager.tsx`).
-- No CanAction.tsx changes, no useEntitlement changes, no RLS/policy/migration, no PMS workflow/scoring/menu/reports changes.
+## 7. DOCUMENTATION.md / POLICY.md / Memory updates
 
-## Implementation
-Add one `import { CanAction } from '@/components/platform/CanAction';` per file (if not already imported) and wrap each listed `<Button>` JSX node:
+- `DOCUMENTATION.md` — new Version History entry (top): Telemetry dashboard scope, data source, gaps (no page/source field), platform_owner gating.
+- `POLICY.md` — append a bullet to §Phase20 stating the Telemetry tab is read-only platform_owner aggregates of `entitlement_audit.would_deny`.
+- `mem/features/platform/hub-foundation.md` — single line addition; no invariant change.
+- `CHANGELOG_2026.md` — one sub-bullet under Hub Platform.
 
-```tsx
-<CanAction actionKey="pms.<key>">
-  <Button ...>...</Button>
-</CanAction>
-```
+## 8. Post-implementation notes
 
-No other lines change.
+- **Out of scope:** any enforcement, additional `CanAction` wraps, schema migrations, capturing `route/page` in `would_deny` rows, realtime subscriptions.
+- **Rollback:** remove the `Telemetry` tab entry and the `TelemetryTab` component — single-file revert. No DB rollback needed.
+- **Follow-up (future, not part of this plan):** extend `CanAction` to include `window.location.pathname` in `reason` so the dashboard can attribute events to pages; add realtime refresh when usage grows.
 
-## Verification (post-implementation, per user contract)
+## Files to be changed
 
-Pick 3 newly-wrapped actions (e.g. `pms.kra.assign`, `pms.users.password_rollout`, `pms.menu.create_tab`) and verify in `entitlement_audit`:
+- `src/pages/platform/PlatformSettings.tsx` — add `TelemetryTab`, helper `aggregateByKey`, new tab entry, new icon import.
+- `src/test/platformTelemetry.test.ts` *(new)* — unit test for `aggregateByKey`.
+- `DOCUMENTATION.md`, `POLICY.md`, `CHANGELOG_2026.md`, `mem/features/platform/hub-foundation.md` — short doc/memory updates.
 
-1. Master switch OFF → trigger each action → **0 audit rows**, action works.
-2. Master switch ON + entitlement ON → trigger → **0 `would_deny` rows**, action works.
-3. Master switch ON + entitlement OFF → mount each surface once → **exactly 1 `would_deny` row** per mounted surface, action still works.
-4. Re-render the surface without unmount → **no additional rows** (confirms `loggedRef` once-per-mount).
-5. No regression in PMS workflow/scoring/menu/reports/RLS.
-
-After verification I'll post the audit query results for the 3 sampled actions and the final wrapped-list summary.
-
-## Rollback
-Revert the file edits (pure JSX wrapper additions — no schema or behavior change). Or flip `hub_platform_settings_enabled = "false"` to silence all logging instantly.
-
-## Risk
-- **Data:** none (additive audit-row inserts only when flag ON + entitlement OFF).
-- **Workflow/Scoring/RLS/Menus/Reports:** none (CanAction is observe-only, children always rendered).
-- **Performance:** one extra `useQuery` already shared via TanStack cache key `hub-entitlement-snapshot`; one insert per mount when denied. Negligible.
-- **Regression:** wraps are pure tree additions; no handlers/props changed.
-
-## Not Applicable
-DOCUMENTATION.md / POLICY.md: existing Hub Foundation docs already cover the observe-only contract; this is the same contract applied to 10 more keys. Memory file `mem/features/platform/hub-foundation.md` already lists these action keys as seeded — no new behavior to document.
+No other files touched. No backend, migrations, RLS, workflow, scoring, menu, reports, or permissions changes.
