@@ -28,6 +28,7 @@ import { EmployeeCombobox, type EmployeeOption } from '@/components/admin/Employ
 import { MultiSelectFilter } from '@/components/ui/multi-select-filter';
 import { useToast } from '@/hooks/use-toast';
 import {
+  // (existing imports below)
   resolveFinalScore,
   type FinalScoreRuleType,
   type MissingScorePolicy,
@@ -639,9 +640,11 @@ function RuleBuilderSheet({
 
         <SheetFooter>
           <Button variant="outline" onClick={onClose}>Cancel</Button>
-          <Button onClick={handleSave} disabled={!canSave}>
-            {upsert.isPending ? 'Saving…' : 'Save Rule'}
-          </Button>
+          <CanAction actionKey="pms.workflow.final_score_rules.edit">
+            <Button onClick={handleSave} disabled={!canSave}>
+              {upsert.isPending ? 'Saving…' : 'Save Rule'}
+            </Button>
+          </CanAction>
         </SheetFooter>
       </SheetContent>
     </Sheet>
