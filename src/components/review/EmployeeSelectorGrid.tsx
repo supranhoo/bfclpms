@@ -274,6 +274,16 @@ export function EmployeeSelectorGrid({
   const [auditorFilter, setAuditorFilter] = useUrlFilterStateNullable('auditor');
   const [auditorWorkloadExpanded, setAuditorWorkloadExpanded] = useState(true);
 
+  // Universal employee Active / Inactive / All filter.
+  // Defaults to Active (POLICY §EMP-STATUS). Exposed only for full-access
+  // roles (admin / hr_pms / auditor / management); manager/skip views remain
+  // active-only because their hooks already enforce is_active = true.
+  const [empStatusRaw, setEmpStatusRaw] = useUrlFilterState('emp_status', 'active');
+  const empStatus: EmployeeStatusMode =
+    (['active', 'inactive', 'all'] as const).includes(empStatusRaw as EmployeeStatusMode)
+      ? (empStatusRaw as EmployeeStatusMode)
+      : 'active';
+
   // Pagination state — windowed rendering for large reviewer grids (>2500 employees).
   // Search/sort/filter still operate on the FULL set; only the rendered slice is windowed.
   const PAGE_SIZE_OPTIONS = [12, 24, 48, 96];
