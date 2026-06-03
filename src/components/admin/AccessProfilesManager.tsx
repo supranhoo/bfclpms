@@ -393,12 +393,21 @@ export function MappingTab({ profiles, orgScopes, menuRights, configs, saveOrgSc
 
   const handleSaveRights = async () => {
     if (!selectedProfileId) return;
-    const allRights = (configs as MenuAccessConfig[]).map(c => {
-      const r = editedRights[c.menu_key] || (() => {
-        const ex = profileMenuRights.get(c.menu_key);
+    // Build a union of every menu_key we know about so saving never wipes
+    // rights for rows that are not currently visible (hidden by search,
+    // not yet in configs, or only present in the registry / existing
+    // saved rights). Storage layer skips entries with no granted rights.
+    const allKeys = new Set<string>();
+    for (const c of configs as MenuAccessConfig[]) allKeys.add(c.menu_key);
+    for (const n of resolvedNodes) allKeys.add(n.menu_key);
+    for (const k of profileMenuRights.keys()) allKeys.add(k);
+    for (const k of Object.keys(editedRights)) allKeys.add(k);
+    const allRights = Array.from(allKeys).map(menu_key => {
+      const r = editedRights[menu_key] || (() => {
+        const ex = profileMenuRights.get(menu_key);
         return ex ? { can_view: ex.can_view, can_add: ex.can_add, can_update: ex.can_update, can_delete: ex.can_delete } : { can_view: false, can_add: false, can_update: false, can_delete: false };
       })();
-      return { menu_key: c.menu_key, ...r };
+      return { menu_key, ...r };
     });
     try {
       await saveMenuRights.mutateAsync({ profileId: selectedProfileId, rights: allRights });
@@ -409,11 +418,55 @@ export function MappingTab({ profiles, orgScopes, menuRights, configs, saveOrgSc
     }
   };
 
-  // Group configs by section
-  const sections = (configs as MenuAccessConfig[]).reduce<Record<string, MenuAccessConfig[]>>((acc, c) => {
-    (acc[c.section] ||= []).push(c);
-    return acc;
-  }, {});
+  // Group configs by section — used only for the "Legacy / unmapped" tail
+  // (rows in menu_access_config that have no corresponding menu_registry entry).
+  const sections = (configs as MenuAccessConfig[])
+    .filter(c => !nodeByKey.has(c.menu_key))
+    .reduce<Record<string, MenuAccessConfig[]>>((acc, c) => {
+      (acc[c.section] ||= []).push(c);
+      return acc;
+    }, {});
+
+  // Flatten the resolved menu tree depth-first so the rights grid mirrors
+  // sidebar + System Settings hierarchy (Level 2 → Level 3 → Level 4).
+  type FlatRow = { node: ResolvedMenuNode; depth: number };
+  const flatRows: FlatRow[] = useMemo(() => {
+    const out: FlatRow[] = [];
+    const visit = (parentKey: string | null, depth: number) => {
+      const kids = childrenByParent.get(parentKey) ?? [];
+      for (const n of kids) {
+        out.push({ node: n, depth });
+        visit(n.menu_key, depth + 1);
+      }
+    };
+    visit(null, 0);
+    return out;
+  }, [childrenByParent]);
+
+  const matchesSearch = (n: ResolvedMenuNode) => {
+    if (!rightsSearch.trim()) return true;
+    const q = rightsSearch.toLowerCase();
+    return n.label.toLowerCase().includes(q) || n.menu_key.toLowerCase().includes(q);
+  };
+  // A row is visible if it matches search OR any descendant matches
+  // (so parent context stays visible).
+  const descendantMatches = useMemo(() => {
+    const cache = new Map<string, boolean>();
+    const walk = (key: string): boolean => {
+      if (cache.has(key)) return cache.get(key)!;
+      const kids = childrenByParent.get(key) ?? [];
+      const any = kids.some(k => matchesSearch(k) || walk(k.menu_key));
+      cache.set(key, any);
+      return any;
+    };
+    for (const n of resolvedNodes) walk(n.menu_key);
+    return cache;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resolvedNodes, childrenByParent, rightsSearch]);
+
+  const visibleFlatRows = flatRows.filter(({ node }) =>
+    matchesSearch(node) || descendantMatches.get(node.menu_key)
+  );
 
   // Resolve scope labels
   const getScopeLabel = (scope: any) => {
