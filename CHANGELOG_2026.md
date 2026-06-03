@@ -4,6 +4,13 @@
 > **Status:** Living document. Append new ships under the **current week's row**, in the same step that you update `DOCUMENTATION.md` Version History.
 > **Sources:** `DOCUMENTATION.md` Version History, `supabase/migrations/`, `mem/*`.
 
+## 2026-06-03 — Phase 3B Data Governance: Overview dashboard (read-only)
+- New `Overview` sub-tab (now the first) in Platform Settings → Data Governance — 6 KPI cards (total/active/inactive + last-updated relative time) for Classifications, Sensitive Fields, Export Policies, Audit Policies, Retention, Privacy/Consent.
+- Coverage strip: grouped counts by classification key, module, classification, retention bucket (≤90d/≤1y/>1y/forever), purge strategy, lawful basis.
+- Recent changes table: last 10 `entitlement_audit` rows scoped to the 6 governance entity types; clicking a row jumps to the matching sub-tab. "Manage →" buttons on each card do the same via shared `Tabs` state.
+- Pure read-only: single React Query (`['data-governance','overview']`, 60s stale), 7 parallel selects, zero new tables/RLS/grants/migrations/enforcement. No PMS / safety / incentive / reports surface change.
+- Files: new `src/components/platform/DataGovernanceOverviewSubTab.tsx`; `src/components/platform/DataGovernanceTab.tsx` switches to controlled `value`+`onValueChange` so the overview can drive navigation.
+
 ## 2026-06-03 — Phase 3A.6 Data Governance: Privacy / Consent registry (config only)
 - DB: new `public.privacy_consent_settings` — one row per consent. Columns: `module_key`, `consent_key` (UNIQUE), `consent_label`, `purpose`, `data_categories`, `lawful_basis` (`consent|contract|legitimate_interest|legal_obligation|vital_interest|public_task`), `required`, `default_state` (`opt_in|opt_out`), `dsar_contact_email`, `policy_url`, `notes`, `is_active`, audit cols. CHECKs: lawful_basis and default_state whitelists. Index on `module_key`. RLS: read = authenticated, write = `platform_owner`. Standard `updated_at` trigger.
 - Seed: 14 default rows — cookies (strict/analytics/marketing), marketing email/SMS, AI training opt-out + assistant logging, DSAR contact, crash telemetry, PMS anonymous feedback share, HRMS payroll/background-check sharing, Safety anonymized incident publication, Incentive payout bank share. `ON CONFLICT (consent_key) DO NOTHING` — idempotent.
