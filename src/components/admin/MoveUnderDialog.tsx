@@ -128,7 +128,7 @@ export function MoveUnderDialog(p: Props) {
               <AlertCircle className="h-4 w-4 mt-0.5 text-amber-600 flex-shrink-0" />
               <div className="space-y-1">
                 <p className="font-medium">
-                  {lockedSources.length} locked item{lockedSources.length === 1 ? '' : 's'} cannot be moved
+                  {lockedSources.length} protected item{lockedSources.length === 1 ? '' : 's'} cannot be moved
                 </p>
                 <div className="flex flex-wrap gap-1">
                   {lockedSources.map((s) => (
