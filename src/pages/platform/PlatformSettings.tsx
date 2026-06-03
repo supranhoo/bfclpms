@@ -758,6 +758,7 @@ export default function PlatformSettings() {
             <TabsTrigger value="actions"><KeyRound className="h-4 w-4 mr-1" />Action Entitlements</TabsTrigger>
             <TabsTrigger value="registries"><ShieldCheck className="h-4 w-4 mr-1" />Registries</TabsTrigger>
             <TabsTrigger value="audit"><ScrollText className="h-4 w-4 mr-1" />Audit Logs</TabsTrigger>
+            <TabsTrigger value="telemetry"><BarChart3 className="h-4 w-4 mr-1" />Telemetry</TabsTrigger>
           </TabsList>
           <TabsContent value="overview"><OverviewTab /></TabsContent>
           <TabsContent value="clients"><Card><CardContent className="pt-6"><ClientsTab /></CardContent></Card></TabsContent>
@@ -765,6 +766,7 @@ export default function PlatformSettings() {
           <TabsContent value="actions"><Card><CardContent className="pt-6"><ActionEntitlementsTab /></CardContent></Card></TabsContent>
           <TabsContent value="registries"><Card><CardContent className="pt-6"><RegistriesTab /></CardContent></Card></TabsContent>
           <TabsContent value="audit"><Card><CardContent className="pt-6"><AuditTab /></CardContent></Card></TabsContent>
+          <TabsContent value="telemetry"><Card><CardContent className="pt-6"><TelemetryTab /></CardContent></Card></TabsContent>
         </Tabs>
       </main>
     </div>
