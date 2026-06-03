@@ -601,7 +601,7 @@ export default function PlatformSettings() {
         <div className="mb-6">
           <h1 className="text-2xl sm:text-3xl font-bold text-foreground">Platform Settings</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Hub-level configuration. Phase 1: read-only / observe mode. No PMS behavior changes from this screen.
+            Hub-level configuration. Phase 2: writable entitlement toggles (observe-only — no PMS enforcement yet).
           </p>
         </div>
 
