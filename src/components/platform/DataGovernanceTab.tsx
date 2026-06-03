@@ -691,6 +691,454 @@ function AuditPolicySubTab() {
   );
 }
 
+/* ────────────────────────── 3A.5: Retention Policy ─────────────────────── */
+
+type RetentionPolicy = {
+  id: string;
+  module_key: string;
+  domain_key: string;
+  domain_label: string;
+  retention_days: number | null;
+  archive_after_days: number | null;
+  purge_strategy: 'soft_delete' | 'hard_delete' | 'anonymize' | 'archive_only';
+  legal_hold: boolean;
+  regulatory_basis: string | null;
+  owner_role: string | null;
+  notes: string | null;
+  is_active: boolean;
+};
+type RetentionPolicyDraft = Omit<RetentionPolicy, 'id'> & { id?: string };
+
+const RP_MODULES = ['pms', 'hrms', 'lms', 'safety', 'incentive', 'platform'] as const;
+const RP_STRATEGIES = ['soft_delete', 'hard_delete', 'anonymize', 'archive_only'] as const;
+const RP_OWNER_ROLE_SUGGESTIONS = ['platform_owner', 'admin', 'hr_pms', 'management', 'safety_admin', 'manager'];
+const RP_NOTES_MAX = 500;
+const RP_KEY_MAX = 80;
+const RP_LABEL_MAX = 120;
+const RP_REG_MAX = 200;
+
+function emptyRp(): RetentionPolicyDraft {
+  return {
+    module_key: 'pms',
+    domain_key: '',
+    domain_label: '',
+    retention_days: 365,
+    archive_after_days: null,
+    purge_strategy: 'soft_delete',
+    legal_hold: false,
+    regulatory_basis: '',
+    owner_role: '',
+    notes: '',
+    is_active: true,
+  };
+}
+
+function pickRpAuditable(p: RetentionPolicyDraft) {
+  return {
+    module_key: p.module_key,
+    domain_key: p.domain_key,
+    domain_label: p.domain_label,
+    retention_days: p.retention_days,
+    archive_after_days: p.archive_after_days,
+    purge_strategy: p.purge_strategy,
+    legal_hold: p.legal_hold,
+    regulatory_basis: p.regulatory_basis,
+    owner_role: p.owner_role,
+    notes: p.notes,
+    is_active: p.is_active,
+  };
+}
+
+function RetentionPolicySubTab() {
+  const qc = useQueryClient();
+  const { user, hasRole } = useAuth();
+  const canWrite = hasRole('platform_owner');
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['platform-settings', 'data-governance', 'retention-policies'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('retention_policies')
+        .select('*')
+        .order('module_key', { ascending: true })
+        .order('domain_key', { ascending: true });
+      if (error) throw error;
+      return (data ?? []) as RetentionPolicy[];
+    },
+  });
+
+  const [filterModule, setFilterModule] = useState<string>('all');
+  const [showInactive, setShowInactive] = useState(false);
+
+  const [editing, setEditing] = useState<RetentionPolicy | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [form, setForm] = useState<RetentionPolicyDraft | null>(null);
+
+  useEffect(() => {
+    if (creating) setForm(emptyRp());
+    else if (editing) setForm({ ...editing });
+    else setForm(null);
+  }, [editing, creating]);
+
+  const mut = useMutation({
+    mutationFn: async () => {
+      if (!form) return;
+      if (creating) {
+        const payload = pickRpAuditable(form);
+        const { error } = await supabase
+          .from('retention_policies')
+          .insert({ ...payload, created_by: user?.id ?? null, updated_by: user?.id ?? null });
+        if (error) throw error;
+        const { error: audErr } = await supabase.from('entitlement_audit').insert({
+          actor_id: user?.id ?? null,
+          event_type: 'create',
+          entity_type: 'retention_policy',
+          entity_key: form.domain_key,
+          before: null,
+          after: payload,
+          reason: 'platform_settings_retention_policy_create',
+        });
+        if (audErr) throw audErr;
+        return;
+      }
+      if (!editing) return;
+      const before = pickRpAuditable(editing);
+      const after = pickRpAuditable(form);
+      const { error } = await supabase
+        .from('retention_policies')
+        .update({
+          domain_label: form.domain_label,
+          retention_days: form.retention_days,
+          archive_after_days: form.archive_after_days,
+          purge_strategy: form.purge_strategy,
+          legal_hold: form.legal_hold,
+          regulatory_basis: form.regulatory_basis,
+          owner_role: form.owner_role,
+          notes: form.notes,
+          is_active: form.is_active,
+          updated_by: user?.id ?? null,
+        })
+        .eq('id', editing.id);
+      if (error) throw error;
+      const { error: audErr } = await supabase.from('entitlement_audit').insert({
+        actor_id: user?.id ?? null,
+        event_type: 'update',
+        entity_type: 'retention_policy',
+        entity_key: editing.domain_key,
+        before,
+        after,
+        reason: 'platform_settings_retention_policy_update',
+      });
+      if (audErr) throw audErr;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['platform-settings', 'data-governance', 'retention-policies'] });
+      toast.success(creating ? 'Retention policy added' : 'Retention policy updated');
+      setEditing(null);
+      setCreating(false);
+    },
+    onError: (e: Error) => toast.error(`Save failed: ${e.message}`),
+  });
+
+  if (isLoading) return <LoadingRows />;
+
+  const isEditMode = !!editing && !creating;
+  const notesLen = (form?.notes ?? '').length;
+  const labelLen = (form?.domain_label ?? '').length;
+  const keyLen = (form?.domain_key ?? '').length;
+  const regLen = (form?.regulatory_basis ?? '').length;
+
+  const retentionValid =
+    form?.retention_days == null ||
+    (Number.isInteger(form.retention_days) && form.retention_days >= 0);
+  const archiveValid =
+    form?.archive_after_days == null ||
+    (Number.isInteger(form.archive_after_days) && form.archive_after_days >= 0);
+  const archiveLeRetention =
+    !form ||
+    form.archive_after_days == null ||
+    form.retention_days == null ||
+    form.archive_after_days <= form.retention_days;
+
+  const valid =
+    !!form &&
+    !!form.module_key &&
+    !!form.domain_key.trim() &&
+    !!form.domain_label.trim() &&
+    keyLen <= RP_KEY_MAX &&
+    labelLen <= RP_LABEL_MAX &&
+    regLen <= RP_REG_MAX &&
+    notesLen <= RP_NOTES_MAX &&
+    retentionValid &&
+    archiveValid &&
+    archiveLeRetention;
+
+  const dirty = creating
+    ? true
+    : !!editing && !!form && JSON.stringify(pickRpAuditable(editing)) !== JSON.stringify(pickRpAuditable(form));
+
+  const filtered = (data ?? []).filter((p) => {
+    if (filterModule !== 'all' && p.module_key !== filterModule) return false;
+    if (!showInactive && !p.is_active) return false;
+    return true;
+  });
+
+  const fmtDays = (d: number | null) => (d == null ? 'Forever' : d.toLocaleString());
+
+  return (
+    <>
+      <div className="flex flex-wrap items-end gap-3 pb-3">
+        <div className="space-y-1">
+          <Label className="text-xs text-muted-foreground">Module</Label>
+          <Select value={filterModule} onValueChange={setFilterModule}>
+            <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All modules</SelectItem>
+              {RP_MODULES.map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="flex items-center gap-2 pb-2">
+          <Switch checked={showInactive} onCheckedChange={setShowInactive} id="rp-show-inactive" />
+          <Label htmlFor="rp-show-inactive" className="text-sm cursor-pointer">Show inactive</Label>
+        </div>
+        <div className="ml-auto">
+          <Button
+            onClick={() => setCreating(true)}
+            disabled={!canWrite}
+            title={canWrite ? 'Add retention policy' : 'platform_owner only'}
+          >
+            <Plus className="h-4 w-4 mr-1" /> Add Policy
+          </Button>
+        </div>
+      </div>
+
+      <div className="overflow-x-auto rounded-md border">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Module</TableHead>
+              <TableHead>Domain</TableHead>
+              <TableHead className="text-right">Retention</TableHead>
+              <TableHead className="text-right">Archive After</TableHead>
+              <TableHead>Strategy</TableHead>
+              <TableHead className="text-center">Legal Hold</TableHead>
+              <TableHead>Owner</TableHead>
+              <TableHead className="text-center">Active</TableHead>
+              <TableHead className="w-16 text-right">Edit</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {filtered.length === 0 ? (
+              <TableRow><TableCell colSpan={9} className="text-center text-muted-foreground py-6">No retention policies</TableCell></TableRow>
+            ) : filtered.map((p) => (
+              <TableRow key={p.id}>
+                <TableCell className="font-mono text-xs">{p.module_key}</TableCell>
+                <TableCell>
+                  <div className="font-medium">{p.domain_label}</div>
+                  <div className="font-mono text-xs text-muted-foreground">{p.domain_key}</div>
+                </TableCell>
+                <TableCell className="text-right font-mono text-xs">{fmtDays(p.retention_days)}</TableCell>
+                <TableCell className="text-right font-mono text-xs">
+                  {p.archive_after_days == null ? '—' : p.archive_after_days.toLocaleString()}
+                </TableCell>
+                <TableCell>
+                  <Badge variant="outline" className="text-xs">{p.purge_strategy}</Badge>
+                </TableCell>
+                <TableCell className="text-center">{boolDash(p.legal_hold)}</TableCell>
+                <TableCell className="font-mono text-xs">{p.owner_role || '—'}</TableCell>
+                <TableCell className="text-center">{p.is_active ? '✓' : '—'}</TableCell>
+                <TableCell className="text-right">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setEditing(p)}
+                    disabled={!canWrite}
+                    aria-label={`Edit ${p.domain_key}`}
+                    title={canWrite ? 'Edit retention policy' : 'platform_owner only'}
+                  >
+                    <Pencil className="h-4 w-4" />
+                  </Button>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+
+      <Dialog
+        open={editing !== null || creating}
+        onOpenChange={(o) => { if (!o && !mut.isPending) { setEditing(null); setCreating(false); } }}
+      >
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{creating ? 'Add retention policy' : 'Edit retention policy'}</DialogTitle>
+            <DialogDescription>
+              Registry only. Saved values are recorded with an audit row but no archive or purge
+              job consults this table yet.
+            </DialogDescription>
+          </DialogHeader>
+          {form && (
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label htmlFor="rp-module">Module</Label>
+                  <Select
+                    value={form.module_key}
+                    onValueChange={(v) => setForm({ ...form, module_key: v })}
+                    disabled={isEditMode}
+                  >
+                    <SelectTrigger id="rp-module"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {RP_MODULES.map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="rp-key">Domain key</Label>
+                  <Input
+                    id="rp-key"
+                    value={form.domain_key}
+                    maxLength={RP_KEY_MAX}
+                    disabled={isEditMode}
+                    placeholder="e.g. pms.review_submissions"
+                    onChange={(e) => setForm({ ...form, domain_key: e.target.value })}
+                  />
+                  <p className="text-xs text-muted-foreground">{keyLen}/{RP_KEY_MAX}</p>
+                </div>
+              </div>
+              {isEditMode && (
+                <p className="text-xs text-muted-foreground">
+                  Module and domain key are immutable after creation. Add a new row if the identity changes.
+                </p>
+              )}
+
+              <div className="space-y-1">
+                <Label htmlFor="rp-label">Label</Label>
+                <Input
+                  id="rp-label"
+                  value={form.domain_label}
+                  maxLength={RP_LABEL_MAX}
+                  onChange={(e) => setForm({ ...form, domain_label: e.target.value })}
+                />
+                <p className="text-xs text-muted-foreground">{labelLen}/{RP_LABEL_MAX}</p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label htmlFor="rp-retention">Retention (days)</Label>
+                  <Input
+                    id="rp-retention"
+                    type="number"
+                    min={0}
+                    value={form.retention_days ?? ''}
+                    placeholder="Forever"
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setForm({ ...form, retention_days: v === '' ? null : Number(v) });
+                    }}
+                  />
+                  <p className="text-xs text-muted-foreground">Blank = keep forever</p>
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="rp-archive">Archive after (days)</Label>
+                  <Input
+                    id="rp-archive"
+                    type="number"
+                    min={0}
+                    value={form.archive_after_days ?? ''}
+                    placeholder="None"
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setForm({ ...form, archive_after_days: v === '' ? null : Number(v) });
+                    }}
+                  />
+                  <p className="text-xs text-muted-foreground">Must be ≤ retention</p>
+                </div>
+              </div>
+              {!archiveLeRetention && (
+                <p className="text-xs text-destructive">Archive window cannot exceed retention.</p>
+              )}
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label htmlFor="rp-strategy">Purge strategy</Label>
+                  <Select
+                    value={form.purge_strategy}
+                    onValueChange={(v) => setForm({ ...form, purge_strategy: v as RetentionPolicy['purge_strategy'] })}
+                  >
+                    <SelectTrigger id="rp-strategy"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {RP_STRATEGIES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="rp-owner">Owner role</Label>
+                  <Input
+                    id="rp-owner"
+                    list="rp-owner-suggestions"
+                    value={form.owner_role ?? ''}
+                    onChange={(e) => setForm({ ...form, owner_role: e.target.value })}
+                    placeholder="e.g. hr_pms"
+                  />
+                  <datalist id="rp-owner-suggestions">
+                    {RP_OWNER_ROLE_SUGGESTIONS.map((r) => <option key={r} value={r} />)}
+                  </datalist>
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <Label htmlFor="rp-reg">Regulatory basis</Label>
+                <Input
+                  id="rp-reg"
+                  value={form.regulatory_basis ?? ''}
+                  maxLength={RP_REG_MAX}
+                  placeholder='e.g. "IT Act 2000, 7y"'
+                  onChange={(e) => setForm({ ...form, regulatory_basis: e.target.value })}
+                />
+                <p className="text-xs text-muted-foreground">{regLen}/{RP_REG_MAX}</p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <SwitchRow label="Legal hold" checked={form.legal_hold} onChange={(v) => setForm({ ...form, legal_hold: v })} />
+                <SwitchRow label="Active"     checked={form.is_active}  onChange={(v) => setForm({ ...form, is_active: v })} />
+              </div>
+
+              <div className="space-y-1">
+                <Label htmlFor="rp-notes">Notes</Label>
+                <Textarea
+                  id="rp-notes"
+                  value={form.notes ?? ''}
+                  maxLength={RP_NOTES_MAX}
+                  rows={2}
+                  onChange={(e) => setForm({ ...form, notes: e.target.value })}
+                />
+                <p className="text-xs text-muted-foreground">{notesLen}/{RP_NOTES_MAX}</p>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => { setEditing(null); setCreating(false); }}
+              disabled={mut.isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => mut.mutate()}
+              disabled={!valid || !dirty || !canWrite || mut.isPending}
+            >
+              {mut.isPending ? 'Saving…' : creating ? 'Add' : 'Save'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
 /* ────────────────────────── 3A.3: Export Policies ──────────────────────── */
 
 type ExportPolicy = {
