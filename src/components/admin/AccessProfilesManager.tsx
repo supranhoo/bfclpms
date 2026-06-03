@@ -634,15 +634,15 @@ export function MappingTab({ profiles, orgScopes, menuRights, configs, saveOrgSc
                           </TableRow>
                         );
                       })}
-                    {section === 'hr_pms' && (
-                      <TableRow key="review-notes-access-inline">
-                        <TableCell colSpan={7} className="p-0">
-                          <ReviewNotesAccessInline />
-                        </TableCell>
-                      </TableRow>
-                    )}
                     </Fragment>
                   )}
+                  {/* Review-notes access — always render regardless of
+                      whether hr_pms section has legacy rows. */}
+                  <TableRow key="review-notes-access-inline">
+                    <TableCell colSpan={7} className="p-0">
+                      <ReviewNotesAccessInline />
+                    </TableCell>
+                  </TableRow>
                   {visibleFlatRows.length === 0 && Object.keys(sections).length === 0 && (
                     <TableRow>
                       <TableCell colSpan={7} className="text-center text-sm text-muted-foreground py-6">
