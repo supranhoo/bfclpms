@@ -15,6 +15,7 @@ import {
   MONTHS 
 } from '@/hooks/useEmployeeWorkingDays';
 import { useWorkingDaysPerMonth } from '@/hooks/useWorkflowSettings';
+import { CanAction } from '@/components/platform/CanAction';
 
 interface EmployeeWorkingDaysDialogProps {
   isOpen: boolean;
@@ -222,22 +223,24 @@ export function EmployeeWorkingDaysDialog({
 
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>Cancel</Button>
-          <Button 
-            onClick={handleSave} 
-            disabled={saveDays.isPending || Object.keys(monthlyDays).length === 0}
-          >
-            {saveDays.isPending ? (
-              <>
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                Saving...
-              </>
-            ) : (
-              <>
-                <Save className="h-4 w-4 mr-2" />
-                Save Changes
-              </>
-            )}
-          </Button>
+          <CanAction actionKey="pms.users.working_days">
+            <Button 
+              onClick={handleSave} 
+              disabled={saveDays.isPending || Object.keys(monthlyDays).length === 0}
+            >
+              {saveDays.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                <>
+                  <Save className="h-4 w-4 mr-2" />
+                  Save Changes
+                </>
+              )}
+            </Button>
+          </CanAction>
         </DialogFooter>
       </DialogContent>
     </Dialog>
