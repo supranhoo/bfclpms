@@ -449,8 +449,13 @@ export function EmployeeSelectorGrid({
     }
     // POLICY §107 — strip the viewer from every reviewer panel.
     if (!resolved || !user?.id) return resolved;
-    return resolved.filter(m => m.id !== user.id);
-  }, [viewLevel, teamMembers, skipLevelMembers, allProfiles, isFullAccess, requiredStage, stageFilteredProfiles, statusFilter, user?.id]);
+    const withoutViewer = resolved.filter(m => m.id !== user.id);
+    // Universal employee status filter — only meaningful for full-access
+    // roles whose roster includes inactive employees. Manager/skip hooks
+    // already filter is_active=true, so this is a no-op for them.
+    if (!isFullAccess) return withoutViewer;
+    return applyEmployeeStatusFilter(withoutViewer, empStatus, (p) => p.is_active);
+  }, [viewLevel, teamMembers, skipLevelMembers, allProfiles, isFullAccess, requiredStage, stageFilteredProfiles, statusFilter, user?.id, empStatus]);
 
   // Auto-open KPI from URL
   useEffect(() => {
