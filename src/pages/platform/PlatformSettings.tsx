@@ -11,7 +11,8 @@ import { Switch } from '@/components/ui/switch';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useState, useEffect } from 'react';
-import { Building2, Boxes, KeyRound, ShieldCheck, ScrollText, Layers, Download, ChevronLeft, ChevronRight, AlertTriangle, CheckCircle2, BarChart3, Pencil } from 'lucide-react';
+import { Building2, Boxes, KeyRound, ShieldCheck, ScrollText, Layers, Download, ChevronLeft, ChevronRight, AlertTriangle, CheckCircle2, BarChart3, Pencil, Plus } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
 import { useEntitlement } from '@/hooks/useEntitlement';
@@ -39,7 +40,7 @@ import {
 } from '@/components/ui/alert-dialog';
 
 const PAGE_SIZE = 50;
-const AUDIT_EVENT_TYPES = ['grant', 'revoke', 'update', 'would_deny', 'admin_view', 'deny'] as const;
+const AUDIT_EVENT_TYPES = ['grant', 'revoke', 'update', 'would_deny', 'admin_view', 'deny', 'create'] as const;
 
 /** Loose parser matching `useEntitlement` — JSONB can decode to boolean, plain
  *  string `"true"`, or a double-quoted string `"\"true\""`. */
@@ -392,6 +393,21 @@ type ClientRow = {
 };
 
 const CLIENT_NAME_MAX = 80;
+const CLIENT_KEY_MAX = 40;
+const CLIENT_MODES = ['saas', 'on_prem', 'hybrid'] as const;
+type ClientMode = (typeof CLIENT_MODES)[number];
+
+/** Lowercase slug: alphanumerics + hyphens, collapsed, trimmed, max 40. */
+function slugifyClientKey(name: string): string {
+  return name
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, CLIENT_KEY_MAX);
+}
+
+const KEY_PATTERN = /^[a-z0-9][a-z0-9-]*[a-z0-9]$|^[a-z0-9]$/;
 
 function ClientsTab() {
   const qc = useQueryClient();
@@ -400,6 +416,25 @@ function ClientsTab() {
   const { data, isLoading } = useRows<ClientRow>('clients', 'client_key');
   const [editing, setEditing] = useState<ClientRow | null>(null);
   const [name, setName] = useState('');
+  const [adding, setAdding] = useState(false);
+  const [addName, setAddName] = useState('');
+  const [addKey, setAddKey] = useState('');
+  const [addKeyTouched, setAddKeyTouched] = useState(false);
+  const [addMode, setAddMode] = useState<ClientMode>('saas');
+  const [copyFromDefault, setCopyFromDefault] = useState(false);
+
+  // Auto-derive key from name unless the user has edited the key field manually.
+  useEffect(() => {
+    if (adding && !addKeyTouched) setAddKey(slugifyClientKey(addName));
+  }, [addName, addKeyTouched, adding]);
+
+  // Reset the add-form on close.
+  useEffect(() => {
+    if (!adding) {
+      setAddName(''); setAddKey(''); setAddKeyTouched(false);
+      setAddMode('saas'); setCopyFromDefault(false);
+    }
+  }, [adding]);
 
   useEffect(() => {
     if (editing) setName(editing.display_name ?? '');
@@ -433,6 +468,100 @@ function ClientsTab() {
     onError: (e: Error) => toast.error(`Update failed: ${e.message}`),
   });
 
+  const existingKeys = new Set((data ?? []).map((c) => c.client_key));
+  const addNameTrim = addName.trim();
+  const addKeyTrim = addKey.trim();
+  const keyValid =
+    addKeyTrim.length > 0 &&
+    addKeyTrim.length <= CLIENT_KEY_MAX &&
+    KEY_PATTERN.test(addKeyTrim) &&
+    !existingKeys.has(addKeyTrim);
+  const addNameValid = addNameTrim.length > 0 && addNameTrim.length <= CLIENT_NAME_MAX;
+  const addValid = addNameValid && keyValid;
+
+  const addMut = useMutation({
+    mutationFn: async () => {
+      // 1. Insert the client row (RLS already enforces platform_owner).
+      const { data: inserted, error: insErr } = await supabase
+        .from('clients')
+        .insert({
+          client_key: addKeyTrim,
+          display_name: addNameTrim,
+          deployment_mode: addMode,
+          is_active: true,
+          entitlement_source: 'db',
+        })
+        .select('id, client_key, display_name, deployment_mode, is_active, entitlement_source')
+        .single();
+      if (insErr) throw insErr;
+
+      // 2. Optionally copy entitlements from the default client.
+      //    Default seeding (unchecked) = NO rows = all modules/actions OFF,
+      //    because the resolver treats missing rows as not-enabled.
+      let copied = { modules: 0, actions: 0 };
+      if (copyFromDefault) {
+        const { data: src } = await supabase
+          .from('clients')
+          .select('id')
+          .eq('client_key', 'default')
+          .maybeSingle();
+        if (src?.id) {
+          const [{ data: mods }, { data: acts }] = await Promise.all([
+            supabase.from('client_module_entitlements')
+              .select('module_key, is_enabled, valid_from, valid_until')
+              .eq('client_id', src.id),
+            supabase.from('client_action_entitlements')
+              .select('action_key, is_enabled, valid_from, valid_until')
+              .eq('client_id', src.id),
+          ]);
+          if (mods?.length) {
+            const { error } = await supabase.from('client_module_entitlements').insert(
+              mods.map((m) => ({ ...m, client_id: inserted.id, granted_by: user?.id ?? null })),
+            );
+            if (error) throw error;
+            copied.modules = mods.length;
+          }
+          if (acts?.length) {
+            const { error } = await supabase.from('client_action_entitlements').insert(
+              acts.map((a) => ({ ...a, client_id: inserted.id, granted_by: user?.id ?? null })),
+            );
+            if (error) throw error;
+            copied.actions = acts.length;
+          }
+        }
+      }
+
+      // 3. Audit row.
+      await supabase.from('entitlement_audit').insert({
+        actor_id: user?.id ?? null,
+        event_type: 'create',
+        entity_type: 'client',
+        entity_key: inserted.client_key,
+        before: null,
+        after: {
+          client_key: inserted.client_key,
+          display_name: inserted.display_name,
+          deployment_mode: inserted.deployment_mode,
+          is_active: inserted.is_active,
+          entitlement_source: inserted.entitlement_source,
+          copied_from_default: copyFromDefault,
+          copied_modules: copied.modules,
+          copied_actions: copied.actions,
+        },
+        reason: 'platform_settings_client_create',
+      });
+
+      return inserted;
+    },
+    onSuccess: (row) => {
+      qc.invalidateQueries({ queryKey: ['platform-settings', 'clients'] });
+      qc.invalidateQueries({ queryKey: ['platform-settings', 'audit'] });
+      setAdding(false);
+      toast.success(`Client "${row?.display_name}" created`);
+    },
+    onError: (e: Error) => toast.error(`Create failed: ${e.message}`),
+  });
+
   const trimmed = name.trim();
   const valid = trimmed.length > 0 && trimmed.length <= CLIENT_NAME_MAX;
   const dirty = editing ? trimmed !== editing.display_name : false;
@@ -440,6 +569,16 @@ function ClientsTab() {
   if (isLoading) return <LoadingRows />;
   return (
     <>
+      <div className="mb-3 flex justify-end">
+        <Button
+          size="sm"
+          onClick={() => setAdding(true)}
+          disabled={!canWrite}
+          title={canWrite ? 'Add a new client' : 'platform_owner only'}
+        >
+          <Plus className="h-4 w-4 mr-1" /> Add Client
+        </Button>
+      </div>
       <div className="overflow-x-auto rounded-md border">
         <Table>
           <TableHeader>
@@ -517,6 +656,89 @@ function ClientsTab() {
               disabled={!valid || !dirty || !canWrite || mut.isPending}
             >
               {mut.isPending ? 'Saving…' : 'Save'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={adding} onOpenChange={(o) => { if (!o && !addMut.isPending) setAdding(false); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add Client</DialogTitle>
+            <DialogDescription>
+              Creates a new tenant row. Defaults to all modules/actions OFF unless you copy
+              from the default client. Deletion is not available in this phase.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <Label htmlFor="new-client-name">Display name</Label>
+              <Input
+                id="new-client-name"
+                value={addName}
+                maxLength={CLIENT_NAME_MAX}
+                onChange={(e) => setAddName(e.target.value)}
+                placeholder="e.g. Acme Corp"
+                autoFocus
+              />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="new-client-key">Client key</Label>
+              <Input
+                id="new-client-key"
+                value={addKey}
+                maxLength={CLIENT_KEY_MAX}
+                onChange={(e) => { setAddKey(e.target.value); setAddKeyTouched(true); }}
+                placeholder="auto-generated from name"
+                className="font-mono"
+              />
+              <p className="text-xs text-muted-foreground">
+                Lowercase letters, digits, hyphens. Cannot be changed after creation.
+                {addKeyTrim && !keyValid && (
+                  <span className="ml-1 text-destructive">
+                    {existingKeys.has(addKeyTrim)
+                      ? 'Key already exists.'
+                      : 'Invalid key format.'}
+                  </span>
+                )}
+              </p>
+            </div>
+            <div className="space-y-1">
+              <Label>Mode</Label>
+              <Select value={addMode} onValueChange={(v) => setAddMode(v as ClientMode)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {CLIENT_MODES.map((m) => (
+                    <SelectItem key={m} value={m}>{m}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex items-start gap-2 pt-1">
+              <Checkbox
+                id="copy-entitlements"
+                checked={copyFromDefault}
+                onCheckedChange={(v) => setCopyFromDefault(v === true)}
+              />
+              <div className="grid gap-0.5 leading-none">
+                <Label htmlFor="copy-entitlements" className="cursor-pointer">
+                  Copy entitlements from <code className="text-xs">default</code>
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  Unchecked = new client starts with everything OFF (recommended).
+                </p>
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAdding(false)} disabled={addMut.isPending}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => addMut.mutate()}
+              disabled={!addValid || !canWrite || addMut.isPending}
+            >
+              {addMut.isPending ? 'Creating…' : 'Create Client'}
             </Button>
           </DialogFooter>
         </DialogContent>
