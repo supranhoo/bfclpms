@@ -308,6 +308,385 @@ function ClassificationsSubTab() {
   );
 }
 
+/* ────────────────────────── 3A.4: Audit Policy ─────────────────────────── */
+
+type AuditPolicy = {
+  id: string;
+  module_key: string;
+  event_category: string;
+  enabled: boolean;
+  retention_days: number | null;
+  min_severity: 'info' | 'notice' | 'warn' | 'critical';
+  include_payload: boolean;
+  pii_redaction: boolean;
+  alert_on_failure: boolean;
+  notes: string | null;
+  is_active: boolean;
+};
+type AuditPolicyDraft = Omit<AuditPolicy, 'id'> & { id?: string };
+
+const AP_MODULES = ['pms', 'hrms', 'lms', 'safety', 'incentive', 'platform'] as const;
+const AP_CATEGORIES = [
+  'auth', 'data_read', 'data_write', 'export', 'permission_change',
+  'score_change', 'workflow_change', 'config_change', 'admin_action', 'notification',
+] as const;
+const AP_SEVERITIES = ['info', 'notice', 'warn', 'critical'] as const;
+const AP_NOTES_MAX = 500;
+
+function emptyAp(): AuditPolicyDraft {
+  return {
+    module_key: 'pms',
+    event_category: 'data_write',
+    enabled: true,
+    retention_days: 365,
+    min_severity: 'info',
+    include_payload: true,
+    pii_redaction: false,
+    alert_on_failure: false,
+    notes: '',
+    is_active: true,
+  };
+}
+
+function pickApAuditable(p: AuditPolicyDraft) {
+  return {
+    module_key: p.module_key,
+    event_category: p.event_category,
+    enabled: p.enabled,
+    retention_days: p.retention_days,
+    min_severity: p.min_severity,
+    include_payload: p.include_payload,
+    pii_redaction: p.pii_redaction,
+    alert_on_failure: p.alert_on_failure,
+    notes: p.notes,
+    is_active: p.is_active,
+  };
+}
+
+function AuditPolicySubTab() {
+  const qc = useQueryClient();
+  const { user, hasRole } = useAuth();
+  const canWrite = hasRole('platform_owner');
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['platform-settings', 'data-governance', 'audit-policies'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('audit_policies')
+        .select('*')
+        .order('module_key', { ascending: true })
+        .order('event_category', { ascending: true });
+      if (error) throw error;
+      return (data ?? []) as AuditPolicy[];
+    },
+  });
+
+  const [filterModule, setFilterModule] = useState<string>('all');
+  const [filterCategory, setFilterCategory] = useState<string>('all');
+  const [showInactive, setShowInactive] = useState(false);
+
+  const [editing, setEditing] = useState<AuditPolicy | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [form, setForm] = useState<AuditPolicyDraft | null>(null);
+
+  useEffect(() => {
+    if (creating) setForm(emptyAp());
+    else if (editing) setForm({ ...editing });
+    else setForm(null);
+  }, [editing, creating]);
+
+  const mut = useMutation({
+    mutationFn: async () => {
+      if (!form) return;
+      if (creating) {
+        const payload = pickApAuditable(form);
+        const { error } = await supabase
+          .from('audit_policies')
+          .insert({ ...payload, created_by: user?.id ?? null, updated_by: user?.id ?? null });
+        if (error) throw error;
+        const { error: audErr } = await supabase.from('entitlement_audit').insert({
+          actor_id: user?.id ?? null,
+          event_type: 'create',
+          entity_type: 'audit_policy',
+          entity_key: `${form.module_key}.${form.event_category}`,
+          before: null,
+          after: payload,
+          reason: 'platform_settings_audit_policy_create',
+        });
+        if (audErr) throw audErr;
+        return;
+      }
+      if (!editing) return;
+      const before = pickApAuditable(editing);
+      const after = pickApAuditable(form);
+      const { error } = await supabase
+        .from('audit_policies')
+        .update({
+          enabled: form.enabled,
+          retention_days: form.retention_days,
+          min_severity: form.min_severity,
+          include_payload: form.include_payload,
+          pii_redaction: form.pii_redaction,
+          alert_on_failure: form.alert_on_failure,
+          notes: form.notes,
+          is_active: form.is_active,
+          updated_by: user?.id ?? null,
+        })
+        .eq('id', editing.id);
+      if (error) throw error;
+      const { error: audErr } = await supabase.from('entitlement_audit').insert({
+        actor_id: user?.id ?? null,
+        event_type: 'update',
+        entity_type: 'audit_policy',
+        entity_key: `${editing.module_key}.${editing.event_category}`,
+        before,
+        after,
+        reason: 'platform_settings_audit_policy_update',
+      });
+      if (audErr) throw audErr;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['platform-settings', 'data-governance', 'audit-policies'] });
+      qc.invalidateQueries({ queryKey: ['platform-settings', 'audit'] });
+      toast.success(creating ? 'Audit policy added' : 'Audit policy updated');
+      setEditing(null);
+      setCreating(false);
+    },
+    onError: (e: Error) => toast.error(`Save failed: ${e.message}`),
+  });
+
+  if (isLoading) return <LoadingRows />;
+
+  const isEditMode = !!editing && !creating;
+  const notesLen = (form?.notes ?? '').length;
+  const valid =
+    !!form &&
+    !!form.module_key &&
+    !!form.event_category &&
+    notesLen <= AP_NOTES_MAX &&
+    (form.retention_days == null ||
+      (Number.isInteger(form.retention_days) && form.retention_days >= 0));
+  const dirty = creating
+    ? true
+    : !!editing && !!form && JSON.stringify(pickApAuditable(editing)) !== JSON.stringify(pickApAuditable(form));
+
+  const filtered = (data ?? []).filter((p) => {
+    if (filterModule !== 'all' && p.module_key !== filterModule) return false;
+    if (filterCategory !== 'all' && p.event_category !== filterCategory) return false;
+    if (!showInactive && !p.is_active) return false;
+    return true;
+  });
+
+  return (
+    <>
+      <div className="flex flex-wrap items-end gap-3 pb-3">
+        <div className="space-y-1">
+          <Label className="text-xs text-muted-foreground">Module</Label>
+          <Select value={filterModule} onValueChange={setFilterModule}>
+            <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All modules</SelectItem>
+              {AP_MODULES.map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs text-muted-foreground">Category</Label>
+          <Select value={filterCategory} onValueChange={setFilterCategory}>
+            <SelectTrigger className="w-48"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All categories</SelectItem>
+              {AP_CATEGORIES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="flex items-center gap-2 pb-2">
+          <Switch checked={showInactive} onCheckedChange={setShowInactive} id="ap-show-inactive" />
+          <Label htmlFor="ap-show-inactive" className="text-sm cursor-pointer">Show inactive</Label>
+        </div>
+        <div className="ml-auto">
+          <Button
+            onClick={() => setCreating(true)}
+            disabled={!canWrite}
+            title={canWrite ? 'Add audit policy' : 'platform_owner only'}
+          >
+            <Plus className="h-4 w-4 mr-1" /> Add Policy
+          </Button>
+        </div>
+      </div>
+
+      <div className="overflow-x-auto rounded-md border">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Module</TableHead>
+              <TableHead>Category</TableHead>
+              <TableHead className="text-center">Enabled</TableHead>
+              <TableHead className="text-right">Retention (days)</TableHead>
+              <TableHead>Severity</TableHead>
+              <TableHead className="text-center">Payload</TableHead>
+              <TableHead className="text-center">PII Redact</TableHead>
+              <TableHead className="text-center">Alert</TableHead>
+              <TableHead className="text-center">Active</TableHead>
+              <TableHead className="w-16 text-right">Edit</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {filtered.length === 0 ? (
+              <TableRow><TableCell colSpan={10} className="text-center text-muted-foreground py-6">No audit policies</TableCell></TableRow>
+            ) : filtered.map((p) => (
+              <TableRow key={p.id}>
+                <TableCell className="font-mono text-xs">{p.module_key}</TableCell>
+                <TableCell className="font-mono text-xs">{p.event_category}</TableCell>
+                <TableCell className="text-center">{boolDash(p.enabled)}</TableCell>
+                <TableCell className="text-right font-mono text-xs">
+                  {p.retention_days == null ? '∞' : p.retention_days.toLocaleString()}
+                </TableCell>
+                <TableCell>
+                  <Badge variant="outline" className="text-xs uppercase">{p.min_severity}</Badge>
+                </TableCell>
+                <TableCell className="text-center">{boolDash(p.include_payload)}</TableCell>
+                <TableCell className="text-center">{boolDash(p.pii_redaction)}</TableCell>
+                <TableCell className="text-center">{boolDash(p.alert_on_failure)}</TableCell>
+                <TableCell className="text-center">{p.is_active ? '✓' : '—'}</TableCell>
+                <TableCell className="text-right">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setEditing(p)}
+                    disabled={!canWrite}
+                    aria-label={`Edit ${p.module_key}.${p.event_category}`}
+                    title={canWrite ? 'Edit audit policy' : 'platform_owner only'}
+                  >
+                    <Pencil className="h-4 w-4" />
+                  </Button>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+
+      <Dialog
+        open={editing !== null || creating}
+        onOpenChange={(o) => { if (!o && !mut.isPending) { setEditing(null); setCreating(false); } }}
+      >
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{creating ? 'Add audit policy' : 'Edit audit policy'}</DialogTitle>
+            <DialogDescription>
+              Registry only. Saved values are recorded with an audit row but no audit writer or
+              retention job consults this table yet.
+            </DialogDescription>
+          </DialogHeader>
+          {form && (
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label htmlFor="ap-module">Module</Label>
+                  <Select
+                    value={form.module_key}
+                    onValueChange={(v) => setForm({ ...form, module_key: v })}
+                    disabled={isEditMode}
+                  >
+                    <SelectTrigger id="ap-module"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {AP_MODULES.map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="ap-cat">Event category</Label>
+                  <Select
+                    value={form.event_category}
+                    onValueChange={(v) => setForm({ ...form, event_category: v })}
+                    disabled={isEditMode}
+                  >
+                    <SelectTrigger id="ap-cat"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {AP_CATEGORIES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              {isEditMode && (
+                <p className="text-xs text-muted-foreground">
+                  Module and category are immutable after creation. Add a new row if the identity changes.
+                </p>
+              )}
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label htmlFor="ap-retention">Retention (days)</Label>
+                  <Input
+                    id="ap-retention"
+                    type="number"
+                    min={0}
+                    value={form.retention_days ?? ''}
+                    placeholder="Forever"
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setForm({ ...form, retention_days: v === '' ? null : Number(v) });
+                    }}
+                  />
+                  <p className="text-xs text-muted-foreground">Blank = keep forever · 0 = no retention</p>
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="ap-sev">Minimum severity</Label>
+                  <Select
+                    value={form.min_severity}
+                    onValueChange={(v) => setForm({ ...form, min_severity: v as AuditPolicy['min_severity'] })}
+                  >
+                    <SelectTrigger id="ap-sev"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {AP_SEVERITIES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <SwitchRow label="Enabled"          checked={form.enabled}          onChange={(v) => setForm({ ...form, enabled: v })} />
+                <SwitchRow label="Include payload"  checked={form.include_payload}  onChange={(v) => setForm({ ...form, include_payload: v })} />
+                <SwitchRow label="PII redaction"    checked={form.pii_redaction}    onChange={(v) => setForm({ ...form, pii_redaction: v })} />
+                <SwitchRow label="Alert on failure" checked={form.alert_on_failure} onChange={(v) => setForm({ ...form, alert_on_failure: v })} />
+                <SwitchRow label="Active"           checked={form.is_active}        onChange={(v) => setForm({ ...form, is_active: v })} />
+              </div>
+
+              <div className="space-y-1">
+                <Label htmlFor="ap-notes">Notes</Label>
+                <Textarea
+                  id="ap-notes"
+                  value={form.notes ?? ''}
+                  maxLength={AP_NOTES_MAX}
+                  rows={2}
+                  onChange={(e) => setForm({ ...form, notes: e.target.value })}
+                />
+                <p className="text-xs text-muted-foreground">{notesLen}/{AP_NOTES_MAX}</p>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => { setEditing(null); setCreating(false); }}
+              disabled={mut.isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => mut.mutate()}
+              disabled={!valid || !dirty || !canWrite || mut.isPending}
+            >
+              {mut.isPending ? 'Saving…' : creating ? 'Add' : 'Save'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
 /* ────────────────────────── 3A.3: Export Policies ──────────────────────── */
 
 type ExportPolicy = {
