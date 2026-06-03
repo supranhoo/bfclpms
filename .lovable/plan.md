@@ -1,72 +1,80 @@
 ## Goal
-When an admin edits a KPI from the Admin Edit dialog without changing status, the Review Timeline currently labels the event "Admin Override" and adds a misleading "New Status: Self Review" line. Reclassify it to **KPI Updated** (descriptive fields) or **Logic Updated** (scoring thresholds), and hide the noisy "New Status" line when status didn't actually change.
+Bring PMS Menu Setting up to Beehive-style flexibility: surface Level 4 children, give explicit level/parent controls, add a Beehive-style flat table, and a deterministic "Move to level / parent" dialog. Reuse the existing override pipeline (`menu_overrides` columns: `custom_parent_key`, `custom_menu_level`, `custom_sort_order`, `custom_module_key`) and existing safeguards (`validateMove`, DB trigger `menu_overrides_validate`, `CreateShortcutDialog`, `deleteCustomMenuItem`). No DB schema change. No route/permission/workflow/KPI/scoring/auth/business-data change.
 
-## Assumptions
-- Audit row already carries the right metadata: `source: 'admin_edit_dialog'`, `status_changed: boolean`, and `changed_fields: string[]` (verified via `useKpis.ts:741-755` and the live audit row for KPI 101962 / May 2026).
-- "Admin Override" label must remain for genuine non-edit-dialog overrides (e.g. bulk override, direct status overrides whose source ≠ `admin_edit_dialog`).
-- No backend / DB change needed. Pure UI relabel + detail-line filtering.
+## What is already in place (do not rebuild)
+- Override save pipeline, audit logging, reset-all, master switch — `MenuSettingTab.tsx`.
+- Shortcut creation for locked/system rows — `CreateShortcutDialog`, wired via `onCreateShortcut`.
+- Custom delete with children-block + multi-table cleanup — `deleteCustomMenuItem`, wired via `onDeleteCustom`.
+- Cross-level validation (depth ≤ 4, cycles, cross-app, accepts_children, system-required) — `validateMove.ts` + DB trigger.
+- Bulk "Move under…" dialog — `MoveUnderDialog.tsx`.
+- DnD tree with multi-select — `MenuTreeDnd.tsx`.
 
-## Logic Classification (SSOT helper)
-New file `src/lib/auditLabels.ts` exporting:
-- `LOGIC_FIELDS = ['r0','r1','r2','r3','r4','r5','threshold_mode','criteria','uom_type','qualitative_options']`
-- `classifyAdminOverride(log)` returns one of:
-  - `'logic_updated'` — `source==='admin_edit_dialog'`, `status_changed===false`, and every entry in `changed_fields` is in `LOGIC_FIELDS`.
-  - `'kpi_updated'` — `source==='admin_edit_dialog'`, `status_changed===false`, otherwise.
-  - `'admin_override'` — anything else (status actually changed, or non-edit-dialog source).
-- Label map: `kpi_updated → 'KPI Updated'`, `logic_updated → 'Logic Updated'`, `admin_override → 'Admin Override'`.
+## What changes (UI only)
 
-## UI Changes
+### 1. Level-visibility & expansion controls (`MenuSettingTab.tsx` + `MenuTreeDnd.tsx`)
+Add a single toolbar row above the tree:
+- Buttons: **Expand all**, **Collapse all**.
+- Toggle group (multi-select chips): **L2**, **L3**, **L4**, default all on. Filters which nodes render; ancestors of a visible node always render so the chain is intact.
+- A **View** segmented control: **Tree** | **Table** (Beehive-style flat list).
 
-### 1. `src/components/dashboard/KpiTimeline.tsx`
-- `getActionConfig(log)` (signature change from `(action)` → `(log)`): for `action === 'ADMIN_OVERRIDE'`, call `classifyAdminOverride` and swap label + icon:
-  - `kpi_updated` → icon `Edit`, color `bg-slate-500`, label `KPI Updated`
-  - `logic_updated` → icon `Sliders` (lucide), color `bg-amber-500`, label `Logic Updated`
-  - default → keep existing rose `Admin Override`
-- In `formatDetails`, drop the `New Status: …` push when `log.action === 'ADMIN_OVERRIDE' && log.metadata?.status_changed === false`. Add a single concise line: `Updated fields: <human list>` (map raw field names via a small label dictionary — `r0..r5`/`threshold_mode`/`criteria`/`uom_type`/`qualitative_options` → "Scoring Logic"; `kpi_name`→"KPI Name"; `kra_name`→"KRA Name"; `weightage`→"Weightage"; `frequency`→"Frequency"; `target_value`→"Target"; `uom`→"UOM"; `source_of_data`→"Source of Data"; others → Title Case). De-duplicate so a logic-only edit shows just "Updated: Scoring Logic".
+`MenuTreeDnd` props extended with `expandAll?: boolean`, `collapseAll?: boolean`, `visibleLevels: Set<2|3|4>`. Existing local `expanded` state seeded from those signals (effect re-runs on toggle). No change to drag/drop or validation.
 
-### 2. `src/components/review/KpiJourneySection.tsx` (the modal in the screenshot)
-- Same two changes:
-  - Action-label resolution: replace the static `actionLabelMap[log.action]` call with a helper that re-classifies `ADMIN_OVERRIDE` via `classifyAdminOverride`. Applied both in the on-screen list and in the `auditLogs.map(...)` passed to `exportReviewTimelinePdf`, so the PDF stays in sync.
-  - `formatAuditDetails`: skip the `New Status:` push when `status_changed === false`; emit the same "Updated fields: …" summary.
+Auto-expand chain when the page mounts inside Menu Setting: on first render, expand ancestors of `admin-settings-menu-setting` (walk `parent_key` upward via `effectiveByKey`). One-shot, doesn't fight user collapse afterwards.
 
-### 3. `src/lib/pdfExport.ts`
-- No structural change; the call site (above) feeds it the corrected label + details, so PDF mirrors the UI automatically. Verify that `Review Timeline` PDF section reads from the `label`/`details` props (it does).
+### 2. Beehive-style flat table view (new `MenuTable.tsx`)
+Compact table with columns: **Select · Menu Name · Menu_Key · Route · Level · Parent · Icon · Order · Status · Actions**.
+- Pagination: page size 25, client-side (registry is small, ≤ a few hundred). Sort by Level then Order by default; column header click toggles sort.
+- Search reuses the existing `search` input (filter by name/key/route).
+- Status badge: `Protected` for `is_system_required || !is_movable`, `Custom` for `is_custom`, `Active` otherwise; greyed when `is_active === false`.
+- Actions per row (reuse existing handlers): **Move**, **Rename** (inline), **Shortcut** (locked/system only), **Reset** (if dirty), **Delete** (custom only, hidden when row has children — same gate as DnD).
+- No drag-drop in table view (table is for clarity & explicit moves). DnD remains in Tree view.
 
-### 4. `src/pages/reports/AuditTrailReport.tsx`
-- Replace the static `'admin_override': 'Admin Override'` mapping with the same `classifyAdminOverride` call so the Audit Trail report shows "KPI Updated" / "Logic Updated" too. Existing CSV export reads the same label.
+### 3. Explicit "Move to level / parent" dialog (new `MoveToDialog.tsx`)
+Triggered from a row's **Move** action (both tree and table) and from the existing bulk action button next to "Move under…" (renamed to **Move…** with a small dropdown: "Move under parent…" / "Move to level…"). Fields:
+- Selected item(s) chip list (read-only).
+- **Target level**: L2 / L3 / L4 radio (disabled levels are those that would exceed depth or violate `validateMove` for any selected source).
+- **Target parent**: combobox filtered to nodes whose effective `menu_level === target-1` AND `accepts_children` AND pass `validateMove` for every selected source. Search included.
+- **Order**: numeric input, default = max(sibling sort_order)+10.
+- **Preview** block: `Current: <ancestor chain>` → `New: <ancestor chain>` using `effectiveByKey`.
+- Footer: **Cancel** / **Apply**. On Apply, stage `PendingMove` for each selected key (same shape used today); admin still has to click **Save** to commit (preserves the "dirty banner" UX and audit pipeline).
 
-### 5. Test coverage
-- Add `src/lib/auditLabels.test.ts` covering: logic-only fields → `logic_updated`; mixed fields → `kpi_updated`; status_changed=true → `admin_override`; source=`bulk_override` → `admin_override`.
+Locked / system-required sources are listed in a yellow callout exactly like `MoveUnderDialog` does today and are routed to **Create shortcut** instead of being moved.
 
-## What does NOT change
-- Audit row writer in `useKpis.ts` (already records the metadata we need).
-- `ADMIN_STATUS_OVERRIDE` action (real status change) stays labelled "Admin Status Override".
-- Reset / step-back / data-entry actions are untouched.
+### 4. Status terminology
+Replace `Locked` badge text with `Protected` everywhere it currently appears (`MenuTreeDnd.tsx` row badge + `MoveUnderDialog.tsx` callout). Tooltip clarifies: "System-required or non-movable. Use Create shortcut to expose under another parent."
 
-## Visual Result (Review Timeline modal)
-Before:
-```
-🌐 Admin Override
-   by Jaspal
-   • New Status: Self Review
-```
-After (this case — only `kpi_name` & `kra_name` changed):
-```
-✏️ KPI Updated
-   by Jaspal
-   • Updated fields: KPI Name
-```
-If only `r0…r5`/`threshold_mode` changed:
-```
-🎚️ Logic Updated
-   by Jaspal
-   • Updated fields: Scoring Logic
-```
+### 5. Sidebar parity (no logic change, verify only)
+Confirm `AppSidebar` already uses `useResolvedMenu()` recursively. Add a small test in `applyOverrides.test.ts` asserting that a saved `custom_menu_level` change moves a node between L3↔L4 in the resolved tree — guards future regressions.
 
-## Risk & Rollback
-- Risk: low — purely presentational; no schema / RPC / data mutation.
-- Old audit rows render correctly because `classifyAdminOverride` falls back to `admin_override` when metadata is missing (`source` undefined).
-- Rollback: revert the three component files + helper.
+## Out of scope (explicit)
+- DB schema changes, new RPCs, new tables.
+- Beehive-style separate L1/L2/L3 screens — we keep one unified screen with level filters instead (matches our richer tree model).
+- Editing `menu_key`, `route_path`, `permission_key`, `report_key`, role access, icon set, colour token list (those exist already on Create dialog; not expanded here).
+- Cross-app movable allowlist UI (still requires direct registry edit, as documented in `mem://features/admin/menu-setting`).
+- Server-side pagination (registry is bounded; client-side is acceptable).
+
+## Risk & impact
+- **Data**: none — no schema/data writes added beyond the existing `menu_overrides` + `menu_override_audit` pipeline.
+- **Workflow / KPI / scoring / auth**: none.
+- **UI**: new toolbar row above tree; new Table view behind a toggle; new dialog. Defaults render the existing tree, so users opening the page see the same layout plus the new controls.
+- **Regression**: low — all new code is additive; existing handlers (`applyMove`, `setLabelDraft`, `deleteCustomMenuItem`, `CreateShortcutDialog`) are reused unchanged.
+- **Rollback**: revert four files (`MenuSettingTab.tsx`, `MenuTreeDnd.tsx`, new `MenuTable.tsx`, new `MoveToDialog.tsx`).
+
+## Test plan
+- Unit: `validateMove` already covered; add a case for `custom_menu_level` round-trip in `applyOverrides.test.ts`.
+- Manual:
+  1. Toggle L2/L3/L4 filters — only matching depths render, ancestors stay visible.
+  2. Expand all / Collapse all toggles every node.
+  3. Switch to Table view → search, sort, paginate, Move, Rename, Delete.
+  4. Move dialog: move a movable L4 item to L2 under a different parent → Save → verify sidebar after reload.
+  5. Try to move a Protected item → blocked with shortcut suggestion.
+  6. Create shortcut for "System Settings > Menu Setting" under "Main > Dashboards" → both appear, original unchanged.
+  7. Delete a custom tab with no children → succeeds; with children → blocked.
+
+## Files
+- Edit: `src/components/admin/MenuSettingTab.tsx`, `src/components/admin/MenuTreeDnd.tsx`, `src/components/admin/MoveUnderDialog.tsx` (label tweak only).
+- Add: `src/components/admin/MenuTable.tsx`, `src/components/admin/MoveToDialog.tsx`.
+- Extend test: `src/lib/menu/applyOverrides.test.ts`.
 
 ## Docs
-- Append a one-line entry to DOCUMENTATION.md "Review Timeline labels" section and POLICY.md under §audit-display noting: "Admin Override is split into KPI Updated / Logic Updated when source = admin_edit_dialog and status_changed = false."
+Append one line each to `DOCUMENTATION.md` (Menu Setting section) and `POLICY.md` (`§menu-governance`): "Protected items can be reordered among siblings only; cross-parent or cross-level moves require Create shortcut. Level-filter + Move dialog are presentational and write only `custom_parent_key`, `custom_menu_level`, `custom_sort_order`, `custom_module_key`."
