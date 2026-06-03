@@ -29,6 +29,7 @@ import { MultiSelectFilter } from '@/components/ui/multi-select-filter';
 import { useToast } from '@/hooks/use-toast';
 import {
   // (existing imports below)
+} from '@/components/admin/__noop_placeholder_unused__';
   resolveFinalScore,
   type FinalScoreRuleType,
   type MissingScorePolicy,
