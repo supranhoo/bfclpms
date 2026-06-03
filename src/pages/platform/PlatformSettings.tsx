@@ -30,7 +30,7 @@ import {
 } from '@/components/ui/alert-dialog';
 
 const PAGE_SIZE = 50;
-const AUDIT_EVENT_TYPES = ['grant', 'revoke', 'update', 'would_deny', 'admin_view'] as const;
+const AUDIT_EVENT_TYPES = ['grant', 'revoke', 'update', 'would_deny', 'admin_view', 'deny'] as const;
 
 /** Loose parser matching `useEntitlement` — JSONB can decode to boolean, plain
  *  string `"true"`, or a double-quoted string `"\"true\""`. */
@@ -46,6 +46,20 @@ function useHubFlag() {
         .from('system_settings')
         .select('setting_value')
         .eq('setting_key', 'hub_platform_settings_enabled')
+        .maybeSingle();
+      return data?.setting_value ?? null;
+    },
+  });
+}
+
+function usePilotFlag() {
+  return useQuery({
+    queryKey: ['platform-settings', 'pilot-flag'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('system_settings')
+        .select('setting_value')
+        .eq('setting_key', 'hub_enforcement_pilot_enabled')
         .maybeSingle();
       return data?.setting_value ?? null;
     },
@@ -157,6 +171,9 @@ function OverviewTab() {
   const flag = useHubFlag();
   const enabled = parseFlag(flag.data);
   const [confirmOff, setConfirmOff] = useState(false);
+  const pilotFlag = usePilotFlag();
+  const pilotEnabled = parseFlag(pilotFlag.data);
+  const [confirmPilot, setConfirmPilot] = useState<null | boolean>(null);
 
   const mut = useMutation({
     mutationFn: async (next: boolean) => {
@@ -185,6 +202,35 @@ function OverviewTab() {
       toast.success('Master switch updated');
     },
     onError: (e: Error) => toast.error(`Update failed: ${e.message}`),
+  });
+
+  const pilotMut = useMutation({
+    mutationFn: async (next: boolean) => {
+      const before = pilotEnabled;
+      const { error: upErr } = await supabase
+        .from('system_settings')
+        .upsert(
+          { setting_key: 'hub_enforcement_pilot_enabled', setting_value: next as unknown as never },
+          { onConflict: 'setting_key' },
+        );
+      if (upErr) throw upErr;
+      await supabase.from('entitlement_audit').insert({
+        actor_id: user?.id ?? null,
+        event_type: 'update',
+        entity_type: 'flag',
+        entity_key: 'hub_enforcement_pilot_enabled',
+        before: { is_enabled: before },
+        after: { is_enabled: next, allowlist: ['pms.data.export'] },
+        reason: 'platform_settings enforcement pilot toggle',
+      });
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['platform-settings', 'pilot-flag'] });
+      qc.invalidateQueries({ queryKey: ['platform-settings', 'audit'] });
+      qc.invalidateQueries({ queryKey: ['hub-enforcement-pilot'] });
+      toast.success('Enforcement pilot updated');
+    },
+    onError: (e: Error) => toast.error(`Pilot update failed: ${e.message}`),
   });
 
   const handleToggle = (next: boolean) => {
@@ -243,6 +289,63 @@ function OverviewTab() {
                   }}
                 >
                   Turn OFF
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader>
+          <CardTitle>Enforcement pilot</CardTitle>
+          <CardDescription>Phase 3 — single action: <code>pms.data.export</code></CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center gap-3">
+            <Badge variant={pilotEnabled ? 'destructive' : 'secondary'}>
+              {pilotEnabled ? 'ENABLED' : 'DISABLED'}
+            </Badge>
+            <Switch
+              checked={pilotEnabled}
+              disabled={!canWrite || !enabled || pilotMut.isPending || pilotFlag.isLoading}
+              onCheckedChange={(next) => setConfirmPilot(next)}
+              aria-label="Toggle enforcement pilot"
+            />
+            {!canWrite && (
+              <span className="text-xs text-muted-foreground">platform_owner only</span>
+            )}
+            {!enabled && canWrite && (
+              <span className="text-xs text-muted-foreground">Master switch must be ON</span>
+            )}
+          </div>
+          <p className="mt-3 text-sm text-muted-foreground">
+            When ON, the <strong>Export Pending</strong> button (<code>pms.data.export</code>) is blocked
+            in the UI for users whose action entitlement is OFF. All other wrapped actions remain
+            observe-only. Kill-switch: turn this OFF for instant rollback — the button returns to
+            normal behavior on the next render.
+          </p>
+          <AlertDialog open={confirmPilot !== null} onOpenChange={(o) => !o && setConfirmPilot(null)}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>
+                  {confirmPilot ? 'Enable enforcement pilot?' : 'Disable enforcement pilot?'}
+                </AlertDialogTitle>
+                <AlertDialogDescription>
+                  {confirmPilot
+                    ? 'Enabling will start blocking pms.data.export in UI for users whose action entitlement is OFF. No other action is affected. You can disable instantly to roll back.'
+                    : 'Disabling restores observe-only behavior immediately. pms.data.export will work again on the next render.'}
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={() => {
+                    const next = !!confirmPilot;
+                    setConfirmPilot(null);
+                    pilotMut.mutate(next);
+                  }}
+                >
+                  {confirmPilot ? 'Enable' : 'Disable'}
                 </AlertDialogAction>
               </AlertDialogFooter>
             </AlertDialogContent>

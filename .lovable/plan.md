@@ -1,95 +1,121 @@
-## Phase 2E — Telemetry Dashboard Enhancements
+## Phase 3 Pilot — Single-action enforcement for `pms.data.export`
 
-Read-only refinement of the existing Telemetry tab in `src/pages/platform/PlatformSettings.tsx`. No PMS behavior changes, no new wrappers, no enforcement, no DB schema changes, no RLS/permissions/menus/reports/workflow/scoring changes. Existing Audit Logs tab is untouched.
+Introduce enforcement for exactly **one** action, behind three independent kill-switches. All other 12 wrapped actions remain observe-only. No PMS workflow / scoring / RLS / permission / menu / report changes.
 
 ### Assumptions
-- Data source remains `entitlement_audit` filtered by `event_type = 'would_deny'`. Route/page lives in `after->>pathname` and `after->>search` (Phase 2D).
-- Platform-owner-only gating is already enforced inside `TelemetryTab`.
-- Existing 30-day aggregate query (cap 5000) is sufficient for trend + breakdowns. Custom ranges that exceed 30 days will run a second bounded query (cap 5000).
-- "Role" per row is not reliably resolvable from `entitlement_audit` alone; we will surface role via the actor's current `profiles.role` when available and label it "Current role" to avoid implying it was the role at the time of the event. If user prefers to omit, we drop the Role card.
+- Pilot is **UI-only**. No backend / RLS / RPC enforcement. A determined developer with DB access can still export — that's accepted for the pilot. The user explicitly said "Do not enforce any backend/RLS policy yet unless specifically approved."
+- The only existing `CanAction actionKey="pms.data.export"` is in `src/components/review/EmployeeSelectorGrid.tsx:1923` wrapping the "Export Pending" button. That's the sole surface that becomes enforceable.
+- Pilot scope is hard-coded to the single allowlist `['pms.data.export']`. The allowlist lives in code (not DB) so it can never accidentally grow without a code review.
+- `event_type='deny'` requires extending the existing `entitlement_audit_event_type_check` CHECK constraint via a new migration. This is additive (does not invalidate any existing row) and reversible.
+
+### Three independent gates (ALL must be true to block)
+1. `system_settings.hub_platform_settings_enabled = true` (master switch — existing).
+2. `system_settings.hub_enforcement_pilot_enabled = true` (**new** flag, default `false`).
+3. `actionKey ∈ ENFORCEMENT_ALLOWLIST = ['pms.data.export']` (code constant).
+4. The resolved entitlement for that `actionKey` is `false`.
+
+If any of (1)–(4) is false, behavior is identical to today (children render unchanged; would_deny may still log under conditions 1+4 as it does today).
 
 ### Risk & Impact Report
-- **Data**: read-only SELECTs against `entitlement_audit`, `profiles`, `clients`, `module_registry`, `action_registry`. No writes.
-- **Workflow**: none.
-- **UI/UX**: changes confined to the Telemetry tab. New trend chart, new "By page/route" card, new "By role" card, preset-filter chips, clickable rows in breakdown cards that push filters into the events table.
-- **Regression risk**: low — additive; existing filters, pagination, CSV export retained. Page column and pathname/search export already present.
-- **Scalability**: bucket aggregation done client-side over the same capped 5000-row window already in use. Custom ranges over the cap show a "Showing first 5000 events in range" notice; KPI counts continue to use `count: 'exact', head: true` so totals stay accurate.
+- **Data**: one new `system_settings` row, one schema CHECK update, audit rows with new `event_type='deny'`. Backup is automatic (Core rule). No tables added.
+- **Workflow / scoring / RLS / menus / reports**: zero.
+- **UI/UX**: a single button ("Export Pending" in the reviewer grid) becomes disabled+tooltip when all four gates trip. Visual treatment: `opacity-60`, `cursor-not-allowed`, transparent click-shield that fires a toast `"This action is disabled by Platform Owner settings."`.
+- **Regression**: low — `<CanAction>` continues to be a render-only wrapper; the enforcement branch activates only when the new pilot flag is on AND the action key matches the hard-coded allowlist.
+- **Scalability**: nil. One extra `system_settings.maybeSingle()` cached by React Query (10-min staleTime); shares a single query key across all `<CanAction>` mounts.
+- **Rollback**: flip `hub_enforcement_pilot_enabled` → `false` (instant, single-row write from Platform Settings UI). Optional belt-and-braces: flip `hub_platform_settings_enabled` → `false` (kills the entire hub).
 
 ### Implementation Plan
 
-1. **Range selector for trend & breakdowns** (state added inside `TelemetryTab`)
-   - Add `trendRange: '7d' | '30d' | 'custom'` (default `30d`).
-   - Replace `aggQ` `last30` literal with a derived `aggFrom`/`aggUntil` driven by `trendRange` (custom uses the existing `from`/`until` inputs).
-   - Query stays a single bounded SELECT (`limit 5000`). KPI cards unchanged.
+1. **Migration** (`supabase/migrations/<ts>_phase3_pilot_enforcement.sql`)
+   - `ALTER TABLE public.entitlement_audit DROP CONSTRAINT entitlement_audit_event_type_check;`
+   - Recreate with `'deny'` added: `ARRAY['grant','revoke','update','would_deny','admin_view','deny']`.
+   - `INSERT INTO public.system_settings (setting_key, setting_value) VALUES ('hub_enforcement_pilot_enabled', 'false'::jsonb) ON CONFLICT DO NOTHING;`
+   - No GRANT changes (table already granted).
+   - No new policies needed: `ent_audit_insert` already permits any insert; `ent_audit_read` still restricts read to admin/platform_owner.
 
-2. **Trend chart**
-   - Replace the existing `Sparkline` with a Recharts `LineChart` (already in the project) showing daily `would_deny` count over the selected range. Tooltip + day axis. Keeps the existing `daily` bucket logic.
-   - Verify Recharts dep: if missing in `package.json`, fall back to keeping `Sparkline` and add a simple SVG bar/line with day labels — no new dep.
+2. **Pure constants + helper** (`src/lib/platformEnforcement.ts`, new)
+   - `export const ENFORCEMENT_ALLOWLIST = ['pms.data.export'] as const;`
+   - `export function isEnforceable(actionKey: string): boolean`
+   - `export function shouldBlock(params: { hubEnabled; pilotEnabled; actionKey; entitled }): boolean`
+   - Pure functions → unit-testable.
 
-3. **New breakdown card: By page/route (30d window)**
-   - Aggregate `aggRows` by `after.pathname` (blank pathname → label "Not captured").
-   - Top 10. Each row clickable → sets a new `routeFilter` state and re-queries `eventsQ` with `.like('after->>pathname', routeFilter)`.
+3. **`useEnforcementPilot()` hook** (extend `src/hooks/useEntitlement.ts` OR new file)
+   - React Query for `system_settings.setting_key='hub_enforcement_pilot_enabled'` parsed with the existing `parseFlag` semantics. 10-min staleTime, query key `['hub-enforcement-pilot']`.
+   - Returns `{ pilotEnabled: boolean, loading: boolean }`.
 
-4. **By role card (optional)**
-   - Resolve `profiles.role` for actors already fetched in `profilesQ`. Aggregate counts. If `profiles.role` is null for >50% of actors, hide the card (with a "Role data unavailable" note) to avoid misleading numbers.
+4. **`logDeny()`** (extend `src/hooks/useEntitlement.ts`)
+   - Mirror of `logWouldDeny` but writes `event_type='deny'`. Same metadata shape (uses `buildWouldDenyMetadata` with `mode: 'enforced'`).
+   - Best-effort try/catch — never throw from the render/click path.
 
-5. **Drill-down**
-   - Top-actions rows: click sets `actionSearch = action_key` (already a filter) and scrolls to the events table.
-   - Top-users rows: click sets `userSearch = email`.
-   - By client / By module rows: click sets the existing `clientId` / `moduleKey` selects.
-   - By page/route rows: click sets the new `routeFilter`.
-   - Add a single "Clear all filters" button in the events-table toolbar.
+5. **`CanAction` enforcement branch** (`src/components/platform/CanAction.tsx`)
+   - Reads `pilotEnabled` from the new hook.
+   - Computes `blocked = shouldBlock(...)`. When `blocked`:
+     - Render disabled-overlay wrapper:
+       ```tsx
+       <span className="relative inline-block" title={BLOCK_MSG}>
+         <span aria-disabled="true" className="opacity-60 pointer-events-none">{children}</span>
+         <button
+           type="button"
+           aria-label={BLOCK_MSG}
+           className="absolute inset-0 w-full h-full cursor-not-allowed bg-transparent"
+           onClick={(e) => { e.preventDefault(); e.stopPropagation(); toast.error(BLOCK_MSG); }}
+         />
+       </span>
+       ```
+     - `BLOCK_MSG = "This action is disabled by Platform Owner settings."`
+     - In a separate `useEffect` (deps: blocked, actionKey, snapshot.clientId), call `logDeny(actionKey, 'enforced CanAction render', metadata)` exactly once per mount via a second `deniedLoggedRef`.
+   - `would_deny` logging path stays exactly as it is today for all non-enforced actions.
+   - When `blocked` flips to false (entitlement re-enabled or kill-switch off), the component re-renders and the original children are restored — confirms instant rollback.
 
-6. **Preset filter chips** (above events table)
-   - Chips: `Today`, `Last 7 days`, `Last 30 days`, `High-risk actions`, `Critical actions`, `Current client` (if `snapshot.clientId` present from `useEntitlement`).
-   - Each chip writes the existing filter state (`from`, `until`, `risk`, `clientId`). Pure UI sugar over existing filters.
+6. **Platform Settings UI** (`src/pages/platform/PlatformSettings.tsx`, OverviewTab)
+   - New "Enforcement pilot" card next to the Master switch:
+     - Badge: ENABLED / DISABLED
+     - `<Switch>` gated to `platform_owner`, disabled when master switch is OFF (with an inline note).
+     - Description lists the allowlist (`pms.data.export`) verbatim and the kill-switch instructions.
+     - Confirmation dialog when turning ON (matches the existing `confirmOff` pattern, but for the opt-in direction): "Enabling will start blocking pms.data.export for users whose entitlement is OFF. You can disable instantly."
+     - On toggle: upsert `system_settings` row + insert `entitlement_audit` row (`event_type='update'`, `entity_key='hub_enforcement_pilot_enabled'`, before/after JSON).
+   - Telemetry tab: add `'deny'` to `AUDIT_EVENT_TYPES` (already shows in Audit Logs filter) and to the events list — render with a destructive badge. CSV unchanged shape.
 
-7. **Route column + export**
-   - Page column already exists (Phase 2D). Confirm "Not captured" rendering for older rows where `after.pathname` is missing — replace the current `—` with `Not captured` (muted) and keep the `code` chip for present values.
-   - CSV export already includes `pathname`, `search`, `source` — no change.
+7. **Tests** (`src/test/platformEnforcement.test.ts`, new)
+   - `isEnforceable('pms.data.export')` → true; everything else → false (spot-check `pms.users.edit`, `pms.kra.assign`).
+   - `shouldBlock` truth table covers all 6 user scenarios:
+     1. master OFF → never block.
+     2. master ON, pilot OFF, entitlement OFF → never block.
+     3. master ON, pilot ON, entitlement ON → never block.
+     4. master ON, pilot ON, entitlement OFF, action=`pms.data.export` → block.
+     5. master ON, pilot ON, entitlement OFF, action=any-other → never block.
+     6. master ON, pilot ON → entitlement re-enabled → never block (rollback).
+   - Snapshot the `BLOCK_MSG` constant so it cannot drift silently.
 
-8. **Events query filter extension**
-   - `eventsQ` accepts the new `routeFilter`. When set, add `.like('after->>pathname', routeFilter)`. Add to query key.
-   - `exportCsv` mirrors the same filter.
+8. **Documentation & Memory**
+   - `DOCUMENTATION.md` — Version `v2.66.18.0` entry.
+   - `POLICY.md` — extend §Phase20 with §Phase21-EnforcementPilot section listing the 4 gates and the allowlist.
+   - `CHANGELOG_2026.md` — row under W1 Jun 1–7.
+   - `mem://features/platform/hub-foundation.md` — "Phase 3 pilot (shipped)" section.
+   - Add a new index entry: `mem://features/platform/enforcement-pilot` capturing the 4-gate invariant + allowlist + rollback procedure. Update `mem://index.md`.
 
-9. **Safety guards**
-   - All new UI inside the existing `if (!isOwner)` gate.
-   - No mutations, no new tables, no edge functions.
-   - No changes to `useEntitlement`, `CanAction`, or any PMS files.
+### Acceptance Matrix (manual)
+| Master | Pilot | Entitlement | Action | Expected |
+|---|---|---|---|---|
+| OFF | × | × | export | works, no deny audit |
+| ON  | OFF | OFF | export | works, would_deny logged |
+| ON  | ON  | ON  | export | works, no deny |
+| ON  | ON  | OFF | export | **blocked**, toast + deny audit |
+| ON  | ON  | OFF | any other | works (observe-only still logs would_deny) |
+| flip Pilot OFF | – | OFF | export | works immediately on next render |
 
-### Tests
-- Extend `src/test/platformTelemetry.test.ts` (or add `platformTelemetryAgg.test.ts`) for pure helpers only:
-  - `bucketByDay(rows, from, until)` returns one entry per day with zero-fills.
-  - `aggregateByPathname` treats null/empty as `"Not captured"`.
-  - Preset-chip date math (Today / 7d / 30d) returns expected ISO bounds.
-  - Drill-down state transitions: clicking a route sets `routeFilter`; "Clear all filters" resets every filter to defaults.
+### Out of Scope (explicit)
+- No backend / RPC / RLS enforcement.
+- No enforcement on `pms.users.*`, `pms.kra.assign`, `pms.workflow.*`, `pms.menu.*`, `pms.data.import`, `pms.reports.performance.export`.
+- No new `CanAction` wrappers anywhere.
+- No PMS workflow, scoring, menu, reports, RLS, permission changes.
 
-### Documentation & Memory
-- `DOCUMENTATION.md` — bump Version History `v2.66.17.0` (Phase 2E telemetry enhancements).
-- `POLICY.md` — extend §Phase 2 with: trend chart range, route breakdown, drill-down, preset chips; reaffirm read-only / platform_owner / no enforcement.
-- `CHANGELOG_2026.md` — sub-bullet under Platform Hub.
-- `mem://features/platform/hub-foundation.md` — append Phase 2E summary.
-
-### Out of Scope
-- No new CanAction wrappers (Phase 2F or later).
-- No enforcement variant (Phase 3 later).
-- No changes to PMS workflow, scoring, reports, menus, RLS, or permissions.
-- No DB migrations.
-
-### Rollback
-- All changes are additive UI in one file plus one helpers/tests file. Revert by removing the new chart/cards and restoring the previous `Sparkline` block and event-query filter shape.
-
-### Files to change
-- `src/pages/platform/PlatformSettings.tsx` (TelemetryTab only)
-- `src/lib/platformTelemetryAgg.ts` (new — pure helpers for buckets, route agg, preset ranges)
-- `src/test/platformTelemetryAgg.test.ts` (new)
-- `DOCUMENTATION.md`, `POLICY.md`, `CHANGELOG_2026.md`, `mem/features/platform/hub-foundation.md`
-
-### Acceptance check
-- Platform owner sees daily would_deny trend with 7d/30d/custom range.
-- Top actions, users, clients, modules, routes, (optional) roles shown for 30d window.
-- Clicking a row in any breakdown filters the events table.
-- Preset chips quickly apply Today / 7d / 30d / High-risk / Critical / Current client.
-- Old rows without route metadata display "Not captured".
-- CSV export includes route/page metadata (already shipped in 2D).
-- Audit Logs tab unchanged. PMS behavior unchanged.
+### Files to create / edit
+- New: `supabase/migrations/<ts>_phase3_pilot_enforcement.sql`
+- New: `src/lib/platformEnforcement.ts`
+- New: `src/test/platformEnforcement.test.ts`
+- New: `mem/features/platform/enforcement-pilot.md`
+- Edit: `src/hooks/useEntitlement.ts` (`useEnforcementPilot`, `logDeny`)
+- Edit: `src/components/platform/CanAction.tsx` (enforcement branch + disabled overlay)
+- Edit: `src/pages/platform/PlatformSettings.tsx` (Overview pilot card + Telemetry `'deny'` badge)
+- Edit: `DOCUMENTATION.md`, `POLICY.md`, `CHANGELOG_2026.md`, `mem/index.md`, `mem/features/platform/hub-foundation.md`
