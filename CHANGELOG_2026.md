@@ -4,6 +4,14 @@
 > **Status:** Living document. Append new ships under the **current week's row**, in the same step that you update `DOCUMENTATION.md` Version History.
 > **Sources:** `DOCUMENTATION.md` Version History, `supabase/migrations/`, `mem/*`.
 
+## 2026-06-03 — Phase 3A.3 Data Governance: Export Policies registry (config only)
+- DB: new `public.export_policies` — one row per `data_classifications.classification_key` (UNIQUE FK). Columns: `export_allowed`, `allowed_formats text[]`, `max_rows_per_export`, `watermark_required`, `download_reason_required`, `approval_required`, `approver_role` (free text), `retain_export_log_days`, `notes`, `is_active`, audit cols. CHECK guards keep `max_rows_per_export` and `retain_export_log_days` non-negative. RLS: read = authenticated, write = `platform_owner`. Standard `updated_at` trigger.
+- Seed: one row per existing classification with defaults derived from the classification's own flags (export/watermark/reason/approval/max-rows copied; formats default `{csv,xlsx,pdf}` when export allowed, else empty; approver_role defaults to `platform_owner` when approval required). `INSERT … ON CONFLICT DO NOTHING` keeps the migration idempotent.
+- UI: `DataGovernanceTab` gets a third sub-tab **Export Policies** — read-only `classification_key`, edit-only dialog (no add/delete; rows mirror classifications). Format chips toggleable, disabled when export is off; validation blocks save if `export_allowed && formats=[]` or `approval_required && !approver_role`. Same "Config only — not enforced yet" banner. No existing exporter touched.
+- Audit: `entitlement_audit` write per save — `entity_type='export_policy'`, `entity_key=classification_key`, before/after JSON, reason `platform_settings_export_policy_update`.
+- Smoke: `platformFoundation` 12/12 pass.
+
+
 ## 2026-06-03 — Phase 3A.2 Data Governance: Sensitive Field Registry (config only)
 - DB: new `public.sensitive_fields` table — `(module_key, table_name, column_name)` unique, FK to `data_classifications.classification_key`, with PII / PHI / Financial flags, `field_label`, `notes`, `is_active`, audit columns. RLS: read = authenticated; write = `platform_owner`. Standard `updated_at` trigger + indexes on `module_key` and `classification_key`.
 - UI: `DataGovernanceTab` gains a **Sensitive Fields** sub-tab with filters (module / classification / show-inactive), `Add Field` (platform_owner only), and Edit dialog. Module/table/column are read-only after creation (server enforces unique key); everything else (label, classification, flags, notes, active) is editable. Same "Config only — not enforced yet" banner — no masking, no RLS change elsewhere, no PMS surface changes.

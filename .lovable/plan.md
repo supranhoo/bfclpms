@@ -1,87 +1,78 @@
-## Phase 3A.2 — Sensitive Field Registry (config only, no enforcement)
+## Phase 3A.3 — Export Policies registry (config only, no enforcement)
 
 ### Assumptions
 - Platform-owner only writes; authenticated reads.
-- Registry is descriptive metadata. No masking, no RLS change, no UI field hiding anywhere in PMS.
-- New tab lives under the existing **Data Governance** section in `PlatformSettings.tsx`, next to **Classifications** (added in 3A.1).
-- Audit goes to existing `entitlement_audit` table, matching 3A.1 conventions.
+- Registry expresses **policy intent** by classification — what *should* happen on export. No exporter reads it yet.
+- Lives under the existing **Data Governance** section as a third sub-tab.
 
-### Risk & Impact Report
-- **Data**: 1 new table `public.sensitive_fields`. No changes to existing tables.
-- **Workflow**: None. Registry is not read by any runtime path.
-- **UI**: 1 new sub-tab inside Data Governance. No other surface changes.
-- **Regression**: Negligible — additive table + isolated UI component.
-- **Mitigation**: Reversible by dropping the table + removing the sub-tab. Smoke tests rerun.
-- **Scalability**: Tiny dataset (tens to low hundreds of rows). Client-side paginate if > 50.
+### Risk & Impact
+- **Data**: 1 new table `public.export_policies`. No FK back-pressure on existing tables.
+- **Workflow / UI / Reports**: zero impact. No existing export path is touched.
+- **Regression**: negligible (additive table + isolated sub-tab).
+- **Scalability**: one row per classification — trivial.
+- **Rollback**: drop table, remove sub-tab.
 
-### Scope (exactly what ships)
-
-**1. Schema — new table `public.sensitive_fields`**
-Columns:
+### Schema — `public.export_policies`
 - `id uuid pk`
-- `module_key text not null` (e.g. `pms`, `hrms`, `lms`, `safety`)
-- `table_name text not null` (descriptive, free text — no FK to information_schema)
-- `column_name text not null`
-- `field_label text` (human label)
-- `classification_key text not null` references `data_classifications(classification_key)`
-- `pii boolean not null default false`
-- `phi boolean not null default false`
-- `financial boolean not null default false`
+- `classification_key text not null UNIQUE references data_classifications(classification_key)` (one policy per classification — keeps the model simple and matches "policy per sensitivity tier")
+- `export_allowed boolean not null default true`
+- `allowed_formats text[] not null default '{csv,xlsx,pdf}'` (registry list; no enforcement)
+- `max_rows_per_export integer` (null = unlimited)
+- `watermark_required boolean not null default false`
+- `download_reason_required boolean not null default false`
+- `approval_required boolean not null default false`
+- `approver_role text` (free text, e.g. `manager`, `hr_pms`, `platform_owner` — not validated against `app_role` to keep loose coupling)
+- `retain_export_log_days integer` (null = forever)
 - `notes text`
 - `is_active boolean not null default true`
 - `created_at`, `updated_at`, `created_by`, `updated_by`
-- Unique: `(module_key, table_name, column_name)`
 
-GRANTs: `SELECT` to `authenticated`; `ALL` to `service_role`.
-RLS: read = authenticated; write = `platform_owner` only (mirrors 3A.1 policy shape).
+GRANTs: `SELECT` to `authenticated`, `ALL` to `service_role`.
+RLS: read = authenticated; write = `platform_owner`.
 Trigger: standard `updated_at`.
 
-**2. Seed** — empty. No fields seeded. Platform owner adds entries manually. (Avoids accidentally implying enforcement.)
+### Seed
+Seed one row per existing classification with **defaults derived from `data_classifications`** flags so the registry starts coherent:
+- `export_allowed`, `watermark_required`, `download_reason_required`, `approval_required`, `max_rows_per_export` ← copied from the matching `data_classifications` row at seed time.
+- `allowed_formats` defaults to `{csv,xlsx,pdf}` for `export_allowed=true`, else `{}`.
+- `approver_role` defaults to `platform_owner` when `approval_required=true`, else `null`.
+- `retain_export_log_days` defaults to `null`.
+- `is_active=true`.
 
-**3. UI — `src/components/platform/DataGovernanceTab.tsx`**
-Add a second sub-tab **Sensitive Fields**:
-- Table columns: Module · Table · Column · Label · Classification · PII/PHI/Financial badges · Active · Edit
-- "Add Field" button (platform_owner only) → dialog with all editable fields
-- Edit dialog reuses same form; `module_key`/`table_name`/`column_name` editable until first save then read-only (server enforces unique key)
-- "Config only — not enforced yet" alert reused at top of section
-- Client-side filter by module + classification + active
+Seed runs once in the migration via `INSERT ... ON CONFLICT (classification_key) DO NOTHING`.
 
-**4. Audit**
-Every create/update writes to `entitlement_audit`:
-- `event_type`: `create` | `update`
-- `entity_type`: `sensitive_field`
-- `entity_key`: `${module_key}.${table_name}.${column_name}`
-- `before` / `after`: JSON snapshot (null for create)
-- `reason`: `platform_settings_sensitive_field_create` | `..._update`
+### UI — `DataGovernanceTab.tsx`
+Add third sub-tab **Export Policies**:
+- Table: Classification · Export · Formats · Max rows · Watermark · Reason · Approval · Approver · Retain log · Active · Edit
+- Edit dialog only (no Add / no Delete — registry mirrors classifications, so rows are created automatically when a new classification is added; absence of a row falls back to the classification's own flags conceptually but enforcement comes later).
+- `classification_key` read-only in dialog.
+- All other fields editable.
+- "Config only — not enforced yet" banner reused.
 
-**5. No deletes.** Toggle `is_active` instead.
+### Audit
+`entitlement_audit` on every update:
+- `event_type='update'`
+- `entity_type='export_policy'`
+- `entity_key=classification_key`
+- `before` / `after` JSON snapshot
+- `reason='platform_settings_export_policy_update'`
 
-### Out of scope (explicit)
-- No masking
-- No RLS changes on existing tables
-- No PMS UI changes
-- No export/report changes
-- No introspection of `information_schema` (free-text table/column avoids tight coupling)
-- No bulk import (manual entry only for this micro-phase)
+### Out of scope
+- No changes to any existing exporter, report, CSV/XLSX/PDF code path.
+- No enforcement of `max_rows_per_export`, `watermark_required`, `approval_required`.
+- No approval workflow UI.
+- No export log table (retention setting is captured as intent only).
+- No automatic row-creation trigger when a new classification is added — handled in a later phase when enforcement lands.
 
-### Files to touch
-- New migration: `supabase/migrations/<ts>_create_sensitive_fields.sql`
-- `src/components/platform/DataGovernanceTab.tsx` — add sub-tab + table + dialog
-- `DOCUMENTATION.md` — bump to v2.66.18.5, document table + UI
-- `CHANGELOG_2026.md` — 3A.2 entry
+### Files
+- New migration: `<ts>_create_export_policies.sql` (table + RLS + grants + seed).
+- `src/components/platform/DataGovernanceTab.tsx` — add `ExportPoliciesSubTab` + tab trigger.
+- `CHANGELOG_2026.md` — 3A.3 entry.
 
 ### Verification
-- 27/27 smoke tests still pass
-- Manually: platform_owner can add a row, edit it, toggle active; non-platform_owner sees read-only
-- `entitlement_audit` row created for both create and update
-- No change in any other PMS screen
-
-### Rollback
-- Drop table `public.sensitive_fields`
-- Remove sub-tab from `DataGovernanceTab.tsx`
-
-### Documentation & Policy
-- DOCUMENTATION.md: add "Sensitive Field Registry" subsection under Data Governance
-- POLICY.md: note registry exists but is non-enforcing; enforcement deferred to later phase
+- `platformFoundation` smoke 12/12 still pass.
+- Manually: platform_owner can edit each policy; non-platform_owner gets read-only.
+- One `entitlement_audit` row per save.
+- No PMS surface changes anywhere.
 
 Ready to implement on approval.

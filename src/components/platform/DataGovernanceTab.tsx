@@ -32,7 +32,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Pencil, ShieldAlert, Info, Plus, FileLock2 } from 'lucide-react';
+import { Pencil, ShieldAlert, Info, Plus, FileLock2, Download } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -63,10 +63,14 @@ export function DataGovernanceTab() {
           <TabsTrigger value="sensitive-fields">
             <FileLock2 className="h-4 w-4 mr-1" /> Sensitive Fields
           </TabsTrigger>
-          {/* 3A.3–3A.6 tabs will be added in subsequent micro-phases. */}
+          <TabsTrigger value="export-policies">
+            <Download className="h-4 w-4 mr-1" /> Export Policies
+          </TabsTrigger>
+          {/* 3A.4–3A.6 tabs will be added in subsequent micro-phases. */}
         </TabsList>
         <TabsContent value="classifications"><ClassificationsSubTab /></TabsContent>
         <TabsContent value="sensitive-fields"><SensitiveFieldsSubTab /></TabsContent>
+        <TabsContent value="export-policies"><ExportPoliciesSubTab /></TabsContent>
       </Tabs>
     </div>
   );
@@ -282,6 +286,341 @@ function ClassificationsSubTab() {
                   }}
                 />
                 <p className="text-xs text-muted-foreground">Blank = unlimited · 0 = blocked</p>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditing(null)} disabled={mut.isPending}>Cancel</Button>
+            <Button
+              onClick={() => mut.mutate()}
+              disabled={!valid || !dirty || !canWrite || mut.isPending}
+            >
+              {mut.isPending ? 'Saving…' : 'Save'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
+/* ────────────────────────── 3A.3: Export Policies ──────────────────────── */
+
+type ExportPolicy = {
+  id: string;
+  classification_key: string;
+  export_allowed: boolean;
+  allowed_formats: string[];
+  max_rows_per_export: number | null;
+  watermark_required: boolean;
+  download_reason_required: boolean;
+  approval_required: boolean;
+  approver_role: string | null;
+  retain_export_log_days: number | null;
+  notes: string | null;
+  is_active: boolean;
+};
+
+const FORMAT_OPTIONS = ['csv', 'xlsx', 'pdf', 'json'] as const;
+const APPROVER_ROLE_SUGGESTIONS = ['platform_owner', 'admin', 'hr_pms', 'management', 'manager'];
+const EP_NOTES_MAX = 500;
+
+function pickEpAuditable(p: ExportPolicy) {
+  return {
+    export_allowed: p.export_allowed,
+    allowed_formats: [...p.allowed_formats].sort(),
+    max_rows_per_export: p.max_rows_per_export,
+    watermark_required: p.watermark_required,
+    download_reason_required: p.download_reason_required,
+    approval_required: p.approval_required,
+    approver_role: p.approver_role,
+    retain_export_log_days: p.retain_export_log_days,
+    notes: p.notes,
+    is_active: p.is_active,
+  };
+}
+
+function ExportPoliciesSubTab() {
+  const qc = useQueryClient();
+  const { user, hasRole } = useAuth();
+  const canWrite = hasRole('platform_owner');
+
+  const { data: classifications } = useQuery({
+    queryKey: ['platform-settings', 'data-governance', 'classifications'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('data_classifications')
+        .select('classification_key,label,sort_order')
+        .order('sort_order', { ascending: true });
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['platform-settings', 'data-governance', 'export-policies'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('export_policies')
+        .select('*');
+      if (error) throw error;
+      return (data ?? []) as ExportPolicy[];
+    },
+  });
+
+  const [editing, setEditing] = useState<ExportPolicy | null>(null);
+  const [form, setForm] = useState<ExportPolicy | null>(null);
+  useEffect(() => { setForm(editing ? { ...editing } : null); }, [editing]);
+
+  const mut = useMutation({
+    mutationFn: async () => {
+      if (!editing || !form) return;
+      const before = pickEpAuditable(editing);
+      const after = pickEpAuditable(form);
+      const { error } = await supabase
+        .from('export_policies')
+        .update({
+          export_allowed: form.export_allowed,
+          allowed_formats: form.allowed_formats,
+          max_rows_per_export: form.max_rows_per_export,
+          watermark_required: form.watermark_required,
+          download_reason_required: form.download_reason_required,
+          approval_required: form.approval_required,
+          approver_role: form.approver_role,
+          retain_export_log_days: form.retain_export_log_days,
+          notes: form.notes,
+          is_active: form.is_active,
+          updated_by: user?.id ?? null,
+        })
+        .eq('id', editing.id);
+      if (error) throw error;
+      const { error: audErr } = await supabase.from('entitlement_audit').insert({
+        actor_id: user?.id ?? null,
+        event_type: 'update',
+        entity_type: 'export_policy',
+        entity_key: editing.classification_key,
+        before,
+        after,
+        reason: 'platform_settings_export_policy_update',
+      });
+      if (audErr) throw audErr;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['platform-settings', 'data-governance', 'export-policies'] });
+      qc.invalidateQueries({ queryKey: ['platform-settings', 'audit'] });
+      setEditing(null);
+      toast.success('Export policy updated');
+    },
+    onError: (e: Error) => toast.error(`Update failed: ${e.message}`),
+  });
+
+  if (isLoading) return <LoadingRows />;
+
+  const order = new Map((classifications ?? []).map((c, i) => [c.classification_key, i]));
+  const labelOf = (k: string) =>
+    (classifications ?? []).find((c) => c.classification_key === k)?.label ?? k;
+  const sorted = [...(data ?? [])].sort(
+    (a, b) => (order.get(a.classification_key) ?? 999) - (order.get(b.classification_key) ?? 999),
+  );
+
+  const notesLen = (form?.notes ?? '').length;
+  const approverTrim = (form?.approver_role ?? '').trim();
+  const valid =
+    !!form &&
+    notesLen <= EP_NOTES_MAX &&
+    (form.max_rows_per_export == null ||
+      (Number.isInteger(form.max_rows_per_export) && form.max_rows_per_export >= 0)) &&
+    (form.retain_export_log_days == null ||
+      (Number.isInteger(form.retain_export_log_days) && form.retain_export_log_days >= 0)) &&
+    (!form.approval_required || approverTrim.length > 0) &&
+    (!form.export_allowed || form.allowed_formats.length > 0);
+  const dirty = !!editing && !!form && JSON.stringify(pickEpAuditable(editing)) !== JSON.stringify(pickEpAuditable(form));
+
+  const toggleFormat = (fmt: string, on: boolean) => {
+    if (!form) return;
+    const set = new Set(form.allowed_formats);
+    if (on) set.add(fmt); else set.delete(fmt);
+    setForm({ ...form, allowed_formats: [...set] });
+  };
+
+  return (
+    <>
+      <div className="overflow-x-auto rounded-md border">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Classification</TableHead>
+              <TableHead className="text-center">Export</TableHead>
+              <TableHead>Formats</TableHead>
+              <TableHead className="text-right">Max rows</TableHead>
+              <TableHead className="text-center">Watermark</TableHead>
+              <TableHead className="text-center">Reason</TableHead>
+              <TableHead className="text-center">Approval</TableHead>
+              <TableHead>Approver</TableHead>
+              <TableHead className="text-right">Log days</TableHead>
+              <TableHead className="text-center">Active</TableHead>
+              <TableHead className="w-16 text-right">Edit</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {sorted.length === 0 ? (
+              <TableRow><TableCell colSpan={11} className="text-center text-muted-foreground py-6">No rows</TableCell></TableRow>
+            ) : sorted.map((p) => (
+              <TableRow key={p.id}>
+                <TableCell>
+                  <div className="flex items-center gap-2">
+                    <span>{labelOf(p.classification_key)}</span>
+                    <span className="font-mono text-xs text-muted-foreground">{p.classification_key}</span>
+                  </div>
+                </TableCell>
+                <TableCell className="text-center">{boolDash(p.export_allowed)}</TableCell>
+                <TableCell>
+                  {p.allowed_formats.length === 0 ? (
+                    <span className="text-muted-foreground">—</span>
+                  ) : (
+                    <div className="flex gap-1 flex-wrap">
+                      {p.allowed_formats.map((f) => <Badge key={f} variant="outline" className="text-xs uppercase">{f}</Badge>)}
+                    </div>
+                  )}
+                </TableCell>
+                <TableCell className="text-right font-mono text-xs">
+                  {p.max_rows_per_export == null ? '∞' : p.max_rows_per_export.toLocaleString()}
+                </TableCell>
+                <TableCell className="text-center">{boolDash(p.watermark_required)}</TableCell>
+                <TableCell className="text-center">{boolDash(p.download_reason_required)}</TableCell>
+                <TableCell className="text-center">{boolDash(p.approval_required)}</TableCell>
+                <TableCell className="font-mono text-xs">{p.approver_role ?? <span className="text-muted-foreground">—</span>}</TableCell>
+                <TableCell className="text-right font-mono text-xs">
+                  {p.retain_export_log_days == null ? '∞' : p.retain_export_log_days}
+                </TableCell>
+                <TableCell className="text-center">{p.is_active ? '✓' : '—'}</TableCell>
+                <TableCell className="text-right">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setEditing(p)}
+                    disabled={!canWrite}
+                    aria-label={`Edit ${p.classification_key} export policy`}
+                    title={canWrite ? 'Edit export policy' : 'platform_owner only'}
+                  >
+                    <Pencil className="h-4 w-4" />
+                  </Button>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+
+      <Dialog open={editing !== null} onOpenChange={(o) => { if (!o && !mut.isPending) setEditing(null); }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Edit export policy</DialogTitle>
+            <DialogDescription>
+              One policy per classification. Saved values are recorded but do not enforce
+              anything yet — exporters will read this in a future phase.
+            </DialogDescription>
+          </DialogHeader>
+          {form && (
+            <div className="space-y-3">
+              <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground">Classification (read-only)</Label>
+                <Input value={`${labelOf(form.classification_key)}  ·  ${form.classification_key}`} readOnly disabled className="font-mono" />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <SwitchRow label="Export allowed"     checked={form.export_allowed}           onChange={(v) => setForm({ ...form, export_allowed: v })} />
+                <SwitchRow label="Watermark"          checked={form.watermark_required}       onChange={(v) => setForm({ ...form, watermark_required: v })} />
+                <SwitchRow label="Download reason"    checked={form.download_reason_required} onChange={(v) => setForm({ ...form, download_reason_required: v })} />
+                <SwitchRow label="Approval required"  checked={form.approval_required}        onChange={(v) => setForm({ ...form, approval_required: v })} />
+                <SwitchRow label="Active"             checked={form.is_active}                onChange={(v) => setForm({ ...form, is_active: v })} />
+              </div>
+
+              <div className="space-y-1">
+                <Label>Allowed formats</Label>
+                <div className="flex flex-wrap gap-2">
+                  {FORMAT_OPTIONS.map((fmt) => {
+                    const on = form.allowed_formats.includes(fmt);
+                    return (
+                      <Button
+                        key={fmt}
+                        type="button"
+                        size="sm"
+                        variant={on ? 'default' : 'outline'}
+                        onClick={() => toggleFormat(fmt, !on)}
+                        disabled={!form.export_allowed}
+                        className="uppercase text-xs"
+                      >
+                        {fmt}
+                      </Button>
+                    );
+                  })}
+                </div>
+                {form.export_allowed && form.allowed_formats.length === 0 && (
+                  <p className="text-xs text-destructive">Pick at least one format when export is allowed.</p>
+                )}
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label htmlFor="ep-maxrows">Max rows per export</Label>
+                  <Input
+                    id="ep-maxrows"
+                    type="number"
+                    min={0}
+                    value={form.max_rows_per_export ?? ''}
+                    placeholder="Unlimited"
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setForm({ ...form, max_rows_per_export: v === '' ? null : Number(v) });
+                    }}
+                  />
+                  <p className="text-xs text-muted-foreground">Blank = unlimited · 0 = blocked</p>
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="ep-retain">Retain export log (days)</Label>
+                  <Input
+                    id="ep-retain"
+                    type="number"
+                    min={0}
+                    value={form.retain_export_log_days ?? ''}
+                    placeholder="Forever"
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setForm({ ...form, retain_export_log_days: v === '' ? null : Number(v) });
+                    }}
+                  />
+                  <p className="text-xs text-muted-foreground">Blank = keep forever</p>
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <Label htmlFor="ep-approver">Approver role</Label>
+                <Input
+                  id="ep-approver"
+                  value={form.approver_role ?? ''}
+                  placeholder={form.approval_required ? 'e.g. platform_owner' : 'Not required'}
+                  list="ep-approver-suggestions"
+                  onChange={(e) => setForm({ ...form, approver_role: e.target.value || null })}
+                />
+                <datalist id="ep-approver-suggestions">
+                  {APPROVER_ROLE_SUGGESTIONS.map((r) => <option key={r} value={r} />)}
+                </datalist>
+                {form.approval_required && approverTrim.length === 0 && (
+                  <p className="text-xs text-destructive">Approver role required when approval is on.</p>
+                )}
+              </div>
+
+              <div className="space-y-1">
+                <Label htmlFor="ep-notes">Notes</Label>
+                <Textarea
+                  id="ep-notes"
+                  value={form.notes ?? ''}
+                  maxLength={EP_NOTES_MAX}
+                  rows={2}
+                  onChange={(e) => setForm({ ...form, notes: e.target.value })}
+                />
+                <p className="text-xs text-muted-foreground">{notesLen}/{EP_NOTES_MAX}</p>
               </div>
             </div>
           )}

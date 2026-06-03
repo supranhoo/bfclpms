@@ -2082,6 +2082,71 @@ export type Database = {
         }
         Relationships: []
       }
+      export_policies: {
+        Row: {
+          allowed_formats: string[]
+          approval_required: boolean
+          approver_role: string | null
+          classification_key: string
+          created_at: string
+          created_by: string | null
+          download_reason_required: boolean
+          export_allowed: boolean
+          id: string
+          is_active: boolean
+          max_rows_per_export: number | null
+          notes: string | null
+          retain_export_log_days: number | null
+          updated_at: string
+          updated_by: string | null
+          watermark_required: boolean
+        }
+        Insert: {
+          allowed_formats?: string[]
+          approval_required?: boolean
+          approver_role?: string | null
+          classification_key: string
+          created_at?: string
+          created_by?: string | null
+          download_reason_required?: boolean
+          export_allowed?: boolean
+          id?: string
+          is_active?: boolean
+          max_rows_per_export?: number | null
+          notes?: string | null
+          retain_export_log_days?: number | null
+          updated_at?: string
+          updated_by?: string | null
+          watermark_required?: boolean
+        }
+        Update: {
+          allowed_formats?: string[]
+          approval_required?: boolean
+          approver_role?: string | null
+          classification_key?: string
+          created_at?: string
+          created_by?: string | null
+          download_reason_required?: boolean
+          export_allowed?: boolean
+          id?: string
+          is_active?: boolean
+          max_rows_per_export?: number | null
+          notes?: string | null
+          retain_export_log_days?: number | null
+          updated_at?: string
+          updated_by?: string | null
+          watermark_required?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "export_policies_classification_key_fkey"
+            columns: ["classification_key"]
+            isOneToOne: true
+            referencedRelation: "data_classifications"
+            referencedColumns: ["classification_key"]
+          },
+        ]
+      }
       final_score_revisions: {
         Row: {
           auto_reverted: boolean
