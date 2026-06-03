@@ -43,3 +43,10 @@ Set flag `hub_platform_settings_enabled = "false"` (instant). Tables are additiv
 - `toCsv()` helper in `src/pages/platform/PlatformSettings.tsx` is RFC 4180 compliant (escapes commas/quotes/newlines, JSON-stringifies objects). Exported for unit tests.
 - Toggle mutations invalidate `['platform-settings', 'cme-joined' | 'cae-joined']`, `['platform-settings', 'audit']`, and `['hub-entitlement-snapshot']` so the resolver picks up changes immediately.
 - Observe-only contract still in force: a disabled entitlement does NOT block any PMS behavior. Enforcement is deferred to a later phase (one action at a time).
+
+## Phase 2B — Observe-only wraps (shipped)
+- 13 PMS high-risk action trigger buttons now wrapped with `<CanAction actionKey="...">`:
+  `pms.users.add`, `pms.users.edit`, `pms.users.manage_access`, `pms.users.password_rollout`, `pms.users.working_days`, `pms.kra.assign`, `pms.workflow.final_score_rules.edit`, `pms.workflow.template.edit`, `pms.menu.create_tab`, `pms.menu.delete_custom_tab`, `pms.reports.performance.export`, `pms.data.import`, `pms.data.export`.
+- Observe-only contract unchanged: children always render, action is never blocked. When the master switch is ON and an entitlement is OFF, exactly one `would_deny` telemetry row is inserted per mounted surface via `loggedRef`. No re-render spam.
+- No PMS enforcement yet. No workflow, scoring, menu, reports, RLS, or permission changes.
+- Files touched: `src/components/platform/CanAction.tsx` (no change, contract honored), `src/pages/platform/PlatformSettings.tsx` (Master switch display + platform_owner toggle), `src/pages/admin/UserManagement.tsx`, `src/components/admin/UserAccessSheet.tsx`, `src/components/admin/EmployeeWorkingDaysDialog.tsx`, `src/components/admin/SmartAssignmentDialog.tsx`, `src/components/admin/TemplateFormDialog.tsx`, `src/components/admin/MenuSettingTab.tsx`, `src/pages/admin/ImportData.tsx`.
