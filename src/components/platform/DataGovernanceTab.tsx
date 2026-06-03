@@ -338,3 +338,409 @@ function LoadingRows() {
     </div>
   );
 }
+
+/* ────────────────────────── 3A.2: Sensitive Field Registry ─────────────── */
+
+type SensitiveField = {
+  id: string;
+  module_key: string;
+  table_name: string;
+  column_name: string;
+  field_label: string | null;
+  classification_key: string;
+  pii: boolean;
+  phi: boolean;
+  financial: boolean;
+  notes: string | null;
+  is_active: boolean;
+};
+
+type SensitiveFieldDraft = Omit<SensitiveField, 'id'> & { id?: string };
+
+const MODULE_OPTIONS = ['pms', 'hrms', 'lms', 'safety', 'incentive', 'platform'] as const;
+const SF_TEXT_MAX = 120;
+const SF_NOTES_MAX = 500;
+
+function emptyDraft(defaultClassification: string): SensitiveFieldDraft {
+  return {
+    module_key: 'pms',
+    table_name: '',
+    column_name: '',
+    field_label: '',
+    classification_key: defaultClassification,
+    pii: false,
+    phi: false,
+    financial: false,
+    notes: '',
+    is_active: true,
+  };
+}
+
+function pickSfAuditable(f: SensitiveFieldDraft) {
+  return {
+    module_key: f.module_key,
+    table_name: f.table_name,
+    column_name: f.column_name,
+    field_label: f.field_label,
+    classification_key: f.classification_key,
+    pii: f.pii,
+    phi: f.phi,
+    financial: f.financial,
+    notes: f.notes,
+    is_active: f.is_active,
+  };
+}
+
+function SensitiveFieldsSubTab() {
+  const qc = useQueryClient();
+  const { user, hasRole } = useAuth();
+  const canWrite = hasRole('platform_owner');
+
+  const { data: classifications } = useQuery({
+    queryKey: ['platform-settings', 'data-governance', 'classifications'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('data_classifications')
+        .select('classification_key,label,is_active')
+        .order('sort_order', { ascending: true });
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['platform-settings', 'data-governance', 'sensitive-fields'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('sensitive_fields')
+        .select('*')
+        .order('module_key', { ascending: true })
+        .order('table_name', { ascending: true })
+        .order('column_name', { ascending: true });
+      if (error) throw error;
+      return (data ?? []) as SensitiveField[];
+    },
+  });
+
+  const [filterModule, setFilterModule] = useState<string>('all');
+  const [filterClassification, setFilterClassification] = useState<string>('all');
+  const [showInactive, setShowInactive] = useState(false);
+
+  const [editing, setEditing] = useState<SensitiveField | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [form, setForm] = useState<SensitiveFieldDraft | null>(null);
+
+  useEffect(() => {
+    if (creating) {
+      const def = classifications?.[0]?.classification_key ?? 'internal';
+      setForm(emptyDraft(def));
+    } else if (editing) {
+      setForm({ ...editing });
+    } else {
+      setForm(null);
+    }
+  }, [editing, creating, classifications]);
+
+  const mut = useMutation({
+    mutationFn: async () => {
+      if (!form) return;
+      if (creating) {
+        const payload = pickSfAuditable(form);
+        const { data: ins, error } = await supabase
+          .from('sensitive_fields')
+          .insert({ ...payload, created_by: user?.id ?? null, updated_by: user?.id ?? null })
+          .select('id')
+          .single();
+        if (error) throw error;
+        const { error: audErr } = await supabase.from('entitlement_audit').insert({
+          actor_id: user?.id ?? null,
+          event_type: 'create',
+          entity_type: 'sensitive_field',
+          entity_key: `${form.module_key}.${form.table_name}.${form.column_name}`,
+          before: null,
+          after: payload,
+          reason: 'platform_settings_sensitive_field_create',
+        });
+        if (audErr) throw audErr;
+        return ins;
+      }
+      if (!editing) return;
+      const before = pickSfAuditable(editing);
+      const after = pickSfAuditable(form);
+      const { error } = await supabase
+        .from('sensitive_fields')
+        .update({
+          field_label: form.field_label,
+          classification_key: form.classification_key,
+          pii: form.pii,
+          phi: form.phi,
+          financial: form.financial,
+          notes: form.notes,
+          is_active: form.is_active,
+          updated_by: user?.id ?? null,
+        })
+        .eq('id', editing.id);
+      if (error) throw error;
+      const { error: audErr } = await supabase.from('entitlement_audit').insert({
+        actor_id: user?.id ?? null,
+        event_type: 'update',
+        entity_type: 'sensitive_field',
+        entity_key: `${editing.module_key}.${editing.table_name}.${editing.column_name}`,
+        before,
+        after,
+        reason: 'platform_settings_sensitive_field_update',
+      });
+      if (audErr) throw audErr;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['platform-settings', 'data-governance', 'sensitive-fields'] });
+      qc.invalidateQueries({ queryKey: ['platform-settings', 'audit'] });
+      toast.success(creating ? 'Sensitive field added' : 'Sensitive field updated');
+      setEditing(null);
+      setCreating(false);
+    },
+    onError: (e: Error) => toast.error(`Save failed: ${e.message}`),
+  });
+
+  if (isLoading) return <LoadingRows />;
+
+  const isEditMode = !!editing && !creating;
+  const labelTrim = (form?.field_label ?? '').trim();
+  const tableTrim = (form?.table_name ?? '').trim();
+  const columnTrim = (form?.column_name ?? '').trim();
+  const notesLen = (form?.notes ?? '').length;
+  const valid =
+    !!form &&
+    !!form.module_key &&
+    tableTrim.length > 0 && tableTrim.length <= SF_TEXT_MAX &&
+    columnTrim.length > 0 && columnTrim.length <= SF_TEXT_MAX &&
+    labelTrim.length <= SF_TEXT_MAX &&
+    notesLen <= SF_NOTES_MAX &&
+    !!form.classification_key;
+  const dirty = creating
+    ? true
+    : !!editing && !!form && JSON.stringify(pickSfAuditable(editing)) !== JSON.stringify(pickSfAuditable(form));
+
+  const filtered = (data ?? []).filter((f) => {
+    if (filterModule !== 'all' && f.module_key !== filterModule) return false;
+    if (filterClassification !== 'all' && f.classification_key !== filterClassification) return false;
+    if (!showInactive && !f.is_active) return false;
+    return true;
+  });
+
+  return (
+    <>
+      <div className="flex flex-wrap items-end gap-3 pb-3">
+        <div className="space-y-1">
+          <Label className="text-xs text-muted-foreground">Module</Label>
+          <Select value={filterModule} onValueChange={setFilterModule}>
+            <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All modules</SelectItem>
+              {MODULE_OPTIONS.map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs text-muted-foreground">Classification</Label>
+          <Select value={filterClassification} onValueChange={setFilterClassification}>
+            <SelectTrigger className="w-52"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All classifications</SelectItem>
+              {(classifications ?? []).map((c) => (
+                <SelectItem key={c.classification_key} value={c.classification_key}>{c.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="flex items-center gap-2 pb-2">
+          <Switch checked={showInactive} onCheckedChange={setShowInactive} id="sf-show-inactive" />
+          <Label htmlFor="sf-show-inactive" className="text-sm cursor-pointer">Show inactive</Label>
+        </div>
+        <div className="ml-auto">
+          <Button
+            onClick={() => setCreating(true)}
+            disabled={!canWrite}
+            title={canWrite ? 'Add sensitive field' : 'platform_owner only'}
+          >
+            <Plus className="h-4 w-4 mr-1" /> Add Field
+          </Button>
+        </div>
+      </div>
+
+      <div className="overflow-x-auto rounded-md border">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Module</TableHead>
+              <TableHead>Table</TableHead>
+              <TableHead>Column</TableHead>
+              <TableHead>Label</TableHead>
+              <TableHead>Classification</TableHead>
+              <TableHead className="text-center">Flags</TableHead>
+              <TableHead className="text-center">Active</TableHead>
+              <TableHead className="w-16 text-right">Edit</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {filtered.length === 0 ? (
+              <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground py-6">No sensitive fields registered</TableCell></TableRow>
+            ) : filtered.map((f) => (
+              <TableRow key={f.id}>
+                <TableCell className="font-mono text-xs">{f.module_key}</TableCell>
+                <TableCell className="font-mono text-xs">{f.table_name}</TableCell>
+                <TableCell className="font-mono text-xs">{f.column_name}</TableCell>
+                <TableCell>{f.field_label || <span className="text-muted-foreground">—</span>}</TableCell>
+                <TableCell><Badge variant="outline" className="text-xs">{f.classification_key}</Badge></TableCell>
+                <TableCell className="text-center">
+                  <div className="flex gap-1 justify-center">
+                    {f.pii && <Badge variant="secondary" className="text-xs">PII</Badge>}
+                    {f.phi && <Badge variant="secondary" className="text-xs">PHI</Badge>}
+                    {f.financial && <Badge variant="secondary" className="text-xs">FIN</Badge>}
+                    {!f.pii && !f.phi && !f.financial && <span className="text-muted-foreground">—</span>}
+                  </div>
+                </TableCell>
+                <TableCell className="text-center">{f.is_active ? '✓' : '—'}</TableCell>
+                <TableCell className="text-right">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setEditing(f)}
+                    disabled={!canWrite}
+                    aria-label={`Edit ${f.module_key}.${f.table_name}.${f.column_name}`}
+                    title={canWrite ? 'Edit sensitive field' : 'platform_owner only'}
+                  >
+                    <Pencil className="h-4 w-4" />
+                  </Button>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+
+      <Dialog
+        open={editing !== null || creating}
+        onOpenChange={(o) => { if (!o && !mut.isPending) { setEditing(null); setCreating(false); } }}
+      >
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{creating ? 'Add sensitive field' : 'Edit sensitive field'}</DialogTitle>
+            <DialogDescription>
+              Registry only. Saved values are recorded with an audit row but do not mask,
+              block, or otherwise change any PMS behaviour yet.
+            </DialogDescription>
+          </DialogHeader>
+          {form && (
+            <div className="space-y-3">
+              <div className="grid grid-cols-3 gap-2">
+                <div className="space-y-1">
+                  <Label htmlFor="sf-module">Module</Label>
+                  <Select
+                    value={form.module_key}
+                    onValueChange={(v) => setForm({ ...form, module_key: v })}
+                    disabled={isEditMode}
+                  >
+                    <SelectTrigger id="sf-module"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {MODULE_OPTIONS.map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="sf-table">Table</Label>
+                  <Input
+                    id="sf-table"
+                    value={form.table_name}
+                    maxLength={SF_TEXT_MAX}
+                    readOnly={isEditMode}
+                    disabled={isEditMode}
+                    onChange={(e) => setForm({ ...form, table_name: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="sf-col">Column</Label>
+                  <Input
+                    id="sf-col"
+                    value={form.column_name}
+                    maxLength={SF_TEXT_MAX}
+                    readOnly={isEditMode}
+                    disabled={isEditMode}
+                    onChange={(e) => setForm({ ...form, column_name: e.target.value })}
+                  />
+                </div>
+              </div>
+              {isEditMode && (
+                <p className="text-xs text-muted-foreground">
+                  Module, table and column are immutable after creation. Add a new row if the identity changes.
+                </p>
+              )}
+
+              <div className="space-y-1">
+                <Label htmlFor="sf-label">Field label</Label>
+                <Input
+                  id="sf-label"
+                  value={form.field_label ?? ''}
+                  maxLength={SF_TEXT_MAX}
+                  placeholder="Human-readable label (optional)"
+                  onChange={(e) => setForm({ ...form, field_label: e.target.value })}
+                />
+              </div>
+
+              <div className="space-y-1">
+                <Label htmlFor="sf-class">Classification</Label>
+                <Select
+                  value={form.classification_key}
+                  onValueChange={(v) => setForm({ ...form, classification_key: v })}
+                >
+                  <SelectTrigger id="sf-class"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {(classifications ?? []).map((c) => (
+                      <SelectItem key={c.classification_key} value={c.classification_key}>
+                        {c.label} <span className="font-mono text-xs text-muted-foreground ml-1">({c.classification_key})</span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <SwitchRow label="PII"       checked={form.pii}       onChange={(v) => setForm({ ...form, pii: v })} />
+                <SwitchRow label="PHI"       checked={form.phi}       onChange={(v) => setForm({ ...form, phi: v })} />
+                <SwitchRow label="Financial" checked={form.financial} onChange={(v) => setForm({ ...form, financial: v })} />
+                <SwitchRow label="Active"    checked={form.is_active} onChange={(v) => setForm({ ...form, is_active: v })} />
+              </div>
+
+              <div className="space-y-1">
+                <Label htmlFor="sf-notes">Notes</Label>
+                <Textarea
+                  id="sf-notes"
+                  value={form.notes ?? ''}
+                  maxLength={SF_NOTES_MAX}
+                  rows={2}
+                  onChange={(e) => setForm({ ...form, notes: e.target.value })}
+                />
+                <p className="text-xs text-muted-foreground">{notesLen}/{SF_NOTES_MAX}</p>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => { setEditing(null); setCreating(false); }}
+              disabled={mut.isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => mut.mutate()}
+              disabled={!valid || !dirty || !canWrite || mut.isPending}
+            >
+              {mut.isPending ? 'Saving…' : creating ? 'Add' : 'Save'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
