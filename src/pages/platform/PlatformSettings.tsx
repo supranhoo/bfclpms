@@ -780,7 +780,7 @@ function TelemetryTab() {
 
   // Recent events (server-side filtered + paginated)
   const eventsQ = useQuery({
-    queryKey: ['telemetry', 'events', { page, from, until, clientId, moduleKey, risk, actionSearch, userSearch, akeys: constrainByActionKeys ? filteredActionKeys.length : 0 }],
+    queryKey: ['telemetry', 'events', { page, from, until, clientId, moduleKey, risk, actionSearch, userSearch, routeFilter, akeys: constrainByActionKeys ? filteredActionKeys.length : 0 }],
     queryFn: async () => {
       let q = supabase
         .from('entitlement_audit')
@@ -797,6 +797,9 @@ function TelemetryTab() {
       if (constrainByActionKeys) {
         if (filteredActionKeys.length === 0) return { rows: [] as WouldDenyRow[], total: 0 };
         q = q.in('entity_key', filteredActionKeys);
+      }
+      if (routeFilter.trim()) {
+        q = q.eq('after->>pathname', routeFilter.trim());
       }
       const start = page * PAGE_SIZE;
       const { data, count, error } = await q.range(start, start + PAGE_SIZE - 1);
