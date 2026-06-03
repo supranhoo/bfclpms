@@ -11223,6 +11223,7 @@ export type Database = {
         | "management"
         | "hr_pms"
         | "skip_level"
+        | "platform_owner"
       config_status: "draft" | "active" | "archived"
       confirmation_increment_treatment:
         | "ignore"
@@ -11481,6 +11482,7 @@ export const Constants = {
         "management",
         "hr_pms",
         "skip_level",
+        "platform_owner",
       ],
       config_status: ["draft", "active", "archived"],
       confirmation_increment_treatment: [
