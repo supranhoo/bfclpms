@@ -1,76 +1,72 @@
-
 ## Goal
+When an admin edits a KPI from the Admin Edit dialog without changing status, the Review Timeline currently labels the event "Admin Override" and adds a misleading "New Status: Self Review" line. Reclassify it to **KPI Updated** (descriptive fields) or **Logic Updated** (scoring thresholds), and hide the noisy "New Status" line when status didn't actually change.
 
-Allow admins to delete only custom-created menu items from System Settings > Menu Setting. Seeded/system items remain protected (existing DB trigger `menu_registry_protect_seeded_delete` already blocks them server-side).
+## Assumptions
+- Audit row already carries the right metadata: `source: 'admin_edit_dialog'`, `status_changed: boolean`, and `changed_fields: string[]` (verified via `useKpis.ts:741-755` and the live audit row for KPI 101962 / May 2026).
+- "Admin Override" label must remain for genuine non-edit-dialog overrides (e.g. bulk override, direct status overrides whose source ≠ `admin_edit_dialog`).
+- No backend / DB change needed. Pure UI relabel + detail-line filtering.
+
+## Logic Classification (SSOT helper)
+New file `src/lib/auditLabels.ts` exporting:
+- `LOGIC_FIELDS = ['r0','r1','r2','r3','r4','r5','threshold_mode','criteria','uom_type','qualitative_options']`
+- `classifyAdminOverride(log)` returns one of:
+  - `'logic_updated'` — `source==='admin_edit_dialog'`, `status_changed===false`, and every entry in `changed_fields` is in `LOGIC_FIELDS`.
+  - `'kpi_updated'` — `source==='admin_edit_dialog'`, `status_changed===false`, otherwise.
+  - `'admin_override'` — anything else (status actually changed, or non-edit-dialog source).
+- Label map: `kpi_updated → 'KPI Updated'`, `logic_updated → 'Logic Updated'`, `admin_override → 'Admin Override'`.
 
 ## UI Changes
 
-**Location:** `src/components/admin/MenuTreeDnd.tsx` → Actions column in `RowBody`.
+### 1. `src/components/dashboard/KpiTimeline.tsx`
+- `getActionConfig(log)` (signature change from `(action)` → `(log)`): for `action === 'ADMIN_OVERRIDE'`, call `classifyAdminOverride` and swap label + icon:
+  - `kpi_updated` → icon `Edit`, color `bg-slate-500`, label `KPI Updated`
+  - `logic_updated` → icon `Sliders` (lucide), color `bg-amber-500`, label `Logic Updated`
+  - default → keep existing rose `Admin Override`
+- In `formatDetails`, drop the `New Status: …` push when `log.action === 'ADMIN_OVERRIDE' && log.metadata?.status_changed === false`. Add a single concise line: `Updated fields: <human list>` (map raw field names via a small label dictionary — `r0..r5`/`threshold_mode`/`criteria`/`uom_type`/`qualitative_options` → "Scoring Logic"; `kpi_name`→"KPI Name"; `kra_name`→"KRA Name"; `weightage`→"Weightage"; `frequency`→"Frequency"; `target_value`→"Target"; `uom`→"UOM"; `source_of_data`→"Source of Data"; others → Title Case). De-duplicate so a logic-only edit shows just "Updated: Scoring Logic".
 
-**What changes visually:**
-- A new Trash icon button appears in the Actions column, immediately after the existing Reset (RotateCcw) icon.
-- Rendered ONLY when `reg.is_custom === true && !reg.is_system_required`.
-- Tooltip: `Delete custom tab`.
-- Icon uses `text-destructive` styling; hover background `hover:bg-destructive/10`.
-- Disabled (with explanatory tooltip “Move or delete child items first”) when the item has any visible children in the effective tree.
+### 2. `src/components/review/KpiJourneySection.tsx` (the modal in the screenshot)
+- Same two changes:
+  - Action-label resolution: replace the static `actionLabelMap[log.action]` call with a helper that re-classifies `ADMIN_OVERRIDE` via `classifyAdminOverride`. Applied both in the on-screen list and in the `auditLogs.map(...)` passed to `exportReviewTimelinePdf`, so the PDF stays in sync.
+  - `formatAuditDetails`: skip the `New Status:` push when `status_changed === false`; emit the same "Updated fields: …" summary.
 
-**Confirmation dialog** (new component `ConfirmDeleteCustomMenuDialog` or inline using existing `ConfirmDestructiveDialog`):
-- Title: `Delete custom tab?`
-- Body:
-  > This will remove the custom menu tab from Menu Setting and the sidebar. Existing PMS pages, routes, reports, permissions, workflows, KPI data, and scoring data will not be deleted.
-  >
-  > **Name:** {label}
-  > **Key:** `{menu_key}` (monospace)
-- Cancel button: `Cancel`
-- Confirm button: `Delete tab` (destructive variant — reuses `ConfirmDestructiveDialog`).
-- Delete only fires on confirm; cancel leaves tab unchanged.
+### 3. `src/lib/pdfExport.ts`
+- No structural change; the call site (above) feeds it the corrected label + details, so PDF mirrors the UI automatically. Verify that `Review Timeline` PDF section reads from the `label`/`details` props (it does).
 
-**No other layout changes.** Reset icon, Shortcut icon, grid columns, drag/drop, expand/collapse, multi-select all unchanged.
+### 4. `src/pages/reports/AuditTrailReport.tsx`
+- Replace the static `'admin_override': 'Admin Override'` mapping with the same `classifyAdminOverride` call so the Audit Trail report shows "KPI Updated" / "Logic Updated" too. Existing CSV export reads the same label.
 
-## Plan
+### 5. Test coverage
+- Add `src/lib/auditLabels.test.ts` covering: logic-only fields → `logic_updated`; mixed fields → `kpi_updated`; status_changed=true → `admin_override`; source=`bulk_override` → `admin_override`.
 
-1. **Service function** — `src/lib/menu/customMenu.ts`
-   - Add `deleteCustomMenuItem(menuKey, registryRow, performedBy)`:
-     - Guard: throw if `!registryRow.is_custom` or `registryRow.is_system_required`.
-     - Sequence (best-effort cleanup, registry last so trigger validates):
-       1. `delete from menu_access_user_overrides where menu_key = ...`
-       2. `delete from menu_access_config where menu_key = ...`
-       3. `delete from menu_overrides where menu_key = ...`
-       4. `delete from menu_registry where menu_key = ...` (DB trigger enforces is_custom)
-       5. `insert into menu_override_audit { menu_key, field: 'delete_custom_menu_item', old_value: JSON.stringify(registryRow), new_value: null, changed_by: performedBy }`
-   - Returns void; throws on any error.
+## What does NOT change
+- Audit row writer in `useKpis.ts` (already records the metadata we need).
+- `ADMIN_STATUS_OVERRIDE` action (real status change) stays labelled "Admin Status Override".
+- Reset / step-back / data-entry actions are untouched.
 
-2. **Wire through MenuTreeDnd**
-   - Add optional prop `onDeleteCustom?: (menuKey: string) => void` on `Props`, `ModuleSection`, `TreeRow`, `RowBody`.
-   - In `RowBody` Actions cell, render Trash button when `reg?.is_custom && !reg?.is_system_required`; disabled when `childrenByParent.get(node.menu_key)?.length`.
+## Visual Result (Review Timeline modal)
+Before:
+```
+🌐 Admin Override
+   by Jaspal
+   • New Status: Self Review
+```
+After (this case — only `kpi_name` & `kra_name` changed):
+```
+✏️ KPI Updated
+   by Jaspal
+   • Updated fields: KPI Name
+```
+If only `r0…r5`/`threshold_mode` changed:
+```
+🎚️ Logic Updated
+   by Jaspal
+   • Updated fields: Scoring Logic
+```
 
-3. **MenuSettingTab orchestration** — `src/components/admin/MenuSettingTab.tsx`
-   - New state: `const [deleteTarget, setDeleteTarget] = useState<{menuKey:string; label:string} | null>(null)` and `const [deleting, setDeleting] = useState(false)`.
-   - Pass `onDeleteCustom={(k) => setDeleteTarget({menuKey:k, label: effectiveByKey[k]?.label ?? k})}` to `<MenuTreeDnd>`.
-   - Render `<ConfirmDestructiveDialog>` with the title/body/labels above. On confirm:
-     - Call `deleteCustomMenuItem(menuKey, registryByKey[menuKey], profile?.id ?? null)`.
-     - Toast success/failure.
-     - Invalidate queries: `menu-registry-admin`, `menu-overrides-admin`, `resolved-menu`, `menu-access-config`, `menu-access-user-overrides`.
-     - Clear any pending move/label drafts for that key (defensive).
-     - Close dialog.
+## Risk & Rollback
+- Risk: low — purely presentational; no schema / RPC / data mutation.
+- Old audit rows render correctly because `classifyAdminOverride` falls back to `admin_override` when metadata is missing (`source` undefined).
+- Rollback: revert the three component files + helper.
 
-4. **Verification**
-   - Type-check passes.
-   - Manual: create custom tab → delete icon appears → click → dialog → confirm → row disappears, sidebar refreshes, audit row inserted.
-   - Manual: try delete on `admin-menu-setting` → no icon. Try on custom container with a child → icon disabled with tooltip.
-   - Refresh page → deleted custom tab does not return.
-
-## Risk & Impact
-
-- **Data:** Only deletes rows for the specific `menu_key`. Routes, KPI, scoring, workflow, permissions tables untouched. Cleanup of `menu_access_*` rows is intentional and only affects the deleted custom key.
-- **Workflow/UX:** Sidebar/Menu Setting recompute via existing cache invalidation. No effect on seeded items.
-- **Regression:** Guarded by `is_custom && !is_system_required` in UI AND DB trigger `menu_registry_protect_seeded_delete`. Children block prevents orphaned descendants.
-- **Rollback:** Audit row contains the full registry JSON, enabling manual re-insert if needed. Plain DELETEs, no schema change.
-- **Scalability:** Single-row deletes per menu_key; constant time.
-
-## Out of Scope
-
-- No DB migration (existing tables, RLS, and protect-seeded trigger already cover this).
-- No bulk delete.
-- No “undo” UI; recovery is via audit JSON.
-- No changes to routes, permissions, workflow, KPI logic, scoring, or seeded item behavior.
+## Docs
+- Append a one-line entry to DOCUMENTATION.md "Review Timeline labels" section and POLICY.md under §audit-display noting: "Admin Override is split into KPI Updated / Logic Updated when source = admin_edit_dialog and status_changed = false."

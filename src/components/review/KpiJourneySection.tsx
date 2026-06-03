@@ -15,6 +15,7 @@ import { calculateRating, RatingThresholds } from '@/lib/ratingCalculation';
 import { UomType } from '@/lib/qualitativeUom';
 import { exportReviewTimelinePdf, ReviewTimelinePdfData } from '@/lib/pdfExport';
 import { statusLabels } from '@/lib/reviewConstants';
+import { classifyAdminOverride, ADMIN_OVERRIDE_LABELS, describeChangedFields } from '@/lib/auditLabels';
 import { format } from 'date-fns';
 import { isComplianceKpi, useComplianceSubFactors } from '@/hooks/useComplianceSubFactors';
 import { isKpiLockedForPeriod, getActiveMonthForCycle } from '@/lib/frequencyUtils';
@@ -584,7 +585,9 @@ export function KpiJourneySection({
       if (log.new_value.reason) details.push(`Reason: ${log.new_value.reason}`);
       if (log.new_value.resolution_notes) details.push(`Resolution: ${log.new_value.resolution_notes}`);
       if (log.new_value.target) details.push(`Sent to: ${log.new_value.target}`);
-      if (log.new_value.status) {
+      const suppressStatusLine =
+        log.action === 'ADMIN_OVERRIDE' && log.metadata?.status_changed === false;
+      if (log.new_value.status && !suppressStatusLine) {
         const label = statusLabels[String(log.new_value.status)] || String(log.new_value.status).replace(/_/g, ' ');
         details.push(`New Status: ${label}`);
       }
@@ -593,6 +596,15 @@ export function KpiJourneySection({
       if (log.new_value.manager_remarks) details.push(`Manager Remarks: ${log.new_value.manager_remarks}`);
       if (log.new_value.auditor_remarks) details.push(`Auditor Remarks: ${log.new_value.auditor_remarks}`);
       if (log.new_value.management_remarks) details.push(`Management Remarks: ${log.new_value.management_remarks}`);
+    }
+    if (
+      log.action === 'ADMIN_OVERRIDE' &&
+      log.metadata?.source === 'admin_edit_dialog' &&
+      Array.isArray(log.metadata?.changed_fields)
+    ) {
+      const cf = (log.metadata.changed_fields as string[]).filter((f: string) => f !== 'status');
+      const summary = describeChangedFields(cf);
+      if (summary) details.push(`Updated fields: ${summary}`);
     }
     return details;
   };
@@ -668,8 +680,13 @@ export function KpiJourneySection({
       isNA: globalIsNA,
       auditLogs: auditLogs.map((log: any) => {
         const performer = auditProfileMap.get(log.performed_by);
+        let label = actionLabelMap[log.action] || log.action.replace(/_/g, ' ');
+        if (log.action === 'ADMIN_OVERRIDE') {
+          const kind = classifyAdminOverride(log);
+          if (kind !== 'admin_override') label = ADMIN_OVERRIDE_LABELS[kind];
+        }
         return {
-          label: actionLabelMap[log.action] || log.action.replace(/_/g, ' '),
+          label,
           performerName: performer?.full_name || performer?.email || 'System',
           date: format(new Date(log.created_at), 'dd MMM yyyy, hh:mm a'),
           details: formatAuditDetails(log),

@@ -26,6 +26,12 @@ import {
 import { supabase } from '@/integrations/supabase/client';
 import type { KPI } from '@/hooks/useKpis';
 import { groupTimelineEvents, type TimelineLog } from '@/lib/timelineGrouping';
+import { Sliders } from 'lucide-react';
+import {
+  classifyAdminOverride,
+  ADMIN_OVERRIDE_LABELS,
+  describeChangedFields,
+} from '@/lib/auditLabels';
 
 interface KpiTimelineProps {
   isOpen: boolean;
@@ -196,11 +202,20 @@ export function KpiTimeline({ isOpen, onClose, kpi, workflowStages: propStages }
     [auditLogs],
   );
 
-  const getActionConfig = (action: string) => {
-    return actionConfig[action] || { 
-      icon: Clock, 
-      color: 'bg-muted-foreground', 
-      label: action.replace(/_/g, ' ') 
+  const getActionConfig = (log: Pick<AuditLog, 'action' | 'metadata'>) => {
+    if (log.action === 'ADMIN_OVERRIDE') {
+      const kind = classifyAdminOverride(log);
+      if (kind === 'kpi_updated') {
+        return { icon: Edit, color: 'bg-slate-500', label: ADMIN_OVERRIDE_LABELS.kpi_updated };
+      }
+      if (kind === 'logic_updated') {
+        return { icon: Sliders, color: 'bg-amber-500', label: ADMIN_OVERRIDE_LABELS.logic_updated };
+      }
+    }
+    return actionConfig[log.action] || {
+      icon: Clock,
+      color: 'bg-muted-foreground',
+      label: log.action.replace(/_/g, ' '),
     };
   };
 
@@ -252,7 +267,9 @@ export function KpiTimeline({ isOpen, onClose, kpi, workflowStages: propStages }
       if (log.new_value.reason) details.push(`Reason: ${log.new_value.reason}`);
       if (log.new_value.resolution_notes) details.push(`Resolution: ${log.new_value.resolution_notes}`);
       if (log.new_value.target) details.push(`Sent to: ${log.new_value.target}`);
-      if (log.new_value.status) {
+      const suppressStatusLine =
+        log.action === 'ADMIN_OVERRIDE' && log.metadata?.status_changed === false;
+      if (log.new_value.status && !suppressStatusLine) {
         const label = statusLabels[String(log.new_value.status)] || String(log.new_value.status).replace(/_/g, ' ');
         details.push(`New Status: ${label}`);
       }
@@ -267,7 +284,19 @@ export function KpiTimeline({ isOpen, onClose, kpi, workflowStages: propStages }
     if (log.metadata?.mirrored_stage && log.metadata.mirrored_stage !== 'none') {
       details.push(`Mirrored to: ${String(log.metadata.mirrored_stage).replace(/_/g, ' ')}`);
     }
-    
+
+    // For admin edit-dialog updates, surface a single "Updated fields" summary
+    // instead of leaking the misleading "New Status" line for non-status edits.
+    if (
+      log.action === 'ADMIN_OVERRIDE' &&
+      log.metadata?.source === 'admin_edit_dialog' &&
+      Array.isArray(log.metadata?.changed_fields)
+    ) {
+      const cf = (log.metadata.changed_fields as string[]).filter(f => f !== 'status');
+      const summary = describeChangedFields(cf);
+      if (summary) details.push(`Updated fields: ${summary}`);
+    }
+
     return details;
   };
 
@@ -372,7 +401,7 @@ export function KpiTimeline({ isOpen, onClose, kpi, workflowStages: propStages }
                 <div className="space-y-6">
                 {groupedEvents.map(({ parent, children }) => {
                     const log = parent as unknown as AuditLog;
-                    const config = getActionConfig(log.action);
+                    const config = getActionConfig(log);
                     const IconComponent = config.icon;
                     const performer = profileMap.get(log.performed_by);
                     const onBehalfProfile = log.on_behalf_of ? profileMap.get(log.on_behalf_of) : null;
@@ -445,7 +474,7 @@ export function KpiTimeline({ isOpen, onClose, kpi, workflowStages: propStages }
                                     <div className="mt-2 space-y-2 pl-2 border-l-2 border-muted">
                                       {children.map((childLog) => {
                                         const c = childLog as unknown as AuditLog;
-                                        const cCfg = getActionConfig(c.action);
+                                        const cCfg = getActionConfig(c);
                                         const CIcon = cCfg.icon;
                                         const cDetails = formatDetails(c);
                                         return (
