@@ -919,11 +919,39 @@ function TelemetryTab() {
 
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm">would_deny — last 30 days</CardTitle>
-          <CardDescription>Daily volume</CardDescription>
+          <div className="flex items-center justify-between gap-2">
+            <div>
+              <CardTitle className="text-sm">would_deny — daily trend</CardTitle>
+              <CardDescription>
+                {trendRange === 'custom'
+                  ? `Custom: ${aggFromDate} → ${aggUntilDate}`
+                  : trendRange === '7d' ? 'Last 7 days' : 'Last 30 days'}
+                {aggCapped && ' · showing first 5000 events in window'}
+              </CardDescription>
+            </div>
+            <div className="flex gap-1">
+              <Button variant={trendRange === '7d' ? 'default' : 'outline'} size="sm" onClick={() => setTrendRange('7d')}>7d</Button>
+              <Button variant={trendRange === '30d' ? 'default' : 'outline'} size="sm" onClick={() => setTrendRange('30d')}>30d</Button>
+              <Button variant={trendRange === 'custom' ? 'default' : 'outline'} size="sm" onClick={() => setTrendRange('custom')}>Custom</Button>
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
-          {aggQ.isLoading ? <Skeleton className="h-16 w-full" /> : <Sparkline data={daily} />}
+          {aggQ.isLoading ? (
+            <Skeleton className="h-48 w-full" />
+          ) : (
+            <div className="h-48 w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={daily} margin={{ top: 8, right: 8, bottom: 0, left: -16 }}>
+                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                  <XAxis dataKey="date" fontSize={10} tickFormatter={(v: string) => v.slice(5)} />
+                  <YAxis fontSize={10} allowDecimals={false} />
+                  <RTooltip contentStyle={{ fontSize: 12 }} />
+                  <Line type="monotone" dataKey="count" stroke="hsl(var(--primary))" strokeWidth={2} dot={false} />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          )}
         </CardContent>
       </Card>
 
