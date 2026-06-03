@@ -393,6 +393,21 @@ type ClientRow = {
 };
 
 const CLIENT_NAME_MAX = 80;
+const CLIENT_KEY_MAX = 40;
+const CLIENT_MODES = ['saas', 'on_prem', 'hybrid'] as const;
+type ClientMode = (typeof CLIENT_MODES)[number];
+
+/** Lowercase slug: alphanumerics + hyphens, collapsed, trimmed, max 40. */
+function slugifyClientKey(name: string): string {
+  return name
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, CLIENT_KEY_MAX);
+}
+
+const KEY_PATTERN = /^[a-z0-9][a-z0-9-]*[a-z0-9]$|^[a-z0-9]$/;
 
 function ClientsTab() {
   const qc = useQueryClient();
