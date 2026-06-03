@@ -1214,7 +1214,9 @@ function TelemetryTab() {
                         <code className="text-[10px] text-muted-foreground">{r.entity_key}</code>
                       </TableCell>
                       <TableCell className="text-xs max-w-[12rem] truncate" title={`${pathname}${search}`}>
-                        {pathname ? <code className="text-[10px]">{pathname}{search}</code> : '—'}
+                        {pathname
+                          ? <code className="text-[10px]">{pathname}{search}</code>
+                          : <span className="text-muted-foreground italic">Not captured</span>}
                       </TableCell>
                       <TableCell><Badge variant="outline">{meta.risk_level ?? '—'}</Badge></TableCell>
                       <TableCell className="text-xs text-muted-foreground">{source || r.reason || '—'}</TableCell>
