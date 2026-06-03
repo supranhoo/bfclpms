@@ -583,6 +583,21 @@ export function toCsv(rows: Array<Record<string, unknown>>, columns: string[]): 
   return `${header}\n${body}`;
 }
 
+/** Group rows by a string key and return descending counts. Pure, exported for tests. */
+export function aggregateByKey<T extends Record<string, unknown>>(
+  rows: T[],
+  key: keyof T,
+): Array<{ key: string; count: number }> {
+  const map = new Map<string, number>();
+  for (const r of rows) {
+    const k = r[key] == null ? '—' : String(r[key]);
+    map.set(k, (map.get(k) ?? 0) + 1);
+  }
+  return Array.from(map.entries())
+    .map(([k, count]) => ({ key: k, count }))
+    .sort((a, b) => b.count - a.count);
+}
+
 function AuditTab() {
   const { hasRole } = useAuth();
   const canExport = hasRole('platform_owner');
