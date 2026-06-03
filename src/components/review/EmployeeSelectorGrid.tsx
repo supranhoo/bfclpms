@@ -2111,6 +2111,16 @@ export function EmployeeSelectorGrid({
       )}
 
 
+      {isFullAccess && (
+        <div className="flex items-center justify-end">
+          <EmployeeStatusFilter
+            syncToUrl={false}
+            value={empStatus}
+            onChange={(mode) => setEmpStatusRaw(mode)}
+          />
+        </div>
+      )}
+
       <EmployeeFilters
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
