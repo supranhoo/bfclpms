@@ -442,32 +442,154 @@ function RegistriesTab() {
   );
 }
 
+/** CSV helper — escape per RFC 4180. Pure, exported for unit tests. */
+export function toCsv(rows: Array<Record<string, unknown>>, columns: string[]): string {
+  const esc = (v: unknown) => {
+    const s = v === null || v === undefined ? '' : typeof v === 'object' ? JSON.stringify(v) : String(v);
+    return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  const header = columns.join(',');
+  const body = rows.map((r) => columns.map((c) => esc(r[c])).join(',')).join('\n');
+  return `${header}\n${body}`;
+}
+
 function AuditTab() {
+  const { hasRole } = useAuth();
+  const canExport = hasRole('platform_owner');
+  const [page, setPage] = useState(0);
+  const [eventType, setEventType] = useState<string>('all');
+  const [search, setSearch] = useState('');
+  const [from, setFrom] = useState('');
+  const [until, setUntil] = useState('');
+
+  const buildQuery = () => {
+    let q = supabase
+      .from('entitlement_audit')
+      .select('*', { count: 'exact' })
+      .order('created_at', { ascending: false });
+    if (eventType !== 'all') q = q.eq('event_type', eventType);
+    if (search.trim()) q = q.ilike('entity_key', `%${search.trim()}%`);
+    if (from) q = q.gte('created_at', new Date(from).toISOString());
+    if (until) {
+      const end = new Date(until);
+      end.setHours(23, 59, 59, 999);
+      q = q.lte('created_at', end.toISOString());
+    }
+    return q;
+  };
+
   const { data, isLoading } = useQuery({
-    queryKey: ['platform-settings', 'audit'],
+    queryKey: ['platform-settings', 'audit', { page, eventType, search, from, until }],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('entitlement_audit')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(PAGE_SIZE);
+      const start = page * PAGE_SIZE;
+      const { data, count, error } = await buildQuery().range(start, start + PAGE_SIZE - 1);
       if (error) throw error;
-      return data ?? [];
+      return { rows: data ?? [], total: count ?? 0 };
     },
   });
-  if (isLoading) return <LoadingRows />;
+
+  const exportCsv = async () => {
+    try {
+      const { data, error } = await buildQuery().limit(10000);
+      if (error) throw error;
+      const cols = ['created_at', 'event_type', 'entity_type', 'entity_key', 'client_id', 'actor_id', 'reason', 'before', 'after'];
+      const csv = toCsv((data ?? []) as Array<Record<string, unknown>>, cols);
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `entitlement_audit_${new Date().toISOString().slice(0, 10)}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success(`Exported ${(data ?? []).length} rows`);
+    } catch (e) {
+      toast.error(`Export failed: ${(e as Error).message}`);
+    }
+  };
+
+  const total = data?.total ?? 0;
+  const rows = data?.rows ?? [];
+  const maxPage = Math.max(0, Math.ceil(total / PAGE_SIZE) - 1);
+
   return (
-    <SearchableTable
-      rows={(data ?? []) as Array<Record<string, unknown>>}
-      searchKeys={['event_type', 'entity_type', 'entity_key'] as never}
-      columns={[
-        { key: 'created_at' as never, label: 'When', render: (v) => new Date(String(v)).toLocaleString() },
-        { key: 'event_type' as never, label: 'Event', render: (v) => <Badge variant="outline">{String(v)}</Badge> },
-        { key: 'entity_type' as never, label: 'Entity' },
-        { key: 'entity_key' as never, label: 'Key' },
-        { key: 'reason' as never, label: 'Reason' },
-      ]}
-    />
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-end gap-2">
+        <div className="space-y-1">
+          <label className="text-xs text-muted-foreground">Event</label>
+          <Select value={eventType} onValueChange={(v) => { setEventType(v); setPage(0); }}>
+            <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All events</SelectItem>
+              {AUDIT_EVENT_TYPES.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1">
+          <label className="text-xs text-muted-foreground">Entity key contains</label>
+          <Input value={search} onChange={(e) => { setSearch(e.target.value); setPage(0); }} placeholder="e.g. pms.admin.users" className="w-56" />
+        </div>
+        <div className="space-y-1">
+          <label className="text-xs text-muted-foreground">From</label>
+          <Input type="date" value={from} onChange={(e) => { setFrom(e.target.value); setPage(0); }} className="w-40" />
+        </div>
+        <div className="space-y-1">
+          <label className="text-xs text-muted-foreground">Until</label>
+          <Input type="date" value={until} onChange={(e) => { setUntil(e.target.value); setPage(0); }} className="w-40" />
+        </div>
+        <div className="ml-auto">
+          <Button variant="outline" size="sm" onClick={exportCsv} disabled={!canExport}>
+            <Download className="h-4 w-4 mr-1" />Export CSV
+          </Button>
+        </div>
+      </div>
+
+      <div className="overflow-x-auto rounded-md border">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>When</TableHead>
+              <TableHead>Event</TableHead>
+              <TableHead>Entity</TableHead>
+              <TableHead>Key</TableHead>
+              <TableHead>Before → After</TableHead>
+              <TableHead>Reason</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {isLoading ? (
+              <TableRow><TableCell colSpan={6}><LoadingRows /></TableCell></TableRow>
+            ) : rows.length === 0 ? (
+              <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-6">No rows</TableCell></TableRow>
+            ) : rows.map((r) => (
+              <TableRow key={r.id}>
+                <TableCell className="text-xs whitespace-nowrap">{new Date(r.created_at).toLocaleString()}</TableCell>
+                <TableCell><Badge variant="outline">{r.event_type}</Badge></TableCell>
+                <TableCell>{r.entity_type}</TableCell>
+                <TableCell><code className="text-xs">{r.entity_key}</code></TableCell>
+                <TableCell className="text-xs text-muted-foreground max-w-xs truncate">
+                  {r.before ? JSON.stringify(r.before) : '—'} → {r.after ? JSON.stringify(r.after) : '—'}
+                </TableCell>
+                <TableCell className="text-xs">{r.reason ?? '—'}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+
+      <div className="flex items-center justify-between text-xs text-muted-foreground">
+        <span>
+          Page {page + 1} of {maxPage + 1} · {total} rows total
+        </span>
+        <div className="flex gap-1">
+          <Button variant="outline" size="sm" disabled={page === 0} onClick={() => setPage((p) => Math.max(0, p - 1))}>
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+          <Button variant="outline" size="sm" disabled={page >= maxPage} onClick={() => setPage((p) => Math.min(maxPage, p + 1))}>
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+        </div>
+      </div>
+    </div>
   );
 }
 
