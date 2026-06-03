@@ -1,6 +1,6 @@
 ---
-name: Hub Platform Foundation (Phase 1)
-description: Observe-only Hub platform layer — module/action/capability registries, client entitlements, audit log, /platform-settings shell, all gated behind hub_platform_settings_enabled flag (default OFF)
+name: Hub Platform Foundation (Phases 1-2)
+description: Observe-only Hub platform layer with writable entitlement toggles + filtered/paginated audit log + CSV export. All gated behind hub_platform_settings_enabled + platform_owner role. ZERO PMS enforcement.
 type: feature
 ---
 # Hub Platform Foundation — Phase 1 (Observe-Only)
@@ -36,3 +36,10 @@ Workflow/scoring/dashboard config adapters, HRMS/LMS/Safety registration, signed
 
 ## Rollback
 Set flag `hub_platform_settings_enabled = "false"` (instant). Tables are additive; never enforce against PMS.
+
+## Phase 2 — Admin write surface (shipped)
+- `/platform-settings` Module/Action Entitlement tabs are writable for `platform_owner` only. Toggle writes `is_enabled` and inserts an `entitlement_audit` row (`event_type='update'`, before/after JSON, `reason='platform_settings toggle'`).
+- Audit Logs tab: server-side pagination (`PAGE_SIZE=50` with `count: 'exact'`), filters (event_type Select, entity_key `ilike`, date range from/until), `Download CSV` button capped at 10000 rows, gated to `platform_owner`.
+- `toCsv()` helper in `src/pages/platform/PlatformSettings.tsx` is RFC 4180 compliant (escapes commas/quotes/newlines, JSON-stringifies objects). Exported for unit tests.
+- Toggle mutations invalidate `['platform-settings', 'cme-joined' | 'cae-joined']`, `['platform-settings', 'audit']`, and `['hub-entitlement-snapshot']` so the resolver picks up changes immediately.
+- Observe-only contract still in force: a disabled entitlement does NOT block any PMS behavior. Enforcement is deferred to a later phase (one action at a time).
