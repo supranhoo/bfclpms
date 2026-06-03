@@ -15,6 +15,7 @@ import { BarChart3, Users, Target, TrendingUp, Download, ArrowUp, ArrowDown, Arr
 import * as XLSX from 'xlsx';
 import { useToast } from '@/hooks/use-toast';
 import { useResolvedReportFields } from '@/hooks/useResolvedReportFields';
+import { CanAction } from '@/components/platform/CanAction';
 
 /** Default column set for RPT-PERF-001 — mirrors report_field_registry seed. */
 const PERF_DEFAULT_FIELDS = [
@@ -153,10 +154,12 @@ export default function PerformanceReport() {
               {scopeLabel}
             </Badge>
             {canExport && (
-              <Button variant="outline" onClick={handleExportExcel}>
-                <Download className="h-4 w-4 mr-2" />
-                Export Excel
-              </Button>
+              <CanAction actionKey="pms.reports.performance.export">
+                <Button variant="outline" onClick={handleExportExcel}>
+                  <Download className="h-4 w-4 mr-2" />
+                  Export Excel
+                </Button>
+              </CanAction>
             )}
           </div>
         }

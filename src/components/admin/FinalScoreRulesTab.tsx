@@ -34,6 +34,7 @@ import {
   type WorkflowStageKey,
 } from '@/lib/finalScoreResolver';
 import { ConfirmDestructiveDialog } from '@/components/ui/ConfirmDestructiveDialog';
+import { CanAction } from '@/components/platform/CanAction';
 
 const ALL_STAGE_KEYS: WorkflowStageKey[] = [
   'self', 'manager', 'functional_manager', 'skip_level',
@@ -639,9 +640,11 @@ function RuleBuilderSheet({
 
         <SheetFooter>
           <Button variant="outline" onClick={onClose}>Cancel</Button>
-          <Button onClick={handleSave} disabled={!canSave}>
-            {upsert.isPending ? 'Saving…' : 'Save Rule'}
-          </Button>
+          <CanAction actionKey="pms.workflow.final_score_rules.edit">
+            <Button onClick={handleSave} disabled={!canSave}>
+              {upsert.isPending ? 'Saving…' : 'Save Rule'}
+            </Button>
+          </CanAction>
         </SheetFooter>
       </SheetContent>
     </Sheet>

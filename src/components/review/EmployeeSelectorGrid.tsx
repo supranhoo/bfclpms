@@ -28,6 +28,7 @@ import { TeamReviewsZeroDiagnostic } from '@/components/review/TeamReviewsZeroDi
 import { supabase } from '@/integrations/supabase/client';
 import { formatEmployeeName } from '@/lib/utils';
 import { Users, CheckCircle2, Clock, ArrowRight, Target, Shield, Briefcase, FileCheck, UserCheck, ClipboardCheck, Settings2, Download, ChevronDown, ChevronUp, Loader2, Info, Eye, AlertTriangle, RefreshCw, Layers } from 'lucide-react';
+import { CanAction } from '@/components/platform/CanAction';
 import { Hourglass, Building2 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { useBulkReviewFlag } from '@/hooks/useBulkReview';
@@ -1919,10 +1920,12 @@ export function EmployeeSelectorGrid({
               </Tooltip>
             </TooltipProvider>
           )}
-          <Button variant="outline" size="sm" onClick={handleExportPendingKpis} className="gap-1.5">
-            <Download className="h-4 w-4" />
-            <span className="hidden sm:inline">Export Pending</span>
-          </Button>
+          <CanAction actionKey="pms.data.export">
+            <Button variant="outline" size="sm" onClick={handleExportPendingKpis} className="gap-1.5">
+              <Download className="h-4 w-4" />
+              <span className="hidden sm:inline">Export Pending</span>
+            </Button>
+          </CanAction>
           {viewLevel === 'audit' && (
             <Button variant="outline" size="sm" onClick={() => setAssignmentDialogOpen(true)}>
               <Settings2 className="h-4 w-4 mr-1.5" />
