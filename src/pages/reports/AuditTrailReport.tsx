@@ -14,6 +14,7 @@ import { Download, Search, ClipboardList, CheckCircle2, AlertTriangle, Edit, Use
 import { format } from 'date-fns';
 import * as XLSX from 'xlsx';
 import { useResolvedReportFields } from '@/hooks/useResolvedReportFields';
+import { classifyAdminOverride, ADMIN_OVERRIDE_LABELS } from '@/lib/auditLabels';
 
 const AUD_DEFAULT_FIELDS = [
   { field_key: 'timestamp',       default_label: 'Timestamp',       default_sort: 10, is_required: true },
@@ -99,6 +100,19 @@ const actionLabels: Record<string, string> = {
   'MANAGER_DAILY_OVERRIDE': 'Manager: Daily Override',
   'SELF_REVIEW_RECALLED': 'Self Review Recalled',
 };
+
+/**
+ * Resolve the display label for an audit row. `ADMIN_OVERRIDE` rows are
+ * reclassified into "KPI Updated" / "Logic Updated" when the change was a
+ * non-status edit from the admin edit dialog (see classifyAdminOverride).
+ */
+function resolveActionLabel(log: { action: string; metadata?: Record<string, unknown> | null }): string {
+  if (log.action === 'ADMIN_OVERRIDE') {
+    const kind = classifyAdminOverride(log);
+    if (kind !== 'admin_override') return ADMIN_OVERRIDE_LABELS[kind];
+  }
+  return actionLabels[log.action] || log.action;
+}
 
 const actionColors: Record<string, string> = {
   'self_review_submitted': 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200',
@@ -294,7 +308,7 @@ export default function AuditTrailReport() {
     const valueFor = (log: typeof filteredLogs[number], key: string): string | number => {
       switch (key) {
         case 'timestamp':       return format(new Date(log.created_at), 'yyyy-MM-dd HH:mm:ss');
-        case 'action':          return actionLabels[log.action] || log.action;
+        case 'action':          return resolveActionLabel(log);
         case 'kpi_name':        return log.kpi?.kpi_name || 'N/A';
         case 'kra_name':        return log.kpi?.kra_name || 'N/A';
         case 'review_period':   return log.kpi?.review_period || 'N/A';
@@ -472,7 +486,7 @@ export default function AuditTrailReport() {
                 case 'action':
                   return (
                     <Badge className={actionColors[log.action] || 'bg-gray-100 text-gray-800'}>
-                      {actionLabels[log.action] || log.action}
+                      {resolveActionLabel(log)}
                     </Badge>
                   );
                 case 'kpi_name':
