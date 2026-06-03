@@ -20,6 +20,7 @@ import { formatKpiInsertError } from '@/lib/kpiErrorUtils';
 import { useCanonicalResolver } from '@/hooks/useCanonicalResolver';
 import { isCanonicalEnforcementPeriod } from '@/lib/canonicalEnforcementPeriod';
 import { RegistryBadgePreset } from './kpi-standardization/RegistryBadge';
+import { CanAction } from '@/components/platform/CanAction';
 
 const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 
@@ -647,22 +648,24 @@ export function SmartAssignmentDialog({
           <Button variant="outline" onClick={handleClose}>
             Skip
           </Button>
-          <Button 
-            onClick={handleAssign} 
-            disabled={!canAssign || isPending || (hasDuplicates && skipDuplicates && assignCount === 0)}
-          >
-            {isPending ? (
-              <>
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                Assigning...
-              </>
-            ) : (
-              <>
-                <CheckCircle className="h-4 w-4 mr-2" />
-                {assignCount === 0 ? 'No KPIs to Assign' : `Assign ${assignCount} KPIs`}
-              </>
-            )}
-          </Button>
+          <CanAction actionKey="pms.kra.assign">
+            <Button 
+              onClick={handleAssign} 
+              disabled={!canAssign || isPending || (hasDuplicates && skipDuplicates && assignCount === 0)}
+            >
+              {isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Assigning...
+                </>
+              ) : (
+                <>
+                  <CheckCircle className="h-4 w-4 mr-2" />
+                  {assignCount === 0 ? 'No KPIs to Assign' : `Assign ${assignCount} KPIs`}
+                </>
+              )}
+            </Button>
+          </CanAction>
         </DialogFooter>
       </DialogContent>
     </Dialog>
