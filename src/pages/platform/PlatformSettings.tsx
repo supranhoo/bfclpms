@@ -416,6 +416,10 @@ function ClientsTab() {
   const { data, isLoading } = useRows<ClientRow>('clients', 'client_key');
   const [editing, setEditing] = useState<ClientRow | null>(null);
   const [name, setName] = useState('');
+  const [mode, setMode] = useState<ClientMode>('saas');
+  const [active, setActive] = useState(true);
+  const [defaultDeactivateConfirm, setDefaultDeactivateConfirm] = useState('');
+  const [showDefaultConfirm, setShowDefaultConfirm] = useState(false);
   const [adding, setAdding] = useState(false);
   const [addName, setAddName] = useState('');
   const [addKey, setAddKey] = useState('');
@@ -437,16 +441,37 @@ function ClientsTab() {
   }, [adding]);
 
   useEffect(() => {
-    if (editing) setName(editing.display_name ?? '');
+    if (editing) {
+      setName(editing.display_name ?? '');
+      setMode((CLIENT_MODES as readonly string[]).includes(editing.deployment_mode)
+        ? (editing.deployment_mode as ClientMode)
+        : 'saas');
+      setActive(!!editing.is_active);
+      setDefaultDeactivateConfirm('');
+      setShowDefaultConfirm(false);
+    }
   }, [editing]);
 
   const mut = useMutation({
-    mutationFn: async (next: string) => {
+    mutationFn: async (payload: { name: string; mode: ClientMode; active: boolean }) => {
       if (!editing) return;
-      const before = editing.display_name;
+      const before = {
+        name: editing.display_name,
+        deployment_mode: editing.deployment_mode,
+        is_active: editing.is_active,
+      };
+      const after = {
+        name: payload.name,
+        deployment_mode: payload.mode,
+        is_active: payload.active,
+      };
       const { error } = await supabase
         .from('clients')
-        .update({ display_name: next })
+        .update({
+          display_name: payload.name,
+          deployment_mode: payload.mode,
+          is_active: payload.active,
+        })
         .eq('client_key', editing.client_key);
       if (error) throw error;
       await supabase.from('entitlement_audit').insert({
@@ -454,16 +479,16 @@ function ClientsTab() {
         event_type: 'update',
         entity_type: 'client',
         entity_key: editing.client_key,
-        before: { name: before },
-        after: { name: next },
-        reason: 'platform_settings_client_name_update',
+        before,
+        after,
+        reason: 'platform_settings_client_update',
       });
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['platform-settings', 'clients'] });
       qc.invalidateQueries({ queryKey: ['platform-settings', 'audit'] });
       setEditing(null);
-      toast.success('Client name updated');
+      toast.success('Client updated');
     },
     onError: (e: Error) => toast.error(`Update failed: ${e.message}`),
   });
@@ -563,8 +588,24 @@ function ClientsTab() {
   });
 
   const trimmed = name.trim();
-  const valid = trimmed.length > 0 && trimmed.length <= CLIENT_NAME_MAX;
-  const dirty = editing ? trimmed !== editing.display_name : false;
+  const nameValid = trimmed.length > 0 && trimmed.length <= CLIENT_NAME_MAX;
+  const dirty = editing
+    ? trimmed !== editing.display_name
+      || mode !== editing.deployment_mode
+      || active !== editing.is_active
+    : false;
+  const isDefaultRow = editing?.client_key === 'default';
+  const deactivatingDefault = isDefaultRow && editing?.is_active === true && active === false;
+  const valid = nameValid;
+
+  function attemptSave() {
+    if (!editing || !valid || !dirty) return;
+    if (deactivatingDefault) {
+      setShowDefaultConfirm(true);
+      return;
+    }
+    mut.mutate({ name: trimmed, mode, active });
+  }
 
   if (isLoading) return <LoadingRows />;
   return (
@@ -597,7 +638,14 @@ function ClientsTab() {
             ) : (data ?? []).map((c) => (
               <TableRow key={c.client_key}>
                 <TableCell className="font-mono text-xs">{c.client_key}</TableCell>
-                <TableCell>{c.display_name}</TableCell>
+                <TableCell>
+                  <div className="flex items-center gap-2">
+                    <span>{c.display_name}</span>
+                    {!c.is_active && (
+                      <Badge variant="secondary" className="text-xs">Inactive</Badge>
+                    )}
+                  </div>
+                </TableCell>
                 <TableCell><Badge variant="outline">{c.deployment_mode}</Badge></TableCell>
                 <TableCell>{c.is_active ? '✓' : '—'}</TableCell>
                 <TableCell>{c.entitlement_source ?? '—'}</TableCell>
@@ -607,8 +655,8 @@ function ClientsTab() {
                     size="sm"
                     onClick={() => setEditing(c)}
                     disabled={!canWrite}
-                    aria-label={`Edit ${c.client_key} name`}
-                    title={canWrite ? 'Edit display name' : 'platform_owner only'}
+                    aria-label={`Edit ${c.client_key}`}
+                    title={canWrite ? 'Edit client' : 'platform_owner only'}
                   >
                     <Pencil className="h-4 w-4" />
                   </Button>
@@ -622,9 +670,9 @@ function ClientsTab() {
       <Dialog open={editing !== null} onOpenChange={(o) => { if (!o) setEditing(null); }}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Edit Client Name</DialogTitle>
+            <DialogTitle>Edit Client</DialogTitle>
             <DialogDescription>
-              Only the display name can be changed. Key, mode, status, and source are immutable in this phase.
+              Display name, mode, and active status are editable. Key, source, and timestamps are immutable.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
@@ -646,13 +694,42 @@ function ClientsTab() {
                 {trimmed.length}/{CLIENT_NAME_MAX} characters · cannot be blank
               </p>
             </div>
+            <div className="space-y-1">
+              <Label>Mode</Label>
+              <Select value={mode} onValueChange={(v) => setMode(v as ClientMode)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {CLIENT_MODES.map((m) => (
+                    <SelectItem key={m} value={m}>{m}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex items-start justify-between gap-3 rounded-md border p-3">
+              <div className="space-y-0.5">
+                <Label htmlFor="client-active" className="cursor-pointer">Active</Label>
+                <p className="text-xs text-muted-foreground">
+                  Inactive tenants stay in the list with an Inactive flag. Entitlements and audit history are preserved.
+                </p>
+              </div>
+              <Switch
+                id="client-active"
+                checked={active}
+                onCheckedChange={setActive}
+              />
+            </div>
+            {deactivatingDefault && (
+              <p className="text-xs text-destructive">
+                You are deactivating the <code>default</code> deployment client. Save will require typed confirmation.
+              </p>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditing(null)} disabled={mut.isPending}>
               Cancel
             </Button>
             <Button
-              onClick={() => mut.mutate(trimmed)}
+              onClick={attemptSave}
               disabled={!valid || !dirty || !canWrite || mut.isPending}
             >
               {mut.isPending ? 'Saving…' : 'Save'}
@@ -660,6 +737,41 @@ function ClientsTab() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog
+        open={showDefaultConfirm}
+        onOpenChange={(o) => { if (!o) { setShowDefaultConfirm(false); setDefaultDeactivateConfirm(''); } }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Deactivate the default deployment client?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This flags <code>default</code> as Inactive in Platform Settings. It does not delete
+              entitlements, does not affect PMS users, and is reversible from the same Edit dialog.
+              Type <strong>DEFAULT</strong> to confirm.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <Input
+            value={defaultDeactivateConfirm}
+            onChange={(e) => setDefaultDeactivateConfirm(e.target.value)}
+            placeholder="DEFAULT"
+            className="font-mono"
+          />
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setDefaultDeactivateConfirm('')}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={defaultDeactivateConfirm !== 'DEFAULT' || mut.isPending}
+              onClick={() => {
+                setShowDefaultConfirm(false);
+                setDefaultDeactivateConfirm('');
+                mut.mutate({ name: trimmed, mode, active });
+              }}
+            >
+              Deactivate
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <Dialog open={adding} onOpenChange={(o) => { if (!o && !addMut.isPending) setAdding(false); }}>
         <DialogContent>
