@@ -1,4 +1,20 @@
-## Goal
+## Archived 2026-06-04 — see ADR-072
+The publish-unstick plan succeeded and is now archived. Production was
+restored by three concurrent factors (forced republish, flag flip,
+override clear). Single-factor sufficiency is NOT proven and will not be
+tested in production.
+
+Authoritative references:
+- `docs/adr/ADR-072.md` — Menu/Sidebar 3-factor restoration RCA + I1–I4
+- `POLICY.md` §Menu-CAPA
+- `mem/features/admin/menu-setting-capa` — removal criteria
+- `src/test/menu/` — 5-file regression suite locking the invariants
+
+The historical unstick plan follows for reference only; do not re-run.
+
+---
+
+## Goal (historical)
 Unstick the greyed-out **Publish → Update** button and ship the pending frontend changes (sidebar fix marker `2026-06-04b`) to `pms.bfclalloys.com`. The live bundle `index-CjfF6RVN.js` contains neither `data-capa-build` nor `2026-06-04`, confirming the publish pipeline is stuck on an old deployment despite multiple source edits.
 
 ## Root cause
