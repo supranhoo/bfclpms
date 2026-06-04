@@ -51,12 +51,12 @@ export function ImplementersTab() {
     if (!e) return null;
     const { data, error } = await supabase
       .from('profiles')
-      .select('user_id, email')
+      .select('id, email')
       .ilike('email', e)
       .limit(1)
       .maybeSingle();
     if (error) throw error;
-    return data?.user_id ?? null;
+    return data?.id ?? null;
   }
 
   const assign = async () => {
