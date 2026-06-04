@@ -69,3 +69,10 @@ type: feature
 
 ## What `implementation_admin` CANNOT do
 - Access `/platform-settings`, edit `client_key`, `deployment_mode`, `is_active`, or any entitlement / module / enforcement / role / RLS / governance row. Cannot hard-delete `client_urls` or `client_contacts` rows (no DELETE policy or grant). No PMS/safety/incentive/reports surface area is exposed by this console.
+
+## Auth & Routing Enforcement (Phase 4A)
+- `implementation_admin` is first-class in `AuthContext`: present in `ROLE_PRIORITY` (between `management` and `auditor`) and exposed as `isImplementationAdmin` (mirrors `isPlatformOwner`).
+- Route guards render the standalone `<AccessDenied />` page (`/access-denied`) on failure — no silent `/home` redirect. Direct `/platform-settings` probes by `implementation_admin` get a visible 403.
+- `ImplementationConsoleRoute` admits any of: `platform_owner`, `implementation_admin`, OR `client_implementer_assignments` row. An `implementation_admin` with zero assignments reaches the shell; the client picker simply shows no clients (RLS-correct, not a redirect).
+- `ModuleHub` Implementation Console tile uses the same union as the route guard. Platform Settings tile remains `platform_owner` + `hub_platform_settings_enabled`.
+- No sidebar change — `/platform-settings` and `/implementation-console` are outside `DashboardLayout`.
