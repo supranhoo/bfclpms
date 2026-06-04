@@ -439,6 +439,15 @@ export function AppSidebar() {
     });
   }, [effectiveRole, canAccess]);
 
+  // CAPA fail-open fallback: strictly hardcoded role match against the
+  // static `item.roles` array, ignoring DB `menu_access_config`. Used by
+  // CollapsibleSidebarGroup when the primary DB-driven filter blanks a group
+  // entirely (e.g. config missing for a user's effective role).
+  const staticRoleFilter = useCallback((items: typeof menuItems.main) => {
+    if (!effectiveRole) return [];
+    return items.filter(item => Array.isArray(item.roles) && item.roles.includes(effectiveRole));
+  }, [effectiveRole]);
+
   const toggleSection = useCallback((section: string) => {
     setOpenSections(prev => {
       const next = new Set(prev);
