@@ -4,6 +4,19 @@
 > **Status:** Living document. Append new ships under the **current week's row**, in the same step that you update `DOCUMENTATION.md` Version History.
 > **Sources:** `DOCUMENTATION.md` Version History, `supabase/migrations/`, `mem/*`.
 
+## 2026-06-04 — Phase 3D Implementation Console: Client URL / Domain binding
+- New table `public.client_urls` (per-client URLs: production, staging, vanity, etc.). Columns include `url`, `label`, `is_primary`, `verified` (manual), `is_active`, `archived_at/by`, `notes`. CHECK constraints reject `javascript:`/`data:`/`file:`/`vbscript:` schemes and require `https?://...`. Partial unique indexes: at most one active primary per client; URLs are unique per `(client_id, lower(url))` while active.
+- **No hard delete** — `GRANT SELECT, INSERT, UPDATE` only to `authenticated` (no DELETE). Lifecycle is `Archive` (sets `is_active=false`, stamps `archived_at/by`, clears `is_primary`). Archived rows are retained for traceability.
+- RLS: read/write limited to `platform_owner` OR `is_implementation_admin_for(client_id)`. No anonymous access.
+- `impl_console_set_primary_url(url_id)` SECURITY DEFINER RPC: atomically unsets any previous active primary and sets the requested row as primary in one transaction — no manual "clear first" step. Rejects setting an archived URL as primary.
+- `impl_console_archive_url(url_id)` SECURITY DEFINER RPC: archives the row, clears primary flag.
+- Edge function `impl-console-send-test-email`: appends `Client app: <url>` to the test email body **only when** a row exists with `is_active=true AND is_primary=true AND verified=true`. No new auth, rate-limit, or response shape change.
+- UI: new **URLs & Domains** tab on the Implementation Console — list active + archived URLs, per-row "Set primary / Mark verified / Unverify / Archive" actions, Add URL dialog with normalization (trim, scheme check, unsafe-scheme block), banner: "Manual verification only — no DNS/SSL validation performed." Notes hint: "Do not enter passwords/tokens." Setting a primary in the Add dialog auto-replaces the previous primary via the RPC.
+- Checklist auto-tick: when at least one URL is `active + primary + verified`, the existing `allowed_app_urls` item ticks (idempotent — `tickChecklist` short-circuits if already done, so no duplicate audit rows).
+- Audit (`entitlement_audit`): every create / set-primary / verify-toggle / archive writes a row with `entity_type='client_url'`, `entity_key=clients.client_key`, reason `impl_console_update_client_url`. No notes/credentials echoed.
+- Backup auto-included (no denylist entry). No changes to PMS workflow, scoring, menus, reports, RLS on existing tables, auth, routing, or Platform Settings.
+- Files: `supabase/migrations/<ts>_client_urls.sql`; `supabase/functions/impl-console-send-test-email/index.ts` (one additive lookup + body line); `src/pages/platform/ImplementationConsole.tsx` (UrlsTab + AddUrlDialog).
+
 ## 2026-06-04 — Phase 3C Delegated Implementation Console (foundation)
 - New `implementation_admin` role added to `public.app_role` (no platform_owner powers).
 - New tables: `client_implementer_assignments` (per-client user mapping; assignee + platform_owner read, platform_owner write only), `client_smtp_config` (per-client sender identity with column-allowlisted reads — secrets stored elsewhere; only metadata + fingerprint + last-rotated timestamp), `client_setup_checklist` (auto-seeded 9 default items per client via trigger; backfilled for existing clients).
