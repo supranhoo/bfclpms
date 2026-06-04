@@ -774,12 +774,16 @@ function AddUrlDialog({
 
   const submit = async () => {
     const norm = normalizeUrl(url);
-    if (!norm.ok) { toast({ title: 'Invalid URL', description: norm.reason, variant: 'destructive' }); return; }
+    if (!norm.ok) {
+      toast({ title: 'Invalid URL', description: norm.reason, variant: 'destructive' });
+      return;
+    }
+    const safeUrl = norm.url;
     setBusy(true);
     try {
       const { data: inserted, error } = await supabase.from('client_urls').insert({
         client_id: client.id,
-        url: norm.url,
+        url: safeUrl,
         label: label.trim() || null,
         notes: notes.trim() || null,
         is_primary: false, // set via RPC below if requested
@@ -791,7 +795,7 @@ function AddUrlDialog({
       await writeAudit({
         actorId, clientId: client.id, clientKey: client.client_key,
         entityType: 'client_url', action: 'update',
-        before: null, after: { id: inserted.id, url: norm.url, label: label.trim() || null, created: true },
+        before: null, after: { id: inserted.id, url: safeUrl, label: label.trim() || null, created: true },
       });
 
       if (makePrimary) {
