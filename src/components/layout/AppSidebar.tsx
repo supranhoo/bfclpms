@@ -508,9 +508,9 @@ export function AppSidebar() {
       </SidebarHeader>
 
       <SidebarContent>
-        {/* CAPA build marker — use `[data-capa-build]` in DevTools to verify
+        {/* CAPA build marker (r3) — use `[data-capa-build]` in DevTools to verify
             the deployed bundle includes the emergency static fallback path. */}
-        <span data-capa-build="2026-06-04b" className="sr-only" aria-hidden="true" />
+        <span data-capa-build="2026-06-04-r3" className="sr-only" aria-hidden="true" />
         {/* CAPA (2026-06-04): wrap the menu groups in an ErrorBoundary so a
             single malformed resolved-menu node cannot blank the entire
             sidebar. Fallback renders the static baseline groups, role-filtered
