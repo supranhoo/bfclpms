@@ -353,7 +353,7 @@ export function AppSidebar() {
         return fallback;
       }
     },
-    [resolvedMenu, keyOccurrences, flatPool],
+    [overridesEnabled, resolvedMenu, keyOccurrences, flatPool],
   );
 
   // Resolved section for a given path — honours moved items by looking up the
