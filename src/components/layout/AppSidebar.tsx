@@ -439,6 +439,15 @@ export function AppSidebar() {
     });
   }, [effectiveRole, canAccess]);
 
+  // CAPA fail-open fallback: strictly hardcoded role match against the
+  // static `item.roles` array, ignoring DB `menu_access_config`. Used by
+  // CollapsibleSidebarGroup when the primary DB-driven filter blanks a group
+  // entirely (e.g. config missing for a user's effective role).
+  const staticRoleFilter = useCallback((items: typeof menuItems.main) => {
+    if (!effectiveRole) return [];
+    return items.filter(item => Array.isArray(item.roles) && item.roles.includes(effectiveRole));
+  }, [effectiveRole]);
+
   const toggleSection = useCallback((section: string) => {
     setOpenSections(prev => {
       const next = new Set(prev);
@@ -510,6 +519,7 @@ export function AppSidebar() {
           isOpen={openSections.has('main')}
           onToggle={() => toggleSection('main')}
           filterByRole={filterByRole}
+          staticFilter={staticRoleFilter}
           currentPath={location.pathname + location.search}
           onNavigate={handleNavigation}
           hasActiveRoute={resolvedSectionForPath(location.pathname, location.search) === 'main'}
@@ -525,6 +535,7 @@ export function AppSidebar() {
           isOpen={openSections.has('manager')}
           onToggle={() => toggleSection('manager')}
           filterByRole={filterByRole}
+          staticFilter={staticRoleFilter}
           currentPath={location.pathname + location.search}
           onNavigate={handleNavigation}
           hasActiveRoute={resolvedSectionForPath(location.pathname, location.search) === 'manager'}
@@ -537,6 +548,7 @@ export function AppSidebar() {
           isOpen={openSections.has('management')}
           onToggle={() => toggleSection('management')}
           filterByRole={filterByRole}
+          staticFilter={staticRoleFilter}
           currentPath={location.pathname + location.search}
           onNavigate={handleNavigation}
           hasActiveRoute={resolvedSectionForPath(location.pathname, location.search) === 'management'}
@@ -549,6 +561,7 @@ export function AppSidebar() {
           isOpen={openSections.has('hr_pms')}
           onToggle={() => toggleSection('hr_pms')}
           filterByRole={filterByRole}
+          staticFilter={staticRoleFilter}
           currentPath={location.pathname + location.search}
           onNavigate={handleNavigation}
           hasActiveRoute={resolvedSectionForPath(location.pathname, location.search) === 'hr_pms'}
@@ -561,6 +574,7 @@ export function AppSidebar() {
           isOpen={openSections.has('audit')}
           onToggle={() => toggleSection('audit')}
           filterByRole={filterByRole}
+          staticFilter={staticRoleFilter}
           currentPath={location.pathname + location.search}
           onNavigate={handleNavigation}
           hasActiveRoute={resolvedSectionForPath(location.pathname, location.search) === 'audit'}
@@ -602,6 +616,7 @@ export function AppSidebar() {
           isOpen={openSections.has('kraSettings')}
           onToggle={() => toggleSection('kraSettings')}
           filterByRole={filterByRole}
+          staticFilter={staticRoleFilter}
           currentPath={location.pathname + location.search}
           onNavigate={handleNavigation}
           hasActiveRoute={resolvedSectionForPath(location.pathname, location.search) === 'kraSettings'}
@@ -614,6 +629,7 @@ export function AppSidebar() {
           isOpen={openSections.has('incentive')}
           onToggle={() => toggleSection('incentive')}
           filterByRole={filterByRole}
+          staticFilter={staticRoleFilter}
           currentPath={location.pathname + location.search}
           onNavigate={handleNavigation}
           hasActiveRoute={resolvedSectionForPath(location.pathname, location.search) === 'incentive'}
@@ -626,6 +642,7 @@ export function AppSidebar() {
           isOpen={openSections.has('admin')}
           onToggle={() => toggleSection('admin')}
           filterByRole={filterByRole}
+          staticFilter={staticRoleFilter}
           currentPath={location.pathname + location.search}
           onNavigate={handleNavigation}
           hasActiveRoute={resolvedSectionForPath(location.pathname, location.search) === 'admin'}
@@ -638,6 +655,7 @@ export function AppSidebar() {
           isOpen={openSections.has('reports')}
           onToggle={() => toggleSection('reports')}
           filterByRole={filterByRole}
+          staticFilter={staticRoleFilter}
           currentPath={location.pathname + location.search}
           onNavigate={handleNavigation}
           hasActiveRoute={resolvedSectionForPath(location.pathname, location.search) === 'reports'}
