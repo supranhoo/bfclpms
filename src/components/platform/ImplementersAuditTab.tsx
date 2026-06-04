@@ -8,7 +8,7 @@
  * All emails (actor, target, recipient_masked, raw email fields in before/after)
  * are masked before display. No CSV export (Phase 4C).
  */
-import { useMemo, useState } from 'react';
+import { Fragment, useMemo, useState } from 'react';
 import { format } from 'date-fns';
 import { useQuery } from '@tanstack/react-query';
 import { ChevronDown, ChevronRight, Loader2, RefreshCw } from 'lucide-react';
@@ -313,10 +313,10 @@ export function ImplementersAuditTab() {
                   const target = targetId ? profiles?.get(targetId) : null;
                   const client = r.client_id ? clients?.get(r.client_id) : null;
                   const isOpen = expanded.has(r.id);
-                  const maskedBefore = useMemo(() => maskJsonPII(r.before), [r.before]); // eslint-disable-line react-hooks/rules-of-hooks
-                  const maskedAfter = useMemo(() => maskJsonPII(r.after), [r.after]); // eslint-disable-line react-hooks/rules-of-hooks
+                  const maskedBefore = isOpen ? maskJsonPII(r.before) : null;
+                  const maskedAfter = isOpen ? maskJsonPII(r.after) : null;
                   return (
-                    <>
+                    <Fragment key={r.id}>
                       <TableRow key={r.id} className="cursor-pointer" onClick={() => toggleExpand(r.id)}>
                         <TableCell>
                           {isOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
@@ -352,7 +352,7 @@ export function ImplementersAuditTab() {
                           </TableCell>
                         </TableRow>
                       )}
-                    </>
+                    </Fragment>
                   );
                 })
               )}
