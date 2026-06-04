@@ -15,6 +15,7 @@ import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useToast } from '@/hooks/use-toast';
 import { formatDistanceToNow } from 'date-fns';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 
 type Client = { id: string; client_key: string; display_name: string; is_active: boolean };
 
@@ -127,7 +128,7 @@ export default function ImplementationConsole() {
             <TabsContent value="urls"><Placeholder title="URLs &amp; Domains" hint="Activates after the Client URL/Domain Binding phase ships its config table." /></TabsContent>
             <TabsContent value="comms"><Placeholder title="Communications" hint="Activates after the Communications foundation phase ships its config table." /></TabsContent>
             <TabsContent value="sender"><SenderIdentityTab client={activeClient} actorId={user?.id} /></TabsContent>
-            <TabsContent value="test"><Placeholder title="Test Email" hint="Activates after the per-client SMTP secret rotation edge function is enabled in the next phase." /></TabsContent>
+            <TabsContent value="test"><TestEmailTab client={activeClient} actorId={user?.id} /></TabsContent>
             <TabsContent value="templates"><Placeholder title="Notification Templates" hint="Activates after the Communications foundation phase ships per-client templates." /></TabsContent>
             <TabsContent value="checklist"><ChecklistTab client={activeClient} actorId={user?.id} /></TabsContent>
             <TabsContent value="logs"><Placeholder title="Delivery Logs" hint="Activates after per-client email dispatching is wired in the Communications foundation phase." /></TabsContent>
