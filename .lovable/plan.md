@@ -1,3 +1,9 @@
+## Phase 3E — Implementation Console: Communications (SHIPPED)
+
+Closed the **Communications** placeholder with the `client_contacts` address book: role-tagged emails (support/hr/escalation/billing/ops/other), archival-only lifecycle, atomic per-role primary RPC, manual verification, normalized + lowercased email storage, PII-minimized audit (domain + hash + masked only), and `ConfirmDestructiveDialog` for archive. No edge function changes, no email sending, no PMS/scoring/menu/report/Platform Settings impact. See `CHANGELOG_2026.md` and `mem/features/platform/implementation-console.md` "Client Contacts (Phase 3E)" for the locked behavior.
+
+---
+
 ## Phase 3D — Implementation Console: Client URL / Domain binding (SHIPPED)
 
 Closed the **URLs & Domains** placeholder tab with archival-only client URL records, atomic primary switching, manual verification, and a conditional test-email body line. No hard delete, no PMS/scoring/menus/reports/RLS-on-existing-tables/auth/routing impact. See `CHANGELOG_2026.md` 2026-06-04 entry and `mem/features/platform/implementation-console.md` "Client URLs (Phase 3D)" for the locked behavior.
