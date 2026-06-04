@@ -3634,3 +3634,16 @@ approval before any UI ship.
 `menu_overrides_enabled` stays `false` in production, no PMS
 workflow / scoring / RLS / enforcement change, no production
 experiments.
+
+## §Test-Baseline — migration-scan tests
+
+Tests that statically guard PL/pgSQL function contracts MUST scan the
+latest `CREATE OR REPLACE FUNCTION public.<target>` definition only, NOT
+the historical migration set. Migrations are immutable per Migration
+Governance, and Postgres only executes the most recent definition; the
+deployed contract is the latest body. Scanning all historical files
+causes false positives on legacy migrations that have been superseded.
+
+Equivalent rule for GRANT EXECUTE assertions: `CREATE OR REPLACE
+FUNCTION` preserves prior grants, so the GRANT may appear on any prior
+migration for the same function signature — guard tests must accept that.
