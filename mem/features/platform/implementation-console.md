@@ -45,6 +45,17 @@ type: feature
 - Checklist: existing `support_emails` item auto-ticks when at least one row has `role='support' AND is_active AND verified`. Idempotent — short-circuits if already done.
 - No edge function changes and no email sending in this phase — Communications is purely the address-book foundation that downstream Notification Templates and Delivery Logs phases will read from.
 
+## Notification Templates (Phase 3F)
+- `public.client_notification_templates` stores per-client email templates consumed ONLY by `impl-console-send-test-email`. The global PMS notification engine is untouched.
+- Columns: `template_key` (CHECK `^[a-z0-9_]{2,64}$`), `channel` (locked to `email`), `subject` (≤200), `body_text` (≤20000), `body_html` (optional, ≤50000, **stored but not sent** in this phase), `variables`, `is_active`, `archived_at/by`.
+- **Keys are unique per client, not global.** Partial unique index `(client_id, template_key) WHERE is_active`. Different clients may reuse the same key.
+- **No hard delete.** Grants: `SELECT, INSERT, UPDATE` to `authenticated`. Archival via `impl_console_archive_template(_id)` SECURITY DEFINER RPC.
+- RLS: `platform_owner` OR assigned implementer for the row's `client_id`.
+- Variable substitution is a **strict allowlist**: `client_name`, `client_key`, `actor_email_masked`, `timestamp_utc`, `app_url`. Implemented as a regex replace — no expression engine, no conditionals/loops, no SQL/JS, no remote includes. Unknown `{{tokens}}` are left as-is (never errored).
+- Archive behavior: archived templates are NEVER used by the test-email function. When the active row is missing (never created or just archived), the function falls back silently to the default plain body.
+- HTML safety: body_html is shown in the Preview drawer as **source only** (inside `<pre>`), never rendered as markup, since no sanitizer is wired yet. The edge function only sends `body_text`.
+- Audit (`entitlement_audit`): `entity_type='client_notification_template'`, reason `impl_console_<create|update|archive>_client_notification_template`. Payload is PII-minimized: `{ template_key, subject_len, body_text_len, body_html_len, is_active }` — raw subject and bodies are NEVER echoed. Test-email audit records `template_resolved` + length fields.
+
 ## Audit
 - Every console mutation writes to `entitlement_audit` with `event_type='update'` (CHECK constraint allows only `grant/revoke/update/would_deny/admin_view/deny/create`). Logical action is encoded in `reason` as `impl_console_<action>_<entity_type>` (`update`, `secret_rotate`, `checklist_check`, `test_email_send`). `entity_key = clients.client_key`. Secret values are NEVER written to `before`/`after`.
 
