@@ -13,6 +13,7 @@ describe('BUG-001: Role coverage', () => {
     hr_pms: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200',
     skip_level: 'bg-teal-100 text-teal-800 dark:bg-teal-900 dark:text-teal-200',
     platform_owner: 'bg-primary/10 text-primary',
+    implementation_admin: 'bg-primary/10 text-primary',
   };
 
   it('every canonical role has a color mapping', () => {
