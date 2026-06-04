@@ -1,4 +1,6 @@
 import { Navigate } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useModules } from '@/hooks/useModules';
 import { useEntitlement } from '@/hooks/useEntitlement';
@@ -11,6 +13,20 @@ export default function ModuleHub() {
   const { data: modules, isLoading: modulesLoading } = useModules();
   const { hubEnabled } = useEntitlement();
   const showPlatformCard = hubEnabled && hasRole('platform_owner');
+
+  // Show Implementation Console tile for platform_owner OR any user with ≥1 assignment.
+  const { data: assignmentCount } = useQuery({
+    queryKey: ['impl-console', 'tile-access', user?.id],
+    enabled: !!user?.id,
+    queryFn: async () => {
+      const { count } = await supabase
+        .from('client_implementer_assignments')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', user!.id);
+      return count ?? 0;
+    },
+  });
+  const showImplCard = hasRole('platform_owner') || (assignmentCount ?? 0) > 0;
 
   if (authLoading || modulesLoading) {
     return (
@@ -83,6 +99,16 @@ export default function ModuleHub() {
                 icon="Settings"
                 color="primary"
                 route="/platform-settings"
+              />
+            )}
+            {showImplCard && (
+              <ModuleCard
+                code="impl-console"
+                name="Implementation Console"
+                description="Scoped client setup for the implementation team — profile, sender identity, checklist"
+                icon="Wrench"
+                color="primary"
+                route="/implementation-console"
               />
             )}
           </div>
