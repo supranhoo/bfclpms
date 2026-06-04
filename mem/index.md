@@ -91,4 +91,5 @@ Lean-Load: debounce search inputs (>200 rows / network); paginate new lists with
 - [Safety Phase 8 — Stabilization](mem://features/safety/phase8-stabilization) — Docs+tests-only close-out; 33 new SSOT tests; dead-column drop and release-readiness route both deferred with explicit re-propose criteria
 - [Backup Coverage Contract](mem://infrastructure/database/backup-coverage-contract) — Phase 9.1 static regression locking RPC-driven discovery, BATCH_SIZE=4, storage buckets, no hardcoded safety allowlist
 - [Backup Hard-Fail On Partial Policy](mem://infrastructure/database/backup-hard-fail-policy) — Phase 9.2 WP-a flag (default true) marks partial backups as failed; DB-level override only
+- [Backup Batch Retry/Backoff Policy](mem://infrastructure/database/backup-batch-retry-policy) — Phase 9.2 WP-b transient-only retry (546/429/RateLimit), BATCH_SIZE_RETRY=2, RETRY_BUDGET_MS=8min; hard-fail terminal preserved; manual path untouched
 - [Test Baseline Restoration](mem://infrastructure/test-baseline-restoration) — Migration-scan guards use latest-definition semantics; CREATE OR REPLACE preserves grants
