@@ -97,3 +97,18 @@ type: feature
 - Role check: re-queries `user_roles` filtered to `platform_owner` / `implementation_admin`. A *successful* fetch returning zero rows triggers `navigate('/access-denied', { replace: true })`. Transient errors leave the data undefined and are ignored.
 - Assignment check: invalidates `['impl-console', 'clients', user.id]` on the same cadence; the existing RLS-bounded clients query re-fetches and the "No clients assigned" card surfaces automatically if the last assignment was revoked.
 - `platform_owner` always passes both checks and continues seeing all clients.
+
+## Implementers Audit Log (Phase 4F)
+- New owner-only sub-tab `Audit log` inside Platform Settings → Implementers (sibling to the existing `Manage` UI from Phase 4D). Read-only.
+- RLS already restricts SELECT on `entitlement_audit` to `platform_owner`; the component additionally hides itself if the caller is not `platform_owner`. `implementation_admin` cannot see the audit log.
+- **Authoritative filter mapping** (verified against actual writes — DO NOT invent new event_types):
+  - Grant role     → `reason = 'impl_console_grant_role'`     (event_type=`grant`,  entity_type=`implementation_admin_role`)
+  - Revoke role    → `reason = 'impl_console_revoke_role'`    (event_type=`revoke`, entity_type=`implementation_admin_role`)
+  - Assign client  → `reason = 'impl_console_assign_client'`  (event_type=`grant`,  entity_type=`client_implementer_assignment`)
+  - Unassign client→ `reason = 'impl_console_unassign_client'`(event_type=`revoke`, entity_type=`client_implementer_assignment`)
+  - Test email send→ `reason LIKE 'impl_console_test_email_send_%'` (event_type=`update`, entity_type=`client_smtp`)
+- All filters server-side and index-friendly. Client filter uses indexed `entitlement_audit.client_id` directly — no JSONB scans. Multi-scope queries fan out into per-scope queries (`.in(reason,...)` for the four exacts, separate `.like()` for the test-send pattern) then merge-sort client-side.
+- No `target_user_id` column exists. Target user is extracted from `after.user_id` / `before.user_id` JSON; actor + target names are batch-resolved per page via a single `profiles IN(...)`.
+- **PII masking everywhere**: actor/target columns and the expanded before/after JSON detail. A recursive walker masks any string matching the email regex AND any value under a key matching `email|recipient|to_address|from_address`. Owner sees `ab***@domain` even in raw JSON.
+- Pagination: server-paginated (`range` + `count: 'exact'`), default 25, selectable 25/50/100, `keepPreviousData` for snappy page changes.
+- **Out of scope:** no CSV export (deferred to Phase 4C), no write paths, no schema/RLS/migration change, no PMS surface change, no edge function.
