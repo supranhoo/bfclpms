@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Loader2, Building2, Globe, Mail, Send, FileText, CheckSquare, ScrollText, UserCog } from 'lucide-react';
+import { Loader2, Building2, Globe, Mail, Send, FileText, CheckSquare, ScrollText, UserCog, ExternalLink, Archive, Star, ShieldCheck } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { MinimalHeader } from '@/components/layout/MinimalHeader';
@@ -125,7 +125,7 @@ export default function ImplementationConsole() {
 
             <TabsContent value="assigned"><AssignedClientsTab clients={clients ?? []} /></TabsContent>
             <TabsContent value="profile"><ProfileTab client={activeClient} actorId={user?.id} /></TabsContent>
-            <TabsContent value="urls"><Placeholder title="URLs &amp; Domains" hint="Activates after the Client URL/Domain Binding phase ships its config table." /></TabsContent>
+            <TabsContent value="urls"><UrlsTab client={activeClient} actorId={user?.id} /></TabsContent>
             <TabsContent value="comms"><Placeholder title="Communications" hint="Activates after the Communications foundation phase ships its config table." /></TabsContent>
             <TabsContent value="sender"><SenderIdentityTab client={activeClient} actorId={user?.id} /></TabsContent>
             <TabsContent value="test"><TestEmailTab client={activeClient} actorId={user?.id} /></TabsContent>
