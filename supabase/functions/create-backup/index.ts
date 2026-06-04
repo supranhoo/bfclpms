@@ -703,6 +703,7 @@ async function runScheduledChunked(
   folderPath: string
 ): Promise<void> {
   const startTime = Date.now()
+  // Note: `startTime` doubles as the anchor for RETRY_BUDGET_MS below.
   // Must match the manual path (handleInit, line ~377). The scheduled worker
   // shares the same 256 MB Deno Deploy cap; sizes > 4 have been observed to
   // OOM on batch 14/16 with HTTP 546, silently dropping ~5 tables from the
