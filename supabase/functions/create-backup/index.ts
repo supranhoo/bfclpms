@@ -757,8 +757,14 @@ async function runScheduledChunked(
     if (errors.length > 0) {
       parts.push(`${errors.length} warning(s): ${errors.slice(0, 3).join('; ')}`)
     }
+    // Phase 9.2 WP-a — hard-fail-on-partial. When the flag is true
+    // (production default) and table coverage shrank, mark the run as
+    // `failed` instead of `completed_with_errors` so the Backup History
+    // pill is red and the run is excluded from "latest successful" pointers.
+    const hardFail = await loadHardFailOnPartial(supabase)
+    const finalStatus = hardFail && shrunk ? 'failed' : 'completed_with_errors'
     await supabase.from('backup_logs').update({
-      status: 'completed_with_errors',
+      status: finalStatus,
       error_message: parts.join(' — '),
     }).eq('id', backupId)
   }
