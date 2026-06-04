@@ -21,6 +21,8 @@ import {
 import { ConfirmDestructiveDialog } from '@/components/ui/ConfirmDestructiveDialog';
 import { useToast } from '@/hooks/use-toast';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { ImplementersAuditTab } from '@/components/platform/ImplementersAuditTab';
 
 /**
  * Phase 4D — Implementers management UI.
