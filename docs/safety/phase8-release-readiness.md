@@ -32,38 +32,27 @@ No edge-function changes in Phase 8. Reference: `docs/safety/phase1/edge-functio
 
 ## 4. Schema cleanup outcome
 
-The plan included a destructive cleanup migration that would drop two
-verified-dead columns on `safety_settings`:
+**Resolved 2026-06-04.** Both deferred dead columns were dropped from
+`public.safety_settings`:
 
-- `ui_incident_v2 BOOLEAN`
-- `incident_stage_copy JSONB`
+- `ui_incident_v2 BOOLEAN`  ← dropped
+- `incident_stage_copy JSONB` ← dropped
 
-**Pre-flight result (2026-06-04):**
+Re-snapshotted pre-flight at apply time: 2 columns present · 13/13 rows
+at column defaults (`false` / `{}`) · 0 dependents (views / routines /
+policies / triggers) · 0 readers (`rg` repo-wide). The migration carried
+an in-transaction precondition guard that would `RAISE EXCEPTION` if any
+row carried non-default data, and used plain `DROP COLUMN` (no CASCADE)
+so a hidden dependent would fail loudly.
 
-```
-SELECT count(*) FILTER (WHERE ui_incident_v2 IS NOT NULL OR incident_stage_copy IS NOT NULL) AS dirty
-FROM public.safety_settings;
-→ dirty = 13 / 13 rows
-```
-
-The 13 rows are all at the column DEFAULTs (`false` / `{}`) — no row carries
-a meaningful value, and no source-code reader references the columns
-(verified by `src/test/safety/phase8/safety-settings-rows-vs-columns.test.ts`
-and a `rg` scan over `src/`). However, the plan's pre-flight gate is a
-strict `IS NOT NULL` check, and that gate fails because defaults populated
-every row.
-
-**Decision (per the Phase 8 plan's decision gates):** STOP the destructive
-migration; ship the rest of Phase 8. The columns stay physically present
-but remain unread. The drop is re-deferred with a tighter pre-flight (e.g.
-"every value equals the column default AND no reader references exist") to
-be proposed as a separate change set.
+Rollback artefact committed at `docs/safety/phase8-dead-column-rollback.sql`
+(additive, nullable, default-restored). Not auto-applied.
 
 ## 5. Deferred items (explicitly tracked, not silently removed)
 
 | Item | Status | Reason | Next step |
 |---|---|---|---|
-| Drop `safety_settings.ui_incident_v2`, `incident_stage_copy` columns | **Deferred** | Strict `IS NOT NULL` pre-flight fails — defaults populated every row | Re-propose with "value = default" pre-flight |
+| Drop `safety_settings.ui_incident_v2`, `incident_stage_copy` columns | ✅ **Resolved 2026-06-04** | Re-snapshotted pre-flight passed (defaults-only + 0 readers + 0 dependents). Plain `DROP COLUMN` applied with in-transaction guard. | Rollback script at `docs/safety/phase8-dead-column-rollback.sql` (manual). |
 | `/safety/settings/release-readiness` runtime page | **Deferred — optional** | A new route is a runtime feature; user explicitly required a separate approval before any UI ship | Propose as a flag-gated subtask (`release_readiness_v1`, default OFF) only if requested |
 
 ## 6. Constraints honored
