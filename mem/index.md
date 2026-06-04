@@ -14,6 +14,7 @@ Safety lists: no auto-fetch — Search button triggers query; every table pagina
 Agent safety: zero destructive autonomy, stop-and-ask on errors, propose-don't-act, least-privilege. See safety-directives.
 Engineering: SSOT+POLICY.md sync, RCA with regression test, lean UI / logic in hooks, RLS-first, pre-impl Risk & Impact Report. See engineering-standards.
 Lean-Load: debounce search inputs (>200 rows / network); paginate new lists with `.range()`; `useAllKpis` slim projection; full-org reads only via sanctioned `fetchAllPaged` sites. See lean-load-policy (POLICY §120).
+- [System Settings Ownership Inventory](mem://infrastructure/system-settings-ownership-inventory) — Complete audit of settings surfaces, tables, keys, role ownership, RBAC enforcement, gaps
 
 ## Memories
 - [Page loading overlay pattern](mem://design/page-loading-overlay-pattern) — Centered PageLoadingOverlay wired in DashboardLayout (Suspense + RouteDataLoadingGate), rocket+chart art
