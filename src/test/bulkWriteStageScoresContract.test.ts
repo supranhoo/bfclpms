@@ -48,7 +48,10 @@ describe('bulk_write_stage_scores SQL contract', () => {
     ]) {
       expect(SQL).toMatch(new RegExp(`${col}\\s*=`));
     }
-    expect(SQL).toMatch(/v_attach_count\s*>\s*0/);
+    // v2.66.13.x refactor: per-cell attach count (`v_cell_attach_count`)
+    // governs the merge so per-cell `p_evidence_urls` overrides can swap in
+    // a different array. Accept either name.
+    expect(SQL).toMatch(/v_(cell_)?attach_count\s*>\s*0/);
   });
 
   it('still calls the workflow reconciler after writes', () => {
