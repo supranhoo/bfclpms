@@ -540,3 +540,314 @@ function ChecklistTab({ client, actorId }: { client: Client; actorId?: string })
     </CardContent></Card>
   );
 }
+
+// ----------------------------------------------------------------------------
+// Phase 3D — URLs & Domains tab
+// ----------------------------------------------------------------------------
+
+type ClientUrl = {
+  id: string;
+  client_id: string;
+  url: string;
+  label: string | null;
+  is_primary: boolean;
+  verified: boolean;
+  verified_by: string | null;
+  verified_at: string | null;
+  notes: string | null;
+  is_active: boolean;
+  archived_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+function normalizeUrl(raw: string): { ok: true; url: string } | { ok: false; reason: string } {
+  const trimmed = raw.trim();
+  if (!trimmed) return { ok: false, reason: 'URL is required.' };
+  if (/^(javascript|data|file|vbscript):/i.test(trimmed)) {
+    return { ok: false, reason: 'Unsupported URL scheme.' };
+  }
+  if (!/^https?:\/\/[^\s]+$/i.test(trimmed)) {
+    return { ok: false, reason: 'URL must start with http:// or https:// and contain no spaces.' };
+  }
+  return { ok: true, url: trimmed };
+}
+
+function UrlsTab({ client, actorId }: { client: Client; actorId?: string }) {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const { data, isLoading } = useQuery({
+    queryKey: ['impl-console', 'urls', client.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('client_urls')
+        .select('*')
+        .eq('client_id', client.id)
+        .order('is_active', { ascending: false })
+        .order('is_primary', { ascending: false })
+        .order('created_at', { ascending: true });
+      if (error) throw error;
+      return (data ?? []) as ClientUrl[];
+    },
+  });
+
+  const [showAdd, setShowAdd] = useState(false);
+
+  const maybeTickChecklist = async (rows: ClientUrl[]) => {
+    const hasPrimaryVerified = rows.some((r) => r.is_active && r.is_primary && r.verified);
+    if (hasPrimaryVerified) await tickChecklist(client, 'allowed_app_urls');
+  };
+
+  const refresh = async () => {
+    const res = await qc.invalidateQueries({ queryKey: ['impl-console', 'urls', client.id] });
+    void res;
+  };
+
+  const setPrimary = async (row: ClientUrl) => {
+    try {
+      const { data: updated, error } = await supabase.rpc('impl_console_set_primary_url', { _url_id: row.id });
+      if (error) throw error;
+      await writeAudit({
+        actorId, clientId: client.id, clientKey: client.client_key,
+        entityType: 'client_url', action: 'update',
+        before: { id: row.id, is_primary: row.is_primary },
+        after: { id: row.id, is_primary: true, url: row.url, set_primary: true },
+      });
+      toast({ title: 'Primary URL updated' });
+      await refresh();
+      const next = await supabase.from('client_urls').select('*').eq('client_id', client.id);
+      await maybeTickChecklist((next.data ?? []) as ClientUrl[]);
+      qc.invalidateQueries({ queryKey: ['impl-console', 'checklist', client.id] });
+      void updated;
+    } catch (e: any) {
+      toast({ title: 'Could not set primary', description: e.message, variant: 'destructive' });
+    }
+  };
+
+  const verifyRow = async (row: ClientUrl) => {
+    try {
+      const next = !row.verified;
+      const { error } = await supabase.from('client_urls').update({
+        verified: next,
+        verified_by: next ? actorId : null,
+        verified_at: next ? new Date().toISOString() : null,
+        updated_by: actorId,
+      }).eq('id', row.id);
+      if (error) throw error;
+      await writeAudit({
+        actorId, clientId: client.id, clientKey: client.client_key,
+        entityType: 'client_url', action: 'update',
+        before: { id: row.id, verified: row.verified },
+        after: { id: row.id, verified: next, url: row.url },
+      });
+      toast({ title: next ? 'Marked verified' : 'Verification cleared' });
+      await refresh();
+      const ref = await supabase.from('client_urls').select('*').eq('client_id', client.id);
+      await maybeTickChecklist((ref.data ?? []) as ClientUrl[]);
+      qc.invalidateQueries({ queryKey: ['impl-console', 'checklist', client.id] });
+    } catch (e: any) {
+      toast({ title: 'Update failed', description: e.message, variant: 'destructive' });
+    }
+  };
+
+  const archive = async (row: ClientUrl) => {
+    if (!confirm(`Archive ${row.url}? It will be hidden from active use but retained for audit.`)) return;
+    try {
+      const { error } = await supabase.rpc('impl_console_archive_url', { _url_id: row.id });
+      if (error) throw error;
+      await writeAudit({
+        actorId, clientId: client.id, clientKey: client.client_key,
+        entityType: 'client_url', action: 'update',
+        before: { id: row.id, is_active: true, is_primary: row.is_primary },
+        after: { id: row.id, is_active: false, archived: true, url: row.url },
+      });
+      toast({ title: 'URL archived' });
+      await refresh();
+    } catch (e: any) {
+      toast({ title: 'Archive failed', description: e.message, variant: 'destructive' });
+    }
+  };
+
+  if (isLoading) return <div className="py-8 text-center"><Loader2 className="h-5 w-5 animate-spin inline" /></div>;
+
+  const active = (data ?? []).filter((r) => r.is_active);
+  const archived = (data ?? []).filter((r) => !r.is_active);
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between">
+        <CardTitle>URLs &amp; Domains</CardTitle>
+        <Button size="sm" onClick={() => setShowAdd(true)}>Add URL</Button>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <Alert>
+          <AlertDescription className="text-xs">
+            Manual verification only — no DNS or SSL validation is performed. Only an active, primary, verified URL is included in test emails and templates.
+          </AlertDescription>
+        </Alert>
+
+        {active.length === 0 ? (
+          <div className="text-sm text-muted-foreground py-6 text-center">No URLs registered yet. Add the production app URL first.</div>
+        ) : (
+          <div className="border rounded-md divide-y">
+            {active.map((row) => (
+              <div key={row.id} className="p-3 flex items-start gap-3 flex-wrap">
+                <div className="flex-1 min-w-[240px]">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <a href={row.url} target="_blank" rel="noopener noreferrer" className="font-mono text-sm hover:underline break-all">{row.url}</a>
+                    <a href={row.url} target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-foreground" aria-label="Open URL"><ExternalLink className="h-3.5 w-3.5" /></a>
+                    {row.is_primary && <Badge>Primary</Badge>}
+                    {row.verified ? <Badge variant="secondary"><ShieldCheck className="h-3 w-3 mr-1" />Verified</Badge> : <Badge variant="outline">Unverified</Badge>}
+                  </div>
+                  {row.label && <div className="text-xs text-muted-foreground mt-1">{row.label}</div>}
+                  {row.notes && <div className="text-xs text-muted-foreground mt-1 italic">{row.notes}</div>}
+                </div>
+                <div className="flex items-center gap-1 flex-wrap">
+                  {!row.is_primary && (
+                    <Button size="sm" variant="outline" onClick={() => setPrimary(row)} title="Set as primary">
+                      <Star className="h-3.5 w-3.5 mr-1" />Set primary
+                    </Button>
+                  )}
+                  <Button size="sm" variant="outline" onClick={() => verifyRow(row)}>
+                    {row.verified ? 'Unverify' : 'Mark verified'}
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => archive(row)} title="Archive (no hard delete)">
+                    <Archive className="h-3.5 w-3.5 mr-1" />Archive
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {archived.length > 0 && (
+          <div>
+            <div className="text-xs font-medium text-muted-foreground mt-4 mb-1">Archived ({archived.length})</div>
+            <div className="border rounded-md divide-y">
+              {archived.map((row) => (
+                <div key={row.id} className="p-3 flex items-center gap-3 opacity-70">
+                  <div className="flex-1 min-w-0">
+                    <div className="font-mono text-xs break-all">{row.url}</div>
+                    <div className="text-xs text-muted-foreground">
+                      Archived {row.archived_at ? `${formatDistanceToNow(new Date(row.archived_at))} ago` : ''}
+                      {row.label ? ` · ${row.label}` : ''}
+                    </div>
+                  </div>
+                  <Badge variant="outline">Archived</Badge>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <AddUrlDialog
+          open={showAdd}
+          onOpenChange={setShowAdd}
+          client={client}
+          actorId={actorId}
+          existingPrimaryId={active.find((r) => r.is_primary)?.id ?? null}
+          onCreated={async () => { await refresh(); }}
+        />
+      </CardContent>
+    </Card>
+  );
+}
+
+function AddUrlDialog({
+  open, onOpenChange, client, actorId, existingPrimaryId, onCreated,
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  client: Client;
+  actorId?: string;
+  existingPrimaryId: string | null;
+  onCreated: () => Promise<void>;
+}) {
+  const { toast } = useToast();
+  const [url, setUrl] = useState('');
+  const [label, setLabel] = useState('');
+  const [notes, setNotes] = useState('');
+  const [makePrimary, setMakePrimary] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  const reset = () => { setUrl(''); setLabel(''); setNotes(''); setMakePrimary(false); };
+
+  const submit = async () => {
+    const norm = normalizeUrl(url);
+    if (!norm.ok) { toast({ title: 'Invalid URL', description: norm.reason, variant: 'destructive' }); return; }
+    setBusy(true);
+    try {
+      const { data: inserted, error } = await supabase.from('client_urls').insert({
+        client_id: client.id,
+        url: norm.url,
+        label: label.trim() || null,
+        notes: notes.trim() || null,
+        is_primary: false, // set via RPC below if requested
+        created_by: actorId,
+        updated_by: actorId,
+      }).select().single();
+      if (error) throw error;
+
+      await writeAudit({
+        actorId, clientId: client.id, clientKey: client.client_key,
+        entityType: 'client_url', action: 'update',
+        before: null, after: { id: inserted.id, url: norm.url, label: label.trim() || null, created: true },
+      });
+
+      if (makePrimary) {
+        const { error: rpcErr } = await supabase.rpc('impl_console_set_primary_url', { _url_id: inserted.id });
+        if (rpcErr) throw rpcErr;
+        await writeAudit({
+          actorId, clientId: client.id, clientKey: client.client_key,
+          entityType: 'client_url', action: 'update',
+          before: { previous_primary_id: existingPrimaryId },
+          after: { id: inserted.id, is_primary: true, set_primary: true, replaced_previous: !!existingPrimaryId },
+        });
+      }
+
+      toast({ title: 'URL added' });
+      reset();
+      onOpenChange(false);
+      await onCreated();
+    } catch (e: any) {
+      const msg = e?.message ?? String(e);
+      toast({ title: 'Add failed', description: /duplicate key/i.test(msg) ? 'This URL is already registered for the client.' : msg, variant: 'destructive' });
+    } finally { setBusy(false); }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => { if (!busy) onOpenChange(v); }}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Add client URL</DialogTitle>
+          <DialogDescription>
+            Record an app URL for {client.display_name}. Use this for production, staging, or vanity domains. URLs are never hard-deleted — archive instead.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-3">
+          <div>
+            <Label>URL</Label>
+            <Input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://pms.client.com" />
+          </div>
+          <div>
+            <Label>Label <span className="text-xs text-muted-foreground">(optional)</span></Label>
+            <Input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="production / staging / vanity" />
+          </div>
+          <div>
+            <Label>Notes <span className="text-xs text-muted-foreground">(optional)</span></Label>
+            <Input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Context for support — do not enter passwords or tokens" />
+            <div className="text-xs text-muted-foreground mt-1">Do not enter passwords, tokens, or secrets in notes — visible to platform owners and assigned implementers.</div>
+          </div>
+          <label className="flex items-center gap-2 text-sm">
+            <Checkbox checked={makePrimary} onCheckedChange={(v) => setMakePrimary(!!v)} />
+            Mark as primary {existingPrimaryId && <span className="text-xs text-muted-foreground">(replaces current primary)</span>}
+          </label>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => { reset(); onOpenChange(false); }} disabled={busy}>Cancel</Button>
+          <Button onClick={submit} disabled={busy || !url.trim()}>{busy ? 'Adding…' : 'Add URL'}</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
