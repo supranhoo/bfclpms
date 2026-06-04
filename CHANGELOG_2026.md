@@ -4,6 +4,16 @@
 > **Status:** Living document. Append new ships under the **current week's row**, in the same step that you update `DOCUMENTATION.md` Version History.
 > **Sources:** `DOCUMENTATION.md` Version History, `supabase/migrations/`, `mem/*`.
 
+## 2026-06-04 — Phase 3C Delegated Implementation Console (foundation)
+- New `implementation_admin` role added to `public.app_role` (no platform_owner powers).
+- New tables: `client_implementer_assignments` (per-client user mapping; assignee + platform_owner read, platform_owner write only), `client_smtp_config` (per-client sender identity with column-allowlisted reads — secrets stored elsewhere; only metadata + fingerprint + last-rotated timestamp), `client_setup_checklist` (auto-seeded 9 default items per client via trigger; backfilled for existing clients).
+- `is_implementation_admin_for(client_id)` SECURITY DEFINER helper used by RLS on console-scoped tables.
+- New route `/implementation-console` (`ImplementationConsoleRoute`) — opens to `platform_owner` OR any user with ≥1 assignment. Tabs: Assigned Clients, Profile, URLs & Domains (placeholder until 3D), Communications (placeholder until 3E), Sender Identity, Test Email (placeholder until rotation edge function), Notification Templates (placeholder), Setup Checklist, Delivery Logs (placeholder).
+- New Platform Settings tab **Implementers** (platform_owner only): assign by email + revoke, audited to `entitlement_audit` with `entity_type='client_implementer_assignment'`.
+- New ModuleHub tile (Wrench icon) for assigned users.
+- All mutations audited to `entitlement_audit` with `reason='impl_console_*'`. Secrets are never written to audit rows.
+- No changes to PMS workflow, scoring, menus, reports, RLS, or any existing route. Backup coverage automatic.
+
 ## 2026-06-03 — Phase 3B Data Governance: Overview dashboard (read-only)
 - New `Overview` sub-tab (now the first) in Platform Settings → Data Governance — 6 KPI cards (total/active/inactive + last-updated relative time) for Classifications, Sensitive Fields, Export Policies, Audit Policies, Retention, Privacy/Consent.
 - Coverage strip: grouped counts by classification key, module, classification, retention bucket (≤90d/≤1y/>1y/forever), purge strategy, lawful basis.
