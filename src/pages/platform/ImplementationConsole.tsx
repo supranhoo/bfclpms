@@ -108,9 +108,25 @@ export default function ImplementationConsole() {
           </div>
         </div>
 
-        {(clients ?? []).length === 0 && (
-          <Alert><AlertDescription>You have no clients assigned yet. Ask a platform owner to assign you in Platform Settings → Clients → Implementers.</AlertDescription></Alert>
-        )}
+        {(clients ?? []).length === 0 ? (
+          // Phase 4A (corrected): explicit empty-state card for
+          // implementation_admin with zero assignments. Operational tabs are
+          // hidden until at least one client is assigned, so the Console
+          // never looks broken or partially loaded.
+          <Card>
+            <CardHeader>
+              <CardTitle>No clients assigned</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2 text-sm text-muted-foreground">
+              <p>You do not have any clients assigned to you yet.</p>
+              <p>
+                Please contact the Platform Owner to be assigned a client in
+                Platform Settings → Clients → Implementers. Setup tabs will
+                appear here once an assignment is in place.
+              </p>
+            </CardContent>
+          </Card>
+        ) : null}
 
         {activeClient && (
           <Tabs defaultValue="profile" className="space-y-4">

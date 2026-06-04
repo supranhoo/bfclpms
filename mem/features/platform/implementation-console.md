@@ -73,6 +73,7 @@ type: feature
 ## Auth & Routing Enforcement (Phase 4A)
 - `implementation_admin` is first-class in `AuthContext`: present in `ROLE_PRIORITY` (between `management` and `auditor`) and exposed as `isImplementationAdmin` (mirrors `isPlatformOwner`).
 - Route guards render the standalone `<AccessDenied />` page (`/access-denied`) on failure — no silent `/home` redirect. Direct `/platform-settings` probes by `implementation_admin` get a visible 403.
-- `ImplementationConsoleRoute` admits any of: `platform_owner`, `implementation_admin`, OR `client_implementer_assignments` row. An `implementation_admin` with zero assignments reaches the shell; the client picker simply shows no clients (RLS-correct, not a redirect).
-- `ModuleHub` Implementation Console tile uses the same union as the route guard. Platform Settings tile remains `platform_owner` + `hub_platform_settings_enabled`.
+- `ImplementationConsoleRoute` admits ONLY `platform_owner` OR `implementation_admin` **role** — a bare `client_implementer_assignments` row is not sufficient. This prevents ordinary PMS roles from entering via an assignment row.
+- Unassigned `implementation_admin` lands on a clear empty-state card ("No clients assigned" + contact Platform Owner). Operational tabs are hidden until at least one client is assigned.
+- `ModuleHub` Implementation Console tile mirrors the route guard exactly (no assignment-count query). Platform Settings tile remains `platform_owner` + `hub_platform_settings_enabled`.
 - No sidebar change — `/platform-settings` and `/implementation-console` are outside `DashboardLayout`.
