@@ -77,3 +77,16 @@ type: feature
 - Unassigned `implementation_admin` lands on a clear empty-state card ("No clients assigned" + contact Platform Owner). Operational tabs are hidden until at least one client is assigned.
 - `ModuleHub` Implementation Console tile mirrors the route guard exactly (no assignment-count query). Platform Settings tile remains `platform_owner` + `hub_platform_settings_enabled`.
 - No sidebar change — `/platform-settings` and `/implementation-console` are outside `DashboardLayout`.
+
+## Implementers Management UI (Phase 4D)
+- **Platform Settings → Implementers** is the only sanctioned UI for `implementation_admin` lifecycle. No SQL, no inline forms. Owner-only.
+- All mutations go through edge function `manage-implementer` (service-role). Caller's `platform_owner` role is re-verified server-side; the function never touches PMS roles (`admin`, `manager`, `employee`, `auditor`, `management`, `hr_pms`, `skip_level`).
+- Four actions: `grant_role`, `revoke_role`, `assign_client`, `unassign_client`. Each writes an immutable `entitlement_audit` row (event_type `grant`/`revoke`, entity_type `implementation_admin_role` or `client_implementer_assignment`, before/after JSON, actor, reason code).
+- **Server-side guards** (defense in depth — client also enforces):
+  - `revoke_role` refuses when `target == caller` (cannot revoke your own implementation_admin from this screen).
+  - `assign_client` refuses if target lacks `implementation_admin` (no orphan assignments).
+  - `grant_role` is additive — duplicate grant returns `already_granted` with no audit churn.
+  - `revoke_role` cascade-clears all `client_implementer_assignments` for that user atomically (per-row audit on the role revocation captures the assignment snapshot in `before`).
+- **UI:** user-grouped table with client chips (inline × → confirm → `unassign_client`). Add dialog supports search-as-you-type by name/email/employee_code against active profiles only (min 2 chars, ilike OR across three columns). Existing implementers are flagged in the search results and disabled. Initial client assignment is a checkbox multi-select.
+- **Email masking**: every email rendered in this tab uses `ab***@domain` regardless of viewer role (consistent with Phase 3G; even `platform_owner` does not see the full email here — only audit detail can expose it via dedicated review tooling).
+- **Out of scope:** no PMS surface change; no new public-schema table; no migration; no change to `client_implementer_assignments` or `user_roles` RLS; no production email dispatch.

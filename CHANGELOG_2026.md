@@ -5,6 +5,20 @@
 > **Sources:** `DOCUMENTATION.md` Version History, `supabase/migrations/`, `mem/*`.
 
 ## 2026-06-04 — Phase 4A Implementation Console: Auth & Routing Enforcement
+
+## 2026-06-04 — Phase 4D Implementation Console: Implementers Management UI
+- **Platform Settings → Implementers** tab fully rewritten into an owner-only management surface. No more email-only inline form — every mutation now routes through a new audited edge function.
+- New edge function `manage-implementer` (service-role): platform-owner-gated CRUD with four actions — `grant_role`, `revoke_role`, `assign_client`, `unassign_client`. All four write an immutable row to `entitlement_audit` (event_type=`grant`/`revoke`, `entity_type='implementation_admin_role'` or `'client_implementer_assignment'`, before/after JSON, reason code, actor). Caller's `platform_owner` role is verified server-side via service-role query against `user_roles`.
+- **Safety guards:**
+  - Self-revoke of one's own `implementation_admin` role is refused both client-side (button disabled) and server-side (400 response).
+  - Function never touches `admin`/`manager`/`employee`/`auditor`/`management`/`hr_pms`/`skip_level` rows — only `implementation_admin`. PMS role hierarchy and primary-role resolution untouched (admin + implementation_admin still resolves to `admin`).
+  - `assign_client` refuses if the target lacks the `implementation_admin` role (prevents orphan assignment rows).
+  - Grants are additive: re-granting an existing role returns `already_granted` with no audit churn.
+- **UI:** user-grouped view (one row per implementer), assigned clients shown as removable chips with inline "×" → unassign confirmation. "Add implementer" dialog with search-as-you-type by name/email/employee_code (active users only, min 2 chars), checkbox multi-select for initial client assignment. "Assign clients" dialog per row. Revoke and unassign actions use `ConfirmDestructiveDialog`. All emails masked (`ab***@domain`) in line with Phase 3G actor visibility policy.
+- **Out of scope (unchanged):** no PMS menu / workflow / scoring / report / RLS / permission / notification / entitlement-enforcement behavior change. No new public-schema table. No migration. No change to `client_implementer_assignments` schema or RLS. No production email dispatch (still Phase 4B).
+- Files: `supabase/functions/manage-implementer/index.ts` (new); `src/components/platform/ImplementersTab.tsx` (rewritten).
+
+## 2026-06-04 — Phase 4A Implementation Console: Auth & Routing Enforcement
 - `implementation_admin` now first-class in `AuthContext`: added to `ROLE_PRIORITY` between `management` and `auditor` (does NOT outrank `admin` — admin users keep `role='admin'`); new `isImplementationAdmin` convenience flag (mirrors `isPlatformOwner`).
 - New page `src/pages/AccessDenied.tsx` and route `/access-denied` — visible 403 with "Back to Hub" button. Public route, registered inside the same `AuthProvider`/`TooltipProvider`/`BrowserRouter` tree as every other page so it has full access to auth/theme/router context.
 - `PlatformOwnerRoute` and `ImplementationConsoleRoute` now render `<AccessDenied />` on failure instead of silently `Navigate("/home")`. Direct-URL probes of `/platform-settings` by `implementation_admin` (or any non-owner) get a visible 403 instead of a silent bounce.
