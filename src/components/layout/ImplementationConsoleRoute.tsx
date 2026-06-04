@@ -1,6 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/AuthContext';
-import { supabase } from '@/integrations/supabase/client';
 import { Loader2 } from 'lucide-react';
 import AccessDenied from '@/pages/AccessDenied';
 
@@ -11,22 +9,9 @@ import AccessDenied from '@/pages/AccessDenied';
  * to the user themselves, so a simple count is safe.
  */
 export function ImplementationConsoleRoute({ children }: { children: React.ReactNode }) {
-  const { user, hasRole, loading } = useAuth();
+  const { hasRole, loading } = useAuth();
 
-  const { data, isLoading } = useQuery({
-    queryKey: ['impl-console', 'access', user?.id],
-    enabled: !!user?.id,
-    queryFn: async () => {
-      const { count, error } = await supabase
-        .from('client_implementer_assignments')
-        .select('id', { count: 'exact', head: true })
-        .eq('user_id', user!.id);
-      if (error) throw error;
-      return count ?? 0;
-    },
-  });
-
-  if (loading || isLoading) {
+  if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -34,12 +19,13 @@ export function ImplementationConsoleRoute({ children }: { children: React.React
     );
   }
 
-  const isOwner = hasRole('platform_owner');
-  const isImplAdmin = hasRole('implementation_admin');
-  const isAssigned = (data ?? 0) > 0;
-  // Phase 4A: explicit role gate. implementation_admin role grants entry even
-  // without assignments; the client picker inside the console will simply be
-  // empty (correct UX). On full denial, render a visible 403.
-  if (!isOwner && !isImplAdmin && !isAssigned) return <AccessDenied />;
+  // Phase 4A (corrected): access requires an explicit role — `platform_owner`
+  // OR `implementation_admin`. A bare `client_implementer_assignments` row is
+  // NOT sufficient on its own (prevents ordinary PMS roles from sneaking in
+  // via an assignment row). Inside the console: owners see all clients,
+  // implementation_admins see only assigned clients (via existing RLS join).
+  if (!hasRole('platform_owner') && !hasRole('implementation_admin')) {
+    return <AccessDenied />;
+  }
   return <>{children}</>;
 }

@@ -1,6 +1,4 @@
 import { Navigate } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useModules } from '@/hooks/useModules';
 import { useEntitlement } from '@/hooks/useEntitlement';
@@ -14,24 +12,10 @@ export default function ModuleHub() {
   const { hubEnabled } = useEntitlement();
   const showPlatformCard = hubEnabled && hasRole('platform_owner');
 
-  // Show Implementation Console tile for platform_owner OR any user with ≥1 assignment.
-  const { data: assignmentCount } = useQuery({
-    queryKey: ['impl-console', 'tile-access', user?.id],
-    enabled: !!user?.id,
-    queryFn: async () => {
-      const { count } = await supabase
-        .from('client_implementer_assignments')
-        .select('id', { count: 'exact', head: true })
-        .eq('user_id', user!.id);
-      return count ?? 0;
-    },
-  });
-  // Phase 4A: parity with ImplementationConsoleRoute — implementation_admin
-  // sees the tile even without assignments.
+  // Phase 4A (corrected): tile mirrors route guard — explicit role only.
+  // Assignment rows alone do NOT surface the tile to ordinary PMS users.
   const showImplCard =
-    hasRole('platform_owner') ||
-    hasRole('implementation_admin') ||
-    (assignmentCount ?? 0) > 0;
+    hasRole('platform_owner') || hasRole('implementation_admin');
 
   if (authLoading || modulesLoading) {
     return (
