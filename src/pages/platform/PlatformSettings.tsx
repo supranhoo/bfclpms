@@ -1972,6 +1972,7 @@ export default function PlatformSettings() {
             <TabsTrigger value="actions"><KeyRound className="h-4 w-4 mr-1" />Action Entitlements</TabsTrigger>
             <TabsTrigger value="registries"><ShieldCheck className="h-4 w-4 mr-1" />Registries</TabsTrigger>
             <TabsTrigger value="data-governance"><Database className="h-4 w-4 mr-1" />Data Governance</TabsTrigger>
+            <TabsTrigger value="implementers"><Building2 className="h-4 w-4 mr-1" />Implementers</TabsTrigger>
             <TabsTrigger value="audit"><ScrollText className="h-4 w-4 mr-1" />Audit Logs</TabsTrigger>
             <TabsTrigger value="telemetry"><BarChart3 className="h-4 w-4 mr-1" />Telemetry</TabsTrigger>
           </TabsList>
@@ -1981,6 +1982,7 @@ export default function PlatformSettings() {
           <TabsContent value="actions"><Card><CardContent className="pt-6"><ActionEntitlementsTab /></CardContent></Card></TabsContent>
           <TabsContent value="registries"><Card><CardContent className="pt-6"><RegistriesTab /></CardContent></Card></TabsContent>
             <TabsContent value="data-governance"><Card><CardContent className="pt-6"><DataGovernanceTab /></CardContent></Card></TabsContent>
+          <TabsContent value="implementers"><Card><CardContent className="pt-6"><ImplementersTab /></CardContent></Card></TabsContent>
           <TabsContent value="audit"><Card><CardContent className="pt-6"><AuditTab /></CardContent></Card></TabsContent>
           <TabsContent value="telemetry"><Card><CardContent className="pt-6"><TelemetryTab /></CardContent></Card></TabsContent>
         </Tabs>
