@@ -561,16 +561,17 @@ type ClientUrl = {
   updated_at: string;
 };
 
-function normalizeUrl(raw: string): { ok: true; url: string } | { ok: false; reason: string } {
+type NormResult = { ok: true; url: string } | { ok: false; reason: string };
+function normalizeUrl(raw: string): NormResult {
   const trimmed = raw.trim();
-  if (!trimmed) return { ok: false, reason: 'URL is required.' };
+  if (!trimmed) return { ok: false as const, reason: 'URL is required.' };
   if (/^(javascript|data|file|vbscript):/i.test(trimmed)) {
-    return { ok: false, reason: 'Unsupported URL scheme.' };
+    return { ok: false as const, reason: 'Unsupported URL scheme.' };
   }
   if (!/^https?:\/\/[^\s]+$/i.test(trimmed)) {
-    return { ok: false, reason: 'URL must start with http:// or https:// and contain no spaces.' };
+    return { ok: false as const, reason: 'URL must start with http:// or https:// and contain no spaces.' };
   }
-  return { ok: true, url: trimmed };
+  return { ok: true as const, url: trimmed };
 }
 
 function UrlsTab({ client, actorId }: { client: Client; actorId?: string }) {
