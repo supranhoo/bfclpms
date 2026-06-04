@@ -47,6 +47,30 @@ async function assertCoverageNotShrunk(
   }
 }
 
+// Phase 9.2 WP-a — Hard-fail-on-partial flag.
+// When `backup_hard_fail_on_partial` is true (production default), any run
+// where backed-up table count is below discovered count is marked `failed`
+// instead of `completed_with_errors`. Setting `false` is an emergency
+// admin override (DB-level, no UI toggle in 9.2). Default is `true` if the
+// row is missing or unreadable — fail closed.
+async function loadHardFailOnPartial(
+  supabase: ReturnType<typeof createClient>
+): Promise<boolean> {
+  try {
+    const { data, error } = await supabase
+      .from('system_settings')
+      .select('setting_value')
+      .eq('setting_key', 'backup_hard_fail_on_partial')
+      .maybeSingle()
+    if (error) return true
+    const v = (data as { setting_value: unknown } | null)?.setting_value
+    if (v === false || v === 'false') return false
+    return true
+  } catch {
+    return true
+  }
+}
+
 // Buckets to inventory for storage manifest
 const STORAGE_BUCKETS = ['review-evidence', 'avatars', 'safety-media']
 
