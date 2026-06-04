@@ -16,8 +16,11 @@
 
 ## 2026-06-04 — Phase 3C.2 Implementation Console: secret rotation + test email
 - New edge function `impl-console-rotate-smtp-secret`: server-side validation (`platform_owner` or assigned implementer), stores secret bytes via service-role into `system_settings` keyed `client_smtp::<client_id>`, updates `client_smtp_config` metadata (`secret_set_at`, `secret_fingerprint`=sha256[0..4], `secret_ref`). Audit row written; secret value NEVER appears in DB columns, response, or audit JSON.
-- New edge function `impl-console-send-test-email`: same auth checks, 10/hour rate limit per `(actor_id, client_id)` enforced server-side, sends through Resend (provider `resend` or `lovable`), records masked recipient (`local@<first-letter>***`) + provider + success/status in `entitlement_audit`.
+- New edge function `impl-console-send-test-email`: same auth checks, 10/hour rate limit per `(actor_id, client_id)` enforced server-side via atomic SECURITY DEFINER RPC `impl_console_try_increment_rate` (counts every attempt — including failures — so failed sends can't be abused; prunes counters >24h on every call). Recipient allowlist for `implementation_admin`: only the sender's `from_email` domain or the caller's own auth email (platform_owner unrestricted). Sends through Resend (provider `resend` or `lovable`); audit stores only `recipient_masked` (`a***@domain`), `recipient_domain`, and `recipient_hash` (sha256[0..16] of lowercased email) — no PII local-part.
 - New table `public.impl_console_rate_buckets` (per-hour counter). RLS: users see only their own counters; only `service_role` writes.
+- Backup: `impl_console_rate_buckets` added to `backup_denylist` — ephemeral operational data, pruned every call.
+- Fingerprint length increased to 8 hex chars (was 4) for operator usefulness; still not a password.
+- No request body, secret value, secret_ref, API key, or provider response containing secrets is ever console.logged. Audit `before`/`after` never include secrets.
 - UI: Sender Identity tab gets a **Replace secret** modal (password input + typed `ROTATE` confirmation). Test Email tab activated: to-address input, "Used X/10 this hour" badge, last 5 sends list, disabled-until-sender-ready button.
 - Auto-tick: successful rotate ticks `smtp_secret` checklist item; successful test email ticks `test_email`. Both audited with `reason='impl_console_checklist_check_*'`.
 - No PMS / safety / incentive / reports / scoring / menu / RLS changes outside the new table. Backup auto-included.
