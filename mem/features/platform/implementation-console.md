@@ -16,7 +16,8 @@ type: feature
 
 ## SMTP / secret rule
 - `client_smtp_config` stores metadata only (`from_*`, provider, host/port/username, `secret_set_at`, `secret_fingerprint`, `secret_ref`). Column-allowlist GRANT on SELECT — no future secret column can leak via `select *`.
-- Secret bytes live in Supabase Vault and are rotated by an edge function (planned next phase). The UI never displays the secret — only "Last rotated …" and `••••<4-char fingerprint>`.
+- Secret bytes live in `system_settings` keyed `client_smtp::<client_id>` (service-role read only) and are rotated by edge function `impl-console-rotate-smtp-secret`. The UI never displays the secret — only "Last rotated …" and `••••<4-char fingerprint>`.
+- Test sends go through `impl-console-send-test-email` (provider `resend` or `lovable`), rate-limited to 10/hour per `(actor_id, client_id)` via `public.impl_console_rate_buckets` (only `service_role` increments). Recipient PII is masked in audit (`local@<first-letter>***`).
 
 ## Checklist
 - `client_setup_checklist` is auto-seeded by `seed_client_setup_checklist` AFTER INSERT trigger on `clients` and backfilled idempotently for existing clients. 9 default items keyed `display_name, website_url, allowed_app_urls, support_emails, sender_identity, smtp_secret, test_email, notification_templates, go_live`.
