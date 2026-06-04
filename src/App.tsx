@@ -10,6 +10,7 @@ import { DashboardLayout } from "./components/layout/DashboardLayout";
 import { ProtectedRoute } from "./components/layout/ProtectedRoute";
 import { DataOwnerRoute } from "./components/layout/DataOwnerRoute";
 import { PlatformOwnerRoute } from "./components/layout/PlatformOwnerRoute";
+import { ImplementationConsoleRoute } from "./components/layout/ImplementationConsoleRoute";
 import { ErrorBoundary } from "./components/ui/ErrorBoundary";
 import { Loader2 } from 'lucide-react';
 
@@ -65,6 +66,7 @@ const RegistryBrowser = lazy(() => import("./pages/RegistryBrowser"));
 const BulkReviewDashboard = lazy(() => import("./pages/review/BulkReviewDashboard"));
 const CustomMenuPage = lazy(() => import("./pages/CustomMenuPage"));
 const PlatformSettings = lazy(() => import("./pages/platform/PlatformSettings"));
+const ImplementationConsole = lazy(() => import("./pages/platform/ImplementationConsole"));
 
 // Safety module shell + pages
 const SafetyLayout = lazy(() =>
@@ -172,6 +174,14 @@ const App = () => (
                   <PlatformOwnerRoute>
                     <Suspense fallback={<PageFallback />}><PlatformSettings /></Suspense>
                   </PlatformOwnerRoute>
+                }
+              />
+              <Route
+                path="/implementation-console"
+                element={
+                  <ImplementationConsoleRoute>
+                    <Suspense fallback={<PageFallback />}><ImplementationConsole /></Suspense>
+                  </ImplementationConsoleRoute>
                 }
               />
               {/* Safety module — fully decoupled shell. Sibling of /home so PMS chrome never renders here. */}

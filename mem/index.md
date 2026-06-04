@@ -86,3 +86,4 @@ Lean-Load: debounce search inputs (>200 rows / network); paginate new lists with
 - [Menu Setting — Custom Tab Creation](mem://features/admin/menu-setting-custom-tabs) — Admin-created L2/L3/L4 tabs via menu_registry.is_custom + default admin-only access + dynamic sidebar synthesis
 - [Hub Platform Foundation](mem://features/platform/hub-foundation) — Phase 1 observe-only Hub: module/action/capability registries, client entitlements, audit, /platform-settings shell, flag-gated, multi-tenant ready, platform_owner role
 - [Hub Platform Enforcement Pilot](mem://features/platform/enforcement-pilot) — Phase 3 single-action UI enforcement for pms.data.export behind 4 gates (master + pilot flag + allowlist + entitlement); instant rollback
+- [Delegated Implementation Console](mem://features/platform/implementation-console) — Scoped per-client setup for implementation_admin; write-only secrets; audited via entitlement_audit

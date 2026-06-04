@@ -996,6 +996,38 @@ export type Database = {
           },
         ]
       }
+      client_implementer_assignments: {
+        Row: {
+          assigned_by: string | null
+          client_id: string
+          created_at: string
+          id: string
+          user_id: string
+        }
+        Insert: {
+          assigned_by?: string | null
+          client_id: string
+          created_at?: string
+          id?: string
+          user_id: string
+        }
+        Update: {
+          assigned_by?: string | null
+          client_id?: string
+          created_at?: string
+          id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_implementer_assignments_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       client_module_entitlements: {
         Row: {
           client_id: string
@@ -1044,6 +1076,112 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "module_registry"
             referencedColumns: ["module_key"]
+          },
+        ]
+      }
+      client_setup_checklist: {
+        Row: {
+          client_id: string
+          created_at: string
+          done: boolean
+          done_at: string | null
+          done_by: string | null
+          id: string
+          item_key: string
+          item_label: string
+          notes: string | null
+          sort_order: number
+          updated_at: string
+        }
+        Insert: {
+          client_id: string
+          created_at?: string
+          done?: boolean
+          done_at?: string | null
+          done_by?: string | null
+          id?: string
+          item_key: string
+          item_label: string
+          notes?: string | null
+          sort_order?: number
+          updated_at?: string
+        }
+        Update: {
+          client_id?: string
+          created_at?: string
+          done?: boolean
+          done_at?: string | null
+          done_by?: string | null
+          id?: string
+          item_key?: string
+          item_label?: string
+          notes?: string | null
+          sort_order?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_setup_checklist_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      client_smtp_config: {
+        Row: {
+          client_id: string
+          from_email: string | null
+          from_name: string | null
+          provider: string | null
+          reply_to: string | null
+          secret_fingerprint: string | null
+          secret_ref: string | null
+          secret_set_at: string | null
+          smtp_host: string | null
+          smtp_port: number | null
+          smtp_username: string | null
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          client_id: string
+          from_email?: string | null
+          from_name?: string | null
+          provider?: string | null
+          reply_to?: string | null
+          secret_fingerprint?: string | null
+          secret_ref?: string | null
+          secret_set_at?: string | null
+          smtp_host?: string | null
+          smtp_port?: number | null
+          smtp_username?: string | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          client_id?: string
+          from_email?: string | null
+          from_name?: string | null
+          provider?: string | null
+          reply_to?: string | null
+          secret_fingerprint?: string | null
+          secret_ref?: string | null
+          secret_set_at?: string | null
+          smtp_host?: string | null
+          smtp_port?: number | null
+          smtp_username?: string | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_smtp_config_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: true
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -11493,6 +11631,10 @@ export type Database = {
         Returns: boolean
       }
       is_image_url: { Args: { p_url: string }; Returns: boolean }
+      is_implementation_admin_for: {
+        Args: { _client_id: string }
+        Returns: boolean
+      }
       is_mgmt_reopen_enabled: { Args: never; Returns: boolean }
       is_month_locked_for_frequency: {
         Args: { p_frequency: string; p_month: string; p_year: number }
@@ -12043,6 +12185,7 @@ export type Database = {
         | "hr_pms"
         | "skip_level"
         | "platform_owner"
+        | "implementation_admin"
       config_status: "draft" | "active" | "archived"
       confirmation_increment_treatment:
         | "ignore"
@@ -12302,6 +12445,7 @@ export const Constants = {
         "hr_pms",
         "skip_level",
         "platform_owner",
+        "implementation_admin",
       ],
       config_status: ["draft", "active", "archived"],
       confirmation_increment_treatment: [
