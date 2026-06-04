@@ -65,6 +65,7 @@ const RegistryBrowser = lazy(() => import("./pages/RegistryBrowser"));
 const BulkReviewDashboard = lazy(() => import("./pages/review/BulkReviewDashboard"));
 const CustomMenuPage = lazy(() => import("./pages/CustomMenuPage"));
 const PlatformSettings = lazy(() => import("./pages/platform/PlatformSettings"));
+const ImplementationConsole = lazy(() => import("./pages/platform/ImplementationConsole"));
 
 // Safety module shell + pages
 const SafetyLayout = lazy(() =>
