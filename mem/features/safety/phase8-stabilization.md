@@ -19,7 +19,7 @@ Phase 8 is a low-risk validation phase: regression checklist + release-readiness
 ## Deferred items (do NOT silently remove)
 | Item | Status | Reason |
 |---|---|---|
-| Drop `safety_settings.ui_incident_v2` + `incident_stage_copy` columns | Deferred | Pre-flight `IS NOT NULL` gate failed — all 13 rows are at column DEFAULTs (`false`/`{}`). Per plan decision gate: STOP the migration; ship the rest of Phase 8. Re-propose with tighter "value equals default" pre-flight. |
+| Drop `safety_settings.ui_incident_v2` + `incident_stage_copy` columns | ✅ Resolved 2026-06-04 | Re-snapshotted pre-flight passed (defaults-only + 0 readers + 0 dependents). Plain `DROP COLUMN` shipped with in-transaction precondition guard; no CASCADE. Rollback script at `docs/safety/phase8-dead-column-rollback.sql`. |
 | `/safety/settings/release-readiness` runtime page | Deferred — optional | A new route is a runtime feature; user required explicit separate approval before any UI ship. Tracked here so it is not forgotten. |
 
 ## Invariants
