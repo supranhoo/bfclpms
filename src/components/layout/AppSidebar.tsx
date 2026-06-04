@@ -60,6 +60,8 @@ import {
   Folder,
 } from 'lucide-react';
 import { CollapsibleSidebarGroup } from './CollapsibleSidebarGroup';
+import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
+import { ALL_APP_ROLES } from '@/lib/roles';
 
 // NOTE: Keep role arrays in sync with ALL_APP_ROLES in src/lib/roles.ts
 const getStaticMenuItems = (policyVisibleRoles: string[]) => ({
@@ -215,6 +217,7 @@ export function AppSidebar() {
     <T extends { title: string; menuKey?: string }>(groupKey: string, fallback: T[]): T[] => {
       const parentKey = GROUP_PARENT_KEY[groupKey];
       if (!resolvedMenu || !parentKey) return fallback;
+      try {
       const isPinned = (mk?: string) => !!mk && (keyOccurrences.get(mk) ?? 0) > 1;
       // Pool of EVERY known sidebar item across all hardcoded groups, indexed
       // by menu_key — used to attach moved items as nested children of any
@@ -225,12 +228,16 @@ export function AppSidebar() {
       }
       // Synthesize a sidebar item from a resolved custom menu node. Custom
       // items aren't in the hardcoded pool — they come from menu_registry.
+      // CAPA (2026-06-04): roles default to ALL_APP_ROLES (visibility is
+      // gated by `canAccess` / `menu_access_config` anyway). Hardcoding
+      // `['admin']` here previously hid custom containers from every
+      // non-admin role and, for admins, hid the items moved underneath them.
       const synthFromNode = (n: any) => ({
         title: n.label,
         icon: n.icon_name || 'Folder',          // string → resolved dynamically in row renderer
         path: n.route_path ?? '',               // empty = container only
         menuKey: n.menu_key,
-        roles: ['admin'],                       // DB access config is the real gate
+        roles: [...ALL_APP_ROLES],              // DB access config is the real gate
         color: n.color ?? null,
         external: !!n.route_path && /^https?:\/\//i.test(n.route_path),
       });
@@ -323,7 +330,24 @@ export function AppSidebar() {
       result.forEach((it: any) => {
         if (Array.isArray(it.children)) collectKeys(it.children, nestedKeys);
       });
-      return result.filter((it: any) => !it.menuKey || !nestedKeys.has(it.menuKey));
+      const finalResult = result.filter((it: any) => !it.menuKey || !nestedKeys.has(it.menuKey));
+      // CAPA fail-open: if overrides hollow out a group entirely (e.g. all
+      // members were re-parented under a custom container that itself got
+      // hidden), return the static fallback with resolved labels so the
+      // baseline sidebar never disappears. The DB `menu_access_config` is
+      // still the visibility gate per item via `filterByRole`.
+      if (finalResult.length === 0 && fallback.length > 0) {
+        return fallback.map((it) => {
+          const node = (it as any).menuKey ? resolvedMenu.byKey[(it as any).menuKey] : null;
+          return node ? ({ ...it, title: node.label } as T) : it;
+        });
+      }
+      return finalResult;
+      } catch (err) {
+        // CAPA: never let a resolver bug blank a sidebar group.
+        console.error('[menu-resolver] resolveGroupItems failed, falling back to static defaults', { groupKey, err });
+        return fallback;
+      }
     },
     [resolvedMenu, keyOccurrences, flatPool],
   );
