@@ -23,19 +23,20 @@ async function writeAudit(opts: {
   clientId: string;
   clientKey: string;
   entityType: string;
-  eventType: 'update' | 'secret_rotate' | 'checklist_check' | 'test_email_send';
+  /** Logical action — recorded in `reason` to stay within the entitlement_audit event_type CHECK constraint. */
+  action: 'update' | 'secret_rotate' | 'checklist_check' | 'test_email_send';
   before: unknown;
   after: unknown;
 }) {
   await supabase.from('entitlement_audit').insert({
     actor_id: opts.actorId,
-    event_type: opts.eventType,
+    event_type: 'update',
     entity_type: opts.entityType,
     entity_key: opts.clientKey,
     client_id: opts.clientId,
     before: opts.before as any,
     after: opts.after as any,
-    reason: 'impl_console_' + opts.entityType,
+    reason: `impl_console_${opts.action}_${opts.entityType}`,
   });
 }
 
@@ -176,7 +177,7 @@ function ProfileTab({ client, actorId }: { client: Client; actorId?: string }) {
       const before = { display_name: client.display_name };
       const { error } = await supabase.from('clients').update({ display_name: name.trim() }).eq('id', client.id);
       if (error) throw error;
-      await writeAudit({ actorId, clientId: client.id, clientKey: client.client_key, entityType: 'client', eventType: 'update', before, after: { display_name: name.trim() } });
+      await writeAudit({ actorId, clientId: client.id, clientKey: client.client_key, entityType: 'client', action: 'update', before, after: { display_name: name.trim() } });
       toast({ title: 'Saved', description: 'Display name updated.' });
       qc.invalidateQueries({ queryKey: ['impl-console', 'clients'] });
     } catch (e: any) {
@@ -234,7 +235,7 @@ function SenderIdentityTab({ client, actorId }: { client: Client; actorId?: stri
       };
       const { error } = await supabase.from('client_smtp_config').upsert(payload, { onConflict: 'client_id' });
       if (error) throw error;
-      await writeAudit({ actorId, clientId: client.id, clientKey: client.client_key, entityType: 'client_smtp', eventType: 'update', before: data ?? {}, after: payload });
+      await writeAudit({ actorId, clientId: client.id, clientKey: client.client_key, entityType: 'client_smtp', action: 'update', before: data ?? {}, after: payload });
       toast({ title: 'Saved', description: 'Sender identity updated.' });
       qc.invalidateQueries({ queryKey: ['impl-console', 'smtp', client.id] });
       setForm({});
@@ -305,7 +306,7 @@ function ChecklistTab({ client, actorId }: { client: Client; actorId?: string })
         .update({ done: next, done_by: next ? actorId : null, done_at: next ? new Date().toISOString() : null })
         .eq('id', row.id);
       if (error) throw error;
-      await writeAudit({ actorId, clientId: client.id, clientKey: client.client_key, entityType: 'client_setup_checklist', eventType: 'checklist_check', before: { item_key: row.item_key, done: row.done }, after: { item_key: row.item_key, done: next } });
+      await writeAudit({ actorId, clientId: client.id, clientKey: client.client_key, entityType: 'client_setup_checklist', action: 'checklist_check', before: { item_key: row.item_key, done: row.done }, after: { item_key: row.item_key, done: next } });
       qc.invalidateQueries({ queryKey: ['impl-console', 'checklist', client.id] });
     } catch (e: any) {
       toast({ title: 'Update failed', description: e.message, variant: 'destructive' });
