@@ -12,6 +12,7 @@ describe('BUG-001: Role coverage', () => {
     management: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200',
     hr_pms: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200',
     skip_level: 'bg-teal-100 text-teal-800 dark:bg-teal-900 dark:text-teal-200',
+    platform_owner: 'bg-primary/10 text-primary',
   };
 
   it('every canonical role has a color mapping', () => {
@@ -317,7 +318,10 @@ describe('BUG-024: KPI Journey export carries Assigned Workflow chain', () => {
   });
 
   it('handleExport injects an Assigned Workflow column from workflowChain', () => {
-    expect(pageSource).toMatch(/'Assigned Workflow':\s*r\.workflowChain/);
+    // Refactored to a field-registry switch: the export field key
+    // 'workflow_chain' maps to r.workflowChain (default_label "Assigned Workflow").
+    expect(pageSource).toMatch(/default_label:\s*'Assigned Workflow'/);
+    expect(pageSource).toMatch(/case\s+'workflow_chain':[\s\S]{0,80}r\.workflowChain/);
   });
 
   it('on-screen TableHeader does NOT include an Assigned Workflow column (export-only)', () => {
