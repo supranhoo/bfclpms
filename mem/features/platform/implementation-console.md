@@ -90,3 +90,10 @@ type: feature
 - **UI:** user-grouped table with client chips (inline × → confirm → `unassign_client`). Add dialog supports search-as-you-type by name/email/employee_code against active profiles only (min 2 chars, ilike OR across three columns). Existing implementers are flagged in the search results and disabled. Initial client assignment is a checkbox multi-select.
 - **Email masking**: every email rendered in this tab uses `ab***@domain` regardless of viewer role (consistent with Phase 3G; even `platform_owner` does not see the full email here — only audit detail can expose it via dedicated review tooling).
 - **Out of scope:** no PMS surface change; no new public-schema table; no migration; no change to `client_implementer_assignments` or `user_roles` RLS; no production email dispatch.
+
+## Session Reality Check (Phase 4G)
+- Route-scoped revalidation lives inside `ImplementationConsole` only — global `AuthContext` is untouched and PMS pages do not poll.
+- Cadence: every 3 minutes + on tab focus (`refetchOnWindowFocus: true`, `refetchIntervalInBackground: false`).
+- Role check: re-queries `user_roles` filtered to `platform_owner` / `implementation_admin`. A *successful* fetch returning zero rows triggers `navigate('/access-denied', { replace: true })`. Transient errors leave the data undefined and are ignored.
+- Assignment check: invalidates `['impl-console', 'clients', user.id]` on the same cadence; the existing RLS-bounded clients query re-fetches and the "No clients assigned" card surfaces automatically if the last assignment was revoked.
+- `platform_owner` always passes both checks and continues seeing all clients.
