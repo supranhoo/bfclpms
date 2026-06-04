@@ -1,110 +1,70 @@
+## Phase 3C.2 — Implementation Console: Secret Rotation + Test Email (completing 3C)
 
-## Phase 3C — Delegated Implementation Console (scoped client setup for implementation_admin)
-
-A Hub-level surface that lets an implementation/support team configure a small, well-defined set of **per-client** setup fields without granting `platform_owner`. Same backend tables as Platform Settings — no duplicate config storage. Existing PMS, RLS, entitlements, enforcement, menus, scoring and reports remain unchanged.
-
-Placement: ships after Client URL/Domain Binding + Communications foundation, before broad client rollout.
+Phase 3C shipped the foundation (role, tables, route, 3 working tabs + placeholders). This sub-phase closes the two remaining write paths that require server-side privilege so the Console becomes operationally complete, and wires the two tabs already stubbed in the UI (**Sender Identity → Replace secret** modal, **Test Email** tab). No changes to Platform Settings, PMS, scoring, RLS on other tables, menus, or reports.
 
 ### Assumptions
-- New role added to `public.app_role` enum: `implementation_admin`. Distinct from `platform_owner`; no role inherits the other.
-- Assignment is **per-client** (one user can be assigned to N clients). Lives in a new join table; never carried on `profiles`.
-- Console is read-only for any client the user is not assigned to (no leaks).
-- SMTP/API secrets are write-only — never returned from any RPC or table read; UI only shows `••••••• (set)` or `Not set`.
-- Test email is rate-limited per user × client (server-side counter, e.g. 10 / hour).
-- All mutating actions audit-log with `event_type ∈ {update, secret_rotate, test_email_send, checklist_check}`, `actor_id`, `entity_type='client'|'client_smtp'|...`, `entity_key=client_key`, `before`/`after` JSON, `reason='impl_console_*'`. Secret values are NEVER stored in the audit `before`/`after`; we record only `{rotated_at, fingerprint_prefix}`.
+- Vault is available in the project (Supabase Vault). Secret bytes are written via edge function with `service_role`; the table only stores `secret_ref`, `secret_set_at`, `secret_fingerprint`.
+- `client_smtp_config` row already exists for the client before secret rotation (created by the Sender Identity tab in 3C).
+- Test email uses the client's stored sender identity. If `provider='lovable'` we route through Resend (existing `LOVABLE_API_KEY` infra used elsewhere in the project). For SMTP/Resend/SendGrid providers we use the secret rotated for this client.
+- Rate limit: 10 test emails per hour per `(actor_id, client_id)` — enforced server-side via a tiny `rate_buckets`-style row keyed by hour. Implemented as a new lightweight table `impl_console_rate_buckets` (no PII; auto-pruned by a simple `WHERE bucket_hour < now() - interval '24h'` on each call).
+- Both functions reject calls where the caller is neither `platform_owner` nor present in `client_implementer_assignments` for the target `client_id` (defense-in-depth in addition to RLS).
 
 ### Risk & Impact
-- **Data**: 3 new additive tables (`client_implementer_assignments`, `client_setup_checklist`, `client_smtp_config`). One enum value added (`implementation_admin`). No FK to existing PMS / safety / incentive tables; entitlement/governance tables untouched.
-- **Workflow / scoring / menus / reports / RLS / backup**: zero impact (additive; backup auto-included).
-- **Security**: write-only secrets via edge function with `service_role`; client read-side `select` excludes secret columns via column grants. RLS scopes every list/read to `client_implementer_assignments`.
-- **Regression**: negligible — isolated `/implementation-console` route, no edits to Platform Settings tabs except a new "Implementers" sub-tab in Clients.
-- **Scalability**: O(assignments) lists; ≤ a few hundred rows. Pagination on delivery logs (server-side, page size 50).
-- **Rollback**: drop new tables + role grant; remove route. No backfill needed.
+- **Data**: 1 new tiny table `impl_console_rate_buckets`. Additive only; no FK to PMS/safety/incentive. No schema change to `client_smtp_config` (columns already exist from 3C).
+- **Workflow / scoring / menus / reports / RLS on existing tables / backup**: zero impact. New table auto-included in backup engine (per the universal `get_backup_table_order()` RPC rule).
+- **Security**: secret bytes only ever pass through one edge function and into Vault; never written to DB columns, never returned by any RPC/select, never echoed in audit `before`/`after`. UI shows only `Last rotated <relative>` and `••••<4-char fingerprint>`.
+- **Regression**: isolated. Only files touched outside new code are the two Console sub-tab components (`SenderIdentityTab` to mount the rotate modal, `TestEmailTab` to call the new function). No edits to Platform Settings tabs.
+- **Scalability**: O(1) per call; rate-bucket table stays under ~24 rows per active implementer.
+- **Rollback**: disable the two edge functions, drop `impl_console_rate_buckets`. Stored sender-identity metadata remains usable for future re-enable.
 
-### New role + assignment
-- Migration adds `implementation_admin` to `public.app_role` enum.
-- New table `public.client_implementer_assignments`:
-  - `id uuid pk`, `client_id uuid not null references clients(id) on delete cascade`, `user_id uuid not null references auth.users(id) on delete cascade`, `assigned_by uuid`, `created_at timestamptz default now()`. UNIQUE `(client_id, user_id)`. Index `(user_id)`.
-  - GRANT `SELECT` to `authenticated`, `ALL` to `service_role`. RLS: read = `is_platform_owner() OR user_id = auth.uid()`; write = `platform_owner` only.
-- SECURITY DEFINER helpers (search_path=public, stable):
-  - `is_implementation_admin_for(_client_id uuid) returns boolean` — `exists (assignment for auth.uid())`.
-  - `current_user_assigned_clients() returns setof uuid` — used by RLS on all console-scoped queries.
+### What gets built
 
-### New / reused config tables
-- **Reused (no schema change)**:
-  - `public.clients` — Console can edit `name` only (never `client_key`, `deployment_mode`, `is_active`, `signature_hash`, `entitlement_source/version/valid_from/valid_until`).
-  - URL/domain table from the Client URL/Domain phase (assumed `client_urls`); Console edits `website_url`, `allowed_app_urls[]`, `support_email`, `hr_email`, `escalation_email`.
-  - Notification templates from the Communications phase (assumed `notification_templates`) — scoped by `client_id`.
-  - `entitlement_audit` — single audit sink for every Console action.
-- **New `public.client_smtp_config`** (per-client sender + secret indirection):
-  - `client_id uuid pk references clients(id) on delete cascade`
-  - `from_name text`, `from_email text`, `reply_to text`
-  - `provider text check (provider in ('smtp','resend','sendgrid','lovable'))`
-  - `smtp_host text`, `smtp_port int`, `smtp_username text`
-  - `secret_ref text` — opaque pointer (e.g. vault key id), never the secret itself
-  - `secret_set_at timestamptz`, `secret_fingerprint text` (first 4 chars of sha256, display-only)
-  - `updated_by`, `updated_at`
-  - GRANT `SELECT (client_id, from_name, from_email, reply_to, provider, smtp_host, smtp_port, smtp_username, secret_ref, secret_set_at, secret_fingerprint, updated_by, updated_at) ON public.client_smtp_config TO authenticated` — explicit column allowlist so future secret columns can never leak. `ALL` to `service_role`.
-  - RLS: read/write = `is_platform_owner() OR is_implementation_admin_for(client_id)`.
-  - Secret bytes are stored ONLY in Supabase Vault; the table holds the vault ref. The Console UI never displays the secret; "Replace secret" calls an edge function that writes Vault and updates `secret_set_at` + `secret_fingerprint`.
-- **New `public.client_setup_checklist`**:
-  - `id uuid pk`, `client_id uuid not null references clients(id) on delete cascade`, `item_key text not null`, `item_label text not null`, `done boolean default false`, `done_by uuid`, `done_at timestamptz`, `notes text`, `sort_order int default 0`. UNIQUE `(client_id, item_key)`. Idempotent seed of ~12 default items (display name, URLs, support emails, sender identity, SMTP secret, test email passed, first notification template, …).
-  - GRANT `SELECT, UPDATE` to `authenticated`, `ALL` to `service_role`. RLS: read/write = `is_platform_owner() OR is_implementation_admin_for(client_id)`.
+1. **Migration**
+   - `CREATE TABLE public.impl_console_rate_buckets (id uuid pk, actor_id uuid not null, client_id uuid not null references clients(id) on delete cascade, action text not null check (action in ('test_email_send')), bucket_hour timestamptz not null, count int not null default 0, UNIQUE (actor_id, client_id, action, bucket_hour))`.
+   - GRANT `SELECT` to `authenticated`, `ALL` to `service_role`. RLS: `SELECT` allowed when `actor_id = auth.uid()` (so the UI can show "X/10 used this hour"); INSERT/UPDATE blocked from client — only `service_role` writes from the edge function.
 
-### Edge functions (verify_jwt; service_role inside)
-1. `impl-console-rotate-smtp-secret` — body: `{client_id, secret}`. Validates assignment, writes Vault, updates `client_smtp_config.secret_set_at/fingerprint/secret_ref`, inserts audit row with `event_type='secret_rotate'` and **no secret value**.
-2. `impl-console-send-test-email` — body: `{client_id, to_email, template_key?}`. Validates assignment, enforces 10-per-hour rate limit (per `actor_id + client_id` via a small `rate_buckets` row keyed by hour), uses the client's sender identity + SMTP, writes audit row with `event_type='test_email_send'`, `after={to_email, template_key, success}`.
+2. **Edge function `impl-console-rotate-smtp-secret`**
+   - `verify_jwt = true`. Body schema (zod): `{ client_id: uuid, secret: string (min 8, max 2048) }`.
+   - Validates caller is `platform_owner` OR has `client_implementer_assignments` row for `client_id`.
+   - Computes `sha256(secret)`, stores first 4 hex chars as `secret_fingerprint`. Writes secret bytes to Vault under a deterministic key `client_smtp::<client_id>` (overwrites previous).
+   - Updates `client_smtp_config` row: `secret_ref`, `secret_set_at=now()`, `secret_fingerprint`, `updated_by=auth.uid()`, `updated_at=now()`.
+   - Audit insert: `event_type='update'`, `entity_type='client_smtp'`, `entity_key=clients.client_key`, `before={secret_set_at: old}`, `after={secret_set_at: new, fingerprint}`, `reason='impl_console_secret_rotate_client_smtp'`. **Secret value never appears.**
+   - Returns `{ ok: true, secret_set_at, secret_fingerprint }`. Never returns the secret.
 
-### Routes + UI
-- New route `/implementation-console` gated by new `<ImplementationConsoleRoute>` (allow `platform_owner` OR any user with ≥1 row in `client_implementer_assignments`). Hidden from main menu for everyone else.
-- Page layout: left-side **client picker** (only assigned clients; platform_owner sees all). Right-side tab strip:
-  1. **Assigned Clients** (overview list — read-only chips)
-  2. **Client Profile** — edit `name` only (display banner if `platform_owner` locked it). `client_key`, mode, active all disabled with tooltip.
-  3. **URLs & Domains** — edit `website_url`, `allowed_app_urls[]` (chip input, validated http(s) URLs, dedup).
-  4. **Communications Setup** — `support_email`, `hr_email`, `escalation_email` (RFC 5322 validation).
-  5. **Sender Identities** — `from_name`, `from_email`, `reply_to`, `provider` select, host/port/username for SMTP. Save → `client_smtp_config` upsert.
-  6. **Test Email** — to-address input + "Send test" button. Disabled until sender identity + secret set. Shows last 5 test results from delivery logs scoped to client.
-  7. **Notification Templates** — per-client templates list with inline edit (subject + body), scoped to assigned client.
-  8. **Setup Checklist** — checkbox list with optional note per item; each toggle writes `checklist_check` audit.
-  9. **Limited Delivery Logs** — paginated email delivery rows filtered to `client_id`. Hides recipient PII for non-platform_owner (shows local part + masked domain unless the row's recipient matches the assignee's email).
-- "Replace SMTP secret" lives in tab 5: button → modal with single password-style input + confirm typed `ROTATE`. On submit calls `impl-console-rotate-smtp-secret`. Existing value never rendered; UI shows `Last rotated <relative>` + `fingerprint ••••<4 chars>`.
+3. **Edge function `impl-console-send-test-email`**
+   - `verify_jwt = true`. Body schema (zod): `{ client_id: uuid, to_email: email, template_key?: string }`.
+   - Same caller assignment check.
+   - Rate-limit: upsert into `impl_console_rate_buckets` for `(auth.uid(), client_id, 'test_email_send', date_trunc('hour', now()))`; if `count >= 10` return `429 { error: 'rate_limited', retry_after_seconds }`.
+   - Loads `client_smtp_config` for the client. If `from_email`/`provider` missing → `400 { error: 'sender_identity_incomplete' }`.
+   - Sends via the configured provider (Resend for `lovable`/`resend`, SMTP for `smtp`, SendGrid for `sendgrid`). Subject: `"PMS test email — <client.name>"`. Body: plain template stating who triggered the test, timestamp, and client_key.
+   - Increment rate-bucket count after dispatch.
+   - Audit insert: `event_type='update'`, `entity_type='client_smtp'`, `entity_key=client_key`, `after={ to_email_local: '<local-part>', to_email_domain: '<masked>', template_key, success, provider }`, `reason='impl_console_test_email_send_client_smtp'`. Recipient PII is masked (local part + first letter of domain).
+   - Returns `{ ok: true, message_id?, used: count, limit: 10 }`.
 
-### Platform Settings additions (platform_owner only)
-- New sub-tab inside the existing **Clients** tab: **Implementers**. Lists `client_implementer_assignments` joined with `auth.users` email. Actions: **Assign user** (email lookup → insert row) and **Revoke** (delete row). Both audit-logged (`event_type='update'`, `entity_type='client_implementer_assignment'`).
+4. **UI wiring (Console only)**
+   - **SenderIdentityTab**: add **Replace secret** button (visible only when row exists). Opens modal with one password-style input + a required typed confirmation `ROTATE`. On submit invokes `impl-console-rotate-smtp-secret`. On success refreshes the row and shows `Last rotated <relative>` + `Fingerprint ••••<4>`. Existing field shows `Not set` when `secret_set_at IS NULL`.
+   - **TestEmailTab** (currently placeholder): renders a `to_email` input, optional template_key select (read from existing per-client notification templates if any; otherwise plain text test), a **Send test** button (disabled until sender identity + secret set), and a small "Used X/10 this hour" badge backed by a `SELECT count` from `impl_console_rate_buckets` filtered by `actor_id = auth.uid()` and the current hour. Shows the last 5 test results from `entitlement_audit` filtered to `entity_type='client_smtp' AND reason='impl_console_test_email_send_client_smtp' AND entity_key=<client_key>`.
+   - **Checklist auto-tick**: when rotate succeeds → mark `smtp_secret` item done; when test email succeeds → mark `test_email` item done. Same audit reason as manual ticks (`impl_console_checklist_check_*`).
 
-### Audit (one sink, no new audit table)
-Every mutation writes to `entitlement_audit`:
-- `event_type ∈ ('update','secret_rotate','test_email_send','checklist_check')`
-- `entity_type ∈ ('client','client_url','client_smtp','client_notification_template','client_implementer_assignment','client_setup_checklist')`
-- `entity_key = clients.client_key` (so existing audit dashboards aggregate by client without joins)
-- `before` / `after` JSON snapshots, with secret bytes scrubbed. `reason` prefixed `impl_console_*`.
+5. **Docs**
+   - Append to `CHANGELOG_2026.md`.
+   - Update `mem/features/platform/implementation-console.md` (replace the "planned next phase" sentence in the SMTP rule with the actual edge function behavior + rate-limit policy).
 
-### Out of scope
-- No PMS / safety / incentive / reports / scoring / menu / RLS changes.
-- No new enforcement (Phase 3 enforcement pilot stays as-is).
-- No backend role for "view secrets" — secrets are write-only forever via this console; viewing requires direct DB/vault access by an SRE.
-- No bulk client import in this phase.
-- No public marketing / DSAR workflow.
-
-### Files
-- **New migration** — `app_role` enum + 3 tables + grants + RLS + helpers + seed for `client_setup_checklist`.
-- **New edge functions** — `supabase/functions/impl-console-rotate-smtp-secret/index.ts`, `supabase/functions/impl-console-send-test-email/index.ts` (+ deploy).
-- **New route + page** — `src/pages/implementation-console/ImplementationConsole.tsx` and 9 sub-tab components under `src/components/implementation-console/`.
-- **New guards / hooks** — `src/components/layout/ImplementationConsoleRoute.tsx`, `src/hooks/useAssignedClients.ts`, `src/hooks/useIsImplementationAdmin.ts`.
-- **Platform Settings tweak** — add `ImplementersSubTab.tsx` inside Clients tab. No changes to other tabs.
-- **Docs** — `CHANGELOG_2026.md` entry, new `mem/features/platform/implementation-console.md`, `.lovable/plan.md` (this plan).
+### Files (planned, not yet touched)
+- **Migration**: `supabase/migrations/<ts>_impl_console_rate_buckets.sql`
+- **Edge functions**: `supabase/functions/impl-console-rotate-smtp-secret/index.ts`, `supabase/functions/impl-console-send-test-email/index.ts`
+- **UI**: `src/pages/platform/ImplementationConsole.tsx` (mount rotate modal in Sender Identity tab; replace Test Email placeholder with real component) — or split into `src/components/platform/impl-console/SenderIdentityTab.tsx` + `TestEmailTab.tsx` if the page file is getting long.
+- **Docs**: `CHANGELOG_2026.md`, `mem/features/platform/implementation-console.md`.
 
 ### Verification
-- `platformFoundation` smoke 12/12 still pass.
-- New unit tests: helper RLS predicates (`is_implementation_admin_for`), URL validator, rate-limit bucket, secret-scrub on audit insert.
 - Manual matrix:
-  - platform_owner can assign + revoke an `implementation_admin`; audit rows recorded.
-  - `implementation_admin` user sees only assigned clients; deep-link to unassigned `?client_id=` returns 403 from the loader.
-  - All 9 tabs editable for assigned clients; disabled fields (`client_key`, mode, active, entitlements) show tooltip.
-  - Rotate SMTP secret → value never appears in DB, audit, or UI; `Last rotated` updates.
-  - Send test email respects 10/hour cap; 11th call returns rate-limit error.
-  - Non-assigned `implementation_admin` cannot read `client_smtp_config`, `client_setup_checklist`, delivery logs, or notification templates for other clients (RLS enforced; verified by negative-path tests).
-  - `/platform-settings` remains 403 for `implementation_admin`.
-  - No diff in PMS workflow, scoring, menus, reports, or any non-Console route.
+  - `implementation_admin` for client A can rotate secret for A; rotating for unassigned client B returns 403.
+  - Secret value never appears in DB, audit, network response, or UI; `Last rotated` and fingerprint update.
+  - 11th test email within an hour returns 429; counter resets next hour.
+  - Sender-identity-incomplete returns 400 with clear message.
+  - `platform_owner` can rotate/test for any client.
+  - Checklist auto-ticks `smtp_secret` and `test_email`; both produce an audit row each.
+  - `/platform-settings` still 403 for `implementation_admin`.
+  - `platformFoundation` smoke 12/12 still pass; no PMS/scoring/menu/report regression.
 
-Ready to implement on approval. Say "next" to ship Phase 3C.
+Ready to implement on approval. Say "next" to ship Phase 3C.2.
