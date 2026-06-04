@@ -573,6 +573,27 @@ function AddImplementerDialog({
   );
 }
 
+/**
+ * Phase 4F — Public wrapper. Renders the existing management UI plus a new
+ * read-only Audit log sub-tab. Parent (`PlatformSettings`) is unchanged.
+ */
+export function ImplementersTab() {
+  return (
+    <Tabs defaultValue="manage" className="w-full">
+      <TabsList>
+        <TabsTrigger value="manage">Manage</TabsTrigger>
+        <TabsTrigger value="audit">Audit log</TabsTrigger>
+      </TabsList>
+      <TabsContent value="manage" className="pt-4">
+        <ImplementersManageTab />
+      </TabsContent>
+      <TabsContent value="audit" className="pt-4">
+        <ImplementersAuditTab />
+      </TabsContent>
+    </Tabs>
+  );
+}
+
 // =====================================================================
 // Manage clients dialog — add additional clients to an existing implementer
 // =====================================================================
