@@ -1185,6 +1185,71 @@ export type Database = {
           },
         ]
       }
+      client_urls: {
+        Row: {
+          archived_at: string | null
+          archived_by: string | null
+          client_id: string
+          created_at: string
+          created_by: string | null
+          id: string
+          is_active: boolean
+          is_primary: boolean
+          label: string | null
+          notes: string | null
+          updated_at: string
+          updated_by: string | null
+          url: string
+          verified: boolean
+          verified_at: string | null
+          verified_by: string | null
+        }
+        Insert: {
+          archived_at?: string | null
+          archived_by?: string | null
+          client_id: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          is_active?: boolean
+          is_primary?: boolean
+          label?: string | null
+          notes?: string | null
+          updated_at?: string
+          updated_by?: string | null
+          url: string
+          verified?: boolean
+          verified_at?: string | null
+          verified_by?: string | null
+        }
+        Update: {
+          archived_at?: string | null
+          archived_by?: string | null
+          client_id?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          is_active?: boolean
+          is_primary?: boolean
+          label?: string | null
+          notes?: string | null
+          updated_at?: string
+          updated_by?: string | null
+          url?: string
+          verified?: boolean
+          verified_at?: string | null
+          verified_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_urls_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       clients: {
         Row: {
           client_key: string
@@ -11654,6 +11719,60 @@ export type Database = {
         Returns: undefined
       }
       iac_sweep_expired: { Args: never; Returns: number }
+      impl_console_archive_url: {
+        Args: { _url_id: string }
+        Returns: {
+          archived_at: string | null
+          archived_by: string | null
+          client_id: string
+          created_at: string
+          created_by: string | null
+          id: string
+          is_active: boolean
+          is_primary: boolean
+          label: string | null
+          notes: string | null
+          updated_at: string
+          updated_by: string | null
+          url: string
+          verified: boolean
+          verified_at: string | null
+          verified_by: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "client_urls"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      impl_console_set_primary_url: {
+        Args: { _url_id: string }
+        Returns: {
+          archived_at: string | null
+          archived_by: string | null
+          client_id: string
+          created_at: string
+          created_by: string | null
+          id: string
+          is_active: boolean
+          is_primary: boolean
+          label: string | null
+          notes: string | null
+          updated_at: string
+          updated_by: string | null
+          url: string
+          verified: boolean
+          verified_at: string | null
+          verified_by: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "client_urls"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       impl_console_try_increment_rate: {
         Args: {
           _action: string
