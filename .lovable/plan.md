@@ -1,125 +1,100 @@
-# Safety Phase 8 — Final Stabilization & Regression Protection (revised)
 
-## Pre-flight gate (already validated this turn)
-- `bunx vitest run src/test/menu src/test/menu-setting-capa.test.ts` → **24/24 green**.
-- I1 admin sidebar non-empty ✓ · I2 auditor no-crash ✓ · I3 flag-off short-circuit ✓ · I4 access fail-open ✓.
-- Gate passes. The same suite will be re-run as the **final gate** at the end of the phase (see Step 6).
+# Restore Clean Test Baseline — 13 pre-existing failures
 
-## Scope (authoritative: `docs/safety-integration-governance.md` §Phase 8)
-Phase 8 is **docs + tests + stabilization only**. No new runtime route, no new RPC, no new edge fn, no MV change, no behavior change in any Safety module.
+## 0. Pre-flight gate — Menu CAPA must be green
 
-The roadmap's deferred items are preserved, not silently dropped:
-- **Included now:** regression checklist, release-readiness document, read-only SSOT tests, dead-column cleanup (conditional on pre-flight), docs/memory/changelog updates.
-- **Deferred, explicitly tracked (not removed):** `/safety/settings/release-readiness` **runtime page** is recorded as an **optional, flag-gated subtask** in the release-readiness doc and in `mem/features/safety/phase8-stabilization.md`. It will be proposed as a separate approval before any runtime work.
-
-## Assumptions
-- Phases 2–7 complete (125/125 Safety SSOT tests per roadmap version history).
-- Safety remains gated by `useModules` Module-Hub kill switch; Phase 8 does not change that.
-- `menu_overrides_enabled` stays `false` in production.
-- No PMS workflow / scoring / RLS / enforcement change.
-- No Menu Setting / Custom Tabs change.
-
-## Risk & Impact Report
-| Dimension | Impact |
-|---|---|
-| Data | One **destructive cleanup** migration: `ALTER TABLE public.safety_settings DROP COLUMN ui_incident_v2, DROP COLUMN incident_stage_copy`. Both columns are verified-dead per `mem/features/safety/incident-ux-v2.md` (added 2026-05-30, NULL on every row, read by no code). Drop is gated by a pre-flight assertion that aborts the transaction if any non-NULL value exists, and by a code grep confirming no reader references. Backup coverage automatic via `get_backup_table_order()`. |
-| Workflow | None. |
-| UI/UX | **None.** No new route, no menu link, no flag flip. The deferred release-readiness page is documented as an optional follow-up subtask only. |
-| Regression | Low. Tests are additive, read-only. Migration touches verified-dead columns. Menu CAPA suite gates the change. |
-| Scalability | None. |
-| Mitigation | Pre-flight NULL assertion + reader grep + pre-prepared inverse migration (re-add nullable columns). Phase aborts if Menu CAPA or any existing Safety/PMS test regresses. |
-
-## Deliverables (approved core only)
-
-### 1. Phase 8 regression checklist — `docs/safety/phase8-regression-checklist.md`
-- Phase 2–7 happy-path walkthroughs: incident create→close, PTW issue→close, training assign→pass→overdue sweep, audit cycle, calibration alert, emergency drill ack/stand-down, analytics MV refresh + TRIR reconciliation.
-- RLS smoke per role (admin, safety_head, safety_officer, worker, auditor).
-- Module Hub disable → Safety disappears within one realtime tick.
-- Rollback drill: revert the dead-column migration on a non-prod copy.
-
-### 2. Phase 8 release readiness — `docs/safety/phase8-release-readiness.md`
-- Test counts (PMS, Safety, Menu CAPA, Phase 8 new).
-- MV refresh cadence + cron status.
-- Edge-fn auth posture summary (links to `docs/safety/phase1/edge-function-auth.md`).
-- Known deferrals (incl. release-readiness runtime page marked **Deferred — optional, requires separate approval**).
-- Sign-off table: EM / QA Lead / Release Manager (per §Manual Approval Gates).
-
-### 3. Read-only automated SSOT tests — `src/test/safety/phase8/`
-All tests mock supabase; **no DB writes, no runtime feature shipped**. Target ≥ 18 new tests.
-- `safety-module-gate.test.ts` — `useModules` Safety toggle hides Hub card.
-- `safety-rls-smoke.test.ts` — mocked role matrix per Safety table.
-- `analytics-mv-contract.test.ts` — row shape & non-null invariants for `mv_safety_trir`, `mv_incidents_open_vs_closed`, `mv_training_compliance`.
-- `safety-settings-rows-vs-columns.test.ts` — runtime reads `safety_settings` **rows** (key/value); guards that no code references the dropped columns.
-- `emergency-contacts-ssot.test.ts` — `useEmergencyContacts` reads `safety_emergency_contacts` only; no JSONB fallback.
-- `module-hub-realtime.test.ts` — kill-switch invalidation latency regression.
-
-### 4. Dead-column cleanup (destructive, gated) — single migration
-**Pre-flight (must all pass before the DROP is even submitted):**
-- `SELECT count(*) FROM public.safety_settings WHERE ui_incident_v2 IS NOT NULL OR incident_stage_copy IS NOT NULL` returns 0.
-- `rg -n "ui_incident_v2|incident_stage_copy" src supabase` shows only the row-keyed reads in `SafetyIncidentDetail.tsx` / `IncidentStageHeader.tsx` (rows, not columns) and the memory doc. No column references.
-
-**Migration body (single transaction):**
-```sql
-DO $$
-BEGIN
-  IF EXISTS (
-    SELECT 1 FROM public.safety_settings
-    WHERE ui_incident_v2 IS NOT NULL OR incident_stage_copy IS NOT NULL
-  ) THEN
-    RAISE EXCEPTION 'Phase 8 abort: non-NULL value found in dead columns';
-  END IF;
-END $$;
-ALTER TABLE public.safety_settings
-  DROP COLUMN IF EXISTS ui_incident_v2,
-  DROP COLUMN IF EXISTS incident_stage_copy;
+```
+bunx vitest run src/test/menu/
 ```
 
-**Rollback (pre-written, not applied):**
-```sql
-ALTER TABLE public.safety_settings
-  ADD COLUMN IF NOT EXISTS ui_incident_v2 boolean,
-  ADD COLUMN IF NOT EXISTS incident_stage_copy jsonb;
-```
+Required: 24/24 green (admin sidebar non-empty, auditor pages do not crash, baseline access available with `menu_overrides_enabled` true or false). If any invariant fails → STOP, fix CAPA first, do not start this work.
 
-If pre-flight fails for any reason → **STOP, escalate**, do not submit the migration. Mark the item as "still deferred" in the readiness doc; the rest of Phase 8 still ships.
+## 1. Failure inventory & category map
 
-### 5. Documentation / memory / changelog
-- `DOCUMENTATION.md` — Phase 8 section (links to the two new docs).
-- `POLICY.md` — new §Safety-Phase8 capturing low-risk scope + deferred runtime subtask.
-- `CHANGELOG_2026.md` — current-week row: tests added, migration id, deferred-subtask note.
-- `mem/features/safety/phase8-stabilization.md` (new) — invariants, deferred-subtask register, checklist link.
-- `mem/features/safety/incident-ux-v2.md` — mark schema debt resolved (only if Step 4 ran); otherwise note "still deferred".
-- `mem/index.md` — add the new memory line under Memories.
+| # | Test | Category | Root cause hypothesis | Disposition |
+|---|------|----------|----------------------|-------------|
+| 1 | `multimonthPercolateResolveCall.test.ts` — no migration references phantom `resolve_employee_workflow(` | A — stale migration scan | Test scans all historical migrations; 2 legacy files contain the phantom helper but have been superseded. Migrations are immutable per Migration Governance. | Narrow scan to latest `CREATE OR REPLACE` of the target function. |
+| 2 | same file — latest fix uses `get_employee_workflow_info` | A — stale filename heuristic | Filter regex `/percolate\|resolve_workflow\|workflow_call/i` no longer matches the most recent corrective migration filename. | Replace heuristic with latest-definition lookup. |
+| 3 | `orgKpiPropagateEnumGuard.test.ts` — no migration casts `::workflow_status` | A — stale migration scan | 1 legacy migration still contains the bad cast; superseded by canonical `review_status` cast. | Same latest-definition narrowing. |
+| 4 | `bulkManagementApproveEnumGuard.test.ts` — no `::workflow_stage` | A — stale migration scan | Same pattern. | Same. |
+| 5 | same file — no `'approved'::kpi_status` | A — stale migration scan | Same. | Same. |
+| 6 | `carriedScoreResolver.test.ts` — `returns none when N/A` | C — stale test | Resolver returns `source: 'na'` per N/A Status Governance. | Update expectation to `'na'`. |
+| 7 | same file — `N/A short-circuits inputs entirely` | C — stale test | Same. | Update expectation to `'na'`. |
+| 8 | `bugBountyFixes.test.ts` — BUG-001 every canonical role has a color | D — real gap | `platform_owner` role exists in `ALL_APP_ROLES` but missing from color map. | Add color mapping using existing tokens. |
+| 9 | same file — BUG-024 export injects Assigned Workflow column | E — stale literal regex | Refactor changed the literal shape; need to read current `handleExport`. | If column still present → relax regex to assert key + source path. If column missing → surgical restore. |
+| 10 | `safetyShellIsolation.test.tsx` — SafetyHome renders without throwing | F — test harness | `SafetyHome` transitively calls `useAuth` via `useSafetyRealtimeSync`; test renders without `<AuthProvider>`. | Wrap render in minimal `AuthProvider` or `vi.mock('@/contexts/AuthContext')`. |
+| 11 | `kpiCellDetailContract.test.ts` — preserves `kra_categories` join | **B — treat as defect** | Latest `kpi_cell_detail` body lost `kra_categories` JOIN + select. | Investigate DOCUMENTATION/POLICY/ADR. If intentional → proven stale, update test. Otherwise → surgical corrective migration restoring only the join + select. |
+| 12 | `ensureOrgKpiScopeRows.contract.test.ts` — GRANT EXECUTE to authenticated | **B — treat as defect** | Latest definition migration may have dropped the GRANT. Per public-schema-grants policy this breaks runtime callers. | Confirm in latest body; if missing → surgical corrective migration that only adds the GRANT. |
+| 13 | `bulkWriteStageScoresContract.test.ts` — merges shared evidence (`v_attach_count > 0`) | **B — treat as defect** | Latest body may have lost the evidence-merge guard. | Same defect-first stance; surgical corrective migration only on the missing branch. |
 
-### 6. Full test pass + final Menu CAPA re-validation
-`bunx vitest run` must be green, and `bunx vitest run src/test/menu src/test/menu-setting-capa.test.ts` must remain **24/24** before closing the phase.
+## 2. Category disposition rules
 
-## Explicitly **not** in this pass
-- `/safety/settings/release-readiness` runtime page — **deferred, optional, requires separate approval**. Tracked in the readiness doc + memory; not silently dropped.
-- Menu Setting / Custom Tabs changes — none.
-- Re-enable `menu_overrides_enabled` — no.
-- PMS workflow / scoring / RLS / enforcement changes — none.
-- Any new Safety RPC / edge fn / MV / route — none.
-- Changes to `useMenuAccess` resolution order — none.
+- **A (stale migration scan, items 1–5):** test-only edit. Replace "scan every migration" with "find latest `CREATE OR REPLACE FUNCTION public.<target>` and apply the forbidden-pattern check to that body only". No migration files touched. This matches Migration Governance (history is immutable; only the resolved latest definition is the contract).
+- **C (stale test, items 6–7):** test-only edit. `'na'` is the documented governance value. Update expected literals; do not touch resolver code.
+- **D (real gap, item 8):** add `platform_owner` to the role-color map using existing semantic tokens. No new tokens. No layout change.
+- **E (stale regex, item 9):** read current `handleExport`. If the Assigned Workflow column is still injected, relax the regex; otherwise treat as defect with a one-line surgical restore.
+- **F (harness, item 10):** test-only wrapper.
+- **B (items 11–13) — treat as real defects until proven stale.** For each:
+  1. Read the latest migration body defining the target function.
+  2. Search ADR/DOCUMENTATION/POLICY/CHANGELOG for an explicit intentional contract change.
+  3. If found → mark test as stale; update test + add a one-line CHANGELOG entry noting the contract change is acknowledged.
+  4. If not found → write a surgical corrective migration that restores only the missing clause (JOIN + select / GRANT / evidence-merge guard). Each such migration is classified as a **runtime-affecting corrective fix**, with before/after evidence (latest body excerpt vs. corrective excerpt) recorded in the close-out summary.
+  5. If evidence is unclear in one read → **DEFER** that item with a note under `docs/test-baseline/`; do not guess. The other items still ship.
 
-## Step → Verification
-| # | Step | Verification |
-|---|---|---|
-| 1 | Re-run Menu CAPA + existing Safety baseline | Capture pre-counts; must be green |
-| 2 | Add `src/test/safety/phase8/` (6 files, ≥18 tests) | `bunx vitest run src/test/safety/phase8` green |
-| 3 | Run pre-flight (NULL SELECT + reader grep) | Both clean ⇒ proceed to Step 4; either dirty ⇒ skip Step 4, mark deferred |
-| 4 | Submit destructive cleanup migration (conditional) | Pre-flight assertion passes; migration applies; full Safety suite still green |
-| 5 | Write checklist + readiness docs | Files exist; cross-refs resolve |
-| 6 | Update DOCUMENTATION.md / POLICY.md / CHANGELOG_2026.md / memory | All updated in one commit window |
-| 7 | Final full repo test pass + Menu CAPA re-validation | `bunx vitest run` green; menu suite 24/24 |
+## 3. Execution order
 
-## Decision gates
-- Menu CAPA fails at start or end → STOP, fix CAPA, do not close Phase 8.
-- Pre-flight finds non-NULL data or a column reader → STOP the migration only; the rest of Phase 8 still ships; debt stays recorded as deferred.
-- Any existing Safety/PMS test regresses → STOP, surgical fix in failing path only.
-- All gates green + sign-off table filled → Phase 8 closed.
+1. Run Menu CAPA suite → gate.
+2. Snapshot baseline: `bunx vitest run` → confirm 13 failing.
+3. C → D → F → A (all test-only, lowest risk).
+4. E (read code, then minimal change).
+5. B items, one at a time, with per-item RCA write-up.
+6. Targeted re-run after each group.
+7. Full `bunx vitest run` → target 0 failing (or N→0 with only documented deferrals).
+8. Re-run Menu CAPA → must still be 24/24.
 
-## Rollback
-- Tests: delete `src/test/safety/phase8/`.
-- Migration: apply the pre-written inverse (re-add nullable columns).
-- Docs/memory: revert the edits.
+## 4. Decision gates (STOP conditions)
+
+- Menu CAPA fails before or after → STOP.
+- Any required fix would touch PMS workflow/scoring/RLS/enforcement beyond the surgical Category-B corrective scope → STOP and defer.
+- Any required fix would touch Menu Setting / Custom Tabs, re-enable `menu_overrides_enabled`, add a runtime route/RPC/edge function/MV, or change roadmap behavior → STOP and defer.
+- Category B evidence is ambiguous after one focused read → DEFER, do not guess.
+
+## 5. Risk & Impact
+
+- **Data impact:** none for A/C/D/E/F. Category B corrective migrations are additive in shape but classified as runtime-affecting; each restores a documented prior contract clause and is reversible (drop new migration body / re-deploy prior body).
+- **Workflow impact:** none. Category B fixes restore prior behavior, they do not change workflow semantics.
+- **UI impact:** BUG-001 affects role badge color for `platform_owner` only; uses existing tokens.
+- **Regression risk:** low — all test edits narrow scope or wrap harnesses; any Category B migration restores a documented prior clause and ships with a passing contract test plus before/after evidence.
+- **Scalability:** unchanged.
+
+## 6. Out of scope (explicit)
+
+- No PMS workflow/scoring/RLS/enforcement changes beyond the Category-B surgical corrective scope.
+- No Menu Setting / Custom Tabs changes.
+- No re-enable of `menu_overrides_enabled` in production.
+- No new runtime routes, RPCs, edge functions, MVs, or roadmap features.
+- No production experiments (any controlled isolation belongs in a non-prod copy).
+- Deferred dead-column cleanup on `safety_settings` and deferred `/safety/settings/release-readiness` page remain logged in `docs/safety/phase8-release-readiness.md` — NOT silently dropped, NOT silently shipped.
+
+## 7. Deliverables
+
+1. **Close-out summary table:** failure → category → root cause → fix or defer → test command + result.
+2. **13 → 0 failing tests**, or N→0 with explicitly documented deferrals under `docs/test-baseline/`.
+3. **Menu CAPA suite green** at pre-flight and final gate (logged in summary).
+4. **Full repo result:** `bunx vitest run` output count.
+5. **Before/after evidence** for every Category B fix (latest body excerpt + corrective excerpt + new test pass).
+6. **Documentation updates** only where appropriate:
+   - `CHANGELOG_2026.md`: one entry "Test baseline restoration — X resolved, Y deferred; no PMS behavior change beyond restoring [contract clause]" (only if Category B corrective migration ships).
+   - `DOCUMENTATION.md` / ADR: only if a Category B item is reclassified as intentional contract change.
+   - `POLICY.md`: add §Test-Baseline noting "migration-scan tests must use latest-definition semantics".
+   - `mem/infrastructure/test-baseline-restoration.md` (new) + `mem://index.md` entry.
+7. **Confirmation statement** in close-out:
+   - No roadmap stage was skipped.
+   - Deferred dead-column cleanup and deferred release-readiness page remain tracked.
+   - `menu_overrides_enabled` not re-enabled.
+   - No Menu Setting / Custom Tabs changes.
+   - No new runtime features.
+
+## 8. Rollback
+
+Localized to `src/test/**`, `src/lib/**` (color map only), and at most three small additive corrective migrations (Category B). Each migration is independently revertible by a drop/restore migration. Failing baseline is the recoverable previous state.
