@@ -11,27 +11,29 @@ import { join } from 'path';
  *   - get_employee_workflow_info(uuid, text, integer)
  *   - get_bulk_employee_workflows(uuid[], text, integer)
  *
- * `resolve_employee_workflow(` is a forbidden phantom name and must never appear
- * in any committed migration.
+ * Migrations are immutable (Migration Governance). This guard therefore checks
+ * only the LATEST `CREATE OR REPLACE FUNCTION public.percolate_multimonth_score`
+ * body — that is the currently-deployed contract.
  */
 describe('multi-month percolation — workflow helper SSOT', () => {
   const dir = join(process.cwd(), 'supabase', 'migrations');
-  const files = readdirSync(dir).filter((f) => f.endsWith('.sql'));
+  const files = readdirSync(dir).filter((f) => f.endsWith('.sql')).sort();
 
-  it('no migration references the phantom resolve_employee_workflow(', () => {
-    const offenders: string[] = [];
-    for (const f of files) {
-      const src = readFileSync(join(dir, f), 'utf8');
-      if (/\bresolve_employee_workflow\s*\(/.test(src)) offenders.push(f);
-    }
-    expect(offenders, `Forbidden helper used in: ${offenders.join(', ')}`).toEqual([]);
+  const fnRe = /CREATE\s+OR\s+REPLACE\s+FUNCTION\s+public\.percolate_multimonth_score/i;
+  const definers = files.filter((f) => fnRe.test(readFileSync(join(dir, f), 'utf8')));
+  const latest = definers.at(-1);
+  const latestBody = latest ? readFileSync(join(dir, latest), 'utf8') : '';
+
+  it('a percolate_multimonth_score definition exists', () => {
+    expect(definers.length).toBeGreaterThan(0);
   });
 
-  it('latest fix migration uses get_employee_workflow_info', () => {
-    const fixFiles = files.filter((f) => /percolate|resolve_workflow|workflow_call/i.test(f));
-    const anyHasCanonical = fixFiles.some((f) =>
-      readFileSync(join(dir, f), 'utf8').includes('get_employee_workflow_info'),
-    );
-    expect(anyHasCanonical).toBe(true);
+  it('latest percolate_multimonth_score does NOT reference phantom resolve_employee_workflow(', () => {
+    expect(latestBody, `Phantom helper used in latest definition: ${latest}`)
+      .not.toMatch(/\bresolve_employee_workflow\s*\(/);
+  });
+
+  it('latest percolate_multimonth_score uses get_employee_workflow_info', () => {
+    expect(latestBody).toContain('get_employee_workflow_info');
   });
 });

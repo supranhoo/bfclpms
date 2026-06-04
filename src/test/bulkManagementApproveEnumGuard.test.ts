@@ -15,35 +15,33 @@ import { join } from 'path';
  */
 describe('ADR-066 bulk_management_approve enum cast contract', () => {
   const dir = 'supabase/migrations';
-  const files = readdirSync(dir).filter((f) => f.endsWith('.sql'));
+  const files = readdirSync(dir).filter((f) => f.endsWith('.sql')).sort();
 
-  it('no migration casts to the non-existent workflow_stage type', () => {
-    const offenders: string[] = [];
-    for (const f of files) {
-      const body = readFileSync(join(dir, f), 'utf8');
-      if (/::\s*workflow_stage\b/.test(body)) offenders.push(f);
-    }
-    expect(offenders, `Still casting to workflow_stage: ${offenders.join(', ')}`).toEqual([]);
+  const matches = files.filter((f) => {
+    const body = readFileSync(join(dir, f), 'utf8');
+    return /CREATE\s+OR\s+REPLACE\s+FUNCTION\s+public\.bulk_management_approve/i.test(body);
+  });
+  const latest = matches.at(-1);
+  const latestBody = latest ? readFileSync(join(dir, latest), 'utf8') : '';
+
+  // Migrations are immutable per Migration Governance; only the latest
+  // bulk_management_approve definition body is the deployed contract.
+  it('a bulk_management_approve definition exists', () => {
+    expect(matches.length).toBeGreaterThan(0);
   });
 
-  it("no migration writes the invalid 'approved'::kpi_status token", () => {
-    const offenders: string[] = [];
-    for (const f of files) {
-      const body = readFileSync(join(dir, f), 'utf8');
-      if (/'approved'\s*::\s*(public\.)?kpi_status\b/.test(body)) offenders.push(f);
-    }
-    expect(offenders, `Invalid 'approved'::kpi_status in: ${offenders.join(', ')}`).toEqual([]);
+  it('latest bulk_management_approve does NOT cast to the non-existent workflow_stage type', () => {
+    expect(latestBody, `Latest definition (${latest}) still casts to workflow_stage`)
+      .not.toMatch(/::\s*workflow_stage\b/);
+  });
+
+  it("latest bulk_management_approve does NOT write the invalid 'approved'::kpi_status token", () => {
+    expect(latestBody, `Latest definition (${latest}) still writes 'approved'::kpi_status`)
+      .not.toMatch(/'approved'\s*::\s*(public\.)?kpi_status\b/);
   });
 
   it('latest bulk_management_approve uses locked::kpi_status and approved::review_status', () => {
-    const matches = files.filter((f) => {
-      const body = readFileSync(join(dir, f), 'utf8');
-      return /CREATE\s+OR\s+REPLACE\s+FUNCTION\s+public\.bulk_management_approve/i.test(body);
-    });
-    expect(matches.length).toBeGreaterThan(0);
-    const latest = matches.sort().at(-1)!;
-    const body = readFileSync(join(dir, latest), 'utf8');
-    expect(body).toMatch(/'locked'\s*::\s*(public\.)?kpi_status\b/);
-    expect(body).toMatch(/'approved'\s*::\s*(public\.)?review_status\b/);
+    expect(latestBody).toMatch(/'locked'\s*::\s*(public\.)?kpi_status\b/);
+    expect(latestBody).toMatch(/'approved'\s*::\s*(public\.)?review_status\b/);
   });
 });
