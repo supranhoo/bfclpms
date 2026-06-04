@@ -65,7 +65,7 @@ serve(async (req) => {
       .eq("client_id", client_id).maybeSingle();
 
     const hash = await sha256Hex(secret);
-    const fingerprint = hash.slice(0, 4);
+    const fingerprint = hash.slice(0, 8);
     const secret_ref = `client_smtp::${client_id}`;
     const now = new Date().toISOString();
 
@@ -79,7 +79,7 @@ serve(async (req) => {
       { onConflict: "setting_key" },
     );
     if (secErr) {
-      console.error("secret store failed", secErr);
+      console.error("secret store failed");
       return json({ error: "secret_store_failed" }, 500);
     }
 
@@ -96,11 +96,11 @@ serve(async (req) => {
       { onConflict: "client_id" },
     );
     if (metaErr) {
-      console.error("smtp meta update failed", metaErr);
+      console.error("smtp meta update failed");
       return json({ error: "metadata_update_failed" }, 500);
     }
 
-    // Audit (no secret value)
+    // Audit (no secret value, no secret_ref)
     await svc.from("entitlement_audit").insert({
       actor_id: user.id,
       event_type: "update",
@@ -114,7 +114,7 @@ serve(async (req) => {
 
     return json({ ok: true, secret_set_at: now, secret_fingerprint: fingerprint });
   } catch (e: any) {
-    console.error("rotate error", e);
-    return json({ error: e?.message ?? "internal_error" }, 500);
+    console.error("rotate error", e?.name ?? "unknown");
+    return json({ error: "internal_error" }, 500);
   }
 });
