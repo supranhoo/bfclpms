@@ -996,6 +996,74 @@ export type Database = {
           },
         ]
       }
+      client_contacts: {
+        Row: {
+          archived_at: string | null
+          archived_by: string | null
+          client_id: string
+          created_at: string
+          created_by: string | null
+          display_name: string | null
+          email: string
+          id: string
+          is_active: boolean
+          is_primary_for_role: boolean
+          notes: string | null
+          role: string
+          updated_at: string
+          updated_by: string | null
+          verified: boolean
+          verified_at: string | null
+          verified_by: string | null
+        }
+        Insert: {
+          archived_at?: string | null
+          archived_by?: string | null
+          client_id: string
+          created_at?: string
+          created_by?: string | null
+          display_name?: string | null
+          email: string
+          id?: string
+          is_active?: boolean
+          is_primary_for_role?: boolean
+          notes?: string | null
+          role: string
+          updated_at?: string
+          updated_by?: string | null
+          verified?: boolean
+          verified_at?: string | null
+          verified_by?: string | null
+        }
+        Update: {
+          archived_at?: string | null
+          archived_by?: string | null
+          client_id?: string
+          created_at?: string
+          created_by?: string | null
+          display_name?: string | null
+          email?: string
+          id?: string
+          is_active?: boolean
+          is_primary_for_role?: boolean
+          notes?: string | null
+          role?: string
+          updated_at?: string
+          updated_by?: string | null
+          verified?: boolean
+          verified_at?: string | null
+          verified_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_contacts_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       client_implementer_assignments: {
         Row: {
           assigned_by: string | null
@@ -11719,6 +11787,34 @@ export type Database = {
         Returns: undefined
       }
       iac_sweep_expired: { Args: never; Returns: number }
+      impl_console_archive_contact: {
+        Args: { _contact_id: string }
+        Returns: {
+          archived_at: string | null
+          archived_by: string | null
+          client_id: string
+          created_at: string
+          created_by: string | null
+          display_name: string | null
+          email: string
+          id: string
+          is_active: boolean
+          is_primary_for_role: boolean
+          notes: string | null
+          role: string
+          updated_at: string
+          updated_by: string | null
+          verified: boolean
+          verified_at: string | null
+          verified_by: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "client_contacts"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       impl_console_archive_url: {
         Args: { _url_id: string }
         Returns: {
@@ -11742,6 +11838,34 @@ export type Database = {
         SetofOptions: {
           from: "*"
           to: "client_urls"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      impl_console_set_primary_contact: {
+        Args: { _contact_id: string }
+        Returns: {
+          archived_at: string | null
+          archived_by: string | null
+          client_id: string
+          created_at: string
+          created_by: string | null
+          display_name: string | null
+          email: string
+          id: string
+          is_active: boolean
+          is_primary_for_role: boolean
+          notes: string | null
+          role: string
+          updated_at: string
+          updated_by: string | null
+          verified: boolean
+          verified_at: string | null
+          verified_by: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "client_contacts"
           isOneToOne: true
           isSetofReturn: false
         }
