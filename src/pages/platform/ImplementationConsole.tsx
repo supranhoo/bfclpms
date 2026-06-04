@@ -273,7 +273,7 @@ function SenderIdentityTab({ client, actorId }: { client: Client; actorId?: stri
         <div className="font-medium mb-1">SMTP / API Secret</div>
         <div className="text-muted-foreground">
           {data?.secret_set_at ? (
-            <>Last rotated {formatDistanceToNow(new Date(data.secret_set_at))} ago · fingerprint ••••{data?.secret_fingerprint ?? '----'}</>
+            <>Last rotated {formatDistanceToNow(new Date(data.secret_set_at))} ago · fingerprint <span className="font-mono">{data?.secret_fingerprint ?? '--------'}</span></>
           ) : (
             <>Not set</>
           )}
