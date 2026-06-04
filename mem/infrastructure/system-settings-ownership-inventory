@@ -1,0 +1,257 @@
+---
+name: System Settings Ownership Inventory
+description: Complete audit of all system settings surfaces, storage tables, keys, role ownership, and RBAC enforcement across PMS, Safety, and Menu modules
+type: reference
+---
+
+# System Settings Ownership Inventory
+
+Last audited: 2026-06-04
+Scope: All settings/configuration surfaces in the PMS + Safety application
+
+---
+
+## 1. Storage Layer (Tables & Buckets)
+
+| Table / Store | Schema | Purpose | Row Count Expectation |
+|--------------|--------|---------|----------------------|
+| `system_settings` | `public` | Core PMS tunable parameters (KV store) | ~10–20 rows |
+| `app_settings` | `public` | Singleton org branding & policy config (1 row) | 1 row |
+| `safety_settings` | `public` | Safety module tunable variables (JSON KV store) | ~10–30 rows |
+| `menu_registry` | `public` | Canonical menu catalog (seed source) | ~60 rows |
+| `menu_overrides` | `public` | Active menu customizations (rename, reorder, reparent) | 0–N rows |
+| `menu_override_audit` | `public` | Immutable audit log of menu changes | Grows unbounded |
+| `kra_rollover_logs` | `public` | Auto-rollover execution history | Grows unbounded |
+| `backup_logs` | `public` | Backup job metadata & artifact paths | Grows unbounded |
+| `safety_drill_runs` | `public` | Safety drill execution telemetry | Grows unbounded |
+| `branding-assets` | Storage bucket | Logo, login background, wallpapers | ~3–10 files |
+| `database-backups` | Storage bucket | Backup JSON artifacts + drill snapshots | Grows unbounded |
+
+---
+
+## 2. Settings Keys by Domain
+
+### 2.1 PMS Core (`system_settings.setting_key`)
+
+| Key | Default | Type | Consumer | UI Surface |
+|-----|---------|------|----------|------------|
+| `score_calculation_mode` | `manual` | string enum | Review scorecards, Admin scoring | SystemSettings > Scoring |
+| `auto_kra_rollover` | `enabled` | string (`enabled`/`disabled`) | Cron `auto-rollover-kpis` | SystemSettings > General |
+| `daily_aggregation_method` | `average` | string enum | Daily KPI aggregation | SystemSettings > Cycles |
+| `auto_logout_minutes` | `30` | number / `disabled` | `useIdleTimeout` hook | SystemSettings > Controls |
+| `working_days_per_month` | `22` | number | Daily KPI calculations | (consumed by scoring) |
+| `self_review_recall_hours` | `24` | number / `disabled` | Self-review withdrawal | SystemSettings > Controls |
+| `max_upload_size_mb` | `5` | number | Evidence upload validation | SystemSettings > Uploads |
+| `menu_overrides_enabled` | `false` | boolean | `useResolvedMenu`, `AppSidebar` | MenuSettingTab header |
+| `backup_hard_fail_on_partial` | `false` | boolean | `create-backup` edge function | (not exposed in UI) |
+| `increment_*` (various) | varies | mixed | Incentive engine | SystemSettings > Increment |
+| `email_*` (various) | varies | mixed | Email dispatch | SystemSettings > Email |
+
+### 2.2 Org Branding (`app_settings` — singleton)
+
+| Field | Purpose | UI Surface |
+|-------|---------|------------|
+| `organization_name` | Display name in header, emails | SystemSettings > Branding |
+| `app_name` | Browser tab title, login page | SystemSettings > Branding |
+| `logo_url` | Sidebar logo, login logo | SystemSettings > Branding |
+| `login_background_url` | Login page background | SystemSettings > Branding |
+| `login_wallpapers` | Carousel images on login | SystemSettings > Branding |
+| `login_hero_headline` | Login page headline text | SystemSettings > Branding |
+| `login_hero_description` | Login page subtext | SystemSettings > Branding |
+| `pms_policy_url` | External policy link | SystemSettings > Branding |
+| `pms_policy_content` | Inline policy HTML/text | SystemSettings > Branding |
+| `pms_policy_visible_roles` | Roles that see PMS Policy menu | SystemSettings > Branding |
+| `view_mode_strip_color` | UI accent color | SystemSettings > Branding |
+
+### 2.3 Safety (`safety_settings.key`)
+
+| Key Pattern | Purpose | UI Surface |
+|-------------|---------|------------|
+| `ptw_expiry_offset_days` | Permit-to-work auto-expiry | SafetySettings |
+| `training_overdue_threshold_days` | Training SLA threshold | SafetySettings |
+| `audit_threshold_*` | Safety audit scoring thresholds | SafetySettings |
+| `incident_severity_matrix` | Severity → SLA mapping | SafetySettings |
+| `safety_*` (open-ended) | Any future Safety variable | SafetySettings |
+
+Safety settings are **open-ended JSON KV** — admins can add new keys at runtime via the SafetySettings UI. No registry validation exists.
+
+---
+
+## 3. UI Surfaces (Where Settings Are Managed)
+
+### 3.1 SystemSettings.tsx (`/admin/settings`)
+**Role gate:** `admin` only (via sidebar + route guard)
+
+| Section Key | Tab Label | Component | Writes To |
+|-------------|-----------|-----------|-----------|
+| `branding` | Branding | `GlobalBrandingSettings` | `app_settings` |
+| `general` | General | Inline (rollover toggle + logs) | `system_settings`, `kra_rollover_logs` |
+| `workflow` | Workflow Config | `WorkflowSettingsTab` | `system_settings`, workflow tables |
+| `organization` | Organization | `OrganizationPage` | org hierarchy tables |
+| `menu-setting` | Menu Setting | `MenuSettingTab` | `menu_registry`, `menu_overrides`, `menu_override_audit` |
+| `review-periods` | Review Periods | `ReviewPeriodsPage` | `review_periods` table |
+| `scoring` | Scoring | `Increment*Section`, `AnnualScoreCalculationSection` | `system_settings` |
+| `increment` | Increment | `GeneralEligibilityPage`, `IncrementSlabsPage` | `system_settings`, incentive tables |
+| `cycles` | Cycles | `FrequencyCycleSettings` | `system_settings` |
+| `controls` | Controls | Inline (auto-logout, recall window) | `system_settings` |
+| `uploads` | Uploads | `UploadSettingsTab` | `system_settings` |
+| `reports` | Report Access | `ReportAccessTab` | `menu_access_config` |
+| `menu-access` | Menu Access | `MenuAccessTab` | `menu_access_config` |
+| `email` | Email | `EmailNotificationSettings`, `EmailTemplateEditor` | `system_settings`, `email_templates` |
+| `templates` | Templates | Inline (template mgmt) | `workflow_templates` |
+| `passwords` | Passwords | `PasswordPolicyTab` | `system_settings` |
+| `report-builder` | Report Builder | `ReportBuilderTab` | `system_settings` |
+| `backups` | Backups | `BackupRestoreTab` | `backup_logs`, storage (read-only UI for triggers) |
+| `data-repair` | Data Repair | `DataRepairTab` | repair RPCs |
+| `feature-flags` | Feature Flags | `FeatureFlagsTab` | `system_settings` |
+| `module-hub` | Module Hub | `ModuleHubSettings` | `module_registry` |
+| `logs` | Logs | `AuditLogsPage`, `EmailLogsPage` | read-only |
+
+### 3.2 SafetySettings.tsx (`/safety/settings`)
+**Role gate:** `admin` OR `safety_head` (via Safety module route guard)
+
+| Surface | Component | Writes To |
+|---------|-----------|-----------|
+| Tunable variables | Inline JSON editor | `safety_settings` via `set_safety_setting` RPC |
+| Admin links | Static `ADMIN_LINKS` array | Navigation only (no writes) |
+
+### 3.3 MenuSettingTab.tsx (`/admin/settings?section=menu-setting`)
+**Role gate:** `admin` only
+
+| Action | Writes To | Audit Trail |
+|--------|-----------|-------------|
+| Seed registry | `menu_registry` (upsert) | None (idempotent) |
+| Save overrides | `menu_overrides` (per-row upsert) | `menu_override_audit` per field diff |
+| Reset all overrides | `menu_overrides` (deactivate) | `menu_override_audit` single row `__ALL__` |
+| Create custom tab | `menu_registry` (insert) | None |
+| Delete custom tab | `menu_registry` (delete via `deleteCustomMenuItem`) | None |
+
+---
+
+## 4. Role Ownership Matrix
+
+| Setting Domain | Read Roles | Write Roles | Enforcement Layer |
+|----------------|------------|-------------|-------------------|
+| `system_settings` | All (selective consumption) | `admin` | UI route guard + RLS on table |
+| `app_settings` | All (branding visible) | `admin` | UI route guard + RLS on table |
+| `safety_settings` | `admin`, `safety_head` | `admin`, `safety_head` | UI route guard + `set_safety_setting` RPC (SECURITY DEFINER, RBAC inside) |
+| `menu_registry` | All (via `useResolvedMenu`) | `admin` | UI route guard + `CanAction` component |
+| `menu_overrides` | All (via `useResolvedMenu`) | `admin` | UI route guard + RLS |
+| `menu_override_audit` | `admin` | `admin` (insert only) | RLS |
+| `backup_logs` | `admin` | Edge functions (`create-backup`, `restore-backup`) | RLS + edge function auth |
+| `safety_drill_runs` | `admin`, `safety_head` | `safety-drill` edge function | RLS + edge function auth |
+
+---
+
+## 5. RBAC Enforcement Details
+
+### 5.1 PMS Admin Settings
+- **Route guard:** `/admin/settings` is inside `/admin/*` which requires `admin` role (checked in `App.tsx` route definitions + `AuthContext`)
+- **Sidebar visibility:** `admin-settings` menu_key is in the `admin` group with `roles: ['admin']`
+- **Table RLS:** `system_settings` allows SELECT to `authenticated`, INSERT/UPDATE to `admin` (via `has_role` check)
+- **UI-level gating:** `CanAction` component used inside `MenuSettingTab` for "Create tab" button (`pms.menu.create_tab` action key)
+
+### 5.2 Safety Settings
+- **Route guard:** `/safety/settings` requires `admin` or `safety_head` via Safety module entry guard
+- **RPC auth:** `set_safety_setting` is SECURITY DEFINER; internal RBAC checks `has_role(auth.uid(), 'admin') OR has_role(auth.uid(), 'safety_head')`
+- **Table RLS:** `safety_settings` allows SELECT to `admin`/`safety_head`; writes via RPC only
+
+### 5.3 Menu Configuration
+- **Route guard:** Admin-only
+- **Table RLS:** `menu_registry` SELECT to `authenticated`; write to `admin` + `service_role`
+- **Table RLS:** `menu_overrides` SELECT to `authenticated`; write to `admin`
+- **Audit RLS:** `menu_override_audit` SELECT to `admin`; INSERT to `admin`
+
+### 5.4 Backup/Drill
+- **Route guard:** Backup tab is admin-only
+- **Edge function:** `create-backup`, `restore-backup`, `safety-drill` all require Bearer auth; `safety-drill` additionally checks `isSystem` (cron secret) or valid user token
+- **Table RLS:** `backup_logs` SELECT to `admin`; INSERT by `service_role` (edge functions)
+
+---
+
+## 6. Audit Trails
+
+| Domain | Audit Table | Granularity | Immutable |
+|--------|-------------|-------------|-----------|
+| Menu overrides | `menu_override_audit` | Per-field diff (label, sort_order, parent, menu_level, module_key) | Yes (append-only) |
+| Rollover jobs | `kra_rollover_logs` | Per-run summary | Yes (insert-only) |
+| Backup jobs | `backup_logs` | Per-run summary + error message | Yes (status updates via edge fn only) |
+| Safety drills | `safety_drill_runs` | Per-run deltas + errors | Yes (insert-only) |
+| System settings | **None dedicated** | Changes go through `useUpdateSystemSetting` mutation but no audit table | **Gap identified** |
+| Safety settings | **None dedicated** | Changes go through `useUpsertSafetySetting` but no audit table | **Gap identified** |
+| App settings | **None dedicated** | Changes go through `useUpdateAppSettings` but no audit table | **Gap identified** |
+
+---
+
+## 7. Isolation & Contamination Risks
+
+### 7.1 Cross-Module Read Contamination
+| Risk | Evidence | Severity |
+|------|----------|----------|
+| `app_settings.pms_policy_visible_roles` drives `AppSidebar` menu visibility for ALL roles | `policyVisibleRoles` consumed in `getStaticMenuItems` | Low (read-only) |
+| `system_settings.menu_overrides_enabled` gates `AppSidebar` for ALL users | `overridesEnabled` consumed in `resolveGroupItems` | Low (read-only) |
+| `system_settings.score_calculation_mode` affects ALL reviewer scorecards | Consumed in review hooks universally | Low (read-only) |
+
+### 7.2 Cross-Module Write Contamination
+| Risk | Evidence | Severity |
+|------|----------|----------|
+| MenuSettingTab can reorder/reparent items across module boundaries (e.g. Safety items under PMS groups) | `is_cross_app_movable` is `false` in catalog but parent changes are allowed within PMS | Medium (contained to PMS) |
+| SafetySettings writes to `public.safety_settings` but lives in Safety module namespace | Correctly isolated by table | Low |
+
+### 7.3 No Contamination (Good)
+- `safety_drill.*` schema — completely isolated from `public.*`
+- `system_settings` keys are namespaced by prefix (`score_`, `auto_`, `daily_`, `self_review_`, `menu_`, `increment_`, `email_`)
+- `safety_settings` keys are namespaced by `safety_` prefix
+
+---
+
+## 8. Gaps & Recommendations
+
+| # | Gap | Impact | Proposed Fix |
+|---|-----|--------|--------------|
+| G1 | No audit trail for `system_settings` changes | Cannot trace who changed score calculation mode, rollover, etc. | Add `system_settings_audit` table (append-only, admin-selectable) |
+| G2 | No audit trail for `app_settings` changes | Cannot trace branding/policy changes | Add `app_settings_audit` table or reuse `system_settings_audit` |
+| G3 | No audit trail for `safety_settings` changes | Cannot trace Safety variable tuning | Add `safety_settings_audit` table |
+| G4 | `safety_settings` is open-ended JSON with no registry | Typos in keys, invalid JSON types possible | Add `safety_settings_registry` (optional validated keys) or typed schema |
+| G5 | `system_settings` values are loosely typed (string/number/boolean/object) | Parsing fragility in hooks (`replace(/^"|"$/g, '')`) | Migrate to strict JSONB with typed getters |
+
+---
+
+## 9. Hooks & Services Inventory
+
+| Hook / Service | File | Reads | Writes | Module |
+|---------------|------|-------|--------|--------|
+| `useSystemSettings` | `src/hooks/useSystemSettings.ts` | `system_settings` | — | PMS |
+| `useSystemSetting(key)` | `src/hooks/useSystemSettings.ts` | `system_settings` (single key) | — | PMS |
+| `useUpdateSystemSetting` | `src/hooks/useSystemSettings.ts` | — | `system_settings` (upsert) | PMS |
+| `useScoreCalculationMode` | `src/hooks/useSystemSettings.ts` | `system_settings` | — | PMS |
+| `useAutoRolloverSetting` | `src/hooks/useSystemSettings.ts` | `system_settings` | — | PMS |
+| `useDailyAggregationMethod` | `src/hooks/useSystemSettings.ts` | `system_settings` | — | PMS |
+| `useAutoLogoutMinutes` | `src/hooks/useSystemSettings.ts` | `system_settings` | — | PMS |
+| `useWorkingDaysPerMonth` | `src/hooks/useSystemSettings.ts` | `system_settings` | — | PMS |
+| `useRolloverLogs` | `src/hooks/useSystemSettings.ts` | `kra_rollover_logs` | — | PMS |
+| `useTriggerRollover` | `src/hooks/useSystemSettings.ts` | — | Edge fn `auto-rollover-kpis` | PMS |
+| `useAppSettings` | `src/hooks/useAppSettings.ts` | `app_settings` | — | PMS |
+| `useUpdateAppSettings` | `src/hooks/useAppSettings.ts` | — | `app_settings` | PMS |
+| `useUploadBrandingAsset` | `src/hooks/useAppSettings.ts` | — | Storage `branding-assets` | PMS |
+| `useSafetySettings` | `src/hooks/useSafetySettings.ts` | `safety_settings` | — | Safety |
+| `useUpsertSafetySetting` | `src/hooks/useSafetySettings.ts` | — | RPC `set_safety_setting` | Safety |
+| `useResolvedMenu` | `src/hooks/useResolvedMenu.ts` | `menu_registry`, `menu_overrides` | — | Shared |
+| `useMenuRegistryAdmin` | `src/hooks/useResolvedMenu.ts` | `menu_registry`, `menu_overrides` | — | Admin |
+| `useMenuOverridesEnabled` | `src/hooks/useResolvedMenu.ts` | `system_settings` | — | Shared |
+
+---
+
+## 10. Memory Index References
+
+Related memory files:
+- `mem/features/admin/menu-setting` — Configurable menus, resolver layer
+- `mem/features/admin/menu-setting-capa` — Menu Setting CAPA test coverage
+- `mem/features/admin/menu-access-rights` — DB-driven menu access config
+- `mem/features/safety/settings-hub` — Safety settings surface design
+- `mem/infrastructure/database/backup-coverage-contract` — Backup settings ownership
+- `mem/infrastructure/database/backup-hard-fail-policy` — Backup hard-fail flag
+
+---
+
+*This inventory is read-only documentation. Any implementation of audit tables (G1–G3) or typed registries (G4–G5) requires a separate work package with migration, RLS, and contract tests.*
