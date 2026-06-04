@@ -184,10 +184,10 @@ export function TemplatesTab({ client, actorId }: { client?: Client; actorId?: s
       {archiving && (
         <ConfirmDestructiveDialog
           open
-          onOpenChange={(o) => !o && setArchiving(null)}
+          onCancel={() => setArchiving(null)}
           title="Archive template?"
           description={`This will archive "${archiving.template_key}", not delete it. Historical audit remains available. The Test Email tab will fall back to the default body for this key until a new active template is added.`}
-          confirmText="Archive"
+          confirmLabel="Archive"
           onConfirm={() => doArchive(archiving)}
         />
       )}
