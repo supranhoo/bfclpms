@@ -611,6 +611,109 @@ export function parseRetryAfterMs(errString: string | undefined): number | null 
 // per-trace rate limit (observed ~30 invocations / 30 s).
 const INTER_BATCH_DELAY_MS = 900
 
+// Phase 9.2 WP-b — Backup batch retry/backoff hardening.
+//
+// Retry policy for the scheduled chunked path ONLY:
+//   • Triggers ONLY on transient chunk failures: HTTP 546 (Deno Deploy OOM
+//     under load), HTTP 429, or RateLimitError. Schema / permission / RLS /
+//     validation errors are NEVER retried.
+//   • Up to 2 retries per failing chunk with backoff 5s then 15s.
+//   • On retry, the failing chunk is re-split into halves of
+//     `BATCH_SIZE_RETRY = 2` to reduce memory pressure. The primary
+//     `BATCH_SIZE = 4` is unchanged (Phase 9.1 I4 invariant).
+//   • A global `RETRY_BUDGET_MS = 8 min` cap keeps total wall time well
+//     under the 30-min stuck-backup reaper ceiling. Once exhausted,
+//     subsequent failing chunks skip retry and are recorded as failed —
+//     the WP-9.2.a hard-fail terminal (`backup_hard_fail_on_partial`) then
+//     marks the run `failed` deterministically.
+//   • Manual backup finalize/status semantics are intentionally unchanged
+//     in this WP. The classifier is exported for reuse but only wired
+//     into the scheduled loop.
+const BATCH_SIZE_RETRY = 2
+const RETRY_BUDGET_MS = 8 * 60_000
+const RETRY_BACKOFFS_MS = [5_000, 15_000] as const
+
+export function isTransientChunkError(
+  errMsg: string | undefined,
+  rateLimited?: boolean,
+): boolean {
+  if (rateLimited) return true
+  if (!errMsg) return false
+  // HTTP 546: Deno Deploy OOM. HTTP 429: rate limit.
+  if (/\bHTTP\s+546\b/.test(errMsg)) return true
+  if (/\bHTTP\s+429\b/.test(errMsg)) return true
+  if (/RateLimitError|Rate limit/i.test(errMsg)) return true
+  // Explicitly NON-transient: schema / permission / RLS / validation /
+  // generic 5xx other than 546. Do not retry.
+  return false
+}
+
+// Phase 9.2 WP-b — transient retry helper. Re-issues the failing chunk in
+// halves of BATCH_SIZE_RETRY=2 with 5s/15s backoff, capped by the shared
+// RETRY_BUDGET_MS wall-time budget anchored on the orchestrator startTime.
+async function retryFailedBatchTransient(args: {
+  batch: string[]
+  batchIndex: number
+  totalBatches: number
+  firstError: string
+  backupId: string
+  folderPath: string
+  startTime: number
+}): Promise<{ processed: Array<{ table: string; rows: number; sizeBytes?: number }>; summary: string }> {
+  const { batch, batchIndex, totalBatches, firstError, backupId, folderPath, startTime } = args
+  const subBatches = splitIntoBatches(batch, BATCH_SIZE_RETRY)
+  const processed: Array<{ table: string; rows: number; sizeBytes?: number }> = []
+  const notes: string[] = [
+    `Batch ${batchIndex + 1}/${totalBatches} transient: ${firstError}`,
+  ]
+
+  for (let s = 0; s < subBatches.length; s++) {
+    const sub = subBatches[s]
+    let recovered = false
+    let lastErr = firstError
+    for (let attempt = 0; attempt < RETRY_BACKOFFS_MS.length; attempt++) {
+      const budgetLeftMs = RETRY_BUDGET_MS - (Date.now() - startTime)
+      if (budgetLeftMs <= 0) {
+        notes.push(
+          `sub ${s + 1}/${subBatches.length} skipped: budget exhausted`,
+        )
+        break
+      }
+      await sleep(RETRY_BACKOFFS_MS[attempt])
+      const res = await callSelf({
+        backup_type: 'scheduled',
+        backup_id: backupId,
+        folder_path: folderPath,
+        tables: sub,
+      })
+      if (res.ok) {
+        const arr = res.data?.processed || []
+        for (const p of arr) processed.push(p)
+        notes.push(
+          `sub ${s + 1}/${subBatches.length} recovered on attempt ${attempt + 1}/${RETRY_BACKOFFS_MS.length}`,
+        )
+        recovered = true
+        break
+      }
+      lastErr = res.error ?? 'unknown'
+      // Only continue retrying if still transient.
+      if (!isTransientChunkError(lastErr, res.rateLimited)) {
+        notes.push(
+          `sub ${s + 1}/${subBatches.length} non-transient on retry: ${lastErr}`,
+        )
+        break
+      }
+    }
+    if (!recovered && !notes.some((n) => n.startsWith(`sub ${s + 1}/`))) {
+      notes.push(
+        `sub ${s + 1}/${subBatches.length} failed after ${RETRY_BACKOFFS_MS.length} retries: ${lastErr}`,
+      )
+    }
+  }
+  const budgetLeftS = Math.max(0, Math.round((RETRY_BUDGET_MS - (Date.now() - startTime)) / 1000))
+  return { processed, summary: `${notes.join('; ')} (budget ${budgetLeftS}s left)` }
+}
+
 async function callSelf(
   payload: Record<string, unknown>,
   opts: { maxRetries?: number } = {}
@@ -666,6 +769,7 @@ async function runScheduledChunked(
   folderPath: string
 ): Promise<void> {
   const startTime = Date.now()
+  // Note: `startTime` doubles as the anchor for RETRY_BUDGET_MS below.
   // Must match the manual path (handleInit, line ~377). The scheduled worker
   // shares the same 256 MB Deno Deploy cap; sizes > 4 have been observed to
   // OOM on batch 14/16 with HTTP 546, silently dropping ~5 tables from the
@@ -691,10 +795,38 @@ async function runScheduledChunked(
     })
 
     if (!result.ok) {
-      errors.push(`Batch ${i + 1}/${batches.length} failed: ${result.error}`)
-      console.error(`Scheduled backup batch ${i + 1} failed:`, result.error)
-      // Brief pause before next batch even on failure
-      await sleep(INTER_BATCH_DELAY_MS)
+      // Phase 9.2 WP-b — transient retry with halved sub-batches and
+      // a global wall-time budget. Non-transient errors fall through
+      // immediately to the hard-fail terminal (WP-9.2.a).
+      const transient = isTransientChunkError(result.error, result.rateLimited)
+      const budgetLeftMs = RETRY_BUDGET_MS - (Date.now() - startTime)
+      if (!transient || budgetLeftMs <= 0) {
+        const reason = !transient ? 'non-transient' : 'budget exhausted'
+        errors.push(
+          `Batch ${i + 1}/${batches.length} failed (${reason}): ${result.error}`,
+        )
+        console.error(`Scheduled backup batch ${i + 1} failed (${reason}):`, result.error)
+        await sleep(INTER_BATCH_DELAY_MS)
+        continue
+      }
+
+      const recovered = await retryFailedBatchTransient({
+        batch,
+        batchIndex: i,
+        totalBatches: batches.length,
+        firstError: result.error ?? 'unknown',
+        backupId,
+        folderPath,
+        startTime,
+      })
+      for (const p of recovered.processed) {
+        tableManifest.push({ table: p.table, rows: p.rows, file: `${folderPath}/${p.table}.json` })
+        totalRows += p.rows
+        totalSize += p.sizeBytes || 0
+        tablesCount++
+      }
+      if (recovered.summary) errors.push(recovered.summary)
+      if (i < batches.length - 1) await sleep(INTER_BATCH_DELAY_MS)
       continue
     }
 

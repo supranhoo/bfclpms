@@ -1,97 +1,118 @@
-## Phase 9.2 — Backup Hard-Fail Protection + Batch Reliability (revised)
+# WP-9.2.b — Backup Batch Retry/Backoff Hardening
 
-**Status:** Revised per your corrections. Awaiting final approval before any code.
-Phase 8 stays CLOSED. Phase 9.1 contracts I1–I5 stay green. Menu CAPA stays 24/24.
+## WP-9.2.a status confirmed green
+- `system_settings.backup_hard_fail_on_partial = true` row present (verified via DB query).
+- Phase 9 contract suite **7/7 green** (I1–I7).
+- Full suite: **1736/1737 green**; the 1 failure (`safetyShellIsolation > SafetyHome page renders`) is a pre-existing 5s test-timeout in a TanStack-Query wrapped render, **unrelated to backup/Menu CAPA**. Menu CAPA invariants in scope are green.
+- Hard-fail branches present in both `runScheduledChunked` and `finalizeManualBackup` (loader `loadHardFailOnPartial` fails closed).
 
----
-
-### Flag decision (corrected)
-
-**Name:** `backup_hard_fail_on_partial` (clearer semantics, no double-negative).
-**Production default:** `true` — partial backups are NOT acceptable; mark them `failed`.
-**Override:** setting `false` is an **emergency/admin-only** escape hatch used to intentionally accept a partial run (e.g., known transient infra outage where a partial restore is better than none). Not flipped after observation — only by explicit admin action with a written reason.
-
-Stored as a single row in `system_settings`:
-- `setting_key = 'backup_hard_fail_on_partial'`
-- `setting_value = true` (default)
-- `description = 'When true (default), any scheduled or manual backup where backed-up table count is below discovered count is marked failed instead of completed_with_errors. Set to false ONLY as an emergency override to accept partial backups; document reason in admin notes.'`
-
-**Behavior change vs. today (explicit):** today, partial runs land as `completed_with_errors` (amber pill) and remain restorable. After WP-9.2.a ships with the default `true`, the same partial run lands as `failed` (red pill) and is excluded from "latest successful backup" pointers. **This is stricter than today.** The Backup History UI surfaces both the status and the discovered-vs-backed-up delta so admins understand why.
+Proceeding with WP-9.2.b planning per your corrections.
 
 ---
 
-### Scope — three work-packages, gated, tests ship with each
+## Assumptions
+- Root cause of partial backups is transient: `HTTP 546` (Deno Deploy OOM under load) and `RateLimitError` (already partially handled in `callSelf`). All other errors are non-transient and must NOT be retried.
+- `BATCH_SIZE=4` (primary) is locked by Phase 9.1 I4 and Phase 8 OOM memory — unchanged.
+- The stuck-backup reaper (`reapStuckRunningBackups`) marks any run still `running` after **30 minutes** as failed. This is the effective hard wall-time ceiling; the retry budget must stay well under it.
+- WP-9.2.a's hard-fail contract is the terminal authority: retries reduce partials, never override them.
 
-**WP-9.2.a — Hard-fail flag (ships first)**
-- Migration: insert `system_settings` row `backup_hard_fail_on_partial = true`.
-- `supabase/functions/create-backup/index.ts` (`runScheduledChunked` and manual finalize): after the per-batch loop, read the flag (default `true` if row missing). If `tablesCount < discoveredCount` AND flag is `true`, set `status = 'failed'` (instead of `completed_with_errors`) and record `error_message` with the delta + offending batch list.
-- `src/components/admin/BackupRestoreTab.tsx`: one-line UI note explaining the flag and its production default; no new admin toggle in this WP (override is a deliberate DB-level action documented in PMS Policy).
-- Tests (ship with WP-9.2.a):
-  - Extend `src/test/safety/phase9/backup-coverage-contract.test.ts` with:
-    - I6: `system_settings` migration creates `backup_hard_fail_on_partial` row default `true` (assert by scanning the migration file in `supabase/migrations/`).
-    - I7: `create-backup` source contains the `status='failed'` branch keyed off the flag and the `tablesCount < discoveredCount` predicate.
-  - One Deno unit test under `supabase/functions/create-backup/` that mocks the flag + table counts and asserts the failed branch is taken.
-- Verification gate: I1–I5 still green, I6/I7 green, Menu CAPA 24/24 green.
+## Clarifications
+None outstanding.
 
-**Gate B (corrected per your direction)**
+## Risk & Impact Report
+- **Data Impact:** None. Retries re-read source tables and re-upload chunk artifacts; no writes outside `backup_logs.error_message`.
+- **Workflow Impact:** Scheduled runs gain up to 2 retries per failing chunk on transient errors. Manual runs share the same retry helper but their finalize/status path is unchanged except for fewer transient partials.
+- **UI/UX Impact:** None new. Existing Backup History `error_message` column carries richer telemetry (attempts + final outcome).
+- **Regression Risk (reassessed per your point 1):** Worst case is **every** chunk failing twice on 546.
+  - 16 batches × (5s + 15s backoff) = **320 s** added latency, plus 16 × ~10–20 s retry work ≈ **~10–12 min total** worst case on top of baseline.
+  - With the 30-min reaper ceiling and observed ~8–12 min baseline scheduled run, this is in-budget but tight.
+  - **Mitigation:** add a hard **global retry budget = 8 minutes** (`RETRY_BUDGET_MS = 8 * 60_000`). Once exceeded, remaining failing chunks skip retry and are recorded as failed → hard-fail path (WP-9.2.a) takes over deterministically. Telemetry records "retry budget exhausted".
+- **Scalability Impact:** As `discoveredCount` grows, budget protects against retry storms. No DB load increase.
+- **Rollback:** Pure edge-fn change. Revert the file. No migration, no schema change.
 
-After WP-9.2.a ships, observe the **next scheduled run** with flag at the production default `true`:
+## Step-by-Step Plan
 
-| Observed outcome | Action |
-|---|---|
-| Clean run (`tablesCount == discoveredCount`) | Keep flag `true`. Proceed to WP-9.2.b (retry/backoff hardening) on schedule. |
-| Partial run | Status MUST land as `failed` (validates WP-9.2.a). Flag stays `true`. Proceed to WP-9.2.b immediately as the root-cause fix. |
-| Any run | Do NOT flip `backup_hard_fail_on_partial` to `false` unless explicitly approved as an emergency override. |
+1. **Extract retry classifier** inside `create-backup/index.ts` (local helper, not `_shared/retry.ts` — that helper retries on broader patterns and we need narrower classification).
+   - `isTransientChunkError(status, errMsg) → boolean` returns true ONLY for `status === 546` or `/RateLimitError|Rate limit/i.test(errMsg)` or `status === 429`.
+   - Explicitly returns `false` for 4xx (schema/permission/RLS/validation), 5xx other than 546, and `undefined`/network errors with non-transient signature.
+   - Verification: unit test covers each branch.
 
-No automatic flag flip. No "observation window" to relax behavior.
+2. **Add chunk-level retry in `runScheduledChunked` only** (manual path untouched at the finalize level — see point 2 below).
+   - On `!result.ok && isTransientChunkError(...)`:
+     - Retry up to **2 times** with backoff **5s → 15s**.
+     - On retry, re-split the failing chunk into halves with `BATCH_SIZE_RETRY = 2` and re-invoke `callSelf` per half. (Primary `BATCH_SIZE = 4` unchanged → I4 stays green.)
+     - Each retry attempt subject to the **global `RETRY_BUDGET_MS = 8 min`** check; if budget exhausted, stop retrying and record the chunk as failed.
+   - Successes during retry are appended to `tableManifest` exactly like primary-path successes.
+   - Verification: Deno tests below.
 
-**WP-9.2.b — Retry-with-backoff on batch failure (root cause)**
-- In `create-backup` per-batch loop: when `callSelf` returns `HTTP 546` (OOM) or `RateLimitError`, retry up to 2× with exponential backoff (5s, 15s) at a smaller `BATCH_SIZE_RETRY = 2`. Preserve existing `INTER_BATCH_DELAY_MS` cadence between batches.
-- `BATCH_SIZE = 4` stays the primary value (locked by Phase 9.1 contract I4 — unchanged).
-- Telemetry: append retry attempts to `error_message` so the run is fully auditable; do not mask retries as success.
-- Reuse `supabase/functions/_shared/retry.ts` where compatible (it already skips 4xx, which matches the desired behavior — we only retry 546/Rate-limit).
-- Tests (ship with WP-9.2.b):
-  - I8: `create-backup` source contains the retry path with `BATCH_SIZE_RETRY = 2`, gated on `HTTP 546`/`RateLimitError`, max 2 retries. `BATCH_SIZE = 4` primary unchanged (I4 stays green).
-  - Deno test: mock `callSelf` to return `HTTP 546` once then succeed; assert retry fires and batch is recorded as recovered. Second test: mock `callSelf` to fail all retries; assert batch is recorded as failed and the partial-backup hard-fail path triggers (composition with WP-9.2.a).
-- Verification gate: I1–I5 + I6–I8 green, Menu CAPA 24/24 green, Phase 8 SSOT green.
+3. **Preserve manual backup semantics (your point 2).**
+   - `finalizeManualBackup` and `handleInit` paths are **not modified** in this WP — the manual backup orchestrator is client-driven and already invokes `callSelf` per batch through a different code path. We will not add a retry loop around `finalizeManualBackup`. The shared classifier helper is exported but only WIRED into the scheduled loop in this WP.
+   - WP-9.2.a's manual hard-fail branch (`hardFailManual && partialManual`) stays the terminal authority for manual runs.
+   - Verification: regression test asserts `finalizeManualBackup` source is byte-identical to WP-9.2.a's contract regex (I7 stays green; no new manual-path branches introduced).
 
-**WP-9.2.c — Folded into a + b above** (no separate ship). Memory + ADR + CHANGELOG land alongside each WP.
+4. **Hard-fail preserved (your point 4).**
+   - After the loop, if `tablesCount < discoveredCount` and `backup_hard_fail_on_partial=true`, status is `failed` — exactly WP-9.2.a behavior. Retries never downgrade a failure.
+   - Verification: new invariant I10.
 
----
+5. **Telemetry into `error_message`.**
+   - Per-chunk summary string: `Batch i/N transient(546|RateLimit) attempt k/2 → recovered|failed (budget Xs left)`.
+   - Composed messages appended in-order; no new column.
+   - Verification: snapshot-style assertion in Deno test.
 
-### Guardrails (unchanged)
+6. **Regression tests** added to `src/test/safety/phase9/backup-coverage-contract.test.ts`:
+   - **I8:** `create-backup` source contains `BATCH_SIZE_RETRY = 2` and `RETRY_BUDGET_MS` constants; primary `BATCH_SIZE = 4` count unchanged (I4 still ≥ 2).
+   - **I9:** `isTransientChunkError` exists and gates retry on 546/RateLimit/429 only; source contains the negative-classifier branch for 4xx.
+   - **I10:** Hard-fail predicate from I7 is still present after retry insertion (composition guard: retry path does not bypass `hardFail && shrunk ? 'failed' …`).
+   - **I11:** `finalizeManualBackup` source unchanged relative to WP-9.2.a contract — manual semantics preserved (point 2 lock).
 
-- No Menu Setting / Custom Tabs change. `menu_overrides_enabled` stays `false`.
+7. **Deno unit tests** under `supabase/functions/create-backup/`:
+   - `isTransientChunkError` classifier table: 546→true, 429→true, RateLimitError msg→true, 400/401/403/404/422→false, generic 500→false, network err→false.
+   - Retry path: mock `callSelf` to return 546 once then success → assert retry fires with `BATCH_SIZE_RETRY=2` and chunk recorded as recovered.
+   - Retry exhaustion: mock `callSelf` to fail all retries → assert chunk recorded as failed and (composed with WP-9.2.a) hard-fail status applies.
+   - Budget exhaustion: simulate elapsed > `RETRY_BUDGET_MS` → assert subsequent failing chunks skip retry and are marked failed with "budget exhausted" telemetry.
+
+8. **Verify full suite green:** Phase 9.1 I1–I5 + WP-9.2.a I6–I7 + WP-9.2.b I8–I11, plus Menu CAPA (24), plus Phase 8 SSOT (33). The pre-existing `safetyShellIsolation` timeout is out of scope.
+
+## UI Changes
+Not Applicable. No new controls. Existing Backup History `error_message` carries richer text automatically.
+
+## Implementation
+Deferred to next build pass after this plan is approved.
+
+## Tests
+- Vitest invariants I8–I11 in `src/test/safety/phase9/backup-coverage-contract.test.ts`.
+- Deno unit tests for classifier, retry success, retry exhaustion, budget exhaustion.
+- Full suite expected ~63 green in the Phase 9 contract file.
+
+## DOCUMENTATION.md updates
+- `docs/safety/phase9/README.md`: append WP-9.2.b section — classifier (546 / RateLimit / 429 only), 2-retry cap, 5s/15s backoff, `BATCH_SIZE_RETRY=2`, `RETRY_BUDGET_MS=8min`, manual-path-untouched note, hard-fail interaction.
+- `CHANGELOG_2026.md`: one entry for WP-9.2.b.
+
+## POLICY.md updates
+- New memory `mem/infrastructure/database/backup-batch-retry-policy`:
+  - Retry triggers: **only** HTTP 546, HTTP 429, RateLimitError. Never 4xx (schema/permission/RLS/validation) or other 5xx.
+  - Attempts: max 2 retries per chunk; backoff 5s then 15s; retry uses `BATCH_SIZE_RETRY=2` (primary `BATCH_SIZE=4` unchanged).
+  - Global cap: `RETRY_BUDGET_MS=8min`; once exhausted, remaining failing chunks skip retry.
+  - Manual backup finalize/status semantics unchanged; helper exported but only wired into scheduled path in this WP.
+  - Hard-fail terminal: exhausted retries + missing tables + `backup_hard_fail_on_partial=true` ⇒ `status='failed'`.
+- `mem/index.md`: append reference line.
+
+## Guardrails (per your point 5 + 6, locked)
+- No `backup_denylist` change.
+- No `get_backup_table_order` RPC change.
+- Primary `BATCH_SIZE=4` unchanged (I4 stays green).
+- No Menu Setting / Custom Tabs touched; `menu_overrides_enabled=false`.
 - No PMS workflow / scoring / RLS / enforcement change.
-- No `backup_denylist` change. No RPC change. No release-readiness runtime page.
-- Phase 8 stays CLOSED. Phase 9.3 sandbox drill stays deferred.
-- Phase 9.1 contracts I1–I5 must stay green at every step.
+- Phase 9.3 sandbox drill remains **deferred**.
+- Phase 9.1 I1–I5 and WP-9.2.a I6–I7 must stay green.
 
-### Rollback
+## Decision justification
+- **Local classifier vs `_shared/retry.ts`:** the shared helper retries on a broader 5xx/network pattern. Your point 3 requires **only** 546/RateLimit/429. Inlining the classifier keeps the contract auditable by a single regex in I9 and avoids accidental scope creep if `_shared/retry.ts` is widened later.
+- **Re-split on retry (`BATCH_SIZE_RETRY=2`) vs same batch:** a 546 OOM is memory-pressure-driven; retrying the same 4-table chunk would likely OOM again. Halving is the minimum-effective change that preserves the I4 invariant on the primary path.
+- **Global retry budget = 8 min:** chosen as ~25% of the 30-min reaper window, leaving baseline scheduled work (~10 min) plus finalize (~1–2 min) comfortably inside the ceiling even in the worst-case retry storm.
+- **Manual path left alone in this WP:** scope discipline. WP-9.2.a already gives manual runs the hard-fail terminal. Adding retry there would mix client-driven and server-driven retry semantics in one WP — deferred unless Gate B observation proves it needed.
 
-- WP-9.2.a: revert edge-fn diff; migration to set the row back (or drop it — behavior reverts to `completed_with_errors`). UI copy revert.
-- WP-9.2.b: revert edge-fn diff; `BATCH_SIZE = 4` single-attempt restored.
-- Tests: `git revert` the test additions.
-
-### Documentation deliverables (per WP)
-
-- `docs/safety/phase9/README.md`: append WP-9.2.a then WP-9.2.b sections.
-- `CHANGELOG_2026.md`: one entry per WP.
-- `mem/infrastructure/database/backup-hard-fail-policy` (new, after WP-9.2.a): flag name, default, inverse-semantics note, override procedure.
-- `mem/infrastructure/database/backup-batch-retry-policy` (new, after WP-9.2.b): retry shape, OOM/rate-limit triggers, `BATCH_SIZE_RETRY = 2`.
-- `mem/index.md` updates.
-
-### Out of scope
-
-- Admin UI toggle for the flag (deliberate friction — DB-level override only in 9.2).
-- Phase 9.3 sandbox round-trip drill.
-- Touching the RPC, `backup_denylist`, or storage bucket list.
-- Any PMS / Menu work.
-
----
-
-### Final confirmations needed before I start WP-9.2.a
-
-1. Flag name **`backup_hard_fail_on_partial`** (boolean, default `true`) — OK? Or keep `allow_partial_backups` with inverse semantics documented?
-2. UI: one-line read-only note in Backup History tab is sufficient for 9.2 (no admin toggle) — OK?
-3. Greenlight to issue the migration + WP-9.2.a code + tests in this build pass once you confirm (1) and (2).
+## Post-implementation notes
+After ship, observe the next 1–2 scheduled runs:
+- Clean run → close Phase 9.2; reassess whether Phase 9.3 sandbox drill should be scheduled.
+- Partial run despite retries → non-transient root cause (schema/permissions/timeout/storage), escalate as a separate ticket, do not tune retry knobs blindly.

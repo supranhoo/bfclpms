@@ -105,4 +105,46 @@ describe('Phase 9.1 — Backup coverage contract', () => {
     // Manual finalize must consult the flag too.
     expect(CREATE_SRC).toMatch(/hardFailManual\s*&&\s*partialManual/);
   });
+
+  // ─── Phase 9.2 WP-b — Backup batch retry/backoff hardening ──────────────
+
+  it('I8 — retry constants are declared and primary BATCH_SIZE=4 unchanged', () => {
+    expect(CREATE_SRC).toMatch(/const\s+BATCH_SIZE_RETRY\s*=\s*2\b/);
+    expect(CREATE_SRC).toMatch(/const\s+RETRY_BUDGET_MS\s*=/);
+    // I4 must remain green: BATCH_SIZE=4 still appears in BOTH paths.
+    const occurrences = CREATE_SRC.match(/const\s+BATCH_SIZE\s*=\s*4\b/g) ?? [];
+    expect(occurrences.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('I9 — isTransientChunkError gates retry on 546 / 429 / RateLimit only', () => {
+    expect(CREATE_SRC).toMatch(/isTransientChunkError/);
+    // Positive classifiers must all appear.
+    expect(CREATE_SRC).toMatch(/HTTP\\s\+546/);
+    expect(CREATE_SRC).toMatch(/HTTP\\s\+429/);
+    expect(CREATE_SRC).toMatch(/RateLimitError\|Rate limit/);
+    // The retry call site must guard on the classifier.
+    expect(CREATE_SRC).toMatch(/isTransientChunkError\(\s*result\.error/);
+  });
+
+  it('I10 — hard-fail terminal remains the authority after retries', () => {
+    // The retry helper must not bypass the WP-9.2.a hard-fail predicate.
+    expect(CREATE_SRC).toMatch(/hardFail\s*&&\s*shrunk\s*\?\s*['"]failed['"]/);
+    // Budget-exhausted / non-transient branches must record the chunk as
+    // failed so the post-loop coverage check fires.
+    expect(CREATE_SRC).toMatch(/budget exhausted/);
+    expect(CREATE_SRC).toMatch(/non-transient/);
+  });
+
+  it('I11 — manual finalize semantics preserved (no retry wiring on manual path)', () => {
+    // Manual finalize lives in handleFinalize. The shared classifier and
+    // retry helper must NOT be wired into it in this WP.
+    const manualMatch = CREATE_SRC.match(
+      /async\s+function\s+handleFinalize\([\s\S]*?\n\}\n/,
+    );
+    expect(manualMatch, 'handleFinalize function must exist').not.toBeNull();
+    expect(manualMatch![0]).not.toMatch(/isTransientChunkError/);
+    expect(manualMatch![0]).not.toMatch(/retryFailedBatchTransient/);
+    // WP-9.2.a manual hard-fail branch still present in the same function.
+    expect(manualMatch![0]).toMatch(/hardFailManual\s*&&\s*partialManual/);
+  });
 });

@@ -1,8 +1,31 @@
 # Phase 9 — Safety Backup-Gap Closure
 
+**Status (Phase 9.2 WP-b):** SHIPPED — transient retry/backoff hardening.
 **Status (Phase 9.2 WP-a):** SHIPPED — hard-fail-on-partial flag.
 **Status (Phase 9.1):** SHIPPED — diagnostic + regression locks.
 **Phase 8:** stays CLOSED. Menu CAPA invariants re-verified 24/24 green.
+
+## What shipped in 9.2 WP-b
+
+- `create-backup/index.ts` scheduled path now retries **transient chunk failures only**:
+  - Triggers: `HTTP 546` (Deno Deploy OOM), `HTTP 429`, `RateLimitError`. Schema / permission / RLS / validation / other 5xx are **never** retried (`isTransientChunkError`).
+  - Up to **2 retries** per failing chunk with **5s → 15s** backoff.
+  - Retry re-splits the failing chunk into halves of `BATCH_SIZE_RETRY = 2`. Primary `BATCH_SIZE = 4` is unchanged (Phase 9.1 I4 stays green).
+  - Global **`RETRY_BUDGET_MS = 8 min`** wall-time cap (≈25% of the 30-min stuck-backup reaper window). Once exhausted, subsequent failing chunks skip retry and are recorded as failed.
+  - Telemetry: per-chunk retry summary appended to `backup_logs.error_message` ("recovered on attempt k/2", "non-transient on retry", "budget exhausted").
+- Manual backup finalize/status semantics are **unchanged** in this WP. The classifier is exported for reuse but only wired into the scheduled loop.
+- Hard-fail terminal preserved: after retries, if `tablesCount < discoveredCount` and `backup_hard_fail_on_partial=true`, the run still lands as `failed`. Retries never downgrade a failure.
+- Contract tests gain I8 (retry constants + primary `BATCH_SIZE=4` unchanged), I9 (`isTransientChunkError` exists and gates on 546/429/RateLimit only), I10 (hard-fail terminal still authority; "budget exhausted" / "non-transient" branches present), I11 (manual `handleFinalize` does not reference the classifier or retry helper). I1–I7 stay green.
+
+### Verification (re-run)
+
+- `bunx vitest run src/test/safety/phase9/` — **11/11 green** (I1–I11).
+- `bunx vitest run src/test/safety/` — **103/103 green** (full safety suite, includes Phase 8 SSOT and Menu CAPA-relevant cases).
+
+### Rollback (WP-b)
+
+- Edge fn only: `git revert` the WP-b diff in `create-backup/index.ts` (classifier, retry helper, scheduled-loop call site, constants). No migration, no schema change.
+- Tests: remove the I8–I11 cases from `backup-coverage-contract.test.ts`.
 
 ## What shipped in 9.2 WP-a
 
@@ -41,7 +64,6 @@ Today a partial run lands as `completed_with_errors` (amber pill) and remains re
 
 | Item | Owner | Next decision |
 |---|---|---|
-| Batch reliability root-cause: retry-with-backoff on `HTTP 546` / `RateLimitError`, `BATCH_SIZE_RETRY=2` | Phase 9.2 WP-b | After observing the next scheduled run with WP-a flag at default `true` (Gate B). |
 | Sandbox round-trip drill through `safety-drill` edge fn | Phase 9.3 | Requires non-prod project |
 
 ### Gate B (post WP-a)
