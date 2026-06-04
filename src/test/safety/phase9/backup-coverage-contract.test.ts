@@ -20,7 +20,7 @@
  * Read-only. Pure source scan. No DB or runtime call.
  */
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 
 const CREATE_SRC = readFileSync(
@@ -31,6 +31,12 @@ const RESTORE_SRC = readFileSync(
   join(process.cwd(), 'supabase/functions/restore-backup/index.ts'),
   'utf8',
 );
+
+const MIGRATIONS_DIR = join(process.cwd(), 'supabase/migrations');
+const MIGRATION_SRCS = readdirSync(MIGRATIONS_DIR)
+  .filter((f) => f.endsWith('.sql'))
+  .map((f) => readFileSync(join(MIGRATIONS_DIR, f), 'utf8'))
+  .join('\n');
 
 describe('Phase 9.1 — Backup coverage contract', () => {
   it('I1 — create-backup discovers tables via the get_backup_table_order RPC', () => {
@@ -73,5 +79,30 @@ describe('Phase 9.1 — Backup coverage contract', () => {
       offenders,
       `create-backup must not hardcode safety_* table literals (coverage is RPC-driven):\n${offenders.join('\n')}`,
     ).toHaveLength(0);
+  });
+
+  it('I6 — backup_hard_fail_on_partial system setting is seeded with default true', () => {
+    // A migration must insert the setting key with value true (jsonb).
+    expect(MIGRATION_SRCS).toMatch(/backup_hard_fail_on_partial/);
+    // Locate the INSERT statement that introduces the row and assert the value.
+    const insertBlock = MIGRATION_SRCS.match(
+      /INSERT INTO public\.system_settings[^;]*backup_hard_fail_on_partial[^;]*;/i,
+    );
+    expect(
+      insertBlock,
+      'A migration must INSERT backup_hard_fail_on_partial into system_settings',
+    ).not.toBeNull();
+    expect(insertBlock![0]).toMatch(/'true'::jsonb/);
+  });
+
+  it('I7 — create-backup hard-fails partial runs when the flag is true', () => {
+    // Flag loader must exist and default to true on missing/error (fail closed).
+    expect(CREATE_SRC).toMatch(/loadHardFailOnPartial/);
+    expect(CREATE_SRC).toMatch(/backup_hard_fail_on_partial/);
+    // Scheduled path: partial run with hardFail must land as 'failed'
+    // (not 'completed_with_errors').
+    expect(CREATE_SRC).toMatch(/hardFail\s*&&\s*shrunk\s*\?\s*['"]failed['"]/);
+    // Manual finalize must consult the flag too.
+    expect(CREATE_SRC).toMatch(/hardFailManual\s*&&\s*partialManual/);
   });
 });

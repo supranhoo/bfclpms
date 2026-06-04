@@ -47,6 +47,30 @@ async function assertCoverageNotShrunk(
   }
 }
 
+// Phase 9.2 WP-a — Hard-fail-on-partial flag.
+// When `backup_hard_fail_on_partial` is true (production default), any run
+// where backed-up table count is below discovered count is marked `failed`
+// instead of `completed_with_errors`. Setting `false` is an emergency
+// admin override (DB-level, no UI toggle in 9.2). Default is `true` if the
+// row is missing or unreadable — fail closed.
+async function loadHardFailOnPartial(
+  supabase: ReturnType<typeof createClient>
+): Promise<boolean> {
+  try {
+    const { data, error } = await supabase
+      .from('system_settings')
+      .select('setting_value')
+      .eq('setting_key', 'backup_hard_fail_on_partial')
+      .maybeSingle()
+    if (error) return true
+    const v = (data as { setting_value: unknown } | null)?.setting_value
+    if (v === false || v === 'false') return false
+    return true
+  } catch {
+    return true
+  }
+}
+
 // Buckets to inventory for storage manifest
 const STORAGE_BUCKETS = ['review-evidence', 'avatars', 'safety-media']
 
@@ -506,8 +530,20 @@ async function handleFinalize(
       ? `Integrity: ${integrity.missing.length} missing, ${integrity.unreadable.length} unreadable, ${integrity.row_mismatch.length} row mismatch`
       : null
 
+  // Phase 9.2 WP-a — hard-fail-on-partial. If integrity reports any missing
+  // table the snapshot is a partial backup; when the flag is true
+  // (production default) mark the run failed instead of completed_with_errors.
+  const hardFailManual = await loadHardFailOnPartial(supabase)
+  const partialManual = integrity.missing.length > 0
+  const manualStatus =
+    integrity.status === 'ok'
+      ? 'completed'
+      : hardFailManual && partialManual
+        ? 'failed'
+        : 'completed_with_errors'
+
   await supabase.from('backup_logs').update({
-    status: integrity.status === 'ok' ? 'completed' : 'completed_with_errors',
+    status: manualStatus,
     file_path: manifestPath,
     file_size_bytes: totalSizeBytes,
     tables_count: tablesCount,
@@ -733,8 +769,14 @@ async function runScheduledChunked(
     if (errors.length > 0) {
       parts.push(`${errors.length} warning(s): ${errors.slice(0, 3).join('; ')}`)
     }
+    // Phase 9.2 WP-a — hard-fail-on-partial. When the flag is true
+    // (production default) and table coverage shrank, mark the run as
+    // `failed` instead of `completed_with_errors` so the Backup History
+    // pill is red and the run is excluded from "latest successful" pointers.
+    const hardFail = await loadHardFailOnPartial(supabase)
+    const finalStatus = hardFail && shrunk ? 'failed' : 'completed_with_errors'
     await supabase.from('backup_logs').update({
-      status: 'completed_with_errors',
+      status: finalStatus,
       error_message: parts.join(' — '),
     }).eq('id', backupId)
   }
