@@ -338,6 +338,10 @@ export function BackupRestoreTab() {
           <CardDescription>
             {backups?.length ?? 0} backup{(backups?.length ?? 0) !== 1 ? 's' : ''} available
           </CardDescription>
+          <p className="text-xs text-muted-foreground mt-2">
+            Partial backups (fewer tables backed up than discovered) are marked <strong>failed</strong> by default.
+            This is controlled by the <code>backup_hard_fail_on_partial</code> system setting (default <code>true</code>) and overridable only at the database level for emergency admin use.
+          </p>
         </CardHeader>
         <CardContent>
           {!backups || backups.length === 0 ? (
