@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Loader2, Building2, Globe, Mail, Send, FileText, CheckSquare, ScrollText, UserCog, ExternalLink, Archive, Star, ShieldCheck } from 'lucide-react';
 import { ConfirmDestructiveDialog } from '@/components/ui/ConfirmDestructiveDialog';
+import { CommunicationsTab } from '@/components/platform/impl-console/CommunicationsTab';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { MinimalHeader } from '@/components/layout/MinimalHeader';
