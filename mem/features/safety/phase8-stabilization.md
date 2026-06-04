@@ -19,7 +19,7 @@ Phase 8 is a low-risk validation phase: regression checklist + release-readiness
 ## Deferred items (do NOT silently remove)
 | Item | Status | Reason |
 |---|---|---|
-| Drop `safety_settings.ui_incident_v2` + `incident_stage_copy` columns | ✅ Resolved 2026-06-04 | Re-snapshotted pre-flight passed (defaults-only + 0 readers + 0 dependents). Plain `DROP COLUMN` shipped with in-transaction precondition guard; no CASCADE. Rollback script at `docs/safety/phase8-dead-column-rollback.sql`. |
+| Drop `safety_settings.ui_incident_v2` + `incident_stage_copy` columns | ✅ Verified complete 2026-06-04 | Drop already happened in a prior session — `pg_attribute` attnums 6 & 7 tombstoned (`attisdropped = true`). Today's re-snapshot: 5-column key/value table, 13 rows, runtime config from row keys, 0 readers, 0 dependents. No new migration applied today. Rollback script at `docs/safety/phase8-dead-column-rollback.sql` (manual only). |
 | `/safety/settings/release-readiness` runtime page | Deferred — optional | A new route is a runtime feature; user required explicit separate approval before any UI ship. Tracked here so it is not forgotten. |
 
 ## Invariants

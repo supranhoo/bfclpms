@@ -52,7 +52,7 @@ Rollback artefact committed at `docs/safety/phase8-dead-column-rollback.sql`
 
 | Item | Status | Reason | Next step |
 |---|---|---|---|
-| Drop `safety_settings.ui_incident_v2`, `incident_stage_copy` columns | ✅ **Resolved 2026-06-04** | Re-snapshotted pre-flight passed (defaults-only + 0 readers + 0 dependents). Plain `DROP COLUMN` applied with in-transaction guard. | Rollback script at `docs/safety/phase8-dead-column-rollback.sql` (manual). |
+| Drop `safety_settings.ui_incident_v2`, `incident_stage_copy` columns | ✅ **Verified complete 2026-06-04** | Drop happened in a prior session — `pg_attribute` shows attnums 6 & 7 with `attisdropped = true`. Today's re-snapshot confirmed: 5-column key/value table, 13 rows, runtime config served from row keys, 0 readers, 0 dependents. No new migration applied. | Rollback script at `docs/safety/phase8-dead-column-rollback.sql` (manual). |
 | `/safety/settings/release-readiness` runtime page | **Deferred — optional** | A new route is a runtime feature; user explicitly required a separate approval before any UI ship | Propose as a flag-gated subtask (`release_readiness_v1`, default OFF) only if requested |
 
 ## 6. Constraints honored
