@@ -21,6 +21,8 @@ import {
 import { ConfirmDestructiveDialog } from '@/components/ui/ConfirmDestructiveDialog';
 import { useToast } from '@/hooks/use-toast';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { ImplementersAuditTab } from '@/components/platform/ImplementersAuditTab';
 
 /**
  * Phase 4D — Implementers management UI.
@@ -53,7 +55,7 @@ function callManageImplementer(body: Record<string, unknown>) {
   return supabase.functions.invoke('manage-implementer', { body });
 }
 
-export function ImplementersTab() {
+export function ImplementersManageTab() {
   const { user, hasRole } = useAuth();
   const qc = useQueryClient();
   const { toast } = useToast();
@@ -568,6 +570,27 @@ function AddImplementerDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/**
+ * Phase 4F — Public wrapper. Renders the existing management UI plus a new
+ * read-only Audit log sub-tab. Parent (`PlatformSettings`) is unchanged.
+ */
+export function ImplementersTab() {
+  return (
+    <Tabs defaultValue="manage" className="w-full">
+      <TabsList>
+        <TabsTrigger value="manage">Manage</TabsTrigger>
+        <TabsTrigger value="audit">Audit log</TabsTrigger>
+      </TabsList>
+      <TabsContent value="manage" className="pt-4">
+        <ImplementersManageTab />
+      </TabsContent>
+      <TabsContent value="audit" className="pt-4">
+        <ImplementersAuditTab />
+      </TabsContent>
+    </Tabs>
   );
 }
 

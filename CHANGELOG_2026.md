@@ -9,6 +9,15 @@
 ## 2026-06-04 — Phase 4D Implementation Console: Implementers Management UI
 
 ## 2026-06-04 — Phase 4G Implementation Console: Session Reality Check
+
+## 2026-06-04 — Phase 4F Implementation Console: Implementers Audit Log
+- New owner-only **Audit log** sub-tab inside Platform Settings → Implementers. Read-only view over `entitlement_audit` rows produced by Phase 4D (`manage-implementer`) and Phase 3G (test email sends). RLS already restricts SELECT to `platform_owner`; component additionally hides itself if the caller is not platform_owner.
+- Filters: scope chips (Grant role, Revoke role, Assign client, Unassign client, Test email send), time window (24h / 7d / 30d / 90d / All, default 30d), client dropdown, page-size selector (25/50/100). All filters server-side and indexed — no JSONB scans.
+- Filter strategy verified against actual writes: `reason` is matched with `.in('reason', [...])` for the four exact admin actions (`impl_console_grant_role`, `impl_console_revoke_role`, `impl_console_assign_client`, `impl_console_unassign_client`) and `.like('reason', 'impl_console_test_email_send_%')` for the test-send scope. Client filter uses the indexed `entitlement_audit.client_id` column directly.
+- Target user is resolved from `after.user_id` / `before.user_id` (no `target_user_id` column exists). Actor + target profile names are batch-fetched per page in a single `profiles IN(...)` lookup.
+- **PII masking**: emails masked in actor/target columns AND deep-walked across the expanded `before`/`after` JSON — any string matching `^...@...\.[^...]+$` or living under a key matching `email|recipient|to_address|from_address` is replaced with `ab***@domain` before render.
+- **Out of scope (unchanged):** no CSV export (Phase 4C), no write paths, no schema change, no new edge function, no RLS edit, no PMS workflow / scoring / report / menu / permission / notification / entitlement-enforcement behavior change. Implementation_admin cannot see the audit log (route + RLS).
+- Files: `src/hooks/useImplementersAuditLog.ts` (new); `src/components/platform/ImplementersAuditTab.tsx` (new); `src/components/platform/ImplementersTab.tsx` (wraps existing manage UI as `ImplementersManageTab` and adds the new sub-tab).
 - Implementation Console now revalidates the caller's effective access without waiting for a page reload. Closes the 4D gap where a revoked `implementation_admin` kept console access until manual refresh.
 - Two route-scoped checks (no global polling, no AuthContext change):
   - **Role check** — re-fetches `user_roles` for this user filtered to `platform_owner` / `implementation_admin` every 3 minutes and on tab focus. If a successful fetch returns zero rows, navigates to `/access-denied`. Transient errors (undefined data) are ignored so a flaky network never locks anyone out.
