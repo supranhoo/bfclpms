@@ -23,12 +23,11 @@ Phase 8 is formally closed. Scope was docs + tests + cleanup only; no runtime fe
 
 ## 1. Test posture
 
-| Suite | Files | Tests | Status |
-|---|---|---|---|
-| Menu CAPA (I1–I4) | 6 | 24 | ✅ green |
-| Safety Phase 1–7 SSOT | (existing) | 125 | ✅ green per roadmap version history |
-| Safety Phase 8 SSOT (new) | 6 | 33 | ✅ green |
-| **Safety total** | — | **≥158** | ✅ |
+| Suite | Command | Files | Tests | Status |
+|---|---|---|---|---|
+| Menu CAPA (I1–I4) | `bunx vitest run src/test/menu src/test/menu-setting-capa.test.ts` | 6 | 24 | ✅ 24/24 green (re-run 2026-06-04) |
+| Safety Phase 8 SSOT | `bunx vitest run src/test/safety/phase8` | 6 | 33 | ✅ 33/33 green (re-run 2026-06-04) |
+| **Safety total (all phases)** | `bunx vitest run src/test/safety` | 31 | 241 | ✅ 241/241 green (re-run 2026-06-04) |
 
 Phase 8 SSOT files live under `src/test/safety/phase8/`:
 
