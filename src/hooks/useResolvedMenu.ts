@@ -4,6 +4,7 @@ import { applyOverrides, buildLabelMap, groupByParent } from '@/lib/menu/applyOv
 import type { MenuOverrideRow, MenuRegistryRow, ResolvedMenuNode } from '@/lib/menu/types';
 
 const STALE_MS = 5 * 60 * 1000;
+const FLAG_STALE_MS = 30 * 1000;
 
 async function fetchEnabled(): Promise<boolean> {
   const { data, error } = await supabase
@@ -40,7 +41,8 @@ export function useMenuOverridesEnabled() {
   return useQuery({
     queryKey: ['menu-overrides-enabled'],
     queryFn: fetchEnabled,
-    staleTime: STALE_MS,
+    staleTime: FLAG_STALE_MS,
+    refetchOnWindowFocus: true,
   });
 }
 
@@ -58,6 +60,9 @@ export function useResolvedMenu() {
     enabled: !!enabled,
     staleTime: STALE_MS,
     queryFn: async () => {
+      // CAPA hard-guard: even if a stale cached payload exists, never return
+      // a resolver tree when the flag is off at call time.
+      if (!enabled) return undefined as any;
       const [registry, overrides] = await Promise.all([fetchRegistry(), fetchOverrides()]);
       const resolved = applyOverrides(registry, overrides);
       return {
