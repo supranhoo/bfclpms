@@ -1,73 +1,70 @@
+## Assumptions
+- Roadmap work remains paused until the admin sidebar and auditor pages are restored.
+- No PMS enforcement will be enabled; `hub_enforcement_pilot_enabled` stays `false`.
+- This is a CAPA/observe-only correction, not a new roadmap phase.
 
-## Scope guard
+## Findings from read-only verification
+- The live entitlement resolver in `useEntitlement.ts` always resolves `client_key='default'`.
+- Database currently has `client_key='default'` with `display_name='BFCL'` and `id='b4ffce0d-e806-4413-972c-8c9bf3eb2bdb'`.
+- So live resolves to both labels in practice: the **entity key is `default`**, and the **actual client id is `b4ffce0d-e806-4413-972c-8c9bf3eb2bdb`**.
+- `client_urls` has no binding row for `pms.bfclalloys.com`; current code does not resolve by domain anyway.
+- `hub_platform_settings_enabled=true`, `hub_enforcement_pilot_enabled=false`, and `menu_overrides_enabled=false`.
+- Existing baseline entitlement rows for `default` / `b4ffce0d...` include `module_key='pms'` and all currently registered PMS action entitlements enabled.
+- The requested baseline names like `pms.access`, `pms.sidebar`, `pms.admin.dashboard`, `pms.audit.panel`, etc. do not currently exist as `action_registry` keys, so adding entitlement rows for them would fail unless the registry is extended. I will not create speculative action keys in CAPA.
 
-Roadmap work is paused. This plan only touches CAPA / sidebar render path. No changes to:
-- `menu_overrides_enabled` flag
-- `menu_registry` / `menu_overrides` seeding
-- Menu Setting / Hub enforcement flags
-- DB migrations, RLS, workflow, scoring
+## Risk & Impact Report
+- **Data Impact:** Low. Only safe, idempotent entitlement data correction/audit rows if needed; no destructive data changes.
+- **Workflow Impact:** Low. Keeps observe-only mode; no PMS action should become blocked.
+- **UI/UX Impact:** Intended to restore/verify admin sidebar and auditor pages. No visual redesign.
+- **Regression Risk:** Low if limited to entitlement data and diagnostics. Avoid touching scoring/workflow/menus unless validation proves the failure is code-side.
+- **Scalability Impact:** Minimal. Reads are limited by indexed keys (`client_key`, `client_id`, action/module keys). No large dataset rendering.
+- **Mitigation:** Idempotent upserts only; preserve enforcement flag off; verify with browser/network/DB signals after correction.
+- **Rollback:** Re-disable any accidentally enabled action/module entitlements or revert diagnostic-only code; no schema rollback expected.
 
-## Diagnosis questions answered from code + live signals
+## Step-by-step Plan
+1. **Finalize resolver verification**
+   - Confirm the app code resolves entitlements through `client_key='default'`.
+   - Confirm `default` maps to `client_id='b4ffce0d-e806-4413-972c-8c9bf3eb2bdb'`.
+   - Confirm no domain-based resolver is active for `pms.bfclalloys.com`.
 
-What we can confirm right now from code, network logs, and the live bundle hash served at `pms.bfclalloys.com` (`assets/index-CjfF6RVN.js`):
+2. **Apply idempotent CAPA data correction only if gaps exist**
+   - Ensure `client_module_entitlements` has `module_key='pms'` enabled for the `default` client.
+   - Ensure every existing PMS action in `action_registry` has an enabled row in `client_action_entitlements` for the `default` client.
+   - Do **not** enable `hub_enforcement_pilot_enabled`.
+   - Add an audit row describing the CAPA baseline entitlement reconciliation.
 
-1. AppSidebar is unconditionally mounted by `DashboardLayout` after `loading=false` and `user` present. No conditional that can omit it.
-2. The left pane container (`<Sidebar>`) always renders header + footer + SidebarContent. If only the menu area is blank, the empty region is the `<ErrorBoundary>` inside `<SidebarContent>` between Header and Footer. If the entire left pane is missing, that's a different failure mode (Sidebar offcanvas collapsed). We need a screenshot from the affected user to disambiguate.
-3. From the preview session (Ankit, admin + platform_owner, `menu_overrides_enabled=false`, no direct reports → naturalRole=employee, isAdminMode default `true` → effectiveRole=`admin`), no error is thrown in the captured logs from AppSidebar / CollapsibleSidebarGroup / useMenuAccess / useResolvedMenu / AuthContext / ErrorBoundary. The only errors are unrelated: a `/~api/analytics` 500 and a realtime WS close.
-4. Live values on the active session: `role=admin`, `effectiveRole=admin`, `isAdminMode=true`, `profile.id=535d9a14…`, `loading=false`. Auth bootstrap completed (profile + roles returned 200).
-5. `filterByRole` does receive the static items array each render; if it returns `[]` the new `staticFilter` is invoked. For admin, `canAccess()` falls through to `effectiveRole === 'admin' → true` for all admin-only keys, so the primary filter should already pass.
-6. With the current CAPA code, admin group counts cannot be zero for Main (`dashboard`, `inbox` are EMPLOYEE_DEFAULT_MENUS) and Administration (admin fallthrough). If the user still sees zero items, the running bundle is not the CAPA bundle.
-7. CSS: `Sidebar` is `collapsible="offcanvas"` by default. When `state==="collapsed"` on desktop the whole sidebar is moved off-canvas, leaving a `w-0` strip. This can present as "blank left pane" if the sidebar was collapsed via the trigger. DashboardLayout already shows a floating trigger when collapsed.
-8. Live is serving `index-CjfF6RVN.js`. We need to confirm this hash matches the latest CAPA build (after fail-open + ErrorBoundary fixes). The user reported "Update button blurred" — strong indicator live does NOT yet contain the CAPA fixes.
+3. **Add safe client-resolution visibility if needed**
+   - If browser verification remains inconclusive, add a non-blocking diagnostic marker/log in the entitlement hook or platform settings showing resolved `clientId` and observe/enforcement flags.
+   - This must not affect sidebar logic or access control.
 
-## What this plan changes
+4. **Validate CAPA invariants**
+   - Admin sidebar must not be empty when `menu_overrides_enabled=false`.
+   - Auditor pages must not crash.
+   - Legacy baseline access must remain available with `menu_overrides_enabled=false` and not be dependent on Hub enforcement.
+   - Confirm network/console has no entitlement or sidebar crash errors.
 
-### Step 1 — Confirm the deployed bundle on live (no code change)
+## UI Changes
+- Not Applicable unless diagnostic visibility is required.
+- If added, it will be a developer-only/non-disruptive marker or console diagnostic, not a user-facing redesign.
 
-Ask the user to:
-- On `pms.bfclalloys.com/auth`, open DevTools → Network → reload → note the hash of `assets/index-*.js`.
-- Compare to the preview URL's bundle hash.
-- Confirm whether the Publish → Update button is now enabled (publish required for frontend changes to reach live).
+## Implementation
+- Use a backend data update only for existing entitlement rows / missing rows.
+- No schema migration unless evidence proves missing registry keys must become formal product actions; that would require a separate approval because it changes the entitlement model.
+- No roadmap implementation until validation passes.
 
-If hashes differ → live just needs a Publish/Update; no code fix needed.
+## Tests
+- Add/adjust unit tests only if code changes are needed.
+- Verify existing entitlement resolver behavior: disabled hub returns allow, enabled hub resolves `default` client actions, enforcement pilot remains off.
+- Browser smoke validation: admin sidebar visible; auditor route accessible; no ErrorBoundary.
 
-### Step 2 — Add an emergency static-only sidebar path (CAPA hardening, only if Step 1 still shows blank)
+## DOCUMENTATION.md updates
+- If code changes are made, update documentation to state: live PMS currently resolves entitlements through the `default` client row, and CAPA requires baseline PMS entitlements there.
+- If data-only correction is sufficient, no repository documentation change is necessary unless you want this captured permanently.
 
-In `src/components/layout/AppSidebar.tsx`, when `overridesEnabled === false`, bypass `resolveGroupItems` and `useMenuAccess.canAccess` entirely for the standard groups and render the static items array filtered ONLY by hardcoded `item.roles.includes(effectiveRole)`. This guarantees the baseline sidebar regardless of any DB state, resolver state, or `menu_access_config` row missing.
+## POLICY.md updates
+- If code changes are made, update policy to state: Hub enforcement remains off during CAPA and cannot be used to gate PMS baseline access until sidebar/auditor invariants pass.
+- If data-only correction is sufficient, no repository policy change is necessary unless you want this captured permanently.
 
-Net effect when flag is OFF (current production state):
-- Resolver tree: ignored (was already guarded).
-- `menu_access_config`: ignored for visibility. Static `item.roles` becomes the gate.
-- `canPerform` / per-user overrides: still consulted only for the Data Entry group's bespoke filter (unchanged).
-- When flag flips back ON in the future: existing DB-driven path resumes; no roadmap behavior changes.
-
-This is the "If AppSidebar is mounted but counts are zero → emergency static fallback" path the user asked for, narrowly scoped to the flag-off branch.
-
-### Step 3 — Visible CAPA build marker (1 line)
-
-Add a hidden `data-capa-build="2026-06-04"` attribute on `<SidebarContent>` so the user can verify in DevTools whether the CAPA bundle is actually running on live. Costs nothing and avoids future ambiguity.
-
-### Step 4 — Tests
-
-- Unit test: with `overridesEnabled=false`, `effectiveRole='admin'`, mock `useMenuAccess.canAccess` to always return `false` → admin sidebar still shows Main + Administration groups.
-- Unit test: with `overridesEnabled=false`, `effectiveRole='auditor'`, primary filter empty → Audit group still shows via static roles.
-- Regression: `overridesEnabled=true` path unchanged (resolver still consulted).
-
-## What this plan does NOT change
-
-- No edits to `useResolvedMenu`, `useMenuAccess`, `CollapsibleSidebarGroup`.
-- No DB writes, no flag flips, no roadmap unlock.
-- Data Entry group keeps its bespoke filter (DataOwnerRoute parity).
-
-## Rollback
-
-Single-file change in `AppSidebar.tsx`. If anything regresses, revert that file.
-
-## Decision needed from you
-
-Before I implement Step 2, please confirm:
-- (a) Is the Publish → Update button now clickable? If yes, please click it first and recheck live — Step 2 may be unnecessary.
-- (b) On live, can you press F12 → Network → reload, and share the `assets/index-*.js` filename you see? (This tells us whether CAPA is even deployed.)
-- (c) Is the entire left pane missing on live, or only the menu list between header and footer?
-
-If (a)=No or (b) shows the same hash `CjfF6RVN` after Publish, I will proceed with Step 2 (emergency static fallback) and Step 3 (build marker). If you want me to skip the questions and just implement Steps 2–4 immediately for safety, say "proceed".
+## Post-implementation notes
+- The most important finding is that `default` and `b4ffce0d-e806-4413-972c-8c9bf3eb2bdb` are the same current client row, not two different clients in the database.
+- If the sidebar is still blank after these entitlements are confirmed, the remaining root cause is likely deployment bundle freshness, sidebar collapsed/offcanvas state, route/layout mounting, or menu/sidebar code—not entitlement row mismatch.
