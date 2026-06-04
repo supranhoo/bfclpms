@@ -530,8 +530,20 @@ async function handleFinalize(
       ? `Integrity: ${integrity.missing.length} missing, ${integrity.unreadable.length} unreadable, ${integrity.row_mismatch.length} row mismatch`
       : null
 
+  // Phase 9.2 WP-a — hard-fail-on-partial. If integrity reports any missing
+  // table the snapshot is a partial backup; when the flag is true
+  // (production default) mark the run failed instead of completed_with_errors.
+  const hardFailManual = await loadHardFailOnPartial(supabase)
+  const partialManual = integrity.missing.length > 0
+  const manualStatus =
+    integrity.status === 'ok'
+      ? 'completed'
+      : hardFailManual && partialManual
+        ? 'failed'
+        : 'completed_with_errors'
+
   await supabase.from('backup_logs').update({
-    status: integrity.status === 'ok' ? 'completed' : 'completed_with_errors',
+    status: manualStatus,
     file_path: manifestPath,
     file_size_bytes: totalSizeBytes,
     tables_count: tablesCount,
