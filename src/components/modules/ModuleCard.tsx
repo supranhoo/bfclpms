@@ -10,6 +10,7 @@ import {
   Briefcase,
   Settings,
   ShieldAlert,
+  Wrench,
   ArrowUpRight,
   LucideIcon,
 } from 'lucide-react';
@@ -35,6 +36,7 @@ const iconMap: Record<string, LucideIcon> = {
   Briefcase,
   Settings,
   ShieldAlert,
+  Wrench,
 };
 
 export const ModuleCard = React.forwardRef<HTMLDivElement, ModuleCardProps>(function ModuleCard({
