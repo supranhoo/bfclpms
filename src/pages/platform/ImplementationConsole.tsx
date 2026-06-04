@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Loader2, Building2, Globe, Mail, Send, FileText, CheckSquare, ScrollText, UserCog, ExternalLink, Archive, Star, ShieldCheck } from 'lucide-react';
 import { CommunicationsTab } from '@/components/platform/impl-console/CommunicationsTab';
+import { TemplatesTab } from '@/components/platform/impl-console/TemplatesTab';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { MinimalHeader } from '@/components/layout/MinimalHeader';
@@ -130,7 +131,7 @@ export default function ImplementationConsole() {
             <TabsContent value="comms"><CommunicationsTab client={activeClient} actorId={user?.id} /></TabsContent>
             <TabsContent value="sender"><SenderIdentityTab client={activeClient} actorId={user?.id} /></TabsContent>
             <TabsContent value="test"><TestEmailTab client={activeClient} actorId={user?.id} /></TabsContent>
-            <TabsContent value="templates"><Placeholder title="Notification Templates" hint="Activates after the Communications foundation phase ships per-client templates." /></TabsContent>
+            <TabsContent value="templates"><TemplatesTab client={activeClient} actorId={user?.id} /></TabsContent>
             <TabsContent value="checklist"><ChecklistTab client={activeClient} actorId={user?.id} /></TabsContent>
             <TabsContent value="logs"><Placeholder title="Delivery Logs" hint="Activates after per-client email dispatching is wired in the Communications foundation phase." /></TabsContent>
           </Tabs>
