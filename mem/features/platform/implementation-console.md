@@ -11,7 +11,7 @@ type: feature
 
 ## Route and tabs
 - Route: `/implementation-console`, guarded by `ImplementationConsoleRoute` (platform_owner OR ≥1 assignment).
-- Tabs: Assigned Clients · Profile (display_name only) · URLs & Domains · Communications (placeholder until Phase 3E) · Sender Identity · Test Email · Notification Templates (placeholder) · Setup Checklist · Delivery Logs (placeholder).
+- Tabs: Assigned Clients · Profile (display_name only) · URLs & Domains · Communications · Sender Identity · Test Email · Notification Templates (placeholder) · Setup Checklist · Delivery Logs (placeholder).
 - Client picker shows only clients visible via RLS — platform owners see all; implementers see assigned only.
 
 ## SMTP / secret rule
@@ -34,8 +34,19 @@ type: feature
 - Notes field carries a UI warning: "Do not enter passwords/tokens." Notes are visible to platform owners and assigned implementers.
 - Audit: every create/set-primary/verify-toggle/archive writes `entitlement_audit` with `entity_type='client_url'`, `entity_key=clients.client_key`, reason `impl_console_update_client_url`. Notes contents are NOT echoed into audit payloads.
 
+## Client Contacts (Phase 3E)
+- `public.client_contacts` records per-client role-tagged email addresses. Roles: `support`, `hr`, `escalation`, `billing`, `ops`, `other` (CHECK allowlist). Columns include `email` (CHECK enforces lowercase + no whitespace + regex), `display_name`, `is_primary_for_role`, `verified` (manual), `verified_by/at`, `notes`, `is_active`, `archived_at/by`.
+- **No hard delete.** Grants: `SELECT, INSERT, UPDATE` to `authenticated`; no DELETE policy or grant. Archival via `impl_console_archive_contact(contact_id)` SECURITY DEFINER RPC.
+- Partial unique indexes: one active primary per `(client_id, role)`; same email may not be active twice for the same `(client, role)` while active.
+- `impl_console_set_primary_contact(contact_id)` RPC atomically unsets any prior active primary in the same `(client, role)` and sets the requested row as primary. Rejects archived rows. Used by both the row action and the Add dialog's "Mark as primary" checkbox — users never have to manually clear the old primary.
+- Manual verification only — no SMTP probe. UI banner makes this explicit. Notes UI warning: "Do not enter passwords, tokens, or secrets in notes."
+- Archive uses `ConfirmDestructiveDialog` with copy clarifying that archive is not delete and history remains available.
+- Audit (`entitlement_audit`): `entity_type='client_contact'`, `entity_key=clients.client_key`, reason `impl_console_update_client_contact`. Payload **never echoes** the raw email or notes — only `email_domain`, `email_hash` (sha256[0..16] of lowercased email), `email_masked` (`a***@domain`). The actual email lives only in `client_contacts`.
+- Checklist: existing `support_emails` item auto-ticks when at least one row has `role='support' AND is_active AND verified`. Idempotent — short-circuits if already done.
+- No edge function changes and no email sending in this phase — Communications is purely the address-book foundation that downstream Notification Templates and Delivery Logs phases will read from.
+
 ## Audit
 - Every console mutation writes to `entitlement_audit` with `event_type='update'` (CHECK constraint allows only `grant/revoke/update/would_deny/admin_view/deny/create`). Logical action is encoded in `reason` as `impl_console_<action>_<entity_type>` (`update`, `secret_rotate`, `checklist_check`, `test_email_send`). `entity_key = clients.client_key`. Secret values are NEVER written to `before`/`after`.
 
 ## What `implementation_admin` CANNOT do
-- Access `/platform-settings`, edit `client_key`, `deployment_mode`, `is_active`, or any entitlement / module / enforcement / role / RLS / governance row. Cannot hard-delete `client_urls` rows (no DELETE policy or grant). No PMS/safety/incentive/reports surface area is exposed by this console.
+- Access `/platform-settings`, edit `client_key`, `deployment_mode`, `is_active`, or any entitlement / module / enforcement / role / RLS / governance row. Cannot hard-delete `client_urls` or `client_contacts` rows (no DELETE policy or grant). No PMS/safety/incentive/reports surface area is exposed by this console.
