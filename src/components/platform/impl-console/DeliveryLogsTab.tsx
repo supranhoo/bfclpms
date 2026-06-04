@@ -388,7 +388,127 @@ export function DeliveryLogsTab({ client }: { client?: Client }) {
             <Button size="sm" variant="outline" onClick={() => setPage((p) => p + 1)} disabled={!hasNext || isFetching}>Next</Button>
           </div>
         </div>
+
+        {isOwner && <RetentionPreviewSection clientId={client.id} clientKey={client.client_key} />}
       </CardContent>
     </Card>
+  );
+}
+
+/**
+ * Phase 4C — Retention preview-only section (owner-only).
+ *
+ * Calls the `impl-console-retention-sweep` edge function with
+ * `action: 'preview'` and renders the would-delete count + oldest/newest
+ * timestamps. DELETE is intentionally disabled in this phase; the UI
+ * states this explicitly. Enabling execute will require:
+ *   - separate platform-owner approval,
+ *   - typed confirmation ("DELETE TEST EMAIL LOGS"),
+ *   - pre-delete CSV export,
+ *   - 90+ day retention minimum,
+ *   - reason allowlist enforced server-side.
+ */
+function RetentionPreviewSection({ clientId, clientKey }: { clientId: string; clientKey: string }) {
+  const { toast } = useToast();
+  const [retentionDays, setRetentionDays] = useState(90);
+  const [scopeThisClient, setScopeThisClient] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState<
+    | null
+    | {
+        would_delete: number;
+        cutoff_iso: string;
+        retention_days: number;
+        client_id: string | null;
+        oldest_iso: string | null;
+        newest_iso: string | null;
+      }
+  >(null);
+
+  async function runPreview() {
+    setLoading(true);
+    setResult(null);
+    try {
+      const { data, error } = await supabase.functions.invoke('impl-console-retention-sweep', {
+        body: {
+          action: 'preview',
+          retention_days: retentionDays,
+          client_id: scopeThisClient ? clientId : null,
+        },
+      });
+      if (error) throw error;
+      if ((data as any)?.error) throw new Error((data as any).error);
+      setResult(data as any);
+    } catch (e) {
+      toast({
+        variant: 'destructive',
+        title: 'Preview failed',
+        description: (e as Error).message ?? 'Unknown error',
+      });
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="mt-6 rounded-md border bg-muted/30 p-4 space-y-3">
+      <div className="flex items-center gap-2">
+        <Eye className="h-4 w-4 text-muted-foreground" />
+        <div className="text-sm font-medium">Retention preview</div>
+        <Badge variant="outline" className="text-[10px]">preview-only</Badge>
+      </div>
+      <p className="text-xs text-muted-foreground">
+        Counts test-send audit rows older than the retention window. <strong>Delete is disabled</strong>{' '}
+        in this phase — observe preview counts first. Scope is hard-locked to{' '}
+        <code>reason = impl_console_test_email_send_client_smtp</code>; grant/revoke/assignment/observe/deny/export rows are never touched.
+      </p>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 items-end">
+        <div>
+          <Label className="text-xs">Retention (days, min 90)</Label>
+          <Input
+            type="number"
+            min={90}
+            value={retentionDays}
+            onChange={(e) => setRetentionDays(Math.max(90, parseInt(e.target.value || '90', 10) || 90))}
+          />
+        </div>
+        <div className="flex items-center gap-2 pb-2">
+          <input
+            id="retention-scope-client"
+            type="checkbox"
+            checked={scopeThisClient}
+            onChange={(e) => setScopeThisClient(e.target.checked)}
+            className="h-4 w-4"
+          />
+          <Label htmlFor="retention-scope-client" className="text-xs">
+            Limit to this client ({clientKey})
+          </Label>
+        </div>
+        <div>
+          <Button size="sm" onClick={runPreview} disabled={loading} className="w-full sm:w-auto">
+            {loading ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Eye className="h-4 w-4 mr-1" />}
+            Preview count
+          </Button>
+        </div>
+      </div>
+
+      {result && (
+        <Alert>
+          <AlertDescription className="text-xs space-y-1">
+            <div>
+              Would delete <strong>{result.would_delete}</strong> test-send row{result.would_delete === 1 ? '' : 's'} older than{' '}
+              <code>{new Date(result.cutoff_iso).toISOString()}</code> ({result.retention_days} days).
+            </div>
+            <div>
+              Oldest in scope: <code>{result.oldest_iso ?? '—'}</code> · Newest in scope:{' '}
+              <code>{result.newest_iso ?? '—'}</code>
+            </div>
+            <div className="text-muted-foreground">
+              Scope: <code>{result.client_id ? `client_id=${result.client_id}` : 'all clients'}</code>. Delete is intentionally disabled in this phase.
+            </div>
+          </AlertDescription>
+        </Alert>
+      )}
+    </div>
   );
 }
