@@ -1,5 +1,6 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 import { Loader2, Building2, Globe, Mail, Send, FileText, CheckSquare, ScrollText, UserCog, ExternalLink, Archive, Star, ShieldCheck } from 'lucide-react';
 import { CommunicationsTab } from '@/components/platform/impl-console/CommunicationsTab';
 import { TemplatesTab } from '@/components/platform/impl-console/TemplatesTab';
@@ -47,6 +48,64 @@ async function writeAudit(opts: {
 export default function ImplementationConsole() {
   const { user, hasRole } = useAuth();
   const isOwner = hasRole('platform_owner');
+  const qc = useQueryClient();
+  const navigate = useNavigate();
+
+  // ---------------------------------------------------------------------
+  // Phase 4G — route-scoped access revalidation.
+  //
+  // Re-checks the caller's effective console access without touching
+  // global AuthContext or any PMS surface. Polls every 3 minutes and on
+  // tab focus.
+  //   1. Re-fetch `user_roles` rows for this user filtered to the two
+  //      console-relevant roles. If neither row is present, the user has
+  //      been revoked — navigate to /access-denied.
+  //   2. Invalidate the clients query so a freshly-revoked assignment
+  //      disappears within the same tick (RLS does the filtering).
+  // ---------------------------------------------------------------------
+  const REVALIDATE_MS = 3 * 60 * 1000;
+
+  const { data: liveRoles } = useQuery({
+    queryKey: ['impl-console', 'access-check', user?.id],
+    enabled: !!user?.id,
+    refetchInterval: REVALIDATE_MS,
+    refetchOnWindowFocus: true,
+    refetchIntervalInBackground: false,
+    staleTime: 0,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', user!.id)
+        .in('role', ['platform_owner', 'implementation_admin']);
+      if (error) throw error;
+      return (data ?? []).map((r) => r.role as string);
+    },
+  });
+
+  // Refresh the clients list on the same cadence so revoked assignments
+  // disappear without a full page reload. Cheap — same RLS-bounded query.
+  useEffect(() => {
+    if (!user?.id) return;
+    const tick = () => qc.invalidateQueries({ queryKey: ['impl-console', 'clients', user.id] });
+    const interval = window.setInterval(tick, REVALIDATE_MS);
+    const onFocus = () => tick();
+    window.addEventListener('focus', onFocus);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener('focus', onFocus);
+    };
+  }, [qc, user?.id]);
+
+  // If revalidation returns an empty role set, the user has been revoked
+  // since they entered the console. Bounce to /access-denied. We only act
+  // on a *successful* fetch that returned zero rows — transient network
+  // errors leave `liveRoles` undefined and are ignored.
+  useEffect(() => {
+    if (liveRoles && liveRoles.length === 0) {
+      navigate('/access-denied', { replace: true });
+    }
+  }, [liveRoles, navigate]);
 
   // Load clients visible to me (platform_owner = all; implementation_admin = assigned only via RLS join)
   const { data: clients, isLoading } = useQuery({

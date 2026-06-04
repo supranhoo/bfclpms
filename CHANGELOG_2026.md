@@ -7,6 +7,17 @@
 ## 2026-06-04 — Phase 4A Implementation Console: Auth & Routing Enforcement
 
 ## 2026-06-04 — Phase 4D Implementation Console: Implementers Management UI
+
+## 2026-06-04 — Phase 4G Implementation Console: Session Reality Check
+- Implementation Console now revalidates the caller's effective access without waiting for a page reload. Closes the 4D gap where a revoked `implementation_admin` kept console access until manual refresh.
+- Two route-scoped checks (no global polling, no AuthContext change):
+  - **Role check** — re-fetches `user_roles` for this user filtered to `platform_owner` / `implementation_admin` every 3 minutes and on tab focus. If a successful fetch returns zero rows, navigates to `/access-denied`. Transient errors (undefined data) are ignored so a flaky network never locks anyone out.
+  - **Assignment check** — invalidates the existing `['impl-console', 'clients', user.id]` query on the same cadence. RLS already filters `client_implementer_assignments` per-user, so a revoked assignment disappears from the client picker on the next tick; if it was the last one, the existing "No clients assigned" card replaces the operational tabs automatically.
+- `platform_owner` is unaffected — they always pass the role check and see all clients.
+- **Out of scope (unchanged):** no PMS route, PMS auth, dashboard, workflow, scoring, report, menu, permission, RLS, or notification behavior. No `AuthContext` change. Polling is mounted only inside `ImplementationConsole`, so PMS pages have zero extra traffic.
+- Files: `src/pages/platform/ImplementationConsole.tsx`.
+
+## 2026-06-04 — Phase 4D Implementation Console: Implementers Management UI
 - **Platform Settings → Implementers** tab fully rewritten into an owner-only management surface. No more email-only inline form — every mutation now routes through a new audited edge function.
 - New edge function `manage-implementer` (service-role): platform-owner-gated CRUD with four actions — `grant_role`, `revoke_role`, `assign_client`, `unassign_client`. All four write an immutable row to `entitlement_audit` (event_type=`grant`/`revoke`, `entity_type='implementation_admin_role'` or `'client_implementer_assignment'`, before/after JSON, reason code, actor). Caller's `platform_owner` role is verified server-side via service-role query against `user_roles`.
 - **Safety guards:**
