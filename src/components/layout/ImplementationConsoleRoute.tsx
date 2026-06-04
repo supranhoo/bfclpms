@@ -1,8 +1,8 @@
-import { Navigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { Loader2 } from 'lucide-react';
+import AccessDenied from '@/pages/AccessDenied';
 
 /**
  * Implementation Console guard.
@@ -35,7 +35,11 @@ export function ImplementationConsoleRoute({ children }: { children: React.React
   }
 
   const isOwner = hasRole('platform_owner');
+  const isImplAdmin = hasRole('implementation_admin');
   const isAssigned = (data ?? 0) > 0;
-  if (!isOwner && !isAssigned) return <Navigate to="/home" replace />;
+  // Phase 4A: explicit role gate. implementation_admin role grants entry even
+  // without assignments; the client picker inside the console will simply be
+  // empty (correct UX). On full denial, render a visible 403.
+  if (!isOwner && !isImplAdmin && !isAssigned) return <AccessDenied />;
   return <>{children}</>;
 }
