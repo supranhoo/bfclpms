@@ -4,6 +4,15 @@
 > **Status:** Living document. Append new ships under the **current week's row**, in the same step that you update `DOCUMENTATION.md` Version History.
 > **Sources:** `DOCUMENTATION.md` Version History, `supabase/migrations/`, `mem/*`.
 
+## 2026-06-04 — Phase 4A Implementation Console: Auth & Routing Enforcement
+- `implementation_admin` now first-class in `AuthContext`: added to `ROLE_PRIORITY` (between `management` and `auditor`) so users whose only role is `implementation_admin` get a stable `effectiveRole`; new `isImplementationAdmin` convenience flag on the context value (mirrors `isPlatformOwner`).
+- New page `src/pages/AccessDenied.tsx` and route `/access-denied` — visible 403 with "Back to Hub" button. Public (no guard).
+- `PlatformOwnerRoute` and `ImplementationConsoleRoute` now render `<AccessDenied />` on failure instead of silently `Navigate("/home")`. Direct-URL probes of `/platform-settings` by `implementation_admin` (or any non-owner) get a visible 403 instead of a silent bounce.
+- `ImplementationConsoleRoute` accepts `hasRole('implementation_admin')` as an explicit entry path in addition to `platform_owner` and assignment-row presence — an `implementation_admin` with zero assignments now reaches the console shell (client picker simply shows no clients).
+- `ModuleHub` Implementation Console tile visibility unioned with `hasRole('implementation_admin')` so tile and route never disagree. `showPlatformCard` unchanged — still owner + entitlement.
+- **Out of scope (unchanged):** no DB migration; no RLS edit; no edge function change; no PMS role/menu/scoring/notification/report/entitlement behavior change; no `client_*` table change; no `hub_platform_settings_enabled` semantics change.
+- Files: `src/pages/AccessDenied.tsx` (new); `src/App.tsx`; `src/contexts/AuthContext.tsx`; `src/components/layout/PlatformOwnerRoute.tsx`; `src/components/layout/ImplementationConsoleRoute.tsx`; `src/pages/ModuleHub.tsx`.
+
 ## 2026-06-04 — Phase 3G Implementation Console: Delivery Logs (read-only)
 - New **Delivery Logs** tab — read-only view over existing `entitlement_audit` rows where `entity_type='client_smtp'` and `reason='impl_console_test_email_send_client_smtp'`. **No new table, no new RPC, no new edge function, no schema change.**
 - Filters: outcome (all/success/failed), template_key contains, since (24h/7d/30d/all). Server-side pagination at 25 rows/page using `range()` + `count: 'exact'`.
