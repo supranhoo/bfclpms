@@ -4,6 +4,16 @@
 > **Status:** Living document. Append new ships under the **current week's row**, in the same step that you update `DOCUMENTATION.md` Version History.
 > **Sources:** `DOCUMENTATION.md` Version History, `supabase/migrations/`, `mem/*`.
 
+## 2026-06-04 — Phase 3G Implementation Console: Delivery Logs (read-only)
+- New **Delivery Logs** tab — read-only view over existing `entitlement_audit` rows where `entity_type='client_smtp'` and `reason='impl_console_test_email_send_client_smtp'`. **No new table, no new RPC, no new edge function, no schema change.**
+- Filters: outcome (all/success/failed), template_key contains, since (24h/7d/30d/all). Server-side pagination at 25 rows/page using `range()` + `count: 'exact'`.
+- Columns: When (relative + ISO tooltip), Recipient (masked, as stored), Template (key + `template`/`default` badge from `template_resolved`), Provider, Status (success / failed + HTTP), Actor (full_name from `profiles` + email).
+- **Actor email visibility**: `platform_owner` sees the full email; `implementation_admin` sees a masked form (`a***@domain`). Full name comes from `profiles.full_name` for both.
+- Unassigned clients are not selectable in the client picker (existing RLS); direct query failure renders an "Access denied" alert instead of an empty table.
+- No CSV/Excel export in this phase (deferred until PII export policy is finalized). No retry/resend/bulk action. No realtime/polling — manual Refresh only.
+- No PMS notification logs, dispatch queue, cron, or any PMS behavior surfaced or changed.
+- Files: `src/components/platform/impl-console/DeliveryLogsTab.tsx` (new); `src/pages/platform/ImplementationConsole.tsx` (placeholder swap).
+
 ## 2026-06-04 — Phase 3F Implementation Console: Notification Templates (per-client, Test-Email scoped)
 - New table `public.client_notification_templates`: per-client email templates consumed **only** by the Implementation Console Test Email tab. Columns: `template_key` (CHECK `^[a-z0-9_]{2,64}$`), `channel` (locked to `email`), `subject` (≤200), `body_text` (≤20000), `body_html` (≤50000, optional), `variables`, `is_active`, `archived_at/by`. Partial unique index `(client_id, template_key) WHERE is_active` — keys are scoped per client; the same key may exist for different clients.
 - **No hard delete** — `GRANT SELECT, INSERT, UPDATE` only to `authenticated`. Archival via `impl_console_archive_template(_id)` SECURITY DEFINER RPC: sets `is_active=false`, stamps `archived_at/by`.
