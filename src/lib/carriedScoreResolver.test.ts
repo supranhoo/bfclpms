@@ -81,7 +81,7 @@ describe('resolveCarriedScore', () => {
     expect(resolveCarriedScore({
       stage: 'manager', kpi: numericHigher,
       submission: { ...baseSub, self_score: 4, is_na: true },
-    })).toEqual({ score: null, source: 'none' });
+    })).toEqual({ score: null, source: 'na' });
   });
 
   it('returns none when no prior score AND no achievement', () => {
@@ -168,7 +168,7 @@ describe('resolveWithInputs', () => {
       { stage: 'manager', kpi: numericHigher,
         submission: { ...baseSub, is_na: true } },
       { manualScore: 5 }, true,
-    )).toEqual({ score: null, source: 'none' });
+    )).toEqual({ score: null, source: 'na' });
   });
 
   it('falls back to cascade when no inputs and no override', () => {
