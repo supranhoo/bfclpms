@@ -1,0 +1,16 @@
+---
+name: Backup Coverage Contract
+description: Static regression test locking RPC-driven discovery, BATCH_SIZE=4, storage buckets, and no hardcoded safety allowlist in create-backup/restore-backup
+type: constraint
+---
+`src/test/safety/phase9/backup-coverage-contract.test.ts` enforces five invariants by source-scanning the two edge-function files:
+
+1. `create-backup` calls `supabase.rpc('get_backup_table_order')` — no static allowlist.
+2. `restore-backup` calls the same RPC (legacy `LEGACY_INSERT_ORDER` is fallback-only).
+3. `STORAGE_BUCKETS` array in `create-backup` includes `safety-media`, `review-evidence`, `avatars`.
+4. `const BATCH_SIZE = 4` appears in BOTH manual and scheduled paths (256 MB Deno Deploy OOM guard — pairs with `mem/infrastructure/database/scheduled-backup-batch-size`).
+5. No `'safety_<word>'` string literal in `create-backup` outside the documented `PRUNE_TABLES.safety_notifications` retention sweep.
+
+**Why:** Phase 1.5 ticket T-003 added safety tables via a hardcoded list; that list was correctly removed in favor of RPC discovery. Without this contract, a future refactor could silently re-introduce a static allowlist or change `BATCH_SIZE`, breaking DR.
+
+**Scope:** Read-only, pure source scan. Does not call DB, edge functions, or storage. Failure of any invariant is a Category-B contract regression — treat as a defect until ADR/CHANGELOG proves the contract intentionally changed.

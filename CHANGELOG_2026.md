@@ -4,6 +4,16 @@
 > **Status:** Living document. Append new ships under the **current week's row**, in the same step that you update `DOCUMENTATION.md` Version History.
 > **Sources:** `DOCUMENTATION.md` Version History, `supabase/migrations/`, `mem/*`.
 
+## 2026-06-04 — Safety Phase 9.1 SHIPPED — backup-gap diagnostic + regression locks
+- **What:** Docs+tests-only pass. G-4 read-only diagnostic + static regression test that locks five backup-coverage invariants in `create-backup` / `restore-backup`. No DB change, no migration, no edge-fn redeploy, no RPC edit, no `backup_denylist` change.
+- **G-4 finding:** 201 (public BASE − denylist) vs 177 (last `discoveredCount` from 2026-06-03 logs) = **24-table delta is temporal**, not a coverage hole. Tables landed in Phases 7–8 after the last scheduled run; next run picks them up automatically because discovery is RPC-driven. **Zero `safety_*` exclusions confirmed** (35/35 safety tables in scope).
+- **Regression locks:** `src/test/safety/phase9/backup-coverage-contract.test.ts` (5 tests) — I1 RPC discovery in create-backup, I2 RPC in restore-backup, I3 `STORAGE_BUCKETS` includes `safety-media/review-evidence/avatars`, I4 `BATCH_SIZE=4` in both manual + scheduled paths, I5 no hardcoded `safety_*` literal in create-backup runtime path.
+- **Deferred to Phase 9.2 (tracked, not skipped):** hard-fail flag for `tablesCount < discoveredCount` (owner: Platform/Backup — re-decide after one clean run or two consecutive shrink runs); batch reliability root-cause for HTTP 546 / RateLimitError (owner: Platform/Backup); sandbox round-trip drill via `safety-drill` (owner: Safety — Phase 9.3, requires non-prod project).
+- **Test results (re-run 2026-06-04 at end of pass):** `bunx vitest run src/test/safety/phase9/ src/test/menu/ src/test/safety/phase8/` → 12 files / **58 tests passed (58)**. Menu CAPA invariants: 24/24 green. Phase 8 SSOT: 33/33 green. Phase 9.1 contract: 5/5 green.
+- **Scope locks honored:** no Menu Setting / Custom Tabs change · `menu_overrides_enabled` stays `false` in production · no PMS workflow/scoring/RLS/enforcement change · no release-readiness runtime page · Phase 8 stays CLOSED · no migration · no edge-fn deploy.
+- **Recommendation:** GO on Phase 9.2 scoping after one clean scheduled backup run, or after two consecutive shrink runs — whichever first. Phase 9.2 to propose hard-fail flag + retry-with-backoff, both behind feature flags defaulting OFF.
+- Files: `docs/safety/phase9/README.md` (new), `docs/safety/phase9/backup-gap-diagnostic.md` (new), `src/test/safety/phase9/backup-coverage-contract.test.ts` (new), `mem/infrastructure/database/backup-coverage-contract` (new), `mem/index.md` (index entry), this entry.
+
 ## 2026-06-04 — Safety Phase 8 CLOSED
 - **What:** Formal close-out of Phase 8 (docs + tests + cleanup). No DB change, no runtime code, no migration, no Menu Setting / Custom Tabs touch in this pass.
 - **Completed items:** (1) regression checklist doc, (2) release-readiness report doc, (3) 6-file / 33-test read-only SSOT suite under `src/test/safety/phase8/`, (4) `safety_settings` dead-column drop verified complete (columns no longer present in `public.safety_settings`; rollback script available), (5) memory + changelog updates, (6) Menu CAPA invariants re-validated both ends of phase.
