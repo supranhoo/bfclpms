@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { render } from '@testing-library/react';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -11,6 +11,24 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
  * graph for forbidden symbols rather than spinning up a full render that
  * would require mocking auth + Supabase.
  */
+// SafetyHome transitively consumes useAuth via useSafetyRealtimeSync. We
+// don't exercise auth here — stub the hook so the shell can mount under
+// jsdom without an AuthProvider tree.
+vi.mock('@/contexts/AuthContext', async (orig) => {
+  const actual: any = await orig();
+  return {
+    ...actual,
+    useAuth: () => ({
+      user: null,
+      profile: null,
+      loading: false,
+      isAuthenticated: false,
+      session: null,
+      signOut: vi.fn(),
+    }),
+  };
+});
+
 describe('Safety shell isolation', () => {
   it('SafetyLayout / Sidebar do NOT import PMS chrome', async () => {
     const layoutSrc = await import('@/components/safety/SafetyLayout?raw');
