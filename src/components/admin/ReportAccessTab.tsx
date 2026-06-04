@@ -26,6 +26,7 @@ const ROLE_LABELS: Record<AppRole, string> = {
   hr_pms: 'HR PMS',
   skip_level: 'Skip-Level',
   platform_owner: 'Platform Owner',
+  implementation_admin: 'Implementation Admin',
 };
 
 export function ReportAccessTab() {
