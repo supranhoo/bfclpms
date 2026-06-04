@@ -148,13 +148,26 @@ serve(async (req) => {
     }
 
     const subject = `PMS test email — ${client.display_name}`;
-    const text = [
+
+    // Append primary client URL ONLY if active + primary + verified.
+    const { data: primaryUrl } = await svc
+      .from("client_urls")
+      .select("url")
+      .eq("client_id", client_id)
+      .eq("is_active", true)
+      .eq("is_primary", true)
+      .eq("verified", true)
+      .maybeSingle();
+
+    const lines = [
       `This is a test email from the Implementation Console.`,
       ``,
       `Client: ${client.display_name} (${client.client_key})`,
       `Triggered by: ${user.email ?? user.id}`,
       `Timestamp: ${new Date().toISOString()}`,
-    ].join("\n");
+    ];
+    if (primaryUrl?.url) lines.push(`Client app: ${primaryUrl.url}`);
+    const text = lines.join("\n");
 
     const fromAddress = smtp.from_name
       ? `${smtp.from_name} <${smtp.from_email}>`
