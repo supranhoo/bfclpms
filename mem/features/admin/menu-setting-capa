@@ -48,3 +48,22 @@ invariants above. If any fails, pause the roadmap and patch CAPA first.
 - `src/test/menu-setting-capa.test.ts` — dangling parent, level clamp,
   combined malformed overrides.
 - `src/lib/menu/applyOverrides.test.ts` — pre-existing behaviour preserved.
+- `src/test/menu/` (ADR-072 close-out suite, 5 files / 20 tests):
+  `sidebar-admin-non-empty.test.tsx`, `sidebar-auditor-no-crash.test.tsx`,
+  `useResolvedMenu-flag-off.test.ts`, `useMenuAccess-failopen.test.ts`,
+  `resolver-malformed-override.test.ts`. All MUST pass before any
+  Menu Setting / Custom Tabs PR lands.
+
+## ADR-072 — 3-factor restoration RCA (2026-06-04)
+The empty-sidebar / auditor-crash incident was restored by THREE
+concurrent factors. Single-factor sufficiency is NOT proven and will
+NOT be tested in production. Any isolation experiment must happen in a
+non-prod copy.
+
+1. Forced republish (r3 3-file diff) — shipped CAPA code that was in
+   source but missing from the previously deployed bundle.
+2. `system_settings.menu_overrides_enabled = false` at 07:06:15 UTC.
+3. All active `menu_overrides` rows cleared.
+
+Baseline invariants I1–I4 (see `docs/adr/ADR-072.md` and `POLICY.md`
+§Menu-CAPA) are now the authoritative contract.
