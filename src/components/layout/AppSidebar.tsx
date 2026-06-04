@@ -7,7 +7,7 @@ import { useAppSettings } from '@/hooks/useAppSettings';
 import { useIsAnyOrgKpiDataOwner } from '@/hooks/useOrgKpiDataOwner';
 import { useMenuAccess } from '@/hooks/useMenuAccess';
 import { useBulkReviewFlag } from '@/hooks/useBulkReview';
-import { useResolvedMenu } from '@/hooks/useResolvedMenu';
+import { useResolvedMenu, useMenuOverridesEnabled } from '@/hooks/useResolvedMenu';
 import {
   Sidebar,
   SidebarContent,
@@ -183,6 +183,7 @@ export function AppSidebar() {
   const { data: isDataOwner } = useIsAnyOrgKpiDataOwner();
   const { canAccess, canPerform, userOverrides } = useMenuAccess();
   const { data: bulkReviewFlagOn } = useBulkReviewFlag();
+  const { data: overridesEnabled } = useMenuOverridesEnabled();
   const { data: resolvedMenu } = useResolvedMenu();
 
   const policyVisibleRoles = appSettings?.pms_policy_visible_roles || ['admin', 'manager', 'employee', 'auditor', 'management', 'hr_pms'];
@@ -216,6 +217,9 @@ export function AppSidebar() {
   const resolveGroupItems = useCallback(
     <T extends { title: string; menuKey?: string }>(groupKey: string, fallback: T[]): T[] => {
       const parentKey = GROUP_PARENT_KEY[groupKey];
+      // CAPA hard-guard: when overrides are disabled, never consume the
+      // resolver tree (even if briefly cached). Return the static fallback.
+      if (overridesEnabled === false) return fallback;
       if (!resolvedMenu || !parentKey) return fallback;
       try {
       const isPinned = (mk?: string) => !!mk && (keyOccurrences.get(mk) ?? 0) > 1;
@@ -349,7 +353,7 @@ export function AppSidebar() {
         return fallback;
       }
     },
-    [resolvedMenu, keyOccurrences, flatPool],
+    [overridesEnabled, resolvedMenu, keyOccurrences, flatPool],
   );
 
   // Resolved section for a given path — honours moved items by looking up the
