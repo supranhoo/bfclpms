@@ -136,14 +136,15 @@ describe('Phase 9.1 — Backup coverage contract', () => {
   });
 
   it('I11 — manual finalize semantics preserved (no retry wiring on manual path)', () => {
-    // The shared classifier must NOT be called from finalizeManualBackup.
+    // Manual finalize lives in handleFinalize. The shared classifier and
+    // retry helper must NOT be wired into it in this WP.
     const manualMatch = CREATE_SRC.match(
-      /async\s+function\s+finalizeManualBackup[\s\S]*?\n\}\n/,
+      /async\s+function\s+handleFinalize\([\s\S]*?\n\}\n/,
     );
-    expect(manualMatch, 'finalizeManualBackup function must exist').not.toBeNull();
+    expect(manualMatch, 'handleFinalize function must exist').not.toBeNull();
     expect(manualMatch![0]).not.toMatch(/isTransientChunkError/);
     expect(manualMatch![0]).not.toMatch(/retryFailedBatchTransient/);
-    // WP-9.2.a manual hard-fail branch still present.
+    // WP-9.2.a manual hard-fail branch still present in the same function.
     expect(manualMatch![0]).toMatch(/hardFailManual\s*&&\s*partialManual/);
   });
 });
