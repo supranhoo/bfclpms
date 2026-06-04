@@ -27,6 +27,7 @@ const PMSPolicy = lazy(() => import("./pages/PMSPolicy"));
 const ManagementDashboard = lazy(() => import("./pages/ManagementDashboard"));
 const AuditLogs = lazy(() => import("./pages/AuditLogs"));
 const NotFound = lazy(() => import("./pages/NotFound"));
+const AccessDenied = lazy(() => import("./pages/AccessDenied"));
 
 // Admin pages
 const UserManagement = lazy(() => import("./pages/admin/UserManagement"));
@@ -168,6 +169,7 @@ const App = () => (
               <Route path="/reset-password" element={<Suspense fallback={<PageFallback />}><ResetPassword /></Suspense>} />
               <Route path="/home" element={<Suspense fallback={<PageFallback />}><ModuleHub /></Suspense>} />
               <Route path="/" element={<Navigate to="/home" replace />} />
+              <Route path="/access-denied" element={<Suspense fallback={<PageFallback />}><AccessDenied /></Suspense>} />
               <Route
                 path="/platform-settings"
                 element={

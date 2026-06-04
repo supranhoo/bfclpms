@@ -2,6 +2,7 @@ import { Navigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useEntitlement } from '@/hooks/useEntitlement';
 import { Loader2 } from 'lucide-react';
+import AccessDenied from '@/pages/AccessDenied';
 
 /**
  * Hub-level guard. Requires `platform_owner` role AND the
@@ -21,7 +22,10 @@ export function PlatformOwnerRoute({ children }: { children: React.ReactNode }) 
   }
 
   if (!hubEnabled || !hasRole('platform_owner')) {
-    return <Navigate to="/home" replace />;
+    // Phase 4A: render a visible 403 instead of silently bouncing to /home so
+    // implementation_admin (and other roles) get explicit feedback on direct
+    // /platform-settings probes.
+    return <AccessDenied />;
   }
 
   return <>{children}</>;

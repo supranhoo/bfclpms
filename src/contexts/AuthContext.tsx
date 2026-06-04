@@ -34,6 +34,7 @@ interface AuthContextType {
   /** Convenience flags. `isAdmin` mirrors the legacy `role === 'admin'` check. */
   isAdmin: boolean;
   isPlatformOwner: boolean;
+  isImplementationAdmin: boolean;
   /** The UI-effective role: when admin mode is off, returns the natural hierarchy role */
   effectiveRole: AppRole | null;
   /** The admin's natural role based on org hierarchy (manager or employee) */
@@ -73,6 +74,7 @@ const ROLE_PRIORITY: AppRole[] = [
   'platform_owner',
   'hr_pms',
   'management',
+  'implementation_admin',
   'auditor',
   'skip_level',
   'manager',
@@ -422,6 +424,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       hasRole: (r: AppRole) => roles.includes(r),
       isAdmin: roles.includes('admin'),
       isPlatformOwner: roles.includes('platform_owner'),
+      isImplementationAdmin: roles.includes('implementation_admin'),
       effectiveRole, naturalRole,
       isAdminMode, toggleAdminMode, loading, isReady, profileError, signIn, signUp, signOut, fetchProfile,
     }}>

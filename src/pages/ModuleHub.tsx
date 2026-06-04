@@ -26,7 +26,12 @@ export default function ModuleHub() {
       return count ?? 0;
     },
   });
-  const showImplCard = hasRole('platform_owner') || (assignmentCount ?? 0) > 0;
+  // Phase 4A: parity with ImplementationConsoleRoute — implementation_admin
+  // sees the tile even without assignments.
+  const showImplCard =
+    hasRole('platform_owner') ||
+    hasRole('implementation_admin') ||
+    (assignmentCount ?? 0) > 0;
 
   if (authLoading || modulesLoading) {
     return (
