@@ -11654,6 +11654,16 @@ export type Database = {
         Returns: undefined
       }
       iac_sweep_expired: { Args: never; Returns: number }
+      impl_console_try_increment_rate: {
+        Args: {
+          _action: string
+          _actor_id: string
+          _bucket_hour: string
+          _client_id: string
+          _limit: number
+        }
+        Returns: number
+      }
       is_bulk_review_enabled: { Args: never; Returns: boolean }
       is_canonical_enforcement_period: {
         Args: { p_period: string; p_year: number }
