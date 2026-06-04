@@ -775,8 +775,9 @@ function AddUrlDialog({
 
   const submit = async () => {
     const norm = normalizeUrl(url);
-    if (!norm.ok) {
-      toast({ title: 'Invalid URL', description: norm.reason, variant: 'destructive' });
+    if (norm.ok !== true) {
+      const reason = (norm as { ok: false; reason: string }).reason;
+      toast({ title: 'Invalid URL', description: reason, variant: 'destructive' });
       return;
     }
     const safeUrl = norm.url;
