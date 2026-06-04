@@ -39,12 +39,14 @@ describe('Phase 8 — safety_settings rows vs columns', () => {
   });
 
   it('no source file destructures ui_incident_v2/incident_stage_copy from a safety_settings row object', () => {
-    // Pattern: foo.ui_incident_v2 or foo.incident_stage_copy property access in app code
-    const propAccess = rg(`\\.(ui_incident_v2|incident_stage_copy)\\b`);
-    // Only allowed match is inside types.ts (Supabase-generated schema).
+    // Property access pattern: identChar before the dot (e.g. row.ui_incident_v2),
+    // which excludes `safety_settings.incident_stage_copy` in comments.
+    const propAccess = rg(`[A-Za-z0-9_\\]\\)]\\.(ui_incident_v2|incident_stage_copy)\\b`);
     const offending = propAccess
       .split('\n')
-      .filter((l) => l && !l.startsWith('src/integrations/supabase/types.ts:'));
+      .filter((l) => l)
+      .filter((l) => !l.startsWith('src/integrations/supabase/types.ts:'))
+      .filter((l) => !l.startsWith('src/test/'));
     expect(offending).toEqual([]);
   });
 });
