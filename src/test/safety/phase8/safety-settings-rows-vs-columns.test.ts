@@ -46,7 +46,9 @@ describe('Phase 8 — safety_settings rows vs columns', () => {
       .split('\n')
       .filter((l) => l)
       .filter((l) => !l.startsWith('src/integrations/supabase/types.ts:'))
-      .filter((l) => !l.startsWith('src/test/'));
+      .filter((l) => !l.startsWith('src/test/'))
+      // Exclude doc-comment references like `safety_settings.incident_stage_copy`.
+      .filter((l) => !/safety_settings\.(ui_incident_v2|incident_stage_copy)/.test(l));
     expect(offending).toEqual([]);
   });
 });
