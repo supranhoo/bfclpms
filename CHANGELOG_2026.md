@@ -6,6 +6,19 @@
 
 ## 2026-06-04 — Phase 4A Implementation Console: Auth & Routing Enforcement
 
+## 2026-06-04 — CAPA close-out: Menu/Sidebar 3-factor restoration RCA (ADR-072)
+- **What:** Closes the 2026-06-04 empty-sidebar / auditor-crash incident as a multi-factor recovery. ADR-072 records all three concurrent restoration factors and explicitly states **single-factor sufficiency is NOT proven**.
+- **Three concurrent factors** (none individually validated in prod):
+  1. Forced republish (r3 3-file diff) — shipped CAPA code that was in source but missing from the previously deployed bundle (`useResolvedMenu` flag-off short-circuit + hard-guard, `resolveGroupItems` static-fallback guard, `synthFromNode` `ALL_APP_ROLES` default, `<ErrorBoundary>` around `SidebarContent`, `applyOverrides` dangling-parent coercion + level clamp).
+  2. `system_settings.menu_overrides_enabled = false` at 07:06:15 UTC.
+  3. All active `menu_overrides` rows cleared.
+- **Baseline invariants locked** (I1–I4 in ADR-072): flag-off ⇒ hardcoded baseline; malformed registry/overrides ⇒ no throw + ErrorBoundary catch; `menu_access_config` empty/failing ⇒ `canAccess` fail-open preserves Dashboard/Inbox/Admin/Audit; kill switch = flipping flag to `false`.
+- **Regression suite** (`src/test/menu/`, 5 files / 20 tests, all green): `sidebar-admin-non-empty.test.tsx`, `sidebar-auditor-no-crash.test.tsx`, `useResolvedMenu-flag-off.test.ts`, `useMenuAccess-failopen.test.ts`, `resolver-malformed-override.test.ts`.
+- **Markers removed** (no behavior change): `<meta name="build-stamp">` from `index.html`, `console.info("[build] 2026-06-04-r3")` from `src/main.tsx`, `<span data-capa-build="...">` from `AppSidebar.tsx`. CAPA hard-guards and ErrorBoundary stay.
+- **Production stance:** `menu_overrides_enabled` stays `false`; Menu Setting / Custom Tabs roadmap stays configurable behind the kill switch but is not re-enabled. No controlled prod experiments; any isolation work must happen in a non-prod copy.
+- **Scope lock:** no workflow / scoring / RLS / Safety / Incentive / Increment change. Safety Phase 8+ remains blocked until this suite stays green.
+- Files: `docs/adr/ADR-072.md` (new), `src/test/menu/` (5 new), `src/components/layout/AppSidebar.tsx`, `src/main.tsx`, `index.html`, `mem/features/admin/menu-setting-capa`, `.lovable/plan.md`.
+
 ## 2026-06-04 — CAPA: Menu Setting / Custom Tabs safety net
 - **Incident**: admin Ankit landed on `/dashboard` with an empty sidebar; auditor Shekhar hit the page ErrorBoundary. Suspected cause: live `menu_overrides` rows re-parented seeded items (e.g. `admin-dashboard`, `reports-performance`) under new custom L3 containers (`custom-dashboards`, `custom-shortcut-*`), hollowing out static sidebar groups; the custom synth path also defaulted to `roles:['admin']`, which surfaced inconsistencies for non-admins.
 - **Fix** (UI/menu compatibility layer only — NO DB, RLS, workflow, scoring, audit, or permission change):
