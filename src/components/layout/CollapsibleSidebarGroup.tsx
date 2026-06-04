@@ -38,6 +38,14 @@ interface CollapsibleSidebarGroupProps {
   isOpen: boolean;
   onToggle: () => void;
   filterByRole: (items: MenuItem[]) => MenuItem[];
+  /**
+   * CAPA fail-open fallback. If the primary `filterByRole` hides every item
+   * in this group (e.g. DB `menu_access_config` is empty/wrong, or a custom
+   * container with no children survives filtering), this filter is applied
+   * instead so the static baseline group remains visible. Use a strictly
+   * hardcoded role check here — never a DB-driven one.
+   */
+  staticFilter?: (items: MenuItem[]) => MenuItem[];
   currentPath: string;
   onNavigate: (path: string) => void;
   hasActiveRoute?: boolean;
@@ -50,12 +58,20 @@ export function CollapsibleSidebarGroup({
   isOpen,
   onToggle,
   filterByRole,
+  staticFilter,
   currentPath,
   onNavigate,
   hasActiveRoute,
   inboxBadgeCount,
 }: CollapsibleSidebarGroupProps) {
-  const filteredItems = filterByRole(items);
+  let filteredItems = filterByRole(items);
+  // CAPA fail-open: if the primary filter erased the whole group but a
+  // hardcoded fallback survives, render the fallback so the baseline sidebar
+  // never disappears for legitimate users.
+  if (filteredItems.length === 0 && staticFilter && items.length > 0) {
+    const fallback = staticFilter(items);
+    if (fallback.length > 0) filteredItems = fallback;
+  }
   if (filteredItems.length === 0) return null;
 
   const renderRow = (item: MenuItem, depth: number) => {
