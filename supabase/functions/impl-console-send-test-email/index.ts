@@ -147,8 +147,6 @@ serve(async (req) => {
       if (!apiKey) return json({ error: "lovable_provider_unavailable" }, 500);
     }
 
-    const subject = `PMS test email — ${client.display_name}`;
-
     // Append primary client URL ONLY if active + primary + verified.
     const { data: primaryUrl } = await svc
       .from("client_urls")
@@ -159,15 +157,54 @@ serve(async (req) => {
       .eq("verified", true)
       .maybeSingle();
 
-    const lines = [
+    const defaultLines = [
       `This is a test email from the Implementation Console.`,
       ``,
       `Client: ${client.display_name} (${client.client_key})`,
       `Triggered by: ${user.email ?? user.id}`,
       `Timestamp: ${new Date().toISOString()}`,
     ];
-    if (primaryUrl?.url) lines.push(`Client app: ${primaryUrl.url}`);
-    const text = lines.join("\n");
+    if (primaryUrl?.url) defaultLines.push(`Client app: ${primaryUrl.url}`);
+    let subject = `PMS test email — ${client.display_name}`;
+    let text = defaultLines.join("\n");
+    let template_resolved = false;
+    let template_subject_len = 0;
+    let template_body_text_len = 0;
+    let template_body_html_len = 0;
+
+    // Optional per-client template lookup. Falls back silently to default body
+    // when key is missing or template is archived (is_active = false).
+    if (template_key) {
+      const { data: tpl } = await svc
+        .from("client_notification_templates")
+        .select("subject, body_text, body_html, is_active")
+        .eq("client_id", client_id)
+        .eq("template_key", template_key)
+        .eq("is_active", true)
+        .maybeSingle();
+      if (tpl) {
+        const callerMasked = maskEmail(user.email ?? "").masked;
+        const vars: Record<string, string> = {
+          client_name: client.display_name ?? "",
+          client_key: client.client_key ?? "",
+          actor_email_masked: callerMasked,
+          timestamp_utc: new Date().toISOString(),
+          app_url: primaryUrl?.url ?? "",
+        };
+        // Allowlist-only substitution. Unknown {{tokens}} are left intact.
+        const substitute = (s: string) =>
+          s.replace(/\{\{\s*([a-z0-9_]+)\s*\}\}/gi, (m, k) =>
+            Object.prototype.hasOwnProperty.call(vars, k) ? vars[k] : m,
+          );
+        subject = substitute(tpl.subject as string).slice(0, 200);
+        text = substitute(tpl.body_text as string);
+        template_resolved = true;
+        template_subject_len = (tpl.subject as string).length;
+        template_body_text_len = (tpl.body_text as string).length;
+        template_body_html_len = ((tpl.body_html as string | null) ?? "").length;
+        // NOTE: body_html is intentionally NOT sent in this phase — no sanitizer wired yet.
+      }
+    }
 
     const fromAddress = smtp.from_name
       ? `${smtp.from_name} <${smtp.from_email}>`
@@ -201,6 +238,10 @@ serve(async (req) => {
         recipient_domain: masked.domain,
         recipient_hash: recipientHash,
         template_key,
+        template_resolved,
+        template_subject_len,
+        template_body_text_len,
+        template_body_html_len,
         provider: smtp.provider,
         success: result.ok,
         status: result.status,
