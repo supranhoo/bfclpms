@@ -4,6 +4,15 @@
 > **Status:** Living document. Append new ships under the **current week's row**, in the same step that you update `DOCUMENTATION.md` Version History.
 > **Sources:** `DOCUMENTATION.md` Version History, `supabase/migrations/`, `mem/*`.
 
+## 2026-06-04 — Safety Phase 8 dead-column cleanup (deferred item resolved)
+- **What:** Dropped two verified-dead columns from `public.safety_settings`: `ui_incident_v2` (boolean) and `incident_stage_copy` (jsonb). Closes the Phase 8 deferred destructive-cleanup item.
+- **Pre-flight (re-snapshotted at apply time):** 2 columns present · 13/13 rows at default · 0 dependents (views/routines/policies/triggers) · 0 readers (`rg` repo-wide).
+- **Migration safety:** in-transaction precondition guard re-asserts default-only data and `RAISE EXCEPTION` aborts otherwise. Plain `DROP COLUMN` (no CASCADE) — any hidden dependent would fail loudly instead of being silently broken.
+- **Rollback:** committed at `docs/safety/phase8-dead-column-rollback.sql` (additive, nullable, default-restored). Not auto-applied.
+- **Gates:** Menu CAPA 20/20 green before and after. Safety suite 92/92 green. Full suite 1730/1730 (1 known flake in `safetyShellIsolation` passes in isolation).
+- **Scope lock:** no Menu Setting / Custom Tabs change, `menu_overrides_enabled` stays false, no PMS workflow/scoring/RLS/enforcement change, no new runtime route/RPC/edge fn/MV. `/safety/settings/release-readiness` page remains **deferred and tracked**.
+- Files: new migration (drops the two columns), `docs/safety/phase8-dead-column-rollback.sql` (new), `docs/safety/phase8-release-readiness.md` (status update), `mem/features/safety/phase8-stabilization.md` (item closed).
+
 ## 2026-06-04 — Phase 4A Implementation Console: Auth & Routing Enforcement
 
 ## 2026-06-04 — CAPA close-out: Menu/Sidebar 3-factor restoration RCA (ADR-072)
