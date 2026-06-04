@@ -431,13 +431,21 @@ export function AppSidebar() {
   const filterByRole = useCallback((items: typeof menuItems.main) => {
     return items.filter(item => {
       if (!effectiveRole) return false;
+      // CAPA emergency static path: when overrides are disabled (production
+      // default while roadmap is dormant), bypass DB `menu_access_config`
+      // entirely and gate visibility purely on the hardcoded `item.roles`.
+      // Guarantees the baseline sidebar renders regardless of DB state,
+      // resolver state, or missing/invalid menu_access_config rows.
+      if (overridesEnabled === false) {
+        return Array.isArray(item.roles) && item.roles.includes(effectiveRole);
+      }
       // Use DB-driven access if menuKey exists, else fallback to hardcoded roles
       if ('menuKey' in item && item.menuKey) {
         return canAccess(item.menuKey);
       }
       return item.roles.includes(effectiveRole);
     });
-  }, [effectiveRole, canAccess]);
+  }, [effectiveRole, canAccess, overridesEnabled]);
 
   // CAPA fail-open fallback: strictly hardcoded role match against the
   // static `item.roles` array, ignoring DB `menu_access_config`. Used by
@@ -500,6 +508,9 @@ export function AppSidebar() {
       </SidebarHeader>
 
       <SidebarContent>
+        {/* CAPA build marker — use `[data-capa-build]` in DevTools to verify
+            the deployed bundle includes the emergency static fallback path. */}
+        <span data-capa-build="2026-06-04" className="sr-only" aria-hidden="true" />
         {/* CAPA (2026-06-04): wrap the menu groups in an ErrorBoundary so a
             single malformed resolved-menu node cannot blank the entire
             sidebar. Fallback renders the static baseline groups, role-filtered

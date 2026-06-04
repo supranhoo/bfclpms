@@ -1,59 +1,73 @@
 
-## Root cause
+## Scope guard
 
-- DB flag `system_settings.menu_overrides_enabled = false` is live in production.
-- `menu_access_config` baseline admin/auditor rows are intact.
-- The repo's `useResolvedMenu` + `AppSidebar.resolveGroupItems` already bypass the resolver when the flag is `false` (gated by `enabled` and queryKey includes the flag).
-- The deployed bundle at `pms.bfclalloys.com` is an older JS build from before the CAPA patches. Frontend in Lovable does **not** auto-deploy — it must be republished. The DB flip alone cannot restore the sidebar if the live bundle still ignores or stale-caches the flag.
+Roadmap work is paused. This plan only touches CAPA / sidebar render path. No changes to:
+- `menu_overrides_enabled` flag
+- `menu_registry` / `menu_overrides` seeding
+- Menu Setting / Hub enforcement flags
+- DB migrations, RLS, workflow, scoring
 
-## Action (CAPA-only, no roadmap changes)
+## Diagnosis questions answered from code + live signals
 
-### Step 1 — Add a hard runtime guard so the flag is honored even with a stale cache
+What we can confirm right now from code, network logs, and the live bundle hash served at `pms.bfclalloys.com` (`assets/index-CjfF6RVN.js`):
 
-`useResolvedMenu` currently:
-- caches the flag for 5 min (`staleTime`), and
-- only gates via `enabled: !!enabled`.
+1. AppSidebar is unconditionally mounted by `DashboardLayout` after `loading=false` and `user` present. No conditional that can omit it.
+2. The left pane container (`<Sidebar>`) always renders header + footer + SidebarContent. If only the menu area is blank, the empty region is the `<ErrorBoundary>` inside `<SidebarContent>` between Header and Footer. If the entire left pane is missing, that's a different failure mode (Sidebar offcanvas collapsed). We need a screenshot from the affected user to disambiguate.
+3. From the preview session (Ankit, admin + platform_owner, `menu_overrides_enabled=false`, no direct reports → naturalRole=employee, isAdminMode default `true` → effectiveRole=`admin`), no error is thrown in the captured logs from AppSidebar / CollapsibleSidebarGroup / useMenuAccess / useResolvedMenu / AuthContext / ErrorBoundary. The only errors are unrelated: a `/~api/analytics` 500 and a realtime WS close.
+4. Live values on the active session: `role=admin`, `effectiveRole=admin`, `isAdminMode=true`, `profile.id=535d9a14…`, `loading=false`. Auth bootstrap completed (profile + roles returned 200).
+5. `filterByRole` does receive the static items array each render; if it returns `[]` the new `staticFilter` is invoked. For admin, `canAccess()` falls through to `effectiveRole === 'admin' → true` for all admin-only keys, so the primary filter should already pass.
+6. With the current CAPA code, admin group counts cannot be zero for Main (`dashboard`, `inbox` are EMPLOYEE_DEFAULT_MENUS) and Administration (admin fallthrough). If the user still sees zero items, the running bundle is not the CAPA bundle.
+7. CSS: `Sidebar` is `collapsible="offcanvas"` by default. When `state==="collapsed"` on desktop the whole sidebar is moved off-canvas, leaving a `w-0` strip. This can present as "blank left pane" if the sidebar was collapsed via the trigger. DashboardLayout already shows a floating trigger when collapsed.
+8. Live is serving `index-CjfF6RVN.js`. We need to confirm this hash matches the latest CAPA build (after fail-open + ErrorBoundary fixes). The user reported "Update button blurred" — strong indicator live does NOT yet contain the CAPA fixes.
 
-Add a defensive layer so a brief cache window cannot leak the resolver tree into the sidebar:
+## What this plan changes
 
-1. In `useResolvedMenu`, when `enabled === false` explicitly return `undefined` data immediately (do not fall back to any previously cached payload from a sibling query key).
-2. In `AppSidebar.resolveGroupItems`, short-circuit on `enabled === false` BEFORE touching `resolvedMenu`, so even a stale tree in memory cannot be consumed.
-3. Reduce flag `staleTime` from `5 min` → `30 s` so flips propagate fast without a hard refresh.
+### Step 1 — Confirm the deployed bundle on live (no code change)
 
-No changes to `menu_registry`, `menu_overrides`, `applyOverrides`, the Menu Setting admin UI, or any RLS / PMS workflow.
+Ask the user to:
+- On `pms.bfclalloys.com/auth`, open DevTools → Network → reload → note the hash of `assets/index-*.js`.
+- Compare to the preview URL's bundle hash.
+- Confirm whether the Publish → Update button is now enabled (publish required for frontend changes to reach live).
 
-### Step 2 — Verify baseline access is rendered from the static menu
+If hashes differ → live just needs a Publish/Update; no code fix needed.
 
-`useMenuAccess.canAccess` already grants admin baseline (`admin-dashboard`, `admin-users`, `admin-settings`, `dashboard`, `inbox`, `reports-hub`) via `menu_access_config`. No DB changes required.
+### Step 2 — Add an emergency static-only sidebar path (CAPA hardening, only if Step 1 still shows blank)
 
-Auditor baseline (`audit-panel`, `admin-org-kpi-audit`, `dashboard`, `inbox`) is granted via the static menu's `roles` arrays plus role-based fallback in `canAccess`. No changes needed.
+In `src/components/layout/AppSidebar.tsx`, when `overridesEnabled === false`, bypass `resolveGroupItems` and `useMenuAccess.canAccess` entirely for the standard groups and render the static items array filtered ONLY by hardcoded `item.roles.includes(effectiveRole)`. This guarantees the baseline sidebar regardless of any DB state, resolver state, or `menu_access_config` row missing.
 
-### Step 3 — Republish frontend
+Net effect when flag is OFF (current production state):
+- Resolver tree: ignored (was already guarded).
+- `menu_access_config`: ignored for visibility. Static `item.roles` becomes the gate.
+- `canPerform` / per-user overrides: still consulted only for the Data Entry group's bespoke filter (unchanged).
+- When flag flips back ON in the future: existing DB-driven path resumes; no roadmap behavior changes.
 
-CAPA hardening only goes live after **Publish → Update**. This is the actual unblocker for both Ankit (admin) and Shekhar (auditor) on `pms.bfclalloys.com`.
+This is the "If AppSidebar is mounted but counts are zero → emergency static fallback" path the user asked for, narrowly scoped to the flag-off branch.
 
-### Step 4 — Verify
+### Step 3 — Visible CAPA build marker (1 line)
 
-After publish:
-- Hard refresh `pms.bfclalloys.com/dashboard` as admin → sidebar shows: My Dashboard, Inbox, KPI Registry, Admin Dashboard, User Management, System Settings, Reports, etc.
-- Auditor → sidebar shows: My Dashboard, Inbox, Audit Panel, Org KPI Audit Review, Reports.
-- Flip `menu_overrides_enabled` back to `true` in a staging window only after admins/auditors confirm stable navigation.
+Add a hidden `data-capa-build="2026-06-04"` attribute on `<SidebarContent>` so the user can verify in DevTools whether the CAPA bundle is actually running on live. Costs nothing and avoids future ambiguity.
 
-## Out of scope (explicitly)
+### Step 4 — Tests
 
-- No edits to `menu_registry`, `menu_overrides`, `applyOverrides`, custom-tab routing.
-- No RLS changes.
-- No PMS workflow, scoring, reports, notifications, entitlements, permissions touched.
-- No changes to `menu_access_config` data — current rows are correct.
+- Unit test: with `overridesEnabled=false`, `effectiveRole='admin'`, mock `useMenuAccess.canAccess` to always return `false` → admin sidebar still shows Main + Administration groups.
+- Unit test: with `overridesEnabled=false`, `effectiveRole='auditor'`, primary filter empty → Audit group still shows via static roles.
+- Regression: `overridesEnabled=true` path unchanged (resolver still consulted).
 
-## Technical detail
+## What this plan does NOT change
 
-Files touched:
-- `src/hooks/useResolvedMenu.ts` — return `undefined` when flag is false; staleTime `30s`.
-- `src/components/layout/AppSidebar.tsx` — in `resolveGroupItems`, branch on `enabled === false` and return `fallback` before reading `resolvedMenu`.
-
-No new files, no migrations, no edge function changes.
+- No edits to `useResolvedMenu`, `useMenuAccess`, `CollapsibleSidebarGroup`.
+- No DB writes, no flag flips, no roadmap unlock.
+- Data Entry group keeps its bespoke filter (DataOwnerRoute parity).
 
 ## Rollback
 
-Revert the two files; the flag-based gate already in place continues to work.
+Single-file change in `AppSidebar.tsx`. If anything regresses, revert that file.
+
+## Decision needed from you
+
+Before I implement Step 2, please confirm:
+- (a) Is the Publish → Update button now clickable? If yes, please click it first and recheck live — Step 2 may be unnecessary.
+- (b) On live, can you press F12 → Network → reload, and share the `assets/index-*.js` filename you see? (This tells us whether CAPA is even deployed.)
+- (c) Is the entire left pane missing on live, or only the menu list between header and footer?
+
+If (a)=No or (b) shows the same hash `CjfF6RVN` after Publish, I will proceed with Step 2 (emergency static fallback) and Step 3 (build marker). If you want me to skip the questions and just implement Steps 2–4 immediately for safety, say "proceed".
