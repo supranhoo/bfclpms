@@ -14,6 +14,14 @@
 - All mutations audited to `entitlement_audit` with `reason='impl_console_*'`. Secrets are never written to audit rows.
 - No changes to PMS workflow, scoring, menus, reports, RLS, or any existing route. Backup coverage automatic.
 
+## 2026-06-04 — Phase 3C.2 Implementation Console: secret rotation + test email
+- New edge function `impl-console-rotate-smtp-secret`: server-side validation (`platform_owner` or assigned implementer), stores secret bytes via service-role into `system_settings` keyed `client_smtp::<client_id>`, updates `client_smtp_config` metadata (`secret_set_at`, `secret_fingerprint`=sha256[0..4], `secret_ref`). Audit row written; secret value NEVER appears in DB columns, response, or audit JSON.
+- New edge function `impl-console-send-test-email`: same auth checks, 10/hour rate limit per `(actor_id, client_id)` enforced server-side, sends through Resend (provider `resend` or `lovable`), records masked recipient (`local@<first-letter>***`) + provider + success/status in `entitlement_audit`.
+- New table `public.impl_console_rate_buckets` (per-hour counter). RLS: users see only their own counters; only `service_role` writes.
+- UI: Sender Identity tab gets a **Replace secret** modal (password input + typed `ROTATE` confirmation). Test Email tab activated: to-address input, "Used X/10 this hour" badge, last 5 sends list, disabled-until-sender-ready button.
+- Auto-tick: successful rotate ticks `smtp_secret` checklist item; successful test email ticks `test_email`. Both audited with `reason='impl_console_checklist_check_*'`.
+- No PMS / safety / incentive / reports / scoring / menu / RLS changes outside the new table. Backup auto-included.
+
 ## 2026-06-03 — Phase 3B Data Governance: Overview dashboard (read-only)
 - New `Overview` sub-tab (now the first) in Platform Settings → Data Governance — 6 KPI cards (total/active/inactive + last-updated relative time) for Classifications, Sensitive Fields, Export Policies, Audit Policies, Retention, Privacy/Consent.
 - Coverage strip: grouped counts by classification key, module, classification, retention bucket (≤90d/≤1y/>1y/forever), purge strategy, lawful basis.

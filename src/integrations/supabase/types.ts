@@ -2685,6 +2685,47 @@ export type Database = {
           },
         ]
       }
+      impl_console_rate_buckets: {
+        Row: {
+          action: string
+          actor_id: string
+          bucket_hour: string
+          client_id: string
+          count: number
+          created_at: string
+          id: string
+          updated_at: string
+        }
+        Insert: {
+          action: string
+          actor_id: string
+          bucket_hour: string
+          client_id: string
+          count?: number
+          created_at?: string
+          id?: string
+          updated_at?: string
+        }
+        Update: {
+          action?: string
+          actor_id?: string
+          bucket_hour?: string
+          client_id?: string
+          count?: number
+          created_at?: string
+          id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "impl_console_rate_buckets_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       import_field_settings: {
         Row: {
           field_key: string
