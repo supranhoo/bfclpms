@@ -1,0 +1,50 @@
+---
+name: Menu Setting — CAPA fallback layer
+description: Temporary defensive layer keeping baseline sidebar/route access stable while Menu Setting + Custom Tabs roadmap matures
+type: feature
+---
+# CAPA — Menu Setting rollout safety net
+
+Incident (2026-06-04): admin Ankit saw an empty sidebar; auditor Shekhar hit
+the page ErrorBoundary. Suspected cause: `menu_overrides_enabled=true` plus
+items re-parented under brand-new custom L3 containers (`custom-dashboards`,
+`custom-shortcut-*`) hollowed out static groups, and a custom node with
+`roles:['admin']` made the resolver path unreliable for non-admins.
+
+## What this CAPA changes (UI/menu/route compatibility ONLY)
+- `applyOverrides`: dangling `parent_key` (override OR default) is coerced to
+  the default / `null`; `menu_level` is clamped to 1..4. Bad rows can no
+  longer break tree traversal.
+- `AppSidebar.resolveGroupItems`: wrapped in try/catch (fall back to static
+  defaults on any throw); if the resolver yields **zero items** for a group
+  whose static fallback was non-empty, return the fallback with resolved
+  labels — the baseline never disappears. `synthFromNode` now defaults custom
+  items to `ALL_APP_ROLES`; DB `menu_access_config` remains the visibility
+  gate.
+- `SidebarContent` is wrapped in an `ErrorBoundary` so a single bad node
+  cannot blank the entire sidebar.
+- **No DB, RLS, workflow, scoring, or audit changes.** Roadmap design intact.
+
+## Baseline access invariants (must hold every release)
+- Authenticated users: Dashboard, Inbox, PMS Policy (when policy allows).
+- Admin: Admin Dashboard, User Management, System Settings, core admin pages, Reports.
+- Auditor: Audit Panel, Explore Employees (Read-Only), Org KPI Audit Review, reports.
+- Manager / Management / HR PMS: previous sidebar + route access unchanged.
+- `menu_overrides_enabled=true` MUST NOT break any of the above.
+
+## Removal criteria (all must be met before deleting this layer)
+1. Production-like fixture with current `menu_registry` + `menu_overrides`
+   passes the CAPA test suite.
+2. Admin / auditor / manager smoke tests pass.
+3. All custom tabs render safely under every role.
+4. Route access matches the pre-roadmap baseline.
+5. No empty-sidebar or ErrorBoundary reports for ≥ 2 release cycles.
+
+## Pre-prompt validation
+Before accepting the next Menu Setting roadmap phase, re-verify the four
+invariants above. If any fails, pause the roadmap and patch CAPA first.
+
+## Tests
+- `src/test/menu-setting-capa.test.ts` — dangling parent, level clamp,
+  combined malformed overrides.
+- `src/lib/menu/applyOverrides.test.ts` — pre-existing behaviour preserved.
