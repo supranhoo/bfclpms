@@ -2,11 +2,20 @@
  * Phase 4F — Implementers Audit Log read hook.
  *
  * Owner-only (RLS enforces). Read-only, server-paginated SELECT on
- * `entitlement_audit`. Filters use indexed columns (event_type, entity_type,
- * client_id, actor_id, created_at) and the `reason` text column for the
- * test-email scope — no JSONB scans.
+ * `entitlement_audit`. Filters exclusively on indexed columns
+ * (event_type, entity_type, client_id, actor_id, created_at) and the
+ * indexed `reason` text column. No JSONB scans.
  *
- * Resolves actor + target profile names in one extra IN-query per page.
+ * IMPORTANT — actual event shapes written by manage-implementer:
+ *   grant role         → event_type='grant',  entity_type='implementation_admin_role',     reason='impl_console_grant_role'
+ *   revoke role        → event_type='revoke', entity_type='implementation_admin_role',     reason='impl_console_revoke_role'
+ *   assign client      → event_type='grant',  entity_type='client_implementer_assignment', reason='impl_console_assign_client'
+ *   unassign client    → event_type='revoke', entity_type='client_implementer_assignment', reason='impl_console_unassign_client'
+ *   test email send    → event_type='update', entity_type='client_smtp',                   reason LIKE 'impl_console_test_email_send_%'
+ *
+ * The `entitlement_audit` table has NO `target_user_id` column — target
+ * user is encoded in `after.user_id` (assignments/role grants) or
+ * `before.user_id` (role revokes). We resolve at render time.
  */
 import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -26,7 +35,6 @@ export interface AuditRow {
   entity_key: string | null;
   client_id: string | null;
   actor_id: string | null;
-  target_user_id: string | null;
   reason: string | null;
   before: unknown;
   after: unknown;
@@ -42,7 +50,6 @@ export interface ProfileLite {
 export interface AuditLogParams {
   scopes: AuditScope[];
   actorId?: string | null;
-  targetUserId?: string | null;
   clientId?: string | null;
   sinceIso?: string | null;
   untilIso?: string | null;
@@ -50,17 +57,13 @@ export interface AuditLogParams {
   pageSize: number;
 }
 
-const SCOPE_TO_FILTER: Record<
-  AuditScope,
-  { event_type?: string; entity_type?: string; reason_like?: string }
-> = {
-  grant_role: { event_type: 'grant_role' },
-  revoke_role: { event_type: 'revoke_role' },
-  assign_client: { event_type: 'assign_client' },
-  unassign_client: { event_type: 'unassign_client' },
-  // Phase 3G test sends are written as event_type='update', entity_type='client_smtp',
-  // reason starts with 'impl_console_test_email_send_'. Match by reason prefix.
-  test_email_send: { entity_type: 'client_smtp', reason_like: 'impl_console_test_email_send_%' },
+/** Reasons we filter on — every implementer-relevant write uses one of these. */
+const SCOPE_TO_REASON: Record<AuditScope, { kind: 'exact' | 'like'; value: string }> = {
+  grant_role: { kind: 'exact', value: 'impl_console_grant_role' },
+  revoke_role: { kind: 'exact', value: 'impl_console_revoke_role' },
+  assign_client: { kind: 'exact', value: 'impl_console_assign_client' },
+  unassign_client: { kind: 'exact', value: 'impl_console_unassign_client' },
+  test_email_send: { kind: 'like', value: 'impl_console_test_email_send_%' },
 };
 
 export function useImplementersAuditLog(params: AuditLogParams) {
@@ -72,61 +75,95 @@ export function useImplementersAuditLog(params: AuditLogParams) {
       const from = (params.page - 1) * params.pageSize;
       const to = from + params.pageSize - 1;
 
-      // Build one query per scope (each may have a distinct event_type/entity_type/reason combo),
-      // then union client-side. In practice the user picks ≤5 chips, so ≤5 small queries — cheaper
-      // than a single OR over multiple columns and keeps each query index-friendly.
-      const scopes = params.scopes.length ? params.scopes : (Object.keys(SCOPE_TO_FILTER) as AuditScope[]);
+      // Default to all scopes when none selected.
+      const scopes: AuditScope[] = params.scopes.length
+        ? params.scopes
+        : (Object.keys(SCOPE_TO_REASON) as AuditScope[]);
+
+      // Split into exact-match reasons (cheap .in()) and like-match reasons (separate queries).
+      const exactReasons = scopes
+        .filter((s) => SCOPE_TO_REASON[s].kind === 'exact')
+        .map((s) => SCOPE_TO_REASON[s].value);
+      const likeReasons = scopes
+        .filter((s) => SCOPE_TO_REASON[s].kind === 'like')
+        .map((s) => SCOPE_TO_REASON[s].value);
 
       type Bucket = { rows: AuditRow[]; count: number };
-      const buckets: Bucket[] = await Promise.all(
-        scopes.map(async (scope) => {
-          const f = SCOPE_TO_FILTER[scope];
-          let q = supabase
-            .from('entitlement_audit')
-            .select(
-              'id, created_at, event_type, entity_type, entity_key, client_id, actor_id, target_user_id, reason, before, after',
-              { count: 'exact' },
-            )
-            .order('created_at', { ascending: false })
-            .range(from, to);
 
-          if (f.event_type) q = q.eq('event_type', f.event_type);
-          if (f.entity_type) q = q.eq('entity_type', f.entity_type);
-          if (f.reason_like) q = q.like('reason', f.reason_like);
-          if (params.actorId) q = q.eq('actor_id', params.actorId);
-          if (params.targetUserId) q = q.eq('target_user_id', params.targetUserId);
-          if (params.clientId) q = q.eq('client_id', params.clientId);
-          if (params.sinceIso) q = q.gte('created_at', params.sinceIso);
-          if (params.untilIso) q = q.lte('created_at', params.untilIso);
+      // Use `any` on builder to avoid the Supabase deep-instantiation TS error
+      // (the chain of conditional .eq/.gte calls otherwise blows the type depth).
+      const applyCommon = (builder: any) => {
+        let q = builder;
+        if (params.actorId) q = q.eq('actor_id', params.actorId);
+        if (params.clientId) q = q.eq('client_id', params.clientId);
+        if (params.sinceIso) q = q.gte('created_at', params.sinceIso);
+        if (params.untilIso) q = q.lte('created_at', params.untilIso);
+        return q;
+      };
 
-          const { data, error, count } = await q;
-          if (error) throw error;
-          return { rows: (data ?? []) as AuditRow[], count: count ?? 0 };
-        }),
-      );
+      const queries: Promise<Bucket>[] = [];
 
-      // Merge, re-sort, and slice to page size. Total = sum of per-scope counts.
+      if (exactReasons.length) {
+        const base = (supabase
+          .from('entitlement_audit')
+          .select(
+            'id, created_at, event_type, entity_type, entity_key, client_id, actor_id, reason, before, after',
+            { count: 'exact' },
+          ) as any)
+          .in('reason', exactReasons)
+          .order('created_at', { ascending: false })
+          .range(from, to);
+        queries.push(
+          applyCommon(base).then(({ data, error, count }: any) => {
+            if (error) throw error;
+            return { rows: (data ?? []) as AuditRow[], count: count ?? 0 };
+          }),
+        );
+      }
+
+      for (const pattern of likeReasons) {
+        const base = (supabase
+          .from('entitlement_audit')
+          .select(
+            'id, created_at, event_type, entity_type, entity_key, client_id, actor_id, reason, before, after',
+            { count: 'exact' },
+          ) as any)
+          .like('reason', pattern)
+          .order('created_at', { ascending: false })
+          .range(from, to);
+        queries.push(
+          applyCommon(base).then(({ data, error, count }: any) => {
+            if (error) throw error;
+            return { rows: (data ?? []) as AuditRow[], count: count ?? 0 };
+          }),
+        );
+      }
+
+      const buckets = await Promise.all(queries);
       const merged = buckets.flatMap((b) => b.rows);
       merged.sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
       const pageRows = merged.slice(0, params.pageSize);
       const total = buckets.reduce((s, b) => s + b.count, 0);
 
-      // Resolve actor + target profiles for the visible page.
-      const ids = new Set<string>();
+      // Resolve actor + target profile names. Target is buried in JSON payloads.
+      const userIds = new Set<string>();
       pageRows.forEach((r) => {
-        if (r.actor_id) ids.add(r.actor_id);
-        if (r.target_user_id) ids.add(r.target_user_id);
+        if (r.actor_id) userIds.add(r.actor_id);
+        const after = (r.after ?? {}) as Record<string, unknown>;
+        const before = (r.before ?? {}) as Record<string, unknown>;
+        const tgt = (after.user_id ?? before.user_id) as string | undefined;
+        if (tgt && typeof tgt === 'string') userIds.add(tgt);
       });
+
       let profiles: Map<string, ProfileLite> = new Map();
-      if (ids.size > 0) {
+      if (userIds.size > 0) {
         const { data: profRows } = await supabase
           .from('profiles')
           .select('id, full_name, email, employee_code')
-          .in('id', Array.from(ids));
-        profiles = new Map((profRows ?? []).map((p) => [p.id, p as ProfileLite]));
+          .in('id', Array.from(userIds));
+        profiles = new Map((profRows ?? []).map((p: any) => [p.id, p as ProfileLite]));
       }
 
-      // Resolve client display names for visible page (client_id only).
       const clientIds = new Set<string>();
       pageRows.forEach((r) => r.client_id && clientIds.add(r.client_id));
       let clients: Map<string, { id: string; display_name: string; client_key: string }> = new Map();
@@ -135,10 +172,18 @@ export function useImplementersAuditLog(params: AuditLogParams) {
           .from('clients')
           .select('id, display_name, client_key')
           .in('id', Array.from(clientIds));
-        clients = new Map((cRows ?? []).map((c) => [c.id, c]));
+        clients = new Map((cRows ?? []).map((c: any) => [c.id, c]));
       }
 
       return { rows: pageRows, total, profiles, clients };
     },
   });
+}
+
+/** Extract the target user_id from an audit row's JSON payloads. */
+export function extractTargetUserId(row: AuditRow): string | null {
+  const after = (row.after ?? {}) as Record<string, unknown>;
+  const before = (row.before ?? {}) as Record<string, unknown>;
+  const v = (after.user_id ?? before.user_id) as unknown;
+  return typeof v === 'string' ? v : null;
 }
