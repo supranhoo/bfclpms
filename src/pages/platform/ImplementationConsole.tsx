@@ -430,6 +430,8 @@ function TestEmailTab({ client, actorId }: { client: Client; actorId?: string })
       const resp = data as any;
       if (resp?.error === 'rate_limited') {
         toast({ title: 'Rate limit reached', description: `Try again in ~${Math.ceil(resp.retry_after_seconds / 60)} min.`, variant: 'destructive' });
+      } else if (resp?.error === 'recipient_not_allowed') {
+        toast({ title: 'Recipient not allowed', description: `Only addresses on @${resp.allowed_domain} or your own login email are permitted.`, variant: 'destructive' });
       } else if (resp?.ok) {
         toast({ title: 'Test email sent', description: `Used ${resp.used}/${resp.limit} this hour.` });
         await tickChecklist(client, 'test_email');
@@ -470,7 +472,7 @@ function TestEmailTab({ client, actorId }: { client: Client; actorId?: string })
               {(recent ?? []).map((r: any) => (
                 <li key={r.id} className="py-2 flex items-center justify-between">
                   <div>
-                    <span className="font-mono">{r.after?.to_email_local}@{r.after?.to_email_domain}</span>
+                    <span className="font-mono">{r.after?.recipient_masked ?? '***'}</span>
                     <span className="ml-2 text-xs text-muted-foreground">{r.after?.provider}</span>
                   </div>
                   <div className="flex items-center gap-2">
