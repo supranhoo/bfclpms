@@ -648,6 +648,72 @@ export function isTransientChunkError(
   return false
 }
 
+// Phase 9.2 WP-b — transient retry helper. Re-issues the failing chunk in
+// halves of BATCH_SIZE_RETRY=2 with 5s/15s backoff, capped by the shared
+// RETRY_BUDGET_MS wall-time budget anchored on the orchestrator startTime.
+async function retryFailedBatchTransient(args: {
+  batch: string[]
+  batchIndex: number
+  totalBatches: number
+  firstError: string
+  backupId: string
+  folderPath: string
+  startTime: number
+}): Promise<{ processed: Array<{ table: string; rows: number; sizeBytes?: number }>; summary: string }> {
+  const { batch, batchIndex, totalBatches, firstError, backupId, folderPath, startTime } = args
+  const subBatches = splitIntoBatches(batch, BATCH_SIZE_RETRY)
+  const processed: Array<{ table: string; rows: number; sizeBytes?: number }> = []
+  const notes: string[] = [
+    `Batch ${batchIndex + 1}/${totalBatches} transient: ${firstError}`,
+  ]
+
+  for (let s = 0; s < subBatches.length; s++) {
+    const sub = subBatches[s]
+    let recovered = false
+    let lastErr = firstError
+    for (let attempt = 0; attempt < RETRY_BACKOFFS_MS.length; attempt++) {
+      const budgetLeftMs = RETRY_BUDGET_MS - (Date.now() - startTime)
+      if (budgetLeftMs <= 0) {
+        notes.push(
+          `sub ${s + 1}/${subBatches.length} skipped: budget exhausted`,
+        )
+        break
+      }
+      await sleep(RETRY_BACKOFFS_MS[attempt])
+      const res = await callSelf({
+        backup_type: 'scheduled',
+        backup_id: backupId,
+        folder_path: folderPath,
+        tables: sub,
+      })
+      if (res.ok) {
+        const arr = res.data?.processed || []
+        for (const p of arr) processed.push(p)
+        notes.push(
+          `sub ${s + 1}/${subBatches.length} recovered on attempt ${attempt + 1}/${RETRY_BACKOFFS_MS.length}`,
+        )
+        recovered = true
+        break
+      }
+      lastErr = res.error ?? 'unknown'
+      // Only continue retrying if still transient.
+      if (!isTransientChunkError(lastErr, res.rateLimited)) {
+        notes.push(
+          `sub ${s + 1}/${subBatches.length} non-transient on retry: ${lastErr}`,
+        )
+        break
+      }
+    }
+    if (!recovered && !notes.some((n) => n.startsWith(`sub ${s + 1}/`))) {
+      notes.push(
+        `sub ${s + 1}/${subBatches.length} failed after ${RETRY_BACKOFFS_MS.length} retries: ${lastErr}`,
+      )
+    }
+  }
+  const budgetLeftS = Math.max(0, Math.round((RETRY_BUDGET_MS - (Date.now() - startTime)) / 1000))
+  return { processed, summary: `${notes.join('; ')} (budget ${budgetLeftS}s left)` }
+}
+
 async function callSelf(
   payload: Record<string, unknown>,
   opts: { maxRetries?: number } = {}
