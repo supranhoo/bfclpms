@@ -14,6 +14,7 @@ import { useState, useEffect } from 'react';
 import { Building2, Boxes, KeyRound, ShieldCheck, ScrollText, Layers, Download, ChevronLeft, ChevronRight, AlertTriangle, CheckCircle2, BarChart3, Pencil, Plus, Database } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { DataGovernanceTab } from '@/components/platform/DataGovernanceTab';
+import { ImplementersTab } from '@/components/platform/ImplementersTab';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
 import { useEntitlement } from '@/hooks/useEntitlement';
