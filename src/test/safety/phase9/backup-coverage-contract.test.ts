@@ -31,6 +31,18 @@ const RESTORE_SRC = readFileSync(
   join(process.cwd(), 'supabase/functions/restore-backup/index.ts'),
   'utf8',
 );
+const DRILL_SRC = readFileSync(
+  join(process.cwd(), 'supabase/functions/safety-drill/index.ts'),
+  'utf8',
+);
+const DRILL_HOOK_SRC = readFileSync(
+  join(process.cwd(), 'src/hooks/useSafetyDrill.ts'),
+  'utf8',
+);
+const BACKUP_TAB_SRC = readFileSync(
+  join(process.cwd(), 'src/components/admin/BackupRestoreTab.tsx'),
+  'utf8',
+);
 
 const MIGRATIONS_DIR = join(process.cwd(), 'supabase/migrations');
 const MIGRATION_SRCS = readdirSync(MIGRATIONS_DIR)
@@ -146,5 +158,56 @@ describe('Phase 9.1 — Backup coverage contract', () => {
     expect(manualMatch![0]).not.toMatch(/retryFailedBatchTransient/);
     // WP-9.2.a manual hard-fail branch still present in the same function.
     expect(manualMatch![0]).toMatch(/hardFailManual\s*&&\s*partialManual/);
+  });
+
+  // ─── Phase 9.3 WP-9.3 — Safety backup→restore drill (Flow B UI) ─────────
+
+  it('I12 — safety-drill writes are isolated to safety_drill.* (no mutation of public Safety tables)', () => {
+    // Production Safety tables may only appear in read paths inside the
+    // drill function. The function itself must never call .insert/.update/
+    // .delete/.upsert against public safety tables — all sandbox writes go
+    // through the safety_drill_* RPCs.
+    const forbidden = [
+      /\.from\(\s*['"]safety_incidents['"]\s*\)\s*\.(insert|update|delete|upsert)/,
+      /\.from\(\s*['"]safety_permits['"]\s*\)\s*\.(insert|update|delete|upsert)/,
+      /\.from\(\s*['"]safety_audit_runs['"]\s*\)\s*\.(insert|update|delete|upsert)/,
+    ];
+    for (const re of forbidden) {
+      expect(DRILL_SRC, `safety-drill must not mutate live Safety tables: ${re}`).not.toMatch(re);
+    }
+    // Sandbox RPCs must be the write path.
+    expect(DRILL_SRC).toMatch(/safety_drill_seed/);
+    expect(DRILL_SRC).toMatch(/safety_drill_truncate/);
+    expect(DRILL_SRC).toMatch(/safety_drill_load/);
+  });
+
+  it('I13 — useSafetyDrill invokes the safety-drill function (not a path) and forwards backup_id', () => {
+    expect(DRILL_HOOK_SRC).toMatch(/supabase\.functions\.invoke\(\s*['"]safety-drill['"]/);
+    expect(DRILL_HOOK_SRC).toMatch(/backup_id/);
+  });
+
+  it('I14 — BackupRestoreTab gates the drill action: not on failed rows, only on completed/completed_with_errors', () => {
+    // The action must be wired via useSafetyDrill and only render inside
+    // the completed / completed_with_errors branch (same branch as
+    // Download/Restore). It must NOT appear under a `status === 'failed'`
+    // condition.
+    expect(BACKUP_TAB_SRC).toMatch(/useSafetyDrill/);
+    expect(BACKUP_TAB_SRC).toMatch(
+      /verifyDrill\.mutate\(\s*\{\s*backupId:\s*backup\.id\s*\}\s*\)/,
+    );
+    // Hard guard: the drill mutate call must not be guarded by a 'failed' status branch.
+    const failedDrillBranch =
+      /backup\.status\s*===\s*['"]failed['"][\s\S]{0,500}?verifyDrill\.mutate/;
+    expect(BACKUP_TAB_SRC).not.toMatch(failedDrillBranch);
+  });
+
+  it('I15 — Phase 9.2 composition guard: hard-fail predicates + retry constants still present', () => {
+    // Phase 9.3 must not touch create-backup; the WP-9.2.a/b invariants
+    // are re-asserted here as a composition guard so a Phase 9.3 edit
+    // cannot silently weaken them.
+    expect(CREATE_SRC).toMatch(/hardFail\s*&&\s*shrunk\s*\?\s*['"]failed['"]/);
+    expect(CREATE_SRC).toMatch(/hardFailManual\s*&&\s*partialManual/);
+    expect(CREATE_SRC).toMatch(/const\s+BATCH_SIZE_RETRY\s*=\s*2\b/);
+    expect(CREATE_SRC).toMatch(/const\s+RETRY_BUDGET_MS\s*=/);
   });
 });

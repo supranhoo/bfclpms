@@ -93,3 +93,4 @@ Lean-Load: debounce search inputs (>200 rows / network); paginate new lists with
 - [Backup Hard-Fail On Partial Policy](mem://infrastructure/database/backup-hard-fail-policy) — Phase 9.2 WP-a flag (default true) marks partial backups as failed; DB-level override only
 - [Backup Batch Retry/Backoff Policy](mem://infrastructure/database/backup-batch-retry-policy) — Phase 9.2 WP-b transient-only retry (546/429/RateLimit), BATCH_SIZE_RETRY=2, RETRY_BUDGET_MS=8min; hard-fail terminal preserved; manual path untouched
 - [Test Baseline Restoration](mem://infrastructure/test-baseline-restoration) — Migration-scan guards use latest-definition semantics; CREATE OR REPLACE preserves grants
+- [Backup History Safety Drill Verify Action](mem://features/safety/backup-drill-action) — Phase 9.3 admin Flow-B verify button on non-failed Backup History rows; isolated safety_drill schema; production Safety tables read-only

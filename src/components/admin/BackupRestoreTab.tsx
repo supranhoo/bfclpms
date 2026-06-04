@@ -34,6 +34,8 @@ import {
 import { Database, Download, RotateCcw, HardDrive, Clock, AlertTriangle, Upload, CalendarClock, X, XCircle, RefreshCcw } from 'lucide-react';
 import { format } from 'date-fns';
 import { SafetyDrillCard } from '@/components/admin/SafetyDrillCard';
+import { ShieldCheck } from 'lucide-react';
+import { useSafetyDrill } from '@/hooks/useSafetyDrill';
 import {
   useBackupLogs,
   useTriggerBackup,
@@ -66,6 +68,11 @@ export function BackupRestoreTab() {
   const updateSchedule = useUpdateBackupSchedule();
   const cancelStuck = useCancelStuckBackup();
   const retryFinalize = useRetryFinalize();
+  // Phase 9.3 WP-9.3 — Flow B: verify a specific backup artifact via the
+  // Safety sandbox drill. Writes are isolated to the `safety_drill` schema;
+  // production `public.safety_*` tables are read-only inside the drill.
+  // Hard-failed backups are NOT eligible (WP-9.2.a terminal authority).
+  const verifyDrill = useSafetyDrill();
 
   const [restoreId, setRestoreId] = useState<string | null>(null);
   const [confirmRestore, setConfirmRestore] = useState(false);
@@ -420,6 +427,15 @@ export function BackupRestoreTab() {
                               disabled={triggerRestore.isPending}
                             >
                               <RotateCcw className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => verifyDrill.mutate({ backupId: backup.id })}
+                              disabled={verifyDrill.isPending}
+                              title="Verify with Safety Drill (sandbox)"
+                            >
+                              <ShieldCheck className="h-4 w-4 text-primary" />
                             </Button>
                           </>
                         )}
