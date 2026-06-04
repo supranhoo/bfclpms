@@ -6,6 +6,16 @@
 
 ## 2026-06-04 — Phase 4A Implementation Console: Auth & Routing Enforcement
 
+## 2026-06-04 — CAPA: Menu Setting / Custom Tabs safety net
+- **Incident**: admin Ankit landed on `/dashboard` with an empty sidebar; auditor Shekhar hit the page ErrorBoundary. Suspected cause: live `menu_overrides` rows re-parented seeded items (e.g. `admin-dashboard`, `reports-performance`) under new custom L3 containers (`custom-dashboards`, `custom-shortcut-*`), hollowing out static sidebar groups; the custom synth path also defaulted to `roles:['admin']`, which surfaced inconsistencies for non-admins.
+- **Fix** (UI/menu compatibility layer only — NO DB, RLS, workflow, scoring, audit, or permission change):
+  - `src/lib/menu/applyOverrides.ts`: dangling `parent_key` (override OR default) is coerced to the default / `null`; `menu_level` clamped to 1..4. Bad rows can no longer break tree traversal.
+  - `src/components/layout/AppSidebar.tsx`: `resolveGroupItems` wrapped in try/catch → static fallback on throw; if the resolver yields zero items for a group whose static fallback is non-empty, return the fallback with resolved labels (baseline never disappears). `synthFromNode` now defaults custom items to `ALL_APP_ROLES` (DB `menu_access_config` is the visibility gate). `SidebarContent` wrapped in an `ErrorBoundary` so one malformed node cannot blank the entire sidebar.
+- **Roadmap intact**: `menu_registry`, `menu_overrides`, custom tabs, and the resolver stay behind the existing `system_settings.menu_overrides_enabled` switch. Feature flag off → behaviour identical to pre-roadmap.
+- **Tests**: `src/test/menu-setting-capa.test.ts` (dangling parent → fallback, level clamp, combined malformed overrides). All 10 menu tests green.
+- **Removal criteria**: see `mem://features/admin/menu-setting-capa`. CAPA must be re-validated before any further Menu Setting phase ships.
+- Files: `src/lib/menu/applyOverrides.ts`, `src/components/layout/AppSidebar.tsx`, `src/test/menu-setting-capa.test.ts` (new), `mem/features/admin/menu-setting-capa` (new).
+
 ## 2026-06-04 — Phase 4D Implementation Console: Implementers Management UI
 
 ## 2026-06-04 — Phase 4G Implementation Console: Session Reality Check
