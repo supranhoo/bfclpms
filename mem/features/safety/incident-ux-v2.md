@@ -33,3 +33,8 @@ type: feature
 ## Known schema debt (deferred to Phase 8)
 - Migration `20260530042159_*.sql` added unused `ui_incident_v2` BOOLEAN and `incident_stage_copy` JSONB **columns** to `safety_settings`. The table is a key/value store, so runtime config actually lives in **rows** with those keys (already seeded). The columns are NULL on every row and read by no code.
 - DO NOT use the columns. Treat them as dead schema. Drop them in Phase 8 stabilization (additive `ALTER TABLE ... DROP COLUMN IF EXISTS`), not before — explicit user decision on 2026-05-30 was "leave as-is".
+
+## Phase 8 status (2026-06-04) — drop STILL deferred
+- Pre-flight `IS NOT NULL` gate failed: all 13 rows carry the column DEFAULTs (`ui_incident_v2 = false`, `incident_stage_copy = {}`). The earlier "NULL on every row" note above is corrected here — defaults were applied at column creation.
+- No source-code reader references the columns (verified by `src/test/safety/phase8/safety-settings-rows-vs-columns.test.ts` + a `rg` scan of `src/`).
+- Per the Phase 8 decision gate the destructive migration was NOT submitted. Re-propose with a tighter "value equals column default AND no reader references" pre-flight as a separate change set.

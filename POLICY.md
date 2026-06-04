@@ -3599,3 +3599,38 @@ regression tests in `src/test/menu/` green.
 **Rollback.** `UPDATE public.system_settings SET setting_value =
 '"false"'::jsonb WHERE setting_key = 'menu_overrides_enabled'` —
 single-row write, instant kill-switch.
+
+## §Safety-Phase8 — Safety Phase 8 stabilization (2026-06-04)
+
+**Posture.** Phase 8 is docs + tests + cleanup only. No new runtime
+route, RPC, edge function, materialized view, or behavior change in any
+Safety module. Menu CAPA invariants I1–I4 must be green before and
+after every Safety release.
+
+**Test gate.** Six read-only SSOT files under `src/test/safety/phase8/`
+(33 tests) are part of the Safety release gate. They guard:
+module-hub kill switch and realtime subscriptions, RLS-enabled posture
+on every core Safety table, the canonical materialized view list,
+`safety_settings` rows-vs-columns access, and the
+`safety_emergency_contacts` SSOT.
+
+**Schema cleanup (deferred).** The destructive drop of
+`safety_settings.ui_incident_v2` and `incident_stage_copy` columns is
+gated by a strict `IS NOT NULL` pre-flight. On 2026-06-04 the gate
+failed because column DEFAULTs (`false` / `{}`) populated every row,
+even though no code reader references the columns. Per the Phase 8
+decision gate the migration was **not submitted**. Re-propose with a
+tighter pre-flight ("value equals column default AND no source-code
+reader exists") as a separate change set.
+
+**Runtime page (deferred — optional).** The
+`/safety/settings/release-readiness` admin page is a runtime feature
+and is **not** part of Phase 8. It is tracked as an optional,
+flag-gated subtask in `mem/features/safety/phase8-stabilization.md` and
+`docs/safety/phase8-release-readiness.md` and requires a separate
+approval before any UI ship.
+
+**Out of scope.** Menu Setting / Custom Tabs (no change),
+`menu_overrides_enabled` stays `false` in production, no PMS
+workflow / scoring / RLS / enforcement change, no production
+experiments.
