@@ -9,6 +9,16 @@ import type { MenuOverrideRow, MenuRegistryRow, ResolvedMenuNode } from './types
  *   - is_active=false override is ignored.
  *   - Only ONE override per (menu_key, client_id) — last-write-wins handled
  *     at DB level via UNIQUE INDEX.
+ *
+ * CAPA (2026-06-04) — Resolver hardening:
+ *   - Dangling `parent_key` (override OR default) referencing a missing
+ *     `menu_key` is coerced to the default; if the default is also dangling
+ *     the parent is reset to `null`. The tree must never reference a node
+ *     that doesn't exist, otherwise sidebar groups silently empty out.
+ *   - `menu_level` is clamped to 1..4 to satisfy `ResolvedMenuNode`.
+ * This block is part of the temporary CAPA layer documented in
+ * `mem://features/admin/menu-setting-capa`. Do not remove until the listed
+ * removal criteria are met.
  */
 export function applyOverrides(
   registry: MenuRegistryRow[],
@@ -19,21 +29,46 @@ export function applyOverrides(
     if (o.is_active) overrideMap.set(o.menu_key, o);
   }
 
+  const knownKeys = new Set(registry.map((r) => r.menu_key));
+  const clampLevel = (n: number): 1 | 2 | 3 | 4 => {
+    const v = Math.max(1, Math.min(4, Math.trunc(n || 1)));
+    return v as 1 | 2 | 3 | 4;
+  };
+  const safeParent = (
+    overriddenParent: string | null,
+    defaultParent: string | null,
+  ): { parent: string | null; overridden: boolean } => {
+    if (overriddenParent !== null && overriddenParent !== defaultParent) {
+      if (knownKeys.has(overriddenParent)) {
+        return { parent: overriddenParent, overridden: true };
+      }
+      // dangling override → fall through to default
+    }
+    if (defaultParent !== null && !knownKeys.has(defaultParent)) {
+      return { parent: null, overridden: false };
+    }
+    return { parent: defaultParent, overridden: false };
+  };
+
   return registry.map((r) => {
     const o = overrideMap.get(r.menu_key);
     const labelOverridden  = !!o && o.custom_label !== null && o.custom_label !== r.default_label;
-    const parentOverridden = !!o && o.custom_parent_key !== null && o.custom_parent_key !== r.default_parent_key;
     const sortOverridden   = !!o && o.custom_sort_order !== null && o.custom_sort_order !== r.default_sort_order;
     const levelOverridden  = !!o && o.custom_menu_level !== null && o.custom_menu_level !== r.menu_level;
     const moduleOverridden = !!o && o.custom_module_key !== null && o.custom_module_key !== r.module_key;
 
+    const { parent: resolvedParent, overridden: parentOverridden } = safeParent(
+      o?.custom_parent_key ?? null,
+      r.default_parent_key,
+    );
+
     return {
       menu_key: r.menu_key,
       label: labelOverridden ? (o!.custom_label as string) : r.default_label,
-      parent_key: parentOverridden ? o!.custom_parent_key : r.default_parent_key,
+      parent_key: resolvedParent,
       sort_order: sortOverridden ? (o!.custom_sort_order as number) : r.default_sort_order,
       module_key: moduleOverridden ? (o!.custom_module_key as string) : r.module_key,
-      menu_level: (levelOverridden ? (o!.custom_menu_level as number) : r.menu_level) as 1 | 2 | 3 | 4,
+      menu_level: clampLevel(levelOverridden ? (o!.custom_menu_level as number) : r.menu_level),
       route_path: r.route_path,
       icon_name: r.icon_name,
       accepts_children: r.accepts_children,
