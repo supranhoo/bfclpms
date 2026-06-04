@@ -611,6 +611,43 @@ export function parseRetryAfterMs(errString: string | undefined): number | null 
 // per-trace rate limit (observed ~30 invocations / 30 s).
 const INTER_BATCH_DELAY_MS = 900
 
+// Phase 9.2 WP-b — Backup batch retry/backoff hardening.
+//
+// Retry policy for the scheduled chunked path ONLY:
+//   • Triggers ONLY on transient chunk failures: HTTP 546 (Deno Deploy OOM
+//     under load), HTTP 429, or RateLimitError. Schema / permission / RLS /
+//     validation errors are NEVER retried.
+//   • Up to 2 retries per failing chunk with backoff 5s then 15s.
+//   • On retry, the failing chunk is re-split into halves of
+//     `BATCH_SIZE_RETRY = 2` to reduce memory pressure. The primary
+//     `BATCH_SIZE = 4` is unchanged (Phase 9.1 I4 invariant).
+//   • A global `RETRY_BUDGET_MS = 8 min` cap keeps total wall time well
+//     under the 30-min stuck-backup reaper ceiling. Once exhausted,
+//     subsequent failing chunks skip retry and are recorded as failed —
+//     the WP-9.2.a hard-fail terminal (`backup_hard_fail_on_partial`) then
+//     marks the run `failed` deterministically.
+//   • Manual backup finalize/status semantics are intentionally unchanged
+//     in this WP. The classifier is exported for reuse but only wired
+//     into the scheduled loop.
+const BATCH_SIZE_RETRY = 2
+const RETRY_BUDGET_MS = 8 * 60_000
+const RETRY_BACKOFFS_MS = [5_000, 15_000] as const
+
+export function isTransientChunkError(
+  errMsg: string | undefined,
+  rateLimited?: boolean,
+): boolean {
+  if (rateLimited) return true
+  if (!errMsg) return false
+  // HTTP 546: Deno Deploy OOM. HTTP 429: rate limit.
+  if (/\bHTTP\s+546\b/.test(errMsg)) return true
+  if (/\bHTTP\s+429\b/.test(errMsg)) return true
+  if (/RateLimitError|Rate limit/i.test(errMsg)) return true
+  // Explicitly NON-transient: schema / permission / RLS / validation /
+  // generic 5xx other than 546. Do not retry.
+  return false
+}
+
 async function callSelf(
   payload: Record<string, unknown>,
   opts: { maxRetries?: number } = {}
