@@ -3565,3 +3565,37 @@ If any of (1)–(4) is false, behavior is **identical to Phase 2E** — children
 **Rollback.** `UPDATE public.system_settings SET setting_value = '"false"'::jsonb WHERE setting_key = 'hub_enforcement_pilot_enabled'` — single-row write, instant effect on next render. Belt-and-braces: flip the Master switch OFF.
 
 **Regression coverage.** `src/test/platformEnforcement.test.ts` (11 cases) locks the allowlist contents, `BLOCK_MSG` value, `isEnforceable()` true/false set, and the full `shouldBlock()` truth table including the two rollback paths (pilot OFF, entitlement re-enabled).
+
+## §Menu-CAPA — Sidebar/Menu baseline invariants (ADR-072, 2026-06-04)
+
+The 2026-06-04 empty-sidebar / auditor-crash incident is closed as a
+multi-factor recovery. Single-factor sufficiency is NOT proven; do not
+attempt isolation in production.
+
+**Baseline invariants (locked by `src/test/menu/`):**
+
+- **I1** — `system_settings.menu_overrides_enabled = false` ⇒ hardcoded
+  baseline sidebar groups render for every authenticated role. No empty
+  sidebar is acceptable for any signed-in user.
+- **I2** — Malformed / dangling rows in `menu_overrides` or
+  `menu_registry` MUST NOT throw. `applyOverrides` coerces dangling
+  `parent_key` and clamps `menu_level` to 1..4; the `<ErrorBoundary>`
+  around `SidebarContent` catches anything that escapes and renders the
+  "Menu temporarily simplified" fallback.
+- **I3** — Empty / failing `menu_access_config` ⇒ `useMenuAccess.canAccess`
+  fail-open chain (admin short-circuit for `admin-settings`, employee
+  implicit defaults for `dashboard`/`inbox`, hardcoded
+  `DEFAULT_MENU_ROLES`, admin-last-resort) preserves Dashboard, Inbox,
+  Admin core, and Audit core.
+- **I4** — Menu Setting / Custom Tabs remain gated by
+  `menu_overrides_enabled`. Flipping it to `false` is the kill switch and
+  always restores the hardcoded baseline.
+
+**Production stance.** `menu_overrides_enabled` stays `false`. Re-enabling
+requires (a) Menu Setting Phase 4 shipped, (b) the three restoration
+factors individually validated in a non-prod copy, and (c) all five
+regression tests in `src/test/menu/` green.
+
+**Rollback.** `UPDATE public.system_settings SET setting_value =
+'"false"'::jsonb WHERE setting_key = 'menu_overrides_enabled'` —
+single-row write, instant kill-switch.
