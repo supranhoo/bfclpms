@@ -1,3 +1,9 @@
+## Phase 3F — Implementation Console: Notification Templates (SHIPPED)
+
+Closed the **Notification Templates** placeholder with `client_notification_templates`: per-client (key scoped per client, not global), archival-only, strict allowlist variable substitution, HTML stored but not sent (no sanitizer yet — preview shows source only), PII-minimized audit (key + lengths + active flag, never raw subject/body). Archived templates are never used by the test-email function; missing/archived falls back silently to the default body. No PMS notification engine, dispatch queue, cron, or existing email-behavior changes. See `CHANGELOG_2026.md` and `mem/features/platform/implementation-console.md` "Notification Templates (Phase 3F)" for the locked behavior.
+
+---
+
 ## Phase 3E — Implementation Console: Communications (SHIPPED)
 
 Closed the **Communications** placeholder with the `client_contacts` address book: role-tagged emails (support/hr/escalation/billing/ops/other), archival-only lifecycle, atomic per-role primary RPC, manual verification, normalized + lowercased email storage, PII-minimized audit (domain + hash + masked only), and `ConfirmDestructiveDialog` for archive. No edge function changes, no email sending, no PMS/scoring/menu/report/Platform Settings impact. See `CHANGELOG_2026.md` and `mem/features/platform/implementation-console.md` "Client Contacts (Phase 3E)" for the locked behavior.

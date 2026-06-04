@@ -1147,6 +1147,68 @@ export type Database = {
           },
         ]
       }
+      client_notification_templates: {
+        Row: {
+          archived_at: string | null
+          archived_by: string | null
+          body_html: string | null
+          body_text: string
+          channel: string
+          client_id: string
+          created_at: string
+          created_by: string | null
+          id: string
+          is_active: boolean
+          subject: string
+          template_key: string
+          updated_at: string
+          updated_by: string | null
+          variables: Json
+        }
+        Insert: {
+          archived_at?: string | null
+          archived_by?: string | null
+          body_html?: string | null
+          body_text: string
+          channel?: string
+          client_id: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          is_active?: boolean
+          subject: string
+          template_key: string
+          updated_at?: string
+          updated_by?: string | null
+          variables?: Json
+        }
+        Update: {
+          archived_at?: string | null
+          archived_by?: string | null
+          body_html?: string | null
+          body_text?: string
+          channel?: string
+          client_id?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          is_active?: boolean
+          subject?: string
+          template_key?: string
+          updated_at?: string
+          updated_by?: string | null
+          variables?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_notification_templates_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       client_setup_checklist: {
         Row: {
           client_id: string
@@ -11814,6 +11876,10 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      impl_console_archive_template: {
+        Args: { _id: string }
+        Returns: undefined
       }
       impl_console_archive_url: {
         Args: { _url_id: string }
