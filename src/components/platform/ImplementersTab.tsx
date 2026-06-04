@@ -53,7 +53,7 @@ function callManageImplementer(body: Record<string, unknown>) {
   return supabase.functions.invoke('manage-implementer', { body });
 }
 
-export function ImplementersTab() {
+export function ImplementersManageTab() {
   const { user, hasRole } = useAuth();
   const qc = useQueryClient();
   const { toast } = useToast();
