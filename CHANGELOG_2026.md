@@ -303,3 +303,10 @@ The Create User dialog's **Access** tab is renamed **Access & Login** and now mi
 - Edit User → Workflow mapping card is now period-scoped: requires Review Period + Year selection, pre-fills from existing mapping for that period, Reset clears only the selected period.
 - Rollback: `DELETE FROM workflow_config WHERE id IN (SELECT created_period_config_id FROM workflow_config_migration_log WHERE run_id = '<uuid>');`
 - Phase 5 (Add/Edit User field parity) deferred to a follow-up change set.
+
+## 2026-06-04 — Safety Phase 8: Final Stabilization (docs + tests only)
+- Docs: `docs/safety/phase8-regression-checklist.md`, `docs/safety/phase8-release-readiness.md`.
+- Tests: 6 new read-only SSOT files under `src/test/safety/phase8/` → 33 tests, all green. Total Safety suite ≥ 158. Menu CAPA suite re-validated at 24/24 before and after.
+- Schema: destructive cleanup of `safety_settings.ui_incident_v2` + `incident_stage_copy` columns **DEFERRED** — strict `IS NOT NULL` pre-flight failed (all 13 rows carry column DEFAULTs `false`/`{}`; no code reader). Per decision gate the migration was not submitted. Re-propose with tighter "value equals default" pre-flight.
+- Runtime: `/safety/settings/release-readiness` admin page **DEFERRED — optional**. A new route is a runtime feature; user required separate approval before any UI ship. Tracked in `mem/features/safety/phase8-stabilization.md` so it is not forgotten.
+- Constraints honored: no Menu Setting / Custom Tabs change · `menu_overrides_enabled` stays false in prod · no PMS workflow/scoring/RLS/enforcement change · no new Safety runtime feature · no production experiments.
