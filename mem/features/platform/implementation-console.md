@@ -56,6 +56,14 @@ type: feature
 - HTML safety: body_html is shown in the Preview drawer as **source only** (inside `<pre>`), never rendered as markup, since no sanitizer is wired yet. The edge function only sends `body_text`.
 - Audit (`entitlement_audit`): `entity_type='client_notification_template'`, reason `impl_console_<create|update|archive>_client_notification_template`. Payload is PII-minimized: `{ template_key, subject_len, body_text_len, body_html_len, is_active }` — raw subject and bodies are NEVER echoed. Test-email audit records `template_resolved` + length fields.
 
+## Delivery Logs (Phase 3G)
+- Read-only tab over existing `entitlement_audit` rows (`entity_type='client_smtp'`, `reason='impl_console_test_email_send_client_smtp'`). No new table, RPC, or edge function.
+- Server-side paginated 25/page via `range()` + `count: 'exact'`. Filters: outcome, template_key contains, since-window.
+- Recipient stays masked exactly as stored — full email is never reachable from this UI.
+- Actor email visibility: `platform_owner` sees full email; `implementation_admin` sees masked form. Display name comes from `profiles.full_name`.
+- RLS on `entitlement_audit` (assigned implementer OR platform_owner) is the access boundary. Unassigned clients are not selectable in the picker; direct query failure renders an "Access denied" alert (never silent empty).
+- No CSV/Excel export, no retry/resend, no realtime/polling. Manual Refresh only. PMS notification logs are out of scope.
+
 ## Audit
 - Every console mutation writes to `entitlement_audit` with `event_type='update'` (CHECK constraint allows only `grant/revoke/update/would_deny/admin_view/deny/create`). Logical action is encoded in `reason` as `impl_console_<action>_<entity_type>` (`update`, `secret_rotate`, `checklist_check`, `test_email_send`). `entity_key = clients.client_key`. Secret values are NEVER written to `before`/`after`.
 

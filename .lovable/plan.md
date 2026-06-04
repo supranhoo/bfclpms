@@ -1,3 +1,9 @@
+## Phase 3G — Implementation Console: Delivery Logs (SHIPPED)
+
+Closed the final **Delivery Logs** placeholder with a read-only view over existing test-send audit rows. No new schema, RPC, or edge function. Server-side paginated 25/page with outcome/template/since filters. Recipient kept masked; actor email shown in full only to `platform_owner`, masked for `implementation_admin`. No CSV export, no retries, no PMS notification engine surface. See `CHANGELOG_2026.md` and `mem/features/platform/implementation-console.md` "Delivery Logs (Phase 3G)" for the locked behavior.
+
+---
+
 ## Phase 3F — Implementation Console: Notification Templates (SHIPPED)
 
 Closed the **Notification Templates** placeholder with `client_notification_templates`: per-client (key scoped per client, not global), archival-only, strict allowlist variable substitution, HTML stored but not sent (no sanitizer yet — preview shows source only), PII-minimized audit (key + lengths + active flag, never raw subject/body). Archived templates are never used by the test-email function; missing/archived falls back silently to the default body. No PMS notification engine, dispatch queue, cron, or existing email-behavior changes. See `CHANGELOG_2026.md` and `mem/features/platform/implementation-console.md` "Notification Templates (Phase 3F)" for the locked behavior.
