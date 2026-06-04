@@ -18,8 +18,16 @@ function json(body: unknown, status = 200) {
 
 function maskEmail(addr: string) {
   const [local, domain] = addr.split("@");
-  if (!domain) return { local: addr, domain: "" };
-  return { local, domain: domain[0] + "***" };
+  if (!domain) return { masked: "***", domain: "" };
+  const head = local.length > 0 ? local[0] : "*";
+  return { masked: `${head}***@${domain}`, domain };
+}
+
+async function sha256Hex(input: string): Promise<string> {
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(input));
+  return Array.from(new Uint8Array(buf))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
 }
 
 async function sendViaResend(opts: {
@@ -81,24 +89,6 @@ serve(async (req) => {
     const { data: client } = await svc.from("clients").select("id, client_key, display_name").eq("id", client_id).maybeSingle();
     if (!client) return json({ error: "client_not_found" }, 404);
 
-    // Rate-limit bucket (current hour)
-    const bucket = new Date();
-    bucket.setMinutes(0, 0, 0);
-    const bucket_hour = bucket.toISOString();
-
-    const { data: existing } = await svc
-      .from("impl_console_rate_buckets")
-      .select("id, count")
-      .eq("actor_id", user.id).eq("client_id", client_id)
-      .eq("action", "test_email_send").eq("bucket_hour", bucket_hour)
-      .maybeSingle();
-
-    const currentCount = existing?.count ?? 0;
-    if (currentCount >= RATE_LIMIT) {
-      const retryAfter = Math.max(1, Math.ceil((bucket.getTime() + 3600_000 - Date.now()) / 1000));
-      return json({ error: "rate_limited", retry_after_seconds: retryAfter, used: currentCount, limit: RATE_LIMIT }, 429);
-    }
-
     // Load sender identity
     const { data: smtp } = await svc
       .from("client_smtp_config")
@@ -110,6 +100,41 @@ serve(async (req) => {
     if (!smtp.secret_set_at && smtp.provider !== "lovable") {
       return json({ error: "secret_not_set" }, 400);
     }
+
+    // Recipient allowlist for implementation_admin (platform_owner is unrestricted).
+    // Allowed: same domain as sender's from_email, OR the caller's own auth email.
+    if (!ownerRow) {
+      const recipientDomain = to_email.split("@")[1]?.toLowerCase() ?? "";
+      const fromDomain = (smtp.from_email as string).split("@")[1]?.toLowerCase() ?? "";
+      const callerEmail = (user.email ?? "").toLowerCase();
+      const allowed =
+        (fromDomain && recipientDomain === fromDomain) ||
+        (callerEmail && to_email.toLowerCase() === callerEmail);
+      if (!allowed) {
+        return json({ error: "recipient_not_allowed", allowed_domain: fromDomain }, 400);
+      }
+    }
+
+    // ATOMIC rate-limit pre-increment — counts every attempt, not just successes.
+    const bucket = new Date();
+    bucket.setMinutes(0, 0, 0);
+    const bucket_hour = bucket.toISOString();
+    const { data: newCount, error: rateErr } = await svc.rpc("impl_console_try_increment_rate", {
+      _actor_id: user.id,
+      _client_id: client_id,
+      _action: "test_email_send",
+      _bucket_hour: bucket_hour,
+      _limit: RATE_LIMIT,
+    });
+    if (rateErr) {
+      console.error("rate increment failed");
+      return json({ error: "rate_check_failed" }, 500);
+    }
+    if (newCount === null) {
+      const retryAfter = Math.max(1, Math.ceil((bucket.getTime() + 3600_000 - Date.now()) / 1000));
+      return json({ error: "rate_limited", retry_after_seconds: retryAfter, used: RATE_LIMIT, limit: RATE_LIMIT }, 429);
+    }
+    const used = newCount as number;
 
     // Resolve secret bytes for non-lovable providers
     let apiKey = "";
@@ -149,17 +174,8 @@ serve(async (req) => {
       return json({ error: "provider_not_implemented", provider: smtp.provider }, 501);
     }
 
-    // Update rate bucket
-    if (existing) {
-      await svc.from("impl_console_rate_buckets").update({ count: currentCount + 1, updated_at: new Date().toISOString() }).eq("id", existing.id);
-    } else {
-      await svc.from("impl_console_rate_buckets").insert({
-        actor_id: user.id, client_id, action: "test_email_send",
-        bucket_hour, count: 1,
-      });
-    }
-
     const masked = maskEmail(to_email);
+    const recipientHash = (await sha256Hex(to_email.toLowerCase())).slice(0, 16);
     await svc.from("entitlement_audit").insert({
       actor_id: user.id,
       event_type: "update",
@@ -168,8 +184,9 @@ serve(async (req) => {
       client_id,
       before: null,
       after: {
-        to_email_local: masked.local,
-        to_email_domain: masked.domain,
+        recipient_masked: masked.masked,
+        recipient_domain: masked.domain,
+        recipient_hash: recipientHash,
         template_key,
         provider: smtp.provider,
         success: result.ok,
@@ -179,11 +196,11 @@ serve(async (req) => {
     });
 
     if (!result.ok) {
-      return json({ ok: false, provider: smtp.provider, status: result.status, error: result.body?.message ?? "send_failed", used: currentCount + 1, limit: RATE_LIMIT }, 502);
+      return json({ ok: false, provider: smtp.provider, status: result.status, error: "send_failed", used, limit: RATE_LIMIT }, 502);
     }
-    return json({ ok: true, provider: smtp.provider, message_id: result.body?.id, used: currentCount + 1, limit: RATE_LIMIT });
+    return json({ ok: true, provider: smtp.provider, message_id: result.body?.id, used, limit: RATE_LIMIT });
   } catch (e: any) {
-    console.error("test email error", e);
-    return json({ error: e?.message ?? "internal_error" }, 500);
+    console.error("test email error", e?.name ?? "unknown");
+    return json({ error: "internal_error" }, 500);
   }
 });
