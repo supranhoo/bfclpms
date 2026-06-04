@@ -1,0 +1,19 @@
+---
+name: Backup hard-fail-on-partial policy
+description: System-settings flag `backup_hard_fail_on_partial` (default true) marks partial backups as failed instead of completed_with_errors; DB-level override only
+type: feature
+---
+
+**Flag:** `system_settings.setting_key = 'backup_hard_fail_on_partial'` (boolean jsonb).
+**Production default:** `true` — partial backups (`tablesCount < discoveredCount`, or manual integrity reports missing tables) are marked `status='failed'` (red pill, excluded from "latest successful" pointers).
+**Override:** setting to `false` is an emergency admin escape hatch — DB-level only, no UI toggle. Document the reason in admin notes when overriding.
+
+**Loader:** `loadHardFailOnPartial(supabase)` in `supabase/functions/create-backup/index.ts`. Fails closed — defaults to `true` on missing row or read error.
+
+**Branches:**
+- `runScheduledChunked` post-finalize: `finalStatus = hardFail && shrunk ? 'failed' : 'completed_with_errors'`.
+- `finalizeManualBackup`: when integrity reports `missing.length > 0` AND flag is `true`, status is `failed`; otherwise legacy `completed_with_errors`.
+
+**Locked by:** Phase 9.1 contract tests I6 (migration seeds `'true'::jsonb`) and I7 (source contains loader + both hard-fail branches). Never remove the loader or weaken the predicates without a documented Phase 9.x amendment.
+
+**Why:** Previously partial runs landed as `completed_with_errors` (amber) and could be mistaken for usable backups. Hard-failing partial runs prevents silent coverage holes and forces root-cause fix instead of accumulating warnings.
