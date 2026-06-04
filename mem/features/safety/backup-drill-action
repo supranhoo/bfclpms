@@ -1,0 +1,20 @@
+---
+name: Backup history Safety Drill verify action
+description: Admin-only "Verify (Safety Drill)" button on Backup History rows wires Flow B of safety-drill; isolated to safety_drill schema; never available for failed backups
+type: feature
+---
+Phase 9.3 WP-9.3. Applies to `src/components/admin/BackupRestoreTab.tsx`.
+
+Action: ShieldCheck icon button on each Backup History row, only on `status === 'completed'` or `status === 'completed_with_errors'` rows that have a `file_path`. NEVER rendered on `status === 'failed'` rows — those are terminal per WP-9.2.a hard-fail policy and must not be "verified" away.
+
+Calls `useSafetyDrill().mutate({ backupId: row.id })` → invokes the `safety-drill` edge function (Flow B). The function:
+- Reads production `public.safety_incidents`, `public.safety_permits`, `public.safety_audit_runs` via SECURITY DEFINER `safety_drill_seed` RPC (SELECT-only, LIMIT 5 rows).
+- Downloads `safety_*.json` from the artifact's storage folder.
+- TRUNCATE + INSERT into `safety_drill.*` schema (isolated).
+- Inserts run history into `public.safety_drill_runs` (admin/safety-head RLS).
+
+Production `public.safety_*` Safety tables are **never** written, updated, or deleted by the drill. RBAC enforced inside the SECURITY DEFINER RPCs (PMS admin OR Safety admin/head); UI route also gates by admin.
+
+Locked by Phase 9 contract tests I12 (no `.insert/.update/.delete/.upsert` against `safety_incidents`/`safety_permits`/`safety_audit_runs` in `safety-drill/index.ts`; sandbox RPCs present), I13 (`useSafetyDrill` invokes `safety-drill` function and forwards `backup_id`), I14 (action wired in `BackupRestoreTab.tsx`, not under a `failed` branch), I15 (WP-9.2.a/b hard-fail predicates and retry constants still present in `create-backup`).
+
+Why: gives admins one-click verification of a specific completed backup artifact end-to-end through the existing isolated drill, without touching `create-backup`, `restore-backup`, `backup_denylist`, or the `get_backup_table_order` RPC. Excluding `failed` rows preserves hard-fail authority — a failed backup must be re-run, not "verified".

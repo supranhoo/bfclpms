@@ -1,9 +1,36 @@
 # Phase 9 — Safety Backup-Gap Closure
 
+**Status (Phase 9.3):** SHIPPED — Backup History "Verify (Safety Drill)" Flow-B action.
 **Status (Phase 9.2 WP-b):** SHIPPED — transient retry/backoff hardening.
 **Status (Phase 9.2 WP-a):** SHIPPED — hard-fail-on-partial flag.
 **Status (Phase 9.1):** SHIPPED — diagnostic + regression locks.
 **Phase 8:** stays CLOSED. Menu CAPA invariants re-verified 24/24 green.
+
+## What shipped in 9.3
+
+- `src/components/admin/BackupRestoreTab.tsx` Backup History rows gain a ShieldCheck "Verify (Safety Drill)" action. Wired via `useSafetyDrill({ backupId: row.id })` → invokes the existing `safety-drill` edge function (Flow B) to round-trip the artifact's `safety_*.json` blobs through the isolated `safety_drill` schema and report row-count deltas.
+- Action gating:
+  - Visible only on `status === 'completed'` or `status === 'completed_with_errors'` rows with a `file_path`.
+  - **Never** rendered on `status === 'failed'` rows — those remain terminal under the WP-9.2.a hard-fail authority. A failed backup must be re-run, not "verified".
+  - UI route is admin-gated; the SECURITY DEFINER RPCs the drill calls (`safety_drill_seed/_truncate/_load/_dump/_counts`) re-enforce PMS admin / Safety admin / Safety head at the database layer (defense in depth).
+- Isolation (audited 2026-06-04):
+  - Production `public.safety_incidents`, `public.safety_permits`, `public.safety_audit_runs` are **read-only** in the drill (`SELECT ... LIMIT 5` via `safety_drill_seed`).
+  - All `TRUNCATE` / `INSERT` writes target the dedicated `safety_drill.*` schema.
+  - The only `public.*` write is the telemetry insert into `public.safety_drill_runs` (admin/safety-head RLS).
+- No edge-function change in this WP. No migration. No schema change. Pure UI + tests + docs.
+- Contract tests gain I12 (drill function never mutates live Safety tables; sandbox RPCs present), I13 (`useSafetyDrill` invokes `safety-drill` and forwards `backup_id`), I14 (action wired in `BackupRestoreTab`, not under a `failed` branch), I15 (composition guard: WP-9.2.a/b hard-fail predicates and retry constants still present in `create-backup`). I1–I11 stay green.
+
+### Verification (re-run)
+
+- `bunx vitest run src/test/safety/phase9/` — **15/15 green** (I1–I15).
+- `bunx vitest run src/test/safety/` — full safety suite green (Phase 8 SSOT and Menu CAPA invariants unaffected).
+
+### Rollback (WP-9.3)
+
+- UI: `git revert` the BackupRestoreTab diff (the ShieldCheck button, the `useSafetyDrill` import, and `verifyDrill` wiring).
+- Tests: remove I12–I15 from `backup-coverage-contract.test.ts`.
+- Memory: revert `mem/features/safety/backup-drill-action` and the `mem/index.md` line.
+- No edge-fn or DB rollback needed (none were touched).
 
 ## What shipped in 9.2 WP-b
 
