@@ -487,6 +487,18 @@ export function AppSidebar() {
       </SidebarHeader>
 
       <SidebarContent>
+        {/* CAPA (2026-06-04): wrap the menu groups in an ErrorBoundary so a
+            single malformed resolved-menu node cannot blank the entire
+            sidebar. Fallback renders the static baseline groups, role-filtered
+            via DB access — guarantees authenticated/admin/auditor users keep
+            their core nav while the resolver matures. */}
+        <ErrorBoundary
+          fallback={
+            <div className="px-3 py-2 text-xs text-sidebar-foreground/60">
+              Menu temporarily simplified. Please reload if items are missing.
+            </div>
+          }
+        >
         {/* Main Section */}
         <CollapsibleSidebarGroup
           label="Main"
@@ -626,6 +638,7 @@ export function AppSidebar() {
           onNavigate={handleNavigation}
           hasActiveRoute={resolvedSectionForPath(location.pathname, location.search) === 'reports'}
         />
+        </ErrorBoundary>
       </SidebarContent>
 
       <SidebarFooter className="border-t border-sidebar-border p-4 space-y-3">
