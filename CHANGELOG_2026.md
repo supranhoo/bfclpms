@@ -4,8 +4,17 @@
 > **Status:** Living document. Append new ships under the **current week's row**, in the same step that you update `DOCUMENTATION.md` Version History.
 > **Sources:** `DOCUMENTATION.md` Version History, `supabase/migrations/`, `mem/*`.
 
+## 2026-06-04 — Safety Phase 8 CLOSED
+- **What:** Formal close-out of Phase 8 (docs + tests + cleanup). No DB change, no runtime code, no migration, no Menu Setting / Custom Tabs touch in this pass.
+- **Completed items:** (1) regression checklist doc, (2) release-readiness report doc, (3) 6-file / 33-test read-only SSOT suite under `src/test/safety/phase8/`, (4) `safety_settings` dead-column drop verified complete (columns no longer present in `public.safety_settings`; rollback script available), (5) memory + changelog updates, (6) Menu CAPA invariants re-validated both ends of phase.
+- **Deferred items (tracked, not skipped):** `/safety/settings/release-readiness` runtime page (owner: Safety lead — re-propose only on explicit request, as flag-gated subtask `release_readiness_v1`, default OFF); Safety backup-gap closure from `mem://features/safety/hardening-baseline` (owner: Platform/Backup — Phase 9 candidate, not started in this pass).
+- **Test results (re-run 2026-06-04 at close-out):** see below — pasted into `docs/safety/phase8-release-readiness.md` §1.
+- **Scope locks honored:** no Menu Setting / Custom Tabs change · `menu_overrides_enabled` stays `false` in production · no PMS workflow/scoring/RLS/enforcement change · no new Safety runtime feature (route/RPC/edge fn/MV) · Phase 9 not started.
+- **Recommendation:** Phase 9 should open as a separate planning pass with backup-gap closure as the primary candidate. Phase 9 kickoff gate = Menu CAPA green + Phase 8 close-out signed off + explicit user approval of Phase 9 scope.
+- Files: `docs/safety/phase8-release-readiness.md` (Status → CLOSED + §0 close-out statement + §1 test results), `mem/features/safety/phase8-stabilization.md` (front-matter + Close-out section), this entry.
+
 ## 2026-06-04 — Safety Phase 8 dead-column cleanup (verified already complete)
-- **What:** Re-snapshotted `public.safety_settings` against live DB. Both target columns (`ui_incident_v2`, `incident_stage_copy`) were **already dropped in a prior session** — `pg_attribute` shows attnums 6 & 7 tombstoned (`attisdropped = true`). Live table is the 5-column key/value shape (`key, value, description, updated_at, updated_by`). Runtime config still served from row keys (both rows present with correct values across 13 rows).
+- **What:** Re-snapshotted `public.safety_settings` against live DB. Both target columns (`ui_incident_v2`, `incident_stage_copy`) are **no longer present in `public.safety_settings`; rollback script available** at `docs/safety/phase8-dead-column-rollback.sql`. Live table is the 5-column key/value shape (`key, value, description, updated_at, updated_by`). Runtime config still served from row keys (both rows present with correct values across 13 rows).
 - **No migration applied today.** The staged forward migration was deleted because its precondition guard would have thrown `42703: column "ui_incident_v2" does not exist` — exactly the schema-drift loud-fail we designed in.
 - **Rollback:** committed at `docs/safety/phase8-dead-column-rollback.sql` (additive, nullable, default-restored). Kept for recovery only; not auto-applied.
 - **Gates:** Menu CAPA invariants unaffected (zero menu code/data touched). No schema change this session.

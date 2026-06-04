@@ -1,15 +1,33 @@
 # Safety Phase 8 — Release Readiness Report
 
-**Status:** Phase 8 closed (docs + tests + cleanup; runtime page deferred) · **Date:** 2026-06-04
+**Status:** Phase 8 CLOSED · **Date:** 2026-06-04
+
+## 0. Close-Out Statement (2026-06-04)
+
+Phase 8 is formally closed. Scope was docs + tests + cleanup only; no runtime feature was shipped this phase.
+
+**Completed items**
+
+1. Regression checklist — `docs/safety/phase8-regression-checklist.md`.
+2. Release-readiness report — this document.
+3. Read-only SSOT test suite — 6 files / 33 tests under `src/test/safety/phase8/`.
+4. `safety_settings` dead-column drop — columns no longer present in `public.safety_settings`; rollback script available at `docs/safety/phase8-dead-column-rollback.sql`.
+5. Memory + changelog updates — `mem/features/safety/phase8-stabilization.md`, `CHANGELOG_2026.md`.
+6. Menu CAPA invariants re-validated both ends of phase.
+
+**Deferred items (tracked, not skipped)** — see §5 table below for owners and next decision points.
+
+**Phase 9 not started in this pass.** Backup-gap closure (from `mem://features/safety/hardening-baseline`) is the primary Phase 9 candidate. Phase 9 kickoff gate: Menu CAPA green + this close-out signed off + explicit user approval of Phase 9 scope.
+
+**Scope locks honored** — see §6.
 
 ## 1. Test posture
 
-| Suite | Files | Tests | Status |
-|---|---|---|---|
-| Menu CAPA (I1–I4) | 6 | 24 | ✅ green |
-| Safety Phase 1–7 SSOT | (existing) | 125 | ✅ green per roadmap version history |
-| Safety Phase 8 SSOT (new) | 6 | 33 | ✅ green |
-| **Safety total** | — | **≥158** | ✅ |
+| Suite | Command | Files | Tests | Status |
+|---|---|---|---|---|
+| Menu CAPA (I1–I4) | `bunx vitest run src/test/menu src/test/menu-setting-capa.test.ts` | 6 | 24 | ✅ 24/24 green (re-run 2026-06-04) |
+| Safety Phase 8 SSOT | `bunx vitest run src/test/safety/phase8` | 6 | 33 | ✅ 33/33 green (re-run 2026-06-04) |
+| **Safety total (all phases)** | `bunx vitest run src/test/safety` | 31 | 241 | ✅ 241/241 green (re-run 2026-06-04) |
 
 Phase 8 SSOT files live under `src/test/safety/phase8/`:
 
@@ -52,8 +70,9 @@ Rollback artefact committed at `docs/safety/phase8-dead-column-rollback.sql`
 
 | Item | Status | Reason | Next step |
 |---|---|---|---|
-| Drop `safety_settings.ui_incident_v2`, `incident_stage_copy` columns | ✅ **Verified complete 2026-06-04** | Drop happened in a prior session — `pg_attribute` shows attnums 6 & 7 with `attisdropped = true`. Today's re-snapshot confirmed: 5-column key/value table, 13 rows, runtime config served from row keys, 0 readers, 0 dependents. No new migration applied. | Rollback script at `docs/safety/phase8-dead-column-rollback.sql` (manual). |
-| `/safety/settings/release-readiness` runtime page | **Deferred — optional** | A new route is a runtime feature; user explicitly required a separate approval before any UI ship | Propose as a flag-gated subtask (`release_readiness_v1`, default OFF) only if requested |
+| Drop `safety_settings.ui_incident_v2`, `incident_stage_copy` columns | ✅ **Verified complete 2026-06-04** | Columns no longer present in `public.safety_settings`; rollback script available. Today's re-snapshot confirmed: 5-column key/value table, 13 rows, runtime config served from row keys, 0 readers, 0 dependents. No new migration applied. | Rollback script at `docs/safety/phase8-dead-column-rollback.sql` (manual). |
+| `/safety/settings/release-readiness` runtime page | **Deferred — optional** (owner: Safety lead) | A new route is a runtime feature; user explicitly required a separate approval before any UI ship | Propose as a flag-gated subtask (`release_readiness_v1`, default OFF) only if requested |
+| Safety backup-gap closure (`mem://features/safety/hardening-baseline`) | **Deferred to Phase 9** (owner: Platform/Backup) | Out of Phase 8 scope; tracked for Phase 9 kickoff | Open Phase 9 planning pass with explicit approval |
 
 ## 6. Constraints honored
 
