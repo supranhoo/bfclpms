@@ -728,10 +728,38 @@ async function runScheduledChunked(
     })
 
     if (!result.ok) {
-      errors.push(`Batch ${i + 1}/${batches.length} failed: ${result.error}`)
-      console.error(`Scheduled backup batch ${i + 1} failed:`, result.error)
-      // Brief pause before next batch even on failure
-      await sleep(INTER_BATCH_DELAY_MS)
+      // Phase 9.2 WP-b — transient retry with halved sub-batches and
+      // a global wall-time budget. Non-transient errors fall through
+      // immediately to the hard-fail terminal (WP-9.2.a).
+      const transient = isTransientChunkError(result.error, result.rateLimited)
+      const budgetLeftMs = RETRY_BUDGET_MS - (Date.now() - startTime)
+      if (!transient || budgetLeftMs <= 0) {
+        const reason = !transient ? 'non-transient' : 'budget exhausted'
+        errors.push(
+          `Batch ${i + 1}/${batches.length} failed (${reason}): ${result.error}`,
+        )
+        console.error(`Scheduled backup batch ${i + 1} failed (${reason}):`, result.error)
+        await sleep(INTER_BATCH_DELAY_MS)
+        continue
+      }
+
+      const recovered = await retryFailedBatchTransient({
+        batch,
+        batchIndex: i,
+        totalBatches: batches.length,
+        firstError: result.error ?? 'unknown',
+        backupId,
+        folderPath,
+        startTime,
+      })
+      for (const p of recovered.processed) {
+        tableManifest.push({ table: p.table, rows: p.rows, file: `${folderPath}/${p.table}.json` })
+        totalRows += p.rows
+        totalSize += p.sizeBytes || 0
+        tablesCount++
+      }
+      if (recovered.summary) errors.push(recovered.summary)
+      if (i < batches.length - 1) await sleep(INTER_BATCH_DELAY_MS)
       continue
     }
 
