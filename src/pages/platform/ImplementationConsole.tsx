@@ -277,7 +277,13 @@ function SenderIdentityTab({ client, actorId }: { client: Client; actorId?: stri
           ) : (
             <>Not set</>
           )}
-          <div className="mt-1 text-xs">Secrets are write-only and never displayed. Rotation is handled by an edge function planned in the next phase.</div>
+          <div className="mt-1 text-xs">Secrets are write-only and never displayed. Use Replace secret to rotate.</div>
+        </div>
+        <div className="mt-3">
+          <RotateSecretButton client={client} disabled={!merged.provider || merged.provider === 'lovable'} onDone={() => qc.invalidateQueries({ queryKey: ['impl-console', 'smtp', client.id] })} />
+          {merged.provider === 'lovable' && (
+            <div className="text-xs text-muted-foreground mt-2">Lovable provider uses the platform-managed key; no per-client secret needed.</div>
+          )}
         </div>
       </div>
       <Button onClick={save} disabled={saving || Object.keys(form).length === 0}>{saving ? 'Saving…' : 'Save'}</Button>
@@ -285,6 +291,201 @@ function SenderIdentityTab({ client, actorId }: { client: Client; actorId?: stri
   );
 }
 
+function RotateSecretButton({ client, disabled, onDone }: { client: Client; disabled?: boolean; onDone: () => void }) {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const [open, setOpen] = useState(false);
+  const [secret, setSecret] = useState('');
+  const [confirm, setConfirm] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const submit = async () => {
+    if (confirm !== 'ROTATE' || secret.length < 8) return;
+    setBusy(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('impl-console-rotate-smtp-secret', {
+        body: { client_id: client.id, secret },
+      });
+      if (error) throw error;
+      if ((data as any)?.error) throw new Error((data as any).error);
+      toast({ title: 'Secret rotated', description: 'Stored securely; never displayed.' });
+      // Auto-tick checklist item
+      await tickChecklist(client, 'smtp_secret');
+      qc.invalidateQueries({ queryKey: ['impl-console', 'checklist', client.id] });
+      onDone();
+      setOpen(false); setSecret(''); setConfirm('');
+    } catch (e: any) {
+      toast({ title: 'Rotate failed', description: e.message, variant: 'destructive' });
+    } finally { setBusy(false); }
+  };
+
+  return (
+    <>
+      <Button variant="outline" size="sm" disabled={disabled} onClick={() => setOpen(true)}>Replace secret</Button>
+      <Dialog open={open} onOpenChange={(v) => { if (!busy) setOpen(v); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Replace SMTP / API secret</DialogTitle>
+            <DialogDescription>
+              The previous secret is overwritten. The new value is stored encrypted and never displayed again.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <Label>New secret</Label>
+              <Input type="password" value={secret} onChange={(e) => setSecret(e.target.value)} autoComplete="new-password" />
+            </div>
+            <div>
+              <Label>Type <span className="font-mono">ROTATE</span> to confirm</Label>
+              <Input value={confirm} onChange={(e) => setConfirm(e.target.value)} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setOpen(false)} disabled={busy}>Cancel</Button>
+            <Button onClick={submit} disabled={busy || confirm !== 'ROTATE' || secret.length < 8}>{busy ? 'Rotating…' : 'Rotate'}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
+async function tickChecklist(client: Client, item_key: string) {
+  const { data: row } = await supabase
+    .from('client_setup_checklist')
+    .select('id, done')
+    .eq('client_id', client.id).eq('item_key', item_key).maybeSingle();
+  if (!row || row.done) return;
+  const { data: { user } } = await supabase.auth.getUser();
+  await supabase.from('client_setup_checklist').update({
+    done: true, done_by: user?.id ?? null, done_at: new Date().toISOString(),
+  }).eq('id', row.id);
+  await supabase.from('entitlement_audit').insert({
+    actor_id: user?.id, event_type: 'update',
+    entity_type: 'client_setup_checklist', entity_key: client.client_key, client_id: client.id,
+    before: { item_key, done: false }, after: { item_key, done: true, auto: true },
+    reason: 'impl_console_checklist_check_client_setup_checklist',
+  });
+}
+
+function TestEmailTab({ client, actorId }: { client: Client; actorId?: string }) {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const [to, setTo] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const { data: smtp } = useQuery({
+    queryKey: ['impl-console', 'smtp', client.id],
+    queryFn: async () => {
+      const { data } = await supabase.from('client_smtp_config')
+        .select('from_email, provider, secret_set_at')
+        .eq('client_id', client.id).maybeSingle();
+      return data;
+    },
+  });
+
+  // Current-hour usage
+  const bucketHour = useMemo(() => {
+    const d = new Date(); d.setMinutes(0, 0, 0); return d.toISOString();
+  }, []);
+  const { data: bucket, refetch: refetchBucket } = useQuery({
+    queryKey: ['impl-console', 'rate', client.id, bucketHour, actorId],
+    queryFn: async () => {
+      const { data } = await supabase.from('impl_console_rate_buckets')
+        .select('count')
+        .eq('actor_id', actorId!).eq('client_id', client.id)
+        .eq('action', 'test_email_send').eq('bucket_hour', bucketHour)
+        .maybeSingle();
+      return data?.count ?? 0;
+    },
+    enabled: !!actorId,
+  });
+
+  const { data: recent, refetch: refetchRecent } = useQuery({
+    queryKey: ['impl-console', 'test-history', client.client_key],
+    queryFn: async () => {
+      const { data } = await supabase.from('entitlement_audit')
+        .select('id, created_at, after, actor_id')
+        .eq('entity_type', 'client_smtp')
+        .eq('entity_key', client.client_key)
+        .eq('reason', 'impl_console_test_email_send_client_smtp')
+        .order('created_at', { ascending: false }).limit(5);
+      return data ?? [];
+    },
+  });
+
+  const senderReady = !!smtp?.from_email && !!smtp?.provider && (smtp.provider === 'lovable' || !!smtp.secret_set_at);
+  const limitReached = (bucket ?? 0) >= 10;
+
+  const send = async () => {
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) {
+      toast({ title: 'Invalid email', variant: 'destructive' }); return;
+    }
+    setBusy(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('impl-console-send-test-email', {
+        body: { client_id: client.id, to_email: to },
+      });
+      if (error) throw error;
+      const resp = data as any;
+      if (resp?.error === 'rate_limited') {
+        toast({ title: 'Rate limit reached', description: `Try again in ~${Math.ceil(resp.retry_after_seconds / 60)} min.`, variant: 'destructive' });
+      } else if (resp?.ok) {
+        toast({ title: 'Test email sent', description: `Used ${resp.used}/${resp.limit} this hour.` });
+        await tickChecklist(client, 'test_email');
+        qc.invalidateQueries({ queryKey: ['impl-console', 'checklist', client.id] });
+      } else if (resp?.error) {
+        toast({ title: 'Send failed', description: resp.error, variant: 'destructive' });
+      }
+      refetchBucket(); refetchRecent();
+    } catch (e: any) {
+      toast({ title: 'Send failed', description: e.message, variant: 'destructive' });
+    } finally { setBusy(false); }
+  };
+
+  return (
+    <Card>
+      <CardHeader><CardTitle>Test Email</CardTitle></CardHeader>
+      <CardContent className="space-y-4">
+        {!senderReady && (
+          <Alert><AlertDescription>Set up Sender Identity (and rotate the secret) before sending a test.</AlertDescription></Alert>
+        )}
+        <div className="grid sm:grid-cols-[1fr_auto] gap-2 items-end">
+          <div>
+            <Label>Send test to</Label>
+            <Input type="email" placeholder="you@example.com" value={to} onChange={(e) => setTo(e.target.value)} />
+          </div>
+          <Button onClick={send} disabled={busy || !senderReady || limitReached || !to}>
+            {busy ? 'Sending…' : limitReached ? 'Rate limit reached' : 'Send test'}
+          </Button>
+        </div>
+        <div className="text-xs text-muted-foreground">Used {bucket ?? 0}/10 this hour. Limit resets at the top of the hour.</div>
+
+        <div>
+          <div className="font-medium text-sm mb-2">Recent tests</div>
+          {(recent ?? []).length === 0 ? (
+            <div className="text-sm text-muted-foreground">No tests yet.</div>
+          ) : (
+            <ul className="divide-y text-sm">
+              {(recent ?? []).map((r: any) => (
+                <li key={r.id} className="py-2 flex items-center justify-between">
+                  <div>
+                    <span className="font-mono">{r.after?.to_email_local}@{r.after?.to_email_domain}</span>
+                    <span className="ml-2 text-xs text-muted-foreground">{r.after?.provider}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Badge variant={r.after?.success ? 'default' : 'destructive'}>{r.after?.success ? 'sent' : 'failed'}</Badge>
+                    <span className="text-xs text-muted-foreground">{formatDistanceToNow(new Date(r.created_at))} ago</span>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
 function ChecklistTab({ client, actorId }: { client: Client; actorId?: string }) {
   const qc = useQueryClient();
   const { toast } = useToast();
