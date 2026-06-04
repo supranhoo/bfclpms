@@ -1,3 +1,9 @@
+## Phase 3D — Implementation Console: Client URL / Domain binding (SHIPPED)
+
+Closed the **URLs & Domains** placeholder tab with archival-only client URL records, atomic primary switching, manual verification, and a conditional test-email body line. No hard delete, no PMS/scoring/menus/reports/RLS-on-existing-tables/auth/routing impact. See `CHANGELOG_2026.md` 2026-06-04 entry and `mem/features/platform/implementation-console.md` "Client URLs (Phase 3D)" for the locked behavior.
+
+---
+
 ## Phase 3C.2 — Implementation Console: Secret Rotation + Test Email (completing 3C)
 
 Phase 3C shipped the foundation (role, tables, route, 3 working tabs + placeholders). This sub-phase closes the two remaining write paths that require server-side privilege so the Console becomes operationally complete, and wires the two tabs already stubbed in the UI (**Sender Identity → Replace secret** modal, **Test Email** tab). No changes to Platform Settings, PMS, scoring, RLS on other tables, menus, or reports.
