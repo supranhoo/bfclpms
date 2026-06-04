@@ -90,4 +90,5 @@ Lean-Load: debounce search inputs (>200 rows / network); paginate new lists with
 - [Menu Setting — CAPA fallback](mem://features/admin/menu-setting-capa) — Temporary fail-open layer (dangling-parent coercion, empty-group fallback, sidebar ErrorBoundary, permissive custom-item roles) keeping admin/auditor baseline access stable until roadmap matures; removal criteria documented
 - [Safety Phase 8 — Stabilization](mem://features/safety/phase8-stabilization) — Docs+tests-only close-out; 33 new SSOT tests; dead-column drop and release-readiness route both deferred with explicit re-propose criteria
 - [Backup Coverage Contract](mem://infrastructure/database/backup-coverage-contract) — Phase 9.1 static regression locking RPC-driven discovery, BATCH_SIZE=4, storage buckets, no hardcoded safety allowlist
+- [Backup Hard-Fail On Partial Policy](mem://infrastructure/database/backup-hard-fail-policy) — Phase 9.2 WP-a flag (default true) marks partial backups as failed; DB-level override only
 - [Test Baseline Restoration](mem://infrastructure/test-baseline-restoration) — Migration-scan guards use latest-definition semantics; CREATE OR REPLACE preserves grants
