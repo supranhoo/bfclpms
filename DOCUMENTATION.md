@@ -4142,7 +4142,7 @@ The `useReviewPeriodPermissions(periodName, reviewYear)` hook is the central enf
 | `KpiHeaderSection.tsx` | KPI edit actions |
 | `GovernanceLockBanner.tsx` | Contextual warning banner showing restricted actions |
 
-**Caching:** Results are cached for 30 seconds (`staleTime: 30_000`) to avoid excessive RPC calls. **Fail-open:** If any RPC call fails, that permission defaults to `true` (allowed).
+**Caching:** Results are cached for 30 seconds (`staleTime: 30_000`) to avoid excessive RPC calls. **Fail-open (ADR-074):** If any RPC call fails, the permission defaults to the action-specific *permissive* value — `false` for `view_only` (which has inverted semantics where `true` = restrictive) and `true` for every other action. A uniform `true` would render a phantom "Governance lock active" badge on any transient iOS Safari RPC blip.
 
 #### GovernanceLockBanner Component
 
