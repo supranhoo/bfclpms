@@ -112,7 +112,7 @@ export default function Dashboard() {
         return next;
       }, { replace: true });
     }
-  }, [searchParams]);
+  }, [searchParams.get('mentioned_kpi'), searchParams.get('mentioned_employee')]);
 
   // Initialize from URL query param
   const viewParam = searchParams.get('view');
