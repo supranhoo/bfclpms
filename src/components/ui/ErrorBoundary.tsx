@@ -2,11 +2,18 @@ import React, { Component, ErrorInfo, ReactNode } from 'react';
 import { AlertTriangle, RefreshCw } from 'lucide-react';
 import { Button } from './button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './card';
+import { reportClientError } from '@/lib/diagnostics/reportClientError';
 
 interface Props {
   children: ReactNode;
   fallback?: ReactNode;
   onError?: (error: Error, errorInfo: ErrorInfo) => void;
+  /**
+   * When this value changes, the boundary auto-resets. Wire this to
+   * `location.key` so navigating away clears a stuck error without
+   * requiring the user to click "Try Again".
+   */
+  resetKey?: unknown;
 }
 
 interface State {
@@ -20,17 +27,33 @@ export class ErrorBoundary extends Component<Props, State> {
     error: null,
   };
 
+  private mountedAt: number = Date.now();
+
   public static getDerivedStateFromError(error: Error): State {
     return { hasError: true, error };
   }
 
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error('ErrorBoundary caught an error:', error, errorInfo);
+    // Fire-and-forget remote diagnostic. Wrapped internally; cannot throw.
+    reportClientError({
+      error,
+      componentStack: errorInfo?.componentStack ?? null,
+      timeSinceMountMs: Date.now() - this.mountedAt,
+    });
     this.props.onError?.(error, errorInfo);
+  }
+
+  public componentDidUpdate(prevProps: Props) {
+    if (this.state.hasError && prevProps.resetKey !== this.props.resetKey) {
+      this.setState({ hasError: false, error: null });
+      this.mountedAt = Date.now();
+    }
   }
 
   private handleRetry = () => {
     this.setState({ hasError: false, error: null });
+    this.mountedAt = Date.now();
   };
 
   public render() {
