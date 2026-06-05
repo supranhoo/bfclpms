@@ -7,6 +7,7 @@ import {
   useUrlFilterStateNullable,
   useClearAllFilters,
   __resetUrlWriteCoalescerForTests,
+  __getCoalescerWriteCountForTests,
 } from '@/hooks/useUrlFilterState';
 
 /**
@@ -35,44 +36,37 @@ describe('useUrlFilterState — write coalescer & no-op guard', () => {
   });
 
   it('no-op guard: setting the same value emits no actual URL write', async () => {
-    const replaceSpy = vi.spyOn(window.history, 'replaceState');
     const { result } = renderHook(() => useUrlFilterState('q', ''), { wrapper });
-    const baseline = replaceSpy.mock.calls.length;
+    const baseline = __getCoalescerWriteCountForTests();
     await act(async () => {
       result.current[1](''); // empty == default, current is also empty
     });
     await flushMicrotasks();
-    expect(replaceSpy.mock.calls.length).toBe(baseline);
-    replaceSpy.mockRestore();
+    expect(__getCoalescerWriteCountForTests()).toBe(baseline);
   });
 
   it('setting a new value produces exactly one history write', async () => {
-    const replaceSpy = vi.spyOn(window.history, 'replaceState');
     const { result } = renderHook(() => useUrlFilterState('q', ''), { wrapper });
-    const baseline = replaceSpy.mock.calls.length;
+    const baseline = __getCoalescerWriteCountForTests();
     await act(async () => {
       result.current[1]('hello');
     });
     await flushMicrotasks();
-    expect(replaceSpy.mock.calls.length).toBe(baseline + 1);
+    expect(__getCoalescerWriteCountForTests()).toBe(baseline + 1);
     expect(result.current[0]).toBe('hello');
-    replaceSpy.mockRestore();
   });
 
   it('nullable: repeated null clears emit no writes after the first', async () => {
-    const replaceSpy = vi.spyOn(window.history, 'replaceState');
     const { result } = renderHook(() => useUrlFilterStateNullable('dept'), { wrapper });
-    const baseline = replaceSpy.mock.calls.length;
+    const baseline = __getCoalescerWriteCountForTests();
     await act(async () => { result.current[1](null); });
     await flushMicrotasks();
     await act(async () => { result.current[1](null); });
     await flushMicrotasks();
-    expect(replaceSpy.mock.calls.length).toBe(baseline); // both were no-ops
-    replaceSpy.mockRestore();
+    expect(__getCoalescerWriteCountForTests()).toBe(baseline); // both were no-ops
   });
 
   it('coalesces multiple synchronous setter calls across hooks into one history write', async () => {
-    const replaceSpy = vi.spyOn(window.history, 'replaceState');
     const { result } = renderHook(
       () => ({
         q: useUrlFilterState('q', ''),
@@ -81,37 +75,34 @@ describe('useUrlFilterState — write coalescer & no-op guard', () => {
       }),
       { wrapper },
     );
-    const baseline = replaceSpy.mock.calls.length;
+    const baseline = __getCoalescerWriteCountForTests();
     await act(async () => {
       result.current.q[1]('alpha');
       result.current.dept[1]('eng');
       result.current.desig[1]('mgr');
     });
     await flushMicrotasks();
-    expect(replaceSpy.mock.calls.length).toBe(baseline + 1);
+    expect(__getCoalescerWriteCountForTests()).toBe(baseline + 1);
   });
 
   it('useClearAllFilters is a no-op when there is nothing to clear', async () => {
-    const replaceSpy = vi.spyOn(window.history, 'replaceState');
     const { result } = renderHook(() => useClearAllFilters(), { wrapper });
-    const baseline = replaceSpy.mock.calls.length;
+    const baseline = __getCoalescerWriteCountForTests();
     await act(async () => { result.current(); });
     await flushMicrotasks();
-    expect(replaceSpy.mock.calls.length).toBe(baseline);
-    replaceSpy.mockRestore();
+    expect(__getCoalescerWriteCountForTests()).toBe(baseline);
   });
 
   it('200 distinct setter calls in one synchronous burst produce one history write', async () => {
     // The pathological iOS case: a runaway effect spamming the URL.
     // Coalescer must fold the whole burst into a single replaceState.
-    const replaceSpy = vi.spyOn(window.history, 'replaceState');
     const { result } = renderHook(() => useUrlFilterState('q', ''), { wrapper });
-    const baseline = replaceSpy.mock.calls.length;
+    const baseline = __getCoalescerWriteCountForTests();
     await act(async () => {
       for (let i = 0; i < 200; i++) result.current[1](`v${i}`);
     });
     await flushMicrotasks();
-    expect(replaceSpy.mock.calls.length).toBe(baseline + 1);
+    expect(__getCoalescerWriteCountForTests()).toBe(baseline + 1);
     expect(result.current[0]).toBe('v199');
   });
 });
