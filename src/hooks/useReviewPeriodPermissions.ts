@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { setLastRpc } from '@/lib/diagnostics/lastRpc';
 
 export interface ReviewPeriodPermissions {
   edit_kpi: boolean;
@@ -25,6 +26,17 @@ const DEFAULT_OPEN: ReviewPeriodPermissions = {
   isLoading: false,
   periodStage: null,
 };
+
+/**
+ * Fail-open default per action. `view_only` has INVERTED semantics
+ * (true = restrictive), so the permissive default is `false`; every other
+ * action's permissive default is `true`. Returning the wrong default here
+ * would render a phantom "Governance lock active" badge on any transient
+ * RPC error (see ADR-074, May 2026 RCA).
+ */
+function permissiveDefault(action: string): boolean {
+  return action === 'view_only' ? false : true;
+}
 
 /**
  * Central hook to check governance permissions for the current user + review period.
@@ -58,9 +70,15 @@ export function useReviewPeriodPermissions(
           });
           if (error) {
             console.warn(`Permission check failed for ${action}:`, error.message);
-            return { action, allowed: true }; // Fail-open
+            setLastRpc('check_review_period_permission', null);
+            // Fail-open: use the action-specific permissive default so a
+            // failed `view_only` check does NOT flip the UI to read-only.
+            return { action, allowed: permissiveDefault(action) };
           }
-          return { action, allowed: data as boolean };
+          // Defensive: a non-boolean payload (null/undefined from a partial
+          // PostgREST error) must also fall back to the permissive default.
+          const allowed = typeof data === 'boolean' ? data : permissiveDefault(action);
+          return { action, allowed };
         })
       );
 

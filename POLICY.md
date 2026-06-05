@@ -359,6 +359,15 @@ When a reviewer sends back a KPI, its status reverts to `kra_set`. If the employ
 - **Sent-back KPIs** (`kra_set` with existing submission): Governance lock is bypassed; employee can update data and resubmit.
 - A visual banner informs the employee that the KPI was sent back for revision.
 
+#### 3.5a Governance Permission Hook — Fail-Open Semantics (ADR-074)
+
+`useReviewPeriodPermissions` calls `check_review_period_permission` once per action. If an RPC call fails (network blip, auth-refresh race, transient PostgREST error), the hook MUST fall back to the **action-specific permissive default**:
+
+- `view_only` → `false` (the action's semantics are inverted; `true` = restrictive).
+- Every other action (`edit_kpi`, `edit_scores`, `submit_self_review`, `submit_manager_review`, `approve`, `add_comments`) → `true`.
+
+A uniform `true` default would flip `view_only` to "restrictive" on a transient error and render a phantom "Governance lock active for this period (<stage>)" badge in `KpiHeaderSection`. The DB-side RPC remains the source of truth for real locks; this rule only governs client-side error handling.
+
 ### 3.6 Daily-Frequency KPI Governance Bypass
 
 Daily-frequency KPIs require continuous data entry throughout the month. When governance locks disable "Edit KPI" or "Self Review" for the Employee role, daily KPIs at `kra_set` status are **exempt** from these restrictions.
