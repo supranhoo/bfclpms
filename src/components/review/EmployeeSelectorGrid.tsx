@@ -269,22 +269,33 @@ export function EmployeeSelectorGrid({
   useEffect(() => {
     setSearchInput((prev) => (prev === searchQuery ? prev : searchQuery));
   }, [searchQuery]);
-  useEffect(() => {
-    if (searchInput === searchQuery) return;
-    const t = setTimeout(() => {
-      React.startTransition(() => setSearchQuery(searchInput));
-    }, 250);
-    return () => clearTimeout(t);
-  }, [searchInput, searchQuery, setSearchQuery]);
+  // Ref-backed debounce timer — lives outside the render cycle so that
+  // unrelated re-renders (TanStack Query, useIsFetching polling, etc.)
+  // can't cancel the pending commit before it fires.
+  const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Keep a live ref to the latest setSearchQuery so the handler stays stable
+  // even though useUrlFilterState rebuilds setSearchQuery each render
+  // (setSearchParams identity is not stable across renders).
+  const setSearchQueryRef = useRef(setSearchQuery);
+  useEffect(() => { setSearchQueryRef.current = setSearchQuery; }, [setSearchQuery]);
+  useEffect(() => () => {
+    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+  }, []);
   const handleSearchChange = useCallback((val: string) => {
-    // Empty value (e.g. Clear All) flushes immediately for snappy reset.
+    setSearchInput(val);
+    if (searchDebounceRef.current) {
+      clearTimeout(searchDebounceRef.current);
+      searchDebounceRef.current = null;
+    }
     if (val === '') {
-      setSearchInput('');
-      setSearchQuery('');
+      // Flush immediately on clear for snappy reset.
+      setSearchQueryRef.current('');
       return;
     }
-    setSearchInput(val);
-  }, [setSearchQuery]);
+    searchDebounceRef.current = setTimeout(() => {
+      React.startTransition(() => setSearchQueryRef.current(val));
+    }, 250);
+  }, []);
   const [statusFilter, setStatusFilter] = useUrlFilterState('status', 'all');
   const [selectedDepartment, setSelectedDepartment] = useUrlFilterStateNullable('dept');
   const [selectedDesignation, setSelectedDesignation] = useUrlFilterStateNullable('desig');
