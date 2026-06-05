@@ -51,6 +51,7 @@ function RouteDataLoadingGate() {
 
 function DashboardContent() {
   const { state, isMobile, openMobile } = useSidebar();
+  const location = useLocation();
   
   // Show floating trigger when:
   // - Mobile: sidebar sheet is closed (openMobile === false)
@@ -67,7 +68,7 @@ function DashboardContent() {
       )}
       <SidebarInset className="min-w-0">
         <main className="flex-1 overflow-y-auto overflow-x-hidden px-3 py-3 sm:px-5 sm:py-4 lg:px-6 lg:py-5 bg-background min-w-0">
-          <ErrorBoundary>
+          <ErrorBoundary resetKey={location.key}>
             <Suspense fallback={<PageLoadingOverlay open label="Please wait" />}>
               <Outlet />
             </Suspense>

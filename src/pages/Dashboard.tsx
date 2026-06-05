@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
-import { useSearchParams, useNavigate } from 'react-router-dom';
+import { useSearchParams, useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { FILTER_PARAM_NAMES } from '@/hooks/useUrlFilterState';
 import { useAuth } from '@/contexts/AuthContext';
@@ -14,6 +14,8 @@ import { UnifiedScorecard } from '@/components/review/UnifiedScorecard';
 import { AlertCircle, RefreshCw, LogOut, Plus } from 'lucide-react';
 import { useDashboardKraPermissions } from '@/hooks/useDashboardKraPermissions';
 import { AdminKpiCreateDialog } from '@/components/admin/AdminKpiCreateDialog';
+import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
+import { InlineErrorFallback } from '@/components/ui/InlineErrorFallback';
 
 interface EmployeeProfile {
   id: string;
@@ -66,6 +68,7 @@ export default function Dashboard() {
   const { profile, effectiveRole: role, loading, profileError, signOut, fetchProfile, user } = useAuth();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
+  const location = useLocation();
 
   const defaultPeriodSelection = useDefaultPeriodSelection();
   const [periodSelection, setPeriodSelection] = useState<PeriodSelection>(defaultPeriodSelection);
@@ -358,34 +361,44 @@ export default function Dashboard() {
       return (
         <div className="space-y-4">
           {availableModes.length > 1 && (
-            <ViewModeToggle
-              currentMode={viewMode}
-              availableModes={availableModes}
-              onModeChange={handleModeChange}
-            />
+            <ErrorBoundary
+              resetKey={`${location.key}:toggle`}
+              fallback={<InlineErrorFallback label="View switcher is temporarily unavailable." />}
+            >
+              <ViewModeToggle
+                currentMode={viewMode}
+                availableModes={availableModes}
+                onModeChange={handleModeChange}
+              />
+            </ErrorBoundary>
           )}
-          <UnifiedScorecard
-            viewLevel={viewLevelForScorecard as any}
-            employee={selectedEmployee}
-            periodSelection={periodSelection}
-            onPeriodSelectionChange={setPeriodSelection}
-            onBack={() => {
-              setSelectedEmployee(null);
-              setAutoOpenKpiId(null);
-              setSearchParams((prev) => {
-                const next = new URLSearchParams(prev);
-                next.delete('employee');
-                return next;
-              }, { replace: true });
-            }}
-            autoOpenKpiId={autoOpenKpiId}
-            exploreMode={exploreMode}
-            headerAction={canAddKra ? (
-              <Button size="sm" onClick={() => setAddKraOpen(true)} className="gap-1.5">
-                <Plus className="h-4 w-4" /> Add KRA
-              </Button>
-            ) : null}
-          />
+          <ErrorBoundary
+            resetKey={`${location.key}:scorecard:${selectedEmployee.id}:${viewMode}`}
+            fallback={<InlineErrorFallback label="The scorecard could not be displayed for this employee." />}
+          >
+            <UnifiedScorecard
+              viewLevel={viewLevelForScorecard as any}
+              employee={selectedEmployee}
+              periodSelection={periodSelection}
+              onPeriodSelectionChange={setPeriodSelection}
+              onBack={() => {
+                setSelectedEmployee(null);
+                setAutoOpenKpiId(null);
+                setSearchParams((prev) => {
+                  const next = new URLSearchParams(prev);
+                  next.delete('employee');
+                  return next;
+                }, { replace: true });
+              }}
+              autoOpenKpiId={autoOpenKpiId}
+              exploreMode={exploreMode}
+              headerAction={canAddKra ? (
+                <Button size="sm" onClick={() => setAddKraOpen(true)} className="gap-1.5">
+                  <Plus className="h-4 w-4" /> Add KRA
+                </Button>
+              ) : null}
+            />
+          </ErrorBoundary>
           {canAddKra && (
             <AdminKpiCreateDialog
               isOpen={addKraOpen}
@@ -402,18 +415,28 @@ export default function Dashboard() {
     return (
       <div className="space-y-4">
         {availableModes.length > 1 && (
-          <ViewModeToggle
-            currentMode={viewMode}
-            availableModes={availableModes}
-            onModeChange={handleModeChange}
-          />
+          <ErrorBoundary
+            resetKey={`${location.key}:toggle`}
+            fallback={<InlineErrorFallback label="View switcher is temporarily unavailable." />}
+          >
+            <ViewModeToggle
+              currentMode={viewMode}
+              availableModes={availableModes}
+              onModeChange={handleModeChange}
+            />
+          </ErrorBoundary>
         )}
-        <EmployeeSelectorGrid
-          viewLevel={viewMode as Exclude<ViewMode, 'self'>}
-          periodSelection={periodSelection}
-          onPeriodSelectionChange={setPeriodSelection}
-          onSelectEmployee={handleSelectEmployee}
-        />
+        <ErrorBoundary
+          resetKey={`${location.key}:grid:${viewMode}`}
+          fallback={<InlineErrorFallback label="The employee list could not be loaded." />}
+        >
+          <EmployeeSelectorGrid
+            viewLevel={viewMode as Exclude<ViewMode, 'self'>}
+            periodSelection={periodSelection}
+            onPeriodSelectionChange={setPeriodSelection}
+            onSelectEmployee={handleSelectEmployee}
+          />
+        </ErrorBoundary>
       </div>
     );
   }
@@ -422,32 +445,42 @@ export default function Dashboard() {
   return (
     <div className="space-y-4">
       {availableModes.length > 1 && (
-        <ViewModeToggle
-          currentMode={viewMode}
-          availableModes={availableModes}
-          onModeChange={handleModeChange}
-        />
+        <ErrorBoundary
+          resetKey={`${location.key}:toggle`}
+          fallback={<InlineErrorFallback label="View switcher is temporarily unavailable." />}
+        >
+          <ViewModeToggle
+            currentMode={viewMode}
+            availableModes={availableModes}
+            onModeChange={handleModeChange}
+          />
+        </ErrorBoundary>
       )}
-      <UnifiedScorecard
-        viewLevel="self"
-        employee={{
-          id: profile.id,
-          full_name: profile.full_name,
-          email: profile.email,
-          designation: profile.designation,
-          employee_code: profile.employee_code,
-          avatar_url: profile.avatar_url,
-          department_id: profile.department_id,
-        }}
-        periodSelection={periodSelection}
-        onPeriodSelectionChange={setPeriodSelection}
-        autoOpenKpiId={autoOpenKpiId}
-        headerAction={canAddKra ? (
-          <Button size="sm" onClick={() => setAddKraOpen(true)} className="gap-1.5">
-            <Plus className="h-4 w-4" /> Add KRA
-          </Button>
-        ) : null}
-      />
+      <ErrorBoundary
+        resetKey={`${location.key}:scorecard:self`}
+        fallback={<InlineErrorFallback label="Your scorecard could not be displayed." />}
+      >
+        <UnifiedScorecard
+          viewLevel="self"
+          employee={{
+            id: profile.id,
+            full_name: profile.full_name,
+            email: profile.email,
+            designation: profile.designation,
+            employee_code: profile.employee_code,
+            avatar_url: profile.avatar_url,
+            department_id: profile.department_id,
+          }}
+          periodSelection={periodSelection}
+          onPeriodSelectionChange={setPeriodSelection}
+          autoOpenKpiId={autoOpenKpiId}
+          headerAction={canAddKra ? (
+            <Button size="sm" onClick={() => setAddKraOpen(true)} className="gap-1.5">
+              <Plus className="h-4 w-4" /> Add KRA
+            </Button>
+          ) : null}
+        />
+      </ErrorBoundary>
       {canAddKra && (
         <AdminKpiCreateDialog
           isOpen={addKraOpen}
