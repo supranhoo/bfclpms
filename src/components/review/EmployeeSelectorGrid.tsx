@@ -262,6 +262,29 @@ export function EmployeeSelectorGrid({
 
   // Persist filters in URL search params so they survive refresh/navigation
   const [searchQuery, setSearchQuery] = useUrlFilterState('q', '');
+  // Local input mirror so typing/backspace stays instant; debounced commit
+  // below propagates to URL + heavy filter pipeline (~250 ms after last key).
+  const [searchInput, setSearchInput] = useState<string>(searchQuery);
+  // Reconcile when searchQuery changes externally (Clear All, deep-link nav).
+  useEffect(() => {
+    setSearchInput((prev) => (prev === searchQuery ? prev : searchQuery));
+  }, [searchQuery]);
+  useEffect(() => {
+    if (searchInput === searchQuery) return;
+    const t = setTimeout(() => {
+      React.startTransition(() => setSearchQuery(searchInput));
+    }, 250);
+    return () => clearTimeout(t);
+  }, [searchInput, searchQuery, setSearchQuery]);
+  const handleSearchChange = useCallback((val: string) => {
+    // Empty value (e.g. Clear All) flushes immediately for snappy reset.
+    if (val === '') {
+      setSearchInput('');
+      setSearchQuery('');
+      return;
+    }
+    setSearchInput(val);
+  }, [setSearchQuery]);
   const [statusFilter, setStatusFilter] = useUrlFilterState('status', 'all');
   const [selectedDepartment, setSelectedDepartment] = useUrlFilterStateNullable('dept');
   const [selectedDesignation, setSelectedDesignation] = useUrlFilterStateNullable('desig');
@@ -2125,8 +2148,8 @@ export function EmployeeSelectorGrid({
       )}
 
       <EmployeeFilters
-        searchQuery={searchQuery}
-        onSearchChange={setSearchQuery}
+        searchQuery={searchInput}
+        onSearchChange={handleSearchChange}
         selectedDepartment={selectedDepartment}
         onDepartmentChange={setSelectedDepartment}
         departments={departments}
