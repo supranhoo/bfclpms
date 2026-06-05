@@ -1064,6 +1064,63 @@ export type Database = {
           },
         ]
       }
+      client_error_reports: {
+        Row: {
+          account_code: string | null
+          app_build: string | null
+          component_stack: string | null
+          created_at: string
+          effective_role: string | null
+          error_message: string | null
+          error_stack: string | null
+          id: string
+          last_rpc_name: string | null
+          last_rpc_status: number | null
+          query: string | null
+          route: string | null
+          time_since_mount_ms: number | null
+          user_agent: string | null
+          user_id: string | null
+          viewport: string | null
+        }
+        Insert: {
+          account_code?: string | null
+          app_build?: string | null
+          component_stack?: string | null
+          created_at?: string
+          effective_role?: string | null
+          error_message?: string | null
+          error_stack?: string | null
+          id?: string
+          last_rpc_name?: string | null
+          last_rpc_status?: number | null
+          query?: string | null
+          route?: string | null
+          time_since_mount_ms?: number | null
+          user_agent?: string | null
+          user_id?: string | null
+          viewport?: string | null
+        }
+        Update: {
+          account_code?: string | null
+          app_build?: string | null
+          component_stack?: string | null
+          created_at?: string
+          effective_role?: string | null
+          error_message?: string | null
+          error_stack?: string | null
+          id?: string
+          last_rpc_name?: string | null
+          last_rpc_status?: number | null
+          query?: string | null
+          route?: string | null
+          time_since_mount_ms?: number | null
+          user_agent?: string | null
+          user_id?: string | null
+          viewport?: string | null
+        }
+        Relationships: []
+      }
       client_implementer_assignments: {
         Row: {
           assigned_by: string | null
