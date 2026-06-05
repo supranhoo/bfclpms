@@ -28,6 +28,7 @@ let latestSetSearchParams: SetURLSearchParams | null = null;
 const writeTimestamps: number[] = [];
 const MAX_WRITES_PER_WINDOW = 60;
 const WINDOW_MS = 10_000;
+let writeCountForTests = 0;
 
 function pruneWindow(now: number) {
   while (writeTimestamps.length && now - writeTimestamps[0] > WINDOW_MS) {
@@ -57,6 +58,7 @@ function performFlush() {
   const composed: Mutator = (prev) => batch.reduce((acc, m) => m(acc), prev);
   const setter = latestSetSearchParams;
   writeTimestamps.push(now);
+  writeCountForTests += 1;
   setter(composed, { replace: true });
 }
 
@@ -82,6 +84,12 @@ export function __resetUrlWriteCoalescerForTests() {
   writeTimestamps.length = 0;
   flushScheduled = false;
   latestSetSearchParams = null;
+  writeCountForTests = 0;
+}
+
+/** Test-only: number of flushes that produced a real setSearchParams call. */
+export function __getCoalescerWriteCountForTests(): number {
+  return writeCountForTests;
 }
 
 /**
