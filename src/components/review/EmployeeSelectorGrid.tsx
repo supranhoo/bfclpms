@@ -2148,8 +2148,8 @@ export function EmployeeSelectorGrid({
       )}
 
       <EmployeeFilters
-        searchQuery={searchQuery}
-        onSearchChange={setSearchQuery}
+        searchQuery={searchInput}
+        onSearchChange={handleSearchChange}
         selectedDepartment={selectedDepartment}
         onDepartmentChange={setSelectedDepartment}
         departments={departments}
