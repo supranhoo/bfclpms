@@ -55,4 +55,39 @@ describe('isKpiRowFullyProcessed', () => {
   it('defensively keeps visible when employee list is empty', () => {
     expect(isKpiRowFullyProcessed(KEY, [], new Map(), 'manager_score')).toBe(false);
   });
+
+  // Jitendra RCA Jun 2026: Auditor view + KPI whose workflow has no audit stage.
+  it('treats terminal cells (final_score set) as processed even when stageKey column is null', () => {
+    const m = cell([
+      ['a', { auditor_score: null, final_score: 4.5, status: 'approved' }],
+      ['b', { auditor_score: null, final_score: 3.0, status: 'approved' }],
+    ]);
+    expect(isKpiRowFullyProcessed(KEY, ['a', 'b'], m, 'auditor_score')).toBe(true);
+  });
+
+  it('treats cells whose status is past the viewer stage as processed (audit-less workflow)', () => {
+    // status='management_review' is past 'audit' in the canonical chain
+    const m = cell([
+      ['a', { auditor_score: null, status: 'management_review' }],
+      ['b', { auditor_score: null, status: 'management_review' }],
+    ]);
+    expect(isKpiRowFullyProcessed(KEY, ['a', 'b'], m, 'auditor_score')).toBe(true);
+  });
+
+  it('keeps visible when status is before the viewer stage (genuinely pending)', () => {
+    // viewer=auditor (=='audit'). status='manager_check' is before audit.
+    const m = cell([
+      ['a', { auditor_score: null, status: 'manager_check' }],
+      ['b', { auditor_score: null, status: 'manager_check' }],
+    ]);
+    expect(isKpiRowFullyProcessed(KEY, ['a', 'b'], m, 'auditor_score')).toBe(false);
+  });
+
+  it('keeps visible when one cell is past the stage but another is still pending', () => {
+    const m = cell([
+      ['a', { auditor_score: null, status: 'approved', final_score: 4 }],
+      ['b', { auditor_score: null, status: 'hr_pms_review' }],
+    ]);
+    expect(isKpiRowFullyProcessed(KEY, ['a', 'b'], m, 'auditor_score')).toBe(false);
+  });
 });
