@@ -6202,6 +6202,60 @@ export type Database = {
         }
         Relationships: []
       }
+      org_kpi_owner_key_backup_2026_06: {
+        Row: {
+          assigned_by: string | null
+          backed_up_at: string | null
+          business_unit_id: string | null
+          category_id: string | null
+          created_at: string | null
+          department_id: string | null
+          division_id: string | null
+          id: string | null
+          kpi_name: string | null
+          kra_name: string | null
+          level_id: string | null
+          location_id: string | null
+          org_level_scope: string | null
+          owner_id: string | null
+          pms_grade_id: string | null
+        }
+        Insert: {
+          assigned_by?: string | null
+          backed_up_at?: string | null
+          business_unit_id?: string | null
+          category_id?: string | null
+          created_at?: string | null
+          department_id?: string | null
+          division_id?: string | null
+          id?: string | null
+          kpi_name?: string | null
+          kra_name?: string | null
+          level_id?: string | null
+          location_id?: string | null
+          org_level_scope?: string | null
+          owner_id?: string | null
+          pms_grade_id?: string | null
+        }
+        Update: {
+          assigned_by?: string | null
+          backed_up_at?: string | null
+          business_unit_id?: string | null
+          category_id?: string | null
+          created_at?: string | null
+          department_id?: string | null
+          division_id?: string | null
+          id?: string | null
+          kpi_name?: string | null
+          kra_name?: string | null
+          level_id?: string | null
+          location_id?: string | null
+          org_level_scope?: string | null
+          owner_id?: string | null
+          pms_grade_id?: string | null
+        }
+        Relationships: []
+      }
       org_kpi_value_history: {
         Row: {
           category_id: string
