@@ -11430,6 +11430,13 @@ export type Database = {
         Args: { p_filters?: Json; p_period: string; p_year: number }
         Returns: Json
       }
+      bulk_upsert_org_kpi_values: {
+        Args: { p_rows: Json }
+        Returns: {
+          id: string
+          was_insert: boolean
+        }[]
+      }
       bulk_write_stage_scores:
         | {
             Args: {
