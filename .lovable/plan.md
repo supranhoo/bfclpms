@@ -1,69 +1,42 @@
-## RCA — Why Jyoti (Employee) sees HR PMS + Data Entry groups
+## Goal
+The reviewer-stage dropdown on `Bulk Review (Beta)` currently shows all 6 stages to every user. Restrict the visible options to those the signed-in user is actually entitled to act as.
 
-### What's actually configured
+## Visibility matrix
 
-| Surface | Who decides visibility | What it says for `employee` |
-|---|---|---|
-| Sidebar — **HR PMS → Review Notes** | Hardcoded `roles` list at `AppSidebar.tsx:79` | ✅ shown (list contains every role incl. `employee`) |
-| Page — `/hr/review-notes` | DB setting `system_settings.review_action_notes_visibility` (`useReviewNoteAccess`) | ❌ `view` list is `[admin, hr_pms, manager, skip_level, management, auditor]` — `employee` only has `view_own_subject` |
-| Sidebar — **Data Entry → Org KPI Data Entry** | Custom filter (BUG-040/041) — `isDataOwner ‖ user-override ‖ canPerform('data-entry','view')` | ✅ shown — `menu_access_config.data-entry.allowed_roles` includes `employee`, so `canPerform` is true |
-| Page — `/admin/org-kpi-data` | `DataOwnerRoute` — same 3-way check | ✅ allowed (same gate) |
+| Effective role | Options shown in dropdown |
+|---|---|
+| `admin` | All six (Manager, Functional Manager, Skip-Level, HR PMS, Auditor, Management) |
+| `manager` | Manager (+ Functional Manager only if the user is set as `functional_manager_id` on at least one active profile) |
+| `skip_level` | Skip-Level |
+| `hr_pms` | HR PMS |
+| `auditor` | Auditor |
+| `management` | Management |
+| `employee` / other | (no options — the page is already feature-flag gated, so this is a defensive empty state) |
 
-DB facts confirmed for Jyoti (`8f08a819…`, role `employee`):
-- 0 rows in `org_kpi_data_owners`
-- 0 rows in `menu_access_user_overrides`
-- 0 rows in `access_profile_assignments`
-- BUT `menu_access_config.data-entry.allowed_roles` contains `employee` → `canPerform('data-entry','view')` is `true`.
+Note: there is no `functional_manager` app_role. "Functional Manager" is a relationship — a user acts as one when another active profile points to them via `profiles.functional_manager_id`. So a `manager` who is also referenced as a functional manager will see **both** Manager and Functional Manager. This matches how `workflowResolver.ts` and `workflowEngine.ts` already treat the stage.
 
-### Conclusions
+## Risk & Impact Report
+- **Data:** none — UI-only filter on a static option list plus one `count: 'exact', head: true` query on `profiles`.
+- **Workflow:** none — RPC payload still sends `viewerStage`; we just constrain which value the user can pick.
+- **UI:** dropdown becomes shorter for non-admins; if only one option is allowed it is auto-selected and the trigger still renders (no layout shift). Default `viewerStage` initializer in `BulkReviewDashboard` already maps role → stage; we'll keep it and clamp it to the allowed set.
+- **Regression:** admin behavior unchanged. Existing URL deep-links carrying a `viewerStage` the user isn't allowed to use will fall back to the first allowed stage (logged via toast? No — silent, consistent with current default-pick behavior).
+- **Scalability:** one cached count query per session (staleTime 5 min), gated on `effectiveRole === 'manager'`. Negligible.
+- **Rollback:** revert the single file; no schema or RPC change.
 
-1. **Data Entry group — working as configured, not a bug.** An admin gave the `employee` role view rights for `data-entry` in `menu_access_config`. The sidebar correctly shows it, and `DataOwnerRoute` correctly admits her. If you don't want every employee to see Org KPI Data Entry, the fix is **data, not code**: remove `employee` from `menu_access_config.data-entry.allowed_roles` via Admin → Menu Access.
+## Plan
 
-2. **HR PMS → Review Notes — real bug (mismatch).** Sidebar `roles` list is hardcoded and ignores the DB-driven `review_action_notes_visibility` setting that the page uses. Employees (and any role not in the `view` list) see the menu, click it, and get the "no access" error page. This is the menu→deny loop POLICY §111 / BUG-040 explicitly forbids.
+1. **`src/pages/review/BulkReviewDashboard.tsx`** — replace the constant `VIEWER_STAGES` consumption with a `useMemo` that filters by `effectiveRole`. Add a small `useIsFunctionalManager()` hook call (see step 2) so the Functional Manager option appears for managers who actually own that relationship. Clamp `viewerStage` state to the allowed list inside an effect (if current value not allowed → set to `allowed[0]`).
 
----
+2. **`src/hooks/useIsFunctionalManager.ts`** (new, ~20 lines) — `useQuery` that runs `supabase.from('profiles').select('id',{count:'exact',head:true}).eq('functional_manager_id', user.id).eq('is_active', true)`. Returns `boolean`. `staleTime: 5 * 60_000`. Enabled only when `user?.id && effectiveRole === 'manager'`.
 
-## Plan — fix only the Review Notes mismatch
+3. **Tests** — `src/test/bulkReview/viewerStageVisibility.test.ts` covering: admin sees all, each non-admin role sees exactly its own stage, manager + FM flag sees both, unauthorized role sees empty list, clamp logic rewrites an out-of-range `viewerStage`.
 
-### Risk & Impact
-- **Data**: none — read-only sidebar filter.
-- **Workflow**: HR PMS group hides automatically when its only child hides (`CollapsibleSidebarGroup` returns `null` for empty groups), so employees stop seeing a dead-end menu.
-- **UI/UX**: Roles in the DB `view` list (admin, hr_pms, manager, skip_level, management, auditor) keep seeing Review Notes exactly as today. Employees lose the dead menu entry.
-- **Regression**: low — change is scoped to one menu item filter.
-- **Scalability**: filter is O(1) per render; reuses existing `useReviewNoteAccess` cache.
-- **Rollback**: revert the small AppSidebar diff; no DB change.
+4. **Docs**
+   - `DOCUMENTATION.md` — short subsection under Bulk Review noting role-scoped reviewer stage.
+   - `POLICY.md` — new clause: "Bulk Review reviewer-stage selector must mirror the user's effective role; Functional Manager is visible only to users referenced as `functional_manager_id` on an active profile; admin sees all."
+   - `mem/features/review/bulk-review-viewer-stage.md` (new) + entry in `mem/index.md`.
+   - `docs/adr/ADR-079.md` — short ADR with rollback = revert the page + delete the hook.
 
-### Step → Verification
-
-1. **Hook into the existing access source of truth** in `AppSidebar.tsx`:
-   - Call `useReviewNoteAccess()` once at the top of `AppSidebar`.
-   - Wrap the HR PMS group with a custom `filterByRole` (same pattern as Data Entry, lines 597-614) that, for the `Review Notes` item, requires `canView || canViewOwnSubject`. Other items in the group (e.g. `HR PMS Review`) keep the standard role-list filter.
-   - Verification: log in as `employee` with no DB-grant → HR PMS group is hidden. Log in as `hr_pms` / `admin` → Review Notes still visible.
-
-2. **Keep the page-level gate authoritative** — no change to `useReviewNoteAccess` semantics, no change to the DB setting.
-   - Verification: `src/test/reviewNotes/access.test.ts` still passes.
-
-3. **New focused test** `src/test/reviewNotes/sidebarVisibility.test.ts` that asserts: with `canView=false && canViewOwnSubject=false` the Review Notes item is filtered out; with either true it remains.
-   - Verification: `bunx vitest run src/test/reviewNotes/sidebarVisibility.test.ts`.
-
-4. **Docs**:
-   - `DOCUMENTATION.md` — note that HR PMS → Review Notes sidebar visibility is now sourced from `review_action_notes_visibility` (consistent with the page).
-   - `POLICY.md` §111 (menu→page parity) — add a one-liner: "Review Notes menu obeys `review_action_notes_visibility.view` ∪ `view_own_subject`."
-   - `mem/features/hr/review-action-notes.md` — append a "Sidebar visibility" subsection.
-   - `docs/adr/ADR-078.md` — new ADR documenting the mismatch and fix.
-
-### UI Changes
-- **What changes visually**: For users whose role is not in `review_action_notes_visibility.view` AND not in `view_own_subject`, the entire **HR PMS** sidebar group disappears (because Review Notes was its only visible item for them). For all other users — no visual change.
-- **Exact location**: Left sidebar, "HR PMS" collapsible group.
-- **Interaction impact**: Removes a menu entry that leads to an access-denied page. No keyboard/focus regressions.
-- **Responsiveness**: No layout change; same `<CollapsibleSidebarGroup>` component on all breakpoints.
-
-### Files
-- Edit: `src/components/layout/AppSidebar.tsx` (add `useReviewNoteAccess`; custom filter on HR PMS group).
-- Add: `src/test/reviewNotes/sidebarVisibility.test.ts`.
-- Add: `docs/adr/ADR-078.md`.
-- Edit: `DOCUMENTATION.md`, `POLICY.md`, `mem/features/hr/review-action-notes.md`, `mem/index.md`.
-
-### Out of scope (intentional)
-- **Data Entry visibility** — already governed by an admin-editable DB config; if you want employees off it, update `menu_access_config.data-entry.allowed_roles` from the Menu Access admin UI. Say the word and I'll add a one-line migration to drop `employee` from that row.
-- The `/hr/review-notes` page text "Ask an admin to grant the 'view' permission" — can be softened to mention `view_own_subject`, but that's a copy-only follow-up.
+## Out of scope
+- No change to the RPC, RLS, or grants. The server already enforces per-row visibility; this is a UX clamp, not a security boundary.
+- No change to the master feature-flag (`feature_bulk_review_dashboard`) — pilot membership stays as configured.
