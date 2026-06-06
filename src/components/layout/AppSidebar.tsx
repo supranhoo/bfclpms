@@ -433,19 +433,17 @@ export function AppSidebar() {
   const filterByRole = useCallback((items: typeof menuItems.main) => {
     return items.filter(item => {
       if (!effectiveRole) return false;
-      // CAPA emergency static path: when overrides are disabled (production
-      // default while roadmap is dormant), bypass DB `menu_access_config`
-      // entirely and gate visibility purely on the hardcoded `item.roles`.
-      // Guarantees the baseline sidebar renders regardless of DB state,
-      // resolver state, or missing/invalid menu_access_config rows.
-      if (overridesEnabled === false) {
-        return Array.isArray(item.roles) && item.roles.includes(effectiveRole);
-      }
-      // Use DB-driven access if menuKey exists, else fallback to hardcoded roles
+      // Layered visibility (bug fix): static role match OR explicit DB grant.
+      // `menu_overrides_enabled` only governs the resolver/parent-move tree
+      // (see resolveGroupItems). It must NOT silence per-user overrides or
+      // access-profile rights, otherwise the Menu Access Rights UI grants
+      // nothing while appearing to work.
+      const staticMatch = Array.isArray(item.roles) && item.roles.includes(effectiveRole);
+      if (staticMatch) return true;
       if ('menuKey' in item && item.menuKey) {
         return canAccess(item.menuKey);
       }
-      return item.roles.includes(effectiveRole);
+      return false;
     });
   }, [effectiveRole, canAccess, overridesEnabled]);
 
