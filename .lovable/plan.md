@@ -1,90 +1,82 @@
-# RCA + CAPA — May 2026 KRA Rollover Misses (4 Employees)
+## Problem
 
-## 1. Assumptions
-- "May rollover" = bulk cron that creates May-2026 KPIs from April-2026 source KPIs.
-- "Worked" = an April→May KPI row was created in `public.kpis` for the employee.
+Access Profiles let an admin grant `can_add / can_update / can_delete` on menus like `admin-users`, `admin-kpis`, `admin-org-kpis`, etc. to non-admin users. But the underlying tables (`profiles`, `user_roles`, `kpis`, `org_kpi_values`, …) have RLS that only allows `admin` (or owner) writes. Result: the UI shows the action, the user clicks Save, Supabase returns no error (RLS filters the row), and the toast says "Updated successfully" — but **nothing changed**.
 
-## 2. Findings (evidence)
+We already patched `UserManagement.updateUser` with a `.select()` row-count guard. That treats the symptom on one page. The fix needs to be systemic so menu rights and RLS stay aligned.
 
-| Emp Code | Name | April KPIs | May KPIs | April KPI `created_at` |
-|---|---|---|---|---|
-| 100018 | Ashish Das Gupta | 15 | **0** | 2026-05-01 **11:26:50 UTC** |
-| 100234 | Ajay Prasad Choudhary | 9 | **0** | 2026-05-01 **11:56:37 UTC** |
-| 100393 | Sanjay Gope | 6 | **0** | 2026-05-01 **11:38:58 UTC** |
-| 100749 | Ashish Rajwar | 8 | **0** | 2026-05-01 **12:19:34 UTC** |
+## Goal
 
-Bulk May rollover output is visible in `public.kpis`:
-- First May-2026 row created **2026-05-01 00:00:05 UTC** (cron fired at midnight).
-- 131 employees / 1,969 KPIs produced in that single batch.
+When an Access Profile grants a write right, the corresponding DB write must either:
+- **(A)** actually succeed (RLS recognizes the profile grant), OR
+- **(B)** fail loudly with a clear "no permission" toast — never a false success.
 
-Cross-check: a 5th employee (100406 Anil Rajwar) has the same symptom and is also missing May KPIs — same root cause class.
+## Approach (two layers, both required)
 
-## 3. WHY-WHY
+### Layer 1 — DB: teach RLS about profile-based rights (SSOT)
 
-1. **Why no May KPIs for these 4?** Bulk rollover did not find any April source KPIs for them at run-time.
-2. **Why no April source?** Their April KPIs were inserted **11–12 hours AFTER** the rollover finished (cron ran 00:00:05; KRAs assigned 11:26–12:19).
-3. **Why assigned so late?** Manager (Atul Kumar Khaitan, in 4 of 5 cases) created April KRAs on 1-May — same calendar day the cron ran, but after the cron window.
-4. **Why didn't the system catch up?** Rollover is a **one-shot cron at month start** with no retry/backfill for KRAs assigned later in the source month.
-5. **Why was no alert raised?** Secondary finding: the **2026-05-01 cron run wrote NO row to `kra_rollover_logs`** (zero rows between 2026-04-29 and 2026-05-04), so the run is invisible to admins, and the "X employees skipped due to no source" delta is not surfaced.
+1. Add a SECURITY DEFINER helper:
+   ```
+   public.has_menu_right(_user_id uuid, _menu_key text, _action text) returns boolean
+   ```
+   Reads `access_profile_assignments` → `access_profile_menu_rights`, returns true if `can_view/add/update/delete` matches. `stable`, `search_path=public`.
 
-## 4. Root Cause (RCA)
+2. Extend RLS policies on the tables that the admin-menu pages actually write to, using `has_menu_right`. Scope (minimum, conservative set tied to existing menu_keys):
+   - `profiles` — UPDATE: allow if `has_menu_right(auth.uid(), 'admin-users', 'update')`. INSERT: `'admin-users','add'`. (DELETE stays admin-only.)
+   - `user_roles` — INSERT/DELETE: `'admin-users','update'` (role grant is part of editing a user).
+   - `menu_access_user_overrides` — INSERT/DELETE: `'admin-menu-access','update'`.
+   - `access_profile_assignments` — INSERT/DELETE: `'admin-access-profiles','update'`.
+   - Any other admin menus the user wants delegated → add in same pattern. We will enumerate during build and confirm before extending past `admin-users`.
 
-- **Primary RC (operational/timing):** Source April KPIs did not exist at the instant the May rollover cron executed. Rollover behaved correctly per spec — there was nothing to clone.
-- **Secondary RC (observability gap):** The bulk cron run did not produce a `kra_rollover_logs` entry, so the skip was undetectable without a manual query.
-- **Tertiary RC (process):** No automatic backfill when source KPIs are inserted in the source month after the rollover cron.
+3. Add `WITH CHECK` mirrors for every new policy (per project rule on workflow transitions).
 
-This is NOT an RLS issue, not a duplicate-key trigger issue (ADR-045), and not a frequency-cycle issue (ADR §128) — verified against existing logs.
+4. Migration is **additive**: existing admin-only policies stay; new policies are `OR`-ed by Postgres' permissive-policy semantics. Rollback = drop the new policies.
 
-## 5. Risk & Impact
+### Layer 2 — Frontend: universal silent-RLS guard
 
-| Dimension | Impact |
-|---|---|
-| Data | 5 employees missing May review records; no data corruption |
-| Workflow | Self-review / manager review for May blocked for these employees |
-| UI/UX | Empty scorecards on /dashboard for May |
-| Regression | Same class of miss will recur every month for late KRA assignments |
-| Scalability | Manual reruns are O(missed employees); acceptable |
+5. Add `src/lib/db/assertRowsTouched.ts`:
+   ```ts
+   assertRowsTouched(rows, error, menuKey, action)
+   ```
+   Throws a uniform `PermissionError` with toast-ready copy: *"Your access profile does not allow {action} on {menuLabel}. Ask an admin to grant the right or perform the change."*
 
-## 6. CAPA — Plan
+6. Wrap every admin-page mutation that currently does `.update()/.insert()/.delete()` on a profile-protected table to:
+   - append `.select('id')`
+   - call `assertRowsTouched(...)`
+   Pages to update (initial sweep — confirm scope below):
+   - `src/pages/admin/UserManagement.tsx` (extend existing guard to insert + role grant + bulk)
+   - `src/pages/admin/AccessProfiles.tsx` (assignments, menu rights save)
+   - `src/pages/admin/MenuAccess.tsx` (user overrides)
+   - `src/hooks/useAccessProfiles.ts` (`saveMenuRights`, `assignUser`, `removeAssignment`)
+   - `src/hooks/useMenuAccess.ts` (`grantUserMenuAccess`, `revokeUserMenuAccess`)
 
-### Corrective (one-time, fixes the 5 affected employees)
-**C1.** Run a **scoped** `auto-rollover-kpis` (April → May 2026) for `employee_ids = [100018, 100234, 100393, 100406, 100749]` via the existing RolloverDialog → scoped mode (proven path; see `scopedRolloverDialog.test.ts`). Dry-run first; then execute.
+7. `useMenuAccess.canPerform(menuKey, action)` already exists. Audit the four admin pages above and disable buttons / hide actions when `canPerform` returns false, so the user sees the gate **before** clicking (defence in depth; the DB+toast guard remain the source of truth).
 
-### Preventive (CAPA — code + ops)
+### Layer 3 — Tests & docs
 
-**P1. Close the observability gap (high priority).**
-Ensure the cron path in `supabase/functions/auto-rollover-kpis/index.ts` always writes a `kra_rollover_logs` row — including when `employees_affected = 0` or when employees are skipped because they had no source KPIs. Capture per-employee `skipped` reasons in `details` (today only "duplicates_skipped" / "rolled_over" buckets exist). Add a regression test that asserts a log row is written when source set is empty.
+8. Tests (vitest):
+   - `accessProfileRlsAlignment.test.ts` — table of (menu_key, action, table) → guard throws when RLS filters, passes otherwise (using the same shape as `userManagementSilentRlsGuard.test.ts`).
+   - Extend existing silent-RLS test with insert + role-grant cases.
 
-**P2. Self-healing backfill sweep.**
-Add a lightweight nightly sweep (or post-KRA-assignment hook): for any employee with source-month KPIs whose `created_at > <last rollover run timestamp for target_month>`, automatically enqueue a scoped rollover for the next month. Idempotent via existing `idx_kpis_no_duplicates`.
+9. Docs:
+   - `DOCUMENTATION.md` → Access Profiles section: add "How profile grants reach the database" diagram + `has_menu_right` contract.
+   - `POLICY.md` → Access Profiles: "A menu right is binding only if (a) RLS recognizes it via `has_menu_right`, or (b) the user already has the underlying role. Otherwise the action is blocked with a permission toast — never a silent success."
+   - New ADR `docs/adr/ADR-079.md`: "Access-Profile / RLS alignment".
+   - Memory update: `mem://features/admin/profile-based-menu-access` → note `has_menu_right` SSOT and the universal guard.
 
-**P3. Admin-visible "rollover health" widget.**
-On the Admin → Rollover screen, surface the delta `employees_with_source_month_kpis − employees_with_target_month_kpis` for the current target month, with a one-click "Backfill missing" action that calls the scoped path from P1.
+## Risk & Impact
 
-**P4. Policy update (POLICY.md §Rollover).**
-Document: rollover cron is a snapshot at T0 of source month; any KPI inserted after T0 requires a scoped rollover OR will be picked up automatically by P2. Update DOCUMENTATION.md → Rollover section accordingly.
+- **Data:** additive RLS policies only; no schema changes; existing admin flows unchanged.
+- **Security:** widening write access to non-admins who hold the matching profile right. **Need explicit user sign-off on which menus to delegate** (default proposal = `admin-users` only for v1).
+- **Regression:** low — `assertRowsTouched` only converts a hidden no-op into a visible error.
+- **Scalability:** `has_menu_right` is one indexed lookup per row; fine.
+- **Rollback:** drop new policies + revert frontend wrappers; helper function can stay.
 
-### Sequence
-```
-Step 1  Corrective rerun (C1) ............... verify: 5 emps now have May KPIs
-Step 2  P1 logging fix + unit test ........... verify: forced empty-source run writes a log row
-Step 3  P2 self-healing sweep + test ......... verify: insert late April KPI → next sweep creates May
-Step 4  P3 admin widget ...................... verify: widget shows 0 missing after sweep
-Step 5  P4 docs/policy update ................ verify: docs/policy diff
-```
+## Clarifying questions before I write the plan as code
 
-## 7. UI Changes
-- **P3 only.** New "Rollover Health" card on the existing Admin → KRA Rollover page (no new route). Card shows: target month dropdown, "Employees with source / with target / missing" counts, and a "Backfill missing (N)" button that opens the existing `RolloverDialog` pre-populated with the missing employee IDs. Mobile: collapses to a single column; CTA full-width.
+1. For v1, should DB-level delegation cover **only `admin-users`** (the menu Avinash used), or also `admin-access-profiles`, `admin-menu-access`, and other admin menus? My recommendation: start with `admin-users` to keep blast radius small.
+2. Should profile-granted users be able to change a target user's **role** (`user_roles`), or only profile fields (name, status, manager)? Today the UI exposes both; safer default is **profile fields only**, role changes remain admin-only.
+3. OK to disable (grey-out) admin-page action buttons when `canPerform` is false, in addition to the toast? Or keep buttons live and rely on the toast?
 
-## 8. Tests
-- `kraRolloverLogging.test.ts` — empty-source cron MUST write a `kra_rollover_logs` row with `status='completed'`, `employees_affected=0`.
-- `kraRolloverBackfillSweep.test.ts` — late-inserted source KPI is detected and scoped-rollover is invoked exactly once.
-- `rolloverHealthWidget.test.tsx` — widget renders correct counts from a mocked RPC.
-
-## 9. Out of scope / will NOT change
-- Trigger `enforce_frequency_lock_on_submission` (ADR-045) — unrelated.
-- Duplicate-key dedup logic in rollover — unrelated.
-- April source data itself — correct as-is.
-
-## 10. Rollback
-- P1/P2/P3 are additive (new logging rows, new sweep function, new UI card). Disable via feature flag `rollover_self_heal_enabled` if regression observed; no schema destructive changes.
+## Out of scope
+- Reworking the menu_access vs access_profiles dual model.
+- Any change to `pms-policy` visibility (BUG-042 path stays).
