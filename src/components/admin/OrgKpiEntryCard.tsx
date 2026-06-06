@@ -918,6 +918,9 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
               isComplianceKpi={isCompliance}
               submissionDates={submissionDates}
               kpiName={data.kpiName}
+              dirtyScopeIds={dirtyScopeIds}
+              savingScopeIds={savingRowIds}
+              onSaveRow={handleSaveRow}
             />
             </>
           )}
