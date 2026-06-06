@@ -1,74 +1,89 @@
-## Goal
-On `/admin/org-kpi-data`, disable the 2-second debounced autosave currently driving every field change (Achieved, Remark, N/A, Evidence, scoped rows) and replace it with explicit **Save** buttons — one per scoped row in the Actions column, and one card-level Save for organization-scope KPIs.
+# Data Owners not visible — RCA & Fix
 
-## Scope (surgical)
-- File: `src/components/admin/OrgKpiEntryCard.tsx` — remove autosave wiring, add manual save.
-- File: `src/components/admin/OrgKpiScopedEntryTable.tsx` — render per-row Save button in Actions column; show row-level dirty/saved/error state.
-- No backend/RPC/RLS changes. No schema migration. `onSave(getValues())` contract is unchanged — only its trigger changes.
-- Out of scope: Self-review/Daily entry dialogs, Incentive grids, Safety modules.
+## Root Cause
 
-## Behavior changes
-1. **Typing in any field** (Achieved, Remark, N/A toggle, Evidence URL, scoped Achieved/Remark/N/A/Evidence) no longer schedules a save. It marks the row/card *dirty* and shows an amber "Unsaved" pill (replacing today's "Saving…/Saved" pill).
-2. **Per-scoped-row Save** button (new) appears in the existing **Actions** column for any row whose local state diverges from the snapshot. Disabled when row is clean. On click: calls existing `onSave(getValues())` (which already upserts only touched scope IDs via `touchedScopeIdsRef`) and reports row-level toast.
-3. **Card-level Save** button (new) for org-scope KPIs appears under the inputs, mirroring scoped-row behavior. Disabled when clean.
-4. **Propagate** action stays as-is but is **disabled while dirty** with tooltip "Save before propagating". Today it implicitly waited for autosave; the new contract is explicit.
-5. **Navigation guard**: `beforeunload` warning when any card is dirty (Card already tracks `isDirtyRef`; lift to a parent dirty-set via context or a small `useUnsavedChanges` hook).
-6. **Evidence upload** — file uploads still persist the URL to storage immediately (existing behavior of `OrgKpiFileUpload`), but the *write of the URL into the OKV row* now waits for Save. Mark row dirty on upload-complete instead of triggering autosave.
+`OrgKpiOwnerDialog` reads owners via `useOrgKpiOwners`, which does:
+```
+.eq('category_id', …).eq('kra_name', …).eq('kpi_name', …)
+```
+
+For the "Implement 5S practices" KPI the dialog shows **No data owners assigned**, but `org_kpi_data_owners` actually contains 2 rows for this exact category + KRA.
+
+Byte-level diff of `kpi_name`:
+- `kpis` master (source of truth used by the card):  
+  `…efficiency.\n- Formula:…\n- Scoring Logic:…`  (real newlines)
+- `org_kpi_data_owners` row:  
+  `…efficiency. - Formula:… - Scoring Logic:…`  (newlines collapsed to ` - `)
+
+Same length, different bytes → `eq` never matches.
+
+Scope of the corruption (DB scan):
+- Total owner rows: **233**
+- Rows whose `(category_id, kra_name, kpi_name)` does **not** exist in `kpis`: **228**
+- Of those, **227 are recoverable** by whitespace-normalized match against `kpis`
+- 1 truly orphan row (KPI no longer exists)
+
+So this is not a UI bug — owner rows were persisted in a non-canonical form (older insert path collapsed `\r\n` / `\n` to ` - `), and every subsequent exact-match lookup misses them. The owners are effectively invisible everywhere: the dialog, `useIsOrgKpiDataOwner` access gate, and the `Data Owner: …` badges built from `useOrgKpiOwnershipMap`.
 
 ## Risk & Impact
-- **Data loss risk** — users currently rely on the fire-and-forget autosave. Mitigations:
-  - Persistent "Unsaved" pill per row + card.
-  - `beforeunload` confirm dialog when any card dirty.
-  - Toast on successful save: "Saved <employee name>".
-- **Propagate UX regression** — today users can edit → propagate quickly (autosave races). New: explicit Save required first. Acceptable because user opted into "disable autosave entirely".
-- **Performance** — strictly improves (fewer DB writes; no debounce timers).
-- **Scalability** — no change; same `onSave` contract.
-- **Regression scope** — all field paths in `OrgKpiEntryCard` that call `triggerAutoSave()` (currently 7 callsites) must be flipped to `markDirty()`. Audit complete.
-- **Rollback** — single-revert; no data migration.
 
-## Implementation steps
-1. Replace `triggerAutoSave` with `markDirty(scopeId?)` in `OrgKpiEntryCard.tsx`:
-   - For org-scope: card-level dirty flag.
-   - For scoped rows: per-`scopeId` dirty set (re-use existing `touchedScopeIdsRef`).
-   - Remove `autoSaveTimerRef` and its `setTimeout` chain.
-2. Expose `dirtyScopeIds`, `isCardDirty`, `handleSaveRow(scopeId)`, `handleSaveCard()` to the scoped table via existing props pattern (add `onSaveRow` + `dirtyScopeIds` to `OrgKpiScopedEntryTableProps`).
-3. In `OrgKpiScopedEntryTable.tsx`:
-   - Add a `Save` `Button` (icon `Save`, size `sm`) in the Actions cell of `EmployeeRow` / `DepartmentRow`, ahead of the existing Propagate cell. Disabled unless `dirtyScopeIds.has(row.scopeId)`. Show spinner while pending.
-   - Update the Propagate `disabled`/tooltip logic: if `dirtyScopeIds.has(row.scopeId)`, disable with tooltip "Save row before propagating".
-4. Add **card-level Save button** for org-scope (next to the existing controls under the Remark input). Same disabled-when-clean rule.
-5. Replace the existing `saveStatus` pill copy: `idle | unsaved | saving | saved | error`. Amber pill for `unsaved`.
-6. Add `useUnsavedChanges` lightweight hook (only registers `beforeunload` when any consumer is dirty) — placed in `src/hooks/useUnsavedChanges.ts`.
-7. Update `OrgKpiDataEntry.tsx` only if a parent-level dirty registry is needed for the `beforeunload` aggregation (single import).
+| Area | Impact |
+|---|---|
+| Data | Repair updates 227 rows in `org_kpi_data_owners`. Reversible via timestamped backup table. |
+| Workflow | Restores edit permission for designated data owners (non-admins) on org-level KPIs they were assigned to. No new permissions granted. |
+| UI/UX | Dialog will show the actual current owners; badges across scorecards re-appear. |
+| Regression | Low. Hook signatures unchanged. Canonicalization at insert only normalizes the row to match `kpis`. |
+| Scalability | One-time UPDATE, ~233 rows. Negligible. |
+| Mitigation | Backup table `org_kpi_owner_key_backup_2026_06` written before UPDATE; 1 unrecoverable row logged, not deleted. |
 
-## Tests (Vitest)
-- `src/test/orgKpiEntryCard.manualSave.test.tsx`:
-  - Editing remark does NOT call `onSave`.
-  - Editing remark sets `unsaved` pill and enables Save button.
-  - Clicking Save calls `onSave` with current values and clears dirty state.
-  - Propagate is disabled while dirty.
-  - N/A toggle marks dirty without saving.
-- `src/test/orgKpiScopedEntryTable.rowSave.test.tsx`:
-  - Per-row Save button appears only for dirty rows.
-  - Save click invokes `onSaveRow(scopeId)`.
-- `src/test/useUnsavedChanges.test.ts`: registers/unregisters `beforeunload`.
+## Plan
 
-## Documentation & policy
-- `DOCUMENTATION.md` — Org KPI Data Entry section: document manual-save contract + Save button locations.
-- `POLICY.md` — add section: "Org KPI Data Entry uses explicit Save; autosave is forbidden on this surface."
-- New ADR: `docs/adr/ADR-075.md` — "Org KPI Data Entry: explicit Save replaces 2s autosave".
-- Memory: update `mem/features/admin/org-kpi-data-entry-snapshot.md` with a "Save model: manual" rule so future agents don't re-introduce autosave.
+### Step 1 — Migration (data repair + safety)
 
-## UI summary (for reviewer)
-- **What changes visually**:
-  - Each scoped row gains a small **Save** icon-button in the Actions column (left of Propagate).
-  - Org-scope cards get a **Save** button under the Remark/Evidence inputs.
-  - Status pill copy: "Unsaved" (amber) replaces silent autosave; "Saved" toast after manual save.
-  - Propagate buttons show a tooltip ("Save before propagating") when dirty.
-- **Location**: `/admin/org-kpi-data` only.
-- **Responsiveness**: Save icon-button reuses existing 32×32 touch target — fits the action column at all breakpoints already used by Propagate.
-- **Interaction impact**: One extra click per edited row before Propagate; navigating away while dirty prompts a confirm dialog.
+1. `CREATE TABLE public.org_kpi_owner_key_backup_2026_06 AS SELECT *, now() AS backed_up_at FROM public.org_kpi_data_owners;` (plus GRANTs to `service_role`, RLS enabled, admin-only policy — same pattern as existing `org_kpi_owner_key_backup_2026_05`).
+2. `UPDATE public.org_kpi_data_owners o SET kra_name = k.kra_name, kpi_name = k.kpi_name FROM public.kpis k WHERE k.category_id = o.category_id AND regexp_replace(k.kra_name,'[[:space:]]+',' ','g') = regexp_replace(o.kra_name,'[[:space:]]+',' ','g') AND regexp_replace(k.kpi_name,'[[:space:]]+',' ','g') = regexp_replace(o.kpi_name,'[[:space:]]+',' ','g') AND (k.kra_name <> o.kra_name OR k.kpi_name <> o.kpi_name);`
+3. Log a `RAISE NOTICE` with the count of remaining orphan rows (expected 1) — kept for admin review, not deleted.
+
+**Verification:** post-migration query `SELECT count(*) FROM org_kpi_data_owners o WHERE NOT EXISTS (SELECT 1 FROM kpis k WHERE k.category_id=o.category_id AND k.kra_name=o.kra_name AND k.kpi_name=o.kpi_name)` should return ≤ 1.
+
+### Step 2 — Canonicalize on insert (prevent regression)
+
+In `src/hooks/useOrgKpiDataOwner.ts`, `useAssignOrgKpiOwner.mutationFn`:
+- Before insert, look up the canonical `kra_name`/`kpi_name` in `kpis` using `regexp_replace(...,'[[:space:]]+',' ','g')` equality (single RPC or a select that ANDs `category_id` + LIKE on first 80 chars + whitespace-normalized match in JS).
+- If found, insert canonical values; if not found, insert as-is and surface a toast: "KPI not found in master — owner saved against current text".
+
+Keep the read hooks (`useOrgKpiOwners`, `useIsOrgKpiDataOwner`, `useOrgKpiDataOwners`) unchanged — they continue to use `.eq()` which is correct once stored data is canonical.
+
+### Step 3 — Tests
+
+- `src/test/orgKpiOwnerCanonicalization.test.ts` — unit test on the canonicalize helper: `\r\n` and `\n` variants resolve to the master's exact string.
+- Mock-data: extend existing owner fixtures with one "collapsed whitespace" row to assert the repair migration logic against a SQL fixture (executed by `vitest`'s SQL helper if present, otherwise pure JS simulation).
+
+### Step 4 — SSOT updates
+
+- `DOCUMENTATION.md`: add note under Org KPI Data Owners — canonical storage rule.
+- `POLICY.md`: add invariant "Owner rows must store `kra_name`/`kpi_name` byte-identical to `kpis`".
+- `docs/adr/ADR-076.md`: record decision (canonicalize on write; repair migration with backup).
+- `mem/features/admin/org-kpi-key-normalization` — append the owner-rows clause.
+
+## UI Changes
+
+None. Only the dialog content changes from "No data owners assigned" → the actual list of owners (and the `Data Owner: …` badges on scorecards re-appear) once data is canonicalized.
+
+## Rollback
+
+Re-apply `org_kpi_data_owners` from `org_kpi_owner_key_backup_2026_06` (single SQL: `UPDATE … FROM backup WHERE id = backup.id`). Step-2 code change is additive and safe to revert independently.
 
 ## Files
-- Edit: `src/components/admin/OrgKpiEntryCard.tsx`, `src/components/admin/OrgKpiScopedEntryTable.tsx`, `src/pages/admin/OrgKpiDataEntry.tsx` (small wire-up only), `DOCUMENTATION.md`, `POLICY.md`.
-- Create: `src/hooks/useUnsavedChanges.ts`, `src/test/orgKpiEntryCard.manualSave.test.tsx`, `src/test/orgKpiScopedEntryTable.rowSave.test.tsx`, `src/test/useUnsavedChanges.test.ts`, `docs/adr/ADR-075.md`, `mem/features/admin/org-kpi-data-entry-manual-save.md`.
-- NOT touched: any RPC, any other data-entry surface, scoring/propagation logic, evidence targeting, snapshot RPC.
+
+- New: `supabase/migrations/<ts>_repair_org_kpi_owner_canonical_keys.sql`
+- New: `docs/adr/ADR-076.md`
+- New: `src/test/orgKpiOwnerCanonicalization.test.ts`
+- Edit: `src/hooks/useOrgKpiDataOwner.ts` (canonicalize on insert only)
+- Edit: `DOCUMENTATION.md`, `POLICY.md`, `mem/features/admin/org-kpi-key-normalization`, `mem/index.md`
+
+## Out of Scope
+
+- Changing read-side lookup logic.
+- Touching the 1 unrecoverable orphan (left for admin review).
+- Any change to `kpis` master or to the dialog UI.
