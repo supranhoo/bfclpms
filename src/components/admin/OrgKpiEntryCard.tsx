@@ -833,6 +833,22 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
                   }}
                 />
               )}
+              {/* ADR-075 — explicit Save (org scope). Disabled until the
+                  user actually changes a field. */}
+              {!isLocked && (
+                <div className="flex justify-end">
+                  <Button
+                    size="sm"
+                    variant="default"
+                    className="h-8 text-xs gap-1"
+                    disabled={!cardDirty || isSavingCard}
+                    onClick={handleSaveCard}
+                  >
+                    {isSavingCard ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+                    Save
+                  </Button>
+                </div>
+              )}
             </div>
           )}
 
@@ -852,6 +868,20 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
                 rows={2}
                 disabled={isLocked}
               />
+              {!isLocked && (
+                <div className="flex justify-end">
+                  <Button
+                    size="sm"
+                    variant="default"
+                    className="h-8 text-xs gap-1"
+                    disabled={!cardDirty || isSavingCard}
+                    onClick={handleSaveCard}
+                  >
+                    {isSavingCard ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+                    Save
+                  </Button>
+                </div>
+              )}
             </div>
           )}
 
