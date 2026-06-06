@@ -538,34 +538,60 @@ function RowStatusPill({ status, reason }: { status?: ScopedRow['status']; reaso
 }
 
 // ---- Per-row propagate cell with confirmation dialog ----
-function PerRowPropagateCell({ canPropagate, isPropagating, employeeName, onConfirm }: {
+function PerRowPropagateCell({ canPropagate, isPropagating, employeeName, onConfirm, isDirty, isSavingRow, onSaveRow }: {
   canPropagate: boolean;
   isPropagating?: boolean;
   employeeName: string;
   onConfirm: () => void;
+  isDirty?: boolean;
+  isSavingRow?: boolean;
+  onSaveRow?: () => void;
 }) {
   const [confirmOpen, setConfirmOpen] = useState(false);
 
   return (
-    <TableCell className="py-1.5 w-16 text-center">
-      <TooltipProvider>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 w-7 p-0"
-              disabled={!canPropagate || isPropagating}
-              onClick={() => setConfirmOpen(true)}
-            >
-              <ArrowUpRight className="h-3.5 w-3.5" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent side="top" className="text-xs">
-            Propagate this employee only
-          </TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
+    <TableCell className="py-1.5 w-28 text-center">
+      <div className="flex items-center justify-center gap-1">
+        {/* ADR-075 — explicit per-row Save */}
+        {onSaveRow && (
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant={isDirty ? 'default' : 'ghost'}
+                  size="sm"
+                  className="h-7 w-7 p-0"
+                  disabled={!isDirty || isSavingRow}
+                  onClick={() => onSaveRow()}
+                >
+                  {isSavingRow ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="top" className="text-xs">
+                {isDirty ? `Save changes for ${employeeName}` : 'No unsaved changes'}
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        )}
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 w-7 p-0"
+                disabled={!canPropagate || isPropagating || isDirty}
+                onClick={() => setConfirmOpen(true)}
+              >
+                <ArrowUpRight className="h-3.5 w-3.5" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="top" className="text-xs">
+              {isDirty ? 'Save row before propagating' : 'Propagate this employee only'}
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      </div>
 
       <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <AlertDialogContent>
