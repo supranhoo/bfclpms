@@ -47,6 +47,7 @@ import { UserAccessSheet, type UserAccessSheetTab, type UserAccessSheetUser } fr
 import { BulkGrantAccessDialog, type BulkGrantTarget } from '@/components/admin/BulkGrantAccessDialog';
 import { useSearchParams } from 'react-router-dom';
 import { CanAction } from '@/components/platform/CanAction';
+import { useMenuAccess } from '@/hooks/useMenuAccess';
 
 import { ALL_APP_ROLES, type AppRole } from '@/lib/roles';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
@@ -226,6 +227,13 @@ export default function UserManagement() {
   const { data: locationsList } = useLocations();
   const queryClient = useQueryClient();
   const { toast } = useToast();
+
+  // Profile-based right alignment with RLS (see ADR-079). When the caller
+  // does NOT hold `admin-users / update`, the Save button is disabled so
+  // they see the gate before clicking. The DB-side `assertRowsTouched`
+  // guard inside the updateUser mutation remains the source of truth.
+  const { canPerform } = useMenuAccess();
+  const canUpdateUser = canPerform('admin-users', 'update');
 
   // Employee Master Field Requirements (admin-configurable mandatory flags
   // for the Add New User page).
@@ -1938,7 +1946,11 @@ export default function UserManagement() {
           <DialogFooter className="pt-4 border-t">
             <Button variant="outline" onClick={() => setEditDialogOpen(false)}>Cancel</Button>
             <CanAction actionKey="pms.users.edit">
-              <Button onClick={handleSaveUser} disabled={updateUser.isPending || editHydrating}>
+              <Button
+                onClick={handleSaveUser}
+                disabled={!canUpdateUser || updateUser.isPending || editHydrating}
+                title={!canUpdateUser ? 'Your Access Profile does not allow updating users. Ask an Admin.' : undefined}
+              >
                 {editHydrating ? 'Loading…' : updateUser.isPending ? 'Saving...' : 'Save Changes'}
               </Button>
             </CanAction>
