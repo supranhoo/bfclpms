@@ -54,6 +54,9 @@ import {
 import { bulkActionForStage } from '@/lib/bulkActionForStage';
 import { summariseSkipReasons, summariseStageWriteOutcome } from '@/lib/summariseSkipReasons';
 import { kpiRowKey as makeKpiRowKey } from '@/lib/bulkRowSelection';
+import { isRowDueInPeriod } from '@/lib/bulkReviewDueFilter';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { CalendarClock } from 'lucide-react';
 import { useUrlFilterStateNullable } from '@/hooks/useUrlFilterState';
 import { buildBulkSignoffImpact, type ImpactSummary } from '@/lib/bulkSignoffImpact';
 import { useBulkSignoffPreviewData } from '@/hooks/useBulkSignoffPreviewData';
@@ -134,6 +137,19 @@ export default function BulkReviewDashboard() {
   const [search, setSearch] = useState('');
   const [displayMode, setDisplayMode] = useState<'score' | 'wt' | 'both'>('score');
   const [hideEmpty, setHideEmpty] = useState(false);
+  // Hide multi-month KPI rows whose cycle is not anchored to the selected
+  // month (sibling placeholders). Default ON; user can toggle off to see the
+  // full matrix including non-due rows. Persisted in localStorage.
+  const [hideNonDue, setHideNonDue] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return true;
+    const raw = window.localStorage.getItem('bulkReview.hideNonDue');
+    return raw === null ? true : raw === 'true';
+  });
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem('bulkReview.hideNonDue', String(hideNonDue));
+    }
+  }, [hideNonDue]);
   const [scopeLoaded, setScopeLoaded] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [activeRow, setActiveRow] = useState<BulkReviewRow | null>(null);
@@ -323,11 +339,26 @@ export default function BulkReviewDashboard() {
         return scores.some(s => s !== null && s !== undefined);
       });
     }
+    if (hideNonDue) {
+      rows = rows.filter(r => isRowDueInPeriod(r, period, year));
+    }
     if (designations.length || grades.length || managerIds.length) {
       rows = rows.filter(r => allowedEmpSet.has(r.employee_id));
     }
     return rows;
-  }, [rawRows, search, hideEmpty, kraNames, designations, grades, managerIds, allowedEmpSet]);
+  }, [rawRows, search, hideEmpty, hideNonDue, period, year, kraNames, designations, grades, managerIds, allowedEmpSet]);
+
+  // Count of rows hidden specifically by the non-due filter (post other filters
+  // except non-due itself) — surfaced as a badge so users know how many rows
+  // are being suppressed.
+  const nonDueHiddenCount = useMemo(() => {
+    if (!rawRows.length) return 0;
+    let n = 0;
+    for (const r of rawRows) {
+      if (!isRowDueInPeriod(r, period, year)) n++;
+    }
+    return n;
+  }, [rawRows, period, year]);
 
   // Org-KPI flags for the currently loaded snapshot.
   const distinctKpiIds = useMemo(() => {
