@@ -3660,3 +3660,11 @@ migration for the same function signature — guard tests must accept that.
 ## URL-Persisted Filter / View / Selection State (ADR-073)
 
 All URL persistence for dashboard filters, view modes, selected entities, and pagination MUST flow through `useUrlFilterState`, `useUrlFilterStateNullable`, or `useClearAllFilters` from `src/hooks/useUrlFilterState.ts`. Direct calls to `setSearchParams(...)` or `window.history.replaceState(...)` from feature code are prohibited because they bypass the no-op guard, microtask coalescer, and 60-writes/10s rate-limit that prevent iOS Safari's hard 100/10s `replaceState` throttle from crashing the page. Effects that observe `useSearchParams()` SHOULD declare narrow dependencies (e.g. `[searchParams.get('mentioned_kpi')]`) rather than `[searchParams]` so they do not re-run on every unrelated URL change. Exceptions: idempotent one-time deep-link processors guarded by a `useRef` flag may retain `[searchParams]`.
+
+
+## §99 — Org KPI Data Entry must use explicit Save (ADR-075)
+
+- Forbidden on `/admin/org-kpi-data`: debounced autosave (`setTimeout`-based persistence) for Achieved, Remark, N/A, Evidence, or scoped per-row values.
+- Required: Save buttons (card-level + per-row) gated by dirty state. Propagate buttons must be disabled while dirty.
+- Required: `useUnsavedChanges` hook (or equivalent) registers a `beforeunload` warning while any card has pending edits.
+- Scope is narrow — Self-review, Daily entry, Incentive grids, and Safety modules are NOT bound by this rule.
