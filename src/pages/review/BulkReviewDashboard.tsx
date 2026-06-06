@@ -873,10 +873,10 @@ export default function BulkReviewDashboard() {
                     )}
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent side="bottom" className="max-w-[280px] text-xs">
+                <TooltipContent side="bottom" className="max-w-[300px] text-xs">
                   {hideNonDue
-                    ? `Showing only KPIs whose cycle ends in ${period} ${year}. Multi-month rows from other cycle months are hidden${nonDueHiddenCount > 0 ? ` (${nonDueHiddenCount} hidden)` : ''}. Click to show all.`
-                    : `Showing all rows including multi-month KPI placeholders that are not actionable until their cycle's final month. Click to hide non-due rows.`}
+                    ? `Showing only rows whose cycle's anchor month is ${period} ${year}. Multi-month KPI siblings and off-cycle rows are hidden${nonDueHiddenCount > 0 ? ` (${nonDueHiddenCount} row${nonDueHiddenCount === 1 ? '' : 's'} hidden)` : ' (none in this view)'}. Click to show all cycles.`
+                    : `Showing all rows including multi-month KPI siblings that are not actionable in ${period}. Click to hide non-due rows.`}
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>

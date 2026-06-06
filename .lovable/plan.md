@@ -1,105 +1,101 @@
-# RCA: Menu access showing wrong items for 101715 (and auditors)
+# Bulk Review "Due only" filter — WHY/RCA/CAPA
 
-## What I found in the data
+## What the user sees
 
-User **101715 – Jitendra Bharti** (role: `manager`) has been granted:
-- **Access Profile "Payroll HASP"** with `can_view` on: `dashboard`, `inbox`, `team-reviews`, `admin-incentive` (Incentive Config), `admin-incentive-data` (Incentive Data Entry), `data-entry`, `reports-hub`, `reports-incentive` (Incentive Report).
-- **User-level overrides** on: `admin-incentive`, `admin-incentive-data`, `reports-incentive`.
+"Due only" toggle ON or OFF → same counts (`54 KPIs, 27 employees, 269 cells`). Tooltip claims multi-month sibling rows are hidden, but nothing changes.
 
-So on paper he should see Incentive Config + Incentive Report. But his sidebar shows neither, and shows "Org KPI Data Entry" under Data Entry (which the admin says was never granted).
+## RCA
 
-## Root cause
-
-In `system_settings`:
-
-```
-menu_overrides_enabled = false   ← CAPA kill switch is OFF
-```
-
-In `src/components/layout/AppSidebar.tsx` → `filterByRole` (lines 433–450), the kill switch takes a hard short-circuit:
+The pure helper `src/lib/bulkReviewDueFilter.ts` has a safety short-circuit on line 38 that swallows the filter for almost every multi-month row in production:
 
 ```ts
-if (overridesEnabled === false) {
-  return Array.isArray(item.roles) && item.roles.includes(effectiveRole);
-}
-// ↑ user overrides AND access-profile rights are completely bypassed.
-// DB-driven canAccess() is only consulted in the ON branch.
+// Multi-month: cycle-start is required to disambiguate ...
+// Per POLICY §128 we do NOT silently default — if the
+// field is missing we treat the row as due so the user is
+// never wrongly hidden from work they need to do.
+if (!row.frequency_cycle_start) return true;
 ```
 
-Once the flag is OFF, the sidebar is gated purely by the hardcoded `item.roles` arrays declared in `getStaticMenuItems`. That explains every symptom:
+What the live data looks like in `kpis` for `review_period='April', review_year=2026` (snapshot input):
 
-| Symptom | Cause |
-|---|---|
-| 101715 sees **Org KPI Data Entry** under Data Entry despite "no KPI entry rights" | line 121: `menuKey:'data-entry'`, `roles:['employee','manager','auditor','management','hr_pms']` → static role match wins; profile/overrides ignored. |
-| **Auditors** see "KPI entry" with no grant | Same line 121 — `auditor` is in the hardcoded list, so every auditor sees it regardless of admin config. |
-| 101715 does NOT see **Incentive Config** | line 107: `menuKey:'admin-incentive'`, `roles:['admin']` → manager fails static match; his override + profile right are ignored. |
-| 101715 does NOT see **Incentive Report** | line 109: `menuKey:'reports-incentive'`, `roles:['admin','management','hr_pms']` → manager not listed; override + profile right ignored. |
-| 101715 DOES see "Incentive Data Entry" under Data Entry | line 122 has the same key listed with `manager` in the static roles — coincidental visibility, not because of the grant. |
+| frequency | frequency_cycle_start | rows |
+|---|---|---|
+| Bi-Monthly | Feb-Mar | 45 |
+| Bi-Monthly | (empty) | included via null fallback |
+| Quarterly  | **NULL** | **42** |
+| Quarterly  | Apr-Jun | 3 |
+| Quarterly  | Jul-Sep | 1 |
+| Half-Yearly | May-Oct | 1 |
+| Monthly / Weekly / Daily | — | bulk of dataset |
 
-The "Menu Access Rights" admin UI therefore gives the false impression that grants are live, while the kill switch silently overrules them.
+So of the multi-month rows that should be evaluated by the filter, **the vast majority have NULL `frequency_cycle_start`** (data is not POLICY §128-compliant — see Migration Governance memory). Every one of those rows hits the line-38 short-circuit and returns `due = true` → never hidden.
+
+Verified by running `isKpiLockedForPeriod` directly for April 2026:
+
+```
+Bi-Monthly Feb-Mar → due=false  (would hide — correct)
+Quarterly Apr-Jun  → due=false  (would hide — correct)
+Quarterly null     → due=false  (would hide — but BLOCKED by short-circuit)
+Half-Yearly May-Oct → due=true  (edge cycle — see §Secondary below)
+```
+
+With the short-circuit in place, the only rows the filter actually trims are the ~48 with non-null `frequency_cycle_start`. In the auditor's loaded scope (Load Scope = 1 reviewer), those rows often aren't represented at all, so the visible counts and the `nonDueHiddenCount` badge both stay at zero — the toggle appears dead.
+
+### Secondary contributing causes
+
+1. **Helper conflates "outside the cycle" with "active month".** `isKpiLockedForPeriod` only flags months that appear in the cycle's `lockedMonths` list. Months that don't belong to the cycle at all (e.g. April for a `Half-Yearly May-Oct` row) are reported as "not locked" → treated as "due". That's wrong: due should mean *the selected month IS the cycle's anchor month*, not just *the selected month is not in the locked list*.
+
+2. **Display dedup masks small wins.** `BulkReviewMatrixGrid` derives the visible `kpiRows` / `employees` / `cells` from `loadedRows` after dedup by KPI key. Even when the helper correctly hides 3 rows, the unique KPI count may not move (the same KPI is still represented by another employee row). The badge counts raw rows, the headline counts unique KPIs → the toggle looks broken even when it works.
+
+3. **Data quality.** 42 Quarterly + 1 Bi-Monthly rows for April have NULL / empty `frequency_cycle_start`, violating POLICY §128. Out of scope to backfill here, but a real cause of the symptom.
+
+## Why didn't tests catch it?
+
+`src/test/bulkReview/dueFilter.test.ts` only exercises rows where `frequency_cycle_start` is explicitly populated. There is no test for `cycle_start = null` on a Bi-Monthly / Quarterly / Half-Yearly / Yearly row, so the short-circuit was never exercised in a "should be hidden" scenario.
+
+## CAPA
+
+### Step 1 — Make the filter operate on the cascading cycle default
+
+Edit `src/lib/bulkReviewDueFilter.ts`:
+
+- **Remove the line-38 short-circuit.** When `frequency_cycle_start` is null/empty, pass `undefined` through to `isKpiLockedForPeriod` — it already cascades to the first cycle option (`getDefaultCycleStart`) which produces the correct lock pattern (e.g. Quarterly defaults to Jan-Mar, so April → locked → hidden).
+- **Tighten "due" semantics** so a row whose cycle does not include the selected month at all is also treated as **not due**. Use `getCycleMonths(...)` and require `selectedMonth ∈ cycleMonths` before consulting `isKpiLockedForPeriod`. This removes the false-positives for off-cycle rows like `Half-Yearly May-Oct` in April.
+- Keep the helper pure; signature unchanged.
+
+> Decision: we considered keeping the safety default but logging a warning. Rejected — the safety default *is* the bug for this feature. The cascading default (`getDefaultCycleStart`) is already the project-wide convention used by every other multi-month code path; aligning the filter with it removes the inconsistency. POLICY §128 governs *write* paths (don't silently default into storage), not read-time UI filters.
+
+### Step 2 — Update tests in `src/test/bulkReview/dueFilter.test.ts`
+
+Add cases covering:
+- Quarterly with `cycle_start = null` in April → hidden.
+- Quarterly with `cycle_start = null` in March (default Q1 active) → visible.
+- Bi-Monthly with `cycle_start = null` in April (active of Mar-Apr default) → visible.
+- Half-Yearly `May-Oct` in April (off-cycle entirely) → hidden.
+- Existing cases stay green.
+
+### Step 3 — UX clarity in `BulkReviewDashboard.tsx`
+
+- Recompute `nonDueHiddenCount` from `rawRows` AFTER the same attribute filters that gate `loadedRows`, so the badge only counts rows the user would actually have seen.
+- Update the tooltip to surface a secondary "(N rows from M KPIs hidden)" line — communicates that hiding may compress rows without changing the unique KPI count, eliminating the "filter is dead" perception.
+- Disable the toggle (greyed + tooltip "No multi-month KPIs in this view") when `nonDueHiddenCount === 0` and the helper finds zero hide-eligible rows in the current scope. Pure UI; no logic change.
+
+### Step 4 — Documentation
+
+- `DOCUMENTATION.md` → Bulk Review section: clarify Due-only semantics (active anchor month, off-cycle treated as not-due).
+- `POLICY.md` → §128 amend: read-time filters MAY apply the cascading default; write paths still must not.
+- `mem://architecture/pms/multimonth-percolation` — append a note about the read-time vs write-time defaulting distinction.
 
 ## Risk & Impact
 
-- **Data Impact:** none. Read-only resolver fix.
-- **Workflow Impact:** sidebar visibility will start honouring admin-configured rights immediately for grantees; some users currently seeing menus by accident (e.g. auditors with KPI Entry) will lose them.
-- **UI/UX Impact:** sidebar items for affected users; no layout changes.
-- **Regression Risk:** medium. The kill switch exists for a reason — historically the resolver tree could blank the sidebar. We keep that safety for the resolver/labels but stop using it to discard grant-based access.
-- **Mitigation:** keep `overridesEnabled === false` as the gate ONLY for the resolver/parent-label logic (already does this in `resolveGroupItems`). Visibility uses a layered check that always allows the static role match as the floor + adds overrides/profile rights on top.
-- **Scalability:** unchanged — `useMenuAccess` already caches configs/overrides/profile rights with React Query.
-
-## Plan (surgical)
-
-### Step 1 — Fix `filterByRole` in `src/components/layout/AppSidebar.tsx`
-
-Replace the hard short-circuit with a layered check that works in both flag states:
-
-```text
-visible if (static item.roles includes effectiveRole)
-        OR (item.menuKey present AND canAccess(menuKey) via profile rights / user override)
-```
-
-This means:
-- When kill switch is OFF: baseline `item.roles` continues to render (fail-open), AND admin-granted overrides/profile rights also work.
-- When kill switch is ON: behaviour unchanged from today.
-
-We do NOT remove the existing CAPA fallbacks (`staticRoleFilter`, the catch in `resolveGroupItems`, fail-open in `useMenuAccess`). The kill switch keeps its job of suppressing the *resolver/parent move/label* tree.
-
-**Verification:** unit test in `src/test/menu/` that asserts:
-- manager with `admin-incentive` override + flag OFF → visible.
-- manager without any grant + flag OFF → `admin-incentive` not visible (admin-only static role).
-- auditor without any grant + flag OFF → `data-entry` hidden (see Step 2).
-- the existing CAPA invariants (`admin-settings` for admin, dashboard+inbox baseline, last-resort admin fallback) still pass.
-
-### Step 2 — Tighten hardcoded `roles` on data-entry duplicates
-
-Lines 121–122 currently list `roles: ['employee','manager','auditor','management','hr_pms']` for both Data Entry items. Per the report, these are admin-grant-driven menus, not role defaults. Change to `roles: ['admin']` so they only appear via an explicit grant (override / access profile / `menu_access_config`).
-
-This is what removes the **auditor seeing "KPI entry" with no grant** symptom and the **101715 seeing "Org KPI Data Entry" with no explicit grant** symptom. Admins who actually need it keep it via their profile right (`data-entry` is already in `menu_access_config` for those roles, but with Step 1 in place that becomes additive, not automatic).
-
-> Decision justification: the cleaner alternative is dropping these duplicates from `getStaticMenuItems` and relying purely on the registry/overrides. Rejected for this fix — it would require database menu_registry rows for the Data Entry group, which is out of scope. The role tightening achieves the same gating with one line each.
-
-### Step 3 — Backfill check
-
-No DB migration. Confirm that `menu_access_config` for the affected keys still lists the correct fallback roles (it does — see RCA table). No new GRANT/RLS work.
-
-### Step 4 — Tests
-
-- New test file `src/test/menu/menu-overrides-off-honors-grants.test.ts` covering Step 1 behaviour with the flag OFF.
-- Extend existing `useMenuAccess-failopen.test.ts` invariants to confirm they still pass after the edit.
-- No e2e change.
-
-### Step 5 — Docs
-
-- `DOCUMENTATION.md`: update Menu Access Rights section — clarify that `menu_overrides_enabled` only gates the resolver tree, not access grants.
-- `POLICY.md`: update the access-resolution policy (priority chain) to read "static role match OR grant" when flag is off.
-- `mem://features/admin/menu-setting` and `mem://features/admin/menu-setting-capa`: append a note about Step 1's layered behaviour.
-
-## Rollback
-
-Revert the single `filterByRole` edit and the two `roles:` arrays on lines 121–122. No DB changes to undo.
+- **Data:** none. Read-only helper change.
+- **Workflow:** users with the toggle ON will start seeing fewer rows in months that were previously a no-op. Default state is already ON, so this is exactly what users expect.
+- **Regression:** low. The change is isolated to one pure helper + one badge memo + one tooltip. Existing tests all still pass once we add the missing-cycle-start cases.
+- **Scalability:** unchanged — all filtering remains O(rows) client-side.
+- **Rollback:** revert the single `bulkReviewDueFilter.ts` edit and the test file.
 
 ## Out of scope
 
-- Turning `menu_overrides_enabled` to `true` (separate decision; resolver tree change has broader implications).
-- Re-architecting Data Entry duplicates into the registry.
-- Any change to `useMenuAccess` priority chain — it's already correct; we just need the sidebar to USE it.
+- Backfilling `frequency_cycle_start` for the 42+ Quarterly NULL rows (data-hygiene migration; separate ticket).
+- Changing `BulkReviewMatrixGrid` dedup behavior.
+- Server-side pre-filter in the `bulk_review_snapshot` RPC.
