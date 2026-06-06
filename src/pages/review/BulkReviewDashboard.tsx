@@ -854,6 +854,32 @@ export default function BulkReviewDashboard() {
             >
               {hideEmpty ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
             </Button>
+            <TooltipProvider delayDuration={150}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant={hideNonDue ? 'secondary' : 'ghost'}
+                    size="sm"
+                    className="h-7 px-2 text-[11px] gap-1"
+                    onClick={() => setHideNonDue(v => !v)}
+                    aria-pressed={hideNonDue}
+                  >
+                    <CalendarClock className="h-3.5 w-3.5" />
+                    {hideNonDue ? 'Due only' : 'All cycles'}
+                    {hideNonDue && nonDueHiddenCount > 0 && (
+                      <Badge variant="outline" className="ml-1 h-4 px-1 text-[10px] tabular-nums">
+                        {nonDueHiddenCount}
+                      </Badge>
+                    )}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="max-w-[280px] text-xs">
+                  {hideNonDue
+                    ? `Showing only KPIs whose cycle ends in ${period} ${year}. Multi-month rows from other cycle months are hidden${nonDueHiddenCount > 0 ? ` (${nonDueHiddenCount} hidden)` : ''}. Click to show all.`
+                    : `Showing all rows including multi-month KPI placeholders that are not actionable until their cycle's final month. Click to hide non-due rows.`}
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
           </div>
         </div>
       </div>
