@@ -458,6 +458,22 @@ export function AppSidebar() {
     return items.filter(item => Array.isArray(item.roles) && item.roles.includes(effectiveRole));
   }, [effectiveRole]);
 
+  // BUG: Review Notes sidebar visibility must mirror the DB-driven access
+  // setting (`review_action_notes_visibility`) that the /hr/review-notes page
+  // uses. The static `roles` list on the menu entry includes every role so
+  // employees were seeing a dead-end menu that opened straight into an
+  // "access denied" screen. Drop the Review Notes item from any candidate
+  // list when the user lacks both `view` and `view_own_subject` rights.
+  const gateReviewNotes = useCallback((items: typeof menuItems.main) => {
+    const role = effectiveRole;
+    const cfg = reviewNoteAccess.config;
+    const allowed =
+      reviewNoteAccess.canView ||
+      (!!role && cfg.view_own_subject.includes(role));
+    if (allowed) return items;
+    return items.filter(item => item.path !== '/hr/review-notes');
+  }, [effectiveRole, reviewNoteAccess.canView, reviewNoteAccess.config]);
+
   const toggleSection = useCallback((section: string) => {
     setOpenSections(prev => {
       const next = new Set(prev);
