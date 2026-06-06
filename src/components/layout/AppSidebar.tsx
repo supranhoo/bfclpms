@@ -186,6 +186,7 @@ export function AppSidebar() {
   const { data: bulkReviewFlagOn } = useBulkReviewFlag();
   const { data: overridesEnabled } = useMenuOverridesEnabled();
   const { data: resolvedMenu } = useResolvedMenu();
+  const reviewNoteAccess = useReviewNoteAccess();
 
   const policyVisibleRoles = appSettings?.pms_policy_visible_roles || ['admin', 'manager', 'employee', 'auditor', 'management', 'hr_pms'];
   const menuItems = getStaticMenuItems(policyVisibleRoles);
