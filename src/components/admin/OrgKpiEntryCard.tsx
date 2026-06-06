@@ -756,8 +756,7 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
                 checked={isNa}
                 onCheckedChange={(checked) => {
                   setIsNa(checked);
-                  isDirtyRef.current = true;
-                  triggerAutoSave();
+                  markDirty();
                 }}
               />
               <Label htmlFor={`na-toggle-${data.categoryId}-${data.kpiName}`} className="text-xs font-medium cursor-pointer">
@@ -785,7 +784,7 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
                   })()}
                   onChange={(label, rating) => {
                     setAchievedValue(rating.toString());
-                    triggerAutoSave();
+                    markDirty();
                   }}
                   disabled={isLocked}
                   className="h-9"
@@ -795,7 +794,7 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
                   <Input
                     type="number"
                     value={achievedValue}
-                    onChange={(e) => { setAchievedValue(e.target.value); triggerAutoSave(); }}
+                    onChange={(e) => { setAchievedValue(e.target.value); markDirty(); }}
                     placeholder="Achieved value"
                     className="h-9"
                     disabled={isLocked}
@@ -819,7 +818,7 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
               )}
               <Input
                 value={remarks}
-                onChange={(e) => { setRemarks(e.target.value); triggerAutoSave(); }}
+                onChange={(e) => { setRemarks(e.target.value); markDirty(); }}
                 placeholder="Remark"
                 className="h-9"
                 disabled={isLocked}
@@ -830,7 +829,7 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
                   onUploadComplete={(url) => {
                     orgEvidenceTouchedRef.current = true;
                     setEvidenceUrl(url);
-                    triggerAutoSave();
+                    markDirty();
                   }}
                 />
               )}
@@ -848,7 +847,7 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
               </Alert>
               <Textarea
                 value={naRemarks}
-                onChange={(e) => { setNaRemarks(e.target.value); triggerAutoSave(); }}
+                onChange={(e) => { setNaRemarks(e.target.value); markDirty(); }}
                 placeholder="Reason for marking as N/A (required)"
                 rows={2}
                 disabled={isLocked}
