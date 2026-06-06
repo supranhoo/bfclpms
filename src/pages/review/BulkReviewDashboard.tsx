@@ -46,6 +46,8 @@ import { ConfirmDestructiveDialog } from '@/components/ui/ConfirmDestructiveDial
 import { BulkApproveDialog } from '@/components/review/BulkApproveDialog';
 import { MultiSelectFilter } from '@/components/review/MultiSelectFilter';
 import { readUrlArrays, writeUrlArrays } from '@/lib/bulkUrlState';
+import { allowedViewerStages, clampViewerStage } from '@/lib/bulkReviewerStages';
+import { useIsFunctionalManager } from '@/hooks/useIsFunctionalManager';
 import {
   allowedEmployeeIds, distinctAttrOptions, BLANK_SENTINEL, type EmpAttrs,
 } from '@/lib/bulkEmployeeFilter';
@@ -68,14 +70,6 @@ const CALENDAR_MONTHS = [
   'July', 'August', 'September', 'October', 'November', 'December',
 ];
 
-const VIEWER_STAGES = [
-  { value: 'manager', label: 'Manager' },
-  { value: 'functional_manager', label: 'Functional Manager' },
-  { value: 'skip_level', label: 'Skip-Level' },
-  { value: 'hr_pms', label: 'HR PMS' },
-  { value: 'auditor', label: 'Auditor' },
-  { value: 'management', label: 'Management' },
-];
 
 /**
  * Bulk Review Dashboard (PRD v2.0, Phase 1 — M2 shell).
