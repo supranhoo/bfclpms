@@ -388,20 +388,6 @@ async function legacyPerRowUpsert(values: Array<any>): Promise<any[]> {
         }
       }
       return results;
-    },
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ['org-kpi-values'] });
-      queryClient.invalidateQueries({ queryKey: ['org-kpi-value'] });
-      toast({ title: `${data.length} values saved successfully` });
-    },
-    onError: (error: any) => {
-      const friendly =
-        error?.code === 'PGRST116'
-          ? 'Could not save this KPI — please refresh the page and try again. (The KPI name may have been updated by another user.)'
-          : error?.message || 'Unknown error';
-      toast({ title: 'Failed to save values', description: friendly, variant: 'destructive' });
-    },
-  });
 }
 
 export function useDeleteOrgKpiValue() {
