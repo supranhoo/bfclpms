@@ -1,89 +1,69 @@
-# Data Owners not visible — RCA & Fix
+## RCA — Why Jyoti (Employee) sees HR PMS + Data Entry groups
 
-## Root Cause
+### What's actually configured
 
-`OrgKpiOwnerDialog` reads owners via `useOrgKpiOwners`, which does:
-```
-.eq('category_id', …).eq('kra_name', …).eq('kpi_name', …)
-```
+| Surface | Who decides visibility | What it says for `employee` |
+|---|---|---|
+| Sidebar — **HR PMS → Review Notes** | Hardcoded `roles` list at `AppSidebar.tsx:79` | ✅ shown (list contains every role incl. `employee`) |
+| Page — `/hr/review-notes` | DB setting `system_settings.review_action_notes_visibility` (`useReviewNoteAccess`) | ❌ `view` list is `[admin, hr_pms, manager, skip_level, management, auditor]` — `employee` only has `view_own_subject` |
+| Sidebar — **Data Entry → Org KPI Data Entry** | Custom filter (BUG-040/041) — `isDataOwner ‖ user-override ‖ canPerform('data-entry','view')` | ✅ shown — `menu_access_config.data-entry.allowed_roles` includes `employee`, so `canPerform` is true |
+| Page — `/admin/org-kpi-data` | `DataOwnerRoute` — same 3-way check | ✅ allowed (same gate) |
 
-For the "Implement 5S practices" KPI the dialog shows **No data owners assigned**, but `org_kpi_data_owners` actually contains 2 rows for this exact category + KRA.
+DB facts confirmed for Jyoti (`8f08a819…`, role `employee`):
+- 0 rows in `org_kpi_data_owners`
+- 0 rows in `menu_access_user_overrides`
+- 0 rows in `access_profile_assignments`
+- BUT `menu_access_config.data-entry.allowed_roles` contains `employee` → `canPerform('data-entry','view')` is `true`.
 
-Byte-level diff of `kpi_name`:
-- `kpis` master (source of truth used by the card):  
-  `…efficiency.\n- Formula:…\n- Scoring Logic:…`  (real newlines)
-- `org_kpi_data_owners` row:  
-  `…efficiency. - Formula:… - Scoring Logic:…`  (newlines collapsed to ` - `)
+### Conclusions
 
-Same length, different bytes → `eq` never matches.
+1. **Data Entry group — working as configured, not a bug.** An admin gave the `employee` role view rights for `data-entry` in `menu_access_config`. The sidebar correctly shows it, and `DataOwnerRoute` correctly admits her. If you don't want every employee to see Org KPI Data Entry, the fix is **data, not code**: remove `employee` from `menu_access_config.data-entry.allowed_roles` via Admin → Menu Access.
 
-Scope of the corruption (DB scan):
-- Total owner rows: **233**
-- Rows whose `(category_id, kra_name, kpi_name)` does **not** exist in `kpis`: **228**
-- Of those, **227 are recoverable** by whitespace-normalized match against `kpis`
-- 1 truly orphan row (KPI no longer exists)
+2. **HR PMS → Review Notes — real bug (mismatch).** Sidebar `roles` list is hardcoded and ignores the DB-driven `review_action_notes_visibility` setting that the page uses. Employees (and any role not in the `view` list) see the menu, click it, and get the "no access" error page. This is the menu→deny loop POLICY §111 / BUG-040 explicitly forbids.
 
-So this is not a UI bug — owner rows were persisted in a non-canonical form (older insert path collapsed `\r\n` / `\n` to ` - `), and every subsequent exact-match lookup misses them. The owners are effectively invisible everywhere: the dialog, `useIsOrgKpiDataOwner` access gate, and the `Data Owner: …` badges built from `useOrgKpiOwnershipMap`.
+---
 
-## Risk & Impact
+## Plan — fix only the Review Notes mismatch
 
-| Area | Impact |
-|---|---|
-| Data | Repair updates 227 rows in `org_kpi_data_owners`. Reversible via timestamped backup table. |
-| Workflow | Restores edit permission for designated data owners (non-admins) on org-level KPIs they were assigned to. No new permissions granted. |
-| UI/UX | Dialog will show the actual current owners; badges across scorecards re-appear. |
-| Regression | Low. Hook signatures unchanged. Canonicalization at insert only normalizes the row to match `kpis`. |
-| Scalability | One-time UPDATE, ~233 rows. Negligible. |
-| Mitigation | Backup table `org_kpi_owner_key_backup_2026_06` written before UPDATE; 1 unrecoverable row logged, not deleted. |
+### Risk & Impact
+- **Data**: none — read-only sidebar filter.
+- **Workflow**: HR PMS group hides automatically when its only child hides (`CollapsibleSidebarGroup` returns `null` for empty groups), so employees stop seeing a dead-end menu.
+- **UI/UX**: Roles in the DB `view` list (admin, hr_pms, manager, skip_level, management, auditor) keep seeing Review Notes exactly as today. Employees lose the dead menu entry.
+- **Regression**: low — change is scoped to one menu item filter.
+- **Scalability**: filter is O(1) per render; reuses existing `useReviewNoteAccess` cache.
+- **Rollback**: revert the small AppSidebar diff; no DB change.
 
-## Plan
+### Step → Verification
 
-### Step 1 — Migration (data repair + safety)
+1. **Hook into the existing access source of truth** in `AppSidebar.tsx`:
+   - Call `useReviewNoteAccess()` once at the top of `AppSidebar`.
+   - Wrap the HR PMS group with a custom `filterByRole` (same pattern as Data Entry, lines 597-614) that, for the `Review Notes` item, requires `canView || canViewOwnSubject`. Other items in the group (e.g. `HR PMS Review`) keep the standard role-list filter.
+   - Verification: log in as `employee` with no DB-grant → HR PMS group is hidden. Log in as `hr_pms` / `admin` → Review Notes still visible.
 
-1. `CREATE TABLE public.org_kpi_owner_key_backup_2026_06 AS SELECT *, now() AS backed_up_at FROM public.org_kpi_data_owners;` (plus GRANTs to `service_role`, RLS enabled, admin-only policy — same pattern as existing `org_kpi_owner_key_backup_2026_05`).
-2. `UPDATE public.org_kpi_data_owners o SET kra_name = k.kra_name, kpi_name = k.kpi_name FROM public.kpis k WHERE k.category_id = o.category_id AND regexp_replace(k.kra_name,'[[:space:]]+',' ','g') = regexp_replace(o.kra_name,'[[:space:]]+',' ','g') AND regexp_replace(k.kpi_name,'[[:space:]]+',' ','g') = regexp_replace(o.kpi_name,'[[:space:]]+',' ','g') AND (k.kra_name <> o.kra_name OR k.kpi_name <> o.kpi_name);`
-3. Log a `RAISE NOTICE` with the count of remaining orphan rows (expected 1) — kept for admin review, not deleted.
+2. **Keep the page-level gate authoritative** — no change to `useReviewNoteAccess` semantics, no change to the DB setting.
+   - Verification: `src/test/reviewNotes/access.test.ts` still passes.
 
-**Verification:** post-migration query `SELECT count(*) FROM org_kpi_data_owners o WHERE NOT EXISTS (SELECT 1 FROM kpis k WHERE k.category_id=o.category_id AND k.kra_name=o.kra_name AND k.kpi_name=o.kpi_name)` should return ≤ 1.
+3. **New focused test** `src/test/reviewNotes/sidebarVisibility.test.ts` that asserts: with `canView=false && canViewOwnSubject=false` the Review Notes item is filtered out; with either true it remains.
+   - Verification: `bunx vitest run src/test/reviewNotes/sidebarVisibility.test.ts`.
 
-### Step 2 — Canonicalize on insert (prevent regression)
+4. **Docs**:
+   - `DOCUMENTATION.md` — note that HR PMS → Review Notes sidebar visibility is now sourced from `review_action_notes_visibility` (consistent with the page).
+   - `POLICY.md` §111 (menu→page parity) — add a one-liner: "Review Notes menu obeys `review_action_notes_visibility.view` ∪ `view_own_subject`."
+   - `mem/features/hr/review-action-notes.md` — append a "Sidebar visibility" subsection.
+   - `docs/adr/ADR-078.md` — new ADR documenting the mismatch and fix.
 
-In `src/hooks/useOrgKpiDataOwner.ts`, `useAssignOrgKpiOwner.mutationFn`:
-- Before insert, look up the canonical `kra_name`/`kpi_name` in `kpis` using `regexp_replace(...,'[[:space:]]+',' ','g')` equality (single RPC or a select that ANDs `category_id` + LIKE on first 80 chars + whitespace-normalized match in JS).
-- If found, insert canonical values; if not found, insert as-is and surface a toast: "KPI not found in master — owner saved against current text".
+### UI Changes
+- **What changes visually**: For users whose role is not in `review_action_notes_visibility.view` AND not in `view_own_subject`, the entire **HR PMS** sidebar group disappears (because Review Notes was its only visible item for them). For all other users — no visual change.
+- **Exact location**: Left sidebar, "HR PMS" collapsible group.
+- **Interaction impact**: Removes a menu entry that leads to an access-denied page. No keyboard/focus regressions.
+- **Responsiveness**: No layout change; same `<CollapsibleSidebarGroup>` component on all breakpoints.
 
-Keep the read hooks (`useOrgKpiOwners`, `useIsOrgKpiDataOwner`, `useOrgKpiDataOwners`) unchanged — they continue to use `.eq()` which is correct once stored data is canonical.
+### Files
+- Edit: `src/components/layout/AppSidebar.tsx` (add `useReviewNoteAccess`; custom filter on HR PMS group).
+- Add: `src/test/reviewNotes/sidebarVisibility.test.ts`.
+- Add: `docs/adr/ADR-078.md`.
+- Edit: `DOCUMENTATION.md`, `POLICY.md`, `mem/features/hr/review-action-notes.md`, `mem/index.md`.
 
-### Step 3 — Tests
-
-- `src/test/orgKpiOwnerCanonicalization.test.ts` — unit test on the canonicalize helper: `\r\n` and `\n` variants resolve to the master's exact string.
-- Mock-data: extend existing owner fixtures with one "collapsed whitespace" row to assert the repair migration logic against a SQL fixture (executed by `vitest`'s SQL helper if present, otherwise pure JS simulation).
-
-### Step 4 — SSOT updates
-
-- `DOCUMENTATION.md`: add note under Org KPI Data Owners — canonical storage rule.
-- `POLICY.md`: add invariant "Owner rows must store `kra_name`/`kpi_name` byte-identical to `kpis`".
-- `docs/adr/ADR-076.md`: record decision (canonicalize on write; repair migration with backup).
-- `mem/features/admin/org-kpi-key-normalization` — append the owner-rows clause.
-
-## UI Changes
-
-None. Only the dialog content changes from "No data owners assigned" → the actual list of owners (and the `Data Owner: …` badges on scorecards re-appear) once data is canonicalized.
-
-## Rollback
-
-Re-apply `org_kpi_data_owners` from `org_kpi_owner_key_backup_2026_06` (single SQL: `UPDATE … FROM backup WHERE id = backup.id`). Step-2 code change is additive and safe to revert independently.
-
-## Files
-
-- New: `supabase/migrations/<ts>_repair_org_kpi_owner_canonical_keys.sql`
-- New: `docs/adr/ADR-076.md`
-- New: `src/test/orgKpiOwnerCanonicalization.test.ts`
-- Edit: `src/hooks/useOrgKpiDataOwner.ts` (canonicalize on insert only)
-- Edit: `DOCUMENTATION.md`, `POLICY.md`, `mem/features/admin/org-kpi-key-normalization`, `mem/index.md`
-
-## Out of Scope
-
-- Changing read-side lookup logic.
-- Touching the 1 unrecoverable orphan (left for admin review).
-- Any change to `kpis` master or to the dialog UI.
+### Out of scope (intentional)
+- **Data Entry visibility** — already governed by an admin-editable DB config; if you want employees off it, update `menu_access_config.data-entry.allowed_roles` from the Menu Access admin UI. Say the word and I'll add a one-line migration to drop `employee` from that row.
+- The `/hr/review-notes` page text "Ask an admin to grant the 'view' permission" — can be softened to mention `view_own_subject`, but that's a copy-only follow-up.

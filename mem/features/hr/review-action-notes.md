@@ -48,3 +48,13 @@ Lightweight log so HR can capture KPI/KRA-change inputs during reviews and track
 ## Out of scope
 - No automatic mutations to KPIs/weightages — completing a note is a manual ack only.
 - No analytics yet ("% of notes implemented next cycle").
+
+## Sidebar visibility (ADR-078)
+- `HR PMS → Review Notes` in `AppSidebar.tsx` is filtered by
+  `useReviewNoteAccess()`. Visible iff role ∈ `config.view` ∪
+  `config.view_own_subject` (DB setting
+  `system_settings.review_action_notes_visibility`).
+- When Review Notes is the only HR PMS child the user can see, the entire
+  HR PMS group hides automatically (CollapsibleSidebarGroup empty-state).
+- Page-level gate (`useReviewNoteAccess`) remains authoritative; the sidebar
+  filter is a pure mirror to prevent menu→access-denied loops (POLICY §111).
