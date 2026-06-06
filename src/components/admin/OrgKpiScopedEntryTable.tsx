@@ -1195,25 +1195,47 @@ function DepartmentRow({ row, onValueChange, ratingThresholds, targetValue, uom,
         )}
       </TableCell>
       {hasRowPropagation && (
-        <TableCell className="py-1.5 w-16 text-center">
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 w-7 p-0"
-                  disabled={!canPropagate}
-                  onClick={() => onPropagateRow?.(row.scopeId)}
-                >
-                  <ArrowUpRight className="h-3.5 w-3.5" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="top" className="text-xs">
-                Propagate this department only
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
+        <TableCell className="py-1.5 w-28 text-center">
+          <div className="flex items-center justify-center gap-1">
+            {onSaveRow && (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant={isDirty ? 'default' : 'ghost'}
+                      size="sm"
+                      className="h-7 w-7 p-0"
+                      disabled={!isDirty || isSavingRow}
+                      onClick={() => onSaveRow(row.scopeId)}
+                    >
+                      {isSavingRow ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="text-xs">
+                    {isDirty ? `Save changes for ${row.scopeName}` : 'No unsaved changes'}
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 w-7 p-0"
+                    disabled={!canPropagate || isDirty}
+                    onClick={() => onPropagateRow?.(row.scopeId)}
+                  >
+                    <ArrowUpRight className="h-3.5 w-3.5" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="text-xs">
+                  {isDirty ? 'Save row before propagating' : 'Propagate this department only'}
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </div>
         </TableCell>
       )}
     </TableRow>
