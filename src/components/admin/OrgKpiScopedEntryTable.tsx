@@ -979,6 +979,9 @@ function EmployeeRow({ row, onValueChange, ratingThresholds, targetValue, uom, c
             isPropagating={isPropagating}
             employeeName={row.scopeName}
             onConfirm={() => onPropagateRow?.(row.scopeId)}
+            isDirty={isDirty}
+            isSavingRow={isSavingRow}
+            onSaveRow={onSaveRow ? () => onSaveRow(row.scopeId) : undefined}
           />
         )}
       </TableRow>
