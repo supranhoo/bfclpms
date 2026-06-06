@@ -18,6 +18,7 @@ import {
 } from '@/hooks/useBulkReview';
 import { ConfirmDestructiveDialog } from '@/components/ui/ConfirmDestructiveDialog';
 import { KpiReviewPanel, type ViewLevel } from './KpiReviewPanel';
+import { KpiTimeline } from '@/components/dashboard/KpiTimeline';
 import { AchievedValueScoreInput } from './AchievedValueScoreInput';
 import { validateBulkRemark, BULK_REMARK_MIN_LENGTH } from '@/lib/bulkCellDrawerRemarks';
 import { Switch } from '@/components/ui/switch';
@@ -58,6 +59,20 @@ export function BulkCellDrawer({ row, viewerStage, open, onOpenChange, canReopen
   const detail = useKpiCellDetail(row?.kpi_id ?? null, row?.employee_id ?? null, open && !!row);
   const write = useBulkWriteStageScores();
   const reopen = useBulkReopenCells();
+  const [timelineOpen, setTimelineOpen] = useState(false);
+
+  // Reset Timeline modal whenever drawer closes so it doesn't linger across rows.
+  useEffect(() => {
+    if (!open) setTimelineOpen(false);
+  }, [open]);
+
+  const resolvedWorkflowStages: string[] | undefined = Array.isArray(detail.data?.workflow)
+    ? (detail.data?.workflow as string[])
+    : Array.isArray(detail.data?.workflow?.stages)
+      ? (detail.data?.workflow?.stages as string[])
+      : Array.isArray(detail.data?.workflow?.workflow_stages)
+        ? (detail.data?.workflow?.workflow_stages as string[])
+        : undefined;
 
   const [manualScore, setManualScore] = useState<string>('');
   const [achieved, setAchieved] = useState<number | string | null>(null);
