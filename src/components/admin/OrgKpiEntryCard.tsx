@@ -1199,6 +1199,8 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
                           })));
                           isDirtyRef.current = false;
                           setSaveStatus('idle');
+                          setCardDirty(false);
+                          setDirtyScopeIds(new Set());
                         } finally {
                           setIsClearing(false);
                         }
