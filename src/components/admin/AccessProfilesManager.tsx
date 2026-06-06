@@ -673,6 +673,9 @@ export function AssignmentTab({ profiles, assignments, assignUser, removeAssignm
   const [includeInactive, setIncludeInactive] = useState(false);
   const { isReady, user } = useAuth();
   const profilesVersion = useProfilesVersion();
+  const { canPerform } = useMenuAccess();
+  const canAssign = canPerform('admin-access-profiles', 'add');
+  const canRemove = canPerform('admin-access-profiles', 'delete');
 
   // Active employees — drive the search picker (preserves core rule: never
   // assign to inactive users by default).
@@ -829,7 +832,11 @@ export function AssignmentTab({ profiles, assignments, assignUser, removeAssignm
             </div>
           )}
         </div>
-        <Button onClick={handleAssign} disabled={!selectedProfileId || !selectedUserId || assignUser.isPending}>
+        <Button
+          onClick={handleAssign}
+          disabled={!canAssign || !selectedProfileId || !selectedUserId || assignUser.isPending}
+          title={!canAssign ? 'Your Access Profile does not allow adding assignments.' : undefined}
+        >
           <Users className="h-4 w-4 mr-1" />Assign
         </Button>
       </div>
@@ -860,7 +867,14 @@ export function AssignmentTab({ profiles, assignments, assignUser, removeAssignm
                   </TableCell>
                   <TableCell className="text-xs text-muted-foreground">{new Date(a.created_at).toLocaleDateString()}</TableCell>
                   <TableCell className="text-center">
-                    <Button size="sm" variant="ghost" className="h-7 px-2 text-destructive hover:text-destructive" onClick={() => removeAssignment.mutateAsync(a.id)}>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 px-2 text-destructive hover:text-destructive"
+                      onClick={() => removeAssignment.mutateAsync(a.id)}
+                      disabled={!canRemove}
+                      title={!canRemove ? 'Your Access Profile does not allow removing assignments.' : undefined}
+                    >
                       <Trash2 className="h-3.5 w-3.5" />
                     </Button>
                   </TableCell>

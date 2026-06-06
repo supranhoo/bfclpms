@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { assertRowsTouched } from '@/lib/db/assertRowsTouched';
 
 export interface AccessProfile {
   id: string;
@@ -174,10 +175,15 @@ export function useAccessProfiles() {
         .map(r => ({ profile_id: profileId, ...r }));
 
       if (toInsert.length > 0) {
-        const { error } = await supabase
+        const { data, error } = await supabase
           .from('access_profile_menu_rights')
-          .insert(toInsert);
-        if (error) throw error;
+          .insert(toInsert)
+          .select('id');
+        assertRowsTouched(data, error, {
+          menuKey: 'admin-access-profiles',
+          action: 'update',
+          resource: 'menu rights for this profile',
+        });
       }
     },
     onSuccess: () => invalidateAll(),
@@ -185,18 +191,31 @@ export function useAccessProfiles() {
 
   const assignUser = useMutation({
     mutationFn: async ({ profileId, userId }: { profileId: string; userId: string }) => {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('access_profile_assignments')
-        .upsert({ profile_id: profileId, user_id: userId, assigned_by: user?.id }, { onConflict: 'profile_id,user_id' });
-      if (error) throw error;
+        .upsert({ profile_id: profileId, user_id: userId, assigned_by: user?.id }, { onConflict: 'profile_id,user_id' })
+        .select('id');
+      assertRowsTouched(data, error, {
+        menuKey: 'admin-access-profiles',
+        action: 'add',
+        resource: 'this profile assignment',
+      });
     },
     onSuccess: () => invalidateAll(),
   });
 
   const removeAssignment = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from('access_profile_assignments').delete().eq('id', id);
-      if (error) throw error;
+      const { data, error } = await supabase
+        .from('access_profile_assignments')
+        .delete()
+        .eq('id', id)
+        .select('id');
+      assertRowsTouched(data, error, {
+        menuKey: 'admin-access-profiles',
+        action: 'delete',
+        resource: 'this profile assignment',
+      });
     },
     onSuccess: () => invalidateAll(),
   });
