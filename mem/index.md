@@ -97,3 +97,4 @@ Lean-Load: debounce search inputs (>200 rows / network); paginate new lists with
 - [Backup History Safety Drill Verify Action](mem://features/safety/backup-drill-action) — Phase 9.3 admin Flow-B verify button on non-failed Backup History rows; isolated safety_drill schema; production Safety tables read-only
 - [Org KPI Data Entry — explicit Save](mem://features/admin/org-kpi-data-entry-manual-save) — ADR-075. Manual Save (card + per-row); autosave forbidden; Propagate blocked while dirty
 - [Org KPI Owner Canonical Storage](mem://features/admin/org-kpi-key-normalization) — ADR-076. `org_kpi_data_owners` must store KRA/KPI byte-identical to `kpis`; canonicalize on insert; June 2026 repair migration with `org_kpi_owner_key_backup_2026_06`
+- [Review Notes Sidebar Visibility](mem://features/hr/review-action-notes) — ADR-078. `HR PMS → Review Notes` sidebar gate mirrors `useReviewNoteAccess()` (view ∪ view_own_subject); POLICY §111 forbids menu→access-denied loops
