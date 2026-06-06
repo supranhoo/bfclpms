@@ -1021,9 +1021,12 @@ interface DepartmentRowProps {
   hasSelectionFeature: boolean;
   hasRowPropagation: boolean;
   kpiName?: string;
+  isDirty?: boolean;
+  isSavingRow?: boolean;
+  onSaveRow?: (scopeId: string) => Promise<void> | void;
 }
 
-function DepartmentRow({ row, onValueChange, ratingThresholds, targetValue, uom, criteria, sentBackInfo, isSelected, onToggleRow, onPropagateRow, isPropagating, hasSelectionFeature, hasRowPropagation, kpiName }: DepartmentRowProps) {
+function DepartmentRow({ row, onValueChange, ratingThresholds, targetValue, uom, criteria, sentBackInfo, isSelected, onToggleRow, onPropagateRow, isPropagating, hasSelectionFeature, hasRowPropagation, kpiName, isDirty, isSavingRow, onSaveRow }: DepartmentRowProps) {
   const rowIsNa = row.isNa ?? false;
   const effectiveTarget = row.targetValue != null ? row.targetValue : targetValue;
   const effectiveUom = row.uom != null ? row.uom : uom;
