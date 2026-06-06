@@ -6653,3 +6653,14 @@ and to access checks (`useIsOrgKpiDataOwner`).
   canonical.
 
 See: `docs/adr/ADR-076.md`, `src/test/orgKpiOwnerCanonicalization.test.ts`.
+
+## Review Notes sidebar visibility (ADR-078, 2026-06-06)
+
+`HR PMS → Review Notes` in the sidebar is gated by the same DB setting
+(`system_settings.review_action_notes_visibility`) that the
+`/hr/review-notes` page uses, via `useReviewNoteAccess()` in
+`AppSidebar.tsx`. A user sees the entry if their role is in `view` OR in
+`view_own_subject`. When Review Notes is the only HR PMS child the user can
+see, the entire HR PMS group hides (no more menu→access-denied loop).
+
+See: `docs/adr/ADR-078.md`, `src/test/reviewNotes/sidebarVisibility.test.ts`.

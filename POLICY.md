@@ -3675,3 +3675,15 @@ All URL persistence for dashboard filters, view modes, selected entities, and pa
 - `useAssignOrgKpiOwner` MUST canonicalize against `kpis` (whitespace-normalized equality) before insert.
 - The legacy "owner invisible to dialog" symptom is treated as a data-integrity bug, never patched by relaxing read-side `.eq()` lookups.
 - Repair operations MUST snapshot to a dated `org_kpi_owner_key_backup_YYYY_MM` table (admin-read RLS) before rewriting.
+
+## §111 — Sidebar visibility must match the page-level access gate
+
+- A sidebar entry MUST NOT appear for a user whose role / config will be
+  rejected by the destination page's access check. Static role allowlists
+  on menu items are insufficient when the page consults a DB-driven config.
+- `HR PMS → Review Notes` obeys `system_settings.review_action_notes_visibility`
+  via `useReviewNoteAccess()` — visible iff role ∈ `view` ∪ `view_own_subject`.
+- `Data Entry → Org KPI Data Entry` obeys the existing 3-way check
+  (`isDataOwner` ‖ explicit user override ‖ `canPerform('data-entry','view')`).
+- New menu items that delegate to a DB-driven gate MUST add a parallel
+  filter in `AppSidebar.tsx` instead of relying on a static role list.
