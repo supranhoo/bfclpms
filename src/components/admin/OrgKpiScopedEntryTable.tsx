@@ -17,7 +17,7 @@ import { isValueOutOfRange, RatingThresholds, calculateRating } from '@/lib/rati
 import { RatingBadge } from '@/components/ui/RatingBadge';
 import { QualitativeSelect } from '@/components/review/QualitativeSelect';
 import { BINARY_OPTIONS, type QualitativeOption } from '@/lib/qualitativeUom';
-import { ChevronDown, ChevronRight, Building2, AlertTriangle, Ban, TrendingUp, TrendingDown, MessageSquare, ArrowUpRight, Undo2, CheckCircle2, Clock } from 'lucide-react';
+import { ChevronDown, ChevronRight, Building2, AlertTriangle, Ban, TrendingUp, TrendingDown, MessageSquare, ArrowUpRight, Undo2, CheckCircle2, Clock, Save, Loader2 } from 'lucide-react';
 
 /**
  * Per-row "Manage Files" launcher — opens the same Evidence & Parity sheet
@@ -150,9 +150,15 @@ interface OrgKpiScopedEntryTableProps {
   totalCount?: number;
   /** KPI display name — passed through so per-row sheets can show context. */
   kpiName?: string;
+  /** ADR-075 — per-row dirty state for explicit Save buttons. */
+  dirtyScopeIds?: Set<string>;
+  /** ADR-075 — per-row in-flight save state. */
+  savingScopeIds?: Set<string>;
+  /** ADR-075 — explicit row Save handler. */
+  onSaveRow?: (scopeId: string) => Promise<void> | void;
 }
 
-export function OrgKpiScopedEntryTable({ rows, onValueChange, scopeLabel, ratingThresholds, targetValue, uom, criteria, employeeObservations, observationCounts, sentBackMap, selectedIds = [], onSelectionChange, onPropagateRow, isPropagating, isComplianceKpi = false, submissionDates, totalCount, kpiName }: OrgKpiScopedEntryTableProps) {
+export function OrgKpiScopedEntryTable({ rows, onValueChange, scopeLabel, ratingThresholds, targetValue, uom, criteria, employeeObservations, observationCounts, sentBackMap, selectedIds = [], onSelectionChange, onPropagateRow, isPropagating, isComplianceKpi = false, submissionDates, totalCount, kpiName, dirtyScopeIds, savingScopeIds, onSaveRow }: OrgKpiScopedEntryTableProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [bulkFillValue, setBulkFillValue] = useState('');
 
