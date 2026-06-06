@@ -96,3 +96,4 @@ Lean-Load: debounce search inputs (>200 rows / network); paginate new lists with
 - [Test Baseline Restoration](mem://infrastructure/test-baseline-restoration) — Migration-scan guards use latest-definition semantics; CREATE OR REPLACE preserves grants
 - [Backup History Safety Drill Verify Action](mem://features/safety/backup-drill-action) — Phase 9.3 admin Flow-B verify button on non-failed Backup History rows; isolated safety_drill schema; production Safety tables read-only
 - [Org KPI Data Entry — explicit Save](mem://features/admin/org-kpi-data-entry-manual-save) — ADR-075. Manual Save (card + per-row); autosave forbidden; Propagate blocked while dirty
+- [Org KPI Owner Canonical Storage](mem://features/admin/org-kpi-key-normalization) — ADR-076. `org_kpi_data_owners` must store KRA/KPI byte-identical to `kpis`; canonicalize on insert; June 2026 repair migration with `org_kpi_owner_key_backup_2026_06`

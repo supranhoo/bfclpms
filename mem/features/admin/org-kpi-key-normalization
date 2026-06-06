@@ -27,3 +27,9 @@ Affected policies brought into compliance:
 
 Backup of pre-canonicalization owner rows: `org_kpi_owner_key_backup_2026_05` (admin-read RLS).
 Parity test: `src/test/orgKpiOwnerNormalization.test.ts`.
+
+## Storage canonicalization (ADR-076, June 2026)
+
+`org_kpi_data_owners` rows MUST store `kra_name` / `kpi_name` byte-identical to the `kpis` master. `useAssignOrgKpiOwner` looks up the canonical text in `kpis` (whitespace-normalized equality) before insert. The dialog (`OrgKpiOwnerDialog`) and access hooks continue to use `.eq()` — they rely on storage being canonical.
+
+Repair migration: `repair_org_kpi_owner_canonical_keys` (June 2026). Backup: `org_kpi_owner_key_backup_2026_06` (admin-read RLS). 3 truly orphan rows (KPI removed from master) left untouched for admin review.

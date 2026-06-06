@@ -3668,3 +3668,10 @@ All URL persistence for dashboard filters, view modes, selected entities, and pa
 - Required: Save buttons (card-level + per-row) gated by dirty state. Propagate buttons must be disabled while dirty.
 - Required: `useUnsavedChanges` hook (or equivalent) registers a `beforeunload` warning while any card has pending edits.
 - Scope is narrow — Self-review, Daily entry, Incentive grids, and Safety modules are NOT bound by this rule.
+
+## §100 — `org_kpi_data_owners` canonical text storage (ADR-076)
+
+- `org_kpi_data_owners.kra_name` and `kpi_name` MUST be byte-identical to the matching row in `kpis`. Whitespace-collapsed variants (e.g. `\n` → `" - "`) are forbidden in storage.
+- `useAssignOrgKpiOwner` MUST canonicalize against `kpis` (whitespace-normalized equality) before insert.
+- The legacy "owner invisible to dialog" symptom is treated as a data-integrity bug, never patched by relaxing read-side `.eq()` lookups.
+- Repair operations MUST snapshot to a dated `org_kpi_owner_key_backup_YYYY_MM` table (admin-read RLS) before rewriting.

@@ -184,12 +184,35 @@ export function useAssignOrgKpiOwner() {
       kpiName: string;
       ownerId: string;
     }) => {
+      // Canonicalize kra/kpi text against the kpis master so the row is
+      // stored byte-identical to the master and exact-match lookups succeed.
+      // RCA: legacy inserts collapsed newlines to " - ", making owner rows
+      // invisible to .eq() lookups in the dialog and access checks.
+      let canonicalKra = kraName;
+      let canonicalKpi = kpiName;
+      try {
+        const norm = (s: string) => (s || '').replace(/\s+/g, ' ').trim();
+        const { data: candidates } = await supabase
+          .from('kpis')
+          .select('kra_name, kpi_name')
+          .eq('category_id', categoryId);
+        const match = (candidates || []).find(
+          (k: any) => norm(k.kra_name) === norm(kraName) && norm(k.kpi_name) === norm(kpiName),
+        );
+        if (match) {
+          canonicalKra = (match as any).kra_name;
+          canonicalKpi = (match as any).kpi_name;
+        }
+      } catch {
+        // fall through with original values
+      }
+
       const { data, error } = await supabase
         .from('org_kpi_data_owners')
         .insert({
           category_id: categoryId,
-          kra_name: kraName,
-          kpi_name: kpiName,
+          kra_name: canonicalKra,
+          kpi_name: canonicalKpi,
           owner_id: ownerId,
           assigned_by: user?.id,
         })
