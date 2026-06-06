@@ -770,7 +770,12 @@ export default function OrgKpiDataEntry() {
         });
       }
     } else if (values.scopedValues) {
-      values.scopedValues.forEach(sv => {
+      // Perf — only persist rows the user actually edited. _touched is set
+      // by OrgKpiEntryCard for every scoped value; missing flag means the
+      // caller didn't narrow (Save & Propagate path) so we treat it as
+      // touched to preserve existing behavior. See ADR-080.
+      const touchedOnly = values.scopedValues.filter(sv => (sv as any)._touched ?? true);
+      touchedOnly.forEach(sv => {
         const isDept = scope === 'department';
         const scopeKey = isDept
           ? `${kpi.category_id}||${kpi.kra_name.toLowerCase()}||${kpi.kpi_name.toLowerCase()}||${sv.scopeId}||null`
