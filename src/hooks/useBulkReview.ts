@@ -147,6 +147,7 @@ export interface BulkReviewRow {
   status: string | null;
   kpi_group_type: string;
   frequency: string | null;
+  frequency_cycle_start: string | null;
   employee_name: string;
   employee_code: string | null;
   submission_id: string | null;
