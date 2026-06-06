@@ -1,42 +1,63 @@
 ## Goal
-The reviewer-stage dropdown on `Bulk Review (Beta)` currently shows all 6 stages to every user. Restrict the visible options to those the signed-in user is actually entitled to act as.
+On Bulk Review, when the user picks a month (e.g. May 2026), hide KPI rows whose cycle is not anchored to that month — i.e. multi-month placeholder siblings that cannot be acted on in the selected month. Provide a toggle to unhide them.
 
-## Visibility matrix
+## Why
+Per `mem://architecture/pms/multimonth-percolation`, multi-month KPIs (Bi-Monthly / Quarterly / Half-Yearly / Yearly) create sibling placeholder rows in every cycle month, but only the **terminal** month is actionable. Today Bulk Review shows all sibling rows as `PENDING`, inflating the matrix and confusing reviewers. POLICY §54 UX Corollary already mandates this filtering pattern on Self-Mode pending banners; Bulk Review needs the same treatment.
 
-| Effective role | Options shown in dropdown |
-|---|---|
-| `admin` | All six (Manager, Functional Manager, Skip-Level, HR PMS, Auditor, Management) |
-| `manager` | Manager (+ Functional Manager only if the user is set as `functional_manager_id` on at least one active profile) |
-| `skip_level` | Skip-Level |
-| `hr_pms` | HR PMS |
-| `auditor` | Auditor |
-| `management` | Management |
-| `employee` / other | (no options — the page is already feature-flag gated, so this is a defensive empty state) |
+Daily KPIs are already excluded by the RPC (`frequency <> 'daily'`), so this only affects Bi-Monthly / Quarterly / Half-Yearly / Yearly.
 
-Note: there is no `functional_manager` app_role. "Functional Manager" is a relationship — a user acts as one when another active profile points to them via `profiles.functional_manager_id`. So a `manager` who is also referenced as a functional manager will see **both** Manager and Functional Manager. This matches how `workflowResolver.ts` and `workflowEngine.ts` already treat the stage.
+## Scope
+UI + one read-only RPC field addition. No write-path, RLS, or business-logic changes.
 
-## Risk & Impact Report
-- **Data:** none — UI-only filter on a static option list plus one `count: 'exact', head: true` query on `profiles`.
-- **Workflow:** none — RPC payload still sends `viewerStage`; we just constrain which value the user can pick.
-- **UI:** dropdown becomes shorter for non-admins; if only one option is allowed it is auto-selected and the trigger still renders (no layout shift). Default `viewerStage` initializer in `BulkReviewDashboard` already maps role → stage; we'll keep it and clamp it to the allowed set.
-- **Regression:** admin behavior unchanged. Existing URL deep-links carrying a `viewerStage` the user isn't allowed to use will fall back to the first allowed stage (logged via toast? No — silent, consistent with current default-pick behavior).
-- **Scalability:** one cached count query per session (staleTime 5 min), gated on `effectiveRole === 'manager'`. Negligible.
-- **Rollback:** revert the single file; no schema or RPC change.
+## Risk & Impact
+- Data Impact: none — read-only filter
+- Workflow Impact: none — same rows still exist; just hidden by default in this view
+- UI Impact: one new toggle pill in the Bulk Review header strip
+- Regression Risk: low. A user could be confused if "their" row disappears — mitigated by default-on toggle with clear label and a badge showing hidden count
+- Backup/Rollback: additive RPC column + UI toggle; trivially revertible
 
-## Plan
+## Technical Plan
 
-1. **`src/pages/review/BulkReviewDashboard.tsx`** — replace the constant `VIEWER_STAGES` consumption with a `useMemo` that filters by `effectiveRole`. Add a small `useIsFunctionalManager()` hook call (see step 2) so the Functional Manager option appears for managers who actually own that relationship. Clamp `viewerStage` state to the allowed list inside an effect (if current value not allowed → set to `allowed[0]`).
+### 1. RPC — expose `frequency_cycle_start`
+Add `k.frequency_cycle_start` to the `SELECT` list of `get_bulk_review_snapshot` (single-line addition in a new migration that `CREATE OR REPLACE`s the function — does not touch `bulk_scope_preview` or any write RPC). Needed because `isKpiLockedForPeriod` requires the cycle start to disambiguate (Jan-Feb vs Feb-Mar Bi-Monthly, etc.) — `mem://features/admin/multi-month-kpi-cycle-ux` forbids silent default fallback.
 
-2. **`src/hooks/useIsFunctionalManager.ts`** (new, ~20 lines) — `useQuery` that runs `supabase.from('profiles').select('id',{count:'exact',head:true}).eq('functional_manager_id', user.id).eq('is_active', true)`. Returns `boolean`. `staleTime: 5 * 60_000`. Enabled only when `user?.id && effectiveRole === 'manager'`.
+### 2. Type — `src/hooks/useBulkReview.ts`
+Add `frequency_cycle_start: string | null` to `BulkReviewRow`.
 
-3. **Tests** — `src/test/bulkReview/viewerStageVisibility.test.ts` covering: admin sees all, each non-admin role sees exactly its own stage, manager + FM flag sees both, unauthorized role sees empty list, clamp logic rewrites an out-of-range `viewerStage`.
+### 3. Pure helper — `src/lib/bulkReviewDueFilter.ts` (new)
+```ts
+isRowDueInPeriod(row, period, year): boolean
+```
+Wraps `isKpiLockedForPeriod` from `@/lib/frequencyUtils`. Returns `true` when the row is the cycle anchor for `(period, year)`; `false` for non-anchor siblings. Daily / Weekly / Monthly always return `true` (single-month, always due).
 
-4. **Docs**
-   - `DOCUMENTATION.md` — short subsection under Bulk Review noting role-scoped reviewer stage.
-   - `POLICY.md` — new clause: "Bulk Review reviewer-stage selector must mirror the user's effective role; Functional Manager is visible only to users referenced as `functional_manager_id` on an active profile; admin sees all."
-   - `mem/features/review/bulk-review-viewer-stage.md` (new) + entry in `mem/index.md`.
-   - `docs/adr/ADR-079.md` — short ADR with rollback = revert the page + delete the hook.
+### 4. `BulkReviewDashboard.tsx`
+- New state `hideNonDue` (default `true`), persisted in localStorage key `bulkReview.hideNonDue`.
+- Add to `loadedRows` memo: when `hideNonDue`, filter out rows where `isRowDueInPeriod(r, period, year) === false`.
+- Header pill next to existing "Hide fully processed" toggle:
+  - Label: "Hide non-due KPIs"
+  - Subtitle/badge: `N hidden` (count of rows filtered out by this rule, regardless of other filters)
+  - Tooltip: "Hides multi-month KPI rows whose cycle does not end in {Month} {Year}. They will become actionable in their cycle's final month."
 
-## Out of scope
-- No change to the RPC, RLS, or grants. The server already enforces per-row visibility; this is a UX clamp, not a security boundary.
-- No change to the master feature-flag (`feature_bulk_review_dashboard`) — pilot membership stays as configured.
+### 5. Tests — `src/test/bulkReview/dueFilter.test.ts`
+- Bi-Monthly Apr-May row hidden when period=April, visible when period=May
+- Quarterly Jan-Mar row hidden Jan/Feb, visible Mar
+- Monthly row always visible
+- Daily handled (already excluded by RPC, but helper returns true defensively)
+- Missing `frequency_cycle_start` for multi-month → log + treat as due (safe default; do not silently hide)
+
+### 6. Docs
+- `DOCUMENTATION.md` — Bulk Review section: add "Hide non-due KPIs" toggle entry
+- `POLICY.md` §54 UX Corollary — extend to cover Bulk Review parity
+- `mem/features/review/bulk-review-non-due-filter.md` (new) + index entry
+- `docs/adr/ADR-079.md` — record decision
+
+## Out of Scope
+- Changing sibling-creation behaviour (still needed for monthly-score "pending" semantics per existing memory)
+- Server-side filtering of non-due rows (kept client-side so admins/auditors can opt-in to see the full matrix)
+- Any change to `bulk_scope_preview` cell counts (would mask the underlying placeholder count, which admins still need for diagnostics)
+
+## Verification
+1. Load May 2026 scope → Bi-Monthly Apr-May KPIs that anchor on May remain visible; ones anchored on April are hidden; counter shows "N hidden"
+2. Toggle off → all rows reappear
+3. Switch to April 2026 → the inverse holds
+4. Vitest suite passes
