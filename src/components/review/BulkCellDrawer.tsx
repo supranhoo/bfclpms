@@ -466,5 +466,12 @@ export function BulkCellDrawer({ row, viewerStage, open, onOpenChange, canReopen
         />
       </SheetContent>
     </Sheet>
+    <KpiTimeline
+      isOpen={timelineOpen}
+      onClose={() => setTimelineOpen(false)}
+      kpi={(detail.data?.kpi as any) ?? null}
+      workflowStages={resolvedWorkflowStages}
+    />
+    </>
   );
 }
