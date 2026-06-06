@@ -1,82 +1,112 @@
-## Problem
 
-Access Profiles let an admin grant `can_add / can_update / can_delete` on menus like `admin-users`, `admin-kpis`, `admin-org-kpis`, etc. to non-admin users. But the underlying tables (`profiles`, `user_roles`, `kpis`, `org_kpi_values`, …) have RLS that only allows `admin` (or owner) writes. Result: the UI shows the action, the user clicks Save, Supabase returns no error (RLS filters the row), and the toast says "Updated successfully" — but **nothing changed**.
+## RCA — Why "Saving…" takes forever (updated)
 
-We already patched `UserManagement.updateUser` with a `.select()` row-count guard. That treats the symptom on one page. The fix needs to be systemic so menu rights and RLS stay aligned.
+Observed on a 95-employee card:
+- Typing in **one row** and clicking the **row-level Save** ⇒ spinner runs for tens of seconds.
+- The card-footer "Saving…" pill stays lit just as long.
+- User's intuition is correct: **a per-row Save is persisting every row on the card**, not just the row that was edited.
 
-## Goal
+Three compounding root causes — confirmed in code:
 
-When an Access Profile grants a write right, the corresponding DB write must either:
-- **(A)** actually succeed (RLS recognizes the profile grant), OR
-- **(B)** fail loudly with a clear "no permission" toast — never a false success.
+### Cause 1 (PRIMARY) — Row Save flushes the entire card payload
+`OrgKpiEntryCard.tsx` L578–600:
+```text
+performSave(scopeId?) {
+  ...
+  await onSave(getValues());   // <-- getValues() returns ALL 95 scopedValues
+}
+```
+`getValues()` returns the full form state. `handleSaveRow(scopeId)` only updates the **UI spinner** for that row — it does not narrow the payload. So a row-level Save sends the whole card to the server, exactly what you suspected.
 
-## Approach (two layers, both required)
+The `_touched: true/false` flag is already attached per row at L550, but it is **never read** by the caller — see Cause 2.
 
-### Layer 1 — DB: teach RLS about profile-based rights (SSOT)
+### Cause 2 — `_touched` filter computed but ignored in `handleCardSave`
+`src/pages/admin/OrgKpiDataEntry.tsx` L772–813 iterates `values.scopedValues` and pushes **every** row into `toSave`, regardless of `_touched`. Combined with Cause 1, one keystroke → 95 rows pushed downstream.
 
-1. Add a SECURITY DEFINER helper:
-   ```
-   public.has_menu_right(_user_id uuid, _menu_key text, _action text) returns boolean
-   ```
-   Reads `access_profile_assignments` → `access_profile_menu_rights`, returns true if `can_view/add/update/delete` matches. `stable`, `search_path=public`.
+### Cause 3 — `useBulkUpsertOrgKpiValues` is serial N+1
+`src/hooks/useOrgKpiValues.ts` L207–347 is "bulk" in name only:
+```text
+for (const value of values) {
+  await select.maybeSingle();           // round-trip 1
+  if (existing) await update.single();  // round-trip 2
+  else          await insert.maybeSingle();
+}
+```
+95 rows × 2 sequential round-trips × ~80–200 ms ≈ **15–60 s**, matching the "saving forever" UX.
 
-2. Extend RLS policies on the tables that the admin-menu pages actually write to, using `has_menu_right`. Scope (minimum, conservative set tied to existing menu_keys):
-   - `profiles` — UPDATE: allow if `has_menu_right(auth.uid(), 'admin-users', 'update')`. INSERT: `'admin-users','add'`. (DELETE stays admin-only.)
-   - `user_roles` — INSERT/DELETE: `'admin-users','update'` (role grant is part of editing a user).
-   - `menu_access_user_overrides` — INSERT/DELETE: `'admin-menu-access','update'`.
-   - `access_profile_assignments` — INSERT/DELETE: `'admin-access-profiles','update'`.
-   - Any other admin menus the user wants delegated → add in same pattern. We will enumerate during build and confirm before extending past `admin-users`.
+### Cause 4 (minor) — Broad cache invalidation on success
+`onSuccess` invalidates the entire `org-kpi-values` key, refetching the whole period and re-rendering 95 rows immediately after save — keeps the screen busy and re-fires the spinner if the user is already typing in the next row.
 
-3. Add `WITH CHECK` mirrors for every new policy (per project rule on workflow transitions).
-
-4. Migration is **additive**: existing admin-only policies stay; new policies are `OR`-ed by Postgres' permissive-policy semantics. Rollback = drop the new policies.
-
-### Layer 2 — Frontend: universal silent-RLS guard
-
-5. Add `src/lib/db/assertRowsTouched.ts`:
-   ```ts
-   assertRowsTouched(rows, error, menuKey, action)
-   ```
-   Throws a uniform `PermissionError` with toast-ready copy: *"Your access profile does not allow {action} on {menuLabel}. Ask an admin to grant the right or perform the change."*
-
-6. Wrap every admin-page mutation that currently does `.update()/.insert()/.delete()` on a profile-protected table to:
-   - append `.select('id')`
-   - call `assertRowsTouched(...)`
-   Pages to update (initial sweep — confirm scope below):
-   - `src/pages/admin/UserManagement.tsx` (extend existing guard to insert + role grant + bulk)
-   - `src/pages/admin/AccessProfiles.tsx` (assignments, menu rights save)
-   - `src/pages/admin/MenuAccess.tsx` (user overrides)
-   - `src/hooks/useAccessProfiles.ts` (`saveMenuRights`, `assignUser`, `removeAssignment`)
-   - `src/hooks/useMenuAccess.ts` (`grantUserMenuAccess`, `revokeUserMenuAccess`)
-
-7. `useMenuAccess.canPerform(menuKey, action)` already exists. Audit the four admin pages above and disable buttons / hide actions when `canPerform` returns false, so the user sees the gate **before** clicking (defence in depth; the DB+toast guard remain the source of truth).
-
-### Layer 3 — Tests & docs
-
-8. Tests (vitest):
-   - `accessProfileRlsAlignment.test.ts` — table of (menu_key, action, table) → guard throws when RLS filters, passes otherwise (using the same shape as `userManagementSilentRlsGuard.test.ts`).
-   - Extend existing silent-RLS test with insert + role-grant cases.
-
-9. Docs:
-   - `DOCUMENTATION.md` → Access Profiles section: add "How profile grants reach the database" diagram + `has_menu_right` contract.
-   - `POLICY.md` → Access Profiles: "A menu right is binding only if (a) RLS recognizes it via `has_menu_right`, or (b) the user already has the underlying role. Otherwise the action is blocked with a permission toast — never a silent success."
-   - New ADR `docs/adr/ADR-079.md`: "Access-Profile / RLS alignment".
-   - Memory update: `mem://features/admin/profile-based-menu-access` → note `has_menu_right` SSOT and the universal guard.
+## Net effect
+- 1 keystroke + 1 row Save click  ⇒  full-card payload (95 rows)  ⇒  190 sequential DB round-trips  ⇒  multi-second spinner.
+- Card-footer Save behaves identically (same `performSave` path), which is why both spinners appear "stuck for all rows".
 
 ## Risk & Impact
 
-- **Data:** additive RLS policies only; no schema changes; existing admin flows unchanged.
-- **Security:** widening write access to non-admins who hold the matching profile right. **Need explicit user sign-off on which menus to delegate** (default proposal = `admin-users` only for v1).
-- **Regression:** low — `assertRowsTouched` only converts a hidden no-op into a visible error.
-- **Scalability:** `has_menu_right` is one indexed lookup per row; fine.
-- **Rollback:** drop new policies + revert frontend wrappers; helper function can stay.
+- **Data:** no loss; upsert semantics unchanged. Fix is additive (new RPC) + payload narrowing.
+- **Workflow:** identical save guarantees (composite-key upsert).
+- **UI:** "Saving…" pill clears in <1 s for a 1-row edit and in <2 s for 95-row bulk paste.
+- **Regression:** medium — shared path with Save & Propagate, Compliance sub-factor save, FK/RLS skip toasts. Mitigation: preserve existing skip/FK toasts; preserve 23505 unique-violation retry; covered by new unit tests.
+- **Scalability:** O(N) round-trips → O(1) per Save click. Critical for 1,000-row Compliance KPI cards too.
+- **Rollback:** revert 3 files; the new RPC stays harmless if unused.
 
-## Clarifying questions before I write the plan as code
+## Plan
 
-1. For v1, should DB-level delegation cover **only `admin-users`** (the menu Avinash used), or also `admin-access-profiles`, `admin-menu-access`, and other admin menus? My recommendation: start with `admin-users` to keep blast radius small.
-2. Should profile-granted users be able to change a target user's **role** (`user_roles`), or only profile fields (name, status, manager)? Today the UI exposes both; safer default is **profile fields only**, role changes remain admin-only.
-3. OK to disable (grey-out) admin-page action buttons when `canPerform` is false, in addition to the toast? Or keep buttons live and rely on the toast?
+### Step 1 — Row Save sends only the touched row (PRIMARY FIX)
+File: `src/components/admin/OrgKpiEntryCard.tsx`
+- `performSave(scopeId?)` builds a **filtered** payload: when `scopeId` is passed, include only that row's scopedValue; when no scopeId (card Save), include only rows where `_touched === true`.
+- Card-level `getValues()` keeps returning the full state for compatibility with `Save & Propagate` (which must consider every row).
 
-## Out of scope
-- Reworking the menu_access vs access_profiles dual model.
-- Any change to `pms-policy` visibility (BUG-042 path stays).
+Verification: vitest — `performSave('abc-123')` produces a 1-row payload; `performSave()` after editing 3 rows produces a 3-row payload; Save & Propagate still produces all 95.
+
+### Step 2 — `handleCardSave` honors `_touched` defensively
+File: `src/pages/admin/OrgKpiDataEntry.tsx` L772
+- Filter `values.scopedValues.filter(sv => sv._touched ?? true)` before building `toSave` (the `?? true` keeps Save & Propagate working when the field is absent).
+- Compliance sub-factor branch keeps its existing override (sub_factors present ⇒ always persist).
+
+Verification: vitest — typing in 1 row produces `toSave.length === 1`; 10-row paste produces 10; Save & Propagate still passes full set.
+
+### Step 3 — Single round-trip bulk upsert RPC
+Migration: `public.bulk_upsert_org_kpi_values(p_rows jsonb)` SECURITY INVOKER, returns `(id uuid, was_insert boolean)`. Uses `INSERT … ON CONFLICT ON CONSTRAINT idx_org_kpi_values_unique_scope DO UPDATE`. GRANT EXECUTE to `authenticated`, `service_role`.
+
+Rewrite `useBulkUpsertOrgKpiValues` to call the RPC once (chunked at 500 defensively); keep the existing per-row loop only as fallback when the RPC is unavailable (resilience during rollout). Pipe result through `assertRowsTouched` (ADR-079) so any RLS-silently-dropped row surfaces a destructive toast instead of fake "Saved".
+
+Verification: vitest mocks `supabase.rpc` — 1 RPC call for any payload up to 500; correct chunking at 501+. SQL test confirms 95 rows persist in one statement and RLS still rejects out-of-scope rows.
+
+### Step 4 — Narrow cache invalidation
+In `onSuccess`, invalidate only the active card's key (`['org-kpi-values', period, year, category_id, kra_name, kpi_name]`) plus the existing evidence keys. Other cards stay warm.
+
+Verification: React Query devtools — only the active card refetches after save.
+
+### Step 5 — Tests + docs (per project SSOT rule)
+- `src/test/orgKpiEntryCardRowSave.test.ts` — row Save payload size.
+- `src/test/orgKpiHandleCardSave.test.ts` — `_touched` filter.
+- `src/test/orgKpiBulkUpsert.test.ts` — RPC happy path, chunking, partial RLS reject, 23505 fallback.
+- ADR-080 documenting the fix.
+- DOCUMENTATION.md + POLICY.md changelog entries.
+- Update `mem://features/admin/org-kpi-data-entry-manual-save` with the new save contract (row Save = touched row only; card Save = touched rows only; Save & Propagate = all rows).
+
+## UI Changes
+
+- No visual redesign.
+- Row Save spinner clears in <1 s for a single-row edit.
+- Card-footer "Saving…" pill (L1275) clears in <2 s for a typical 95-row bulk paste, vs 15–60 s today.
+- "Unsaved — wait for autosave, then Propagate" hint (L708) unchanged — the wait window just becomes much shorter.
+
+## Files touched
+
+- src/components/admin/OrgKpiEntryCard.tsx  (row Save payload narrowing)
+- src/pages/admin/OrgKpiDataEntry.tsx  (filter `_touched`)
+- src/hooks/useOrgKpiValues.ts  (rewrite bulk upsert to use RPC)
+- supabase/migrations/<new>.sql  (new RPC + GRANT)
+- src/test/orgKpiEntryCardRowSave.test.ts  (new)
+- src/test/orgKpiHandleCardSave.test.ts  (new)
+- src/test/orgKpiBulkUpsert.test.ts  (new)
+- docs/adr/ADR-080.md  (new)
+- DOCUMENTATION.md, POLICY.md  (changelog)
+- mem/features/admin/org-kpi-data-entry-manual-save.md  (update)
+
+## Open question
+
+OK to ship the bulk RPC as **SECURITY INVOKER** (RLS still enforced per row; silently-rejected rows surface via `assertRowsTouched`)? Alternative: SECURITY DEFINER with `has_menu_right('admin-org-kpi','update')` — stricter but couples the RPC to the menu-rights model.  
+**Recommendation: SECURITY INVOKER**, matching every other Org KPI write path today.
