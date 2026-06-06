@@ -586,8 +586,8 @@ export function AppSidebar() {
           items={resolveGroupItems("hr_pms", menuItems.hr_pms)}
           isOpen={openSections.has('hr_pms')}
           onToggle={() => toggleSection('hr_pms')}
-          filterByRole={(items) => gateReviewNotes(filterByRole(items))}
-          staticFilter={(items) => gateReviewNotes(staticRoleFilter(items))}
+          filterByRole={(items) => gateReviewNotes(filterByRole(items as any)) as any}
+          staticFilter={(items) => gateReviewNotes(staticRoleFilter(items as any)) as any}
           currentPath={location.pathname + location.search}
           onNavigate={handleNavigation}
           hasActiveRoute={resolvedSectionForPath(location.pathname, location.search) === 'hr_pms'}
