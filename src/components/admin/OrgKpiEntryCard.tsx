@@ -36,6 +36,8 @@ import {
 import { OrgKpiEvidenceManagerSheet, type OrgKpiEvidenceScopeOption } from '@/components/admin/OrgKpiEvidenceManagerSheet';
 import { OrgKpiEvidenceStatusChip } from '@/components/admin/OrgKpiEvidenceStatusChip';
 import { OrgKpiParityBadge } from '@/components/admin/OrgKpiParityBadge';
+import { useUnsavedChanges } from '@/hooks/useUnsavedChanges';
+import { Save } from 'lucide-react';
 
 export interface OrgKpiCardData {
   categoryId: string;
@@ -212,7 +214,17 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
   const touchedEvidenceScopeIdsRef = useRef<Set<string>>(new Set());
 
   const [isPropagating, setIsPropagating] = useState(false);
-  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
+  // ADR-075 — explicit Save replaces 2s autosave. saveStatus pill now also
+  // surfaces 'unsaved' (amber) and 'error' (red) so users are never left
+  // wondering whether their typing was persisted.
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'unsaved' | 'saving' | 'saved' | 'error'>('idle');
+  // Per-scope-row dirty tracker for the Save buttons in the scoped table.
+  const [dirtyScopeIds, setDirtyScopeIds] = useState<Set<string>>(new Set());
+  // Card-level dirty flag (org-scope inputs + the N/A toggle on any scope).
+  const [cardDirty, setCardDirty] = useState(false);
+  // Per-row spinner while a row's Save is in flight.
+  const [savingRowIds, setSavingRowIds] = useState<Set<string>>(new Set());
+  const [isSavingCard, setIsSavingCard] = useState(false);
   const [showRepairDialog, setShowRepairDialog] = useState(false);
   const [repairRows, setRepairRows] = useState<DiagnoseGapRow[] | null>(null);
   const [showEvidenceSheet, setShowEvidenceSheet] = useState(false);
@@ -365,7 +377,6 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
       setRepairRows(rows);
     } catch { /* ignore */ }
   }, [repairGap, diagnoseGap, data.categoryId, data.kraName, data.kpiName, reviewPeriod, reviewYear]);
-  const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isDirtyRef = useRef(false);
   const kpiIdentityRef = useRef('');
 
@@ -542,30 +553,63 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
     };
   }, [data.scope, isNa, naRemarks, isCompliance, submissionDates]);
 
-  // Auto-save with debounce
-  const triggerAutoSave = useCallback(() => {
+  // ADR-075 — explicit Save model (replaces 2s autosave). Field edits mark
+  // the row/card as dirty; persistence happens only when the user clicks
+  // Save on the card or a scoped row.
+  const markDirty = useCallback((scopeId?: string) => {
     isDirtyRef.current = true;
-    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
-    autoSaveTimerRef.current = setTimeout(async () => {
-      if (!isDirtyRef.current) return;
-      setSaveStatus('saving');
-      try {
-        await onSave(getValues());
-        isDirtyRef.current = false;
-        setSaveStatus('saved');
-        setTimeout(() => setSaveStatus('idle'), 3000);
-      } catch {
-        setSaveStatus('idle');
+    if (scopeId) {
+      setDirtyScopeIds(prev => (prev.has(scopeId) ? prev : new Set(prev).add(scopeId)));
+    } else {
+      setCardDirty(true);
+    }
+    setSaveStatus(prev => (prev === 'saving' ? prev : 'unsaved'));
+  }, []);
+
+  const clearAllDirty = useCallback(() => {
+    isDirtyRef.current = false;
+    setCardDirty(false);
+    setDirtyScopeIds(new Set());
+  }, []);
+
+  // Shared save flow. `onSave` already filters to touched scope rows server-
+  // side via `_touched`, so a row-level Save still flushes the entire
+  // touched batch — we just track per-row UI affordances.
+  const performSave = useCallback(async (scopeId?: string) => {
+    if (scopeId) setSavingRowIds(prev => new Set(prev).add(scopeId));
+    else setIsSavingCard(true);
+    setSaveStatus('saving');
+    try {
+      await onSave(getValues());
+      clearAllDirty();
+      setSaveStatus('saved');
+      setTimeout(() => setSaveStatus(prev => (prev === 'saved' ? 'idle' : prev)), 3000);
+    } catch {
+      setSaveStatus('error');
+    } finally {
+      if (scopeId) {
+        setSavingRowIds(prev => {
+          const next = new Set(prev);
+          next.delete(scopeId);
+          return next;
+        });
+      } else {
+        setIsSavingCard(false);
       }
-    }, 2000);
-  }, [onSave, getValues]);
+    }
+  }, [onSave, getValues, clearAllDirty]);
+
+  const handleSaveCard = useCallback(() => performSave(), [performSave]);
+  const handleSaveRow = useCallback((scopeId: string) => performSave(scopeId), [performSave]);
+
+  // Warn before unload when any pending edit exists on this card.
+  useUnsavedChanges(cardDirty || dirtyScopeIds.size > 0);
 
   const handleSaveAndPropagate = async (filterIds?: string[]) => {
-    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
     setIsPropagating(true);
     try {
       await onSaveAndPropagate(getValues(), filterIds);
-      isDirtyRef.current = false;
+      clearAllDirty();
       setSaveStatus('saved');
       setSelectedScopeIds([]);
     } finally {
@@ -595,7 +639,7 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
       if (field === 'evidenceUrl') return { ...r, evidenceUrl: value };
       return { ...r, [field]: value || '' };
     }));
-    triggerAutoSave();
+    markDirty(scopeId);
   };
 
   // For scoped KPIs (department / employee) the card-level `status` is a
@@ -626,7 +670,7 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
 
   return (
     <>
-    <Card className={`transition-all min-w-0 overflow-hidden ${isDirtyRef.current ? 'ring-1 ring-primary/30' : ''} ${
+    <Card className={`transition-all min-w-0 overflow-hidden ${(cardDirty || dirtyScopeIds.size > 0) ? 'ring-1 ring-amber-400/50' : ''} ${
       isNa ? 'border-l-4 border-l-orange-400' :
       data.status === 'propagated' ? 'border-l-4 border-l-green-500' :
       data.status === 'entered' ? 'border-l-4 border-l-primary' :
@@ -712,8 +756,7 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
                 checked={isNa}
                 onCheckedChange={(checked) => {
                   setIsNa(checked);
-                  isDirtyRef.current = true;
-                  triggerAutoSave();
+                  markDirty();
                 }}
               />
               <Label htmlFor={`na-toggle-${data.categoryId}-${data.kpiName}`} className="text-xs font-medium cursor-pointer">
@@ -741,7 +784,7 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
                   })()}
                   onChange={(label, rating) => {
                     setAchievedValue(rating.toString());
-                    triggerAutoSave();
+                    markDirty();
                   }}
                   disabled={isLocked}
                   className="h-9"
@@ -751,7 +794,7 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
                   <Input
                     type="number"
                     value={achievedValue}
-                    onChange={(e) => { setAchievedValue(e.target.value); triggerAutoSave(); }}
+                    onChange={(e) => { setAchievedValue(e.target.value); markDirty(); }}
                     placeholder="Achieved value"
                     className="h-9"
                     disabled={isLocked}
@@ -775,7 +818,7 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
               )}
               <Input
                 value={remarks}
-                onChange={(e) => { setRemarks(e.target.value); triggerAutoSave(); }}
+                onChange={(e) => { setRemarks(e.target.value); markDirty(); }}
                 placeholder="Remark"
                 className="h-9"
                 disabled={isLocked}
@@ -786,9 +829,25 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
                   onUploadComplete={(url) => {
                     orgEvidenceTouchedRef.current = true;
                     setEvidenceUrl(url);
-                    triggerAutoSave();
+                    markDirty();
                   }}
                 />
+              )}
+              {/* ADR-075 — explicit Save (org scope). Disabled until the
+                  user actually changes a field. */}
+              {!isLocked && (
+                <div className="flex justify-end">
+                  <Button
+                    size="sm"
+                    variant="default"
+                    className="h-8 text-xs gap-1"
+                    disabled={!cardDirty || isSavingCard}
+                    onClick={handleSaveCard}
+                  >
+                    {isSavingCard ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+                    Save
+                  </Button>
+                </div>
               )}
             </div>
           )}
@@ -804,11 +863,25 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
               </Alert>
               <Textarea
                 value={naRemarks}
-                onChange={(e) => { setNaRemarks(e.target.value); triggerAutoSave(); }}
+                onChange={(e) => { setNaRemarks(e.target.value); markDirty(); }}
                 placeholder="Reason for marking as N/A (required)"
                 rows={2}
                 disabled={isLocked}
               />
+              {!isLocked && (
+                <div className="flex justify-end">
+                  <Button
+                    size="sm"
+                    variant="default"
+                    className="h-8 text-xs gap-1"
+                    disabled={!cardDirty || isSavingCard}
+                    onClick={handleSaveCard}
+                  >
+                    {isSavingCard ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+                    Save
+                  </Button>
+                </div>
+              )}
             </div>
           )}
 
@@ -845,6 +918,9 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
               isComplianceKpi={isCompliance}
               submissionDates={submissionDates}
               kpiName={data.kpiName}
+              dirtyScopeIds={dirtyScopeIds}
+              savingScopeIds={savingRowIds}
+              onSaveRow={handleSaveRow}
             />
             </>
           )}
@@ -1123,6 +1199,8 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
                           })));
                           isDirtyRef.current = false;
                           setSaveStatus('idle');
+                          setCardDirty(false);
+                          setDirtyScopeIds(new Set());
                         } finally {
                           setIsClearing(false);
                         }
@@ -1187,6 +1265,11 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
           </div>
           {!isLocked && (
             <div className="flex items-center gap-2 flex-wrap">
+              {saveStatus === 'unsaved' && (
+                <span className="text-xs text-amber-700 dark:text-amber-400 flex items-center gap-1">
+                  <AlertTriangle className="h-3 w-3" />Unsaved changes
+                </span>
+              )}
               {saveStatus === 'saving' && (
                 <span className="text-xs text-muted-foreground flex items-center gap-1">
                   <Loader2 className="h-3 w-3 animate-spin" />Saving...
@@ -1197,12 +1280,17 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
                   <CheckCircle2 className="h-3 w-3" />Saved
                 </span>
               )}
+              {saveStatus === 'error' && (
+                <span className="text-xs text-destructive flex items-center gap-1">
+                  <AlertTriangle className="h-3 w-3" />Save failed
+                </span>
+              )}
 
               {/* Propagate Selected button — only when selections exist */}
               {selectedScopeIds.length > 0 && data.scope !== 'organization' && (
                 <AlertDialog>
                   <AlertDialogTrigger asChild>
-                    <Button size="sm" variant="outline" className="h-7 text-xs gap-1" disabled={isPropagating}>
+                    <Button size="sm" variant="outline" className="h-7 text-xs gap-1" disabled={isPropagating || cardDirty || dirtyScopeIds.size > 0} title={cardDirty || dirtyScopeIds.size > 0 ? 'Save unsaved changes first' : undefined}>
                       {isPropagating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ArrowUpRight className="h-3.5 w-3.5" />}
                       Propagate Selected ({selectedScopeIds.length})
                     </Button>
@@ -1244,7 +1332,7 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
               {/* Main Propagate All button */}
               <AlertDialog>
                 <AlertDialogTrigger asChild>
-                  <Button size="sm" className="h-7 text-xs" disabled={isPropagating || !(data.scope === 'organization' ? (isNa || achievedValue.trim() !== '') : (isNa || scopedValues.some(sv => sv.achievedValue !== null || sv.isNa)))}>
+                  <Button size="sm" className="h-7 text-xs" disabled={isPropagating || cardDirty || dirtyScopeIds.size > 0 || !(data.scope === 'organization' ? (isNa || achievedValue.trim() !== '') : (isNa || scopedValues.some(sv => sv.achievedValue !== null || sv.isNa)))} title={cardDirty || dirtyScopeIds.size > 0 ? 'Save unsaved changes first' : undefined}>
                     {isPropagating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ArrowUpRight className="h-3.5 w-3.5 mr-1" />}
                     Propagate
                   </Button>

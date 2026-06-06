@@ -17,7 +17,7 @@ import { isValueOutOfRange, RatingThresholds, calculateRating } from '@/lib/rati
 import { RatingBadge } from '@/components/ui/RatingBadge';
 import { QualitativeSelect } from '@/components/review/QualitativeSelect';
 import { BINARY_OPTIONS, type QualitativeOption } from '@/lib/qualitativeUom';
-import { ChevronDown, ChevronRight, Building2, AlertTriangle, Ban, TrendingUp, TrendingDown, MessageSquare, ArrowUpRight, Undo2, CheckCircle2, Clock } from 'lucide-react';
+import { ChevronDown, ChevronRight, Building2, AlertTriangle, Ban, TrendingUp, TrendingDown, MessageSquare, ArrowUpRight, Undo2, CheckCircle2, Clock, Save, Loader2 } from 'lucide-react';
 
 /**
  * Per-row "Manage Files" launcher — opens the same Evidence & Parity sheet
@@ -150,9 +150,15 @@ interface OrgKpiScopedEntryTableProps {
   totalCount?: number;
   /** KPI display name — passed through so per-row sheets can show context. */
   kpiName?: string;
+  /** ADR-075 — per-row dirty state for explicit Save buttons. */
+  dirtyScopeIds?: Set<string>;
+  /** ADR-075 — per-row in-flight save state. */
+  savingScopeIds?: Set<string>;
+  /** ADR-075 — explicit row Save handler. */
+  onSaveRow?: (scopeId: string) => Promise<void> | void;
 }
 
-export function OrgKpiScopedEntryTable({ rows, onValueChange, scopeLabel, ratingThresholds, targetValue, uom, criteria, employeeObservations, observationCounts, sentBackMap, selectedIds = [], onSelectionChange, onPropagateRow, isPropagating, isComplianceKpi = false, submissionDates, totalCount, kpiName }: OrgKpiScopedEntryTableProps) {
+export function OrgKpiScopedEntryTable({ rows, onValueChange, scopeLabel, ratingThresholds, targetValue, uom, criteria, employeeObservations, observationCounts, sentBackMap, selectedIds = [], onSelectionChange, onPropagateRow, isPropagating, isComplianceKpi = false, submissionDates, totalCount, kpiName, dirtyScopeIds, savingScopeIds, onSaveRow }: OrgKpiScopedEntryTableProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [bulkFillValue, setBulkFillValue] = useState('');
 
@@ -323,7 +329,7 @@ export function OrgKpiScopedEntryTable({ rows, onValueChange, scopeLabel, rating
                 <TableHead className="text-xs min-w-[220px]">Remark</TableHead>
                 <TableHead className="text-xs w-24">File</TableHead>
                 {hasRowPropagation && (
-                  <TableHead className="text-xs w-16 text-center">Actions</TableHead>
+                  <TableHead className="text-xs w-28 text-center">Actions</TableHead>
                 )}
               </TableRow>
             </TableHeader>
@@ -351,6 +357,9 @@ export function OrgKpiScopedEntryTable({ rows, onValueChange, scopeLabel, rating
                     isComplianceKpi={isComplianceKpi}
                     submissionDates={submissionDates}
                     kpiName={kpiName}
+                    dirtyScopeIds={dirtyScopeIds}
+                    savingScopeIds={savingScopeIds}
+                    onSaveRow={onSaveRow}
                   />
                 ))
               ) : (
@@ -371,6 +380,9 @@ export function OrgKpiScopedEntryTable({ rows, onValueChange, scopeLabel, rating
                     hasSelectionFeature={hasSelectionFeature}
                     hasRowPropagation={hasRowPropagation}
                     kpiName={kpiName}
+                    isDirty={!!dirtyScopeIds?.has(row.scopeId)}
+                    isSavingRow={!!savingScopeIds?.has(row.scopeId)}
+                    onSaveRow={onSaveRow}
                   />
                 ))
               )}
@@ -403,9 +415,12 @@ interface EmployeeGroupProps {
   isComplianceKpi?: boolean;
   submissionDates?: Map<string, { complete: boolean; date: string | null; pendingCount: number }>;
   kpiName?: string;
+  dirtyScopeIds?: Set<string>;
+  savingScopeIds?: Set<string>;
+  onSaveRow?: (scopeId: string) => Promise<void> | void;
 }
 
-function EmployeeGroup({ group, onValueChange, ratingThresholds, targetValue, uom, criteria, employeeObservations, observationCounts, sentBackMap, selectedIds, onToggleRow, onPropagateRow, isPropagating, totalColSpan, hasSelectionFeature, hasRowPropagation, isComplianceKpi, submissionDates, kpiName }: EmployeeGroupProps) {
+function EmployeeGroup({ group, onValueChange, ratingThresholds, targetValue, uom, criteria, employeeObservations, observationCounts, sentBackMap, selectedIds, onToggleRow, onPropagateRow, isPropagating, totalColSpan, hasSelectionFeature, hasRowPropagation, isComplianceKpi, submissionDates, kpiName, dirtyScopeIds, savingScopeIds, onSaveRow }: EmployeeGroupProps) {
   return (
     <>
       <TableRow key={`group-${group.dept ?? 'none'}`} className="bg-muted/50 hover:bg-muted/50">
@@ -443,6 +458,9 @@ function EmployeeGroup({ group, onValueChange, ratingThresholds, targetValue, uo
           isComplianceKpi={isComplianceKpi}
           submissionDateInfo={submissionDates?.get(row.scopeId)}
           kpiName={kpiName}
+          isDirty={!!dirtyScopeIds?.has(row.scopeId)}
+          isSavingRow={!!savingScopeIds?.has(row.scopeId)}
+          onSaveRow={onSaveRow}
         />
       ))}
     </>
@@ -520,34 +538,60 @@ function RowStatusPill({ status, reason }: { status?: ScopedRow['status']; reaso
 }
 
 // ---- Per-row propagate cell with confirmation dialog ----
-function PerRowPropagateCell({ canPropagate, isPropagating, employeeName, onConfirm }: {
+function PerRowPropagateCell({ canPropagate, isPropagating, employeeName, onConfirm, isDirty, isSavingRow, onSaveRow }: {
   canPropagate: boolean;
   isPropagating?: boolean;
   employeeName: string;
   onConfirm: () => void;
+  isDirty?: boolean;
+  isSavingRow?: boolean;
+  onSaveRow?: () => void;
 }) {
   const [confirmOpen, setConfirmOpen] = useState(false);
 
   return (
-    <TableCell className="py-1.5 w-16 text-center">
-      <TooltipProvider>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 w-7 p-0"
-              disabled={!canPropagate || isPropagating}
-              onClick={() => setConfirmOpen(true)}
-            >
-              <ArrowUpRight className="h-3.5 w-3.5" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent side="top" className="text-xs">
-            Propagate this employee only
-          </TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
+    <TableCell className="py-1.5 w-28 text-center">
+      <div className="flex items-center justify-center gap-1">
+        {/* ADR-075 — explicit per-row Save */}
+        {onSaveRow && (
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant={isDirty ? 'default' : 'ghost'}
+                  size="sm"
+                  className="h-7 w-7 p-0"
+                  disabled={!isDirty || isSavingRow}
+                  onClick={() => onSaveRow()}
+                >
+                  {isSavingRow ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="top" className="text-xs">
+                {isDirty ? `Save changes for ${employeeName}` : 'No unsaved changes'}
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        )}
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 w-7 p-0"
+                disabled={!canPropagate || isPropagating || isDirty}
+                onClick={() => setConfirmOpen(true)}
+              >
+                <ArrowUpRight className="h-3.5 w-3.5" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="top" className="text-xs">
+              {isDirty ? 'Save row before propagating' : 'Propagate this employee only'}
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      </div>
 
       <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <AlertDialogContent>
@@ -590,9 +634,12 @@ interface EmployeeRowProps {
   isComplianceKpi?: boolean;
   submissionDateInfo?: { complete: boolean; date: string | null; pendingCount: number };
   kpiName?: string;
+  isDirty?: boolean;
+  isSavingRow?: boolean;
+  onSaveRow?: (scopeId: string) => Promise<void> | void;
 }
 
-function EmployeeRow({ row, onValueChange, ratingThresholds, targetValue, uom, criteria, observations, observationCounts: legacyCounts, sentBackInfo, isSelected, onToggleRow, onPropagateRow, isPropagating, totalColSpan, hasSelectionFeature, hasRowPropagation, isComplianceKpi, submissionDateInfo, kpiName }: EmployeeRowProps) {
+function EmployeeRow({ row, onValueChange, ratingThresholds, targetValue, uom, criteria, observations, observationCounts: legacyCounts, sentBackInfo, isSelected, onToggleRow, onPropagateRow, isPropagating, totalColSpan, hasSelectionFeature, hasRowPropagation, isComplianceKpi, submissionDateInfo, kpiName, isDirty, isSavingRow, onSaveRow }: EmployeeRowProps) {
   const [expanded, setExpanded] = useState(false);
 
   const effectiveTarget = row.targetValue != null ? row.targetValue : targetValue;
@@ -932,6 +979,9 @@ function EmployeeRow({ row, onValueChange, ratingThresholds, targetValue, uom, c
             isPropagating={isPropagating}
             employeeName={row.scopeName}
             onConfirm={() => onPropagateRow?.(row.scopeId)}
+            isDirty={isDirty}
+            isSavingRow={isSavingRow}
+            onSaveRow={onSaveRow ? () => onSaveRow(row.scopeId) : undefined}
           />
         )}
       </TableRow>
@@ -1000,9 +1050,12 @@ interface DepartmentRowProps {
   hasSelectionFeature: boolean;
   hasRowPropagation: boolean;
   kpiName?: string;
+  isDirty?: boolean;
+  isSavingRow?: boolean;
+  onSaveRow?: (scopeId: string) => Promise<void> | void;
 }
 
-function DepartmentRow({ row, onValueChange, ratingThresholds, targetValue, uom, criteria, sentBackInfo, isSelected, onToggleRow, onPropagateRow, isPropagating, hasSelectionFeature, hasRowPropagation, kpiName }: DepartmentRowProps) {
+function DepartmentRow({ row, onValueChange, ratingThresholds, targetValue, uom, criteria, sentBackInfo, isSelected, onToggleRow, onPropagateRow, isPropagating, hasSelectionFeature, hasRowPropagation, kpiName, isDirty, isSavingRow, onSaveRow }: DepartmentRowProps) {
   const rowIsNa = row.isNa ?? false;
   const effectiveTarget = row.targetValue != null ? row.targetValue : targetValue;
   const effectiveUom = row.uom != null ? row.uom : uom;
@@ -1142,25 +1195,47 @@ function DepartmentRow({ row, onValueChange, ratingThresholds, targetValue, uom,
         )}
       </TableCell>
       {hasRowPropagation && (
-        <TableCell className="py-1.5 w-16 text-center">
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 w-7 p-0"
-                  disabled={!canPropagate}
-                  onClick={() => onPropagateRow?.(row.scopeId)}
-                >
-                  <ArrowUpRight className="h-3.5 w-3.5" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="top" className="text-xs">
-                Propagate this department only
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
+        <TableCell className="py-1.5 w-28 text-center">
+          <div className="flex items-center justify-center gap-1">
+            {onSaveRow && (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant={isDirty ? 'default' : 'ghost'}
+                      size="sm"
+                      className="h-7 w-7 p-0"
+                      disabled={!isDirty || isSavingRow}
+                      onClick={() => onSaveRow(row.scopeId)}
+                    >
+                      {isSavingRow ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="text-xs">
+                    {isDirty ? `Save changes for ${row.scopeName}` : 'No unsaved changes'}
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 w-7 p-0"
+                    disabled={!canPropagate || isDirty}
+                    onClick={() => onPropagateRow?.(row.scopeId)}
+                  >
+                    <ArrowUpRight className="h-3.5 w-3.5" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="text-xs">
+                  {isDirty ? 'Save row before propagating' : 'Propagate this department only'}
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </div>
         </TableCell>
       )}
     </TableRow>
