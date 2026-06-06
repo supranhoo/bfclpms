@@ -8,6 +8,7 @@ import { useIsAnyOrgKpiDataOwner } from '@/hooks/useOrgKpiDataOwner';
 import { useMenuAccess } from '@/hooks/useMenuAccess';
 import { useBulkReviewFlag } from '@/hooks/useBulkReview';
 import { useResolvedMenu, useMenuOverridesEnabled } from '@/hooks/useResolvedMenu';
+import { useReviewNoteAccess } from '@/hooks/useReviewNoteAccess';
 import {
   Sidebar,
   SidebarContent,
