@@ -553,30 +553,63 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
     };
   }, [data.scope, isNa, naRemarks, isCompliance, submissionDates]);
 
-  // Auto-save with debounce
-  const triggerAutoSave = useCallback(() => {
+  // ADR-075 — explicit Save model (replaces 2s autosave). Field edits mark
+  // the row/card as dirty; persistence happens only when the user clicks
+  // Save on the card or a scoped row.
+  const markDirty = useCallback((scopeId?: string) => {
     isDirtyRef.current = true;
-    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
-    autoSaveTimerRef.current = setTimeout(async () => {
-      if (!isDirtyRef.current) return;
-      setSaveStatus('saving');
-      try {
-        await onSave(getValues());
-        isDirtyRef.current = false;
-        setSaveStatus('saved');
-        setTimeout(() => setSaveStatus('idle'), 3000);
-      } catch {
-        setSaveStatus('idle');
+    if (scopeId) {
+      setDirtyScopeIds(prev => (prev.has(scopeId) ? prev : new Set(prev).add(scopeId)));
+    } else {
+      setCardDirty(true);
+    }
+    setSaveStatus(prev => (prev === 'saving' ? prev : 'unsaved'));
+  }, []);
+
+  const clearAllDirty = useCallback(() => {
+    isDirtyRef.current = false;
+    setCardDirty(false);
+    setDirtyScopeIds(new Set());
+  }, []);
+
+  // Shared save flow. `onSave` already filters to touched scope rows server-
+  // side via `_touched`, so a row-level Save still flushes the entire
+  // touched batch — we just track per-row UI affordances.
+  const performSave = useCallback(async (scopeId?: string) => {
+    if (scopeId) setSavingRowIds(prev => new Set(prev).add(scopeId));
+    else setIsSavingCard(true);
+    setSaveStatus('saving');
+    try {
+      await onSave(getValues());
+      clearAllDirty();
+      setSaveStatus('saved');
+      setTimeout(() => setSaveStatus(prev => (prev === 'saved' ? 'idle' : prev)), 3000);
+    } catch {
+      setSaveStatus('error');
+    } finally {
+      if (scopeId) {
+        setSavingRowIds(prev => {
+          const next = new Set(prev);
+          next.delete(scopeId);
+          return next;
+        });
+      } else {
+        setIsSavingCard(false);
       }
-    }, 2000);
-  }, [onSave, getValues]);
+    }
+  }, [onSave, getValues, clearAllDirty]);
+
+  const handleSaveCard = useCallback(() => performSave(), [performSave]);
+  const handleSaveRow = useCallback((scopeId: string) => performSave(scopeId), [performSave]);
+
+  // Warn before unload when any pending edit exists on this card.
+  useUnsavedChanges(cardDirty || dirtyScopeIds.size > 0);
 
   const handleSaveAndPropagate = async (filterIds?: string[]) => {
-    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
     setIsPropagating(true);
     try {
       await onSaveAndPropagate(getValues(), filterIds);
-      isDirtyRef.current = false;
+      clearAllDirty();
       setSaveStatus('saved');
       setSelectedScopeIds([]);
     } finally {
