@@ -670,7 +670,7 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
 
   return (
     <>
-    <Card className={`transition-all min-w-0 overflow-hidden ${isDirtyRef.current ? 'ring-1 ring-primary/30' : ''} ${
+    <Card className={`transition-all min-w-0 overflow-hidden ${(cardDirty || dirtyScopeIds.size > 0) ? 'ring-1 ring-amber-400/50' : ''} ${
       isNa ? 'border-l-4 border-l-orange-400' :
       data.status === 'propagated' ? 'border-l-4 border-l-green-500' :
       data.status === 'entered' ? 'border-l-4 border-l-primary' :
