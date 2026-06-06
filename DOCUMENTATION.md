@@ -6634,3 +6634,22 @@ Documented in `mem/architecture/profiles-query-policy`. Capping these to 20 rows
 - A `beforeunload` confirm fires if the user tries to navigate away with unsaved edits.
 
 See: `docs/adr/ADR-075.md`, `src/hooks/useUnsavedChanges.ts`.
+
+## Org KPI Data Owners — canonical storage (ADR-076, 2026-06-06)
+
+`org_kpi_data_owners.kra_name` / `kpi_name` MUST be stored byte-identical
+to the `kpis` master. Legacy inserts collapsed `\n` / `\r\n` to `" - "`,
+leaving 228/233 owner rows invisible to the dialog (`OrgKpiOwnerDialog`)
+and to access checks (`useIsOrgKpiDataOwner`).
+
+- Repair: migration `repair_org_kpi_owner_canonical_keys` (June 2026)
+  dedupes non-canonical duplicates, then rewrites mismatched rows to the
+  master text using whitespace-normalized equality. Snapshot:
+  `org_kpi_owner_key_backup_2026_06`.
+- Prevention: `useAssignOrgKpiOwner` looks up the canonical text in
+  `kpis` before insert; falls back to supplied text only if the master
+  has no whitespace-normalized match.
+- Read hooks continue to use `.eq()`; they rely on storage being
+  canonical.
+
+See: `docs/adr/ADR-076.md`, `src/test/orgKpiOwnerCanonicalization.test.ts`.
