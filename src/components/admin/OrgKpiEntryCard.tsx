@@ -36,6 +36,8 @@ import {
 import { OrgKpiEvidenceManagerSheet, type OrgKpiEvidenceScopeOption } from '@/components/admin/OrgKpiEvidenceManagerSheet';
 import { OrgKpiEvidenceStatusChip } from '@/components/admin/OrgKpiEvidenceStatusChip';
 import { OrgKpiParityBadge } from '@/components/admin/OrgKpiParityBadge';
+import { useUnsavedChanges } from '@/hooks/useUnsavedChanges';
+import { Save } from 'lucide-react';
 
 export interface OrgKpiCardData {
   categoryId: string;
