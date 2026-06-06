@@ -458,6 +458,9 @@ function EmployeeGroup({ group, onValueChange, ratingThresholds, targetValue, uo
           isComplianceKpi={isComplianceKpi}
           submissionDateInfo={submissionDates?.get(row.scopeId)}
           kpiName={kpiName}
+          isDirty={!!dirtyScopeIds?.has(row.scopeId)}
+          isSavingRow={!!savingScopeIds?.has(row.scopeId)}
+          onSaveRow={onSaveRow}
         />
       ))}
     </>
