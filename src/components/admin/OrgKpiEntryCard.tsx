@@ -214,7 +214,17 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
   const touchedEvidenceScopeIdsRef = useRef<Set<string>>(new Set());
 
   const [isPropagating, setIsPropagating] = useState(false);
-  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
+  // ADR-075 — explicit Save replaces 2s autosave. saveStatus pill now also
+  // surfaces 'unsaved' (amber) and 'error' (red) so users are never left
+  // wondering whether their typing was persisted.
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'unsaved' | 'saving' | 'saved' | 'error'>('idle');
+  // Per-scope-row dirty tracker for the Save buttons in the scoped table.
+  const [dirtyScopeIds, setDirtyScopeIds] = useState<Set<string>>(new Set());
+  // Card-level dirty flag (org-scope inputs + the N/A toggle on any scope).
+  const [cardDirty, setCardDirty] = useState(false);
+  // Per-row spinner while a row's Save is in flight.
+  const [savingRowIds, setSavingRowIds] = useState<Set<string>>(new Set());
+  const [isSavingCard, setIsSavingCard] = useState(false);
   const [showRepairDialog, setShowRepairDialog] = useState(false);
   const [repairRows, setRepairRows] = useState<DiagnoseGapRow[] | null>(null);
   const [showEvidenceSheet, setShowEvidenceSheet] = useState(false);
