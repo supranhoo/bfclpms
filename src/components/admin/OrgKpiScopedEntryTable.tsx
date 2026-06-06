@@ -415,9 +415,12 @@ interface EmployeeGroupProps {
   isComplianceKpi?: boolean;
   submissionDates?: Map<string, { complete: boolean; date: string | null; pendingCount: number }>;
   kpiName?: string;
+  dirtyScopeIds?: Set<string>;
+  savingScopeIds?: Set<string>;
+  onSaveRow?: (scopeId: string) => Promise<void> | void;
 }
 
-function EmployeeGroup({ group, onValueChange, ratingThresholds, targetValue, uom, criteria, employeeObservations, observationCounts, sentBackMap, selectedIds, onToggleRow, onPropagateRow, isPropagating, totalColSpan, hasSelectionFeature, hasRowPropagation, isComplianceKpi, submissionDates, kpiName }: EmployeeGroupProps) {
+function EmployeeGroup({ group, onValueChange, ratingThresholds, targetValue, uom, criteria, employeeObservations, observationCounts, sentBackMap, selectedIds, onToggleRow, onPropagateRow, isPropagating, totalColSpan, hasSelectionFeature, hasRowPropagation, isComplianceKpi, submissionDates, kpiName, dirtyScopeIds, savingScopeIds, onSaveRow }: EmployeeGroupProps) {
   return (
     <>
       <TableRow key={`group-${group.dept ?? 'none'}`} className="bg-muted/50 hover:bg-muted/50">
