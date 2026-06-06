@@ -1263,6 +1263,11 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
           </div>
           {!isLocked && (
             <div className="flex items-center gap-2 flex-wrap">
+              {saveStatus === 'unsaved' && (
+                <span className="text-xs text-amber-700 dark:text-amber-400 flex items-center gap-1">
+                  <AlertTriangle className="h-3 w-3" />Unsaved changes
+                </span>
+              )}
               {saveStatus === 'saving' && (
                 <span className="text-xs text-muted-foreground flex items-center gap-1">
                   <Loader2 className="h-3 w-3 animate-spin" />Saving...
@@ -1273,12 +1278,17 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
                   <CheckCircle2 className="h-3 w-3" />Saved
                 </span>
               )}
+              {saveStatus === 'error' && (
+                <span className="text-xs text-destructive flex items-center gap-1">
+                  <AlertTriangle className="h-3 w-3" />Save failed
+                </span>
+              )}
 
               {/* Propagate Selected button — only when selections exist */}
               {selectedScopeIds.length > 0 && data.scope !== 'organization' && (
                 <AlertDialog>
                   <AlertDialogTrigger asChild>
-                    <Button size="sm" variant="outline" className="h-7 text-xs gap-1" disabled={isPropagating}>
+                    <Button size="sm" variant="outline" className="h-7 text-xs gap-1" disabled={isPropagating || cardDirty || dirtyScopeIds.size > 0} title={cardDirty || dirtyScopeIds.size > 0 ? 'Save unsaved changes first' : undefined}>
                       {isPropagating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ArrowUpRight className="h-3.5 w-3.5" />}
                       Propagate Selected ({selectedScopeIds.length})
                     </Button>
@@ -1320,7 +1330,7 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
               {/* Main Propagate All button */}
               <AlertDialog>
                 <AlertDialogTrigger asChild>
-                  <Button size="sm" className="h-7 text-xs" disabled={isPropagating || !(data.scope === 'organization' ? (isNa || achievedValue.trim() !== '') : (isNa || scopedValues.some(sv => sv.achievedValue !== null || sv.isNa)))}>
+                  <Button size="sm" className="h-7 text-xs" disabled={isPropagating || cardDirty || dirtyScopeIds.size > 0 || !(data.scope === 'organization' ? (isNa || achievedValue.trim() !== '') : (isNa || scopedValues.some(sv => sv.achievedValue !== null || sv.isNa)))} title={cardDirty || dirtyScopeIds.size > 0 ? 'Save unsaved changes first' : undefined}>
                     {isPropagating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ArrowUpRight className="h-3.5 w-3.5 mr-1" />}
                     Propagate
                   </Button>
