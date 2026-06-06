@@ -589,14 +589,16 @@ export default function UserManagement() {
       const { error: profileError } = await supabase
         .from('profiles')
         .update(updatePayload)
-        .eq('id', userId);
+        .eq('id', userId)
+        .select('id');
 
       if (profileError) throw profileError;
 
       const { error: roleError } = await supabase
         .from('user_roles')
         .update({ role })
-        .eq('user_id', userId);
+        .eq('user_id', userId)
+        .select('user_id');
 
       if (roleError) throw roleError;
     },
