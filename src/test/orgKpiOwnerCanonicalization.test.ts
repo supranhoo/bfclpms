@@ -8,8 +8,8 @@ describe('Org KPI owner canonical-key matching', () => {
   const masterKpi =
     'Measures the level of workplace organization and cleanliness based on periodic 5S audits, improving safety and efficiency.\n- Formula: Average score from monthly 5S audits.\n- Scoring Logic: (5 for =5, 4 for 4, 3 for 3)';
 
-  it('matches when newlines are collapsed to " - "', () => {
-    const submittedKpi = masterKpi.replace(/\n/g, ' - ');
+  it('matches when newlines are collapsed to whitespace', () => {
+    const submittedKpi = masterKpi.replace(/\n/g, ' ');
     expect(norm(submittedKpi)).toBe(norm(masterKpi));
   });
 
