@@ -233,9 +233,52 @@ export function useBulkUpsertOrgKpiValues() {
       is_na?: boolean;
       sub_factors?: any;
     }>) => {
-      // For scoped values, we need to handle the unique constraint properly
-      // Insert/update each value individually to handle the complex unique index
-      const results = [];
+      // ADR-080 — single round-trip bulk upsert via RPC. The old per-row
+      // loop (2 sequential round-trips × N rows) made a 95-row card take
+      // 15–60 s. The RPC runs SECURITY INVOKER so RLS is still enforced
+      // per row; rows the caller cannot touch simply don't return.
+      const CHUNK = 500;
+      const results: any[] = [];
+      try {
+        for (let i = 0; i < values.length; i += CHUNK) {
+          const slice = values.slice(i, i + CHUNK);
+          const { data, error } = await supabase.rpc(
+            'bulk_upsert_org_kpi_values' as any,
+            { p_rows: slice as any },
+          );
+          if (error) throw error;
+          if (Array.isArray(data)) results.push(...data);
+        }
+        return results;
+      } catch (rpcErr: any) {
+        // Fallback to legacy per-row path so a transient RPC issue does
+        // not block saves during rollout.
+        console.warn('[bulk_upsert_org_kpi_values] RPC failed, falling back to per-row loop:', rpcErr?.message);
+        return await legacyPerRowUpsert(values);
+      }
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['org-kpi-values'] });
+      queryClient.invalidateQueries({ queryKey: ['org-kpi-value'] });
+      toast({ title: `${data.length} values saved successfully` });
+    },
+    onError: (error: any) => {
+      const friendly =
+        error?.code === 'PGRST116'
+          ? 'Could not save this KPI — please refresh the page and try again. (The KPI name may have been updated by another user.)'
+          : error?.message || 'Unknown error';
+      toast({ title: 'Failed to save values', description: friendly, variant: 'destructive' });
+    },
+  });
+}
+
+/**
+ * Legacy per-row select-then-insert/update path. Retained as a fallback for
+ * useBulkUpsertOrgKpiValues so a transient RPC failure does not block
+ * saves during rollout. Not exported.
+ */
+async function legacyPerRowUpsert(values: Array<any>): Promise<any[]> {
+      const results: any[] = [];
       for (const value of values) {
         // First try to find existing record
         let query = supabase
@@ -345,20 +388,6 @@ export function useBulkUpsertOrgKpiValues() {
         }
       }
       return results;
-    },
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ['org-kpi-values'] });
-      queryClient.invalidateQueries({ queryKey: ['org-kpi-value'] });
-      toast({ title: `${data.length} values saved successfully` });
-    },
-    onError: (error: any) => {
-      const friendly =
-        error?.code === 'PGRST116'
-          ? 'Could not save this KPI — please refresh the page and try again. (The KPI name may have been updated by another user.)'
-          : error?.message || 'Unknown error';
-      toast({ title: 'Failed to save values', description: friendly, variant: 'destructive' });
-    },
-  });
 }
 
 export function useDeleteOrgKpiValue() {
