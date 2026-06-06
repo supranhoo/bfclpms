@@ -586,21 +586,36 @@ export default function UserManagement() {
         updatePayload.deactivated_at = isActive ? null : new Date().toISOString();
       }
 
-      const { error: profileError } = await supabase
+      const { data: profileRows, error: profileError } = await supabase
         .from('profiles')
         .update(updatePayload)
         .eq('id', userId)
         .select('id');
 
       if (profileError) throw profileError;
+      if (!profileRows || profileRows.length === 0) {
+        // RLS silently filtered the update — caller lacks privilege to modify
+        // this profile. Surface a clear error instead of a misleading
+        // "success" toast (RCA: BUG, non-admin users opening Edit User from
+        // a profile-based menu grant could toggle Account Status with no
+        // effect and still see "User updated successfully").
+        throw new Error(
+          'You do not have permission to modify this user. Only Admins can change profile details, account status, or roles.'
+        );
+      }
 
-      const { error: roleError } = await supabase
+      const { data: roleRows, error: roleError } = await supabase
         .from('user_roles')
         .update({ role })
         .eq('user_id', userId)
         .select('user_id');
 
       if (roleError) throw roleError;
+      if (!roleRows || roleRows.length === 0) {
+        throw new Error(
+          'You do not have permission to change this user\u2019s role. Only Admins can update roles.'
+        );
+      }
     },
     onSuccess: () => {
       invalidateProfileCaches(queryClient);
