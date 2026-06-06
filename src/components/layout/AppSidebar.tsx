@@ -118,8 +118,10 @@ const getStaticMenuItems = (policyVisibleRoles: string[]) => ({
     { title: 'KPI Standardization', icon: GitMerge, path: '/admin/kpi-standardization', menuKey: 'admin-kpi-standardization', roles: ['admin'] },
   ],
   dataEntry: [
-    { title: 'Org KPI Data Entry', icon: Building2, path: '/admin/org-kpi-data', menuKey: 'data-entry', roles: ['employee', 'manager', 'auditor', 'management', 'hr_pms'] },
-    { title: 'Incentive Data Entry', icon: FileInput, path: '/admin/incentive-data-entry', menuKey: 'admin-incentive-data', roles: ['employee', 'manager', 'auditor', 'management', 'hr_pms'] },
+    // Data Entry items are grant-driven (access profile / user override / menu_access_config).
+    // Static roles intentionally restricted to admin — non-admins see them only via an explicit grant.
+    { title: 'Org KPI Data Entry', icon: Building2, path: '/admin/org-kpi-data', menuKey: 'data-entry', roles: ['admin'] },
+    { title: 'Incentive Data Entry', icon: FileInput, path: '/admin/incentive-data-entry', menuKey: 'admin-incentive-data', roles: ['admin'] },
   ],
   reports: [
     { title: 'View Reports', icon: BarChart3, path: '/reports', menuKey: 'reports-hub', roles: ['admin', 'manager', 'auditor', 'management'] },
