@@ -86,6 +86,12 @@ export default function BulkReviewDashboard() {
   const { toast } = useToast();
   const flagQuery = useBulkReviewFlag();
   const qc = useQueryClient();
+  const isFunctionalManager = useIsFunctionalManager();
+
+  const viewerStageOptions = useMemo(
+    () => allowedViewerStages(effectiveRole, isFunctionalManager),
+    [effectiveRole, isFunctionalManager],
+  );
 
   const now = new Date();
   const defaultPeriod = CALENDAR_MONTHS[now.getMonth()] || 'April';
@@ -101,6 +107,13 @@ export default function BulkReviewDashboard() {
       : effectiveRole === 'skip_level' ? 'skip_level'
       : 'manager'
   );
+  // Clamp the (possibly URL- or default-seeded) viewerStage to the set of
+  // stages the current user is actually allowed to act as. Runs whenever the
+  // allowed list changes (e.g. after the FM-relationship query resolves).
+  useEffect(() => {
+    const next = clampViewerStage(viewerStage, viewerStageOptions);
+    if (next && next !== viewerStage) setViewerStage(next);
+  }, [viewerStage, viewerStageOptions]);
   // Multi-select state — empty array = "All". Persisted to URL query params.
   const initialUrl = useMemo(
     () => readUrlArrays(
@@ -618,7 +631,11 @@ export default function BulkReviewDashboard() {
 
           {/* Right action cluster */}
           <div className="flex items-center gap-2 shrink-0 pl-3 border-l border-border/50">
-            <Select value={viewerStage} onValueChange={setViewerStage}>
+            <Select
+              value={viewerStage}
+              onValueChange={setViewerStage}
+              disabled={viewerStageOptions.length <= 1}
+            >
               <SelectTrigger className="h-9 w-[140px] text-xs" aria-label="Reviewer stage">
                 <div className="flex items-center gap-1.5 min-w-0">
                   <UserCog className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
@@ -626,7 +643,7 @@ export default function BulkReviewDashboard() {
                 </div>
               </SelectTrigger>
               <SelectContent>
-                {VIEWER_STAGES.map((s) => (
+                {viewerStageOptions.map((s) => (
                   <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
                 ))}
               </SelectContent>
