@@ -377,7 +377,6 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
       setRepairRows(rows);
     } catch { /* ignore */ }
   }, [repairGap, diagnoseGap, data.categoryId, data.kraName, data.kpiName, reviewPeriod, reviewYear]);
-  const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isDirtyRef = useRef(false);
   const kpiIdentityRef = useRef('');
 
