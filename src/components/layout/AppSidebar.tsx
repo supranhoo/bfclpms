@@ -118,8 +118,10 @@ const getStaticMenuItems = (policyVisibleRoles: string[]) => ({
     { title: 'KPI Standardization', icon: GitMerge, path: '/admin/kpi-standardization', menuKey: 'admin-kpi-standardization', roles: ['admin'] },
   ],
   dataEntry: [
-    { title: 'Org KPI Data Entry', icon: Building2, path: '/admin/org-kpi-data', menuKey: 'data-entry', roles: ['employee', 'manager', 'auditor', 'management', 'hr_pms'] },
-    { title: 'Incentive Data Entry', icon: FileInput, path: '/admin/incentive-data-entry', menuKey: 'admin-incentive-data', roles: ['employee', 'manager', 'auditor', 'management', 'hr_pms'] },
+    // Data Entry items are grant-driven (access profile / user override / menu_access_config).
+    // Static roles intentionally restricted to admin — non-admins see them only via an explicit grant.
+    { title: 'Org KPI Data Entry', icon: Building2, path: '/admin/org-kpi-data', menuKey: 'data-entry', roles: ['admin'] },
+    { title: 'Incentive Data Entry', icon: FileInput, path: '/admin/incentive-data-entry', menuKey: 'admin-incentive-data', roles: ['admin'] },
   ],
   reports: [
     { title: 'View Reports', icon: BarChart3, path: '/reports', menuKey: 'reports-hub', roles: ['admin', 'manager', 'auditor', 'management'] },
@@ -433,19 +435,17 @@ export function AppSidebar() {
   const filterByRole = useCallback((items: typeof menuItems.main) => {
     return items.filter(item => {
       if (!effectiveRole) return false;
-      // CAPA emergency static path: when overrides are disabled (production
-      // default while roadmap is dormant), bypass DB `menu_access_config`
-      // entirely and gate visibility purely on the hardcoded `item.roles`.
-      // Guarantees the baseline sidebar renders regardless of DB state,
-      // resolver state, or missing/invalid menu_access_config rows.
-      if (overridesEnabled === false) {
-        return Array.isArray(item.roles) && item.roles.includes(effectiveRole);
-      }
-      // Use DB-driven access if menuKey exists, else fallback to hardcoded roles
+      // Layered visibility (bug fix): static role match OR explicit DB grant.
+      // `menu_overrides_enabled` only governs the resolver/parent-move tree
+      // (see resolveGroupItems). It must NOT silence per-user overrides or
+      // access-profile rights, otherwise the Menu Access Rights UI grants
+      // nothing while appearing to work.
+      const staticMatch = Array.isArray(item.roles) && item.roles.includes(effectiveRole);
+      if (staticMatch) return true;
       if ('menuKey' in item && item.menuKey) {
         return canAccess(item.menuKey);
       }
-      return item.roles.includes(effectiveRole);
+      return false;
     });
   }, [effectiveRole, canAccess, overridesEnabled]);
 
