@@ -8,10 +8,10 @@ describe('isRowDueInPeriod — Bulk Review non-due filter', () => {
     expect(isRowDueInPeriod(row, 'April', 2026)).toBe(true);
   });
 
-  it('Bi-Monthly Apr-May: row hidden in April, visible in May', () => {
-    const row = { frequency: 'Bi-Monthly', frequency_cycle_start: 'Apr-May' };
-    expect(isRowDueInPeriod(row, 'April', 2026)).toBe(false);
-    expect(isRowDueInPeriod(row, 'May', 2026)).toBe(true);
+  it('Bi-Monthly May-Jun: row hidden in May, visible in June', () => {
+    const row = { frequency: 'Bi-Monthly', frequency_cycle_start: 'May-Jun' };
+    expect(isRowDueInPeriod(row, 'May', 2026)).toBe(false);
+    expect(isRowDueInPeriod(row, 'June', 2026)).toBe(true);
   });
 
   it('Quarterly Jan-Mar: hidden Jan & Feb, visible Mar', () => {
