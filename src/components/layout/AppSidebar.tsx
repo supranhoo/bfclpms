@@ -464,7 +464,7 @@ export function AppSidebar() {
   // employees were seeing a dead-end menu that opened straight into an
   // "access denied" screen. Drop the Review Notes item from any candidate
   // list when the user lacks both `view` and `view_own_subject` rights.
-  const gateReviewNotes = useCallback((items: typeof menuItems.main) => {
+  const gateReviewNotes = useCallback(<T extends { path?: string }>(items: T[]): T[] => {
     const role = effectiveRole;
     const cfg = reviewNoteAccess.config;
     const allowed =
