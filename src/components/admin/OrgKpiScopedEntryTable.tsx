@@ -608,9 +608,12 @@ interface EmployeeRowProps {
   isComplianceKpi?: boolean;
   submissionDateInfo?: { complete: boolean; date: string | null; pendingCount: number };
   kpiName?: string;
+  isDirty?: boolean;
+  isSavingRow?: boolean;
+  onSaveRow?: (scopeId: string) => Promise<void> | void;
 }
 
-function EmployeeRow({ row, onValueChange, ratingThresholds, targetValue, uom, criteria, observations, observationCounts: legacyCounts, sentBackInfo, isSelected, onToggleRow, onPropagateRow, isPropagating, totalColSpan, hasSelectionFeature, hasRowPropagation, isComplianceKpi, submissionDateInfo, kpiName }: EmployeeRowProps) {
+function EmployeeRow({ row, onValueChange, ratingThresholds, targetValue, uom, criteria, observations, observationCounts: legacyCounts, sentBackInfo, isSelected, onToggleRow, onPropagateRow, isPropagating, totalColSpan, hasSelectionFeature, hasRowPropagation, isComplianceKpi, submissionDateInfo, kpiName, isDirty, isSavingRow, onSaveRow }: EmployeeRowProps) {
   const [expanded, setExpanded] = useState(false);
 
   const effectiveTarget = row.targetValue != null ? row.targetValue : targetValue;
