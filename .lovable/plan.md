@@ -1,101 +1,83 @@
-# Bulk Review "Due only" filter — WHY/RCA/CAPA
+# "Hide fully processed" leaks KPIs the viewer never reviews — RCA & CAPA
 
-## What the user sees
+## Symptom
 
-"Due only" toggle ON or OFF → same counts (`54 KPIs, 27 employees, 269 cells`). Tooltip claims multi-month sibling rows are hidden, but nothing changes.
+In Bulk Review (viewer = Auditor, April 2026), the FAR / Capitalize-of-WIP KPI stays visible with `Hide fully processed` ON even though:
+- Auditor is **not** in that KPI's workflow (auditor_score will never be filled), and
+- HR-PMS has already approved it (`final_score` is set, KPI is terminal).
+
+12 KPIs are hidden, ~30 should be.
 
 ## RCA
 
-The pure helper `src/lib/bulkReviewDueFilter.ts` has a safety short-circuit on line 38 that swallows the filter for almost every multi-month row in production:
+`src/lib/bulkProcessedFilter.ts` — `isKpiRowFullyProcessed` — defines "processed" purely as *the viewer-stage score column is filled (or `is_na`) for every assignee*. The viewer-stage column is picked from a fixed map:
 
 ```ts
-// Multi-month: cycle-start is required to disambiguate ...
-// Per POLICY §128 we do NOT silently default — if the
-// field is missing we treat the row as due so the user is
-// never wrongly hidden from work they need to do.
-if (!row.frequency_cycle_start) return true;
+const STAGE_SCORE_KEY = {
+  manager: 'manager_score',
+  skip_level: 'skip_level_score',
+  hr_pms: 'hr_pms_score',
+  auditor: 'auditor_score',      // ← used for the Auditor view
+  management: 'management_score',
+};
 ```
 
-What the live data looks like in `kpis` for `review_period='April', review_year=2026` (snapshot input):
+For a KPI whose workflow does **not** route through the auditor stage, `auditor_score` is structurally `null` forever. The helper returns `false` for every such row → the row is never hidden, no matter what stage the KPI is actually finished at.
 
-| frequency | frequency_cycle_start | rows |
-|---|---|---|
-| Bi-Monthly | Feb-Mar | 45 |
-| Bi-Monthly | (empty) | included via null fallback |
-| Quarterly  | **NULL** | **42** |
-| Quarterly  | Apr-Jun | 3 |
-| Quarterly  | Jul-Sep | 1 |
-| Half-Yearly | May-Oct | 1 |
-| Monthly / Weekly / Daily | — | bulk of dataset |
+Two distinct miss-cases produce the same symptom:
 
-So of the multi-month rows that should be evaluated by the filter, **the vast majority have NULL `frequency_cycle_start`** (data is not POLICY §128-compliant — see Migration Governance memory). Every one of those rows hits the line-38 short-circuit and returns `due = true` → never hidden.
+1. **Terminal KPI not in viewer's workflow.** FAR KPI is HR-PMS-approved (`final_score` set, status terminal). Auditor isn't in its workflow chain. `auditor_score === null` for every cell → filter keeps the row.
+2. **Stage skipped at this period.** Period-specific workflow resolution may drop the auditor stage for a given KPI (see `mem://features/review/period-specific-reviewer-visibility`). Same null-column problem.
 
-Verified by running `isKpiLockedForPeriod` directly for April 2026:
+The PENDING badges in the screenshot are rendered from the **viewer-stage** queue, not from the KPI's actual lifecycle, which is why the row visually "looks pending" even though it isn't.
 
-```
-Bi-Monthly Feb-Mar → due=false  (would hide — correct)
-Quarterly Apr-Jun  → due=false  (would hide — correct)
-Quarterly null     → due=false  (would hide — but BLOCKED by short-circuit)
-Half-Yearly May-Oct → due=true  (edge cycle — see §Secondary below)
-```
+## Why tests didn't catch it
 
-With the short-circuit in place, the only rows the filter actually trims are the ~48 with non-null `frequency_cycle_start`. In the auditor's loaded scope (Load Scope = 1 reviewer), those rows often aren't represented at all, so the visible counts and the `nonDueHiddenCount` badge both stay at zero — the toggle appears dead.
-
-### Secondary contributing causes
-
-1. **Helper conflates "outside the cycle" with "active month".** `isKpiLockedForPeriod` only flags months that appear in the cycle's `lockedMonths` list. Months that don't belong to the cycle at all (e.g. April for a `Half-Yearly May-Oct` row) are reported as "not locked" → treated as "due". That's wrong: due should mean *the selected month IS the cycle's anchor month*, not just *the selected month is not in the locked list*.
-
-2. **Display dedup masks small wins.** `BulkReviewMatrixGrid` derives the visible `kpiRows` / `employees` / `cells` from `loadedRows` after dedup by KPI key. Even when the helper correctly hides 3 rows, the unique KPI count may not move (the same KPI is still represented by another employee row). The badge counts raw rows, the headline counts unique KPIs → the toggle looks broken even when it works.
-
-3. **Data quality.** 42 Quarterly + 1 Bi-Monthly rows for April have NULL / empty `frequency_cycle_start`, violating POLICY §128. Out of scope to backfill here, but a real cause of the symptom.
-
-## Why didn't tests catch it?
-
-`src/test/bulkReview/dueFilter.test.ts` only exercises rows where `frequency_cycle_start` is explicitly populated. There is no test for `cycle_start = null` on a Bi-Monthly / Quarterly / Half-Yearly / Yearly row, so the short-circuit was never exercised in a "should be hidden" scenario.
+`src/lib/bulkProcessedFilter.test.ts` only feeds rows where the viewer stage IS part of the workflow. No case covers `auditor_score === null` + `final_score !== null` (terminal-but-out-of-scope), so the leak is invisible.
 
 ## CAPA
 
-### Step 1 — Make the filter operate on the cascading cycle default
+### Step 1 — Widen the "processed" definition (single helper change)
 
-Edit `src/lib/bulkReviewDueFilter.ts`:
+Edit `src/lib/bulkProcessedFilter.ts` `isKpiRowFullyProcessed`. A cell is processed when **any** of the following is true:
 
-- **Remove the line-38 short-circuit.** When `frequency_cycle_start` is null/empty, pass `undefined` through to `isKpiLockedForPeriod` — it already cascades to the first cycle option (`getDefaultCycleStart`) which produces the correct lock pattern (e.g. Quarterly defaults to Jan-Mar, so April → locked → hidden).
-- **Tighten "due" semantics** so a row whose cycle does not include the selected month at all is also treated as **not due**. Use `getCycleMonths(...)` and require `selectedMonth ∈ cycleMonths` before consulting `isKpiLockedForPeriod`. This removes the false-positives for off-cycle rows like `Half-Yearly May-Oct` in April.
-- Keep the helper pure; signature unchanged.
+1. `cell.is_na === true` *(current rule, kept)*
+2. `cell[stageKey] !== null` *(current rule, kept)*
+3. `cell.final_score !== null` *(new — KPI is terminal; viewer stage was either past or never required)*
+4. Cell `status` is a stage at or after the viewer's stage in the canonical workflow order — meaning the viewer's stage was either completed or bypassed. Uses the existing canonical stage order; no new schema.
 
-> Decision: we considered keeping the safety default but logging a warning. Rejected — the safety default *is* the bug for this feature. The cascading default (`getDefaultCycleStart`) is already the project-wide convention used by every other multi-month code path; aligning the filter with it removes the inconsistency. POLICY §128 governs *write* paths (don't silently default into storage), not read-time UI filters.
+Conditions 3+4 collapse cleanly to: *"the KPI has progressed past the viewer's stage OR is terminal."*
 
-### Step 2 — Update tests in `src/test/bulkReview/dueFilter.test.ts`
+Signature stays the same; rule 4 is data already on `BulkReviewRow.status`.
 
-Add cases covering:
-- Quarterly with `cycle_start = null` in April → hidden.
-- Quarterly with `cycle_start = null` in March (default Q1 active) → visible.
-- Bi-Monthly with `cycle_start = null` in April (active of Mar-Apr default) → visible.
-- Half-Yearly `May-Oct` in April (off-cycle entirely) → hidden.
-- Existing cases stay green.
+### Step 2 — Tests
 
-### Step 3 — UX clarity in `BulkReviewDashboard.tsx`
+Extend `src/lib/bulkProcessedFilter.test.ts`:
 
-- Recompute `nonDueHiddenCount` from `rawRows` AFTER the same attribute filters that gate `loadedRows`, so the badge only counts rows the user would actually have seen.
-- Update the tooltip to surface a secondary "(N rows from M KPIs hidden)" line — communicates that hiding may compress rows without changing the unique KPI count, eliminating the "filter is dead" perception.
-- Disable the toggle (greyed + tooltip "No multi-month KPIs in this view") when `nonDueHiddenCount === 0` and the helper finds zero hide-eligible rows in the current scope. Pure UI; no logic change.
+- Auditor view, `auditor_score=null`, `final_score=4.5` → processed.
+- Auditor view, `auditor_score=null`, `status='approved'` (terminal) → processed.
+- Auditor view, `auditor_score=null`, `status='hr_pms_approved'` while viewer is `auditor` → processed (HR PMS sits after auditor in the canonical chain? **clarify in implementation by reusing the existing stage-order constant**).
+- Auditor view, `auditor_score=null`, `status='manager_approved'`, `final_score=null` → still pending (auditor stage not yet bypassed).
+- Existing 5 cases stay green.
 
-### Step 4 — Documentation
+### Step 3 — Clarify the toggle label
 
-- `DOCUMENTATION.md` → Bulk Review section: clarify Due-only semantics (active anchor month, off-cycle treated as not-due).
-- `POLICY.md` → §128 amend: read-time filters MAY apply the cascading default; write paths still must not.
-- `mem://architecture/pms/multimonth-percolation` — append a note about the read-time vs write-time defaulting distinction.
+Update label tooltip on `BulkReviewMatrixGrid.tsx` (line 307) from "Hide fully processed" to keep label but add a hover hint: *"Hides KPIs whose workflow has finished or moved past your stage."* No logic change.
+
+### Step 4 — Docs / Memory
+
+- `DOCUMENTATION.md` → Bulk Review: update "Hide fully processed" semantics.
+- `mem://features/review/reviewer-dashboard-view-architecture` → append a one-liner: filter uses `stage-or-after | terminal | N/A`, not just `stage column filled`.
 
 ## Risk & Impact
 
-- **Data:** none. Read-only helper change.
-- **Workflow:** users with the toggle ON will start seeing fewer rows in months that were previously a no-op. Default state is already ON, so this is exactly what users expect.
-- **Regression:** low. The change is isolated to one pure helper + one badge memo + one tooltip. Existing tests all still pass once we add the missing-cycle-start cases.
-- **Scalability:** unchanged — all filtering remains O(rows) client-side.
-- **Rollback:** revert the single `bulkReviewDueFilter.ts` edit and the test file.
+- **Data:** none. Pure UI helper.
+- **Workflow:** Auditor & other reviewers will see fewer rows when the toggle is ON. Matches the intent of the toggle. No write paths, no scoring, no RLS touched.
+- **Regression:** low. The widened definition is strictly *more permissive* (more rows qualify as processed) and never hides a row that has at least one truly pending assignee at the viewer's stage.
+- **Scalability:** unchanged — same O(rows × employees) loop.
+- **Rollback:** revert one helper + one test file.
 
 ## Out of scope
 
-- Backfilling `frequency_cycle_start` for the 42+ Quarterly NULL rows (data-hygiene migration; separate ticket).
-- Changing `BulkReviewMatrixGrid` dedup behavior.
-- Server-side pre-filter in the `bulk_review_snapshot` RPC.
+- Why the snapshot returns KPIs that aren't in the auditor's workflow at all (server-side scope question; tracked separately under `period-specific-reviewer-visibility`).
+- Hiding the misleading PENDING badge on stage-skipped cells (separate visual fix).
