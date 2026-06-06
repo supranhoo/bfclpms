@@ -207,6 +207,7 @@ export function BulkCellDrawer({ row, viewerStage, open, onOpenChange, canReopen
   };
 
   return (
+    <>
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent className="w-full sm:max-w-[1100px] overflow-y-auto p-4 sm:p-6">
         <SheetHeader>
