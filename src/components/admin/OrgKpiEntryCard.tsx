@@ -639,7 +639,7 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
       if (field === 'evidenceUrl') return { ...r, evidenceUrl: value };
       return { ...r, [field]: value || '' };
     }));
-    triggerAutoSave();
+    markDirty(scopeId);
   };
 
   // For scoped KPIs (department / employee) the card-level `status` is a
