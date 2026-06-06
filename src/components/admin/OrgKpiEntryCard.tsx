@@ -580,7 +580,25 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
     else setIsSavingCard(true);
     setSaveStatus('saving');
     try {
-      await onSave(getValues());
+      // Perf — narrow the save payload so a row-level Save only flushes that
+      // row, and a card-level Save only flushes rows the user actually
+      // edited. Without this filter, a single-row Save persisted all
+      // scoped rows (95+ for big cards), turning the spinner into a
+      // multi-second hang. See ADR-080.
+      const values = getValues();
+      const narrowed = (() => {
+        if (!values.scopedValues) return values;
+        if (scopeId) {
+          return { ...values, scopedValues: values.scopedValues.filter(s => s.scopeId === scopeId) };
+        }
+        const touchedOnly = values.scopedValues.filter(s => s._touched);
+        // Defensive: if nothing is flagged touched but the card is dirty
+        // (e.g. org-scope edit on a scoped card), fall back to full list.
+        return touchedOnly.length > 0
+          ? { ...values, scopedValues: touchedOnly }
+          : values;
+      })();
+      await onSave(narrowed);
       clearAllDirty();
       setSaveStatus('saved');
       setTimeout(() => setSaveStatus(prev => (prev === 'saved' ? 'idle' : prev)), 3000);
