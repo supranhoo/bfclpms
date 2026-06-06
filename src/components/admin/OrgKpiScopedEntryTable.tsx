@@ -329,7 +329,7 @@ export function OrgKpiScopedEntryTable({ rows, onValueChange, scopeLabel, rating
                 <TableHead className="text-xs min-w-[220px]">Remark</TableHead>
                 <TableHead className="text-xs w-24">File</TableHead>
                 {hasRowPropagation && (
-                  <TableHead className="text-xs w-16 text-center">Actions</TableHead>
+                  <TableHead className="text-xs w-28 text-center">Actions</TableHead>
                 )}
               </TableRow>
             </TableHeader>
@@ -357,6 +357,9 @@ export function OrgKpiScopedEntryTable({ rows, onValueChange, scopeLabel, rating
                     isComplianceKpi={isComplianceKpi}
                     submissionDates={submissionDates}
                     kpiName={kpiName}
+                    dirtyScopeIds={dirtyScopeIds}
+                    savingScopeIds={savingScopeIds}
+                    onSaveRow={onSaveRow}
                   />
                 ))
               ) : (
@@ -377,6 +380,9 @@ export function OrgKpiScopedEntryTable({ rows, onValueChange, scopeLabel, rating
                     hasSelectionFeature={hasSelectionFeature}
                     hasRowPropagation={hasRowPropagation}
                     kpiName={kpiName}
+                    isDirty={!!dirtyScopeIds?.has(row.scopeId)}
+                    isSavingRow={!!savingScopeIds?.has(row.scopeId)}
+                    onSaveRow={onSaveRow}
                   />
                 ))
               )}
