@@ -321,6 +321,16 @@ export function KpiTimeline({ isOpen, onClose, kpi, workflowStages: propStages }
   };
 
   const formatDetails = (log: AuditLog) => {
+    // ADMIN_DATA_ENTRY_* rows: render strictly from metadata.fields_updated
+    // so pre-existing per-stage values don't leak into the timeline.
+    if (log.action?.startsWith('ADMIN_DATA_ENTRY_')) {
+      const md = (log.metadata || {}) as Record<string, unknown>;
+      if (Array.isArray(md.fields_updated)) {
+        return formatAdminDataEntryDetails(log);
+      }
+      // legacy rows without fields_updated → fall through to generic renderer
+    }
+
     const details: string[] = [];
     
     // Admin reason from metadata (priority display)
