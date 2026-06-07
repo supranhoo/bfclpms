@@ -33,6 +33,107 @@ import {
   describeChangedFields,
 } from '@/lib/auditLabels';
 
+/**
+ * Build the detail bullets for an ADMIN_DATA_ENTRY_* row strictly from
+ * `metadata.fields_updated` (written by useAdminSubmitReviewData). We
+ * deliberately ignore unrelated columns in `new_value` so pre-existing
+ * self/manager values from earlier stages don't masquerade as fresh edits.
+ *
+ * Also: the *_rating columns hold the derived RAG colour band
+ * (red|yellow|green|blue), NOT the 0–5 rating the user sees. Those are
+ * suppressed entirely from the timeline.
+ */
+export function formatAdminDataEntryDetails(log: {
+  action: string;
+  new_value: Record<string, unknown> | null;
+  metadata: Record<string, unknown> | null;
+}): string[] {
+  const out: string[] = [];
+  const md = (log.metadata || {}) as Record<string, unknown>;
+  const nv = (log.new_value || {}) as Record<string, unknown>;
+  if (md.reason) out.push(`Admin Reason: ${String(md.reason)}`);
+
+  const fields = Array.isArray(md.fields_updated) ? (md.fields_updated as string[]) : null;
+  if (!fields) return out; // caller falls back to generic renderer
+
+  const has = (f: string) => fields.includes(f);
+  const v = (f: string) => nv[f];
+
+  // is_na takes precedence — when admin marks N/A the role's score/remarks
+  // are intentionally cleared, so reporting them is misleading.
+  if (has('is_na') && v('is_na') === true) {
+    out.push('Marked as N/A');
+    return out;
+  }
+
+  // Added value (self uses unprefixed column, other roles use <role>_achieved_value)
+  const valueFields = [
+    'achieved_value',
+    'manager_achieved_value',
+    'skip_level_achieved_value',
+    'hr_pms_achieved_value',
+    'auditor_achieved_value',
+    'management_achieved_value',
+  ];
+  for (const f of valueFields) {
+    if (has(f) && v(f) !== undefined && v(f) !== null) {
+      out.push(`Added Value: ${String(v(f))}`);
+      break;
+    }
+  }
+
+  // Score
+  const scoreFields = [
+    'self_score',
+    'manager_score',
+    'skip_level_score',
+    'hr_pms_score',
+    'auditor_score',
+    'management_score',
+  ];
+  for (const f of scoreFields) {
+    if (has(f) && v(f) !== undefined && v(f) !== null) {
+      out.push(`Score: ${String(v(f))}`);
+      break;
+    }
+  }
+
+  // Remarks
+  const remarkFields = [
+    'self_remarks',
+    'manager_remarks',
+    'skip_level_remarks',
+    'hr_pms_remarks',
+    'auditor_remarks',
+    'management_remarks',
+  ];
+  for (const f of remarkFields) {
+    if (has(f) && v(f)) {
+      out.push(`Remarks: ${String(v(f))}`);
+      break;
+    }
+  }
+
+  // Evidence
+  if (fields.some(f => f.endsWith('_evidence_urls') || f.endsWith('_evidence_url') || f === 'self_evidence_url' || f === 'self_evidence_urls')) {
+    out.push('Evidence updated');
+  }
+
+  // Final score on approval
+  if (has('final_score') && v('final_score') !== undefined && v('final_score') !== null) {
+    out.push(`Final Score: ${String(v('final_score'))}`);
+  }
+
+  return out;
+}
+
+/** Impersonal stages — admin acts AS the stage, not on the employee's behalf. */
+const IMPERSONAL_ADMIN_DATA_ENTRY_ACTIONS = new Set([
+  'ADMIN_DATA_ENTRY_HR_PMS',
+  'ADMIN_DATA_ENTRY_AUDITOR',
+  'ADMIN_DATA_ENTRY_MANAGEMENT',
+]);
+
 interface KpiTimelineProps {
   isOpen: boolean;
   onClose: () => void;
