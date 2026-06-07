@@ -539,9 +539,15 @@ export function KpiTimeline({ isOpen, onClose, kpi, workflowStages: propStages }
                                   </span>
                                 )}
                                 {log.on_behalf_of && onBehalfProfile && (
-                                  <span className="text-rose-600 dark:text-rose-400">
-                                    {' '}(on behalf of {onBehalfProfile.full_name || onBehalfProfile.email})
-                                  </span>
+                                  IMPERSONAL_ADMIN_DATA_ENTRY_ACTIONS.has(log.action) ? (
+                                    <span className="text-muted-foreground">
+                                      {' '}· for {onBehalfProfile.full_name || onBehalfProfile.email}
+                                    </span>
+                                  ) : (
+                                    <span className="text-rose-600 dark:text-rose-400">
+                                      {' '}(on behalf of {onBehalfProfile.full_name || onBehalfProfile.email})
+                                    </span>
+                                  )
                                 )}
                               </p>
                               
