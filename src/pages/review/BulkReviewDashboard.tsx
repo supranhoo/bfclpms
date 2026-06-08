@@ -4,7 +4,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import {
   AlertCircle, Layers, RefreshCw, Search, EyeOff, Eye,
   Calendar, CalendarDays, Building2, Network, Factory, Users, Tag, UserCog, Target,
-  IdCard, Award, Crosshair, X,
+  IdCard, Award, Crosshair, X, UserCheck,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -36,6 +36,7 @@ import {
   useBulkWriteStageScores,
   useBulkOrgKpiFlags,
   useBulkEmployeeAttrs,
+  useMyAuditScope,
   type BulkScopeFilters,
   type BulkReviewRow,
 } from '@/hooks/useBulkReview';
@@ -55,6 +56,7 @@ import { bulkActionForStage } from '@/lib/bulkActionForStage';
 import { summariseSkipReasons, summariseStageWriteOutcome } from '@/lib/summariseSkipReasons';
 import { kpiRowKey as makeKpiRowKey } from '@/lib/bulkRowSelection';
 import { isRowDueInPeriod } from '@/lib/bulkReviewDueFilter';
+import { isRowInAuditorScope, matchesCategoryFilter } from '@/lib/bulkAuditScopeFilter';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { CalendarClock } from 'lucide-react';
 import { useUrlFilterStateNullable } from '@/hooks/useUrlFilterState';
@@ -150,6 +152,18 @@ export default function BulkReviewDashboard() {
       window.localStorage.setItem('bulkReview.hideNonDue', String(hideNonDue));
     }
   }, [hideNonDue]);
+  // "My audit scope only" — auditor-only toggle. Default ON: an auditor's
+  // mental model is "show me what I have to review". Persisted in localStorage.
+  const [myScopeOnly, setMyScopeOnly] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return true;
+    const raw = window.localStorage.getItem('bulkReview.myScopeOnly');
+    return raw === null ? true : raw === 'true';
+  });
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem('bulkReview.myScopeOnly', String(myScopeOnly));
+    }
+  }, [myScopeOnly]);
   const [scopeLoaded, setScopeLoaded] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [activeRow, setActiveRow] = useState<BulkReviewRow | null>(null);
@@ -317,6 +331,16 @@ export default function BulkReviewDashboard() {
     [attrsByEmp, designations, grades, managerIds],
   );
 
+  // Auditor's own assigned scope (employee-level ∪ KPI-level). Fetched once
+  // per session and reused for both the toggle filter and the counter chip.
+  const myAuditScopeQ = useMyAuditScope(effectiveRole === 'auditor');
+  const myAuditScope = myAuditScopeQ.data;
+  const isAuditor = effectiveRole === 'auditor';
+
+  /** Row predicate: is this row inside the current auditor's assigned scope? */
+  const isRowInMyScope = (r: BulkReviewRow): boolean =>
+    !!myAuditScope && isRowInAuditorScope(r, myAuditScope);
+
   // Multi-axis client-side filter over the snapshot.
   const loadedRows = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -345,8 +369,30 @@ export default function BulkReviewDashboard() {
     if (designations.length || grades.length || managerIds.length) {
       rows = rows.filter(r => allowedEmpSet.has(r.employee_id));
     }
+    // Multi-category client filter — server only honours single category
+    // (oneOrNull). Without this branch, picking 2+ categories was a silent
+    // no-op. Requires `category_id` returned by `bulk_review_snapshot`.
+    if (categoryIds.length > 0) {
+      rows = rows.filter(r => matchesCategoryFilter(r, categoryIds));
+    }
+    // Auditor "My audit scope only" — restrict to KPIs/employees assigned
+    // to the current auditor. Hidden for other roles.
+    if (isAuditor && myScopeOnly && myAuditScope) {
+      rows = rows.filter(isRowInMyScope);
+    }
     return rows;
-  }, [rawRows, search, hideEmpty, hideNonDue, period, year, kraNames, designations, grades, managerIds, allowedEmpSet]);
+  }, [rawRows, search, hideEmpty, hideNonDue, period, year, kraNames, designations, grades, managerIds, allowedEmpSet, categoryIds, isAuditor, myScopeOnly, myAuditScope]);
+
+  // Count of currently-loaded rows that fall inside the auditor's scope —
+  // surfaced as a muted chip so even with the toggle off the auditor knows
+  // "X of Y rows are mine".
+  const inMyScopeCount = useMemo(() => {
+    if (!isAuditor || !myAuditScope) return 0;
+    let n = 0;
+    for (const r of rawRows) if (isRowInMyScope(r)) n++;
+    return n;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuditor, myAuditScope, rawRows]);
 
   // Count of rows hidden specifically by the non-due filter (post other filters
   // except non-due itself) — surfaced as a badge so users know how many rows
@@ -614,6 +660,14 @@ export default function BulkReviewDashboard() {
                     <span><strong className="text-foreground">{snapshot.data.rows?.length ?? 0}</strong>/<strong className="text-foreground">{snapshot.data.total ?? 0}</strong> rows</span>
                     <span className="opacity-40">·</span>
                     <span>Δ&gt;1: <strong className="text-foreground">{variance}</strong></span>
+                    {isAuditor && myAuditScope && (
+                      <>
+                        <span className="opacity-40">·</span>
+                        <span title="Rows assigned to you as auditor (out of the loaded snapshot)">
+                          <strong className="text-foreground">{inMyScopeCount}</strong> in my scope
+                        </span>
+                      </>
+                    )}
                   </>
                 )}
                 {capExceeded && (
@@ -880,6 +934,34 @@ export default function BulkReviewDashboard() {
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
+            {isAuditor && (
+              <TooltipProvider delayDuration={150}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant={myScopeOnly ? 'secondary' : 'ghost'}
+                      size="sm"
+                      className="h-7 px-2 text-[11px] gap-1"
+                      onClick={() => setMyScopeOnly(v => !v)}
+                      aria-pressed={myScopeOnly}
+                    >
+                      <UserCheck className="h-3.5 w-3.5" />
+                      {myScopeOnly ? 'My scope only' : 'All auditable'}
+                      {myAuditScope && (
+                        <Badge variant="outline" className="ml-1 h-4 px-1 text-[10px] tabular-nums">
+                          {myScopeOnly ? inMyScopeCount : myAuditScope.total}
+                        </Badge>
+                      )}
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom" className="max-w-[320px] text-xs">
+                    {myScopeOnly
+                      ? 'Showing only KPIs assigned to you as auditor (employee-level ∪ KPI-level assignments). Click to see all KPIs in the loaded scope.'
+                      : 'Showing every KPI in the loaded scope, including those assigned to other auditors. Click to restrict to your assignments.'}
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
           </div>
         </div>
       </div>
