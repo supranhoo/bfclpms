@@ -420,6 +420,21 @@ export default function BulkReviewDashboard() {
     return m;
   }, [orgFlagsQ.data]);
 
+  // Org-KPI auditor coverage gaps (June 2026 RCA, "Sindhu Raj Singh / Adherence
+  // to Manning Norms"). When an Org KPI is propagated to N employees but the
+  // auditor's KPI/employee assignments cover K < N, the "My scope only" toggle
+  // silently hides (N − K) cells. We surface that as a non-blocking soft alert
+  // so the auditor can ask Admin to widen Audit Delegation instead of assuming
+  // the KPI doesn't exist for those employees. Uses only data already in
+  // memory — no new RPC.
+  const orgKpiCoverageGaps = useMemo(() => {
+    if (!isAuditor || !myAuditScope || rawRows.length === 0) return [];
+    const orgIds = new Set<string>();
+    for (const [kpiId, flag] of isOrgByKpiId) if (flag) orgIds.add(kpiId);
+    if (orgIds.size === 0) return [];
+    return computeOrgKpiCoverageGaps(rawRows as any, orgIds, myAuditScope);
+  }, [isAuditor, myAuditScope, rawRows, isOrgByKpiId]);
+
   // Prune stale selections when the scope changes so they don't silently hide
   // every row. We prune per-value (not full clear) so URL deep-links survive.
   useEffect(() => {
