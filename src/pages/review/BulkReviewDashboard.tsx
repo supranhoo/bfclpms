@@ -57,6 +57,7 @@ import { summariseSkipReasons, summariseStageWriteOutcome } from '@/lib/summaris
 import { kpiRowKey as makeKpiRowKey } from '@/lib/bulkRowSelection';
 import { isRowDueInPeriod } from '@/lib/bulkReviewDueFilter';
 import { isRowInAuditorScope, matchesCategoryFilter } from '@/lib/bulkAuditScopeFilter';
+import { computeOrgKpiCoverageGaps } from '@/lib/orgKpiAuditCoverage';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { CalendarClock } from 'lucide-react';
 import { useUrlFilterStateNullable } from '@/hooks/useUrlFilterState';
