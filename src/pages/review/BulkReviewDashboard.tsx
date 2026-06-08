@@ -663,6 +663,14 @@ export default function BulkReviewDashboard() {
                     <span><strong className="text-foreground">{snapshot.data.rows?.length ?? 0}</strong>/<strong className="text-foreground">{snapshot.data.total ?? 0}</strong> rows</span>
                     <span className="opacity-40">·</span>
                     <span>Δ&gt;1: <strong className="text-foreground">{variance}</strong></span>
+                    {isAuditor && myAuditScope && (
+                      <>
+                        <span className="opacity-40">·</span>
+                        <span title="Rows assigned to you as auditor (out of the loaded snapshot)">
+                          <strong className="text-foreground">{inMyScopeCount}</strong> in my scope
+                        </span>
+                      </>
+                    )}
                   </>
                 )}
                 {capExceeded && (
