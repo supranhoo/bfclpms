@@ -278,7 +278,7 @@ export function MobileKpiCard({
                 Data Owner: {owners.join(', ')}
               </Badge>
             ) : orgValue?.entered_by_name ? (
-              <Badge variant="secondary" className="text-[10px] px-1.5 py-0 text-muted-foreground" title="Last person who entered a value for this KPI. Not necessarily the assigned Data Owner.">
+              <Badge variant="outline" className="text-[10px] px-1.5 py-0" title="Last person who entered a value for this KPI. Not necessarily the assigned Data Owner.">
                 Entered by: {orgValue.entered_by_name}
               </Badge>
             ) : null;
