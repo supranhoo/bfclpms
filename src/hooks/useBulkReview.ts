@@ -414,3 +414,49 @@ export function useBulkReopenCells() {
     },
   });
 }
+
+/**
+ * Auditor's own scope — the union of:
+ *   - `audit_kpi_assignments`        (employee-level: every KPI for an emp)
+ *   - `audit_kpi_level_assignments`  (KPI-level: a single KPI)
+ *
+ * Used by the Bulk Review "My audit scope only" toggle so an auditor can
+ * collapse a 2k-row org-wide grid down to just the KPIs they're responsible
+ * for. Read-only, RLS-bounded to the current auditor's own rows.
+ */
+export interface MyAuditScope {
+  employeeIds: Set<string>;
+  kpiIds: Set<string>;
+  /** Distinct count = unique employees ∪ unique KPIs (for badge UI). */
+  total: number;
+}
+
+export function useMyAuditScope(enabled: boolean) {
+  return useQuery({
+    queryKey: ['my_audit_scope'],
+    enabled,
+    staleTime: 5 * 60 * 1000,
+    queryFn: async (): Promise<MyAuditScope> => {
+      const { data: { user } } = await supabase.auth.getUser();
+      const uid = user?.id;
+      if (!uid) return { employeeIds: new Set(), kpiIds: new Set(), total: 0 };
+
+      const [empRes, kpiRes] = await Promise.all([
+        supabase
+          .from('audit_kpi_assignments')
+          .select('employee_id')
+          .eq('auditor_id', uid),
+        supabase
+          .from('audit_kpi_level_assignments')
+          .select('kpi_id')
+          .eq('auditor_id', uid),
+      ]);
+      if (empRes.error) throw empRes.error;
+      if (kpiRes.error) throw kpiRes.error;
+
+      const employeeIds = new Set<string>((empRes.data ?? []).map((r: any) => r.employee_id));
+      const kpiIds = new Set<string>((kpiRes.data ?? []).map((r: any) => r.kpi_id));
+      return { employeeIds, kpiIds, total: employeeIds.size + kpiIds.size };
+    },
+  });
+}
