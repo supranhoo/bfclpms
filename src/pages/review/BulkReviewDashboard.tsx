@@ -333,15 +333,24 @@ export default function BulkReviewDashboard() {
     [attrsByEmp, designations, grades, managerIds],
   );
 
-  // Auditor's own assigned scope (employee-level ∪ KPI-level). Fetched once
-  // per session and reused for both the toggle filter and the counter chip.
-  const myAuditScopeQ = useMyAuditScope(effectiveRole === 'auditor');
-  const myAuditScope = myAuditScopeQ.data;
+  // Workflow-driven "My scope" — pairs of (kpi_id, employee_id) where the
+  // current user is the resolved reviewer at the active viewerStage for the
+  // selected period. Replaces the prior auditor-only `useMyAuditScope` which
+  // expanded employee-level audit assignments into every KPI of that
+  // employee. The toggle is now meaningful for every reviewer stage.
+  const isReviewerRole =
+    effectiveRole === 'auditor'
+    || effectiveRole === 'manager'
+    || effectiveRole === 'hr_pms'
+    || effectiveRole === 'skip_level'
+    || effectiveRole === 'management';
+  const myReviewScopeQ = useMyReviewScope(period, year, viewerStage, isReviewerRole);
+  const myReviewScope = myReviewScopeQ.data;
   const isAuditor = effectiveRole === 'auditor';
 
-  /** Row predicate: is this row inside the current auditor's assigned scope? */
+  /** Row predicate: is this row inside the current user's resolved-reviewer scope? */
   const isRowInMyScope = (r: BulkReviewRow): boolean =>
-    !!myAuditScope && isRowInAuditorScope(r, myAuditScope);
+    !!myReviewScope && isRowInMyReviewScope(r, myReviewScope.pairs);
 
   // Multi-axis client-side filter over the snapshot.
   const loadedRows = useMemo(() => {
@@ -379,22 +388,22 @@ export default function BulkReviewDashboard() {
     }
     // Auditor "My audit scope only" — restrict to KPIs/employees assigned
     // to the current auditor. Hidden for other roles.
-    if (isAuditor && myScopeOnly && myAuditScope) {
+    if (isReviewerRole && myScopeOnly && myReviewScope) {
       rows = rows.filter(isRowInMyScope);
     }
     return rows;
-  }, [rawRows, search, hideEmpty, hideNonDue, period, year, kraNames, designations, grades, managerIds, allowedEmpSet, categoryIds, isAuditor, myScopeOnly, myAuditScope]);
+  }, [rawRows, search, hideEmpty, hideNonDue, period, year, kraNames, designations, grades, managerIds, allowedEmpSet, categoryIds, isReviewerRole, myScopeOnly, myReviewScope]);
 
   // Count of currently-loaded rows that fall inside the auditor's scope —
   // surfaced as a muted chip so even with the toggle off the auditor knows
   // "X of Y rows are mine".
   const inMyScopeCount = useMemo(() => {
-    if (!isAuditor || !myAuditScope) return 0;
+    if (!isReviewerRole || !myReviewScope) return 0;
     let n = 0;
     for (const r of rawRows) if (isRowInMyScope(r)) n++;
     return n;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAuditor, myAuditScope, rawRows]);
+  }, [isReviewerRole, myReviewScope, rawRows]);
 
   // Count of rows hidden specifically by the non-due filter (post other filters
   // except non-due itself) — surfaced as a badge so users know how many rows
@@ -429,12 +438,21 @@ export default function BulkReviewDashboard() {
   // the KPI doesn't exist for those employees. Uses only data already in
   // memory — no new RPC.
   const orgKpiCoverageGaps = useMemo(() => {
-    if (!isAuditor || !myAuditScope || rawRows.length === 0) return [];
+    if (!isAuditor || !myReviewScope || rawRows.length === 0) return [];
     const orgIds = new Set<string>();
     for (const [kpiId, flag] of isOrgByKpiId) if (flag) orgIds.add(kpiId);
     if (orgIds.size === 0) return [];
-    return computeOrgKpiCoverageGaps(rawRows as any, orgIds, myAuditScope);
-  }, [isAuditor, myAuditScope, rawRows, isOrgByKpiId]);
+    // Adapt the new pair-set into the legacy {employeeIds, kpiIds} shape the
+    // coverage gap helper expects. Coverage now means "this (kpi,emp) pair
+    // is in my resolved-reviewer scope" — same intent, stricter source.
+    const empSet = new Set<string>();
+    const kpiSet = new Set<string>();
+    for (const p of myReviewScope.pairs) {
+      const [k, e] = p.split('|');
+      kpiSet.add(k); empSet.add(e);
+    }
+    return computeOrgKpiCoverageGaps(rawRows as any, orgIds, { employeeIds: empSet, kpiIds: kpiSet });
+  }, [isAuditor, myReviewScope, rawRows, isOrgByKpiId]);
 
   // Prune stale selections when the scope changes so they don't silently hide
   // every row. We prune per-value (not full clear) so URL deep-links survive.
