@@ -83,7 +83,7 @@ export function KpiMetricsSection({ kpi }: KpiMetricsSectionProps) {
       </CardHeader>
       <CardContent className="space-y-2 sm:space-y-3 px-3 sm:px-6 pb-3 sm:pb-6">
         {/* Metrics Grid — inline label:value to save vertical space */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-x-3 gap-y-1.5 text-xs">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-3 gap-y-1.5 text-xs">
           <div className="flex items-center gap-1.5 min-w-0">
             <Target className="h-3 w-3 shrink-0 text-muted-foreground" />
             <span className="text-muted-foreground">Target:</span>
