@@ -28,3 +28,21 @@ type: feature
 
 ## Tests
 - `src/test/bulkReview/auditScopeAndCategoryFilters.test.ts` (7 cases).
+
+## Org-KPI coverage gap diagnostic (June 2026 RCA)
+
+RCA case: "Adherence to Manning Norms" was propagated to 6+ employees but
+the auditor only had `audit_kpi_level_assignments` rows for 5 of them
+(Sindhu Raj Singh was missing). With "My scope only" ON the row for the
+uncovered employee was silently hidden, looking like the KPI didn't exist.
+
+- Pure helper: `src/lib/orgKpiAuditCoverage.ts::computeOrgKpiCoverageGaps`.
+- Dashboard surfaces a non-blocking amber Alert above the grid when:
+  `effectiveRole === 'auditor'` && `myScopeOnly` && at least one Org KPI has
+  `covered < total`. Lists up to 4 KPIs with `K of N covered` badges.
+- No new RPC — uses `rawRows`, `useBulkOrgKpiFlags`, and `useMyAuditScope`
+  already on the client.
+- Tests: `src/test/orgKpiAuditCoverage.test.ts` (5 cases) +
+  `src/test/bulkReview/auditScopeAndCategoryFilters.test.ts` regression
+  case "hides a row whose kpi_id and employee_id are both outside the
+  assigned scope".
