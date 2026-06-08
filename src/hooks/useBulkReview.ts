@@ -143,6 +143,7 @@ export interface BulkReviewRow {
   employee_id: string;
   kpi_name: string;
   kra_name: string;
+  category_id: string | null;
   weightage: number | null;
   status: string | null;
   kpi_group_type: string;
