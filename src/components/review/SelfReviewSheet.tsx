@@ -567,7 +567,7 @@ export function SelfReviewSheet({
   return (
     <>
       <Sheet open={open} onOpenChange={onOpenChange}>
-        <SheetContent className="flex flex-col h-full w-full sm:w-[85vw] sm:max-w-[1200px] overflow-y-auto p-4 sm:p-6">
+        <SheetContent className="flex flex-col h-full w-full sm:w-[95vw] sm:max-w-[1600px] overflow-y-auto p-4 sm:p-6">
           {/* Header */}
           <SheetHeader className="pb-2 sm:pb-3 border-b flex-shrink-0">
             <div className="flex items-center justify-between">
