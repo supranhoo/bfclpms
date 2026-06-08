@@ -63,4 +63,14 @@ describe('Bulk Review — "My audit scope only" predicate', () => {
       'kpi-x|e-alice',
     ]);
   });
+
+  // Regression lock — June 2026 "Sindhu Raj Singh / Adherence to Manning Norms"
+  // RCA. Auditor was assigned Manning Norms for 5 employees but Sindhu's KPI
+  // row was neither in `audit_kpi_level_assignments` nor was Sindhu in the
+  // auditor's `audit_kpi_assignments`. With "My scope only" ON the row must
+  // be hidden — confirms current behaviour and prevents accidental widening.
+  it('hides a row whose kpi_id and employee_id are both outside the assigned scope', () => {
+    const sindhuRow = row('kpi-manning-norms', 'e-sindhu-raj-singh');
+    expect(isRowInAuditorScope(sindhuRow, scope)).toBe(false);
+  });
 });
