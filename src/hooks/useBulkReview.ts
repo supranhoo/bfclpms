@@ -460,3 +460,60 @@ export function useMyAuditScope(enabled: boolean) {
     },
   });
 }
+
+/**
+ * Workflow-driven "My scope only" for Bulk Review.
+ *
+ * Returns the set of (kpi_id, employee_id) pairs where the current user is
+ * the resolved reviewer at `stage` for `(period, year)`. Replaces the older
+ * `useMyAuditScope` which expanded employee-level audit assignments into
+ * every KPI of that employee — that produced "random KPIs" the auditor
+ * had no workflow role on. The RPC `my_review_scope` is SECURITY DEFINER
+ * and only returns rows for `auth.uid()`.
+ */
+export type MyScopeStage =
+  | 'manager'
+  | 'functional_manager'
+  | 'skip_level'
+  | 'auditor'
+  | 'hr_pms'
+  | 'management';
+
+export interface MyReviewScope {
+  /** `${kpi_id}|${employee_id}` — exact pair (no employee-wide bleed). */
+  pairs: Set<string>;
+  kpiIds: Set<string>;
+  employeeIds: Set<string>;
+  total: number;
+}
+
+export function useMyReviewScope(
+  period: string,
+  year: number,
+  stage: MyScopeStage | string,
+  enabled: boolean,
+) {
+  return useQuery({
+    queryKey: ['my_review_scope', period, year, stage],
+    enabled: enabled && !!period && !!year && !!stage,
+    staleTime: 5 * 60 * 1000,
+    queryFn: async (): Promise<MyReviewScope> => {
+      const { data, error } = await supabase.rpc('my_review_scope' as any, {
+        p_period: period,
+        p_year: year,
+        p_stage: stage,
+      });
+      if (error) throw error;
+      const rows = (data ?? []) as Array<{ kpi_id: string; employee_id: string }>;
+      const pairs = new Set<string>();
+      const kpiIds = new Set<string>();
+      const employeeIds = new Set<string>();
+      for (const r of rows) {
+        pairs.add(`${r.kpi_id}|${r.employee_id}`);
+        kpiIds.add(r.kpi_id);
+        employeeIds.add(r.employee_id);
+      }
+      return { pairs, kpiIds, employeeIds, total: pairs.size };
+    },
+  });
+}
