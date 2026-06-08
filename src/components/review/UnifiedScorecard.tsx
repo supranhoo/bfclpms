@@ -1862,7 +1862,7 @@ export function UnifiedScorecard({
           </SheetHeader>
 
           {selectedKpi && (
-            <div className="space-y-4 sm:space-y-6 py-4 sm:py-6">
+            <div className="space-y-3 sm:space-y-4 py-2 sm:py-3">
               {/* v2.65.0 — Explorer Mode read-only banner */}
               {exploreMode && (
                 <Alert className="border-amber-300 bg-amber-50 dark:border-amber-700 dark:bg-amber-950/30">
