@@ -6,15 +6,25 @@ type: feature
 
 ## Bulk Review — Auditor scope toggle
 
-- Toggle label: **"My scope only"** (auditor role only, hidden for others).
+- Toggle label: **"My scope only"** — visible for every reviewer role
+  (auditor, manager, hr_pms, skip_level, management). Hidden for employee/admin.
 - **Default ON.** Persisted in `localStorage` as `bulkReview.myScopeOnly`.
-- Scope source = `useMyAuditScope()` → union of
-  - `audit_kpi_assignments` (employee-level, all KPIs of the employee)
-  - `audit_kpi_level_assignments` (single KPI)
-- Filter predicate lives in `src/lib/bulkAuditScopeFilter.ts::isRowInAuditorScope`.
-- Header chip `<N> in my scope` is shown whenever the role is auditor and the
-  snapshot is loaded — even when the toggle is OFF — so the auditor always
-  sees how much of the snapshot is theirs.
+- Scope source = `useMyReviewScope(period, year, viewerStage)` → calls RPC
+  `public.my_review_scope(p_period, p_year, p_stage)` which returns the
+  exact `(kpi_id, employee_id)` pairs where `auth.uid()` is the **resolved
+  reviewer** at the active stage for that period. Stage → resolution rule:
+  - `auditor` → `audit_kpi_assignments` ∪ `audit_kpi_level_assignments`,
+    intersected with KPIs whose resolved workflow contains `auditor_check`.
+  - `manager` → `profiles.reporting_manager_id = uid`.
+  - `functional_manager` → `is_functional_manager_of(employee_id)`.
+  - `skip_level` → `get_skip_level_manager(employee_id) = uid`.
+  - `hr_pms` / `management` → role-bearer (workflow gates the KPI list).
+- Filter predicate: `src/lib/bulkAuditScopeFilter.ts::isRowInMyReviewScope`
+  matches the exact `${kpi_id}|${employee_id}` pair — no employee-wide bleed.
+- Header chip `<N> in my scope` is shown for any reviewer role once the
+  snapshot is loaded, even with the toggle OFF.
+- Legacy `useMyAuditScope` + `isRowInAuditorScope` remain exported for
+  backward-compat but are deprecated; do not use them in new code.
 
 ## Bulk Review — Multi-category filter
 
@@ -37,9 +47,11 @@ the auditor only had `audit_kpi_level_assignments` rows for 5 of them
 uncovered employee was silently hidden, looking like the KPI didn't exist.
 
 - Pure helper: `src/lib/orgKpiAuditCoverage.ts::computeOrgKpiCoverageGaps`.
-- Dashboard surfaces a non-blocking amber Alert above the grid when:
+- Dashboard surfaces a compact ⓘ icon next to the "X in my scope" chip when:
   `effectiveRole === 'auditor'` && `myScopeOnly` && at least one Org KPI has
-  `covered < total`. Lists up to 4 KPIs with `K of N covered` badges.
+  `covered < total`. Click → Popover listing up to 6 KPIs with `K of N
+  covered` badges. The wide amber banner above the grid was removed
+  (June 2026 UX feedback — "should be just an (i) icon").
 - No new RPC — uses `rawRows`, `useBulkOrgKpiFlags`, and `useMyAuditScope`
   already on the client.
 - Tests: `src/test/orgKpiAuditCoverage.test.ts` (5 cases) +
