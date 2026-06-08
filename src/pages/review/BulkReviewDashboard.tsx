@@ -1102,38 +1102,6 @@ export default function BulkReviewDashboard() {
                 </p>
               ) : (
                 <>
-                  {isAuditor && myScopeOnly && orgKpiCoverageGaps.length > 0 && (
-                    <Alert className="mb-3 border-amber-500/40 bg-amber-500/5">
-                      <AlertCircle className="h-4 w-4 text-amber-600" />
-                      <AlertTitle className="text-sm">
-                        Audit coverage gap on {orgKpiCoverageGaps.length} Org KPI{orgKpiCoverageGaps.length > 1 ? 's' : ''}
-                      </AlertTitle>
-                      <AlertDescription className="text-xs space-y-1.5 mt-1">
-                        <p className="text-muted-foreground">
-                          These Org KPIs exist for more employees than your Audit Delegation
-                          covers. "My scope only" is hiding the uncovered cells. Ask Admin to
-                          extend your KPI-level assignment, or toggle <strong>My scope only</strong> off
-                          to inspect the missing rows read-only.
-                        </p>
-                        <ul className="space-y-0.5 pl-1">
-                          {orgKpiCoverageGaps.slice(0, 4).map((g) => (
-                            <li key={g.key} className="flex items-baseline gap-1.5">
-                              <span className="text-muted-foreground">·</span>
-                              <span className="truncate">{g.kpi_name}</span>
-                              <Badge variant="outline" className="h-4 px-1 text-[10px] shrink-0">
-                                {g.covered} of {g.total} covered
-                              </Badge>
-                            </li>
-                          ))}
-                          {orgKpiCoverageGaps.length > 4 && (
-                            <li className="text-muted-foreground">
-                              · …and {orgKpiCoverageGaps.length - 4} more
-                            </li>
-                          )}
-                        </ul>
-                      </AlertDescription>
-                    </Alert>
-                  )}
                   <BulkReviewMatrixGrid
                     rows={loadedRows}
                     viewerStage={viewerStage}
