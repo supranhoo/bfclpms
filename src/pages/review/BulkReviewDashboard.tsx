@@ -937,6 +937,34 @@ export default function BulkReviewDashboard() {
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
+            {isAuditor && (
+              <TooltipProvider delayDuration={150}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant={myScopeOnly ? 'secondary' : 'ghost'}
+                      size="sm"
+                      className="h-7 px-2 text-[11px] gap-1"
+                      onClick={() => setMyScopeOnly(v => !v)}
+                      aria-pressed={myScopeOnly}
+                    >
+                      <UserCheck className="h-3.5 w-3.5" />
+                      {myScopeOnly ? 'My scope only' : 'All auditable'}
+                      {myAuditScope && (
+                        <Badge variant="outline" className="ml-1 h-4 px-1 text-[10px] tabular-nums">
+                          {myScopeOnly ? inMyScopeCount : myAuditScope.total}
+                        </Badge>
+                      )}
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom" className="max-w-[320px] text-xs">
+                    {myScopeOnly
+                      ? 'Showing only KPIs assigned to you as auditor (employee-level ∪ KPI-level assignments). Click to see all KPIs in the loaded scope.'
+                      : 'Showing every KPI in the loaded scope, including those assigned to other auditors. Click to restrict to your assignments.'}
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
           </div>
         </div>
       </div>
