@@ -4,7 +4,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import {
   AlertCircle, Layers, RefreshCw, Search, EyeOff, Eye,
   Calendar, CalendarDays, Building2, Network, Factory, Users, Tag, UserCog, Target,
-  IdCard, Award, Crosshair, X,
+  IdCard, Award, Crosshair, X, UserCheck,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -36,6 +36,7 @@ import {
   useBulkWriteStageScores,
   useBulkOrgKpiFlags,
   useBulkEmployeeAttrs,
+  useMyAuditScope,
   type BulkScopeFilters,
   type BulkReviewRow,
 } from '@/hooks/useBulkReview';
