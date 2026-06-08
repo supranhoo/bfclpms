@@ -10,7 +10,8 @@ type: feature
   - Decoders: `@jsquash/jpeg`, `@jsquash/png`. Encoder: `@jsquash/webp` (q=85).
   - Batch size: 8 per queue per run. Max attempts: 3.
   - Skips when WebP ≥ original (`no_savings`), then marks `skipped`.
-- **Cron**: `compress-evidence-every-2min` (jobid 13) — `*/2 * * * *`.
+- **Cron**: `compress-evidence-daily` — `30 3 * * *` (once daily, 03:30 UTC). Throttled from `*/2 * * * *` in June 2026 to cut Cloud compute cost (queue was empty 99% of runs). Admins can trigger an on-demand run from the Server Compression panel.
+- **Empty-queue guard**: the edge function does a `count head:true` on both queues at entry and exits before importing the heavy `@jsquash/*` WASM codecs when both are empty. Codecs are dynamic-imported on first real job.
 
 ## Schema
 - `safety_incident_evidence` adds: `compression_status`, `original_size_bytes`, `compressed_at`, `compression_attempts`, `compression_error`, `original_file_path`. BEFORE INSERT trigger `enqueue_safety_compression_on_insert` marks image MIMEs as `pending`, others as `skipped`.
