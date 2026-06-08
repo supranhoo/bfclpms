@@ -4,7 +4,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import {
   AlertCircle, Layers, RefreshCw, Search, EyeOff, Eye,
   Calendar, CalendarDays, Building2, Network, Factory, Users, Tag, UserCog, Target,
-  IdCard, Award, Crosshair, X, UserCheck,
+  IdCard, Award, Crosshair, X, UserCheck, Info,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -36,7 +36,7 @@ import {
   useBulkWriteStageScores,
   useBulkOrgKpiFlags,
   useBulkEmployeeAttrs,
-  useMyAuditScope,
+  useMyReviewScope,
   type BulkScopeFilters,
   type BulkReviewRow,
 } from '@/hooks/useBulkReview';
@@ -56,8 +56,9 @@ import { bulkActionForStage } from '@/lib/bulkActionForStage';
 import { summariseSkipReasons, summariseStageWriteOutcome } from '@/lib/summariseSkipReasons';
 import { kpiRowKey as makeKpiRowKey } from '@/lib/bulkRowSelection';
 import { isRowDueInPeriod } from '@/lib/bulkReviewDueFilter';
-import { isRowInAuditorScope, matchesCategoryFilter } from '@/lib/bulkAuditScopeFilter';
+import { isRowInMyReviewScope, matchesCategoryFilter } from '@/lib/bulkAuditScopeFilter';
 import { computeOrgKpiCoverageGaps } from '@/lib/orgKpiAuditCoverage';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { CalendarClock } from 'lucide-react';
 import { useUrlFilterStateNullable } from '@/hooks/useUrlFilterState';
