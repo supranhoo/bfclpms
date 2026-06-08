@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
@@ -6,7 +6,7 @@ import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Server, AlertTriangle, RefreshCw } from 'lucide-react';
+import { Server, AlertTriangle, RefreshCw, Play } from 'lucide-react';
 import { useSystemSetting, useUpdateSystemSetting } from '@/hooks/useSystemSettings';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -67,6 +67,7 @@ export function ServerCompressionPanel() {
 
   const enabled = useMemo(() => parseBool(enabledQ.data?.setting_value, true), [enabledQ.data?.setting_value]);
   const rewrite = useMemo(() => parseBool(rewriteQ.data?.setting_value, false), [rewriteQ.data?.setting_value]);
+  const [running, setRunning] = useState(false);
 
   const setBool = async (key: string, val: boolean, label: string) => {
     try {
@@ -74,6 +75,27 @@ export function ServerCompressionPanel() {
       toast.success(`${label} ${val ? 'enabled' : 'disabled'}`);
     } catch (err) {
       toast.error(`Failed to update: ${(err as Error).message}`);
+    }
+  };
+
+  const runNow = async () => {
+    setRunning(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('compress-evidence');
+      if (error) throw error;
+      const skipped = (data as { skipped?: string } | null)?.skipped;
+      if (skipped) {
+        toast.message(`Compression run skipped: ${skipped}`);
+      } else {
+        const safety = ((data as { safety?: unknown[] } | null)?.safety ?? []).length;
+        const pms = ((data as { pms?: unknown[] } | null)?.pms ?? []).length;
+        toast.success(`Compression complete — Safety: ${safety}, PMS: ${pms}`);
+      }
+      stats.refetch();
+    } catch (err) {
+      toast.error(`Compression run failed: ${(err as Error).message}`);
+    } finally {
+      setRunning(false);
     }
   };
 
@@ -101,8 +123,9 @@ export function ServerCompressionPanel() {
           <Server className="h-5 w-5" /> Background Server Compression
         </CardTitle>
         <CardDescription>
-          Re-encodes uploaded evidence images to WebP every 2 minutes via a background job.
-          Originals are preserved on the storage bucket; only the active reference is rewritten.
+          Re-encodes uploaded evidence images to WebP. Runs once daily as a background job;
+          admins can trigger an on-demand run below. Originals are preserved on the storage
+          bucket; only the active reference is rewritten.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -134,22 +157,37 @@ export function ServerCompressionPanel() {
         <div className="space-y-2 p-3 rounded-lg border">
           <div className="flex items-center justify-between gap-2">
             <Label className="text-sm font-semibold">Queue status</Label>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => stats.refetch()}
-              disabled={stats.isFetching}
-              className="h-8"
-            >
-              <RefreshCw
-                className={`h-3.5 w-3.5 mr-1.5 ${stats.isFetching ? 'animate-spin' : ''}`}
-              />
-              Refresh
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="default"
+                size="sm"
+                onClick={runNow}
+                disabled={running || !enabled}
+                className="h-8"
+                title={!enabled ? 'Enable the master switch first' : 'Run the compression worker now'}
+              >
+                <Play className={`h-3.5 w-3.5 mr-1.5 ${running ? 'animate-pulse' : ''}`} />
+                {running ? 'Running…' : 'Run compression now'}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => stats.refetch()}
+                disabled={stats.isFetching}
+                className="h-8"
+              >
+                <RefreshCw
+                  className={`h-3.5 w-3.5 mr-1.5 ${stats.isFetching ? 'animate-spin' : ''}`}
+                />
+                Refresh
+              </Button>
+            </div>
           </div>
           <StatRow title="Safety" t={stats.data?.safety} />
           <StatRow title="PMS" t={stats.data?.pms} />
-          <p className="text-xs text-muted-foreground">Auto-refreshes every 2 minutes. Failures retry up to 3 times.</p>
+          <p className="text-xs text-muted-foreground">
+            Auto-refreshes every 2 minutes. Failures retry up to 3 times. Scheduled run: once daily.
+          </p>
         </div>
       </CardContent>
     </Card>

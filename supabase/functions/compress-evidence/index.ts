@@ -12,9 +12,8 @@
 // SAFETY: original storage object is preserved for 7 days (cleaned by a separate job, not here).
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
-import { decode as decodeJpeg } from 'https://esm.sh/@jsquash/jpeg@1.5.0?bundle';
-import { decode as decodePng } from 'https://esm.sh/@jsquash/png@3.0.1?bundle';
-import { encode as encodeWebp } from 'https://esm.sh/@jsquash/webp@1.4.0?bundle';
+// Heavy WASM codecs are dynamically imported inside decodeImage()/compressOne()
+// so empty-queue runs don't pay the ~5 MB cold-start cost.
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -83,8 +82,14 @@ function parseStorageUrl(url: string): { bucket: string; path: string } | null {
 
 async function decodeImage(bytes: Uint8Array, mime: string): Promise<ImageData | null> {
   const m = mime.toLowerCase();
-  if (m.includes('jpeg') || m.includes('jpg')) return decodeJpeg(bytes);
-  if (m.includes('png')) return decodePng(bytes);
+  if (m.includes('jpeg') || m.includes('jpg')) {
+    const { decode } = await import('https://esm.sh/@jsquash/jpeg@1.5.0?bundle');
+    return decode(bytes);
+  }
+  if (m.includes('png')) {
+    const { decode } = await import('https://esm.sh/@jsquash/png@3.0.1?bundle');
+    return decode(bytes);
+  }
   // HEIC not supported by jsquash; client should have re-encoded already.
   return null;
 }
@@ -106,6 +111,7 @@ async function compressOne(
   const img = await decodeImage(buf, mime);
   if (!img) return { error: `decode_unsupported: ${mime}` };
 
+  const { encode: encodeWebp } = await import('https://esm.sh/@jsquash/webp@1.4.0?bundle');
   const webp = await encodeWebp(img, { quality: WEBP_QUALITY });
   const webpBytes = new Uint8Array(webp);
 
@@ -262,6 +268,23 @@ Deno.serve(async (req) => {
     const settings = await readSettings(sb);
     if (!settings.enabled) {
       return jsonResponse({ ok: true, skipped: 'disabled_via_setting' });
+    }
+    // Cheap empty-queue guard — avoids loading WASM codecs when there's no work.
+    // POLICY §120: zero-row head:true count call is explicitly allowed.
+    const [pmsCount, safetyCount] = await Promise.all([
+      sb.from('pms_evidence_compression_jobs')
+        .select('id', { count: 'exact', head: true })
+        .in('status', ['pending', 'failed'])
+        .lt('attempts', MAX_ATTEMPTS),
+      sb.from('safety_incident_evidence')
+        .select('id', { count: 'exact', head: true })
+        .in('compression_status', ['pending', 'failed'])
+        .lt('compression_attempts', MAX_ATTEMPTS),
+    ]);
+    const pmsPending = pmsCount.count ?? 0;
+    const safetyPending = safetyCount.count ?? 0;
+    if (pmsPending === 0 && safetyPending === 0) {
+      return jsonResponse({ ok: true, skipped: 'empty_queue' });
     }
     const safety = await processSafetyBatch(sb);
     const pms = await processPmsBatch(sb, settings.pmsRewrite);
