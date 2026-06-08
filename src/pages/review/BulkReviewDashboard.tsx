@@ -695,12 +695,56 @@ export default function BulkReviewDashboard() {
                     <span><strong className="text-foreground">{snapshot.data.rows?.length ?? 0}</strong>/<strong className="text-foreground">{snapshot.data.total ?? 0}</strong> rows</span>
                     <span className="opacity-40">·</span>
                     <span>Δ&gt;1: <strong className="text-foreground">{variance}</strong></span>
-                    {isAuditor && myAuditScope && (
+                    {isReviewerRole && myReviewScope && (
                       <>
                         <span className="opacity-40">·</span>
-                        <span title="Rows assigned to you as auditor (out of the loaded snapshot)">
+                        <span title="Rows where you are the resolved reviewer for the active stage (out of the loaded snapshot)">
                           <strong className="text-foreground">{inMyScopeCount}</strong> in my scope
                         </span>
+                        {isAuditor && myScopeOnly && orgKpiCoverageGaps.length > 0 && (
+                          <Popover>
+                            <PopoverTrigger asChild>
+                              <button
+                                type="button"
+                                className="ml-1 inline-flex items-center justify-center h-4 w-4 rounded-full text-amber-600 hover:bg-amber-500/10"
+                                aria-label="Audit coverage gap details"
+                                title="Audit coverage gap"
+                              >
+                                <Info className="h-3.5 w-3.5" />
+                              </button>
+                            </PopoverTrigger>
+                            <PopoverContent side="bottom" align="start" className="w-[360px] text-xs">
+                              <div className="flex items-center gap-1.5 mb-1.5">
+                                <AlertCircle className="h-3.5 w-3.5 text-amber-600" />
+                                <span className="font-medium">
+                                  Audit coverage gap on {orgKpiCoverageGaps.length} Org KPI{orgKpiCoverageGaps.length > 1 ? 's' : ''}
+                                </span>
+                              </div>
+                              <p className="text-muted-foreground mb-2">
+                                These Org KPIs exist for more employees than your Audit Delegation
+                                covers. "My scope only" is hiding the uncovered cells. Ask Admin to
+                                extend your KPI-level assignment, or toggle <strong>My scope only</strong> off
+                                to inspect the missing rows read-only.
+                              </p>
+                              <ul className="space-y-0.5">
+                                {orgKpiCoverageGaps.slice(0, 6).map((g) => (
+                                  <li key={g.key} className="flex items-baseline gap-1.5">
+                                    <span className="text-muted-foreground">·</span>
+                                    <span className="truncate">{g.kpi_name}</span>
+                                    <Badge variant="outline" className="h-4 px-1 text-[10px] shrink-0 ml-auto">
+                                      {g.covered} of {g.total} covered
+                                    </Badge>
+                                  </li>
+                                ))}
+                                {orgKpiCoverageGaps.length > 6 && (
+                                  <li className="text-muted-foreground">
+                                    · …and {orgKpiCoverageGaps.length - 6} more
+                                  </li>
+                                )}
+                              </ul>
+                            </PopoverContent>
+                          </Popover>
+                        )}
                       </>
                     )}
                   </>
