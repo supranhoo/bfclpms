@@ -151,6 +151,18 @@ export default function BulkReviewDashboard() {
       window.localStorage.setItem('bulkReview.hideNonDue', String(hideNonDue));
     }
   }, [hideNonDue]);
+  // "My audit scope only" — auditor-only toggle. Default ON: an auditor's
+  // mental model is "show me what I have to review". Persisted in localStorage.
+  const [myScopeOnly, setMyScopeOnly] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return true;
+    const raw = window.localStorage.getItem('bulkReview.myScopeOnly');
+    return raw === null ? true : raw === 'true';
+  });
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem('bulkReview.myScopeOnly', String(myScopeOnly));
+    }
+  }, [myScopeOnly]);
   const [scopeLoaded, setScopeLoaded] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [activeRow, setActiveRow] = useState<BulkReviewRow | null>(null);
