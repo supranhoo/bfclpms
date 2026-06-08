@@ -1013,7 +1013,7 @@ export default function BulkReviewDashboard() {
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
-            {isAuditor && (
+            {isReviewerRole && (
               <TooltipProvider delayDuration={150}>
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -1025,18 +1025,18 @@ export default function BulkReviewDashboard() {
                       aria-pressed={myScopeOnly}
                     >
                       <UserCheck className="h-3.5 w-3.5" />
-                      {myScopeOnly ? 'My scope only' : 'All auditable'}
-                      {myAuditScope && (
+                      {myScopeOnly ? 'My scope only' : 'All in scope'}
+                      {myReviewScope && (
                         <Badge variant="outline" className="ml-1 h-4 px-1 text-[10px] tabular-nums">
-                          {myScopeOnly ? inMyScopeCount : myAuditScope.total}
+                          {myScopeOnly ? inMyScopeCount : myReviewScope.total}
                         </Badge>
                       )}
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent side="bottom" className="max-w-[320px] text-xs">
                     {myScopeOnly
-                      ? 'Showing only KPIs assigned to you as auditor (employee-level ∪ KPI-level assignments). Click to see all KPIs in the loaded scope.'
-                      : 'Showing every KPI in the loaded scope, including those assigned to other auditors. Click to restrict to your assignments.'}
+                      ? `Showing only KPIs where you are the resolved reviewer for the active stage (${viewerStage.replace('_', ' ')}) in ${period} ${year}. Click to see all loaded KPIs.`
+                      : `Showing every KPI in the loaded scope, including those routed to other reviewers. Click to restrict to KPIs where you are the resolved ${viewerStage.replace('_', ' ')}.`}
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
