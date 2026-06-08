@@ -330,6 +330,19 @@ export default function BulkReviewDashboard() {
     [attrsByEmp, designations, grades, managerIds],
   );
 
+  // Auditor's own assigned scope (employee-level ∪ KPI-level). Fetched once
+  // per session and reused for both the toggle filter and the counter chip.
+  const myAuditScopeQ = useMyAuditScope(effectiveRole === 'auditor');
+  const myAuditScope = myAuditScopeQ.data;
+  const isAuditor = effectiveRole === 'auditor';
+
+  /** Row predicate: is this row inside the current auditor's assigned scope? */
+  const isRowInMyScope = (r: BulkReviewRow): boolean => {
+    if (!myAuditScope) return false;
+    return myAuditScope.kpiIds.has(r.kpi_id)
+      || myAuditScope.employeeIds.has(r.employee_id);
+  };
+
   // Multi-axis client-side filter over the snapshot.
   const loadedRows = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -358,8 +371,31 @@ export default function BulkReviewDashboard() {
     if (designations.length || grades.length || managerIds.length) {
       rows = rows.filter(r => allowedEmpSet.has(r.employee_id));
     }
+    // Multi-category client filter — server only honours single category
+    // (oneOrNull). Without this branch, picking 2+ categories was a silent
+    // no-op. Requires `category_id` returned by `bulk_review_snapshot`.
+    if (categoryIds.length > 0) {
+      const catSet = new Set(categoryIds);
+      rows = rows.filter(r => !!r.category_id && catSet.has(r.category_id));
+    }
+    // Auditor "My audit scope only" — restrict to KPIs/employees assigned
+    // to the current auditor. Hidden for other roles.
+    if (isAuditor && myScopeOnly && myAuditScope) {
+      rows = rows.filter(isRowInMyScope);
+    }
     return rows;
-  }, [rawRows, search, hideEmpty, hideNonDue, period, year, kraNames, designations, grades, managerIds, allowedEmpSet]);
+  }, [rawRows, search, hideEmpty, hideNonDue, period, year, kraNames, designations, grades, managerIds, allowedEmpSet, categoryIds, isAuditor, myScopeOnly, myAuditScope]);
+
+  // Count of currently-loaded rows that fall inside the auditor's scope —
+  // surfaced as a muted chip so even with the toggle off the auditor knows
+  // "X of Y rows are mine".
+  const inMyScopeCount = useMemo(() => {
+    if (!isAuditor || !myAuditScope) return 0;
+    let n = 0;
+    for (const r of rawRows) if (isRowInMyScope(r)) n++;
+    return n;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuditor, myAuditScope, rawRows]);
 
   // Count of rows hidden specifically by the non-due filter (post other filters
   // except non-due itself) — surfaced as a badge so users know how many rows
