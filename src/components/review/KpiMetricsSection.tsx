@@ -81,42 +81,30 @@ export function KpiMetricsSection({ kpi }: KpiMetricsSectionProps) {
           Metrics & Scale
         </CardTitle>
       </CardHeader>
-      <CardContent className="space-y-3 sm:space-y-4 px-3 sm:px-6 pb-3 sm:pb-6">
-        {/* Metrics Grid - stack label above value to avoid overlap on narrow widths */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-x-3 gap-y-2 text-xs sm:text-sm">
-          <div className="flex flex-col gap-0.5 min-w-0">
-            <span className="text-muted-foreground flex items-center gap-1">
-              <Target className="h-3 w-3 shrink-0" />
-              Target
-            </span>
-            <span className="font-medium whitespace-nowrap">
+      <CardContent className="space-y-2 sm:space-y-3 px-3 sm:px-6 pb-3 sm:pb-6">
+        {/* Metrics Grid — inline label:value to save vertical space */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-x-3 gap-y-1.5 text-xs">
+          <div className="flex items-center gap-1.5 min-w-0">
+            <Target className="h-3 w-3 shrink-0 text-muted-foreground" />
+            <span className="text-muted-foreground">Target:</span>
+            <span className="font-medium whitespace-nowrap truncate">
               {target !== null && target !== undefined ? `${target} ${uom}` : 'N/A'}
             </span>
           </div>
-          <div className="flex flex-col gap-0.5 min-w-0">
-            <span className="text-muted-foreground flex items-center gap-1">
-              <Scale className="h-3 w-3 shrink-0" />
-              Criteria
-            </span>
-            <span className="font-medium text-xs break-words">{criteria}</span>
+          <div className="flex items-center gap-1.5 min-w-0">
+            <Scale className="h-3 w-3 shrink-0 text-muted-foreground" />
+            <span className="text-muted-foreground">Criteria:</span>
+            <span className="font-medium truncate" title={criteria}>{criteria}</span>
           </div>
-          <div className="flex flex-col gap-0.5 min-w-0">
-            <span className="text-muted-foreground flex items-center gap-1">
-              <Clock className="h-3 w-3 shrink-0" />
-              Frequency
-            </span>
-            <Badge variant="outline" className="text-[10px] sm:text-xs h-5 w-fit">
-              {frequency}
-            </Badge>
+          <div className="flex items-center gap-1.5 min-w-0">
+            <Clock className="h-3 w-3 shrink-0 text-muted-foreground" />
+            <span className="text-muted-foreground">Frequency:</span>
+            <Badge variant="outline" className="text-[10px] h-4 px-1.5 py-0">{frequency}</Badge>
           </div>
-          <div className="flex flex-col gap-0.5 min-w-0">
-            <span className="text-muted-foreground flex items-center gap-1">
-              <Database className="h-3 w-3 shrink-0" />
-              Source
-            </span>
-            <span className="font-medium text-xs break-words" title={source}>
-              {source}
-            </span>
+          <div className="flex items-center gap-1.5 min-w-0">
+            <Database className="h-3 w-3 shrink-0 text-muted-foreground" />
+            <span className="text-muted-foreground">Source:</span>
+            <span className="font-medium truncate" title={source}>{source}</span>
           </div>
         </div>
 
