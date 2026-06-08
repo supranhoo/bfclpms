@@ -12194,6 +12194,13 @@ export type Database = {
         Returns: Json
       }
       month_name_to_index: { Args: { p_month: string }; Returns: number }
+      my_review_scope: {
+        Args: { p_period: string; p_stage: string; p_year: number }
+        Returns: {
+          employee_id: string
+          kpi_id: string
+        }[]
+      }
       normalize_kpi_text: { Args: { p: string }; Returns: string }
       normalize_kpi_text_value: { Args: { txt: string }; Returns: string }
       org_kpi_evidence_parity: {

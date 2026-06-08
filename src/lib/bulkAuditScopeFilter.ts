@@ -32,3 +32,17 @@ export function matchesCategoryFilter(
   if (!row.category_id) return false;
   return selected.includes(row.category_id);
 }
+
+/**
+ * Workflow-driven scope predicate (replaces `isRowInAuditorScope` for the
+ * "My scope only" toggle). Matches strictly on the exact `(kpi, employee)`
+ * pair returned by the `my_review_scope` RPC — so an auditor who only audits
+ * employee X for KPIs A,B no longer sees KPI C of employee X just because
+ * X is in their employee-level coverage.
+ */
+export function isRowInMyReviewScope(
+  row: Pick<RowForScope, 'kpi_id' | 'employee_id'>,
+  pairs: ReadonlySet<string>,
+): boolean {
+  return pairs.has(`${row.kpi_id}|${row.employee_id}`);
+}

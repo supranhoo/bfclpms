@@ -1,59 +1,94 @@
-# Why "Adherence to Manning Norms" is hidden for Sindhu Raj Singh
+## Goal
+Two fixes on the **Bulk Review** dashboard:
 
-## 1. RCA (verified against live DB)
+1. **Audit coverage gap notice** is too loud — collapse it to a single ⓘ icon (popover on click/hover).
+2. **"My scope only"** currently includes any KPI tied to the auditor via `audit_kpi_assignments` (employee‑level) — even KPIs the auditor is *not* a reviewer of in the active workflow. It must instead show **only KPIs where the current user is the resolved reviewer for the active stage** (Auditor / Manager / Functional Manager / HR PMS / Skip‑Level) for that period.
 
-**The KPI does exist.** For May 2026 there is a `kpis` row for Sindhu Raj Singh (100042 / `66b76d0c…c99b`):
-- KPI id `e0c12404-1cf1-438f-83a8-583bc6291404`
-- `is_org_level = true`, `status = self_review`, KRA "Adherence to Monthly Budget".
+---
 
-**It is being hidden by the "My scope only" toggle** (default ON for auditors — see `mem/features/review/bulk-review-auditor-scope-filter.md`). Auditor scope is the union of:
-- `audit_kpi_assignments` (employee-level) → Ayush Bansal has exactly **1**: Abhas Luharuwalla.
-- `audit_kpi_level_assignments` (KPI-level) → Ayush has 358 rows; for KPI name "Adherence to Manning Norms" only **5 employees** are assigned (Dilip Ojha, Abhas, Sajid Raza, Parshu Ram, Jitendra Dwivedi). Sindhu Raj Singh is **not** in that set.
+## Risk & Impact
 
-That is why the column for Sindhu Raj Singh shows `—` (filtered out, not "pending"). Other employees on the same row show PENDING because they're in the 5 assigned above.
+- **Data Impact**: none — read‑only filter logic + 1 new read‑only RPC.
+- **Workflow Impact**: none — sign‑off/approve paths untouched.
+- **UI Impact**: alert collapses to an icon; My‑scope rows shrink to true reviewer scope.
+- **Regression risk**: auditors who currently rely on seeing every KPI of "their" employees will see fewer rows; mitigated by (a) keeping the toggle default ON but documenting the new semantics in tooltip + memory, and (b) toggling OFF still shows the full snapshot.
+- **Scalability**: RPC returns a `(kpi_id, employee_id)` pair set bounded by the period’s active workflow (~hundreds–few thousand rows). Indexed lookup, cached 5 min.
 
-→ **Root cause = an Audit Assignment data gap, not a workflow / propagation / RLS bug.** When this Org KPI was propagated to all mapped employees, the auditor coverage was not extended to the new employees.
+---
 
-## 2. Verification you can do right now (no code change)
+## Fix 1 — Coverage‑gap as ⓘ icon only
 
-Switch **"My scope only" OFF** on the Bulk Review header — Sindhu Raj Singh's column will immediately show the KPI as PENDING. That confirms the cell is being suppressed only by the auditor-scope filter.
+**Where**: `src/pages/review/BulkReviewDashboard.tsx` lines 1042‑1073.
 
-## 3. CAPA
+**Change**:
+- Remove the full `<Alert>` block above the matrix.
+- Render, only when `isAuditor && myScopeOnly && orgKpiCoverageGaps.length > 0`, a single small `<Info>` (lucide) button in the existing header strip right next to the **"X in my scope"** chip.
+- Click/hover opens a `Popover` (shadcn) with the existing title + descriptive paragraph + up to‑4 KPI list + "…and N more". Same content, same data source — no logic change.
+- A11y: `aria-label="Audit coverage gap details"`, focusable.
 
-### Corrective (one-shot, data fix)
-Add Sindhu Raj Singh to Ayush's KPI-level coverage for "Adherence to Manning Norms" (and any other org-level KPI that has the same coverage gap). Done from **Audit Delegation** → KPI-level → pick Manning Norms → tick the missing employees. No code change required.
+**No business‑logic change**. `computeOrgKpiCoverageGaps` and tests stay as‑is.
 
-### Preventive (code) — small, surgical
-The repeating defect is: when an **Org KPI** is propagated to N employees, KPI-level auditor coverage stays at the old N-k. Two cheap, isolated guards:
+---
 
-1. **Auditor coverage badge on the auditor's row** *(UI-only, Bulk Review header)*
-   When `My scope only` is ON, also show **"(K of N covered)"** per Org KPI in the row header tooltip. Today the chip shows `90 in my scope` globally — it doesn't tell the auditor which Org KPIs are partially covered, so silent gaps stay silent.
+## Fix 2 — Redefine "My scope only" to the active workflow
 
-2. **Coverage-gap warning on the Org KPI Data Entry page** *(admin-facing)*
-   After a successful propagate, if any propagated KPI ends up with `audit_kpi_level_assignments` rows that cover < propagated employees and no `audit_kpi_assignments` row covers the remainder, surface a non-blocking toast + a row-level "Audit coverage incomplete" pill linking to Audit Delegation pre-filtered to that KPI. Reuses `resolve_org_kpi_target_kpis` + a new read-only RPC `get_org_kpi_audit_coverage(p_kpi_name, p_period, p_year)`; no write paths touched.
+### Server (new read‑only RPC)
+`my_review_scope(p_period text, p_year int, p_stage text)` returns `(kpi_id uuid, employee_id uuid)`:
 
-Neither item changes the bulk-scoring scope contract (POLICY §… auditor-scope), only its **visibility** to the admin and the **diagnostic** to the auditor.
+- Resolves the per‑employee workflow for the given period via the existing `resolve_workflow_for_employee` / `kpi_workflow_assignments` chain already used by Team Reviews.
+- Returns the pairs where the **current `auth.uid()`** is the resolved reviewer at `p_stage`:
+  - `auditor` → from resolved `auditor_id` (covers both `audit_kpi_assignments` AND `audit_kpi_level_assignments`, intersected with KPIs that have an active workflow for the period — this strips the "random KPIs of my assigned employees that aren't in workflow").
+  - `manager` → resolved manager (line manager OR functional manager link).
+  - `functional_manager` → resolved FM only.
+  - `hr_pms` → resolved HR PMS.
+  - `skip_level` → resolved skip‑level.
+- `SECURITY DEFINER`, RLS‑safe (only returns rows for `auth.uid()`).
+- `GRANT EXECUTE ... TO authenticated`.
+
+### Client
+`src/hooks/useBulkReview.ts`:
+- Replace `useMyAuditScope` consumer with new **`useMyReviewScope(period, year, viewerStage, enabled)`** returning `{ pairs: Set<\`${kpi}|${emp}\`>, kpiIds: Set<string>, employeeIds: Set<string>, total }`. Keyed by `(stage, period, year)`; staleTime 5 min.
+- Keep `useMyAuditScope` exported for backward‑compat (used elsewhere?). New hook is purpose‑built for this toggle.
+
+`src/lib/bulkAuditScopeFilter.ts`:
+- Add `isRowInMyReviewScope(row, pairs)` using the exact `${kpi_id}|${employee_id}` pair (no more "employee‑level expands to all KPIs"). Existing `isRowInAuditorScope` kept and marked deprecated.
+
+`src/pages/review/BulkReviewDashboard.tsx`:
+- Swap predicate to `isRowInMyReviewScope`.
+- Toggle label changes only when viewer stage is non‑auditor: **"My scope only"** stays; tooltip text becomes "Show only KPIs where I am the resolved {Auditor|Manager|HR PMS|Skip‑Level|Functional Manager} for the active period."
+- Show the toggle for **all reviewer roles** (auditor / manager / hr_pms / management / skip_level / functional_manager), not auditor only.
+- `orgKpiCoverageGaps` now uses the new pair set; semantics still valid (covered = pair in my scope).
 
 ### Tests
-- `src/test/bulkReview/auditScopeAndCategoryFilters.test.ts` — add a case: row with `kpi_id` not in `kpiIds` and `employee_id` not in `employeeIds` → `isRowInAuditorScope` returns `false` (regression lock for this exact case).
-- New `src/test/orgKpiAuditCoverage.test.ts` — given (propagatedEmpIds, kpiLevelEmpIds, empLevelEmpIds) returns missingEmpIds (pure helper).
+- New: `src/test/bulkReview/myReviewScopePredicate.test.ts` — pair‑set semantics, no employee‑wide bleed, stage‑specific filtering, regression for the "random KPI" case.
+- Update: `auditScopeAndCategoryFilters.test.ts` — mark legacy predicate as deprecated, keep regression case for Sindhu Raj Singh.
+- New SQL test fixture in `supabase/migrations/...` covering each stage path.
 
-## 4. Risk & Impact
-- **Data**: no DB writes from the code change (read-only RPC + UI). Manual data fix is a single Delegation save.
-- **Workflow**: no change to scoring/propagation.
-- **UI/UX**: one new tooltip line, one admin toast/pill. Both additive.
-- **Regression**: low — predicate already isolated in `src/lib/bulkAuditScopeFilter.ts`.
-- **Scalability**: coverage RPC is keyed on (kpi_name, period, year) with the same indexes the propagate path uses; O(N) over employees of the Org KPI (≤ ~150 today).
+### Docs / Memory
+- `mem/features/review/bulk-review-auditor-scope-filter.md` → rename to **bulk‑review‑my‑scope‑filter.md**; document workflow‑driven semantics + stage matrix.
+- New ADR `docs/adr/ADR-080.md` — "Bulk Review My‑Scope = resolved reviewer per stage".
+- `DOCUMENTATION.md`, `POLICY.md` — update Bulk Review section.
 
-## 5. Doc updates
-- `mem/features/review/bulk-review-auditor-scope-filter.md` — add "Org KPI coverage gap" diagnostic note.
-- `mem/features/review/audit-delegation-system` — note the coverage warning surface.
-- `POLICY.md` — append §… "Org KPI propagation MUST surface auditor coverage gaps."
-- `DOCUMENTATION.md` — bump.
+---
 
-## 6. What I will NOT do
-- Auto-assign auditors during propagate (changes governance — out of scope).
-- Touch RLS or the snapshot RPC contract.
-- Move the default of "My scope only" — auditors asked for it ON.
+## Step → Verification
 
-Awaiting approval before implementing the preventive code changes. The corrective data fix you can do today in Audit Delegation.
+1. Add `my_review_scope` RPC migration → run; manual `select * from my_review_scope('May', 2026, 'auditor')` returns expected pairs for a test auditor.
+2. Add `useMyReviewScope` + new predicate + tests → `vitest` green.
+3. Swap dashboard predicate + show toggle for all reviewer stages → load Bulk Review as auditor; verify Manning Norms no longer shows uncovered employees as "random" and only resolved‑auditor KPIs remain.
+4. Collapse coverage Alert → ⓘ Popover → visual check matches mock; popover content identical to old alert.
+5. Update memory + ADR + DOCUMENTATION + POLICY.
+
+---
+
+## UI Changes
+
+- **Header strip (right of "90 in my scope" chip)**: new ⓘ icon button when coverage gaps exist. Click → popover with KPI list. Removes the wide amber banner above the matrix.
+- **"My scope only" toggle**: visible for all reviewer roles; tooltip updated; behaviour now stage‑aware.
+
+## Rollback
+- RPC is additive; drop function + revert client diff.
+- UI changes are component‑local.
+
+## Not Applicable
+- Hardcoding, pagination, backup coverage (no new tables), offline resilience (read‑only query).

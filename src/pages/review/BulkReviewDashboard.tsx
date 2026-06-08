@@ -4,7 +4,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import {
   AlertCircle, Layers, RefreshCw, Search, EyeOff, Eye,
   Calendar, CalendarDays, Building2, Network, Factory, Users, Tag, UserCog, Target,
-  IdCard, Award, Crosshair, X, UserCheck,
+  IdCard, Award, Crosshair, X, UserCheck, Info,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -36,7 +36,7 @@ import {
   useBulkWriteStageScores,
   useBulkOrgKpiFlags,
   useBulkEmployeeAttrs,
-  useMyAuditScope,
+  useMyReviewScope,
   type BulkScopeFilters,
   type BulkReviewRow,
 } from '@/hooks/useBulkReview';
@@ -56,8 +56,9 @@ import { bulkActionForStage } from '@/lib/bulkActionForStage';
 import { summariseSkipReasons, summariseStageWriteOutcome } from '@/lib/summariseSkipReasons';
 import { kpiRowKey as makeKpiRowKey } from '@/lib/bulkRowSelection';
 import { isRowDueInPeriod } from '@/lib/bulkReviewDueFilter';
-import { isRowInAuditorScope, matchesCategoryFilter } from '@/lib/bulkAuditScopeFilter';
+import { isRowInMyReviewScope, matchesCategoryFilter } from '@/lib/bulkAuditScopeFilter';
 import { computeOrgKpiCoverageGaps } from '@/lib/orgKpiAuditCoverage';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { CalendarClock } from 'lucide-react';
 import { useUrlFilterStateNullable } from '@/hooks/useUrlFilterState';
@@ -332,15 +333,24 @@ export default function BulkReviewDashboard() {
     [attrsByEmp, designations, grades, managerIds],
   );
 
-  // Auditor's own assigned scope (employee-level ∪ KPI-level). Fetched once
-  // per session and reused for both the toggle filter and the counter chip.
-  const myAuditScopeQ = useMyAuditScope(effectiveRole === 'auditor');
-  const myAuditScope = myAuditScopeQ.data;
+  // Workflow-driven "My scope" — pairs of (kpi_id, employee_id) where the
+  // current user is the resolved reviewer at the active viewerStage for the
+  // selected period. Replaces the prior auditor-only `useMyAuditScope` which
+  // expanded employee-level audit assignments into every KPI of that
+  // employee. The toggle is now meaningful for every reviewer stage.
+  const isReviewerRole =
+    effectiveRole === 'auditor'
+    || effectiveRole === 'manager'
+    || effectiveRole === 'hr_pms'
+    || effectiveRole === 'skip_level'
+    || effectiveRole === 'management';
+  const myReviewScopeQ = useMyReviewScope(period, year, viewerStage, isReviewerRole);
+  const myReviewScope = myReviewScopeQ.data;
   const isAuditor = effectiveRole === 'auditor';
 
-  /** Row predicate: is this row inside the current auditor's assigned scope? */
+  /** Row predicate: is this row inside the current user's resolved-reviewer scope? */
   const isRowInMyScope = (r: BulkReviewRow): boolean =>
-    !!myAuditScope && isRowInAuditorScope(r, myAuditScope);
+    !!myReviewScope && isRowInMyReviewScope(r, myReviewScope.pairs);
 
   // Multi-axis client-side filter over the snapshot.
   const loadedRows = useMemo(() => {
@@ -378,22 +388,22 @@ export default function BulkReviewDashboard() {
     }
     // Auditor "My audit scope only" — restrict to KPIs/employees assigned
     // to the current auditor. Hidden for other roles.
-    if (isAuditor && myScopeOnly && myAuditScope) {
+    if (isReviewerRole && myScopeOnly && myReviewScope) {
       rows = rows.filter(isRowInMyScope);
     }
     return rows;
-  }, [rawRows, search, hideEmpty, hideNonDue, period, year, kraNames, designations, grades, managerIds, allowedEmpSet, categoryIds, isAuditor, myScopeOnly, myAuditScope]);
+  }, [rawRows, search, hideEmpty, hideNonDue, period, year, kraNames, designations, grades, managerIds, allowedEmpSet, categoryIds, isReviewerRole, myScopeOnly, myReviewScope]);
 
   // Count of currently-loaded rows that fall inside the auditor's scope —
   // surfaced as a muted chip so even with the toggle off the auditor knows
   // "X of Y rows are mine".
   const inMyScopeCount = useMemo(() => {
-    if (!isAuditor || !myAuditScope) return 0;
+    if (!isReviewerRole || !myReviewScope) return 0;
     let n = 0;
     for (const r of rawRows) if (isRowInMyScope(r)) n++;
     return n;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAuditor, myAuditScope, rawRows]);
+  }, [isReviewerRole, myReviewScope, rawRows]);
 
   // Count of rows hidden specifically by the non-due filter (post other filters
   // except non-due itself) — surfaced as a badge so users know how many rows
@@ -428,12 +438,21 @@ export default function BulkReviewDashboard() {
   // the KPI doesn't exist for those employees. Uses only data already in
   // memory — no new RPC.
   const orgKpiCoverageGaps = useMemo(() => {
-    if (!isAuditor || !myAuditScope || rawRows.length === 0) return [];
+    if (!isAuditor || !myReviewScope || rawRows.length === 0) return [];
     const orgIds = new Set<string>();
     for (const [kpiId, flag] of isOrgByKpiId) if (flag) orgIds.add(kpiId);
     if (orgIds.size === 0) return [];
-    return computeOrgKpiCoverageGaps(rawRows as any, orgIds, myAuditScope);
-  }, [isAuditor, myAuditScope, rawRows, isOrgByKpiId]);
+    // Adapt the new pair-set into the legacy {employeeIds, kpiIds} shape the
+    // coverage gap helper expects. Coverage now means "this (kpi,emp) pair
+    // is in my resolved-reviewer scope" — same intent, stricter source.
+    const empSet = new Set<string>();
+    const kpiSet = new Set<string>();
+    for (const p of myReviewScope.pairs) {
+      const [k, e] = p.split('|');
+      kpiSet.add(k); empSet.add(e);
+    }
+    return computeOrgKpiCoverageGaps(rawRows as any, orgIds, { employeeIds: empSet, kpiIds: kpiSet });
+  }, [isAuditor, myReviewScope, rawRows, isOrgByKpiId]);
 
   // Prune stale selections when the scope changes so they don't silently hide
   // every row. We prune per-value (not full clear) so URL deep-links survive.
@@ -676,12 +695,56 @@ export default function BulkReviewDashboard() {
                     <span><strong className="text-foreground">{snapshot.data.rows?.length ?? 0}</strong>/<strong className="text-foreground">{snapshot.data.total ?? 0}</strong> rows</span>
                     <span className="opacity-40">·</span>
                     <span>Δ&gt;1: <strong className="text-foreground">{variance}</strong></span>
-                    {isAuditor && myAuditScope && (
+                    {isReviewerRole && myReviewScope && (
                       <>
                         <span className="opacity-40">·</span>
-                        <span title="Rows assigned to you as auditor (out of the loaded snapshot)">
+                        <span title="Rows where you are the resolved reviewer for the active stage (out of the loaded snapshot)">
                           <strong className="text-foreground">{inMyScopeCount}</strong> in my scope
                         </span>
+                        {isAuditor && myScopeOnly && orgKpiCoverageGaps.length > 0 && (
+                          <Popover>
+                            <PopoverTrigger asChild>
+                              <button
+                                type="button"
+                                className="ml-1 inline-flex items-center justify-center h-4 w-4 rounded-full text-amber-600 hover:bg-amber-500/10"
+                                aria-label="Audit coverage gap details"
+                                title="Audit coverage gap"
+                              >
+                                <Info className="h-3.5 w-3.5" />
+                              </button>
+                            </PopoverTrigger>
+                            <PopoverContent side="bottom" align="start" className="w-[360px] text-xs">
+                              <div className="flex items-center gap-1.5 mb-1.5">
+                                <AlertCircle className="h-3.5 w-3.5 text-amber-600" />
+                                <span className="font-medium">
+                                  Audit coverage gap on {orgKpiCoverageGaps.length} Org KPI{orgKpiCoverageGaps.length > 1 ? 's' : ''}
+                                </span>
+                              </div>
+                              <p className="text-muted-foreground mb-2">
+                                These Org KPIs exist for more employees than your Audit Delegation
+                                covers. "My scope only" is hiding the uncovered cells. Ask Admin to
+                                extend your KPI-level assignment, or toggle <strong>My scope only</strong> off
+                                to inspect the missing rows read-only.
+                              </p>
+                              <ul className="space-y-0.5">
+                                {orgKpiCoverageGaps.slice(0, 6).map((g) => (
+                                  <li key={g.key} className="flex items-baseline gap-1.5">
+                                    <span className="text-muted-foreground">·</span>
+                                    <span className="truncate">{g.kpi_name}</span>
+                                    <Badge variant="outline" className="h-4 px-1 text-[10px] shrink-0 ml-auto">
+                                      {g.covered} of {g.total} covered
+                                    </Badge>
+                                  </li>
+                                ))}
+                                {orgKpiCoverageGaps.length > 6 && (
+                                  <li className="text-muted-foreground">
+                                    · …and {orgKpiCoverageGaps.length - 6} more
+                                  </li>
+                                )}
+                              </ul>
+                            </PopoverContent>
+                          </Popover>
+                        )}
                       </>
                     )}
                   </>
@@ -950,7 +1013,7 @@ export default function BulkReviewDashboard() {
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
-            {isAuditor && (
+            {isReviewerRole && (
               <TooltipProvider delayDuration={150}>
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -962,18 +1025,18 @@ export default function BulkReviewDashboard() {
                       aria-pressed={myScopeOnly}
                     >
                       <UserCheck className="h-3.5 w-3.5" />
-                      {myScopeOnly ? 'My scope only' : 'All auditable'}
-                      {myAuditScope && (
+                      {myScopeOnly ? 'My scope only' : 'All in scope'}
+                      {myReviewScope && (
                         <Badge variant="outline" className="ml-1 h-4 px-1 text-[10px] tabular-nums">
-                          {myScopeOnly ? inMyScopeCount : myAuditScope.total}
+                          {myScopeOnly ? inMyScopeCount : myReviewScope.total}
                         </Badge>
                       )}
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent side="bottom" className="max-w-[320px] text-xs">
                     {myScopeOnly
-                      ? 'Showing only KPIs assigned to you as auditor (employee-level ∪ KPI-level assignments). Click to see all KPIs in the loaded scope.'
-                      : 'Showing every KPI in the loaded scope, including those assigned to other auditors. Click to restrict to your assignments.'}
+                      ? `Showing only KPIs where you are the resolved reviewer for the active stage (${viewerStage.replace('_', ' ')}) in ${period} ${year}. Click to see all loaded KPIs.`
+                      : `Showing every KPI in the loaded scope, including those routed to other reviewers. Click to restrict to KPIs where you are the resolved ${viewerStage.replace('_', ' ')}.`}
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
@@ -1039,38 +1102,6 @@ export default function BulkReviewDashboard() {
                 </p>
               ) : (
                 <>
-                  {isAuditor && myScopeOnly && orgKpiCoverageGaps.length > 0 && (
-                    <Alert className="mb-3 border-amber-500/40 bg-amber-500/5">
-                      <AlertCircle className="h-4 w-4 text-amber-600" />
-                      <AlertTitle className="text-sm">
-                        Audit coverage gap on {orgKpiCoverageGaps.length} Org KPI{orgKpiCoverageGaps.length > 1 ? 's' : ''}
-                      </AlertTitle>
-                      <AlertDescription className="text-xs space-y-1.5 mt-1">
-                        <p className="text-muted-foreground">
-                          These Org KPIs exist for more employees than your Audit Delegation
-                          covers. "My scope only" is hiding the uncovered cells. Ask Admin to
-                          extend your KPI-level assignment, or toggle <strong>My scope only</strong> off
-                          to inspect the missing rows read-only.
-                        </p>
-                        <ul className="space-y-0.5 pl-1">
-                          {orgKpiCoverageGaps.slice(0, 4).map((g) => (
-                            <li key={g.key} className="flex items-baseline gap-1.5">
-                              <span className="text-muted-foreground">·</span>
-                              <span className="truncate">{g.kpi_name}</span>
-                              <Badge variant="outline" className="h-4 px-1 text-[10px] shrink-0">
-                                {g.covered} of {g.total} covered
-                              </Badge>
-                            </li>
-                          ))}
-                          {orgKpiCoverageGaps.length > 4 && (
-                            <li className="text-muted-foreground">
-                              · …and {orgKpiCoverageGaps.length - 4} more
-                            </li>
-                          )}
-                        </ul>
-                      </AlertDescription>
-                    </Alert>
-                  )}
                   <BulkReviewMatrixGrid
                     rows={loadedRows}
                     viewerStage={viewerStage}
