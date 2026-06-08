@@ -127,7 +127,7 @@ export function KpiMetricsSection({ kpi }: KpiMetricsSectionProps) {
               <Info className="h-3 w-3" />
               Rating Scale
             </Label>
-            <div className="space-y-0.5 sm:space-y-1">
+            <div className="flex flex-wrap gap-x-3 gap-y-1">
               {ratings.map(r => (
                 <RatingRow
                   key={r.key}
