@@ -57,6 +57,7 @@ import { summariseSkipReasons, summariseStageWriteOutcome } from '@/lib/summaris
 import { kpiRowKey as makeKpiRowKey } from '@/lib/bulkRowSelection';
 import { isRowDueInPeriod } from '@/lib/bulkReviewDueFilter';
 import { isRowInAuditorScope, matchesCategoryFilter } from '@/lib/bulkAuditScopeFilter';
+import { computeOrgKpiCoverageGaps } from '@/lib/orgKpiAuditCoverage';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { CalendarClock } from 'lucide-react';
 import { useUrlFilterStateNullable } from '@/hooks/useUrlFilterState';
@@ -418,6 +419,21 @@ export default function BulkReviewDashboard() {
     for (const f of orgFlagsQ.data ?? []) m.set(f.kpi_id, f.is_org_level);
     return m;
   }, [orgFlagsQ.data]);
+
+  // Org-KPI auditor coverage gaps (June 2026 RCA, "Sindhu Raj Singh / Adherence
+  // to Manning Norms"). When an Org KPI is propagated to N employees but the
+  // auditor's KPI/employee assignments cover K < N, the "My scope only" toggle
+  // silently hides (N − K) cells. We surface that as a non-blocking soft alert
+  // so the auditor can ask Admin to widen Audit Delegation instead of assuming
+  // the KPI doesn't exist for those employees. Uses only data already in
+  // memory — no new RPC.
+  const orgKpiCoverageGaps = useMemo(() => {
+    if (!isAuditor || !myAuditScope || rawRows.length === 0) return [];
+    const orgIds = new Set<string>();
+    for (const [kpiId, flag] of isOrgByKpiId) if (flag) orgIds.add(kpiId);
+    if (orgIds.size === 0) return [];
+    return computeOrgKpiCoverageGaps(rawRows as any, orgIds, myAuditScope);
+  }, [isAuditor, myAuditScope, rawRows, isOrgByKpiId]);
 
   // Prune stale selections when the scope changes so they don't silently hide
   // every row. We prune per-value (not full clear) so URL deep-links survive.
@@ -1022,6 +1038,39 @@ export default function BulkReviewDashboard() {
                   No KPIs match the selected scope.
                 </p>
               ) : (
+                <>
+                  {isAuditor && myScopeOnly && orgKpiCoverageGaps.length > 0 && (
+                    <Alert className="mb-3 border-amber-500/40 bg-amber-500/5">
+                      <AlertCircle className="h-4 w-4 text-amber-600" />
+                      <AlertTitle className="text-sm">
+                        Audit coverage gap on {orgKpiCoverageGaps.length} Org KPI{orgKpiCoverageGaps.length > 1 ? 's' : ''}
+                      </AlertTitle>
+                      <AlertDescription className="text-xs space-y-1.5 mt-1">
+                        <p className="text-muted-foreground">
+                          These Org KPIs exist for more employees than your Audit Delegation
+                          covers. "My scope only" is hiding the uncovered cells. Ask Admin to
+                          extend your KPI-level assignment, or toggle <strong>My scope only</strong> off
+                          to inspect the missing rows read-only.
+                        </p>
+                        <ul className="space-y-0.5 pl-1">
+                          {orgKpiCoverageGaps.slice(0, 4).map((g) => (
+                            <li key={g.key} className="flex items-baseline gap-1.5">
+                              <span className="text-muted-foreground">·</span>
+                              <span className="truncate">{g.kpi_name}</span>
+                              <Badge variant="outline" className="h-4 px-1 text-[10px] shrink-0">
+                                {g.covered} of {g.total} covered
+                              </Badge>
+                            </li>
+                          ))}
+                          {orgKpiCoverageGaps.length > 4 && (
+                            <li className="text-muted-foreground">
+                              · …and {orgKpiCoverageGaps.length - 4} more
+                            </li>
+                          )}
+                        </ul>
+                      </AlertDescription>
+                    </Alert>
+                  )}
                   <BulkReviewMatrixGrid
                     rows={loadedRows}
                     viewerStage={viewerStage}
@@ -1035,6 +1084,7 @@ export default function BulkReviewDashboard() {
                     onFocusKpi={setKpiFocusKey}
                     onReplaceSelection={setSelectedIds}
                   />
+                </>
               )}
 
               {/* Snapshot loads every page on Load Scope; employees scroll
