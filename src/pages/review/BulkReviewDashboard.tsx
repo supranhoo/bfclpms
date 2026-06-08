@@ -56,6 +56,7 @@ import { bulkActionForStage } from '@/lib/bulkActionForStage';
 import { summariseSkipReasons, summariseStageWriteOutcome } from '@/lib/summariseSkipReasons';
 import { kpiRowKey as makeKpiRowKey } from '@/lib/bulkRowSelection';
 import { isRowDueInPeriod } from '@/lib/bulkReviewDueFilter';
+import { isRowInAuditorScope, matchesCategoryFilter } from '@/lib/bulkAuditScopeFilter';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { CalendarClock } from 'lucide-react';
 import { useUrlFilterStateNullable } from '@/hooks/useUrlFilterState';
@@ -337,11 +338,8 @@ export default function BulkReviewDashboard() {
   const isAuditor = effectiveRole === 'auditor';
 
   /** Row predicate: is this row inside the current auditor's assigned scope? */
-  const isRowInMyScope = (r: BulkReviewRow): boolean => {
-    if (!myAuditScope) return false;
-    return myAuditScope.kpiIds.has(r.kpi_id)
-      || myAuditScope.employeeIds.has(r.employee_id);
-  };
+  const isRowInMyScope = (r: BulkReviewRow): boolean =>
+    !!myAuditScope && isRowInAuditorScope(r, myAuditScope);
 
   // Multi-axis client-side filter over the snapshot.
   const loadedRows = useMemo(() => {
@@ -375,8 +373,7 @@ export default function BulkReviewDashboard() {
     // (oneOrNull). Without this branch, picking 2+ categories was a silent
     // no-op. Requires `category_id` returned by `bulk_review_snapshot`.
     if (categoryIds.length > 0) {
-      const catSet = new Set(categoryIds);
-      rows = rows.filter(r => !!r.category_id && catSet.has(r.category_id));
+      rows = rows.filter(r => matchesCategoryFilter(r, categoryIds));
     }
     // Auditor "My audit scope only" — restrict to KPIs/employees assigned
     // to the current auditor. Hidden for other roles.
