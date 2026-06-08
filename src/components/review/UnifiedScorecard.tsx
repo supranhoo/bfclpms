@@ -1848,15 +1848,17 @@ export function UnifiedScorecard({
       {!isSelfMode && (
       <Sheet open={reviewSheetOpen} onOpenChange={setReviewSheetOpen}>
         <SheetContent className="flex flex-col h-full w-full sm:w-[95vw] sm:max-w-[1600px] overflow-y-auto p-4 sm:p-6">
-          <SheetHeader className="pb-2 sm:pb-4">
-            <SheetTitle className="text-base sm:text-lg">
-              {selectedKpi && isReviewable(selectedKpi) ? config.title : 'View KPI Details'}
-            </SheetTitle>
-            <SheetDescription className="text-xs sm:text-sm">
-              {selectedKpi && isReviewable(selectedKpi) 
-                ? config.description
-                : 'View submission details for this KPI'}
-            </SheetDescription>
+          <SheetHeader className="pb-1 sm:pb-2 space-y-0">
+            <div className="flex flex-wrap items-baseline gap-x-2">
+              <SheetTitle className="text-sm sm:text-base">
+                {selectedKpi && isReviewable(selectedKpi) ? config.title : 'View KPI Details'}
+              </SheetTitle>
+              <SheetDescription className="text-xs text-muted-foreground">
+                — {selectedKpi && isReviewable(selectedKpi)
+                  ? config.description
+                  : 'View submission details for this KPI'}
+              </SheetDescription>
+            </div>
           </SheetHeader>
 
           {selectedKpi && (
