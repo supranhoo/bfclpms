@@ -121,7 +121,9 @@ describe('Phase 9.1 — Backup coverage contract', () => {
   // ─── Phase 9.2 WP-b — Backup batch retry/backoff hardening ──────────────
 
   it('I8 — retry constants are declared and primary BATCH_SIZE=4 unchanged', () => {
-    expect(CREATE_SRC).toMatch(/const\s+BATCH_SIZE_RETRY\s*=\s*2\b/);
+    // ADR-082: retry was tightened from 2 → 1. Single-table retry isolates
+    // a failing table from a healthy sibling.
+    expect(CREATE_SRC).toMatch(/const\s+BATCH_SIZE_RETRY\s*=\s*1\b/);
     expect(CREATE_SRC).toMatch(/const\s+RETRY_BUDGET_MS\s*=/);
     // I4 must remain green: BATCH_SIZE=4 still appears in BOTH paths.
     const occurrences = CREATE_SRC.match(/const\s+BATCH_SIZE\s*=\s*4\b/g) ?? [];
@@ -207,7 +209,27 @@ describe('Phase 9.1 — Backup coverage contract', () => {
     // cannot silently weaken them.
     expect(CREATE_SRC).toMatch(/hardFail\s*&&\s*shrunk\s*\?\s*['"]failed['"]/);
     expect(CREATE_SRC).toMatch(/hardFailManual\s*&&\s*partialManual/);
-    expect(CREATE_SRC).toMatch(/const\s+BATCH_SIZE_RETRY\s*=\s*2\b/);
+    expect(CREATE_SRC).toMatch(/const\s+BATCH_SIZE_RETRY\s*=\s*1\b/);
     expect(CREATE_SRC).toMatch(/const\s+RETRY_BUDGET_MS\s*=/);
+  });
+
+  // ─── ADR-082 — Streaming chunked table export ──────────────────────────
+
+  it('I16 — create-backup streams tables to part files (no whole-table buffering)', () => {
+    // The streaming helper and per-chunk row budget must exist.
+    expect(CREATE_SRC).toMatch(/streamTableToStorage/);
+    expect(CREATE_SRC).toMatch(/const\s+ROWS_PER_CHUNK\s*=/);
+    expect(CREATE_SRC).toMatch(/partFileName/);
+    // The old whole-table accumulator pattern must be gone.
+    expect(CREATE_SRC).not.toMatch(/allRows\s*=\s*allRows\.concat\(/);
+    // processTableBatch returns a `files` array per result.
+    expect(CREATE_SRC).toMatch(/files:\s*string\[\]/);
+  });
+
+  it('I17 — restore-backup honours the part-files manifest array', () => {
+    // The manifest type accepts `files?: string[]`, and insert iterates
+    // them instead of downloading a single file per table.
+    expect(RESTORE_SRC).toMatch(/files\?\s*:\s*string\[\]/);
+    expect(RESTORE_SRC).toMatch(/entry\.files\s*&&\s*entry\.files\.length\s*>\s*0/);
   });
 });
