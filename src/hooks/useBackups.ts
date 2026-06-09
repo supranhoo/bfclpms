@@ -123,10 +123,15 @@ export function useTriggerBackup() {
             // Build manifest from processed results
             if (batchData.processed) {
               for (const p of batchData.processed) {
+                const files: string[] = Array.isArray(p.files) && p.files.length > 0
+                  ? p.files
+                  : (p.file ? [p.file] : [`${folder_path}/${p.table}.part-000001.json`]);
                 tableManifest.push({
                   table: p.table,
                   rows: p.rows,
-                  file: `${folder_path}/${p.table}.json`,
+                  file: files[0],
+                  // @ts-expect-error - manifest carries authoritative files array for ADR-082
+                  files,
                 });
               }
             }
