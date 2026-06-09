@@ -301,7 +301,7 @@ export type IntegrityReport = {
 async function verifyBackupIntegrity(
   supabase: ReturnType<typeof createClient>,
   folderPath: string,
-  tableManifest: Array<{ table: string; rows: number; file: string }>
+  tableManifest: Array<{ table: string; rows: number; file: string; files?: string[] }>
 ): Promise<IntegrityReport> {
   const issues: IntegrityIssues = { missing: [], unreadable: [], row_mismatch: [] }
 
@@ -326,39 +326,50 @@ async function verifyBackupIntegrity(
     const slice = tableManifest.slice(i, i + CONCURRENCY)
     await Promise.all(
       slice.map(async (entry) => {
-        const fileName = `${entry.table}.json`
-        const sizeFromList = presentSizes.get(fileName)
+        // ADR-082: each table may be stored across multiple part files.
+        // entry.files is authoritative; entry.file is the first part for
+        // backward compatibility with legacy single-file backups.
+        const partPaths = entry.files && entry.files.length > 0
+          ? entry.files
+          : [entry.file]
 
-        if (presentSizes.size > 0 && (sizeFromList === undefined || sizeFromList === 0)) {
-          issues.missing.push(entry.table)
-          return
-        }
-
-        try {
-          const { data: blob, error } = await supabase.storage
-            .from('database-backups')
-            .download(entry.file)
-          if (error || !blob) {
-            issues.unreadable.push({ table: entry.table, reason: error?.message || 'empty blob' })
-            return
+        let actualRows = 0
+        let anyMissing = false
+        for (const partPath of partPaths) {
+          const fileName = partPath.split('/').pop() || partPath
+          const sizeFromList = presentSizes.get(fileName)
+          if (presentSizes.size > 0 && (sizeFromList === undefined)) {
+            issues.missing.push(`${entry.table}:${fileName}`)
+            anyMissing = true
+            continue
           }
-          const text = await blob.text()
-          let parsed: unknown
           try {
-            parsed = JSON.parse(text)
-          } catch (e) {
-            issues.unreadable.push({ table: entry.table, reason: `parse error: ${e}` })
-            return
+            const { data: blob, error } = await supabase.storage
+              .from('database-backups')
+              .download(partPath)
+            if (error || !blob) {
+              issues.unreadable.push({ table: entry.table, reason: `${fileName}: ${error?.message || 'empty blob'}` })
+              continue
+            }
+            const text = await blob.text()
+            let parsed: unknown
+            try {
+              parsed = JSON.parse(text)
+            } catch (e) {
+              issues.unreadable.push({ table: entry.table, reason: `${fileName} parse error: ${e}` })
+              continue
+            }
+            if (!Array.isArray(parsed)) {
+              issues.unreadable.push({ table: entry.table, reason: `${fileName} payload is not an array` })
+              continue
+            }
+            actualRows += parsed.length
+          } catch (err) {
+            issues.unreadable.push({ table: entry.table, reason: `${fileName}: ${String(err)}` })
           }
-          if (!Array.isArray(parsed)) {
-            issues.unreadable.push({ table: entry.table, reason: 'payload is not an array' })
-            return
-          }
-          if (parsed.length !== entry.rows) {
-            issues.row_mismatch.push({ table: entry.table, expected: entry.rows, actual: parsed.length })
-          }
-        } catch (err) {
-          issues.unreadable.push({ table: entry.table, reason: String(err) })
+        }
+        if (!anyMissing && actualRows !== entry.rows) {
+          issues.row_mismatch.push({ table: entry.table, expected: entry.rows, actual: actualRows })
         }
       })
     )
