@@ -13,3 +13,5 @@ type: feature
 - `saveStatus` pill states: `idle | unsaved | saving | saved | error`. Amber "Unsaved changes" replaces the silent autosave UX.
 - `useUnsavedChanges` hook MUST stay wired on the card to surface a `beforeunload` warning while any field is dirty.
 - Scope: this rule applies ONLY to `/admin/org-kpi-data`. Self-review, Daily entry, Incentive grids, and Safety modules keep their own save models.
+- ADR-081 — Per-row Save MUST scope dirty clearing to the saved `scopeId`: remove only that id from `dirtyScopeIds`, `touchedScopeIdsRef`, and `touchedEvidenceScopeIdsRef`. Do NOT call `clearAllDirty()` from a row Save — it wipes sibling rows' unsaved edits and the next refetch overwrites them from `data.scopedRows`.
+- The primary merge effect's reset branch in `OrgKpiEntryCard.tsx` MUST preserve local `achievedValue` / `remarks` / `isNa` / `subFactors` for any `scopeId` in `touchedScopeIdsRef` (mirroring how `evidenceUrl` is preserved via `touchedEvidenceScopeIdsRef`). Otherwise a sibling Save's refetch silently drops typed values in other rows. Reported by Vivek Dansena, 2026-06.
