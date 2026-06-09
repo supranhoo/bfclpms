@@ -1,10 +1,30 @@
 # Phase 9 — Safety Backup-Gap Closure
 
+**Status (Phase 9.4 / ADR-082):** SHIPPED — streaming chunked table export. Fixes recurring `HTTP 546` failures at batch 46/51 caused by whole-table memory buffering in `create-backup`.
 **Status (Phase 9.3):** SHIPPED — Backup History "Verify (Safety Drill)" Flow-B action.
 **Status (Phase 9.2 WP-b):** SHIPPED — transient retry/backoff hardening.
 **Status (Phase 9.2 WP-a):** SHIPPED — hard-fail-on-partial flag.
 **Status (Phase 9.1):** SHIPPED — diagnostic + regression locks.
 **Phase 8:** stays CLOSED. Menu CAPA invariants re-verified 24/24 green.
+
+## What shipped in 9.4 / ADR-082
+
+RCA + Why-Why for 2026-06-05 → 2026-06-09 failures:
+- `notifications` (~78k rows / 67 MB) and `org_kpi_data_entry_logs` (~85k rows / 57 MB) sit together in scheduled batch 46/51.
+- `fetchAllRows` + `JSON.stringify(rows)` held the whole table in heap as {rows array + JSON string + TextEncoder buffer}.
+- Combined peak > 256 MB Deno Deploy worker cap → deterministic `HTTP 546` for `notifications` after both transient retries.
+- Earlier CAPAs (BATCH_SIZE=4, retry/backoff, hard-fail-on-partial) addressed concurrency, transient noise, and visibility — never the per-table memory shape.
+
+Fix:
+- `create-backup` streams each table page-by-page and flushes one part file every `ROWS_PER_CHUNK=5000` rows. Naming: `<table>.part-NNNNNN.json`.
+- Manifest entry now carries `files: string[]` (authoritative). `file` remains as the first part for backward-compat readers.
+- `verifyBackupIntegrity` sums row counts across part files.
+- `restore-backup` iterates `entry.files`, falling back to `[entry.file]` for legacy single-file backups (older backups remain restorable).
+- `BATCH_SIZE_RETRY` tightened from `2` → `1` so a failing table isolates from a healthy sibling.
+- Retry telemetry now lists the failing table names in `backup_logs.error_message`.
+- Contract tests gain I16 (streaming + no whole-table buffering in create-backup) and I17 (restore honours part-files manifest array). I1–I15 stay green (17/17).
+
+Rollback: revert `create-backup`, `restore-backup`, `useBackups.ts`, the test file, the new memory and this section. Legacy single-file backups remain restorable; backups created under ADR-082 are not restorable after rollback and must be re-run.
 
 ## What shipped in 9.3
 

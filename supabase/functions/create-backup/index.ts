@@ -93,72 +93,140 @@ function splitIntoBatches(tables: string[], batchSize: number): string[][] {
   return batches
 }
 
-async function fetchAllRows(
+// ADR-082: streaming chunked table export.
+//
+// Previous behaviour buffered every row of a table into one array, then
+// serialised the whole array to a single JSON string before upload. For
+// the two largest tables (`notifications`, `org_kpi_data_entry_logs`,
+// ~80k rows each) the {rows array + JSON string + TextEncoder buffer}
+// peaked above the 256 MB Deno Deploy worker cap, causing HTTP 546 and
+// repeated scheduled-backup failures at batch 46/51.
+//
+// The streamer below pages rows from the DB and flushes a part file to
+// storage every ROWS_PER_CHUNK rows. Peak heap is bounded by one chunk,
+// not by total table size.
+const ROWS_PER_CHUNK = 5000
+const PAGE_SIZE = 1000
+
+function partFileName(tableName: string, partIndex: number): string {
+  return `${tableName}.part-${String(partIndex).padStart(6, '0')}.json`
+}
+
+async function streamTableToStorage(
   supabase: ReturnType<typeof createClient>,
   tableName: string,
-  pruneColumn?: string
-): Promise<unknown[]> {
-  let allRows: unknown[] = []
-  let offset = 0
-  const pageSize = 1000
-  let hasMore = true
+  folderPath: string,
+  pruneColumn?: string,
+): Promise<{ rows: number; files: string[]; sizeBytes: number }> {
+  const files: string[] = []
+  let totalRows = 0
+  let totalSize = 0
+  let buffer: unknown[] = []
+  let partIndex = 0
 
+  const flush = async () => {
+    if (buffer.length === 0) return
+    partIndex++
+    const fileName = partFileName(tableName, partIndex)
+    const filePath = `${folderPath}/${fileName}`
+    const json = JSON.stringify(buffer)
+    const sizeBytes = new TextEncoder().encode(json).byteLength
+    const { error: uploadError } = await supabase.storage
+      .from('database-backups')
+      .upload(filePath, json, { contentType: 'application/json', upsert: false })
+    if (uploadError) {
+      throw new Error(`Upload ${fileName} failed: ${uploadError.message}`)
+    }
+    files.push(filePath)
+    totalSize += sizeBytes
+    // Help V8 reclaim the chunk before paging the next slice.
+    buffer = []
+  }
+
+  let offset = 0
+  let hasMore = true
   while (hasMore) {
-    let query = supabase.from(tableName).select('*').range(offset, offset + pageSize - 1)
+    let query = supabase.from(tableName).select('*').range(offset, offset + PAGE_SIZE - 1)
     if (pruneColumn) {
       query = query.gte(pruneColumn, NINETY_DAYS_AGO)
     }
-
     const { data, error } = await query
     if (error) {
-      console.warn(`Warning: Could not backup table ${tableName}: ${error.message}`)
+      console.warn(`Warning: Could not page table ${tableName}: ${error.message}`)
       break
     }
-    if (data && data.length > 0) {
-      allRows = allRows.concat(data)
-      offset += pageSize
-      hasMore = data.length === pageSize
-    } else {
+    if (!data || data.length === 0) {
       hasMore = false
+      break
     }
+    for (const row of data) {
+      buffer.push(row)
+      totalRows++
+      if (buffer.length >= ROWS_PER_CHUNK) {
+        await flush()
+      }
+    }
+    offset += PAGE_SIZE
+    hasMore = data.length === PAGE_SIZE
   }
 
-  return allRows
+  // Always emit at least one part file so integrity verification has
+  // something to read for zero-row tables (preserves prior contract).
+  if (files.length === 0) {
+    await flush() // flush empty buffer no-op
+    partIndex++
+    const fileName = partFileName(tableName, partIndex)
+    const filePath = `${folderPath}/${fileName}`
+    const json = '[]'
+    const { error: uploadError } = await supabase.storage
+      .from('database-backups')
+      .upload(filePath, json, { contentType: 'application/json', upsert: false })
+    if (uploadError) {
+      throw new Error(`Upload ${fileName} failed: ${uploadError.message}`)
+    }
+    files.push(filePath)
+    totalSize += 2
+  } else {
+    await flush()
+  }
+
+  return { rows: totalRows, files, sizeBytes: totalSize }
 }
 
 async function processTableBatch(
   supabase: ReturnType<typeof createClient>,
   tables: string[],
   folderPath: string
-): Promise<{ results: Array<{ table: string; rows: number; file: string; sizeBytes: number }>; errors: string[] }> {
-  const results: Array<{ table: string; rows: number; file: string; sizeBytes: number }> = []
+): Promise<{
+  results: Array<{ table: string; rows: number; file: string; files: string[]; sizeBytes: number }>;
+  errors: string[]
+}> {
+  const results: Array<{ table: string; rows: number; file: string; files: string[]; sizeBytes: number }> = []
   const errors: string[] = []
 
-  // Process tables sequentially within a batch to keep peak memory low.
-  // Parallel Promise.all here caused WORKER_RESOURCE_LIMIT once the 33
-  // safety_* tables were added — multiple large table payloads were held
-  // in RAM simultaneously (rows array + JSON string + Blob copy).
+  // Process tables sequentially within a batch and stream each table to
+  // storage one chunk at a time, so peak memory is bounded by ROWS_PER_CHUNK
+  // rather than total table size. See ADR-082.
   for (const tableName of tables) {
     try {
       const pruneColumn = PRUNE_TABLES[tableName]
-      const rows = await fetchAllRows(supabase, tableName, pruneColumn)
-
-      const filePath = `${folderPath}/${tableName}.json`
-      const json = JSON.stringify(rows)
-      // Byte length without allocating a Blob copy.
-      const sizeBytes = new TextEncoder().encode(json).byteLength
-
-      const { error: uploadError } = await supabase.storage
-        .from('database-backups')
-        .upload(filePath, json, { contentType: 'application/json', upsert: false })
-
-      if (uploadError) {
-        errors.push(`Failed to upload ${tableName}: ${uploadError.message}`)
-      } else {
-        results.push({ table: tableName, rows: rows.length, file: filePath, sizeBytes })
-      }
+      const { rows, files, sizeBytes } = await streamTableToStorage(
+        supabase,
+        tableName,
+        folderPath,
+        pruneColumn,
+      )
+      results.push({
+        table: tableName,
+        rows,
+        // `file` retained for backward-compat readers; treated as the
+        // first part file. Authoritative list is `files`.
+        file: files[0],
+        files,
+        sizeBytes,
+      })
     } catch (err) {
-      errors.push(`Skipping table ${tableName}: ${err}`)
+      errors.push(`Skipping table ${tableName}: ${err instanceof Error ? err.message : String(err)}`)
     }
   }
 
@@ -233,7 +301,7 @@ export type IntegrityReport = {
 async function verifyBackupIntegrity(
   supabase: ReturnType<typeof createClient>,
   folderPath: string,
-  tableManifest: Array<{ table: string; rows: number; file: string }>
+  tableManifest: Array<{ table: string; rows: number; file: string; files?: string[] }>
 ): Promise<IntegrityReport> {
   const issues: IntegrityIssues = { missing: [], unreadable: [], row_mismatch: [] }
 
@@ -258,39 +326,50 @@ async function verifyBackupIntegrity(
     const slice = tableManifest.slice(i, i + CONCURRENCY)
     await Promise.all(
       slice.map(async (entry) => {
-        const fileName = `${entry.table}.json`
-        const sizeFromList = presentSizes.get(fileName)
+        // ADR-082: each table may be stored across multiple part files.
+        // entry.files is authoritative; entry.file is the first part for
+        // backward compatibility with legacy single-file backups.
+        const partPaths = entry.files && entry.files.length > 0
+          ? entry.files
+          : [entry.file]
 
-        if (presentSizes.size > 0 && (sizeFromList === undefined || sizeFromList === 0)) {
-          issues.missing.push(entry.table)
-          return
-        }
-
-        try {
-          const { data: blob, error } = await supabase.storage
-            .from('database-backups')
-            .download(entry.file)
-          if (error || !blob) {
-            issues.unreadable.push({ table: entry.table, reason: error?.message || 'empty blob' })
-            return
+        let actualRows = 0
+        let anyMissing = false
+        for (const partPath of partPaths) {
+          const fileName = partPath.split('/').pop() || partPath
+          const sizeFromList = presentSizes.get(fileName)
+          if (presentSizes.size > 0 && (sizeFromList === undefined)) {
+            issues.missing.push(`${entry.table}:${fileName}`)
+            anyMissing = true
+            continue
           }
-          const text = await blob.text()
-          let parsed: unknown
           try {
-            parsed = JSON.parse(text)
-          } catch (e) {
-            issues.unreadable.push({ table: entry.table, reason: `parse error: ${e}` })
-            return
+            const { data: blob, error } = await supabase.storage
+              .from('database-backups')
+              .download(partPath)
+            if (error || !blob) {
+              issues.unreadable.push({ table: entry.table, reason: `${fileName}: ${error?.message || 'empty blob'}` })
+              continue
+            }
+            const text = await blob.text()
+            let parsed: unknown
+            try {
+              parsed = JSON.parse(text)
+            } catch (e) {
+              issues.unreadable.push({ table: entry.table, reason: `${fileName} parse error: ${e}` })
+              continue
+            }
+            if (!Array.isArray(parsed)) {
+              issues.unreadable.push({ table: entry.table, reason: `${fileName} payload is not an array` })
+              continue
+            }
+            actualRows += parsed.length
+          } catch (err) {
+            issues.unreadable.push({ table: entry.table, reason: `${fileName}: ${String(err)}` })
           }
-          if (!Array.isArray(parsed)) {
-            issues.unreadable.push({ table: entry.table, reason: 'payload is not an array' })
-            return
-          }
-          if (parsed.length !== entry.rows) {
-            issues.row_mismatch.push({ table: entry.table, expected: entry.rows, actual: parsed.length })
-          }
-        } catch (err) {
-          issues.unreadable.push({ table: entry.table, reason: String(err) })
+        }
+        if (!anyMissing && actualRows !== entry.rows) {
+          issues.row_mismatch.push({ table: entry.table, expected: entry.rows, actual: actualRows })
         }
       })
     )
@@ -445,7 +524,13 @@ async function handleBatch(
   return new Response(
     JSON.stringify({
       mode: 'batch',
-      processed: results.map(r => ({ table: r.table, rows: r.rows, sizeBytes: r.sizeBytes })),
+      processed: results.map(r => ({
+        table: r.table,
+        rows: r.rows,
+        sizeBytes: r.sizeBytes,
+        file: r.file,
+        files: r.files,
+      })),
       tables_processed: results.length,
       total_rows: totalRows,
       total_size_bytes: totalSize,
@@ -465,7 +550,7 @@ async function handleFinalize(
   tablesCount: number,
   totalRows: number,
   totalSizeBytes: number,
-  tableManifest: Array<{ table: string; rows: number; file: string }>
+  tableManifest: Array<{ table: string; rows: number; file: string; files?: string[] }>
 ): Promise<Response> {
   // Run integrity verification first so the manifest can record the outcome.
   const integrity = await verifyBackupIntegrity(supabase, folderPath, tableManifest)
@@ -629,7 +714,11 @@ const INTER_BATCH_DELAY_MS = 900
 //   • Manual backup finalize/status semantics are intentionally unchanged
 //     in this WP. The classifier is exported for reuse but only wired
 //     into the scheduled loop.
-const BATCH_SIZE_RETRY = 2
+// ADR-082: retry at single-table granularity. With streaming chunk
+// uploads, no single table should OOM the worker; if it still does, we
+// isolate the failure to that one table instead of retrying it together
+// with a healthy sibling.
+const BATCH_SIZE_RETRY = 1
 const RETRY_BUDGET_MS = 8 * 60_000
 const RETRY_BACKOFFS_MS = [5_000, 15_000] as const
 
@@ -662,21 +751,20 @@ async function retryFailedBatchTransient(args: {
 }): Promise<{ processed: Array<{ table: string; rows: number; sizeBytes?: number }>; summary: string }> {
   const { batch, batchIndex, totalBatches, firstError, backupId, folderPath, startTime } = args
   const subBatches = splitIntoBatches(batch, BATCH_SIZE_RETRY)
-  const processed: Array<{ table: string; rows: number; sizeBytes?: number }> = []
+  const processed: Array<{ table: string; rows: number; sizeBytes?: number; files?: string[]; file?: string }> = []
   const notes: string[] = [
-    `Batch ${batchIndex + 1}/${totalBatches} transient: ${firstError}`,
+    `Batch ${batchIndex + 1}/${totalBatches} [${batch.join(',')}] transient: ${firstError}`,
   ]
 
   for (let s = 0; s < subBatches.length; s++) {
     const sub = subBatches[s]
+    const subLabel = `sub ${s + 1}/${subBatches.length} [${sub.join(',')}]`
     let recovered = false
     let lastErr = firstError
     for (let attempt = 0; attempt < RETRY_BACKOFFS_MS.length; attempt++) {
       const budgetLeftMs = RETRY_BUDGET_MS - (Date.now() - startTime)
       if (budgetLeftMs <= 0) {
-        notes.push(
-          `sub ${s + 1}/${subBatches.length} skipped: budget exhausted`,
-        )
+        notes.push(`${subLabel} skipped: budget exhausted`)
         break
       }
       await sleep(RETRY_BACKOFFS_MS[attempt])
@@ -689,25 +777,19 @@ async function retryFailedBatchTransient(args: {
       if (res.ok) {
         const arr = res.data?.processed || []
         for (const p of arr) processed.push(p)
-        notes.push(
-          `sub ${s + 1}/${subBatches.length} recovered on attempt ${attempt + 1}/${RETRY_BACKOFFS_MS.length}`,
-        )
+        notes.push(`${subLabel} recovered on attempt ${attempt + 1}/${RETRY_BACKOFFS_MS.length}`)
         recovered = true
         break
       }
       lastErr = res.error ?? 'unknown'
       // Only continue retrying if still transient.
       if (!isTransientChunkError(lastErr, res.rateLimited)) {
-        notes.push(
-          `sub ${s + 1}/${subBatches.length} non-transient on retry: ${lastErr}`,
-        )
+        notes.push(`${subLabel} non-transient on retry: ${lastErr}`)
         break
       }
     }
-    if (!recovered && !notes.some((n) => n.startsWith(`sub ${s + 1}/`))) {
-      notes.push(
-        `sub ${s + 1}/${subBatches.length} failed after ${RETRY_BACKOFFS_MS.length} retries: ${lastErr}`,
-      )
+    if (!recovered && !notes.some((n) => n.startsWith(`sub ${s + 1}/${subBatches.length}`))) {
+      notes.push(`${subLabel} failed after ${RETRY_BACKOFFS_MS.length} retries: ${lastErr}`)
     }
   }
   const budgetLeftS = Math.max(0, Math.round((RETRY_BUDGET_MS - (Date.now() - startTime)) / 1000))
@@ -778,7 +860,7 @@ async function runScheduledChunked(
   const tablesToBackup = await fetchBackupTableOrder(supabase)
   await assertCoverageNotShrunk(supabase, tablesToBackup.length)
   const batches = splitIntoBatches(tablesToBackup, BATCH_SIZE)
-  const tableManifest: Array<{ table: string; rows: number; file: string }> = []
+  const tableManifest: Array<{ table: string; rows: number; file: string; files: string[] }> = []
   let totalRows = 0
   let totalSize = 0
   let tablesCount = 0
@@ -820,7 +902,12 @@ async function runScheduledChunked(
         startTime,
       })
       for (const p of recovered.processed) {
-        tableManifest.push({ table: p.table, rows: p.rows, file: `${folderPath}/${p.table}.json` })
+        const pFiles: string[] | undefined = (p as { files?: string[] }).files
+        const pFile: string | undefined = (p as { file?: string }).file
+        const files = pFiles && pFiles.length > 0
+          ? pFiles
+          : (pFile ? [pFile] : [`${folderPath}/${partFileName(p.table, 1)}`])
+        tableManifest.push({ table: p.table, rows: p.rows, file: files[0], files })
         totalRows += p.rows
         totalSize += p.sizeBytes || 0
         tablesCount++
@@ -832,7 +919,12 @@ async function runScheduledChunked(
 
     const processed = result.data?.processed || []
     for (const p of processed) {
-      tableManifest.push({ table: p.table, rows: p.rows, file: `${folderPath}/${p.table}.json` })
+      const pFiles: string[] | undefined = p.files
+      const pFile: string | undefined = p.file
+      const files = pFiles && pFiles.length > 0
+        ? pFiles
+        : (pFile ? [pFile] : [`${folderPath}/${partFileName(p.table, 1)}`])
+      tableManifest.push({ table: p.table, rows: p.rows, file: files[0], files })
       totalRows += p.rows
       totalSize += p.sizeBytes || 0
       tablesCount++
