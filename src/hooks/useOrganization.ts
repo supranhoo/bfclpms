@@ -297,6 +297,8 @@ export function useDeleteKraCategory() {
 export function useProfiles() {
   return useQuery({
     queryKey: ['profiles'],
+    staleTime: 5 * 60_000,
+    gcTime: 15 * 60_000,
     queryFn: async () => {
       // v2.66.11.0 — Use SECURITY DEFINER RPC to bypass per-row RLS
       // evaluation cost. Lifts statement_timeout to 30s and short-circuits
