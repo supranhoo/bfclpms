@@ -101,45 +101,36 @@ export default function AdminDashboard() {
 
   const { data: stats, isLoading } = useQuery({
     queryKey: ['admin-dashboard-stats'],
+    staleTime: 60_000,
+    gcTime: 5 * 60_000,
     queryFn: async (): Promise<DashboardStats> => {
-      // Fetch all stats in parallel
-      const [
-        { count: totalEmployees },
-        { data: kpis },
-        { count: openQueries },
-        { data: periods },
-        { count: pendingRollbacks },
-      ] = await Promise.all([
-        supabase.from('profiles').select('*', { count: 'exact', head: true }),
-        supabase.from('kpis').select('status'),
-        supabase.from('kpi_queries').select('*', { count: 'exact', head: true }).eq('status', 'open').eq('query_type', 'query'),
-        supabase.from('review_periods').select('is_locked'),
-        supabase.from('kpi_rollback_requests').select('*', { count: 'exact', head: true }).eq('status', 'pending'),
-      ]);
-
-      // Count KPIs by stage
-      const stageCounts: Record<string, number> = {};
-      (kpis || []).forEach(kpi => {
-        const stage = kpi.status || 'kra_set';
-        stageCounts[stage] = (stageCounts[stage] || 0) + 1;
-      });
-
+      // v2.66.13.0 (ADR-083) — Single SECURITY DEFINER RPC replaces the
+      // 5-query parallel block. Eliminates the full-table `kpis.status`
+      // scan and the 5x per-focus refetch storm.
+      const { data, error } = await (supabase as any).rpc('get_admin_dashboard_stats');
+      if (error) throw error;
+      const payload = (data || {}) as {
+        total_employees?: number;
+        open_queries?: number;
+        pending_rollbacks?: number;
+        locked_periods?: number;
+        active_periods?: number;
+        stage_counts?: Record<string, number>;
+      };
+      const stageCounts = payload.stage_counts || {};
       const kpisByStage: StageCount[] = Object.entries(STAGE_CONFIG).map(([stage]) => ({
         stage,
         count: stageCounts[stage] || 0,
       }));
-
-      const lockedPeriods = (periods || []).filter(p => p.is_locked).length;
-      const activePeriods = (periods || []).filter(p => !p.is_locked).length;
-
+      const totalKpis = Object.values(stageCounts).reduce((a, b) => a + (b || 0), 0);
       return {
-        totalEmployees: totalEmployees || 0,
-        totalKpis: kpis?.length || 0,
-        openQueries: openQueries || 0,
+        totalEmployees: payload.total_employees || 0,
+        totalKpis,
+        openQueries: payload.open_queries || 0,
         kpisByStage,
-        lockedPeriods,
-        activePeriods,
-        pendingRollbacks: pendingRollbacks || 0,
+        lockedPeriods: payload.locked_periods || 0,
+        activePeriods: payload.active_periods || 0,
+        pendingRollbacks: payload.pending_rollbacks || 0,
       };
     },
   });
