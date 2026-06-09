@@ -11652,6 +11652,7 @@ export type Database = {
           reason: string
         }[]
       }
+      get_admin_dashboard_stats: { Args: never; Returns: Json }
       get_backup_table_order: {
         Args: never
         Returns: {
@@ -11730,6 +11731,26 @@ export type Database = {
           p_year: number
         }
         Returns: Json
+      }
+      get_management_dashboard_rows: {
+        Args: { p_employee_ids?: string[]; p_months: string[]; p_year: number }
+        Returns: {
+          auditor_score: number
+          employee_id: string
+          final_score: number
+          frequency: string
+          hr_pms_score: number
+          id: string
+          is_na: boolean
+          management_score: number
+          manager_score: number
+          review_period: string
+          review_year: number
+          self_score: number
+          skip_level_score: number
+          status: string
+          weightage: number
+        }[]
       }
       get_org_kpi_data_entry_snapshot: {
         Args: { p_period: string; p_year: number }
