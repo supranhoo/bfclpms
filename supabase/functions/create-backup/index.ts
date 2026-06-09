@@ -544,7 +544,7 @@ async function handleFinalize(
   tablesCount: number,
   totalRows: number,
   totalSizeBytes: number,
-  tableManifest: Array<{ table: string; rows: number; file: string }>
+  tableManifest: Array<{ table: string; rows: number; file: string; files?: string[] }>
 ): Promise<Response> {
   // Run integrity verification first so the manifest can record the outcome.
   const integrity = await verifyBackupIntegrity(supabase, folderPath, tableManifest)
