@@ -372,6 +372,8 @@ export function useTeamMembers(managerId: string | undefined) {
 export function useProfilesByWorkflowStage(stage: string | null, reviewPeriod?: string, reviewYear?: number) {
   return useQuery({
     queryKey: ['profiles-by-workflow-stage', stage, reviewPeriod, reviewYear],
+    staleTime: 60_000,
+    gcTime: 10 * 60_000,
     queryFn: async () => {
       if (!stage) return null;
 
