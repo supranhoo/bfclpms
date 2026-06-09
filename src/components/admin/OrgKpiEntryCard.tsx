@@ -618,9 +618,30 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
           : values;
       })();
       await onSave(narrowed);
-      clearAllDirty();
-      setSaveStatus('saved');
-      setTimeout(() => setSaveStatus(prev => (prev === 'saved' ? 'idle' : prev)), 3000);
+      // ADR-081 — Row Save must only clear dirty state for the saved row.
+      // Card Save clears everything as before.
+      if (scopeId) {
+        touchedScopeIdsRef.current.delete(scopeId);
+        touchedEvidenceScopeIdsRef.current.delete(scopeId);
+        let remainingDirty = 0;
+        setDirtyScopeIds(prev => {
+          if (!prev.has(scopeId)) { remainingDirty = prev.size; return prev; }
+          const next = new Set(prev);
+          next.delete(scopeId);
+          remainingDirty = next.size;
+          return next;
+        });
+        const stillDirty = cardDirty || remainingDirty > 0;
+        isDirtyRef.current = stillDirty;
+        setSaveStatus(stillDirty ? 'unsaved' : 'saved');
+        if (!stillDirty) {
+          setTimeout(() => setSaveStatus(prev => (prev === 'saved' ? 'idle' : prev)), 3000);
+        }
+      } else {
+        clearAllDirty();
+        setSaveStatus('saved');
+        setTimeout(() => setSaveStatus(prev => (prev === 'saved' ? 'idle' : prev)), 3000);
+      }
     } catch {
       setSaveStatus('error');
     } finally {
@@ -634,7 +655,7 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
         setIsSavingCard(false);
       }
     }
-  }, [onSave, getValues, clearAllDirty]);
+  }, [onSave, getValues, clearAllDirty, cardDirty]);
 
   const handleSaveCard = useCallback(() => performSave(), [performSave]);
   const handleSaveRow = useCallback((scopeId: string) => performSave(scopeId), [performSave]);
