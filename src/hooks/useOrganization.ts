@@ -568,6 +568,8 @@ export function useProfilesByWorkflowStage(stage: string | null, reviewPeriod?: 
 export function useSkipLevelTeamMembers(userId: string | undefined) {
   return useQuery({
     queryKey: ['skip-level-team-members', userId],
+    staleTime: 2 * 60_000,
+    gcTime: 15 * 60_000,
     queryFn: async () => {
       // Step 1: Get direct reports of the current user
       const { data: directReports, error: drError } = await supabase
