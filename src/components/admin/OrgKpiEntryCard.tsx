@@ -437,23 +437,42 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
     }
     if (data.scopedRows) {
       const touched = touchedEvidenceScopeIdsRef.current;
+      const touchedFields = touchedScopeIdsRef.current;
       setScopedValues(prev => {
-        if (touched.size === 0) return data.scopedRows!;
+        if (touched.size === 0 && touchedFields.size === 0) return data.scopedRows!;
         return data.scopedRows!.map(dbRow => {
-          if (!touched.has(dbRow.scopeId)) return dbRow;
           const localRow = prev.find(r => r.scopeId === dbRow.scopeId);
-          // Preserve the user's local evidenceUrl (incl. null after removal).
-          return { ...dbRow, evidenceUrl: localRow ? localRow.evidenceUrl : dbRow.evidenceUrl };
+          if (!localRow) return dbRow;
+          const preserveFields = touchedFields.has(dbRow.scopeId);
+          const preserveEvidence = touched.has(dbRow.scopeId);
+          if (!preserveFields && !preserveEvidence) return dbRow;
+          // ADR-081 — Per-row Save preserves sibling unsaved edits. When the
+          // user has typed into a row but not yet saved it, a sibling row's
+          // Save (which refetches `data.scopedRows`) must NOT overwrite the
+          // local achievedValue/remarks/isNa/subFactors. Evidence is
+          // preserved via the separate `touchedEvidenceScopeIdsRef` ref.
+          return {
+            ...dbRow,
+            ...(preserveFields ? {
+              achievedValue: localRow.achievedValue,
+              remarks: localRow.remarks,
+              isNa: localRow.isNa,
+              subFactors: localRow.subFactors,
+            } : {}),
+            evidenceUrl: preserveEvidence ? localRow.evidenceUrl : dbRow.evidenceUrl,
+          };
         });
       });
     } else {
       setScopedValues([]);
     }
     setSaveStatus('idle');
-    isDirtyRef.current = false;
+    // Keep dirty flag set if any sibling rows still have unsaved local edits.
+    isDirtyRef.current = touchedScopeIdsRef.current.size > 0;
     if (identityChanged) {
       orgEvidenceTouchedRef.current = false;
       touchedEvidenceScopeIdsRef.current = new Set();
+      touchedScopeIdsRef.current = new Set();
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data.achievedValue, data.remarks, data.evidenceUrl, data.categoryId, data.kraName, data.kpiName, reviewPeriod, reviewYear, data.scopedRows]);
