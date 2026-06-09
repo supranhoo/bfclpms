@@ -160,6 +160,8 @@ export default function ManagementDashboard() {
   const { data: dashboardData, isLoading: dataLoading, isError, refetch } = useQuery({
     queryKey: ['management-dashboard', selectedFiscalYear, selectedMonths, stableEmployeeKey, filters.divisionId, filters.businessUnitId, filters.departmentId, filters.managerId, filters.employeeId],
     placeholderData: keepPreviousData,
+    staleTime: 60_000,
+    gcTime: 5 * 60_000,
     queryFn: async () => {
      try {
       // Detect if any hierarchy filter is active to avoid .in() overflow with 454+ UUIDs
@@ -172,34 +174,41 @@ export default function ManagementDashboard() {
         monthsByYear.get(year)!.push(month);
       });
 
+      // v2.66.13.0 (ADR-083) — Replaces PostgREST embed + N batched .range()
+      // loops with a single SECURITY DEFINER RPC per calendar year. Server
+      // does kpis ⨝ review_submissions in one planned query; client keeps
+      // the existing aggregator so getKpiDueDate stays the source of truth.
       const fetchFiscalData = async (): Promise<any[]> => {
-        const allKpis: any[] = [];
-        // Fetch calendar year chunks in parallel
+        if (hasActiveHierarchyFilters && filteredEmployeeIds.length === 0) return [];
+        const empIds = hasActiveHierarchyFilters ? filteredEmployeeIds : null;
         const yearResults = await Promise.all(
           Array.from(monthsByYear.entries()).map(async ([calYear, months]) => {
-            const yearKpis: any[] = [];
-            let offset = 0;
-            const batchSize = 1000;
-            let hasMore = true;
-            while (hasMore) {
-              let query = supabase
-                .from('kpis')
-                .select(`
-                  id, employee_id, status, weightage, review_period, review_year, frequency,
-                  review_submissions ( final_score, management_score, auditor_score, hr_pms_score, skip_level_score, manager_score, self_score, is_na )
-                `)
-                .eq('review_year', calYear)
-                .in('review_period', months)
-                .range(offset, offset + batchSize - 1);
-              if (hasActiveHierarchyFilters) {
-                if (filteredEmployeeIds.length === 0) { hasMore = false; continue; }
-                query = query.in('employee_id', filteredEmployeeIds);
-              }
-              const { data, error } = await query;
-              if (error) throw error;
-              if (data && data.length > 0) { yearKpis.push(...data); offset += batchSize; hasMore = data.length === batchSize; } else { hasMore = false; }
-            }
-            return yearKpis;
+            const { data, error } = await (supabase as any).rpc('get_management_dashboard_rows', {
+              p_year: calYear,
+              p_months: months,
+              p_employee_ids: empIds,
+            });
+            if (error) throw error;
+            // Wrap submission columns back into the shape the aggregator expects
+            return (data || []).map((r: any) => ({
+              id: r.id,
+              employee_id: r.employee_id,
+              status: r.status,
+              weightage: r.weightage,
+              review_period: r.review_period,
+              review_year: r.review_year,
+              frequency: r.frequency,
+              review_submissions: {
+                final_score: r.final_score,
+                management_score: r.management_score,
+                auditor_score: r.auditor_score,
+                hr_pms_score: r.hr_pms_score,
+                skip_level_score: r.skip_level_score,
+                manager_score: r.manager_score,
+                self_score: r.self_score,
+                is_na: r.is_na,
+              },
+            }));
           })
         );
         return yearResults.flat();
