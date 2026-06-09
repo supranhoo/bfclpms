@@ -1,0 +1,22 @@
+---
+name: Streaming chunked backup export (ADR-082)
+description: create-backup streams each table to part files (`<table>.part-NNNNNN.json`, 5k rows/part); manifest carries `files[]`; restore iterates parts; bounds peak heap to one chunk
+type: feature
+---
+ADR-082 — applies to `supabase/functions/create-backup/index.ts` and `supabase/functions/restore-backup/index.ts`.
+
+**Why:** Pre-ADR, `fetchAllRows` accumulated every row of a table into one array and then `JSON.stringify`d the whole array. For `notifications` (~78k rows / 67 MB) and `org_kpi_data_entry_logs` (~85k rows / 57 MB) peak heap exceeded the 256 MB Deno Deploy worker cap, causing deterministic `HTTP 546` at `Batch 46/51` and 5 consecutive `failed` scheduled backups (2026-06-05 → 2026-06-09).
+
+**What:**
+- `streamTableToStorage` pages from Postgres `PAGE_SIZE=1000` at a time and flushes a part file every `ROWS_PER_CHUNK=5000` rows.
+- Part file convention: `<folder>/<table>.part-NNNNNN.json` (zero-padded). Zero-row tables still emit one empty part file (preserves the integrity-verification contract).
+- Manifest table entry carries `files: string[]` (authoritative) and `file: string` (= first part, for backward-compat readers).
+- `verifyBackupIntegrity` sums row counts across all part files for a table and reports missing parts individually.
+- `restore-backup` iterates `entry.files` (falling back to `[entry.file]` for legacy single-file backups) — legacy backups stay restorable.
+- `BATCH_SIZE_RETRY=1` (single-table retry) pairs with this so an OOM on one table cannot drag a sibling into the same retry budget.
+
+**Invariants locked by tests** in `src/test/safety/phase9/backup-coverage-contract.test.ts`:
+- I16: `streamTableToStorage`, `ROWS_PER_CHUNK`, `partFileName` exist; `allRows = allRows.concat(...)` pattern is gone; results carry `files: string[]`.
+- I17: restore-backup manifest type accepts `files?: string[]` and the insert path iterates `entry.files` when present.
+
+**Forbidden:** Re-introducing whole-table buffering (`allRows.concat`, single `JSON.stringify(allRows)`) in the backup export path. Restoring from a single `<table>.json` for new backups created under ADR-082 (manifest now lists multiple parts).
