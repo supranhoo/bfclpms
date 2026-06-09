@@ -524,7 +524,13 @@ async function handleBatch(
   return new Response(
     JSON.stringify({
       mode: 'batch',
-      processed: results.map(r => ({ table: r.table, rows: r.rows, sizeBytes: r.sizeBytes })),
+      processed: results.map(r => ({
+        table: r.table,
+        rows: r.rows,
+        sizeBytes: r.sizeBytes,
+        file: r.file,
+        files: r.files,
+      })),
       tables_processed: results.length,
       total_rows: totalRows,
       total_size_bytes: totalSize,
