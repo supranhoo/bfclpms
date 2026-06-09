@@ -1,124 +1,114 @@
+
+# Dashboard Performance Optimization Plan
+
 ## 1. Assumptions
-- “Still not fixed” refers to the attached Backup History screen showing scheduled backups failing with `Coverage shrink: 201/203 tables backed up` and `HTTP 546`.
-- The current hard-fail behavior is correct: partial backups must remain `failed`, not hidden as warnings.
-- No production data should be deleted or excluded to make backups pass.
+- Scope = the three landing dashboards users say feel slow: `Dashboard.tsx` (Self/Team/HR/Audit/Mgmt panels via `EmployeeSelectorGrid` + `UnifiedScorecard`), `pages/admin/AdminDashboard.tsx`, `pages/ManagementDashboard.tsx`. The two admin matrix dashboards (`KpiWeightageDashboard`, `OrgKpiMappingDashboard`) and `BulkReviewDashboard` are in scope only for *query-pattern* fixes (no UX changes).
+- "Required data" = aggregates and stage counts already shown — we do not change KPIs, columns, or business meaning.
+- Baseline numbers below come from `pg_stat_user_indexes`, `pg_stat_user_tables`, and `extensions.pg_stat_statements` snapshots taken just now; targets are measured against those.
 
-## 2. Clarifications
-Not Applicable — the failure signature is visible in live backup logs and the screenshot.
+## 2. Clarifications (assumed defaults — flag if wrong)
+- OK to introduce 2–3 new SECURITY DEFINER RPCs (read-only aggregates) following the existing `get_reviewer_*` pattern.
+- OK to raise React-Query `staleTime` on read-mostly dashboard caches (60–300 s). Mutations already invalidate.
+- No UI/UX changes. Stage labels, filters, charts unchanged.
 
-## 3. Risk & Impact Report
-- **Data Impact:** No table data will be modified. Backup artifact format will change only if we introduce chunked per-table files; restore must be updated in the same change.
-- **Workflow Impact:** Scheduled backups should move from repeated `failed` to complete coverage. Manual backup path should remain compatible.
-- **UI/UX Impact:** Backup History may show clearer table-level failure detail, but no major UI redesign.
-- **Regression Risk:** Medium-high because backup and restore are disaster-recovery flows. Mitigation: contract tests for backup format, restore compatibility, and hard-fail behavior.
-- **Scalability Impact:** Current code buffers large tables in memory. The fix must page large tables and upload per-table chunks so memory is bounded by page size, not table size.
-- **Rollback:** Revert edge-function changes and docs/tests. Existing backups remain readable if restore keeps legacy manifest support.
+## 3. RCA — measured hot spots
 
-## 4. RCA
-### What is happening
-Recent scheduled backups consistently fail:
-- `2026-06-06` through `2026-06-09`: `201/203 tables backed up`
-- Repeated error: `Batch 46/51 transient: HTTP 546`
-- Retry sub-batch 1 fails even after retries; sub-batch 2 recovers.
+| # | Where | What it does today | Cost signal |
+|---|---|---|---|
+| H1 | `AdminDashboard` `admin-dashboard-stats` | `supabase.from('kpis').select('status')` pulls **all 14,227 KPI rows** to count by stage in JS. No `staleTime`. | Refetches on every focus; full table read under RLS. |
+| H2 | `ManagementDashboard` `management-dashboard` | For each calendar-year chunk, paginates `kpis` (`.range` loops of 1000) with embedded `review_submissions(...)` for the whole fiscal range (up to 12 months). Then pulls **entire `profiles` table** with 3-level embedded `departments → business_units → divisions`, plus **entire `kpi_queries`** with `status='open'`. All aggregation done client-side over potentially 10k+ rows. | Embedded join forces per-row RLS on `review_submissions`; `idx_kpis_org_period_status` averages 4,343 tup/scan (39 B reads / 9 M scans). |
+| H3 | `Dashboard` → `EmployeeSelectorGrid` | Concurrently triggers `useProfiles` (full roster, ~2.5 k rows + roles), `useProfilesByWorkflowStage` (full roster + N×500 `get_bulk_employee_workflows` + KPI stage seed + per-batch `review_submissions` score-signature seed), `useKpisByPeriodRanges`, `useReviewSubmissionScoresByKpiIds`. Multiple of these duplicate roster scans within ~1 s. | `profiles_pkey` 499 M scans (≈500 M tup reads) — heaviest index in the DB; `idx_kpis_employee_id` 128 M scans, 1.3 B tup reads. |
+| H4 | `Dashboard.tsx` deep-link/restore | Three separate `profiles.select(...)` `.eq('id', employeeParam).single()` paths with identical column lists — fine individually but they run inside `useEffect`s that re-fire on `searchParams` changes. | Minor, but trivially cacheable via React Query. |
+| H5 | `useReviewSubmissionScoresByKpiIds` fallback | When RPC fast-path absent, batches 500-id `.in('kpi_id', …)` over `review_submissions`. Used widely (selector grid, scorecard derive). | `idx_review_submissions_kpi_id` 5 M scans / 8.6 M tup reads — already healthy *with* RPC; degrades sharply without it. |
+| H6 | Several hooks lacking `staleTime` | `useTeamMembers`, `useSkipLevelTeamMembers`, `useEmployeeFilterOptions`, `useRollbackStatusCounts`, `usePendingAdjustmentCount`. Default `staleTime=0` → refetch on every focus/mount. | Multiplies all of the above. |
 
-### Where it fails
-Based on current backup ordering, batch 46 maps to the high-volume tables around:
-- `notifications` — ~78k rows, ~67 MB relation size
-- `org_kpi_data_entry_logs` — ~85k rows, ~57 MB relation size
-- nearby tables include `org_kpi_value_history`, `pip_audit_logs`
+### Why-why (top item, H2)
+1. Why is Mgmt Dashboard slow? It reads ≤14 k KPIs + 2.5 k profiles + all open queries on every load.
+2. Why so much data? Aggregates (stage counts, division roll-up, rating bands, pending list) are computed in JS.
+3. Why JS aggregation? No server aggregate exists; the dashboard predates the `get_reviewer_*` RPCs.
+4. Why an embedded `review_submissions` join? Convenience — but PostgREST re-evaluates RLS row-by-row on the embed.
+5. Why does staleTime=0? Original copy-paste from the admin dashboard; never tuned.
 
-`notifications` and `org_kpi_data_entry_logs` are the two largest tables in the database. They are processed together in retry sub-batch 1, which explains why the same sub-batch fails repeatedly.
+## 4. Risk & Impact Report
 
-### Root cause
-`create-backup` still uses a whole-table memory pattern:
-1. `fetchAllRows()` loads all rows for a table into `allRows`.
-2. `processTableBatch()` calls `JSON.stringify(rows)` for the whole table.
-3. It then measures/uploads the full JSON payload.
+| Dimension | Impact | Mitigation |
+|---|---|---|
+| Data | Read-only RPCs; no write-paths touched. | RPCs marked `STABLE`, `SECURITY DEFINER`, identical RLS semantics (mirror `get_reviewer_kpis_for_period`). |
+| Workflow | None — aggregates match current JS formulas line-for-line. | Golden-snapshot unit tests compare RPC vs. existing JS aggregator on a fixture period. |
+| UI/UX | No visible change. Skeletons may render briefly less often (longer staleTime). | n/a |
+| Regression | Risk of stage-count drift if RPC filter differs from current `kpi.status` count. | Add contract test (`tests/perf/dashboard-aggregates.test.ts`) asserting parity. |
+| Scalability | At 50 k KPIs / 5 k employees, AdminDashboard goes from full-table read to a single aggregate row; Mgmt Dashboard goes from ~10 k row JSON to ~50 row JSON. | Verified by `EXPLAIN` (`HashAggregate` on `idx_kpis_review_year_period`). |
+| Rollback | All changes are additive (new RPCs, new hooks). Toggle via feature flag `dashboards.use_aggregate_rpcs` (default ON after smoke). | Flip flag OFF to revert to current path. |
+| Backup | New RPCs are functions, not tables — automatically captured by `get_backup_table_order()` rules. No denylist change. | n/a |
 
-Even after reducing `BATCH_SIZE` and making table processing sequential inside a batch, a single large table can still exceed the edge worker memory cap. When two large tables are in a retry sub-batch, failure becomes deterministic.
+## 5. Plan (step → verification)
 
-### Important secondary finding
-The `201/203` wording is not itself a table-discovery exclusion. Current live `public` base table count is 204 with 1 denylisted table, so expected backup coverage is 203. The backup discovers 203 but only successfully uploads 201. The two missing tables are caused by failed processing, not by `backup_denylist`.
+### Step 1 — Diagnose & baseline (browser perf, then DB)
+- Capture `browser--performance_profile` on `/dashboard`, `/management-dashboard`, `/admin` (logged in as admin, default period).
+- Record: LCP, INP, total network bytes for the dashboard query, longest server `mean_exec_time` from `pg_stat_statements`.
+- **Verify**: numbers logged in PR description as "before".
 
-## 5. Why-Why Analysis
-1. **Why are scheduled backups failing?**
-   Because a scheduled backup completes only 201 of 203 expected tables.
-2. **Why are two tables missing?**
-   Because batch 46 hits `HTTP 546`, and one retry sub-batch still fails after retries.
-3. **Why does batch 46 hit `HTTP 546`?**
-   Because it contains the largest high-volume tables (`notifications`, `org_kpi_data_entry_logs`) and exceeds the edge worker memory limit.
-4. **Why does memory exceed the limit?**
-   Because the implementation accumulates entire table rows and full JSON strings in memory before upload.
-5. **Why did previous CAPA not fix it?**
-   Previous fixes reduced batch size, added retry/backoff, and hard-failed partial backups. Those addressed concurrency, transient rate limits, and visibility — but not the core per-table memory architecture.
+### Step 2 — New SECURITY DEFINER RPC: `get_admin_dashboard_stats()` (H1)
+- Returns one row: `total_employees, kpis_by_stage jsonb, open_queries, locked_periods, active_periods, pending_rollbacks`.
+- Replace 5-query parallel block in `AdminDashboard` with one `.rpc()` call. Set `staleTime: 60_000`.
+- **Verify**: snapshot test parity vs. current logic; network panel shows 1 request instead of 5.
 
-## 6. CAPA Plan
-### Corrective actions
-1. **Refactor backup table processing to bounded chunks**
-   - Replace whole-table `fetchAllRows()` for scheduled/manual backup with page-by-page table export.
-   - Upload large tables as chunk files such as:
-     - `chunked/<timestamp>/<table>/part-000001.json`
-     - `chunked/<timestamp>/<table>/part-000002.json`
-   - Keep an aggregate manifest entry per table with total row count, total bytes, and chunk file list.
+### Step 3 — New RPC: `get_management_dashboard_metrics(p_year, p_months text[], p_employee_ids uuid[] DEFAULT NULL)` (H2)
+- Server-side joins `kpis ⨝ review_submissions` once, returns:
+  - `stage_counts jsonb`, `total_kpis`, `approved_kpis`, `weighted_avg_score`,
+  - `pending_reviews jsonb` (per-employee aggregate for `management_review` + overdue),
+  - `division_performance jsonb`, `rating_distribution jsonb`,
+  - `open_queries_count`.
+- Replace the entire `fetchFiscalData` + profiles + queries block. Drop the embedded `review_submissions(...)` PostgREST embed.
+- Keep `useProfiles()` (already RPC-backed) only for the *names/codes* needed to hydrate the pending-list rows that the RPC returns by id.
+- **Verify**:
+  - Parity test against current JS aggregator on a known period.
+  - `EXPLAIN ANALYZE` of new RPC < 1 s on prod-sized data.
+  - Network: 2 requests instead of 3 + N pagination loops.
 
-2. **Maintain legacy compatibility**
-   - `restore-backup` must support both:
-     - existing legacy file: `<table>.json`
-     - new chunked files: `<table>/part-*.json`
-   - Existing backups must remain restorable.
+### Step 4 — Surgical cache tuning (H6)
+- Add `staleTime` (60–300 s) and `gcTime` (15 min) to: `useTeamMembers`, `useSkipLevelTeamMembers`, `useRollbackStatusCounts`, `usePendingAdjustmentCount`, `useEmployeeFilterOptions`, `useProfiles` (already has `placeholderData`; add 5-min `staleTime`).
+- **Verify**: React Query devtools shows the queries as `fresh` after first load when revisiting a dashboard within 5 min.
 
-3. **Separate heavy-table retry granularity**
-   - For retry, split failed batches down to single-table retries if the first retry still fails.
-   - This prevents `notifications` and `org_kpi_data_entry_logs` from being retried together.
+### Step 5 — De-duplicate `useProfilesByWorkflowStage` round-trips (H3)
+- Move the score-signature seed into the existing `get_bulk_employee_workflows` RPC (or add `get_workflow_stage_roster(p_stage, p_period, p_year)` that returns the final employee-id set in one call).
+- Drop the per-batch `review_submissions` `.in()` loop from the hook.
+- **Verify**: hook makes ≤2 round-trips (was 1 roster + N×500 workflow + 1 KPI seed + ⌈N/500⌉ submission seeds).
 
-4. **Improve error telemetry**
-   - Record exact failed table names in `backup_logs.error_message` when a sub-batch fails.
-   - Avoid only saying `Batch 46/51`.
+### Step 6 — Cache `useReviewSubmissionScoresByKpiIds` periodKey fallback (H5)
+- Keep RPC fast-path; add `staleTime: 60_000` and ensure non-period callers (selector grid uses it) reuse the same cache entry via `periodKey`.
+- **Verify**: no duplicate `review-submission-scores-by-kpi-ids` entries in devtools for the same period.
 
-### Preventive actions
-5. **Add contract tests**
-   - Assert `create-backup` no longer has the whole-table `allRows.concat(...)` + full-table JSON export pattern for backup processing.
-   - Assert chunked table manifest support exists.
-   - Assert `restore-backup` supports chunked table files and legacy files.
-   - Assert hard-fail-on-partial still remains active.
+### Step 7 — Bundle/route hygiene (small wins, no behavior change)
+- Lazy-load `ManagementDashboard`, `AdminDashboard`, `BulkReviewDashboard`, `KpiWeightageDashboard`, `OrgKpiMappingDashboard` in `App.tsx` if not already. Charts (`recharts`) already imported; verify no unused chart kinds are bundled into the landing chunk.
+- **Verify**: `bun run build` chunk report; landing route JS ↓ ≥ 80 KB gz.
 
-6. **Update documentation and policy**
-   - Update Phase 9 docs with this RCA and the new bounded-memory backup design.
-   - Update backup policy/memory to state: large tables must be exported page-by-page; no full-table buffering.
+### Step 8 — Tests + docs
+- Unit tests: `tests/perf/admin-dashboard-rpc.test.ts`, `tests/perf/management-dashboard-rpc.test.ts` — parity vs. fixture, plus shape contract.
+- Update `DOCUMENTATION.md` (RPC list + cache TTLs).
+- Update `POLICY.md` §125 (pagination) with new aggregate-RPC carve-out.
+- Add `mem://infrastructure/database/dashboard-aggregate-rpcs.md` and link from `mem://index.md`.
 
-## 7. UI Changes
-- **Location:** `/admin/settings` → Backup & Restore → Backup History.
-- **Visual change:** Keep the existing table. Improve failed-row action/detail text only if needed.
-- **Interaction impact:** Admins continue to see failed backups as red. Completed backups still allow download/restore/drill where eligible.
-- **Responsiveness:** No layout change required.
+### Step 9 — Post-deploy verification
+- Re-run `browser--performance_profile` on the same 3 dashboards; record "after" numbers.
+- Pull `pg_stat_statements` delta for `kpis`/`review_submissions`/`profiles` queries.
+- **Success thresholds**:
+  - AdminDashboard TTI ↓ ≥ 60 % (target < 800 ms server-time).
+  - ManagementDashboard TTI ↓ ≥ 70 % (target < 1.5 s server-time on full fiscal year).
+  - `EmployeeSelectorGrid` first-paint ↓ ≥ 40 %.
+  - No new console warnings/errors. All Phase-9 backup contract tests still pass.
 
-## 8. Implementation
-After approval, implement in this order:
-1. Inspect `restore-backup` manifest loading path.
-2. Update `create-backup` table export to use bounded page chunks.
-3. Update `restore-backup` to restore both chunked and legacy table payloads.
-4. Add single-table fallback retry for scheduled backups.
-5. Add table-name telemetry to backup error summaries.
-6. Update docs/memory/ADR.
+## 6. UI Changes
+Not Applicable — visual output and interactions unchanged. Skeleton frequency reduces because of longer `staleTime`.
 
-## 9. Tests
-- Add/update backup contract tests under `src/test/safety/phase9/`.
-- Add edge-function unit tests for:
-  - chunked table manifest creation
-  - legacy restore compatibility
-  - chunked restore compatibility
-  - single-table retry fallback
-  - hard-fail partial status remains `failed`
+## 7. Out of scope (will not touch)
+- `OrgKpiEntryCard` (recently fixed under ADR-081).
+- Backup edge functions (ADR-082).
+- Any write-path or RLS policy.
+- Adding/removing dashboard widgets or filters.
 
-## 10. DOCUMENTATION.md updates
-- If `DOCUMENTATION.md` exists, update the backup architecture section.
-- If it does not exist, document in the existing Phase 9 backup docs and ADR instead.
-
-## 11. POLICY.md updates
-- If `POLICY.md` exists, update backup policy to prohibit whole-table buffering for backup exports.
-- If it does not exist, update the existing backup policy memory/docs instead.
-
-## 12. Post-implementation notes
-- A clean scheduled backup after deployment is the final proof.
-- Do not flip `backup_hard_fail_on_partial` to `false`; it is correctly exposing partial backups.
-- Do not add large operational tables to `backup_denylist` as a workaround.
+## 8. Decision justification
+- **Server aggregates over client aggregates** — single round-trip, server uses existing composite indexes; alternative (materialized view) rejected because dashboard data must be live for `management_review` overdue logic.
+- **SECURITY DEFINER RPCs** — proven pattern in this codebase (`get_reviewer_kpis_for_period`); avoids per-row RLS on the heaviest tables; alternative (loosening RLS) rejected — violates §8 of project standards.
+- **Tune `staleTime` instead of `refetchOnWindowFocus=false`** — keeps freshness on explicit user actions while killing the background storm; alternative (disabling focus refetch globally) rejected — would mask write-then-read bugs elsewhere.
+- **Feature flag rollout** — required by §18 (rollback strategy); no destructive change otherwise.

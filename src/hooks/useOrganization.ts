@@ -297,6 +297,8 @@ export function useDeleteKraCategory() {
 export function useProfiles() {
   return useQuery({
     queryKey: ['profiles'],
+    staleTime: 5 * 60_000,
+    gcTime: 15 * 60_000,
     queryFn: async () => {
       // v2.66.11.0 — Use SECURITY DEFINER RPC to bypass per-row RLS
       // evaluation cost. Lifts statement_timeout to 30s and short-circuits
@@ -333,6 +335,8 @@ export function useProfiles() {
 export function useTeamMembers(managerId: string | undefined) {
   return useQuery({
     queryKey: ['team-members', managerId],
+    staleTime: 2 * 60_000,
+    gcTime: 15 * 60_000,
     queryFn: async () => {
       const { data, error } = await supabase
         .from('profiles')
@@ -368,6 +372,8 @@ export function useTeamMembers(managerId: string | undefined) {
 export function useProfilesByWorkflowStage(stage: string | null, reviewPeriod?: string, reviewYear?: number) {
   return useQuery({
     queryKey: ['profiles-by-workflow-stage', stage, reviewPeriod, reviewYear],
+    staleTime: 60_000,
+    gcTime: 10 * 60_000,
     queryFn: async () => {
       if (!stage) return null;
 
@@ -564,6 +570,8 @@ export function useProfilesByWorkflowStage(stage: string | null, reviewPeriod?: 
 export function useSkipLevelTeamMembers(userId: string | undefined) {
   return useQuery({
     queryKey: ['skip-level-team-members', userId],
+    staleTime: 2 * 60_000,
+    gcTime: 15 * 60_000,
     queryFn: async () => {
       // Step 1: Get direct reports of the current user
       const { data: directReports, error: drError } = await supabase

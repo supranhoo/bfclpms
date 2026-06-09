@@ -101,6 +101,8 @@ export function useMarkIncentivePaid() {
 export function usePendingAdjustmentCount() {
   return useQuery({
     queryKey: ['incentive-pending-adjustments-count'],
+    staleTime: 60_000,
+    gcTime: 5 * 60_000,
     queryFn: async () => {
       const { count, error } = await supabase
         .from('incentive_score_revisions')

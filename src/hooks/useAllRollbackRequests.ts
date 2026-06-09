@@ -67,6 +67,8 @@ export function useAllRollbackRequests(statusFilter: RollbackStatusFilter = 'all
 export function useRollbackStatusCounts() {
   return useQuery({
     queryKey: ['rollback-status-counts'],
+    staleTime: 60_000,
+    gcTime: 5 * 60_000,
     queryFn: async () => {
       const { data, error } = await supabase
         .from('kpi_rollback_requests')
