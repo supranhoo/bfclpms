@@ -93,72 +93,140 @@ function splitIntoBatches(tables: string[], batchSize: number): string[][] {
   return batches
 }
 
-async function fetchAllRows(
+// ADR-082: streaming chunked table export.
+//
+// Previous behaviour buffered every row of a table into one array, then
+// serialised the whole array to a single JSON string before upload. For
+// the two largest tables (`notifications`, `org_kpi_data_entry_logs`,
+// ~80k rows each) the {rows array + JSON string + TextEncoder buffer}
+// peaked above the 256 MB Deno Deploy worker cap, causing HTTP 546 and
+// repeated scheduled-backup failures at batch 46/51.
+//
+// The streamer below pages rows from the DB and flushes a part file to
+// storage every ROWS_PER_CHUNK rows. Peak heap is bounded by one chunk,
+// not by total table size.
+const ROWS_PER_CHUNK = 5000
+const PAGE_SIZE = 1000
+
+function partFileName(tableName: string, partIndex: number): string {
+  return `${tableName}.part-${String(partIndex).padStart(6, '0')}.json`
+}
+
+async function streamTableToStorage(
   supabase: ReturnType<typeof createClient>,
   tableName: string,
-  pruneColumn?: string
-): Promise<unknown[]> {
-  let allRows: unknown[] = []
-  let offset = 0
-  const pageSize = 1000
-  let hasMore = true
+  folderPath: string,
+  pruneColumn?: string,
+): Promise<{ rows: number; files: string[]; sizeBytes: number }> {
+  const files: string[] = []
+  let totalRows = 0
+  let totalSize = 0
+  let buffer: unknown[] = []
+  let partIndex = 0
 
+  const flush = async () => {
+    if (buffer.length === 0) return
+    partIndex++
+    const fileName = partFileName(tableName, partIndex)
+    const filePath = `${folderPath}/${fileName}`
+    const json = JSON.stringify(buffer)
+    const sizeBytes = new TextEncoder().encode(json).byteLength
+    const { error: uploadError } = await supabase.storage
+      .from('database-backups')
+      .upload(filePath, json, { contentType: 'application/json', upsert: false })
+    if (uploadError) {
+      throw new Error(`Upload ${fileName} failed: ${uploadError.message}`)
+    }
+    files.push(filePath)
+    totalSize += sizeBytes
+    // Help V8 reclaim the chunk before paging the next slice.
+    buffer = []
+  }
+
+  let offset = 0
+  let hasMore = true
   while (hasMore) {
-    let query = supabase.from(tableName).select('*').range(offset, offset + pageSize - 1)
+    let query = supabase.from(tableName).select('*').range(offset, offset + PAGE_SIZE - 1)
     if (pruneColumn) {
       query = query.gte(pruneColumn, NINETY_DAYS_AGO)
     }
-
     const { data, error } = await query
     if (error) {
-      console.warn(`Warning: Could not backup table ${tableName}: ${error.message}`)
+      console.warn(`Warning: Could not page table ${tableName}: ${error.message}`)
       break
     }
-    if (data && data.length > 0) {
-      allRows = allRows.concat(data)
-      offset += pageSize
-      hasMore = data.length === pageSize
-    } else {
+    if (!data || data.length === 0) {
       hasMore = false
+      break
     }
+    for (const row of data) {
+      buffer.push(row)
+      totalRows++
+      if (buffer.length >= ROWS_PER_CHUNK) {
+        await flush()
+      }
+    }
+    offset += PAGE_SIZE
+    hasMore = data.length === PAGE_SIZE
   }
 
-  return allRows
+  // Always emit at least one part file so integrity verification has
+  // something to read for zero-row tables (preserves prior contract).
+  if (files.length === 0) {
+    await flush() // flush empty buffer no-op
+    partIndex++
+    const fileName = partFileName(tableName, partIndex)
+    const filePath = `${folderPath}/${fileName}`
+    const json = '[]'
+    const { error: uploadError } = await supabase.storage
+      .from('database-backups')
+      .upload(filePath, json, { contentType: 'application/json', upsert: false })
+    if (uploadError) {
+      throw new Error(`Upload ${fileName} failed: ${uploadError.message}`)
+    }
+    files.push(filePath)
+    totalSize += 2
+  } else {
+    await flush()
+  }
+
+  return { rows: totalRows, files, sizeBytes: totalSize }
 }
 
 async function processTableBatch(
   supabase: ReturnType<typeof createClient>,
   tables: string[],
   folderPath: string
-): Promise<{ results: Array<{ table: string; rows: number; file: string; sizeBytes: number }>; errors: string[] }> {
-  const results: Array<{ table: string; rows: number; file: string; sizeBytes: number }> = []
+): Promise<{
+  results: Array<{ table: string; rows: number; file: string; files: string[]; sizeBytes: number }>;
+  errors: string[]
+}> {
+  const results: Array<{ table: string; rows: number; file: string; files: string[]; sizeBytes: number }> = []
   const errors: string[] = []
 
-  // Process tables sequentially within a batch to keep peak memory low.
-  // Parallel Promise.all here caused WORKER_RESOURCE_LIMIT once the 33
-  // safety_* tables were added — multiple large table payloads were held
-  // in RAM simultaneously (rows array + JSON string + Blob copy).
+  // Process tables sequentially within a batch and stream each table to
+  // storage one chunk at a time, so peak memory is bounded by ROWS_PER_CHUNK
+  // rather than total table size. See ADR-082.
   for (const tableName of tables) {
     try {
       const pruneColumn = PRUNE_TABLES[tableName]
-      const rows = await fetchAllRows(supabase, tableName, pruneColumn)
-
-      const filePath = `${folderPath}/${tableName}.json`
-      const json = JSON.stringify(rows)
-      // Byte length without allocating a Blob copy.
-      const sizeBytes = new TextEncoder().encode(json).byteLength
-
-      const { error: uploadError } = await supabase.storage
-        .from('database-backups')
-        .upload(filePath, json, { contentType: 'application/json', upsert: false })
-
-      if (uploadError) {
-        errors.push(`Failed to upload ${tableName}: ${uploadError.message}`)
-      } else {
-        results.push({ table: tableName, rows: rows.length, file: filePath, sizeBytes })
-      }
+      const { rows, files, sizeBytes } = await streamTableToStorage(
+        supabase,
+        tableName,
+        folderPath,
+        pruneColumn,
+      )
+      results.push({
+        table: tableName,
+        rows,
+        // `file` retained for backward-compat readers; treated as the
+        // first part file. Authoritative list is `files`.
+        file: files[0],
+        files,
+        sizeBytes,
+      })
     } catch (err) {
-      errors.push(`Skipping table ${tableName}: ${err}`)
+      errors.push(`Skipping table ${tableName}: ${err instanceof Error ? err.message : String(err)}`)
     }
   }
 
