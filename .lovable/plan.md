@@ -1,102 +1,89 @@
-## Diagnosis recap
+## Issue
 
-Pulled `cron.job` + `cron.job_run_details` (last 7 days). The recent compute spike is dominated by sub-hourly cron jobs that mostly run on **empty queues**:
+Reported by **Jitendra Bharti**: when a Skip-Level Manager (SLM) requests a Rollback and an Admin approves it, the KPI disappears from the SLM's pending queue and they can no longer act on it.
 
-| Job | Schedule today | Runs / 30d | Current workload |
-|---|---|---:|---|
-| `compress-evidence-every-2min` | every 2 min | ~21,600 | PMS jobs pending = **0**, Safety non-webp = **0** |
-| `check-safety-sla-every-5min` | every 5 min | ~8,640 | small open-incident queue |
-| `safety-analytics-refresh-30min` | every 30 min | ~1,440 | full `REFRESH MATERIALIZED VIEW` every run |
-| `permit-expiry-sweep-15min` | every 15 min | ~2,880 | |
-| `reap-stuck-backups-every-15min` | every 15 min | ~2,880 | |
-| `process-scheduled-emails` | every 15 min | ~2,880 | user-facing email latency |
+## Root cause analysis
 
-Each `compress-evidence` invocation cold-starts and loads ~5 MB of WASM (`@jsquash/jpeg`, `png`, `webp`) even when there's nothing to do. That alone explains most of the recent Cloud compute bill.
+Two issues are at play, in `src/hooks/useKpiRollbackRequests.ts → useApproveRollbackRequest`:
 
-## Risk & Impact Report
+### 1. Incomplete React-Query cache invalidation (primary, user-visible cause)
 
-- **Data:** none. Queued jobs still process, just on a slower cadence.
-- **Workflow:** evidence images stay as JPEG/PNG longer (cosmetic — storage size only). Safety SLA / permit-expiry / backup-reaper alerts arrive minutes later, well within their business SLAs.
-- **UI:** none.
-- **Regression risk:** low. Schedule changes + a cheap early-exit guard. No business logic.
-- **Scalability:** cost now scales with actual queue depth, not wall-clock.
-- **Rollback:** every change is one `cron.unschedule` + `cron.schedule` call — reversible in a single migration.
+After admin approves a rollback the hook reverts `kpis.status` and clears downstream `review_submissions` fields correctly. It then invalidates only:
 
-## Plan
+- `['kpis']`, `['my-kpis']`, `['review-submissions']`, `['notifications']`, `['rollback-request', kpi_id]`, `['all-rollback-requests']`, `['rollback-status-counts']`
 
-### Step 1 — Re-schedule cron jobs
+But the reviewer grid (`EmployeeSelectorGrid` → `useKpisByPeriod`, `useAllKpis`, employee-scoped queues) is keyed under:
 
-| Job | Today | **New** | Why |
-|---|---|---|---|
-| `compress-evidence-every-2min` | every 2 min | **once daily at 03:30 UTC** (`30 3 * * *`) | Per user direction. Queue is empty 99% of the time; nightly run is plenty for background WebP re-encode. Job renamed to `compress-evidence-daily`. |
-| `check-safety-sla-every-5min` | every 5 min | **every 15 min** | SLA breaches are tracked in minutes-to-hours. |
-| `safety-analytics-refresh-30min` | every 30 min | **every 2 h** | Dashboards, not realtime alerts. |
-| `permit-expiry-sweep-15min` | every 15 min | **every 1 h** | Daily/weekly concern. |
-| `reap-stuck-backups-every-15min` | every 15 min | **every 1 h** | Backups run weekly. |
-| `process-scheduled-emails` | every 15 min | **unchanged** | User-facing email latency — leave alone. |
+- `['kpis-by-period', ...]`
+- `['kpis-by-period-ranges', ...]`
+- `['all-kpis', user?.id]`
+- `['review-submission-scores-by-kpi-ids', ...]`
 
-Implementation: a single `supabase--insert`-style SQL call that runs `cron.unschedule(<old name>)` and then `cron.schedule(<new name>, <new cron>, <same http_post body>)` for each job. Schedules are user-specific data (URLs + tokens) so we use the insert/SQL path, not a checked-in migration.
+None of those are invalidated. Result: in any session where the SLM/Admin is currently viewing the team-reviews grid, the SLM's queue keeps showing the pre-rollback snapshot. With `status` flipped server-side, the cached row no longer matches `resolveReviewableStatuses('skip_level')` and the KPI is **filtered out of the queue but never re-fetched**, so it visually "disappears". Hard refresh recovers it; the user doesn't know to do that.
 
-Verification: re-query `cron.job` after the change and confirm new schedules + that the old job names are gone.
+### 2. No notification to the newly-active reviewer
 
-### Step 2 — Empty-queue short-circuit in `compress-evidence`
+Currently only the requester is notified. When the SLM requests a rollback that targets `manager_check`, the Manager becomes the new active reviewer but is not pinged. The Manager re-forwards eventually (the DB shows this happened in ~2 minutes for the Avinash / Timeliness KPI on Jun 9), but in the interim the SLM sees nothing in queue and assumes they lost access. Same applies when the requester is the SLM themselves rolling back their own stage — they should get an in-app "ready for re-review" ping rather than relying on visual refresh.
 
-Even with daily cadence, guard the entry-point so the function exits before importing the WASM codecs when both queues are empty:
+## Scope of fix
+
+Targeted change to one file. No DB schema or RLS change. No workflow-engine change (the status-transition + clearFields logic is already correct).
+
+### File: `src/hooks/useKpiRollbackRequests.ts`
+
+In `useApproveRollbackRequest.onSuccess`, add the missing invalidations:
 
 ```ts
-const [{ count: pmsPending }, { count: safetyPending }] = await Promise.all([
-  sb.from('pms_evidence_compression_jobs')
-    .select('id', { count: 'exact', head: true })
-    .in('status', ['pending', 'failed'])
-    .lt('attempts', MAX_ATTEMPTS),
-  sb.from('safety_incident_evidence')
-    .select('id', { count: 'exact', head: true })
-    .in('compression_status', ['pending', 'failed'])
-    .lt('compression_attempts', MAX_ATTEMPTS),
-]);
-if ((pmsPending ?? 0) === 0 && (safetyPending ?? 0) === 0) {
-  return jsonResponse({ ok: true, skipped: 'empty_queue' });
-}
+queryClient.invalidateQueries({ queryKey: ['kpis-by-period'] });
+queryClient.invalidateQueries({ queryKey: ['kpis-by-period-ranges'] });
+queryClient.invalidateQueries({ queryKey: ['all-kpis'] });
+queryClient.invalidateQueries({ queryKey: ['review-submission-scores-by-kpi-ids'] });
+queryClient.invalidateQueries({ queryKey: ['employee-kpi-stats'] });
+queryClient.invalidateQueries({ queryKey: ['team-employees'] });
+queryClient.invalidateQueries({ queryKey: ['sent-back-kpis'] });
 ```
 
-(POLICY §120 — zero-row `head: true` count call is explicitly allowed.)
+In `useApproveRollbackRequest.mutationFn`, after the status revert and field clearing, also insert a notification for the **new active reviewer** (the user whose stage becomes active after rollback). We already know `target_status` (= the new value of `kpis.status` = last completed stage). The next stage is the active one. Resolve that and notify the employee's reporting chain owner of that stage — for the common cases:
 
-The dynamic-imports of `@jsquash/*` codecs are moved inside `decodeImage()` so they only load when there's real work.
+- `target_status = 'self_review'` → notify employee (`kpis.employee_id`)
+- `target_status = 'manager_check'` → notify SLM (`profiles.reporting_manager_id` of the manager)
+- `target_status = 'skip_level_check'` → notify HR PMS role holders
+- `target_status = 'kra_set'` → notify employee
 
-Verification: invoke `compress-evidence` manually with empty queue → response under ~200 ms and no codec import in logs.
+Implementation: keep it minimal — fetch the employee profile + reporting chain, derive the next reviewer using the same helper the reviewer grid uses, insert a `notifications` row of type `rollback_active_reviewer` with title "KPI Returned for Review" and message naming the KPI. If chain lookup fails, no-op (non-blocking).
 
-### Step 3 — Add an "On-demand re-encode" button to the existing admin panel
+## Verification steps
 
-`src/components/admin/ServerCompressionPanel.tsx` already has the master switch and queue counters. Add one button: **"Run compression now"** that calls `supabase.functions.invoke('compress-evidence')` and refreshes the queue counts. This is how the admin "moves to manual" between the daily runs if a large batch lands.
+1. As Admin, approve a pending rollback for an SLM-stage KPI.
+2. As the SLM (different session), open Team Reviews → confirm the KPI re-appears in the Skip-Level queue within React-Query's default `staleTime` without a hard page refresh.
+3. Confirm the new active reviewer receives an in-app notification.
+4. Confirm `kpi_audit_logs` still records `ROLLBACK_APPROVED` exactly once.
+5. Re-run the Jun-9 case (KPI `468b6d80…`): status = `manager_check`, SLM Jaspal should see it in his queue.
 
-Update the panel's description text from *"every 2 minutes"* to *"runs once daily; admins can trigger an on-demand run below"*.
+## Risk and impact
 
-Verification: click the button while there are pending jobs → toast shows result; queue counts drop on next refresh.
+- **Data impact**: None. Only client-side cache invalidations + one additional `notifications` row per approval.
+- **Workflow impact**: None — status transitions unchanged.
+- **UI impact**: Reviewer queue refreshes correctly; new reviewer receives a bell notification.
+- **Regression risk**: Low. Invalidations are additive; the notification insert is wrapped in try/catch and non-blocking.
+- **Scalability**: Negligible — one extra DB insert + a few cache invalidations per admin approval (low-frequency action).
+- **Rollback strategy**: Pure code change in one file; revert via chat history.
 
-### Step 4 — Documentation
+## Documentation updates
 
-- `DOCUMENTATION.md`: replace the "Scheduled Jobs" cadence table with the new values; document the on-demand button.
-- `POLICY.md`: record SLA — evidence WebP re-encode is best-effort, processed at least once per 24 h; admins may trigger manually.
-- Update mem `mem://features/image-compression-server.md` cron line from `*/2 * * * *` to the new daily schedule.
+- Append a row to `mem/features/admin/rollback-request-management-system` noting the active-reviewer notification + cache invalidation contract.
+- Update `DOCUMENTATION.md` "Rollback flow" section with the same.
 
-### Step 5 — Measure
+## Tests
 
-After 7 days, re-pull `cron.job_run_details` and compare. Expected reductions:
+Extend `src/hooks/useKpiRollbackRequests` coverage (if a test file exists; otherwise add a focused one) asserting that `onSuccess` invalidates the additional query keys and that an active-reviewer notification is enqueued when `target_status` resolves to a stage with a known next reviewer.
 
-- compress-evidence: 21,600 → **~30 /month** (−99.9%)
-- safety-sla: 8,640 → 2,880 (−67%)
-- safety-analytics: 1,440 → 360 (−75%)
-- permit-expiry + reap-backups: 5,760 → 1,440 combined (−75%)
-- **Total cron invocations: roughly −95%**, which should reflect directly in the Cloud compute line.
+## Out of scope (explicitly not changed)
 
-## Technical details
+- `resolvePreviousStatus` and the rollback target logic — verified correct against the "status = last completed stage" convention.
+- RLS policies on `kpis` / `review_submissions` — SLM already has read+update rights at `manager_check` status.
+- The "Request Rollback" button placement and `currentStatus` value passed by `UnifiedScorecard`.
 
-- `cron.unschedule(jobname)` requires the old name to exist — wrap in `DO $$ ... EXCEPTION WHEN OTHERS THEN NULL; $$` so re-runs are idempotent.
-- Each new `cron.schedule(...)` keeps the **exact same `net.http_post(...)` body** as today (URL, headers, anon/cron-secret). No auth-posture change.
-- `compress-evidence/index.ts` change is additive: existing `server_compression_enabled` kill-switch still wins; the new empty-queue exit just runs before it does any work.
-- No RLS, no schema, no backup-coverage change.
+## Open question for the user (non-blocking)
 
-## Out of scope
-
-- Removing the Safety module or compression feature entirely (still in use — just over-scheduled).
-- Optimising edge-function cold-start beyond the empty-queue guard. Revisit only if numbers stay high after Step 1 + 2.
+If after this fix any specific SLM still cannot see a KPI, please share the **employee name + KPI name + month** so we can inspect that row directly. The current evidence (Jun-9 Timeliness for Avinash Kumar) shows the DB state is already correct (`status = manager_check`, SLM = Jaspal) — only the stale UI cache and missing notification are blocking access.
