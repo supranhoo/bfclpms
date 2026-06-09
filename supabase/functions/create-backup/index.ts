@@ -708,7 +708,11 @@ const INTER_BATCH_DELAY_MS = 900
 //   • Manual backup finalize/status semantics are intentionally unchanged
 //     in this WP. The classifier is exported for reuse but only wired
 //     into the scheduled loop.
-const BATCH_SIZE_RETRY = 2
+// ADR-082: retry at single-table granularity. With streaming chunk
+// uploads, no single table should OOM the worker; if it still does, we
+// isolate the failure to that one table instead of retrying it together
+// with a healthy sibling.
+const BATCH_SIZE_RETRY = 1
 const RETRY_BUDGET_MS = 8 * 60_000
 const RETRY_BACKOFFS_MS = [5_000, 15_000] as const
 
@@ -741,21 +745,20 @@ async function retryFailedBatchTransient(args: {
 }): Promise<{ processed: Array<{ table: string; rows: number; sizeBytes?: number }>; summary: string }> {
   const { batch, batchIndex, totalBatches, firstError, backupId, folderPath, startTime } = args
   const subBatches = splitIntoBatches(batch, BATCH_SIZE_RETRY)
-  const processed: Array<{ table: string; rows: number; sizeBytes?: number }> = []
+  const processed: Array<{ table: string; rows: number; sizeBytes?: number; files?: string[]; file?: string }> = []
   const notes: string[] = [
-    `Batch ${batchIndex + 1}/${totalBatches} transient: ${firstError}`,
+    `Batch ${batchIndex + 1}/${totalBatches} [${batch.join(',')}] transient: ${firstError}`,
   ]
 
   for (let s = 0; s < subBatches.length; s++) {
     const sub = subBatches[s]
+    const subLabel = `sub ${s + 1}/${subBatches.length} [${sub.join(',')}]`
     let recovered = false
     let lastErr = firstError
     for (let attempt = 0; attempt < RETRY_BACKOFFS_MS.length; attempt++) {
       const budgetLeftMs = RETRY_BUDGET_MS - (Date.now() - startTime)
       if (budgetLeftMs <= 0) {
-        notes.push(
-          `sub ${s + 1}/${subBatches.length} skipped: budget exhausted`,
-        )
+        notes.push(`${subLabel} skipped: budget exhausted`)
         break
       }
       await sleep(RETRY_BACKOFFS_MS[attempt])
@@ -768,25 +771,19 @@ async function retryFailedBatchTransient(args: {
       if (res.ok) {
         const arr = res.data?.processed || []
         for (const p of arr) processed.push(p)
-        notes.push(
-          `sub ${s + 1}/${subBatches.length} recovered on attempt ${attempt + 1}/${RETRY_BACKOFFS_MS.length}`,
-        )
+        notes.push(`${subLabel} recovered on attempt ${attempt + 1}/${RETRY_BACKOFFS_MS.length}`)
         recovered = true
         break
       }
       lastErr = res.error ?? 'unknown'
       // Only continue retrying if still transient.
       if (!isTransientChunkError(lastErr, res.rateLimited)) {
-        notes.push(
-          `sub ${s + 1}/${subBatches.length} non-transient on retry: ${lastErr}`,
-        )
+        notes.push(`${subLabel} non-transient on retry: ${lastErr}`)
         break
       }
     }
-    if (!recovered && !notes.some((n) => n.startsWith(`sub ${s + 1}/`))) {
-      notes.push(
-        `sub ${s + 1}/${subBatches.length} failed after ${RETRY_BACKOFFS_MS.length} retries: ${lastErr}`,
-      )
+    if (!recovered && !notes.some((n) => n.startsWith(`sub ${s + 1}/${subBatches.length}`))) {
+      notes.push(`${subLabel} failed after ${RETRY_BACKOFFS_MS.length} retries: ${lastErr}`)
     }
   }
   const budgetLeftS = Math.max(0, Math.round((RETRY_BUDGET_MS - (Date.now() - startTime)) / 1000))
