@@ -206,6 +206,58 @@ export function useApproveRollbackRequest() {
         metadata: { rollback_request_id: request_id },
       });
 
+      // Notify the newly-active reviewer (the user whose stage becomes active after rollback).
+      // target_status = last completed stage; active stage = next stage in the workflow.
+      // Non-blocking — failures here must not break the approval.
+      try {
+        const { data: kpiRow } = await supabase
+          .from('kpis')
+          .select('employee_id, kpi_name')
+          .eq('id', kpi_id)
+          .maybeSingle();
+
+        if (kpiRow?.employee_id) {
+          // Map target_status -> the user who must act next.
+          // - target_status 'kra_set' | 'self_review'  => employee acts next
+          // - target_status 'manager_check'            => skip-level manager acts next
+          // - target_status 'skip_level_check' onward  => no deterministic single recipient (HR PMS / auditor groups); skip
+          let nextReviewerId: string | null = null;
+
+          if (target_status === 'kra_set' || target_status === 'self_review') {
+            nextReviewerId = kpiRow.employee_id;
+          } else if (target_status === 'manager_check') {
+            // Active stage = skip_level_check. Fetch employee -> reporting_manager -> reporting_manager (= SLM).
+            const { data: emp } = await supabase
+              .from('profiles')
+              .select('reporting_manager_id')
+              .eq('id', kpiRow.employee_id)
+              .maybeSingle();
+            if (emp?.reporting_manager_id) {
+              const { data: mgr } = await supabase
+                .from('profiles')
+                .select('reporting_manager_id')
+                .eq('id', emp.reporting_manager_id)
+                .maybeSingle();
+              nextReviewerId = mgr?.reporting_manager_id || null;
+            }
+          }
+
+          if (nextReviewerId && nextReviewerId !== requested_by) {
+            await supabase.from('notifications').insert({
+              user_id: nextReviewerId,
+              type: 'rollback_active_reviewer',
+              title: 'KPI Returned for Review',
+              message: `"${kpiRow.kpi_name ?? 'A KPI'}" has been returned to your stage following an approved rollback.`,
+              kpi_id,
+              related_user_id: user.id,
+              metadata: { rollback_request_id: request_id, target_status },
+            });
+          }
+        }
+      } catch (notifyErr) {
+        console.warn('[Rollback] Failed to notify next active reviewer:', notifyErr);
+      }
+
       // Audit log
       await supabase.from('kpi_audit_logs').insert({
         kpi_id,
@@ -223,6 +275,15 @@ export function useApproveRollbackRequest() {
       queryClient.invalidateQueries({ queryKey: ['notifications'] });
       queryClient.invalidateQueries({ queryKey: ['all-rollback-requests'] });
       queryClient.invalidateQueries({ queryKey: ['rollback-status-counts'] });
+      // Reviewer-grid / queue queries that filter by kpi.status — must be refetched
+      // so the KPI re-appears in the newly-active reviewer's queue without a hard refresh.
+      queryClient.invalidateQueries({ queryKey: ['kpis-by-period'] });
+      queryClient.invalidateQueries({ queryKey: ['kpis-by-period-ranges'] });
+      queryClient.invalidateQueries({ queryKey: ['all-kpis'] });
+      queryClient.invalidateQueries({ queryKey: ['review-submission-scores-by-kpi-ids'] });
+      queryClient.invalidateQueries({ queryKey: ['employee-kpi-stats'] });
+      queryClient.invalidateQueries({ queryKey: ['team-employees'] });
+      queryClient.invalidateQueries({ queryKey: ['sent-back-kpis'] });
       toast({ title: 'Rollback approved', description: 'KPI has been sent back for revision.' });
     },
     onError: (error: Error) => {
