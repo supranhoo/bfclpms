@@ -854,7 +854,7 @@ async function runScheduledChunked(
   const tablesToBackup = await fetchBackupTableOrder(supabase)
   await assertCoverageNotShrunk(supabase, tablesToBackup.length)
   const batches = splitIntoBatches(tablesToBackup, BATCH_SIZE)
-  const tableManifest: Array<{ table: string; rows: number; file: string }> = []
+  const tableManifest: Array<{ table: string; rows: number; file: string; files: string[] }> = []
   let totalRows = 0
   let totalSize = 0
   let tablesCount = 0
@@ -896,7 +896,12 @@ async function runScheduledChunked(
         startTime,
       })
       for (const p of recovered.processed) {
-        tableManifest.push({ table: p.table, rows: p.rows, file: `${folderPath}/${p.table}.json` })
+        const pFiles: string[] | undefined = (p as { files?: string[] }).files
+        const pFile: string | undefined = (p as { file?: string }).file
+        const files = pFiles && pFiles.length > 0
+          ? pFiles
+          : (pFile ? [pFile] : [`${folderPath}/${partFileName(p.table, 1)}`])
+        tableManifest.push({ table: p.table, rows: p.rows, file: files[0], files })
         totalRows += p.rows
         totalSize += p.sizeBytes || 0
         tablesCount++
@@ -908,7 +913,12 @@ async function runScheduledChunked(
 
     const processed = result.data?.processed || []
     for (const p of processed) {
-      tableManifest.push({ table: p.table, rows: p.rows, file: `${folderPath}/${p.table}.json` })
+      const pFiles: string[] | undefined = p.files
+      const pFile: string | undefined = p.file
+      const files = pFiles && pFiles.length > 0
+        ? pFiles
+        : (pFile ? [pFile] : [`${folderPath}/${partFileName(p.table, 1)}`])
+      tableManifest.push({ table: p.table, rows: p.rows, file: files[0], files })
       totalRows += p.rows
       totalSize += p.sizeBytes || 0
       tablesCount++
