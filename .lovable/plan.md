@@ -1,39 +1,124 @@
-## Problem
-On `/admin/org-kpi-data`, when a scoped Org KPI card has typed-but-unsaved values in multiple rows, clicking the per-row **Save** icon persists that row correctly but blanks the typed Achieved/Remarks in the other unsaved rows. Reported by Vivek Dansena.
+## 1. Assumptions
+- “Still not fixed” refers to the attached Backup History screen showing scheduled backups failing with `Coverage shrink: 201/203 tables backed up` and `HTTP 546`.
+- The current hard-fail behavior is correct: partial backups must remain `failed`, not hidden as warnings.
+- No production data should be deleted or excluded to make backups pass.
 
-## Root cause
-In `src/components/admin/OrgKpiEntryCard.tsx`:
+## 2. Clarifications
+Not Applicable — the failure signature is visible in live backup logs and the screenshot.
 
-1. `performSave(scopeId)` calls `clearAllDirty()`, which resets `isDirtyRef.current = false`, `cardDirty = false`, and empties `dirtyScopeIds` — even though only one row was flushed.
-2. The following refetch fires the primary merge effect (deps include `data.scopedRows`). With `isDirtyRef.current === false`, `sameScopedSignature` is now false (the saved row's value changed), so the effect falls into the reset branch and calls `setScopedValues(data.scopedRows!)`, preserving only `evidenceUrl` for rows in `touchedEvidenceScopeIdsRef`. Local Achieved/Remarks edits for other touched rows are dropped.
+## 3. Risk & Impact Report
+- **Data Impact:** No table data will be modified. Backup artifact format will change only if we introduce chunked per-table files; restore must be updated in the same change.
+- **Workflow Impact:** Scheduled backups should move from repeated `failed` to complete coverage. Manual backup path should remain compatible.
+- **UI/UX Impact:** Backup History may show clearer table-level failure detail, but no major UI redesign.
+- **Regression Risk:** Medium-high because backup and restore are disaster-recovery flows. Mitigation: contract tests for backup format, restore compatibility, and hard-fail behavior.
+- **Scalability Impact:** Current code buffers large tables in memory. The fix must page large tables and upload per-table chunks so memory is bounded by page size, not table size.
+- **Rollback:** Revert edge-function changes and docs/tests. Existing backups remain readable if restore keeps legacy manifest support.
 
-## Fix (surgical, UI/state only)
-File: `src/components/admin/OrgKpiEntryCard.tsx`
+## 4. RCA
+### What is happening
+Recent scheduled backups consistently fail:
+- `2026-06-06` through `2026-06-09`: `201/203 tables backed up`
+- Repeated error: `Batch 46/51 transient: HTTP 546`
+- Retry sub-batch 1 fails even after retries; sub-batch 2 recovers.
 
-1. Replace the single `clearAllDirty()` call inside `performSave` with scoped clearing:
-   - **Card Save** (`scopeId` undefined): keep current `clearAllDirty()` behavior.
-   - **Row Save**: remove only `scopeId` from `dirtyScopeIds`, remove it from `touchedScopeIdsRef` and `touchedEvidenceScopeIdsRef`, and set `isDirtyRef.current = (cardDirty || remainingDirtyScopeIds.size > 0)`. Do not touch `cardDirty`.
-2. In the primary merge effect's reset branch (around line 438–451), when rebuilding `scopedValues` from `data.scopedRows`, preserve local edits for any `scopeId` still in `touchedScopeIdsRef`:
-   - Keep local `achievedValue`, `remarks`, `isNa`, `subFactors`.
-   - Continue preserving `evidenceUrl` via `touchedEvidenceScopeIdsRef`.
-3. `saveStatus` semantics: after a row Save, set to `'saved'` only if no rows remain dirty; otherwise keep `'unsaved'` so the amber "Unsaved changes" pill stays visible for the rest.
+### Where it fails
+Based on current backup ordering, batch 46 maps to the high-volume tables around:
+- `notifications` — ~78k rows, ~67 MB relation size
+- `org_kpi_data_entry_logs` — ~85k rows, ~57 MB relation size
+- nearby tables include `org_kpi_value_history`, `pip_audit_logs`
 
-No changes to `onSave`, RPCs, schema, RLS, or `OrgKpiScopedEntryTable`.
+`notifications` and `org_kpi_data_entry_logs` are the two largest tables in the database. They are processed together in retry sub-batch 1, which explains why the same sub-batch fails repeatedly.
 
-## Verification
-- Manual: open a scoped Org KPI card with ≥3 mapped employees, type Achieved + Remarks in rows A, B, C; click Save on row A. Expect: row A pill = "Saved", rows B & C retain typed values, card pill = "Unsaved", Propagate buttons still disabled until B & C are saved.
-- Unit test (`src/components/admin/__tests__/OrgKpiEntryCard.rowSave.test.tsx`): mount the card with 3 scoped rows, mock `onSave` to resolve and a follow-up `data.scopedRows` prop that reflects row A persisted; type into A, B, C; fire row-A Save; assert rows B & C still hold typed values and remain dirty.
+### Root cause
+`create-backup` still uses a whole-table memory pattern:
+1. `fetchAllRows()` loads all rows for a table into `allRows`.
+2. `processTableBatch()` calls `JSON.stringify(rows)` for the whole table.
+3. It then measures/uploads the full JSON payload.
 
-## Risk & impact
-- Scope: single component, UI state only. No data migration, no RLS change.
-- Regression risk: low — card-level Save path is unchanged; existing tests for ADR-075 (explicit Save) and ADR-080 (narrowed payload) still hold.
-- Rollback: revert the file (single commit).
+Even after reducing `BATCH_SIZE` and making table processing sequential inside a batch, a single large table can still exceed the edge worker memory cap. When two large tables are in a retry sub-batch, failure becomes deterministic.
 
-## Docs / memory
-- Append a note to `mem/features/admin/org-kpi-data-entry-manual-save.md`: row-Save MUST scope dirty clearing to the saved `scopeId`; merge effect's reset branch MUST honor `touchedScopeIdsRef` for value/remarks/isNa/subFactors.
-- Add ADR-081 "Per-row Save preserves sibling unsaved edits" under `docs/adr/`.
+### Important secondary finding
+The `201/203` wording is not itself a table-discovery exclusion. Current live `public` base table count is 204 with 1 denylisted table, so expected backup coverage is 203. The backup discovers 203 but only successfully uploads 201. The two missing tables are caused by failed processing, not by `backup_denylist`.
 
-## Out of scope
-- Reintroducing autosave.
-- Server RPC changes.
-- Evidence/parity flows (already correct via `touchedEvidenceScopeIdsRef`).
+## 5. Why-Why Analysis
+1. **Why are scheduled backups failing?**
+   Because a scheduled backup completes only 201 of 203 expected tables.
+2. **Why are two tables missing?**
+   Because batch 46 hits `HTTP 546`, and one retry sub-batch still fails after retries.
+3. **Why does batch 46 hit `HTTP 546`?**
+   Because it contains the largest high-volume tables (`notifications`, `org_kpi_data_entry_logs`) and exceeds the edge worker memory limit.
+4. **Why does memory exceed the limit?**
+   Because the implementation accumulates entire table rows and full JSON strings in memory before upload.
+5. **Why did previous CAPA not fix it?**
+   Previous fixes reduced batch size, added retry/backoff, and hard-failed partial backups. Those addressed concurrency, transient rate limits, and visibility — but not the core per-table memory architecture.
+
+## 6. CAPA Plan
+### Corrective actions
+1. **Refactor backup table processing to bounded chunks**
+   - Replace whole-table `fetchAllRows()` for scheduled/manual backup with page-by-page table export.
+   - Upload large tables as chunk files such as:
+     - `chunked/<timestamp>/<table>/part-000001.json`
+     - `chunked/<timestamp>/<table>/part-000002.json`
+   - Keep an aggregate manifest entry per table with total row count, total bytes, and chunk file list.
+
+2. **Maintain legacy compatibility**
+   - `restore-backup` must support both:
+     - existing legacy file: `<table>.json`
+     - new chunked files: `<table>/part-*.json`
+   - Existing backups must remain restorable.
+
+3. **Separate heavy-table retry granularity**
+   - For retry, split failed batches down to single-table retries if the first retry still fails.
+   - This prevents `notifications` and `org_kpi_data_entry_logs` from being retried together.
+
+4. **Improve error telemetry**
+   - Record exact failed table names in `backup_logs.error_message` when a sub-batch fails.
+   - Avoid only saying `Batch 46/51`.
+
+### Preventive actions
+5. **Add contract tests**
+   - Assert `create-backup` no longer has the whole-table `allRows.concat(...)` + full-table JSON export pattern for backup processing.
+   - Assert chunked table manifest support exists.
+   - Assert `restore-backup` supports chunked table files and legacy files.
+   - Assert hard-fail-on-partial still remains active.
+
+6. **Update documentation and policy**
+   - Update Phase 9 docs with this RCA and the new bounded-memory backup design.
+   - Update backup policy/memory to state: large tables must be exported page-by-page; no full-table buffering.
+
+## 7. UI Changes
+- **Location:** `/admin/settings` → Backup & Restore → Backup History.
+- **Visual change:** Keep the existing table. Improve failed-row action/detail text only if needed.
+- **Interaction impact:** Admins continue to see failed backups as red. Completed backups still allow download/restore/drill where eligible.
+- **Responsiveness:** No layout change required.
+
+## 8. Implementation
+After approval, implement in this order:
+1. Inspect `restore-backup` manifest loading path.
+2. Update `create-backup` table export to use bounded page chunks.
+3. Update `restore-backup` to restore both chunked and legacy table payloads.
+4. Add single-table fallback retry for scheduled backups.
+5. Add table-name telemetry to backup error summaries.
+6. Update docs/memory/ADR.
+
+## 9. Tests
+- Add/update backup contract tests under `src/test/safety/phase9/`.
+- Add edge-function unit tests for:
+  - chunked table manifest creation
+  - legacy restore compatibility
+  - chunked restore compatibility
+  - single-table retry fallback
+  - hard-fail partial status remains `failed`
+
+## 10. DOCUMENTATION.md updates
+- If `DOCUMENTATION.md` exists, update the backup architecture section.
+- If it does not exist, document in the existing Phase 9 backup docs and ADR instead.
+
+## 11. POLICY.md updates
+- If `POLICY.md` exists, update backup policy to prohibit whole-table buffering for backup exports.
+- If it does not exist, update the existing backup policy memory/docs instead.
+
+## 12. Post-implementation notes
+- A clean scheduled backup after deployment is the final proof.
+- Do not flip `backup_hard_fail_on_partial` to `false`; it is correctly exposing partial backups.
+- Do not add large operational tables to `backup_denylist` as a workaround.
