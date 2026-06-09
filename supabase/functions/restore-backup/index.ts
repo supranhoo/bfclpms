@@ -154,7 +154,7 @@ const LEGACY_INSERT_ORDER = [
 interface ManifestV2 {
   version: number
   format: string
-  tables: Array<{ table: string; rows: number; file: string }>
+  tables: Array<{ table: string; rows: number; file: string; files?: string[] }>
   storage_manifest_file?: string
 }
 
@@ -208,7 +208,7 @@ async function loadLegacyBackupData(
  */
 function packBatches(
   order: string[],
-  manifestByTable: Record<string, { rows: number; file: string }>,
+  manifestByTable: Record<string, { rows: number; file: string; files?: string[] }>,
   opts: { maxTables: number; maxRows: number }
 ): string[][] {
   const batches: string[][] = []
@@ -253,38 +253,45 @@ async function insertTablesFromStorage(
 ): Promise<{ errors: string[]; tablesProcessed: number }> {
   const errors: string[] = []
   let tablesProcessed = 0
-  const byTable: Record<string, { rows: number; file: string }> = {}
-  for (const e of manifest.tables) byTable[e.table] = { rows: e.rows, file: e.file }
+  const byTable: Record<string, { rows: number; file: string; files?: string[] }> = {}
+  for (const e of manifest.tables) byTable[e.table] = { rows: e.rows, file: e.file, files: e.files }
 
   for (const tableName of tables) {
     const entry = byTable[tableName]
     if (!entry || entry.rows === 0) { tablesProcessed++; continue }
-    try {
-      const { data: fileData, error: dlErr } = await supabase.storage
-        .from('database-backups')
-        .download(entry.file)
-      if (dlErr || !fileData) {
-        errors.push(`Download ${tableName}: ${dlErr?.message ?? 'no file'}`)
-        continue
+    // ADR-082: tables may be stored across multiple part files. Iterate
+    // them in order and upsert each chunk independently so peak memory
+    // tracks chunk size, not table size.
+    const partPaths = entry.files && entry.files.length > 0 ? entry.files : [entry.file]
+    let hadError = false
+    for (let pi = 0; pi < partPaths.length; pi++) {
+      const partPath = partPaths[pi]
+      try {
+        const { data: fileData, error: dlErr } = await supabase.storage
+          .from('database-backups')
+          .download(partPath)
+        if (dlErr || !fileData) {
+          errors.push(`Download ${tableName} (${partPath}): ${dlErr?.message ?? 'no file'}`)
+          hadError = true
+          continue
+        }
+        let rows: unknown[] = JSON.parse(await fileData.text()) as unknown[]
+        const batchSize = 250
+        for (let i = 0; i < rows.length; i += batchSize) {
+          const batch = rows.slice(i, i + batchSize)
+          const { error } = await supabase
+            .from(tableName)
+            .upsert(batch, { onConflict: 'id', ignoreDuplicates: false })
+          if (error) errors.push(`Insert ${tableName} part ${pi + 1}/${partPaths.length} (batch ${Math.floor(i / batchSize) + 1}): ${error.message}`)
+        }
+        // Help V8 reclaim the parsed array before the next chunk.
+        rows = []
+      } catch (err) {
+        errors.push(`Insert ${tableName} part ${pi + 1}/${partPaths.length}: ${err}`)
+        hadError = true
       }
-      const rows = JSON.parse(await fileData.text()) as unknown[]
-      // Memory hardening (Phase 1.5 drill follow-up): keep the in-flight
-      // upsert batch small so a 50k-row table file doesn't compound the
-      // already-loaded JSON array in heap. Worker cap is 256 MB.
-      const batchSize = 250
-      for (let i = 0; i < rows.length; i += batchSize) {
-        const batch = rows.slice(i, i + batchSize)
-        const { error } = await supabase
-          .from(tableName)
-          .upsert(batch, { onConflict: 'id', ignoreDuplicates: false })
-        if (error) errors.push(`Insert ${tableName} (batch ${Math.floor(i / batchSize) + 1}): ${error.message}`)
-      }
-      tablesProcessed++
-      // Help V8 reclaim the parsed array before moving to the next table.
-      rows.length = 0
-    } catch (err) {
-      errors.push(`Insert ${tableName}: ${err}`)
     }
+    if (!hadError) tablesProcessed++
   }
   return { errors, tablesProcessed }
 }
@@ -497,8 +504,8 @@ Deno.serve(async (req) => {
       })
     }
     const manifest = JSON.parse(await manifestFile.text()) as ManifestV2
-    const byTable: Record<string, { rows: number; file: string }> = {}
-    for (const e of manifest.tables) byTable[e.table] = { rows: e.rows, file: e.file }
+    const byTable: Record<string, { rows: number; file: string; files?: string[] }> = {}
+    for (const e of manifest.tables) byTable[e.table] = { rows: e.rows, file: e.file, files: e.files }
 
     // Phase: INIT — return ordered batches for the client to orchestrate
     if (!phase) {
