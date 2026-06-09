@@ -335,6 +335,8 @@ export function useProfiles() {
 export function useTeamMembers(managerId: string | undefined) {
   return useQuery({
     queryKey: ['team-members', managerId],
+    staleTime: 2 * 60_000,
+    gcTime: 15 * 60_000,
     queryFn: async () => {
       const { data, error } = await supabase
         .from('profiles')
