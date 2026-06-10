@@ -1940,7 +1940,7 @@ export default function UserManagement() {
                 </div>
               )}
             </TabsContent>
-            </ScrollArea>
+            </div>
           </Tabs>
 
           <DialogFooter className="pt-4 border-t">
