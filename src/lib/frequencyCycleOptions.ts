@@ -144,6 +144,66 @@ export const YEARLY_OPTIONS: CycleOption[] = [
 /** Frequencies that support per-KPI cycle start override */
 export const MULTI_MONTH_FREQUENCIES = ['Bi-Monthly', 'Quarterly', 'Half-Yearly', 'Yearly'];
 
+const MONTH_ABBR_TO_NUM: Record<string, number> = {
+  Jan: 1, Feb: 2, Mar: 3, Apr: 4, May: 5, Jun: 6,
+  Jul: 7, Aug: 8, Sep: 9, Oct: 10, Nov: 11, Dec: 12,
+};
+
+function cycleLengthFor(frequency: string): number | undefined {
+  const key = frequency.toLowerCase().replace(/[-\s]/g, '');
+  switch (key) {
+    case 'bimonthly': return 2;
+    case 'quarterly': return 3;
+    case 'halfyearly': return 6;
+    case 'yearly': return 12;
+    default: return undefined;
+  }
+}
+
+/**
+ * Build a synthetic CycleOption from a raw `frequency_cycle_start` anchor
+ * (e.g. "May-Jun", "Mar-May", "Nov-Apr") even when the anchor is not in the
+ * hardcoded BI_MONTHLY/QUARTERLY/HALF_YEARLY/YEARLY option lists.
+ *
+ * Mirrors the DB trigger math in `enforce_frequency_lock_on_submission`:
+ *   cycle_pos = ((month - start_month) mod 12) mod cycle_length
+ *   terminal  = position cycle_length - 1
+ *
+ * Returns undefined if the frequency is not multi-month or the anchor is
+ * unparseable.
+ */
+export function deriveCycleOptionFromCycleStart(
+  frequency: string | null | undefined,
+  cycleStart: string | null | undefined,
+): CycleOption | undefined {
+  if (!frequency || !cycleStart) return undefined;
+  const cycleLength = cycleLengthFor(frequency);
+  if (!cycleLength) return undefined;
+
+  const startAbbr = cycleStart.split('-')[0];
+  const startMonth = MONTH_ABBR_TO_NUM[startAbbr];
+  if (!startMonth) return undefined;
+
+  // Build the cycle window starting at startMonth.
+  const cycleMonths: number[] = [];
+  for (let i = 0; i < cycleLength; i++) {
+    cycleMonths.push(((startMonth - 1 + i) % 12) + 1);
+  }
+  const terminalMonth = cycleMonths[cycleLength - 1];
+  const lockedMonths: Record<string, number[]> = {
+    [cycleStart]: cycleMonths.slice(0, cycleLength - 1),
+  };
+
+  return {
+    value: cycleStart,
+    label: cycleStart,
+    description: `Custom cycle starting ${startAbbr} — review in month ${terminalMonth}`,
+    subFrequency: cycleStart,
+    lockedMonths,
+    activeMonth: terminalMonth,
+  };
+}
+
 /**
  * Get the available cycle options for a given frequency.
  * Returns undefined for frequencies that don't support cycle start configuration.
@@ -184,6 +244,14 @@ export function resolveEffectiveCycleOption(
   if (kpiCycleStart) {
     const match = options.find(o => o.value === kpiCycleStart);
     if (match) return match;
+    // POLICY §54 / ADR-087: when the per-KPI anchor is not one of the
+    // hardcoded options (e.g. "May-Jun" for Bi-Monthly, "Mar-May" for
+    // Quarterly), synthesize the correct CycleOption from the anchor so
+    // client-side locking matches the DB trigger. Previously this path
+    // silently fell through to global config / first option, which leaked
+    // multi-month KPIs onto non-terminal months in Org KPI Data Entry.
+    const derived = deriveCycleOptionFromCycleStart(frequency, kpiCycleStart);
+    if (derived) return derived;
   }
 
   // 2. Global config match by sub_frequency
