@@ -1,0 +1,26 @@
+---
+name: Reviewer Draft Hydration (SSOT)
+description: Reviewer picker hydration uses `hydrateReviewerDraft`; never silently falls back to employee achieved_value
+type: feature
+---
+
+Reviewer-stage picker hydration is centralised in `src/lib/reviewerDraftHydration.ts` (`hydrateReviewerDraft`). Used by `UnifiedScorecard.openReviewSheet` and the legacy `AuditScorecard.openReviewSheet`.
+
+**Invariants (POLICY §107):**
+1. Draft exists ⇔ ANY of `<prefix>_{score, rating, remarks, achieved_value, evidence_url, evidence_urls}` is populated. `0` counts; empty/whitespace remarks do not.
+2. When a draft exists, picker shows the reviewer's saved `<prefix>_achieved_value` and `<prefix>_score` verbatim. Never read `existing.achieved_value` (employee's value) in this branch.
+3. Qualitative draft labels are derived from `<prefix>_score` (canonical), tie-broken by `<prefix>_achieved_value`. Honours the kpi's own `qualitative_options` (handles inverted safety binaries like Yes=0/No=5).
+4. No draft ⇒ prefill from employee's `achieved_value`, score stays `null` (caller decides whether to recompute via thresholds).
+5. Postgres NUMERIC → JS string is normalised inside the helper (`parseFloat`).
+
+**Caller responsibilities:**
+- `UnifiedScorecard`: `kpiIds` MUST be memoized so `useReviewSubmissions` doesn't thrash and race the sheet open. Org-KPI fallback (when `bundle.source === 'employee-prefill'` AND employee value is null AND `kpi.is_org_level`) is layered on top of the helper.
+- `AchievedValueScoreInput`: auto-recalc must not overwrite a non-null score on mount or on a re-render where the parent passes the SAME `achievedValue`. Only `handleAchievedValueChange` (user-typed) or a true value transition with `score === null` may trigger `onScoreChange`.
+
+**Cross-stage parity:** Self / Manager / Skip-Level / HR PMS / Auditor / Management. The helper is parametrised by `prefix`; tests in `src/test/reviewerDraftHydration.test.ts` enforce parity across all 6.
+
+**Trigger:** BUG-AUD-103 (June 2026) — auditor saved 103/0 on a Lower-is-Better KPI; reopen showed employee's 99/4. See ADR-084.
+
+**Related memos:**
+- `mem/features/review/auditor-draft-qualitative-hydration` — qualitative-only precursor, now subsumed by this helper.
+- `mem/architecture/pms/universal-scoring-logic` — scoring cascade is a SEPARATE concern (display fallback, not hydration).
