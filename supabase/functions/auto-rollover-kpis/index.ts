@@ -791,9 +791,20 @@ Deno.serve(async (req) => {
 });
 
 function buildNewKpi(source: any, targetMonth: string, targetYear: number) {
-  const resolvedCycleStart = resolveCycleAnchorForPeriod(source.frequency, targetMonth) ?? source.frequency_cycle_start;
-  if (resolvedCycleStart !== source.frequency_cycle_start) {
-    console.log(`[Rollover] Cycle anchor resolved for ${source.kpi_name}: ${source.frequency_cycle_start} → ${resolvedCycleStart} (${source.frequency} @ ${targetMonth})`);
+  // ADR-088: the per-KPI `frequency_cycle_start` is immutable across rollover.
+  // Always preserve the source row's anchor (offset cycles like `Feb-Mar`,
+  // `May-Oct`, custom multi-month windows must NOT be silently rewritten to
+  // the Jan-anchored default). Only synthesize an anchor when the source
+  // genuinely has none (legacy rows pre-dating the column).
+  const resolvedCycleStart =
+    source.frequency_cycle_start ?? resolveCycleAnchorForPeriod(source.frequency, targetMonth);
+  if (
+    source.frequency_cycle_start == null &&
+    resolvedCycleStart != null
+  ) {
+    console.log(
+      `[Rollover] Cycle anchor synthesized for ${source.kpi_name}: null → ${resolvedCycleStart} (${source.frequency} @ ${targetMonth})`,
+    );
   }
   return {
     employee_id: source.employee_id,
