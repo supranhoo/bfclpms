@@ -656,10 +656,9 @@ export default function UserManagement() {
       confirmation_date?: string;
       location_id?: string;
     }) => {
-      const { data: session } = await supabase.auth.getSession();
-      
-      const response = await supabase.functions.invoke('create-employee', {
-        body: {
+      const result = await invokeAdminEdgeFunction<{ profile?: { id: string; [k: string]: any }; updated?: boolean }>(
+        'create-employee',
+        {
           full_name: data.full_name,
           email: data.email || undefined,
           employee_code: data.employee_code,
@@ -676,10 +675,11 @@ export default function UserManagement() {
           confirmation_date: data.confirmation_date || undefined,
           location_id: data.location_id || undefined,
         },
-      });
+      );
 
-      if (response.error) throw new Error(response.error.message);
-      
+      // Shape compatibility: downstream blocks reference `response.data?.profile?.id`.
+      const response = { data: result } as { data: typeof result };
+
       // Update role if not employee (default)
       if (data.role !== 'employee' && response.data?.profile?.id) {
         const { error: roleError } = await supabase
@@ -1631,7 +1631,7 @@ export default function UserManagement() {
 
       {/* Edit Dialog */}
       <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
-        <DialogContent className="max-w-5xl w-[96vw] max-h-[92vh] overflow-hidden flex flex-col">
+        <DialogContent className="max-w-5xl w-[96vw] max-h-[calc(100vh-2rem)] sm:max-h-[92vh] overflow-hidden flex flex-col">
           <DialogHeader>
             <DialogTitle>Edit User</DialogTitle>
             <DialogDescription>Update details for {selectedUser?.full_name}</DialogDescription>
@@ -1643,7 +1643,7 @@ export default function UserManagement() {
               <TabsTrigger value="access" className="gap-1.5"><Shield className="h-3.5 w-3.5" /> Access & Login</TabsTrigger>
             </TabsList>
 
-            <ScrollArea className="flex-1 pr-4 -mr-4 mt-3">
+            <div className="flex-1 min-h-0 overflow-y-auto pr-2 -mr-2 mt-3">
             <TabsContent value="profile" className="mt-0 space-y-4">
               <div className="space-y-3">
                 <div className="flex items-center gap-2 mb-2">
@@ -1940,7 +1940,7 @@ export default function UserManagement() {
                 </div>
               )}
             </TabsContent>
-            </ScrollArea>
+            </div>
           </Tabs>
 
           <DialogFooter className="pt-4 border-t">
@@ -1960,7 +1960,7 @@ export default function UserManagement() {
 
       {/* Create Dialog */}
       <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
-        <DialogContent className="max-w-5xl w-[96vw] max-h-[92vh] overflow-hidden flex flex-col">
+        <DialogContent className="max-w-5xl w-[96vw] max-h-[calc(100vh-2rem)] sm:max-h-[92vh] overflow-hidden flex flex-col">
           <DialogHeader>
             <DialogTitle>Add New User</DialogTitle>
             <DialogDescription>Create a new user account and assign their role</DialogDescription>
@@ -1972,7 +1972,7 @@ export default function UserManagement() {
               <TabsTrigger value="access" className="gap-1.5"><Shield className="h-3.5 w-3.5" /> Access & Login</TabsTrigger>
             </TabsList>
 
-            <ScrollArea className="flex-1 pr-4 -mr-4 mt-3">
+            <div className="flex-1 min-h-0 overflow-y-auto pr-2 -mr-2 mt-3">
             <TabsContent value="profile" className="mt-0 space-y-4">
               <div className="space-y-3">
                 <div className="flex items-center gap-2 mb-2">
@@ -2334,7 +2334,7 @@ export default function UserManagement() {
                 </div>
               </div>
             </TabsContent>
-            </ScrollArea>
+            </div>
           </Tabs>
 
           <DialogFooter className="pt-4 border-t">
