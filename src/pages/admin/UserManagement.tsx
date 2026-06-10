@@ -656,10 +656,9 @@ export default function UserManagement() {
       confirmation_date?: string;
       location_id?: string;
     }) => {
-      const { data: session } = await supabase.auth.getSession();
-      
-      const response = await supabase.functions.invoke('create-employee', {
-        body: {
+      const result = await invokeAdminEdgeFunction<{ profile?: { id: string; [k: string]: any }; updated?: boolean }>(
+        'create-employee',
+        {
           full_name: data.full_name,
           email: data.email || undefined,
           employee_code: data.employee_code,
@@ -676,10 +675,11 @@ export default function UserManagement() {
           confirmation_date: data.confirmation_date || undefined,
           location_id: data.location_id || undefined,
         },
-      });
+      );
 
-      if (response.error) throw new Error(response.error.message);
-      
+      // Shape compatibility: downstream blocks reference `response.data?.profile?.id`.
+      const response = { data: result } as { data: typeof result };
+
       // Update role if not employee (default)
       if (data.role !== 'employee' && response.data?.profile?.id) {
         const { error: roleError } = await supabase
