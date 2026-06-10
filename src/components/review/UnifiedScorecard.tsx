@@ -356,7 +356,10 @@ export function UnifiedScorecard({
     return null;
   };
 
-  const kpiIds = kpis?.map(k => k.id) || [];
+  // POLICY §107: memoize kpiIds so the `useReviewSubmissions` queryKey is stable across
+  // renders. A new array reference per render thrashes the React Query cache and races
+  // sheet-open hydration (root cause of BUG-AUD-103 — see ADR-084).
+  const kpiIds = useMemo(() => kpis?.map(k => k.id) || [], [kpis]);
   const { data: submissions } = useReviewSubmissions(kpiIds);
   const { data: queries } = useKpiQueries(kpiIds);
   const { data: observationsMap } = useObservationsByKpis(kpiIds);
