@@ -19,6 +19,7 @@ import { ReviewLevelOverrideEditor, calculateOverriddenScore } from '@/component
 import { useReviewerSubPeriodOverride } from '@/hooks/useReviewerSubPeriodOverride';
 import { QualitativeOption } from '@/lib/qualitativeUom';
 import { labelToRating, getQualitativeAchievedLabel } from '@/lib/qualitativeUom';
+import { hydrateReviewerDraft } from '@/lib/reviewerDraftHydration';
 import { calculateRating } from '@/lib/ratingCalculation';
 import { useAuth } from '@/contexts/AuthContext';
 import { ReviewPanelSkeleton } from '@/components/ui/LoadingSkeletons';
@@ -401,41 +402,10 @@ export function AuditScorecard({
   const openReviewSheet = (kpi: KPI) => {
     setSelectedKpi(kpi);
     const existing = submissionMap.get(kpi.id);
-    const uomType = (kpi as any).uom_type as 'numeric' | 'binary' | 'tiered' | undefined;
-    const qualOpts = (kpi as any).qualitative_options as QualitativeOption[] | null;
-    const isQualitative = uomType === 'binary' || uomType === 'tiered';
-    // A draft is considered to exist when the auditor has touched any of these fields
-    const hasAuditorDraft =
-      existing?.auditor_score != null ||
-      existing?.auditor_rating != null ||
-      (typeof existing?.auditor_remarks === 'string' && existing.auditor_remarks.trim() !== '') ||
-      (existing as any)?.auditor_achieved_value != null;
-    const rawAuditorAchieved = (existing as any)?.auditor_achieved_value ?? null;
-    let auditorAchieved: number | string | null;
-    if (hasAuditorDraft) {
-      // SINGLE SOURCE OF TRUTH for qualitative drafts: derive the picker label from
-      // `auditor_score` (canonical). `auditor_achieved_value` is only used as a
-      // tie-breaker when `auditor_score` is null. This guarantees the Review Journey
-      // tile (which reads auditor_score) and the picker tile cannot diverge.
-      if (isQualitative) {
-        const numeric =
-          existing?.auditor_score != null
-            ? Number(existing.auditor_score)
-            : (rawAuditorAchieved != null ? Number(rawAuditorAchieved) : null);
-        auditorAchieved = getQualitativeAchievedLabel(numeric, uomType, qualOpts) ?? null;
-      } else {
-        auditorAchieved = rawAuditorAchieved;
-      }
-    } else {
-      // No auditor draft yet — pre-fill with the employee's submitted value
-      const employeeAchieved = existing?.achieved_value ?? null;
-      auditorAchieved = isQualitative
-        ? (getQualitativeAchievedLabel(employeeAchieved, uomType, qualOpts) ?? null)
-        : employeeAchieved;
-    }
-    
-    // Recalculate score from achieved value if auditor hasn't reviewed yet
-    let initialAuditorScore: number | null = existing?.auditor_score ?? null;
+    // POLICY §107: SSOT hydration. Auditor's saved value/score wins over employee data.
+    const bundle = hydrateReviewerDraft(existing as any, kpi as any, 'auditor');
+    const auditorAchieved: number | string | null = bundle.achievedValue;
+    let initialAuditorScore: number | null = bundle.score;
     if (initialAuditorScore === null && auditorAchieved !== null && auditorAchieved !== '') {
       const numVal = typeof auditorAchieved === 'number' ? auditorAchieved : parseFloat(String(auditorAchieved));
       if (!isNaN(numVal)) {
@@ -458,12 +428,8 @@ export function AuditScorecard({
       initialAuditorScore = existing?.manager_score ?? null;
     }
     setAuditorScore(initialAuditorScore);
-    setAuditorRemarks(existing?.auditor_remarks || '');
-    // Support both new array and legacy single URL
-    const existingUrls = (existing as any)?.auditor_evidence_urls;
-    setAuditorEvidenceUrls(Array.isArray(existingUrls) && existingUrls.length > 0 
-      ? existingUrls 
-      : existing?.auditor_evidence_url ? [existing.auditor_evidence_url] : []);
+    setAuditorRemarks(bundle.remarks || existing?.auditor_remarks || '');
+    setAuditorEvidenceUrls(bundle.evidenceUrls);
     setAuditorAchievedValue(auditorAchieved);
     // Reset override state
     setAuditorAgrees(null);
