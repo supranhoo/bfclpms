@@ -1,65 +1,114 @@
-# Fix: Bi-Monthly Org KPIs leaking onto non-terminal months
+## RCA — Why Prabhat's Bi-Monthly cycle drifted
 
-## RCA (verified against live DB)
+**Symptom.** The "Achieve organization's production target" Bi-Monthly KPI for Prabhat Kumar Singh is labelled **Apr-May** in April 2026 and **May-Jun** in May/June 2026 — May appears in two overlapping cycles, which is structurally impossible.
 
-The KPIs in your screenshot (Bi-Monthly, `frequency_cycle_start = 'May-Jun'`, terminal = **June**) appear on the **May** Org KPI Data Entry page. When you click Propagate, the DB trigger `enforce_frequency_lock_on_submission` correctly rejects the write with *"Bi-Monthly KPI cannot be reviewed for May. Only the terminal month of the cycle is reviewable."*
+**Evidence (DB).** Within the same org-KPI tuple (`category`/`kra`/`kpi`):
 
-Mismatch source (`src/lib/frequencyCycleOptions.ts::resolveEffectiveCycleOption`):
+| Period | Prabhat `frequency_cycle_start` | Biswajit | Dharmendra |
+|---|---|---|---|
+| Jan 2026 | `Feb-Mar` | NULL | NULL |
+| Feb 2026 | `Feb-Mar` | NULL | NULL |
+| Mar 2026 | `Feb-Mar` | NULL | NULL |
+| Apr 2026 | `Feb-Mar` | `Feb-Mar` | `Feb-Mar` |
+| **May 2026** | **`May-Jun`** | `Feb-Mar` | `Feb-Mar` |
+| **Jun 2026** | **`May-Jun`** | `Feb-Mar` | `Feb-Mar` |
 
-- `BI_MONTHLY_OPTIONS` only contains the two values `Jan-Feb` and `Feb-Mar`.
-- The DB stores per-KPI `frequency_cycle_start` values like `May-Jun`, `Mar-Apr`, `Apr-May`, etc. (any 2-month window the admin picked at KPI creation time).
-- When the per-KPI value isn't found in the hardcoded list, the client **silently falls back** to the global `frequency_config` row (currently `Feb-Mar,Apr-May,…`), whose `lockedMonths` say May is NOT locked → KPI shows.
-- But the DB trigger reads the KPI's own `frequency_cycle_start = 'May-Jun'` literally, computes terminal = June, and blocks May.
+Prabhat's May row was inserted by the **`auto-rollover-kpis` edge function** at `2026-05-01 00:00:05` cron run. The June row was inserted by the same edge function at `2026-06-01 10:31:15` (with the `ORG_KPI_AUTO_INHERITED` trigger logging it). Biswajit/Dharmendra's June row was instead created by an `admin_bulk_apply` from the April template, which preserved `Feb-Mar`.
 
-Same defect class exists for Quarterly / Half-Yearly / Yearly cycles whose `frequency_cycle_start` doesn't match a hardcoded option (e.g. `Mar-May`, `Aug-Oct`, `May-Oct` partially).
+**Root cause.** Two co-located functions hard-code a **standard Jan-anchored cycle** and silently overwrite the per-KPI offset anchor:
 
-POLICY §54: the terminal month is the single source of truth for multi-month KPIs. The UI must reflect that — non-terminal months MUST NOT list the card, so admins cannot attempt an invalid Propagate.
+1. `supabase/functions/auto-rollover-kpis/index.ts::resolveCycleAnchorForPeriod()` and the call site at line 794:
+   ```
+   resolvedCycleStart = resolveCycleAnchorForPeriod(source.frequency, targetMonth)
+                        ?? source.frequency_cycle_start;
+   ```
+   The resolver always returns a non-null Jan-anchored value for multi-month frequencies, so the `?? source.frequency_cycle_start` fallback never fires. For May (month_idx 4) it returns `May-Jun`; the source's `Feb-Mar` offset is discarded.
+
+2. DB function `public.resolve_cycle_anchor(frequency, month_idx)` — mirrors the same bug:
+   ```
+   cycle_start_idx := (p_month_idx / cycle_len) * cycle_len;
+   ```
+   Used by `repair_org_kpi_cycle_anchors`, which would actively rewrite any offset anchor to the Jan-anchored one if run.
+
+Net effect: every monthly rollover of an offset-anchored multi-month KPI (`Feb-Mar`, `May-Oct`, `Apr-Jun` quarter offsets, etc.) silently mutates the cycle anchor, producing overlapping windows and breaking POLICY §54 (single terminal month per cycle).
+
+**Why only Prabhat is visibly broken here.** He is the **employee-scope owner** for the tuple, so `auto-rollover-kpis` rolls his row forward every month. The other employees get materialised on demand by `materialize_kpis_for_org_kpi` (which copies the template anchor verbatim) or via manual admin bulk-apply — both preserve `Feb-Mar`. Result: divergence inside one org-KPI tuple.
+
+---
 
 ## Risk & Impact
 
-- Data: zero writes; pure read-side filter change.
-- Workflow: multi-month Org KPIs disappear from non-terminal months in `/admin/org-kpi-data`. They will only appear on the cycle's terminal month (already the only month where propagation succeeds).
-- UI: matches the existing tooltip/badge for multi-month KPIs in MyKpis / Team Reviews (POLICY §54).
-- Regression risk: low. The fallback path was returning a wrong-but-permissive option; we now compute the correct lock from the stored `frequency_cycle_start`. Verified no other consumer relies on the old fallback by searching usages of `resolveEffectiveCycleOption`.
-- Scalability: pure function, no extra query.
-- Rollback: revert the helper to its previous body; one file.
+- **Data integrity:** broken cycle membership ⇒ wrong terminal month, wrong sibling set, breaks ADR-086 percolation, breaks ADR-087 client locking.
+- **Affected scope:** every employee whose multi-month KPI uses any non-Jan-anchored `frequency_cycle_start` (`Feb-Mar`, `May-Oct` Half-Yearly, `Apr-Jun`/`Jul-Sep` Quarterly, `Apr-Mar`/`Jul-Jun` Yearly, plus the synthetic anchors enabled by ADR-087).
+- **Blast radius:** any month a rollover has run since the offset was introduced.
+- **No data loss** — only the anchor column drifted; achieved values intact.
+
+---
 
 ## Plan
 
-1. **Add `deriveCycleOptionFromCycleStart(frequency, cycleStart)`** in `src/lib/frequencyCycleOptions.ts`. Given a `frequency_cycle_start` like `May-Jun` (Bi-Monthly) or `Mar-May` (Quarterly), generate the synthetic `CycleOption` (lockedMonths + activeMonth) for that exact starting anchor. Mirrors the DB trigger math: `cycle_pos = ((month - start_month) mod 12) mod cycle_length`; terminal month at position `cycle_length-1`.
+### Step 1 — Make the cycle anchor sticky (forward-fix). Verification: code review + new unit test.
 
-2. **Update `resolveEffectiveCycleOption`** to call the new helper **before** falling back to global config or `options[0]`, so a per-KPI override that isn't in the hardcoded list is still respected. Keep the existing match-first behavior to avoid behavior change for `Jan-Feb` / `Feb-Mar` etc.
+`supabase/functions/auto-rollover-kpis/index.ts`:
+- Replace the `resolvedCycleStart = resolveCycleAnchorForPeriod(...) ?? source.frequency_cycle_start` line with **anchor preservation**:
+  ```
+  resolvedCycleStart = source.frequency_cycle_start
+                        ?? resolveCycleAnchorForPeriod(source.frequency, targetMonth);
+  ```
+  i.e. honour whatever the source row already declares; only synthesise an anchor when the source has none. Same change at the sibling-month resolution site (`getCycleMonthsForTarget`) already reads `kpi.frequency_cycle_start`, so just the `buildNewKpi` write path needs the flip.
+- Add a structured log when the anchor would have changed, for observability.
 
-3. **Tests** — add `src/test/cycleStartFallbackResolution.test.ts`:
-   - `May-Jun` Bi-Monthly: only **June** is unlocked; May/Jul/etc locked.
-   - `Mar-Apr` Bi-Monthly: only **April** unlocked.
-   - `Mar-May` Quarterly: only **May** unlocked.
-   - `Aug-Oct` Quarterly: only **October** unlocked.
-   - `Nov-Apr` Half-Yearly (wrapping): only **April** unlocked.
-   - Returning `Jan-Feb` for a hardcoded match path still works (regression guard).
+### Step 2 — Fix the DB resolver. Verification: SQL unit test on `resolve_cycle_anchor` with `month_idx=4, frequency='Bi-Monthly'` returning the **input-aware** anchor.
 
-4. **Update memory & docs**
-   - `mem/architecture/pms/multimonth-percolation` — note that `frequency_cycle_start` is the SSOT for cycle resolution on the client too (no silent fallback to global config when an override exists).
-   - ADR-087 `docs/adr/ADR-087.md` — Client/DB cycle-resolution parity for Org KPI Data Entry.
+Replace `public.resolve_cycle_anchor` with a 3-arg variant `(p_frequency, p_month_idx, p_existing_anchor text)` that:
+- Returns `p_existing_anchor` unchanged when it is a valid anchor for the frequency.
+- Otherwise computes the standard Jan-anchored fallback (current behaviour) so old callers keep working.
 
-5. **No DB changes.** No migrations. No trigger changes.
+Update `repair_org_kpi_cycle_anchors` to call the 3-arg variant and to **never** rewrite a valid offset anchor — drift is only flagged when the stored value can't satisfy any legal cycle window for the row's `review_period`.
 
-## Out of Scope
+### Step 3 — One-shot data repair for the affected tuple. Verification: re-query the 6 rows above and confirm Prabhat's May/Jun rows show `Feb-Mar`; UI label becomes `Bi-Monthly: Apr-May` (May) and `Bi-Monthly: Jun-Jul` (Jun).
 
-- We do not change `propagate_org_kpi_value` or relax `enforce_frequency_lock_on_submission`. The DB lock is correct and must keep blocking non-terminal writes.
-- We do not change MyKpis / Team Reviews; those already use the same helper and benefit transparently.
-- We do not retroactively re-show or hide KPIs in any other page beyond what `isKpiLockedForPeriod` already controls.
+Scoped migration (admin, audited) that, **for the single tuple** (category `c8fbb996…`, kra/kpi name match) and `review_year = 2026`:
+- Resets `frequency_cycle_start = 'Feb-Mar'` on the two divergent Prabhat rows (`e08a5e40…` May, `42caf513…` June).
+- Emits `KPI_CYCLE_ANCHOR_REPAIRED` audit rows with `system_action=true` and `reason='RCA — rollover anchor drift'`.
+- No score / submission / OKV mutation.
+- Idempotent (only touches rows whose anchor differs from the tuple's majority anchor).
 
-## Files
+### Step 4 — Detection guard. Verification: returns 0 drift rows after Step 3.
 
-- `src/lib/frequencyCycleOptions.ts` — add helper + extend `resolveEffectiveCycleOption`.
-- `src/test/cycleStartFallbackResolution.test.ts` — new.
-- `docs/adr/ADR-087.md` — new.
-- `mem/architecture/pms/multimonth-percolation` — update.
+New read-only RPC `public.detect_org_kpi_cycle_anchor_drift()` (admin) that lists every org-KPI tuple whose rows disagree on `frequency_cycle_start` for the same `review_year`. Wire a small banner on `OrgKpiCycleAnchorRepair` admin page if any drift exists.
 
-## Verification
+### Step 5 — Tests, docs, policy.
+- Vitest: `auto-rollover-kpis` builder test — source `Feb-Mar` + targetMonth `May` ⇒ output `Feb-Mar` (regression for this RCA).
+- Vitest: same source + targetMonth `Jun` ⇒ `Feb-Mar`.
+- `docs/adr/ADR-088.md` — "Cycle anchor preservation across monthly rollover".
+- Update `mem/architecture/pms/multimonth-percolation` (§ anchor stickiness invariant).
+- POLICY.md §54 amendment: *the per-KPI `frequency_cycle_start` is immutable across rollover; admin override is the only legal mutation path.*
 
-- Run the new test suite.
-- Reload `/admin/org-kpi-data` on **May 2026**: the seven Bi-Monthly KPI cards (Production incentive of FAD/SMS, Incentive sheet of DRI 100 TPD / CLU, etc., all `frequency_cycle_start='May-Jun'`) should disappear.
-- Switch to **June 2026**: those same cards must appear, and Propagate must succeed.
-- KPIs with `frequency_cycle_start='Feb-Mar'` (terminal = May for the Apr-May cycle) must still be visible on May.
+### Step 6 — Roll-back plan.
+- Step 1 / Step 2 are pure code/function replacements ⇒ revert by re-deploying prior versions.
+- Step 3 migration is bounded to two row IDs; reversal SQL ships in the migration file as a comment.
+
+---
+
+## UI Changes
+
+- `View KPI Details` panel for Prabhat's May 2026 row: badge changes from `Bi-Monthly: May-Jun` to `Bi-Monthly: Apr-May`.
+- `View KPI Details` panel for Prabhat's June 2026 row: badge changes to `Bi-Monthly: Jun-Jul`. June row will no longer appear on the May Org KPI Data Entry page (terminal of `Jun-Jul` is Jul under standard mapping, or stays Jun under Feb-Mar offset — confirmed against `deriveCycleOptionFromCycleStart` so the label is consistent with ADR-087).
+- New small "anchor drift detected" banner on the admin **Org KPI Cycle Anchor Repair** page, only when drift exists.
+
+No other UI surface changes.
+
+## Tests
+- Vitest cases in Step 5.
+- SQL test for `resolve_cycle_anchor` 3-arg variant.
+
+## Documentation / Policy
+- ADR-088 created.
+- POLICY.md §54 amended.
+- `mem/architecture/pms/multimonth-percolation` updated.
+
+## Out of scope
+- Backfilling other tuples beyond Prabhat's. A separate audit pass (using Step 4's detector) will be planned once the forward-fix is live and Step 4 has run for ≥1 cron cycle.
+- Touching `materialize_kpis_for_org_kpi` (already preserves the template's anchor).
+- Any change to scoring / percolation logic.
