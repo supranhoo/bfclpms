@@ -1,114 +1,154 @@
+## RCA — "Saved as 103 / rating 0, reopens as 99 / rating 4"
 
-# Dashboard Performance Optimization Plan
+### Confirmed from DB (kpi `f8a9da89…`, "Control Specific Coal Consumption", Lower-is-Better, R0=>102):
 
-## 1. Assumptions
-- Scope = the three landing dashboards users say feel slow: `Dashboard.tsx` (Self/Team/HR/Audit/Mgmt panels via `EmployeeSelectorGrid` + `UnifiedScorecard`), `pages/admin/AdminDashboard.tsx`, `pages/ManagementDashboard.tsx`. The two admin matrix dashboards (`KpiWeightageDashboard`, `OrgKpiMappingDashboard`) and `BulkReviewDashboard` are in scope only for *query-pattern* fixes (no UX changes).
-- "Required data" = aggregates and stage counts already shown — we do not change KPIs, columns, or business meaning.
-- Baseline numbers below come from `pg_stat_user_indexes`, `pg_stat_user_tables`, and `extensions.pg_stat_statements` snapshots taken just now; targets are measured against those.
+```
+auditor_score = 0.00              (saved by auditor)
+auditor_rating = red
+auditor_remarks = "Total Coal Consumption - 1.22 ..."
+auditor_achieved_value = 103      (saved by auditor)
+achieved_value = 99               (employee's self submission)
+```
 
-## 2. Clarifications (assumed defaults — flag if wrong)
-- OK to introduce 2–3 new SECURITY DEFINER RPCs (read-only aggregates) following the existing `get_reviewer_*` pattern.
-- OK to raise React-Query `staleTime` on read-mostly dashboard caches (60–300 s). Mutations already invalidate.
-- No UI/UX changes. Stage labels, filters, charts unchanged.
+The KPI Journey tile reads from `submission.auditor_*` and **correctly** shows Value:103 / Rating:0.
+The picker form reads via `UnifiedScorecard.openReviewSheet` → `AchievedValueScoreInput` and **incorrectly** shows 99 / 4 (employee value + auto-calc rating).
 
-## 3. RCA — measured hot spots
+### Why-Why
 
-| # | Where | What it does today | Cost signal |
-|---|---|---|---|
-| H1 | `AdminDashboard` `admin-dashboard-stats` | `supabase.from('kpis').select('status')` pulls **all 14,227 KPI rows** to count by stage in JS. No `staleTime`. | Refetches on every focus; full table read under RLS. |
-| H2 | `ManagementDashboard` `management-dashboard` | For each calendar-year chunk, paginates `kpis` (`.range` loops of 1000) with embedded `review_submissions(...)` for the whole fiscal range (up to 12 months). Then pulls **entire `profiles` table** with 3-level embedded `departments → business_units → divisions`, plus **entire `kpi_queries`** with `status='open'`. All aggregation done client-side over potentially 10k+ rows. | Embedded join forces per-row RLS on `review_submissions`; `idx_kpis_org_period_status` averages 4,343 tup/scan (39 B reads / 9 M scans). |
-| H3 | `Dashboard` → `EmployeeSelectorGrid` | Concurrently triggers `useProfiles` (full roster, ~2.5 k rows + roles), `useProfilesByWorkflowStage` (full roster + N×500 `get_bulk_employee_workflows` + KPI stage seed + per-batch `review_submissions` score-signature seed), `useKpisByPeriodRanges`, `useReviewSubmissionScoresByKpiIds`. Multiple of these duplicate roster scans within ~1 s. | `profiles_pkey` 499 M scans (≈500 M tup reads) — heaviest index in the DB; `idx_kpis_employee_id` 128 M scans, 1.3 B tup reads. |
-| H4 | `Dashboard.tsx` deep-link/restore | Three separate `profiles.select(...)` `.eq('id', employeeParam).single()` paths with identical column lists — fine individually but they run inside `useEffect`s that re-fire on `searchParams` changes. | Minor, but trivially cacheable via React Query. |
-| H5 | `useReviewSubmissionScoresByKpiIds` fallback | When RPC fast-path absent, batches 500-id `.in('kpi_id', …)` over `review_submissions`. Used widely (selector grid, scorecard derive). | `idx_review_submissions_kpi_id` 5 M scans / 8.6 M tup reads — already healthy *with* RPC; degrades sharply without it. |
-| H6 | Several hooks lacking `staleTime` | `useTeamMembers`, `useSkipLevelTeamMembers`, `useEmployeeFilterOptions`, `useRollbackStatusCounts`, `usePendingAdjustmentCount`. Default `staleTime=0` → refetch on every focus/mount. | Multiplies all of the above. |
+1. **Why does the picker show 99 instead of 103?** — `reviewerAchievedValue` was set to the employee's `achieved_value` (99) instead of the auditor's `auditor_achieved_value` (103) at hydration time.
+2. **Why was it set to the employee's value?** — One of two race/branch paths in `UnifiedScorecard.tsx` lines 952–979 collapsed to the "no-draft" else branch (line 974), so `baseAchieved = existing.achieved_value = 99`.
+3. **Why did the "draft exists" branch fail?** — Either (a) `submissionMap.get(kpi.id)` returned `undefined` on first paint because `kpiIds` (line 359) is **not memoized** — every render creates a new array, the `useReviewSubmissions` queryKey thrashes, and the freshly-saved row hasn't repopulated in time when the sheet reopens, OR (b) hydration succeeded with 103 but `AchievedValueScoreInput`'s auto-recalc `useEffect` (lines 73–87) silently overwrote score on a stale prop chain.
+4. **Why is the auto-recalc effect dangerous?** — It runs `onScoreChange(result.rating, …)` **whenever** `result.rating !== score`, with no guard that the reviewer already has a persisted score. A single transient render where `score` is briefly stale or `achievedValue` flips to the employee fallback will overwrite the reviewer's saved 0 with the auto-derived 4.
+5. **Why does the same risk apply elsewhere?** — All five reviewer stages (Manager, Skip-Level, HR PMS, Auditor, Management) flow through the same `openReviewSheet` + `AchievedValueScoreInput` pair in `UnifiedScorecard.tsx`. The legacy `AuditScorecard.tsx` has the identical pattern (lines 408–467). `SelfReviewSheet` has it for qualitative (already partly hardened — see `mem/features/review/auditor-draft-qualitative-hydration`) but NOT for numeric KPIs.
 
-### Why-why (top item, H2)
-1. Why is Mgmt Dashboard slow? It reads ≤14 k KPIs + 2.5 k profiles + all open queries on every load.
-2. Why so much data? Aggregates (stage counts, division roll-up, rating bands, pending list) are computed in JS.
-3. Why JS aggregation? No server aggregate exists; the dashboard predates the `get_reviewer_*` RPCs.
-4. Why an embedded `review_submissions` join? Convenience — but PostgREST re-evaluates RLS row-by-row on the embed.
-5. Why does staleTime=0? Original copy-paste from the admin dashboard; never tuned.
+### Root cause (single sentence)
 
-## 4. Risk & Impact Report
+`UnifiedScorecard` does not snapshot the reviewer-owned hydration values before handing them to `AchievedValueScoreInput`, and `AchievedValueScoreInput` then re-derives a score from achievedValue on every effect run, so any transient mismatch between the two state slots silently rewrites the reviewer's saved score back to the employee-derived value.
 
-| Dimension | Impact | Mitigation |
-|---|---|---|
-| Data | Read-only RPCs; no write-paths touched. | RPCs marked `STABLE`, `SECURITY DEFINER`, identical RLS semantics (mirror `get_reviewer_kpis_for_period`). |
-| Workflow | None — aggregates match current JS formulas line-for-line. | Golden-snapshot unit tests compare RPC vs. existing JS aggregator on a fixture period. |
-| UI/UX | No visible change. Skeletons may render briefly less often (longer staleTime). | n/a |
-| Regression | Risk of stage-count drift if RPC filter differs from current `kpi.status` count. | Add contract test (`tests/perf/dashboard-aggregates.test.ts`) asserting parity. |
-| Scalability | At 50 k KPIs / 5 k employees, AdminDashboard goes from full-table read to a single aggregate row; Mgmt Dashboard goes from ~10 k row JSON to ~50 row JSON. | Verified by `EXPLAIN` (`HashAggregate` on `idx_kpis_review_year_period`). |
-| Rollback | All changes are additive (new RPCs, new hooks). Toggle via feature flag `dashboards.use_aggregate_rpcs` (default ON after smoke). | Flip flag OFF to revert to current path. |
-| Backup | New RPCs are functions, not tables — automatically captured by `get_backup_table_order()` rules. No denylist change. | n/a |
+---
 
-## 5. Plan (step → verification)
+## Risk & Impact Report
 
-### Step 1 — Diagnose & baseline (browser perf, then DB)
-- Capture `browser--performance_profile` on `/dashboard`, `/management-dashboard`, `/admin` (logged in as admin, default period).
-- Record: LCP, INP, total network bytes for the dashboard query, longest server `mean_exec_time` from `pg_stat_statements`.
-- **Verify**: numbers logged in PR description as "before".
+| Area | Impact |
+|---|---|
+| Data | Picker UI mis-renders saved reviewer scores; if reviewer clicks Save Draft again without noticing, the auto-derived score (4) overwrites the persisted 0. **Silent data corruption risk on every re-open.** |
+| Workflow | Every reviewer stage (5 roles) affected. Most visible for Lower-is-Better KPIs where auto-calc and reviewer judgement diverge sharply. |
+| UI/UX | Auditor sees a different value than what they saved → loss of trust, repeated re-work. |
+| Regression | Fix touches one hot path (`UnifiedScorecard.openReviewSheet`) and one shared input (`AchievedValueScoreInput`). Must not break: qualitative drafts (binary/tiered), N/A overrides, daily-binary reviewer agree/disagree, sessionStorage drafts. |
+| Scalability | Memoizing `kpiIds` also fixes a per-render refetch storm on `review_submissions` (separate perf win). |
 
-### Step 2 — New SECURITY DEFINER RPC: `get_admin_dashboard_stats()` (H1)
-- Returns one row: `total_employees, kpis_by_stage jsonb, open_queries, locked_periods, active_periods, pending_rollbacks`.
-- Replace 5-query parallel block in `AdminDashboard` with one `.rpc()` call. Set `staleTime: 60_000`.
-- **Verify**: snapshot test parity vs. current logic; network panel shows 1 request instead of 5.
+Mitigation: snapshot+guard pattern, full unit-test matrix across the 5 reviewer stages × 3 UOM types × 2 criteria, plus an `effect-self-heal` guard that refuses to overwrite a non-null saved reviewer score.
 
-### Step 3 — New RPC: `get_management_dashboard_metrics(p_year, p_months text[], p_employee_ids uuid[] DEFAULT NULL)` (H2)
-- Server-side joins `kpis ⨝ review_submissions` once, returns:
-  - `stage_counts jsonb`, `total_kpis`, `approved_kpis`, `weighted_avg_score`,
-  - `pending_reviews jsonb` (per-employee aggregate for `management_review` + overdue),
-  - `division_performance jsonb`, `rating_distribution jsonb`,
-  - `open_queries_count`.
-- Replace the entire `fetchFiscalData` + profiles + queries block. Drop the embedded `review_submissions(...)` PostgREST embed.
-- Keep `useProfiles()` (already RPC-backed) only for the *names/codes* needed to hydrate the pending-list rows that the RPC returns by id.
-- **Verify**:
-  - Parity test against current JS aggregator on a known period.
-  - `EXPLAIN ANALYZE` of new RPC < 1 s on prod-sized data.
-  - Network: 2 requests instead of 3 + N pagination loops.
+---
 
-### Step 4 — Surgical cache tuning (H6)
-- Add `staleTime` (60–300 s) and `gcTime` (15 min) to: `useTeamMembers`, `useSkipLevelTeamMembers`, `useRollbackStatusCounts`, `usePendingAdjustmentCount`, `useEmployeeFilterOptions`, `useProfiles` (already has `placeholderData`; add 5-min `staleTime`).
-- **Verify**: React Query devtools shows the queries as `fresh` after first load when revisiting a dashboard within 5 min.
+## Plan
 
-### Step 5 — De-duplicate `useProfilesByWorkflowStage` round-trips (H3)
-- Move the score-signature seed into the existing `get_bulk_employee_workflows` RPC (or add `get_workflow_stage_roster(p_stage, p_period, p_year)` that returns the final employee-id set in one call).
-- Drop the per-batch `review_submissions` `.in()` loop from the hook.
-- **Verify**: hook makes ≤2 round-trips (was 1 roster + N×500 workflow + 1 KPI seed + ⌈N/500⌉ submission seeds).
+### Step 1 — Stabilise the `submissions` cache feeding `submissionMap`
 
-### Step 6 — Cache `useReviewSubmissionScoresByKpiIds` periodKey fallback (H5)
-- Keep RPC fast-path; add `staleTime: 60_000` and ensure non-period callers (selector grid uses it) reuse the same cache entry via `periodKey`.
-- **Verify**: no duplicate `review-submission-scores-by-kpi-ids` entries in devtools for the same period.
+File: `src/components/review/UnifiedScorecard.tsx`
 
-### Step 7 — Bundle/route hygiene (small wins, no behavior change)
-- Lazy-load `ManagementDashboard`, `AdminDashboard`, `BulkReviewDashboard`, `KpiWeightageDashboard`, `OrgKpiMappingDashboard` in `App.tsx` if not already. Charts (`recharts`) already imported; verify no unused chart kinds are bundled into the landing chunk.
-- **Verify**: `bun run build` chunk report; landing route JS ↓ ≥ 80 KB gz.
+- Memoize `kpiIds` (line 359) → `useMemo(() => kpis?.map(k => k.id) || [], [kpis])`. Prevents the `useReviewSubmissions` queryKey churn that races sheet-open hydration.
+- Verify: same fix for `allKpiIds` (already memoized at line 370 — keep).
 
-### Step 8 — Tests + docs
-- Unit tests: `tests/perf/admin-dashboard-rpc.test.ts`, `tests/perf/management-dashboard-rpc.test.ts` — parity vs. fixture, plus shape contract.
-- Update `DOCUMENTATION.md` (RPC list + cache TTLs).
-- Update `POLICY.md` §125 (pagination) with new aggregate-RPC carve-out.
-- Add `mem://infrastructure/database/dashboard-aggregate-rpcs.md` and link from `mem://index.md`.
+### Step 2 — Make reviewer-draft hydration deterministic and snapshot-based
 
-### Step 9 — Post-deploy verification
-- Re-run `browser--performance_profile` on the same 3 dashboards; record "after" numbers.
-- Pull `pg_stat_statements` delta for `kpis`/`review_submissions`/`profiles` queries.
-- **Success thresholds**:
-  - AdminDashboard TTI ↓ ≥ 60 % (target < 800 ms server-time).
-  - ManagementDashboard TTI ↓ ≥ 70 % (target < 1.5 s server-time on full fiscal year).
-  - `EmployeeSelectorGrid` first-paint ↓ ≥ 40 %.
-  - No new console warnings/errors. All Phase-9 backup contract tests still pass.
+File: `src/components/review/UnifiedScorecard.tsx`, `openReviewSheet` (lines 922–1052).
 
-## 6. UI Changes
-Not Applicable — visual output and interactions unchanged. Skeleton frequency reduces because of longer `staleTime`.
+- Extract hydration into a pure helper `hydrateReviewerDraft(existing, kpi, viewLevel, scoreFieldPrefix)` returning `{ achievedValue, score, remarks, evidenceUrls, source }` where `source` is `'reviewer-draft' | 'employee-prefill' | 'empty'`.
+- Hardening rules inside the helper:
+  - `hasReviewerDraft` = any of `*_score`, `*_rating`, non-empty `*_remarks`, `*_achieved_value`, `*_evidence_url(s)`.
+  - If `hasReviewerDraft`: `achievedValue = existing[*_achieved_value]` (never `existing.achieved_value`). For qualitative, derive label from `*_score` (existing rule from §96 / qualitative-hydration memo).
+  - If NOT `hasReviewerDraft`: prefill from employee's `achieved_value` (current "fresh review" UX).
+  - Never recompute score from achievedValue here — the score that goes into state must be the reviewer's saved `*_score` verbatim.
+- After computing the bundle, store it in a `lastHydratedRef.current = { kpiId, ...bundle }` to guard against effect-driven overwrites (see Step 3).
 
-## 7. Out of scope (will not touch)
-- `OrgKpiEntryCard` (recently fixed under ADR-081).
-- Backup edge functions (ADR-082).
-- Any write-path or RLS policy.
-- Adding/removing dashboard widgets or filters.
+### Step 3 — Stop `AchievedValueScoreInput` from silently overwriting a saved reviewer score
 
-## 8. Decision justification
-- **Server aggregates over client aggregates** — single round-trip, server uses existing composite indexes; alternative (materialized view) rejected because dashboard data must be live for `management_review` overdue logic.
-- **SECURITY DEFINER RPCs** — proven pattern in this codebase (`get_reviewer_kpis_for_period`); avoids per-row RLS on the heaviest tables; alternative (loosening RLS) rejected — violates §8 of project standards.
-- **Tune `staleTime` instead of `refetchOnWindowFocus=false`** — keeps freshness on explicit user actions while killing the background storm; alternative (disabling focus refetch globally) rejected — would mask write-then-read bugs elsewhere.
-- **Feature flag rollout** — required by §18 (rollback strategy); no destructive change otherwise.
+File: `src/components/review/AchievedValueScoreInput.tsx`, lines 73–87.
+
+- Replace the unconditional recompute with a *user-input-driven* trigger:
+  - Add a `prevAchievedValueRef = useRef(achievedValue)`.
+  - Only run auto-recalc when `achievedValue` **transitions** AND the transition was initiated locally (via `handleAchievedValueChange`), OR when `score === null`.
+  - Never call `onScoreChange` when `score !== null && achievedValue` is the **initial** value handed in by the parent (i.e., on mount).
+- Concretely: on mount, set `prevAchievedValueRef.current = achievedValue` and skip the effect's auto-correction. On subsequent updates, only correct when `prevAchievedValueRef.current !== achievedValue`.
+- Public API unchanged. Modes `manual`, `suggested_override`, qualitative branch, and Date branch untouched.
+
+### Step 4 — Cross-stage parity sweep
+
+- `UnifiedScorecard` covers Manager / Skip-Level / HR PMS / Auditor / Management via the same `openReviewSheet`. Single fix handles all 5.
+- `src/components/review/AuditScorecard.tsx` (legacy, lines 401–467) — apply the same `hydrateReviewerDraft` rule (it already uses `auditor_achieved_value` correctly but still runs the dangerous auto-recalc through `AchievedValueScoreInput`).
+- `src/components/review/SelfReviewSheet.tsx` — confirm self_achieved_value hydration uses `self_achieved_value`, not `achieved_value` from a non-existent prior cycle.
+- `src/components/admin/AdminDataEntryDialog.tsx` & `AdminDailyEntryDialog.tsx` — verify admin-on-behalf draft hydration follows the same rule for whichever stage they are populating.
+
+### Step 5 — Tests (regression-protection bundle)
+
+New file: `src/test/unifiedScorecardHydration.test.ts`
+
+Mock data factories: `generateMockKpi({ criteria, r0..r5, uom_type })`, `generateMockSubmission({ stage, achieved, score })`.
+
+Matrix:
+
+```
+stages           = [self, manager, skip_level, hr_pms, auditor, management]
+uom_types        = [numeric, binary, tiered]
+criteria         = [Higher is Better, Lower is Better]
+hydration_cases  = [
+  reviewer-saved-draft   → picker shows reviewer's value + score verbatim
+  no-reviewer-draft      → picker prefills from employee's achieved_value
+  reviewer-score-only    → picker shows that score, achievedValue null
+  reviewer-achieved-only → picker shows that achievedValue, score derived ONCE
+]
+```
+
+Plus one explicit regression test for THIS bug:
+
+```ts
+it('BUG-XXX: auditor saved 103/0 Lower-is-Better → reopen still 103/0', () => {
+  const kpi = generateMockKpi({ criteria: 'Lower is Better', r0: '>102', r1:'102', r2:'101', r3:'100', r4:'99', r5:'98', target_value: 98 });
+  const sub = generateMockSubmission({ stage: 'auditor', achieved: 103, score: 0, employee_achieved: 99 });
+  const bundle = hydrateReviewerDraft(sub, kpi, 'auditor', 'auditor');
+  expect(bundle).toEqual({ source: 'reviewer-draft', achievedValue: 103, score: 0, remarks: expect.any(String), evidenceUrls: [] });
+});
+```
+
+Update existing tests:
+
+- `src/test/auditorDraftHydration.test.ts` — extend to numeric path.
+- `src/lib/carriedScoreResolver.test.ts` — unaffected, but add a note: hydration vs cascading-fallback are two different concerns.
+
+### Step 6 — Documentation & Policy
+
+- `DOCUMENTATION.md` — add section "Reviewer Draft Hydration Invariant".
+- `POLICY.md` §107 (new): *"When a reviewer reopens their own draft, the picker MUST display the reviewer's saved `*_achieved_value` and `*_score` verbatim. The picker MUST NOT recompute or overwrite either field from the employee's `achieved_value` or from threshold auto-calc. Threshold auto-calc only fires when the reviewer explicitly edits the achievedValue input."*
+- `mem/features/review/reviewer-draft-hydration` (new memo): cross-stage canonical rule, the snapshot/guard pattern, and the `hydrateReviewerDraft` helper as SSOT.
+- Update `mem/features/review/auditor-draft-qualitative-hydration` to reference the new numeric coverage.
+- ADR-084: "Reviewer Draft Hydration & AchievedValueScoreInput auto-recalc guard."
+
+### Step 7 — Diagnostic console logs (one release, behind a feature flag)
+
+Add `console.debug('[hydrateReviewerDraft]', { kpiId, stage, source, achievedValue, score })` gated behind `import.meta.env.VITE_DEBUG_HYDRATION` (off in prod by default). Remove after one release.
+
+---
+
+## Files changed (estimate)
+
+- `src/components/review/UnifiedScorecard.tsx` (memoize kpiIds; extract + call `hydrateReviewerDraft`; ref-guard)
+- `src/components/review/AchievedValueScoreInput.tsx` (guard auto-recalc effect)
+- `src/components/review/AuditScorecard.tsx` (use same helper)
+- `src/lib/reviewerDraftHydration.ts` (new — pure helper, SSOT)
+- `src/test/unifiedScorecardHydration.test.ts` (new — full matrix)
+- `src/test/auditorDraftHydration.test.ts` (extend)
+- `DOCUMENTATION.md`, `POLICY.md`, `mem/features/review/reviewer-draft-hydration`, `docs/adr/ADR-084.md`
+
+## Rollback strategy
+
+Pure-frontend change. To revert: drop the helper and restore the inline hydration block in `openReviewSheet` plus the original `AchievedValueScoreInput` effect. No schema or RPC changes. No data migration. Zero risk to persisted data.
+
+## Out of scope (explicitly NOT changed)
+
+- No changes to `review_submissions` schema.
+- No changes to save-path mutations (`submitReview` / `executeAuditSubmit`) — they already persist the correct values; the bug is on the read/hydrate side only.
+- No changes to `KpiJourneySection` (already correct).
+- No changes to scoring/cascading logic (`carriedScoreResolver`, `ratingCalculation`).
+
+Awaiting approval to implement.

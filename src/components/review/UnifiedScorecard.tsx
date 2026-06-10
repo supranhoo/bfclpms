@@ -21,6 +21,7 @@ import { ReviewLevelOverrideEditor, calculateOverriddenScore as calculateReviewe
 import { useManagerSubPeriodOverride } from '@/hooks/useManagerSubPeriodOverride';
 import { useReviewerSubPeriodOverride } from '@/hooks/useReviewerSubPeriodOverride';
 import { QualitativeOption, labelToRating, getQualitativeAchievedLabel } from '@/lib/qualitativeUom';
+import { hydrateReviewerDraft } from '@/lib/reviewerDraftHydration';
 import { useAuth } from '@/contexts/AuthContext';
 import { useKpiSorting } from '@/hooks/useKpiSorting';
 import { ReviewPanelSkeleton } from '@/components/ui/LoadingSkeletons';
@@ -356,7 +357,10 @@ export function UnifiedScorecard({
     return null;
   };
 
-  const kpiIds = kpis?.map(k => k.id) || [];
+  // POLICY §107: memoize kpiIds so the `useReviewSubmissions` queryKey is stable across
+  // renders. A new array reference per render thrashes the React Query cache and races
+  // sheet-open hydration (root cause of BUG-AUD-103 — see ADR-084).
+  const kpiIds = useMemo(() => kpis?.map(k => k.id) || [], [kpis]);
   const { data: submissions } = useReviewSubmissions(kpiIds);
   const { data: queries } = useKpiQueries(kpiIds);
   const { data: observationsMap } = useObservationsByKpis(kpiIds);
@@ -936,49 +940,32 @@ export function UnifiedScorecard({
     }
     const existing = submissionMap.get(kpi.id);
     
-    // Get the reviewer's OWN score (not inherited)
-    const ownScoreFieldMap: Record<string, number | null | undefined> = {
-      manager: existing?.manager_score,
-      skip_level: (existing as any)?.skip_level_score,
-      hr_pms: (existing as any)?.hr_pms_score,
-      auditor: existing?.auditor_score,
-      management: existing?.management_score,
-    };
-    const ownScore = ownScoreFieldMap[viewLevel] ?? null;
-
-    const uomType = (kpi as any).uom_type as 'numeric' | 'binary' | 'tiered' | undefined;
-    const qualOpts = (kpi as any).qualitative_options as QualitativeOption[] | null;
-    const isQualitative = uomType === 'binary' || uomType === 'tiered';
-    const rawReviewerAchieved = (existing as any)?.[`${config.scoreFieldPrefix}_achieved_value`] ?? null;
-    const remarksField = (existing as any)?.[`${config.scoreFieldPrefix}_remarks`];
-    const ratingField = (existing as any)?.[`${config.scoreFieldPrefix}_rating`];
-    const hasReviewerDraft =
-      ownScore != null ||
-      ratingField != null ||
-      (typeof remarksField === 'string' && remarksField.trim() !== '') ||
-      rawReviewerAchieved != null;
-
-    // Determine the achieved value for this level. For qualitative drafts we derive the
-    // picker label from the reviewer's OWN score (canonical) so the picker tile cannot
-    // diverge from the Review Journey tile.
-    let achievedVal: number | string | null;
-    if (hasReviewerDraft && isQualitative) {
-      const numeric =
-        ownScore != null
-          ? Number(ownScore)
-          : (rawReviewerAchieved != null ? Number(rawReviewerAchieved) : null);
-      achievedVal = getQualitativeAchievedLabel(numeric, uomType, qualOpts) ?? null;
-    } else if (hasReviewerDraft) {
-      achievedVal = rawReviewerAchieved ?? null;
-    } else {
-      const baseAchieved = existing?.achieved_value ?? 
-        (kpi.is_org_level ? getOrgKpiValue(kpi)?.achieved_value ?? null : null);
-      achievedVal = isQualitative
-        ? (getQualitativeAchievedLabel(baseAchieved, uomType, qualOpts) ?? null)
-        : baseAchieved;
+    // POLICY §107: SSOT draft hydration. Picker NEVER falls back to the employee's
+    // `achieved_value` when the reviewer has saved their own value.
+    const bundle = hydrateReviewerDraft(
+      existing as any,
+      kpi as any,
+      config.scoreFieldPrefix as any,
+    );
+    // Self-mode hydration is handled by SelfReviewSheet — guard anyway.
+    // Org KPI fallback: when no reviewer draft AND no employee achieved_value AND the
+    // KPI is org-level, prefill from the org KPI store (legacy UX, no score recompute).
+    let achievedVal: number | string | null = bundle.achievedValue;
+    if (
+      bundle.source === 'employee-prefill' &&
+      (achievedVal === null || achievedVal === '') &&
+      kpi.is_org_level
+    ) {
+      const orgVal = getOrgKpiValue(kpi)?.achieved_value ?? null;
+      const uomType = (kpi as any).uom_type as 'numeric' | 'binary' | 'tiered' | undefined;
+      const qualOpts = (kpi as any).qualitative_options as QualitativeOption[] | null;
+      const isQual = uomType === 'binary' || uomType === 'tiered';
+      achievedVal = isQual
+        ? (getQualitativeAchievedLabel(orgVal, uomType, qualOpts) ?? null)
+        : orgVal;
     }
 
-    let prevScore: number | null = ownScore;
+    let prevScore: number | null = bundle.score;
 
     // If the reviewer hasn't scored yet (own score is null), recalculate from achieved value
     if (prevScore === null && achievedVal !== null && achievedVal !== '') {
