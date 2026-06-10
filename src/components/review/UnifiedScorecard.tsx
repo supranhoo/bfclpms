@@ -21,6 +21,7 @@ import { ReviewLevelOverrideEditor, calculateOverriddenScore as calculateReviewe
 import { useManagerSubPeriodOverride } from '@/hooks/useManagerSubPeriodOverride';
 import { useReviewerSubPeriodOverride } from '@/hooks/useReviewerSubPeriodOverride';
 import { QualitativeOption, labelToRating, getQualitativeAchievedLabel } from '@/lib/qualitativeUom';
+import { hydrateReviewerDraft } from '@/lib/reviewerDraftHydration';
 import { useAuth } from '@/contexts/AuthContext';
 import { useKpiSorting } from '@/hooks/useKpiSorting';
 import { ReviewPanelSkeleton } from '@/components/ui/LoadingSkeletons';
