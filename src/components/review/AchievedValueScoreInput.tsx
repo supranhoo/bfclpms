@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
@@ -68,23 +68,40 @@ export function AchievedValueScoreInput({
     setLocalAchievedValue(achievedValue?.toString() || '');
   }, [achievedValue]);
 
-  // Auto-calculate score on mount or when achievedValue changes
-  // Also recalculates when current score doesn't match the achieved value (safety net for inherited mismatches)
+  // POLICY §107: never silently overwrite a reviewer's SAVED score with a threshold
+  // auto-calc on mount or on a stale prop re-render. Auto-calc fires only when:
+  //   (a) the reviewer has not entered a score yet (`score === null`), OR
+  //   (b) the `achievedValue` prop transitions to a NEW value while mounted (i.e.
+  //       a sibling control mutated it, or the parent reset it).
+  // The on-input recompute lives in `handleAchievedValueChange` below — that path
+  // already calls `onScoreChange` synchronously, so the effect must NOT duplicate it.
+  const prevAchievedRef = useRef<typeof achievedValue>(achievedValue);
   useEffect(() => {
-    if (mode === 'auto_calculate' && achievedValue !== null && achievedValue !== '') {
-      const numValue = typeof achievedValue === 'number' ? achievedValue : parseFloat(String(achievedValue));
-      if (!isNaN(numValue)) {
-        const result = calculateScoreFromValue(numValue);
-        if (result && result.rating !== score) {
-          // Use a microtask to avoid React state batching issues on mount
-          Promise.resolve().then(() => {
-            onScoreChange(result.rating, result.ratingLevel);
-          });
-        }
-      }
+    const prev = prevAchievedRef.current;
+    prevAchievedRef.current = achievedValue;
+
+    if (mode !== 'auto_calculate') return;
+    if (achievedValue === null || achievedValue === '') return;
+
+    const isInitialMount = prev === achievedValue; // ref starts equal to first prop
+    const transitioned = prev !== achievedValue;
+
+    // Guard: on initial mount with a non-null saved score, trust the parent.
+    if (isInitialMount && score !== null) return;
+    // Guard: on a prop transition where the reviewer already has a non-null score,
+    // do NOT auto-correct. They explicitly chose that score.
+    if (transitioned && score !== null) return;
+
+    const numValue = typeof achievedValue === 'number' ? achievedValue : parseFloat(String(achievedValue));
+    if (isNaN(numValue)) return;
+    const result = calculateScoreFromValue(numValue);
+    if (result && result.rating !== score) {
+      Promise.resolve().then(() => {
+        onScoreChange(result.rating, result.ratingLevel);
+      });
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [achievedValue, score, mode]);
+  }, [achievedValue, mode]);
 
   // Calculate score from achieved value using thresholds
   // NOTE: Must be defined before any conditional returns that use it
