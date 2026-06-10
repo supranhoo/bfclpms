@@ -11553,6 +11553,18 @@ export type Database = {
           variant_kra_names: string[]
         }[]
       }
+      detect_org_kpi_cycle_anchor_drift: {
+        Args: never
+        Returns: {
+          affected_kpi_count: number
+          category_id: string
+          distinct_anchors: string[]
+          frequency: string
+          kpi_name: string
+          kra_name: string
+          review_year: number
+        }[]
+      }
       detect_training_needs_for_period: {
         Args: {
           p_review_period: string
@@ -12153,6 +12165,10 @@ export type Database = {
         Args: { _permit_id: string; _uid: string }
         Returns: boolean
       }
+      is_valid_cycle_anchor: {
+        Args: { p_anchor: string; p_frequency: string }
+        Returns: boolean
+      }
       jsonb_url_set_equal: { Args: { a: Json; b: Json }; Returns: boolean }
       kpi_cell_detail: {
         Args: { p_emp_id: string; p_kpi_id: string }
@@ -12356,10 +12372,19 @@ export type Database = {
           kra_name: string
         }[]
       }
-      resolve_cycle_anchor: {
-        Args: { p_frequency: string; p_month_idx: number }
-        Returns: string
-      }
+      resolve_cycle_anchor:
+        | {
+            Args: { p_frequency: string; p_month_idx: number }
+            Returns: string
+          }
+        | {
+            Args: {
+              p_existing_anchor: string
+              p_frequency: string
+              p_month_idx: number
+            }
+            Returns: string
+          }
       resolve_final_score_rule: {
         Args: {
           p_employee_id: string
