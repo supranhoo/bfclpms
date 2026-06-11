@@ -294,6 +294,20 @@ export default function SafetyIncidentNew() {
                 </Select>
               </div>
               <div>
+                <Label>Priority</Label>
+                <Select value={priority} onValueChange={(v) => setPriority(v as SafetyIncidentPriority)}>
+                  <SelectTrigger className="h-11"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {(Object.keys(SAFETY_PRIORITY_LABELS) as SafetyIncidentPriority[]).map((k) => (
+                      <SelectItem key={k} value={k}>{SAFETY_PRIORITY_LABELS[k]}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Drives the SLA target alongside Type and Severity.
+                </p>
+              </div>
+              <div>
                 <Label>Business Unit</Label>
                 <Select value={businessUnitId} onValueChange={(v) => { setBusinessUnitId(v); setDepartmentId(''); }}>
                   <SelectTrigger className="h-11"><SelectValue placeholder="Select BU" /></SelectTrigger>
