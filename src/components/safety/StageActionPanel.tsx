@@ -27,10 +27,12 @@ import { useActiveProfilesLite } from '@/hooks/useSafetyOrg';
 
 const STAGE_TO_EVIDENCE: Record<SafetyIncidentStatus, EvidenceStage | null> = {
   reported: 'report',
+  management_review: null,
   assigned: 'assignment',
   investigation: 'investigation',
   rca: 'rca',
   corrective_action: 'capa',
+  safety_head_review: null,
   verification: 'verification',
   closed: null,
   orphaned: null,
@@ -48,6 +50,7 @@ export function StageActionPanel({ incident }: { incident: SafetyIncidentRow }) 
 
   const [note, setNote] = useState('');
   const [assignTo, setAssignTo] = useState<string>('');
+  const [verifier, setVerifier] = useState<string>(incident.verifier_id ?? '');
   const [rca, setRca] = useState(incident.rca_summary ?? '');
   const [capa, setCapa] = useState(incident.capa_summary ?? '');
   const [verNotes, setVerNotes] = useState(incident.verification_notes ?? '');
@@ -75,6 +78,7 @@ export function StageActionPanel({ incident }: { incident: SafetyIncidentRow }) 
       toStatus: next,
       notes: note || undefined,
       assignedTo: next === 'assigned' ? assignTo || undefined : undefined,
+      verifierId: next === 'verification' ? verifier || undefined : undefined,
     });
   };
 
@@ -101,7 +105,7 @@ export function StageActionPanel({ incident }: { incident: SafetyIncidentRow }) 
         <CardTitle className="text-base">Stage: {SAFETY_STATUS_LABELS[incident.status]}</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        {incident.status === 'reported' && (
+        {incident.status === 'management_review' && (
           <div>
             <Label>Assign to *</Label>
             <Select value={assignTo} onValueChange={setAssignTo}>
@@ -114,6 +118,27 @@ export function StageActionPanel({ incident }: { incident: SafetyIncidentRow }) 
                 ))}
               </SelectContent>
             </Select>
+            <p className="text-xs text-muted-foreground mt-1">
+              Selected worker becomes the investigator for this incident.
+            </p>
+          </div>
+        )}
+        {incident.status === 'safety_head_review' && (
+          <div>
+            <Label>Assign Verifier *</Label>
+            <Select value={verifier} onValueChange={setVerifier}>
+              <SelectTrigger><SelectValue placeholder="Select verifier" /></SelectTrigger>
+              <SelectContent>
+                {profiles.map((p) => (
+                  <SelectItem key={p.id} value={p.id}>
+                    {p.full_name ?? p.email ?? p.id.slice(0, 8)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground mt-1">
+              Verifier confirms corrective actions before closure (may differ from the investigator).
+            </p>
           </div>
         )}
         {incident.status === 'rca' && (
@@ -178,7 +203,8 @@ export function StageActionPanel({ incident }: { incident: SafetyIncidentRow }) 
               disabled={
                 transition.isPending ||
                 saveNotes.isPending ||
-                (incident.status === 'reported' && !assignTo)
+                (incident.status === 'management_review' && !assignTo) ||
+                (incident.status === 'safety_head_review' && !verifier)
               }
               className="w-full"
             >

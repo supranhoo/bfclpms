@@ -52,6 +52,8 @@ export interface SafetyIncidentRow {
   routed_manager_id?: string | null;
   routed_second_manager_id?: string | null;
   routing_status?: 'dept' | 'division' | 'unrouted' | 'legacy' | null;
+  safety_head_id?: string | null;
+  verifier_id?: string | null;
 }
 
 export const SAFETY_INCIDENTS_KEY = ['safety', 'incidents'] as const;
@@ -137,18 +139,20 @@ export interface TransitionInput {
   toStatus: SafetyIncidentStatus;
   notes?: string;
   assignedTo?: string;
+  verifierId?: string;
 }
 
 export function useTransitionSafetyIncident() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ incidentId, toStatus, notes, assignedTo }: TransitionInput) => {
+    mutationFn: async ({ incidentId, toStatus, notes, assignedTo, verifierId }: TransitionInput) => {
       const { data, error } = await supabase.rpc('transition_safety_incident', {
         p_incident_id: incidentId,
         p_to_status: toStatus,
         p_notes: notes ?? null,
         p_assigned_to: assignedTo ?? null,
-      });
+        p_verifier_id: verifierId ?? null,
+      } as never);
       if (error) throw error;
       const result = data as { ok: boolean; error?: string };
       if (!result?.ok) throw new Error(result?.error ?? 'Transition failed');
