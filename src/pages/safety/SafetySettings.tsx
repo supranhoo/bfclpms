@@ -16,6 +16,7 @@ import { formatSettingValue, parseSettingJson } from '@/lib/safetySettings';
 import { format } from 'date-fns';
 import SafetyDataExportDialog from '@/components/safety/SafetyDataExportDialog';
 import SafetyMasterDataPanel from '@/components/safety/SafetyMasterDataPanel';
+import SafetyPermissionsTab from '@/components/safety/settings/SafetyPermissionsTab';
 
 /**
  * SafetySettings — Cross-cutting Phase X
@@ -133,6 +134,8 @@ export default function SafetySettings() {
       <SafetyDataExportDialog open={exportOpen} onOpenChange={setExportOpen} />
 
       <SafetyMasterDataPanel />
+
+      <SafetyPermissionsTab />
 
       <Card>
         <CardHeader className="pb-3">
