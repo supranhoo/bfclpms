@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   ArrowLeft, Plus, Loader2, Trash2, ChevronDown, ChevronRight, GripVertical,
@@ -139,6 +139,13 @@ export default function SafetyIncidentTypes() {
         open={creating || !!editing}
         existing={editing}
         onClose={() => { setCreating(false); setEditing(null); }}
+        onSaved={(row) => {
+          // Switch from "create" to "edit" so severities can be configured in the same dialog.
+          if (creating) {
+            setCreating(false);
+            setEditing(row);
+          }
+        }}
       />
 
       <AlertDialog open={!!deleting} onOpenChange={(o) => !o && setDeleting(null)}>
@@ -174,8 +181,13 @@ export default function SafetyIncidentTypes() {
 }
 
 function TypeEditorDialog({
-  open, existing, onClose,
-}: { open: boolean; existing: SafetyIncidentTypeRow | null; onClose: () => void }) {
+  open, existing, onClose, onSaved,
+}: {
+  open: boolean;
+  existing: SafetyIncidentTypeRow | null;
+  onClose: () => void;
+  onSaved?: (row: SafetyIncidentTypeRow) => void;
+}) {
   const upsert = useUpsertSafetyIncidentType();
   const [name, setName] = useState(existing?.name ?? '');
   const [code, setCode] = useState(existing?.code ?? '');
@@ -183,14 +195,13 @@ function TypeEditorDialog({
   const [active, setActive] = useState(existing?.is_active ?? true);
   const [sortOrder, setSortOrder] = useState(String(existing?.sort_order ?? 0));
 
-  // Reset when opening for a different row.
-  useMemo(() => {
+  // Reset when opening for a different row. Side-effects must live in useEffect.
+  useEffect(() => {
     setName(existing?.name ?? '');
     setCode(existing?.code ?? '');
     setDescription(existing?.description ?? '');
     setActive(existing?.is_active ?? true);
     setSortOrder(String(existing?.sort_order ?? 0));
-    return null;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [existing?.id, open]);
 
@@ -207,13 +218,23 @@ function TypeEditorDialog({
           sort_order: Number(sortOrder) || 0,
         },
       },
-      { onSuccess: () => onClose() },
+      {
+        onSuccess: (row) => {
+          if (!existing && row) {
+            // Keep dialog open and switch into edit mode so the admin can
+            // immediately configure severity values for the just-created type.
+            onSaved?.(row);
+          } else {
+            onClose();
+          }
+        },
+      },
     );
   };
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{existing ? 'Edit Incident Type' : 'New Incident Type'}</DialogTitle>
           <DialogDescription>
@@ -270,12 +291,26 @@ function TypeEditorDialog({
               </div>
             </div>
           </div>
+
+          {/* Severity Values — managed inline per spec. Only available once
+              the Incident Type exists (we need its id to attach children). */}
+          <div className="pt-2 border-t mt-2">
+            {existing ? (
+              <SeverityManager typeId={existing.id} typeName={existing.name} />
+            ) : (
+              <div className="rounded-md border border-dashed p-3 text-xs text-muted-foreground">
+                Save this Incident Type first — severity values can be configured here once it is created.
+              </div>
+            )}
+          </div>
         </div>
         <DialogFooter>
-          <Button variant="ghost" onClick={onClose} disabled={upsert.isPending}>Cancel</Button>
+          <Button variant="ghost" onClick={onClose} disabled={upsert.isPending}>
+            {existing ? 'Done' : 'Cancel'}
+          </Button>
           <Button onClick={submit} disabled={upsert.isPending || !name.trim() || !code.trim()}>
             {upsert.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-            Save
+            {existing ? 'Save changes' : 'Save & configure severities'}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -416,12 +451,11 @@ function SeverityEditor({
   const [active, setActive] = useState(existing?.is_active ?? true);
   const [sortOrder, setSortOrder] = useState(String(existing?.sort_order ?? 0));
 
-  useMemo(() => {
+  useEffect(() => {
     setLabel(existing?.label ?? '');
     setCode(existing?.code ?? '');
     setActive(existing?.is_active ?? true);
     setSortOrder(String(existing?.sort_order ?? 0));
-    return null;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [existing?.id, open]);
 
