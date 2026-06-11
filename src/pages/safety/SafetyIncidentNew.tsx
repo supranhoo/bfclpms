@@ -30,8 +30,6 @@ import { useQuery } from '@tanstack/react-query';
 import { useBusinessUnits, useDepartments } from '@/hooks/useSafetyOrg';
 import { supabase } from '@/integrations/supabase/client';
 import {
-  SAFETY_TYPE_LABELS,
-  SAFETY_SEVERITY_LABELS,
   SAFETY_PRIORITY_LABELS,
   type SafetyIncidentType,
   type SafetyIncidentSeverity,
