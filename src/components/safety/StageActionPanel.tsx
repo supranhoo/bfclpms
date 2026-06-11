@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { Loader2, ArrowRight, Upload, CheckCircle2 } from 'lucide-react';
+import { Loader2, ArrowRight, Upload, CheckCircle2, Undo2 } from 'lucide-react';
 import {
   nextStage,
   SAFETY_STATUS_LABELS,
@@ -32,6 +32,7 @@ const STAGE_TO_EVIDENCE: Record<SafetyIncidentStatus, EvidenceStage | null> = {
   // uploads under the legacy 'verification' bucket to preserve history.
   safety_head_review: 'verification',
   verification: null,
+  rework_required: 'capa',
   closed: null,
   orphaned: null,
 };
@@ -70,6 +71,9 @@ function stageResponsibleIds(
       // globally configured Safety Head if no specific one was stamped
       // on the incident at report time.
       return [incident.safety_head_id ?? globalSafetyHeadId];
+    case 'rework_required':
+      // Sent back to the original assignee for corrections.
+      return [incident.assigned_to];
     default:
       return [];
   }
@@ -102,6 +106,7 @@ export function StageActionPanel({ incident }: { incident: SafetyIncidentRow }) 
   const [rca, setRca] = useState(incident.rca_summary ?? '');
   const [capa, setCapa] = useState(incident.capa_summary ?? '');
   const [finalRemarks, setFinalRemarks] = useState(incident.verification_notes ?? '');
+  const [reworkRemarks, setReworkRemarks] = useState('');
 
   const onPickFile = (e: React.ChangeEvent<HTMLInputElement>, stage: EvidenceStage) => {
     const f = e.target.files?.[0];
@@ -127,6 +132,16 @@ export function StageActionPanel({ incident }: { incident: SafetyIncidentRow }) 
         incident.status === 'safety_head_review' && next === 'closed'
           ? finalRemarks.trim() || undefined
           : undefined,
+    });
+  };
+
+  const sendBackForRework = () => {
+    const remarks = reworkRemarks.trim();
+    if (!remarks) return;
+    transition.mutate({
+      incidentId: incident.id,
+      toStatus: 'rework_required',
+      notes: remarks,
     });
   };
 
@@ -158,7 +173,9 @@ export function StageActionPanel({ incident }: { incident: SafetyIncidentRow }) 
   // must be done by the configured Safety Head only. Any other user (including
   // the investigator who just handed the ticket back) sees a read-only note.
   const canOverride =
-    incident.status === 'safety_head_review' ? false : can('action.incidents.override');
+    incident.status === 'safety_head_review' || incident.status === 'rework_required'
+      ? false
+      : can('action.incidents.override');
   if (!isResponsible && !canOverride) {
     const owner = responsible.find((r): r is string => !!r);
     return (
@@ -207,6 +224,41 @@ export function StageActionPanel({ incident }: { incident: SafetyIncidentRow }) 
             />
             <p className="text-xs text-muted-foreground mt-1">
               Optional. Remarks are stamped on the closure timeline entry for audit.
+            </p>
+          </div>
+        )}
+        {incident.status === 'safety_head_review' && (
+          <div className="border border-dashed border-border rounded-md p-3 space-y-2">
+            <Label>Send back for rework</Label>
+            <Textarea
+              rows={3}
+              value={reworkRemarks}
+              onChange={(e) => setReworkRemarks(e.target.value)}
+              placeholder="Explain what the assignee must fix or add. Remarks are mandatory and shared with the assignee."
+            />
+            <Button
+              variant="outline"
+              onClick={sendBackForRework}
+              disabled={transition.isPending || !reworkRemarks.trim()}
+              className="w-full"
+            >
+              {transition.isPending ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Undo2 className="h-4 w-4 mr-2" />
+              )}
+              Send back to assignee (Rework Required)
+            </Button>
+            <p className="text-xs text-muted-foreground">
+              Returns the incident to the assigned investigator. They must address the remarks and resubmit for review.
+            </p>
+          </div>
+        )}
+        {incident.status === 'rework_required' && (
+          <div className="rounded-md border border-amber-500/30 bg-amber-500/5 p-3">
+            <p className="text-sm font-medium">Rework requested by Safety Head</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              Review the latest timeline entry for the Safety Head&apos;s remarks, update your corrective actions, then resubmit below.
             </p>
           </div>
         )}
@@ -276,7 +328,11 @@ export function StageActionPanel({ incident }: { incident: SafetyIncidentRow }) 
               ) : (
                 <ArrowRight className="h-4 w-4 mr-2" />
               )}
-              {next === 'closed' ? 'Close Incident' : `Advance to ${SAFETY_STATUS_LABELS[next]}`}
+              {next === 'closed'
+                ? 'Close Incident'
+                : incident.status === 'rework_required' && next === 'safety_head_review'
+                  ? 'Resubmit to Safety Head'
+                  : `Advance to ${SAFETY_STATUS_LABELS[next]}`}
             </Button>
           </div>
         )}

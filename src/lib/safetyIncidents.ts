@@ -20,6 +20,7 @@ export const SAFETY_INCIDENT_STAGES = [
 export type SafetyIncidentStatus =
   | (typeof SAFETY_INCIDENT_STAGES)[number]
   | 'verification'
+  | 'rework_required'
   | 'orphaned';
 
 export const SAFETY_STATUS_LABELS: Record<SafetyIncidentStatus, string> = {
@@ -32,6 +33,7 @@ export const SAFETY_STATUS_LABELS: Record<SafetyIncidentStatus, string> = {
   safety_head_review: 'Safety Head Review',
   verification: 'Verification (legacy)',
   closed: 'Closed',
+  rework_required: 'Rework Required',
   orphaned: 'Orphaned',
 };
 
@@ -104,6 +106,8 @@ export const SAFETY_SLA_STATUS_TONE: Record<SafetySlaStatus, 'default' | 'second
 
 export function nextStage(curr: SafetyIncidentStatus): SafetyIncidentStatus | null {
   if (curr === 'orphaned' || curr === 'closed') return null;
+  // Rework loop is non-sequential: resubmission target is safety_head_review.
+  if (curr === 'rework_required') return 'safety_head_review';
   const idx = SAFETY_INCIDENT_STAGES.indexOf(curr as typeof SAFETY_INCIDENT_STAGES[number]);
   if (idx < 0 || idx >= SAFETY_INCIDENT_STAGES.length - 1) return null;
   return SAFETY_INCIDENT_STAGES[idx + 1];
@@ -157,6 +161,14 @@ export function validateFsmTransition(
     return 'Orphaned incidents must be revived server-side';
   }
   if (to === 'orphaned') return null; // exception path, server-validated
+  // Rework loop — non-sequential but legal:
+  //   safety_head_review -> rework_required   (Safety Head sends back)
+  //   rework_required    -> safety_head_review (assignee resubmits)
+  if (from === 'safety_head_review' && to === 'rework_required') return null;
+  if (from === 'rework_required' && to === 'safety_head_review') return null;
+  if (from === 'rework_required' || to === 'rework_required') {
+    return 'Rework Required only loops between Safety Head Review and the assignee';
+  }
   const fromIdx = SAFETY_INCIDENT_STAGES.indexOf(
     from as typeof SAFETY_INCIDENT_STAGES[number],
   );
