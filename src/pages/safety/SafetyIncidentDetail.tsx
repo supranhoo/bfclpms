@@ -19,6 +19,7 @@ import { useSafetySettings } from '@/hooks/useSafetySettings';
 import { SafetySkeletonBlock } from '@/components/safety/SafetySkeletonBlock';
 import { OrphanIncidentDialog } from '@/components/safety/OrphanIncidentDialog';
 import { RoutingChainDisplay } from '@/components/safety/RoutingChainDisplay';
+import { IncidentSlaPanel } from '@/components/safety/IncidentSlaPanel';
 
 export default function SafetyIncidentDetail() {
   const { id } = useParams<{ id: string }>();
@@ -135,6 +136,7 @@ export default function SafetyIncidentDetail() {
       {uiV2 && <IncidentRcaPanel incident={incident} />}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <IncidentSlaPanel incident={incident} />
         <StageActionPanel incident={incident} />
         <Card>
           <CardHeader><CardTitle className="text-base">Status Timeline</CardTitle></CardHeader>
