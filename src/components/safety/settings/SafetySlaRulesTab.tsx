@@ -164,8 +164,16 @@ export default function SafetySlaRulesTab() {
                 )}
                 {filtered.map((r) => (
                   <TableRow key={r.id}>
-                    <TableCell>{SAFETY_TYPE_LABELS[r.incident_type]}</TableCell>
-                    <TableCell>{SAFETY_SEVERITY_LABELS[r.severity]}</TableCell>
+                    <TableCell>
+                      {(r.incident_type_id && typeNameById.get(r.incident_type_id))
+                        ?? (SAFETY_TYPE_LABELS as Record<string, string>)[r.incident_type]
+                        ?? r.incident_type}
+                    </TableCell>
+                    <TableCell>
+                      {(r.severity_id && severityLabelById.get(r.severity_id))
+                        ?? (SAFETY_SEVERITY_LABELS as Record<string, string>)[r.severity]
+                        ?? r.severity}
+                    </TableCell>
                     <TableCell>
                       {r.priority
                         ? SAFETY_PRIORITY_LABELS[r.priority]
