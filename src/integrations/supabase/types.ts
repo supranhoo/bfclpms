@@ -11883,6 +11883,7 @@ export type Database = {
           incident_type:
             | Database["public"]["Enums"]["safety_incident_type"]
             | null
+          incident_type_id: string | null
           involved_person_id: string | null
           involved_person_name: string | null
           location: string | null
@@ -11898,6 +11899,8 @@ export type Database = {
           severity:
             | Database["public"]["Enums"]["safety_incident_severity"]
             | null
+          severity_id: string | null
+          severity_label_snapshot: string | null
           sla_amber_threshold_pct: number | null
           sla_due_at: string | null
           sla_rule_id: string | null
@@ -11907,6 +11910,7 @@ export type Database = {
           sla_target_hours: number | null
           status: Database["public"]["Enums"]["safety_incident_status"] | null
           title: string | null
+          type_label_snapshot: string | null
           updated_at: string | null
           verification_notes: string | null
           verifier_id: string | null
@@ -11929,6 +11933,7 @@ export type Database = {
           incident_type?:
             | Database["public"]["Enums"]["safety_incident_type"]
             | null
+          incident_type_id?: string | null
           involved_person_id?: string | null
           involved_person_name?: string | null
           location?: string | null
@@ -11944,6 +11949,8 @@ export type Database = {
           severity?:
             | Database["public"]["Enums"]["safety_incident_severity"]
             | null
+          severity_id?: string | null
+          severity_label_snapshot?: string | null
           sla_amber_threshold_pct?: number | null
           sla_due_at?: string | null
           sla_rule_id?: string | null
@@ -11953,6 +11960,7 @@ export type Database = {
           sla_target_hours?: number | null
           status?: Database["public"]["Enums"]["safety_incident_status"] | null
           title?: string | null
+          type_label_snapshot?: string | null
           updated_at?: string | null
           verification_notes?: string | null
           verifier_id?: string | null
@@ -11975,6 +11983,7 @@ export type Database = {
           incident_type?:
             | Database["public"]["Enums"]["safety_incident_type"]
             | null
+          incident_type_id?: string | null
           involved_person_id?: string | null
           involved_person_name?: string | null
           location?: string | null
@@ -11990,6 +11999,8 @@ export type Database = {
           severity?:
             | Database["public"]["Enums"]["safety_incident_severity"]
             | null
+          severity_id?: string | null
+          severity_label_snapshot?: string | null
           sla_amber_threshold_pct?: number | null
           sla_due_at?: string | null
           sla_rule_id?: string | null
@@ -11999,6 +12010,7 @@ export type Database = {
           sla_target_hours?: number | null
           status?: Database["public"]["Enums"]["safety_incident_status"] | null
           title?: string | null
+          type_label_snapshot?: string | null
           updated_at?: string | null
           verification_notes?: string | null
           verifier_id?: string | null
@@ -12047,6 +12059,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "safety_incidents_incident_type_id_fkey"
+            columns: ["incident_type_id"]
+            isOneToOne: false
+            referencedRelation: "safety_incident_types"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "safety_incidents_involved_person_id_fkey"
             columns: ["involved_person_id"]
             isOneToOne: false
@@ -12128,6 +12147,13 @@ export type Database = {
             columns: ["safety_head_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "safety_incidents_severity_id_fkey"
+            columns: ["severity_id"]
+            isOneToOne: false
+            referencedRelation: "safety_incident_severities"
             referencedColumns: ["id"]
           },
           {
