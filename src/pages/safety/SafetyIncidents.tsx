@@ -102,6 +102,26 @@ async function fetchIncidentsPage({
     }
   }
 
+  // Hydrate involved-person profile (employee_code + full_name) so the
+  // Accident-filtered grid can surface the involved employee inline.
+  const personIds = Array.from(
+    new Set(rows.map((r) => r.involved_person_id).filter(Boolean) as string[]),
+  );
+  if (personIds.length) {
+    const { data: profs } = await supabase
+      .from('profiles')
+      .select('id, full_name, employee_code')
+      .in('id', personIds);
+    const pmap = new Map((profs ?? []).map((p: any) => [p.id, p]));
+    for (const r of rows as any[]) {
+      const p = pmap.get(r.involved_person_id);
+      if (p) {
+        r.involved_person_full_name = p.full_name;
+        r.involved_person_employee_code = p.employee_code;
+      }
+    }
+  }
+
   return { rows, total: count ?? 0 };
 }
 
@@ -112,6 +132,7 @@ export default function SafetyIncidents() {
   const navigate = useNavigate();
   const [draft, setDraft] = useState<IncidentFilters>(INITIAL);
   const [orphanTarget, setOrphanTarget] = useState<SafetyIncidentRow | null>(null);
+  const [submittedTypeId, setSubmittedTypeId] = useState<string>('all');
 
   const {
     rows, total, page, pageSize, totalPages,
@@ -122,8 +143,8 @@ export default function SafetyIncidents() {
     fetchIncidentsPage,
   );
 
-  const handleSubmit = () => submit(draft);
-  const handleReset = () => { setDraft(INITIAL); reset(); };
+  const handleSubmit = () => { setSubmittedTypeId(draft.typeId); submit(draft); };
+  const handleReset = () => { setDraft(INITIAL); setSubmittedTypeId('all'); reset(); };
 
   // Dynamic dropdown sources — replaces the hardcoded type/severity lists.
   const { data: typeOptions = [] } = useSafetyIncidentTypes({ activeOnly: false });
@@ -131,6 +152,18 @@ export default function SafetyIncidents() {
     draft.typeId !== 'all' ? draft.typeId : null,
     { activeOnly: false },
   );
+
+  /**
+   * Show the "Involved Person" column when the submitted Type filter resolves
+   * to an Accident-style incident type. Match by name (case-insensitive) so
+   * admins renaming or adding accident variants (e.g. "Accident — Major")
+   * still benefit without code changes — Zero-Hardcoding Rule.
+   */
+  const showInvolvedPerson = useMemo(() => {
+    if (submittedTypeId === 'all') return false;
+    const t = typeOptions.find((x) => x.id === submittedTypeId);
+    return !!t && /accident/i.test(t.name);
+  }, [submittedTypeId, typeOptions]);
 
   const openRow = (i: SafetyIncidentRow) => {
     if (i.status === 'orphaned') setOrphanTarget(i);
@@ -274,6 +307,9 @@ export default function SafetyIncidents() {
               <TableHead>Type</TableHead>
               <TableHead>Severity</TableHead>
               <TableHead className="hidden md:table-cell">Business Unit</TableHead>
+              {showInvolvedPerson && (
+                <TableHead>Involved Person</TableHead>
+              )}
               <TableHead>Status</TableHead>
               <TableHead>SLA</TableHead>
               <TableHead className="hidden md:table-cell">Due / Remaining</TableHead>
@@ -308,6 +344,24 @@ export default function SafetyIncidents() {
                     <span className="text-muted-foreground">—</span>
                   )}
                 </TableCell>
+                {showInvolvedPerson && (
+                  <TableCell className="text-xs">
+                    {(i as any).involved_person_full_name || i.involved_person_name ? (
+                      <div>
+                        <div>
+                          {(i as any).involved_person_full_name ?? i.involved_person_name}
+                        </div>
+                        {(i as any).involved_person_employee_code && (
+                          <div className="text-muted-foreground font-mono">
+                            {(i as any).involved_person_employee_code}
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
+                  </TableCell>
+                )}
                 <TableCell><SafetyStatusBadge status={i.status} /></TableCell>
                 <TableCell>
                   {i.sla_status ? (
