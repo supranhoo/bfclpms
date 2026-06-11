@@ -10,7 +10,8 @@ import type { SafetyIncidentRow } from '@/hooks/useSafetyIncidents';
  */
 export function IncidentRcaPanel({ incident }: { incident: SafetyIncidentRow }) {
   const hasAny = !!(incident.rca_summary || incident.capa_summary || incident.verification_notes);
-  if (!hasAny) {
+  const isClosed = incident.status === 'closed';
+  if (!hasAny && !isClosed) {
     return (
       <Card>
         <CardHeader><CardTitle className="text-base">Investigation Summary</CardTitle></CardHeader>
@@ -23,6 +24,14 @@ export function IncidentRcaPanel({ incident }: { incident: SafetyIncidentRow }) 
       </Card>
     );
   }
+  // Verification stage was retired (June 2026). For closed incidents the
+  // `verification_notes` column now stores the Safety Head's final closure
+  // remarks. Re-label the section accordingly and never show "Pending" once
+  // the incident is terminal.
+  const closureTitle = isClosed ? 'Closure Remarks' : 'Verification';
+  const closureFallback = isClosed
+    ? 'Closed without additional remarks.'
+    : 'Pending';
   return (
     <Card>
       <CardHeader>
@@ -41,8 +50,9 @@ export function IncidentRcaPanel({ incident }: { incident: SafetyIncidentRow }) 
         />
         <Section
           icon={<ShieldCheck className="h-4 w-4" />}
-          title="Verification"
+          title={closureTitle}
           body={incident.verification_notes}
+          fallback={closureFallback}
           className="md:col-span-2"
         />
       </CardContent>
@@ -54,11 +64,13 @@ function Section({
   icon,
   title,
   body,
+  fallback,
   className,
 }: {
   icon: React.ReactNode;
   title: string;
   body: string | null;
+  fallback?: string;
   className?: string;
 }) {
   return (
@@ -70,7 +82,7 @@ function Section({
       {body ? (
         <p className="text-sm whitespace-pre-wrap text-foreground/90">{body}</p>
       ) : (
-        <p className="text-xs text-muted-foreground italic">Pending</p>
+        <p className="text-xs text-muted-foreground italic">{fallback ?? 'Pending'}</p>
       )}
     </div>
   );
