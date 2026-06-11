@@ -13506,6 +13506,7 @@ export type Database = {
         | "verification"
         | "closed"
         | "orphaned"
+        | "rework_required"
       safety_incident_type:
         | "near_miss"
         | "unsafe_act"
@@ -13778,6 +13779,7 @@ export const Constants = {
         "verification",
         "closed",
         "orphaned",
+        "rework_required",
       ],
       safety_incident_type: [
         "near_miss",
