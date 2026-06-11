@@ -8,10 +8,12 @@
 
 export const SAFETY_INCIDENT_STAGES = [
   'reported',
+  'management_review',
   'assigned',
   'investigation',
   'rca',
   'corrective_action',
+  'safety_head_review',
   'verification',
   'closed',
 ] as const;
@@ -22,10 +24,12 @@ export type SafetyIncidentStatus =
 
 export const SAFETY_STATUS_LABELS: Record<SafetyIncidentStatus, string> = {
   reported: 'Reported',
+  management_review: 'Management Review',
   assigned: 'Assigned',
   investigation: 'Investigation',
   rca: 'Root Cause Analysis',
   corrective_action: 'Corrective Action',
+  safety_head_review: 'Safety Head Review',
   verification: 'Verification',
   closed: 'Closed',
   orphaned: 'Orphaned',
