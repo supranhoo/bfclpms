@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -147,7 +147,7 @@ export function AuditScorecard({
   };
 
   const kpiIds = kpis?.map(k => k.id) || [];
-  const { data: submissions } = useReviewSubmissions(kpiIds);
+  const { data: submissions, isLoading: isSubmissionsLoading } = useReviewSubmissions(kpiIds);
   const { data: sentBackKpiIds } = useSentBackKpis(kpiIds);
   const { data: queries } = useKpiQueries(kpiIds);
   const { data: auditKpiAssignments } = useAuditKpiAssignments(kpiIds);
@@ -204,6 +204,32 @@ export function AuditScorecard({
   const { saveOverrides, acceptPreviousLevel, isLoading: isSavingOverrides } = useReviewerSubPeriodOverride();
 
   const submissionMap = useMemo(() => new Map(submissions?.map(s => [s.kpi_id, s])), [submissions]);
+
+  // RCA Jun-2026: while the audit sheet is open for a specific KPI, subscribe
+  // to live changes on its review_submissions row so any insert/update lands
+  // immediately and the Review Journey tiles never show stale "N/A".
+  useEffect(() => {
+    if (!reviewSheetOpen || !selectedKpi?.id) return;
+    const channel = supabase
+      .channel(`audit-review-sub-${selectedKpi.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'review_submissions',
+          filter: `kpi_id=eq.${selectedKpi.id}`,
+        },
+        () => {
+          queryClient.invalidateQueries({ queryKey: ['review-submissions'] });
+        },
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [reviewSheetOpen, selectedKpi?.id, queryClient]);
+
   const queryMap = useMemo(() => {
     const map = new Map<string, typeof queries>();
     queries?.forEach(q => {
@@ -401,6 +427,11 @@ export function AuditScorecard({
 
   const openReviewSheet = (kpi: KPI) => {
     setSelectedKpi(kpi);
+    // RCA Jun-2026: force a fresh fetch so the Review Journey never renders
+    // stale "N/A" tiles when a KPI was just promoted to the audit stage and
+    // the cached snapshot pre-dates the row insert.
+    queryClient.invalidateQueries({ queryKey: ['review-submissions'] });
+    queryClient.invalidateQueries({ queryKey: ['kpis', employee.id] });
     const existing = submissionMap.get(kpi.id);
     // POLICY §107: SSOT hydration. Auditor's saved value/score wins over employee data.
     const bundle = hydrateReviewerDraft(existing as any, kpi as any, 'auditor');
@@ -874,7 +905,14 @@ export function AuditScorecard({
             {selectedKpi && (
               <KpiReviewPanel
                 kpi={selectedKpi}
-                submission={submissionMap.get(selectedKpi.id) || null}
+                submission={
+                  // RCA Jun-2026: fall back to the cross-period `allSubmissions`
+                  // snapshot when the current-period map is empty/stale so the
+                  // auditor never sees N/A while the row exists in the DB.
+                  submissionMap.get(selectedKpi.id)
+                  ?? allSubmissions?.find(s => s.kpi_id === selectedKpi.id)
+                  ?? null
+                }
                 allKpis={allKpis || []}
                 allSubmissions={allSubmissions || []}
                 queries={queryMap.get(selectedKpi.id) || []}
@@ -888,6 +926,7 @@ export function AuditScorecard({
                 orgKpiDataOwnerNames={getOwnerNamesForKpi(dataOwnerNamesMap, selectedKpi)}
                 employeeName={employee.full_name || undefined}
                 employeeCode={employee.employee_code || undefined}
+                isSubmissionLoading={isSubmissionsLoading}
               />
             )}
             

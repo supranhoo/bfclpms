@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { LucideIcon, FileText, ExternalLink } from 'lucide-react';
 import { openStorageFile, buildEvidenceFileName } from '@/lib/storageDownload';
 import { Badge } from '@/components/ui/badge';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import { RatingLevel } from '@/hooks/useKpis';
@@ -22,6 +23,12 @@ interface ReviewStageCardProps {
   achievedValue?: number | null;
   kpiName?: string | null;
   employeeCode?: string | null;
+  /**
+   * RCA Jun-2026 (Auditor saw N/A while data existed): when the parent's
+   * submissions query is still in flight, render a skeleton instead of
+   * the misleading "N/A" pill so loading is not confused with "no data".
+   */
+  isLoading?: boolean;
 }
 
 const iconColorClasses = {
@@ -65,6 +72,7 @@ export function ReviewStageCard({
   achievedValue,
   kpiName,
   employeeCode,
+  isLoading = false,
 }: ReviewStageCardProps) {
   const isPending = status === 'pending';
   const isCurrent = status === 'current';
@@ -109,7 +117,9 @@ export function ReviewStageCard({
             Value: <span className="font-medium text-foreground">{achievedValue}</span>
           </div>
         )}
-        {isNA ? (
+        {isLoading && !isPending ? (
+          <Skeleton data-testid="stage-score-skeleton" className="h-5 w-16" />
+        ) : isNA ? (
           <Badge variant="outline" className="text-xs">N/A</Badge>
         ) : score !== null ? (
           <Badge 

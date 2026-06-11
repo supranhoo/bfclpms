@@ -95,6 +95,12 @@ interface KpiJourneySectionProps {
   employeeCode?: string;
   reportingManagerName?: string;
   orgAchievedValue?: number | null;
+  /**
+   * RCA Jun-2026: when true (parent's `useReviewSubmissions` still loading),
+   * stage tiles render skeletons instead of "N/A" pills so a transient
+   * loading state cannot be confused with "no submission exists".
+   */
+  isLoading?: boolean;
 }
 
 // Determine the status of each review stage based on KPI status and view level
@@ -149,6 +155,7 @@ export function KpiJourneySection({
   employeeCode,
   reportingManagerName,
   orgAchievedValue,
+  isLoading = false,
 }: KpiJourneySectionProps) {
   const { data: profileData } = useEmployeeProfileForPdf(kpi.employee_id);
   const effectiveStages = workflowStages || DEFAULT_WORKFLOW_STAGES;
@@ -808,6 +815,7 @@ export function KpiJourneySection({
                 achievedValue={data.achievedValue}
                 kpiName={kpi.kpi_name}
                 employeeCode={resolvedEmployeeCode !== '-' ? resolvedEmployeeCode : null}
+                isLoading={isLoading && !submission}
               />
             );
           })}
