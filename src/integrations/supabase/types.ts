@@ -9349,6 +9349,80 @@ export type Database = {
           },
         ]
       }
+      safety_incident_sla_rules: {
+        Row: {
+          amber_threshold_pct: number
+          created_at: string
+          created_by: string | null
+          id: string
+          incident_type: Database["public"]["Enums"]["safety_incident_type"]
+          is_active: boolean
+          notes: string | null
+          priority: Database["public"]["Enums"]["safety_priority"] | null
+          severity: Database["public"]["Enums"]["safety_incident_severity"]
+          target_hours: number
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          amber_threshold_pct?: number
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          incident_type: Database["public"]["Enums"]["safety_incident_type"]
+          is_active?: boolean
+          notes?: string | null
+          priority?: Database["public"]["Enums"]["safety_priority"] | null
+          severity: Database["public"]["Enums"]["safety_incident_severity"]
+          target_hours: number
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          amber_threshold_pct?: number
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          incident_type?: Database["public"]["Enums"]["safety_incident_type"]
+          is_active?: boolean
+          notes?: string | null
+          priority?: Database["public"]["Enums"]["safety_priority"] | null
+          severity?: Database["public"]["Enums"]["safety_incident_severity"]
+          target_hours?: number
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "safety_incident_sla_rules_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "eligible_login_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "safety_incident_sla_rules_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "safety_incident_sla_rules_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "eligible_login_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "safety_incident_sla_rules_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       safety_incident_timeline: {
         Row: {
           changed_by: string | null
@@ -9435,6 +9509,7 @@ export type Database = {
           involved_person_name: string | null
           location: string
           occurred_at: string
+          priority: Database["public"]["Enums"]["safety_priority"]
           rca_summary: string | null
           reporter_id: string
           routed_bu_head_id: string | null
@@ -9443,6 +9518,11 @@ export type Database = {
           routing_status: string
           safety_head_id: string | null
           severity: Database["public"]["Enums"]["safety_incident_severity"]
+          sla_amber_threshold_pct: number | null
+          sla_due_at: string | null
+          sla_rule_id: string | null
+          sla_start_at: string | null
+          sla_target_hours: number | null
           status: Database["public"]["Enums"]["safety_incident_status"]
           title: string
           updated_at: string
@@ -9469,6 +9549,7 @@ export type Database = {
           involved_person_name?: string | null
           location: string
           occurred_at?: string
+          priority?: Database["public"]["Enums"]["safety_priority"]
           rca_summary?: string | null
           reporter_id: string
           routed_bu_head_id?: string | null
@@ -9477,6 +9558,11 @@ export type Database = {
           routing_status?: string
           safety_head_id?: string | null
           severity: Database["public"]["Enums"]["safety_incident_severity"]
+          sla_amber_threshold_pct?: number | null
+          sla_due_at?: string | null
+          sla_rule_id?: string | null
+          sla_start_at?: string | null
+          sla_target_hours?: number | null
           status?: Database["public"]["Enums"]["safety_incident_status"]
           title: string
           updated_at?: string
@@ -9503,6 +9589,7 @@ export type Database = {
           involved_person_name?: string | null
           location?: string
           occurred_at?: string
+          priority?: Database["public"]["Enums"]["safety_priority"]
           rca_summary?: string | null
           reporter_id?: string
           routed_bu_head_id?: string | null
@@ -9511,6 +9598,11 @@ export type Database = {
           routing_status?: string
           safety_head_id?: string | null
           severity?: Database["public"]["Enums"]["safety_incident_severity"]
+          sla_amber_threshold_pct?: number | null
+          sla_due_at?: string | null
+          sla_rule_id?: string | null
+          sla_start_at?: string | null
+          sla_target_hours?: number | null
           status?: Database["public"]["Enums"]["safety_incident_status"]
           title?: string
           updated_at?: string
@@ -11606,6 +11698,7 @@ export type Database = {
           involved_person_name: string | null
           location: string | null
           occurred_at: string | null
+          priority: Database["public"]["Enums"]["safety_priority"] | null
           rca_summary: string | null
           reporter_id: string | null
           routed_bu_head_id: string | null
@@ -11616,7 +11709,13 @@ export type Database = {
           severity:
             | Database["public"]["Enums"]["safety_incident_severity"]
             | null
+          sla_amber_threshold_pct: number | null
+          sla_due_at: string | null
+          sla_rule_id: string | null
+          sla_start_at: string | null
           sla_state: string | null
+          sla_status: string | null
+          sla_target_hours: number | null
           status: Database["public"]["Enums"]["safety_incident_status"] | null
           title: string | null
           updated_at: string | null
@@ -11645,6 +11744,7 @@ export type Database = {
           involved_person_name?: string | null
           location?: string | null
           occurred_at?: string | null
+          priority?: Database["public"]["Enums"]["safety_priority"] | null
           rca_summary?: string | null
           reporter_id?: string | null
           routed_bu_head_id?: string | null
@@ -11655,7 +11755,13 @@ export type Database = {
           severity?:
             | Database["public"]["Enums"]["safety_incident_severity"]
             | null
+          sla_amber_threshold_pct?: number | null
+          sla_due_at?: string | null
+          sla_rule_id?: string | null
+          sla_start_at?: string | null
           sla_state?: never
+          sla_status?: never
+          sla_target_hours?: number | null
           status?: Database["public"]["Enums"]["safety_incident_status"] | null
           title?: string | null
           updated_at?: string | null
@@ -11684,6 +11790,7 @@ export type Database = {
           involved_person_name?: string | null
           location?: string | null
           occurred_at?: string | null
+          priority?: Database["public"]["Enums"]["safety_priority"] | null
           rca_summary?: string | null
           reporter_id?: string | null
           routed_bu_head_id?: string | null
@@ -11694,7 +11801,13 @@ export type Database = {
           severity?:
             | Database["public"]["Enums"]["safety_incident_severity"]
             | null
+          sla_amber_threshold_pct?: number | null
+          sla_due_at?: string | null
+          sla_rule_id?: string | null
+          sla_start_at?: string | null
           sla_state?: never
+          sla_status?: never
+          sla_target_hours?: number | null
           status?: Database["public"]["Enums"]["safety_incident_status"] | null
           title?: string | null
           updated_at?: string | null
@@ -12963,6 +13076,18 @@ export type Database = {
           weightage: number
         }[]
       }
+      resolve_safety_incident_sla: {
+        Args: {
+          p_priority: Database["public"]["Enums"]["safety_priority"]
+          p_severity: Database["public"]["Enums"]["safety_incident_severity"]
+          p_type: Database["public"]["Enums"]["safety_incident_type"]
+        }
+        Returns: {
+          amber_threshold_pct: number
+          rule_id: string
+          target_hours: number
+        }[]
+      }
       resolve_safety_routing: {
         Args: { p_bu: string; p_dept: string }
         Returns: {
@@ -13401,6 +13526,7 @@ export type Database = {
         | "excavation"
         | "lifting"
         | "general"
+      safety_priority: "low" | "medium" | "high" | "critical"
       safety_training_status:
         | "pending"
         | "in_progress"
@@ -13676,6 +13802,7 @@ export const Constants = {
         "lifting",
         "general",
       ],
+      safety_priority: ["low", "medium", "high", "critical"],
       safety_training_status: [
         "pending",
         "in_progress",

@@ -18,6 +18,7 @@ import SafetyDataExportDialog from '@/components/safety/SafetyDataExportDialog';
 import SafetyMasterDataPanel from '@/components/safety/SafetyMasterDataPanel';
 import SafetyPermissionsTab from '@/components/safety/settings/SafetyPermissionsTab';
 import SafetyIncidentRoutingTab from '@/components/safety/settings/SafetyIncidentRoutingTab';
+import SafetySlaRulesTab from '@/components/safety/settings/SafetySlaRulesTab';
 
 /**
  * SafetySettings — Cross-cutting Phase X
@@ -137,6 +138,8 @@ export default function SafetySettings() {
       <SafetyMasterDataPanel />
 
       <SafetyIncidentRoutingTab />
+
+      <SafetySlaRulesTab />
 
       <SafetyPermissionsTab />
 

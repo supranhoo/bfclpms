@@ -69,6 +69,39 @@ export const SLA_BADGE_VARIANT: Record<SlaState, 'default' | 'secondary' | 'dest
   closed: 'outline',
 };
 
+/** Priority (independent from severity). Drives SLA target rule resolution. */
+export type SafetyIncidentPriority = 'low' | 'medium' | 'high' | 'critical';
+export const SAFETY_PRIORITY_LABELS: Record<SafetyIncidentPriority, string> = {
+  low: 'Low',
+  medium: 'Medium',
+  high: 'High',
+  critical: 'Critical',
+};
+
+/** SLA business-status derived from the stored, immutable SLA window. */
+export type SafetySlaStatus =
+  | 'on_track'
+  | 'at_risk'
+  | 'overdue'
+  | 'closed_on_time'
+  | 'closed_late';
+
+export const SAFETY_SLA_STATUS_LABELS: Record<SafetySlaStatus, string> = {
+  on_track: 'On Track',
+  at_risk: 'At Risk',
+  overdue: 'Overdue',
+  closed_on_time: 'Closed On Time',
+  closed_late: 'Closed Late',
+};
+
+export const SAFETY_SLA_STATUS_TONE: Record<SafetySlaStatus, 'default' | 'secondary' | 'destructive' | 'outline'> = {
+  on_track: 'secondary',
+  at_risk: 'default',
+  overdue: 'destructive',
+  closed_on_time: 'outline',
+  closed_late: 'destructive',
+};
+
 export function nextStage(curr: SafetyIncidentStatus): SafetyIncidentStatus | null {
   if (curr === 'orphaned' || curr === 'closed') return null;
   const idx = SAFETY_INCIDENT_STAGES.indexOf(curr as typeof SAFETY_INCIDENT_STAGES[number]);

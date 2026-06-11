@@ -22,9 +22,12 @@ import { OrphanIncidentDialog } from '@/components/safety/OrphanIncidentDialog';
 import {
   SAFETY_SEVERITY_LABELS,
   SAFETY_TYPE_LABELS,
+  SAFETY_SLA_STATUS_LABELS,
+  SAFETY_SLA_STATUS_TONE,
 } from '@/lib/safetyIncidents';
+import { Badge } from '@/components/ui/badge';
 import type { SafetyIncidentRow } from '@/hooks/useSafetyIncidents';
-import { format } from 'date-fns';
+import { format, formatDistanceToNowStrict } from 'date-fns';
 
 /**
  * Safety Incidents — POLICY §113 / ADR-050.
@@ -40,15 +43,19 @@ const TYPE_OPTIONS = [
   'all', 'near_miss', 'first_aid', 'medical_treatment', 'lost_time',
   'fatality', 'property_damage', 'environmental', 'other',
 ] as const;
+const SLA_STATUS_OPTIONS = [
+  'all', 'on_track', 'at_risk', 'overdue', 'closed_on_time', 'closed_late',
+] as const;
 
 interface IncidentFilters {
   status: string;
   severity: string;
   type: string;
+  slaStatus: string;
   search: string;
 }
 
-const INITIAL: IncidentFilters = { status: 'all', severity: 'all', type: 'all', search: '' };
+const INITIAL: IncidentFilters = { status: 'all', severity: 'all', type: 'all', slaStatus: 'all', search: '' };
 
 async function fetchIncidentsPage({
   filters, range,
@@ -62,6 +69,7 @@ async function fetchIncidentsPage({
   if (filters.status !== 'all') q = q.eq('status', filters.status);
   if (filters.severity !== 'all') q = q.eq('severity', filters.severity);
   if (filters.type !== 'all') q = q.eq('incident_type', filters.type);
+  if (filters.slaStatus !== 'all') q = q.eq('sla_status', filters.slaStatus);
   if (filters.search.trim()) {
     const needle = filters.search.trim();
     q = q.or(
@@ -107,6 +115,7 @@ export default function SafetyIncidents() {
     if (draft.status !== 'all') n++;
     if (draft.severity !== 'all') n++;
     if (draft.type !== 'all') n++;
+    if (draft.slaStatus !== 'all') n++;
     if (draft.search.trim()) n++;
     return n;
   }, [draft]);
@@ -158,6 +167,16 @@ export default function SafetyIncidents() {
           <SelectContent>
             {TYPE_OPTIONS.map((s) => (
               <SelectItem key={s} value={s}>{s === 'all' ? 'All types' : s}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select value={draft.slaStatus} onValueChange={(v) => setDraft((d) => ({ ...d, slaStatus: v }))}>
+          <SelectTrigger><SelectValue placeholder="SLA status" /></SelectTrigger>
+          <SelectContent>
+            {SLA_STATUS_OPTIONS.map((s) => (
+              <SelectItem key={s} value={s}>
+                {s === 'all' ? 'All SLA statuses' : SAFETY_SLA_STATUS_LABELS[s as keyof typeof SAFETY_SLA_STATUS_LABELS]}
+              </SelectItem>
             ))}
           </SelectContent>
         </Select>
@@ -213,6 +232,7 @@ export default function SafetyIncidents() {
               <TableHead>Severity</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>SLA</TableHead>
+              <TableHead className="hidden md:table-cell">Due / Remaining</TableHead>
               <TableHead className="hidden lg:table-cell">Routing</TableHead>
               <TableHead>Reported</TableHead>
             </TableRow>
@@ -231,7 +251,28 @@ export default function SafetyIncidents() {
                 <TableCell>{SAFETY_TYPE_LABELS[i.incident_type]}</TableCell>
                 <TableCell>{SAFETY_SEVERITY_LABELS[i.severity]}</TableCell>
                 <TableCell><SafetyStatusBadge status={i.status} /></TableCell>
-                <TableCell><SlaBadge state={i.sla_state} /></TableCell>
+                <TableCell>
+                  {i.sla_status ? (
+                    <Badge variant={SAFETY_SLA_STATUS_TONE[i.sla_status]}>
+                      {SAFETY_SLA_STATUS_LABELS[i.sla_status]}
+                    </Badge>
+                  ) : (
+                    <SlaBadge state={i.sla_state} />
+                  )}
+                </TableCell>
+                <TableCell className="hidden md:table-cell text-xs">
+                  {i.sla_due_at ? (
+                    <div>
+                      <div>{format(new Date(i.sla_due_at), 'dd MMM yyyy, HH:mm')}</div>
+                      <div className="text-muted-foreground">
+                        {new Date(i.sla_due_at) > new Date() ? 'in ' : 'overdue by '}
+                        {formatDistanceToNowStrict(new Date(i.sla_due_at))}
+                      </div>
+                    </div>
+                  ) : (
+                    <span className="text-muted-foreground">—</span>
+                  )}
+                </TableCell>
                 <TableCell className="hidden lg:table-cell text-xs">
                   {i.routing_status === 'unrouted' ? (
                     <span className="text-amber-600">Unrouted</span>

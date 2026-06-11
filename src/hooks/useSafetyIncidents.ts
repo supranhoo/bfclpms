@@ -6,6 +6,8 @@ import type {
   SafetyIncidentStatus,
   SafetyIncidentSeverity,
   SafetyIncidentType,
+  SafetyIncidentPriority,
+  SafetySlaStatus,
 } from '@/lib/safetyIncidents';
 
 /**
@@ -54,6 +56,13 @@ export interface SafetyIncidentRow {
   routing_status?: 'dept' | 'division' | 'unrouted' | 'legacy' | null;
   safety_head_id?: string | null;
   verifier_id?: string | null;
+  priority?: SafetyIncidentPriority | null;
+  sla_rule_id?: string | null;
+  sla_start_at?: string | null;
+  sla_due_at?: string | null;
+  sla_target_hours?: number | null;
+  sla_amber_threshold_pct?: number | null;
+  sla_status?: SafetySlaStatus | null;
 }
 
 export const SAFETY_INCIDENTS_KEY = ['safety', 'incidents'] as const;
@@ -94,6 +103,7 @@ export interface ReportIncidentInput {
   location: string;
   incident_type: SafetyIncidentType;
   severity: SafetyIncidentSeverity;
+  priority?: SafetyIncidentPriority;
   business_unit_id?: string | null;
   department_id?: string | null;
   involved_person_id?: string | null;
