@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   ArrowLeft, Plus, Loader2, Trash2, ChevronDown, ChevronRight, GripVertical,
@@ -139,6 +139,13 @@ export default function SafetyIncidentTypes() {
         open={creating || !!editing}
         existing={editing}
         onClose={() => { setCreating(false); setEditing(null); }}
+        onSaved={(row) => {
+          // Switch from "create" to "edit" so severities can be configured in the same dialog.
+          if (creating) {
+            setCreating(false);
+            setEditing(row);
+          }
+        }}
       />
 
       <AlertDialog open={!!deleting} onOpenChange={(o) => !o && setDeleting(null)}>
