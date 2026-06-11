@@ -1,129 +1,94 @@
-## Assumptions
+## Goal
+The Auditor (Ayush) sees Self / Manager / Auditor as "N/A" inside the Audit Review sheet, while Admin's "View KPI Details" shows the real scores (Self=5, Manager=5) for the same KPI / employee / period. Make the auditor always see what is actually in `review_submissions`, regardless of how recently the KPI moved to the audit stage.
 
-- "Division" maps to `business_units`; "Department" maps to `departments` (FK to BU). No separate `divisions` table is needed — reuse existing org SSOT per `useSafetyOrg`.
-- Resolved routing is **frozen on the incident** at report time so later config edits do not rewrite history (matches the PMS "immutable resolved chain" pattern).
-- BU Head / Manager / 2nd Manager are `profiles.id` references (active employees only). No new role enum.
-- Admin UI lives under existing `SafetySettings` hub as a new "Incident Routing" tab, gated by the existing `safety_permission_keys` (`nav.settings` + a new `action.routing.manage`).
-- Notifications stay on the existing `trg_safety_incident_after_insert` path — we extend it to notify the resolved chain in addition to (not instead of) the current Safety Admin/Head fallback.
-- "Missing routing fallback" = incident still created successfully, but flagged with `routing_status = 'unrouted'` and surfaced as a warning badge; Safety Admin/Head continue to receive notification (current behavior).
+## RCA (what the database and RLS already prove)
 
-## Risk & Impact Report
+For the reported case (Jyoti Prakash Dwivedi · Environment Compliance · April 2026):
 
-| Area | Impact | Mitigation |
-|---|---|---|
-| Data | New table `safety_incident_routing_rules` + 4 nullable columns on `safety_incidents` (`routed_bu_head_id`, `routed_manager_id`, `routed_second_manager_id`, `routing_status`). Additive only. | Backfill `routing_status='legacy'` for existing rows. |
-| Workflow | `report_safety_incident` RPC extended to resolve + stamp routing. Existing trigger unchanged in numbering/SLA logic. | Resolver is a separate SECURITY DEFINER helper; failures degrade to `unrouted`, never block submission. |
-| UI/UX | Incident detail + list show 3 new fields; Settings gets a Routing tab. | Reuse existing `Table`, `SafetyResponsiveList`, employee combobox patterns. |
-| RLS | New table: admin/safety-head write, all authenticated read (config is non-sensitive). New incident cols inherit existing row policies. | Explicit GRANTs + policies in migration. |
-| Regression | Existing incidents without routing rules must keep working. | Resolver returns null on miss; UI tolerates nulls; trigger fallback to Admin/Head preserved. |
-| Scalability | One rule lookup per insert, indexed on `(business_unit_id, department_id, is_active)`. Negligible cost. | Partial unique indexes for the "one active rule" constraint. |
+- `kpis.id = 468b853f…`, `status = 'audit'`, `is_org_level = true`, `weightage = 2`.
+- `review_submissions` row exists (`07568aa7…`) with `self_score = 5`, `manager_score = 5`, `auditor_score = NULL`, `is_na = false`, `updated_at = 2026-06-11 11:21:11`.
+- RLS on `review_submissions` includes `"Admins and auditors can view all submissions"` (qual: `has_role(auth.uid(), 'auditor')`). RLS on `kpis` allows any auditor via `can_view_kpi_row()`.
 
-Rollback: drop new table + 4 columns + RPC changes; trigger reverts to pre-change body. No destructive change to existing data.
+So the data is there and Ayush is allowed to read it. The N/A in the journey tiles can only come from the client passing `submission = null` to `KpiJourneySection`. Three contributing client-side issues were found:
 
-## Database Migration
+1. **Stale `useReviewSubmissions` snapshot.** `AuditScorecard` calls `useReviewSubmissions(kpiIds)` with `queryKey: ['review-submissions', kpiIds]`. When a KPI is just promoted to `audit` and the auditor opens the sheet, React Query may still serve the previous snapshot (which did not include the row keyed by the new `kpi_id`), so `submissionMap.get(selectedKpi.id)` returns `undefined` and the panel renders all stages as N/A. There is no realtime invalidation on `review_submissions` from `AuditScorecard`.
+2. **Indistinguishable "no submission" vs "loading" in `KpiJourneySection`.** When `submission` is `null/undefined` the section unconditionally renders `null` scores → "N/A" tiles, even while the submissions query is still in flight. So a transient loading state looks identical to "really no data".
+3. **`submissionMap` is built only from the current-period `submissions`** (the 150-line block), but the journey panel is also opened from places that already have `allSubmissions` cached. There is no fallback to `allSubmissions.find(s => s.kpi_id === selectedKpi.id)` when the current-period query is empty/stale.
 
-```sql
--- 1. Routing rules table
-CREATE TABLE public.safety_incident_routing_rules (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  business_unit_id uuid NOT NULL REFERENCES public.business_units(id) ON DELETE CASCADE,
-  department_id uuid NULL REFERENCES public.departments(id) ON DELETE CASCADE,
-  bu_head_id uuid NOT NULL REFERENCES public.profiles(id),
-  manager_id uuid NOT NULL REFERENCES public.profiles(id),
-  second_manager_id uuid NOT NULL REFERENCES public.profiles(id),
-  is_active boolean NOT NULL DEFAULT true,
-  created_by uuid NULL REFERENCES public.profiles(id),
-  updated_by uuid NULL REFERENCES public.profiles(id),
-  created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now()
-);
+## Fix plan
 
--- Partial unique: one active rule per dept; one active default per BU (dept NULL)
-CREATE UNIQUE INDEX uq_safety_routing_active_dept
-  ON public.safety_incident_routing_rules (business_unit_id, department_id)
-  WHERE is_active AND department_id IS NOT NULL;
-CREATE UNIQUE INDEX uq_safety_routing_active_bu_default
-  ON public.safety_incident_routing_rules (business_unit_id)
-  WHERE is_active AND department_id IS NULL;
-CREATE INDEX ix_safety_routing_lookup
-  ON public.safety_incident_routing_rules (business_unit_id, department_id, is_active);
+Surgical, frontend-only. No schema or RLS changes — the DB and policies are correct.
 
-GRANT SELECT ON public.safety_incident_routing_rules TO authenticated;
-GRANT ALL ON public.safety_incident_routing_rules TO service_role;
-ALTER TABLE public.safety_incident_routing_rules ENABLE ROW LEVEL SECURITY;
+### 1. Force a fresh fetch of submissions when the audit sheet is opened
+`src/components/review/AuditScorecard.tsx`
 
-CREATE POLICY "safety routing read" ON public.safety_incident_routing_rules
-  FOR SELECT TO authenticated USING (true);
-CREATE POLICY "safety routing admin write" ON public.safety_incident_routing_rules
-  FOR ALL TO authenticated
-  USING (public.has_safety_role(auth.uid(), 'admin') OR public.has_safety_role(auth.uid(), 'safety_head'))
-  WITH CHECK (public.has_safety_role(auth.uid(), 'admin') OR public.has_safety_role(auth.uid(), 'safety_head'));
+- On the `setReviewSheetOpen(true)` path (and on initial mount of the sheet for `selectedKpi`), invalidate the `['review-submissions', kpiIds]` and `['kpis', employee.id]` query keys so the panel always reads the current row.
+- Also fire `queryClient.invalidateQueries({ queryKey: ['review-submissions'] })` after any `transition`-style mutation that already exists in the file (these already happen on auditor actions — we just need to add an explicit refetch when the sheet opens, not only after mutations).
 
--- updated_at trigger reuses public.update_updated_at_column()
+### 2. Fallback lookup in the sheet
+Same file, around line 877:
 
--- 2. Persisted resolved chain on incidents
-ALTER TABLE public.safety_incidents
-  ADD COLUMN routed_bu_head_id uuid NULL REFERENCES public.profiles(id),
-  ADD COLUMN routed_manager_id uuid NULL REFERENCES public.profiles(id),
-  ADD COLUMN routed_second_manager_id uuid NULL REFERENCES public.profiles(id),
-  ADD COLUMN routing_status text NOT NULL DEFAULT 'unrouted'
-    CHECK (routing_status IN ('dept','division','unrouted','legacy'));
-UPDATE public.safety_incidents SET routing_status = 'legacy';
-
--- 3. Resolver helper (SECURITY DEFINER, pinned search_path)
-CREATE OR REPLACE FUNCTION public.resolve_safety_routing(p_bu uuid, p_dept uuid)
-RETURNS TABLE(bu_head uuid, manager uuid, second_manager uuid, source text)
-LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
-  SELECT bu_head_id, manager_id, second_manager_id, 'dept'
-  FROM safety_incident_routing_rules
-  WHERE is_active AND business_unit_id = p_bu AND department_id = p_dept
-  UNION ALL
-  SELECT bu_head_id, manager_id, second_manager_id, 'division'
-  FROM safety_incident_routing_rules
-  WHERE is_active AND business_unit_id = p_bu AND department_id IS NULL
-  LIMIT 1;
-$$;
-
--- 4. Patch report_safety_incident RPC to call resolver and stamp 4 cols
---    (full body re-applied; numbering/SLA trigger unchanged)
-
--- 5. Extend trg_safety_incident_after_insert to also notify routed_*_id
---    when present (Admin/Head fallback notification preserved).
+```ts
+const liveSubmission =
+  submissionMap.get(selectedKpi.id) ??
+  allSubmissions?.find(s => s.kpi_id === selectedKpi.id) ??
+  null;
 ```
 
-## Files to Create
+Pass `liveSubmission` to `<KpiReviewPanel submission={liveSubmission} />`. `allSubmissions` is already fetched (line 163) across all periods, so this gives us a second, broader source of truth at zero extra request cost.
 
-- `src/components/safety/settings/SafetyIncidentRoutingTab.tsx` — admin matrix UI (BU/Dept selector, 3 employee comboboxes, active toggle, list of existing rules with edit/deactivate).
-- `src/components/safety/RoutingChainDisplay.tsx` — small presentational component (BU Head / Manager / 2nd Manager rows + missing-routing warning).
-- `src/hooks/useSafetyIncidentRouting.ts` — list/create/update/deactivate rules; resolves names via `useActiveProfilesLite`.
-- `src/test/safety/incidentRouting.test.ts` — unit tests for resolver order, missing routing, inactive rules.
+### 3. Differentiate "loading" from "no data" in the journey tiles
+`src/components/review/KpiJourneySection.tsx`
 
-## Files to Modify
+- Accept an optional `isLoading?: boolean` prop (default `false`) and, when true, render a `Skeleton` block for each stage tile instead of the "N/A" pill. Wire it from `KpiReviewPanel` → `AuditScorecard` (`useReviewSubmissions(...).isLoading`). This prevents the auditor from ever seeing a misleading "N/A" while data is still arriving.
 
-- `src/pages/safety/SafetySettings.tsx` — add "Incident Routing" tab (gated by `nav.settings` + new permission key).
-- `src/lib/safety/permissionKeys.ts` — add `action.routing.manage`.
-- `src/pages/safety/SafetyIncidentDetail.tsx` — render `<RoutingChainDisplay>` in header card.
-- `src/pages/safety/SafetyIncidents.tsx` — add optional "Routing" column on desktop showing status badge (routed/unrouted).
-- `src/hooks/useSafetyIncidents.ts` — extend `SafetyIncidentRow` type with new fields; types regenerate from migration.
-- `mem/index.md` + new `mem/features/safety/incident-routing.md` — record SSOT rule.
+### 4. Subscribe the audit sheet to realtime `review_submissions` updates for the open KPI
+`AuditScorecard.tsx` — when the sheet is open, attach a Supabase channel filtered to `kpi_id = selectedKpi.id`. On any insert/update, call `queryClient.setQueryData(['review-submissions', kpiIds], ...)` (or just invalidate). This guarantees that if a manager just submitted seconds before the auditor opened the sheet, the auditor still sees it.
 
-## Step-by-Step Plan
+## UI changes
 
-1. **Migration** → table, indexes, RLS, resolver, incident columns, RPC + trigger patch. Verify via Supabase linter.
-2. **Types regenerate** automatically post-migration.
-3. **Hook + Admin UI** (`useSafetyIncidentRouting`, `SafetyIncidentRoutingTab`) wired into `SafetySettings`. Verify save/edit/deactivate + duplicate-rule error toast.
-4. **Display component** in incident detail + list column. Verify warning shows for `routing_status='unrouted'`.
-5. **Tests** for resolver precedence (dept > division > none) + inactive-rule exclusion.
-6. **Memory + docs** entry.
+- **Where:** Audit Review sheet → Review Journey card (right column).
+- **Behaviour change:**
+  - While submissions are loading → 3 stage tiles render as 40 px Skeleton bars instead of `N/A` pills.
+  - Once loaded with a real row → `Self: 5`, `Manager: 5`, `Auditor: -` exactly like admin's view.
+  - No layout, color, or token changes. No new controls.
+- **Responsiveness:** Skeletons inherit the existing tile grid; `grid-cols-2 lg:grid-cols-3` is unchanged.
 
-## UI Changes
+## Risk & impact
 
-- **Settings → Incident Routing tab**: filter by BU; table of rules (BU / Dept / BU Head / Manager / 2nd Manager / Active / Actions); "Add Rule" dialog with 5 selects + active toggle; inline validation for duplicate active rule and incomplete chain.
-- **Incident Detail header**: new "Routing" subsection below the existing meta grid, with three labeled rows and an amber warning chip if unrouted.
-- **Incident List**: new "Routing" badge column (desktop only) — green "Routed" / amber "Unrouted" / muted "Legacy".
+- **Data impact:** Read-only client change. No writes. No schema or RLS change.
+- **Workflow impact:** None — auditor permissions, transitions, and the existing N/A flow are untouched.
+- **UI/UX impact:** Skeletons replace momentary "N/A" flashes for ~150–300 ms during the initial fetch. Everyone benefits, not only auditors.
+- **Regression risk:** Low. `liveSubmission` fallback is additive; the existing primary lookup is tried first. Realtime channel is scoped to the open sheet and torn down on close.
+- **Mitigation:** Unit tests below cover the loading→loaded transition and the `allSubmissions` fallback path.
 
-## Not Applicable
+## Tests (mandatory)
 
-- New role enum, division table, offline queue changes, payment/AI integration.
+- `src/test/auditScorecardSubmissionFallback.test.ts` (new)
+  1. `submissionMap` empty + `allSubmissions` has a matching row → panel receives the real submission (not `null`).
+  2. `submissionMap` has the row → it wins over `allSubmissions`.
+  3. Both empty → `null` (true N/A case preserved).
+- `src/test/kpiJourneySectionLoadingState.test.tsx` (new)
+  1. `isLoading=true` + `submission=null` → renders Skeletons, not "N/A" pills.
+  2. `isLoading=false` + `submission=null` → renders existing "N/A" pills (current behaviour preserved).
+  3. `isLoading=false` + `submission={ self_score:5, manager_score:5 }` → renders `5` and `5`.
 
-Awaiting approval to implement.
+Mock data uses the existing `ReviewSubmission` shape with realistic fields (id, kpi_id, self_score, manager_score, updated_at, is_na, evidence arrays empty).
+
+## DOCUMENTATION.md / POLICY.md sync
+
+- Add a short note under "Review Journey rendering" describing the loading-vs-empty contract for `KpiJourneySection`.
+- Add a one-line entry in the auditor section of POLICY clarifying: *"The auditor's Review Journey tiles must reflect `review_submissions` as-of sheet open; stale snapshots are not acceptable."*
+
+## Out of scope (explicitly)
+
+- RLS changes on `review_submissions` or `kpis` — already correct.
+- Any change to admin's `View KPI Details` modal — it already renders correctly.
+- KPI Standardization / canonical-rename flow — not the cause here; the same `kpi.id` is used by both views.
+
+## Verification steps after build
+
+1. Log in as Ayush (auditor), open Jyoti Prakash Dwivedi → April 2026 → Environment Compliance → "Audit Review".
+2. Expect: `Self: 5`, `Manager: 5`, `Auditor: -` (current stage), `is_na = false`.
+3. Re-open immediately after a manager submits a different KPI in another tab → no stale N/A flash.
+4. Run the two new test files; both pass.
