@@ -15,6 +15,7 @@ import { useSafetySettings, useUpsertSafetySetting } from '@/hooks/useSafetySett
 import { formatSettingValue, parseSettingJson } from '@/lib/safetySettings';
 import { format } from 'date-fns';
 import SafetyDataExportDialog from '@/components/safety/SafetyDataExportDialog';
+import SafetyMasterDataPanel from '@/components/safety/SafetyMasterDataPanel';
 
 /**
  * SafetySettings — Cross-cutting Phase X
@@ -130,6 +131,8 @@ export default function SafetySettings() {
         </CardHeader>
       </Card>
       <SafetyDataExportDialog open={exportOpen} onOpenChange={setExportOpen} />
+
+      <SafetyMasterDataPanel />
 
       <Card>
         <CardHeader className="pb-3">
