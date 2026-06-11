@@ -149,19 +149,20 @@ export interface TransitionInput {
   toStatus: SafetyIncidentStatus;
   notes?: string;
   assignedTo?: string;
-  verifierId?: string;
+  /** Safety Head closure remarks (only used when toStatus === 'closed'). */
+  finalRemarks?: string;
 }
 
 export function useTransitionSafetyIncident() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ incidentId, toStatus, notes, assignedTo, verifierId }: TransitionInput) => {
+    mutationFn: async ({ incidentId, toStatus, notes, assignedTo, finalRemarks }: TransitionInput) => {
       const { data, error } = await supabase.rpc('transition_safety_incident', {
         p_incident_id: incidentId,
         p_to_status: toStatus,
         p_notes: notes ?? null,
         p_assigned_to: assignedTo ?? null,
-        p_verifier_id: verifierId ?? null,
+        p_final_remarks: finalRemarks ?? null,
       } as never);
       if (error) throw error;
       const result = data as { ok: boolean; error?: string };
