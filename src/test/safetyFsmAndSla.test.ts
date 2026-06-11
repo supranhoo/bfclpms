@@ -18,24 +18,28 @@ import {
  * Safety UI imports from.
  */
 describe('Safety FSM — sequential transition rule', () => {
-  it('exposes the canonical 7-stage order', () => {
+  it('exposes the canonical 9-stage order', () => {
     expect(SAFETY_INCIDENT_STAGES).toEqual([
       'reported',
+      'management_review',
       'assigned',
       'investigation',
       'rca',
       'corrective_action',
+      'safety_head_review',
       'verification',
       'closed',
     ]);
   });
 
   it('nextStage advances exactly one step until closed', () => {
-    expect(nextStage('reported')).toBe('assigned');
+    expect(nextStage('reported')).toBe('management_review');
+    expect(nextStage('management_review')).toBe('assigned');
     expect(nextStage('assigned')).toBe('investigation');
     expect(nextStage('investigation')).toBe('rca');
     expect(nextStage('rca')).toBe('corrective_action');
-    expect(nextStage('corrective_action')).toBe('verification');
+    expect(nextStage('corrective_action')).toBe('safety_head_review');
+    expect(nextStage('safety_head_review')).toBe('verification');
     expect(nextStage('verification')).toBe('closed');
   });
 
@@ -53,7 +57,7 @@ describe('Safety FSM — sequential transition rule', () => {
   });
 
   it('blocks skipping stages', () => {
-    expect(validateFsmTransition('reported', 'investigation')).toMatch(/sequential/i);
+    expect(validateFsmTransition('reported', 'assigned')).toMatch(/sequential/i);
     expect(validateFsmTransition('reported', 'closed')).toMatch(/sequential/i);
     expect(validateFsmTransition('rca', 'closed')).toMatch(/sequential/i);
   });
