@@ -238,7 +238,7 @@ export default function SafetyIncidentRoutingTab() {
 
       <ConfirmDestructiveDialog
         open={!!pendingDelete}
-        onOpenChange={(v) => { if (!v) setPendingDelete(null); }}
+        onCancel={() => setPendingDelete(null)}
         title="Delete routing rule?"
         description="Future incidents matching this scope will fall back to Safety Admin / Safety Head. Historical incidents keep their stamped routing."
         confirmLabel="Delete"
