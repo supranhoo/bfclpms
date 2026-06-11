@@ -181,19 +181,30 @@ export default function SafetyIncidents() {
             ))}
           </SelectContent>
         </Select>
-        <Select value={draft.severity} onValueChange={(v) => setDraft((d) => ({ ...d, severity: v }))}>
-          <SelectTrigger><SelectValue placeholder="Severity" /></SelectTrigger>
+        <Select
+          value={draft.typeId}
+          onValueChange={(v) => setDraft((d) => ({ ...d, typeId: v, severityId: 'all' }))}
+        >
+          <SelectTrigger><SelectValue placeholder="Type" /></SelectTrigger>
           <SelectContent>
-            {SEVERITY_OPTIONS.map((s) => (
-              <SelectItem key={s} value={s}>{s === 'all' ? 'All severities' : s}</SelectItem>
+            <SelectItem value="all">All types</SelectItem>
+            {typeOptions.map((t) => (
+              <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
             ))}
           </SelectContent>
         </Select>
-        <Select value={draft.type} onValueChange={(v) => setDraft((d) => ({ ...d, type: v }))}>
-          <SelectTrigger><SelectValue placeholder="Type" /></SelectTrigger>
+        <Select
+          value={draft.severityId}
+          onValueChange={(v) => setDraft((d) => ({ ...d, severityId: v }))}
+          disabled={draft.typeId === 'all'}
+        >
+          <SelectTrigger>
+            <SelectValue placeholder={draft.typeId === 'all' ? 'Pick a type first' : 'Severity'} />
+          </SelectTrigger>
           <SelectContent>
-            {TYPE_OPTIONS.map((s) => (
-              <SelectItem key={s} value={s}>{s === 'all' ? 'All types' : s}</SelectItem>
+            <SelectItem value="all">All severities</SelectItem>
+            {severityOptions.map((s) => (
+              <SelectItem key={s.id} value={s.id}>{s.label}</SelectItem>
             ))}
           </SelectContent>
         </Select>
