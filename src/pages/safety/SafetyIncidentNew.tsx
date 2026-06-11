@@ -45,6 +45,10 @@ import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { useImageCompressionSettings } from '@/hooks/useImageCompressionSettings';
 import { SafetyStickyActionBar } from '@/components/safety/SafetyStickyActionBar';
+import {
+  useSafetyIncidentTypes,
+  useSafetyIncidentSeverities,
+} from '@/hooks/useSafetyIncidentTypes';
 
 /**
  * Incident report form (Phase 1.C).
@@ -56,7 +60,11 @@ import { SafetyStickyActionBar } from '@/components/safety/SafetyStickyActionBar
  * - `client_submission_id` is generated inside the hook for offline idempotency.
  */
 
-const REQUIRES_INVOLVED: SafetyIncidentType[] = ['unsafe_act', 'accident'];
+/**
+ * Incident type codes that require an "involved person" name. Kept as a
+ * code-based list so admin-renamed types still match by their immutable code.
+ */
+const REQUIRES_INVOLVED_CODES = new Set(['unsafe_act', 'accident']);
 
 export default function SafetyIncidentNew() {
   const navigate = useNavigate();
@@ -70,8 +78,8 @@ export default function SafetyIncidentNew() {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [location, setLocation] = useState('');
-  const [type, setType] = useState<SafetyIncidentType | ''>('');
-  const [severity, setSeverity] = useState<SafetyIncidentSeverity | ''>('');
+  const [typeId, setTypeId] = useState<string>('');
+  const [severityId, setSeverityId] = useState<string>('');
   const [priority, setPriority] = useState<SafetyIncidentPriority>('medium');
   const [businessUnitId, setBusinessUnitId] = useState<string>('');
   const [departmentId, setDepartmentId] = useState<string>('');
@@ -82,6 +90,11 @@ export default function SafetyIncidentNew() {
   const [submitting, setSubmitting] = useState(false);
 
   const { data: departments = [] } = useDepartments(businessUnitId || null);
+  const { data: incidentTypes = [] } = useSafetyIncidentTypes({ activeOnly: true });
+  const { data: severities = [] } = useSafetyIncidentSeverities(typeId || null, { activeOnly: true });
+
+  const selectedType = incidentTypes.find((t) => t.id === typeId) ?? null;
+  const selectedSeverity = severities.find((s) => s.id === severityId) ?? null;
 
   // Searchable employee picker for "Involved Person". Free-text remains
   // allowed (contractors / visitors who aren't in profiles).
@@ -103,7 +116,7 @@ export default function SafetyIncidentNew() {
   });
 
   // Pending uploader bound to a placeholder id; we'll re-bind after insert.
-  const requiresInvolved = REQUIRES_INVOLVED.includes(type as SafetyIncidentType);
+  const requiresInvolved = !!selectedType && REQUIRES_INVOLVED_CODES.has(selectedType.code);
 
   const onPickFiles = (e: React.ChangeEvent<HTMLInputElement>) => {
     const next = Array.from(e.target.files ?? []);
@@ -117,8 +130,8 @@ export default function SafetyIncidentNew() {
     title.trim().length >= 3 &&
     description.trim().length >= 10 &&
     location.trim().length >= 2 &&
-    type !== '' &&
-    severity !== '' &&
+    typeId !== '' &&
+    severityId !== '' &&
     files.length >= 1 &&
     (!requiresInvolved || involvedName.trim().length >= 2);
 
@@ -161,8 +174,12 @@ export default function SafetyIncidentNew() {
       title: title.trim(),
       description: description.trim(),
       location: location.trim(),
-      incident_type: type as SafetyIncidentType,
-      severity: severity as SafetyIncidentSeverity,
+      incident_type_id: typeId,
+      severity_id: severityId,
+      // Legacy enum codes for one release of backward-compat (the RPC
+      // coerces invalid codes to safe defaults).
+      incident_type: (selectedType?.code as SafetyIncidentType | undefined),
+      severity: (selectedSeverity?.code as SafetyIncidentSeverity | undefined),
       priority,
       business_unit_id: businessUnitId || null,
       department_id: departmentId || null,
@@ -210,7 +227,7 @@ export default function SafetyIncidentNew() {
         compression: {
           enabled: compressionEnabled,
           policy: compressionPolicy,
-          severityHint: severity as SafetyIncidentSeverity,
+          severityHint: (selectedSeverity?.code as 'low' | 'medium' | 'high' | 'critical' | undefined) ?? null,
         },
       });
       toast.success(`Incident ${created.incident_number} reported`);
