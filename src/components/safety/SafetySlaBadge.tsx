@@ -11,6 +11,7 @@ import {
   formatSlaCountdown,
   type SlaIncidentLike,
 } from '@/lib/safetySla';
+import { useNowTick } from '@/hooks/useNowTick';
 
 interface Props {
   incident: SlaIncidentLike;
@@ -18,7 +19,10 @@ interface Props {
 }
 
 export function SafetySlaBadge({ incident, className }: Props) {
-  const c = classifySla(incident);
+  // Phase 2 / Safety migration — live countdown (re-renders every 30s
+  // while the tab is visible). Closed incidents render once and are static.
+  const tick = useNowTick(incident.status === 'closed' ? 0 : 30_000);
+  const c = classifySla(incident, tick);
   const label = formatSlaCountdown(c);
   const Icon =
     c.state === 'red'    ? AlertTriangle :
