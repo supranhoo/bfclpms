@@ -401,6 +401,11 @@ export function AuditScorecard({
 
   const openReviewSheet = (kpi: KPI) => {
     setSelectedKpi(kpi);
+    // RCA Jun-2026: force a fresh fetch so the Review Journey never renders
+    // stale "N/A" tiles when a KPI was just promoted to the audit stage and
+    // the cached snapshot pre-dates the row insert.
+    queryClient.invalidateQueries({ queryKey: ['review-submissions'] });
+    queryClient.invalidateQueries({ queryKey: ['kpis', employee.id] });
     const existing = submissionMap.get(kpi.id);
     // POLICY §107: SSOT hydration. Auditor's saved value/score wins over employee data.
     const bundle = hydrateReviewerDraft(existing as any, kpi as any, 'auditor');
