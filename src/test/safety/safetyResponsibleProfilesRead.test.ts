@@ -85,5 +85,4 @@ describe('has_responsible_safety_role helper (latest definition)', () => {
     expect(sql).toMatch(/i\.routed_bu_head_id\s*=\s*_user_id/i);
     expect(sql).toMatch(/i\.verifier_id\s*=\s*_user_id/i);
   });
-  });
 });
