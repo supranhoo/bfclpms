@@ -25,6 +25,10 @@ import {
   SAFETY_SLA_STATUS_LABELS,
   SAFETY_SLA_STATUS_TONE,
 } from '@/lib/safetyIncidents';
+import {
+  useSafetyIncidentTypes,
+  useSafetyIncidentSeverities,
+} from '@/hooks/useSafetyIncidentTypes';
 import { Badge } from '@/components/ui/badge';
 import type { SafetyIncidentRow } from '@/hooks/useSafetyIncidents';
 import { format, formatDistanceToNowStrict } from 'date-fns';
@@ -38,24 +42,21 @@ const STATUS_OPTIONS = [
   'all', 'reported', 'management_review', 'assigned', 'investigation', 'rca',
   'corrective_action', 'safety_head_review', 'verification', 'closed', 'orphaned',
 ] as const;
-const SEVERITY_OPTIONS = ['all', 'low', 'medium', 'high', 'critical'] as const;
-const TYPE_OPTIONS = [
-  'all', 'near_miss', 'first_aid', 'medical_treatment', 'lost_time',
-  'fatality', 'property_damage', 'environmental', 'other',
-] as const;
 const SLA_STATUS_OPTIONS = [
   'all', 'on_track', 'at_risk', 'overdue', 'closed_on_time', 'closed_late',
 ] as const;
 
 interface IncidentFilters {
   status: string;
-  severity: string;
-  type: string;
+  /** safety_incident_severities.id or 'all' */
+  severityId: string;
+  /** safety_incident_types.id or 'all' */
+  typeId: string;
   slaStatus: string;
   search: string;
 }
 
-const INITIAL: IncidentFilters = { status: 'all', severity: 'all', type: 'all', slaStatus: 'all', search: '' };
+const INITIAL: IncidentFilters = { status: 'all', severityId: 'all', typeId: 'all', slaStatus: 'all', search: '' };
 
 async function fetchIncidentsPage({
   filters, range,
@@ -67,8 +68,8 @@ async function fetchIncidentsPage({
     .range(range[0], range[1]);
 
   if (filters.status !== 'all') q = q.eq('status', filters.status);
-  if (filters.severity !== 'all') q = q.eq('severity', filters.severity);
-  if (filters.type !== 'all') q = q.eq('incident_type', filters.type);
+  if (filters.severityId !== 'all') q = q.eq('severity_id', filters.severityId);
+  if (filters.typeId !== 'all') q = q.eq('incident_type_id', filters.typeId);
   if (filters.slaStatus !== 'all') q = q.eq('sla_status', filters.slaStatus);
   if (filters.search.trim()) {
     const needle = filters.search.trim();
