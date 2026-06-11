@@ -28,6 +28,18 @@ function latestMigrationWithPolicy(): string {
   throw new Error('Safety responsible-roles profiles read policy migration was not found');
 }
 
+function latestMigrationWithHelper(): string {
+  const dir = 'supabase/migrations';
+  const files = readdirSync(dir).sort();
+  for (let i = files.length - 1; i >= 0; i--) {
+    const body = readFileSync(join(dir, files[i]), 'utf8');
+    if (/FUNCTION\s+public\.has_responsible_safety_role/i.test(body)) {
+      return body;
+    }
+  }
+  throw new Error('has_responsible_safety_role migration was not found');
+}
+
 describe('Safety responsible roles profiles read policy', () => {
   const sql = latestMigrationWithPolicy();
 
@@ -51,9 +63,26 @@ describe('Safety responsible roles profiles read policy', () => {
   it('targets only authenticated users', () => {
     expect(sql).toMatch(/TO\s+authenticated/i);
   });
+});
 
-  it('helper excludes plain workers from both role sources', () => {
+describe('has_responsible_safety_role helper (latest definition)', () => {
+  const sql = latestMigrationWithHelper();
+
+  it('excludes plain workers from both role sources', () => {
     expect(sql).toMatch(/role\s*<>\s*'worker'/i);
     expect(sql).toMatch(/r\.code\s*<>\s*'safety_worker'/i);
+  });
+
+  it('includes users named in ACTIVE routing rules', () => {
+    expect(sql).toMatch(/safety_incident_routing_rules/i);
+    expect(sql).toMatch(/rr\.is_active\s*=\s*true/i);
+    expect(sql).toMatch(/rr\.bu_head_id\s*=\s*_user_id/i);
+    expect(sql).toMatch(/rr\.second_manager_id\s*=\s*_user_id/i);
+  });
+
+  it('includes users on any incident routing/assignment chain', () => {
+    expect(sql).toMatch(/i\.assigned_to\s*=\s*_user_id/i);
+    expect(sql).toMatch(/i\.routed_bu_head_id\s*=\s*_user_id/i);
+    expect(sql).toMatch(/i\.verifier_id\s*=\s*_user_id/i);
   });
 });
