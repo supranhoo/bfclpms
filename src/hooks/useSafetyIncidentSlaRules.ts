@@ -20,6 +20,8 @@ export interface SafetyIncidentSlaRule {
   id: string;
   incident_type: SafetyIncidentType;
   severity: SafetyIncidentSeverity;
+  incident_type_id: string | null;
+  severity_id: string | null;
   priority: SafetyIncidentPriority | null;
   target_hours: number;
   amber_threshold_pct: number;
@@ -51,6 +53,9 @@ export function useSafetyIncidentSlaRules() {
 export interface SlaRuleInput {
   incident_type: SafetyIncidentType;
   severity: SafetyIncidentSeverity;
+  /** Preferred: link to configured type/severity rows. */
+  incident_type_id?: string | null;
+  severity_id?: string | null;
   priority: SafetyIncidentPriority | null;
   target_hours: number;
   amber_threshold_pct: number;
