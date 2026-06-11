@@ -48,6 +48,10 @@ export interface SafetyIncidentRow {
   created_at: string;
   updated_at: string;
   sla_state: 'green' | 'amber' | 'red' | 'closed';
+  routed_bu_head_id?: string | null;
+  routed_manager_id?: string | null;
+  routed_second_manager_id?: string | null;
+  routing_status?: 'dept' | 'division' | 'unrouted' | 'legacy' | null;
 }
 
 export const SAFETY_INCIDENTS_KEY = ['safety', 'incidents'] as const;
