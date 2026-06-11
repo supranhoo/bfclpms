@@ -290,23 +290,49 @@ export default function SafetyIncidentNew() {
               </div>
               <div>
                 <Label>Type *</Label>
-                <Select value={type} onValueChange={(v) => setType(v as SafetyIncidentType)}>
+                <Select
+                  value={typeId}
+                  onValueChange={(v) => {
+                    setTypeId(v);
+                    setSeverityId(''); // cascade: clear severity when type changes
+                  }}
+                >
                   <SelectTrigger className="h-11"><SelectValue placeholder="Select type" /></SelectTrigger>
                   <SelectContent>
-                    {(Object.keys(SAFETY_TYPE_LABELS) as SafetyIncidentType[]).map((k) => (
-                      <SelectItem key={k} value={k}>{SAFETY_TYPE_LABELS[k]}</SelectItem>
-                    ))}
+                    {incidentTypes.length === 0 ? (
+                      <SelectItem value="__none__" disabled>
+                        No incident types configured
+                      </SelectItem>
+                    ) : (
+                      incidentTypes.map((t) => (
+                        <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+                      ))
+                    )}
                   </SelectContent>
                 </Select>
               </div>
               <div>
                 <Label>Severity *</Label>
-                <Select value={severity} onValueChange={(v) => setSeverity(v as SafetyIncidentSeverity)}>
-                  <SelectTrigger className="h-11"><SelectValue placeholder="Select severity" /></SelectTrigger>
+                <Select
+                  value={severityId}
+                  onValueChange={(v) => setSeverityId(v)}
+                  disabled={!typeId}
+                >
+                  <SelectTrigger className="h-11">
+                    <SelectValue placeholder={typeId ? 'Select severity' : 'Select a type first'} />
+                  </SelectTrigger>
                   <SelectContent>
-                    {(Object.keys(SAFETY_SEVERITY_LABELS) as SafetyIncidentSeverity[]).map((k) => (
-                      <SelectItem key={k} value={k}>{SAFETY_SEVERITY_LABELS[k]}</SelectItem>
-                    ))}
+                    {!typeId ? (
+                      <SelectItem value="__none__" disabled>Select a type first</SelectItem>
+                    ) : severities.length === 0 ? (
+                      <SelectItem value="__none__" disabled>
+                        No severities configured for this type
+                      </SelectItem>
+                    ) : (
+                      severities.map((s) => (
+                        <SelectItem key={s.id} value={s.id}>{s.label}</SelectItem>
+                      ))
+                    )}
                   </SelectContent>
                 </Select>
               </div>
