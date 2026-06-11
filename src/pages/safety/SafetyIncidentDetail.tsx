@@ -107,7 +107,7 @@ export default function SafetyIncidentDetail() {
               <p className="text-xs text-muted-foreground font-mono">{incident.incident_number}</p>
               <CardTitle className="text-lg sm:text-xl">{incident.title}</CardTitle>
               <p className="text-xs sm:text-sm text-muted-foreground mt-1">
-                {SAFETY_TYPE_LABELS[incident.incident_type]} • Severity {SAFETY_SEVERITY_LABELS[incident.severity]} • {incident.location}
+                {renderTypeLabel(incident as never)} • Severity {renderSeverityLabel(incident as never)} • {incident.location}
               </p>
             </div>
             <div className="flex flex-wrap gap-1.5">
