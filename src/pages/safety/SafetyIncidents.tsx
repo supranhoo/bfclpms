@@ -125,6 +125,13 @@ export default function SafetyIncidents() {
   const handleSubmit = () => submit(draft);
   const handleReset = () => { setDraft(INITIAL); reset(); };
 
+  // Dynamic dropdown sources — replaces the hardcoded type/severity lists.
+  const { data: typeOptions = [] } = useSafetyIncidentTypes({ activeOnly: false });
+  const { data: severityOptions = [] } = useSafetyIncidentSeverities(
+    draft.typeId !== 'all' ? draft.typeId : null,
+    { activeOnly: false },
+  );
+
   const openRow = (i: SafetyIncidentRow) => {
     if (i.status === 'orphaned') setOrphanTarget(i);
     else navigate(`/safety/incidents/${i.id}`);
