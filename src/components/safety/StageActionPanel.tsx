@@ -32,6 +32,7 @@ const STAGE_TO_EVIDENCE: Record<SafetyIncidentStatus, EvidenceStage | null> = {
   // uploads under the legacy 'verification' bucket to preserve history.
   safety_head_review: 'verification',
   verification: null,
+  rework_required: 'capa',
   closed: null,
   orphaned: null,
 };
