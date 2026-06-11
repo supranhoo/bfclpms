@@ -30,7 +30,7 @@ export function OrphanIncidentDialog({
 }) {
   const { data: profiles = [], isLoading } = useActiveProfilesLite();
   const { data: myRoles = [] } = useMySafetyRoles();
-  const canRevive = myRoles.includes('safety_admin') || myRoles.includes('safety_head');
+  const canRevive = myRoles.includes('admin') || myRoles.includes('safety_head');
   const revive = useReviveOrphanedIncident();
 
   const [assignee, setAssignee] = useState<string>('');
