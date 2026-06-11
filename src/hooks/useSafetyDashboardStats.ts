@@ -80,8 +80,15 @@ export function useSafetyDashboardStats() {
         if (r.sla_state === 'red' && r.status !== 'closed') overdue.push(r);
         if (
           currentUserId &&
-          r.assigned_to === currentUserId &&
-          r.status !== 'closed'
+          r.status !== 'closed' &&
+          (
+            r.assigned_to === currentUserId ||
+            (r as unknown as { routed_bu_head_id?: string | null }).routed_bu_head_id === currentUserId ||
+            (r as unknown as { routed_manager_id?: string | null }).routed_manager_id === currentUserId ||
+            (r as unknown as { routed_second_manager_id?: string | null }).routed_second_manager_id === currentUserId ||
+            (r as unknown as { safety_head_id?: string | null }).safety_head_id === currentUserId ||
+            (r as unknown as { verifier_id?: string | null }).verifier_id === currentUserId
+          )
         ) {
           myAssignments.push(r);
         }
