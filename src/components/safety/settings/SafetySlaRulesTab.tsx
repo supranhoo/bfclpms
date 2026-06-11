@@ -231,8 +231,10 @@ function RuleEditor({
   onSave: (input: SlaRuleInput) => void;
   saving: boolean;
 }) {
-  const [type, setType] = useState<SafetyIncidentType>(rule?.incident_type ?? 'near_miss');
-  const [severity, setSeverity] = useState<SafetyIncidentSeverity>(rule?.severity ?? 'medium');
+  const { data: typeOptions = [] } = useSafetyIncidentTypes({ activeOnly: false });
+  const [typeId, setTypeId] = useState<string>(rule?.incident_type_id ?? '');
+  const [severityId, setSeverityId] = useState<string>(rule?.severity_id ?? '');
+  const { data: severities = [] } = useSafetyIncidentSeverities(typeId || null, { activeOnly: false });
   const [priority, setPriority] = useState<string>(rule?.priority ?? ANY);
   const [hours, setHours] = useState<string>(String(rule?.target_hours ?? 24));
   const [amber, setAmber] = useState<string>(String(rule?.amber_threshold_pct ?? 50));
@@ -241,8 +243,8 @@ function RuleEditor({
 
   // Re-seed when rule changes
   useMemo(() => {
-    setType(rule?.incident_type ?? 'near_miss');
-    setSeverity(rule?.severity ?? 'medium');
+    setTypeId(rule?.incident_type_id ?? '');
+    setSeverityId(rule?.severity_id ?? '');
     setPriority(rule?.priority ?? ANY);
     setHours(String(rule?.target_hours ?? 24));
     setAmber(String(rule?.amber_threshold_pct ?? 50));
@@ -257,9 +259,22 @@ function RuleEditor({
     const a = Number(amber);
     if (!Number.isFinite(h) || h <= 0) return toast.error('Target hours must be > 0');
     if (!Number.isFinite(a) || a < 1 || a > 99) return toast.error('Amber threshold must be 1–99');
+    const selectedType = typeOptions.find((t) => t.id === typeId);
+    const selectedSeverity = severities.find((s) => s.id === severityId);
+    if (!selectedType || !selectedSeverity) {
+      return toast.error('Pick an incident type and severity');
+    }
+    // Coerce to legacy enum (still NOT NULL on the table) — falls back to
+    // safe defaults if the configured code is a fully custom value.
+    const enumTypes = ['near_miss','unsafe_act','unsafe_condition','accident','property_damage','environmental'];
+    const enumSevs = ['low','medium','high','critical'];
+    const legacyType = (enumTypes.includes(selectedType.code) ? selectedType.code : 'near_miss') as SafetyIncidentType;
+    const legacySev = (enumSevs.includes(selectedSeverity.code) ? selectedSeverity.code : 'medium') as SafetyIncidentSeverity;
     onSave({
-      incident_type: type,
-      severity,
+      incident_type: legacyType,
+      severity: legacySev,
+      incident_type_id: typeId,
+      severity_id: severityId,
       priority: priority === ANY ? null : (priority as SafetyIncidentPriority),
       target_hours: h,
       amber_threshold_pct: a,
@@ -278,19 +293,19 @@ function RuleEditor({
           <div className="grid grid-cols-2 gap-3">
             <div>
               <Label>Incident type</Label>
-              <Select value={type} onValueChange={(v) => setType(v as SafetyIncidentType)}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+              <Select value={typeId} onValueChange={(v) => { setTypeId(v); setSeverityId(''); }}>
+                <SelectTrigger><SelectValue placeholder="Select type" /></SelectTrigger>
                 <SelectContent>
-                  {TYPES.map((t) => <SelectItem key={t} value={t}>{SAFETY_TYPE_LABELS[t]}</SelectItem>)}
+                  {typeOptions.map((t) => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
             <div>
               <Label>Severity</Label>
-              <Select value={severity} onValueChange={(v) => setSeverity(v as SafetyIncidentSeverity)}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+              <Select value={severityId} onValueChange={setSeverityId} disabled={!typeId}>
+                <SelectTrigger><SelectValue placeholder={typeId ? 'Select severity' : 'Pick type first'} /></SelectTrigger>
                 <SelectContent>
-                  {SEVERITIES.map((s) => <SelectItem key={s} value={s}>{SAFETY_SEVERITY_LABELS[s]}</SelectItem>)}
+                  {severities.map((s) => <SelectItem key={s.id} value={s.id}>{s.label}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
