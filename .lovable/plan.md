@@ -1,51 +1,83 @@
+# Configurable Incident Types & Per-Type Severities
+
 ## Goal
-Make Safety Head the final approver. Remove the intermediate **Verification** stage so the flow ends at **Safety Head Review → Closed**. Safety Head can either close the incident (with optional final remarks) or send it back to the assigned user.
+Remove the hardcoded `safety_incident_type` and `safety_incident_severity` enums from the user-facing flow. Admins define both Types and the Severities under each Type. New incidents pick Type → then a Severity that belongs to that Type. SLA and routing rules are re-keyed to the new severity rows. Historical incidents keep their original labels via snapshots.
 
-## New stage order
+## What changes for the user
+
+### Admin → Safety Settings → Incident Types (new page)
+- Table of incident types: `Name`, `Active`, `# Severities`, actions.
+- Add / Edit dialog: Name, Description (optional), Active toggle.
+- Each row expands into a Severities manager:
+  - Add / Edit / Delete / Reorder severities (drag handle + up/down).
+  - Fields per severity: Label, Code (auto from label, editable), Sort order, Active.
+  - Deleting a severity that is referenced by historical incidents soft-deactivates it instead of hard delete (toast explains why).
+
+### Incident creation form (`SafetyIncidentNew`)
+- "Type" dropdown lists active configured Incident Types.
+- "Severity" dropdown becomes empty + disabled until a Type is chosen, then lists only that Type's active severities.
+- Selected Type & Severity labels are snapshotted onto the incident at submit time.
+
+### Incident list & detail
+- Render the snapshot label (`type_label_snapshot`, `severity_label_snapshot`) so renames/deletes never change historical rows. Falls back to the legacy enum value for incidents created before this change.
+
+### Admin → SLA Rules tab
+- Severity selector becomes cascading: pick Type → pick Severity (from that type's list). Existing rules are migrated to point at seeded severity ids.
+
+## Technical details
+
+### New tables
 ```text
-reported → management_review → assigned → investigation → rca →
-corrective_action → safety_head_review → closed
+safety_incident_types
+  id uuid pk, name text unique, code text unique, description text,
+  is_active bool, sort_order int, created_at, updated_at
+
+safety_incident_severities
+  id uuid pk, incident_type_id uuid fk -> safety_incident_types(id),
+  label text, code text, sort_order int, is_active bool,
+  created_at, updated_at,
+  unique(incident_type_id, code)
 ```
-(`verification` is retired. `orphaned` exception path is unchanged.)
+Both get RLS: read = any authenticated safety user; write = Safety Admin / Safety Head (via `has_safety_role`). GRANTs to authenticated + service_role.
 
-## Risk & Impact
+### Schema migration on `safety_incidents`
+- Add `incident_type_id uuid`, `severity_id uuid` (nullable, FK with `ON DELETE SET NULL`).
+- Add `type_label_snapshot text`, `severity_label_snapshot text`.
+- Keep existing `incident_type` and `severity` enum columns for one release (read-only historical) — populated via trigger when only the new ids are supplied, so nothing reading the old columns breaks.
 
-- **Data:** Historical incidents currently sitting in `verification` must be migrated. Plan: in the same migration, move any existing `status='verification'` rows to `safety_head_review` (preserving audit trail) so no row references the dropped enum value. `final_score` / immutability rules unchanged.
-- **Workflow:** Safety Head action panel changes from "Assign Verifier + Advance to Verification" to "Close Incident" (with final remarks + optional send-back). Verifier assignment UI retired for incidents.
-- **SLA:** `close_due_at` rule unchanged — Safety Head closure is still the terminal event the SLA measures against.
-- **RLS / RPC:** `transition_safety_incident()` validation list shortened. Closure permission gated to Safety Head role only.
-- **Regression risk:** Anywhere that switches on `'verification'` (badges, filters, dashboard counters, tests). Mitigation: SSOT in `src/lib/safetyIncidents.ts` drives almost all UI; grep+fix the rest and update tests.
-- **Backup:** No new tables; existing tables retained. No backup impact.
+### Data seeding (idempotent)
+- Seed 6 incident types from current enum values (`near_miss`, `unsafe_act`, `unsafe_condition`, `accident`, `property_damage`, `environmental`) with their existing labels.
+- Seed the 4 default severities (`low`, `medium`, `high`, `critical`) under every seeded type so historical incidents map cleanly.
+- Backfill `safety_incidents.incident_type_id` / `severity_id` / snapshots from the existing enum values.
 
-## Implementation steps
+### SLA + routing migration
+- `safety_incident_sla_rules` and `safety_severity_sla`: add `severity_id uuid` FK. Backfill by joining `(incident_type, severity)` → seeded rows. Keep the old enum columns for one release; new admin writes only the id.
+- `safety_incident_routing_rules`: add `incident_type_id` + `severity_id` FKs, backfill the same way.
 
-1. **DB migration** (`supabase/migrations/...`)
-   - Re-point any live rows: `UPDATE safety_incidents SET status='safety_head_review' WHERE status='verification'` (log via existing audit trigger).
-   - Update `transition_safety_incident()` RPC: new sequential list ends at `safety_head_review → closed`; only users with Safety Head role may execute the `→ closed` transition; accept optional `closure_remarks` and persist into the timeline/audit row.
-   - Keep the `verification` enum value present (Postgres can't drop enum values safely) but mark it deprecated in a comment; FSM no longer accepts it as a legal target.
+### RPC update
+- `report_safety_incident(p_payload jsonb)` accepts `incident_type_id` + `severity_id` (preferred). Validates the severity belongs to the chosen type, writes snapshots, and back-fills the legacy enum columns from the resolved codes for one release.
 
-2. **SSOT** (`src/lib/safetyIncidents.ts`)
-   - Remove `verification` from `SAFETY_INCIDENT_STAGES` and labels.
-   - `nextStage('safety_head_review')` returns `'closed'`.
-   - `validateFsmTransition` auto-updates from the SSOT array.
+### Frontend
+- New hooks: `useIncidentTypes`, `useUpsertIncidentType`, `useDeleteIncidentType`, `useIncidentSeverities(typeId)`, `useUpsertIncidentSeverity`, `useReorderIncidentSeverities`, `useDeleteIncidentSeverity`.
+- New page: `src/pages/safety/SafetyIncidentTypes.tsx` + child component `IncidentTypeSeverityManager.tsx`.
+- New route `/safety/settings/incident-types` + tile in `SafetySettings`.
+- `SafetyIncidentNew`: replace enum-driven selects with the new hooks; cascade severity on type change; pass ids to the RPC.
+- `SafetyIncidents`, `SafetyIncidentDetail`, dashboard widgets, analytics: render `severity_label_snapshot ?? severity` and `type_label_snapshot ?? incident_type`.
+- `safetyIncidents.ts`: keep enum labels for legacy fallback only; remove from the new-incident form.
 
-3. **Stage action panel** (`src/components/safety/StageActionPanel.tsx`)
-   - For `safety_head_review`: render Safety-Head-only panel with **Final Remarks** textarea, **Close Incident** primary action, and **Send Back to Assignee** secondary action. Remove verifier picker + "Advance to Verification".
-   - Hide the panel for non-Safety-Head users (read-only summary).
+### Backup & RLS
+- New tables flow into `public.get_backup_table_order()` automatically — nothing to allowlist.
+- RLS policies follow the Safety RBAC: read for any signed-in safety user, write for Safety Admin / Safety Head.
 
-4. **Cleanup references**
-   - Grep `'verification'` / "Verification" / "verifier" across `src/`, remove stage-specific badges, filters, dashboard tiles, and timeline mappings. Keep only historical-display fallback (label remains in `SAFETY_STATUS_LABELS` as "Verification (legacy)" so old audit rows still render).
-
-5. **Tests**
-   - Update `src/test/safetyFsmAndSla.test.ts` to assert the new 8-stage list and `safety_head_review → closed` is legal while `→ verification` is illegal.
-   - Add a test: only Safety Head role can perform the closure transition; non-Safety-Head gets rejected.
-   - Add UI test: StageActionPanel at `safety_head_review` renders Close/Send-Back actions and no verifier picker.
-
-6. **Docs / Policy**
-   - Update `DOCUMENTATION.md` workflow diagram + `POLICY.md` closure-authority section. Version-history entry: "Verification stage retired; Safety Head is terminal approver."
+### Tests
+- DB: RPC rejects a severity that doesn't belong to the chosen type.
+- DB: deactivating a referenced severity is allowed; deleting one that's referenced raises a clear error (FK ON DELETE SET NULL would orphan history, so we block hard-delete in the API).
+- TS: snapshot fallback renders the right label for legacy rows.
+- TS: cascade resets severity when type changes.
 
 ## Rollback
-Revert migration sets enum-driven list back to 9 stages and restores the prior RPC body (kept in the migration's `-- previous version` comment block). No destructive schema changes (enum value preserved).
+- Migration is additive (new tables, new nullable columns). Reverting = drop the new tables/columns and switch the form back to the enum imports — historical data untouched.
 
 ## Out of scope
-Notification template copy changes beyond stage-name substitution; bulk-historical re-labelling of closed incidents.
+- Dropping the old `safety_incident_type` / `safety_incident_severity` enums (deferred to a follow-up once all read paths use the snapshot/id columns in production).
+- Bulk import of severities (admins create them manually for now).
