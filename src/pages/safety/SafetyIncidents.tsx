@@ -18,6 +18,7 @@ import { SafetyMobileListCard } from '@/components/safety/SafetyMobileListCard';
 import { SafetyStickyActionBar } from '@/components/safety/SafetyStickyActionBar';
 import { SafetyStatusBadge } from '@/components/safety/StatusBadge';
 import { SlaBadge } from '@/components/safety/SlaBadge';
+import { OrphanIncidentDialog } from '@/components/safety/OrphanIncidentDialog';
 import {
   SAFETY_SEVERITY_LABELS,
   SAFETY_TYPE_LABELS,
@@ -82,6 +83,7 @@ export default function SafetyIncidents() {
   useSafetyRealtimeSync(true, ['safety_incidents', 'safety_incident_status_history']);
   const navigate = useNavigate();
   const [draft, setDraft] = useState<IncidentFilters>(INITIAL);
+  const [orphanTarget, setOrphanTarget] = useState<SafetyIncidentRow | null>(null);
 
   const {
     rows, total, page, pageSize, totalPages,
@@ -94,6 +96,11 @@ export default function SafetyIncidents() {
 
   const handleSubmit = () => submit(draft);
   const handleReset = () => { setDraft(INITIAL); reset(); };
+
+  const openRow = (i: SafetyIncidentRow) => {
+    if (i.status === 'orphaned') setOrphanTarget(i);
+    else navigate(`/safety/incidents/${i.id}`);
+  };
 
   const activeCount = useMemo(() => {
     let n = 0;
@@ -173,7 +180,7 @@ export default function SafetyIncidents() {
         onPageChange={setPage}
         mobileRender={(i) => (
           <SafetyMobileListCard
-            onClick={() => navigate(`/safety/incidents/${i.id}`)}
+            onClick={() => openRow(i)}
             title={
               <span>
                 <span className="font-mono text-xs text-muted-foreground mr-1">
@@ -214,7 +221,7 @@ export default function SafetyIncidents() {
               <TableRow
                 key={i.id}
                 className="cursor-pointer hover:bg-muted/40"
-                onClick={() => navigate(`/safety/incidents/${i.id}`)}
+                onClick={() => openRow(i)}
               >
                 <TableCell className="font-mono text-xs">
                   {i.incident_number ?? '—'}
@@ -240,6 +247,12 @@ export default function SafetyIncidents() {
           </Link>
         </Button>
       </SafetyStickyActionBar>
+
+      <OrphanIncidentDialog
+        incident={orphanTarget}
+        open={!!orphanTarget}
+        onOpenChange={(v) => { if (!v) setOrphanTarget(null); }}
+      />
     </div>
   );
 }
