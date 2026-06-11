@@ -15,6 +15,7 @@ export function useNowTick(intervalMs: number = 30_000): Date {
   const [now, setNow] = useState<Date>(() => new Date());
 
   useEffect(() => {
+    if (intervalMs <= 0) return; // disabled — caller doesn't need live updates
     let timer: ReturnType<typeof setInterval> | null = null;
 
     const start = () => {
