@@ -37,7 +37,9 @@ export function EmergencyFab() {
           <Siren className="h-6 w-6" />
         </Button>
       </div>
-      <EmergencyOverlay open={open} onOpenChange={setOpen} />
+      {/* FAB intent = active emergency: pass sirenEnabled so the overlay can
+          arm the audio siren when admins have enabled ui_emergency_siren_v1. */}
+      <EmergencyOverlay open={open} onOpenChange={setOpen} sirenEnabled />
     </>
   );
 }
