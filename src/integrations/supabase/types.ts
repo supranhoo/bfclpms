@@ -9445,6 +9445,56 @@ export type Database = {
           },
         ]
       }
+      safety_master_data: {
+        Row: {
+          category: string
+          code: string
+          created_at: string
+          created_by: string | null
+          id: string
+          is_active: boolean
+          label: string
+          metadata: Json
+          parent_id: string | null
+          sort_order: number
+          updated_at: string
+        }
+        Insert: {
+          category: string
+          code: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          is_active?: boolean
+          label: string
+          metadata?: Json
+          parent_id?: string | null
+          sort_order?: number
+          updated_at?: string
+        }
+        Update: {
+          category?: string
+          code?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          is_active?: boolean
+          label?: string
+          metadata?: Json
+          parent_id?: string | null
+          sort_order?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "safety_master_data_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "safety_master_data"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       safety_module_access: {
         Row: {
           can_edit: boolean
@@ -11075,6 +11125,23 @@ export type Database = {
         }
         Relationships: []
       }
+      mv_safety_dept_risk_trend: {
+        Row: {
+          department_id: string | null
+          high_severity: number | null
+          month: string | null
+          total: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "safety_incidents_department_id_fkey"
+            columns: ["department_id"]
+            isOneToOne: false
+            referencedRelation: "departments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       mv_safety_incident_monthly_trend: {
         Row: {
           business_unit_id: string | null
@@ -11130,6 +11197,32 @@ export type Database = {
         }
         Relationships: []
       }
+      mv_safety_recurrence: {
+        Row: {
+          business_unit_id: string | null
+          department_id: string | null
+          incident_type: string | null
+          last_occurred_at: string | null
+          location_label: string | null
+          occurrences: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "safety_incidents_business_unit_id_fkey"
+            columns: ["business_unit_id"]
+            isOneToOne: false
+            referencedRelation: "business_units"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "safety_incidents_department_id_fkey"
+            columns: ["department_id"]
+            isOneToOne: false
+            referencedRelation: "departments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       mv_safety_severity_rate: {
         Row: {
           business_unit_id: string | null
@@ -11149,6 +11242,14 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      mv_safety_top_root_causes: {
+        Row: {
+          cause: string | null
+          incidents: number | null
+          severity: string | null
+        }
+        Relationships: []
       }
       mv_safety_training_compliance: {
         Row: {
@@ -12590,6 +12691,45 @@ export type Database = {
         }[]
       }
       run_safety_sla_escalations: { Args: never; Returns: Json }
+      safety_analytics_dept_risk_trend: {
+        Args: { p_months?: number }
+        Returns: {
+          department_id: string
+          high_severity: number
+          month: string
+          total: number
+        }[]
+      }
+      safety_analytics_recurrence: {
+        Args: { p_department?: string }
+        Returns: {
+          business_unit_id: string
+          department_id: string
+          incident_type: string
+          last_occurred_at: string
+          location_label: string
+          occurrences: number
+        }[]
+      }
+      safety_analytics_top_root_causes: {
+        Args: { p_limit?: number }
+        Returns: {
+          cause: string
+          incidents: number
+          severity: string
+        }[]
+      }
+      safety_dashboard_at_risk: {
+        Args: { p_threshold?: number }
+        Returns: {
+          amber_count: number
+          assigned_to: string
+          oldest_open_at: string
+          open_count: number
+          red_count: number
+          worst_sla: string
+        }[]
+      }
       safety_drill_counts: { Args: never; Returns: Json }
       safety_drill_dump: { Args: { _table: string }; Returns: Json }
       safety_drill_load: {
