@@ -79,10 +79,29 @@ async function fetchIncidentsPage({
 
   const { data, error, count } = await q;
   if (error) throw error;
-  return {
-    rows: (data ?? []) as unknown as SafetyIncidentRow[],
-    total: count ?? 0,
-  };
+  const rows = (data ?? []) as unknown as SafetyIncidentRow[];
+
+  // Hydrate Business Unit name/code for display. The SLA view exposes
+  // `business_unit_id` only — join client-side to avoid widening the view.
+  const buIds = Array.from(
+    new Set(rows.map((r) => r.business_unit_id).filter(Boolean) as string[]),
+  );
+  if (buIds.length) {
+    const { data: bus } = await supabase
+      .from('business_units')
+      .select('id, name, code')
+      .in('id', buIds);
+    const map = new Map((bus ?? []).map((b: any) => [b.id, b]));
+    for (const r of rows as any[]) {
+      const bu = map.get(r.business_unit_id);
+      if (bu) {
+        r.business_unit_name = bu.name;
+        r.business_unit_code = bu.code;
+      }
+    }
+  }
+
+  return { rows, total: count ?? 0 };
 }
 
 export default function SafetyIncidents() {
