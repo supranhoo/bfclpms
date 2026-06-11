@@ -51,8 +51,9 @@ export function useSafetyPermissions(): SafetyPermissionsSnapshot {
     ready: !q.isLoading && (q.isSuccess || q.isError),
     allowed,
     can: (key: string) => {
-      // Fail-open: if we don't have a snapshot, allow (server RLS still enforces).
-      if (!allowed) return true;
+      // Fail-closed: until we have a verified snapshot, deny.
+      // `nav.home` is universal so the Safety hub landing stays reachable.
+      if (!allowed) return key === 'nav.home';
       return allowed.has(key);
     },
   };
