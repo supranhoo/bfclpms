@@ -53,7 +53,6 @@ export default function SafetyIncidentRoutingTab() {
     bu_head_id: '',
     manager_id: '',
     second_manager_id: '',
-    safety_head_id: '',
     is_active: true,
   });
 
@@ -68,8 +67,7 @@ export default function SafetyIncidentRoutingTab() {
     setEditing(null);
     setForm({
       business_unit_id: '', department_id: null,
-      bu_head_id: '', manager_id: '', second_manager_id: '',
-      safety_head_id: '', is_active: true,
+      bu_head_id: '', manager_id: '', second_manager_id: '', is_active: true,
     });
     setOpen(true);
   }
@@ -83,7 +81,6 @@ export default function SafetyIncidentRoutingTab() {
       bu_head_id: r.bu_head_id,
       manager_id: r.manager_id,
       second_manager_id: r.second_manager_id,
-      safety_head_id: r.safety_head_id,
       is_active: r.is_active,
     });
     setOpen(true);
@@ -155,14 +152,6 @@ export default function SafetyIncidentRoutingTab() {
                 <Label className="text-xs">2nd Manager</Label>
                 <EmployeeSelect value={form.second_manager_id ?? ''} onChange={(v) => setForm((f) => ({ ...f, second_manager_id: v || null }))} placeholder="Select 2nd Manager (optional)" />
               </div>
-              <div>
-                <Label className="text-xs">Safety Head (optional — receives the ticket at the Safety Head Review stage)</Label>
-                <EmployeeSelect
-                  value={form.safety_head_id ?? ''}
-                  onChange={(v) => setForm((f) => ({ ...f, safety_head_id: v || null }))}
-                  placeholder="Select Safety Head (optional)"
-                />
-              </div>
               <div className="flex items-center gap-2 pt-2">
                 <Switch checked={form.is_active} onCheckedChange={(v) => setForm((f) => ({ ...f, is_active: v }))} />
                 <Label className="text-sm">Active</Label>
@@ -203,7 +192,6 @@ export default function SafetyIncidentRoutingTab() {
                 <TableHead>BU Head</TableHead>
                 <TableHead>Manager</TableHead>
                 <TableHead>2nd Manager</TableHead>
-                <TableHead>Safety Head</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
@@ -220,7 +208,6 @@ export default function SafetyIncidentRoutingTab() {
                   <TableCell>{profileMap.get(r.bu_head_id) ?? '—'}</TableCell>
                   <TableCell>{profileMap.get(r.manager_id) ?? '—'}</TableCell>
                   <TableCell>{profileMap.get(r.second_manager_id) ?? '—'}</TableCell>
-                  <TableCell>{r.safety_head_id ? (profileMap.get(r.safety_head_id) ?? '—') : <span className="text-muted-foreground italic">Default</span>}</TableCell>
                   <TableCell>
                     {r.is_active
                       ? <Badge variant="secondary">Active</Badge>
