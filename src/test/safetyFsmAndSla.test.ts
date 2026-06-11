@@ -81,6 +81,17 @@ describe('Safety FSM — sequential transition rule', () => {
   it('Safety Head Review → Closed is the terminal forward step', () => {
     expect(validateFsmTransition('safety_head_review', 'closed')).toBeNull();
   });
+
+  it('Safety Head can send back to assignee (rework loop)', () => {
+    expect(validateFsmTransition('safety_head_review', 'rework_required')).toBeNull();
+    expect(validateFsmTransition('rework_required', 'safety_head_review')).toBeNull();
+  });
+
+  it('rework_required cannot jump to other stages', () => {
+    expect(validateFsmTransition('rework_required', 'closed')).toMatch(/rework required/i);
+    expect(validateFsmTransition('rework_required', 'corrective_action')).toMatch(/rework required/i);
+    expect(validateFsmTransition('investigation', 'rework_required')).toMatch(/rework required/i);
+  });
 });
 
 describe('Safety SLA — classifySlaState mirrors the DB view', () => {
