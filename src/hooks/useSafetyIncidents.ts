@@ -101,8 +101,13 @@ export interface ReportIncidentInput {
   title: string;
   description: string;
   location: string;
-  incident_type: SafetyIncidentType;
-  severity: SafetyIncidentSeverity;
+  /** Legacy enum codes — optional now. Prefer the *_id variants. */
+  incident_type?: SafetyIncidentType;
+  severity?: SafetyIncidentSeverity;
+  /** Configured incident type id (safety_incident_types.id). Preferred. */
+  incident_type_id?: string;
+  /** Configured severity id (safety_incident_severities.id). Preferred. */
+  severity_id?: string;
   priority?: SafetyIncidentPriority;
   business_unit_id?: string | null;
   department_id?: string | null;
