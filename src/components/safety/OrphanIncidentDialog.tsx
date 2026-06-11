@@ -10,7 +10,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { Loader2, ShieldAlert } from 'lucide-react';
-import { useActiveProfilesLite } from '@/hooks/useSafetyOrg';
+import { useActiveProfilesLite, formatSafetyProfileLabel } from '@/hooks/useSafetyOrg';
 import { useReviveOrphanedIncident } from '@/hooks/useSafetyIncidents';
 import { useMySafetyRoles } from '@/hooks/useSafetyRoles';
 import type { SafetyIncidentRow } from '@/hooks/useSafetyIncidents';
@@ -43,7 +43,8 @@ export function OrphanIncidentDialog({
     return profiles
       .filter((p) =>
         (p.full_name ?? '').toLowerCase().includes(q) ||
-        (p.email ?? '').toLowerCase().includes(q),
+        (p.email ?? '').toLowerCase().includes(q) ||
+        (p.employee_code ?? '').toLowerCase().includes(q),
       )
       .slice(0, 50);
   }, [profiles, search]);
@@ -94,7 +95,7 @@ export function OrphanIncidentDialog({
                 <SelectContent>
                   {filtered.map((p) => (
                     <SelectItem key={p.id} value={p.id}>
-                      {p.full_name ?? p.email ?? p.id.slice(0, 8)}
+                      {formatSafetyProfileLabel(p)}
                       {p.email && p.full_name ? ` · ${p.email}` : ''}
                     </SelectItem>
                   ))}
