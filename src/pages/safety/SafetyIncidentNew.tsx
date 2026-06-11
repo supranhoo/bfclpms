@@ -12,7 +12,21 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Loader2, ArrowLeft, AlertTriangle, Upload, X, WifiOff, Camera } from 'lucide-react';
+import { Loader2, ArrowLeft, AlertTriangle, Upload, X, WifiOff, Camera, Search } from 'lucide-react';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '@/components/ui/command';
+import { useQuery } from '@tanstack/react-query';
 import { useBusinessUnits, useDepartments } from '@/hooks/useSafetyOrg';
 import { supabase } from '@/integrations/supabase/client';
 import {
@@ -59,10 +73,31 @@ export default function SafetyIncidentNew() {
   const [businessUnitId, setBusinessUnitId] = useState<string>('');
   const [departmentId, setDepartmentId] = useState<string>('');
   const [involvedName, setInvolvedName] = useState('');
+  const [involvedPickerOpen, setInvolvedPickerOpen] = useState(false);
+  const [involvedSearch, setInvolvedSearch] = useState('');
   const [files, setFiles] = useState<File[]>([]);
   const [submitting, setSubmitting] = useState(false);
 
   const { data: departments = [] } = useDepartments(businessUnitId || null);
+
+  // Searchable employee picker for "Involved Person". Free-text remains
+  // allowed (contractors / visitors who aren't in profiles).
+  const involvedQuery = useQuery({
+    queryKey: ['safety', 'involved-person-search', involvedSearch],
+    enabled: involvedPickerOpen && involvedSearch.trim().length >= 2,
+    queryFn: async () => {
+      const term = involvedSearch.trim();
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, full_name, email, employee_code')
+        .eq('is_active', true)
+        .or(`full_name.ilike.%${term}%,email.ilike.%${term}%,employee_code.ilike.%${term}%`)
+        .order('full_name', { ascending: true })
+        .limit(20);
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
 
   // Pending uploader bound to a placeholder id; we'll re-bind after insert.
   const requiresInvolved = REQUIRES_INVOLVED.includes(type as SafetyIncidentType);
@@ -279,7 +314,71 @@ export default function SafetyIncidentNew() {
               {requiresInvolved && (
                 <div className="md:col-span-2">
                   <Label htmlFor="involved">Involved Person *</Label>
-                  <Input id="involved" className="h-11" value={involvedName} onChange={(e) => setInvolvedName(e.target.value)} placeholder="Name of person involved" />
+                  <div className="flex gap-2">
+                    <Input
+                      id="involved"
+                      className="h-11 flex-1"
+                      value={involvedName}
+                      onChange={(e) => setInvolvedName(e.target.value)}
+                      placeholder="Search employee or type name"
+                    />
+                    <Popover open={involvedPickerOpen} onOpenChange={(o) => { setInvolvedPickerOpen(o); if (o) setInvolvedSearch(involvedName); }}>
+                      <PopoverTrigger asChild>
+                        <Button type="button" variant="outline" className="h-11 shrink-0">
+                          <Search className="h-4 w-4 mr-1.5" /> Find
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent align="end" className="p-0 w-[320px]">
+                        <Command shouldFilter={false}>
+                          <CommandInput
+                            placeholder="Type name, email or employee ID…"
+                            value={involvedSearch}
+                            onValueChange={setInvolvedSearch}
+                          />
+                          <CommandList className="max-h-64">
+                            {involvedSearch.trim().length < 2 ? (
+                              <div className="p-4 text-xs text-center text-muted-foreground">
+                                Type at least 2 characters to search.
+                              </div>
+                            ) : involvedQuery.isFetching ? (
+                              <div className="p-6 flex items-center justify-center">
+                                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                              </div>
+                            ) : (
+                              <>
+                                <CommandEmpty>No employees match. You can still type a name manually.</CommandEmpty>
+                                <CommandGroup>
+                                  {(involvedQuery.data ?? []).map((p) => (
+                                    <CommandItem
+                                      key={p.id}
+                                      value={p.id}
+                                      onSelect={() => {
+                                        const label = p.employee_code
+                                          ? `${p.full_name || p.email} (${p.employee_code})`
+                                          : (p.full_name || p.email);
+                                        setInvolvedName(label);
+                                        setInvolvedPickerOpen(false);
+                                      }}
+                                    >
+                                      <div className="min-w-0 flex-1">
+                                        <div className="font-medium truncate">{p.full_name || p.email}</div>
+                                        <div className="text-xs text-muted-foreground truncate">
+                                          {p.email}{p.employee_code ? ` · ${p.employee_code}` : ''}
+                                        </div>
+                                      </div>
+                                    </CommandItem>
+                                  ))}
+                                </CommandGroup>
+                              </>
+                            )}
+                          </CommandList>
+                        </Command>
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Pick from employees, or type a name manually for contractors/visitors.
+                  </p>
                 </div>
               )}
               <div className="md:col-span-2">
