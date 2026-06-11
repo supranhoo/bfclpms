@@ -41,7 +41,7 @@ export function OverallScoreChart({ percentage, rating }: OverallScoreChartProps
         </PieChart>
       </ResponsiveContainer>
       <div className="absolute inset-0 flex items-center justify-center flex-col">
-        <span className="text-xl font-bold text-foreground">{percentage.toFixed(1)}%</span>
+        <span className="text-base font-bold text-foreground leading-none">{percentage.toFixed(1)}%</span>
         {rating !== undefined && (
           <span className="text-xs text-muted-foreground">{rating.toFixed(2)}/5</span>
         )}
