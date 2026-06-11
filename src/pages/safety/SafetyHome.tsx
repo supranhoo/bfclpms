@@ -12,6 +12,7 @@ import { useSafetyRealtimeSync } from '@/hooks/useSafetyRealtimeSync';
 import { useNowTick } from '@/hooks/useNowTick';
 import { SafetyStickyActionBar } from '@/components/safety/SafetyStickyActionBar';
 import { SafetyTrendSparkline } from '@/components/safety/SafetyTrendSparkline';
+import BuHeadDashboard from '@/components/safety/dashboard/BuHeadDashboard';
 import {
   SAFETY_STATUS_LABELS,
   SAFETY_SEVERITY_LABELS,
@@ -263,6 +264,8 @@ export default function SafetyHome() {
               )}
             </CardContent>
           </Card>
+
+          <BuHeadDashboard />
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-3">
