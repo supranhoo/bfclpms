@@ -132,7 +132,7 @@ export async function fetchDatasetRows(
     if (def.dateColumn && opts.to) q = q.lte(def.dateColumn, opts.to);
     const { data, error } = await q;
     if (error) throw new Error(error.message);
-    const batch = (data ?? []) as Record<string, unknown>[];
+    const batch = (data ?? []) as unknown as Record<string, unknown>[];
     rows.push(...batch);
     opts.onProgress?.({ fetched: rows.length, capped: false });
     if (batch.length < PAGE) break;
