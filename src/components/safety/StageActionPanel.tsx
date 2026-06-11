@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { Loader2, ArrowRight, Upload, CheckCircle2 } from 'lucide-react';
+import { Loader2, ArrowRight, Upload, CheckCircle2, Undo2 } from 'lucide-react';
 import {
   nextStage,
   SAFETY_STATUS_LABELS,
@@ -71,6 +71,9 @@ function stageResponsibleIds(
       // globally configured Safety Head if no specific one was stamped
       // on the incident at report time.
       return [incident.safety_head_id ?? globalSafetyHeadId];
+    case 'rework_required':
+      // Sent back to the original assignee for corrections.
+      return [incident.assigned_to];
     default:
       return [];
   }
@@ -103,6 +106,7 @@ export function StageActionPanel({ incident }: { incident: SafetyIncidentRow }) 
   const [rca, setRca] = useState(incident.rca_summary ?? '');
   const [capa, setCapa] = useState(incident.capa_summary ?? '');
   const [finalRemarks, setFinalRemarks] = useState(incident.verification_notes ?? '');
+  const [reworkRemarks, setReworkRemarks] = useState('');
 
   const onPickFile = (e: React.ChangeEvent<HTMLInputElement>, stage: EvidenceStage) => {
     const f = e.target.files?.[0];
@@ -128,6 +132,16 @@ export function StageActionPanel({ incident }: { incident: SafetyIncidentRow }) 
         incident.status === 'safety_head_review' && next === 'closed'
           ? finalRemarks.trim() || undefined
           : undefined,
+    });
+  };
+
+  const sendBackForRework = () => {
+    const remarks = reworkRemarks.trim();
+    if (!remarks) return;
+    transition.mutate({
+      incidentId: incident.id,
+      toStatus: 'rework_required',
+      notes: remarks,
     });
   };
 
@@ -159,7 +173,9 @@ export function StageActionPanel({ incident }: { incident: SafetyIncidentRow }) 
   // must be done by the configured Safety Head only. Any other user (including
   // the investigator who just handed the ticket back) sees a read-only note.
   const canOverride =
-    incident.status === 'safety_head_review' ? false : can('action.incidents.override');
+    incident.status === 'safety_head_review' || incident.status === 'rework_required'
+      ? false
+      : can('action.incidents.override');
   if (!isResponsible && !canOverride) {
     const owner = responsible.find((r): r is string => !!r);
     return (
