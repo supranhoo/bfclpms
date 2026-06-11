@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -147,7 +147,7 @@ export function AuditScorecard({
   };
 
   const kpiIds = kpis?.map(k => k.id) || [];
-  const { data: submissions } = useReviewSubmissions(kpiIds);
+  const { data: submissions, isLoading: isSubmissionsLoading } = useReviewSubmissions(kpiIds);
   const { data: sentBackKpiIds } = useSentBackKpis(kpiIds);
   const { data: queries } = useKpiQueries(kpiIds);
   const { data: auditKpiAssignments } = useAuditKpiAssignments(kpiIds);
