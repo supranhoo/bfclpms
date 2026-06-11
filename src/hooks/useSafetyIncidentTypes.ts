@@ -99,20 +99,26 @@ export interface IncidentTypeInput {
 export function useUpsertSafetyIncidentType() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, input }: { id?: string; input: IncidentTypeInput }) => {
+    mutationFn: async ({ id, input }: { id?: string; input: IncidentTypeInput }): Promise<SafetyIncidentTypeRow> => {
       const { data: u } = await supabase.auth.getUser();
       const actor = u?.user?.id ?? null;
       if (id) {
-        const { error } = await supabase
+        const { data, error } = await supabase
           .from('safety_incident_types' as never)
           .update({ ...input, updated_by: actor } as never)
-          .eq('id', id);
+          .eq('id', id)
+          .select()
+          .single();
         if (error) throw error;
+        return data as unknown as SafetyIncidentTypeRow;
       } else {
-        const { error } = await supabase
+        const { data, error } = await supabase
           .from('safety_incident_types' as never)
-          .insert({ ...input, created_by: actor, updated_by: actor } as never);
+          .insert({ ...input, created_by: actor, updated_by: actor } as never)
+          .select()
+          .single();
         if (error) throw error;
+        return data as unknown as SafetyIncidentTypeRow;
       }
     },
     onSuccess: (_r, v) => {
