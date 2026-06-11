@@ -7,6 +7,7 @@
  * new writers, RPCs, or external API calls. `tel:` links are inert anchors.
  */
 import { useNavigate } from 'react-router-dom';
+import { useEffect } from 'react';
 import {
   Sheet,
   SheetContent,
@@ -19,24 +20,42 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { AlertTriangle, Inbox, Mail, Phone, Siren } from 'lucide-react';
+import { AlertTriangle, Inbox, Mail, Phone, Siren, Volume2, VolumeX } from 'lucide-react';
 import { useSafetySettings } from '@/hooks/useSafetySettings';
 import { useEmergencyContacts } from '@/hooks/useSafetyEmergency';
 import { SAFETY_EMERGENCY_CONTACT_TYPE_LABEL } from '@/lib/safetyEmergency';
+import { useEmergencySiren } from '@/hooks/useEmergencySiren';
 
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   trigger?: React.ReactNode;
+  /** When true AND admin setting `ui_emergency_siren_v1` is on, the overlay
+   *  auto-starts the audio siren on open. Default false for passive views. */
+  sirenEnabled?: boolean;
 }
 
-export function EmergencyOverlay({ open, onOpenChange, trigger }: Props) {
+export function EmergencyOverlay({ open, onOpenChange, trigger, sirenEnabled = false }: Props) {
   const navigate = useNavigate();
   const { data: settings = [] } = useSafetySettings();
   // Phase 8 SSOT: pull from the typed contacts table, active-only.
   const { data: contacts = [] } = useEmergencyContacts({ type: 'all', activeOnly: true });
   const inspectorEnabled =
     settings.find((r) => r.key === 'ui_offline_inspector_v1')?.value === true;
+  const sirenSettingOn =
+    settings.find((r) => r.key === 'ui_emergency_siren_v1')?.value === true;
+  const siren = useEmergencySiren();
+
+  // Auto-start siren when overlay opens with intent + admin setting on.
+  // Always stop on close — siren never outlives the overlay.
+  useEffect(() => {
+    if (open && sirenEnabled && sirenSettingOn && siren.supported) {
+      siren.start();
+    }
+    if (!open) siren.stop();
+    // siren controller identity is stable; only react to open/intent changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, sirenEnabled, sirenSettingOn]);
 
   const handleReport = () => {
     onOpenChange(false);
@@ -52,9 +71,24 @@ export function EmergencyOverlay({ open, onOpenChange, trigger }: Props) {
         data-testid="emergency-overlay"
       >
         <SheetHeader className="text-left">
-          <SheetTitle className="flex items-center gap-2 text-destructive">
-            <Siren className="h-5 w-5" />
-            Emergency
+          <SheetTitle className="flex items-center justify-between gap-2 text-destructive">
+            <span className="flex items-center gap-2">
+              <Siren className="h-5 w-5" />
+              Emergency
+            </span>
+            {sirenSettingOn && siren.supported && sirenEnabled && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 text-destructive"
+                onClick={() => (siren.isPlaying ? siren.stop() : siren.start())}
+                aria-label={siren.isPlaying ? 'Mute siren' : 'Sound siren'}
+                data-testid="emergency-siren-toggle"
+              >
+                {siren.isPlaying ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
+              </Button>
+            )}
           </SheetTitle>
           <SheetDescription>
             Reach safety responders or log an incident immediately.
