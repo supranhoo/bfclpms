@@ -1,114 +1,134 @@
-## RCA — Why Prabhat's Bi-Monthly cycle drifted
 
-**Symptom.** The "Achieve organization's production target" Bi-Monthly KPI for Prabhat Kumar Singh is labelled **Apr-May** in April 2026 and **May-Jun** in May/June 2026 — May appears in two overlapping cycles, which is structurally impossible.
+# Safety Parity Audit Plan
 
-**Evidence (DB).** Within the same org-KPI tuple (`category`/`kra`/`kpi`):
+Read-only audit. No source code edits. One new artifact: `docs/safety/parity-audit-2026-06.md`.
 
-| Period | Prabhat `frequency_cycle_start` | Biswajit | Dharmendra |
-|---|---|---|---|
-| Jan 2026 | `Feb-Mar` | NULL | NULL |
-| Feb 2026 | `Feb-Mar` | NULL | NULL |
-| Mar 2026 | `Feb-Mar` | NULL | NULL |
-| Apr 2026 | `Feb-Mar` | `Feb-Mar` | `Feb-Mar` |
-| **May 2026** | **`May-Jun`** | `Feb-Mar` | `Feb-Mar` |
-| **Jun 2026** | **`May-Jun`** | `Feb-Mar` | `Feb-Mar` |
+## Goal
 
-Prabhat's May row was inserted by the **`auto-rollover-kpis` edge function** at `2026-05-01 00:00:05` cron run. The June row was inserted by the same edge function at `2026-06-01 10:31:15` (with the `ORG_KPI_AUTO_INHERITED` trigger logging it). Biswajit/Dharmendra's June row was instead created by an `admin_bulk_apply` from the April template, which preserved `Feb-Mar`.
+Trace every prototype artefact in `github.com/justVedantt/safety` to its real implementation in BFCL PMS, classify it (Fully Present / Partially Present / UI Only / Broken / Missing), back every verdict with file paths + evidence, and score parity.
 
-**Root cause.** Two co-located functions hard-code a **standard Jan-anchored cycle** and silently overwrite the per-KPI offset anchor:
+## Method
 
-1. `supabase/functions/auto-rollover-kpis/index.ts::resolveCycleAnchorForPeriod()` and the call site at line 794:
-   ```
-   resolvedCycleStart = resolveCycleAnchorForPeriod(source.frequency, targetMonth)
-                        ?? source.frequency_cycle_start;
-   ```
-   The resolver always returns a non-null Jan-anchored value for multi-month frequencies, so the `?? source.frequency_cycle_start` fallback never fires. For May (month_idx 4) it returns `May-Jun`; the source's `Feb-Mar` offset is discarded.
+### Phase A — Acquire prototype tree (read-only)
 
-2. DB function `public.resolve_cycle_anchor(frequency, month_idx)` — mirrors the same bug:
-   ```
-   cycle_start_idx := (p_month_idx / cycle_len) * cycle_len;
-   ```
-   Used by `repair_org_kpi_cycle_anchors`, which would actively rewrite any offset anchor to the Jan-anchored one if run.
+1. Fetch repo tree via `https://api.github.com/repos/justVedantt/safety/git/trees/HEAD?recursive=1` and save to `/tmp/proto-tree.json`.
+2. Bulk-download relevant files via `https://raw.githubusercontent.com/justVedantt/safety/HEAD/<path>` into `/tmp/proto/` preserving structure. Limit to source-bearing dirs (`src/**`, `supabase/**`, `public/**`, `package.json`, root configs, docs).
+3. Parse `package.json` + `supabase/config.toml` to enumerate dependencies, edge functions, storage buckets.
 
-Net effect: every monthly rollover of an offset-anchored multi-month KPI (`Feb-Mar`, `May-Oct`, `Apr-Jun` quarter offsets, etc.) silently mutates the cycle anchor, producing overlapping windows and breaking POLICY §54 (single terminal month per cycle).
+### Phase B — Build prototype inventory
 
-**Why only Prabhat is visibly broken here.** He is the **employee-scope owner** for the tuple, so `auto-rollover-kpis` rolls his row forward every month. The other employees get materialised on demand by `materialize_kpis_for_org_kpi` (which copies the template anchor verbatim) or via manual admin bulk-apply — both preserve `Feb-Mar`. Result: divergence inside one org-KPI tuple.
+For each prototype artefact, categorise into:
+- Routes/pages (`src/pages/**`, route table)
+- Components (`src/components/**`)
+- Hooks (`src/hooks/**`)
+- Services / utils / libs (`src/lib/**`, `src/services/**`)
+- Contexts / providers
+- Supabase migrations (`supabase/migrations/**`) → extracted tables, columns, RPCs, triggers, RLS policies, storage buckets, views
+- Edge functions (`supabase/functions/**`)
+- State machines / workflows (incident FSM, permit lifecycle, audit run, drill, training)
+- Dashboard widgets / analytics MVs
 
----
+Persist as `/tmp/proto-inventory.json`.
 
-## Risk & Impact
+### Phase C — Build BFCL inventory
 
-- **Data integrity:** broken cycle membership ⇒ wrong terminal month, wrong sibling set, breaks ADR-086 percolation, breaks ADR-087 client locking.
-- **Affected scope:** every employee whose multi-month KPI uses any non-Jan-anchored `frequency_cycle_start` (`Feb-Mar`, `May-Oct` Half-Yearly, `Apr-Jun`/`Jul-Sep` Quarterly, `Apr-Mar`/`Jul-Jun` Yearly, plus the synthetic anchors enabled by ADR-087).
-- **Blast radius:** any month a rollover has run since the offset was introduced.
-- **No data loss** — only the anchor column drifted; achieved values intact.
+Use existing project tree. Scope:
+- `src/pages/safety/**`, `src/components/safety/**`, `src/hooks/useSafety*`, `src/lib/safety*`, `src/contexts/SafetyOfflineSyncContext.tsx`
+- `supabase/functions/{check-safety-sla,grant-safety-role,safety-analytics,safety-drill,permit-expiry-sweep,asset-calibration-sweep,training-overdue-sweep}`
+- All `supabase/migrations/*safety*` plus any migration that creates/alters `safety_*` tables, MVs, RPCs, triggers, policies, buckets
+- `docs/safety/**` for already-documented baselines
 
----
+Persist as `/tmp/bfcl-safety-inventory.json`.
 
-## Plan
+### Phase D — Match + classify
 
-### Step 1 — Make the cycle anchor sticky (forward-fix). Verification: code review + new unit test.
+For every prototype artefact, locate the BFCL counterpart by **behaviour**, not filename:
+- UI: match by route purpose + rendered fields/actions, not component name.
+- Hooks/services: match by table touched + RPC called + mutation shape.
+- DB: match table name + column set + RLS posture + RPC signature.
+- Edge functions: match by trigger + auth posture + downstream RPC.
 
-`supabase/functions/auto-rollover-kpis/index.ts`:
-- Replace the `resolvedCycleStart = resolveCycleAnchorForPeriod(...) ?? source.frequency_cycle_start` line with **anchor preservation**:
-  ```
-  resolvedCycleStart = source.frequency_cycle_start
-                        ?? resolveCycleAnchorForPeriod(source.frequency, targetMonth);
-  ```
-  i.e. honour whatever the source row already declares; only synthesise an anchor when the source has none. Same change at the sibling-month resolution site (`getCycleMonthsForTarget`) already reads `kpi.frequency_cycle_start`, so just the `buildNewKpi` write path needs the flip.
-- Add a structured log when the anchor would have changed, for observability.
+Verification depth per artefact:
+1. UI trace — does the page render and do its CTAs invoke real hooks?
+2. Hook trace — does the hook call a real RPC/table the BFCL DB exposes?
+3. DB trace — does the table/RPC/policy exist in current migration history?
+4. State transitions — do FSM guards still fire (incident `transition_safety_incident`, permit `*_permit` RPCs, audit/drill/training trigger blocks)?
 
-### Step 2 — Fix the DB resolver. Verification: SQL unit test on `resolve_cycle_anchor` with `month_idx=4, frequency='Bi-Monthly'` returning the **input-aware** anchor.
+Status rules:
+- **Fully Present** — UI + hook + DB + FSM all aligned.
+- **Partially Present** — behaviour exists but missing fields, missing RBAC, or narrower scope.
+- **UI Only** — page/component rendered but no working write path (or RLS blocks).
+- **Broken** — code exists and calls a missing RPC/column/bucket, or RLS denies all paths.
+- **Missing** — no equivalent.
 
-Replace `public.resolve_cycle_anchor` with a 3-arg variant `(p_frequency, p_month_idx, p_existing_anchor text)` that:
-- Returns `p_existing_anchor` unchanged when it is a valid anchor for the frequency.
-- Otherwise computes the standard Jan-anchored fallback (current behaviour) so old callers keep working.
+Spawn parallel `acp_subagent--explore` tasks per module to keep my own context lean:
+1. Incidents + offline queue + idempotency
+2. Permits + LOTO/HIRA + approvals
+3. Audits + templates + responses + scoreboard
+4. Drills + participants + findings
+5. Training + SOPs + quizzes + attempts
+6. Emergency contacts + drills + overlay/siren
+7. Assets + calibration + evidence
+8. Analytics MVs + dashboards + widgets
+9. RBAC + module gate + settings + RLS matrix
+10. Edge functions + cron + SLA
 
-Update `repair_org_kpi_cycle_anchors` to call the 3-arg variant and to **never** rewrite a valid offset anchor — drift is only flagged when the stored value can't satisfy any legal cycle window for the row's `review_period`.
+Each subagent returns a JSON-shaped findings block I merge into the report.
 
-### Step 3 — One-shot data repair for the affected tuple. Verification: re-query the 6 rows above and confirm Prabhat's May/Jun rows show `Feb-Mar`; UI label becomes `Bi-Monthly: Apr-May` (May) and `Bi-Monthly: Jun-Jul` (Jun).
+### Phase E — Database parity diff
 
-Scoped migration (admin, audited) that, **for the single tuple** (category `c8fbb996…`, kra/kpi name match) and `review_year = 2026`:
-- Resets `frequency_cycle_start = 'Feb-Mar'` on the two divergent Prabhat rows (`e08a5e40…` May, `42caf513…` June).
-- Emits `KPI_CYCLE_ANCHOR_REPAIRED` audit rows with `system_action=true` and `reason='RCA — rollover anchor drift'`.
-- No score / submission / OKV mutation.
-- Idempotent (only touches rows whose anchor differs from the tuple's majority anchor).
+Produce 6 tables in the report:
+1. Tables (prototype vs BFCL, column-level deltas)
+2. Views / MVs
+3. RPCs (signature + SECURITY DEFINER posture)
+4. Triggers (FSM guards, before-insert, status-write blocks)
+5. Storage buckets + MIME/size policy
+6. RLS policies (per-table count, anonymous exposure, write gates)
 
-### Step 4 — Detection guard. Verification: returns 0 drift rows after Step 3.
+### Phase F — Score
 
-New read-only RPC `public.detect_org_kpi_cycle_anchor_drift()` (admin) that lists every org-KPI tuple whose rows disagree on `frequency_cycle_start` for the same `review_year`. Wire a small banner on `OrgKpiCycleAnchorRepair` admin page if any drift exists.
+- % Fully Present
+- % Partially Present
+- % UI Only
+- % Broken
+- % Missing
 
-### Step 5 — Tests, docs, policy.
-- Vitest: `auto-rollover-kpis` builder test — source `Feb-Mar` + targetMonth `May` ⇒ output `Feb-Mar` (regression for this RCA).
-- Vitest: same source + targetMonth `Jun` ⇒ `Feb-Mar`.
-- `docs/adr/ADR-088.md` — "Cycle anchor preservation across monthly rollover".
-- Update `mem/architecture/pms/multimonth-percolation` (§ anchor stickiness invariant).
-- POLICY.md §54 amendment: *the per-KPI `frequency_cycle_start` is immutable across rollover; admin override is the only legal mutation path.*
+Weighted by artefact category (DB > workflow > hook > page > component), with raw counts also shown.
 
-### Step 6 — Roll-back plan.
-- Step 1 / Step 2 are pure code/function replacements ⇒ revert by re-deploying prior versions.
-- Step 3 migration is bounded to two row IDs; reversal SQL ships in the migration file as a comment.
+### Phase G — Write report
 
----
+Single markdown file at `docs/safety/parity-audit-2026-06.md`:
 
-## UI Changes
+```text
+1. Executive summary + final score
+2. Methodology + repo SHAs used
+3. Feature parity table (prototype file → BFCL file → status → evidence → gap)
+4. Missing files list
+5. Broken implementations list
+6. Database parity (6 sub-tables)
+7. Workflow / state-machine parity
+8. Edge functions parity
+9. RBAC + RLS parity
+10. Appendix: prototype inventory dump, BFCL safety inventory dump
+```
 
-- `View KPI Details` panel for Prabhat's May 2026 row: badge changes from `Bi-Monthly: May-Jun` to `Bi-Monthly: Apr-May`.
-- `View KPI Details` panel for Prabhat's June 2026 row: badge changes to `Bi-Monthly: Jun-Jul`. June row will no longer appear on the May Org KPI Data Entry page (terminal of `Jun-Jul` is Jul under standard mapping, or stays Jun under Feb-Mar offset — confirmed against `deriveCycleOptionFromCycleStart` so the label is consistent with ADR-087).
-- New small "anchor drift detected" banner on the admin **Org KPI Cycle Anchor Repair** page, only when drift exists.
+## Deliverables
 
-No other UI surface changes.
+- `docs/safety/parity-audit-2026-06.md` — the only repo write.
+- Intermediates (`/tmp/proto-tree.json`, `/tmp/proto-inventory.json`, `/tmp/bfcl-safety-inventory.json`) discarded.
 
-## Tests
-- Vitest cases in Step 5.
-- SQL test for `resolve_cycle_anchor` 3-arg variant.
+## Non-goals
 
-## Documentation / Policy
-- ADR-088 created.
-- POLICY.md §54 amended.
-- `mem/architecture/pms/multimonth-percolation` updated.
+- No code edits. No migrations. No memory edits. No DB writes.
+- No recommendations beyond the gap list (a follow-up plan can convert gaps to tickets if requested).
 
-## Out of scope
-- Backfilling other tuples beyond Prabhat's. A separate audit pass (using Step 4's detector) will be planned once the forward-fix is live and Step 4 has run for ≥1 cron cycle.
-- Touching `materialize_kpis_for_org_kpi` (already preserves the template's anchor).
-- Any change to scoring / percolation logic.
+## Risks
+
+- **Prototype repo is private** → fetch returns 404. Fallback: ask user for an upload.
+- **GitHub rate limiting** on unauth raw downloads → batch with sleep + ETag if needed.
+- **Behavioural matching is judgement-heavy** → every "Fully Present" verdict cites both the prototype evidence line and the BFCL evidence line, so the user can spot-check.
+- **Subagent context drift** → each subagent gets the same status rubric verbatim.
+
+## Acceptance
+
+Report renders, every row has a file:line citation on both sides (or an explicit "n/a — missing"), and the score block sums to 100%.
