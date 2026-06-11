@@ -230,6 +230,9 @@ export default function SafetyIncidents() {
             subtitle={
               <>
                 {SAFETY_TYPE_LABELS[i.incident_type]} · {SAFETY_SEVERITY_LABELS[i.severity]}
+                {(i as any).business_unit_name && (
+                  <> · {(i as any).business_unit_name}</>
+                )}
               </>
             }
             meta={format(new Date(i.created_at), 'dd MMM yyyy, HH:mm')}
