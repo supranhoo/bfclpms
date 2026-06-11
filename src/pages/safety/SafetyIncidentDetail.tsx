@@ -20,8 +20,8 @@ import { SafetySkeletonBlock } from '@/components/safety/SafetySkeletonBlock';
 import { OrphanIncidentDialog } from '@/components/safety/OrphanIncidentDialog';
 import { RoutingChainDisplay } from '@/components/safety/RoutingChainDisplay';
 import { IncidentSlaPanel } from '@/components/safety/IncidentSlaPanel';
-import { useMySafetyRoles } from '@/hooks/useSafetyRoles';
 import { useAuth } from '@/contexts/AuthContext';
+import { useSafetyPermissions } from '@/hooks/useSafetyPermissions';
 
 export default function SafetyIncidentDetail() {
   const { id } = useParams<{ id: string }>();
@@ -39,7 +39,7 @@ export default function SafetyIncidentDetail() {
   const { data: settings = [] } = useSafetySettings();
   const uiV2 = settings.find((r) => r.key === 'ui_incident_v2')?.value === true;
   const { user } = useAuth();
-  const { data: myRoles = [] } = useMySafetyRoles();
+  const { can } = useSafetyPermissions();
 
   if (isLoading) {
     return (
@@ -62,15 +62,12 @@ export default function SafetyIncidentDetail() {
     );
   }
 
-  // Workers / reporter-only users see just the status timeline.
-  // Privileged viewers (admin, safety_head, safety_officer, bu_head, manager,
-  // supervisor, auditor) OR anyone routed/assigned on this incident see
-  // the full stage actions, SLA, evidence and progress log.
+  // Visibility of stage actions, SLA, evidence & progress log is controlled
+  // by the configurable `action.incidents.view_internals` permission key
+  // (manage from Safety > Settings > Permissions). Anyone explicitly on the
+  // routing/assignment chain for this incident always sees the internals so
+  // they can act on it.
   const uid = user?.id ?? null;
-  const privilegedRoles: string[] = [
-    'admin', 'safety_head', 'safety_officer', 'bu_head', 'manager', 'supervisor', 'auditor',
-  ];
-  const hasPrivilegedRole = myRoles.some((r) => privilegedRoles.includes(r));
   const isOnRoutingChain = !!uid && (
     incident.assigned_to === uid ||
     incident.routed_bu_head_id === uid ||
@@ -79,7 +76,7 @@ export default function SafetyIncidentDetail() {
     incident.safety_head_id === uid ||
     incident.verifier_id === uid
   );
-  const canSeeFullDetail = hasPrivilegedRole || isOnRoutingChain;
+  const canSeeFullDetail = can('action.incidents.view_internals') || isOnRoutingChain;
 
   return (
     <div className="p-3 sm:p-6 space-y-3 sm:space-y-4 w-full">
