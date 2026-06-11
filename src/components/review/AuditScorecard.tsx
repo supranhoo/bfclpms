@@ -204,6 +204,32 @@ export function AuditScorecard({
   const { saveOverrides, acceptPreviousLevel, isLoading: isSavingOverrides } = useReviewerSubPeriodOverride();
 
   const submissionMap = useMemo(() => new Map(submissions?.map(s => [s.kpi_id, s])), [submissions]);
+
+  // RCA Jun-2026: while the audit sheet is open for a specific KPI, subscribe
+  // to live changes on its review_submissions row so any insert/update lands
+  // immediately and the Review Journey tiles never show stale "N/A".
+  useEffect(() => {
+    if (!reviewSheetOpen || !selectedKpi?.id) return;
+    const channel = supabase
+      .channel(`audit-review-sub-${selectedKpi.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'review_submissions',
+          filter: `kpi_id=eq.${selectedKpi.id}`,
+        },
+        () => {
+          queryClient.invalidateQueries({ queryKey: ['review-submissions'] });
+        },
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [reviewSheetOpen, selectedKpi?.id, queryClient]);
+
   const queryMap = useMemo(() => {
     const map = new Map<string, typeof queries>();
     queries?.forEach(q => {
