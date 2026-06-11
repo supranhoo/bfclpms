@@ -154,7 +154,12 @@ export function StageActionPanel({ incident }: { incident: SafetyIncidentRow }) 
   const uid = user?.id ?? null;
   const responsible = stageResponsibleIds(incident, globalSafetyHeadId);
   const isResponsible = !!uid && responsible.some((r) => r === uid);
-  const canOverride = can('action.incidents.override');
+  // For the Safety Head Review stage we deliberately ignore the generic
+  // override permission: assigning the verifier and advancing to verification
+  // must be done by the configured Safety Head only. Any other user (including
+  // the investigator who just handed the ticket back) sees a read-only note.
+  const canOverride =
+    incident.status === 'safety_head_review' ? false : can('action.incidents.override');
   if (!isResponsible && !canOverride) {
     const owner = responsible.find((r): r is string => !!r);
     return (
