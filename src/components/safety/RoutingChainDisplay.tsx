@@ -1,5 +1,5 @@
 import { AlertTriangle, UserCircle2 } from 'lucide-react';
-import { useActiveProfilesLite } from '@/hooks/useSafetyOrg';
+import { useActiveProfilesLite, formatSafetyProfileLabel } from '@/hooks/useSafetyOrg';
 import { Badge } from '@/components/ui/badge';
 
 interface Props {
@@ -12,7 +12,7 @@ interface Props {
 export function RoutingChainDisplay({ buHeadId, managerId, secondManagerId, routingStatus }: Props) {
   const { data: profiles = [] } = useActiveProfilesLite();
   const nameOf = (id: string | null) =>
-    !id ? '—' : (profiles.find((p) => p.id === id)?.full_name ?? 'Unknown user');
+    !id ? '—' : (formatSafetyProfileLabel(profiles.find((p) => p.id === id)) ?? 'Unknown user');
 
   const rows: Array<[string, string | null]> = [
     ['BU Head', buHeadId],

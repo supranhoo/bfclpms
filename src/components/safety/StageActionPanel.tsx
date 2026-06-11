@@ -23,7 +23,7 @@ import {
   useUpdateIncidentNotes,
   type EvidenceStage,
 } from '@/hooks/useSafetyIncidentDetail';
-import { useActiveProfilesLite } from '@/hooks/useSafetyOrg';
+import { useActiveProfilesLite, formatSafetyProfileLabel } from '@/hooks/useSafetyOrg';
 
 const STAGE_TO_EVIDENCE: Record<SafetyIncidentStatus, EvidenceStage | null> = {
   reported: 'report',
@@ -113,7 +113,7 @@ export function StageActionPanel({ incident }: { incident: SafetyIncidentRow }) 
               <SelectContent>
                 {profiles.map((p) => (
                   <SelectItem key={p.id} value={p.id}>
-                    {p.full_name ?? p.email ?? p.id.slice(0, 8)}
+                    {formatSafetyProfileLabel(p)}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -131,7 +131,7 @@ export function StageActionPanel({ incident }: { incident: SafetyIncidentRow }) 
               <SelectContent>
                 {profiles.map((p) => (
                   <SelectItem key={p.id} value={p.id}>
-                    {p.full_name ?? p.email ?? p.id.slice(0, 8)}
+                    {formatSafetyProfileLabel(p)}
                   </SelectItem>
                 ))}
               </SelectContent>

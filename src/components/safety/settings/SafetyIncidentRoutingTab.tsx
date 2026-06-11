@@ -17,6 +17,7 @@ import { Loader2, Network, Pencil, Plus, Trash2 } from 'lucide-react';
 import {
   useBusinessUnits, useDepartments, useActiveProfilesLite,
 } from '@/hooks/useSafetyOrg';
+import { formatSafetyProfileLabel } from '@/hooks/useSafetyOrg';
 import {
   useSafetyRoutingRules, useUpsertSafetyRoutingRule, useDeleteSafetyRoutingRule,
   type SafetyRoutingRule, type UpsertRuleInput,
@@ -35,7 +36,7 @@ function EmployeeSelect({
       <SelectContent className="max-h-72">
         {profiles.map((p) => (
           <SelectItem key={p.id} value={p.id}>
-            {p.full_name ?? p.email ?? p.id}
+            {formatSafetyProfileLabel(p)}
           </SelectItem>
         ))}
       </SelectContent>
@@ -67,7 +68,7 @@ export default function SafetyIncidentRoutingTab() {
   const buMap = useMemo(() => new Map(bus.map((b) => [b.id, b.name])), [bus]);
   const deptMap = useMemo(() => new Map(depts.map((d) => [d.id, d.name])), [depts]);
   const profileMap = useMemo(
-    () => new Map(profiles.map((p) => [p.id, p.full_name ?? p.email ?? p.id])),
+    () => new Map(profiles.map((p) => [p.id, formatSafetyProfileLabel(p)])),
     [profiles],
   );
 
