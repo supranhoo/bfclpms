@@ -53,7 +53,7 @@ const items: Array<{ title: string; url: string; icon: any; end?: boolean; perm?
   { title: 'SLA Monitor', url: '/safety/settings/sla', icon: Timer, perm: SAFETY_NAV_KEYS.slaMonitor },
   { title: 'Users & Roles', url: '/safety/settings/users', icon: Users, perm: SAFETY_NAV_KEYS.usersRoles },
   { title: 'Audit Log', url: '/safety/settings/audit', icon: ScrollText, perm: SAFETY_NAV_KEYS.auditLog },
-  { title: 'Settings', url: '/safety/settings', icon: Settings, end: true }, // settings hub itself stays universal
+  { title: 'Settings', url: '/safety/settings', icon: Settings, end: true, perm: SAFETY_NAV_KEYS.settings },
 ];
 
 export function SafetySidebar() {
