@@ -32,8 +32,8 @@ import { format } from 'date-fns';
  */
 
 const STATUS_OPTIONS = [
-  'all', 'reported', 'assigned', 'investigation', 'rca',
-  'corrective_action', 'verification', 'closed', 'orphaned',
+  'all', 'reported', 'management_review', 'assigned', 'investigation', 'rca',
+  'corrective_action', 'safety_head_review', 'verification', 'closed', 'orphaned',
 ] as const;
 const SEVERITY_OPTIONS = ['all', 'low', 'medium', 'high', 'critical'] as const;
 const TYPE_OPTIONS = [
