@@ -33,6 +33,7 @@ import {
   useSafetyIncidentTypes,
   useSafetyIncidentSeverities,
 } from '@/hooks/useSafetyIncidentTypes';
+import { useAllSafetyIncidentSeverities } from '@/hooks/useSafetyIncidentTypes';
 import { toast } from 'sonner';
 
 const PRIORITIES = Object.keys(SAFETY_PRIORITY_LABELS) as SafetyIncidentPriority[];
@@ -46,28 +47,43 @@ function formatHours(h: number) {
 
 export default function SafetySlaRulesTab() {
   const { data: rules = [], isLoading } = useSafetyIncidentSlaRules();
+  const { data: typeOptions = [] } = useSafetyIncidentTypes({ activeOnly: false });
+  const { data: allSeverities = [] } = useAllSafetyIncidentSeverities();
   const upsert = useUpsertSafetyIncidentSlaRule();
   const toggle = useToggleSafetyIncidentSlaRule();
 
-  const [filterType, setFilterType] = useState<string>('all');
-  const [filterSeverity, setFilterSeverity] = useState<string>('all');
+  const [filterTypeId, setFilterTypeId] = useState<string>('all');
+  const [filterSeverityId, setFilterSeverityId] = useState<string>('all');
   const [filterPriority, setFilterPriority] = useState<string>('all');
   const [search, setSearch] = useState('');
   const [editing, setEditing] = useState<SafetyIncidentSlaRule | null>(null);
   const [creating, setCreating] = useState(false);
 
+  const typeNameById = useMemo(
+    () => new Map(typeOptions.map((t) => [t.id, t.name])),
+    [typeOptions],
+  );
+  const severityLabelById = useMemo(
+    () => new Map(allSeverities.map((s) => [s.id, s.label])),
+    [allSeverities],
+  );
+  const severitiesForFilter = useMemo(
+    () => allSeverities.filter((s) => filterTypeId === 'all' || s.incident_type_id === filterTypeId),
+    [allSeverities, filterTypeId],
+  );
+
   const filtered = useMemo(() => {
     const needle = search.trim().toLowerCase();
     return rules.filter((r) => {
-      if (filterType !== 'all' && r.incident_type !== filterType) return false;
-      if (filterSeverity !== 'all' && r.severity !== filterSeverity) return false;
+      if (filterTypeId !== 'all' && r.incident_type_id !== filterTypeId) return false;
+      if (filterSeverityId !== 'all' && r.severity_id !== filterSeverityId) return false;
       if (filterPriority !== 'all') {
         if (filterPriority === ANY ? r.priority !== null : r.priority !== filterPriority) return false;
       }
       if (needle && !(r.notes ?? '').toLowerCase().includes(needle)) return false;
       return true;
     });
-  }, [rules, filterType, filterSeverity, filterPriority, search]);
+  }, [rules, filterTypeId, filterSeverityId, filterPriority, search]);
 
   return (
     <Card>
@@ -87,18 +103,18 @@ export default function SafetySlaRulesTab() {
       </CardHeader>
       <CardContent className="space-y-3">
         <div className="grid grid-cols-1 sm:grid-cols-4 gap-2">
-          <Select value={filterType} onValueChange={setFilterType}>
+          <Select value={filterTypeId} onValueChange={(v) => { setFilterTypeId(v); setFilterSeverityId('all'); }}>
             <SelectTrigger><SelectValue placeholder="Type" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All types</SelectItem>
-              {TYPES.map((t) => <SelectItem key={t} value={t}>{SAFETY_TYPE_LABELS[t]}</SelectItem>)}
+              {typeOptions.map((t) => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
             </SelectContent>
           </Select>
-          <Select value={filterSeverity} onValueChange={setFilterSeverity}>
+          <Select value={filterSeverityId} onValueChange={setFilterSeverityId}>
             <SelectTrigger><SelectValue placeholder="Severity" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All severities</SelectItem>
-              {SEVERITIES.map((s) => <SelectItem key={s} value={s}>{SAFETY_SEVERITY_LABELS[s]}</SelectItem>)}
+              {severitiesForFilter.map((s) => <SelectItem key={s.id} value={s.id}>{s.label}</SelectItem>)}
             </SelectContent>
           </Select>
           <Select value={filterPriority} onValueChange={setFilterPriority}>
