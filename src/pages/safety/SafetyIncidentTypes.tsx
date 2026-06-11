@@ -451,12 +451,11 @@ function SeverityEditor({
   const [active, setActive] = useState(existing?.is_active ?? true);
   const [sortOrder, setSortOrder] = useState(String(existing?.sort_order ?? 0));
 
-  useMemo(() => {
+  useEffect(() => {
     setLabel(existing?.label ?? '');
     setCode(existing?.code ?? '');
     setActive(existing?.is_active ?? true);
     setSortOrder(String(existing?.sort_order ?? 0));
-    return null;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [existing?.id, open]);
 
