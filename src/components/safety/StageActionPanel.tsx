@@ -3,13 +3,6 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import { Loader2, ArrowRight, Upload } from 'lucide-react';
 import {
   nextStage,
@@ -23,7 +16,7 @@ import {
   useUpdateIncidentNotes,
   type EvidenceStage,
 } from '@/hooks/useSafetyIncidentDetail';
-import { useActiveProfilesLite, formatSafetyProfileLabel } from '@/hooks/useSafetyOrg';
+import { SafetyUserPicker } from '@/components/safety/SafetyUserPicker';
 
 const STAGE_TO_EVIDENCE: Record<SafetyIncidentStatus, EvidenceStage | null> = {
   reported: 'report',
@@ -46,7 +39,6 @@ export function StageActionPanel({ incident }: { incident: SafetyIncidentRow }) 
   const addProgress = useAddProgressLog(incident.id);
   const upload = useUploadEvidence(incident.id);
   const saveNotes = useUpdateIncidentNotes(incident.id);
-  const { data: profiles = [] } = useActiveProfilesLite();
 
   const [note, setNote] = useState('');
   const [assignTo, setAssignTo] = useState<string>('');
@@ -108,16 +100,11 @@ export function StageActionPanel({ incident }: { incident: SafetyIncidentRow }) 
         {incident.status === 'management_review' && (
           <div>
             <Label>Assign to *</Label>
-            <Select value={assignTo} onValueChange={setAssignTo}>
-              <SelectTrigger><SelectValue placeholder="Select investigator" /></SelectTrigger>
-              <SelectContent>
-                {profiles.map((p) => (
-                  <SelectItem key={p.id} value={p.id}>
-                    {formatSafetyProfileLabel(p)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <SafetyUserPicker
+              value={assignTo}
+              onChange={setAssignTo}
+              placeholder="Select investigator"
+            />
             <p className="text-xs text-muted-foreground mt-1">
               Selected worker becomes the investigator for this incident.
             </p>
@@ -126,16 +113,11 @@ export function StageActionPanel({ incident }: { incident: SafetyIncidentRow }) 
         {incident.status === 'safety_head_review' && (
           <div>
             <Label>Assign Verifier *</Label>
-            <Select value={verifier} onValueChange={setVerifier}>
-              <SelectTrigger><SelectValue placeholder="Select verifier" /></SelectTrigger>
-              <SelectContent>
-                {profiles.map((p) => (
-                  <SelectItem key={p.id} value={p.id}>
-                    {formatSafetyProfileLabel(p)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <SafetyUserPicker
+              value={verifier}
+              onChange={setVerifier}
+              placeholder="Select verifier"
+            />
             <p className="text-xs text-muted-foreground mt-1">
               Verifier confirms corrective actions before closure (may differ from the investigator).
             </p>

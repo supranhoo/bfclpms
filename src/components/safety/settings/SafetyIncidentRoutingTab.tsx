@@ -7,11 +7,12 @@ import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger,
 } from '@/components/ui/dialog';
 import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select';
-import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select';
+import { SafetyUserPicker } from '@/components/safety/SafetyUserPicker';
 import { Badge } from '@/components/ui/badge';
 import { Loader2, Network, Pencil, Plus, Trash2 } from 'lucide-react';
 import {
@@ -29,18 +30,8 @@ const ANY_DEPT = '__division_default__';
 function EmployeeSelect({
   value, onChange, placeholder,
 }: { value: string; onChange: (v: string) => void; placeholder: string }) {
-  const { data: profiles = [] } = useActiveProfilesLite();
   return (
-    <Select value={value} onValueChange={onChange}>
-      <SelectTrigger><SelectValue placeholder={placeholder} /></SelectTrigger>
-      <SelectContent className="max-h-72">
-        {profiles.map((p) => (
-          <SelectItem key={p.id} value={p.id}>
-            {formatSafetyProfileLabel(p)}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
+    <SafetyUserPicker value={value} onChange={onChange} placeholder={placeholder} />
   );
 }
 
