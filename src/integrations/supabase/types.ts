@@ -11612,6 +11612,7 @@ export type Database = {
           routed_manager_id: string | null
           routed_second_manager_id: string | null
           routing_status: string | null
+          safety_head_id: string | null
           severity:
             | Database["public"]["Enums"]["safety_incident_severity"]
             | null
@@ -11620,6 +11621,7 @@ export type Database = {
           title: string | null
           updated_at: string | null
           verification_notes: string | null
+          verifier_id: string | null
         }
         Insert: {
           acknowledge_due_at?: string | null
@@ -11649,6 +11651,7 @@ export type Database = {
           routed_manager_id?: string | null
           routed_second_manager_id?: string | null
           routing_status?: string | null
+          safety_head_id?: string | null
           severity?:
             | Database["public"]["Enums"]["safety_incident_severity"]
             | null
@@ -11657,6 +11660,7 @@ export type Database = {
           title?: string | null
           updated_at?: string | null
           verification_notes?: string | null
+          verifier_id?: string | null
         }
         Update: {
           acknowledge_due_at?: string | null
@@ -11686,6 +11690,7 @@ export type Database = {
           routed_manager_id?: string | null
           routed_second_manager_id?: string | null
           routing_status?: string | null
+          safety_head_id?: string | null
           severity?:
             | Database["public"]["Enums"]["safety_incident_severity"]
             | null
@@ -11694,6 +11699,7 @@ export type Database = {
           title?: string | null
           updated_at?: string | null
           verification_notes?: string | null
+          verifier_id?: string | null
         }
         Relationships: [
           {
@@ -11804,6 +11810,34 @@ export type Database = {
           {
             foreignKeyName: "safety_incidents_routed_second_manager_id_fkey"
             columns: ["routed_second_manager_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "safety_incidents_safety_head_id_fkey"
+            columns: ["safety_head_id"]
+            isOneToOne: false
+            referencedRelation: "eligible_login_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "safety_incidents_safety_head_id_fkey"
+            columns: ["safety_head_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "safety_incidents_verifier_id_fkey"
+            columns: ["verifier_id"]
+            isOneToOne: false
+            referencedRelation: "eligible_login_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "safety_incidents_verifier_id_fkey"
+            columns: ["verifier_id"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
@@ -13215,15 +13249,26 @@ export type Database = {
         Args: { p_permit_id: string; p_reason: string }
         Returns: Json
       }
-      transition_safety_incident: {
-        Args: {
-          p_assigned_to?: string
-          p_incident_id: string
-          p_notes?: string
-          p_to_status: Database["public"]["Enums"]["safety_incident_status"]
-        }
-        Returns: Json
-      }
+      transition_safety_incident:
+        | {
+            Args: {
+              p_assigned_to?: string
+              p_incident_id: string
+              p_notes?: string
+              p_to_status: Database["public"]["Enums"]["safety_incident_status"]
+            }
+            Returns: Json
+          }
+        | {
+            Args: {
+              p_assigned_to?: string
+              p_incident_id: string
+              p_notes?: string
+              p_to_status: Database["public"]["Enums"]["safety_incident_status"]
+              p_verifier_id?: string
+            }
+            Returns: Json
+          }
       user_can_see_employee: {
         Args: { p_employee_id: string; p_user_id: string }
         Returns: boolean
