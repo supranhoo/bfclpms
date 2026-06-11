@@ -66,18 +66,30 @@ export function useActiveProfilesLite() {
   return useQuery({
     queryKey: ['safety', 'profiles', 'lite'],
     queryFn: async (): Promise<SafetyProfileLite[]> => {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('id, full_name, email, employee_code, is_active')
-        .eq('is_active', true)
-        .order('full_name');
-      if (error) throw error;
-      return (data ?? []).map((p: { id: string; full_name: string | null; email: string | null; employee_code: string | null }) => ({
-        id: p.id,
-        full_name: p.full_name,
-        email: p.email,
-        employee_code: p.employee_code,
-      }));
+      // Page through the profiles table so we are not silently capped by
+      // PostgREST's default 1000-row limit on large organisations.
+      const PAGE = 1000;
+      const out: SafetyProfileLite[] = [];
+      for (let from = 0; ; from += PAGE) {
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('id, full_name, email, employee_code')
+          .eq('is_active', true)
+          .order('full_name')
+          .range(from, from + PAGE - 1);
+        if (error) throw error;
+        const batch = data ?? [];
+        for (const p of batch) {
+          out.push({
+            id: p.id,
+            full_name: p.full_name,
+            email: p.email,
+            employee_code: p.employee_code,
+          });
+        }
+        if (batch.length < PAGE) break;
+      }
+      return out;
     },
   });
 }

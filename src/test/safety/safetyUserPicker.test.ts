@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { filterSafetyProfiles, SAFETY_USER_PICKER_LIMIT } from '@/components/safety/SafetyUserPicker';
+import {
+  filterSafetyProfiles,
+  SAFETY_USER_PICKER_IDLE_LIMIT,
+} from '@/components/safety/SafetyUserPicker';
 import type { SafetyProfileLite } from '@/hooks/useSafetyOrg';
 
 const mk = (id: string, full_name: string | null, email: string | null, employee_code: string | null): SafetyProfileLite =>
@@ -44,10 +47,21 @@ describe('filterSafetyProfiles (Safety user picker search)', () => {
     expect(filterSafetyProfiles(PROFILES, 'zzz-does-not-exist')).toEqual([]);
   });
 
-  it('caps results at the picker limit for large datasets', () => {
+  it('caps idle results but returns ALL matches when searching', () => {
     const big = Array.from({ length: 500 }, (_, i) => mk(`u${i}`, `Worker ${i}`, `w${i}@x.com`, `E${i}`));
-    expect(filterSafetyProfiles(big, '')).toHaveLength(SAFETY_USER_PICKER_LIMIT);
-    expect(filterSafetyProfiles(big, 'worker')).toHaveLength(SAFETY_USER_PICKER_LIMIT);
-    expect(filterSafetyProfiles(big, 'worker', 10)).toHaveLength(10);
+    // Idle (no query) -> capped to keep dropdown fast.
+    expect(filterSafetyProfiles(big, '')).toHaveLength(SAFETY_USER_PICKER_IDLE_LIMIT);
+    // Searching -> NOT capped, so users beyond the idle window are findable.
+    expect(filterSafetyProfiles(big, 'worker')).toHaveLength(500);
+    expect(filterSafetyProfiles(big, 'Worker 4')).toHaveLength(
+      big.filter((p) => p.full_name?.includes('Worker 4')).length,
+    );
+  });
+
+  it('finds a specific user even when they are far past the idle cap', () => {
+    const big = Array.from({ length: 500 }, (_, i) => mk(`u${i}`, `Worker ${i}`, `w${i}@x.com`, `E${i}`));
+    big.push(mk('target', 'Avinash Kumar', 'avi@x.com', '101732'));
+    expect(filterSafetyProfiles(big, '101732').map((p) => p.id)).toEqual(['target']);
+    expect(filterSafetyProfiles(big, 'avinash').map((p) => p.id)).toEqual(['target']);
   });
 });

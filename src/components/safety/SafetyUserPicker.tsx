@@ -10,7 +10,16 @@ import {
 } from '@/hooks/useSafetyOrg';
 import { cn } from '@/lib/utils';
 
-export const SAFETY_USER_PICKER_LIMIT = 50;
+/**
+ * Idle cap: how many users to render when the search box is empty.
+ * When the user starts typing, ALL matching profiles are returned
+ * (no cap) so they can find anyone in the organisation — not just
+ * the first N alphabetically.
+ */
+export const SAFETY_USER_PICKER_IDLE_LIMIT = 50;
+
+/** @deprecated kept for backwards-compat with older tests/imports. */
+export const SAFETY_USER_PICKER_LIMIT = SAFETY_USER_PICKER_IDLE_LIMIT;
 
 /**
  * Pure filter used by the Safety user picker.
@@ -20,17 +29,17 @@ export const SAFETY_USER_PICKER_LIMIT = 50;
 export function filterSafetyProfiles(
   profiles: SafetyProfileLite[],
   query: string,
-  limit: number = SAFETY_USER_PICKER_LIMIT,
+  idleLimit: number = SAFETY_USER_PICKER_IDLE_LIMIT,
 ): SafetyProfileLite[] {
   const q = query.trim().toLowerCase();
-  if (!q) return profiles.slice(0, limit);
-  return profiles
-    .filter((p) =>
-      (p.full_name ?? '').toLowerCase().includes(q) ||
-      (p.email ?? '').toLowerCase().includes(q) ||
-      (p.employee_code ?? '').toLowerCase().includes(q),
-    )
-    .slice(0, limit);
+  if (!q) return profiles.slice(0, idleLimit);
+  // When searching, return ALL matches so users beyond the idle window
+  // are still findable by name / email / employee ID.
+  return profiles.filter((p) =>
+    (p.full_name ?? '').toLowerCase().includes(q) ||
+    (p.email ?? '').toLowerCase().includes(q) ||
+    (p.employee_code ?? '').toLowerCase().includes(q),
+  );
 }
 
 interface SafetyUserPickerProps {
@@ -118,9 +127,9 @@ export function SafetyUserPicker({
                   </div>
                 </CommandItem>
               ))}
-              {filtered.length >= SAFETY_USER_PICKER_LIMIT && (
+              {!search.trim() && profiles.length > SAFETY_USER_PICKER_IDLE_LIMIT && (
                 <div className="px-3 py-1.5 text-[11px] text-muted-foreground">
-                  Showing first {SAFETY_USER_PICKER_LIMIT} — keep typing to narrow down.
+                  Showing first {SAFETY_USER_PICKER_IDLE_LIMIT} of {profiles.length} — type to search all users.
                 </div>
               )}
             </CommandGroup>
