@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Search, Save, Loader2, ShieldCheck, UserCog, History, X } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
-import { SAFETY_ROLES, SafetyRole } from '@/lib/safetyRoles';
+import { ALL_SAFETY_ROLES as SAFETY_ROLES, type SafetyAppRole as SafetyRole } from '@/lib/safetyRoles';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
