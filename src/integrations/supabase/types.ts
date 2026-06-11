@@ -9441,11 +9441,13 @@ export type Database = {
           routed_manager_id: string | null
           routed_second_manager_id: string | null
           routing_status: string
+          safety_head_id: string | null
           severity: Database["public"]["Enums"]["safety_incident_severity"]
           status: Database["public"]["Enums"]["safety_incident_status"]
           title: string
           updated_at: string
           verification_notes: string | null
+          verifier_id: string | null
         }
         Insert: {
           acknowledge_due_at: string
@@ -9473,11 +9475,13 @@ export type Database = {
           routed_manager_id?: string | null
           routed_second_manager_id?: string | null
           routing_status?: string
+          safety_head_id?: string | null
           severity: Database["public"]["Enums"]["safety_incident_severity"]
           status?: Database["public"]["Enums"]["safety_incident_status"]
           title: string
           updated_at?: string
           verification_notes?: string | null
+          verifier_id?: string | null
         }
         Update: {
           acknowledge_due_at?: string
@@ -9505,11 +9509,13 @@ export type Database = {
           routed_manager_id?: string | null
           routed_second_manager_id?: string | null
           routing_status?: string
+          safety_head_id?: string | null
           severity?: Database["public"]["Enums"]["safety_incident_severity"]
           status?: Database["public"]["Enums"]["safety_incident_status"]
           title?: string
           updated_at?: string
           verification_notes?: string | null
+          verifier_id?: string | null
         }
         Relationships: [
           {
@@ -9620,6 +9626,34 @@ export type Database = {
           {
             foreignKeyName: "safety_incidents_routed_second_manager_id_fkey"
             columns: ["routed_second_manager_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "safety_incidents_safety_head_id_fkey"
+            columns: ["safety_head_id"]
+            isOneToOne: false
+            referencedRelation: "eligible_login_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "safety_incidents_safety_head_id_fkey"
+            columns: ["safety_head_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "safety_incidents_verifier_id_fkey"
+            columns: ["verifier_id"]
+            isOneToOne: false
+            referencedRelation: "eligible_login_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "safety_incidents_verifier_id_fkey"
+            columns: ["verifier_id"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
@@ -13288,10 +13322,12 @@ export type Database = {
       safety_incident_severity: "low" | "medium" | "high" | "critical"
       safety_incident_status:
         | "reported"
+        | "management_review"
         | "assigned"
         | "investigation"
         | "rca"
         | "corrective_action"
+        | "safety_head_review"
         | "verification"
         | "closed"
         | "orphaned"
@@ -13557,10 +13593,12 @@ export const Constants = {
       safety_incident_severity: ["low", "medium", "high", "critical"],
       safety_incident_status: [
         "reported",
+        "management_review",
         "assigned",
         "investigation",
         "rca",
         "corrective_action",
+        "safety_head_review",
         "verification",
         "closed",
         "orphaned",
