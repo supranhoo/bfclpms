@@ -1,16 +1,12 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Input } from '@/components/ui/input';
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select';
 import { Loader2, ShieldAlert } from 'lucide-react';
-import { useActiveProfilesLite, formatSafetyProfileLabel } from '@/hooks/useSafetyOrg';
+import { SafetyUserPicker } from '@/components/safety/SafetyUserPicker';
 import { useReviveOrphanedIncident } from '@/hooks/useSafetyIncidents';
 import { useMySafetyRoles } from '@/hooks/useSafetyRoles';
 import type { SafetyIncidentRow } from '@/hooks/useSafetyIncidents';
@@ -28,33 +24,18 @@ export function OrphanIncidentDialog({
   open: boolean;
   onOpenChange: (v: boolean) => void;
 }) {
-  const { data: profiles = [], isLoading } = useActiveProfilesLite();
   const { data: myRoles = [] } = useMySafetyRoles();
   const canRevive = myRoles.includes('admin') || myRoles.includes('safety_head');
   const revive = useReviveOrphanedIncident();
 
   const [assignee, setAssignee] = useState<string>('');
   const [notes, setNotes] = useState('');
-  const [search, setSearch] = useState('');
-
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return profiles.slice(0, 50);
-    return profiles
-      .filter((p) =>
-        (p.full_name ?? '').toLowerCase().includes(q) ||
-        (p.email ?? '').toLowerCase().includes(q) ||
-        (p.employee_code ?? '').toLowerCase().includes(q),
-      )
-      .slice(0, 50);
-  }, [profiles, search]);
 
   const onSubmit = async () => {
     if (!incident || !assignee) return;
     await revive.mutateAsync({ incidentId: incident.id, assignedTo: assignee, notes });
     setAssignee('');
     setNotes('');
-    setSearch('');
     onOpenChange(false);
   };
 
@@ -80,30 +61,12 @@ export function OrphanIncidentDialog({
         ) : (
           <div className="space-y-4">
             <div>
-              <Label htmlFor="orphan-search">Search employee</Label>
-              <Input
-                id="orphan-search"
-                placeholder="Search by name or email…"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-              />
-            </div>
-            <div>
               <Label>New owner *</Label>
-              <Select value={assignee} onValueChange={setAssignee} disabled={isLoading}>
-                <SelectTrigger><SelectValue placeholder={isLoading ? 'Loading…' : 'Select assignee'} /></SelectTrigger>
-                <SelectContent>
-                  {filtered.map((p) => (
-                    <SelectItem key={p.id} value={p.id}>
-                      {formatSafetyProfileLabel(p)}
-                      {p.email && p.full_name ? ` · ${p.email}` : ''}
-                    </SelectItem>
-                  ))}
-                  {filtered.length === 0 && (
-                    <div className="px-3 py-2 text-xs text-muted-foreground">No matches.</div>
-                  )}
-                </SelectContent>
-              </Select>
+              <SafetyUserPicker
+                value={assignee}
+                onChange={setAssignee}
+                placeholder="Select assignee"
+              />
             </div>
             <div>
               <Label htmlFor="orphan-notes">Notes (optional)</Label>
