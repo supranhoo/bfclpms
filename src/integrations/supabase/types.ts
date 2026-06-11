@@ -9232,6 +9232,7 @@ export type Database = {
           id: string
           is_active: boolean
           manager_id: string | null
+          safety_head_id: string | null
           second_manager_id: string | null
           updated_at: string
           updated_by: string | null
@@ -9245,6 +9246,7 @@ export type Database = {
           id?: string
           is_active?: boolean
           manager_id?: string | null
+          safety_head_id?: string | null
           second_manager_id?: string | null
           updated_at?: string
           updated_by?: string | null
@@ -9258,6 +9260,7 @@ export type Database = {
           id?: string
           is_active?: boolean
           manager_id?: string | null
+          safety_head_id?: string | null
           second_manager_id?: string | null
           updated_at?: string
           updated_by?: string | null
@@ -9315,6 +9318,20 @@ export type Database = {
           {
             foreignKeyName: "safety_incident_routing_rules_manager_id_fkey"
             columns: ["manager_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "safety_incident_routing_rules_safety_head_id_fkey"
+            columns: ["safety_head_id"]
+            isOneToOne: false
+            referencedRelation: "eligible_login_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "safety_incident_routing_rules_safety_head_id_fkey"
+            columns: ["safety_head_id"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
@@ -13097,6 +13114,7 @@ export type Database = {
         Returns: {
           bu_head: string
           manager: string
+          safety_head: string
           second_manager: string
           source: string
         }[]
