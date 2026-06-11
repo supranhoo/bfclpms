@@ -37,7 +37,30 @@ export function useDepartments(businessUnitId?: string | null) {
   });
 }
 
-export interface SafetyProfileLite { id: string; full_name: string | null; email: string | null }
+export interface SafetyProfileLite {
+  id: string;
+  full_name: string | null;
+  email: string | null;
+  employee_code: string | null;
+}
+
+/**
+ * Standard label for a Safety user picker / display:
+ *   "Full Name (EMP123)" when both present,
+ *   "Full Name" when no code,
+ *   "EMP123" when no name,
+ *   email or id fallback.
+ * Used across every Safety screen so the employee code is always visible
+ * alongside the user's name.
+ */
+export function formatSafetyProfileLabel(
+  p: Pick<SafetyProfileLite, 'full_name' | 'email' | 'employee_code' | 'id'> | null | undefined,
+): string {
+  if (!p) return '—';
+  const name = p.full_name?.trim() || p.email?.trim() || p.id.slice(0, 8);
+  const code = p.employee_code?.trim();
+  return code ? `${name} (${code})` : name;
+}
 
 export function useActiveProfilesLite() {
   return useQuery({
@@ -45,14 +68,15 @@ export function useActiveProfilesLite() {
     queryFn: async (): Promise<SafetyProfileLite[]> => {
       const { data, error } = await supabase
         .from('profiles')
-        .select('id, full_name, email, is_active')
+        .select('id, full_name, email, employee_code, is_active')
         .eq('is_active', true)
         .order('full_name');
       if (error) throw error;
-      return (data ?? []).map((p: { id: string; full_name: string | null; email: string | null }) => ({
+      return (data ?? []).map((p: { id: string; full_name: string | null; email: string | null; employee_code: string | null }) => ({
         id: p.id,
         full_name: p.full_name,
         email: p.email,
+        employee_code: p.employee_code,
       }));
     },
   });
