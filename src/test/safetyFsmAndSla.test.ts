@@ -18,7 +18,7 @@ import {
  * Safety UI imports from.
  */
 describe('Safety FSM — sequential transition rule', () => {
-  it('exposes the canonical 9-stage order', () => {
+  it('exposes the canonical 8-stage order (Verification stage retired June 2026)', () => {
     expect(SAFETY_INCIDENT_STAGES).toEqual([
       'reported',
       'management_review',
@@ -27,7 +27,6 @@ describe('Safety FSM — sequential transition rule', () => {
       'rca',
       'corrective_action',
       'safety_head_review',
-      'verification',
       'closed',
     ]);
   });
@@ -39,8 +38,7 @@ describe('Safety FSM — sequential transition rule', () => {
     expect(nextStage('investigation')).toBe('rca');
     expect(nextStage('rca')).toBe('corrective_action');
     expect(nextStage('corrective_action')).toBe('safety_head_review');
-    expect(nextStage('safety_head_review')).toBe('verification');
-    expect(nextStage('verification')).toBe('closed');
+    expect(nextStage('safety_head_review')).toBe('closed');
   });
 
   it('nextStage returns null at terminal / exception states', () => {
@@ -64,11 +62,11 @@ describe('Safety FSM — sequential transition rule', () => {
 
   it('blocks reversing stages', () => {
     expect(validateFsmTransition('investigation', 'assigned')).toMatch(/sequential/i);
-    expect(validateFsmTransition('verification', 'rca')).toMatch(/sequential/i);
+    expect(validateFsmTransition('safety_head_review', 'rca')).toMatch(/sequential/i);
   });
 
   it('blocks editing closed incidents', () => {
-    expect(validateFsmTransition('closed', 'verification')).toMatch(/immutable/i);
+    expect(validateFsmTransition('closed', 'safety_head_review')).toMatch(/immutable/i);
     expect(validateFsmTransition('closed', 'reported')).toMatch(/immutable/i);
   });
 
@@ -78,6 +76,10 @@ describe('Safety FSM — sequential transition rule', () => {
 
   it('reviving orphaned incidents is server-only', () => {
     expect(validateFsmTransition('orphaned', 'reported')).toMatch(/server-side/i);
+  });
+
+  it('Safety Head Review → Closed is the terminal forward step', () => {
+    expect(validateFsmTransition('safety_head_review', 'closed')).toBeNull();
   });
 });
 

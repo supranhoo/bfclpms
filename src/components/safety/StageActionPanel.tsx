@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { Loader2, ArrowRight, Upload } from 'lucide-react';
+import { Loader2, ArrowRight, Upload, CheckCircle2 } from 'lucide-react';
 import {
   nextStage,
   SAFETY_STATUS_LABELS,
@@ -28,8 +28,10 @@ const STAGE_TO_EVIDENCE: Record<SafetyIncidentStatus, EvidenceStage | null> = {
   investigation: 'investigation',
   rca: 'rca',
   corrective_action: 'capa',
-  safety_head_review: null,
-  verification: 'verification',
+  // Safety Head is now the terminal approver — closure evidence (if any)
+  // uploads under the legacy 'verification' bucket to preserve history.
+  safety_head_review: 'verification',
+  verification: null,
   closed: null,
   orphaned: null,
 };
@@ -68,8 +70,6 @@ function stageResponsibleIds(
       // globally configured Safety Head if no specific one was stamped
       // on the incident at report time.
       return [incident.safety_head_id ?? globalSafetyHeadId];
-    case 'verification':
-      return [incident.verifier_id];
     default:
       return [];
   }
@@ -99,10 +99,9 @@ export function StageActionPanel({ incident }: { incident: SafetyIncidentRow }) 
 
   const [note, setNote] = useState('');
   const [assignTo, setAssignTo] = useState<string>('');
-  const [verifier, setVerifier] = useState<string>(incident.verifier_id ?? '');
   const [rca, setRca] = useState(incident.rca_summary ?? '');
   const [capa, setCapa] = useState(incident.capa_summary ?? '');
-  const [verNotes, setVerNotes] = useState(incident.verification_notes ?? '');
+  const [finalRemarks, setFinalRemarks] = useState(incident.verification_notes ?? '');
 
   const onPickFile = (e: React.ChangeEvent<HTMLInputElement>, stage: EvidenceStage) => {
     const f = e.target.files?.[0];
@@ -119,15 +118,15 @@ export function StageActionPanel({ incident }: { incident: SafetyIncidentRow }) 
     if (incident.status === 'corrective_action' && capa !== (incident.capa_summary ?? '')) {
       await saveNotes.mutateAsync({ capa_summary: capa });
     }
-    if (incident.status === 'verification' && verNotes !== (incident.verification_notes ?? '')) {
-      await saveNotes.mutateAsync({ verification_notes: verNotes });
-    }
     transition.mutate({
       incidentId: incident.id,
       toStatus: next,
       notes: note || undefined,
       assignedTo: next === 'assigned' ? assignTo || undefined : undefined,
-      verifierId: next === 'verification' ? verifier || undefined : undefined,
+      finalRemarks:
+        incident.status === 'safety_head_review' && next === 'closed'
+          ? finalRemarks.trim() || undefined
+          : undefined,
     });
   };
 
@@ -199,14 +198,15 @@ export function StageActionPanel({ incident }: { incident: SafetyIncidentRow }) 
         )}
         {incident.status === 'safety_head_review' && (
           <div>
-            <Label>Assign Verifier *</Label>
-            <SafetyUserPicker
-              value={verifier}
-              onChange={setVerifier}
-              placeholder="Select verifier"
+            <Label>Final closure remarks</Label>
+            <Textarea
+              rows={4}
+              value={finalRemarks}
+              onChange={(e) => setFinalRemarks(e.target.value)}
+              placeholder="Confirm the incident has been resolved satisfactorily. Add any final remarks for the audit trail…"
             />
             <p className="text-xs text-muted-foreground mt-1">
-              Verifier confirms corrective actions before closure (may differ from the investigator).
+              Optional. Remarks are stamped on the closure timeline entry for audit.
             </p>
           </div>
         )}
@@ -220,13 +220,6 @@ export function StageActionPanel({ incident }: { incident: SafetyIncidentRow }) 
           <div>
             <Label>Corrective & Preventive Action (CAPA)</Label>
             <Textarea rows={4} value={capa} onChange={(e) => setCapa(e.target.value)} placeholder="Describe corrective and preventive actions…" />
-          </div>
-        )}
-        {incident.status === 'verification' && (
-          <div>
-            <Label>Verification Notes *</Label>
-            <Textarea rows={4} value={verNotes} onChange={(e) => setVerNotes(e.target.value)} placeholder="Verify CAPA effectiveness before closure…" />
-            <p className="text-xs text-muted-foreground mt-1">Required to close. Closure also needs ≥1 verification evidence file and ≥1 progress log.</p>
           </div>
         )}
         {stageEvidence && (
@@ -272,13 +265,18 @@ export function StageActionPanel({ incident }: { incident: SafetyIncidentRow }) 
               disabled={
                 transition.isPending ||
                 saveNotes.isPending ||
-                (incident.status === 'management_review' && !assignTo) ||
-                (incident.status === 'safety_head_review' && !verifier)
+                (incident.status === 'management_review' && !assignTo)
               }
               className="w-full"
             >
-              {transition.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <ArrowRight className="h-4 w-4 mr-2" />}
-              Advance to {SAFETY_STATUS_LABELS[next]}
+              {transition.isPending ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : next === 'closed' ? (
+                <CheckCircle2 className="h-4 w-4 mr-2" />
+              ) : (
+                <ArrowRight className="h-4 w-4 mr-2" />
+              )}
+              {next === 'closed' ? 'Close Incident' : `Advance to ${SAFETY_STATUS_LABELS[next]}`}
             </Button>
           </div>
         )}

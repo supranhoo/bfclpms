@@ -14,12 +14,12 @@ export const SAFETY_INCIDENT_STAGES = [
   'rca',
   'corrective_action',
   'safety_head_review',
-  'verification',
   'closed',
 ] as const;
 
 export type SafetyIncidentStatus =
   | (typeof SAFETY_INCIDENT_STAGES)[number]
+  | 'verification'
   | 'orphaned';
 
 export const SAFETY_STATUS_LABELS: Record<SafetyIncidentStatus, string> = {
@@ -30,7 +30,7 @@ export const SAFETY_STATUS_LABELS: Record<SafetyIncidentStatus, string> = {
   rca: 'Root Cause Analysis',
   corrective_action: 'Corrective Action',
   safety_head_review: 'Safety Head Review',
-  verification: 'Verification',
+  verification: 'Verification (legacy)',
   closed: 'Closed',
   orphaned: 'Orphaned',
 };
