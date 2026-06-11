@@ -11,6 +11,7 @@ import { Loader2 } from 'lucide-react';
 import { useIdleTimeout } from '@/hooks/useIdleTimeout';
 import { SafetySidebar } from './SafetySidebar';
 import { SafetyModuleRoute } from './SafetyModuleRoute';
+import { SafetyRouteGuard } from './SafetyRouteGuard';
 import { EmergencyFab } from './EmergencyFab';
 import { SafetyOfflineSyncProvider } from '@/contexts/SafetyOfflineSyncContext';
 
@@ -50,7 +51,9 @@ function SafetyContent() {
                 </div>
               }
             >
-              <Outlet />
+              <SafetyRouteGuard>
+                <Outlet />
+              </SafetyRouteGuard>
             </Suspense>
           </ErrorBoundary>
         </main>
