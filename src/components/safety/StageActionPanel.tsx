@@ -17,6 +17,8 @@ import {
   type EvidenceStage,
 } from '@/hooks/useSafetyIncidentDetail';
 import { SafetyUserPicker } from '@/components/safety/SafetyUserPicker';
+import { useAuth } from '@/contexts/AuthContext';
+import { useSafetyPermissions } from '@/hooks/useSafetyPermissions';
 
 const STAGE_TO_EVIDENCE: Record<SafetyIncidentStatus, EvidenceStage | null> = {
   reported: 'report',
@@ -31,9 +33,46 @@ const STAGE_TO_EVIDENCE: Record<SafetyIncidentStatus, EvidenceStage | null> = {
   orphaned: null,
 };
 
+/**
+ * Returns the set of user IDs that are the "responsible actor(s)" for the
+ * current stage. Anyone NOT in this set sees the panel as read-only — even if
+ * they're elsewhere on the routing chain (e.g. BU Head after they've handed
+ * off to an investigator).
+ *
+ * Kept data-driven from the incident row itself (no role hardcoding) so admin
+ * routing config remains the source of truth.
+ */
+function stageResponsibleIds(incident: SafetyIncidentRow): Array<string | null | undefined> {
+  switch (incident.status) {
+    case 'reported':
+    case 'management_review':
+      // Routing chain owns triage/assignment.
+      return [
+        incident.routed_bu_head_id,
+        incident.routed_manager_id,
+        incident.routed_second_manager_id,
+        incident.safety_head_id,
+      ];
+    case 'assigned':
+    case 'investigation':
+    case 'rca':
+    case 'corrective_action':
+      // Investigator owns fact-finding through CAPA.
+      return [incident.assigned_to];
+    case 'safety_head_review':
+      return [incident.safety_head_id];
+    case 'verification':
+      return [incident.verifier_id];
+    default:
+      return [];
+  }
+}
+
 export function StageActionPanel({ incident }: { incident: SafetyIncidentRow }) {
   const next = nextStage(incident.status);
   const stageEvidence = STAGE_TO_EVIDENCE[incident.status];
+  const { user } = useAuth();
+  const { can } = useSafetyPermissions();
 
   const transition = useTransitionSafetyIncident();
   const addProgress = useAddProgressLog(incident.id);
@@ -87,6 +126,31 @@ export function StageActionPanel({ incident }: { incident: SafetyIncidentRow }) 
       <Card>
         <CardHeader><CardTitle className="text-base">Orphaned</CardTitle></CardHeader>
         <CardContent><p className="text-sm text-muted-foreground">No owner identified. Contact Safety Head.</p></CardContent>
+      </Card>
+    );
+  }
+
+  // Gate the action panel to the stage's responsible actor. Admins and users
+  // with the explicit `action.incidents.override` permission can still act
+  // (e.g. to unblock a stuck workflow). Everyone else sees a read-only note.
+  const uid = user?.id ?? null;
+  const responsible = stageResponsibleIds(incident);
+  const isResponsible = !!uid && responsible.some((r) => r === uid);
+  const canOverride = can('action.incidents.override');
+  if (!isResponsible && !canOverride) {
+    const owner = responsible.find((r): r is string => !!r);
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Stage: {SAFETY_STATUS_LABELS[incident.status]}</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-muted-foreground">
+            {owner
+              ? 'Waiting on the responsible reviewer for this stage to act. You will see actions here when it returns to you.'
+              : 'No actor is assigned for this stage yet.'}
+          </p>
+        </CardContent>
       </Card>
     );
   }
