@@ -213,6 +213,7 @@ export default function SafetyIncidents() {
               <TableHead>Severity</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>SLA</TableHead>
+              <TableHead className="hidden lg:table-cell">Routing</TableHead>
               <TableHead>Reported</TableHead>
             </TableRow>
           </TableHeader>
@@ -231,6 +232,15 @@ export default function SafetyIncidents() {
                 <TableCell>{SAFETY_SEVERITY_LABELS[i.severity]}</TableCell>
                 <TableCell><SafetyStatusBadge status={i.status} /></TableCell>
                 <TableCell><SlaBadge state={i.sla_state} /></TableCell>
+                <TableCell className="hidden lg:table-cell text-xs">
+                  {i.routing_status === 'unrouted' ? (
+                    <span className="text-amber-600">Unrouted</span>
+                  ) : i.routing_status === 'legacy' ? (
+                    <span className="text-muted-foreground">Legacy</span>
+                  ) : (
+                    <span className="text-emerald-600">Routed</span>
+                  )}
+                </TableCell>
                 <TableCell className="text-xs text-muted-foreground">
                   {format(new Date(i.created_at), 'dd MMM yyyy, HH:mm')}
                 </TableCell>

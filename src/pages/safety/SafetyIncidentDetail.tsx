@@ -18,6 +18,7 @@ import { IncidentRcaPanel } from '@/components/safety/IncidentRcaPanel';
 import { useSafetySettings } from '@/hooks/useSafetySettings';
 import { SafetySkeletonBlock } from '@/components/safety/SafetySkeletonBlock';
 import { OrphanIncidentDialog } from '@/components/safety/OrphanIncidentDialog';
+import { RoutingChainDisplay } from '@/components/safety/RoutingChainDisplay';
 
 export default function SafetyIncidentDetail() {
   const { id } = useParams<{ id: string }>();
@@ -104,6 +105,12 @@ export default function SafetyIncidentDetail() {
               <p className="text-xs sm:text-sm">{incident.involved_person_name ?? '—'}</p>
             </div>
           </div>
+          <RoutingChainDisplay
+            buHeadId={incident.routed_bu_head_id ?? null}
+            managerId={incident.routed_manager_id ?? null}
+            secondManagerId={incident.routed_second_manager_id ?? null}
+            routingStatus={incident.routing_status ?? null}
+          />
         </CardContent>
       </Card>
 

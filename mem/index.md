@@ -107,3 +107,4 @@ Lean-Load: debounce search inputs (>200 rows / network); paginate new lists with
 - [Orphan Incident Revival](mem://features/safety/orphan-revival) — ADR-089. Safety Admin/Head reassign flow via revive_orphaned_safety_incident RPC; FSM guard bypassed only by session flag
 - [Safety Role Bulk Management](mem://features/safety/role-bulk-management) — Phase 5: CSV bulk import + export for safety_user_roles on /safety/settings/users
 - [Safety Universal Data Export](mem://features/safety/data-export) — Phase 6: CSV exporter over Safety tables on /safety/settings
+- [Safety Incident Routing](mem://features/safety/incident-routing) — Dept/Division → BU Head + Manager + 2nd Manager matrix, resolver precedence (dept > division > unrouted), immutable routed_* chain stamped on incidents

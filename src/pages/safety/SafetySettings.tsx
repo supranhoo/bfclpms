@@ -17,6 +17,7 @@ import { format } from 'date-fns';
 import SafetyDataExportDialog from '@/components/safety/SafetyDataExportDialog';
 import SafetyMasterDataPanel from '@/components/safety/SafetyMasterDataPanel';
 import SafetyPermissionsTab from '@/components/safety/settings/SafetyPermissionsTab';
+import SafetyIncidentRoutingTab from '@/components/safety/settings/SafetyIncidentRoutingTab';
 
 /**
  * SafetySettings — Cross-cutting Phase X
@@ -134,6 +135,8 @@ export default function SafetySettings() {
       <SafetyDataExportDialog open={exportOpen} onOpenChange={setExportOpen} />
 
       <SafetyMasterDataPanel />
+
+      <SafetyIncidentRoutingTab />
 
       <SafetyPermissionsTab />
 

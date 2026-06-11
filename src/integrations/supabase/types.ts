@@ -9222,6 +9222,133 @@ export type Database = {
           },
         ]
       }
+      safety_incident_routing_rules: {
+        Row: {
+          bu_head_id: string
+          business_unit_id: string
+          created_at: string
+          created_by: string | null
+          department_id: string | null
+          id: string
+          is_active: boolean
+          manager_id: string
+          second_manager_id: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          bu_head_id: string
+          business_unit_id: string
+          created_at?: string
+          created_by?: string | null
+          department_id?: string | null
+          id?: string
+          is_active?: boolean
+          manager_id: string
+          second_manager_id: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          bu_head_id?: string
+          business_unit_id?: string
+          created_at?: string
+          created_by?: string | null
+          department_id?: string | null
+          id?: string
+          is_active?: boolean
+          manager_id?: string
+          second_manager_id?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "safety_incident_routing_rules_bu_head_id_fkey"
+            columns: ["bu_head_id"]
+            isOneToOne: false
+            referencedRelation: "eligible_login_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "safety_incident_routing_rules_bu_head_id_fkey"
+            columns: ["bu_head_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "safety_incident_routing_rules_business_unit_id_fkey"
+            columns: ["business_unit_id"]
+            isOneToOne: false
+            referencedRelation: "business_units"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "safety_incident_routing_rules_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "eligible_login_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "safety_incident_routing_rules_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "safety_incident_routing_rules_department_id_fkey"
+            columns: ["department_id"]
+            isOneToOne: false
+            referencedRelation: "departments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "safety_incident_routing_rules_manager_id_fkey"
+            columns: ["manager_id"]
+            isOneToOne: false
+            referencedRelation: "eligible_login_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "safety_incident_routing_rules_manager_id_fkey"
+            columns: ["manager_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "safety_incident_routing_rules_second_manager_id_fkey"
+            columns: ["second_manager_id"]
+            isOneToOne: false
+            referencedRelation: "eligible_login_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "safety_incident_routing_rules_second_manager_id_fkey"
+            columns: ["second_manager_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "safety_incident_routing_rules_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "eligible_login_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "safety_incident_routing_rules_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       safety_incident_timeline: {
         Row: {
           changed_by: string | null
@@ -9310,6 +9437,10 @@ export type Database = {
           occurred_at: string
           rca_summary: string | null
           reporter_id: string
+          routed_bu_head_id: string | null
+          routed_manager_id: string | null
+          routed_second_manager_id: string | null
+          routing_status: string
           severity: Database["public"]["Enums"]["safety_incident_severity"]
           status: Database["public"]["Enums"]["safety_incident_status"]
           title: string
@@ -9338,6 +9469,10 @@ export type Database = {
           occurred_at?: string
           rca_summary?: string | null
           reporter_id: string
+          routed_bu_head_id?: string | null
+          routed_manager_id?: string | null
+          routed_second_manager_id?: string | null
+          routing_status?: string
           severity: Database["public"]["Enums"]["safety_incident_severity"]
           status?: Database["public"]["Enums"]["safety_incident_status"]
           title: string
@@ -9366,6 +9501,10 @@ export type Database = {
           occurred_at?: string
           rca_summary?: string | null
           reporter_id?: string
+          routed_bu_head_id?: string | null
+          routed_manager_id?: string | null
+          routed_second_manager_id?: string | null
+          routing_status?: string
           severity?: Database["public"]["Enums"]["safety_incident_severity"]
           status?: Database["public"]["Enums"]["safety_incident_status"]
           title?: string
@@ -9439,6 +9578,48 @@ export type Database = {
           {
             foreignKeyName: "safety_incidents_reporter_id_fkey"
             columns: ["reporter_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "safety_incidents_routed_bu_head_id_fkey"
+            columns: ["routed_bu_head_id"]
+            isOneToOne: false
+            referencedRelation: "eligible_login_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "safety_incidents_routed_bu_head_id_fkey"
+            columns: ["routed_bu_head_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "safety_incidents_routed_manager_id_fkey"
+            columns: ["routed_manager_id"]
+            isOneToOne: false
+            referencedRelation: "eligible_login_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "safety_incidents_routed_manager_id_fkey"
+            columns: ["routed_manager_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "safety_incidents_routed_second_manager_id_fkey"
+            columns: ["routed_second_manager_id"]
+            isOneToOne: false
+            referencedRelation: "eligible_login_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "safety_incidents_routed_second_manager_id_fkey"
+            columns: ["routed_second_manager_id"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
@@ -11393,6 +11574,10 @@ export type Database = {
           occurred_at: string | null
           rca_summary: string | null
           reporter_id: string | null
+          routed_bu_head_id: string | null
+          routed_manager_id: string | null
+          routed_second_manager_id: string | null
+          routing_status: string | null
           severity:
             | Database["public"]["Enums"]["safety_incident_severity"]
             | null
@@ -11426,6 +11611,10 @@ export type Database = {
           occurred_at?: string | null
           rca_summary?: string | null
           reporter_id?: string | null
+          routed_bu_head_id?: string | null
+          routed_manager_id?: string | null
+          routed_second_manager_id?: string | null
+          routing_status?: string | null
           severity?:
             | Database["public"]["Enums"]["safety_incident_severity"]
             | null
@@ -11459,6 +11648,10 @@ export type Database = {
           occurred_at?: string | null
           rca_summary?: string | null
           reporter_id?: string | null
+          routed_bu_head_id?: string | null
+          routed_manager_id?: string | null
+          routed_second_manager_id?: string | null
+          routing_status?: string | null
           severity?:
             | Database["public"]["Enums"]["safety_incident_severity"]
             | null
@@ -11535,6 +11728,48 @@ export type Database = {
           {
             foreignKeyName: "safety_incidents_reporter_id_fkey"
             columns: ["reporter_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "safety_incidents_routed_bu_head_id_fkey"
+            columns: ["routed_bu_head_id"]
+            isOneToOne: false
+            referencedRelation: "eligible_login_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "safety_incidents_routed_bu_head_id_fkey"
+            columns: ["routed_bu_head_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "safety_incidents_routed_manager_id_fkey"
+            columns: ["routed_manager_id"]
+            isOneToOne: false
+            referencedRelation: "eligible_login_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "safety_incidents_routed_manager_id_fkey"
+            columns: ["routed_manager_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "safety_incidents_routed_second_manager_id_fkey"
+            columns: ["routed_second_manager_id"]
+            isOneToOne: false
+            referencedRelation: "eligible_login_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "safety_incidents_routed_second_manager_id_fkey"
+            columns: ["routed_second_manager_id"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
@@ -12658,6 +12893,15 @@ export type Database = {
           uom: string
           uom_type: string
           weightage: number
+        }[]
+      }
+      resolve_safety_routing: {
+        Args: { p_bu: string; p_dept: string }
+        Returns: {
+          bu_head: string
+          manager: string
+          second_manager: string
+          source: string
         }[]
       }
       resolve_scope_population: {
