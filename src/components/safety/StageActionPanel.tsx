@@ -19,7 +19,7 @@ import {
 import { SafetyUserPicker } from '@/components/safety/SafetyUserPicker';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSafetyPermissions } from '@/hooks/useSafetyPermissions';
-import { useMySafetyRoles } from '@/hooks/useSafetyRoles';
+import { useSafetySettings } from '@/hooks/useSafetySettings';
 
 const STAGE_TO_EVIDENCE: Record<SafetyIncidentStatus, EvidenceStage | null> = {
   reported: 'report',
@@ -43,7 +43,10 @@ const STAGE_TO_EVIDENCE: Record<SafetyIncidentStatus, EvidenceStage | null> = {
  * Kept data-driven from the incident row itself (no role hardcoding) so admin
  * routing config remains the source of truth.
  */
-function stageResponsibleIds(incident: SafetyIncidentRow): Array<string | null | undefined> {
+function stageResponsibleIds(
+  incident: SafetyIncidentRow,
+  globalSafetyHeadId: string | null,
+): Array<string | null | undefined> {
   switch (incident.status) {
     case 'reported':
     case 'management_review':
@@ -52,7 +55,7 @@ function stageResponsibleIds(incident: SafetyIncidentRow): Array<string | null |
         incident.routed_bu_head_id,
         incident.routed_manager_id,
         incident.routed_second_manager_id,
-        incident.safety_head_id,
+        incident.safety_head_id ?? globalSafetyHeadId,
       ];
     case 'assigned':
     case 'investigation':
@@ -61,7 +64,10 @@ function stageResponsibleIds(incident: SafetyIncidentRow): Array<string | null |
       // Investigator owns fact-finding through CAPA.
       return [incident.assigned_to];
     case 'safety_head_review':
-      return [incident.safety_head_id];
+      // Only the configured Safety Head may act here. Fall back to the
+      // globally configured Safety Head if no specific one was stamped
+      // on the incident at report time.
+      return [incident.safety_head_id ?? globalSafetyHeadId];
     case 'verification':
       return [incident.verifier_id];
     default:
@@ -74,8 +80,17 @@ export function StageActionPanel({ incident }: { incident: SafetyIncidentRow }) 
   const stageEvidence = STAGE_TO_EVIDENCE[incident.status];
   const { user } = useAuth();
   const { can } = useSafetyPermissions();
-  const { data: myRoles = [] } = useMySafetyRoles();
-  const isSafetyHead = myRoles.includes('safety_head') || myRoles.includes('admin');
+  const { data: settings = [] } = useSafetySettings();
+  const globalSafetyHeadId = (() => {
+    const row = settings.find((s) => s.key === 'global_safety_head_id');
+    const v = row?.value as unknown;
+    if (typeof v === 'string') return v;
+    if (v && typeof v === 'object' && 'value' in (v as Record<string, unknown>)) {
+      const inner = (v as Record<string, unknown>).value;
+      return typeof inner === 'string' ? inner : null;
+    }
+    return null;
+  })();
 
   const transition = useTransitionSafetyIncident();
   const addProgress = useAddProgressLog(incident.id);
@@ -137,15 +152,8 @@ export function StageActionPanel({ incident }: { incident: SafetyIncidentRow }) 
   // with the explicit `action.incidents.override` permission can still act
   // (e.g. to unblock a stuck workflow). Everyone else sees a read-only note.
   const uid = user?.id ?? null;
-  const responsible = stageResponsibleIds(incident);
-  let isResponsible = !!uid && responsible.some((r) => r === uid);
-  // Safety Head Review stage: any user with the safety_head (or admin) role
-  // can act, even if they aren't the specific routed safety_head_id. This
-  // covers cases where the assigned investigator hands the ticket back and
-  // no specific head was pre-routed.
-  if (incident.status === 'safety_head_review' && isSafetyHead) {
-    isResponsible = true;
-  }
+  const responsible = stageResponsibleIds(incident, globalSafetyHeadId);
+  const isResponsible = !!uid && responsible.some((r) => r === uid);
   const canOverride = can('action.incidents.override');
   if (!isResponsible && !canOverride) {
     const owner = responsible.find((r): r is string => !!r);
