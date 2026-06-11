@@ -15,7 +15,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Loader2, Search, Shield, UserPlus, Trash2, ChevronsUpDown, RotateCcw } from 'lucide-react';
-import { Sparkles } from 'lucide-react';
+import { Sparkles, Upload, Download } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import {
   Popover,
@@ -45,6 +45,8 @@ import {
 import { useAuth } from '@/contexts/AuthContext';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Lock } from 'lucide-react';
+import SafetyRoleImportDialog from '@/components/safety/SafetyRoleImportDialog';
+import { buildRoleExportCsv } from '@/lib/safetyRoleCsv';
 
 interface ProfileRow {
   id: string;
@@ -75,6 +77,7 @@ export default function SafetyUsers() {
   const [selectedUserId, setSelectedUserId] = useState<string>('');
   const [selectedRole, setSelectedRole] = useState<SafetyAppRole>('worker');
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
 
   const profilesQuery = useQuery({
     queryKey: ['safety', 'profiles', appliedSearch],
@@ -185,6 +188,27 @@ export default function SafetyUsers() {
     }
   };
 
+  const handleExport = () => {
+    const roleRows = rolesQuery.data ?? [];
+    const rows = roleRows.map((r) => {
+      const p = assignedProfilesById.get(r.user_id);
+      return {
+        employee_code: p?.employee_code ?? null,
+        email: p?.email ?? null,
+        role: r.role,
+        assigned_at: r.assigned_at,
+      };
+    });
+    const csv = buildRoleExportCsv(rows);
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `safety-roles-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div className="w-full space-y-6">
       <div className="rounded-md border bg-primary/5 px-4 py-3 flex items-start gap-3">
@@ -199,17 +223,28 @@ export default function SafetyUsers() {
           <Link to="/admin/iac">Open Console</Link>
         </Button>
       </div>
-      <div className="flex items-start gap-3">
+      <div className="flex items-start gap-3 flex-wrap">
         <div className="p-2 rounded-lg bg-destructive/10 text-destructive">
           <Shield className="h-5 w-5" />
         </div>
-        <div>
+        <div className="flex-1 min-w-0">
           <h1 className="text-2xl font-bold text-foreground">Safety Users & Roles</h1>
           <p className="text-sm text-muted-foreground">
             Assign Safety-module roles. Granting any role automatically gives Hub access.
           </p>
         </div>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={handleExport} disabled={rolesQuery.isLoading || (rolesQuery.data ?? []).length === 0}>
+            <Download className="h-3.5 w-3.5 mr-1.5" /> Export
+          </Button>
+          {canManage && (
+            <Button size="sm" onClick={() => setImportOpen(true)}>
+              <Upload className="h-3.5 w-3.5 mr-1.5" /> Bulk import
+            </Button>
+          )}
+        </div>
       </div>
+      <SafetyRoleImportDialog open={importOpen} onOpenChange={setImportOpen} />
 
       {!canManage && !mySafetyRoles.isLoading && (
         <Alert>
