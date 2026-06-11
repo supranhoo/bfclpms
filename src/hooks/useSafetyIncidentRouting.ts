@@ -7,8 +7,8 @@ export interface SafetyRoutingRule {
   business_unit_id: string;
   department_id: string | null;
   bu_head_id: string;
-  manager_id: string;
-  second_manager_id: string;
+  manager_id: string | null;
+  second_manager_id: string | null;
   is_active: boolean;
   created_at: string;
   updated_at: string;
@@ -37,8 +37,8 @@ export interface UpsertRuleInput {
   business_unit_id: string;
   department_id: string | null;
   bu_head_id: string;
-  manager_id: string;
-  second_manager_id: string;
+  manager_id: string | null;
+  second_manager_id: string | null;
   is_active: boolean;
 }
 
@@ -48,15 +48,15 @@ export function useUpsertSafetyRoutingRule() {
     mutationFn: async (input: UpsertRuleInput) => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
-      if (!input.bu_head_id || !input.manager_id || !input.second_manager_id) {
-        throw new Error('BU Head, Manager and 2nd Manager are all required.');
+      if (!input.business_unit_id || !input.bu_head_id) {
+        throw new Error('Business unit and BU Head are required.');
       }
       const payload = {
         business_unit_id: input.business_unit_id,
         department_id: input.department_id,
         bu_head_id: input.bu_head_id,
-        manager_id: input.manager_id,
-        second_manager_id: input.second_manager_id,
+        manager_id: input.manager_id || null,
+        second_manager_id: input.second_manager_id || null,
         is_active: input.is_active,
         updated_by: user.id,
       };
