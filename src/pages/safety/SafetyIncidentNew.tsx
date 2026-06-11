@@ -32,8 +32,10 @@ import { supabase } from '@/integrations/supabase/client';
 import {
   SAFETY_TYPE_LABELS,
   SAFETY_SEVERITY_LABELS,
+  SAFETY_PRIORITY_LABELS,
   type SafetyIncidentType,
   type SafetyIncidentSeverity,
+  type SafetyIncidentPriority,
 } from '@/lib/safetyIncidents';
 import { submitSafetyIncident } from '@/lib/safetyIncidentSubmit';
 import { enqueuePendingIncident } from '@/lib/safetyOfflineQueue';
@@ -70,6 +72,7 @@ export default function SafetyIncidentNew() {
   const [location, setLocation] = useState('');
   const [type, setType] = useState<SafetyIncidentType | ''>('');
   const [severity, setSeverity] = useState<SafetyIncidentSeverity | ''>('');
+  const [priority, setPriority] = useState<SafetyIncidentPriority>('medium');
   const [businessUnitId, setBusinessUnitId] = useState<string>('');
   const [departmentId, setDepartmentId] = useState<string>('');
   const [involvedName, setInvolvedName] = useState('');
@@ -160,6 +163,7 @@ export default function SafetyIncidentNew() {
       location: location.trim(),
       incident_type: type as SafetyIncidentType,
       severity: severity as SafetyIncidentSeverity,
+      priority,
       business_unit_id: businessUnitId || null,
       department_id: departmentId || null,
       involved_person_name: requiresInvolved ? involvedName.trim() : null,
