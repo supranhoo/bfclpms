@@ -18,18 +18,22 @@ import {
   formatSlaCountdown,
   prioritizeSlaQueue,
 } from '@/lib/safetySla';
+import { useNowTick } from '@/hooks/useNowTick';
 
 export function SafetySlaQueueCard() {
   const { data, isLoading } = useSafetyIncidents();
+  // Phase 2 / Safety migration — live tick so amber→red transitions and
+  // countdown labels refresh without waiting for the next cache invalidation.
+  const now = useNowTick(30_000);
 
   const queue = useMemo(() => {
     if (!data) return [];
     const enriched = data
       .filter((r) => r.status !== 'closed')
-      .map((r) => ({ row: r, classification: classifySla(r) }))
+      .map((r) => ({ row: r, classification: classifySla(r, now) }))
       .filter((e) => e.classification.state === 'red' || e.classification.state === 'amber');
     return prioritizeSlaQueue(enriched);
-  }, [data]);
+  }, [data, now]);
 
   const redCount   = queue.filter((q) => q.classification.state === 'red').length;
   const amberCount = queue.filter((q) => q.classification.state === 'amber').length;
