@@ -227,6 +227,41 @@ export function StageActionPanel({ incident }: { incident: SafetyIncidentRow }) 
             </p>
           </div>
         )}
+        {incident.status === 'safety_head_review' && (
+          <div className="border border-dashed border-border rounded-md p-3 space-y-2">
+            <Label>Send back for rework</Label>
+            <Textarea
+              rows={3}
+              value={reworkRemarks}
+              onChange={(e) => setReworkRemarks(e.target.value)}
+              placeholder="Explain what the assignee must fix or add. Remarks are mandatory and shared with the assignee."
+            />
+            <Button
+              variant="outline"
+              onClick={sendBackForRework}
+              disabled={transition.isPending || !reworkRemarks.trim()}
+              className="w-full"
+            >
+              {transition.isPending ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Undo2 className="h-4 w-4 mr-2" />
+              )}
+              Send back to assignee (Rework Required)
+            </Button>
+            <p className="text-xs text-muted-foreground">
+              Returns the incident to the assigned investigator. They must address the remarks and resubmit for review.
+            </p>
+          </div>
+        )}
+        {incident.status === 'rework_required' && (
+          <div className="rounded-md border border-amber-500/30 bg-amber-500/5 p-3">
+            <p className="text-sm font-medium">Rework requested by Safety Head</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              Review the latest timeline entry for the Safety Head&apos;s remarks, update your corrective actions, then resubmit below.
+            </p>
+          </div>
+        )}
         {incident.status === 'rca' && (
           <div>
             <Label>Root Cause Analysis</Label>
