@@ -40,6 +40,9 @@ interface KpiReviewPanelProps {
   orgAchievedValue?: number | null;
   /** v2.65.0 — Explorer Mode: read-only browsing for auditors outside their scope */
   exploreMode?: boolean;
+  /** RCA Jun-2026: forwarded to KpiJourneySection so tiles show skeletons,
+   *  not "N/A", while the submissions query is still in flight. */
+  isSubmissionLoading?: boolean;
 }
 
 export function KpiReviewPanel({
@@ -63,6 +66,7 @@ export function KpiReviewPanel({
   orgKpiDataOwnerNames,
   orgAchievedValue,
   exploreMode = false,
+  isSubmissionLoading = false,
 }: KpiReviewPanelProps) {
   const isOwnKpi = currentUserId ? kpi.employee_id === currentUserId : false;
   return (
@@ -107,6 +111,7 @@ export function KpiReviewPanel({
             employeeCode={employeeCode}
             reportingManagerName={reportingManagerName}
             orgAchievedValue={orgAchievedValue}
+            isLoading={isSubmissionLoading}
           />
           
           <KpiObservationsSection
