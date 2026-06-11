@@ -1,248 +1,184 @@
+# Safety Module Configurable Access Control — Implementation Plan
 
-# Safety Parity — Missing-Only Closeout Plan
+## 1. Assumptions
 
-Source of truth: `docs/safety/parity-audit-2026-06.md` §4. Only the 7
-items classified **Missing** are in scope. Items classified Full / Partial
-are out of scope and must not be touched.
+- Reuse existing `safety_app_role` enum and `safety_user_roles` table (SSOT: `src/lib/safetyRoles.ts`). Do **not** introduce a parallel role system.
+- Reuse existing `has_safety_role` / `has_safety_module_access` / `has_any_safety_role` SECURITY DEFINER helpers; add new resolver helpers alongside them, not replacements.
+- Module-level visibility (`has_safety_module_access` = every authenticated user) remains untouched per Phase 19 memory. The new system only **narrows** what is shown/allowed inside `/safety/*`.
+- "Admin" for the permission console = `has_safety_role(uid, 'admin')` only. Safety Head does **not** edit the matrix (can be added later via a config flag).
+- Existing per-table RLS on `safety_*` tables (FSM guards, drill writes, RBAC) is the authoritative server gate and stays exactly as-is. The new permission layer is an **additive** UI + route + action gate; it never loosens RLS.
+- Existing `menu_overrides` / `access_profiles` systems (PMS-wide) are **not** the right vehicle — Safety has its own role enum, BU/dept scope, and FSM. We keep this self-contained inside the Safety module to avoid coupling.
+- "Phase 1–4" in the user request becomes our internal scope; we deliver all four in one cohesive change because the UI matrix is unusable without the action + widget keys seeded.
 
-## 0. The 7 Missing items (verbatim from audit §4)
+## 2. Risk & Impact Report
 
-1. `BuHeadDashboard.tsx` — BU-Head-scoped dashboard layout
-2. `DeptRiskWidget.tsx` — department risk heat tile
-3. `RepeatHeatmapWidget.tsx` — location-recurrence heatmap
-4. `useSafetyMasterData.ts` + table `safety_master_data` — generic reference registry
-5. RPC `safety_dashboard_at_risk` — multi-factor at-risk roster
-6. RPCs `safety_analytics_recurrence`, `safety_analytics_top_root_causes`, `safety_analytics_dept_risk_trend`
-7. Table `safety_emergency_acknowledgements` — ack-per-employee for emergencies
+| Area | Risk | Mitigation |
+| --- | --- | --- |
+| Sidebar/routes | Hiding a nav item a user previously had → support tickets | Default policy = **allow** for every existing safety role on every permission key (open posture). Admins opt-in to restrict. |
+| RLS | Adding a second gate could double-deny | New layer only short-circuits **before** RLS in the UI/route guard. Server RLS untouched. RPCs that already check `has_safety_role` keep working. |
+| Widgets | Hiding a widget breaks dashboard layout | `BuHeadDashboard` and `SafetyHome` already render widgets in a `grid` with conditional blocks — null-return is safe. |
+| Performance | Resolver called on every render | Single `useSafetyPermissions()` React Query (5 min stale), one row per user from a SQL function. |
+| Rollback | Misconfigured rules locking out admin | DB function hard-codes `admin` role → always allowed for every key. Cannot be revoked from UI. |
+| Backup | New tables must be covered | Tables live in `public` and are auto-included via `get_backup_table_order()` (per backup memory). No denylist entry. |
 
-Decision on item 7: BFCL's drill model intentionally side-steps acks
-(audit §3.1, §8). Re-introducing acks would conflict with the drill FSM.
-**Recommend: NOT shipping item 7** as an additive table; instead surface
-this as an explicit "won't fix" note in `DOCUMENTATION.md`. Confirm
-before Phase 3 begins.
+Scalability: 3 small tables, <500 rows expected. One JOIN per resolve. Negligible.
 
-## 1. Architecture & reuse constraints
+## 3. Database Schema (additive only)
 
-- Reuse `useSafetyDashboardStats` view-based aggregation pattern — do
-  not bypass `safety_incidents_with_sla`.
-- New analytics endpoints go through MV + `refresh_safety_analytics`
-  contract (Phase 8 SSOT). New MVs must be added to
-  `src/test/safety/phase8/analytics-mv-contract.test.ts` allowlist.
-- New widgets render inside `SafetyHome.tsx` behind
-  `has_safety_role(uid, 'bu_head')` / `has_any_safety_role`. No new
-  route, no replacement of existing tiles.
-- Master-data table follows existing `safety_settings` RLS posture
-  (admin write, authenticated read) — not `anon`.
-- No edits to `src/integrations/supabase/client.ts` or `types.ts`
-  (auto-gen).
+### `safety_permission_keys` (catalog — seed-only)
+| col | type |
+|---|---|
+| key | text PK (e.g. `nav.incidents`, `action.incidents.approve`, `widget.open_incidents`) |
+| category | text — `nav` \| `action` \| `widget` |
+| label | text |
+| description | text |
+| sort_order | int |
+| is_active | bool default true |
 
-## 2. Pre-implementation risk & impact
+### `safety_role_permissions` (RBAC matrix)
+| col | type |
+|---|---|
+| role | `safety_app_role` |
+| permission_key | text FK → safety_permission_keys |
+| is_allowed | bool default true |
+| updated_at, updated_by | audit |
 
-| Risk | Detail | Mitigation |
-|---|---|---|
-| MV refresh cost | 3 new MVs join incidents × root cause × dept | Same refresh cadence as existing 7 MVs; concurrent refresh; index `safety_incidents(occurred_at, department_id, root_cause)` |
-| Phase 8 contract test break | New MVs not in allowlist → red | Update allowlist + add per-MV column/SSOT test in same migration PR |
-| RLS leakage on widgets | BU-Head widget shows cross-BU data | Filter via `has_safety_role(auth.uid(), 'bu_head')` + BU scope from `safety_user_roles` |
-| Dashboard regression | New tiles re-render `SafetyHome` | Gate via lazy `Suspense` + `useQuery` cache; existing tiles untouched |
-| Master-data unused fan-out | Adding table nobody reads | Wire `useSafetyMasterData` only to one consumer (Settings → Reference Data section), no other call sites |
-| Backup coverage | New tables auto-included | Verify `public.get_backup_table_order()` picks up `safety_master_data` (Core memory: backup is automatic) |
-| Performance | `at_risk` roster RPC scans incidents | LIMIT 200; index `safety_incidents(assigned_to, sla_state)` exists; cache 60s |
+PK = (role, permission_key).
 
-Estimated impact: additive only. Zero rows changed in existing tables,
-zero existing files replaced. ~6 new files, ~3 file edits, 1 migration.
+### `safety_user_permission_overrides` (per-user grant/deny)
+| col | type |
+|---|---|
+| user_id | uuid FK auth.users |
+| permission_key | text FK |
+| effect | text check (`allow`,`deny`) |
+| reason | text |
+| created_at, created_by | audit |
 
-## 3. Phase 1 — Reference data + analytics RPCs
+PK = (user_id, permission_key).
 
-### 3.1 `safety_master_data` table + hook (gap #4)
+### Audit
+Reuse existing `safety_audit_log` via trigger on the two writable tables.
 
-Migration:
-
-```text
-CREATE TABLE public.safety_master_data (
-  id uuid PK default gen_random_uuid(),
-  category text NOT NULL,        -- e.g. 'root_cause','ppe_type','hazard_class'
-  code text NOT NULL,
-  label text NOT NULL,
-  parent_id uuid NULL REFERENCES safety_master_data(id) ON DELETE SET NULL,
-  sort_order int NOT NULL default 0,
-  is_active bool NOT NULL default true,
-  metadata jsonb NOT NULL default '{}'::jsonb,
-  created_at timestamptz default now(),
-  updated_at timestamptz default now(),
-  UNIQUE (category, code)
-);
-GRANT SELECT ON public.safety_master_data TO authenticated;
-GRANT ALL    ON public.safety_master_data TO service_role;
-ALTER TABLE  public.safety_master_data ENABLE ROW LEVEL SECURITY;
--- read: any authenticated user with safety module access
--- write: has_safety_role(auth.uid(),'admin') OR 'safety_head'
+### Resolver function
+```sql
+CREATE FUNCTION public.has_safety_permission(_user_id uuid, _key text)
+RETURNS boolean LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path=public AS $$
+DECLARE v_override text; v_role_allow bool;
+BEGIN
+  -- 1. Admin always wins
+  IF public.has_safety_role(_user_id, 'admin') THEN RETURN true; END IF;
+  -- 2. User override
+  SELECT effect INTO v_override FROM safety_user_permission_overrides
+   WHERE user_id=_user_id AND permission_key=_key;
+  IF v_override = 'deny' THEN RETURN false; END IF;
+  IF v_override = 'allow' THEN RETURN true; END IF;
+  -- 3. Any of the user's safety roles allows it?
+  SELECT bool_or(COALESCE(rp.is_allowed, true)) INTO v_role_allow
+    FROM safety_user_roles ur
+    LEFT JOIN safety_role_permissions rp
+      ON rp.role = ur.role AND rp.permission_key = _key
+   WHERE ur.user_id = _user_id;
+  -- 4. Default-allow if no rule exists (open posture, backwards compatible)
+  RETURN COALESCE(v_role_allow, true);
+END$$;
 ```
 
-New files:
+Companion bulk function `get_safety_permissions(_user_id)` returns `setof (key, allowed)` so the frontend resolves once per session.
 
-- `src/hooks/useSafetyMasterData.ts` — `useQuery(['safety','master-data',category])`
-- `src/components/safety/SafetyMasterDataPanel.tsx` — admin CRUD table
-  inside `SafetySettings.tsx` (gated by `has_safety_role admin/safety_head`)
+### Permission keys seeded (40 total)
 
-Edited files:
+```
+nav.home, nav.incidents, nav.permits, nav.assets, nav.audits, nav.emergency,
+nav.training_my, nav.training_admin, nav.analytics, nav.hours_worked,
+nav.permit_types, nav.sla_monitor, nav.users_roles, nav.audit_log
 
-- `src/pages/safety/SafetySettings.tsx` — add `<SafetyMasterDataPanel />` tab
+action.incidents.{view,create,edit,assign,investigate,approve,close,delete}
+action.permits.{view,create,approve,reject,close}
+action.assets.{view,create,edit,calibrate,archive}
+action.audits.{view,create,execute,close}
+action.training.{view,assign,complete,administer}
+action.emergency.{view,trigger,resolve}
+action.users.{view,create,edit,delete,manage_permissions}
 
-Verification: unit tests for hook + RLS smoke test entry in
-`src/test/safety/phase8/safety-rls-smoke.test.ts`.
-
-### 3.2 Three analytics MVs + RPCs (gap #6)
-
-Migration creates three MVs and three thin wrapper RPCs (to match
-prototype RPC names for parity):
-
-```text
-CREATE MATERIALIZED VIEW public.mv_safety_recurrence AS
-  SELECT location_id, department_id, root_cause,
-         count(*) AS occurrences,
-         max(occurred_at) AS last_occurred_at
-  FROM safety_incidents
-  WHERE occurred_at >= now() - interval '12 months'
-  GROUP BY 1,2,3 HAVING count(*) > 1;
-
-CREATE MATERIALIZED VIEW public.mv_safety_top_root_causes AS
-  SELECT root_cause, severity, count(*) AS incidents
-  FROM safety_incidents
-  WHERE root_cause IS NOT NULL
-    AND occurred_at >= now() - interval '12 months'
-  GROUP BY 1,2;
-
-CREATE MATERIALIZED VIEW public.mv_safety_dept_risk_trend AS
-  SELECT department_id,
-         date_trunc('month', occurred_at) AS month,
-         count(*) FILTER (WHERE severity IN ('high','critical')) AS high_sev,
-         count(*) AS total
-  FROM safety_incidents
-  WHERE occurred_at >= now() - interval '12 months'
-  GROUP BY 1,2;
+widget.{open_incidents,overdue_incidents,at_risk,orphaned,closed,my_assignments,
+        trend_30d,stage_dist,severity_dist,sla,compliance,training,audit,asset}
 ```
 
-RPC wrappers `safety_analytics_recurrence(p_dept uuid default null)`,
-`safety_analytics_top_root_causes(p_limit int default 10)`,
-`safety_analytics_dept_risk_trend(p_months int default 12)` — all
-SECURITY DEFINER, scoped via `has_safety_module_access(auth.uid())`,
-return rows from the MVs.
+### RLS (all 3 new tables)
+- `SELECT` to `authenticated` (matrix is non-sensitive; UI needs it to render).
+- `INSERT/UPDATE/DELETE` only when `has_safety_role(auth.uid(),'admin')`.
+- `service_role` full access.
+- GRANTs per platform rule.
 
-Also add `safety_dashboard_at_risk(p_threshold int default 3)` RPC
-returning per-assignee open count + max SLA state. No MV needed; reads
-`safety_incidents_with_sla` directly with LIMIT 200.
+## 4. Permission Matrix (default seed)
 
-Edits:
+Default seed = open for every existing role on every key, EXCEPT:
 
-- `src/hooks/useSafetyAnalytics.ts` — add 3 query keys
-- `src/test/safety/phase8/analytics-mv-contract.test.ts` — extend
-  allowlist with 3 new MV names + expected columns
-- `refresh_safety_analytics()` — append the 3 new MVs
+| Key prefix | worker | supervisor | manager | bu_head | safety_officer | safety_head | auditor |
+|---|---|---|---|---|---|---|---|
+| `nav.users_roles`, `nav.audit_log`, `nav.permit_types`, `nav.sla_monitor`, `nav.training_admin` | deny | deny | deny | deny | deny | allow | deny |
+| `action.users.manage_permissions` | deny | deny | deny | deny | deny | allow | deny |
+| `action.incidents.delete` | deny | deny | deny | deny | deny | allow | deny |
+| `action.incidents.approve/close` | deny | deny | allow | allow | allow | allow | deny |
+| `action.permits.approve/reject` | deny | deny | allow | allow | allow | allow | deny |
+| `action.assets.archive` | deny | deny | deny | deny | allow | allow | deny |
+| Everything else | allow | allow | allow | allow | allow | allow | allow (view-only widgets) |
 
-Verification: contract test green; manual `EXPLAIN` for MV indexes.
+`admin` skips the table entirely (always true via resolver short-circuit).
 
-## 4. Phase 2 — Dashboard widgets (gaps #1, #2, #3)
+## 5. Files Affected
 
-All three render inside `SafetyHome.tsx` as additive cards. No layout
-shuffle of existing tiles.
+### Created (frontend)
+- `src/lib/safety/permissionKeys.ts` — typed catalog constants (mirror of seed).
+- `src/hooks/useSafetyPermissions.ts` — one query → `Set<string>`; exposes `can(key)`.
+- `src/components/safety/PermissionGate.tsx` — `<PermissionGate keyName="action.incidents.delete">…</>`.
+- `src/components/safety/SafetyRouteGuard.tsx` — wraps individual page routes (composes with existing `SafetyModuleRoute`).
+- `src/components/safety/settings/PermissionMatrixPanel.tsx` — role × permission grid, search, bulk toggle.
+- `src/components/safety/settings/UserOverridesPanel.tsx` — user picker (reuses `SafetyUsers` cmdk pattern) + per-key allow/deny.
+- `src/components/safety/settings/PermissionAuditPanel.tsx` — reads `safety_audit_log` filtered to entity_type='safety_permissions'.
 
-New files:
+### Modified
+- `src/components/safety/SafetySidebar.tsx` (or wherever nav lives — confirm at code time) — wrap each item in `PermissionGate`.
+- `src/App.tsx` (Safety route block) — wrap each `/safety/*` route element in `SafetyRouteGuard keyName="nav.xxx"`.
+- `src/pages/safety/SafetySettings.tsx` — add new "Security & Permissions" tab.
+- `src/pages/safety/SafetyHome.tsx` + `src/components/safety/dashboard/BuHeadDashboard.tsx` — wrap each widget in `PermissionGate`.
+- Action buttons (Approve/Reject/Delete/etc.) in `SafetyIncidentDetail.tsx`, `SafetyPermits.tsx`, `SafetyAssets.tsx`, `SafetyAudits.tsx`, training pages — wrap with `PermissionGate`.
 
-- `src/components/safety/dashboard/BuHeadDashboard.tsx` — wrapper that
-  renders DeptRisk + Repeat-Heatmap + AtRisk roster when
-  `has_safety_role(uid,'bu_head')` is true. Pulls from existing hooks.
-- `src/components/safety/dashboard/DeptRiskWidget.tsx` — consumes
-  `safety_analytics_dept_risk_trend`; renders heat tile using existing
-  `SafetyHeatmap` primitive in `src/components/safety/analytics/`.
-- `src/components/safety/dashboard/RepeatHeatmapWidget.tsx` — consumes
-  `safety_analytics_recurrence`; location × root_cause grid.
-- `src/components/safety/dashboard/AtRiskWidget.tsx` — consumes
-  `safety_dashboard_at_risk` RPC; assignee roster sorted by red SLA.
+### Created (DB)
+One migration: tables + grants + RLS + resolver fn + bulk fn + seed of catalog + seed of restrictive defaults + audit trigger.
 
-Edited files:
+### Created (tests)
+- `src/test/safety/permissions/resolver.test.ts` — admin short-circuit, override precedence, default-allow.
+- `src/test/safety/permissions/matrix-seed.test.ts` — every catalog key has a label & category.
 
-- `src/pages/safety/SafetyHome.tsx` — conditional `<BuHeadDashboard />`
-  block; only visible when role check resolves true. No existing tile
-  removed.
+## 6. Implementation Steps
 
-UI specifics:
-- Visual location: below existing severity tile row, above recent list
-- Mobile: each widget collapses to single-column via existing
-  `SafetyResponsiveList` breakpoints
-- Empty/loading: reuse `SafetySkeletonBlock`, `SafetyEmptyState`
-- Drill-down: reuse `KpiDrillDownDialog`
+1. **Migration** (one call): catalog + matrix + overrides + RLS + GRANTs + `has_safety_permission` + `get_safety_permissions` + audit trigger + seed (40 keys + default deny rows).
+2. **Frontend resolver hook + gate component + route guard.**
+3. **Wire sidebar + routes.** Each nav item → `nav.xxx` key; each route → `SafetyRouteGuard`.
+4. **Wire dashboard widgets** in `SafetyHome` and `BuHeadDashboard`.
+5. **Wire action buttons** on incident/permit/asset/audit/training/emergency/users pages.
+6. **Admin console** as a new tab inside `SafetySettings.tsx` (Matrix / Overrides / Audit subtabs).
+7. **Tests + docs** (`DOCUMENTATION.md`, `POLICY.md`, audit doc, memory file `mem/features/safety/permission-system.md`).
 
-Tests: snapshot + role-gate test per widget under
-`src/test/safety/dashboard/`.
+## 7. UI Changes
 
-## 5. Phase 3 — Residual gap (item #7)
+- **Sidebar**: nav items missing a permission disappear (no greyed-out state — matches existing pattern).
+- **Routes**: direct URL → `Navigate to /safety` with toast "You don't have permission to view this page".
+- **Action buttons**: hidden when denied; server still enforces.
+- **Dashboard**: widget tiles disappear; grid reflows automatically (already `grid auto-rows`).
+- **New tab** in `/safety/settings` → "Security & Permissions" with 3 sub-tabs: Role Matrix · User Overrides · Audit Trail.
+- Matrix: sticky-header table, rows = permission keys (grouped + searchable), cols = 8 roles, cells = checkbox.
+- Bulk: "Select all in category" + "Allow/Deny selected for role X".
 
-Default recommendation: **do not implement**
-`safety_emergency_acknowledgements`. The BFCL drill model treats acks
-as an anti-pattern (audit §3.1, §8). If implemented, it would require
-loosening `safety_drills_block_status_writes`, which the Phase 8 SSOT
-forbids.
+## 8. Open Question (one)
 
-Action in Phase 3: add a one-paragraph "Won't fix — superseded by drill
-participants" note to:
+The default seed above restricts a handful of high-risk keys (users_roles, audit_log, delete) for non-admin/non-safety-head roles. Confirm this restrictive default is acceptable — alternative is **fully open** for every role on day-1 and let the admin restrict from the UI. I recommend the proposed restrictive seed; reply "fully open" to override.
 
-- `docs/safety/parity-audit-2026-06.md` (new §11 addendum, no edits to
-  existing sections)
-- `DOCUMENTATION.md` safety section
-- `POLICY.md` safety section
+## 9. Rollback Strategy
 
-Stop here unless the user explicitly overrides.
+Single migration; revert = drop two writable tables + catalog + two functions. UI gates become no-ops because hook returns empty Set → fail-open path triggers (defaults to allow when no rule). No data loss in existing safety_* tables.
 
-## 6. File-by-file summary
+## 10. Not Applicable
 
-### Files to create
-- `src/hooks/useSafetyMasterData.ts`
-- `src/components/safety/SafetyMasterDataPanel.tsx`
-- `src/components/safety/dashboard/BuHeadDashboard.tsx`
-- `src/components/safety/dashboard/DeptRiskWidget.tsx`
-- `src/components/safety/dashboard/RepeatHeatmapWidget.tsx`
-- `src/components/safety/dashboard/AtRiskWidget.tsx`
-- Test files mirroring each new module under `src/test/safety/`
-
-### Files to modify
-- `src/pages/safety/SafetySettings.tsx` (Phase 1)
-- `src/hooks/useSafetyAnalytics.ts` (Phase 1)
-- `src/test/safety/phase8/analytics-mv-contract.test.ts` (Phase 1)
-- `src/test/safety/phase8/safety-rls-smoke.test.ts` (Phase 1)
-- `src/pages/safety/SafetyHome.tsx` (Phase 2 — additive block only)
-- `docs/safety/parity-audit-2026-06.md`, `DOCUMENTATION.md`, `POLICY.md` (Phase 3)
-
-### Database migrations (one per phase)
-- `<ts>_safety_master_data.sql` — table + GRANT + RLS + policies + update_at trigger
-- `<ts>_safety_analytics_gaps.sql` — 3 MVs, 4 RPCs, refresh fn update, indexes
-- (no Phase 3 migration)
-
-### New RPCs
-- `safety_analytics_recurrence`
-- `safety_analytics_top_root_causes`
-- `safety_analytics_dept_risk_trend`
-- `safety_dashboard_at_risk`
-
-### Rollback strategy
-All changes are additive. Rollback = `DROP MATERIALIZED VIEW`,
-`DROP TABLE`, `DROP FUNCTION`, revert two file edits. No destructive
-schema change to existing tables.
-
-## 7. Acceptance criteria
-
-- Phase 8 contract test green with new MVs in allowlist
-- RLS smoke test green for `safety_master_data`
-- `SafetyHome` renders new tiles only for `bu_head` role
-- No existing test in `src/test/safety/**` regresses
-- Backup picks up `safety_master_data` automatically (verified via
-  `public.get_backup_table_order()`)
-
-## 8. Open questions before build
-
-1. Confirm "Won't fix" stance on `safety_emergency_acknowledgements`
-   (gap #7)?
-2. Master-data initial seed categories — leave empty for admins to fill,
-   or seed `root_cause`, `ppe_type`, `hazard_class`?
-3. BU-Head dashboard — show only to `bu_head`, or also to `safety_head`
-   and `admin` for oversight?
-
+Edge functions, storage buckets, third-party connectors.

@@ -9579,6 +9579,36 @@ export type Database = {
           },
         ]
       }
+      safety_permission_keys: {
+        Row: {
+          category: string
+          created_at: string
+          description: string | null
+          is_active: boolean
+          key: string
+          label: string
+          sort_order: number
+        }
+        Insert: {
+          category: string
+          created_at?: string
+          description?: string | null
+          is_active?: boolean
+          key: string
+          label: string
+          sort_order?: number
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          description?: string | null
+          is_active?: boolean
+          key?: string
+          label?: string
+          sort_order?: number
+        }
+        Relationships: []
+      }
       safety_permit_approvals: {
         Row: {
           approver_id: string | null
@@ -9951,6 +9981,38 @@ export type Database = {
           },
         ]
       }
+      safety_role_permissions: {
+        Row: {
+          is_allowed: boolean
+          permission_key: string
+          role: Database["public"]["Enums"]["safety_app_role"]
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          is_allowed?: boolean
+          permission_key: string
+          role: Database["public"]["Enums"]["safety_app_role"]
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          is_allowed?: boolean
+          permission_key?: string
+          role?: Database["public"]["Enums"]["safety_app_role"]
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "safety_role_permissions_permission_key_fkey"
+            columns: ["permission_key"]
+            isOneToOne: false
+            referencedRelation: "safety_permission_keys"
+            referencedColumns: ["key"]
+          },
+        ]
+      }
       safety_settings: {
         Row: {
           description: string | null
@@ -10186,6 +10248,41 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "safety_training_assignments"
             referencedColumns: ["id"]
+          },
+        ]
+      }
+      safety_user_permission_overrides: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          effect: string
+          permission_key: string
+          reason: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          effect: string
+          permission_key: string
+          reason?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          effect?: string
+          permission_key?: string
+          reason?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "safety_user_permission_overrides_permission_key_fkey"
+            columns: ["permission_key"]
+            isOneToOne: false
+            referencedRelation: "safety_permission_keys"
+            referencedColumns: ["key"]
           },
         ]
       }
@@ -11969,6 +12066,13 @@ export type Database = {
           skip_level_score: number
         }[]
       }
+      get_safety_permissions: {
+        Args: { _user_id: string }
+        Returns: {
+          allowed: boolean
+          permission_key: string
+        }[]
+      }
       get_safety_setting: { Args: { p_key: string }; Returns: Json }
       get_skip_level_manager: {
         Args: { employee_uuid: string }
@@ -12067,6 +12171,10 @@ export type Database = {
         Returns: boolean
       }
       has_safety_module_access: { Args: { _user_id: string }; Returns: boolean }
+      has_safety_permission: {
+        Args: { _key: string; _user_id: string }
+        Returns: boolean
+      }
       has_safety_role: {
         Args: {
           _business_unit_id?: string

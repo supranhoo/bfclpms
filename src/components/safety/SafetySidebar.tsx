@@ -21,6 +21,8 @@ import { Button } from '@/components/ui/button';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { SafetyNotificationBell } from './SafetyNotificationBell';
 import { SafetyOfflineBadge } from './SafetyOfflineBadge';
+import { useSafetyPermissions } from '@/hooks/useSafetyPermissions';
+import { SAFETY_NAV_KEYS } from '@/lib/safety/permissionKeys';
 import {
   Home, AlertTriangle, Settings, ArrowLeft, Users, Timer, ScrollText, LogOut, ShieldAlert,
   FileSignature, ShieldCheck, GraduationCap, BookOpen, Wrench, ClipboardCheck, Siren,
@@ -36,22 +38,22 @@ import {
  * up in Phase 1.
  */
 
-const items = [
-  { title: 'Safety Home', url: '/safety', icon: Home, end: true },
-  { title: 'Incidents', url: '/safety/incidents', icon: AlertTriangle },
-  { title: 'Permits to Work', url: '/safety/permits', icon: FileSignature },
-  { title: 'Assets & Calibration', url: '/safety/assets', icon: Wrench },
-  { title: 'Audits & Compliance', url: '/safety/audits', icon: ClipboardCheck },
-  { title: 'Emergency Response', url: '/safety/emergency', icon: Siren },
-  { title: 'My Training', url: '/safety/training', icon: GraduationCap, end: true },
-  { title: 'Training Admin', url: '/safety/training/admin', icon: BookOpen },
-  { title: 'Analytics', url: '/safety/analytics', icon: BarChart3 },
-  { title: 'Hours Worked', url: '/safety/settings/hours-worked', icon: Activity },
-  { title: 'Permit Types', url: '/safety/settings/permit-types', icon: ShieldCheck },
-  { title: 'SLA Monitor', url: '/safety/settings/sla', icon: Timer },
-  { title: 'Users & Roles', url: '/safety/settings/users', icon: Users },
-  { title: 'Audit Log', url: '/safety/settings/audit', icon: ScrollText },
-  { title: 'Settings', url: '/safety/settings', icon: Settings, end: true },
+const items: Array<{ title: string; url: string; icon: any; end?: boolean; perm?: string }> = [
+  { title: 'Safety Home', url: '/safety', icon: Home, end: true, perm: SAFETY_NAV_KEYS.home },
+  { title: 'Incidents', url: '/safety/incidents', icon: AlertTriangle, perm: SAFETY_NAV_KEYS.incidents },
+  { title: 'Permits to Work', url: '/safety/permits', icon: FileSignature, perm: SAFETY_NAV_KEYS.permits },
+  { title: 'Assets & Calibration', url: '/safety/assets', icon: Wrench, perm: SAFETY_NAV_KEYS.assets },
+  { title: 'Audits & Compliance', url: '/safety/audits', icon: ClipboardCheck, perm: SAFETY_NAV_KEYS.audits },
+  { title: 'Emergency Response', url: '/safety/emergency', icon: Siren, perm: SAFETY_NAV_KEYS.emergency },
+  { title: 'My Training', url: '/safety/training', icon: GraduationCap, end: true, perm: SAFETY_NAV_KEYS.trainingMy },
+  { title: 'Training Admin', url: '/safety/training/admin', icon: BookOpen, perm: SAFETY_NAV_KEYS.trainingAdmin },
+  { title: 'Analytics', url: '/safety/analytics', icon: BarChart3, perm: SAFETY_NAV_KEYS.analytics },
+  { title: 'Hours Worked', url: '/safety/settings/hours-worked', icon: Activity, perm: SAFETY_NAV_KEYS.hoursWorked },
+  { title: 'Permit Types', url: '/safety/settings/permit-types', icon: ShieldCheck, perm: SAFETY_NAV_KEYS.permitTypes },
+  { title: 'SLA Monitor', url: '/safety/settings/sla', icon: Timer, perm: SAFETY_NAV_KEYS.slaMonitor },
+  { title: 'Users & Roles', url: '/safety/settings/users', icon: Users, perm: SAFETY_NAV_KEYS.usersRoles },
+  { title: 'Audit Log', url: '/safety/settings/audit', icon: ScrollText, perm: SAFETY_NAV_KEYS.auditLog },
+  { title: 'Settings', url: '/safety/settings', icon: Settings, end: true }, // settings hub itself stays universal
 ];
 
 export function SafetySidebar() {
@@ -61,6 +63,7 @@ export function SafetySidebar() {
   const navigate = useNavigate();
   const { profile, signOut } = useAuth();
   const { data: appSettings } = useAppSettings();
+  const { can } = useSafetyPermissions();
 
   const orgName = appSettings?.organization_name || 'Health, Safety & Environment';
 
@@ -101,7 +104,7 @@ export function SafetySidebar() {
           <SidebarGroupLabel>Safety</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {items.map((item) => (
+              {items.filter((it) => !it.perm || can(it.perm)).map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton
                     asChild
