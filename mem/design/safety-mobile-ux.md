@@ -38,3 +38,5 @@ Safety entry-level users (Workers, Supervisors, Safety Officers) work primarily 
 
 ## Out of scope
 Admin surfaces (`SafetyTrainingAdmin`, `SafetyUsers`, `SafetyHoursWorked`, `SafetyPermitTypeConfig`, `SafetyAuditTemplates`, `SafetySettings`) stay desktop-first — they are configuration tools, not entry-level workflows. Only ensure they don't horizontally overflow.
+## Safety user selection standard
+All Safety-module user pickers MUST use `SafetyUserPicker` (`src/components/safety/SafetyUserPicker.tsx`) — a searchable combobox (Popover + Command, `modal`, `shouldFilter=false`) that matches name / email / employee code via `filterSafetyProfiles` and caps results at 50. Never use a plain `<Select>` over `useActiveProfilesLite` for picking people. Used in: StageActionPanel (investigator/verifier), OrphanIncidentDialog (new owner), SafetyIncidentRoutingTab (BU Head/Manager/2nd Manager). Tests: `src/test/safety/safetyUserPicker.test.ts`.
