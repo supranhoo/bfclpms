@@ -23,7 +23,7 @@ import {
   useUpdateIncidentNotes,
   type EvidenceStage,
 } from '@/hooks/useSafetyIncidentDetail';
-import { useActiveProfilesLite } from '@/hooks/useSafetyOrg';
+import { useActiveProfilesLite, formatSafetyProfileLabel } from '@/hooks/useSafetyOrg';
 
 const STAGE_TO_EVIDENCE: Record<SafetyIncidentStatus, EvidenceStage | null> = {
   reported: 'report',
