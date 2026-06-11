@@ -21,7 +21,7 @@ import {
   useSafetyRoutingRules, useUpsertSafetyRoutingRule, useDeleteSafetyRoutingRule,
   type SafetyRoutingRule, type UpsertRuleInput,
 } from '@/hooks/useSafetyIncidentRouting';
-import { ConfirmDestructiveDialog } from '@/components/safety/ConfirmDestructiveDialog';
+import { ConfirmDestructiveDialog } from '@/components/ui/ConfirmDestructiveDialog';
 
 const ANY_DEPT = '__division_default__';
 
