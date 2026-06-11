@@ -12,7 +12,21 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Loader2, ArrowLeft, AlertTriangle, Upload, X, WifiOff, Camera } from 'lucide-react';
+import { Loader2, ArrowLeft, AlertTriangle, Upload, X, WifiOff, Camera, Search } from 'lucide-react';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '@/components/ui/command';
+import { useQuery } from '@tanstack/react-query';
 import { useBusinessUnits, useDepartments } from '@/hooks/useSafetyOrg';
 import { supabase } from '@/integrations/supabase/client';
 import {
