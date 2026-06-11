@@ -79,10 +79,29 @@ async function fetchIncidentsPage({
 
   const { data, error, count } = await q;
   if (error) throw error;
-  return {
-    rows: (data ?? []) as unknown as SafetyIncidentRow[],
-    total: count ?? 0,
-  };
+  const rows = (data ?? []) as unknown as SafetyIncidentRow[];
+
+  // Hydrate Business Unit name/code for display. The SLA view exposes
+  // `business_unit_id` only — join client-side to avoid widening the view.
+  const buIds = Array.from(
+    new Set(rows.map((r) => r.business_unit_id).filter(Boolean) as string[]),
+  );
+  if (buIds.length) {
+    const { data: bus } = await supabase
+      .from('business_units')
+      .select('id, name, code')
+      .in('id', buIds);
+    const map = new Map((bus ?? []).map((b: any) => [b.id, b]));
+    for (const r of rows as any[]) {
+      const bu = map.get(r.business_unit_id);
+      if (bu) {
+        r.business_unit_name = bu.name;
+        r.business_unit_code = bu.code;
+      }
+    }
+  }
+
+  return { rows, total: count ?? 0 };
 }
 
 export default function SafetyIncidents() {
@@ -211,6 +230,9 @@ export default function SafetyIncidents() {
             subtitle={
               <>
                 {SAFETY_TYPE_LABELS[i.incident_type]} · {SAFETY_SEVERITY_LABELS[i.severity]}
+                {(i as any).business_unit_name && (
+                  <> · {(i as any).business_unit_name}</>
+                )}
               </>
             }
             meta={format(new Date(i.created_at), 'dd MMM yyyy, HH:mm')}
@@ -230,6 +252,7 @@ export default function SafetyIncidents() {
               <TableHead>Title</TableHead>
               <TableHead>Type</TableHead>
               <TableHead>Severity</TableHead>
+              <TableHead className="hidden md:table-cell">Business Unit</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>SLA</TableHead>
               <TableHead className="hidden md:table-cell">Due / Remaining</TableHead>
@@ -250,6 +273,20 @@ export default function SafetyIncidents() {
                 <TableCell className="max-w-[280px] truncate">{i.title}</TableCell>
                 <TableCell>{SAFETY_TYPE_LABELS[i.incident_type]}</TableCell>
                 <TableCell>{SAFETY_SEVERITY_LABELS[i.severity]}</TableCell>
+                <TableCell className="hidden md:table-cell text-xs">
+                  {(i as any).business_unit_name ? (
+                    <div>
+                      <div>{(i as any).business_unit_name}</div>
+                      {(i as any).business_unit_code && (
+                        <div className="text-muted-foreground font-mono">
+                          {(i as any).business_unit_code}
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <span className="text-muted-foreground">—</span>
+                  )}
+                </TableCell>
                 <TableCell><SafetyStatusBadge status={i.status} /></TableCell>
                 <TableCell>
                   {i.sla_status ? (
