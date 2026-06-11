@@ -8,13 +8,12 @@ import { useCallback, useEffect, useRef, useState } from 'react';
  * AudioContext. Degrades silently when AudioContext is missing.
  */
 
-type WindowWithAudio = Window & {
-  webkitAudioContext?: typeof AudioContext;
-};
-
 function getAudioCtor(): typeof AudioContext | null {
   if (typeof window === 'undefined') return null;
-  const w = window as WindowWithAudio;
+  const w = window as unknown as {
+    AudioContext?: typeof AudioContext;
+    webkitAudioContext?: typeof AudioContext;
+  };
   return w.AudioContext ?? w.webkitAudioContext ?? null;
 }
 
