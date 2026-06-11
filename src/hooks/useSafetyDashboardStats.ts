@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
 import type { SafetyIncidentRow } from './useSafetyIncidents';
 import { SAFETY_INCIDENT_STAGES } from '@/lib/safetyIncidents';
 
@@ -15,26 +16,34 @@ import { SAFETY_INCIDENT_STAGES } from '@/lib/safetyIncidents';
 export interface SafetyDashboardStats {
   total: number;
   open: number;
+  orphaned: number;
   byStatus: Record<string, number>;
   bySeverity: Record<string, number>;
   bySla: { green: number; amber: number; red: number; closed: number };
   recent: SafetyIncidentRow[];
   overdue: SafetyIncidentRow[];
+  myAssignments: SafetyIncidentRow[];
+  trend30d: { date: string; count: number }[];
 }
 
 const EMPTY_STATS: SafetyDashboardStats = {
   total: 0,
   open: 0,
+  orphaned: 0,
   byStatus: {},
   bySeverity: {},
   bySla: { green: 0, amber: 0, red: 0, closed: 0 },
   recent: [],
   overdue: [],
+  myAssignments: [],
+  trend30d: [],
 };
 
 export function useSafetyDashboardStats() {
+  const { user } = useAuth();
+  const currentUserId = user?.id ?? null;
   return useQuery({
-    queryKey: ['safety', 'dashboard-stats'],
+    queryKey: ['safety', 'dashboard-stats', currentUserId],
     queryFn: async (): Promise<SafetyDashboardStats> => {
       const { data, error } = await supabase
         .from('safety_incidents_with_sla' as never)
@@ -49,14 +58,37 @@ export function useSafetyDashboardStats() {
       const bySeverity: Record<string, number> = {};
       const bySla = { green: 0, amber: 0, red: 0, closed: 0 };
       let open = 0;
+      let orphaned = 0;
       const overdue: SafetyIncidentRow[] = [];
+      const myAssignments: SafetyIncidentRow[] = [];
+
+      // 30-day trend buckets (oldest → newest), keyed by YYYY-MM-DD.
+      const trendMap = new Map<string, number>();
+      const today = new Date();
+      for (let i = 29; i >= 0; i--) {
+        const d = new Date(today);
+        d.setDate(today.getDate() - i);
+        trendMap.set(d.toISOString().slice(0, 10), 0);
+      }
 
       for (const r of rows) {
         byStatus[r.status] = (byStatus[r.status] ?? 0) + 1;
         bySeverity[r.severity] = (bySeverity[r.severity] ?? 0) + 1;
         bySla[r.sla_state] = (bySla[r.sla_state] ?? 0) + 1;
         if (r.status !== 'closed') open += 1;
+        if (r.status === 'orphaned') orphaned += 1;
         if (r.sla_state === 'red' && r.status !== 'closed') overdue.push(r);
+        if (
+          currentUserId &&
+          r.assigned_to === currentUserId &&
+          r.status !== 'closed'
+        ) {
+          myAssignments.push(r);
+        }
+        const dayKey = r.created_at.slice(0, 10);
+        if (trendMap.has(dayKey)) {
+          trendMap.set(dayKey, (trendMap.get(dayKey) ?? 0) + 1);
+        }
       }
 
       // Ensure every defined stage shows up (zero counts) so UI tiles are stable.
@@ -65,11 +97,14 @@ export function useSafetyDashboardStats() {
       return {
         total: rows.length,
         open,
+        orphaned,
         byStatus,
         bySeverity,
         bySla,
         recent: rows.slice(0, 5),
         overdue: overdue.slice(0, 8),
+        myAssignments: myAssignments.slice(0, 8),
+        trend30d: Array.from(trendMap.entries()).map(([date, count]) => ({ date, count })),
       };
     },
     staleTime: 30_000,
