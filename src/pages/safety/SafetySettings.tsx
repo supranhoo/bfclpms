@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Settings, Users, Timer, ScrollText, ShieldCheck, Activity, Save,
-  Loader2, Phone, AlertTriangle, ArrowLeft, KeyRound, FileSignature,
+  Loader2, Phone, AlertTriangle, ArrowLeft, KeyRound, FileSignature, Download,
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -14,6 +14,7 @@ import { toast } from 'sonner';
 import { useSafetySettings, useUpsertSafetySetting } from '@/hooks/useSafetySettings';
 import { formatSettingValue, parseSettingJson } from '@/lib/safetySettings';
 import { format } from 'date-fns';
+import SafetyDataExportDialog from '@/components/safety/SafetyDataExportDialog';
 
 /**
  * SafetySettings — Cross-cutting Phase X
@@ -44,6 +45,7 @@ export default function SafetySettings() {
   const upsert = useUpsertSafetySetting();
 
   const [edit, setEdit] = useState<Record<string, string>>({});
+  const [exportOpen, setExportOpen] = useState(false);
 
   function handleSave(key: string, currentValue: unknown, currentDesc: string | null) {
     const raw = edit[key] ?? formatSettingValue(currentValue);
@@ -111,6 +113,23 @@ export default function SafetySettings() {
           ))}
         </CardContent>
       </Card>
+
+      <Card>
+        <CardHeader className="pb-3 flex flex-row items-start justify-between gap-3">
+          <div>
+            <CardTitle className="text-base flex items-center gap-2">
+              <Download className="h-4 w-4" /> Data export
+            </CardTitle>
+            <CardDescription>
+              Download Safety data (incidents, assets, audits, training, permits, drills, hours) as CSV. RLS applies.
+            </CardDescription>
+          </div>
+          <Button size="sm" onClick={() => setExportOpen(true)}>
+            <Download className="h-3.5 w-3.5 mr-1.5" /> Open exporter
+          </Button>
+        </CardHeader>
+      </Card>
+      <SafetyDataExportDialog open={exportOpen} onOpenChange={setExportOpen} />
 
       <Card>
         <CardHeader className="pb-3">
