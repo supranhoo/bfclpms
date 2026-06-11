@@ -19,6 +19,7 @@ export const SAFETY_NAV_KEYS = {
   slaMonitor:    'nav.sla_monitor',
   usersRoles:    'nav.users_roles',
   auditLog:      'nav.audit_log',
+  incidentTypes: 'nav.incident_types',
   settings:      'nav.settings',
 } as const;
 
@@ -40,6 +41,7 @@ export const ROUTE_TO_PERMISSION: Array<{ test: (path: string) => boolean; key: 
   { test: (p) => p.startsWith('/safety/settings/sla'),                         key: SAFETY_NAV_KEYS.slaMonitor },
   { test: (p) => p.startsWith('/safety/settings/users'),                       key: SAFETY_NAV_KEYS.usersRoles },
   { test: (p) => p.startsWith('/safety/settings/audit'),                       key: SAFETY_NAV_KEYS.auditLog },
+  { test: (p) => p.startsWith('/safety/settings/incident-types'),              key: SAFETY_NAV_KEYS.incidentTypes },
   // Settings hub root — must come AFTER all /safety/settings/* sub-route tests above.
   { test: (p) => p === '/safety/settings' || p === '/safety/settings/',        key: SAFETY_NAV_KEYS.settings },
 ];
