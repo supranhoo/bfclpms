@@ -26,7 +26,7 @@ import { SAFETY_NAV_KEYS } from '@/lib/safety/permissionKeys';
 import {
   Home, AlertTriangle, Settings, ArrowLeft, Users, Timer, ScrollText, LogOut, ShieldAlert,
   FileSignature, ShieldCheck, GraduationCap, BookOpen, Wrench, ClipboardCheck, Siren,
-  BarChart3, Activity,
+  BarChart3, Activity, Tag,
 } from 'lucide-react';
 
 /**
@@ -50,6 +50,7 @@ const items: Array<{ title: string; url: string; icon: any; end?: boolean; perm?
   { title: 'Analytics', url: '/safety/analytics', icon: BarChart3, perm: SAFETY_NAV_KEYS.analytics },
   { title: 'Hours Worked', url: '/safety/settings/hours-worked', icon: Activity, perm: SAFETY_NAV_KEYS.hoursWorked },
   { title: 'Permit Types', url: '/safety/settings/permit-types', icon: ShieldCheck, perm: SAFETY_NAV_KEYS.permitTypes },
+  { title: 'Incident Types', url: '/safety/settings/incident-types', icon: Tag, perm: SAFETY_NAV_KEYS.incidentTypes },
   { title: 'SLA Monitor', url: '/safety/settings/sla', icon: Timer, perm: SAFETY_NAV_KEYS.slaMonitor },
   { title: 'Users & Roles', url: '/safety/settings/users', icon: Users, perm: SAFETY_NAV_KEYS.usersRoles },
   { title: 'Audit Log', url: '/safety/settings/audit', icon: ScrollText, perm: SAFETY_NAV_KEYS.auditLog },
