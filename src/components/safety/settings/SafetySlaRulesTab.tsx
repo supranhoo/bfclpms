@@ -29,10 +29,12 @@ import {
   type SafetyIncidentSlaRule,
   type SlaRuleInput,
 } from '@/hooks/useSafetyIncidentSlaRules';
+import {
+  useSafetyIncidentTypes,
+  useSafetyIncidentSeverities,
+} from '@/hooks/useSafetyIncidentTypes';
 import { toast } from 'sonner';
 
-const TYPES = Object.keys(SAFETY_TYPE_LABELS) as SafetyIncidentType[];
-const SEVERITIES = Object.keys(SAFETY_SEVERITY_LABELS) as SafetyIncidentSeverity[];
 const PRIORITIES = Object.keys(SAFETY_PRIORITY_LABELS) as SafetyIncidentPriority[];
 
 const ANY = '__any__';
