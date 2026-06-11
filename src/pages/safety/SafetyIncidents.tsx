@@ -25,6 +25,10 @@ import {
   SAFETY_SLA_STATUS_LABELS,
   SAFETY_SLA_STATUS_TONE,
 } from '@/lib/safetyIncidents';
+import {
+  useSafetyIncidentTypes,
+  useSafetyIncidentSeverities,
+} from '@/hooks/useSafetyIncidentTypes';
 import { Badge } from '@/components/ui/badge';
 import type { SafetyIncidentRow } from '@/hooks/useSafetyIncidents';
 import { format, formatDistanceToNowStrict } from 'date-fns';
@@ -38,24 +42,21 @@ const STATUS_OPTIONS = [
   'all', 'reported', 'management_review', 'assigned', 'investigation', 'rca',
   'corrective_action', 'safety_head_review', 'verification', 'closed', 'orphaned',
 ] as const;
-const SEVERITY_OPTIONS = ['all', 'low', 'medium', 'high', 'critical'] as const;
-const TYPE_OPTIONS = [
-  'all', 'near_miss', 'first_aid', 'medical_treatment', 'lost_time',
-  'fatality', 'property_damage', 'environmental', 'other',
-] as const;
 const SLA_STATUS_OPTIONS = [
   'all', 'on_track', 'at_risk', 'overdue', 'closed_on_time', 'closed_late',
 ] as const;
 
 interface IncidentFilters {
   status: string;
-  severity: string;
-  type: string;
+  /** safety_incident_severities.id or 'all' */
+  severityId: string;
+  /** safety_incident_types.id or 'all' */
+  typeId: string;
   slaStatus: string;
   search: string;
 }
 
-const INITIAL: IncidentFilters = { status: 'all', severity: 'all', type: 'all', slaStatus: 'all', search: '' };
+const INITIAL: IncidentFilters = { status: 'all', severityId: 'all', typeId: 'all', slaStatus: 'all', search: '' };
 
 async function fetchIncidentsPage({
   filters, range,
@@ -67,8 +68,8 @@ async function fetchIncidentsPage({
     .range(range[0], range[1]);
 
   if (filters.status !== 'all') q = q.eq('status', filters.status);
-  if (filters.severity !== 'all') q = q.eq('severity', filters.severity);
-  if (filters.type !== 'all') q = q.eq('incident_type', filters.type);
+  if (filters.severityId !== 'all') q = q.eq('severity_id', filters.severityId);
+  if (filters.typeId !== 'all') q = q.eq('incident_type_id', filters.typeId);
   if (filters.slaStatus !== 'all') q = q.eq('sla_status', filters.slaStatus);
   if (filters.search.trim()) {
     const needle = filters.search.trim();
@@ -124,6 +125,13 @@ export default function SafetyIncidents() {
   const handleSubmit = () => submit(draft);
   const handleReset = () => { setDraft(INITIAL); reset(); };
 
+  // Dynamic dropdown sources — replaces the hardcoded type/severity lists.
+  const { data: typeOptions = [] } = useSafetyIncidentTypes({ activeOnly: false });
+  const { data: severityOptions = [] } = useSafetyIncidentSeverities(
+    draft.typeId !== 'all' ? draft.typeId : null,
+    { activeOnly: false },
+  );
+
   const openRow = (i: SafetyIncidentRow) => {
     if (i.status === 'orphaned') setOrphanTarget(i);
     else navigate(`/safety/incidents/${i.id}`);
@@ -132,8 +140,8 @@ export default function SafetyIncidents() {
   const activeCount = useMemo(() => {
     let n = 0;
     if (draft.status !== 'all') n++;
-    if (draft.severity !== 'all') n++;
-    if (draft.type !== 'all') n++;
+    if (draft.severityId !== 'all') n++;
+    if (draft.typeId !== 'all') n++;
     if (draft.slaStatus !== 'all') n++;
     if (draft.search.trim()) n++;
     return n;
@@ -173,19 +181,30 @@ export default function SafetyIncidents() {
             ))}
           </SelectContent>
         </Select>
-        <Select value={draft.severity} onValueChange={(v) => setDraft((d) => ({ ...d, severity: v }))}>
-          <SelectTrigger><SelectValue placeholder="Severity" /></SelectTrigger>
+        <Select
+          value={draft.typeId}
+          onValueChange={(v) => setDraft((d) => ({ ...d, typeId: v, severityId: 'all' }))}
+        >
+          <SelectTrigger><SelectValue placeholder="Type" /></SelectTrigger>
           <SelectContent>
-            {SEVERITY_OPTIONS.map((s) => (
-              <SelectItem key={s} value={s}>{s === 'all' ? 'All severities' : s}</SelectItem>
+            <SelectItem value="all">All types</SelectItem>
+            {typeOptions.map((t) => (
+              <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
             ))}
           </SelectContent>
         </Select>
-        <Select value={draft.type} onValueChange={(v) => setDraft((d) => ({ ...d, type: v }))}>
-          <SelectTrigger><SelectValue placeholder="Type" /></SelectTrigger>
+        <Select
+          value={draft.severityId}
+          onValueChange={(v) => setDraft((d) => ({ ...d, severityId: v }))}
+          disabled={draft.typeId === 'all'}
+        >
+          <SelectTrigger>
+            <SelectValue placeholder={draft.typeId === 'all' ? 'Pick a type first' : 'Severity'} />
+          </SelectTrigger>
           <SelectContent>
-            {TYPE_OPTIONS.map((s) => (
-              <SelectItem key={s} value={s}>{s === 'all' ? 'All types' : s}</SelectItem>
+            <SelectItem value="all">All severities</SelectItem>
+            {severityOptions.map((s) => (
+              <SelectItem key={s.id} value={s.id}>{s.label}</SelectItem>
             ))}
           </SelectContent>
         </Select>
@@ -229,7 +248,9 @@ export default function SafetyIncidents() {
             }
             subtitle={
               <>
-                {SAFETY_TYPE_LABELS[i.incident_type]} · {SAFETY_SEVERITY_LABELS[i.severity]}
+                {(i as any).type_label_snapshot ?? SAFETY_TYPE_LABELS[i.incident_type]}
+                {' · '}
+                {(i as any).severity_label_snapshot ?? SAFETY_SEVERITY_LABELS[i.severity]}
                 {(i as any).business_unit_name && (
                   <> · {(i as any).business_unit_name}</>
                 )}
@@ -271,8 +292,8 @@ export default function SafetyIncidents() {
                   {i.incident_number ?? '—'}
                 </TableCell>
                 <TableCell className="max-w-[280px] truncate">{i.title}</TableCell>
-                <TableCell>{SAFETY_TYPE_LABELS[i.incident_type]}</TableCell>
-                <TableCell>{SAFETY_SEVERITY_LABELS[i.severity]}</TableCell>
+                <TableCell>{(i as any).type_label_snapshot ?? SAFETY_TYPE_LABELS[i.incident_type]}</TableCell>
+                <TableCell>{(i as any).severity_label_snapshot ?? SAFETY_SEVERITY_LABELS[i.severity]}</TableCell>
                 <TableCell className="hidden md:table-cell text-xs">
                   {(i as any).business_unit_name ? (
                     <div>

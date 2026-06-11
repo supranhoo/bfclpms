@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Settings, Users, Timer, ScrollText, ShieldCheck, Activity, Save,
-  Loader2, Phone, AlertTriangle, ArrowLeft, KeyRound, FileSignature, Download,
+  Loader2, Phone, AlertTriangle, ArrowLeft, KeyRound, FileSignature, Download, Tag,
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -37,6 +37,7 @@ const ADMIN_LINKS: Array<{
   icon: React.ComponentType<{ className?: string }>;
 }> = [
   { to: '/safety/settings/users',         label: 'Users & Roles',     description: 'Grant or revoke Safety roles for users.', icon: Users },
+  { to: '/safety/settings/incident-types',label: 'Incident Types',    description: 'Configure incident types and per-type severities.', icon: Tag },
   { to: '/safety/settings/permit-types',  label: 'Permit Types',      description: 'Per-type approval ladders for PTW.',     icon: ShieldCheck },
   { to: '/safety/settings/sla',           label: 'SLA Monitor',       description: 'Severity SLA matrix + escalation status.', icon: Timer },
   { to: '/safety/settings/audit',         label: 'Audit Log',         description: 'Immutable audit trail across the module.', icon: ScrollText },

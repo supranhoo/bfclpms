@@ -29,10 +29,13 @@ import {
   type SafetyIncidentSlaRule,
   type SlaRuleInput,
 } from '@/hooks/useSafetyIncidentSlaRules';
+import {
+  useSafetyIncidentTypes,
+  useSafetyIncidentSeverities,
+} from '@/hooks/useSafetyIncidentTypes';
+import { useAllSafetyIncidentSeverities } from '@/hooks/useSafetyIncidentTypes';
 import { toast } from 'sonner';
 
-const TYPES = Object.keys(SAFETY_TYPE_LABELS) as SafetyIncidentType[];
-const SEVERITIES = Object.keys(SAFETY_SEVERITY_LABELS) as SafetyIncidentSeverity[];
 const PRIORITIES = Object.keys(SAFETY_PRIORITY_LABELS) as SafetyIncidentPriority[];
 
 const ANY = '__any__';
@@ -44,28 +47,43 @@ function formatHours(h: number) {
 
 export default function SafetySlaRulesTab() {
   const { data: rules = [], isLoading } = useSafetyIncidentSlaRules();
+  const { data: typeOptions = [] } = useSafetyIncidentTypes({ activeOnly: false });
+  const { data: allSeverities = [] } = useAllSafetyIncidentSeverities();
   const upsert = useUpsertSafetyIncidentSlaRule();
   const toggle = useToggleSafetyIncidentSlaRule();
 
-  const [filterType, setFilterType] = useState<string>('all');
-  const [filterSeverity, setFilterSeverity] = useState<string>('all');
+  const [filterTypeId, setFilterTypeId] = useState<string>('all');
+  const [filterSeverityId, setFilterSeverityId] = useState<string>('all');
   const [filterPriority, setFilterPriority] = useState<string>('all');
   const [search, setSearch] = useState('');
   const [editing, setEditing] = useState<SafetyIncidentSlaRule | null>(null);
   const [creating, setCreating] = useState(false);
 
+  const typeNameById = useMemo(
+    () => new Map(typeOptions.map((t) => [t.id, t.name])),
+    [typeOptions],
+  );
+  const severityLabelById = useMemo(
+    () => new Map(allSeverities.map((s) => [s.id, s.label])),
+    [allSeverities],
+  );
+  const severitiesForFilter = useMemo(
+    () => allSeverities.filter((s) => filterTypeId === 'all' || s.incident_type_id === filterTypeId),
+    [allSeverities, filterTypeId],
+  );
+
   const filtered = useMemo(() => {
     const needle = search.trim().toLowerCase();
     return rules.filter((r) => {
-      if (filterType !== 'all' && r.incident_type !== filterType) return false;
-      if (filterSeverity !== 'all' && r.severity !== filterSeverity) return false;
+      if (filterTypeId !== 'all' && r.incident_type_id !== filterTypeId) return false;
+      if (filterSeverityId !== 'all' && r.severity_id !== filterSeverityId) return false;
       if (filterPriority !== 'all') {
         if (filterPriority === ANY ? r.priority !== null : r.priority !== filterPriority) return false;
       }
       if (needle && !(r.notes ?? '').toLowerCase().includes(needle)) return false;
       return true;
     });
-  }, [rules, filterType, filterSeverity, filterPriority, search]);
+  }, [rules, filterTypeId, filterSeverityId, filterPriority, search]);
 
   return (
     <Card>
@@ -85,18 +103,18 @@ export default function SafetySlaRulesTab() {
       </CardHeader>
       <CardContent className="space-y-3">
         <div className="grid grid-cols-1 sm:grid-cols-4 gap-2">
-          <Select value={filterType} onValueChange={setFilterType}>
+          <Select value={filterTypeId} onValueChange={(v) => { setFilterTypeId(v); setFilterSeverityId('all'); }}>
             <SelectTrigger><SelectValue placeholder="Type" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All types</SelectItem>
-              {TYPES.map((t) => <SelectItem key={t} value={t}>{SAFETY_TYPE_LABELS[t]}</SelectItem>)}
+              {typeOptions.map((t) => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
             </SelectContent>
           </Select>
-          <Select value={filterSeverity} onValueChange={setFilterSeverity}>
+          <Select value={filterSeverityId} onValueChange={setFilterSeverityId}>
             <SelectTrigger><SelectValue placeholder="Severity" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All severities</SelectItem>
-              {SEVERITIES.map((s) => <SelectItem key={s} value={s}>{SAFETY_SEVERITY_LABELS[s]}</SelectItem>)}
+              {severitiesForFilter.map((s) => <SelectItem key={s.id} value={s.id}>{s.label}</SelectItem>)}
             </SelectContent>
           </Select>
           <Select value={filterPriority} onValueChange={setFilterPriority}>
@@ -146,8 +164,16 @@ export default function SafetySlaRulesTab() {
                 )}
                 {filtered.map((r) => (
                   <TableRow key={r.id}>
-                    <TableCell>{SAFETY_TYPE_LABELS[r.incident_type]}</TableCell>
-                    <TableCell>{SAFETY_SEVERITY_LABELS[r.severity]}</TableCell>
+                    <TableCell>
+                      {(r.incident_type_id && typeNameById.get(r.incident_type_id))
+                        ?? (SAFETY_TYPE_LABELS as Record<string, string>)[r.incident_type]
+                        ?? r.incident_type}
+                    </TableCell>
+                    <TableCell>
+                      {(r.severity_id && severityLabelById.get(r.severity_id))
+                        ?? (SAFETY_SEVERITY_LABELS as Record<string, string>)[r.severity]
+                        ?? r.severity}
+                    </TableCell>
                     <TableCell>
                       {r.priority
                         ? SAFETY_PRIORITY_LABELS[r.priority]
@@ -205,8 +231,10 @@ function RuleEditor({
   onSave: (input: SlaRuleInput) => void;
   saving: boolean;
 }) {
-  const [type, setType] = useState<SafetyIncidentType>(rule?.incident_type ?? 'near_miss');
-  const [severity, setSeverity] = useState<SafetyIncidentSeverity>(rule?.severity ?? 'medium');
+  const { data: typeOptions = [] } = useSafetyIncidentTypes({ activeOnly: false });
+  const [typeId, setTypeId] = useState<string>(rule?.incident_type_id ?? '');
+  const [severityId, setSeverityId] = useState<string>(rule?.severity_id ?? '');
+  const { data: severities = [] } = useSafetyIncidentSeverities(typeId || null, { activeOnly: false });
   const [priority, setPriority] = useState<string>(rule?.priority ?? ANY);
   const [hours, setHours] = useState<string>(String(rule?.target_hours ?? 24));
   const [amber, setAmber] = useState<string>(String(rule?.amber_threshold_pct ?? 50));
@@ -215,8 +243,8 @@ function RuleEditor({
 
   // Re-seed when rule changes
   useMemo(() => {
-    setType(rule?.incident_type ?? 'near_miss');
-    setSeverity(rule?.severity ?? 'medium');
+    setTypeId(rule?.incident_type_id ?? '');
+    setSeverityId(rule?.severity_id ?? '');
     setPriority(rule?.priority ?? ANY);
     setHours(String(rule?.target_hours ?? 24));
     setAmber(String(rule?.amber_threshold_pct ?? 50));
@@ -231,9 +259,22 @@ function RuleEditor({
     const a = Number(amber);
     if (!Number.isFinite(h) || h <= 0) return toast.error('Target hours must be > 0');
     if (!Number.isFinite(a) || a < 1 || a > 99) return toast.error('Amber threshold must be 1–99');
+    const selectedType = typeOptions.find((t) => t.id === typeId);
+    const selectedSeverity = severities.find((s) => s.id === severityId);
+    if (!selectedType || !selectedSeverity) {
+      return toast.error('Pick an incident type and severity');
+    }
+    // Coerce to legacy enum (still NOT NULL on the table) — falls back to
+    // safe defaults if the configured code is a fully custom value.
+    const enumTypes = ['near_miss','unsafe_act','unsafe_condition','accident','property_damage','environmental'];
+    const enumSevs = ['low','medium','high','critical'];
+    const legacyType = (enumTypes.includes(selectedType.code) ? selectedType.code : 'near_miss') as SafetyIncidentType;
+    const legacySev = (enumSevs.includes(selectedSeverity.code) ? selectedSeverity.code : 'medium') as SafetyIncidentSeverity;
     onSave({
-      incident_type: type,
-      severity,
+      incident_type: legacyType,
+      severity: legacySev,
+      incident_type_id: typeId,
+      severity_id: severityId,
       priority: priority === ANY ? null : (priority as SafetyIncidentPriority),
       target_hours: h,
       amber_threshold_pct: a,
@@ -252,19 +293,19 @@ function RuleEditor({
           <div className="grid grid-cols-2 gap-3">
             <div>
               <Label>Incident type</Label>
-              <Select value={type} onValueChange={(v) => setType(v as SafetyIncidentType)}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+              <Select value={typeId} onValueChange={(v) => { setTypeId(v); setSeverityId(''); }}>
+                <SelectTrigger><SelectValue placeholder="Select type" /></SelectTrigger>
                 <SelectContent>
-                  {TYPES.map((t) => <SelectItem key={t} value={t}>{SAFETY_TYPE_LABELS[t]}</SelectItem>)}
+                  {typeOptions.map((t) => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
             <div>
               <Label>Severity</Label>
-              <Select value={severity} onValueChange={(v) => setSeverity(v as SafetyIncidentSeverity)}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+              <Select value={severityId} onValueChange={setSeverityId} disabled={!typeId}>
+                <SelectTrigger><SelectValue placeholder={typeId ? 'Select severity' : 'Pick type first'} /></SelectTrigger>
                 <SelectContent>
-                  {SEVERITIES.map((s) => <SelectItem key={s} value={s}>{SAFETY_SEVERITY_LABELS[s]}</SelectItem>)}
+                  {severities.map((s) => <SelectItem key={s.id} value={s.id}>{s.label}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
