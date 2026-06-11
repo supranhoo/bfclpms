@@ -248,7 +248,9 @@ export default function SafetyIncidents() {
             }
             subtitle={
               <>
-                {SAFETY_TYPE_LABELS[i.incident_type]} · {SAFETY_SEVERITY_LABELS[i.severity]}
+                {(i as any).type_label_snapshot ?? SAFETY_TYPE_LABELS[i.incident_type]}
+                {' · '}
+                {(i as any).severity_label_snapshot ?? SAFETY_SEVERITY_LABELS[i.severity]}
                 {(i as any).business_unit_name && (
                   <> · {(i as any).business_unit_name}</>
                 )}
@@ -290,8 +292,8 @@ export default function SafetyIncidents() {
                   {i.incident_number ?? '—'}
                 </TableCell>
                 <TableCell className="max-w-[280px] truncate">{i.title}</TableCell>
-                <TableCell>{SAFETY_TYPE_LABELS[i.incident_type]}</TableCell>
-                <TableCell>{SAFETY_SEVERITY_LABELS[i.severity]}</TableCell>
+                <TableCell>{(i as any).type_label_snapshot ?? SAFETY_TYPE_LABELS[i.incident_type]}</TableCell>
+                <TableCell>{(i as any).severity_label_snapshot ?? SAFETY_SEVERITY_LABELS[i.severity]}</TableCell>
                 <TableCell className="hidden md:table-cell text-xs">
                   {(i as any).business_unit_name ? (
                     <div>
