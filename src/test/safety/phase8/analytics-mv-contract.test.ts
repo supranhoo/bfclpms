@@ -18,6 +18,10 @@ const REQUIRED_MVS = [
   'mv_safety_audit_scoreboard',
   'mv_safety_permit_throughput',
   'mv_safety_incident_monthly_trend',
+  // Parity closeout (gap #6): three new MVs backing dashboard widgets
+  'mv_safety_recurrence',
+  'mv_safety_top_root_causes',
+  'mv_safety_dept_risk_trend',
 ];
 
 describe('Phase 8 — Safety analytics MV contract', () => {
