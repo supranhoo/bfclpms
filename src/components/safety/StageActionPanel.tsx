@@ -328,7 +328,11 @@ export function StageActionPanel({ incident }: { incident: SafetyIncidentRow }) 
               ) : (
                 <ArrowRight className="h-4 w-4 mr-2" />
               )}
-              {next === 'closed' ? 'Close Incident' : `Advance to ${SAFETY_STATUS_LABELS[next]}`}
+              {next === 'closed'
+                ? 'Close Incident'
+                : incident.status === 'rework_required' && next === 'safety_head_review'
+                  ? 'Resubmit to Safety Head'
+                  : `Advance to ${SAFETY_STATUS_LABELS[next]}`}
             </Button>
           </div>
         )}
