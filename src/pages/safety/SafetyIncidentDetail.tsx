@@ -12,6 +12,20 @@ import { IncidentTimeline } from '@/components/safety/IncidentTimeline';
 import { EvidenceList } from '@/components/safety/EvidenceList';
 import { ProgressLogList } from '@/components/safety/ProgressLogList';
 import { SAFETY_SEVERITY_LABELS, SAFETY_TYPE_LABELS } from '@/lib/safetyIncidents';
+
+/**
+ * Render the configured snapshot label if present (so admin renames or
+ * deletes never alter past records), otherwise fall back to the legacy
+ * enum label.
+ */
+function renderTypeLabel(i: { incident_type?: string | null; type_label_snapshot?: string | null }) {
+  return i.type_label_snapshot
+    ?? (i.incident_type ? (SAFETY_TYPE_LABELS as Record<string, string>)[i.incident_type] ?? i.incident_type : '—');
+}
+function renderSeverityLabel(i: { severity?: string | null; severity_label_snapshot?: string | null }) {
+  return i.severity_label_snapshot
+    ?? (i.severity ? (SAFETY_SEVERITY_LABELS as Record<string, string>)[i.severity] ?? i.severity : '—');
+}
 import { format } from 'date-fns';
 import { IncidentStageHeader } from '@/components/safety/IncidentStageHeader';
 import { IncidentRcaPanel } from '@/components/safety/IncidentRcaPanel';
