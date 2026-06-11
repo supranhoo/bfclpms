@@ -73,10 +73,31 @@ export default function SafetyIncidentNew() {
   const [businessUnitId, setBusinessUnitId] = useState<string>('');
   const [departmentId, setDepartmentId] = useState<string>('');
   const [involvedName, setInvolvedName] = useState('');
+  const [involvedPickerOpen, setInvolvedPickerOpen] = useState(false);
+  const [involvedSearch, setInvolvedSearch] = useState('');
   const [files, setFiles] = useState<File[]>([]);
   const [submitting, setSubmitting] = useState(false);
 
   const { data: departments = [] } = useDepartments(businessUnitId || null);
+
+  // Searchable employee picker for "Involved Person". Free-text remains
+  // allowed (contractors / visitors who aren't in profiles).
+  const involvedQuery = useQuery({
+    queryKey: ['safety', 'involved-person-search', involvedSearch],
+    enabled: involvedPickerOpen && involvedSearch.trim().length >= 2,
+    queryFn: async () => {
+      const term = involvedSearch.trim();
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, full_name, email, employee_code')
+        .eq('is_active', true)
+        .or(`full_name.ilike.%${term}%,email.ilike.%${term}%,employee_code.ilike.%${term}%`)
+        .order('full_name', { ascending: true })
+        .limit(20);
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
 
   // Pending uploader bound to a placeholder id; we'll re-bind after insert.
   const requiresInvolved = REQUIRES_INVOLVED.includes(type as SafetyIncidentType);
