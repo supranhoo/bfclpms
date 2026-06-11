@@ -13392,10 +13392,10 @@ export type Database = {
         | {
             Args: {
               p_assigned_to?: string
+              p_final_remarks?: string
               p_incident_id: string
               p_notes?: string
               p_to_status: Database["public"]["Enums"]["safety_incident_status"]
-              p_verifier_id?: string
             }
             Returns: Json
           }
