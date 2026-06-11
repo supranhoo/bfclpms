@@ -9,7 +9,6 @@ export interface SafetyRoutingRule {
   bu_head_id: string;
   manager_id: string | null;
   second_manager_id: string | null;
-  safety_head_id: string | null;
   is_active: boolean;
   created_at: string;
   updated_at: string;
@@ -40,7 +39,6 @@ export interface UpsertRuleInput {
   bu_head_id: string;
   manager_id: string | null;
   second_manager_id: string | null;
-  safety_head_id: string | null;
   is_active: boolean;
 }
 
@@ -59,7 +57,6 @@ export function useUpsertSafetyRoutingRule() {
         bu_head_id: input.bu_head_id,
         manager_id: input.manager_id || null,
         second_manager_id: input.second_manager_id || null,
-        safety_head_id: input.safety_head_id || null,
         is_active: input.is_active,
         updated_by: user.id,
       };

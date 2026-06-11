@@ -18,6 +18,7 @@ import SafetyDataExportDialog from '@/components/safety/SafetyDataExportDialog';
 import SafetyMasterDataPanel from '@/components/safety/SafetyMasterDataPanel';
 import SafetyPermissionsTab from '@/components/safety/settings/SafetyPermissionsTab';
 import SafetyIncidentRoutingTab from '@/components/safety/settings/SafetyIncidentRoutingTab';
+import SafetyHeadAssignmentTab from '@/components/safety/settings/SafetyHeadAssignmentTab';
 import SafetySlaRulesTab from '@/components/safety/settings/SafetySlaRulesTab';
 
 /**
@@ -138,6 +139,8 @@ export default function SafetySettings() {
       <SafetyMasterDataPanel />
 
       <SafetyIncidentRoutingTab />
+
+      <SafetyHeadAssignmentTab />
 
       <SafetySlaRulesTab />
 
