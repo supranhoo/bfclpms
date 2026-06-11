@@ -1,7 +1,8 @@
 import { useNavigate, useParams } from 'react-router-dom';
+import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Loader2, ArrowLeft } from 'lucide-react';
+import { ArrowLeft, ShieldAlert } from 'lucide-react';
 import { useSafetyIncident } from '@/hooks/useSafetyIncidents';
 import { useSafetyRealtimeSync } from '@/hooks/useSafetyRealtimeSync';
 import { SafetyStatusBadge } from '@/components/safety/StatusBadge';
@@ -16,10 +17,12 @@ import { IncidentStageHeader } from '@/components/safety/IncidentStageHeader';
 import { IncidentRcaPanel } from '@/components/safety/IncidentRcaPanel';
 import { useSafetySettings } from '@/hooks/useSafetySettings';
 import { SafetySkeletonBlock } from '@/components/safety/SafetySkeletonBlock';
+import { OrphanIncidentDialog } from '@/components/safety/OrphanIncidentDialog';
 
 export default function SafetyIncidentDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const [reviveOpen, setReviveOpen] = useState(false);
   // Scoped realtime: incidents row + everything the timeline/evidence
   // sections render. Avoids subscribing to permits/training/etc.
   useSafetyRealtimeSync(true, [
@@ -104,6 +107,24 @@ export default function SafetyIncidentDetail() {
         </CardContent>
       </Card>
 
+      {incident.status === 'orphaned' && (
+        <Card className="border-destructive/40">
+          <CardHeader className="px-4 py-3 sm:px-6 sm:py-4">
+            <CardTitle className="text-base flex items-center gap-2 text-destructive">
+              <ShieldAlert className="h-5 w-5" /> Orphaned incident
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="px-4 sm:px-6">
+            <p className="text-sm text-muted-foreground mb-3">
+              This incident has no active owner. Safety Admin or Safety Head can revive it by reassigning to an active employee.
+            </p>
+            <Button variant="destructive" onClick={() => setReviveOpen(true)}>
+              Revive &amp; Reassign
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
       {uiV2 && <IncidentRcaPanel incident={incident} />}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -121,6 +142,12 @@ export default function SafetyIncidentDetail() {
           <CardContent><ProgressLogList incidentId={incident.id} /></CardContent>
         </Card>
       </div>
+
+      <OrphanIncidentDialog
+        incident={incident.status === 'orphaned' ? incident : null}
+        open={reviveOpen}
+        onOpenChange={setReviveOpen}
+      />
     </div>
   );
 }

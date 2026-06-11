@@ -12494,6 +12494,10 @@ export type Database = {
         Args: { _action: string; _user_id: string }
         Returns: boolean
       }
+      revive_orphaned_safety_incident: {
+        Args: { p_assigned_to: string; p_incident_id: string; p_notes?: string }
+        Returns: Json
+      }
       rpc_bulk_employee_attrs: {
         Args: { p_employee_ids: string[] }
         Returns: {

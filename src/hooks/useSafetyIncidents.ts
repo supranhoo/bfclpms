@@ -159,6 +159,41 @@ export function useTransitionSafetyIncident() {
 }
 
 /**
+ * Phase 1 / ADR-089 — Orphan revival. Calls the dedicated
+ * `revive_orphaned_safety_incident` RPC (Safety Admin / Head only).
+ */
+export interface ReviveOrphanInput {
+  incidentId: string;
+  assignedTo: string;
+  notes?: string;
+}
+
+export function useReviveOrphanedIncident() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ incidentId, assignedTo, notes }: ReviveOrphanInput) => {
+      const { data, error } = await supabase.rpc(
+        'revive_orphaned_safety_incident' as never,
+        {
+          p_incident_id: incidentId,
+          p_assigned_to: assignedTo,
+          p_notes: notes ?? null,
+        } as never,
+      );
+      if (error) throw error;
+      const result = data as { ok: boolean; error?: string };
+      if (!result?.ok) throw new Error(result?.error ?? 'Revival failed');
+      return result;
+    },
+    onSuccess: () => {
+      toast.success('Incident revived and reassigned');
+      qc.invalidateQueries({ queryKey: ['safety'] });
+    },
+    onError: (err: Error) => toast.error(err.message ?? 'Revival rejected'),
+  });
+}
+
+/**
  * Strictly scoped invalidator — never nukes PMS caches.
  * (Per POLICY §110 cache isolation requirement.)
  */
