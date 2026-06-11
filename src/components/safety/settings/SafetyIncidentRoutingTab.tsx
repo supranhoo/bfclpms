@@ -155,11 +155,11 @@ export default function SafetyIncidentRoutingTab() {
               </div>
               <div>
                 <Label className="text-xs">Manager</Label>
-                <EmployeeSelect value={form.manager_id} onChange={(v) => setForm((f) => ({ ...f, manager_id: v }))} placeholder="Select Manager" />
+                <EmployeeSelect value={form.manager_id ?? ''} onChange={(v) => setForm((f) => ({ ...f, manager_id: v || null }))} placeholder="Select Manager (optional)" />
               </div>
               <div>
                 <Label className="text-xs">2nd Manager</Label>
-                <EmployeeSelect value={form.second_manager_id} onChange={(v) => setForm((f) => ({ ...f, second_manager_id: v }))} placeholder="Select 2nd Manager" />
+                <EmployeeSelect value={form.second_manager_id ?? ''} onChange={(v) => setForm((f) => ({ ...f, second_manager_id: v || null }))} placeholder="Select 2nd Manager (optional)" />
               </div>
               <div className="flex items-center gap-2 pt-2">
                 <Switch checked={form.is_active} onCheckedChange={(v) => setForm((f) => ({ ...f, is_active: v }))} />
@@ -173,7 +173,7 @@ export default function SafetyIncidentRoutingTab() {
                 disabled={
                   upsert.isPending
                   || !form.business_unit_id
-                  || !form.bu_head_id || !form.manager_id || !form.second_manager_id
+                  || !form.bu_head_id
                 }
               >
                 {upsert.isPending && <Loader2 className="h-4 w-4 mr-1 animate-spin" />}
