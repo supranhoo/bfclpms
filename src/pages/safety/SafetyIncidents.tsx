@@ -133,8 +133,8 @@ export default function SafetyIncidents() {
   const activeCount = useMemo(() => {
     let n = 0;
     if (draft.status !== 'all') n++;
-    if (draft.severity !== 'all') n++;
-    if (draft.type !== 'all') n++;
+    if (draft.severityId !== 'all') n++;
+    if (draft.typeId !== 'all') n++;
     if (draft.slaStatus !== 'all') n++;
     if (draft.search.trim()) n++;
     return n;
