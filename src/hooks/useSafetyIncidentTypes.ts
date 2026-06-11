@@ -34,6 +34,7 @@ export interface SafetyIncidentSeverityRow {
 
 const TYPES_KEY = ['safety', 'incident-types'] as const;
 const SEV_KEY = (typeId: string | null) => ['safety', 'incident-severities', typeId] as const;
+const ALL_SEV_KEY = ['safety', 'incident-severities', 'all'] as const;
 
 /** All incident types (active + inactive). */
 export function useSafetyIncidentTypes(opts?: { activeOnly?: boolean }) {
@@ -66,6 +67,21 @@ export function useSafetyIncidentSeverities(typeId: string | null, opts?: { acti
         .order('label', { ascending: true });
       if (opts?.activeOnly) q = q.eq('is_active', true);
       const { data, error } = await q;
+      if (error) throw error;
+      return (data ?? []) as unknown as SafetyIncidentSeverityRow[];
+    },
+  });
+}
+
+/** All severities across all types (used by admin tools that need a global map). */
+export function useAllSafetyIncidentSeverities() {
+  return useQuery({
+    queryKey: ALL_SEV_KEY,
+    queryFn: async (): Promise<SafetyIncidentSeverityRow[]> => {
+      const { data, error } = await supabase
+        .from('safety_incident_severities' as never)
+        .select('*')
+        .order('sort_order', { ascending: true });
       if (error) throw error;
       return (data ?? []) as unknown as SafetyIncidentSeverityRow[];
     },
