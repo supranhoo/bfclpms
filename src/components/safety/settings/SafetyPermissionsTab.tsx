@@ -138,8 +138,8 @@ function MatrixPanel() {
                 </td>
                 {SAFETY_ROLES.filter((r) => r !== 'admin').map((role) => {
                   const k2 = `${role}::${k.key}`;
-                  // missing row = open default = allowed
-                  const checked = map.has(k2) ? !!map.get(k2) : true;
+                  // missing row = denied by default; only explicit allow grants access.
+                  const checked = map.has(k2) ? !!map.get(k2) : false;
                   return (
                     <td key={role} className="text-center p-2">
                       <Checkbox
@@ -156,7 +156,7 @@ function MatrixPanel() {
         </table>
       </ScrollArea>
       <p className="text-xs text-muted-foreground">
-        Admin role is always allowed everything (not shown). Empty cell = inherits open default (allowed).
+        Admin role is always allowed everything (not shown). Unchecked = denied. Only checked permissions are granted to the role.
       </p>
     </div>
   );
