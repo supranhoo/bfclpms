@@ -249,6 +249,7 @@ export default function SafetyIncidents() {
               <TableHead>Title</TableHead>
               <TableHead>Type</TableHead>
               <TableHead>Severity</TableHead>
+              <TableHead className="hidden md:table-cell">Business Unit</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>SLA</TableHead>
               <TableHead className="hidden md:table-cell">Due / Remaining</TableHead>
@@ -269,6 +270,20 @@ export default function SafetyIncidents() {
                 <TableCell className="max-w-[280px] truncate">{i.title}</TableCell>
                 <TableCell>{SAFETY_TYPE_LABELS[i.incident_type]}</TableCell>
                 <TableCell>{SAFETY_SEVERITY_LABELS[i.severity]}</TableCell>
+                <TableCell className="hidden md:table-cell text-xs">
+                  {(i as any).business_unit_name ? (
+                    <div>
+                      <div>{(i as any).business_unit_name}</div>
+                      {(i as any).business_unit_code && (
+                        <div className="text-muted-foreground font-mono">
+                          {(i as any).business_unit_code}
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <span className="text-muted-foreground">—</span>
+                  )}
+                </TableCell>
                 <TableCell><SafetyStatusBadge status={i.status} /></TableCell>
                 <TableCell>
                   {i.sla_status ? (
