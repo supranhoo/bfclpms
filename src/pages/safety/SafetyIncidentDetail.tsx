@@ -20,6 +20,8 @@ import { SafetySkeletonBlock } from '@/components/safety/SafetySkeletonBlock';
 import { OrphanIncidentDialog } from '@/components/safety/OrphanIncidentDialog';
 import { RoutingChainDisplay } from '@/components/safety/RoutingChainDisplay';
 import { IncidentSlaPanel } from '@/components/safety/IncidentSlaPanel';
+import { useMySafetyRoles } from '@/hooks/useSafetyRoles';
+import { useAuth } from '@/contexts/AuthContext';
 
 export default function SafetyIncidentDetail() {
   const { id } = useParams<{ id: string }>();
@@ -36,6 +38,8 @@ export default function SafetyIncidentDetail() {
   const { data: incident, isLoading, error } = useSafetyIncident(id);
   const { data: settings = [] } = useSafetySettings();
   const uiV2 = settings.find((r) => r.key === 'ui_incident_v2')?.value === true;
+  const { user } = useAuth();
+  const { data: myRoles = [] } = useMySafetyRoles();
 
   if (isLoading) {
     return (
@@ -57,6 +61,25 @@ export default function SafetyIncidentDetail() {
       </div>
     );
   }
+
+  // Workers / reporter-only users see just the status timeline.
+  // Privileged viewers (admin, safety_head, safety_officer, bu_head, manager,
+  // supervisor, auditor) OR anyone routed/assigned on this incident see
+  // the full stage actions, SLA, evidence and progress log.
+  const uid = user?.id ?? null;
+  const privilegedRoles: string[] = [
+    'admin', 'safety_head', 'safety_officer', 'bu_head', 'manager', 'supervisor', 'auditor',
+  ];
+  const hasPrivilegedRole = myRoles.some((r) => privilegedRoles.includes(r));
+  const isOnRoutingChain = !!uid && (
+    incident.assigned_to === uid ||
+    incident.routed_bu_head_id === uid ||
+    incident.routed_manager_id === uid ||
+    incident.routed_second_manager_id === uid ||
+    incident.safety_head_id === uid ||
+    incident.verifier_id === uid
+  );
+  const canSeeFullDetail = hasPrivilegedRole || isOnRoutingChain;
 
   return (
     <div className="p-3 sm:p-6 space-y-3 sm:space-y-4 w-full">
@@ -135,22 +158,29 @@ export default function SafetyIncidentDetail() {
 
       {uiV2 && <IncidentRcaPanel incident={incident} />}
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <IncidentSlaPanel incident={incident} />
-        <StageActionPanel incident={incident} />
+      {canSeeFullDetail ? (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <IncidentSlaPanel incident={incident} />
+          <StageActionPanel incident={incident} />
+          <Card>
+            <CardHeader><CardTitle className="text-base">Status Timeline</CardTitle></CardHeader>
+            <CardContent><IncidentTimeline incidentId={incident.id} grouped={uiV2} /></CardContent>
+          </Card>
+          <Card>
+            <CardHeader><CardTitle className="text-base">Evidence</CardTitle></CardHeader>
+            <CardContent><EvidenceList incidentId={incident.id} /></CardContent>
+          </Card>
+          <Card>
+            <CardHeader><CardTitle className="text-base">Progress Log</CardTitle></CardHeader>
+            <CardContent><ProgressLogList incidentId={incident.id} /></CardContent>
+          </Card>
+        </div>
+      ) : (
         <Card>
           <CardHeader><CardTitle className="text-base">Status Timeline</CardTitle></CardHeader>
           <CardContent><IncidentTimeline incidentId={incident.id} grouped={uiV2} /></CardContent>
         </Card>
-        <Card>
-          <CardHeader><CardTitle className="text-base">Evidence</CardTitle></CardHeader>
-          <CardContent><EvidenceList incidentId={incident.id} /></CardContent>
-        </Card>
-        <Card>
-          <CardHeader><CardTitle className="text-base">Progress Log</CardTitle></CardHeader>
-          <CardContent><ProgressLogList incidentId={incident.id} /></CardContent>
-        </Card>
-      </div>
+      )}
 
       <OrphanIncidentDialog
         incident={incident.status === 'orphaned' ? incident : null}
