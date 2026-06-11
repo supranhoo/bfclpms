@@ -9231,8 +9231,8 @@ export type Database = {
           department_id: string | null
           id: string
           is_active: boolean
-          manager_id: string
-          second_manager_id: string
+          manager_id: string | null
+          second_manager_id: string | null
           updated_at: string
           updated_by: string | null
         }
@@ -9244,8 +9244,8 @@ export type Database = {
           department_id?: string | null
           id?: string
           is_active?: boolean
-          manager_id: string
-          second_manager_id: string
+          manager_id?: string | null
+          second_manager_id?: string | null
           updated_at?: string
           updated_by?: string | null
         }
@@ -9257,8 +9257,8 @@ export type Database = {
           department_id?: string | null
           id?: string
           is_active?: boolean
-          manager_id?: string
-          second_manager_id?: string
+          manager_id?: string | null
+          second_manager_id?: string | null
           updated_at?: string
           updated_by?: string | null
         }
