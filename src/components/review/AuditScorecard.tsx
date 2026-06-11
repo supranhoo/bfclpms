@@ -879,7 +879,14 @@ export function AuditScorecard({
             {selectedKpi && (
               <KpiReviewPanel
                 kpi={selectedKpi}
-                submission={submissionMap.get(selectedKpi.id) || null}
+                submission={
+                  // RCA Jun-2026: fall back to the cross-period `allSubmissions`
+                  // snapshot when the current-period map is empty/stale so the
+                  // auditor never sees N/A while the row exists in the DB.
+                  submissionMap.get(selectedKpi.id)
+                  ?? allSubmissions?.find(s => s.kpi_id === selectedKpi.id)
+                  ?? null
+                }
                 allKpis={allKpis || []}
                 allSubmissions={allSubmissions || []}
                 queries={queryMap.get(selectedKpi.id) || []}
@@ -893,6 +900,7 @@ export function AuditScorecard({
                 orgKpiDataOwnerNames={getOwnerNamesForKpi(dataOwnerNamesMap, selectedKpi)}
                 employeeName={employee.full_name || undefined}
                 employeeCode={employee.employee_code || undefined}
+                isSubmissionLoading={isSubmissionsLoading}
               />
             )}
             
