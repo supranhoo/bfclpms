@@ -5,10 +5,13 @@ import { Button } from '@/components/ui/button';
 import {
   ShieldAlert, AlertTriangle, Activity, ArrowRight, Plus,
   TrendingUp, Clock, CheckCircle2, AlertOctagon, Loader2,
+  UserCheck, Ghost, LineChart,
 } from 'lucide-react';
 import { useSafetyDashboardStats } from '@/hooks/useSafetyDashboardStats';
 import { useSafetyRealtimeSync } from '@/hooks/useSafetyRealtimeSync';
+import { useNowTick } from '@/hooks/useNowTick';
 import { SafetyStickyActionBar } from '@/components/safety/SafetyStickyActionBar';
+import { SafetyTrendSparkline } from '@/components/safety/SafetyTrendSparkline';
 import {
   SAFETY_STATUS_LABELS,
   SAFETY_SEVERITY_LABELS,
@@ -33,6 +36,8 @@ export default function SafetyHome() {
   // scoped subscriptions are used everywhere else.
   useSafetyRealtimeSync();
   const { data, isLoading } = useSafetyDashboardStats();
+  // Phase 3 — live tick so overdue badges re-render without cache churn.
+  useNowTick(30_000);
 
   return (
     <div className="w-full space-y-4 sm:space-y-6">
@@ -61,7 +66,7 @@ export default function SafetyHome() {
 
       {!isLoading && data && (
         <>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
             <KpiTile
               label="Open Incidents"
               value={data.open}
@@ -81,11 +86,76 @@ export default function SafetyHome() {
               tone="amber"
             />
             <KpiTile
+              label="Orphaned"
+              value={data.orphaned}
+              icon={<Ghost className="h-4 w-4" />}
+              tone="destructive"
+            />
+            <KpiTile
               label="Closed"
               value={data.byStatus['closed'] ?? 0}
               icon={<CheckCircle2 className="h-4 w-4" />}
               tone="success"
             />
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between pb-3">
+                <div>
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <UserCheck className="h-4 w-4" /> My assignments
+                  </CardTitle>
+                  <CardDescription>Open incidents assigned to you.</CardDescription>
+                </div>
+                <Badge variant="secondary" className="tabular-nums">
+                  {data.myAssignments.length}
+                </Badge>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {data.myAssignments.length === 0 ? (
+                  <p className="text-sm text-muted-foreground py-4 text-center">
+                    Nothing assigned to you right now.
+                  </p>
+                ) : (
+                  data.myAssignments.map((inc) => (
+                    <Link
+                      key={inc.id}
+                      to={`/safety/incidents/${inc.id}`}
+                      className="flex flex-wrap sm:flex-nowrap items-center gap-2 sm:gap-3 p-3 rounded-lg border hover:bg-muted/50 transition-colors min-h-[56px]"
+                    >
+                      <div className="flex-1 min-w-0">
+                        <div className="font-medium text-sm truncate">
+                          {inc.incident_number ?? '—'} · {inc.title}
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          {SAFETY_SEVERITY_LABELS[inc.severity]} · {inc.location}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <SafetyStatusBadge status={inc.status} />
+                        <SlaBadge state={inc.sla_state} />
+                      </div>
+                    </Link>
+                  ))
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="pb-2">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <LineChart className="h-4 w-4" /> 30-day trend
+                  </CardTitle>
+                  <span className="text-xs text-muted-foreground">Incidents reported</span>
+                </div>
+                <CardDescription>Daily reported incident volume.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <SafetyTrendSparkline data={data.trend30d} height={72} />
+              </CardContent>
+            </Card>
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
