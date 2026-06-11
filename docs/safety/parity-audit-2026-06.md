@@ -436,3 +436,32 @@ behaviour.
 ---
 
 *End of report.*
+
+---
+
+## 11. Addendum — Parity closeout (2026-06-11)
+
+Implementation of the 7 Missing items per the user-approved Missing-Only
+plan (`.lovable/plan.md`).
+
+| # | Gap | Status | Evidence |
+|---|---|---|---|
+| 1 | `BuHeadDashboard.tsx` | **Shipped** | `bfcl:src/components/safety/dashboard/BuHeadDashboard.tsx`, mounted in `SafetyHome.tsx` |
+| 2 | `DeptRiskWidget.tsx` | **Shipped** | `bfcl:src/components/safety/dashboard/DeptRiskWidget.tsx` (reads `safety_analytics_dept_risk_trend`) |
+| 3 | `RepeatHeatmapWidget.tsx` | **Shipped** | `bfcl:src/components/safety/dashboard/RepeatHeatmapWidget.tsx` (reads `safety_analytics_recurrence`) |
+| 4 | `safety_master_data` + hook | **Shipped** | table `public.safety_master_data` + `bfcl:src/hooks/useSafetyMasterData.ts` + admin panel in `SafetySettings` |
+| 5 | `safety_dashboard_at_risk` RPC | **Shipped** | RPC live; consumed by `AtRiskWidget.tsx` |
+| 6 | 3 analytics RPCs (`recurrence`, `top_root_causes`, `dept_risk_trend`) | **Shipped** | RPCs + backing MVs (`mv_safety_recurrence`, `mv_safety_top_root_causes`, `mv_safety_dept_risk_trend`); `refresh_safety_analytics` extended; Phase 8 contract allowlist updated |
+| 7 | `safety_emergency_acknowledgements` | **Won't fix — superseded** | BFCL drill model uses `safety_drill_participants` + `safety_drill_findings` and is locked by `safety_drills_block_status_writes`. Re-introducing per-employee acks would require loosening the FSM guard, which Phase 8 SSOT forbids. Drill participation provides the same auditable signal (per-user row with status). |
+
+**Caveat on item 6.** The prototype's `safety_analytics_top_root_causes`
+is keyed by a free-text `root_cause` column that does not exist on
+`safety_incidents` in BFCL. The shipped MV substitutes `incident_type`
+(8-value enum) as the cause dimension. If a true free-text root-cause
+column is later added (or `rca_summary` is normalized), the MV definition
+should be revisited.
+
+**Final score impact.** 6 of 7 Missing items shipped; 1 closed as
+"won't fix — superseded". Adjusted parity: 65/74 (87.8%) Full,
+9/74 (12.2%) Partial, 0 Broken, 0 Missing (with documented
+superseded item). No file classified Full or Partial was modified.
