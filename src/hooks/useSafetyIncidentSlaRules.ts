@@ -65,12 +65,15 @@ export interface SlaRuleInput {
 
 /**
  * Friendly translation for the unique-index violations enforced server-side:
- *   - uq_safety_sla_rules_active_specific      (type, severity, priority WHERE is_active)
- *   - uq_safety_sla_rules_active_any_priority  (type, severity      WHERE is_active AND priority IS NULL)
+ *   - uq_safety_sla_rules_active_specific      (incident_type_id, severity_id, priority WHERE is_active)
+ *   - uq_safety_sla_rules_active_any_priority  (incident_type_id, severity_id WHERE is_active AND priority IS NULL)
+ *   - *_legacy variants on the old enum columns for rows not mapped to configured IDs
+ * Uniqueness is keyed on the CONFIGURED type/severity ids — custom types (e.g.
+ * "Spillage") never collide with the legacy enum fallback of another type.
  * Surfacing the raw Postgres message ("duplicate key value violates …") is
  * confusing to end-users — translate to an actionable hint instead.
  */
-function translateSlaRuleError(e: unknown): string {
+export function translateSlaRuleError(e: unknown): string {
   const err = e as { code?: string; message?: string };
   const msg = err?.message ?? '';
   if (err?.code === '23505' || /duplicate key value/i.test(msg)) {
