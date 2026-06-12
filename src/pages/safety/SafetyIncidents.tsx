@@ -364,51 +364,84 @@ export default function SafetyIncidents() {
         isSubmitting={isFetching}
         activeCount={activeCount}
       >
-        <Select value={draft.status} onValueChange={(v) => setDraft((d) => ({ ...d, status: v }))}>
-          <SelectTrigger><SelectValue placeholder="Status" /></SelectTrigger>
-          <SelectContent>
-            {STATUS_OPTIONS.map((s) => (
-              <SelectItem key={s} value={s}>{s === 'all' ? 'All statuses' : s}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <MultiSelectFilter
+          options={STATUS_OPTIONS.map((s) => STATUS_LABEL(s))}
+          value={draft.statuses.map(STATUS_LABEL)}
+          onChange={(labels) =>
+            setDraft((d) => ({
+              ...d,
+              statuses: STATUS_OPTIONS.filter((s) => labels.includes(STATUS_LABEL(s))) as unknown as string[],
+            }))
+          }
+          placeholder="All statuses"
+          searchPlaceholder="Filter statuses…"
+        />
+        <MultiSelectId
+          options={typeOptions.map((t) => ({ id: t.id, label: t.name }))}
+          value={draft.typeIds}
+          onChange={(ids) => setDraft((d) => ({ ...d, typeIds: ids, severityIds: [] }))}
+          placeholder="All types"
+          searchPlaceholder="Filter types…"
+        />
+        <MultiSelectId
+          options={severityOptions.map((s) => ({ id: s.id, label: s.label }))}
+          value={draft.severityIds}
+          onChange={(ids) => setDraft((d) => ({ ...d, severityIds: ids }))}
+          placeholder={
+            draft.typeIds.length === 0
+              ? 'All severities'
+              : draft.typeIds.length > 1
+              ? 'Pick a single type for severity'
+              : 'All severities'
+          }
+          searchPlaceholder="Filter severities…"
+        />
+        <MultiSelectFilter
+          options={SLA_STATUS_OPTIONS.map((s) => SAFETY_SLA_STATUS_LABELS[s])}
+          value={draft.slaStatuses.map((s) => SAFETY_SLA_STATUS_LABELS[s as keyof typeof SAFETY_SLA_STATUS_LABELS])}
+          onChange={(labels) =>
+            setDraft((d) => ({
+              ...d,
+              slaStatuses: SLA_STATUS_OPTIONS.filter((s) => labels.includes(SAFETY_SLA_STATUS_LABELS[s])) as unknown as string[],
+            }))
+          }
+          placeholder="All SLA statuses"
+          searchPlaceholder="Filter SLA…"
+        />
+        <MultiSelectId
+          options={businessUnits.map((b) => ({ id: b.id, label: b.name }))}
+          value={draft.buIds}
+          onChange={(ids) => setDraft((d) => ({ ...d, buIds: ids }))}
+          placeholder="All business units"
+          searchPlaceholder="Filter BUs…"
+        />
         <Select
-          value={draft.typeId}
-          onValueChange={(v) => setDraft((d) => ({ ...d, typeId: v, severityId: 'all' }))}
+          value={draft.datePreset}
+          onValueChange={(v) => setDraft((d) => ({ ...d, datePreset: v as DateRangePreset }))}
         >
-          <SelectTrigger><SelectValue placeholder="Type" /></SelectTrigger>
+          <SelectTrigger><SelectValue placeholder="Date range (Created)" /></SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">All types</SelectItem>
-            {typeOptions.map((t) => (
-              <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+            {DATE_RANGE_PRESETS.map((p) => (
+              <SelectItem key={p} value={p}>{DATE_RANGE_PRESET_LABELS[p]}</SelectItem>
             ))}
           </SelectContent>
         </Select>
-        <Select
-          value={draft.severityId}
-          onValueChange={(v) => setDraft((d) => ({ ...d, severityId: v }))}
-          disabled={draft.typeId === 'all'}
-        >
-          <SelectTrigger>
-            <SelectValue placeholder={draft.typeId === 'all' ? 'Pick a type first' : 'Severity'} />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All severities</SelectItem>
-            {severityOptions.map((s) => (
-              <SelectItem key={s.id} value={s.id}>{s.label}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select value={draft.slaStatus} onValueChange={(v) => setDraft((d) => ({ ...d, slaStatus: v }))}>
-          <SelectTrigger><SelectValue placeholder="SLA status" /></SelectTrigger>
-          <SelectContent>
-            {SLA_STATUS_OPTIONS.map((s) => (
-              <SelectItem key={s} value={s}>
-                {s === 'all' ? 'All SLA statuses' : SAFETY_SLA_STATUS_LABELS[s as keyof typeof SAFETY_SLA_STATUS_LABELS]}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        {draft.datePreset === 'custom' && (
+          <>
+            <Input
+              type="date"
+              value={draft.customFrom ?? ''}
+              onChange={(e) => setDraft((d) => ({ ...d, customFrom: e.target.value || null }))}
+              aria-label="From date"
+            />
+            <Input
+              type="date"
+              value={draft.customTo ?? ''}
+              onChange={(e) => setDraft((d) => ({ ...d, customTo: e.target.value || null }))}
+              aria-label="To date"
+            />
+          </>
+        )}
         <Input
           placeholder="Search title, location, or number…"
           value={draft.search}
