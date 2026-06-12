@@ -1,0 +1,29 @@
+---
+name: Safety Perf CAPA Wave 2
+description: Scoped mutation invalidation and parallel severity reorder for Safety incidents (v2.66.20)
+type: feature
+---
+
+Wave 2 invariants — locked by `src/test/safety/safetyPerfCapaWave2.test.ts`.
+
+## Cache invalidation (POLICY §110 cache isolation)
+
+Incident mutations in `useSafetyIncidents.ts` MUST NOT invalidate the bare
+`['safety']` root. Doing so re-runs every Safety sub-module query (assets,
+training, permits, audits, emergency, notifications, …) on every transition.
+
+Allowed scoped keys per mutation:
+
+- `useReportSafetyIncident` → `SAFETY_SLA_QUEUE_KEY`, `['safety','incidents','drill']`, `['safety','dashboard-stats']`, `['safety','audit-log']`.
+- `useTransitionSafetyIncident` → above + `['safety','incident', incidentId]` + `['safety','incident-detail', incidentId]`.
+- `useReviveOrphanedIncident` → same as transition.
+
+The `invalidateAllSafetyQueries` helper has been removed; do NOT reintroduce
+a generic broad-invalidator.
+
+## Severity reorder
+
+`useReorderSafetyIncidentSeverities` MUST use `Promise.all` (parallel
+round-trips), not a sequential `for` loop. Reorder lists are bounded
+(≤ ~12 items in practice) so a single RPC is unnecessary; the parallel
+fetch already collapses latency from N×rtt to ~1×rtt.
