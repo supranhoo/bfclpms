@@ -8,7 +8,7 @@ import {
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
-import { AlertTriangle, Plus } from 'lucide-react';
+import { AlertTriangle, Plus, FileDown, Loader2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useManualQuery, type ManualQueryFetcherArgs } from '@/hooks/useManualQuery';
 import { useSafetyRealtimeSync } from '@/hooks/useSafetyRealtimeSync';
@@ -31,6 +31,13 @@ import {
 } from '@/hooks/useSafetyIncidentTypes';
 import { Badge } from '@/components/ui/badge';
 import type { SafetyIncidentRow } from '@/hooks/useSafetyIncidents';
+import { useMySafetyRoleRows } from '@/hooks/useSafetyIncidents';
+import { useAuth } from '@/contexts/AuthContext';
+import {
+  exportIncidentsToExcel,
+  MAX_INCIDENT_EXPORT_ROWS,
+} from '@/lib/safetyIncidentExcelExport';
+import { toast } from 'sonner';
 import { format, formatDistanceToNowStrict } from 'date-fns';
 
 /**
@@ -204,6 +211,38 @@ export default function SafetyIncidents() {
     { activeOnly: false },
   );
 
+  // Excel export — visible to Safety Head and Admin only. Reuses the
+  // same view + filters as the list, so RLS + scope stay consistent.
+  const { effectiveRole } = useAuth();
+  const { data: myRoles = [] } = useMySafetyRoleRows();
+  const canExportExcel =
+    effectiveRole === 'admin' || myRoles.some((r) => r.role === 'safety_head');
+  const [isExporting, setIsExporting] = useState(false);
+  const handleExportExcel = async () => {
+    if (isExporting) return;
+    setIsExporting(true);
+    const t = toast.loading('Preparing Excel export…');
+    try {
+      const res = await exportIncidentsToExcel({
+        status: draft.status,
+        severityId: draft.severityId,
+        typeId: draft.typeId,
+        slaStatus: draft.slaStatus,
+        search: draft.search,
+      });
+      toast.success(
+        res.capped
+          ? `Exported first ${MAX_INCIDENT_EXPORT_ROWS.toLocaleString()} rows (cap reached) → ${res.fileName}`
+          : `Exported ${res.rowCount.toLocaleString()} incident${res.rowCount === 1 ? '' : 's'} → ${res.fileName}`,
+        { id: t },
+      );
+    } catch (err) {
+      toast.error(`Export failed: ${err instanceof Error ? err.message : 'Unknown error'}`, { id: t });
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   /**
    * Show the "Involved Person" column when the submitted Type filter resolves
    * to an Accident-style incident type. Match by name (case-insensitive) so
@@ -243,12 +282,30 @@ export default function SafetyIncidents() {
             7-stage workflow: Reported → Assigned → Investigation → RCA → CAPA → Verification → Closed
           </p>
         </div>
-        <Button asChild className="hidden md:inline-flex">
-          <Link to="/safety/incidents/new">
-            <Plus className="h-4 w-4 mr-2" />
-            Report Incident
-          </Link>
-        </Button>
+        <div className="flex items-center gap-2">
+          {canExportExcel && (
+            <Button
+              variant="outline"
+              onClick={handleExportExcel}
+              disabled={isExporting}
+              className="hidden md:inline-flex"
+              title="Export filtered incidents to Excel (Safety Head / Admin)"
+            >
+              {isExporting ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <FileDown className="h-4 w-4 mr-2" />
+              )}
+              Export Excel
+            </Button>
+          )}
+          <Button asChild className="hidden md:inline-flex">
+            <Link to="/safety/incidents/new">
+              <Plus className="h-4 w-4 mr-2" />
+              Report Incident
+            </Link>
+          </Button>
+        </div>
       </div>
 
       <SafetyFilterSheet
