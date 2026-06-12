@@ -6718,3 +6718,14 @@ See: `docs/adr/ADR-078.md`, `src/test/reviewNotes/sidebarVisibility.test.ts`.
   - **Tests:** `src/test/safety/dateRangePresets.test.ts` (13 tests) covers every preset incl. Mon-week boundary, quarter math (Q1↔Q2 transition), and empty-custom safety; existing export tests still pass. 17/17 passing.
   - **Rollback:** revert `SafetyIncidents.tsx`, the new lib + component, and the export filter shape (additive — old single-value callers would need restoration). No DB / RLS / RPC change.
   - **Phase 5 of the 6-phase Safety Incident enhancement plan.** Phase 6 (Professional filter UI polish: chips row + clear-all + drawer) is next.
+
+- **v2.66.27 (2026-06-12 — Safety Incident Phase 6: Active Filter Chips & Clear All):** The Safety Incidents page now surfaces every currently-applied filter as a removable chip above the table, ServiceNow-style. Implementation:
+  - **Component (`src/components/safety/SafetyActiveFilterChips.tsx`):** pure presentational chip row. Each chip renders `Label: value` with a per-chip X (with `aria-label="Remove {Label} filter"`) and an optional "Clear all" button. Hidden entirely when no filters are active — no visual noise on first load.
+  - **`SafetyIncidents.tsx`:** tracks the most-recently-applied filter snapshot in local `applied` state (set on submit / cleared on reset). Chips are derived from `applied` — not from `draft` — so the row always reflects what the data is actually filtered by, not pending edits.
+  - **Instant feedback:** removing a chip calls `applyPatch()` which updates both draft + applied + triggers a fresh server-paginated query in one step. No re-clicking "Search".
+  - **Cascade preserved:** removing a Type chip also clears any dependent Severity selections (mirrors the existing add-path cascade).
+  - **Custom date chip** renders `customFrom → customTo`; preset chips render the human label (e.g. "This quarter").
+  - **Out of scope (deferred):** the planned desktop drawer refactor and debounced inline search — current `SafetyFilterSheet` continues to work; reopening that scope is a low-risk follow-up if requested.
+  - **Tests:** `src/test/safety/activeFilterChips.test.tsx` (4 tests) covers empty state, per-chip removal targeting the right callback, and Clear all wiring. 21/21 Safety filter tests passing (Phases 4+5+6).
+  - **Rollback:** revert the new component file + the `applied` state / chip-derivation block in `SafetyIncidents.tsx`. No DB / RLS / RPC change.
+  - **Phase 6 (final) of the 6-phase Safety Incident Management enhancement plan.** All six phases (Actual Reporter → Duplicates → Evidence Rename → Excel Export → Advanced Filters → Active Chips) shipped.
