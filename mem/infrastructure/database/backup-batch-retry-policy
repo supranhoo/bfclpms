@@ -1,11 +1,17 @@
 ---
 name: Backup batch retry/backoff policy
-description: Scheduled-backup transient-failure retry — 546/429/RateLimit only, 2 retries with 5s/15s backoff, BATCH_SIZE_RETRY=1 (ADR-082, single-table isolation), RETRY_BUDGET_MS=8min, hard-fail terminal preserved
+description: Scheduled-backup transient-failure retry — 546/429/RateLimit + upstream gateway 408/502/503/504 + fetch/ECONNRESET/ETIMEDOUT network errors (Phase 9.2.c, 2026-06-12); 2 retries with 5s/15s backoff, BATCH_SIZE_RETRY=1 (ADR-082, single-table isolation), RETRY_BUDGET_MS=8min, hard-fail terminal preserved
 type: feature
 ---
 Phase 9.2 WP-b. Applies to `runScheduledChunked` in `supabase/functions/create-backup/index.ts`. Manual finalize path is intentionally NOT wired.
 
-Retry triggers (`isTransientChunkError`): **only** `HTTP 546` (Deno Deploy OOM), `HTTP 429`, or `RateLimitError`/`Rate limit` strings. Never retry schema / permission / RLS / validation errors or other 5xx.
+Retry triggers (`isTransientChunkError`):
+- `HTTP 546` (Deno Deploy worker OOM)
+- `HTTP 429` or `RateLimitError`/`Rate limit` strings
+- **Phase 9.2.c (2026-06-12, post-RCA of 11 Jun failure):** `HTTP 408 / 502 / 503 / 504` (RFC-7231 canonical idempotent-retryable upstream gateway transients)
+- **Phase 9.2.c:** network-layer transients — `fetch failed`, `ECONNRESET`, `ETIMEDOUT`, `socket hang up`, `network error`
+
+Never retry schema / permission / RLS / validation errors, `HTTP 500`, `HTTP 501`, or other non-retryable 5xx.
 
 Retry mechanics:
 - Up to 2 retries per failing chunk; backoffs `[5s, 15s]` before each retry.
@@ -18,4 +24,6 @@ Hard-fail terminal (WP-9.2.a) is the authority: after retries, if `tablesCount <
 
 Manual backup finalize/status semantics are unchanged. The classifier is exported but only the scheduled loop calls it in this WP.
 
-Locked by Phase 9 contract tests I8 (constants present incl. BATCH_SIZE_RETRY=1, primary BATCH_SIZE=4 unchanged), I9 (classifier exists, gates on 546/429/RateLimit only), I10 (hard-fail terminal + budget-exhausted / non-transient branches present), I11 (manual `handleFinalize` does not reference the classifier or retry helper).
+Locked by Phase 9 contract tests I8 (constants present incl. BATCH_SIZE_RETRY=1, primary BATCH_SIZE=4 unchanged), I9 (classifier exists; 546/429/RateLimit branches present — Phase 9.2.c widened the set, did not remove), I10 (hard-fail terminal + budget-exhausted / non-transient branches present), I11 (manual `handleFinalize` does not reference the classifier or retry helper). Phase 9.2.c additionally locked by `supabase/functions/create-backup/transient_classifier_test.ts`.
+
+RCA pointer: 2026-06-11 scheduled run `c7b341a7…` lost 3 consecutive batches (12 tables, 199/211) when Batches 5/6/7 returned `HTTP 502 Bad Gateway` and the pre-9.2.c classifier marked them non-transient. The widened set now retries them; hard-fail-on-partial remains the authority for any post-retry shrink.
