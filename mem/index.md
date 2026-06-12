@@ -110,3 +110,4 @@ Lean-Load: debounce search inputs (>200 rows / network); paginate new lists with
 - [Safety Role Bulk Management](mem://features/safety/role-bulk-management) — Phase 5: CSV bulk import + export for safety_user_roles on /safety/settings/users
 - [Safety Universal Data Export](mem://features/safety/data-export) — Phase 6: CSV exporter over Safety tables on /safety/settings
 - [Safety Incident Routing](mem://features/safety/incident-routing) — Dept/Division → BU Head + Manager + 2nd Manager matrix, resolver precedence (dept > division > unrouted), immutable routed_* chain stamped on incidents
+- [Safety Perf CAPA Wave 2](mem://infrastructure/safety-perf-capa-wave-2) — Scoped mutation invalidation + parallel severity reorder (Safety incidents)
