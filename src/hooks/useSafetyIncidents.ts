@@ -301,10 +301,6 @@ export function useReviveOrphanedIncident() {
   });
 }
 
-/**
- * Strictly scoped invalidator — never nukes PMS caches.
- * (Per POLICY §110 cache isolation requirement.)
- */
-export function invalidateAllSafetyQueries(qc: ReturnType<typeof useQueryClient>) {
-  qc.invalidateQueries({ queryKey: ['safety'] });
-}
+// Note: a generic `invalidateAllSafetyQueries` helper used to live here but
+// was removed in Wave 2 — broad invalidation of the `['safety']` root is
+// an anti-pattern (POLICY §110). Use the scoped sub-keys exposed above.
