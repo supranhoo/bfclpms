@@ -96,6 +96,8 @@ export interface EvidenceRow {
   size_bytes: number | null;
   uploaded_by: string;
   uploaded_at: string;
+  /** Phase 3 — preserved on first upload; never changes after rename. */
+  original_file_name?: string | null;
 }
 
 const ALLOWED_MIME = /^(image\/.+|video\/mp4|application\/pdf)$/;
