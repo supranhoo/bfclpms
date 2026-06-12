@@ -65,6 +65,11 @@ export interface SafetyIncidentRow {
   sla_status?: SafetySlaStatus | null;
   /** Optional: employee on whose behalf the incident was filed. Display/audit only. */
   actual_reporter_id?: string | null;
+  /** Phase 2 — duplicate handling. Set when a BU Head marks this incident as a duplicate of another. */
+  duplicate_of_id?: string | null;
+  marked_duplicate_by?: string | null;
+  marked_duplicate_at?: string | null;
+  duplicate_remarks?: string | null;
 }
 
 export const SAFETY_INCIDENTS_KEY = ['safety', 'incidents'] as const;
