@@ -176,6 +176,34 @@ export async function getEvidenceSignedUrl(filePath: string): Promise<string> {
   return data.signedUrl;
 }
 
+/**
+ * Phase 3 — Rename the *display* name of an uploaded evidence file.
+ * Storage path is immutable; only `file_name` changes. Original filename is
+ * preserved server-side in `original_file_name` for audit. Only the original
+ * uploader can rename — the SECURITY DEFINER RPC enforces this.
+ */
+export function useRenameIncidentEvidence(incidentId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ evidenceId, newName }: { evidenceId: string; newName: string }) => {
+      const { data, error } = await supabase.rpc(
+        'rename_incident_evidence' as never,
+        { p_evidence_id: evidenceId, p_new_file_name: newName } as never,
+      );
+      if (error) throw error;
+      const result = data as { ok: boolean; error?: string; file_name?: string };
+      if (!result?.ok) throw new Error(result?.error ?? 'Rename failed');
+      return result;
+    },
+    onSuccess: () => {
+      toast.success('Evidence renamed');
+      qc.invalidateQueries({ queryKey: ['safety', 'incident', incidentId, 'evidence'] });
+      qc.invalidateQueries({ queryKey: ['safety', 'audit-log'] });
+    },
+    onError: (err: Error) => toast.error(err.message ?? 'Rename failed'),
+  });
+}
+
 export type IncidentNotesPatch = {
   rca_summary?: string;
   capa_summary?: string;
