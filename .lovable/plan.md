@@ -1,90 +1,92 @@
-## RCA — Why Backup Failed Again (2026-06-11 22:30 IST)
+# Safety Module Performance CAPA Plan
 
-### Evidence
-From `backup_logs` for the failed run `c7b341a7…`:
-```
-status        = failed
-tables_count  = 199 / 211   (12 tables missing = 3 batches × 4)
-error_message = "Coverage shrink: 199/211 tables backed up — 3 warning(s):
-                 Batch 5/53 failed (non-transient): HTTP 502;
-                 Batch 6/53 failed (non-transient): HTTP 502;
-                 Batch 7/53 failed (non-transient): HTTP 502"
-```
-Three consecutive early batches got `HTTP 502 Bad Gateway` from the Supabase REST/PostgREST gateway. Hard-fail-on-partial (WP-9.2.a) correctly marked the run `failed`. Working as designed — but the run **should not have lost those batches in the first place.**
+Audit covers code shipped over the last ~2 days (Incident Types + Severity values, Involved Person column, backup CAPA-1). Diagnosis-first per the performance-optimization skill — no blind fixes.
 
-### 5-Why Analysis
+## Assumptions
+- Active incident volume will grow into thousands within 12 months; current sizing tolerates today's gaps but won't scale.
+- POLICY §113 / ADR-050 (Safety Manual-Fetch & Pagination) is the canonical contract.
+- No UI redesign requested — fixes stay behind existing primitives.
 
-| # | Why? | Answer |
-|---|---|---|
-| 1 | Why did the 11 Jun scheduled backup fail? | Hard-fail triggered: 199 of 211 tables backed up. |
-| 2 | Why were 12 tables missing? | Batches 5, 6, 7 each failed with `HTTP 502` and were skipped. |
-| 3 | Why were those batches skipped instead of retried? | `isTransientChunkError()` in `create-backup/index.ts` (lines 725-737) only treats **HTTP 546 / HTTP 429 / RateLimitError** as transient. `502` falls through to the `// generic 5xx other than 546. Do not retry.` branch. |
-| 4 | Why was that classifier scoped so narrowly? | Phase 9.2 WP-b focused on the then-dominant failure modes (Deno worker OOM = 546, edge rate limits = 429). Upstream gateway transients (502 Bad Gateway, 503 Service Unavailable, 504 Gateway Timeout) were not in the observed sample set and were left as "non-transient". |
-| 5 | Why did we not catch the gap earlier? | Until 11 Jun, the recurring failure pattern was 546 on Batch 46 (one chronically large table) — not 502. The classifier was never stress-tested against a gateway-side blip, so the gap remained latent. The 11 Jun event was the first transient 502 burst since the policy shipped. |
+## Risk & Impact Report
+- **Data:** No schema changes. Read-path only, except GAP-7 (batch severity reorder) which is an additive RPC.
+- **Workflow:** None — same screens, same filters, same buttons.
+- **UI/UX:** GAP-5 swaps custom Permits filter/table for canonical `SafetyFilterBar`/`SafetyDataTable` — visual parity expected, minor spacing diffs possible.
+- **Regression:** Highest on GAP-1/2 (SLA queue card + KPI drill-down) and GAP-10 (scoped invalidation). Mitigation: extend `safetyManualFetch.test.tsx` + add unit tests for the new scoped queries + manual smoke on SafetyHome/SLA queue.
+- **Scalability:** All four High fixes remove O(N) scans of the incidents table from the hot path.
 
-### Root Cause
-**Mis-classification of upstream gateway errors (HTTP 502/503/504) as non-transient** in `isTransientChunkError`. A short upstream blip on Supabase's gateway killed three back-to-back batches that a normal retry-with-backoff would have recovered — exactly the use case the retry policy was built for. The hard-fail policy then (correctly) marked the run failed.
+## Findings Summary
 
-### Secondary Finding (chronic, not the trigger for this failure)
-`backup_logs` shows a long tail of `Batch 46/51 HTTP 546; sub 1/2 failed after 2 retries` (2026-06-04, 06-05, 06-06, 06-07, 06-08, 06-09). One specific table at dependency position ~46 OOMs the Deno worker **even at `BATCH_SIZE_RETRY = 1`** (i.e. table alone). Streaming chunk export isn't enough for that table. Out of scope for this fix but tracked below as CAPA-2.
+| # | File | Severity | Issue |
+|---|---|---|---|
+| 1 | `useSafetyIncidents.ts` | High | Unbounded `select('*')`, no `.range()`, auto-fires on mount |
+| 2 | `SafetySlaQueueCard`, `KpiDrillDownDialog` | High | Client-side filter of GAP-1's result set; re-runs every 30s |
+| 3 | `SafetyIncidents.tsx` | High | Profiles join runs on every page fetch, even when type ≠ Accident |
+| 4 | `useSafetyAssets.ts` | High | `.limit(1000)` + client-side calibration-bucket filter |
+| 5 | `SafetyPermits.tsx` | Med | Custom filter/table instead of canonical primitives |
+| 6 | `useSafetyTraining.ts` | Med | Hardcoded `.limit(500/2000)` on SOPs + assignments |
+| 7 | `useReorderSafetyIncidentSeverities` | Med | Sequential N UPDATEs in a `for` loop |
+| 8 | `SafetyIncidentTypes.tsx` SeverityManager | Med | N concurrent severity fetches when N rows expanded |
+| 9 | `SafetyHome.tsx` realtime sync | Med | Subscribes to all 20 safety tables; over-invalidates |
+| 10 | `useSafetyIncidents` mutations | Med | Invalidates entire `['safety']` root cache |
+| 11 | `SafetyTrendChart` recharts import | Low | Static import — safe today, fragile if reused outside `/analytics` |
+| 12 | `useSafetyIncidentTypes` `select('*')` | Low | No explicit column list on reference tables |
 
-### CAPA
+## Step-by-Step Plan (in priority order)
 
-#### CAPA-1 (Corrective — fixes the 11 Jun failure class)
-Expand `isTransientChunkError` to also classify as transient:
-- `HTTP 502` (Bad Gateway)
-- `HTTP 503` (Service Unavailable)
-- `HTTP 504` (Gateway Timeout)
-- `HTTP 408` (Request Timeout)
-- Network-layer errors: `fetch failed`, `ECONNRESET`, `ETIMEDOUT`, `socket hang up`
+### Wave 1 — High-severity (blocks scale)
 
-These are all canonical idempotent-retryable errors per RFC 7231 / standard backend retry policy. The existing retry mechanics already cover them safely:
-- Max 2 retries per chunk, 5s / 15s backoff
-- `BATCH_SIZE_RETRY = 1` (single-table isolation)
-- Global `RETRY_BUDGET_MS = 8 min` cap
+1. **GAP-1 + GAP-2 — Scope the incidents hot path**
+   - Refactor `useSafetyIncidents()` to be `useSafetyIncident(id)` (single-row only). Mark list usage as forbidden in policy memory.
+   - `SafetySlaQueueCard`: replace with a new `useSafetySlaQueue()` that runs `select('id, ref_code, title, sla_state, due_at, assigned_to').neq('status','closed').in('sla_state',['red','amber']).order('due_at').range(0, 24)` — ranked queue, 25 rows.
+   - `KpiDrillDownDialog`: replace with parameterised count/list RPCs already exposed (`safety-analytics` edge function) or scoped paged queries keyed on the KPI.
+   - **Verify:** new vitest covering the scoped query keys; manual: open SafetyHome → SLA tile → confirm same rows render; open any KPI tile → drill-down still works.
 
-No new infra, no schema change, no constant tuning. **One file changed:** `supabase/functions/create-backup/index.ts`. Hard-fail policy and shrink-guard remain authoritative — retries only get a wider net of "worth retrying".
+2. **GAP-3 — Conditional profiles hydration in incidents fetcher**
+   - Pass `typeId` + resolved `typeName` into `fetchIncidentsPage`. Skip the `profiles` IN-query unless `/accident/i.test(typeName)`.
+   - **Verify:** network tab — filtering by non-Accident type fires 1 request (incidents), not 2.
 
-**Rollback:** revert the regex additions in `isTransientChunkError`. Backward-compatible; behaviour falls back to current narrow classifier.
+3. **GAP-4 — Server-side calibration bucket filter**
+   - Push `calibrationBucket` logic into a `.gte()/.lte()` on `next_calibration_at` (overdue / due-30 / due-90 / ok). Convert to `useManualQuery` and remove `.limit(1000)`.
+   - Leave `SafetyAssetDetail.tsx` consumer using a single-row variant.
+   - **Verify:** vitest for bucket→date-range mapping; manual: each bucket filter returns same counts as before.
 
-#### CAPA-2 (Preventive — tracked, not in this change)
-Diagnose the chronic `Batch 46` OOM:
-- Identify which table sits at dependency index ~46 (likely a wide row + JSONB table — `org_kpi_data_entry_logs`, `notifications`, or a `*_audit_log`).
-- If it's a single fat table, add row-level streaming (chunk the table itself via `LIMIT/OFFSET` keyset rather than table-at-a-time) for tables above a row-count or column-width threshold.
-- Open as separate ticket; do **not** bundle with CAPA-1 to keep the surgical change auditable.
+### Wave 2 — Medium-severity (housekeeping)
 
-#### CAPA-3 (Detective — already in place, verified)
-- Hard-fail-on-partial (`backup_hard_fail_on_partial = true`) correctly converted the partial run to `failed`. No change needed; this is exactly why we shipped it.
-- Backup History UI already exposes `error_message` with the per-batch breakdown — that's how we diagnosed this in <5 minutes. No UI change needed.
+4. **GAP-10 — Scope mutation invalidations** in `useSafetyIncidents` to `['safety','incidents']`, `['safety','dashboard-stats']`, `['safety','audit-log']` only.
+5. **GAP-9 — Scope `useSafetyRealtimeSync` on SafetyHome** to `['safety_incidents','safety_sla_escalations','safety_permits','safety_audit_runs']`.
+6. **GAP-7 — Single-RPC severity reorder.** New `reorder_safety_incident_severities(p_type_id uuid, p_ids uuid[])` SECURITY DEFINER function. Replace N-loop client side.
+7. **GAP-8 — Lazy-mount SeverityManager**: verify conditional render unmounts on collapse; if not, gate behind expansion state.
+8. **GAP-5 — Permits page primitives swap** to `SafetyFilterBar` + `SafetyDataTable`. Visual parity only.
+9. **GAP-6 — `useSafetyTraining` migration** to `useManualQuery` + `.range()`. SOP admin + assignment admin only; member-facing "My Assignments" can keep a `.range(0,49)` cap if list stays bounded by RLS.
 
-### Risk & Impact (CAPA-1 only)
+### Wave 3 — Low (deferred unless trivial)
+- **GAP-11 + GAP-12** addressed inline during Wave 1/2 edits to touched files.
 
-| Area | Impact |
-|---|---|
-| Data | None. Retries are read-only re-exports of the same tables; idempotent. |
-| Workflow | None. Same scheduled cron, same finalize path. |
-| UI/UX | None. Status pills and history unchanged. |
-| Regression | Very low. Adds matches to a regex; non-matching paths unchanged. |
-| Scalability | Slightly longer worst-case wall time (≤ 8 min retry budget already capped). No change to memory profile. |
-| Backup integrity | Improved — more transient classes recovered before hard-fail trips. |
+## UI Changes
+- **SafetyPermits page** (GAP-5): filter bar and table swap to canonical primitives. Same fields, same columns, same buttons — only chrome alignment changes.
+- **SafetyAssets calibration filter** (GAP-4): no visual change; same dropdown, same results.
+- All other waves are data-layer only.
 
-### Step-by-Step Plan
+## Tests
+- New: `src/test/safety/sla-queue-scoped.test.tsx` (GAP-2), `src/test/safety/incidents-profiles-skip.test.tsx` (GAP-3), `src/test/safety/assets-calibration-bucket.test.ts` (GAP-4), `src/test/safety/severity-reorder-rpc.test.ts` (GAP-7).
+- Extend `src/test/safetyManualFetchPages.test.ts` to include SafetyPermits primitive imports.
 
-1. **Edit** `supabase/functions/create-backup/index.ts` → `isTransientChunkError`: add `502/503/504/408` regex branches and a network-error string match. Keep the existing 546/429/RateLimit branches.
-   - **Verify:** added unit assertions in the existing classifier test (`supabase/functions/create-backup/*test*.ts` if present, else inline) covering 502/503/504/408/network. Re-run `bunx vitest run` for the safety + backup contract tests (I8/I9/I10/I11 stay green — they assert *presence* of 546/429/RateLimit and retry mechanics, not exclusivity).
-2. **Update** memory `mem/infrastructure/database/backup-batch-retry-policy` to add the widened transient set + rationale, preserving the WP-9.2 invariants.
-3. **Update** `DOCUMENTATION.md` (backup runbook section) and `POLICY.md` (operational policy: which HTTP statuses are retryable for the backup engine). One-paragraph addition each.
-4. **Deploy** edge function via the standard flow.
-5. **Verify in production:** trigger one manual backup; confirm `status='completed'` and `tables_count = discoveredCount`. Watch the next 2 scheduled runs for absence of "non-transient: HTTP 5xx" entries.
+## Documentation Updates
+- `DOCUMENTATION.md` — new v2.66.16 entry summarising the 4 high-priority fixes and measured impact (queries-per-mount, payload bytes).
+- `POLICY.md` §113 — clarify that listing hooks (`useSafetyXxx()` returning arrays) must be migrated to `useManualQuery`; single-row hooks exempt.
+- `mem://architecture/safety/manual-fetch-and-pagination.md` — add the migrated pages (Permits, Assets calibration), and the new "list hooks must follow §113" clause.
 
-### Files Touched (CAPA-1)
-- `supabase/functions/create-backup/index.ts` (classifier only — ~6 lines)
-- `mem/infrastructure/database/backup-batch-retry-policy`
-- `DOCUMENTATION.md`, `POLICY.md`
+## Rollback Strategy
+- Each wave is a separate commit. Wave 1 fixes are pure additions of new scoped hooks; the deprecated `useSafetyIncidents()` list overload stays as a re-export shim for one release before deletion.
+- GAP-7 RPC is additive; client falls back to N-loop if RPC absent.
 
-### Not Changed (explicitly)
-- `BATCH_SIZE = 4`, `BATCH_SIZE_RETRY = 1`, `RETRY_BUDGET_MS = 8 min` — locked invariants.
-- Hard-fail-on-partial policy, shrink-guard, `get_backup_table_order` RPC, `backup_denylist`.
-- `restore-backup`, `safety-drill`, Backup History UI.
+## Decision Justification
+- Chose **scoped queries** over a global `SafetyRealtimeSync` rewrite because the realtime channel is shared infra; narrowing per-page subscriptions is safer than re-architecting the bus.
+- Chose to **deprecate, not delete**, `useSafetyIncidents()` list usage to keep external imports compiling while we migrate consumers.
+- Did **not** propose recharts/jspdf code-splitting work — audit shows it's already correctly lazy-loaded at the route level (GAP-11 is preventive, not corrective).
 
-Awaiting approval to implement CAPA-1. CAPA-2 will be raised as a separate ticket after this lands.
+## Out of Scope
+- CAPA-2 (chronic Batch 46 OOM, row-level streaming for the largest backup tables) — tracked separately.
+- General PMS performance — only touched if a shared utility is changed.
+
+Approve to proceed with **Wave 1** first; Waves 2 and 3 will follow in separate commits with their own verification.
