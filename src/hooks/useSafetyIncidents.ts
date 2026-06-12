@@ -208,7 +208,13 @@ export function useReportSafetyIncident() {
     },
     onSuccess: (res) => {
       toast.success(`Incident ${res.incident_number} reported`);
-      qc.invalidateQueries({ queryKey: ['safety'] });
+      // Scoped invalidation (Wave 2 / POLICY §110). A new report only affects
+      // the SLA queue, dashboard stats, drill-down dialogs, and audit log —
+      // never PMS caches or unrelated Safety sub-modules.
+      qc.invalidateQueries({ queryKey: SAFETY_SLA_QUEUE_KEY });
+      qc.invalidateQueries({ queryKey: ['safety', 'incidents', 'drill'] });
+      qc.invalidateQueries({ queryKey: ['safety', 'dashboard-stats'] });
+      qc.invalidateQueries({ queryKey: ['safety', 'audit-log'] });
     },
     onError: (err: Error) => toast.error(err.message ?? 'Failed to report incident'),
   });
@@ -241,7 +247,15 @@ export function useTransitionSafetyIncident() {
     },
     onSuccess: (_res, vars) => {
       toast.success(`Moved to ${vars.toStatus}`);
-      qc.invalidateQueries({ queryKey: ['safety'] });
+      // Scoped invalidation (Wave 2). A status transition affects only the
+      // touched incident's detail, the SLA queue, drill-downs, dashboard
+      // tiles, timeline, and audit log.
+      qc.invalidateQueries({ queryKey: ['safety', 'incident', vars.incidentId] });
+      qc.invalidateQueries({ queryKey: SAFETY_SLA_QUEUE_KEY });
+      qc.invalidateQueries({ queryKey: ['safety', 'incidents', 'drill'] });
+      qc.invalidateQueries({ queryKey: ['safety', 'dashboard-stats'] });
+      qc.invalidateQueries({ queryKey: ['safety', 'incident-detail', vars.incidentId] });
+      qc.invalidateQueries({ queryKey: ['safety', 'audit-log'] });
     },
     onError: (err: Error) => toast.error(err.message ?? 'Transition rejected'),
   });
@@ -274,9 +288,14 @@ export function useReviveOrphanedIncident() {
       if (!result?.ok) throw new Error(result?.error ?? 'Revival failed');
       return result;
     },
-    onSuccess: () => {
+    onSuccess: (_res, vars) => {
       toast.success('Incident revived and reassigned');
-      qc.invalidateQueries({ queryKey: ['safety'] });
+      qc.invalidateQueries({ queryKey: ['safety', 'incident', vars.incidentId] });
+      qc.invalidateQueries({ queryKey: ['safety', 'incident-detail', vars.incidentId] });
+      qc.invalidateQueries({ queryKey: SAFETY_SLA_QUEUE_KEY });
+      qc.invalidateQueries({ queryKey: ['safety', 'incidents', 'drill'] });
+      qc.invalidateQueries({ queryKey: ['safety', 'dashboard-stats'] });
+      qc.invalidateQueries({ queryKey: ['safety', 'audit-log'] });
     },
     onError: (err: Error) => toast.error(err.message ?? 'Revival rejected'),
   });

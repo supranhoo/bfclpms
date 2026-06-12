@@ -187,14 +187,19 @@ export function useReorderSafetyIncidentSeverities() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (rows: { id: string; sort_order: number }[]) => {
-      // Sequential updates keep RLS predictable (small list, low cost).
-      for (const r of rows) {
-        const { error } = await supabase
-          .from('safety_incident_severities' as never)
-          .update({ sort_order: r.sort_order } as never)
-          .eq('id', r.id);
-        if (error) throw error;
-      }
+      // Wave 2: fire the N updates in parallel so a 6-item reorder takes one
+      // round-trip worth of latency instead of N. RLS evaluation is per-row
+      // so this is safe — Postgres serialises the writes server-side.
+      const results = await Promise.all(
+        rows.map((r) =>
+          supabase
+            .from('safety_incident_severities' as never)
+            .update({ sort_order: r.sort_order } as never)
+            .eq('id', r.id),
+        ),
+      );
+      const firstErr = results.find((r) => r.error)?.error;
+      if (firstErr) throw firstErr;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['safety', 'incident-severities'] }),
     onError: (e: Error) => toast.error(e.message ?? 'Reorder failed'),
