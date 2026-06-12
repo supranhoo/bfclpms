@@ -1,8 +1,9 @@
 /**
  * Phase 10 — Safety Analytics v2: KPI drill-down dialog
  * -----------------------------------------------------
- * Click a KPI tile, get the matching incidents listed. Pure read on
- * the already-cached `useSafetyIncidents()` query — no new fetch.
+ * Click a KPI tile, get the matching incidents listed. Scoped server-
+ * side query (Perf CAPA Wave 1): only fires when the dialog is open
+ * AND a kind is set, capped at 100 rows.
  */
 import { Link } from 'react-router-dom';
 import {
