@@ -391,7 +391,15 @@ export default function SafetyIncidents() {
                   )}
                 </TableCell>
                 <TableCell className="hidden md:table-cell text-xs">
-                  {i.sla_due_at ? (
+                  {i.status === 'closed' || i.status === 'orphaned' ? (
+                    i.closed_at ? (
+                      <div className="text-muted-foreground">
+                        Closed {format(new Date(i.closed_at), 'dd MMM yyyy, HH:mm')}
+                      </div>
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )
+                  ) : i.sla_due_at ? (
                     <div>
                       <div>{format(new Date(i.sla_due_at), 'dd MMM yyyy, HH:mm')}</div>
                       <div className="text-muted-foreground">
