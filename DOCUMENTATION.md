@@ -6688,3 +6688,12 @@ See: `docs/adr/ADR-078.md`, `src/test/reviewNotes/sidebarVisibility.test.ts`.
   - **Backup:** all new columns are additive on an existing public table → covered automatically by `public.get_backup_table_order()` per Core memory; no denylist or codepath change needed.
   - **Rollback:** revert client files; new RPCs can stay (they're no-ops without callers). Columns are nullable and additive; no data migration.
   - **Phase 2 of the 6-phase Safety Incident enhancement plan.** Phase 3 (Evidence rename) is next.
+
+- **v2.66.24 (2026-06-12 — Safety Incident Phase 3: Evidence Rename):** Uploaders can now rename the display name of an evidence file without touching the storage object. Implementation:
+  - **Schema (`safety_incident_evidence`):** new nullable `original_file_name` column, backfilled from current `file_name` for every existing row so the first-upload name is preserved forever.
+  - **RPC `rename_incident_evidence(p_evidence_id, p_new_file_name)`** (SECURITY DEFINER, `authenticated`): only the original uploader (`uploaded_by = auth.uid()`) may rename; rejects empty, >200 char, or slash/control-character names; mutates `file_name` only (storage `file_path` is never touched); records `incident.evidence_renamed` in `safety_audit_log` with previous, new, and original name.
+  - **Hook (`useRenameIncidentEvidence`)** invalidates the per-incident evidence cache + audit log.
+  - **UI (`EvidenceList.tsx`):** pencil icon visible only to the uploader → inline `<Input>` with Enter (save) / Esc (cancel). When renamed, the row title shows the new name with a tooltip exposing the immutable `original_file_name`. Download uses an `<a download>` with the current display name so the saved file matches what the user sees.
+  - **Backup:** additive nullable column on an existing public table → auto-covered by `public.get_backup_table_order()`.
+  - **Rollback:** revert client files; the RPC and column are additive and stay no-op without callers.
+  - **Phase 3 of the 6-phase Safety Incident enhancement plan.** Phase 4 (Safety Head Excel export) is next.
