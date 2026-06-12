@@ -301,13 +301,21 @@ export function EvidencePreviewDialog({
               <>
                 {kind === 'image' && (
                   <ScrollArea className="h-full w-full">
-                    <div className="min-h-full min-w-full flex items-center justify-center p-4">
+                    <div className="min-h-full w-full flex items-center justify-center p-4">
                       <img
                         src={signedUrl}
                         alt={current.file_name}
-                        className="max-w-none transition-transform duration-150 select-none"
+                        className={cn(
+                          'transition-transform duration-150 select-none',
+                          zoom === 1
+                            ? 'max-h-[calc(92vh-9rem)] sm:max-h-[calc(88vh-9rem)] max-w-full object-contain'
+                            : 'max-w-none',
+                        )}
                         style={{
-                          transform: `scale(${zoom}) rotate(${rotation}deg)`,
+                          transform:
+                            zoom === 1 && rotation === 0
+                              ? undefined
+                              : `scale(${zoom}) rotate(${rotation}deg)`,
                           transformOrigin: 'center center',
                         }}
                         draggable={false}
