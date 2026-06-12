@@ -1,0 +1,57 @@
+---
+name: Safety Perf CAPA Wave 1 — scoped incident reads
+description: Forbids unbounded reads of safety_incidents/safety_incidents_with_sla; SafetyHome SLA queue + KPI drill-down + incidents profiles join must be server-scoped
+type: constraint
+---
+# Safety Perf CAPA — Wave 1 (v2.66.19)
+
+Locks the three fixes that closed the "load every incident into the
+browser" path introduced during yesterday's Safety work.
+
+## Invariants (do not regress)
+
+1. `useSafetyIncidents()` (the unparameterised list overload in
+   `src/hooks/useSafetyIncidents.ts`) is **deprecated** and ships with
+   `enabled: false`. Do not re-enable it. Do not add new call sites.
+   It exists only as a no-throw shim for one release.
+
+2. SafetyHome's At-Risk queue (`SafetySlaQueueCard`) MUST use
+   `useSafetySlaQueue()`. That hook is the only sanctioned source for
+   the dashboard SLA tile and is bound to a server-side predicate:
+   `status NOT IN (closed, orphaned) AND sla_state IN (red, amber)`,
+   ordered by `sla_due_at ASC`, capped at 100 rows via `.range(0, 99)`.
+
+3. Safety Analytics KPI drill-down (`KpiDrillDownDialog`) MUST use
+   `useSafetyIncidentsByDrillKey(kind, open)`. The query is enabled only
+   when the dialog is open AND a `kind` is set. Each kind maps to a
+   server-side predicate (`open` → not in closed/orphaned; `closed` →
+   status=closed; `critical` → severity=critical). Capped at 100 rows.
+
+4. `SafetyIncidents.tsx → fetchIncidentsPage` MUST gate the `profiles`
+   IN-query on `filters.typeName` matching `/accident/i`. Carrying the
+   resolved `typeName` snapshot on the submitted filter object is the
+   sanctioned pattern — do not re-introduce an unconditional join.
+
+5. The legacy `useSafetyAssets(filters)` list hook (`select('*').limit(1000)`
+   + in-memory `calibrationBucket` filter) is **deleted**. The
+   `SafetyAssets` page is the only allowed list surface for assets and
+   already pushes the bucket filter into a server-side date predicate
+   via `useManualQuery`.
+
+## Why
+
+Pre-CAPA, SafetyHome mounted `useSafetyIncidents()` which issued a
+`select('*')` against `safety_incidents_with_sla` with no `.range()`.
+SafetySlaQueueCard + KpiDrillDownDialog then filtered the full result
+set in-memory. Audit (sub-agent, 2026-06-12) classified this as 3
+High-severity §113/ADR-050 violations.
+
+## Out of scope (tracked separately)
+- Wave 2: scoped mutation invalidations, severity-reorder RPC, Permits
+  primitives swap, Training hardcoded `.limit()` migration, scoped
+  SafetyHome realtime subscription.
+- Wave 3: preventive `select('*')` tightening on reference tables.
+
+## Related
+- POLICY §113 / ADR-050 — Safety Manual-Fetch & Pagination
+- `mem://architecture/safety/manual-fetch-and-pagination.md`
