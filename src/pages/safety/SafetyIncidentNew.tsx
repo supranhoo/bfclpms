@@ -66,7 +66,7 @@ const REQUIRES_INVOLVED_CODES = new Set(['unsafe_act', 'accident']);
 
 export default function SafetyIncidentNew() {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const qc = useQueryClient();
   const { isOnline } = useSafetyOfflineSync();
   const { data: businessUnits = [] } = useBusinessUnits();
