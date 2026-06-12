@@ -16,6 +16,7 @@ import { SafetyFilterSheet } from '@/components/safety/SafetyFilterSheet';
 import { SafetyResponsiveList } from '@/components/safety/SafetyResponsiveList';
 import { SafetyMobileListCard } from '@/components/safety/SafetyMobileListCard';
 import { SafetyStickyActionBar } from '@/components/safety/SafetyStickyActionBar';
+import { SafetyActiveFilterChips, type SafetyFilterChip } from '@/components/safety/SafetyActiveFilterChips';
 import { SafetyStatusBadge } from '@/components/safety/StatusBadge';
 import { SlaBadge } from '@/components/safety/SlaBadge';
 import { OrphanIncidentDialog } from '@/components/safety/OrphanIncidentDialog';
@@ -219,6 +220,7 @@ export default function SafetyIncidents() {
   const [draft, setDraft] = useState<IncidentFilters>(INITIAL);
   const [orphanTarget, setOrphanTarget] = useState<SafetyIncidentRow | null>(null);
   const [submittedTypeIds, setSubmittedTypeIds] = useState<string[]>([]);
+  const [applied, setApplied] = useState<IncidentFilters | null>(null);
 
   const {
     rows, total, page, pageSize, totalPages,
@@ -234,9 +236,11 @@ export default function SafetyIncidents() {
     const names = draft.typeIds
       .map((id) => typeOptions.find((t) => t.id === id)?.name)
       .filter(Boolean) as string[];
-    submit({ ...draft, typeNames: names });
+    const next = { ...draft, typeNames: names };
+    setApplied(next);
+    submit(next);
   };
-  const handleReset = () => { setDraft(INITIAL); setSubmittedTypeIds([]); reset(); };
+  const handleReset = () => { setDraft(INITIAL); setSubmittedTypeIds([]); setApplied(null); reset(); };
 
   // Dynamic dropdown sources — replaces the hardcoded type/severity lists.
   const { data: typeOptions = [] } = useSafetyIncidentTypes({ activeOnly: false });
