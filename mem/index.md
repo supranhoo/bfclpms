@@ -111,3 +111,4 @@ Lean-Load: debounce search inputs (>200 rows / network); paginate new lists with
 - [Safety Universal Data Export](mem://features/safety/data-export) — Phase 6: CSV exporter over Safety tables on /safety/settings
 - [Safety Incident Routing](mem://features/safety/incident-routing) — Dept/Division → BU Head + Manager + 2nd Manager matrix, resolver precedence (dept > division > unrouted), immutable routed_* chain stamped on incidents
 - [Safety Perf CAPA Wave 2](mem://infrastructure/safety-perf-capa-wave-2) — Scoped mutation invalidation + parallel severity reorder (Safety incidents)
+- [Safety Perf CAPA Wave 3](mem://infrastructure/safety-perf-capa-wave-3) — Scoped training mutation invalidation + SOP assignments cap (Safety)

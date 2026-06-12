@@ -1,0 +1,32 @@
+---
+name: Safety Perf CAPA Wave 3
+description: Scoped Safety Training mutation invalidation and SOP-assignments cap (v2.66.21)
+type: feature
+---
+
+Wave 3 invariants — locked by `src/test/safety/safetyPerfCapaWave3.test.ts`.
+
+## Training cache invalidation (POLICY §110)
+
+Training mutations in `useSafetyTraining.ts` MUST NOT invalidate the bare
+`['safety','training']` sub-root. The legitimate scopes are:
+
+- `useUpsertSop` → `['safety','training','sops']` + `['safety','training','sop', id]`.
+- `useDeleteSop` → above + `quiz-for-sop,id` + `assignments,by-sop,id`.
+- `useUpsertQuiz` → `quiz-for-sop, sopId` + `questions, quizId`.
+- `useUpsertQuestion` → `questions, quizId`.
+- `useDeleteQuestion` → `['safety','training','questions']` (quiz_id unknown).
+- `useAssignSopToRole`, `useStartTrainingAttempt`, `useSubmitTrainingAttempt`
+  → `['safety','training','assignments']`.
+
+## Caps
+
+`useSopAssignments` is capped at 500 rows via `.range(0, 499)`. Do not raise
+the cap — if a single SOP exceeds 500 assignments, paginate the UI instead.
+
+## Permits primitives
+
+`src/pages/safety/SafetyPermits.tsx` MUST use `useManualQuery`,
+`SafetyFilterSheet`, `SafetyResponsiveList`, `SafetyMobileListCard`,
+`SafetyStickyActionBar`, `SafetySkeletonBlock`, and scoped realtime on
+`['safety_permits', 'safety_permit_approvals']` only.
