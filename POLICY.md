@@ -732,6 +732,19 @@ Draft → Pending HR Approval → Active → [Extended] → Completed / Cancelle
 - **Scheduled backups**: Time guard ensures the function never exceeds CPU limits. Partial backups are logged with status `partial` and include a manifest of completed tables.
 - **No orphaned backups**: Failed finalization marks the log as `failed`. Stuck backups (running > 30 min) are auto-cleaned on next invocation.
 
+### 16.5 Transient Error Classification (Phase 9.2.c — RCA-2026-06-11)
+
+The scheduled-backup orchestrator retries only errors classified as transient by `isTransientChunkError()` in `supabase/functions/create-backup/index.ts`. The authoritative set is:
+
+| Class | Examples | Rationale |
+|---|---|---|
+| Deno worker OOM | `HTTP 546` | Worker recycled; safe to re-issue smaller chunk |
+| Edge rate limit | `HTTP 429`, `RateLimitError`, `Rate limit` | Retry after backoff |
+| Upstream gateway transients (RFC-7231) | `HTTP 408`, `HTTP 502`, `HTTP 503`, `HTTP 504` | Idempotent reads; gateway/proxy blips |
+| Network-layer transients | `fetch failed`, `ECONNRESET`, `ETIMEDOUT`, `socket hang up`, `network error` | Transport-level interruptions |
+
+Explicitly **non-transient** (no retry): `HTTP 500`, `HTTP 501`, schema/permission/RLS/validation errors, any other status. Retry envelope is fixed at: max 2 attempts per chunk, 5s/15s backoff, `BATCH_SIZE_RETRY=1` (single-table isolation per ADR-082), global `RETRY_BUDGET_MS=8min`. Hard-fail-on-partial (§Phase9.2a-Backup) remains authoritative — retries can never downgrade a final shrink to `completed_with_errors`. This set was widened on 2026-06-12 after a scheduled run lost 12 tables to three back-to-back `HTTP 502` batches that the prior narrow classifier refused to retry; CAPA-1 of that RCA. Any further widening requires an ADR + a new entry in this table.
+
 ---
 
 ## 17. Export & Report Access Policy
