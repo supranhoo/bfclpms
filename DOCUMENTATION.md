@@ -6707,3 +6707,14 @@ See: `docs/adr/ADR-078.md`, `src/test/reviewNotes/sidebarVisibility.test.ts`.
   - **Rollback:** revert the new lib + the four-line UI block. Existing CSV admin export (`/safety/settings`) is untouched.
   - **Tests:** `src/test/safety/incidentExcelExport.test.ts` locks column order, cap value, and the row-to-record mapping (including missing-lookup graceful path). 4/4 passing.
   - **Phase 4 of the 6-phase Safety Incident enhancement plan.** Phase 5 (Advanced date & multi-filter) is next.
+
+- **v2.66.26 (2026-06-12 — Safety Incident Phase 5: Advanced Date & Multi-Filter):** The Safety Incidents list filter bar gains a date-range preset and multi-select for every dimension. Implementation:
+  - **Lib (`src/lib/safetyDateRangePresets.ts`):** pure ISO-8601 / Monday-week date math. Presets: All time, Today, Yesterday, This/Last Week, This/Last Month, This/Last Quarter, This/Last Year, Custom. `resolveDateRange()` returns inclusive `[from, to]` ISO instants for `.gte / .lte` against `created_at`. Reusable for any future Safety page (audits, permits, drills) — do NOT inline calendar math elsewhere.
+  - **Component (`src/components/ui/multi-select-id.tsx`):** ID-keyed sibling of `MultiSelectFilter` for filters whose WHERE clause is on `id` but the user sees a label (Type, Severity, Business Unit).
+  - **`SafetyIncidents.tsx` filter schema** changed from single string values to arrays (`statuses`, `typeIds`, `severityIds`, `slaStatuses`, `buIds`) plus `datePreset`, `customFrom`, `customTo`. All filters compile to server-side `.in(...)` / `.gte / .lte` on `safety_incidents_with_sla` — no client-side filtering — so pagination + RLS continue to scope correctly.
+  - **Severity scoping:** when exactly one type is selected the severity multi-select stays scoped to that type (preserves the cascading UX); 0 or >1 types unscope it so the user is not shown a misleading subset.
+  - **Accident hydration:** "Involved Person" column shows whenever ANY submitted type matches `/accident/i` (was: single-type only).
+  - **Excel export (Phase 4) updated** to accept the same array filters → exports honor the new filter shape; column order remains LOCKED.
+  - **Tests:** `src/test/safety/dateRangePresets.test.ts` (13 tests) covers every preset incl. Mon-week boundary, quarter math (Q1↔Q2 transition), and empty-custom safety; existing export tests still pass. 17/17 passing.
+  - **Rollback:** revert `SafetyIncidents.tsx`, the new lib + component, and the export filter shape (additive — old single-value callers would need restoration). No DB / RLS / RPC change.
+  - **Phase 5 of the 6-phase Safety Incident enhancement plan.** Phase 6 (Professional filter UI polish: chips row + clear-all + drawer) is next.
