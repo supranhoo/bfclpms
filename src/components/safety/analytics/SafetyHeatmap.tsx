@@ -18,14 +18,12 @@ type Row = {
   critical: number;
   high: number;
   open: number;
-  recordable: number;
 };
 
 const METRICS: Array<{ key: keyof Omit<Row, 'buId'>; label: string; tone: 'destructive' | 'amber' }> = [
   { key: 'critical',   label: 'Critical', tone: 'destructive' },
   { key: 'high',       label: 'High',     tone: 'destructive' },
   { key: 'open',       label: 'Open',     tone: 'amber' },
-  { key: 'recordable', label: 'Recordable', tone: 'destructive' },
 ];
 
 export function SafetyHeatmap({ payload }: Props) {
@@ -34,20 +32,17 @@ export function SafetyHeatmap({ payload }: Props) {
     new Set([
       ...payload.severity.map((r) => r.business_unit_id),
       ...payload.open_vs_closed.map((r) => r.business_unit_id),
-      ...payload.trir.map((r) => r.business_unit_id),
     ]),
   );
 
   const rows: Row[] = buIds.map((buId) => {
     const sev = payload.severity.find((r) => r.business_unit_id === buId);
     const oc  = payload.open_vs_closed.find((r) => r.business_unit_id === buId);
-    const tr  = payload.trir.find((r) => r.business_unit_id === buId);
     return {
       buId,
       critical:   sev?.critical_count ?? 0,
       high:       sev?.high_count ?? 0,
       open:       oc?.open_count ?? 0,
-      recordable: tr?.recordable_cases ?? 0,
     };
   });
 
@@ -56,7 +51,6 @@ export function SafetyHeatmap({ payload }: Props) {
     critical:   Math.max(0, ...rows.map((r) => r.critical)),
     high:       Math.max(0, ...rows.map((r) => r.high)),
     open:       Math.max(0, ...rows.map((r) => r.open)),
-    recordable: Math.max(0, ...rows.map((r) => r.recordable)),
   };
 
   return (
