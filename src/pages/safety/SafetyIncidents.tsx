@@ -134,6 +134,27 @@ async function fetchIncidentsPage({
     }
   }
 
+  // Hydrate the reporter's name + employee code for the "Reported" column.
+  // Always runs (vs. involved-person which is type-gated) because every row
+  // surfaces this column. Single batched IN() — one round-trip per page.
+  const reporterIds = Array.from(
+    new Set(rows.map((r) => r.reporter_id).filter(Boolean) as string[]),
+  );
+  if (reporterIds.length) {
+    const { data: reporters } = await supabase
+      .from('profiles')
+      .select('id, full_name, employee_code')
+      .in('id', reporterIds);
+    const rmap = new Map((reporters ?? []).map((p: any) => [p.id, p]));
+    for (const r of rows as any[]) {
+      const p = rmap.get(r.reporter_id);
+      if (p) {
+        r.reporter_full_name = p.full_name;
+        r.reporter_employee_code = p.employee_code;
+      }
+    }
+  }
+
   return { rows, total: count ?? 0 };
 }
 
