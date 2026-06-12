@@ -11963,15 +11963,6 @@ export type Database = {
           run_id: string
         }[]
       }
-      assign_sop_to_role: {
-        Args: {
-          _business_unit_id?: string
-          _due_in_days?: number
-          _role: Database["public"]["Enums"]["safety_app_role"]
-          _sop_id: string
-        }
-        Returns: Json
-      }
       backfill_late_joiner_org_kpis: {
         Args: { p_dry_run?: boolean }
         Returns: Json
@@ -13296,16 +13287,8 @@ export type Database = {
         Returns: Json
       }
       start_drill: { Args: { p_drill_id: string }; Returns: Json }
-      start_training_attempt: {
-        Args: { _assignment_id: string }
-        Returns: Json
-      }
       submit_audit_run: { Args: { p_run_id: string }; Returns: Json }
       submit_permit: { Args: { p_permit_id: string }; Returns: Json }
-      submit_training_attempt: {
-        Args: { _answers: Json; _attempt_id: string; _reading_seconds?: number }
-        Returns: Json
-      }
       suggest_alias_candidates: {
         Args: { p_limit?: number; p_min_similarity?: number }
         Returns: {

@@ -1,0 +1,1 @@
+REFRESH MATERIALIZED VIEW public.mv_safety_incident_monthly_trend;
