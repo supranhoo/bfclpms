@@ -6697,3 +6697,13 @@ See: `docs/adr/ADR-078.md`, `src/test/reviewNotes/sidebarVisibility.test.ts`.
   - **Backup:** additive nullable column on an existing public table → auto-covered by `public.get_backup_table_order()`.
   - **Rollback:** revert client files; the RPC and column are additive and stay no-op without callers.
   - **Phase 3 of the 6-phase Safety Incident enhancement plan.** Phase 4 (Safety Head Excel export) is next.
+
+- **v2.66.25 (2026-06-12 — Safety Incident Phase 4: Safety Head Excel Export):** Safety Heads (and Admin) can export the currently-filtered incident list to `.xlsx`. Implementation:
+  - **Lib (`src/lib/safetyIncidentExcelExport.ts`):** server-paginated 1000-row batches over `safety_incidents_with_sla` (same view as the list, so RLS + SLA derivation match exactly), hard cap `MAX_INCIDENT_EXPORT_ROWS = 50_000`. Single batched `business_units` + `profiles` IN()-lookups hydrate display names. Uses the existing `xlsx` (SheetJS) dependency — no new packages.
+  - **Columns (LOCKED by `INCIDENT_EXPORT_COLUMNS`, asserted by test):** Incident ID, Type, Severity, Business Unit, Created By, Reported By, Actual Reporter, Assigned User, Status, SLA Status, Created Date, Closed Date, Closure Remarks (sourced from `verification_notes`). Type/Severity prefer the row's stored snapshot label, falling back to the enum label map.
+  - **UI (`SafetyIncidents.tsx`):** "Export Excel" outline button beside "Report Incident", visible only when `effectiveRole === 'admin'` OR the caller has a `safety_head` row in `safety_user_roles` (checked via existing `useMySafetyRoleRows`). Button disables + shows spinner while exporting; toast surfaces row count and a "cap reached" warning when applicable.
+  - **Filters honored:** status, severity, type, SLA status, search — exactly the filters the user has applied on the page.
+  - **Backup / RLS:** read-only export, no schema change, no new RPC. RLS on the underlying view continues to scope rows per caller.
+  - **Rollback:** revert the new lib + the four-line UI block. Existing CSV admin export (`/safety/settings`) is untouched.
+  - **Tests:** `src/test/safety/incidentExcelExport.test.ts` locks column order, cap value, and the row-to-record mapping (including missing-lookup graceful path). 4/4 passing.
+  - **Phase 4 of the 6-phase Safety Incident enhancement plan.** Phase 5 (Advanced date & multi-filter) is next.
