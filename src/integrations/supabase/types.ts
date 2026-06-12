@@ -9666,6 +9666,8 @@ export type Database = {
           created_at: string
           department_id: string | null
           description: string
+          duplicate_of_id: string | null
+          duplicate_remarks: string | null
           id: string
           incident_number: string | null
           incident_type: Database["public"]["Enums"]["safety_incident_type"]
@@ -9673,6 +9675,8 @@ export type Database = {
           involved_person_id: string | null
           involved_person_name: string | null
           location: string
+          marked_duplicate_at: string | null
+          marked_duplicate_by: string | null
           occurred_at: string
           priority: Database["public"]["Enums"]["safety_priority"]
           rca_summary: string | null
@@ -9711,6 +9715,8 @@ export type Database = {
           created_at?: string
           department_id?: string | null
           description: string
+          duplicate_of_id?: string | null
+          duplicate_remarks?: string | null
           id?: string
           incident_number?: string | null
           incident_type: Database["public"]["Enums"]["safety_incident_type"]
@@ -9718,6 +9724,8 @@ export type Database = {
           involved_person_id?: string | null
           involved_person_name?: string | null
           location: string
+          marked_duplicate_at?: string | null
+          marked_duplicate_by?: string | null
           occurred_at?: string
           priority?: Database["public"]["Enums"]["safety_priority"]
           rca_summary?: string | null
@@ -9756,6 +9764,8 @@ export type Database = {
           created_at?: string
           department_id?: string | null
           description?: string
+          duplicate_of_id?: string | null
+          duplicate_remarks?: string | null
           id?: string
           incident_number?: string | null
           incident_type?: Database["public"]["Enums"]["safety_incident_type"]
@@ -9763,6 +9773,8 @@ export type Database = {
           involved_person_id?: string | null
           involved_person_name?: string | null
           location?: string
+          marked_duplicate_at?: string | null
+          marked_duplicate_by?: string | null
           occurred_at?: string
           priority?: Database["public"]["Enums"]["safety_priority"]
           rca_summary?: string | null
@@ -9845,6 +9857,20 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "safety_incidents_duplicate_of_id_fkey"
+            columns: ["duplicate_of_id"]
+            isOneToOne: false
+            referencedRelation: "safety_incidents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "safety_incidents_duplicate_of_id_fkey"
+            columns: ["duplicate_of_id"]
+            isOneToOne: false
+            referencedRelation: "safety_incidents_with_sla"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "safety_incidents_incident_type_id_fkey"
             columns: ["incident_type_id"]
             isOneToOne: false
@@ -9861,6 +9887,20 @@ export type Database = {
           {
             foreignKeyName: "safety_incidents_involved_person_id_fkey"
             columns: ["involved_person_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "safety_incidents_marked_duplicate_by_fkey"
+            columns: ["marked_duplicate_by"]
+            isOneToOne: false
+            referencedRelation: "eligible_login_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "safety_incidents_marked_duplicate_by_fkey"
+            columns: ["marked_duplicate_by"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
@@ -12350,6 +12390,10 @@ export type Database = {
         Args: { template_uuid: string }
         Returns: boolean
       }
+      close_duplicate_incident: {
+        Args: { p_incident_id: string; p_notes?: string }
+        Returns: Json
+      }
       close_permit: {
         Args: { p_notes?: string; p_permit_id: string }
         Returns: Json
@@ -13060,6 +13104,10 @@ export type Database = {
       }
       mark_audit_reviewed: {
         Args: { p_run_id: string; p_summary?: string }
+        Returns: Json
+      }
+      mark_incident_duplicate: {
+        Args: { p_incident_id: string; p_master_id: string; p_remarks: string }
         Returns: Json
       }
       mark_overdue_assets: { Args: never; Returns: Json }

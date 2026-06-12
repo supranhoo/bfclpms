@@ -65,6 +65,11 @@ export interface SafetyIncidentRow {
   sla_status?: SafetySlaStatus | null;
   /** Optional: employee on whose behalf the incident was filed. Display/audit only. */
   actual_reporter_id?: string | null;
+  /** Phase 2 — duplicate handling. Set when a BU Head marks this incident as a duplicate of another. */
+  duplicate_of_id?: string | null;
+  marked_duplicate_by?: string | null;
+  marked_duplicate_at?: string | null;
+  duplicate_remarks?: string | null;
 }
 
 export const SAFETY_INCIDENTS_KEY = ['safety', 'incidents'] as const;
@@ -308,3 +313,146 @@ export function useReviveOrphanedIncident() {
 // Note: a generic `invalidateAllSafetyQueries` helper used to live here but
 // was removed in Wave 2 — broad invalidation of the `['safety']` root is
 // an anti-pattern (POLICY §110). Use the scoped sub-keys exposed above.
+
+// ============================================================
+// Phase 2 — Duplicate Incident Handling
+// ============================================================
+
+/**
+ * Returns the current user's Safety role rows (role + business_unit_id).
+ * Used by client guards to decide whether to show "Mark as duplicate"
+ * (BU Head over the incident's BU) or "Close duplicate" (Safety Head /
+ * Admin). RLS still enforces server-side; this only drives UI visibility.
+ */
+export function useMySafetyRoleRows() {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: ['safety', 'user-roles', 'me-rows', user?.id ?? 'anon'],
+    enabled: !!user,
+    staleTime: 60_000,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('safety_user_roles')
+        .select('role, business_unit_id')
+        .eq('user_id', user!.id);
+      if (error) throw error;
+      return (data ?? []) as Array<{ role: string; business_unit_id: string | null }>;
+    },
+  });
+}
+
+export interface MarkDuplicateInput {
+  incidentId: string;
+  masterIncidentId: string;
+  remarks: string;
+}
+
+export function useMarkIncidentDuplicate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ incidentId, masterIncidentId, remarks }: MarkDuplicateInput) => {
+      const { data, error } = await supabase.rpc(
+        'mark_incident_duplicate' as never,
+        {
+          p_incident_id: incidentId,
+          p_master_id: masterIncidentId,
+          p_remarks: remarks,
+        } as never,
+      );
+      if (error) throw error;
+      const result = data as { ok: boolean; error?: string };
+      if (!result?.ok) throw new Error(result?.error ?? 'Failed to mark duplicate');
+      return result;
+    },
+    onSuccess: (_res, vars) => {
+      toast.success('Incident marked as duplicate. Awaiting Safety Head closure.');
+      qc.invalidateQueries({ queryKey: ['safety', 'incident', vars.incidentId] });
+      qc.invalidateQueries({ queryKey: ['safety', 'incident-detail', vars.incidentId] });
+      qc.invalidateQueries({ queryKey: SAFETY_SLA_QUEUE_KEY });
+      qc.invalidateQueries({ queryKey: ['safety', 'incidents', 'drill'] });
+      qc.invalidateQueries({ queryKey: ['safety', 'dashboard-stats'] });
+      qc.invalidateQueries({ queryKey: ['safety', 'audit-log'] });
+    },
+    onError: (err: Error) => toast.error(err.message ?? 'Failed to mark duplicate'),
+  });
+}
+
+export interface CloseDuplicateInput {
+  incidentId: string;
+  notes?: string;
+}
+
+export function useCloseDuplicateIncident() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ incidentId, notes }: CloseDuplicateInput) => {
+      const { data, error } = await supabase.rpc(
+        'close_duplicate_incident' as never,
+        {
+          p_incident_id: incidentId,
+          p_notes: notes ?? null,
+        } as never,
+      );
+      if (error) throw error;
+      const result = data as { ok: boolean; error?: string };
+      if (!result?.ok) throw new Error(result?.error ?? 'Failed to close duplicate');
+      return result;
+    },
+    onSuccess: (_res, vars) => {
+      toast.success('Duplicate incident closed');
+      qc.invalidateQueries({ queryKey: ['safety', 'incident', vars.incidentId] });
+      qc.invalidateQueries({ queryKey: ['safety', 'incident-detail', vars.incidentId] });
+      qc.invalidateQueries({ queryKey: SAFETY_SLA_QUEUE_KEY });
+      qc.invalidateQueries({ queryKey: ['safety', 'incidents', 'drill'] });
+      qc.invalidateQueries({ queryKey: ['safety', 'dashboard-stats'] });
+      qc.invalidateQueries({ queryKey: ['safety', 'audit-log'] });
+    },
+    onError: (err: Error) => toast.error(err.message ?? 'Failed to close duplicate'),
+  });
+}
+
+/**
+ * Lightweight searchable list of incidents within a given business unit,
+ * for the master-incident picker. Only returns OPEN, non-duplicate incidents
+ * (excludes the source incident itself).
+ */
+export function useSafetyIncidentsForDuplicatePicker(args: {
+  businessUnitId: string | null;
+  excludeIncidentId: string;
+  search: string;
+  enabled?: boolean;
+}) {
+  const { businessUnitId, excludeIncidentId, search, enabled = true } = args;
+  return useQuery({
+    queryKey: ['safety', 'incidents', 'dup-picker', businessUnitId ?? 'no-bu', excludeIncidentId, search],
+    enabled,
+    staleTime: 15_000,
+    queryFn: async () => {
+      let q = supabase
+        .from('safety_incidents_with_sla' as never)
+        .select('id, incident_number, title, status, severity, occurred_at, business_unit_id')
+        .neq('id', excludeIncidentId)
+        .neq('status', 'closed')
+        .neq('status', 'orphaned')
+        .is('duplicate_of_id', null)
+        .order('created_at', { ascending: false })
+        .range(0, 24);
+      if (businessUnitId) q = q.eq('business_unit_id', businessUnitId);
+      if (search.trim()) {
+        const term = `%${search.trim()}%`;
+        q = q.or(`incident_number.ilike.${term},title.ilike.${term}`);
+      }
+      const { data, error } = await q;
+      if (error) throw error;
+      return (data ?? []) as unknown as Array<{
+        id: string;
+        incident_number: string | null;
+        title: string;
+        status: string;
+        severity: string;
+        occurred_at: string;
+        business_unit_id: string | null;
+      }>;
+    },
+  });
+}

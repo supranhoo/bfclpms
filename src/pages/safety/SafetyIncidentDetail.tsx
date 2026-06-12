@@ -2,8 +2,11 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, ShieldAlert } from 'lucide-react';
-import { useSafetyIncident } from '@/hooks/useSafetyIncidents';
+import { ArrowLeft, ShieldAlert, Copy as CopyIcon, CheckCircle2 } from 'lucide-react';
+import {
+  useSafetyIncident,
+  useMySafetyRoleRows,
+} from '@/hooks/useSafetyIncidents';
 import { useSafetyRealtimeSync } from '@/hooks/useSafetyRealtimeSync';
 import { SafetyStatusBadge } from '@/components/safety/StatusBadge';
 import { SlaBadge } from '@/components/safety/SlaBadge';
@@ -38,11 +41,15 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useSafetyPermissions } from '@/hooks/useSafetyPermissions';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { MarkDuplicateDialog } from '@/components/safety/MarkDuplicateDialog';
+import { CloseDuplicateDialog } from '@/components/safety/CloseDuplicateDialog';
 
 export default function SafetyIncidentDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [reviveOpen, setReviveOpen] = useState(false);
+  const [markDupOpen, setMarkDupOpen] = useState(false);
+  const [closeDupOpen, setCloseDupOpen] = useState(false);
   // Scoped realtime: incidents row + everything the timeline/evidence
   // sections render. Avoids subscribing to permits/training/etc.
   useSafetyRealtimeSync(true, [
@@ -56,6 +63,7 @@ export default function SafetyIncidentDetail() {
   const uiV2 = settings.find((r) => r.key === 'ui_incident_v2')?.value === true;
   const { user } = useAuth();
   const { can } = useSafetyPermissions();
+  const { data: myRoleRows = [] } = useMySafetyRoleRows();
 
   // Hydrate reporter + actual-reporter profile data for the detail header.
   const reporterIds = [incident?.reporter_id, (incident as any)?.actual_reporter_id]
@@ -76,6 +84,30 @@ export default function SafetyIncidentDetail() {
   const actualReporterProfile = (incident as any)?.actual_reporter_id
     ? reporterProfiles.find((p: any) => p.id === (incident as any).actual_reporter_id) as any
     : null;
+
+  // Phase 2 — duplicate handling fields (added to safety_incidents schema).
+  const dupOfId = (incident as any)?.duplicate_of_id as string | null | undefined;
+  const markedDupAt = (incident as any)?.marked_duplicate_at as string | null | undefined;
+  const isMarkedDuplicate = !!markedDupAt;
+
+  // Hydrate the master-incident number for the banner link (single small query).
+  const { data: masterRows = [] } = useQuery({
+    queryKey: ['safety', 'incident-duplicate-master', dupOfId ?? 'none'],
+    enabled: !!dupOfId,
+    staleTime: 60_000,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('safety_incidents')
+        .select('id, incident_number, title, status')
+        .eq('id', dupOfId!)
+        .limit(1);
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+  const masterIncident = masterRows[0] as
+    | { id: string; incident_number: string | null; title: string; status: string }
+    | undefined;
 
   if (isLoading) {
     return (
@@ -113,6 +145,22 @@ export default function SafetyIncidentDetail() {
     incident.verifier_id === uid
   );
   const canSeeFullDetail = can('action.incidents.view_internals') || isOnRoutingChain;
+
+  // Phase 2 — show "Mark as duplicate" only to BU Heads of this incident's
+  // business unit (or admin override). Server RPC re-validates this.
+  const isAdminRole = myRoleRows.some((r) => r.role === 'admin');
+  const isSafetyHeadRole = myRoleRows.some((r) => r.role === 'safety_head');
+  const isBuHeadHere =
+    isAdminRole ||
+    myRoleRows.some(
+      (r) =>
+        r.role === 'bu_head' &&
+        (r.business_unit_id == null || r.business_unit_id === incident.business_unit_id),
+    );
+  const canMarkDuplicate =
+    isBuHeadHere && !isMarkedDuplicate && incident.status !== 'closed' && incident.status !== 'orphaned';
+  const canCloseDuplicate =
+    (isSafetyHeadRole || isAdminRole) && isMarkedDuplicate && incident.status !== 'closed';
 
   return (
     <div className="p-3 sm:p-6 space-y-3 sm:space-y-4 w-full">
@@ -197,6 +245,65 @@ export default function SafetyIncidentDetail() {
         </CardContent>
       </Card>
 
+      {isMarkedDuplicate && (
+        <Card className="border-amber-500/40 bg-amber-50/40 dark:bg-amber-950/10">
+          <CardHeader className="px-4 py-3 sm:px-6 sm:py-4">
+            <CardTitle className="text-base flex items-center gap-2 text-amber-700 dark:text-amber-400">
+              <CopyIcon className="h-4 w-4" /> Marked as duplicate
+              {incident.status === 'closed' && (
+                <span className="inline-flex items-center gap-1 text-xs text-emerald-700 dark:text-emerald-400 font-normal">
+                  <CheckCircle2 className="h-3.5 w-3.5" /> Closed by Safety Head
+                </span>
+              )}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="px-4 sm:px-6 space-y-2 text-sm">
+            {masterIncident ? (
+              <p>
+                Linked to master incident{' '}
+                <button
+                  type="button"
+                  onClick={() => navigate(`/safety/incidents/${masterIncident.id}`)}
+                  className="font-mono underline text-primary"
+                >
+                  {masterIncident.incident_number}
+                </button>{' '}
+                — {masterIncident.title}
+              </p>
+            ) : (
+              <p className="text-muted-foreground">Master incident link unavailable.</p>
+            )}
+            {(incident as any).duplicate_remarks && (
+              <p className="text-xs text-muted-foreground whitespace-pre-wrap">
+                <span className="font-medium text-foreground">Remarks: </span>
+                {(incident as any).duplicate_remarks}
+              </p>
+            )}
+            {markedDupAt && (
+              <p className="text-xs text-muted-foreground">
+                Marked on {format(new Date(markedDupAt), 'dd MMM yyyy, HH:mm')}
+              </p>
+            )}
+            {canCloseDuplicate && (
+              <div className="pt-1">
+                <Button size="sm" onClick={() => setCloseDupOpen(true)}>
+                  Close duplicate
+                </Button>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {canMarkDuplicate && (
+        <div className="flex justify-end">
+          <Button variant="outline" size="sm" onClick={() => setMarkDupOpen(true)}>
+            <CopyIcon className="h-4 w-4 mr-2" />
+            Mark as duplicate
+          </Button>
+        </div>
+      )}
+
       {incident.status === 'orphaned' && (
         <Card className="border-destructive/40">
           <CardHeader className="px-4 py-3 sm:px-6 sm:py-4">
@@ -245,6 +352,17 @@ export default function SafetyIncidentDetail() {
         incident={incident.status === 'orphaned' ? incident : null}
         open={reviveOpen}
         onOpenChange={setReviveOpen}
+      />
+
+      <MarkDuplicateDialog
+        open={markDupOpen}
+        onOpenChange={setMarkDupOpen}
+        incident={incident}
+      />
+      <CloseDuplicateDialog
+        open={closeDupOpen}
+        onOpenChange={setCloseDupOpen}
+        incident={incident}
       />
     </div>
   );
