@@ -102,6 +102,7 @@ export function StageActionPanel({ incident }: { incident: SafetyIncidentRow }) 
   const saveNotes = useUpdateIncidentNotes(incident.id);
 
   const [note, setNote] = useState('');
+  const [progressNote, setProgressNote] = useState('');
   const [assignTo, setAssignTo] = useState<string>('');
   const [rca, setRca] = useState(incident.rca_summary ?? '');
   const [capa, setCapa] = useState(incident.capa_summary ?? '');
@@ -122,6 +123,16 @@ export function StageActionPanel({ incident }: { incident: SafetyIncidentRow }) 
     }
     if (incident.status === 'corrective_action' && capa !== (incident.capa_summary ?? '')) {
       await saveNotes.mutateAsync({ capa_summary: capa });
+    }
+    // Auto-save any in-progress note so the user never loses context when advancing.
+    const trimmedProgress = progressNote.trim();
+    if (trimmedProgress) {
+      try {
+        await addProgress.mutateAsync({ stage: incident.status, note: trimmedProgress });
+        setProgressNote('');
+      } catch {
+        // Surface failure but don't block the transition the user explicitly clicked.
+      }
     }
     transition.mutate({
       incidentId: incident.id,
@@ -295,18 +306,21 @@ export function StageActionPanel({ incident }: { incident: SafetyIncidentRow }) 
           <Textarea
             rows={2}
             placeholder="Quick note about this stage…"
+            value={progressNote}
+            onChange={(e) => setProgressNote(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-                const target = e.currentTarget;
-                const value = target.value.trim();
+                const value = progressNote.trim();
                 if (value) {
                   addProgress.mutate({ stage: incident.status, note: value });
-                  target.value = '';
+                  setProgressNote('');
                 }
               }
             }}
           />
-          <p className="text-xs text-muted-foreground mt-1">Press ⌘/Ctrl+Enter to save the note.</p>
+          <p className="text-xs text-muted-foreground mt-1">
+            Saved automatically when you advance to the next stage. Press ⌘/Ctrl+Enter to save without advancing.
+          </p>
         </div>
         {next && (
           <div className="border-t pt-4 space-y-2">
