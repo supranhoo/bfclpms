@@ -246,6 +246,7 @@ export default function SafetyIncidentNew() {
     try {
       const created = await submitSafetyIncident({
         reporterId: user.id,
+        reporterEmployeeCode: profile?.employee_code ?? null,
         payload,
         files: files.map((f) => ({ name: f.name, type: f.type, size: f.size, blob: f })),
         compression: {
