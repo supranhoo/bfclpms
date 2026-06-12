@@ -84,6 +84,11 @@ export default function SafetyIncidentNew() {
   const [involvedName, setInvolvedName] = useState('');
   const [involvedPickerOpen, setInvolvedPickerOpen] = useState(false);
   const [involvedSearch, setInvolvedSearch] = useState('');
+  // "Reported on behalf of" — optional secondary reporter (employee picker only).
+  const [actualReporterId, setActualReporterId] = useState<string>('');
+  const [actualReporterLabel, setActualReporterLabel] = useState<string>('');
+  const [actualReporterOpen, setActualReporterOpen] = useState(false);
+  const [actualReporterSearch, setActualReporterSearch] = useState('');
   const [files, setFiles] = useState<File[]>([]);
   const [submitting, setSubmitting] = useState(false);
 
@@ -101,6 +106,26 @@ export default function SafetyIncidentNew() {
     enabled: involvedPickerOpen && involvedSearch.trim().length >= 2,
     queryFn: async () => {
       const term = involvedSearch.trim();
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, full_name, email, employee_code')
+        .eq('is_active', true)
+        .or(`full_name.ilike.%${term}%,email.ilike.%${term}%,employee_code.ilike.%${term}%`)
+        .order('full_name', { ascending: true })
+        .limit(20);
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
+  // Searchable employee picker for "Reported on behalf of". Strict — must
+  // pick an existing employee (no free text), as the value is stored as a
+  // FK to profiles.id and validated server-side.
+  const actualReporterQuery = useQuery({
+    queryKey: ['safety', 'actual-reporter-search', actualReporterSearch],
+    enabled: actualReporterOpen && actualReporterSearch.trim().length >= 2,
+    queryFn: async () => {
+      const term = actualReporterSearch.trim();
       const { data, error } = await supabase
         .from('profiles')
         .select('id, full_name, email, employee_code')
@@ -182,6 +207,7 @@ export default function SafetyIncidentNew() {
       business_unit_id: businessUnitId || null,
       department_id: departmentId || null,
       involved_person_name: requiresInvolved ? involvedName.trim() : null,
+      actual_reporter_id: actualReporterId || null,
       client_submission_id: clientSubmissionId,
     };
 
@@ -440,6 +466,89 @@ export default function SafetyIncidentNew() {
                   </p>
                 </div>
               )}
+              <div className="md:col-span-2">
+                <Label htmlFor="actual-reporter">Reported on behalf of (optional)</Label>
+                <div className="flex gap-2">
+                  <Input
+                    id="actual-reporter"
+                    className="h-11 flex-1"
+                    value={actualReporterLabel}
+                    readOnly
+                    placeholder="Leave blank if you are the reporter"
+                  />
+                  {actualReporterId && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="h-11 shrink-0"
+                      onClick={() => { setActualReporterId(''); setActualReporterLabel(''); }}
+                      aria-label="Clear actual reporter"
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  )}
+                  <Popover
+                    open={actualReporterOpen}
+                    onOpenChange={(o) => { setActualReporterOpen(o); if (o) setActualReporterSearch(''); }}
+                  >
+                    <PopoverTrigger asChild>
+                      <Button type="button" variant="outline" className="h-11 shrink-0">
+                        <Search className="h-4 w-4 mr-1.5" /> Find
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent align="end" className="p-0 w-[320px]">
+                      <Command shouldFilter={false}>
+                        <CommandInput
+                          placeholder="Type name, email or employee ID…"
+                          value={actualReporterSearch}
+                          onValueChange={setActualReporterSearch}
+                        />
+                        <CommandList className="max-h-64">
+                          {actualReporterSearch.trim().length < 2 ? (
+                            <div className="p-4 text-xs text-center text-muted-foreground">
+                              Type at least 2 characters to search.
+                            </div>
+                          ) : actualReporterQuery.isFetching ? (
+                            <div className="p-6 flex items-center justify-center">
+                              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                            </div>
+                          ) : (
+                            <>
+                              <CommandEmpty>No employees match.</CommandEmpty>
+                              <CommandGroup>
+                                {(actualReporterQuery.data ?? []).map((p) => (
+                                  <CommandItem
+                                    key={p.id}
+                                    value={p.id}
+                                    onSelect={() => {
+                                      const label = p.employee_code
+                                        ? `${p.full_name || p.email} (${p.employee_code})`
+                                        : (p.full_name || p.email);
+                                      setActualReporterId(p.id);
+                                      setActualReporterLabel(label);
+                                      setActualReporterOpen(false);
+                                    }}
+                                  >
+                                    <div className="min-w-0 flex-1">
+                                      <div className="font-medium truncate">{p.full_name || p.email}</div>
+                                      <div className="text-xs text-muted-foreground truncate">
+                                        {p.email}{p.employee_code ? ` · ${p.employee_code}` : ''}
+                                      </div>
+                                    </div>
+                                  </CommandItem>
+                                ))}
+                              </CommandGroup>
+                            </>
+                          )}
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Use when filing for a worker who does not have system access. Their name &amp; employee ID will appear on the incident record.
+                </p>
+              </div>
               <div className="md:col-span-2">
                 <Label>Evidence (≥1, max 5, ≤20 MB each — images, MP4, PDF) *</Label>
                 <div className="flex flex-col gap-2 mt-1">

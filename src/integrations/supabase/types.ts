@@ -9654,6 +9654,7 @@ export type Database = {
       safety_incidents: {
         Row: {
           acknowledge_due_at: string
+          actual_reporter_id: string | null
           assigned_at: string | null
           assigned_to: string | null
           business_unit_id: string | null
@@ -9698,6 +9699,7 @@ export type Database = {
         }
         Insert: {
           acknowledge_due_at: string
+          actual_reporter_id?: string | null
           assigned_at?: string | null
           assigned_to?: string | null
           business_unit_id?: string | null
@@ -9742,6 +9744,7 @@ export type Database = {
         }
         Update: {
           acknowledge_due_at?: string
+          actual_reporter_id?: string | null
           assigned_at?: string | null
           assigned_to?: string | null
           business_unit_id?: string | null
@@ -9785,6 +9788,20 @@ export type Database = {
           verifier_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "safety_incidents_actual_reporter_id_fkey"
+            columns: ["actual_reporter_id"]
+            isOneToOne: false
+            referencedRelation: "eligible_login_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "safety_incidents_actual_reporter_id_fkey"
+            columns: ["actual_reporter_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "safety_incidents_assigned_to_fkey"
             columns: ["assigned_to"]

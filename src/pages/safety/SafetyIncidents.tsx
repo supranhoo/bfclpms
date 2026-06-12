@@ -140,17 +140,29 @@ async function fetchIncidentsPage({
   const reporterIds = Array.from(
     new Set(rows.map((r) => r.reporter_id).filter(Boolean) as string[]),
   );
-  if (reporterIds.length) {
+  // Also hydrate the optional "actual reporter" (file-on-behalf-of).
+  const actualIds = Array.from(
+    new Set(rows.map((r: any) => r.actual_reporter_id).filter(Boolean) as string[]),
+  );
+  const allReporterIds = Array.from(new Set([...reporterIds, ...actualIds]));
+  if (allReporterIds.length) {
     const { data: reporters } = await supabase
       .from('profiles')
       .select('id, full_name, employee_code')
-      .in('id', reporterIds);
+      .in('id', allReporterIds);
     const rmap = new Map((reporters ?? []).map((p: any) => [p.id, p]));
     for (const r of rows as any[]) {
       const p = rmap.get(r.reporter_id);
       if (p) {
         r.reporter_full_name = p.full_name;
         r.reporter_employee_code = p.employee_code;
+      }
+      if (r.actual_reporter_id) {
+        const ap = rmap.get(r.actual_reporter_id);
+        if (ap) {
+          r.actual_reporter_full_name = ap.full_name;
+          r.actual_reporter_employee_code = ap.employee_code;
+        }
       }
     }
   }
@@ -462,6 +474,23 @@ export default function SafetyIncidents() {
                   {(i as any).reporter_employee_code && (
                     <div className="font-mono">
                       {(i as any).reporter_employee_code}
+                    </div>
+                  )}
+                  {(i as any).actual_reporter_id && (
+                    <div className="mt-1 pt-1 border-t border-border/50">
+                      <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                        On behalf of
+                      </div>
+                      {(i as any).actual_reporter_full_name && (
+                        <div className="text-foreground">
+                          {(i as any).actual_reporter_full_name}
+                        </div>
+                      )}
+                      {(i as any).actual_reporter_employee_code && (
+                        <div className="font-mono">
+                          {(i as any).actual_reporter_employee_code}
+                        </div>
+                      )}
                     </div>
                   )}
                 </TableCell>

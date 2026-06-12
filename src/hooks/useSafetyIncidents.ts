@@ -63,6 +63,8 @@ export interface SafetyIncidentRow {
   sla_target_hours?: number | null;
   sla_amber_threshold_pct?: number | null;
   sla_status?: SafetySlaStatus | null;
+  /** Optional: employee on whose behalf the incident was filed. Display/audit only. */
+  actual_reporter_id?: string | null;
 }
 
 export const SAFETY_INCIDENTS_KEY = ['safety', 'incidents'] as const;
@@ -180,6 +182,8 @@ export interface ReportIncidentInput {
   involved_person_name?: string | null;
   occurred_at?: string;
   client_submission_id?: string;
+  /** Optional: file-on-behalf-of — references a profile id. Server validates. */
+  actual_reporter_id?: string | null;
 }
 
 export function useReportSafetyIncident() {
