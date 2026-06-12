@@ -8,7 +8,7 @@ import {
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
-import { AlertTriangle, Plus } from 'lucide-react';
+import { AlertTriangle, Plus, FileDown, Loader2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useManualQuery, type ManualQueryFetcherArgs } from '@/hooks/useManualQuery';
 import { useSafetyRealtimeSync } from '@/hooks/useSafetyRealtimeSync';
@@ -31,6 +31,13 @@ import {
 } from '@/hooks/useSafetyIncidentTypes';
 import { Badge } from '@/components/ui/badge';
 import type { SafetyIncidentRow } from '@/hooks/useSafetyIncidents';
+import { useMySafetyRoleRows } from '@/hooks/useSafetyIncidents';
+import { useAuth } from '@/contexts/AuthContext';
+import {
+  exportIncidentsToExcel,
+  MAX_INCIDENT_EXPORT_ROWS,
+} from '@/lib/safetyIncidentExcelExport';
+import { toast } from 'sonner';
 import { format, formatDistanceToNowStrict } from 'date-fns';
 
 /**
