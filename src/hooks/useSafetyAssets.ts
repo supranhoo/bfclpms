@@ -2,9 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import type {
   SafetyAssetStatus,
-  CalibrationBucket,
 } from '@/lib/safetyAssets';
-import { calibrationBucket } from '@/lib/safetyAssets';
 
 /**
  * Phase 4 data layer for the safety asset register.
@@ -60,44 +58,6 @@ export interface SafetyAssetEvidenceRow {
   caption: string | null;
   uploaded_by: string | null;
   uploaded_at: string;
-}
-
-export interface AssetFilters {
-  status?: SafetyAssetStatus | 'all';
-  bucket?: CalibrationBucket | 'all';
-  search?: string;
-  businessUnitId?: string | 'all';
-}
-
-export function useSafetyAssets(filters: AssetFilters = {}) {
-  const status = filters.status ?? 'all';
-  const bucket = filters.bucket ?? 'all';
-  const search = filters.search?.trim() ?? '';
-  const buId = filters.businessUnitId ?? 'all';
-
-  return useQuery({
-    queryKey: ['safety', 'assets', { status, bucket, search, buId }],
-    queryFn: async (): Promise<SafetyAssetRow[]> => {
-      let q = supabase
-        .from('safety_assets')
-        .select('*')
-        .order('updated_at', { ascending: false })
-        .limit(1000);
-      if (status !== 'all') q = q.eq('status', status);
-      if (buId !== 'all') q = q.eq('business_unit_id', buId);
-      if (search.length >= 2) {
-        q = q.or(
-          `asset_code.ilike.%${search}%,name.ilike.%${search}%,location.ilike.%${search}%,serial_no.ilike.%${search}%`,
-        );
-      }
-      const { data, error } = await q;
-      if (error) throw error;
-      const rows = (data ?? []) as SafetyAssetRow[];
-      if (bucket === 'all') return rows;
-      return rows.filter((r) => calibrationBucket(r) === bucket);
-    },
-    staleTime: 30_000,
-  });
 }
 
 export function useSafetyAsset(assetId: string | undefined) {
