@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  Settings, Users, Timer, ScrollText, ShieldCheck, Activity, Save,
-  Loader2, Phone, AlertTriangle, ArrowLeft, KeyRound, FileSignature, Download, Tag,
+  Settings, Users, ScrollText, ShieldCheck, Save,
+  Loader2, Phone, AlertTriangle, ArrowLeft, KeyRound, Download, Tag,
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -39,11 +39,8 @@ const ADMIN_LINKS: Array<{
   { to: '/safety/settings/users',         label: 'Users & Roles',     description: 'Grant or revoke Safety roles for users.', icon: Users },
   { to: '/safety/settings/incident-types',label: 'Incident Types',    description: 'Configure incident types and per-type severities.', icon: Tag },
   { to: '/safety/settings/permit-types',  label: 'Permit Types',      description: 'Per-type approval ladders for PTW.',     icon: ShieldCheck },
-  { to: '/safety/settings/sla',           label: 'SLA Monitor',       description: 'Severity SLA matrix + escalation status.', icon: Timer },
   { to: '/safety/settings/audit',         label: 'Audit Log',         description: 'Immutable audit trail across the module.', icon: ScrollText },
-  { to: '/safety/settings/hours-worked',  label: 'Hours Worked',      description: 'Monthly hours per BU — drives TRIR.',     icon: Activity },
   { to: '/safety/emergency/contacts',     label: 'Emergency Contacts',description: 'Manage the emergency contact directory.', icon: Phone },
-  { to: '/safety/training/admin',         label: 'Training Admin',    description: 'SOPs, quizzes, and assignments.',         icon: FileSignature },
 ];
 
 export default function SafetySettings() {
@@ -127,7 +124,7 @@ export default function SafetySettings() {
               <Download className="h-4 w-4" /> Data export
             </CardTitle>
             <CardDescription>
-              Download Safety data (incidents, assets, audits, training, permits, drills, hours) as CSV. RLS applies.
+              Download Safety data (incidents, assets, audits, permits, drills) as CSV. RLS applies.
             </CardDescription>
           </div>
           <Button size="sm" onClick={() => setExportOpen(true)}>

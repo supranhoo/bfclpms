@@ -17,7 +17,6 @@ const CORE_TABLES = [
   'safety_incidents',
   'safety_permits',
   'safety_assets',
-  'safety_training_assignments',
   'safety_audit_runs',
   'safety_emergency_drills',
   'safety_emergency_contacts',

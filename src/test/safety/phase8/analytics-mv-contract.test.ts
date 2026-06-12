@@ -11,10 +11,8 @@ import { readFileSync } from 'node:fs';
 const SRC = readFileSync('src/hooks/useSafetyAnalytics.ts', 'utf8');
 
 const REQUIRED_MVS = [
-  'mv_safety_trir',
   'mv_safety_severity_rate',
   'mv_safety_incidents_open_vs_closed',
-  'mv_safety_training_compliance',
   'mv_safety_audit_scoreboard',
   'mv_safety_permit_throughput',
   'mv_safety_incident_monthly_trend',

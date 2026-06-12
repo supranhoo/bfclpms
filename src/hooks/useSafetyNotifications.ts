@@ -106,19 +106,3 @@ export function useMarkAllSafetyNotificationsRead() {
     onSuccess: () => qc.invalidateQueries({ queryKey: KEY(user?.id) }),
   });
 }
-
-/**
- * Manually invoke the SLA escalation engine. Restricted server-side to
- * service-role calls and Safety Admin/Head users.
- */
-export function useRunSafetySlaCheck() {
-  return useMutation({
-    mutationFn: async () => {
-      const { data, error } = await supabase.functions.invoke('check-safety-sla', {
-        body: {},
-      });
-      if (error) throw error;
-      return data as { ok: boolean; amber_escalated?: number; red_escalated?: number };
-    },
-  });
-}

@@ -106,8 +106,6 @@ export type SafetyRealtimeTable =
   | 'safety_sla_escalations'
   | 'safety_permits'
   | 'safety_permit_approvals'
-  | 'safety_training_assignments'
-  | 'safety_training_attempts'
   | 'safety_assets'
   | 'safety_asset_calibrations'
   | 'safety_asset_evidence'
@@ -133,8 +131,6 @@ const SUBSCRIPTIONS: SubscriptionDescriptor[] = [
   { table: 'safety_sla_escalations', group: 'sla' },
   { table: 'safety_permits', group: 'permits' },
   { table: 'safety_permit_approvals', group: 'permitApprovals' },
-  { table: 'safety_training_assignments', group: 'training' },
-  { table: 'safety_training_attempts', group: 'training' },
   { table: 'safety_assets', group: 'assets' },
   { table: 'safety_asset_calibrations', group: 'assets' },
   { table: 'safety_asset_evidence', group: 'assets' },

@@ -15,8 +15,6 @@ const MIGRATED_PAGES = [
   'SafetyPermits.tsx',
   'SafetyAudits.tsx',
   'SafetyAssets.tsx',
-  'SafetyHoursWorked.tsx',
-  'SafetySlaMonitor.tsx',
 ];
 
 function read(name: string) {
