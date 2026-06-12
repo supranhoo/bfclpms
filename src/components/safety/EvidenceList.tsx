@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { Loader2, Download, FileText, Pencil, Check, X } from 'lucide-react';
+import { Loader2, Download, FileText, Pencil, Check, X, Eye } from 'lucide-react';
 import {
   useIncidentEvidence,
   getEvidenceSignedUrl,
@@ -13,6 +13,7 @@ import { Badge } from '@/components/ui/badge';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
+import { EvidencePreviewDialog } from './EvidencePreviewDialog';
 
 const STAGE_LABEL: Record<EvidenceStage, string> = {
   report: 'Report',
@@ -28,6 +29,7 @@ export function EvidenceList({ incidentId }: { incidentId: string }) {
   const [opening, setOpening] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState('');
+  const [previewId, setPreviewId] = useState<string | null>(null);
   const { user } = useAuth();
   const rename = useRenameIncidentEvidence(incidentId);
 
@@ -136,14 +138,26 @@ export function EvidenceList({ incidentId }: { incidentId: string }) {
                         {wasRenamed ? (
                           <Tooltip>
                             <TooltipTrigger asChild>
-                              <span className="truncate">{r.file_name}</span>
+                              <button
+                                type="button"
+                                onClick={() => setPreviewId(r.id)}
+                                className="truncate text-left hover:underline focus:underline focus:outline-none text-primary"
+                              >
+                                {r.file_name}
+                              </button>
                             </TooltipTrigger>
                             <TooltipContent side="top">
                               Original: <span className="font-mono">{original}</span>
                             </TooltipContent>
                           </Tooltip>
                         ) : (
-                          <span className="truncate">{r.file_name}</span>
+                          <button
+                            type="button"
+                            onClick={() => setPreviewId(r.id)}
+                            className="truncate text-left hover:underline focus:underline focus:outline-none text-primary"
+                          >
+                            {r.file_name}
+                          </button>
                         )}
                       </p>
                       <p className="text-xs text-muted-foreground">
@@ -168,22 +182,39 @@ export function EvidenceList({ incidentId }: { incidentId: string }) {
                   </Button>
                 )}
                 {!isEditing && (
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8"
-                    onClick={() => open(r.file_path, r.id, r.file_name)}
-                    disabled={opening === r.id}
-                    aria-label="Download evidence"
-                  >
-                    {opening === r.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-                  </Button>
+                  <>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={() => setPreviewId(r.id)}
+                      aria-label="Preview evidence"
+                    >
+                      <Eye className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={() => open(r.file_path, r.id, r.file_name)}
+                      disabled={opening === r.id}
+                      aria-label="Download evidence"
+                    >
+                      {opening === r.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                    </Button>
+                  </>
                 )}
               </div>
             </li>
           );
         })}
       </ul>
+      <EvidencePreviewDialog
+        open={previewId !== null}
+        onOpenChange={(o) => { if (!o) setPreviewId(null); }}
+        items={rows}
+        initialId={previewId}
+      />
     </TooltipProvider>
   );
 }
