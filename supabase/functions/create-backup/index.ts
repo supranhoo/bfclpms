@@ -732,8 +732,16 @@ export function isTransientChunkError(
   if (/\bHTTP\s+546\b/.test(errMsg)) return true
   if (/\bHTTP\s+429\b/.test(errMsg)) return true
   if (/RateLimitError|Rate limit/i.test(errMsg)) return true
+  // Phase 9.2.c (post-2026-06-11 RCA) — upstream gateway transients.
+  // 11 Jun 2026: 3 consecutive batches died with HTTP 502 Bad Gateway and
+  // were skipped (12 tables lost → hard-fail). 502/503/504/408 are the
+  // RFC-7231 canonical idempotent-retryable statuses; safe to retry under
+  // the same 2-retry / 5s+15s / 8-min-budget / BATCH_SIZE_RETRY=1 envelope.
+  if (/\bHTTP\s+(?:408|502|503|504)\b/.test(errMsg)) return true
+  // Network-layer transients surfaced by fetch / Deno runtime.
+  if (/fetch failed|ECONNRESET|ETIMEDOUT|socket hang up|network error/i.test(errMsg)) return true
   // Explicitly NON-transient: schema / permission / RLS / validation /
-  // generic 5xx other than 546. Do not retry.
+  // remaining 5xx (500/501/505+). Do not retry.
   return false
 }
 
