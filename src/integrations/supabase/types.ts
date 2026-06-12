@@ -9094,6 +9094,7 @@ export type Database = {
           id: string
           incident_id: string
           mime_type: string | null
+          original_file_name: string | null
           original_file_path: string | null
           original_size_bytes: number | null
           size_bytes: number | null
@@ -9111,6 +9112,7 @@ export type Database = {
           id?: string
           incident_id: string
           mime_type?: string | null
+          original_file_name?: string | null
           original_file_path?: string | null
           original_size_bytes?: number | null
           size_bytes?: number | null
@@ -9128,6 +9130,7 @@ export type Database = {
           id?: string
           incident_id?: string
           mime_type?: string | null
+          original_file_name?: string | null
           original_file_path?: string | null
           original_size_bytes?: number | null
           size_bytes?: number | null
@@ -13239,6 +13242,10 @@ export type Database = {
         Returns: undefined
       }
       refresh_safety_analytics: { Args: never; Returns: Json }
+      rename_incident_evidence: {
+        Args: { p_evidence_id: string; p_new_file_name: string }
+        Returns: Json
+      }
       repair_multimonth_workflow_drift_v5: {
         Args: { p_apply?: boolean }
         Returns: Json
