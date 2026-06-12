@@ -13289,10 +13289,6 @@ export type Database = {
       start_drill: { Args: { p_drill_id: string }; Returns: Json }
       submit_audit_run: { Args: { p_run_id: string }; Returns: Json }
       submit_permit: { Args: { p_permit_id: string }; Returns: Json }
-      submit_training_attempt: {
-        Args: { _answers: Json; _attempt_id: string; _reading_seconds?: number }
-        Returns: Json
-      }
       suggest_alias_candidates: {
         Args: { p_limit?: number; p_min_similarity?: number }
         Returns: {

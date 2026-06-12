@@ -1,0 +1,1 @@
+DROP FUNCTION IF EXISTS public.submit_training_attempt(uuid, jsonb, integer);
