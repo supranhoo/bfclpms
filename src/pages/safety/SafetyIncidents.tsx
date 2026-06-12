@@ -356,6 +356,11 @@ export default function SafetyIncidents() {
               <>
                 <SafetyStatusBadge status={i.status} />
                 <SlaBadge state={i.sla_state} />
+                {(i as any).duplicate_of_id && (
+                  <Badge variant="outline" className="text-[10px] uppercase">
+                    {i.status === 'closed' ? 'Duplicate' : 'Duplicate pending'}
+                  </Badge>
+                )}
               </>
             }
           />
@@ -424,7 +429,16 @@ export default function SafetyIncidents() {
                     )}
                   </TableCell>
                 )}
-                <TableCell><SafetyStatusBadge status={i.status} /></TableCell>
+                <TableCell>
+                  <div className="flex flex-wrap items-center gap-1">
+                    <SafetyStatusBadge status={i.status} />
+                    {(i as any).duplicate_of_id && (
+                      <Badge variant="outline" className="text-[10px] uppercase">
+                        {i.status === 'closed' ? 'Duplicate' : 'Dup pending'}
+                      </Badge>
+                    )}
+                  </div>
+                </TableCell>
                 <TableCell>
                   {i.sla_status ? (
                     <Badge variant={SAFETY_SLA_STATUS_TONE[i.sla_status]}>
