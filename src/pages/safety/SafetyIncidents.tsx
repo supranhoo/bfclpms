@@ -328,7 +328,18 @@ export default function SafetyIncidents() {
                 )}
               </>
             }
-            meta={format(new Date(i.created_at), 'dd MMM yyyy, HH:mm')}
+            meta={
+              <>
+                {format(new Date(i.created_at), 'dd MMM yyyy, HH:mm')}
+                {(i as any).reporter_full_name && (
+                  <> · by {(i as any).reporter_full_name}
+                    {(i as any).reporter_employee_code && (
+                      <> ({(i as any).reporter_employee_code})</>
+                    )}
+                  </>
+                )}
+              </>
+            }
             badges={
               <>
                 <SafetyStatusBadge status={i.status} />
