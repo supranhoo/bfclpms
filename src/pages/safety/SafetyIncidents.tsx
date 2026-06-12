@@ -104,9 +104,19 @@ async function fetchIncidentsPage({
 
   // Hydrate involved-person profile (employee_code + full_name) so the
   // Accident-filtered grid can surface the involved employee inline.
-  const personIds = Array.from(
-    new Set(rows.map((r) => r.involved_person_id).filter(Boolean) as string[]),
-  );
+  //
+  // Performance: skip this round-trip entirely unless the active type
+  // filter resolves to an accident-style type. Without this guard the
+  // join fires on EVERY page fetch — including types that never need
+  // it — wasting one full profiles query per page. (Perf CAPA Wave 1.)
+  const typeName = (filters as IncidentFilters & { __typeName?: string }).__typeName;
+  const needsPersonHydration =
+    !!typeName && /accident/i.test(typeName);
+  const personIds = needsPersonHydration
+    ? Array.from(
+        new Set(rows.map((r) => r.involved_person_id).filter(Boolean) as string[]),
+      )
+    : [];
   if (personIds.length) {
     const { data: profs } = await supabase
       .from('profiles')

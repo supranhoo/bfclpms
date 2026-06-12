@@ -11,7 +11,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { AlertTriangle, ExternalLink, Loader2 } from 'lucide-react';
-import { useSafetyIncidents } from '@/hooks/useSafetyIncidents';
+import { useSafetySlaQueue } from '@/hooks/useSafetyIncidents';
 import {
   badgeToneFor,
   classifySla,
@@ -21,7 +21,9 @@ import {
 import { useNowTick } from '@/hooks/useNowTick';
 
 export function SafetySlaQueueCard() {
-  const { data, isLoading } = useSafetyIncidents();
+  // Scoped query: only open, red/amber incidents — capped at 100 server-side.
+  // Replaces the previous unbounded select('*') of every incident.
+  const { data, isLoading } = useSafetySlaQueue();
   // Phase 2 / Safety migration — live tick so amber→red transitions and
   // countdown labels refresh without waiting for the next cache invalidation.
   const now = useNowTick(30_000);
