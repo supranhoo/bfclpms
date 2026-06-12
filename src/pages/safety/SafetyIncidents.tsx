@@ -282,12 +282,30 @@ export default function SafetyIncidents() {
             7-stage workflow: Reported → Assigned → Investigation → RCA → CAPA → Verification → Closed
           </p>
         </div>
-        <Button asChild className="hidden md:inline-flex">
-          <Link to="/safety/incidents/new">
-            <Plus className="h-4 w-4 mr-2" />
-            Report Incident
-          </Link>
-        </Button>
+        <div className="flex items-center gap-2">
+          {canExportExcel && (
+            <Button
+              variant="outline"
+              onClick={handleExportExcel}
+              disabled={isExporting}
+              className="hidden md:inline-flex"
+              title="Export filtered incidents to Excel (Safety Head / Admin)"
+            >
+              {isExporting ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <FileDown className="h-4 w-4 mr-2" />
+              )}
+              Export Excel
+            </Button>
+          )}
+          <Button asChild className="hidden md:inline-flex">
+            <Link to="/safety/incidents/new">
+              <Plus className="h-4 w-4 mr-2" />
+              Report Incident
+            </Link>
+          </Button>
+        </div>
       </div>
 
       <SafetyFilterSheet
