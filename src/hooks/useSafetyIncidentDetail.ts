@@ -10,6 +10,11 @@ import {
 } from '@/lib/imageCompression';
 import { useImageCompressionSettings } from '@/hooks/useImageCompressionSettings';
 import { useSafetyIncident } from '@/hooks/useSafetyIncidents';
+import {
+  buildEvidenceDisplayName,
+  nextEvidenceSequence,
+  safeEmployeeCode,
+} from '@/lib/safetyEvidenceNaming';
 
 export interface TimelineRow {
   id: string;
@@ -121,7 +126,7 @@ export function useIncidentEvidence(incidentId: string | undefined) {
 
 export function useUploadEvidence(incidentId: string) {
   const qc = useQueryClient();
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const { enabled: compressionEnabled, policy: compressionPolicy } =
     useImageCompressionSettings();
   const { data: incident } = useSafetyIncident(incidentId);
@@ -139,17 +144,35 @@ export function useUploadEvidence(incidentId: string) {
       });
       const out = compResult.file;
 
+      // Storage path keeps a sanitized form of the ORIGINAL filename for
+      // technical traceability; the user-facing display name is auto-generated.
       const safeName = out.name.replace(/[^a-zA-Z0-9._-]/g, '_');
       const path = `${user.id}/${incidentId}/${stage}/${Date.now()}_${safeName}`;
       const { error: upErr } = await supabase.storage
         .from('safety-media')
         .upload(path, out, { contentType: out.type });
       if (upErr) throw upErr;
+
+      // Generate the standardized display name: {StageLabel}_{EmployeeCode}_v{n}.
+      const employeeCode = safeEmployeeCode(profile?.employee_code, user.id);
+      const { data: existing } = await supabase
+        .from('safety_incident_evidence')
+        .select('stage, uploaded_by, file_name')
+        .eq('incident_id', incidentId);
+      const sequence = nextEvidenceSequence({
+        rows: (existing ?? []) as Array<{ stage: EvidenceStage; uploaded_by: string; file_name: string }>,
+        stage,
+        uploadedBy: user.id,
+        employeeCode,
+      });
+      const displayName = buildEvidenceDisplayName({ stage, employeeCode, sequence });
+
       const { error: insErr } = await supabase.from('safety_incident_evidence').insert({
         incident_id: incidentId,
         stage,
         file_path: path,
-        file_name: out.name,
+        file_name: displayName,
+        original_file_name: out.name,
         mime_type: out.type,
         size_bytes: out.size,
         uploaded_by: user.id,
