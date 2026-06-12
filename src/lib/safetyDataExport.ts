@@ -33,7 +33,7 @@ export const DATASETS: DatasetDef[] = [
     key: 'incidents',
     label: 'Incidents',
     table: 'safety_incidents',
-    columns: ['id', 'ref_code', 'title', 'severity', 'stage', 'status', 'occurred_at', 'reported_at', 'business_unit_id', 'department_id', 'reporter_id', 'assigned_to', 'closed_at'],
+    columns: ['id', 'ref_code', 'title', 'severity', 'stage', 'status', 'occurred_at', 'reported_at', 'business_unit_id', 'department_id', 'reporter_id', 'actual_reporter_id', 'assigned_to', 'closed_at'],
     dateColumn: 'occurred_at',
     orderBy: 'occurred_at',
   },
