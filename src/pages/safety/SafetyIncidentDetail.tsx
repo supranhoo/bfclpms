@@ -36,6 +36,8 @@ import { RoutingChainDisplay } from '@/components/safety/RoutingChainDisplay';
 import { IncidentSlaPanel } from '@/components/safety/IncidentSlaPanel';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSafetyPermissions } from '@/hooks/useSafetyPermissions';
+import { useQuery } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
 
 export default function SafetyIncidentDetail() {
   const { id } = useParams<{ id: string }>();
@@ -54,6 +56,26 @@ export default function SafetyIncidentDetail() {
   const uiV2 = settings.find((r) => r.key === 'ui_incident_v2')?.value === true;
   const { user } = useAuth();
   const { can } = useSafetyPermissions();
+
+  // Hydrate reporter + actual-reporter profile data for the detail header.
+  const reporterIds = [incident?.reporter_id, (incident as any)?.actual_reporter_id]
+    .filter(Boolean) as string[];
+  const { data: reporterProfiles = [] } = useQuery({
+    queryKey: ['safety', 'incident-detail-reporters', reporterIds.sort().join(',')],
+    enabled: reporterIds.length > 0,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, full_name, employee_code')
+        .in('id', reporterIds);
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+  const reporterProfile = reporterProfiles.find((p: any) => p.id === incident?.reporter_id) as any;
+  const actualReporterProfile = (incident as any)?.actual_reporter_id
+    ? reporterProfiles.find((p: any) => p.id === (incident as any).actual_reporter_id) as any
+    : null;
 
   if (isLoading) {
     return (
@@ -139,6 +161,32 @@ export default function SafetyIncidentDetail() {
               <p className="text-xs text-muted-foreground">Involved</p>
               <p className="text-xs sm:text-sm">{incident.involved_person_name ?? '—'}</p>
             </div>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm pt-1 border-t">
+            <div>
+              <p className="text-xs text-muted-foreground">Reported by</p>
+              <p className="text-xs sm:text-sm">
+                {reporterProfile?.full_name ?? '—'}
+                {reporterProfile?.employee_code && (
+                  <span className="ml-1 font-mono text-muted-foreground">
+                    ({reporterProfile.employee_code})
+                  </span>
+                )}
+              </p>
+            </div>
+            {actualReporterProfile && (
+              <div>
+                <p className="text-xs text-muted-foreground">On behalf of</p>
+                <p className="text-xs sm:text-sm">
+                  {actualReporterProfile.full_name}
+                  {actualReporterProfile.employee_code && (
+                    <span className="ml-1 font-mono text-muted-foreground">
+                      ({actualReporterProfile.employee_code})
+                    </span>
+                  )}
+                </p>
+              </div>
+            )}
           </div>
           <RoutingChainDisplay
             buHeadId={incident.routed_bu_head_id ?? null}
