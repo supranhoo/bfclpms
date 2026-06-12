@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useSafetyAnalytics, useRefreshSafetyAnalytics } from '@/hooks/useSafetyAnalytics';
-import { aggregateTotals, complianceBand, trirBand, toCsv } from '@/lib/safetyAnalytics';
+import { aggregateTotals, complianceBand, toCsv } from '@/lib/safetyAnalytics';
 import { useSafetySettings } from '@/hooks/useSafetySettings';
 import { SafetyTrendChart } from '@/components/safety/analytics/SafetyTrendChart';
 import { SafetyHeatmap } from '@/components/safety/analytics/SafetyHeatmap';
@@ -12,7 +12,7 @@ import { Badge } from '@/components/ui/badge';
 import { SafetySkeletonBlock } from '@/components/safety/SafetySkeletonBlock';
 import {
   BarChart3, RefreshCw, Loader2, Download, AlertTriangle,
-  CheckCircle2, GraduationCap, ClipboardCheck, FileSignature, Activity, ArrowLeft,
+  CheckCircle2, ClipboardCheck, FileSignature, ArrowLeft,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -35,16 +35,19 @@ export default function SafetyAnalytics() {
 
   function handleExport() {
     if (!data) return;
-    const rows = data.trir.map((t) => {
-      const sev = data.severity.find((s) => s.business_unit_id === t.business_unit_id);
-      const oc = data.open_vs_closed.find((o) => o.business_unit_id === t.business_unit_id);
-      const aud = data.audit_scoreboard.find((a) => a.business_unit_id === t.business_unit_id);
-      const pt = data.permit_throughput.find((p) => p.business_unit_id === t.business_unit_id);
+    const buIds = Array.from(new Set([
+      ...data.severity.map((s) => s.business_unit_id),
+      ...data.open_vs_closed.map((o) => o.business_unit_id),
+      ...data.audit_scoreboard.map((a) => a.business_unit_id),
+      ...data.permit_throughput.map((p) => p.business_unit_id),
+    ]));
+    const rows = buIds.map((buId) => {
+      const sev = data.severity.find((s) => s.business_unit_id === buId);
+      const oc = data.open_vs_closed.find((o) => o.business_unit_id === buId);
+      const aud = data.audit_scoreboard.find((a) => a.business_unit_id === buId);
+      const pt = data.permit_throughput.find((p) => p.business_unit_id === buId);
       return {
-        business_unit_id: t.business_unit_id ?? '(unassigned)',
-        hours_worked: t.hours_worked,
-        recordable_cases: t.recordable_cases,
-        trir: t.trir ?? '',
+        business_unit_id: buId ?? '(unassigned)',
         critical: sev?.critical_count ?? 0,
         high: sev?.high_count ?? 0,
         medium: sev?.medium_count ?? 0,
@@ -56,7 +59,7 @@ export default function SafetyAnalytics() {
       };
     });
     const csv = toCsv(rows, [
-      'business_unit_id', 'hours_worked', 'recordable_cases', 'trir',
+      'business_unit_id',
       'critical', 'high', 'medium', 'low', 'open', 'closed',
       'audit_avg', 'permits_active',
     ]);
@@ -77,8 +80,6 @@ export default function SafetyAnalytics() {
     );
   }
 
-  const trirInfo = trirBand(totals.orgTrir);
-
   return (
     <div className="w-full space-y-6">
       <div className="flex flex-wrap items-start gap-4">
@@ -88,15 +89,10 @@ export default function SafetyAnalytics() {
         <div className="flex-1 min-w-[220px]">
           <h1 className="text-2xl sm:text-3xl font-bold text-foreground">Safety Analytics</h1>
           <p className="text-muted-foreground">
-            TRIR, severity, training, audit, and permit performance — last 12 months.
+            Severity, audit, and permit performance — last 12 months.
           </p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" asChild>
-            <Link to="/safety/settings/hours-worked" className="flex items-center gap-1">
-              <Activity className="h-4 w-4" /> Hours Entry
-            </Link>
-          </Button>
           <Button variant="outline" size="sm" onClick={handleExport}>
             <Download className="h-4 w-4 mr-1" /> Export CSV
           </Button>
@@ -125,14 +121,7 @@ export default function SafetyAnalytics() {
       </div>
 
       {/* KPI tiles */}
-      <div className="grid grid-cols-2 lg:grid-cols-6 gap-3">
-        <KpiTile
-          label="Org TRIR (12mo)"
-          value={totals.orgTrir == null ? '—' : totals.orgTrir.toFixed(2)}
-          sub={trirInfo.label}
-          tone={trirInfo.tone}
-          icon={<Activity className="h-4 w-4" />}
-        />
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <KpiTile
           label="Open Incidents"
           value={totals.openIncidents}
@@ -153,12 +142,6 @@ export default function SafetyAnalytics() {
           tone="destructive"
           icon={<AlertTriangle className="h-4 w-4" />}
           onClick={v2Enabled ? () => setDrill('critical') : undefined}
-        />
-        <KpiTile
-          label="Training %"
-          value={totals.trainingPct == null ? '—' : `${totals.trainingPct}%`}
-          tone="primary"
-          icon={<GraduationCap className="h-4 w-4" />}
         />
         <KpiTile
           label="Active Permits"
@@ -183,13 +166,13 @@ export default function SafetyAnalytics() {
             <BarChart3 className="h-4 w-4" /> Business Unit Heatmap
           </CardTitle>
           <CardDescription>
-            TRIR, audit average, and incident posture per business unit.
+            Audit average and incident posture per business unit.
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {data.trir.length === 0 ? (
+          {data.open_vs_closed.length === 0 && data.audit_scoreboard.length === 0 && data.permit_throughput.length === 0 ? (
             <p className="text-sm text-muted-foreground py-6 text-center">
-              No business unit data yet. Add hours-worked entries to start TRIR tracking.
+              No business unit data yet.
             </p>
           ) : (
             <div className="overflow-x-auto">
@@ -197,9 +180,6 @@ export default function SafetyAnalytics() {
                 <thead>
                   <tr className="border-b text-left text-muted-foreground">
                     <th className="py-2 pr-4">BU</th>
-                    <th className="py-2 pr-4 text-right">Hours</th>
-                    <th className="py-2 pr-4 text-right">Recordables</th>
-                    <th className="py-2 pr-4 text-right">TRIR</th>
                     <th className="py-2 pr-4 text-right">Open</th>
                     <th className="py-2 pr-4 text-right">Closed</th>
                     <th className="py-2 pr-4 text-right">Audit Avg</th>
@@ -207,25 +187,19 @@ export default function SafetyAnalytics() {
                   </tr>
                 </thead>
                 <tbody>
-                  {data.trir.map((row) => {
-                    const oc = data.open_vs_closed.find((o) => o.business_unit_id === row.business_unit_id);
-                    const aud = data.audit_scoreboard.find((a) => a.business_unit_id === row.business_unit_id);
-                    const pt = data.permit_throughput.find((p) => p.business_unit_id === row.business_unit_id);
-                    const ti = trirBand(row.trir);
+                  {Array.from(new Set([
+                    ...data.open_vs_closed.map((o) => o.business_unit_id),
+                    ...data.audit_scoreboard.map((a) => a.business_unit_id),
+                    ...data.permit_throughput.map((p) => p.business_unit_id),
+                  ])).map((buId) => {
+                    const oc = data.open_vs_closed.find((o) => o.business_unit_id === buId);
+                    const aud = data.audit_scoreboard.find((a) => a.business_unit_id === buId);
+                    const pt = data.permit_throughput.find((p) => p.business_unit_id === buId);
                     const ab = complianceBand(aud?.avg_score ?? null);
                     return (
-                      <tr key={row.business_unit_id ?? 'na'} className="border-b last:border-0">
+                      <tr key={buId ?? 'na'} className="border-b last:border-0">
                         <td className="py-2 pr-4 font-mono text-xs">
-                          {row.business_unit_id?.slice(0, 8) ?? '(unassigned)'}
-                        </td>
-                        <td className="py-2 pr-4 text-right tabular-nums">
-                          {Number(row.hours_worked).toLocaleString()}
-                        </td>
-                        <td className="py-2 pr-4 text-right tabular-nums">{row.recordable_cases}</td>
-                        <td className="py-2 pr-4 text-right">
-                          <Badge variant={ti.tone === 'destructive' ? 'destructive' : 'secondary'}>
-                            {row.trir == null ? '—' : row.trir} · {ti.label}
-                          </Badge>
+                          {buId?.slice(0, 8) ?? '(unassigned)'}
                         </td>
                         <td className="py-2 pr-4 text-right tabular-nums">{oc?.open_count ?? 0}</td>
                         <td className="py-2 pr-4 text-right tabular-nums">{oc?.closed_count ?? 0}</td>

@@ -78,11 +78,9 @@ Deno.serve(async (req) => {
     const filter = (q: any) =>
       bu ? q.eq('business_unit_id', bu) : q;
 
-    const [trir, sev, oc, train, audit, permit] = await Promise.all([
-      filter(supabase.from('mv_safety_trir').select('*')),
+    const [sev, oc, audit, permit] = await Promise.all([
       filter(supabase.from('mv_safety_severity_rate').select('*')),
       filter(supabase.from('mv_safety_incidents_open_vs_closed').select('*')),
-      supabase.from('mv_safety_training_compliance').select('*').limit(1).maybeSingle(),
       filter(supabase.from('mv_safety_audit_scoreboard').select('*')),
       filter(supabase.from('mv_safety_permit_throughput').select('*')),
     ]);
@@ -91,10 +89,8 @@ Deno.serve(async (req) => {
       JSON.stringify({
         ok: true,
         result: {
-          trir: trir.data ?? [],
           severity: sev.data ?? [],
           open_vs_closed: oc.data ?? [],
-          training: train.data ?? null,
           audit_scoreboard: audit.data ?? [],
           permit_throughput: permit.data ?? [],
           refreshed_at: new Date().toISOString(),
