@@ -17,9 +17,20 @@ import {
   compressImageFile,
   type CompressionPolicy,
 } from '@/lib/imageCompression';
+import {
+  buildEvidenceDisplayName,
+  nextEvidenceSequence,
+  safeEmployeeCode,
+} from '@/lib/safetyEvidenceNaming';
 
 export interface SubmitIncidentArgs {
   reporterId: string;
+  /**
+   * Reporter's employee code (from profile). Used to compose the
+   * auto-generated evidence display name `Reported_{code}_v{n}`. When
+   * missing, falls back to a short hash of the reporter id.
+   */
+  reporterEmployeeCode?: string | null;
   payload: ReportIncidentInput; // must include client_submission_id when retrying offline
   files: { name: string; type: string; size: number; blob: Blob | File }[];
   /**
@@ -43,7 +54,7 @@ export interface SubmitIncidentResult {
 export async function submitSafetyIncident(
   args: SubmitIncidentArgs,
 ): Promise<SubmitIncidentResult> {
-  const { reporterId, payload, files, compression } = args;
+  const { reporterId, payload, files, compression, reporterEmployeeCode } = args;
 
   if (!payload.client_submission_id) {
     throw new Error('client_submission_id is required for safe submission');
@@ -85,13 +96,23 @@ export async function submitSafetyIncident(
   // 2) Upload evidence — skip files whose path already exists in the table.
   const { data: existingEvidence } = await supabase
     .from('safety_incident_evidence')
-    .select('file_name, size_bytes')
-    .eq('incident_id', row.id)
-    .eq('stage', 'report');
+    .select('stage, uploaded_by, file_name, size_bytes, original_file_name')
+    .eq('incident_id', row.id);
 
   const alreadyUploaded = new Set(
-    (existingEvidence ?? []).map((e: any) => `${e.file_name}::${e.size_bytes}`),
+    (existingEvidence ?? []).map(
+      (e: any) => `${e.original_file_name ?? e.file_name}::${e.size_bytes}`,
+    ),
   );
+
+  const employeeCode = safeEmployeeCode(reporterEmployeeCode ?? null, reporterId);
+  // Mutable working copy so each new upload in this batch increments the seq.
+  const evidenceRows: { stage: 'report'; uploaded_by: string; file_name: string }[] =
+    ((existingEvidence ?? []) as any[]).map((e) => ({
+      stage: e.stage,
+      uploaded_by: e.uploaded_by ?? reporterId,
+      file_name: e.file_name,
+    }));
 
   for (const f of files) {
     const dedupKey = `${f.name}::${f.size}`;
@@ -123,13 +144,28 @@ export async function submitSafetyIncident(
       .from('safety-media')
       .upload(path, outBody, { contentType: outType });
     if (upErr) throw upErr;
+
+    const sequence = nextEvidenceSequence({
+      rows: evidenceRows,
+      stage: 'report',
+      uploadedBy: reporterId,
+      employeeCode,
+    });
+    const displayName = buildEvidenceDisplayName({
+      stage: 'report',
+      employeeCode,
+      sequence,
+    });
+    evidenceRows.push({ stage: 'report', uploaded_by: reporterId, file_name: displayName });
+
     const { error: evErr } = await supabase
       .from('safety_incident_evidence')
       .insert({
         incident_id: row.id,
         stage: 'report',
         file_path: path,
-        file_name: outName,
+        file_name: displayName,
+        original_file_name: outName,
         mime_type: outType,
         size_bytes: outSize,
         uploaded_by: reporterId,

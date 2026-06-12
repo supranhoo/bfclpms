@@ -115,6 +115,6 @@ Lean-Load: debounce search inputs (>200 rows / network); paginate new lists with
 
 - [Safety Actual Reporter](mem://features/safety/actual-reporter) — Optional file-on-behalf-of (actual_reporter_id), display/audit only, set via RPC
 - [Safety Duplicate Incident Handling](mem://features/safety/duplicate-incident-handling) — BU Head marks open incident as duplicate of master; Safety Head closes via dedicated RPC; SLA keeps ticking until closure
-- [Safety Evidence Rename](mem://features/safety/evidence-rename) — Uploader-only display-name rename; storage path immutable; original_file_name preserved for audit
+- [Safety Evidence Auto-Naming](mem://features/safety/evidence-rename) — Auto-generated {Stage}_{EmpCode}_v{n} display names; original_file_name + storage path immutable; manual rename removed
 - [Safety Incident Excel Export](mem://features/safety/excel-export) — Safety-Head/Admin .xlsx export with locked columns; server-paginated over the SLA view; reuses existing xlsx dep
 - [Safety Incident Advanced Filters](mem://features/safety/incident-filters) — Array-based multi-select + date-range presets on /safety/incidents; server-side .in/.gte/.lte

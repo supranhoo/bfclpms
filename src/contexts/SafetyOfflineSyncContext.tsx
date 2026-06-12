@@ -39,7 +39,7 @@ const SafetyOfflineSyncContext = createContext<SafetyOfflineSyncValue | null>(nu
 
 /** Internal worker hook — kept private so it can only be instantiated by the provider. */
 function useSafetyOfflineSyncInternal(): SafetyOfflineSyncValue {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const qc = useQueryClient();
   const { enabled: compressionEnabled, policy: compressionPolicy } =
     useImageCompressionSettings();
@@ -76,6 +76,7 @@ function useSafetyOfflineSyncInternal(): SafetyOfflineSyncValue {
         try {
           await submitSafetyIncident({
             reporterId: user.id,
+            reporterEmployeeCode: profile?.employee_code ?? null,
             payload: it.payload,
             files: adaptPendingFiles(it.files),
             compression: {

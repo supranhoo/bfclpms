@@ -66,7 +66,7 @@ const REQUIRES_INVOLVED_CODES = new Set(['unsafe_act', 'accident']);
 
 export default function SafetyIncidentNew() {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const qc = useQueryClient();
   const { isOnline } = useSafetyOfflineSync();
   const { data: businessUnits = [] } = useBusinessUnits();
@@ -246,6 +246,7 @@ export default function SafetyIncidentNew() {
     try {
       const created = await submitSafetyIncident({
         reporterId: user.id,
+        reporterEmployeeCode: profile?.employee_code ?? null,
         payload,
         files: files.map((f) => ({ name: f.name, type: f.type, size: f.size, blob: f })),
         compression: {
