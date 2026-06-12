@@ -38,10 +38,11 @@ export const INCIDENT_EXPORT_COLUMNS = [
 ] as const;
 
 export interface IncidentExportFilters {
-  status?: string;
-  severityId?: string;
-  typeId?: string;
-  slaStatus?: string;
+  statuses?: string[];
+  severityIds?: string[];
+  typeIds?: string[];
+  slaStatuses?: string[];
+  buIds?: string[];
   search?: string;
   from?: string;
   to?: string;
@@ -68,10 +69,11 @@ async function fetchIncidentRows(
       .select('*')
       .order('created_at', { ascending: false })
       .range(offset, offset + PAGE - 1);
-    if (filters.status && filters.status !== 'all') q = q.eq('status', filters.status);
-    if (filters.severityId && filters.severityId !== 'all') q = q.eq('severity_id', filters.severityId);
-    if (filters.typeId && filters.typeId !== 'all') q = q.eq('incident_type_id', filters.typeId);
-    if (filters.slaStatus && filters.slaStatus !== 'all') q = q.eq('sla_status', filters.slaStatus);
+    if (filters.statuses?.length) q = q.in('status', filters.statuses);
+    if (filters.severityIds?.length) q = q.in('severity_id', filters.severityIds);
+    if (filters.typeIds?.length) q = q.in('incident_type_id', filters.typeIds);
+    if (filters.slaStatuses?.length) q = q.in('sla_status', filters.slaStatuses);
+    if (filters.buIds?.length) q = q.in('business_unit_id', filters.buIds);
     if (filters.from) q = q.gte('created_at', filters.from);
     if (filters.to) q = q.lte('created_at', filters.to);
     if (filters.search?.trim()) {
