@@ -10,3 +10,4 @@ type: feature
 - Accident-style hydration triggers when ANY submitted type matches `/accident/i` (per-type id check).
 - Excel export (`exportIncidentsToExcel`) accepts the same array-shaped filters — keep them in sync if you add new filter dimensions.
 - ID-keyed multi-select: use `MultiSelectId` (`@/components/ui/multi-select-id`) when the WHERE clause is on id but the user sees a label. String enum filters keep using `MultiSelectFilter`.
+- Applied filters are surfaced as removable chips via `SafetyActiveFilterChips`. Chips derive from the `applied` snapshot (NOT the live `draft`) so they reflect what data is actually filtered by; chip removal re-submits immediately via the page's `applyPatch()` helper. Type chip removal cascade-clears severities.
