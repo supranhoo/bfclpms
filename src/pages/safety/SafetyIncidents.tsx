@@ -134,6 +134,27 @@ async function fetchIncidentsPage({
     }
   }
 
+  // Hydrate the reporter's name + employee code for the "Reported" column.
+  // Always runs (vs. involved-person which is type-gated) because every row
+  // surfaces this column. Single batched IN() — one round-trip per page.
+  const reporterIds = Array.from(
+    new Set(rows.map((r) => r.reporter_id).filter(Boolean) as string[]),
+  );
+  if (reporterIds.length) {
+    const { data: reporters } = await supabase
+      .from('profiles')
+      .select('id, full_name, employee_code')
+      .in('id', reporterIds);
+    const rmap = new Map((reporters ?? []).map((p: any) => [p.id, p]));
+    for (const r of rows as any[]) {
+      const p = rmap.get(r.reporter_id);
+      if (p) {
+        r.reporter_full_name = p.full_name;
+        r.reporter_employee_code = p.employee_code;
+      }
+    }
+  }
+
   return { rows, total: count ?? 0 };
 }
 
@@ -307,7 +328,18 @@ export default function SafetyIncidents() {
                 )}
               </>
             }
-            meta={format(new Date(i.created_at), 'dd MMM yyyy, HH:mm')}
+            meta={
+              <>
+                {format(new Date(i.created_at), 'dd MMM yyyy, HH:mm')}
+                {(i as any).reporter_full_name && (
+                  <> · by {(i as any).reporter_full_name}
+                    {(i as any).reporter_employee_code && (
+                      <> ({(i as any).reporter_employee_code})</>
+                    )}
+                  </>
+                )}
+              </>
+            }
             badges={
               <>
                 <SafetyStatusBadge status={i.status} />
@@ -421,7 +453,17 @@ export default function SafetyIncidents() {
                   )}
                 </TableCell>
                 <TableCell className="text-xs text-muted-foreground">
-                  {format(new Date(i.created_at), 'dd MMM yyyy, HH:mm')}
+                  <div>{format(new Date(i.created_at), 'dd MMM yyyy, HH:mm')}</div>
+                  {(i as any).reporter_full_name && (
+                    <div className="text-foreground mt-0.5">
+                      {(i as any).reporter_full_name}
+                    </div>
+                  )}
+                  {(i as any).reporter_employee_code && (
+                    <div className="font-mono">
+                      {(i as any).reporter_employee_code}
+                    </div>
+                  )}
                 </TableCell>
               </TableRow>
             ))}
