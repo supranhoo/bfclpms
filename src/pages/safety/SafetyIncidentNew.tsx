@@ -84,6 +84,11 @@ export default function SafetyIncidentNew() {
   const [involvedName, setInvolvedName] = useState('');
   const [involvedPickerOpen, setInvolvedPickerOpen] = useState(false);
   const [involvedSearch, setInvolvedSearch] = useState('');
+  // "Reported on behalf of" — optional secondary reporter (employee picker only).
+  const [actualReporterId, setActualReporterId] = useState<string>('');
+  const [actualReporterLabel, setActualReporterLabel] = useState<string>('');
+  const [actualReporterOpen, setActualReporterOpen] = useState(false);
+  const [actualReporterSearch, setActualReporterSearch] = useState('');
   const [files, setFiles] = useState<File[]>([]);
   const [submitting, setSubmitting] = useState(false);
 
@@ -101,6 +106,26 @@ export default function SafetyIncidentNew() {
     enabled: involvedPickerOpen && involvedSearch.trim().length >= 2,
     queryFn: async () => {
       const term = involvedSearch.trim();
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, full_name, email, employee_code')
+        .eq('is_active', true)
+        .or(`full_name.ilike.%${term}%,email.ilike.%${term}%,employee_code.ilike.%${term}%`)
+        .order('full_name', { ascending: true })
+        .limit(20);
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
+  // Searchable employee picker for "Reported on behalf of". Strict — must
+  // pick an existing employee (no free text), as the value is stored as a
+  // FK to profiles.id and validated server-side.
+  const actualReporterQuery = useQuery({
+    queryKey: ['safety', 'actual-reporter-search', actualReporterSearch],
+    enabled: actualReporterOpen && actualReporterSearch.trim().length >= 2,
+    queryFn: async () => {
+      const term = actualReporterSearch.trim();
       const { data, error } = await supabase
         .from('profiles')
         .select('id, full_name, email, employee_code')
@@ -182,6 +207,7 @@ export default function SafetyIncidentNew() {
       business_unit_id: businessUnitId || null,
       department_id: departmentId || null,
       involved_person_name: requiresInvolved ? involvedName.trim() : null,
+      actual_reporter_id: actualReporterId || null,
       client_submission_id: clientSubmissionId,
     };
 
