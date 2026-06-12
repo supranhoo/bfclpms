@@ -209,7 +209,10 @@ export function useSopAssignments(sopId: string | undefined) {
         .select('*')
         .eq('sop_id', sopId!)
         .order('status', { ascending: true })
-        .limit(2000);
+        // Wave 3 / POLICY §113: cap aligned with the per-user 500 list. A
+        // single SOP with 500+ live assignments needs paginated UX; for now
+        // we hard-cap rather than silently truncating at 2k client memory.
+        .range(0, 499);
       if (error) throw error;
       return (data ?? []) as SafetyTrainingAssignmentRow[];
     },
@@ -252,7 +255,12 @@ export function useUpsertSop() {
       if (error) throw error;
       return data as SafetySopRow;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['safety', 'training'] }),
+    onSuccess: (row) => {
+      // Wave 3: scoped invalidation — SOP writes only touch SOP lists/details,
+      // never quiz attempts or assignments. (POLICY §110)
+      qc.invalidateQueries({ queryKey: ['safety', 'training', 'sops'] });
+      qc.invalidateQueries({ queryKey: ['safety', 'training', 'sop', row.id] });
+    },
   });
 }
 
@@ -262,8 +270,14 @@ export function useDeleteSop() {
     mutationFn: async (sopId: string) => {
       const { error } = await supabase.from('safety_sops').delete().eq('id', sopId);
       if (error) throw error;
+      return sopId;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['safety', 'training'] }),
+    onSuccess: (sopId) => {
+      qc.invalidateQueries({ queryKey: ['safety', 'training', 'sops'] });
+      qc.invalidateQueries({ queryKey: ['safety', 'training', 'sop', sopId] });
+      qc.invalidateQueries({ queryKey: ['safety', 'training', 'quiz-for-sop', sopId] });
+      qc.invalidateQueries({ queryKey: ['safety', 'training', 'assignments', 'by-sop', sopId] });
+    },
   });
 }
 
@@ -294,7 +308,10 @@ export function useUpsertQuiz() {
       if (error) throw error;
       return data as SafetyQuizRow;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['safety', 'training'] }),
+    onSuccess: (row) => {
+      qc.invalidateQueries({ queryKey: ['safety', 'training', 'quiz-for-sop', row.sop_id] });
+      qc.invalidateQueries({ queryKey: ['safety', 'training', 'questions', row.id] });
+    },
   });
 }
 
@@ -330,7 +347,9 @@ export function useUpsertQuestion() {
       if (error) throw error;
       return data;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['safety', 'training'] }),
+    onSuccess: (row: any) => {
+      qc.invalidateQueries({ queryKey: ['safety', 'training', 'questions', row?.quiz_id] });
+    },
   });
 }
 
@@ -341,7 +360,12 @@ export function useDeleteQuestion() {
       const { error } = await supabase.from('safety_quiz_questions').delete().eq('id', id);
       if (error) throw error;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['safety', 'training'] }),
+    onSuccess: () => {
+      // We don't know the quiz_id here (only the question id), so we
+      // invalidate the questions sub-tree only — much narrower than the
+      // whole training cache.
+      qc.invalidateQueries({ queryKey: ['safety', 'training', 'questions'] });
+    },
   });
 }
 
@@ -365,7 +389,7 @@ export function useAssignSopToRole() {
       if (error) throw error;
       return data as { ok: boolean; error?: string; result?: { assigned: number; due_at: string } };
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['safety', 'training'] }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['safety', 'training', 'assignments'] }),
   });
 }
 
@@ -383,7 +407,7 @@ export function useStartTrainingAttempt() {
       if (!env?.ok || !env.result) throw new Error(env?.error ?? 'Could not start attempt');
       return env.result;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['safety', 'training'] }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['safety', 'training', 'assignments'] }),
   });
 }
 
@@ -409,6 +433,6 @@ export function useSubmitTrainingAttempt() {
       if (!env?.ok || !env.result) throw new Error(env?.error ?? 'Submission failed');
       return env.result;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['safety', 'training'] }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['safety', 'training', 'assignments'] }),
   });
 }
