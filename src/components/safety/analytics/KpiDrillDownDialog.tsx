@@ -1,8 +1,9 @@
 /**
  * Phase 10 — Safety Analytics v2: KPI drill-down dialog
  * -----------------------------------------------------
- * Click a KPI tile, get the matching incidents listed. Pure read on
- * the already-cached `useSafetyIncidents()` query — no new fetch.
+ * Click a KPI tile, get the matching incidents listed. Scoped server-
+ * side query (Perf CAPA Wave 1): only fires when the dialog is open
+ * AND a kind is set, capped at 100 rows.
  */
 import { Link } from 'react-router-dom';
 import {
@@ -15,9 +16,12 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { ExternalLink, Loader2 } from 'lucide-react';
-import { useSafetyIncidents, type SafetyIncidentRow } from '@/hooks/useSafetyIncidents';
-
-export type DrillKey = 'open' | 'closed' | 'critical';
+import {
+  useSafetyIncidentsByDrillKey,
+  type DrillKey,
+  type SafetyIncidentRow,
+} from '@/hooks/useSafetyIncidents';
+export type { DrillKey };
 
 interface Props {
   open: boolean;
@@ -38,8 +42,11 @@ function matches(row: SafetyIncidentRow, kind: DrillKey): boolean {
 }
 
 export function KpiDrillDownDialog({ open, onOpenChange, kind }: Props) {
-  const { data, isLoading } = useSafetyIncidents();
-  const filtered = kind && data ? data.filter((r) => matches(r, kind)) : [];
+  // Scoped query — fires only when the dialog is open AND a kind is set,
+  // and caps at 100 rows server-side. Replaces the previous in-memory
+  // filter of every incident row.
+  const { data, isLoading } = useSafetyIncidentsByDrillKey(kind, open);
+  const filtered: SafetyIncidentRow[] = (data ?? []) as SafetyIncidentRow[];
   const meta = kind ? TITLES[kind] : null;
 
   return (

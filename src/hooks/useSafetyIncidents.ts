@@ -67,6 +67,12 @@ export interface SafetyIncidentRow {
 
 export const SAFETY_INCIDENTS_KEY = ['safety', 'incidents'] as const;
 
+/**
+ * @deprecated POLICY §113 / ADR-050 — list hooks must paginate.
+ * Do not use in new code. Existing call sites have been migrated to the
+ * scoped hooks below (`useSafetySlaQueue`, `useSafetyIncidentsByDrillKey`).
+ * Kept as a no-throw shim for one release to allow safe rollback.
+ */
 export function useSafetyIncidents() {
   return useQuery({
     queryKey: SAFETY_INCIDENTS_KEY,
@@ -75,6 +81,65 @@ export function useSafetyIncidents() {
         .from('safety_incidents_with_sla' as never)
         .select('*')
         .order('created_at', { ascending: false });
+      if (error) throw error;
+      return (data ?? []) as unknown as SafetyIncidentRow[];
+    },
+    // Hard cap: never auto-run on mount (was the source of the unbounded
+    // shell-level fetch). Callers must opt in by enabling explicitly.
+    enabled: false,
+  });
+}
+
+/**
+ * Scoped query for SafetyHome's At-Risk SLA queue. Returns only open
+ * incidents whose `sla_state` is red or amber, ordered by SLA due-time
+ * ascending (most urgent first). Capped server-side at 100 rows.
+ */
+export const SAFETY_SLA_QUEUE_KEY = ['safety', 'incidents', 'sla-queue'] as const;
+export function useSafetySlaQueue(enabled = true) {
+  return useQuery({
+    queryKey: SAFETY_SLA_QUEUE_KEY,
+    enabled,
+    staleTime: 30_000,
+    queryFn: async (): Promise<SafetyIncidentRow[]> => {
+      const { data, error } = await supabase
+        .from('safety_incidents_with_sla' as never)
+        .select('*')
+        .neq('status', 'closed')
+        .neq('status', 'orphaned')
+        .in('sla_state', ['red', 'amber'])
+        .order('sla_due_at', { ascending: true, nullsFirst: false })
+        .range(0, 99);
+      if (error) throw error;
+      return (data ?? []) as unknown as SafetyIncidentRow[];
+    },
+  });
+}
+
+/**
+ * Scoped query for the analytics KPI drill-down dialog. Each drill kind
+ * maps to a narrow server-side predicate so we never load the whole
+ * incidents table into the browser.
+ */
+export type DrillKey = 'open' | 'closed' | 'critical';
+export function useSafetyIncidentsByDrillKey(
+  kind: DrillKey | null,
+  enabled = true,
+) {
+  return useQuery({
+    queryKey: ['safety', 'incidents', 'drill', kind],
+    enabled: enabled && !!kind,
+    staleTime: 30_000,
+    queryFn: async (): Promise<SafetyIncidentRow[]> => {
+      let q = supabase
+        .from('safety_incidents_with_sla' as never)
+        .select('*')
+        .order('created_at', { ascending: false })
+        .range(0, 99);
+      if (kind === 'open') q = q.not('status', 'in', '(closed,orphaned)');
+      else if (kind === 'closed') q = q.eq('status', 'closed');
+      else if (kind === 'critical') q = q.eq('severity', 'critical');
+      const { data, error } = await q;
       if (error) throw error;
       return (data ?? []) as unknown as SafetyIncidentRow[];
     },

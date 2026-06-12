@@ -52,11 +52,14 @@ interface IncidentFilters {
   severityId: string;
   /** safety_incident_types.id or 'all' */
   typeId: string;
+  /** Resolved type name (snapshot at submit time) — drives whether the
+   *  fetcher hydrates involved-person profiles. NOT part of the WHERE clause. */
+  typeName: string | null;
   slaStatus: string;
   search: string;
 }
 
-const INITIAL: IncidentFilters = { status: 'all', severityId: 'all', typeId: 'all', slaStatus: 'all', search: '' };
+const INITIAL: IncidentFilters = { status: 'all', severityId: 'all', typeId: 'all', typeName: null, slaStatus: 'all', search: '' };
 
 async function fetchIncidentsPage({
   filters, range,
@@ -104,9 +107,18 @@ async function fetchIncidentsPage({
 
   // Hydrate involved-person profile (employee_code + full_name) so the
   // Accident-filtered grid can surface the involved employee inline.
-  const personIds = Array.from(
-    new Set(rows.map((r) => r.involved_person_id).filter(Boolean) as string[]),
-  );
+  //
+  // Performance: skip this round-trip entirely unless the active type
+  // filter resolves to an accident-style type. Without this guard the
+  // join fires on EVERY page fetch — including types that never need
+  // it — wasting one full profiles query per page. (Perf CAPA Wave 1.)
+  const needsPersonHydration =
+    !!filters.typeName && /accident/i.test(filters.typeName);
+  const personIds = needsPersonHydration
+    ? Array.from(
+        new Set(rows.map((r) => r.involved_person_id).filter(Boolean) as string[]),
+      )
+    : [];
   if (personIds.length) {
     const { data: profs } = await supabase
       .from('profiles')
@@ -143,7 +155,13 @@ export default function SafetyIncidents() {
     fetchIncidentsPage,
   );
 
-  const handleSubmit = () => { setSubmittedTypeId(draft.typeId); submit(draft); };
+  const handleSubmit = () => {
+    setSubmittedTypeId(draft.typeId);
+    const resolved = draft.typeId !== 'all'
+      ? typeOptions.find((t) => t.id === draft.typeId)?.name ?? null
+      : null;
+    submit({ ...draft, typeName: resolved });
+  };
   const handleReset = () => { setDraft(INITIAL); setSubmittedTypeId('all'); reset(); };
 
   // Dynamic dropdown sources — replaces the hardcoded type/severity lists.

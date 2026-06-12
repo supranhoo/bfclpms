@@ -15,6 +15,7 @@ Agent safety: zero destructive autonomy, stop-and-ask on errors, propose-don't-a
 Engineering: SSOT+POLICY.md sync, RCA with regression test, lean UI / logic in hooks, RLS-first, pre-impl Risk & Impact Report. See engineering-standards.
 Lean-Load: debounce search inputs (>200 rows / network); paginate new lists with `.range()`; `useAllKpis` slim projection; full-org reads only via sanctioned `fetchAllPaged` sites. See lean-load-policy (POLICY §120).
 - [System Settings Ownership Inventory](mem://infrastructure/system-settings-ownership-inventory) — Complete audit of settings surfaces, tables, keys, role ownership, RBAC enforcement, gaps
+- [Safety Perf CAPA Wave 1](mem://infrastructure/safety-perf-capa-wave-1) — Forbids unbounded incidents reads; SafetyHome SLA queue + KPI drill-down + incidents accident-join scoped to server-side predicates (v2.66.19)
 
 ## Memories
 - [Page loading overlay pattern](mem://design/page-loading-overlay-pattern) — Centered PageLoadingOverlay wired in DashboardLayout (Suspense + RouteDataLoadingGate), rocket+chart art
