@@ -144,12 +144,7 @@ export function useSafetyAnalytics(businessUnitId?: string | null) {
           : await q;
         return (res.data as unknown[]) ?? [];
       };
-      const trainRes = await (
-        sb.from('mv_safety_training_compliance').select('*') as unknown as Promise<{ data: unknown }>
-      );
-      const trainArr = (trainRes.data as unknown[]) ?? [];
-      const [trir, sev, oc, audit, permit] = await Promise.all([
-        fetchView('mv_safety_trir'),
+      const [sev, oc, audit, permit] = await Promise.all([
         fetchView('mv_safety_severity_rate'),
         fetchView('mv_safety_incidents_open_vs_closed'),
         fetchView('mv_safety_audit_scoreboard'),
@@ -158,10 +153,8 @@ export function useSafetyAnalytics(businessUnitId?: string | null) {
       const trend = await fetchView('mv_safety_incident_monthly_trend');
 
       return {
-        trir: trir as SafetyAnalyticsPayload['trir'],
         severity: sev as SafetyAnalyticsPayload['severity'],
         open_vs_closed: oc as SafetyAnalyticsPayload['open_vs_closed'],
-        training: (trainArr[0] as SafetyAnalyticsPayload['training']) ?? null,
         audit_scoreboard: audit as SafetyAnalyticsPayload['audit_scoreboard'],
         permit_throughput: permit as SafetyAnalyticsPayload['permit_throughput'],
         monthly_trend: trend as SafetyAnalyticsPayload['monthly_trend'],
@@ -185,60 +178,5 @@ export function useRefreshSafetyAnalytics() {
       return data as { ok: boolean; error?: string; refreshed_at?: string };
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: KEY }),
-  });
-}
-
-/* ===== Hours-worked admin entry ===== */
-const HOURS_KEY = ['safety', 'hours-worked'] as const;
-
-export function useSafetyHoursWorked() {
-  return useQuery({
-    queryKey: HOURS_KEY,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('safety_hours_worked')
-        .select('*, business_units(name)')
-        .order('period_year', { ascending: false })
-        .order('period_month', { ascending: false });
-      if (error) throw error;
-      return data ?? [];
-    },
-  });
-}
-
-export function useUpsertSafetyHours() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async (input: {
-      business_unit_id: string;
-      period_year: number;
-      period_month: number;
-      hours_worked: number;
-      headcount?: number | null;
-      notes?: string | null;
-    }) => {
-      const { error } = await supabase
-        .from('safety_hours_worked')
-        .upsert(input, { onConflict: 'business_unit_id,period_year,period_month' });
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: HOURS_KEY });
-      qc.invalidateQueries({ queryKey: ['safety', 'analytics'] });
-    },
-  });
-}
-
-export function useDeleteSafetyHours() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase.from('safety_hours_worked').delete().eq('id', id);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: HOURS_KEY });
-      qc.invalidateQueries({ queryKey: ['safety', 'analytics'] });
-    },
   });
 }
