@@ -211,6 +211,38 @@ export default function SafetyIncidents() {
     { activeOnly: false },
   );
 
+  // Excel export — visible to Safety Head and Admin only. Reuses the
+  // same view + filters as the list, so RLS + scope stay consistent.
+  const { effectiveRole } = useAuth();
+  const { data: myRoles = [] } = useMySafetyRoleRows();
+  const canExportExcel =
+    effectiveRole === 'admin' || myRoles.some((r) => r.role === 'safety_head');
+  const [isExporting, setIsExporting] = useState(false);
+  const handleExportExcel = async () => {
+    if (isExporting) return;
+    setIsExporting(true);
+    const t = toast.loading('Preparing Excel export…');
+    try {
+      const res = await exportIncidentsToExcel({
+        status: draft.status,
+        severityId: draft.severityId,
+        typeId: draft.typeId,
+        slaStatus: draft.slaStatus,
+        search: draft.search,
+      });
+      toast.success(
+        res.capped
+          ? `Exported first ${MAX_INCIDENT_EXPORT_ROWS.toLocaleString()} rows (cap reached) → ${res.fileName}`
+          : `Exported ${res.rowCount.toLocaleString()} incident${res.rowCount === 1 ? '' : 's'} → ${res.fileName}`,
+        { id: t },
+      );
+    } catch (err) {
+      toast.error(`Export failed: ${err instanceof Error ? err.message : 'Unknown error'}`, { id: t });
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   /**
    * Show the "Involved Person" column when the submitted Type filter resolves
    * to an Accident-style incident type. Match by name (case-insensitive) so
