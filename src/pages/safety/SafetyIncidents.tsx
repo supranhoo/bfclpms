@@ -324,6 +324,80 @@ export default function SafetyIncidents() {
     return n;
   }, [draft]);
 
+  /**
+   * Apply a patch to the filter state, mark it as applied, and immediately
+   * re-run the query. Used by chip removal so users get instant feedback
+   * without re-clicking Search.
+   */
+  const applyPatch = (patch: Partial<IncidentFilters>) => {
+    const next = { ...(applied ?? draft), ...patch };
+    setDraft(next);
+    setApplied(next);
+    setSubmittedTypeIds(next.typeIds);
+    const names = next.typeIds
+      .map((id) => typeOptions.find((t) => t.id === id)?.name)
+      .filter(Boolean) as string[];
+    submit({ ...next, typeNames: names });
+  };
+
+  const chips: SafetyFilterChip[] = useMemo(() => {
+    if (!applied) return [];
+    const out: SafetyFilterChip[] = [];
+    const removeFromArray = (key: keyof IncidentFilters, id: string) => () => {
+      const current = (applied[key] as string[]) ?? [];
+      applyPatch({ [key]: current.filter((x) => x !== id) } as Partial<IncidentFilters>);
+    };
+    applied.statuses.forEach((s) =>
+      out.push({ key: `status:${s}`, label: 'Status', value: STATUS_LABEL(s), onRemove: removeFromArray('statuses', s) }),
+    );
+    applied.typeIds.forEach((id) => {
+      const t = typeOptions.find((x) => x.id === id);
+      out.push({
+        key: `type:${id}`,
+        label: 'Type',
+        value: t?.name ?? id,
+        onRemove: () => applyPatch({ typeIds: applied.typeIds.filter((x) => x !== id), severityIds: [] }),
+      });
+    });
+    applied.severityIds.forEach((id) => {
+      const s = severityOptions.find((x) => x.id === id);
+      out.push({ key: `sev:${id}`, label: 'Severity', value: s?.label ?? id, onRemove: removeFromArray('severityIds', id) });
+    });
+    applied.slaStatuses.forEach((s) =>
+      out.push({
+        key: `sla:${s}`,
+        label: 'SLA',
+        value: SAFETY_SLA_STATUS_LABELS[s as keyof typeof SAFETY_SLA_STATUS_LABELS] ?? s,
+        onRemove: removeFromArray('slaStatuses', s),
+      }),
+    );
+    applied.buIds.forEach((id) => {
+      const b = businessUnits.find((x) => x.id === id);
+      out.push({ key: `bu:${id}`, label: 'BU', value: b?.name ?? id, onRemove: removeFromArray('buIds', id) });
+    });
+    if (applied.datePreset !== 'all') {
+      const label =
+        applied.datePreset === 'custom'
+          ? `${applied.customFrom ?? '…'} → ${applied.customTo ?? '…'}`
+          : DATE_RANGE_PRESET_LABELS[applied.datePreset];
+      out.push({
+        key: 'date',
+        label: 'Created',
+        value: label,
+        onRemove: () => applyPatch({ datePreset: 'all', customFrom: null, customTo: null }),
+      });
+    }
+    if (applied.search.trim()) {
+      out.push({
+        key: 'search',
+        label: 'Search',
+        value: `"${applied.search.trim()}"`,
+        onRemove: () => applyPatch({ search: '' }),
+      });
+    }
+    return out;
+  }, [applied, typeOptions, severityOptions, businessUnits]);
+
   return (
     <div className="space-y-4 p-3 sm:p-6">
       <div className="flex items-center justify-between gap-4 flex-wrap">
