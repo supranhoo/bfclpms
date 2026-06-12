@@ -114,3 +114,4 @@ Lean-Load: debounce search inputs (>200 rows / network); paginate new lists with
 - [Safety Perf CAPA Wave 3](mem://infrastructure/safety-perf-capa-wave-3) — Scoped training mutation invalidation + SOP assignments cap (Safety)
 
 - [Safety Actual Reporter](mem://features/safety/actual-reporter) — Optional file-on-behalf-of (actual_reporter_id), display/audit only, set via RPC
+- [Safety Duplicate Incident Handling](mem://features/safety/duplicate-incident-handling) — BU Head marks open incident as duplicate of master; Safety Head closes via dedicated RPC; SLA keeps ticking until closure
