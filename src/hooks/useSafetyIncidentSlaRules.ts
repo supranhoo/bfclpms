@@ -63,6 +63,28 @@ export interface SlaRuleInput {
   is_active?: boolean;
 }
 
+/**
+ * Friendly translation for the unique-index violations enforced server-side:
+ *   - uq_safety_sla_rules_active_specific      (type, severity, priority WHERE is_active)
+ *   - uq_safety_sla_rules_active_any_priority  (type, severity      WHERE is_active AND priority IS NULL)
+ * Surfacing the raw Postgres message ("duplicate key value violates …") is
+ * confusing to end-users — translate to an actionable hint instead.
+ */
+function translateSlaRuleError(e: unknown): string {
+  const err = e as { code?: string; message?: string };
+  const msg = err?.message ?? '';
+  if (err?.code === '23505' || /duplicate key value/i.test(msg)) {
+    if (/uq_safety_sla_rules_active_any_priority/i.test(msg)) {
+      return 'An active "Any priority (catch-all)" rule already exists for this Incident Type + Severity. Edit the existing rule, choose a specific priority, or deactivate the existing rule first.';
+    }
+    if (/uq_safety_sla_rules_active_specific/i.test(msg)) {
+      return 'An active rule already exists for this Incident Type + Severity + Priority. Edit the existing rule or deactivate it before adding a new one.';
+    }
+    return 'A matching active rule already exists. Edit or deactivate the existing rule first.';
+  }
+  return msg || 'Save failed';
+}
+
 export function useUpsertSafetyIncidentSlaRule() {
   const qc = useQueryClient();
   return useMutation({
@@ -86,7 +108,7 @@ export function useUpsertSafetyIncidentSlaRule() {
       toast.success(vars.id ? 'Rule updated' : 'Rule created');
       qc.invalidateQueries({ queryKey: KEY });
     },
-    onError: (e: Error) => toast.error(e.message ?? 'Save failed'),
+    onError: (e: Error) => toast.error(translateSlaRuleError(e)),
   });
 }
 
