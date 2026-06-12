@@ -9036,53 +9036,6 @@ export type Database = {
         }
         Relationships: []
       }
-      safety_hours_worked: {
-        Row: {
-          business_unit_id: string | null
-          created_at: string
-          created_by: string | null
-          headcount: number | null
-          hours_worked: number
-          id: string
-          notes: string | null
-          period_month: number
-          period_year: number
-          updated_at: string
-        }
-        Insert: {
-          business_unit_id?: string | null
-          created_at?: string
-          created_by?: string | null
-          headcount?: number | null
-          hours_worked: number
-          id?: string
-          notes?: string | null
-          period_month: number
-          period_year: number
-          updated_at?: string
-        }
-        Update: {
-          business_unit_id?: string | null
-          created_at?: string
-          created_by?: string | null
-          headcount?: number | null
-          hours_worked?: number
-          id?: string
-          notes?: string | null
-          period_month?: number
-          period_year?: number
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "safety_hours_worked_business_unit_id_fkey"
-            columns: ["business_unit_id"]
-            isOneToOne: false
-            referencedRelation: "business_units"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       safety_incident_evidence: {
         Row: {
           compressed_at: string | null
@@ -10452,91 +10405,6 @@ export type Database = {
         }
         Relationships: []
       }
-      safety_quiz_questions: {
-        Row: {
-          correct_index: number
-          created_at: string
-          id: string
-          options: Json
-          prompt: string
-          quiz_id: string
-          sort_order: number
-          weight: number
-        }
-        Insert: {
-          correct_index: number
-          created_at?: string
-          id?: string
-          options: Json
-          prompt: string
-          quiz_id: string
-          sort_order?: number
-          weight?: number
-        }
-        Update: {
-          correct_index?: number
-          created_at?: string
-          id?: string
-          options?: Json
-          prompt?: string
-          quiz_id?: string
-          sort_order?: number
-          weight?: number
-        }
-        Relationships: [
-          {
-            foreignKeyName: "safety_quiz_questions_quiz_id_fkey"
-            columns: ["quiz_id"]
-            isOneToOne: false
-            referencedRelation: "safety_quizzes"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      safety_quizzes: {
-        Row: {
-          created_at: string
-          id: string
-          is_active: boolean
-          max_attempts: number
-          pass_threshold: number
-          randomize: boolean
-          sop_id: string
-          time_limit_seconds: number | null
-          updated_at: string
-        }
-        Insert: {
-          created_at?: string
-          id?: string
-          is_active?: boolean
-          max_attempts?: number
-          pass_threshold?: number
-          randomize?: boolean
-          sop_id: string
-          time_limit_seconds?: number | null
-          updated_at?: string
-        }
-        Update: {
-          created_at?: string
-          id?: string
-          is_active?: boolean
-          max_attempts?: number
-          pass_threshold?: number
-          randomize?: boolean
-          sop_id?: string
-          time_limit_seconds?: number | null
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "safety_quizzes_sop_id_fkey"
-            columns: ["sop_id"]
-            isOneToOne: true
-            referencedRelation: "safety_sops"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       safety_role_permissions: {
         Row: {
           is_allowed: boolean
@@ -10652,157 +10520,6 @@ export type Database = {
             columns: ["incident_id"]
             isOneToOne: false
             referencedRelation: "safety_incidents_with_sla"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      safety_sops: {
-        Row: {
-          attachments: Json
-          body_md: string
-          category: string | null
-          code: string
-          created_at: string
-          created_by: string | null
-          id: string
-          is_active: boolean
-          min_read_seconds: number
-          published_at: string | null
-          title: string
-          updated_at: string
-          version: number
-        }
-        Insert: {
-          attachments?: Json
-          body_md?: string
-          category?: string | null
-          code: string
-          created_at?: string
-          created_by?: string | null
-          id?: string
-          is_active?: boolean
-          min_read_seconds?: number
-          published_at?: string | null
-          title: string
-          updated_at?: string
-          version?: number
-        }
-        Update: {
-          attachments?: Json
-          body_md?: string
-          category?: string | null
-          code?: string
-          created_at?: string
-          created_by?: string | null
-          id?: string
-          is_active?: boolean
-          min_read_seconds?: number
-          published_at?: string | null
-          title?: string
-          updated_at?: string
-          version?: number
-        }
-        Relationships: []
-      }
-      safety_training_assignments: {
-        Row: {
-          assigned_by: string | null
-          attempts_count: number
-          business_unit_id: string | null
-          completed_at: string | null
-          created_at: string
-          due_at: string | null
-          id: string
-          last_attempt_at: string | null
-          sop_id: string
-          status: Database["public"]["Enums"]["safety_training_status"]
-          updated_at: string
-          user_id: string
-        }
-        Insert: {
-          assigned_by?: string | null
-          attempts_count?: number
-          business_unit_id?: string | null
-          completed_at?: string | null
-          created_at?: string
-          due_at?: string | null
-          id?: string
-          last_attempt_at?: string | null
-          sop_id: string
-          status?: Database["public"]["Enums"]["safety_training_status"]
-          updated_at?: string
-          user_id: string
-        }
-        Update: {
-          assigned_by?: string | null
-          attempts_count?: number
-          business_unit_id?: string | null
-          completed_at?: string | null
-          created_at?: string
-          due_at?: string | null
-          id?: string
-          last_attempt_at?: string | null
-          sop_id?: string
-          status?: Database["public"]["Enums"]["safety_training_status"]
-          updated_at?: string
-          user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "safety_training_assignments_sop_id_fkey"
-            columns: ["sop_id"]
-            isOneToOne: false
-            referencedRelation: "safety_sops"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      safety_training_attempts: {
-        Row: {
-          answers: Json
-          assignment_id: string
-          created_at: string
-          finished_at: string | null
-          id: string
-          passed: boolean | null
-          question_order: Json
-          reading_seconds: number
-          score: number | null
-          started_at: string
-          user_id: string
-        }
-        Insert: {
-          answers?: Json
-          assignment_id: string
-          created_at?: string
-          finished_at?: string | null
-          id?: string
-          passed?: boolean | null
-          question_order?: Json
-          reading_seconds?: number
-          score?: number | null
-          started_at?: string
-          user_id: string
-        }
-        Update: {
-          answers?: Json
-          assignment_id?: string
-          created_at?: string
-          finished_at?: string | null
-          id?: string
-          passed?: boolean | null
-          question_order?: Json
-          reading_seconds?: number
-          score?: number | null
-          started_at?: string
-          user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "safety_training_attempts_assignment_id_fkey"
-            columns: ["assignment_id"]
-            isOneToOne: false
-            referencedRelation: "safety_training_assignments"
             referencedColumns: ["id"]
           },
         ]
@@ -11901,26 +11618,6 @@ export type Database = {
           cause: string | null
           incidents: number | null
           severity: string | null
-        }
-        Relationships: []
-      }
-      mv_safety_training_compliance: {
-        Row: {
-          compliance_pct: number | null
-          overdue_count: number | null
-          passed_count: number | null
-          refreshed_at: string | null
-          total_assignments: number | null
-        }
-        Relationships: []
-      }
-      mv_safety_trir: {
-        Row: {
-          business_unit_id: string | null
-          hours_worked: number | null
-          recordable_cases: number | null
-          refreshed_at: string | null
-          trir: number | null
         }
         Relationships: []
       }
@@ -13114,7 +12811,6 @@ export type Database = {
         Returns: Json
       }
       mark_overdue_assets: { Args: never; Returns: Json }
-      mark_overdue_training_assignments: { Args: never; Returns: Json }
       materialize_kpis_for_org_kpi: {
         Args: {
           p_category_id: string
@@ -13820,12 +13516,6 @@ export type Database = {
         | "lifting"
         | "general"
       safety_priority: "low" | "medium" | "high" | "critical"
-      safety_training_status:
-        | "pending"
-        | "in_progress"
-        | "passed"
-        | "failed"
-        | "overdue"
       tni_gap_type: "skill" | "knowledge" | "behavior" | "compliance"
       tni_priority: "high" | "medium" | "low"
       tni_status:
@@ -14097,13 +13787,6 @@ export const Constants = {
         "general",
       ],
       safety_priority: ["low", "medium", "high", "critical"],
-      safety_training_status: [
-        "pending",
-        "in_progress",
-        "passed",
-        "failed",
-        "overdue",
-      ],
       tni_gap_type: ["skill", "knowledge", "behavior", "compliance"],
       tni_priority: ["high", "medium", "low"],
       tni_status: [

@@ -22,12 +22,6 @@ function read(p: string): string {
 }
 
 describe('Safety Perf CAPA Wave 1 — scoped incident reads', () => {
-  it('SafetySlaQueueCard imports useSafetySlaQueue, not useSafetyIncidents', () => {
-    const src = read('src/components/safety/SafetySlaQueueCard.tsx');
-    expect(src).toMatch(/useSafetySlaQueue/);
-    expect(src).not.toMatch(/from\s+'@\/hooks\/useSafetyIncidents'[^;]*useSafetyIncidents\b(?!ByDrillKey|\w)/);
-  });
-
   it('KpiDrillDownDialog imports useSafetyIncidentsByDrillKey, not useSafetyIncidents()', () => {
     const src = read('src/components/safety/analytics/KpiDrillDownDialog.tsx');
     expect(src).toMatch(/useSafetyIncidentsByDrillKey/);

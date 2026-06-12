@@ -11,7 +11,6 @@ export type SettingValue = unknown;
 /** Known setting keys with their defaults (mirror of DB seeds). */
 export const SAFETY_SETTING_DEFAULTS = {
   ptw_expiry_warning_hours: 2,
-  training_overdue_escalation_days: 3,
   audit_compliance_thresholds: { excellent: 90, good: 75, fair: 60 },
   emergency_ack_window_minutes: 5,
   drill_required_per_year: 4,

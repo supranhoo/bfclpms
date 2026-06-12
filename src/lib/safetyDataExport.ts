@@ -14,10 +14,8 @@ export type DatasetKey =
   | 'incidents'
   | 'assets'
   | 'audit_runs'
-  | 'training_assignments'
   | 'permits'
-  | 'drills'
-  | 'hours_worked';
+  | 'drills';
 
 interface DatasetDef {
   key: DatasetKey;
@@ -54,14 +52,6 @@ export const DATASETS: DatasetDef[] = [
     orderBy: 'started_at',
   },
   {
-    key: 'training_assignments',
-    label: 'Training Assignments',
-    table: 'safety_training_assignments',
-    columns: ['id', 'sop_id', 'assignee_id', 'assigned_at', 'due_at', 'completed_at', 'status'],
-    dateColumn: 'assigned_at',
-    orderBy: 'assigned_at',
-  },
-  {
     key: 'permits',
     label: 'Permits to Work',
     table: 'safety_permits',
@@ -76,14 +66,6 @@ export const DATASETS: DatasetDef[] = [
     columns: ['id', 'title', 'drill_type', 'scheduled_at', 'conducted_at', 'status', 'business_unit_id'],
     dateColumn: 'scheduled_at',
     orderBy: 'scheduled_at',
-  },
-  {
-    key: 'hours_worked',
-    label: 'Hours Worked',
-    table: 'safety_hours_worked',
-    columns: ['id', 'business_unit_id', 'month', 'year', 'hours', 'headcount', 'created_at'],
-    dateColumn: 'created_at',
-    orderBy: 'created_at',
   },
 ];
 
