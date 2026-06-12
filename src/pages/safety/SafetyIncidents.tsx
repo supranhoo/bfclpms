@@ -154,7 +154,7 @@ async function fetchIncidentsPage({
   // join fires on EVERY page fetch — including types that never need
   // it — wasting one full profiles query per page. (Perf CAPA Wave 1.)
   const needsPersonHydration =
-    !!filters.typeName && /accident/i.test(filters.typeName);
+    filters.typeNames.some((n) => /accident/i.test(n));
   const personIds = needsPersonHydration
     ? Array.from(
         new Set(rows.map((r) => r.involved_person_id).filter(Boolean) as string[]),
@@ -218,7 +218,7 @@ export default function SafetyIncidents() {
   const navigate = useNavigate();
   const [draft, setDraft] = useState<IncidentFilters>(INITIAL);
   const [orphanTarget, setOrphanTarget] = useState<SafetyIncidentRow | null>(null);
-  const [submittedTypeId, setSubmittedTypeId] = useState<string>('all');
+  const [submittedTypeIds, setSubmittedTypeIds] = useState<string[]>([]);
 
   const {
     rows, total, page, pageSize, totalPages,
@@ -230,20 +230,25 @@ export default function SafetyIncidents() {
   );
 
   const handleSubmit = () => {
-    setSubmittedTypeId(draft.typeId);
-    const resolved = draft.typeId !== 'all'
-      ? typeOptions.find((t) => t.id === draft.typeId)?.name ?? null
-      : null;
-    submit({ ...draft, typeName: resolved });
+    setSubmittedTypeIds(draft.typeIds);
+    const names = draft.typeIds
+      .map((id) => typeOptions.find((t) => t.id === id)?.name)
+      .filter(Boolean) as string[];
+    submit({ ...draft, typeNames: names });
   };
-  const handleReset = () => { setDraft(INITIAL); setSubmittedTypeId('all'); reset(); };
+  const handleReset = () => { setDraft(INITIAL); setSubmittedTypeIds([]); reset(); };
 
   // Dynamic dropdown sources — replaces the hardcoded type/severity lists.
   const { data: typeOptions = [] } = useSafetyIncidentTypes({ activeOnly: false });
+  // Severities scope to the FIRST selected type when exactly one is picked
+  // (preserves the existing cascading dropdown UX); cleared when 0 or >1
+  // types are selected so the user sees no misleading subset.
+  const severityScopeTypeId = draft.typeIds.length === 1 ? draft.typeIds[0] : null;
   const { data: severityOptions = [] } = useSafetyIncidentSeverities(
-    draft.typeId !== 'all' ? draft.typeId : null,
+    severityScopeTypeId,
     { activeOnly: false },
   );
+  const { data: businessUnits = [] } = useBusinessUnits();
 
   // Excel export — visible to Safety Head and Admin only. Reuses the
   // same view + filters as the list, so RLS + scope stay consistent.
@@ -257,12 +262,19 @@ export default function SafetyIncidents() {
     setIsExporting(true);
     const t = toast.loading('Preparing Excel export…');
     try {
+      const { from, to } = resolveDateRange(draft.datePreset, {
+        customFrom: draft.customFrom,
+        customTo: draft.customTo,
+      });
       const res = await exportIncidentsToExcel({
-        status: draft.status,
-        severityId: draft.severityId,
-        typeId: draft.typeId,
-        slaStatus: draft.slaStatus,
+        statuses: draft.statuses,
+        severityIds: draft.severityIds,
+        typeIds: draft.typeIds,
+        slaStatuses: draft.slaStatuses,
+        buIds: draft.buIds,
         search: draft.search,
+        from: from ?? undefined,
+        to: to ?? undefined,
       });
       toast.success(
         res.capped
@@ -284,10 +296,12 @@ export default function SafetyIncidents() {
    * still benefit without code changes — Zero-Hardcoding Rule.
    */
   const showInvolvedPerson = useMemo(() => {
-    if (submittedTypeId === 'all') return false;
-    const t = typeOptions.find((x) => x.id === submittedTypeId);
-    return !!t && /accident/i.test(t.name);
-  }, [submittedTypeId, typeOptions]);
+    if (!submittedTypeIds.length) return false;
+    return submittedTypeIds.some((id) => {
+      const t = typeOptions.find((x) => x.id === id);
+      return !!t && /accident/i.test(t.name);
+    });
+  }, [submittedTypeIds, typeOptions]);
 
   const openRow = (i: SafetyIncidentRow) => {
     if (i.status === 'orphaned') setOrphanTarget(i);
@@ -296,10 +310,12 @@ export default function SafetyIncidents() {
 
   const activeCount = useMemo(() => {
     let n = 0;
-    if (draft.status !== 'all') n++;
-    if (draft.severityId !== 'all') n++;
-    if (draft.typeId !== 'all') n++;
-    if (draft.slaStatus !== 'all') n++;
+    if (draft.statuses.length) n++;
+    if (draft.severityIds.length) n++;
+    if (draft.typeIds.length) n++;
+    if (draft.slaStatuses.length) n++;
+    if (draft.buIds.length) n++;
+    if (draft.datePreset !== 'all') n++;
     if (draft.search.trim()) n++;
     return n;
   }, [draft]);
