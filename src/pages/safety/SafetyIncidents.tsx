@@ -29,6 +29,15 @@ import {
   useSafetyIncidentTypes,
   useSafetyIncidentSeverities,
 } from '@/hooks/useSafetyIncidentTypes';
+import { useBusinessUnits } from '@/hooks/useSafetyOrg';
+import { MultiSelectId } from '@/components/ui/multi-select-id';
+import { MultiSelectFilter } from '@/components/ui/multi-select-filter';
+import {
+  DATE_RANGE_PRESETS,
+  DATE_RANGE_PRESET_LABELS,
+  resolveDateRange,
+  type DateRangePreset,
+} from '@/lib/safetyDateRangePresets';
 import { Badge } from '@/components/ui/badge';
 import type { SafetyIncidentRow } from '@/hooks/useSafetyIncidents';
 import { useMySafetyRoleRows } from '@/hooks/useSafetyIncidents';
@@ -46,27 +55,45 @@ import { format, formatDistanceToNowStrict } from 'date-fns';
  */
 
 const STATUS_OPTIONS = [
-  'all', 'reported', 'management_review', 'assigned', 'investigation', 'rca',
+  'reported', 'management_review', 'assigned', 'investigation', 'rca',
   'corrective_action', 'safety_head_review', 'verification', 'closed', 'orphaned',
 ] as const;
 const SLA_STATUS_OPTIONS = [
-  'all', 'on_track', 'at_risk', 'overdue', 'closed_on_time', 'closed_late',
+  'on_track', 'at_risk', 'overdue', 'closed_on_time', 'closed_late',
 ] as const;
 
+const STATUS_LABEL = (s: string) => s.replace(/_/g, ' ');
+
 interface IncidentFilters {
-  status: string;
-  /** safety_incident_severities.id or 'all' */
-  severityId: string;
-  /** safety_incident_types.id or 'all' */
-  typeId: string;
-  /** Resolved type name (snapshot at submit time) — drives whether the
+  statuses: string[];
+  /** safety_incident_severities.id[] */
+  severityIds: string[];
+  /** safety_incident_types.id[] */
+  typeIds: string[];
+  /** business_units.id[] */
+  buIds: string[];
+  /** Resolved type names (snapshot at submit time) — drives whether the
    *  fetcher hydrates involved-person profiles. NOT part of the WHERE clause. */
-  typeName: string | null;
-  slaStatus: string;
+  typeNames: string[];
+  slaStatuses: string[];
   search: string;
+  datePreset: DateRangePreset;
+  customFrom: string | null;
+  customTo: string | null;
 }
 
-const INITIAL: IncidentFilters = { status: 'all', severityId: 'all', typeId: 'all', typeName: null, slaStatus: 'all', search: '' };
+const INITIAL: IncidentFilters = {
+  statuses: [],
+  severityIds: [],
+  typeIds: [],
+  buIds: [],
+  typeNames: [],
+  slaStatuses: [],
+  search: '',
+  datePreset: 'all',
+  customFrom: null,
+  customTo: null,
+};
 
 async function fetchIncidentsPage({
   filters, range,
@@ -77,10 +104,17 @@ async function fetchIncidentsPage({
     .order('created_at', { ascending: false })
     .range(range[0], range[1]);
 
-  if (filters.status !== 'all') q = q.eq('status', filters.status);
-  if (filters.severityId !== 'all') q = q.eq('severity_id', filters.severityId);
-  if (filters.typeId !== 'all') q = q.eq('incident_type_id', filters.typeId);
-  if (filters.slaStatus !== 'all') q = q.eq('sla_status', filters.slaStatus);
+  if (filters.statuses.length) q = q.in('status', filters.statuses);
+  if (filters.severityIds.length) q = q.in('severity_id', filters.severityIds);
+  if (filters.typeIds.length) q = q.in('incident_type_id', filters.typeIds);
+  if (filters.slaStatuses.length) q = q.in('sla_status', filters.slaStatuses);
+  if (filters.buIds.length) q = q.in('business_unit_id', filters.buIds);
+  const { from, to } = resolveDateRange(filters.datePreset, {
+    customFrom: filters.customFrom,
+    customTo: filters.customTo,
+  });
+  if (from) q = q.gte('created_at', from);
+  if (to) q = q.lte('created_at', to);
   if (filters.search.trim()) {
     const needle = filters.search.trim();
     q = q.or(
@@ -120,7 +154,7 @@ async function fetchIncidentsPage({
   // join fires on EVERY page fetch — including types that never need
   // it — wasting one full profiles query per page. (Perf CAPA Wave 1.)
   const needsPersonHydration =
-    !!filters.typeName && /accident/i.test(filters.typeName);
+    filters.typeNames.some((n) => /accident/i.test(n));
   const personIds = needsPersonHydration
     ? Array.from(
         new Set(rows.map((r) => r.involved_person_id).filter(Boolean) as string[]),
@@ -184,7 +218,7 @@ export default function SafetyIncidents() {
   const navigate = useNavigate();
   const [draft, setDraft] = useState<IncidentFilters>(INITIAL);
   const [orphanTarget, setOrphanTarget] = useState<SafetyIncidentRow | null>(null);
-  const [submittedTypeId, setSubmittedTypeId] = useState<string>('all');
+  const [submittedTypeIds, setSubmittedTypeIds] = useState<string[]>([]);
 
   const {
     rows, total, page, pageSize, totalPages,
@@ -196,20 +230,25 @@ export default function SafetyIncidents() {
   );
 
   const handleSubmit = () => {
-    setSubmittedTypeId(draft.typeId);
-    const resolved = draft.typeId !== 'all'
-      ? typeOptions.find((t) => t.id === draft.typeId)?.name ?? null
-      : null;
-    submit({ ...draft, typeName: resolved });
+    setSubmittedTypeIds(draft.typeIds);
+    const names = draft.typeIds
+      .map((id) => typeOptions.find((t) => t.id === id)?.name)
+      .filter(Boolean) as string[];
+    submit({ ...draft, typeNames: names });
   };
-  const handleReset = () => { setDraft(INITIAL); setSubmittedTypeId('all'); reset(); };
+  const handleReset = () => { setDraft(INITIAL); setSubmittedTypeIds([]); reset(); };
 
   // Dynamic dropdown sources — replaces the hardcoded type/severity lists.
   const { data: typeOptions = [] } = useSafetyIncidentTypes({ activeOnly: false });
+  // Severities scope to the FIRST selected type when exactly one is picked
+  // (preserves the existing cascading dropdown UX); cleared when 0 or >1
+  // types are selected so the user sees no misleading subset.
+  const severityScopeTypeId = draft.typeIds.length === 1 ? draft.typeIds[0] : null;
   const { data: severityOptions = [] } = useSafetyIncidentSeverities(
-    draft.typeId !== 'all' ? draft.typeId : null,
+    severityScopeTypeId,
     { activeOnly: false },
   );
+  const { data: businessUnits = [] } = useBusinessUnits();
 
   // Excel export — visible to Safety Head and Admin only. Reuses the
   // same view + filters as the list, so RLS + scope stay consistent.
@@ -223,12 +262,19 @@ export default function SafetyIncidents() {
     setIsExporting(true);
     const t = toast.loading('Preparing Excel export…');
     try {
+      const { from, to } = resolveDateRange(draft.datePreset, {
+        customFrom: draft.customFrom,
+        customTo: draft.customTo,
+      });
       const res = await exportIncidentsToExcel({
-        status: draft.status,
-        severityId: draft.severityId,
-        typeId: draft.typeId,
-        slaStatus: draft.slaStatus,
+        statuses: draft.statuses,
+        severityIds: draft.severityIds,
+        typeIds: draft.typeIds,
+        slaStatuses: draft.slaStatuses,
+        buIds: draft.buIds,
         search: draft.search,
+        from: from ?? undefined,
+        to: to ?? undefined,
       });
       toast.success(
         res.capped
@@ -250,10 +296,12 @@ export default function SafetyIncidents() {
    * still benefit without code changes — Zero-Hardcoding Rule.
    */
   const showInvolvedPerson = useMemo(() => {
-    if (submittedTypeId === 'all') return false;
-    const t = typeOptions.find((x) => x.id === submittedTypeId);
-    return !!t && /accident/i.test(t.name);
-  }, [submittedTypeId, typeOptions]);
+    if (!submittedTypeIds.length) return false;
+    return submittedTypeIds.some((id) => {
+      const t = typeOptions.find((x) => x.id === id);
+      return !!t && /accident/i.test(t.name);
+    });
+  }, [submittedTypeIds, typeOptions]);
 
   const openRow = (i: SafetyIncidentRow) => {
     if (i.status === 'orphaned') setOrphanTarget(i);
@@ -262,10 +310,12 @@ export default function SafetyIncidents() {
 
   const activeCount = useMemo(() => {
     let n = 0;
-    if (draft.status !== 'all') n++;
-    if (draft.severityId !== 'all') n++;
-    if (draft.typeId !== 'all') n++;
-    if (draft.slaStatus !== 'all') n++;
+    if (draft.statuses.length) n++;
+    if (draft.severityIds.length) n++;
+    if (draft.typeIds.length) n++;
+    if (draft.slaStatuses.length) n++;
+    if (draft.buIds.length) n++;
+    if (draft.datePreset !== 'all') n++;
     if (draft.search.trim()) n++;
     return n;
   }, [draft]);
@@ -314,51 +364,84 @@ export default function SafetyIncidents() {
         isSubmitting={isFetching}
         activeCount={activeCount}
       >
-        <Select value={draft.status} onValueChange={(v) => setDraft((d) => ({ ...d, status: v }))}>
-          <SelectTrigger><SelectValue placeholder="Status" /></SelectTrigger>
-          <SelectContent>
-            {STATUS_OPTIONS.map((s) => (
-              <SelectItem key={s} value={s}>{s === 'all' ? 'All statuses' : s}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <MultiSelectFilter
+          options={STATUS_OPTIONS.map((s) => STATUS_LABEL(s))}
+          value={draft.statuses.map(STATUS_LABEL)}
+          onChange={(labels) =>
+            setDraft((d) => ({
+              ...d,
+              statuses: STATUS_OPTIONS.filter((s) => labels.includes(STATUS_LABEL(s))) as unknown as string[],
+            }))
+          }
+          placeholder="All statuses"
+          searchPlaceholder="Filter statuses…"
+        />
+        <MultiSelectId
+          options={typeOptions.map((t) => ({ id: t.id, label: t.name }))}
+          value={draft.typeIds}
+          onChange={(ids) => setDraft((d) => ({ ...d, typeIds: ids, severityIds: [] }))}
+          placeholder="All types"
+          searchPlaceholder="Filter types…"
+        />
+        <MultiSelectId
+          options={severityOptions.map((s) => ({ id: s.id, label: s.label }))}
+          value={draft.severityIds}
+          onChange={(ids) => setDraft((d) => ({ ...d, severityIds: ids }))}
+          placeholder={
+            draft.typeIds.length === 0
+              ? 'All severities'
+              : draft.typeIds.length > 1
+              ? 'Pick a single type for severity'
+              : 'All severities'
+          }
+          searchPlaceholder="Filter severities…"
+        />
+        <MultiSelectFilter
+          options={SLA_STATUS_OPTIONS.map((s) => SAFETY_SLA_STATUS_LABELS[s])}
+          value={draft.slaStatuses.map((s) => SAFETY_SLA_STATUS_LABELS[s as keyof typeof SAFETY_SLA_STATUS_LABELS])}
+          onChange={(labels) =>
+            setDraft((d) => ({
+              ...d,
+              slaStatuses: SLA_STATUS_OPTIONS.filter((s) => labels.includes(SAFETY_SLA_STATUS_LABELS[s])) as unknown as string[],
+            }))
+          }
+          placeholder="All SLA statuses"
+          searchPlaceholder="Filter SLA…"
+        />
+        <MultiSelectId
+          options={businessUnits.map((b) => ({ id: b.id, label: b.name }))}
+          value={draft.buIds}
+          onChange={(ids) => setDraft((d) => ({ ...d, buIds: ids }))}
+          placeholder="All business units"
+          searchPlaceholder="Filter BUs…"
+        />
         <Select
-          value={draft.typeId}
-          onValueChange={(v) => setDraft((d) => ({ ...d, typeId: v, severityId: 'all' }))}
+          value={draft.datePreset}
+          onValueChange={(v) => setDraft((d) => ({ ...d, datePreset: v as DateRangePreset }))}
         >
-          <SelectTrigger><SelectValue placeholder="Type" /></SelectTrigger>
+          <SelectTrigger><SelectValue placeholder="Date range (Created)" /></SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">All types</SelectItem>
-            {typeOptions.map((t) => (
-              <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+            {DATE_RANGE_PRESETS.map((p) => (
+              <SelectItem key={p} value={p}>{DATE_RANGE_PRESET_LABELS[p]}</SelectItem>
             ))}
           </SelectContent>
         </Select>
-        <Select
-          value={draft.severityId}
-          onValueChange={(v) => setDraft((d) => ({ ...d, severityId: v }))}
-          disabled={draft.typeId === 'all'}
-        >
-          <SelectTrigger>
-            <SelectValue placeholder={draft.typeId === 'all' ? 'Pick a type first' : 'Severity'} />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All severities</SelectItem>
-            {severityOptions.map((s) => (
-              <SelectItem key={s.id} value={s.id}>{s.label}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select value={draft.slaStatus} onValueChange={(v) => setDraft((d) => ({ ...d, slaStatus: v }))}>
-          <SelectTrigger><SelectValue placeholder="SLA status" /></SelectTrigger>
-          <SelectContent>
-            {SLA_STATUS_OPTIONS.map((s) => (
-              <SelectItem key={s} value={s}>
-                {s === 'all' ? 'All SLA statuses' : SAFETY_SLA_STATUS_LABELS[s as keyof typeof SAFETY_SLA_STATUS_LABELS]}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        {draft.datePreset === 'custom' && (
+          <>
+            <Input
+              type="date"
+              value={draft.customFrom ?? ''}
+              onChange={(e) => setDraft((d) => ({ ...d, customFrom: e.target.value || null }))}
+              aria-label="From date"
+            />
+            <Input
+              type="date"
+              value={draft.customTo ?? ''}
+              onChange={(e) => setDraft((d) => ({ ...d, customTo: e.target.value || null }))}
+              aria-label="To date"
+            />
+          </>
+        )}
         <Input
           placeholder="Search title, location, or number…"
           value={draft.search}
