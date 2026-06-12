@@ -527,6 +527,8 @@ export default function SafetyIncidents() {
         />
       </SafetyFilterSheet>
 
+      <SafetyActiveFilterChips chips={chips} onClearAll={handleReset} />
+
       <SafetyResponsiveList
         title="Incidents"
         hasSubmitted={hasSubmitted}
