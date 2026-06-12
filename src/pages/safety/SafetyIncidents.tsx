@@ -55,27 +55,45 @@ import { format, formatDistanceToNowStrict } from 'date-fns';
  */
 
 const STATUS_OPTIONS = [
-  'all', 'reported', 'management_review', 'assigned', 'investigation', 'rca',
+  'reported', 'management_review', 'assigned', 'investigation', 'rca',
   'corrective_action', 'safety_head_review', 'verification', 'closed', 'orphaned',
 ] as const;
 const SLA_STATUS_OPTIONS = [
-  'all', 'on_track', 'at_risk', 'overdue', 'closed_on_time', 'closed_late',
+  'on_track', 'at_risk', 'overdue', 'closed_on_time', 'closed_late',
 ] as const;
 
+const STATUS_LABEL = (s: string) => s.replace(/_/g, ' ');
+
 interface IncidentFilters {
-  status: string;
-  /** safety_incident_severities.id or 'all' */
-  severityId: string;
-  /** safety_incident_types.id or 'all' */
-  typeId: string;
-  /** Resolved type name (snapshot at submit time) — drives whether the
+  statuses: string[];
+  /** safety_incident_severities.id[] */
+  severityIds: string[];
+  /** safety_incident_types.id[] */
+  typeIds: string[];
+  /** business_units.id[] */
+  buIds: string[];
+  /** Resolved type names (snapshot at submit time) — drives whether the
    *  fetcher hydrates involved-person profiles. NOT part of the WHERE clause. */
-  typeName: string | null;
-  slaStatus: string;
+  typeNames: string[];
+  slaStatuses: string[];
   search: string;
+  datePreset: DateRangePreset;
+  customFrom: string | null;
+  customTo: string | null;
 }
 
-const INITIAL: IncidentFilters = { status: 'all', severityId: 'all', typeId: 'all', typeName: null, slaStatus: 'all', search: '' };
+const INITIAL: IncidentFilters = {
+  statuses: [],
+  severityIds: [],
+  typeIds: [],
+  buIds: [],
+  typeNames: [],
+  slaStatuses: [],
+  search: '',
+  datePreset: 'all',
+  customFrom: null,
+  customTo: null,
+};
 
 async function fetchIncidentsPage({
   filters, range,
@@ -86,10 +104,17 @@ async function fetchIncidentsPage({
     .order('created_at', { ascending: false })
     .range(range[0], range[1]);
 
-  if (filters.status !== 'all') q = q.eq('status', filters.status);
-  if (filters.severityId !== 'all') q = q.eq('severity_id', filters.severityId);
-  if (filters.typeId !== 'all') q = q.eq('incident_type_id', filters.typeId);
-  if (filters.slaStatus !== 'all') q = q.eq('sla_status', filters.slaStatus);
+  if (filters.statuses.length) q = q.in('status', filters.statuses);
+  if (filters.severityIds.length) q = q.in('severity_id', filters.severityIds);
+  if (filters.typeIds.length) q = q.in('incident_type_id', filters.typeIds);
+  if (filters.slaStatuses.length) q = q.in('sla_status', filters.slaStatuses);
+  if (filters.buIds.length) q = q.in('business_unit_id', filters.buIds);
+  const { from, to } = resolveDateRange(filters.datePreset, {
+    customFrom: filters.customFrom,
+    customTo: filters.customTo,
+  });
+  if (from) q = q.gte('created_at', from);
+  if (to) q = q.lte('created_at', to);
   if (filters.search.trim()) {
     const needle = filters.search.trim();
     q = q.or(
