@@ -1,83 +1,90 @@
-# Configurable Incident Types & Per-Type Severities
+## RCA — Why Backup Failed Again (2026-06-11 22:30 IST)
 
-## Goal
-Remove the hardcoded `safety_incident_type` and `safety_incident_severity` enums from the user-facing flow. Admins define both Types and the Severities under each Type. New incidents pick Type → then a Severity that belongs to that Type. SLA and routing rules are re-keyed to the new severity rows. Historical incidents keep their original labels via snapshots.
-
-## What changes for the user
-
-### Admin → Safety Settings → Incident Types (new page)
-- Table of incident types: `Name`, `Active`, `# Severities`, actions.
-- Add / Edit dialog: Name, Description (optional), Active toggle.
-- Each row expands into a Severities manager:
-  - Add / Edit / Delete / Reorder severities (drag handle + up/down).
-  - Fields per severity: Label, Code (auto from label, editable), Sort order, Active.
-  - Deleting a severity that is referenced by historical incidents soft-deactivates it instead of hard delete (toast explains why).
-
-### Incident creation form (`SafetyIncidentNew`)
-- "Type" dropdown lists active configured Incident Types.
-- "Severity" dropdown becomes empty + disabled until a Type is chosen, then lists only that Type's active severities.
-- Selected Type & Severity labels are snapshotted onto the incident at submit time.
-
-### Incident list & detail
-- Render the snapshot label (`type_label_snapshot`, `severity_label_snapshot`) so renames/deletes never change historical rows. Falls back to the legacy enum value for incidents created before this change.
-
-### Admin → SLA Rules tab
-- Severity selector becomes cascading: pick Type → pick Severity (from that type's list). Existing rules are migrated to point at seeded severity ids.
-
-## Technical details
-
-### New tables
-```text
-safety_incident_types
-  id uuid pk, name text unique, code text unique, description text,
-  is_active bool, sort_order int, created_at, updated_at
-
-safety_incident_severities
-  id uuid pk, incident_type_id uuid fk -> safety_incident_types(id),
-  label text, code text, sort_order int, is_active bool,
-  created_at, updated_at,
-  unique(incident_type_id, code)
+### Evidence
+From `backup_logs` for the failed run `c7b341a7…`:
 ```
-Both get RLS: read = any authenticated safety user; write = Safety Admin / Safety Head (via `has_safety_role`). GRANTs to authenticated + service_role.
+status        = failed
+tables_count  = 199 / 211   (12 tables missing = 3 batches × 4)
+error_message = "Coverage shrink: 199/211 tables backed up — 3 warning(s):
+                 Batch 5/53 failed (non-transient): HTTP 502;
+                 Batch 6/53 failed (non-transient): HTTP 502;
+                 Batch 7/53 failed (non-transient): HTTP 502"
+```
+Three consecutive early batches got `HTTP 502 Bad Gateway` from the Supabase REST/PostgREST gateway. Hard-fail-on-partial (WP-9.2.a) correctly marked the run `failed`. Working as designed — but the run **should not have lost those batches in the first place.**
 
-### Schema migration on `safety_incidents`
-- Add `incident_type_id uuid`, `severity_id uuid` (nullable, FK with `ON DELETE SET NULL`).
-- Add `type_label_snapshot text`, `severity_label_snapshot text`.
-- Keep existing `incident_type` and `severity` enum columns for one release (read-only historical) — populated via trigger when only the new ids are supplied, so nothing reading the old columns breaks.
+### 5-Why Analysis
 
-### Data seeding (idempotent)
-- Seed 6 incident types from current enum values (`near_miss`, `unsafe_act`, `unsafe_condition`, `accident`, `property_damage`, `environmental`) with their existing labels.
-- Seed the 4 default severities (`low`, `medium`, `high`, `critical`) under every seeded type so historical incidents map cleanly.
-- Backfill `safety_incidents.incident_type_id` / `severity_id` / snapshots from the existing enum values.
+| # | Why? | Answer |
+|---|---|---|
+| 1 | Why did the 11 Jun scheduled backup fail? | Hard-fail triggered: 199 of 211 tables backed up. |
+| 2 | Why were 12 tables missing? | Batches 5, 6, 7 each failed with `HTTP 502` and were skipped. |
+| 3 | Why were those batches skipped instead of retried? | `isTransientChunkError()` in `create-backup/index.ts` (lines 725-737) only treats **HTTP 546 / HTTP 429 / RateLimitError** as transient. `502` falls through to the `// generic 5xx other than 546. Do not retry.` branch. |
+| 4 | Why was that classifier scoped so narrowly? | Phase 9.2 WP-b focused on the then-dominant failure modes (Deno worker OOM = 546, edge rate limits = 429). Upstream gateway transients (502 Bad Gateway, 503 Service Unavailable, 504 Gateway Timeout) were not in the observed sample set and were left as "non-transient". |
+| 5 | Why did we not catch the gap earlier? | Until 11 Jun, the recurring failure pattern was 546 on Batch 46 (one chronically large table) — not 502. The classifier was never stress-tested against a gateway-side blip, so the gap remained latent. The 11 Jun event was the first transient 502 burst since the policy shipped. |
 
-### SLA + routing migration
-- `safety_incident_sla_rules` and `safety_severity_sla`: add `severity_id uuid` FK. Backfill by joining `(incident_type, severity)` → seeded rows. Keep the old enum columns for one release; new admin writes only the id.
-- `safety_incident_routing_rules`: add `incident_type_id` + `severity_id` FKs, backfill the same way.
+### Root Cause
+**Mis-classification of upstream gateway errors (HTTP 502/503/504) as non-transient** in `isTransientChunkError`. A short upstream blip on Supabase's gateway killed three back-to-back batches that a normal retry-with-backoff would have recovered — exactly the use case the retry policy was built for. The hard-fail policy then (correctly) marked the run failed.
 
-### RPC update
-- `report_safety_incident(p_payload jsonb)` accepts `incident_type_id` + `severity_id` (preferred). Validates the severity belongs to the chosen type, writes snapshots, and back-fills the legacy enum columns from the resolved codes for one release.
+### Secondary Finding (chronic, not the trigger for this failure)
+`backup_logs` shows a long tail of `Batch 46/51 HTTP 546; sub 1/2 failed after 2 retries` (2026-06-04, 06-05, 06-06, 06-07, 06-08, 06-09). One specific table at dependency position ~46 OOMs the Deno worker **even at `BATCH_SIZE_RETRY = 1`** (i.e. table alone). Streaming chunk export isn't enough for that table. Out of scope for this fix but tracked below as CAPA-2.
 
-### Frontend
-- New hooks: `useIncidentTypes`, `useUpsertIncidentType`, `useDeleteIncidentType`, `useIncidentSeverities(typeId)`, `useUpsertIncidentSeverity`, `useReorderIncidentSeverities`, `useDeleteIncidentSeverity`.
-- New page: `src/pages/safety/SafetyIncidentTypes.tsx` + child component `IncidentTypeSeverityManager.tsx`.
-- New route `/safety/settings/incident-types` + tile in `SafetySettings`.
-- `SafetyIncidentNew`: replace enum-driven selects with the new hooks; cascade severity on type change; pass ids to the RPC.
-- `SafetyIncidents`, `SafetyIncidentDetail`, dashboard widgets, analytics: render `severity_label_snapshot ?? severity` and `type_label_snapshot ?? incident_type`.
-- `safetyIncidents.ts`: keep enum labels for legacy fallback only; remove from the new-incident form.
+### CAPA
 
-### Backup & RLS
-- New tables flow into `public.get_backup_table_order()` automatically — nothing to allowlist.
-- RLS policies follow the Safety RBAC: read for any signed-in safety user, write for Safety Admin / Safety Head.
+#### CAPA-1 (Corrective — fixes the 11 Jun failure class)
+Expand `isTransientChunkError` to also classify as transient:
+- `HTTP 502` (Bad Gateway)
+- `HTTP 503` (Service Unavailable)
+- `HTTP 504` (Gateway Timeout)
+- `HTTP 408` (Request Timeout)
+- Network-layer errors: `fetch failed`, `ECONNRESET`, `ETIMEDOUT`, `socket hang up`
 
-### Tests
-- DB: RPC rejects a severity that doesn't belong to the chosen type.
-- DB: deactivating a referenced severity is allowed; deleting one that's referenced raises a clear error (FK ON DELETE SET NULL would orphan history, so we block hard-delete in the API).
-- TS: snapshot fallback renders the right label for legacy rows.
-- TS: cascade resets severity when type changes.
+These are all canonical idempotent-retryable errors per RFC 7231 / standard backend retry policy. The existing retry mechanics already cover them safely:
+- Max 2 retries per chunk, 5s / 15s backoff
+- `BATCH_SIZE_RETRY = 1` (single-table isolation)
+- Global `RETRY_BUDGET_MS = 8 min` cap
 
-## Rollback
-- Migration is additive (new tables, new nullable columns). Reverting = drop the new tables/columns and switch the form back to the enum imports — historical data untouched.
+No new infra, no schema change, no constant tuning. **One file changed:** `supabase/functions/create-backup/index.ts`. Hard-fail policy and shrink-guard remain authoritative — retries only get a wider net of "worth retrying".
 
-## Out of scope
-- Dropping the old `safety_incident_type` / `safety_incident_severity` enums (deferred to a follow-up once all read paths use the snapshot/id columns in production).
-- Bulk import of severities (admins create them manually for now).
+**Rollback:** revert the regex additions in `isTransientChunkError`. Backward-compatible; behaviour falls back to current narrow classifier.
+
+#### CAPA-2 (Preventive — tracked, not in this change)
+Diagnose the chronic `Batch 46` OOM:
+- Identify which table sits at dependency index ~46 (likely a wide row + JSONB table — `org_kpi_data_entry_logs`, `notifications`, or a `*_audit_log`).
+- If it's a single fat table, add row-level streaming (chunk the table itself via `LIMIT/OFFSET` keyset rather than table-at-a-time) for tables above a row-count or column-width threshold.
+- Open as separate ticket; do **not** bundle with CAPA-1 to keep the surgical change auditable.
+
+#### CAPA-3 (Detective — already in place, verified)
+- Hard-fail-on-partial (`backup_hard_fail_on_partial = true`) correctly converted the partial run to `failed`. No change needed; this is exactly why we shipped it.
+- Backup History UI already exposes `error_message` with the per-batch breakdown — that's how we diagnosed this in <5 minutes. No UI change needed.
+
+### Risk & Impact (CAPA-1 only)
+
+| Area | Impact |
+|---|---|
+| Data | None. Retries are read-only re-exports of the same tables; idempotent. |
+| Workflow | None. Same scheduled cron, same finalize path. |
+| UI/UX | None. Status pills and history unchanged. |
+| Regression | Very low. Adds matches to a regex; non-matching paths unchanged. |
+| Scalability | Slightly longer worst-case wall time (≤ 8 min retry budget already capped). No change to memory profile. |
+| Backup integrity | Improved — more transient classes recovered before hard-fail trips. |
+
+### Step-by-Step Plan
+
+1. **Edit** `supabase/functions/create-backup/index.ts` → `isTransientChunkError`: add `502/503/504/408` regex branches and a network-error string match. Keep the existing 546/429/RateLimit branches.
+   - **Verify:** added unit assertions in the existing classifier test (`supabase/functions/create-backup/*test*.ts` if present, else inline) covering 502/503/504/408/network. Re-run `bunx vitest run` for the safety + backup contract tests (I8/I9/I10/I11 stay green — they assert *presence* of 546/429/RateLimit and retry mechanics, not exclusivity).
+2. **Update** memory `mem/infrastructure/database/backup-batch-retry-policy` to add the widened transient set + rationale, preserving the WP-9.2 invariants.
+3. **Update** `DOCUMENTATION.md` (backup runbook section) and `POLICY.md` (operational policy: which HTTP statuses are retryable for the backup engine). One-paragraph addition each.
+4. **Deploy** edge function via the standard flow.
+5. **Verify in production:** trigger one manual backup; confirm `status='completed'` and `tables_count = discoveredCount`. Watch the next 2 scheduled runs for absence of "non-transient: HTTP 5xx" entries.
+
+### Files Touched (CAPA-1)
+- `supabase/functions/create-backup/index.ts` (classifier only — ~6 lines)
+- `mem/infrastructure/database/backup-batch-retry-policy`
+- `DOCUMENTATION.md`, `POLICY.md`
+
+### Not Changed (explicitly)
+- `BATCH_SIZE = 4`, `BATCH_SIZE_RETRY = 1`, `RETRY_BUDGET_MS = 8 min` — locked invariants.
+- Hard-fail-on-partial policy, shrink-guard, `get_backup_table_order` RPC, `backup_denylist`.
+- `restore-backup`, `safety-drill`, Backup History UI.
+
+Awaiting approval to implement CAPA-1. CAPA-2 will be raised as a separate ticket after this lands.
