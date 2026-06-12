@@ -442,7 +442,17 @@ export default function SafetyIncidents() {
                   )}
                 </TableCell>
                 <TableCell className="text-xs text-muted-foreground">
-                  {format(new Date(i.created_at), 'dd MMM yyyy, HH:mm')}
+                  <div>{format(new Date(i.created_at), 'dd MMM yyyy, HH:mm')}</div>
+                  {(i as any).reporter_full_name && (
+                    <div className="text-foreground mt-0.5">
+                      {(i as any).reporter_full_name}
+                    </div>
+                  )}
+                  {(i as any).reporter_employee_code && (
+                    <div className="font-mono">
+                      {(i as any).reporter_employee_code}
+                    </div>
+                  )}
                 </TableCell>
               </TableRow>
             ))}
