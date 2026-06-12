@@ -6672,3 +6672,5 @@ See: `docs/adr/ADR-076.md`, `src/test/orgKpiOwnerCanonicalization.test.ts`.
 see, the entire HR PMS group hides (no more menu→access-denied loop).
 
 See: `docs/adr/ADR-078.md`, `src/test/reviewNotes/sidebarVisibility.test.ts`.
+
+- **v2.66.21.1 (2026-06-12 — Safety Incidents list / closed-row Due/Remaining fix):** The Incidents table's `Due / Remaining` cell rendered `sla_due_at` + a live `formatDistanceToNowStrict` countdown ("in 14 days" / "overdue by …") regardless of `status`, so closed rows showed a contradictory future deadline alongside the green "Closed" status badge and "Closed On Time" SLA pill. Surgical FE-only fix in `src/pages/safety/SafetyIncidents.tsx`: when `status` is `closed` or `orphaned`, the cell now renders `"Closed dd MMM yyyy, HH:mm"` from `closed_at` (or `—` when `closed_at` is null, e.g. orphaned), and the countdown is suppressed entirely. Open / in-progress rows are unchanged. No schema, RLS, RPC, scoring, workflow or backup impact. Rollback = revert the single file. Regression: `src/test/safety/incidentsClosedDueCell.test.tsx`.
