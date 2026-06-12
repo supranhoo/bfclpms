@@ -115,3 +115,4 @@ Lean-Load: debounce search inputs (>200 rows / network); paginate new lists with
 
 - [Safety Actual Reporter](mem://features/safety/actual-reporter) — Optional file-on-behalf-of (actual_reporter_id), display/audit only, set via RPC
 - [Safety Duplicate Incident Handling](mem://features/safety/duplicate-incident-handling) — BU Head marks open incident as duplicate of master; Safety Head closes via dedicated RPC; SLA keeps ticking until closure
+- [Safety Evidence Rename](mem://features/safety/evidence-rename) — Uploader-only display-name rename; storage path immutable; original_file_name preserved for audit
