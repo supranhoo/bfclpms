@@ -28,16 +28,10 @@ import {
   type EvidenceRow,
   type EvidenceStage,
 } from '@/hooks/useSafetyIncidentDetail';
+import { EVIDENCE_STAGE_DISPLAY_LABEL } from '@/lib/safetyEvidenceNaming';
 import { cn } from '@/lib/utils';
 
-const STAGE_LABEL: Record<EvidenceStage, string> = {
-  report: 'Report',
-  assignment: 'Assignment',
-  investigation: 'Investigation',
-  rca: 'RCA',
-  capa: 'CAPA',
-  verification: 'Verification',
-};
+const STAGE_LABEL: Record<EvidenceStage, string> = EVIDENCE_STAGE_DISPLAY_LABEL;
 
 type Kind = 'image' | 'pdf' | 'video' | 'office' | 'other';
 
@@ -64,18 +58,19 @@ function useUploaderNames(ids: string[]) {
   return useQuery({
     queryKey: ['safety', 'evidence-uploaders', sorted],
     enabled: sorted.length > 0,
-    queryFn: async (): Promise<Record<string, string>> => {
+    queryFn: async (): Promise<Record<string, { name: string; employeeCode: string | null }>> => {
       const { data, error } = await supabase
         .from('profiles')
-        .select('id, full_name, email')
+        .select('id, full_name, email, employee_code')
         .in('id', sorted);
       if (error) throw error;
-      const map: Record<string, string> = {};
+      const map: Record<string, { name: string; employeeCode: string | null }> = {};
       for (const r of data ?? []) {
-        map[(r as { id: string }).id] =
-          (r as { full_name?: string | null }).full_name ??
-          (r as { email?: string | null }).email ??
-          '';
+        const row = r as { id: string; full_name?: string | null; email?: string | null; employee_code?: string | null };
+        map[row.id] = {
+          name: row.full_name ?? row.email ?? '',
+          employeeCode: row.employee_code ?? null,
+        };
       }
       return map;
     },
