@@ -187,7 +187,9 @@ export function EvidencePreviewDialog({
     );
   }
 
-  const uploader = uploaderMap[current.uploaded_by] || current.uploaded_by.slice(0, 8);
+  const uploaderInfo = uploaderMap[current.uploaded_by];
+  const uploader = uploaderInfo?.name || current.uploaded_by.slice(0, 8);
+  const uploaderEmployeeCode = uploaderInfo?.employeeCode ?? null;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -392,7 +394,12 @@ export function EvidencePreviewDialog({
                     </div>
                     <div>
                       <dt className="text-xs text-muted-foreground">Uploaded by</dt>
-                      <dd className="break-words">{uploader}</dd>
+                      <dd className="break-words">
+                        {uploader}
+                        {uploaderEmployeeCode && (
+                          <span className="text-xs text-muted-foreground"> · {uploaderEmployeeCode}</span>
+                        )}
+                      </dd>
                     </div>
                     <div>
                       <dt className="text-xs text-muted-foreground">Uploaded at</dt>
