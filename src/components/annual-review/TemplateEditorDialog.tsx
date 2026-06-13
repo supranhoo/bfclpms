@@ -537,41 +537,35 @@ function CriterionConfigPopover({
   );
 }
 
-function CriterionOptionsPopover({
-  criterion, onChange,
-}: { criterion: TemplateCriterion; onChange: (patch: Partial<TemplateCriterion>) => void }) {
-  const options = criterion.options ?? [];
+function CriterionOptionsButton({
+  criterion, onChange, multilingual, extraLangs, getTr, setTr,
+}: {
+  criterion: TemplateCriterion;
+  onChange: (patch: Partial<TemplateCriterion>) => void;
+  multilingual: boolean;
+  extraLangs: string[];
+  getTr: (lang: string, key: string) => string;
+  setTr: (lang: string, key: string, value: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const count = (criterion.options ?? []).length;
   return (
-    <Popover>
-      <PopoverTrigger asChild>
-        <Button variant="ghost" size="sm" className="h-9 gap-1.5 w-full justify-start">
-          <ListOrdered className="h-4 w-4" /> Options <Badge variant="secondary" className="ml-auto">{options.length}</Badge>
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent className="w-80 space-y-2">
-        <div className="flex items-center justify-between">
-          <p className="text-xs font-semibold">Score Options (0–5)</p>
-          <Button size="sm" variant="ghost" className="h-7 gap-1" onClick={() => onChange({ options: [...options, { id: uid('o'), label: '', score: 0 }] })}>
-            <Plus className="h-3 w-3" /> Add
-          </Button>
-        </div>
-        {options.length === 0 && <p className="text-xs text-muted-foreground">No custom options — defaults to a numeric 0–5 input.</p>}
-        {options.map((o, i) => (
-          <div key={o.id} className="flex items-center gap-1.5">
-            <Input className="h-8 flex-1" value={o.label} placeholder="Label" onChange={(ev) => {
-              const next = [...options]; next[i] = { ...o, label: ev.target.value };
-              onChange({ options: next });
-            }} />
-            <Input className="h-8 w-14" type="number" min={0} max={5} value={o.score} onChange={(ev) => {
-              const next = [...options]; next[i] = { ...o, score: Number(ev.target.value) };
-              onChange({ options: next });
-            }} />
-            <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => {
-              const next = [...options]; next.splice(i, 1); onChange({ options: next });
-            }} aria-label="Remove option"><Trash2 className="h-3.5 w-3.5 text-destructive" /></Button>
-          </div>
-        ))}
-      </PopoverContent>
-    </Popover>
+    <>
+      <Button variant="outline" size="sm" className="h-9 gap-1.5 w-full justify-start" onClick={() => setOpen(true)}>
+        <ListOrdered className="h-4 w-4" /> Manage <Badge variant="secondary" className="ml-auto">{count}</Badge>
+      </Button>
+      {open && (
+        <CriterionOptionsDialog
+          open={open}
+          onOpenChange={setOpen}
+          criterion={criterion}
+          onSave={(options) => onChange({ options })}
+          multilingual={multilingual}
+          extraLangs={extraLangs}
+          getTr={getTr}
+          setTr={setTr}
+        />
+      )}
+    </>
   );
 }
