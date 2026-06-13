@@ -15,6 +15,7 @@ import {
 import { Checkbox } from '@/components/ui/checkbox';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Plus, Trash2, Settings2, Sparkles, Loader2, Languages, ListOrdered } from 'lucide-react';
+import { CriterionOptionsDialog } from './CriterionOptionsDialog';
 import { toast } from 'sonner';
 import * as svc from '@/services/annualReview/annualReviewService';
 import type {
@@ -334,7 +335,14 @@ export function TemplateEditorDialog({
                         <CriterionConfigPopover criterion={c} onChange={(patch) => updateAt(setSections, 'criteria', i, patch)} />
                       </TableCell>
                       <TableCell className="align-top">
-                        <CriterionOptionsPopover criterion={c} onChange={(patch) => updateAt(setSections, 'criteria', i, patch)} />
+                        <CriterionOptionsButton
+                          criterion={c}
+                          onChange={(patch) => updateAt(setSections, 'criteria', i, patch)}
+                          multilingual={multilingual}
+                          extraLangs={extraLangs}
+                          getTr={(lang, key) => tr[lang]?.[key] ?? ''}
+                          setTr={setTr}
+                        />
                       </TableCell>
                       <TableCell className="align-top">
                         <Button size="icon" variant="ghost" onClick={() => removeAt(setSections, 'criteria', i)} aria-label="Delete">
