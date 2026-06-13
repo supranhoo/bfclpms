@@ -11,6 +11,7 @@ import { FINAL_RATINGS } from '@/lib/annualReview/constants';
 import { computeCriteriaScore, computeOverallScore } from '@/lib/annualReview/scoring';
 import { useFinalizeInstance, useInstanceResponses } from '@/hooks/useAnnualReview';
 import { SystemScoresPanel } from './SystemScoresPanel';
+import { EligibilityInputsEditor } from './EligibilityInputsEditor';
 import type { AnnualReviewInstance, AnnualReviewTemplate } from '@/types/annualReview';
 import type { InstanceWithEmployee } from '@/services/annualReview/annualReviewService';
 
@@ -105,6 +106,14 @@ export function HrFinalizationSheet({
             eligibility={template?.sections.eligibility_criteria}
             eligibilityInputs={instance?.eligibility_inputs}
           />
+
+          {instance && (template?.sections.eligibility_criteria?.length ?? 0) > 0 && (
+            <EligibilityInputsEditor
+              instanceId={instance.id}
+              criteria={template!.sections.eligibility_criteria!}
+              initial={(instance.eligibility_inputs ?? {}) as Record<string, string | number | boolean>}
+            />
+          )}
 
           <div className="rounded-lg border p-3 text-sm">
             <div className="flex items-center justify-between">

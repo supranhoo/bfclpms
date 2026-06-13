@@ -280,6 +280,36 @@ export async function advanceStatus(instanceId: string, reviewerRole: AnnualRevi
   return data as string;
 }
 
+/** Send the review one stage back so the prior reviewer can revise & resubmit. */
+export async function sendBackStatus(
+  instanceId: string,
+  reviewerRole: AnnualReviewerRole,
+  reason: string | null,
+) {
+  const { data, error } = await db.rpc('send_back_annual_review_status', {
+    p_instance_id: instanceId,
+    p_reviewer_role: reviewerRole,
+    p_reason: reason,
+  });
+  if (error) throw error;
+  return data as string;
+}
+
+/** Patch eligibility-input values on the instance (used by HR pre-finalization). */
+export async function updateEligibilityInputs(
+  instanceId: string,
+  inputs: Record<string, string | number | boolean>,
+) {
+  const { data, error } = await db
+    .from('annual_review_instances')
+    .update({ eligibility_inputs: inputs })
+    .eq('id', instanceId)
+    .select('*')
+    .single();
+  if (error) throw error;
+  return data;
+}
+
 // ---------- Storage ----------
 export async function uploadEvidence(args: { instanceId: string; reviewerId: string; role: AnnualReviewerRole; file: File }): Promise<EvidenceItem> {
   const safeName = args.file.name.replace(/[^a-zA-Z0-9._-]/g, '_');

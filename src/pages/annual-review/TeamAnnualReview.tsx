@@ -8,6 +8,7 @@ import {
   useAdvanceStatus,
   useDebouncedResponseDraft,
   useUploadEvidence,
+  useSendBackStatus,
 } from '@/hooks/useAnnualReview';
 import { AnnualReviewStageTracker } from '@/components/annual-review/AnnualReviewStageTracker';
 import { AnnualReviewStatusBadge } from '@/components/annual-review/AnnualReviewStatusBadge';
@@ -18,6 +19,12 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Loader2, ChevronRight } from 'lucide-react';
 import { Sheet, SheetContent } from '@/components/ui/sheet';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 import type { AnnualReviewerRole, EvidenceItem } from '@/types/annualReview';
 import type { InstanceWithEmployee } from '@/services/annualReview/annualReviewService';
@@ -122,10 +129,13 @@ function ReviewDetail({ instance }: { instance: InstanceWithEmployee }) {
   const { data: template } = useTemplate(instance.template_id);
   const { data: responses = [] } = useInstanceResponses(instance.id);
   const advance = useAdvanceStatus();
+  const sendBack = useSendBackStatus();
   const upload = useUploadEvidence();
   const role = user ? STAGE_FOR_REVIEWER(instance, user.id) : null;
   const myResponse = role ? responses.find((r) => r.reviewer_role === role) ?? null : null;
   const locked = !role || myResponse?.is_locked;
+  const [sendBackOpen, setSendBackOpen] = useState(false);
+  const [sendBackReason, setSendBackReason] = useState('');
 
   const { draft, setDraft, flush, status } = useDebouncedResponseDraft({
     instanceId: instance.id,
@@ -156,6 +166,16 @@ function ReviewDetail({ instance }: { instance: InstanceWithEmployee }) {
     if (!role) return;
     try { await flush(); await advance.mutateAsync({ instanceId: instance.id, role }); toast.success('Submitted.'); }
     catch (e) { toast.error((e as Error).message); }
+  };
+
+  const handleSendBack = async () => {
+    if (!role || role === 'self') return;
+    try {
+      await sendBack.mutateAsync({ instanceId: instance.id, role, reason: sendBackReason.trim() || null });
+      toast.success('Returned to previous stage.');
+      setSendBackOpen(false);
+      setSendBackReason('');
+    } catch (e) { toast.error((e as Error).message); }
   };
 
   return (
@@ -204,6 +224,11 @@ function ReviewDetail({ instance }: { instance: InstanceWithEmployee }) {
         <div className="sticky bottom-0 bg-background/80 backdrop-blur border-t py-3 flex items-center justify-between gap-3">
           <span className="text-xs text-muted-foreground">{status === 'saving' ? 'Saving…' : status === 'saved' ? 'Draft saved' : status === 'error' ? 'Save error' : ''}</span>
           <div className="flex gap-2">
+            {role !== 'self' && (
+              <Button variant="outline" onClick={() => setSendBackOpen(true)} disabled={sendBack.isPending}>
+                Send back
+              </Button>
+            )}
             <Button variant="outline" onClick={flush}>Save draft</Button>
             <Button onClick={handleSubmit} disabled={advance.isPending}>
               {advance.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />} Submit & forward
@@ -211,6 +236,34 @@ function ReviewDetail({ instance }: { instance: InstanceWithEmployee }) {
           </div>
         </div>
       )}
+
+      <AlertDialog open={sendBackOpen} onOpenChange={setSendBackOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Send back to previous stage?</AlertDialogTitle>
+            <AlertDialogDescription>
+              The previous reviewer will be notified and able to revise their response.
+              This action is recorded in the audit log.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="space-y-1.5">
+            <Label htmlFor="ar-sendback-reason">Reason (optional)</Label>
+            <Textarea
+              id="ar-sendback-reason"
+              rows={3}
+              value={sendBackReason}
+              onChange={(e) => setSendBackReason(e.target.value)}
+              placeholder="What needs to be revised?"
+            />
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleSendBack} disabled={sendBack.isPending}>
+              {sendBack.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />} Send back
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

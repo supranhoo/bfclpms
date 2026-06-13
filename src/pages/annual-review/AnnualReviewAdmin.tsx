@@ -17,7 +17,8 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
 import { toast } from 'sonner';
-import { Loader2, Upload, Settings2, ListChecks, Calendar, Layers, Pencil, Plus } from 'lucide-react';
+import { Loader2, Upload, Settings2, ListChecks, Calendar, Layers, Pencil, Plus, Download } from 'lucide-react';
+import * as XLSX from 'xlsx';
 import { AnnualReviewStatusBadge } from '@/components/annual-review/AnnualReviewStatusBadge';
 import { HrFinalizationSheet } from '@/components/annual-review/HrFinalizationSheet';
 import { SystemScoresUploadDialog } from '@/components/annual-review/SystemScoresUploadDialog';
@@ -49,6 +50,28 @@ export default function AnnualReviewAdmin() {
       </Tabs>
     </div>
   );
+}
+
+/**
+ * Exports the active-cycle progress grid to an .xlsx workbook (single sheet).
+ * Columns kept lean & deterministic for downstream pivot use.
+ */
+function exportProgress(cycleName: string, rows: InstanceWithEmployee[]) {
+  const data = rows.map((i) => ({
+    'Employee Code': i.employee?.employee_code ?? '',
+    'Employee Name': i.employee?.full_name ?? '',
+    'Designation': i.employee?.designation ?? '',
+    'Stage': i.overall_status,
+    'Total Score': i.total_score ?? '',
+    'Criteria Weighted Score': i.criteria_weighted_score ?? '',
+    'Final Rating': i.final_rating ?? '',
+    'Finalized At': i.finalized_at ?? '',
+  }));
+  const ws = XLSX.utils.json_to_sheet(data);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Progress');
+  const safe = cycleName.replace(/[^a-zA-Z0-9._-]/g, '_');
+  XLSX.writeFile(wb, `annual-review-progress_${safe}_${new Date().toISOString().slice(0, 10)}.xlsx`);
 }
 
 // ------------------------------------------------------------------
@@ -101,9 +124,18 @@ function ProgressTab() {
 
       <div className="flex flex-wrap items-center justify-between gap-2">
         <Input placeholder="Search employees…" value={search} onChange={(e) => setSearch(e.target.value)} className="max-w-sm" />
-        <Button variant="outline" className="gap-2" onClick={() => setUploadOpen(true)} disabled={!uploadTemplate}>
-          <Upload className="h-4 w-4" /> Bulk system-score upload
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline" className="gap-2"
+            onClick={() => exportProgress(activeCycle.name, filtered)}
+            disabled={filtered.length === 0}
+          >
+            <Download className="h-4 w-4" /> Export to Excel
+          </Button>
+          <Button variant="outline" className="gap-2" onClick={() => setUploadOpen(true)} disabled={!uploadTemplate}>
+            <Upload className="h-4 w-4" /> Bulk system-score upload
+          </Button>
+        </div>
       </div>
 
       <Card>
