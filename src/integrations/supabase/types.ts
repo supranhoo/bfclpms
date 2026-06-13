@@ -12477,6 +12477,10 @@ export type Database = {
         Args: { template_uuid: string }
         Returns: boolean
       }
+      close_annual_review_cycle: {
+        Args: { p_cycle_id: string }
+        Returns: number
+      }
       close_duplicate_incident: {
         Args: { p_incident_id: string; p_notes?: string }
         Returns: Json
@@ -13166,6 +13170,20 @@ export type Database = {
         Args: { p_emp_id: string; p_kpi_id: string }
         Returns: Json
       }
+      list_annual_review_pending_reviewers: {
+        Args: { p_cycle_id: string }
+        Returns: {
+          cycle_id: string
+          cycle_name: string
+          days_to_deadline: number
+          deadline: string
+          employee_id: string
+          employee_name: string
+          instance_id: string
+          reviewer_id: string
+          stage: string
+        }[]
+      }
       list_profile_grade_level_orphans: {
         Args: never
         Returns: {
@@ -13262,6 +13280,10 @@ export type Database = {
           kpi_id: string
           kpi_status: string
         }[]
+      }
+      override_annual_review_rating: {
+        Args: { p_instance_id: string; p_new_rating: string; p_reason: string }
+        Returns: undefined
       }
       preview_org_kpi_propagation: {
         Args: {
