@@ -157,6 +157,90 @@ export async function seedInstancesForCycle(args: { cycleId: string; templateId:
   return rows.length;
 }
 
+/**
+ * Filter-aware seeding. Walks active rules for the cycle in priority order
+ * (lower number wins) and assigns each employee to the first matching rule's
+ * template. Employees that don't match any rule are skipped.
+ *
+ * Filter semantics (all comparisons string-equal):
+ *   - roles            → profiles.designation
+ *   - grades           → profiles.pms_grade
+ *   - levels           → profiles.level
+ *   - department_ids   → profiles.department_id
+ *   - bu_ids           → departments.business_unit_id (joined via department)
+ *   - empty filter set → matches all employees
+ */
+export async function seedInstancesByRules(args: { cycleId: string; hrUserId: string | null }) {
+  const { data: rules, error: rulesErr } = await db
+    .from('annual_review_assignment_rules')
+    .select('id, template_id, priority, filters, is_active')
+    .eq('cycle_id', args.cycleId)
+    .eq('is_active', true)
+    .order('priority', { ascending: true });
+  if (rulesErr) throw rulesErr;
+  if (!rules || rules.length === 0) throw new Error('No active rules — add a rule first.');
+
+  const { data: people, error: pErr } = await db
+    .from('profiles')
+    .select('id, reporting_manager_id, functional_manager_id, designation, pms_grade, level, department_id')
+    .eq('is_active', true)
+    .eq('is_dummy_employee', false);
+  if (pErr) throw pErr;
+
+  // Department → BU lookup (one query, no per-row N+1).
+  const deptIds = [...new Set((people ?? []).map((p: any) => p.department_id).filter(Boolean))];
+  let deptToBu: Record<string, string> = {};
+  if (deptIds.length) {
+    const { data: depts, error: dErr } = await db
+      .from('departments').select('id, business_unit_id').in('id', deptIds);
+    if (dErr) throw dErr;
+    deptToBu = Object.fromEntries((depts ?? []).map((d: any) => [d.id, d.business_unit_id]));
+  }
+
+  const mgrMap = new Map<string, string | null>();
+  for (const p of people ?? []) mgrMap.set(p.id, p.reporting_manager_id);
+
+  const matches = (filters: any, p: any): boolean => {
+    const f = filters ?? {};
+    const list = (k: string): string[] => Array.isArray(f[k]) ? f[k] : [];
+    if (list('roles').length && !list('roles').includes(p.designation)) return false;
+    if (list('grades').length && !list('grades').includes(p.pms_grade)) return false;
+    if (list('levels').length && !list('levels').includes(p.level)) return false;
+    if (list('department_ids').length && !list('department_ids').includes(p.department_id)) return false;
+    if (list('bu_ids').length && !list('bu_ids').includes(deptToBu[p.department_id])) return false;
+    return true;
+  };
+
+  const rows: any[] = [];
+  let skipped = 0;
+  for (const p of people ?? []) {
+    const rule = (rules as any[]).find((r) => matches(r.filters, p));
+    if (!rule) { skipped++; continue; }
+    const mgr = mgrMap.get(p.id) ?? null;
+    const skip = mgr ? mgrMap.get(mgr) ?? null : null;
+    const bu = skip ? mgrMap.get(skip) ?? null : null;
+    rows.push({
+      employee_id: p.id,
+      template_id: rule.template_id,
+      cycle_id: args.cycleId,
+      assigned_rule_id: rule.id,
+      manager_id: mgr,
+      skip_id: skip,
+      bu_head_id: bu,
+      hr_id: args.hrUserId,
+    });
+  }
+
+  const CHUNK = 200;
+  for (let i = 0; i < rows.length; i += CHUNK) {
+    const { error: upErr } = await db
+      .from('annual_review_instances')
+      .upsert(rows.slice(i, i + CHUNK), { onConflict: 'employee_id,cycle_id' });
+    if (upErr) throw upErr;
+  }
+  return { seeded: rows.length, skipped };
+}
+
 // ---------- Responses ----------
 export async function listResponses(instanceId: string): Promise<AnnualReviewResponse[]> {
   const { data, error } = await db
