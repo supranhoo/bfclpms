@@ -17,7 +17,8 @@ import { SystemScoresPanel } from '@/components/annual-review/SystemScoresPanel'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Loader2, ChevronRight } from 'lucide-react';
+import { Loader2, ChevronRight, Scale } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { Sheet, SheetContent } from '@/components/ui/sheet';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -106,6 +107,9 @@ export default function TeamAnnualReview() {
           <h1 className="text-2xl font-bold">Team Annual Review</h1>
           <p className="text-sm text-muted-foreground">{cycle.name}</p>
         </div>
+        <Button asChild variant="outline" className="gap-1.5">
+          <Link to="/annual-review/calibrate"><Scale className="h-4 w-4" /> Calibration worksheet</Link>
+        </Button>
       </header>
 
       <div className="grid gap-4 md:grid-cols-3">
