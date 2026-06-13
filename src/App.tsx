@@ -66,6 +66,11 @@ const KpiStandardization = lazy(() => import("./pages/admin/KpiStandardization")
 const RegistryBrowser = lazy(() => import("./pages/RegistryBrowser"));
 const BulkReviewDashboard = lazy(() => import("./pages/review/BulkReviewDashboard"));
 const CustomMenuPage = lazy(() => import("./pages/CustomMenuPage"));
+
+// Annual Review module (Phase 1)
+const EmployeeAnnualReview = lazy(() => import("./pages/annual-review/EmployeeAnnualReview"));
+const TeamAnnualReview = lazy(() => import("./pages/annual-review/TeamAnnualReview"));
+const AnnualReviewAdmin = lazy(() => import("./pages/annual-review/AnnualReviewAdmin"));
 const PlatformSettings = lazy(() => import("./pages/platform/PlatformSettings"));
 const ImplementationConsole = lazy(() => import("./pages/platform/ImplementationConsole"));
 
