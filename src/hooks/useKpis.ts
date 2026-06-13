@@ -237,7 +237,10 @@ export function useAllKpis(options?: { enabled?: boolean }) {
         const { data, error } = await supabase
           .from('kpis')
           .select(SLIM_KPI_SELECT)
-          .order('created_at', { ascending: false })
+          // v2.66.13 (perf): order by primary key — `created_at DESC` was the
+          // #1 slow query (mean ~1.5s/page, 44k calls/day). Callers don't rely
+          // on creation order; PK ordering uses kpis_pkey directly.
+          .order('id', { ascending: true })
           .range(from, from + pageSize - 1);
 
         if (error) throw error;

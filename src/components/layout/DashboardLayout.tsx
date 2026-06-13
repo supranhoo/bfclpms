@@ -18,27 +18,46 @@ import { PageLoadingOverlay } from '@/components/ui/PageLoadingOverlay';
  * AND `useIsFetching() > 0` the overlay is visible. Once the fetch count
  * drops to 0 we disarm — subsequent background refetches (window focus,
  * realtime sync) stay silent. Pure presentation; no business logic.
+ *
+ * v2.66.13 (perf):
+ *  - 150ms grace period before showing the overlay so most navigations
+ *    never flash the rocket card.
+ *  - Safety cap reduced from 15s → 6s. The Postgres statement timeout is
+ *    8s; anything longer than 6s is a real failure and inline error UI
+ *    should take over instead of an apparently-frozen "Please wait".
  */
 function RouteDataLoadingGate() {
   const { pathname } = useLocation();
   const isFetching = useIsFetching();
   const [armed, setArmed] = useState(false);
+  const [showOverlay, setShowOverlay] = useState(false);
   const lastPathRef = useRef(pathname);
-  // Safety: auto-disarm if the first fetch burst never resolves within 15s.
+  // Safety: auto-disarm if the first fetch burst never resolves within 6s.
   const armTimeoutRef = useRef<number | null>(null);
+  // Grace period: only show the overlay if loading takes longer than 150ms.
+  const graceTimeoutRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (lastPathRef.current !== pathname) {
       lastPathRef.current = pathname;
       setArmed(true);
+      setShowOverlay(false);
       if (armTimeoutRef.current) window.clearTimeout(armTimeoutRef.current);
-      armTimeoutRef.current = window.setTimeout(() => setArmed(false), 15000);
+      armTimeoutRef.current = window.setTimeout(() => {
+        setArmed(false);
+        setShowOverlay(false);
+      }, 6000);
     }
   }, [pathname]);
 
   useEffect(() => {
     if (armed && isFetching === 0) {
       setArmed(false);
+      setShowOverlay(false);
+      if (graceTimeoutRef.current) {
+        window.clearTimeout(graceTimeoutRef.current);
+        graceTimeoutRef.current = null;
+      }
       if (armTimeoutRef.current) {
         window.clearTimeout(armTimeoutRef.current);
         armTimeoutRef.current = null;
@@ -46,7 +65,21 @@ function RouteDataLoadingGate() {
     }
   }, [armed, isFetching]);
 
-  return <PageLoadingOverlay open={armed && isFetching > 0} label="Please wait" />;
+  // Grace period before showing the overlay — avoids flashing for fast loads.
+  useEffect(() => {
+    if (armed && isFetching > 0 && !showOverlay) {
+      if (graceTimeoutRef.current) window.clearTimeout(graceTimeoutRef.current);
+      graceTimeoutRef.current = window.setTimeout(() => setShowOverlay(true), 150);
+      return () => {
+        if (graceTimeoutRef.current) {
+          window.clearTimeout(graceTimeoutRef.current);
+          graceTimeoutRef.current = null;
+        }
+      };
+    }
+  }, [armed, isFetching, showOverlay]);
+
+  return <PageLoadingOverlay open={armed && showOverlay && isFetching > 0} label="Please wait" />;
 }
 
 function DashboardContent() {
