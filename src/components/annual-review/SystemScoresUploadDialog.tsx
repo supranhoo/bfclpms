@@ -70,10 +70,15 @@ export function SystemScoresUploadDialog({
           const v = rec[s.name];
           if (v !== null && v !== undefined && v !== '') system_scores[s.id] = Number(v);
         }
-        const eligibility_inputs: Record<string, unknown> = { ...(inst.eligibility_inputs ?? {}) };
+        const eligibility_inputs: Record<string, string | number | boolean> = {
+          ...(inst.eligibility_inputs ?? {}),
+        };
         for (const c of eligCols) {
           const v = rec[c.name];
-          if (v !== null && v !== undefined && v !== '') eligibility_inputs[c.id] = v;
+          if (v !== null && v !== undefined && v !== '') {
+            eligibility_inputs[c.id] =
+              typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean' ? v : String(v);
+          }
         }
         await svc.updateInstance(inst.id, { system_scores, eligibility_inputs });
         updated++;
