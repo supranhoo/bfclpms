@@ -563,6 +563,22 @@ const App = () => (
                     <Suspense fallback={<PageFallback />}><CustomReport /></Suspense>
                   </ProtectedRoute>
                 } />
+                {/* Annual Review module (Phase 1, feature-flag gated in UI) */}
+                <Route path="/annual-review" element={
+                  <ProtectedRoute allowedRoles={['admin','manager','employee','auditor','management','hr_pms','skip_level']}>
+                    <Suspense fallback={<PageFallback />}><EmployeeAnnualReview /></Suspense>
+                  </ProtectedRoute>
+                } />
+                <Route path="/annual-review/team" element={
+                  <ProtectedRoute allowedRoles={['admin','manager','hr_pms','skip_level','management']}>
+                    <Suspense fallback={<PageFallback />}><TeamAnnualReview /></Suspense>
+                  </ProtectedRoute>
+                } />
+                <Route path="/annual-review/admin" element={
+                  <ProtectedRoute allowedRoles={['admin','hr_pms']}>
+                    <Suspense fallback={<PageFallback />}><AnnualReviewAdmin /></Suspense>
+                  </ProtectedRoute>
+                } />
               </Route>
               <Route path="*" element={<Suspense fallback={<PageFallback />}><NotFound /></Suspense>} />
             </Routes>
