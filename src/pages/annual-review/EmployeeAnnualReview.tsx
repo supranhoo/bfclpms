@@ -1,0 +1,206 @@
+import { useEffect, useMemo, useState } from 'react';
+import { useAuth } from '@/contexts/AuthContext';
+import {
+  useActiveCycle,
+  useMyInstance,
+  useTemplate,
+  useInstanceResponses,
+  useAdvanceStatus,
+  useUploadEvidence,
+  useDebouncedResponseDraft,
+} from '@/hooks/useAnnualReview';
+import { AnnualReviewStageTracker } from '@/components/annual-review/AnnualReviewStageTracker';
+import { AnnualReviewStatusBadge } from '@/components/annual-review/AnnualReviewStatusBadge';
+import { CriteriaScoringMatrix } from '@/components/annual-review/CriteriaScoringMatrix';
+import { SystemScoresPanel } from '@/components/annual-review/SystemScoresPanel';
+import { LanguageSwitcher } from '@/components/annual-review/LanguageSwitcher';
+import { useAnnualReviewTranslation } from '@/hooks/useAnnualReviewTranslation';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
+import { Loader2 } from 'lucide-react';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { toast } from 'sonner';
+import { computeCriteriaScore } from '@/lib/annualReview/scoring';
+import type { EvidenceItem } from '@/types/annualReview';
+
+export default function EmployeeAnnualReview() {
+  const { user, profile } = useAuth();
+  const { data: cycle, isLoading: cycleLoading } = useActiveCycle();
+  const { data: instance, isLoading: instLoading } = useMyInstance(user?.id, cycle?.id);
+  const { data: template } = useTemplate(instance?.template_id);
+  const { data: responses = [] } = useInstanceResponses(instance?.id);
+  const advance = useAdvanceStatus();
+  const upload = useUploadEvidence();
+
+  const myResponse = responses.find((r) => r.reviewer_role === 'self') ?? null;
+  const locked = myResponse?.is_locked || (instance && instance.overall_status !== 'pending_self');
+
+  const [lang, setLang] = useState<string>(instance?.language_pref ?? 'en');
+  useEffect(() => { if (instance?.language_pref) setLang(instance.language_pref); }, [instance?.language_pref]);
+
+  const { t } = useAnnualReviewTranslation({
+    currentLanguage: lang,
+    defaultLanguage: template?.sections.settings?.default_language ?? 'en',
+    templateTranslations: template?.sections.translations,
+  });
+
+  const { draft, setDraft, flush, status: saveStatus } = useDebouncedResponseDraft({
+    instanceId: instance?.id ?? '',
+    reviewerId: user?.id ?? '',
+    role: 'self',
+    initial: myResponse,
+    enabled: !!instance && !locked,
+  });
+
+  const [confirmOpen, setConfirmOpen] = useState(false);
+
+  const summary = useMemo(
+    () => computeCriteriaScore(template?.sections.criteria ?? [], draft.criteria_scores ?? {}),
+    [template, draft.criteria_scores],
+  );
+
+  if (cycleLoading || instLoading) {
+    return <div className="p-6 flex items-center gap-2 text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Loading…</div>;
+  }
+  if (!cycle) {
+    return <div className="p-6"><Card><CardContent className="p-6">There is no active annual review cycle.</CardContent></Card></div>;
+  }
+  if (!instance) {
+    return <div className="p-6"><Card><CardContent className="p-6">No annual review instance has been assigned to you for the {cycle.name} cycle.</CardContent></Card></div>;
+  }
+
+  const handleSubmit = async () => {
+    setConfirmOpen(false);
+    try {
+      await flush();
+      await advance.mutateAsync({ instanceId: instance.id, role: 'self' });
+      toast.success(t('note.locked', 'Your review has been submitted and forwarded.'));
+    } catch (e) { toast.error((e as Error).message); }
+  };
+
+  const onUpload = async (criterionId: string, file: File): Promise<EvidenceItem | void> => {
+    if (!user) return;
+    const ev = await upload.mutateAsync({ instanceId: instance.id, reviewerId: user.id, role: 'self', file });
+    const tagged: EvidenceItem = { ...ev, name: `${criterionId}::${ev.name}` };
+    setDraft((p) => ({ ...p, evidence: [...(p.evidence ?? []), tagged] }));
+    return tagged;
+  };
+
+  const evidenceByCriterion = useMemo(() => {
+    const map: Record<string, EvidenceItem[]> = {};
+    for (const e of draft.evidence ?? []) {
+      const [cid, ...rest] = e.name.split('::');
+      const realName = rest.length ? rest.join('::') : e.name;
+      (map[cid] ||= []).push({ ...e, name: realName });
+    }
+    return map;
+  }, [draft.evidence]);
+
+  const availLangs = template?.sections.settings?.enable_multilingual
+    ? template.sections.settings.available_languages ?? ['en']
+    : ['en'];
+
+  return (
+    <div className="p-4 md:p-6 space-y-6 max-w-5xl mx-auto">
+      <header className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold">{cycle.name}</h1>
+          <p className="text-sm text-muted-foreground">My annual review · {profile?.full_name}</p>
+        </div>
+        <div className="flex items-center gap-3">
+          {availLangs.length > 1 && <LanguageSwitcher value={lang} onChange={setLang} available={availLangs} />}
+          <AnnualReviewStatusBadge status={instance.overall_status} />
+        </div>
+      </header>
+
+      <AnnualReviewStageTracker status={instance.overall_status} />
+
+      <SystemScoresPanel
+        systemScores={template?.sections.system_scores ?? []}
+        values={instance.system_scores ?? {}}
+        eligibility={template?.sections.eligibility_criteria}
+        eligibilityInputs={instance.eligibility_inputs}
+        readOnly
+      />
+
+      <Card>
+        <CardHeader><CardTitle>Self-Assessment Criteria</CardTitle></CardHeader>
+        <CardContent>
+          <CriteriaScoringMatrix
+            criteria={(template?.sections.criteria ?? []).filter((c) => !c.reviewer_stages?.length || c.reviewer_stages.includes('self'))}
+            values={draft.criteria_scores ?? {}}
+            remarks={(draft.qualitative_responses ?? {}) as Record<string, string>}
+            evidence={evidenceByCriterion}
+            readOnly={!!locked}
+            reviewerLabel="Self"
+            onChangeScore={(id, v) => setDraft((p) => ({ ...p, criteria_scores: { ...(p.criteria_scores ?? {}), [id]: v } }))}
+            onChangeRemark={(id, txt) => setDraft((p) => ({ ...p, qualitative_responses: { ...(p.qualitative_responses ?? {}), [id]: txt } }))}
+            onUploadEvidence={onUpload}
+            onRemoveEvidence={(_, path) => setDraft((p) => ({ ...p, evidence: (p.evidence ?? []).filter((e) => e.path !== path) }))}
+          />
+        </CardContent>
+      </Card>
+
+      {(template?.sections.self_review_fields ?? []).length > 0 && (
+        <Card>
+          <CardHeader><CardTitle>Qualitative Responses</CardTitle></CardHeader>
+          <CardContent className="space-y-4">
+            {template!.sections.self_review_fields!.map((f) => (
+              <div key={f.id} className="space-y-1">
+                <Label>{t(`field.${f.id}`, f.label)}{f.required && <span className="text-destructive"> *</span>}</Label>
+                <Textarea
+                  rows={3}
+                  placeholder={f.placeholder}
+                  value={(draft.qualitative_responses ?? {})[f.id] ?? ''}
+                  disabled={!!locked}
+                  onChange={(e) => setDraft((p) => ({ ...p, qualitative_responses: { ...(p.qualitative_responses ?? {}), [f.id]: e.target.value } }))}
+                />
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
+
+      <footer className="flex flex-wrap items-center justify-between gap-3 sticky bottom-0 bg-background/80 backdrop-blur border-t py-3">
+        <div className="text-xs text-muted-foreground">
+          {locked
+            ? t('note.locked', 'Your review is locked.')
+            : saveStatus === 'saving' ? t('note.saving', 'Saving draft…')
+            : saveStatus === 'saved'   ? t('note.saved', 'Draft saved')
+            : saveStatus === 'error'   ? 'Could not save — retry your last edit.'
+            : `Score: ${summary.totalCriteriaScore.toFixed(2)} / ${summary.maxCriteriaScore.toFixed(2)}`}
+        </div>
+        {!locked && (
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={flush} disabled={saveStatus === 'saving'}>
+              {t('btn.save_draft', 'Save draft')}
+            </Button>
+            <Button onClick={() => setConfirmOpen(true)} disabled={advance.isPending}>
+              {advance.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />} {t('btn.submit', 'Submit')}
+            </Button>
+          </div>
+        )}
+      </footer>
+
+      <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Submit your self-review?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Once submitted, your responses are locked and forwarded to your manager. You cannot edit them afterwards.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleSubmit}>Submit</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+}

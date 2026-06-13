@@ -66,6 +66,11 @@ const KpiStandardization = lazy(() => import("./pages/admin/KpiStandardization")
 const RegistryBrowser = lazy(() => import("./pages/RegistryBrowser"));
 const BulkReviewDashboard = lazy(() => import("./pages/review/BulkReviewDashboard"));
 const CustomMenuPage = lazy(() => import("./pages/CustomMenuPage"));
+
+// Annual Review module (Phase 1)
+const EmployeeAnnualReview = lazy(() => import("./pages/annual-review/EmployeeAnnualReview"));
+const TeamAnnualReview = lazy(() => import("./pages/annual-review/TeamAnnualReview"));
+const AnnualReviewAdmin = lazy(() => import("./pages/annual-review/AnnualReviewAdmin"));
 const PlatformSettings = lazy(() => import("./pages/platform/PlatformSettings"));
 const ImplementationConsole = lazy(() => import("./pages/platform/ImplementationConsole"));
 
@@ -556,6 +561,22 @@ const App = () => (
                 <Route path="/reports/custom/:id" element={
                   <ProtectedRoute allowedRoles={['admin','manager','employee','auditor','management','hr_pms','skip_level']}>
                     <Suspense fallback={<PageFallback />}><CustomReport /></Suspense>
+                  </ProtectedRoute>
+                } />
+                {/* Annual Review module (Phase 1, feature-flag gated in UI) */}
+                <Route path="/annual-review" element={
+                  <ProtectedRoute allowedRoles={['admin','manager','employee','auditor','management','hr_pms','skip_level']}>
+                    <Suspense fallback={<PageFallback />}><EmployeeAnnualReview /></Suspense>
+                  </ProtectedRoute>
+                } />
+                <Route path="/annual-review/team" element={
+                  <ProtectedRoute allowedRoles={['admin','manager','hr_pms','skip_level','management']}>
+                    <Suspense fallback={<PageFallback />}><TeamAnnualReview /></Suspense>
+                  </ProtectedRoute>
+                } />
+                <Route path="/annual-review/admin" element={
+                  <ProtectedRoute allowedRoles={['admin','hr_pms']}>
+                    <Suspense fallback={<PageFallback />}><AnnualReviewAdmin /></Suspense>
                   </ProtectedRoute>
                 } />
               </Route>
