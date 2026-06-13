@@ -52,6 +52,28 @@ export default function AnnualReviewAdmin() {
   );
 }
 
+/**
+ * Exports the active-cycle progress grid to an .xlsx workbook (single sheet).
+ * Columns kept lean & deterministic for downstream pivot use.
+ */
+function exportProgress(cycleName: string, rows: InstanceWithEmployee[]) {
+  const data = rows.map((i) => ({
+    'Employee Code': i.employee?.employee_code ?? '',
+    'Employee Name': i.employee?.full_name ?? '',
+    'Designation': i.employee?.designation ?? '',
+    'Stage': i.overall_status,
+    'Total Score': i.total_score ?? '',
+    'Criteria Weighted Score': i.criteria_weighted_score ?? '',
+    'Final Rating': i.final_rating ?? '',
+    'Finalized At': i.finalized_at ?? '',
+  }));
+  const ws = XLSX.utils.json_to_sheet(data);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Progress');
+  const safe = cycleName.replace(/[^a-zA-Z0-9._-]/g, '_');
+  XLSX.writeFile(wb, `annual-review-progress_${safe}_${new Date().toISOString().slice(0, 10)}.xlsx`);
+}
+
 // ------------------------------------------------------------------
 // Tab 1 — Progress + bulk upload + HR finalize sheet
 // ------------------------------------------------------------------
