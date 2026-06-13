@@ -96,6 +96,50 @@ function ProgressTab() {
   const [uploadOpen, setUploadOpen] = useState(false);
   const { data: template } = useTemplate(selected?.template_id);
   const { data: uploadTemplate } = useTemplate(activeCycle ? instances[0]?.template_id : undefined);
+  const sendBack = useSendBackStatus();
+  const qc = useQueryClient();
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkOpen, setBulkOpen] = useState<null | 'finalize' | 'sendBack'>(null);
+  const [bulkRating, setBulkRating] = useState('');
+  const [bulkRemarks, setBulkRemarks] = useState('');
+  const [bulkReason, setBulkReason] = useState('');
+
+  const bulkFinalize = useMutation({
+    mutationFn: () => svc.bulkFinalize({
+      instanceIds: Array.from(selectedIds),
+      finalRating: bulkRating,
+      hrRemarks: bulkRemarks.trim() || null,
+    }),
+    onSuccess: (n) => {
+      toast.success(`Finalized ${n} review${n === 1 ? '' : 's'}.`);
+      setBulkOpen(null); setSelectedIds(new Set()); setBulkRating(''); setBulkRemarks('');
+      qc.invalidateQueries();
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const bulkSendBack = useMutation({
+    mutationFn: async () => {
+      let n = 0;
+      for (const id of selectedIds) {
+        const inst = instances.find((i) => i.id === id);
+        if (!inst || inst.overall_status === 'pending_self' || inst.overall_status === 'not_started' || inst.overall_status === 'completed') continue;
+        const roleMap: Record<string, AnnualReviewerRole> = {
+          pending_manager: 'manager', pending_skip: 'skip_manager', pending_bu: 'bu_head', pending_hr: 'hr',
+        };
+        const role = roleMap[inst.overall_status];
+        if (!role) continue;
+        await sendBack.mutateAsync({ instanceId: id, role, reason: bulkReason.trim() || null });
+        n++;
+      }
+      return n;
+    },
+    onSuccess: (n) => {
+      toast.success(`Sent back ${n} review${n === 1 ? '' : 's'}.`);
+      setBulkOpen(null); setSelectedIds(new Set()); setBulkReason('');
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
 
   const counts = useMemo(() => {
     const c = { total: 0, self: 0, in_progress: 0, completed: 0 };
@@ -112,6 +156,24 @@ function ProgressTab() {
   const filtered = useMemo(
     () => instances.filter((i) => !search || (i.employee?.full_name ?? '').toLowerCase().includes(search.toLowerCase())),
     [instances, search],
+  );
+
+  const allFilteredSelected = filtered.length > 0 && filtered.every((i) => selectedIds.has(i.id));
+  const toggleAll = () => {
+    const next = new Set(selectedIds);
+    if (allFilteredSelected) filtered.forEach((i) => next.delete(i.id));
+    else filtered.forEach((i) => next.add(i.id));
+    setSelectedIds(next);
+  };
+  const toggleOne = (id: string) => {
+    const next = new Set(selectedIds);
+    next.has(id) ? next.delete(id) : next.add(id);
+    setSelectedIds(next);
+  };
+  const selectedCount = selectedIds.size;
+  const selectedPendingHrCount = useMemo(
+    () => instances.filter((i) => selectedIds.has(i.id) && i.overall_status === 'pending_hr').length,
+    [instances, selectedIds],
   );
 
   if (!activeCycle) return <Card><CardContent className="p-6">Activate a cycle to see progress.</CardContent></Card>;
@@ -150,11 +212,29 @@ function ProgressTab() {
         </div>
       </div>
 
+      {selectedCount > 0 && (
+        <div className="sticky top-0 z-10 flex flex-wrap items-center justify-between gap-3 rounded-md border border-primary/40 bg-primary/5 p-3">
+          <p className="text-sm font-medium">{selectedCount} selected · {selectedPendingHrCount} ready to finalize</p>
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" variant="outline" onClick={() => setSelectedIds(new Set())}>Clear</Button>
+            <Button size="sm" variant="outline" className="gap-1.5" disabled={selectedCount === 0} onClick={() => setBulkOpen('sendBack')}>
+              <Undo2 className="h-4 w-4" /> Bulk send back
+            </Button>
+            <Button size="sm" className="gap-1.5" disabled={selectedPendingHrCount === 0} onClick={() => setBulkOpen('finalize')}>
+              <CheckCheck className="h-4 w-4" /> Bulk finalize ({selectedPendingHrCount})
+            </Button>
+          </div>
+        </div>
+      )}
+
       <Card>
         <CardContent className="p-0 overflow-x-auto">
           <Table>
             <TableHeader className="sticky top-0 bg-card">
               <TableRow>
+                <TableHead className="w-10">
+                  <Checkbox checked={allFilteredSelected} onCheckedChange={toggleAll} aria-label="Select all" />
+                </TableHead>
                 <TableHead>Employee</TableHead>
                 <TableHead>Stage</TableHead>
                 <TableHead className="text-right">Score</TableHead>
@@ -165,6 +245,13 @@ function ProgressTab() {
             <TableBody>
               {filtered.map((i) => (
                 <TableRow key={i.id} className="min-h-10">
+                  <TableCell>
+                    <Checkbox
+                      checked={selectedIds.has(i.id)}
+                      onCheckedChange={() => toggleOne(i.id)}
+                      aria-label={`Select ${i.employee?.full_name ?? ''}`}
+                    />
+                  </TableCell>
                   <TableCell>
                     <div className="font-medium">{i.employee?.full_name ?? i.employee_id}</div>
                     <div className="text-xs text-muted-foreground">{i.employee?.employee_code}</div>
@@ -178,7 +265,7 @@ function ProgressTab() {
                 </TableRow>
               ))}
               {filtered.length === 0 && (
-                <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground py-8">No instances.</TableCell></TableRow>
+                <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-8">No instances.</TableCell></TableRow>
               )}
             </TableBody>
           </Table>
@@ -201,6 +288,179 @@ function ProgressTab() {
         instance={selected}
         template={template ?? null}
       />
+
+      <AlertDialog open={bulkOpen === 'finalize'} onOpenChange={(o) => !o && setBulkOpen(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Bulk finalize {selectedPendingHrCount} review{selectedPendingHrCount === 1 ? '' : 's'}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Only instances in <strong>pending HR</strong> are affected. The same rating and remark are applied to all selected.
+              This action is recorded in the audit log and cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1"><Label>Final rating</Label>
+              <Input value={bulkRating} onChange={(e) => setBulkRating(e.target.value)} placeholder="e.g. Exceeds expectations" />
+            </div>
+            <div className="space-y-1"><Label>HR remarks (optional)</Label>
+              <Textarea rows={3} value={bulkRemarks} onChange={(e) => setBulkRemarks(e.target.value)} />
+            </div>
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => { e.preventDefault(); bulkFinalize.mutate(); }}
+              disabled={!bulkRating.trim() || bulkFinalize.isPending}
+            >
+              {bulkFinalize.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />} Finalize
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={bulkOpen === 'sendBack'} onOpenChange={(o) => !o && setBulkOpen(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Bulk send back {selectedCount} review{selectedCount === 1 ? '' : 's'}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Each selected instance is reverted one stage so the previous reviewer can revise and resubmit.
+              Instances in <em>self</em>, <em>not started</em>, or <em>completed</em> are skipped.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="space-y-1">
+            <Label>Reason (optional)</Label>
+            <Textarea rows={3} value={bulkReason} onChange={(e) => setBulkReason(e.target.value)} placeholder="What needs to be revised?" />
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => { e.preventDefault(); bulkSendBack.mutate(); }}
+              disabled={bulkSendBack.isPending}
+            >
+              {bulkSendBack.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />} Send back
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+}
+
+// ------------------------------------------------------------------
+// Analytics tab — rating distribution, stage funnel, on-time vs overdue
+// ------------------------------------------------------------------
+const STAGE_ORDER = ['not_started','pending_self','pending_manager','pending_skip','pending_bu','pending_hr','completed'] as const;
+const STAGE_LABEL: Record<string, string> = {
+  not_started: 'Not started', pending_self: 'Self', pending_manager: 'Manager',
+  pending_skip: 'Skip', pending_bu: 'BU', pending_hr: 'HR', completed: 'Completed',
+};
+
+function AnalyticsTab() {
+  const { data: activeCycle } = useActiveCycle();
+  const { data: instances = [] } = useCycleInstances(activeCycle?.id);
+
+  const ratingData = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const i of instances) {
+      const r = (i.final_rating ?? '').trim();
+      if (!r) continue;
+      map.set(r, (map.get(r) ?? 0) + 1);
+    }
+    return Array.from(map.entries()).map(([rating, count]) => ({ rating, count }))
+      .sort((a, b) => b.count - a.count);
+  }, [instances]);
+
+  const stageData = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const i of instances) map.set(i.overall_status, (map.get(i.overall_status) ?? 0) + 1);
+    return STAGE_ORDER.map((s) => ({ stage: STAGE_LABEL[s], count: map.get(s) ?? 0 }));
+  }, [instances]);
+
+  const onTimeData = useMemo(() => {
+    if (!activeCycle?.hr_finalization_deadline) return null;
+    const dl = new Date(activeCycle.hr_finalization_deadline).getTime();
+    const now = Date.now();
+    let onTime = 0, overdue = 0, completed = 0;
+    for (const i of instances) {
+      if (i.overall_status === 'completed') {
+        completed++;
+        if (i.finalized_at && new Date(i.finalized_at).getTime() <= dl) onTime++;
+      } else if (now > dl) overdue++;
+    }
+    return [
+      { label: 'Completed on time', value: onTime },
+      { label: 'Completed late', value: completed - onTime },
+      { label: 'Pending (overdue)', value: overdue },
+      { label: 'Pending (in window)', value: instances.length - completed - overdue },
+    ];
+  }, [instances, activeCycle]);
+
+  if (!activeCycle) return <Card><CardContent className="p-6">Activate a cycle to see analytics.</CardContent></Card>;
+
+  const COLORS = ['hsl(var(--primary))', 'hsl(var(--chart-2, 142 76% 36%))', 'hsl(var(--chart-3, 38 92% 50%))', 'hsl(var(--muted-foreground))'];
+
+  return (
+    <div className="grid gap-4 md:grid-cols-2">
+      <Card>
+        <CardHeader><CardTitle className="text-base">Stage funnel</CardTitle></CardHeader>
+        <CardContent style={{ height: 280 }}>
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={stageData} layout="vertical" margin={{ left: 24, right: 16 }}>
+              <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+              <XAxis type="number" allowDecimals={false} />
+              <YAxis type="category" dataKey="stage" width={90} />
+              <Tooltip />
+              <Bar dataKey="count" fill="hsl(var(--primary))" radius={[0,4,4,0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader><CardTitle className="text-base">Rating distribution</CardTitle></CardHeader>
+        <CardContent style={{ height: 280 }}>
+          {ratingData.length === 0 ? (
+            <p className="text-sm text-muted-foreground p-4">No reviews finalized yet.</p>
+          ) : (
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={ratingData} margin={{ left: 8, right: 16 }}>
+                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                <XAxis dataKey="rating" />
+                <YAxis allowDecimals={false} />
+                <Tooltip />
+                <Bar dataKey="count" radius={[4,4,0,0]}>
+                  {ratingData.map((_, idx) => <Cell key={idx} fill={COLORS[idx % COLORS.length]} />)}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card className="md:col-span-2">
+        <CardHeader>
+          <CardTitle className="text-base">On-time vs overdue</CardTitle>
+          <p className="text-xs text-muted-foreground">
+            {activeCycle.hr_finalization_deadline
+              ? `Measured against HR deadline ${new Date(activeCycle.hr_finalization_deadline).toLocaleDateString()}.`
+              : 'Set an HR finalization deadline on the active cycle to enable this view.'}
+          </p>
+        </CardHeader>
+        <CardContent>
+          {!onTimeData ? (
+            <p className="text-sm text-muted-foreground">—</p>
+          ) : (
+            <div className="grid gap-3 md:grid-cols-4">
+              {onTimeData.map((d, idx) => (
+                <div key={d.label} className="rounded-md border p-3">
+                  <p className="text-xs text-muted-foreground">{d.label}</p>
+                  <p className="text-2xl font-semibold tabular-nums" style={{ color: COLORS[idx] }}>{d.value}</p>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }
