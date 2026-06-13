@@ -208,12 +208,12 @@ export function TemplateEditorDialog({
                         <Select value={e.operator} onValueChange={(v) => updateAt(setSections, 'eligibility_criteria', i, { operator: v as EligibilityCriterion['operator'] })}>
                           <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="equals">Equals</SelectItem>
-                            <SelectItem value="not_equals">Not equals</SelectItem>
-                            <SelectItem value="gt">Greater than</SelectItem>
-                            <SelectItem value="gte">≥</SelectItem>
-                            <SelectItem value="lt">Less than</SelectItem>
-                            <SelectItem value="lte">≤</SelectItem>
+                            <SelectItem value="equals">= Equals</SelectItem>
+                            <SelectItem value="not_equals">≠ Not equals</SelectItem>
+                            <SelectItem value="gt">&gt; Greater than</SelectItem>
+                            <SelectItem value="gte">≥ Greater than or equal</SelectItem>
+                            <SelectItem value="lt">&lt; Less than</SelectItem>
+                            <SelectItem value="lte">≤ Less than or equal</SelectItem>
                           </SelectContent>
                         </Select>
                       </TableCell>
