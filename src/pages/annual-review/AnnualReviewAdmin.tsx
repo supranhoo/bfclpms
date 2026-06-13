@@ -17,7 +17,8 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
 import { toast } from 'sonner';
-import { Loader2, Upload, Settings2, ListChecks, Calendar, Layers, Pencil, Plus } from 'lucide-react';
+import { Loader2, Upload, Settings2, ListChecks, Calendar, Layers, Pencil, Plus, Download } from 'lucide-react';
+import * as XLSX from 'xlsx';
 import { AnnualReviewStatusBadge } from '@/components/annual-review/AnnualReviewStatusBadge';
 import { HrFinalizationSheet } from '@/components/annual-review/HrFinalizationSheet';
 import { SystemScoresUploadDialog } from '@/components/annual-review/SystemScoresUploadDialog';
@@ -101,9 +102,18 @@ function ProgressTab() {
 
       <div className="flex flex-wrap items-center justify-between gap-2">
         <Input placeholder="Search employees…" value={search} onChange={(e) => setSearch(e.target.value)} className="max-w-sm" />
-        <Button variant="outline" className="gap-2" onClick={() => setUploadOpen(true)} disabled={!uploadTemplate}>
-          <Upload className="h-4 w-4" /> Bulk system-score upload
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline" className="gap-2"
+            onClick={() => exportProgress(activeCycle.name, filtered)}
+            disabled={filtered.length === 0}
+          >
+            <Download className="h-4 w-4" /> Export to Excel
+          </Button>
+          <Button variant="outline" className="gap-2" onClick={() => setUploadOpen(true)} disabled={!uploadTemplate}>
+            <Upload className="h-4 w-4" /> Bulk system-score upload
+          </Button>
+        </div>
       </div>
 
       <Card>
