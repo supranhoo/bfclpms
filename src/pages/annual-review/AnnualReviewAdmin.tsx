@@ -489,6 +489,8 @@ function CyclesTab() {
     onSuccess: () => { toast.success('Cycle saved'); refetch(); setDraft({ name: '', review_year: new Date().getFullYear(), status: 'draft' }); },
     onError: (e: Error) => toast.error(e.message),
   });
+  const closeCycle = useCloseCycle();
+  const [confirmCloseId, setConfirmCloseId] = useState<string | null>(null);
 
   return (
     <div className="grid gap-4 md:grid-cols-3">
@@ -537,7 +539,18 @@ function CyclesTab() {
                   <TableCell>{c.name}</TableCell>
                   <TableCell>{c.review_year}</TableCell>
                   <TableCell><Badge variant="outline">{c.status}</Badge></TableCell>
-                  <TableCell className="text-right"><Button variant="ghost" size="sm" onClick={() => setDraft(c)}>Edit</Button></TableCell>
+                  <TableCell className="text-right space-x-1">
+                    <Button variant="ghost" size="sm" onClick={() => setDraft(c)}>Edit</Button>
+                    {c.status !== 'closed' && (
+                      <Button
+                        variant="ghost" size="sm"
+                        className="text-destructive hover:text-destructive"
+                        onClick={() => setConfirmCloseId(c.id)}
+                      >
+                        <Lock className="h-3.5 w-3.5 mr-1" /> Close
+                      </Button>
+                    )}
+                  </TableCell>
                 </TableRow>
               ))}
               {cycles.length === 0 && <TableRow><TableCell colSpan={4} className="text-center text-muted-foreground py-6">No cycles yet.</TableCell></TableRow>}
@@ -545,6 +558,35 @@ function CyclesTab() {
           </Table>
         </CardContent>
       </Card>
+
+      <AlertDialog open={!!confirmCloseId} onOpenChange={(o) => !o && setConfirmCloseId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Close this cycle?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Closing the cycle locks every response and prevents further edits — including by reviewers and HR.
+              Admins can still override ratings via Calibration. This is recorded in the audit log.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={async (e) => {
+                e.preventDefault();
+                if (!confirmCloseId) return;
+                try {
+                  const n = await closeCycle.mutateAsync(confirmCloseId);
+                  toast.success(`Cycle closed. ${n} response(s) locked.`);
+                  setConfirmCloseId(null);
+                } catch (err) { toast.error((err as Error).message); }
+              }}
+              disabled={closeCycle.isPending}
+            >
+              {closeCycle.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />} Close cycle
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
