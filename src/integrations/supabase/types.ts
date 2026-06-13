@@ -12366,6 +12366,14 @@ export type Database = {
         Args: { kpis_json: Json }
         Returns: number
       }
+      bulk_finalize_annual_reviews: {
+        Args: {
+          p_final_rating: string
+          p_hr_remarks?: string
+          p_instance_ids: string[]
+        }
+        Returns: number
+      }
       bulk_management_approve: {
         Args: {
           p_achieved_values?: Json
