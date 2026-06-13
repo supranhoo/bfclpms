@@ -350,3 +350,54 @@ export async function bulkFinalize(args: { instanceIds: string[]; finalRating: s
   if (error) throw error;
   return data as number;
 }
+
+/** Close a cycle (admin/hr_pms). Locks all responses, marks cycle 'closed'. */
+export async function closeCycle(cycleId: string): Promise<number> {
+  const { data, error } = await db.rpc('close_annual_review_cycle', { p_cycle_id: cycleId });
+  if (error) throw error;
+  return (data as number) ?? 0;
+}
+
+/** HR/Admin rating override on a finalized instance. Reason is mandatory (>=3 chars). */
+export async function overrideRating(instanceId: string, newRating: string, reason: string) {
+  const { error } = await db.rpc('override_annual_review_rating', {
+    p_instance_id: instanceId, p_new_rating: newRating, p_reason: reason,
+  });
+  if (error) throw error;
+}
+
+/** Manually invoke the reminder cron (admins). */
+export async function runReminderCron(): Promise<{ queued: number; skipped: number }> {
+  const { data, error } = await supabase.functions.invoke('annual-review-reminders');
+  if (error) throw error;
+  return data as { queued: number; skipped: number };
+}
+
+export interface AnnualReviewTimelineEntry {
+  id: string;
+  action: string;
+  created_at: string;
+  performed_by: string | null;
+  metadata: Record<string, unknown> | null;
+  performer_name?: string | null;
+}
+
+/** Audit timeline for a single instance — pulls all `annual_review.*` log entries. */
+export async function listInstanceTimeline(instanceId: string): Promise<AnnualReviewTimelineEntry[]> {
+  const { data, error } = await db
+    .from('system_audit_logs')
+    .select('id, action, created_at, performed_by, metadata')
+    .like('action', 'annual_review.%')
+    .contains('metadata', { instance_id: instanceId })
+    .order('created_at', { ascending: false })
+    .limit(200);
+  if (error) throw error;
+  const rows = (data ?? []) as AnnualReviewTimelineEntry[];
+
+  // Resolve performer names in one round-trip.
+  const ids = Array.from(new Set(rows.map((r) => r.performed_by).filter(Boolean))) as string[];
+  if (ids.length === 0) return rows;
+  const { data: profs } = await db.from('profiles').select('id, full_name').in('id', ids);
+  const map = new Map<string, string>((profs ?? []).map((p: { id: string; full_name: string }) => [p.id, p.full_name]));
+  return rows.map((r) => ({ ...r, performer_name: r.performed_by ? map.get(r.performed_by) ?? null : null }));
+}
