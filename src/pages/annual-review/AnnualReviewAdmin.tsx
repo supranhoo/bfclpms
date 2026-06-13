@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import {
   useCycles, useTemplates, useRules, useCycleInstances, useActiveCycle, useTemplate,
-  useSendBackStatus,
+  useSendBackStatus, useCloseCycle, useOverrideRating,
 } from '@/hooks/useAnnualReview';
 import * as svc from '@/services/annualReview/annualReviewService';
 import { useAuth } from '@/contexts/AuthContext';
@@ -24,7 +24,7 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
 import { toast } from 'sonner';
-import { Loader2, Upload, Settings2, ListChecks, Calendar, Layers, Pencil, Plus, Download, BarChart3, CheckCheck, Undo2 } from 'lucide-react';
+import { Loader2, Upload, Settings2, ListChecks, Calendar, Layers, Pencil, Plus, Download, BarChart3, CheckCheck, Undo2, Lock, Bell, Scale } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Cell,
@@ -47,15 +47,17 @@ export default function AnnualReviewAdmin() {
         <p className="text-sm text-muted-foreground">Manage cycles, templates, rules, and finalize reviews.</p>
       </header>
       <Tabs defaultValue="progress" className="w-full">
-        <TabsList className="grid w-full grid-cols-3 md:grid-cols-5">
+        <TabsList className="grid w-full grid-cols-3 md:grid-cols-6">
           <TabsTrigger value="progress" className="gap-1.5"><ListChecks className="h-4 w-4" />Progress</TabsTrigger>
           <TabsTrigger value="analytics" className="gap-1.5"><BarChart3 className="h-4 w-4" />Analytics</TabsTrigger>
+          <TabsTrigger value="calibration" className="gap-1.5"><Scale className="h-4 w-4" />Calibration</TabsTrigger>
           <TabsTrigger value="cycles" className="gap-1.5"><Calendar className="h-4 w-4" />Cycles</TabsTrigger>
           <TabsTrigger value="templates" className="gap-1.5"><Settings2 className="h-4 w-4" />Templates</TabsTrigger>
           <TabsTrigger value="rules" className="gap-1.5"><Layers className="h-4 w-4" />Rules</TabsTrigger>
         </TabsList>
         <TabsContent value="progress" className="mt-4"><ProgressTab /></TabsContent>
         <TabsContent value="analytics" className="mt-4"><AnalyticsTab /></TabsContent>
+        <TabsContent value="calibration" className="mt-4"><CalibrationTab /></TabsContent>
         <TabsContent value="cycles" className="mt-4"><CyclesTab /></TabsContent>
         <TabsContent value="templates" className="mt-4"><TemplatesTab /></TabsContent>
         <TabsContent value="rules" className="mt-4"><RulesTab /></TabsContent>
@@ -199,6 +201,17 @@ function ProgressTab() {
       <div className="flex flex-wrap items-center justify-between gap-2">
         <Input placeholder="Search employees…" value={search} onChange={(e) => setSearch(e.target.value)} className="max-w-sm" />
         <div className="flex items-center gap-2">
+          <Button
+            variant="outline" className="gap-2"
+            onClick={async () => {
+              try {
+                const r = await svc.runReminderCron();
+                toast.success(`Queued ${r.queued} reminder${r.queued === 1 ? '' : 's'}.`);
+              } catch (e) { toast.error((e as Error).message); }
+            }}
+          >
+            <Bell className="h-4 w-4" /> Send reminders now
+          </Button>
           <Button
             variant="outline" className="gap-2"
             onClick={() => exportProgress(activeCycle.name, filtered)}
@@ -476,6 +489,8 @@ function CyclesTab() {
     onSuccess: () => { toast.success('Cycle saved'); refetch(); setDraft({ name: '', review_year: new Date().getFullYear(), status: 'draft' }); },
     onError: (e: Error) => toast.error(e.message),
   });
+  const closeCycle = useCloseCycle();
+  const [confirmCloseId, setConfirmCloseId] = useState<string | null>(null);
 
   return (
     <div className="grid gap-4 md:grid-cols-3">
@@ -524,7 +539,18 @@ function CyclesTab() {
                   <TableCell>{c.name}</TableCell>
                   <TableCell>{c.review_year}</TableCell>
                   <TableCell><Badge variant="outline">{c.status}</Badge></TableCell>
-                  <TableCell className="text-right"><Button variant="ghost" size="sm" onClick={() => setDraft(c)}>Edit</Button></TableCell>
+                  <TableCell className="text-right space-x-1">
+                    <Button variant="ghost" size="sm" onClick={() => setDraft(c)}>Edit</Button>
+                    {c.status !== 'closed' && (
+                      <Button
+                        variant="ghost" size="sm"
+                        className="text-destructive hover:text-destructive"
+                        onClick={() => setConfirmCloseId(c.id)}
+                      >
+                        <Lock className="h-3.5 w-3.5 mr-1" /> Close
+                      </Button>
+                    )}
+                  </TableCell>
                 </TableRow>
               ))}
               {cycles.length === 0 && <TableRow><TableCell colSpan={4} className="text-center text-muted-foreground py-6">No cycles yet.</TableCell></TableRow>}
@@ -532,6 +558,35 @@ function CyclesTab() {
           </Table>
         </CardContent>
       </Card>
+
+      <AlertDialog open={!!confirmCloseId} onOpenChange={(o) => !o && setConfirmCloseId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Close this cycle?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Closing the cycle locks every response and prevents further edits — including by reviewers and HR.
+              Admins can still override ratings via Calibration. This is recorded in the audit log.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={async (e) => {
+                e.preventDefault();
+                if (!confirmCloseId) return;
+                try {
+                  const n = await closeCycle.mutateAsync(confirmCloseId);
+                  toast.success(`Cycle closed. ${n} response(s) locked.`);
+                  setConfirmCloseId(null);
+                } catch (err) { toast.error((err as Error).message); }
+              }}
+              disabled={closeCycle.isPending}
+            >
+              {closeCycle.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />} Close cycle
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
@@ -727,6 +782,139 @@ function RulesTab() {
           </CardContent>
         </Card>
       )}
+    </div>
+  );
+}
+
+// ------------------------------------------------------------------
+// Calibration tab — distribution + per-instance rating override
+// ------------------------------------------------------------------
+function CalibrationTab() {
+  const { data: activeCycle } = useActiveCycle();
+  const { data: instances = [] } = useCycleInstances(activeCycle?.id);
+  const override = useOverrideRating();
+  const [target, setTarget] = useState<InstanceWithEmployee | null>(null);
+  const [newRating, setNewRating] = useState('');
+  const [reason, setReason] = useState('');
+
+  const finalized = useMemo(() => instances.filter((i) => !!i.final_rating), [instances]);
+
+  const distribution = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const i of finalized) {
+      const r = (i.final_rating ?? '').trim();
+      if (!r) continue;
+      map.set(r, (map.get(r) ?? 0) + 1);
+    }
+    const total = finalized.length || 1;
+    return Array.from(map.entries())
+      .map(([rating, count]) => ({ rating, count, pct: Math.round((count / total) * 1000) / 10 }))
+      .sort((a, b) => b.count - a.count);
+  }, [finalized]);
+
+  if (!activeCycle) return <Card><CardContent className="p-6">Activate a cycle to use calibration.</CardContent></Card>;
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Rating distribution</CardTitle>
+          <p className="text-xs text-muted-foreground">{finalized.length} of {instances.length} reviews finalized.</p>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          {distribution.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No final ratings yet.</p>
+          ) : distribution.map((d) => (
+            <div key={d.rating} className="space-y-1">
+              <div className="flex items-center justify-between text-sm">
+                <span className="font-medium">{d.rating}</span>
+                <span className="tabular-nums text-muted-foreground">{d.count} · {d.pct}%</span>
+              </div>
+              <div className="h-2 rounded-full bg-muted overflow-hidden">
+                <div className="h-full bg-primary" style={{ width: `${d.pct}%` }} />
+              </div>
+            </div>
+          ))}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Finalized reviews — override rating</CardTitle>
+          <p className="text-xs text-muted-foreground">
+            Overrides are HR/Admin-only, require a reason, and are recorded in the audit log.
+          </p>
+        </CardHeader>
+        <CardContent className="p-0 overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Employee</TableHead>
+                <TableHead className="text-right">Score</TableHead>
+                <TableHead>Current rating</TableHead>
+                <TableHead></TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {finalized.map((i) => (
+                <TableRow key={i.id} className="min-h-10">
+                  <TableCell>
+                    <div className="font-medium">{i.employee?.full_name ?? i.employee_id}</div>
+                    <div className="text-xs text-muted-foreground">{i.employee?.employee_code}</div>
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums">{i.total_score?.toFixed(2) ?? '—'}</TableCell>
+                  <TableCell><Badge variant="outline">{i.final_rating}</Badge></TableCell>
+                  <TableCell className="text-right">
+                    <Button variant="ghost" size="sm" onClick={() => {
+                      setTarget(i); setNewRating(i.final_rating ?? ''); setReason('');
+                    }}>Override</Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+              {finalized.length === 0 && (
+                <TableRow><TableCell colSpan={4} className="text-center text-muted-foreground py-6">No finalized reviews yet.</TableCell></TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
+      <AlertDialog open={!!target} onOpenChange={(o) => !o && setTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Override final rating</AlertDialogTitle>
+            <AlertDialogDescription>
+              {target?.employee?.full_name} · current rating <strong>{target?.final_rating ?? '—'}</strong>.
+              Provide a non-empty reason — this is permanently audit-logged.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1"><Label>New rating</Label>
+              <Input value={newRating} onChange={(e) => setNewRating(e.target.value)} />
+            </div>
+            <div className="space-y-1"><Label>Reason</Label>
+              <Textarea rows={3} value={reason} onChange={(e) => setReason(e.target.value)} />
+            </div>
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={!newRating.trim() || reason.trim().length < 3 || override.isPending}
+              onClick={async (e) => {
+                e.preventDefault();
+                if (!target) return;
+                try {
+                  await override.mutateAsync({ instanceId: target.id, newRating: newRating.trim(), reason: reason.trim() });
+                  toast.success('Rating overridden.');
+                  setTarget(null);
+                } catch (err) { toast.error((err as Error).message); }
+              }}
+            >
+              {override.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />} Override
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

@@ -102,6 +102,32 @@ export function useFinalizeInstance() {
   });
 }
 
+export function useInstanceTimeline(instanceId: string | undefined) {
+  return useQuery({
+    queryKey: [...annualReviewKeys.all, 'timeline', instanceId ?? ''],
+    queryFn: () => svc.listInstanceTimeline(instanceId!),
+    enabled: !!instanceId,
+    staleTime: 30_000,
+  });
+}
+
+export function useCloseCycle() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: svc.closeCycle,
+    onSuccess: () => qc.invalidateQueries({ queryKey: annualReviewKeys.all }),
+  });
+}
+
+export function useOverrideRating() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (args: { instanceId: string; newRating: string; reason: string }) =>
+      svc.overrideRating(args.instanceId, args.newRating, args.reason),
+    onSuccess: () => qc.invalidateQueries({ queryKey: annualReviewKeys.all }),
+  });
+}
+
 /**
  * Debounced auto-save for a single (instance, reviewer_role) response.
  *
