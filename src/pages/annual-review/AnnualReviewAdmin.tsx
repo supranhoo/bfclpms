@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import {
   useCycles, useTemplates, useRules, useCycleInstances, useActiveCycle, useTemplate,
+  useSendBackStatus,
 } from '@/hooks/useAnnualReview';
 import * as svc from '@/services/annualReview/annualReviewService';
 import { useAuth } from '@/contexts/AuthContext';
@@ -13,19 +14,28 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Textarea } from '@/components/ui/textarea';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
 import { toast } from 'sonner';
-import { Loader2, Upload, Settings2, ListChecks, Calendar, Layers, Pencil, Plus, Download } from 'lucide-react';
+import { Loader2, Upload, Settings2, ListChecks, Calendar, Layers, Pencil, Plus, Download, BarChart3, CheckCheck, Undo2 } from 'lucide-react';
 import * as XLSX from 'xlsx';
+import {
+  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Cell,
+} from 'recharts';
 import { AnnualReviewStatusBadge } from '@/components/annual-review/AnnualReviewStatusBadge';
 import { HrFinalizationSheet } from '@/components/annual-review/HrFinalizationSheet';
 import { SystemScoresUploadDialog } from '@/components/annual-review/SystemScoresUploadDialog';
 import { TemplateEditorDialog } from '@/components/annual-review/TemplateEditorDialog';
 import { RuleFiltersEditor, RuleFiltersSummary, EMPTY_FILTERS } from '@/components/annual-review/RuleFiltersEditor';
 import type {
-  AnnualReviewCycle, AnnualReviewTemplate, AssignmentFilters,
+  AnnualReviewCycle, AnnualReviewTemplate, AssignmentFilters, AnnualReviewerRole,
 } from '@/types/annualReview';
 import type { InstanceWithEmployee } from '@/services/annualReview/annualReviewService';
 
@@ -37,13 +47,15 @@ export default function AnnualReviewAdmin() {
         <p className="text-sm text-muted-foreground">Manage cycles, templates, rules, and finalize reviews.</p>
       </header>
       <Tabs defaultValue="progress" className="w-full">
-        <TabsList className="grid w-full grid-cols-2 md:grid-cols-4">
+        <TabsList className="grid w-full grid-cols-3 md:grid-cols-5">
           <TabsTrigger value="progress" className="gap-1.5"><ListChecks className="h-4 w-4" />Progress</TabsTrigger>
+          <TabsTrigger value="analytics" className="gap-1.5"><BarChart3 className="h-4 w-4" />Analytics</TabsTrigger>
           <TabsTrigger value="cycles" className="gap-1.5"><Calendar className="h-4 w-4" />Cycles</TabsTrigger>
           <TabsTrigger value="templates" className="gap-1.5"><Settings2 className="h-4 w-4" />Templates</TabsTrigger>
           <TabsTrigger value="rules" className="gap-1.5"><Layers className="h-4 w-4" />Rules</TabsTrigger>
         </TabsList>
         <TabsContent value="progress" className="mt-4"><ProgressTab /></TabsContent>
+        <TabsContent value="analytics" className="mt-4"><AnalyticsTab /></TabsContent>
         <TabsContent value="cycles" className="mt-4"><CyclesTab /></TabsContent>
         <TabsContent value="templates" className="mt-4"><TemplatesTab /></TabsContent>
         <TabsContent value="rules" className="mt-4"><RulesTab /></TabsContent>
