@@ -295,6 +295,387 @@ export type Database = {
           },
         ]
       }
+      annual_review_assignment_rules: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          cycle_id: string
+          filters: Json
+          id: string
+          is_active: boolean
+          name: string | null
+          priority: number
+          template_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          cycle_id: string
+          filters?: Json
+          id?: string
+          is_active?: boolean
+          name?: string | null
+          priority?: number
+          template_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          cycle_id?: string
+          filters?: Json
+          id?: string
+          is_active?: boolean
+          name?: string | null
+          priority?: number
+          template_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "annual_review_assignment_rules_cycle_id_fkey"
+            columns: ["cycle_id"]
+            isOneToOne: false
+            referencedRelation: "annual_review_cycles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "annual_review_assignment_rules_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "annual_review_templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      annual_review_cycles: {
+        Row: {
+          bu_review_end: string | null
+          bu_review_start: string | null
+          created_at: string
+          created_by: string | null
+          description: string | null
+          hr_finalization_deadline: string | null
+          id: string
+          manager_review_end: string | null
+          manager_review_start: string | null
+          name: string
+          review_year: number
+          self_review_end: string | null
+          self_review_start: string | null
+          skip_review_end: string | null
+          skip_review_start: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          bu_review_end?: string | null
+          bu_review_start?: string | null
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          hr_finalization_deadline?: string | null
+          id?: string
+          manager_review_end?: string | null
+          manager_review_start?: string | null
+          name: string
+          review_year: number
+          self_review_end?: string | null
+          self_review_start?: string | null
+          skip_review_end?: string | null
+          skip_review_start?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          bu_review_end?: string | null
+          bu_review_start?: string | null
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          hr_finalization_deadline?: string | null
+          id?: string
+          manager_review_end?: string | null
+          manager_review_start?: string | null
+          name?: string
+          review_year?: number
+          self_review_end?: string | null
+          self_review_start?: string | null
+          skip_review_end?: string | null
+          skip_review_start?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      annual_review_instances: {
+        Row: {
+          assigned_rule_id: string | null
+          bu_head_id: string | null
+          created_at: string
+          criteria_weighted_score: number | null
+          cycle_id: string
+          eligibility_inputs: Json
+          employee_id: string
+          final_rating: string | null
+          finalized_at: string | null
+          finalized_by: string | null
+          hr_id: string | null
+          hr_remarks: string | null
+          id: string
+          language_pref: string
+          manager_id: string | null
+          overall_status: Database["public"]["Enums"]["annual_review_status"]
+          skip_id: string | null
+          system_scores: Json
+          template_id: string
+          total_score: number | null
+          updated_at: string
+        }
+        Insert: {
+          assigned_rule_id?: string | null
+          bu_head_id?: string | null
+          created_at?: string
+          criteria_weighted_score?: number | null
+          cycle_id: string
+          eligibility_inputs?: Json
+          employee_id: string
+          final_rating?: string | null
+          finalized_at?: string | null
+          finalized_by?: string | null
+          hr_id?: string | null
+          hr_remarks?: string | null
+          id?: string
+          language_pref?: string
+          manager_id?: string | null
+          overall_status?: Database["public"]["Enums"]["annual_review_status"]
+          skip_id?: string | null
+          system_scores?: Json
+          template_id: string
+          total_score?: number | null
+          updated_at?: string
+        }
+        Update: {
+          assigned_rule_id?: string | null
+          bu_head_id?: string | null
+          created_at?: string
+          criteria_weighted_score?: number | null
+          cycle_id?: string
+          eligibility_inputs?: Json
+          employee_id?: string
+          final_rating?: string | null
+          finalized_at?: string | null
+          finalized_by?: string | null
+          hr_id?: string | null
+          hr_remarks?: string | null
+          id?: string
+          language_pref?: string
+          manager_id?: string | null
+          overall_status?: Database["public"]["Enums"]["annual_review_status"]
+          skip_id?: string | null
+          system_scores?: Json
+          template_id?: string
+          total_score?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "annual_review_instances_assigned_rule_id_fkey"
+            columns: ["assigned_rule_id"]
+            isOneToOne: false
+            referencedRelation: "annual_review_assignment_rules"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "annual_review_instances_bu_head_id_fkey"
+            columns: ["bu_head_id"]
+            isOneToOne: false
+            referencedRelation: "eligible_login_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "annual_review_instances_bu_head_id_fkey"
+            columns: ["bu_head_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "annual_review_instances_cycle_id_fkey"
+            columns: ["cycle_id"]
+            isOneToOne: false
+            referencedRelation: "annual_review_cycles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "annual_review_instances_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "eligible_login_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "annual_review_instances_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "annual_review_instances_hr_id_fkey"
+            columns: ["hr_id"]
+            isOneToOne: false
+            referencedRelation: "eligible_login_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "annual_review_instances_hr_id_fkey"
+            columns: ["hr_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "annual_review_instances_manager_id_fkey"
+            columns: ["manager_id"]
+            isOneToOne: false
+            referencedRelation: "eligible_login_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "annual_review_instances_manager_id_fkey"
+            columns: ["manager_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "annual_review_instances_skip_id_fkey"
+            columns: ["skip_id"]
+            isOneToOne: false
+            referencedRelation: "eligible_login_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "annual_review_instances_skip_id_fkey"
+            columns: ["skip_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "annual_review_instances_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "annual_review_templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      annual_review_responses: {
+        Row: {
+          created_at: string
+          criteria_scores: Json
+          evidence: Json
+          id: string
+          instance_id: string
+          is_locked: boolean
+          notes: string | null
+          qualitative_responses: Json
+          reviewer_id: string
+          reviewer_role: Database["public"]["Enums"]["annual_reviewer_role"]
+          submitted_at: string | null
+          updated_at: string
+          weighted_score: number | null
+        }
+        Insert: {
+          created_at?: string
+          criteria_scores?: Json
+          evidence?: Json
+          id?: string
+          instance_id: string
+          is_locked?: boolean
+          notes?: string | null
+          qualitative_responses?: Json
+          reviewer_id: string
+          reviewer_role: Database["public"]["Enums"]["annual_reviewer_role"]
+          submitted_at?: string | null
+          updated_at?: string
+          weighted_score?: number | null
+        }
+        Update: {
+          created_at?: string
+          criteria_scores?: Json
+          evidence?: Json
+          id?: string
+          instance_id?: string
+          is_locked?: boolean
+          notes?: string | null
+          qualitative_responses?: Json
+          reviewer_id?: string
+          reviewer_role?: Database["public"]["Enums"]["annual_reviewer_role"]
+          submitted_at?: string | null
+          updated_at?: string
+          weighted_score?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "annual_review_responses_instance_id_fkey"
+            columns: ["instance_id"]
+            isOneToOne: false
+            referencedRelation: "annual_review_instances"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "annual_review_responses_reviewer_id_fkey"
+            columns: ["reviewer_id"]
+            isOneToOne: false
+            referencedRelation: "eligible_login_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "annual_review_responses_reviewer_id_fkey"
+            columns: ["reviewer_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      annual_review_templates: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          description: string | null
+          id: string
+          is_active: boolean
+          name: string
+          sections: Json
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          name: string
+          sections?: Json
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          name?: string
+          sections?: Json
+          updated_at?: string
+        }
+        Relationships: []
+      }
       annual_score_config_audit: {
         Row: {
           action: string
@@ -11936,6 +12317,13 @@ export type Database = {
         Returns: Json
       }
       activate_permit: { Args: { p_permit_id: string }; Returns: Json }
+      advance_annual_review_status: {
+        Args: {
+          p_instance_id: string
+          p_reviewer_role: Database["public"]["Enums"]["annual_reviewer_role"]
+        }
+        Returns: Database["public"]["Enums"]["annual_review_status"]
+      }
       aggregate_sub_period_scores: {
         Args: { p_kpi_id: string; p_month: string; p_year: number }
         Returns: number
@@ -13375,6 +13763,20 @@ export type Database = {
       }
     }
     Enums: {
+      annual_review_status:
+        | "not_started"
+        | "pending_self"
+        | "pending_manager"
+        | "pending_skip"
+        | "pending_bu"
+        | "pending_hr"
+        | "completed"
+      annual_reviewer_role:
+        | "self"
+        | "manager"
+        | "skip_manager"
+        | "bu_head"
+        | "hr"
       annual_score_method: "avg_all" | "last_6" | "custom"
       app_role:
         | "admin"
@@ -13633,6 +14035,22 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      annual_review_status: [
+        "not_started",
+        "pending_self",
+        "pending_manager",
+        "pending_skip",
+        "pending_bu",
+        "pending_hr",
+        "completed",
+      ],
+      annual_reviewer_role: [
+        "self",
+        "manager",
+        "skip_manager",
+        "bu_head",
+        "hr",
+      ],
       annual_score_method: ["avg_all", "last_6", "custom"],
       app_role: [
         "admin",
