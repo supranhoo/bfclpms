@@ -1,0 +1,196 @@
+import { useState } from 'react';
+import { Card, CardContent } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Textarea } from '@/components/ui/textarea';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Loader2, Upload, X } from 'lucide-react';
+import { SCORE_COLOR, SCORE_LABEL } from '@/lib/annualReview/constants';
+import type { TemplateCriterion, EvidenceItem } from '@/types/annualReview';
+
+const COACHING_NOTES: Record<number, string> = {
+  5: 'Reserve "Outstanding" for documented, repeated excellence — avoid leniency bias.',
+  4: 'Above-target performance with clear evidence. Watch for halo bias.',
+  3: 'Solid expected performance — the default for someone meeting their role.',
+  2: 'Highlight a specific gap; avoid central-tendency bias by being concrete.',
+  1: 'Document the issue and the support discussed.',
+  0: 'Use only when the deliverable was not achieved at all.',
+};
+
+export interface CriteriaScoringMatrixProps {
+  criteria: TemplateCriterion[];
+  values: Record<string, number | undefined>;
+  remarks: Record<string, string>;
+  evidence?: Record<string, EvidenceItem[]>;
+  readOnly?: boolean;
+  reviewerLabel?: string;
+  onChangeScore?: (criterionId: string, score: number) => void;
+  onChangeRemark?: (criterionId: string, text: string) => void;
+  onUploadEvidence?: (criterionId: string, file: File) => Promise<EvidenceItem | void>;
+  onRemoveEvidence?: (criterionId: string, path: string) => void;
+  comparison?: { label: string; values: Record<string, number | undefined> }[];
+}
+
+export function CriteriaScoringMatrix(props: CriteriaScoringMatrixProps) {
+  return (
+    <TooltipProvider>
+      <div className="space-y-4">
+        {props.criteria.map((c) => (
+          <CriterionRow key={c.id} criterion={c} {...props} />
+        ))}
+      </div>
+    </TooltipProvider>
+  );
+}
+
+function CriterionRow({
+  criterion,
+  values,
+  remarks,
+  evidence,
+  readOnly,
+  reviewerLabel,
+  comparison,
+  onChangeScore,
+  onChangeRemark,
+  onUploadEvidence,
+  onRemoveEvidence,
+}: CriteriaScoringMatrixProps & { criterion: TemplateCriterion }) {
+  const [uploading, setUploading] = useState(false);
+  const score = values[criterion.id];
+  const w = Number(criterion.weight) || 0;
+  const total = typeof score === 'number' ? w * score : null;
+  const enableRemarks = criterion.enable_remarks !== false;
+  const enableEvidence = !!criterion.enable_evidence;
+
+  return (
+    <Card>
+      <CardContent className="p-4 md:p-6 space-y-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <h4 className="font-semibold text-base">{criterion.name}</h4>
+            {criterion.description && <p className="text-sm text-muted-foreground mt-0.5">{criterion.description}</p>}
+          </div>
+          <div className="flex items-center gap-2 text-sm font-mono">
+            <div className="rounded-md border border-emerald-500/30 bg-emerald-500/5 px-3 py-1.5">
+              <div className="text-[10px] uppercase text-muted-foreground">Weight</div>
+              <div className="font-semibold text-emerald-400">{w}</div>
+            </div>
+            <span className="text-muted-foreground">×</span>
+            <div className="rounded-md border border-blue-500/30 bg-blue-500/5 px-3 py-1.5">
+              <div className="text-[10px] uppercase text-muted-foreground">Score</div>
+              <div className="font-semibold text-blue-400">{typeof score === 'number' ? score : '–'}</div>
+            </div>
+            <span className="text-muted-foreground">=</span>
+            <div className="rounded-md border border-indigo-500/30 bg-indigo-500/5 px-3 py-1.5">
+              <div className="text-[10px] uppercase text-muted-foreground">Total</div>
+              <div className="font-semibold text-indigo-400">{total !== null ? total.toFixed(2) : '–'}</div>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          {[0, 1, 2, 3, 4, 5].map((n) => {
+            const c = SCORE_COLOR[n];
+            const active = score === n;
+            return (
+              <Tooltip key={n}>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    disabled={readOnly}
+                    onClick={() => onChangeScore?.(criterion.id, n)}
+                    aria-label={`Score ${n} — ${SCORE_LABEL[n]}`}
+                    aria-pressed={active}
+                    className={[
+                      'h-10 w-10 rounded-full border-2 font-semibold text-sm transition-all',
+                      c.border,
+                      active
+                        ? `${c.bg} ${c.text} scale-110 ring-2 ring-offset-2 ring-offset-background ${c.ring}`
+                        : `${c.text} hover:${c.bg} hover:scale-105`,
+                      readOnly ? 'opacity-50 cursor-not-allowed hover:scale-100' : '',
+                    ].join(' ')}
+                  >
+                    {n}
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">
+                  <div className="text-xs">
+                    <div className="font-semibold">{n} — {SCORE_LABEL[n]}</div>
+                    {reviewerLabel && <div className="text-muted-foreground">{reviewerLabel} perspective</div>}
+                  </div>
+                </TooltipContent>
+              </Tooltip>
+            );
+          })}
+          {typeof score === 'number' && reviewerLabel && reviewerLabel !== 'Self' && (
+            <div className="ml-auto rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-1.5 text-xs text-amber-400 max-w-md">
+              <span className="font-semibold">Coaching note:</span> {COACHING_NOTES[score]}
+            </div>
+          )}
+        </div>
+
+        {comparison && comparison.length > 0 && (
+          <div className="flex flex-wrap gap-2 text-xs text-muted-foreground border-t border-border/50 pt-3">
+            {comparison.map((c) => {
+              const v = c.values[criterion.id];
+              return (
+                <span key={c.label} className="rounded-md border px-2 py-1">
+                  {c.label}: <span className="font-semibold text-foreground">{typeof v === 'number' ? v : '–'}</span>
+                </span>
+              );
+            })}
+          </div>
+        )}
+
+        {(enableRemarks || enableEvidence) && (
+          <div className="grid gap-3 md:grid-cols-2 border-t border-border/50 pt-4">
+            {enableRemarks && (
+              <Textarea
+                placeholder="Remarks / justification"
+                value={remarks[criterion.id] ?? ''}
+                onChange={(e) => onChangeRemark?.(criterion.id, e.target.value)}
+                disabled={readOnly}
+                rows={3}
+              />
+            )}
+            {enableEvidence && (
+              <div className="space-y-2">
+                {!readOnly && (
+                  <label className="inline-flex items-center gap-2 h-10 px-3 rounded-md border bg-background hover:bg-muted/50 cursor-pointer text-sm">
+                    {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                    <span>Upload evidence</span>
+                    <input
+                      type="file"
+                      multiple
+                      hidden
+                      onChange={async (e) => {
+                        const files = Array.from(e.target.files ?? []);
+                        e.currentTarget.value = '';
+                        if (!files.length || !onUploadEvidence) return;
+                        setUploading(true);
+                        try { for (const f of files) await onUploadEvidence(criterion.id, f); }
+                        finally { setUploading(false); }
+                      }}
+                    />
+                  </label>
+                )}
+                <ul className="space-y-1">
+                  {(evidence?.[criterion.id] ?? []).map((e) => (
+                    <li key={e.path} className="flex items-center justify-between rounded border bg-muted/40 px-2 py-1 text-xs">
+                      <span className="truncate">{e.name}</span>
+                      {!readOnly && onRemoveEvidence && (
+                        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => onRemoveEvidence(criterion.id, e.path)}>
+                          <X className="h-3 w-3" />
+                        </Button>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
