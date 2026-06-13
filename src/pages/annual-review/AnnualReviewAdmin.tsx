@@ -232,91 +232,79 @@ function CyclesTab() {
 }
 
 // ------------------------------------------------------------------
-// Tab 3 — Templates (lean JSON editor + multilingual toggle + self-review fields)
+// Tab 3 — Templates (visual builder via TemplateEditorDialog)
 // ------------------------------------------------------------------
 function TemplatesTab() {
   const { data: templates = [], refetch } = useTemplates();
-  const [selected, setSelected] = useState<AnnualReviewTemplate | null>(null);
-  const [name, setName] = useState('');
-  const [desc, setDesc] = useState('');
-  const [isActive, setIsActive] = useState(true);
-  const [sectionsText, setSectionsText] = useState('');
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [editing, setEditing] = useState<AnnualReviewTemplate | null>(null);
 
-  const load = (t: AnnualReviewTemplate | null) => {
-    setSelected(t);
-    setName(t?.name ?? '');
-    setDesc(t?.description ?? '');
-    setIsActive(t?.is_active ?? true);
-    setSectionsText(JSON.stringify(t?.sections ?? defaultSections(), null, 2));
-  };
-
-  const save = useMutation({
-    mutationFn: async () => {
-      let sections: TemplateSections;
-      try { sections = JSON.parse(sectionsText); } catch { throw new Error('Sections JSON is invalid'); }
-      return svc.upsertTemplate({ id: selected?.id, name, description: desc, is_active: isActive, sections });
-    },
-    onSuccess: () => { toast.success('Template saved'); refetch(); },
+  const toggleActive = useMutation({
+    mutationFn: (t: AnnualReviewTemplate) =>
+      svc.upsertTemplate({ id: t.id, is_active: !t.is_active }),
+    onSuccess: () => { toast.success('Template updated'); refetch(); },
     onError: (e: Error) => toast.error(e.message),
   });
 
-  return (
-    <div className="grid gap-4 md:grid-cols-3">
-      <Card className="md:col-span-1">
-        <CardHeader><CardTitle>Templates</CardTitle></CardHeader>
-        <CardContent>
-          <Button size="sm" variant="outline" onClick={() => load(null)} className="mb-2">+ New template</Button>
-          <ul className="space-y-1">
-            {templates.map((t) => (
-              <li key={t.id}>
-                <button className={`w-full text-left rounded p-2 hover:bg-muted/50 ${selected?.id === t.id ? 'bg-muted' : ''}`} onClick={() => load(t)}>
-                  <div className="font-medium text-sm">{t.name}</div>
-                  <div className="text-xs text-muted-foreground">{t.is_active ? 'Active' : 'Inactive'}</div>
-                </button>
-              </li>
-            ))}
-            {templates.length === 0 && <li className="text-sm text-muted-foreground p-2">No templates.</li>}
-          </ul>
-        </CardContent>
-      </Card>
+  const openNew = () => { setEditing(null); setEditorOpen(true); };
+  const openEdit = (t: AnnualReviewTemplate) => { setEditing(t); setEditorOpen(true); };
 
-      <Card className="md:col-span-2">
-        <CardHeader><CardTitle>{selected ? 'Edit template' : 'New template'}</CardTitle></CardHeader>
-        <CardContent className="space-y-3">
-          <div className="grid gap-3 md:grid-cols-2">
-            <div className="space-y-1"><Label>Name</Label><Input value={name} onChange={(e) => setName(e.target.value)} /></div>
-            <div className="space-y-1 flex flex-col"><Label>Active</Label><div className="h-10 flex items-center"><Switch checked={isActive} onCheckedChange={setIsActive} /></div></div>
-          </div>
-          <div className="space-y-1"><Label>Description</Label><Input value={desc} onChange={(e) => setDesc(e.target.value)} /></div>
-          <div className="space-y-1">
-            <Label>Sections (JSON)</Label>
-            <Textarea rows={20} value={sectionsText} onChange={(e) => setSectionsText(e.target.value)} className="font-mono text-xs" />
-            <p className="text-xs text-muted-foreground">
-              Keys: <code>system_scores</code>, <code>criteria</code>, <code>eligibility_criteria</code>,
-              <code> self_review_fields</code>, <code>settings</code>, <code>translations</code>.
-              Supported languages: {SUPPORTED_LANGUAGES.map((l) => l.code).join(', ')}.
-            </p>
-          </div>
-          <Button disabled={save.isPending || !name} onClick={() => save.mutate()}>
-            {save.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />} Save template
-          </Button>
-        </CardContent>
-      </Card>
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-muted-foreground">{templates.length} total template{templates.length === 1 ? '' : 's'}</p>
+        <Button onClick={openNew} className="gap-1.5"><Plus className="h-4 w-4" /> New Template</Button>
+      </div>
+
+      {templates.length === 0 ? (
+        <Card><CardContent className="p-8 text-center text-sm text-muted-foreground">
+          No templates yet. Click <strong>New Template</strong> to build one — you can auto-populate the Blue-Collar preset from inside the editor.
+        </CardContent></Card>
+      ) : (
+        <div className="space-y-2">
+          {templates.map((t) => {
+            const critCount = t.sections?.criteria?.length ?? 0;
+            return (
+              <Card key={t.id} className="hover:border-primary/40 transition">
+                <CardContent className="p-4 flex flex-wrap items-center justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h3 className="font-semibold truncate">{t.name}</h3>
+                      <Badge variant={t.is_active ? 'default' : 'secondary'}
+                        className={t.is_active ? 'bg-emerald-500/15 text-emerald-500 border-emerald-500/30' : ''}>
+                        {t.is_active ? 'Active' : 'Inactive'}
+                      </Badge>
+                      <span className="text-xs text-muted-foreground">{critCount} criteria</span>
+                    </div>
+                    {t.description && <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{t.description}</p>}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button variant="outline" size="sm" onClick={() => openEdit(t)} className="gap-1.5">
+                      <Pencil className="h-4 w-4" /> Edit
+                    </Button>
+                    <Button
+                      variant="outline" size="sm"
+                      onClick={() => toggleActive.mutate(t)}
+                      disabled={toggleActive.isPending}
+                    >
+                      {t.is_active ? 'Deactivate' : 'Activate'}
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+      )}
+
+      <TemplateEditorDialog
+        open={editorOpen}
+        onOpenChange={setEditorOpen}
+        template={editing}
+        onSaved={refetch}
+      />
     </div>
   );
-}
-
-function defaultSections(): TemplateSections {
-  return {
-    settings: { enable_multilingual: false, default_language: 'en', available_languages: ['en'] },
-    system_scores: [{ id: 'safety', name: 'Safety Score', weight: 20 }],
-    eligibility_criteria: [{ id: 'attendance', name: 'Attendance', type: 'number', operator: 'gte', expected_value: 90 }],
-    self_review_fields: [{ id: 'key_achievements', label: 'Key achievements', required: true }],
-    criteria: [
-      { id: 'role_delivery', name: 'Role delivery', description: 'Output and ownership of assigned work', weight: 10, reviewer_stages: ['self','manager','skip_manager','bu_head','hr'], enable_remarks: true, enable_evidence: true },
-    ],
-    translations: {},
-  };
 }
 
 // ------------------------------------------------------------------
