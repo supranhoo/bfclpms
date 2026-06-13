@@ -1,0 +1,14 @@
+---
+name: Annual Review System
+description: Parallel annual appraisal module — 5 tables (annual_review_*), snapshot reviewer chain, advance_annual_review_status RPC, feature-flag gated
+type: feature
+---
+- New module is namespace-isolated from monthly/quarterly PMS. Tables: `annual_review_cycles`, `annual_review_templates`, `annual_review_assignment_rules`, `annual_review_instances`, `annual_review_responses`. Two enums: `annual_review_status`, `annual_reviewer_role`.
+- Reviewer chain is **snapshotted on instance creation** (`manager_id`, `skip_id`, `bu_head_id`, `hr_id` columns) — mid-cycle org changes never break a running review. `seedInstancesForCycle()` resolves the chain from `profiles.reporting_manager_id` (2 hops up = skip; 3 hops = BU head).
+- Status semantics: `overall_status` reflects the CURRENT stage awaiting action (`pending_self` … `pending_hr` → `completed`). RPC `advance_annual_review_status(instance_id, role)` verifies caller against the snapshot, locks the role's response (`is_locked=true`), and bumps to the next stage. Admin/`hr_pms` may force-advance.
+- Scoring (SSOT: `src/lib/annualReview/scoring.ts`): `criteria_total = Σ(weight*score)`, `max = Σ(weight*5)`. `overall = Σ system_scores + criteria_total` capped at 100. System scores are already-weighted (percentage points).
+- Eligibility (SSOT: `src/lib/annualReview/eligibility.ts`): supports `equals | not_equals | gt | gte | lt | lte`; missing actual → fails.
+- Multilingual: `useAnnualReviewTranslation` precedence = current===default ? fallback : template.translations[lang][key] → UI_I18N[lang][key] → fallback. Static dict in `src/lib/annualReview/i18n.ts` covers en/hi/es UI strings.
+- Evidence reuses the existing `review-evidence` Supabase Storage bucket under `annual-review/{instance}/{role}/...`. Names are tagged `criterionId::originalName` in the response.evidence JSONB so the criterion-scoped uploader can rehydrate.
+- UI feature flag: `admin_feature_flags.annual_review_enabled` (default off). Routes: `/annual-review` (employee), `/annual-review/team` (reviewer), `/annual-review/admin` (HR/admin 4-tab console: Progress / Cycles / Templates / Rules). Menu entries live in `menu_registry` keyed by `feature_key='annual_review_enabled'`.
+- Auto-save: `useDebouncedResponseDraft` flushes 2s after the last edit; `submit` always calls `flush()` then `advance.mutateAsync(...)`.
