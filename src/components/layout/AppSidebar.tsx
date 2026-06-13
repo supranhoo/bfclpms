@@ -7,6 +7,7 @@ import { useAppSettings } from '@/hooks/useAppSettings';
 import { useIsAnyOrgKpiDataOwner } from '@/hooks/useOrgKpiDataOwner';
 import { useMenuAccess } from '@/hooks/useMenuAccess';
 import { useBulkReviewFlag } from '@/hooks/useBulkReview';
+import { useAnnualReviewFlag } from '@/hooks/useAnnualReview';
 import { useResolvedMenu, useMenuOverridesEnabled } from '@/hooks/useResolvedMenu';
 import { useReviewNoteAccess } from '@/hooks/useReviewNoteAccess';
 import {
@@ -186,6 +187,7 @@ export function AppSidebar() {
   const { data: isDataOwner } = useIsAnyOrgKpiDataOwner();
   const { canAccess, canPerform, userOverrides } = useMenuAccess();
   const { data: bulkReviewFlagOn } = useBulkReviewFlag();
+  const { data: annualReviewFlagOn } = useAnnualReviewFlag();
   const { data: overridesEnabled } = useMenuOverridesEnabled();
   const { data: resolvedMenu } = useResolvedMenu();
   const reviewNoteAccess = useReviewNoteAccess();
@@ -401,6 +403,39 @@ export function AppSidebar() {
         icon: Layers,
         path: '/review/bulk-scoring',
         roles: ['admin', 'manager', 'skip_level', 'hr_pms', 'auditor', 'management'],
+      } as any,
+    ];
+  }
+
+  // Flag-gated additive entries for the Annual Review module (Phase 1).
+  // Hidden unless `annual_review_enabled = true` for the current user.
+  if (annualReviewFlagOn) {
+    menuItems.main = [
+      ...menuItems.main,
+      {
+        title: 'My Annual Review',
+        icon: Calendar,
+        path: '/annual-review',
+        roles: ['admin', 'manager', 'employee', 'auditor', 'management', 'hr_pms', 'skip_level'],
+      } as any,
+    ];
+    menuItems.manager = [
+      ...menuItems.manager,
+      {
+        title: 'Annual Reviews (Team)',
+        icon: ClipboardCheck,
+        path: '/annual-review/team',
+        roles: ['admin', 'manager', 'skip_level', 'hr_pms', 'management'],
+      } as any,
+    ];
+    menuItems.admin = [
+      ...menuItems.admin,
+      {
+        title: 'Annual Review Admin',
+        icon: Calendar,
+        path: '/annual-review/admin',
+        menuKey: 'admin-annual-review',
+        roles: ['admin', 'hr_pms'],
       } as any,
     ];
   }
