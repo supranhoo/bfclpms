@@ -1,10 +1,7 @@
-import { describe, it, expect, renderHook } from 'vitest';
-// renderHook isn't actually in vitest; fall through to @testing-library/react
+import { describe, it, expect } from 'vitest';
 import { renderHook as rhook } from '@testing-library/react';
 import { useAnnualReviewTranslation } from '@/hooks/useAnnualReviewTranslation';
 import { normalizeLang } from '@/lib/annualReview/i18n';
-
-void renderHook; // keep TS happy on the unused import
 
 describe('Annual Review — translation resolver', () => {
   it('normalizes friendly language names to codes', () => {
