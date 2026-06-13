@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as svc from '@/services/annualReview/annualReviewService';
 import type {
@@ -108,8 +108,7 @@ export function useDebouncedResponseDraft(opts: {
   const draftRef = useRef<DraftPayload>(draft);
   draftRef.current = draft;
 
-  const persist = useMemo(
-    () => async () => {
+  const persist = useCallback(async () => {
       if (opts.enabled === false) return;
       setStatus('saving');
       try {
@@ -124,9 +123,7 @@ export function useDebouncedResponseDraft(opts: {
       } catch {
         setStatus('error');
       }
-    },
-    [opts.enabled, opts.instanceId, opts.reviewerId, opts.role, qc],
-  );
+  }, [opts.enabled, opts.instanceId, opts.reviewerId, opts.role, qc]);
 
   const setDraft = (next: DraftPayload | ((prev: DraftPayload) => DraftPayload)) => {
     setDraftState((prev) => (typeof next === 'function' ? (next as (p: DraftPayload) => DraftPayload)(prev) : next));
