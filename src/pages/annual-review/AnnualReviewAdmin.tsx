@@ -22,8 +22,9 @@ import { AnnualReviewStatusBadge } from '@/components/annual-review/AnnualReview
 import { HrFinalizationSheet } from '@/components/annual-review/HrFinalizationSheet';
 import { SystemScoresUploadDialog } from '@/components/annual-review/SystemScoresUploadDialog';
 import { TemplateEditorDialog } from '@/components/annual-review/TemplateEditorDialog';
+import { RuleFiltersEditor, RuleFiltersSummary, EMPTY_FILTERS } from '@/components/annual-review/RuleFiltersEditor';
 import type {
-  AnnualReviewCycle, AnnualReviewTemplate,
+  AnnualReviewCycle, AnnualReviewTemplate, AssignmentFilters,
 } from '@/types/annualReview';
 import type { InstanceWithEmployee } from '@/services/annualReview/annualReviewService';
 
@@ -317,11 +318,15 @@ function RulesTab() {
   const { data: templates = [] } = useTemplates();
   const [cycleId, setCycleId] = useState<string | undefined>(undefined);
   const { data: rules = [], refetch } = useRules(cycleId);
-  const [draft, setDraft] = useState({ template_id: '', priority: 10, name: '' });
+  const [draft, setDraft] = useState<{
+    id?: string; template_id: string; priority: number; name: string; filters: AssignmentFilters;
+  }>({ template_id: '', priority: 10, name: '', filters: EMPTY_FILTERS });
+
+  const resetDraft = () => setDraft({ template_id: '', priority: 10, name: '', filters: EMPTY_FILTERS });
 
   const save = useMutation({
     mutationFn: () => svc.upsertRule({ ...draft, cycle_id: cycleId! }),
-    onSuccess: () => { toast.success('Rule saved'); refetch(); setDraft({ template_id: '', priority: 10, name: '' }); },
+    onSuccess: () => { toast.success('Rule saved'); refetch(); resetDraft(); },
     onError: (e: Error) => toast.error(e.message),
   });
   const del = useMutation({
@@ -330,11 +335,13 @@ function RulesTab() {
   });
   const seed = useMutation({
     mutationFn: async () => {
-      const rule = rules[0];
-      if (!rule || !cycleId) throw new Error('Add a rule first');
-      return svc.seedInstancesForCycle({ cycleId, templateId: rule.template_id, hrUserId: user?.id ?? null });
+      if (!cycleId) throw new Error('Pick a cycle first');
+      return svc.seedInstancesByRules({ cycleId, hrUserId: user?.id ?? null });
     },
-    onSuccess: (n) => { toast.success(`Seeded ${n} instances`); qc.invalidateQueries(); },
+    onSuccess: (r) => {
+      toast.success(`Seeded ${r.seeded} instance${r.seeded === 1 ? '' : 's'}` + (r.skipped ? ` · ${r.skipped} skipped (no matching rule)` : ''));
+      qc.invalidateQueries();
+    },
     onError: (e: Error) => toast.error(e.message),
   });
 
@@ -350,14 +357,20 @@ function RulesTab() {
         </Select>
         {cycleId && (
           <Button variant="outline" disabled={seed.isPending || rules.length === 0} onClick={() => seed.mutate()}>
-            {seed.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />} Seed instances from first rule
+            {seed.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />} Seed instances by rules
           </Button>
         )}
       </div>
 
       {cycleId && (
         <Card>
-          <CardHeader><CardTitle>Rules</CardTitle></CardHeader>
+          <CardHeader>
+            <CardTitle>{draft.id ? 'Edit rule' : 'New rule'}</CardTitle>
+            <p className="text-xs text-muted-foreground">
+              Rules are evaluated in priority order (lower number first). The first rule matching an employee assigns their template.
+              Leave all filters empty to match every employee.
+            </p>
+          </CardHeader>
           <CardContent className="space-y-3">
             <div className="grid gap-2 md:grid-cols-4 items-end">
               <div className="space-y-1"><Label>Name</Label><Input value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} /></div>
@@ -368,22 +381,43 @@ function RulesTab() {
                 </Select>
               </div>
               <div className="space-y-1"><Label>Priority</Label><Input type="number" value={draft.priority} onChange={(e) => setDraft({ ...draft, priority: Number(e.target.value) })} /></div>
-              <Button disabled={!draft.template_id || save.isPending} onClick={() => save.mutate()}>Add rule</Button>
+              <div className="flex gap-2">
+                <Button disabled={!draft.template_id || save.isPending} onClick={() => save.mutate()} className="flex-1">
+                  {save.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                  {draft.id ? 'Save' : 'Add rule'}
+                </Button>
+                {draft.id && <Button variant="outline" onClick={resetDraft}>Cancel</Button>}
+              </div>
             </div>
+            <RuleFiltersEditor
+              value={draft.filters}
+              onChange={(filters) => setDraft({ ...draft, filters })}
+            />
             <Table>
-              <TableHeader><TableRow><TableHead>Priority</TableHead><TableHead>Name</TableHead><TableHead>Template</TableHead><TableHead></TableHead></TableRow></TableHeader>
+              <TableHeader><TableRow>
+                <TableHead className="w-16">Priority</TableHead>
+                <TableHead>Name</TableHead>
+                <TableHead>Template</TableHead>
+                <TableHead>Filters</TableHead>
+                <TableHead></TableHead>
+              </TableRow></TableHeader>
               <TableBody>
                 {rules.map((r) => (
                   <TableRow key={r.id} className="min-h-10">
                     <TableCell>{r.priority}</TableCell>
                     <TableCell>{r.name}</TableCell>
                     <TableCell>{templates.find((t) => t.id === r.template_id)?.name ?? r.template_id}</TableCell>
+                    <TableCell><RuleFiltersSummary filters={r.filters ?? EMPTY_FILTERS} /></TableCell>
                     <TableCell className="text-right">
+                      <Button variant="ghost" size="sm" onClick={() => setDraft({
+                        id: r.id, template_id: r.template_id, priority: r.priority,
+                        name: r.name ?? '', filters: { ...EMPTY_FILTERS, ...(r.filters ?? {}) },
+                      })}>Edit</Button>
                       <Button variant="ghost" size="sm" onClick={() => del.mutate(r.id)}>Delete</Button>
                     </TableCell>
                   </TableRow>
                 ))}
-                {rules.length === 0 && <TableRow><TableCell colSpan={4} className="text-center text-muted-foreground py-6">No rules.</TableCell></TableRow>}
+                {rules.length === 0 && <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground py-6">No rules.</TableCell></TableRow>}
               </TableBody>
             </Table>
           </CardContent>
