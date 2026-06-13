@@ -12,6 +12,7 @@ import { computeCriteriaScore, computeOverallScore } from '@/lib/annualReview/sc
 import { useFinalizeInstance, useInstanceResponses } from '@/hooks/useAnnualReview';
 import { SystemScoresPanel } from './SystemScoresPanel';
 import { EligibilityInputsEditor } from './EligibilityInputsEditor';
+import { InstanceTimeline } from './InstanceTimeline';
 import type { AnnualReviewInstance, AnnualReviewTemplate } from '@/types/annualReview';
 import type { InstanceWithEmployee } from '@/services/annualReview/annualReviewService';
 
@@ -142,6 +143,13 @@ export function HrFinalizationSheet({
             <Label>HR remarks</Label>
             <Textarea rows={5} value={remarks} onChange={(e) => setRemarks(e.target.value)} placeholder="Justification for any overrides and the final rating." />
           </div>
+
+          {instance && (
+            <div className="space-y-2">
+              <Label>Activity timeline</Label>
+              <InstanceTimeline instanceId={instance.id} />
+            </div>
+          )}
         </div>
 
         <SheetFooter>
