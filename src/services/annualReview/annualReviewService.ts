@@ -339,3 +339,14 @@ export async function finalizeInstance(args: { id: string; finalRating: string; 
   if (error) throw error;
   return advanceStatus(args.id, 'hr');
 }
+
+/** Bulk-apply the same final rating + remark to many `pending_hr` instances. */
+export async function bulkFinalize(args: { instanceIds: string[]; finalRating: string; hrRemarks?: string | null }) {
+  const { data, error } = await db.rpc('bulk_finalize_annual_reviews', {
+    p_instance_ids: args.instanceIds,
+    p_final_rating: args.finalRating,
+    p_hr_remarks: args.hrRemarks ?? null,
+  });
+  if (error) throw error;
+  return data as number;
+}
