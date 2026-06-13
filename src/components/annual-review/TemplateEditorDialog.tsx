@@ -206,7 +206,7 @@ export function TemplateEditorDialog({
                       </TableCell>
                       <TableCell>
                         <Select value={e.operator} onValueChange={(v) => updateAt(setSections, 'eligibility_criteria', i, { operator: v as EligibilityCriterion['operator'] })}>
-                          <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                          <SelectTrigger className="h-9 min-w-[180px]"><SelectValue /></SelectTrigger>
                           <SelectContent>
                             <SelectItem value="equals">= Equals</SelectItem>
                             <SelectItem value="not_equals">≠ Not equals</SelectItem>
