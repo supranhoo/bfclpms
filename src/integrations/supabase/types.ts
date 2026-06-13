@@ -13654,6 +13654,14 @@ export type Database = {
         Args: { p_fuzzy_threshold?: number; p_include_skipped?: boolean }
         Returns: Json
       }
+      send_back_annual_review_status: {
+        Args: {
+          p_instance_id: string
+          p_reason?: string
+          p_reviewer_role: Database["public"]["Enums"]["annual_reviewer_role"]
+        }
+        Returns: Database["public"]["Enums"]["annual_review_status"]
+      }
       set_safety_setting: {
         Args: { p_description?: string; p_key: string; p_value: Json }
         Returns: Json
