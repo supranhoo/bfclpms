@@ -373,6 +373,44 @@ export async function runReminderCron(): Promise<{ queued: number; skipped: numb
   return data as { queued: number; skipped: number };
 }
 
+/** Employee acknowledges their finalized review, optionally with a rebuttal note. */
+export async function acknowledgeInstance(instanceId: string, rebuttal?: string | null) {
+  const { error } = await db.rpc('acknowledge_annual_review_instance', {
+    p_instance_id: instanceId,
+    p_rebuttal: rebuttal ?? null,
+  });
+  if (error) throw error;
+}
+
+/** HR/Admin: clone a template into a new (inactive) version under the same lineage. */
+export async function cloneTemplate(sourceId: string, newName?: string | null): Promise<string> {
+  const { data, error } = await db.rpc('clone_annual_review_template', {
+    p_source_id: sourceId,
+    p_new_name: newName ?? null,
+  });
+  if (error) throw error;
+  return data as string;
+}
+
+/** HR/Admin: clone a cycle as draft. Optionally re-clones templates and copies rules. */
+export async function cloneCycle(args: {
+  sourceId: string;
+  newName: string;
+  reviewYear: number;
+  copyTemplates?: boolean;
+  copyRules?: boolean;
+}): Promise<string> {
+  const { data, error } = await db.rpc('clone_annual_review_cycle', {
+    p_source_id: args.sourceId,
+    p_new_name: args.newName,
+    p_review_year: args.reviewYear,
+    p_copy_templates: args.copyTemplates ?? false,
+    p_copy_rules: args.copyRules ?? true,
+  });
+  if (error) throw error;
+  return data as string;
+}
+
 export interface AnnualReviewTimelineEntry {
   id: string;
   action: string;

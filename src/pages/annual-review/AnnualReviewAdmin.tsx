@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import {
   useCycles, useTemplates, useRules, useCycleInstances, useActiveCycle, useTemplate,
-  useSendBackStatus, useCloseCycle, useOverrideRating,
+  useSendBackStatus, useCloseCycle, useOverrideRating, useCloneTemplate, useCloneCycle,
 } from '@/hooks/useAnnualReview';
 import * as svc from '@/services/annualReview/annualReviewService';
 import { useAuth } from '@/contexts/AuthContext';
@@ -24,7 +24,7 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
 import { toast } from 'sonner';
-import { Loader2, Upload, Settings2, ListChecks, Calendar, Layers, Pencil, Plus, Download, BarChart3, CheckCheck, Undo2, Lock, Bell, Scale } from 'lucide-react';
+import { Loader2, Upload, Settings2, ListChecks, Calendar, Layers, Pencil, Plus, Download, BarChart3, CheckCheck, Undo2, Lock, Bell, Scale, Copy } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Cell,
@@ -491,6 +491,12 @@ function CyclesTab() {
   });
   const closeCycle = useCloseCycle();
   const [confirmCloseId, setConfirmCloseId] = useState<string | null>(null);
+  const clone = useCloneCycle();
+  const [cloneSource, setCloneSource] = useState<AnnualReviewCycle | null>(null);
+  const [cloneName, setCloneName] = useState('');
+  const [cloneYear, setCloneYear] = useState<number>(new Date().getFullYear() + 1);
+  const [cloneCopyTemplates, setCloneCopyTemplates] = useState(false);
+  const [cloneCopyRules, setCloneCopyRules] = useState(true);
 
   return (
     <div className="grid gap-4 md:grid-cols-3">
@@ -541,6 +547,15 @@ function CyclesTab() {
                   <TableCell><Badge variant="outline">{c.status}</Badge></TableCell>
                   <TableCell className="text-right space-x-1">
                     <Button variant="ghost" size="sm" onClick={() => setDraft(c)}>Edit</Button>
+                    <Button variant="ghost" size="sm" className="gap-1" onClick={() => {
+                      setCloneSource(c);
+                      setCloneName(`${c.name} (copy)`);
+                      setCloneYear((c.review_year ?? new Date().getFullYear()) + 1);
+                      setCloneCopyTemplates(false);
+                      setCloneCopyRules(true);
+                    }}>
+                      <Copy className="h-3.5 w-3.5" /> Clone
+                    </Button>
                     {c.status !== 'closed' && (
                       <Button
                         variant="ghost" size="sm"
@@ -587,6 +602,56 @@ function CyclesTab() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <AlertDialog open={!!cloneSource} onOpenChange={(o) => !o && setCloneSource(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Clone cycle</AlertDialogTitle>
+            <AlertDialogDescription>
+              Creates a new draft cycle from <strong>{cloneSource?.name}</strong>. Dates are not carried over —
+              set them on the new cycle before activation.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1"><Label>New cycle name</Label>
+              <Input value={cloneName} onChange={(e) => setCloneName(e.target.value)} />
+            </div>
+            <div className="space-y-1"><Label>Review year</Label>
+              <Input type="number" value={cloneYear} onChange={(e) => setCloneYear(Number(e.target.value))} />
+            </div>
+            <label className="flex items-center gap-2 text-sm">
+              <Switch checked={cloneCopyRules} onCheckedChange={setCloneCopyRules} /> Copy assignment rules
+            </label>
+            <label className="flex items-center gap-2 text-sm">
+              <Switch checked={cloneCopyTemplates} onCheckedChange={setCloneCopyTemplates} /> Also clone each rule's template (new versions)
+            </label>
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={!cloneName.trim() || clone.isPending}
+              onClick={async (e) => {
+                e.preventDefault();
+                if (!cloneSource) return;
+                try {
+                  await clone.mutateAsync({
+                    sourceId: cloneSource.id,
+                    newName: cloneName.trim(),
+                    reviewYear: cloneYear,
+                    copyTemplates: cloneCopyTemplates,
+                    copyRules: cloneCopyRules,
+                  });
+                  toast.success('Cycle cloned as draft.');
+                  setCloneSource(null);
+                  refetch();
+                } catch (err) { toast.error((err as Error).message); }
+              }}
+            >
+              {clone.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />} Clone
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
@@ -605,6 +670,7 @@ function TemplatesTab() {
     onSuccess: () => { toast.success('Template updated'); refetch(); },
     onError: (e: Error) => toast.error(e.message),
   });
+  const clone = useCloneTemplate();
 
   const openNew = () => { setEditing(null); setEditorOpen(true); };
   const openEdit = (t: AnnualReviewTemplate) => { setEditing(t); setEditorOpen(true); };
@@ -635,12 +701,28 @@ function TemplatesTab() {
                         {t.is_active ? 'Active' : 'Inactive'}
                       </Badge>
                       <span className="text-xs text-muted-foreground">{critCount} criteria</span>
+                    {typeof t.version === 'number' && t.version > 1 && (
+                      <Badge variant="outline" className="text-xs">v{t.version}</Badge>
+                    )}
                     </div>
                     {t.description && <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{t.description}</p>}
                   </div>
                   <div className="flex items-center gap-2">
                     <Button variant="outline" size="sm" onClick={() => openEdit(t)} className="gap-1.5">
                       <Pencil className="h-4 w-4" /> Edit
+                    </Button>
+                    <Button
+                      variant="outline" size="sm" className="gap-1.5"
+                      disabled={clone.isPending}
+                      onClick={async () => {
+                        try {
+                          await clone.mutateAsync({ sourceId: t.id, newName: null });
+                          toast.success('New template version created (inactive).');
+                          refetch();
+                        } catch (e) { toast.error((e as Error).message); }
+                      }}
+                    >
+                      <Copy className="h-4 w-4" /> Clone as new version
                     </Button>
                     <Button
                       variant="outline" size="sm"

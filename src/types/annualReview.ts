@@ -103,6 +103,8 @@ export interface AnnualReviewTemplate {
   created_by: string | null;
   created_at: string;
   updated_at: string;
+  parent_template_id?: string | null;
+  version?: number;
 }
 
 export interface AssignmentFilters {
@@ -146,6 +148,9 @@ export interface AnnualReviewInstance {
   language_pref: string;
   finalized_at: string | null;
   finalized_by: string | null;
+  acknowledged_at?: string | null;
+  acknowledged_by?: string | null;
+  employee_rebuttal?: string | null;
   created_at: string;
   updated_at: string;
 }

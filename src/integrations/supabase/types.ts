@@ -411,6 +411,8 @@ export type Database = {
       }
       annual_review_instances: {
         Row: {
+          acknowledged_at: string | null
+          acknowledged_by: string | null
           assigned_rule_id: string | null
           bu_head_id: string | null
           created_at: string
@@ -418,6 +420,7 @@ export type Database = {
           cycle_id: string
           eligibility_inputs: Json
           employee_id: string
+          employee_rebuttal: string | null
           final_rating: string | null
           finalized_at: string | null
           finalized_by: string | null
@@ -434,6 +437,8 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          acknowledged_at?: string | null
+          acknowledged_by?: string | null
           assigned_rule_id?: string | null
           bu_head_id?: string | null
           created_at?: string
@@ -441,6 +446,7 @@ export type Database = {
           cycle_id: string
           eligibility_inputs?: Json
           employee_id: string
+          employee_rebuttal?: string | null
           final_rating?: string | null
           finalized_at?: string | null
           finalized_by?: string | null
@@ -457,6 +463,8 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          acknowledged_at?: string | null
+          acknowledged_by?: string | null
           assigned_rule_id?: string | null
           bu_head_id?: string | null
           created_at?: string
@@ -464,6 +472,7 @@ export type Database = {
           cycle_id?: string
           eligibility_inputs?: Json
           employee_id?: string
+          employee_rebuttal?: string | null
           final_rating?: string | null
           finalized_at?: string | null
           finalized_by?: string | null
@@ -651,8 +660,10 @@ export type Database = {
           id: string
           is_active: boolean
           name: string
+          parent_template_id: string | null
           sections: Json
           updated_at: string
+          version: number
         }
         Insert: {
           created_at?: string
@@ -661,8 +672,10 @@ export type Database = {
           id?: string
           is_active?: boolean
           name: string
+          parent_template_id?: string | null
           sections?: Json
           updated_at?: string
+          version?: number
         }
         Update: {
           created_at?: string
@@ -671,10 +684,20 @@ export type Database = {
           id?: string
           is_active?: boolean
           name?: string
+          parent_template_id?: string | null
           sections?: Json
           updated_at?: string
+          version?: number
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "annual_review_templates_parent_template_id_fkey"
+            columns: ["parent_template_id"]
+            isOneToOne: false
+            referencedRelation: "annual_review_templates"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       annual_score_config_audit: {
         Row: {
@@ -12316,6 +12339,10 @@ export type Database = {
         Args: { p_department_id: string; p_employee_id: string; p_files: Json }
         Returns: Json
       }
+      acknowledge_annual_review_instance: {
+        Args: { p_instance_id: string; p_rebuttal?: string }
+        Returns: undefined
+      }
       activate_permit: { Args: { p_permit_id: string }; Returns: Json }
       advance_annual_review_status: {
         Args: {
@@ -12476,6 +12503,20 @@ export type Database = {
       check_template_has_active_kpis: {
         Args: { template_uuid: string }
         Returns: boolean
+      }
+      clone_annual_review_cycle: {
+        Args: {
+          p_copy_rules?: boolean
+          p_copy_templates?: boolean
+          p_new_name: string
+          p_review_year: number
+          p_source_id: string
+        }
+        Returns: string
+      }
+      clone_annual_review_template: {
+        Args: { p_new_name: string; p_source_id: string }
+        Returns: string
       }
       close_annual_review_cycle: {
         Args: { p_cycle_id: string }

@@ -27,6 +27,7 @@ import {
 import { toast } from 'sonner';
 import { computeCriteriaScore } from '@/lib/annualReview/scoring';
 import type { EvidenceItem } from '@/types/annualReview';
+import { EmployeeResultsView } from '@/components/annual-review/EmployeeResultsView';
 
 export default function EmployeeAnnualReview() {
   const { user, profile } = useAuth();
@@ -72,6 +73,23 @@ export default function EmployeeAnnualReview() {
   }
   if (!instance) {
     return <div className="p-6"><Card><CardContent className="p-6">No annual review instance has been assigned to you for the {cycle.name} cycle.</CardContent></Card></div>;
+  }
+
+  // Finalized: show the read-only results & acknowledgment view.
+  if (instance.overall_status === 'completed') {
+    return (
+      <div className="p-4 md:p-6 space-y-6 max-w-5xl mx-auto">
+        <header className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h1 className="text-2xl font-bold">{cycle.name}</h1>
+            <p className="text-sm text-muted-foreground">My annual review · {profile?.full_name}</p>
+          </div>
+          <AnnualReviewStatusBadge status={instance.overall_status} />
+        </header>
+        <AnnualReviewStageTracker status={instance.overall_status} />
+        <EmployeeResultsView instance={instance} template={template} responses={responses} />
+      </div>
+    );
   }
 
   const handleSubmit = async () => {
