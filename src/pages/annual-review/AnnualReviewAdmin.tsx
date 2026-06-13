@@ -203,6 +203,17 @@ function ProgressTab() {
         <div className="flex items-center gap-2">
           <Button
             variant="outline" className="gap-2"
+            onClick={async () => {
+              try {
+                const r = await svc.runReminderCron();
+                toast.success(`Queued ${r.queued} reminder${r.queued === 1 ? '' : 's'}.`);
+              } catch (e) { toast.error((e as Error).message); }
+            }}
+          >
+            <Bell className="h-4 w-4" /> Send reminders now
+          </Button>
+          <Button
+            variant="outline" className="gap-2"
             onClick={() => exportProgress(activeCycle.name, filtered)}
             disabled={filtered.length === 0}
           >
