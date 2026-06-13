@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as svc from '@/services/annualReview/annualReviewService';
+import { supabase } from '@/integrations/supabase/client';
 import type {
   AnnualReviewerRole,
   AnnualReviewInstance,
@@ -48,6 +49,26 @@ export const useInstanceResponses = (instanceId?: string) =>
     queryFn: () => svc.listResponses(instanceId!),
     enabled: !!instanceId,
   });
+
+/**
+ * Master switch read for the Annual Review module — used by the sidebar to
+ * gate the entry points. Evaluates `admin_feature_flags.annual_review_enabled`
+ * server-side (admins bypass once the master switch is ON).
+ */
+export function useAnnualReviewFlag() {
+  return useQuery({
+    queryKey: ['admin_feature_flag', 'annual_review_enabled'],
+    staleTime: 5 * 60 * 1000,
+    queryFn: async (): Promise<boolean> => {
+      const { data, error } = await supabase.rpc(
+        'is_feature_flag_enabled_for_me' as never,
+        { p_key: 'annual_review_enabled' } as never,
+      );
+      if (error) return false;
+      return data === true;
+    },
+  });
+}
 
 export function useAdvanceStatus() {
   const qc = useQueryClient();
