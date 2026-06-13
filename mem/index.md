@@ -18,6 +18,7 @@ Lean-Load: debounce search inputs (>200 rows / network); paginate new lists with
 - [Safety Perf CAPA Wave 1](mem://infrastructure/safety-perf-capa-wave-1) — Forbids unbounded incidents reads; SafetyHome SLA queue + KPI drill-down + incidents accident-join scoped to server-side predicates (v2.66.19)
 
 ## Memories
+- [Annual Review System](mem://features/annual-review/overview) — Phase 1 module: 5 tables, snapshot reviewer chain, advance RPC, multilingual + XLSX, feature-flag gated
 - [Page loading overlay pattern](mem://design/page-loading-overlay-pattern) — Centered PageLoadingOverlay wired in DashboardLayout (Suspense + RouteDataLoadingGate), rocket+chart art
 - [Access-Profile / RLS alignment](mem://architecture/security/access-profile-rls-alignment) — has_menu_right SSOT + assertRowsTouched guard; v1 delegates admin-users update and admin-access-profiles add/delete only
 - [Increment Engine PMS Score Source](mem://features/incentive/pms-score-source) — compute-increment derives monthly PMS score live from review_submissions + kpis (8-stage chain, weighted avg); performance_reviews is NOT a source
