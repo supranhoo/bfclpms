@@ -78,6 +78,15 @@ export function useAdvanceStatus() {
   });
 }
 
+export function useSendBackStatus() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (args: { instanceId: string; role: AnnualReviewerRole; reason: string | null }) =>
+      svc.sendBackStatus(args.instanceId, args.role, args.reason),
+    onSuccess: () => qc.invalidateQueries({ queryKey: annualReviewKeys.all }),
+  });
+}
+
 export function useUploadEvidence() {
   return useMutation({
     mutationFn: (args: { instanceId: string; reviewerId: string; role: AnnualReviewerRole; file: File }) =>
