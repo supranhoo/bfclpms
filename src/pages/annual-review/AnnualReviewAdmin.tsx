@@ -785,3 +785,136 @@ function RulesTab() {
     </div>
   );
 }
+
+// ------------------------------------------------------------------
+// Calibration tab — distribution + per-instance rating override
+// ------------------------------------------------------------------
+function CalibrationTab() {
+  const { data: activeCycle } = useActiveCycle();
+  const { data: instances = [] } = useCycleInstances(activeCycle?.id);
+  const override = useOverrideRating();
+  const [target, setTarget] = useState<InstanceWithEmployee | null>(null);
+  const [newRating, setNewRating] = useState('');
+  const [reason, setReason] = useState('');
+
+  const finalized = useMemo(() => instances.filter((i) => !!i.final_rating), [instances]);
+
+  const distribution = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const i of finalized) {
+      const r = (i.final_rating ?? '').trim();
+      if (!r) continue;
+      map.set(r, (map.get(r) ?? 0) + 1);
+    }
+    const total = finalized.length || 1;
+    return Array.from(map.entries())
+      .map(([rating, count]) => ({ rating, count, pct: Math.round((count / total) * 1000) / 10 }))
+      .sort((a, b) => b.count - a.count);
+  }, [finalized]);
+
+  if (!activeCycle) return <Card><CardContent className="p-6">Activate a cycle to use calibration.</CardContent></Card>;
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Rating distribution</CardTitle>
+          <p className="text-xs text-muted-foreground">{finalized.length} of {instances.length} reviews finalized.</p>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          {distribution.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No final ratings yet.</p>
+          ) : distribution.map((d) => (
+            <div key={d.rating} className="space-y-1">
+              <div className="flex items-center justify-between text-sm">
+                <span className="font-medium">{d.rating}</span>
+                <span className="tabular-nums text-muted-foreground">{d.count} · {d.pct}%</span>
+              </div>
+              <div className="h-2 rounded-full bg-muted overflow-hidden">
+                <div className="h-full bg-primary" style={{ width: `${d.pct}%` }} />
+              </div>
+            </div>
+          ))}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Finalized reviews — override rating</CardTitle>
+          <p className="text-xs text-muted-foreground">
+            Overrides are HR/Admin-only, require a reason, and are recorded in the audit log.
+          </p>
+        </CardHeader>
+        <CardContent className="p-0 overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Employee</TableHead>
+                <TableHead className="text-right">Score</TableHead>
+                <TableHead>Current rating</TableHead>
+                <TableHead></TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {finalized.map((i) => (
+                <TableRow key={i.id} className="min-h-10">
+                  <TableCell>
+                    <div className="font-medium">{i.employee?.full_name ?? i.employee_id}</div>
+                    <div className="text-xs text-muted-foreground">{i.employee?.employee_code}</div>
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums">{i.total_score?.toFixed(2) ?? '—'}</TableCell>
+                  <TableCell><Badge variant="outline">{i.final_rating}</Badge></TableCell>
+                  <TableCell className="text-right">
+                    <Button variant="ghost" size="sm" onClick={() => {
+                      setTarget(i); setNewRating(i.final_rating ?? ''); setReason('');
+                    }}>Override</Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+              {finalized.length === 0 && (
+                <TableRow><TableCell colSpan={4} className="text-center text-muted-foreground py-6">No finalized reviews yet.</TableCell></TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
+      <AlertDialog open={!!target} onOpenChange={(o) => !o && setTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Override final rating</AlertDialogTitle>
+            <AlertDialogDescription>
+              {target?.employee?.full_name} · current rating <strong>{target?.final_rating ?? '—'}</strong>.
+              Provide a non-empty reason — this is permanently audit-logged.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1"><Label>New rating</Label>
+              <Input value={newRating} onChange={(e) => setNewRating(e.target.value)} />
+            </div>
+            <div className="space-y-1"><Label>Reason</Label>
+              <Textarea rows={3} value={reason} onChange={(e) => setReason(e.target.value)} />
+            </div>
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={!newRating.trim() || reason.trim().length < 3 || override.isPending}
+              onClick={async (e) => {
+                e.preventDefault();
+                if (!target) return;
+                try {
+                  await override.mutateAsync({ instanceId: target.id, newRating: newRating.trim(), reason: reason.trim() });
+                  toast.success('Rating overridden.');
+                  setTarget(null);
+                } catch (err) { toast.error((err as Error).message); }
+              }}
+            >
+              {override.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />} Override
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+}
