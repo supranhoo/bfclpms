@@ -65,16 +65,30 @@ Deno.serve(async (req) => {
 
     console.log('User validated:', user.id)
 
-    // Check if user is admin
-    const { data: roles } = await supabaseAdmin
+    // Authorise: admin role OR delegated Access-Profile right `admin-users / add`.
+    // SSOT: mem/architecture/security/access-profile-rls-alignment.md
+    const { data: adminRole } = await supabaseAdmin
       .from('user_roles')
       .select('role')
       .eq('user_id', user.id)
       .eq('role', 'admin')
-      .single()
+      .maybeSingle()
 
-    if (!roles) {
-      return new Response(JSON.stringify({ error: 'Unauthorized - admin access required' }), {
+    let authorised = !!adminRole
+    if (!authorised) {
+      const { data: hasRight, error: rightErr } = await supabaseAdmin.rpc('has_menu_right', {
+        _user_id: user.id,
+        _menu_key: 'admin-users',
+        _action: 'add',
+      })
+      if (rightErr) {
+        console.error('[create-employee] has_menu_right lookup failed:', rightErr.message)
+      }
+      authorised = hasRight === true
+    }
+
+    if (!authorised) {
+      return new Response(JSON.stringify({ error: "Unauthorized — 'Add User' permission required" }), {
         status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       })
     }

@@ -1,71 +1,42 @@
-## Goal
-Close out all remaining gaps in the Annual Review module (items A–E from the audit) so it reaches production parity with the rest of the PMS modules.
+## Root Cause
 
-## Assumptions
-- "Complete" = ship A through E from the prior audit. F (something else) is not in scope.
-- Existing schema, RLS, RPCs, and routes stay intact; this is additive only.
-- No new business policy — we are formalizing what already exists and hardening operations.
+The user "Avinash Kumar" (id `951a9c3f…`) is **not** an `admin` in `user_roles` — his base role is `employee`. He has been given the `Onboarding` **Access Profile** which grants `admin-users` → `can_add = true`.
+
+The frontend "Add User" dialog correctly enables the button (it consults `useMenuAccess`), but the backing edge function `supabase/functions/create-employee/index.ts` (lines 68–80) hard-checks `user_roles.role = 'admin'` and rejects everyone else with **"Unauthorized - admin access required"** — exactly the toast in the screenshot.
+
+This violates the project's Access-Profile / RLS alignment SSOT (`mem/architecture/security/access-profile-rls-alignment.md`), which mandates that any delegated menu right (`admin-users / add`) must be honoured server-side via `public.has_menu_right(_user_id, _menu_key, _action)`.
 
 ## Risk & Impact Report
-- **Data Impact:** Additive only — one new column (`annual_review_cycles.reopened_at`, `reopened_by`, `reopened_reason`) plus an `annual_review_assignment_overrides` table for mid-cycle reassignment. No destructive changes. Existing rows untouched.
-- **Workflow Impact:** Reopen is HR-only and audit-logged; reassignment writes an override row that the resolver consults before falling back to the rule engine. No change to the happy path.
-- **UI/UX Impact:** Admin Progress tab gains pagination controls (page size, page nav). New "Reopen" action on closed cycles (confirm dialog). New "Reassign reviewer" row action on instance drawer. New `/reports/annual-review` page mirroring existing report styling. Team page swaps `window.matchMedia` for `useIsMobile()` — no visual change.
-- **Regression Risk:** Medium on the Progress tab (query shape changes). Low elsewhere (additive).
-- **Mitigation:** Server-side pagination behind a typed service method with unit tests; reopen/reassign gated by `has_role('hr_pms'|'admin')` and confirmed via `ConfirmDestructiveDialog`; resolver override path covered by tests; feature flag already gates the module.
-- **Scalability:** Progress tab moves from O(org) memory to O(page_size). Report page uses the same paginated service. Override table is small (1 row per exception).
 
-## Step-by-step Plan
+- **Data impact**: None — no schema change. Only widens the auth gate from "admin role" to "admin role OR has_menu_right('admin-users','add')".
+- **Workflow impact**: HR / Onboarding profile users (and any future profile that explicitly carries `admin-users.can_add`) can now create employees. Matches the intent of the Access Profile they were assigned.
+- **Security**: `has_menu_right` is SECURITY DEFINER + STABLE and is already the SSOT used by RLS policies; no new privilege surface is introduced. Admin-only paths (role grants, profile deletes) remain untouched.
+- **Regression risk**: Low. Admins keep working (short-circuit). Behaviour for non-privileged users is unchanged (still 403).
+- **Scalability**: Adds at most one extra RPC round-trip on the create path (negligible).
 
-### A. Server-side pagination on Admin Progress tab
-1. Add `listInstancesPaginated({ cycleId, page, pageSize, search, status, sort })` to `annualReviewService.ts` using `.range()` + `count: 'exact'`.
-2. New hook `useAnnualReviewInstancesPaginated` (TanStack Query, `keepPreviousData`, `staleTime: 30s`).
-3. Refactor Progress tab in `AnnualReviewAdmin.tsx` to consume the hook + a shared `<DataTablePagination />` (reuse existing one if present, else local).
-4. Tests: service returns correct slice; hook caches per page key.
+## Plan
 
-### B. Documentation
-1. Create `src/modules/annual-review/DOCUMENTATION.md` — schema, RPCs, routes, hooks, components, edge function.
-2. Create `src/modules/annual-review/POLICY.md` — eligibility, scoring, send-back, finalization, reopen, reassignment, acknowledgment/rebuttal.
-3. Create `docs/adr/ADR-annual-review.md` — decisions: separate instance table, role-scoped RLS, edge-function reminders, template versioning via clone.
-4. Add Version History entry to each.
+1. **`supabase/functions/create-employee/index.ts`** — after resolving `user`, authorise if **either**:
+   - existing admin check passes, **or**
+   - `supabaseAdmin.rpc('has_menu_right', { _user_id: user.id, _menu_key: 'admin-users', _action: 'add' })` returns `true`.
+   
+   On failure, return the same 403 with a clearer message: `"Unauthorized — 'Add User' permission required"`.
 
-### C. Component / integration tests
-1. `EmployeeResultsView.test.tsx` — renders scores, acknowledge flow, rebuttal submit.
-2. `ManagerCalibration.test.tsx` — distribution math, delta highlighting.
-3. `HrFinalizationSheet.test.tsx` — single + bulk finalize, override rating.
-4. `useAnnualReview.test.ts` — autosave debounce, send-back state.
-5. Service-layer tests for clone RPCs (mock Supabase client).
+2. **No DB migration required** — `has_menu_right` already exists and is used by RLS.
 
-### D. Standalone Annual Review report page
-1. New route `/reports/annual-review` (lazy-loaded), registered with existing report registry pattern.
-2. Filters: cycle, BU, department, status, rating band.
-3. Columns mirror admin grid; export via the existing xlsx dynamic-import pattern.
-4. RLS-aware — reuses paginated service from step A.
+3. **DOCUMENTATION.md / POLICY.md** — append a note to `src/modules/.../POLICY.md` (admin-users section) and `mem/architecture/security/access-profile-rls-alignment.md` entry confirming that `create-employee` edge function honours `admin-users / add`.
 
-### E. Reopen + mid-cycle reassignment
-1. Migration: add `reopened_at`, `reopened_by`, `reopened_reason` to `annual_review_cycles`; create `annual_review_assignment_overrides (instance_id, role, new_reviewer_id, reason, created_by, created_at)` with GRANTs + RLS + audit trigger.
-2. RPCs: `reopen_annual_review_cycle(cycle_id, reason)` (HR/admin only, writes audit, flips `status` back to `active`, unlocks trigger); `reassign_annual_review_reviewer(instance_id, role, new_reviewer_id, reason)`.
-3. Resolver update: `getEffectiveReviewer(instance, role)` checks overrides table first, then falls back to rule engine.
-4. UI: "Reopen cycle" button on Cycles tab (closed only) + confirm dialog; "Reassign" action in HR finalization sheet's reviewer row.
-5. Tests: reopen restores write access; override takes precedence; non-HR cannot invoke either RPC.
+4. **Tests** — add `supabase/functions/create-employee/auth.test.ts` covering: admin allowed, delegated user allowed, plain employee rejected (mock `auth.getUser` + `from('user_roles')` + `rpc('has_menu_right')`).
 
-### Cleanup
-- Swap `window.matchMedia` in `TeamAnnualReview.tsx` for `useIsMobile()`.
-- Update `mem://index.md` with one-liner pointing to a new `mem://features/annual-review/operations` memory documenting reopen + override precedence rules.
+## UI Changes
 
-## UI Changes (summary)
-- **Admin → Progress tab:** pagination bar at bottom (page size selector + prev/next + total count). Table itself unchanged.
-- **Admin → Cycles tab:** new "Reopen" button on rows where `status='closed'`. Opens `ConfirmDestructiveDialog` requiring a reason.
-- **HR Finalization sheet:** each reviewer row gets a small "Reassign" link → modal with user picker + reason.
-- **New page** `/reports/annual-review` — standard report layout (filters left, table right, export top-right).
-- **Sidebar:** add "Annual Review" entry under Reports section, gated by same feature flag.
+None. The dialog already shows for delegated users; only the server response changes from 403 → success.
 
-## Tests
-Vitest suites listed in step C, plus migration smoke test for the new table + RPCs.
+## Out of Scope (not changed in this patch)
 
-## Documentation / Policy
-DOCUMENTATION.md, POLICY.md, ADR all created in step B and amended after E lands.
+- `update-user-email` and `update-user-profile` still require admin. They can be migrated later under the same SSOT once HR delegation for edits is confirmed by the user.
+- Role grants (`user_roles` writes) remain admin-only per the SSOT.
 
-## Post-implementation notes
-- Reopen is intentionally manual and audited — no auto-reopen.
-- Overrides are per-instance, not per-cycle, to avoid surprising other employees.
-- Pagination default: 25 rows, max 100.
+## Rollback
+
+Single-file revert of `create-employee/index.ts` restores the prior behaviour. No data is mutated by this change itself.
