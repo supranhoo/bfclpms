@@ -439,6 +439,32 @@ export async function closeCycle(cycleId: string): Promise<number> {
   return (data as number) ?? 0;
 }
 
+/** Reopen a closed cycle (admin/hr_pms). Reason mandatory; audit-logged. */
+export async function reopenCycle(cycleId: string, reason: string): Promise<AnnualReviewCycle> {
+  const { data, error } = await db.rpc('reopen_annual_review_cycle', {
+    p_cycle_id: cycleId,
+    p_reason: reason,
+  });
+  if (error) throw error;
+  return data as AnnualReviewCycle;
+}
+
+/** Reassign a reviewer on a single instance mid-cycle (admin/hr_pms). */
+export async function reassignReviewer(args: {
+  instanceId: string;
+  role: 'manager' | 'skip_manager' | 'bu_head' | 'hr';
+  newReviewerId: string;
+  reason: string;
+}) {
+  const { error } = await db.rpc('reassign_annual_review_reviewer', {
+    p_instance_id: args.instanceId,
+    p_role: args.role,
+    p_new_reviewer_id: args.newReviewerId,
+    p_reason: args.reason,
+  });
+  if (error) throw error;
+}
+
 /** HR/Admin rating override on a finalized instance. Reason is mandatory (>=3 chars). */
 export async function overrideRating(instanceId: string, newRating: string, reason: string) {
   const { error } = await db.rpc('override_annual_review_rating', {
