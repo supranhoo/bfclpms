@@ -532,6 +532,9 @@ function CyclesTab() {
   });
   const closeCycle = useCloseCycle();
   const [confirmCloseId, setConfirmCloseId] = useState<string | null>(null);
+  const reopenCycle = useReopenCycle();
+  const [reopenSource, setReopenSource] = useState<AnnualReviewCycle | null>(null);
+  const [reopenReason, setReopenReason] = useState('');
   const clone = useCloneCycle();
   const [cloneSource, setCloneSource] = useState<AnnualReviewCycle | null>(null);
   const [cloneName, setCloneName] = useState('');
@@ -604,6 +607,14 @@ function CyclesTab() {
                         onClick={() => setConfirmCloseId(c.id)}
                       >
                         <Lock className="h-3.5 w-3.5 mr-1" /> Close
+                      </Button>
+                    )}
+                    {c.status === 'closed' && (
+                      <Button
+                        variant="ghost" size="sm"
+                        onClick={() => { setReopenSource(c); setReopenReason(''); }}
+                      >
+                        <Unlock className="h-3.5 w-3.5 mr-1" /> Reopen
                       </Button>
                     )}
                   </TableCell>
