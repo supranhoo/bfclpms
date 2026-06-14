@@ -305,6 +305,25 @@ function ProgressTab() {
             </TableBody>
           </Table>
         </CardContent>
+        <div className="flex flex-wrap items-center justify-between gap-2 border-t p-3 text-sm">
+          <p className="text-muted-foreground">
+            Showing <span className="tabular-nums">{filtered.length === 0 ? 0 : (page - 1) * pageSize + 1}–{(page - 1) * pageSize + filtered.length}</span> of <span className="tabular-nums">{total}</span>
+            {' · '}
+            <span className="text-xs">Export covers this page only — narrow the filter for a focused export.</span>
+          </p>
+          <div className="flex items-center gap-2">
+            <Label className="text-xs">Rows</Label>
+            <Select value={String(pageSize)} onValueChange={(v) => { setPageSize(Number(v)); setPage(1); }}>
+              <SelectTrigger className="w-20 h-8"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {[10, 25, 50, 100].map((n) => <SelectItem key={n} value={String(n)}>{n}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>Prev</Button>
+            <span className="text-xs tabular-nums">Page {page} / {pageCount}</span>
+            <Button variant="outline" size="sm" disabled={page >= pageCount} onClick={() => setPage((p) => Math.min(pageCount, p + 1))}>Next</Button>
+          </div>
+        </div>
       </Card>
 
       {uploadTemplate && (
