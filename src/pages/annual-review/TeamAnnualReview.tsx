@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
+import { useIsMobile } from '@/hooks/use-mobile';
 import {
   useActiveCycle,
   useReviewerInstances,
@@ -46,7 +47,7 @@ export default function TeamAnnualReview() {
   const [search, setSearch] = useState('');
   const [drawer, setDrawer] = useState(false);
 
-  const isMobile = typeof window !== 'undefined' && window.matchMedia('(max-width: 768px)').matches;
+  const isMobile = useIsMobile();
 
   const filtered = useMemo(
     () => instances.filter((i) => !search || (i.employee?.full_name ?? '').toLowerCase().includes(search.toLowerCase())),
