@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as svc from '@/services/annualReview/annualReviewService';
 import { supabase } from '@/integrations/supabase/client';
 import type {
@@ -31,6 +31,23 @@ export const useRules = (cycleId?: string) =>
   useQuery({ queryKey: annualReviewKeys.rules(cycleId), queryFn: () => svc.listRules(cycleId), enabled: !!cycleId });
 export const useCycleInstances = (cycleId?: string) =>
   useQuery({ queryKey: annualReviewKeys.cycleInstances(cycleId ?? ''), queryFn: () => svc.listInstancesForCycle(cycleId!), enabled: !!cycleId });
+
+export const useAnnualReviewInstancesPaginated = (args: svc.ListInstancesPaginatedArgs | undefined) =>
+  useQuery({
+    queryKey: [...annualReviewKeys.all, 'instancesPaginated', args],
+    queryFn: () => svc.listInstancesPaginated(args!),
+    enabled: !!args?.cycleId,
+    staleTime: 30_000,
+    placeholderData: keepPreviousData,
+  });
+
+export const useCycleStatusCounts = (cycleId?: string) =>
+  useQuery({
+    queryKey: [...annualReviewKeys.all, 'statusCounts', cycleId ?? ''],
+    queryFn: () => svc.getCycleStatusCounts(cycleId!),
+    enabled: !!cycleId,
+    staleTime: 30_000,
+  });
 export const useMyInstance = (employeeId?: string, cycleId?: string) =>
   useQuery({
     queryKey: annualReviewKeys.myInstance(employeeId ?? '', cycleId ?? ''),
