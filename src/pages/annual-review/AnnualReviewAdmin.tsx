@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import {
   useCycles, useTemplates, useRules, useCycleInstances, useActiveCycle, useTemplate,
   useSendBackStatus, useCloseCycle, useOverrideRating, useCloneTemplate, useCloneCycle,
+  useAnnualReviewInstancesPaginated, useCycleStatusCounts, useReopenCycle,
 } from '@/hooks/useAnnualReview';
 import * as svc from '@/services/annualReview/annualReviewService';
 import { useAuth } from '@/contexts/AuthContext';
@@ -24,7 +25,7 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
 import { toast } from 'sonner';
-import { Loader2, Upload, Settings2, ListChecks, Calendar, Layers, Pencil, Plus, Download, BarChart3, CheckCheck, Undo2, Lock, Bell, Scale, Copy } from 'lucide-react';
+import { Loader2, Upload, Settings2, ListChecks, Calendar, Layers, Pencil, Plus, Download, BarChart3, CheckCheck, Undo2, Lock, Bell, Scale, Copy, Unlock } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Cell,
@@ -93,11 +94,21 @@ function exportProgress(cycleName: string, rows: InstanceWithEmployee[]) {
 // ------------------------------------------------------------------
 function ProgressTab() {
   const { data: activeCycle } = useActiveCycle();
-  const { data: instances = [], refetch } = useCycleInstances(activeCycle?.id);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'pending_self' | 'pending_manager' | 'pending_skip' | 'pending_bu' | 'pending_hr' | 'completed' | 'not_started'>('all');
+  const paginatedArgs = activeCycle
+    ? { cycleId: activeCycle.id, page, pageSize, search, status: statusFilter }
+    : undefined;
+  const { data: paged, refetch } = useAnnualReviewInstancesPaginated(paginatedArgs);
+  const instances = paged?.rows ?? [];
+  const total = paged?.total ?? 0;
+  const { data: counts = { total: 0, pending_self: 0, completed: 0, not_started: 0, pending_manager: 0, pending_skip: 0, pending_bu: 0, pending_hr: 0 } } = useCycleStatusCounts(activeCycle?.id);
   const [selected, setSelected] = useState<InstanceWithEmployee | null>(null);
   const [uploadOpen, setUploadOpen] = useState(false);
   const { data: template } = useTemplate(selected?.template_id);
-  const { data: uploadTemplate } = useTemplate(activeCycle ? instances[0]?.template_id : undefined);
+  const { data: uploadTemplate } = useTemplate(instances[0]?.template_id);
   const sendBack = useSendBackStatus();
   const qc = useQueryClient();
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -143,22 +154,9 @@ function ProgressTab() {
     onError: (e: Error) => toast.error(e.message),
   });
 
-  const counts = useMemo(() => {
-    const c = { total: 0, self: 0, in_progress: 0, completed: 0 };
-    for (const i of instances) {
-      c.total++;
-      if (i.overall_status === 'pending_self') c.self++;
-      else if (i.overall_status === 'completed') c.completed++;
-      else if (i.overall_status !== 'not_started') c.in_progress++;
-    }
-    return c;
-  }, [instances]);
-
-  const [search, setSearch] = useState('');
-  const filtered = useMemo(
-    () => instances.filter((i) => !search || (i.employee?.full_name ?? '').toLowerCase().includes(search.toLowerCase())),
-    [instances, search],
-  );
+  const filtered = instances; // server-side filtering already applied
+  const inProgressCount = counts.pending_manager + counts.pending_skip + counts.pending_bu + counts.pending_hr;
+  const summaryCounts = { total: counts.total, self: counts.pending_self, in_progress: inProgressCount, completed: counts.completed };
 
   const allFilteredSelected = filtered.length > 0 && filtered.every((i) => selectedIds.has(i.id));
   const toggleAll = () => {
@@ -177,6 +175,7 @@ function ProgressTab() {
     () => instances.filter((i) => selectedIds.has(i.id) && i.overall_status === 'pending_hr').length,
     [instances, selectedIds],
   );
+  const pageCount = Math.max(1, Math.ceil(total / pageSize));
 
   if (!activeCycle) return <Card><CardContent className="p-6">Activate a cycle to see progress.</CardContent></Card>;
 
@@ -184,10 +183,10 @@ function ProgressTab() {
     <div className="space-y-4">
       <div className="grid gap-3 md:grid-cols-4">
         {[
-          { label: 'Total Active Reviews', val: counts.total },
-          { label: 'Self-Review Pending', val: counts.self },
-          { label: 'In Progress', val: counts.in_progress },
-          { label: 'Completed', val: counts.completed },
+          { label: 'Total Active Reviews', val: summaryCounts.total },
+          { label: 'Self-Review Pending', val: summaryCounts.self },
+          { label: 'In Progress', val: summaryCounts.in_progress },
+          { label: 'Completed', val: summaryCounts.completed },
         ].map((m) => (
           <Card key={m.label}>
             <CardContent className="p-4">
@@ -199,7 +198,30 @@ function ProgressTab() {
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <Input placeholder="Search employees…" value={search} onChange={(e) => setSearch(e.target.value)} className="max-w-sm" />
+        <div className="flex flex-wrap items-center gap-2">
+          <Input
+            placeholder="Search employees…"
+            value={search}
+            onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+            className="max-w-xs"
+          />
+          <Select
+            value={statusFilter}
+            onValueChange={(v) => { setStatusFilter(v as typeof statusFilter); setPage(1); }}
+          >
+            <SelectTrigger className="w-44 h-10"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All stages</SelectItem>
+              <SelectItem value="not_started">Not started</SelectItem>
+              <SelectItem value="pending_self">Pending self</SelectItem>
+              <SelectItem value="pending_manager">Pending manager</SelectItem>
+              <SelectItem value="pending_skip">Pending skip</SelectItem>
+              <SelectItem value="pending_bu">Pending BU</SelectItem>
+              <SelectItem value="pending_hr">Pending HR</SelectItem>
+              <SelectItem value="completed">Completed</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
         <div className="flex items-center gap-2">
           <Button
             variant="outline" className="gap-2"
@@ -283,6 +305,25 @@ function ProgressTab() {
             </TableBody>
           </Table>
         </CardContent>
+        <div className="flex flex-wrap items-center justify-between gap-2 border-t p-3 text-sm">
+          <p className="text-muted-foreground">
+            Showing <span className="tabular-nums">{filtered.length === 0 ? 0 : (page - 1) * pageSize + 1}–{(page - 1) * pageSize + filtered.length}</span> of <span className="tabular-nums">{total}</span>
+            {' · '}
+            <span className="text-xs">Export covers this page only — narrow the filter for a focused export.</span>
+          </p>
+          <div className="flex items-center gap-2">
+            <Label className="text-xs">Rows</Label>
+            <Select value={String(pageSize)} onValueChange={(v) => { setPageSize(Number(v)); setPage(1); }}>
+              <SelectTrigger className="w-20 h-8"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {[10, 25, 50, 100].map((n) => <SelectItem key={n} value={String(n)}>{n}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>Prev</Button>
+            <span className="text-xs tabular-nums">Page {page} / {pageCount}</span>
+            <Button variant="outline" size="sm" disabled={page >= pageCount} onClick={() => setPage((p) => Math.min(pageCount, p + 1))}>Next</Button>
+          </div>
+        </div>
       </Card>
 
       {uploadTemplate && (
@@ -491,6 +532,9 @@ function CyclesTab() {
   });
   const closeCycle = useCloseCycle();
   const [confirmCloseId, setConfirmCloseId] = useState<string | null>(null);
+  const reopenCycle = useReopenCycle();
+  const [reopenSource, setReopenSource] = useState<AnnualReviewCycle | null>(null);
+  const [reopenReason, setReopenReason] = useState('');
   const clone = useCloneCycle();
   const [cloneSource, setCloneSource] = useState<AnnualReviewCycle | null>(null);
   const [cloneName, setCloneName] = useState('');
@@ -565,6 +609,14 @@ function CyclesTab() {
                         <Lock className="h-3.5 w-3.5 mr-1" /> Close
                       </Button>
                     )}
+                    {c.status === 'closed' && (
+                      <Button
+                        variant="ghost" size="sm"
+                        onClick={() => { setReopenSource(c); setReopenReason(''); }}
+                      >
+                        <Unlock className="h-3.5 w-3.5 mr-1" /> Reopen
+                      </Button>
+                    )}
                   </TableCell>
                 </TableRow>
               ))}
@@ -598,6 +650,45 @@ function CyclesTab() {
               disabled={closeCycle.isPending}
             >
               {closeCycle.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />} Close cycle
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={!!reopenSource} onOpenChange={(o) => !o && setReopenSource(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Reopen <span className="font-mono">{reopenSource?.name}</span>?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Reopening flips a closed cycle back to <strong>active</strong>, restoring write access
+              for reviewers and HR. The reason is mandatory and recorded in the audit log.
+              Use this sparingly — most corrections should be done via rating override.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="space-y-1">
+            <Label>Reason</Label>
+            <Textarea
+              rows={3}
+              value={reopenReason}
+              onChange={(e) => setReopenReason(e.target.value)}
+              placeholder="Why is this cycle being reopened?"
+            />
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={async (e) => {
+                e.preventDefault();
+                if (!reopenSource) return;
+                try {
+                  await reopenCycle.mutateAsync({ cycleId: reopenSource.id, reason: reopenReason.trim() });
+                  toast.success('Cycle reopened.');
+                  setReopenSource(null);
+                } catch (err) { toast.error((err as Error).message); }
+              }}
+              disabled={reopenReason.trim().length < 3 || reopenCycle.isPending}
+            >
+              {reopenCycle.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />} Reopen
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

@@ -4,6 +4,7 @@ import type {
   AnnualReviewCycle,
   AnnualReviewInstance,
   AnnualReviewResponse,
+  AnnualReviewStatus,
   AnnualReviewTemplate,
   AnnualReviewerRole,
   EvidenceItem,
@@ -90,6 +91,86 @@ export async function listInstancesForCycle(cycleId: string): Promise<InstanceWi
     .eq('cycle_id', cycleId);
   if (error) throw error;
   return data ?? [];
+}
+
+// ---------- Server-side pagination ----------
+// See modules/annual-review/DOCUMENTATION.md → "Pagination" for the contract.
+export interface PaginatedInstances {
+  rows: InstanceWithEmployee[];
+  total: number;
+}
+
+export interface ListInstancesPaginatedArgs {
+  cycleId: string;
+  page: number;          // 1-indexed
+  pageSize: number;      // max 100 enforced server-side via caller
+  search?: string;
+  status?: AnnualReviewStatus | 'all';
+  sort?: { col: 'created_at' | 'overall_status' | 'total_score'; dir: 'asc' | 'desc' };
+}
+
+/**
+ * Paginated, status- and name-filtered listing of instances for a cycle.
+ * Search resolves to a profile-name ilike pre-fetch (capped at 500 matches)
+ * because PostgREST cannot ilike across an embedded resource directly.
+ */
+export async function listInstancesPaginated(
+  args: ListInstancesPaginatedArgs,
+): Promise<PaginatedInstances> {
+  const pageSize = Math.min(Math.max(args.pageSize, 1), 100);
+  const from = (Math.max(args.page, 1) - 1) * pageSize;
+  const to = from + pageSize - 1;
+
+  let q = db
+    .from('annual_review_instances')
+    .select(
+      '*, employee:profiles!annual_review_instances_employee_id_fkey(id, full_name, employee_code, designation)',
+      { count: 'exact' },
+    )
+    .eq('cycle_id', args.cycleId);
+
+  if (args.status && args.status !== 'all') q = q.eq('overall_status', args.status);
+
+  const term = args.search?.trim();
+  if (term) {
+    const { data: profs, error: pErr } = await db
+      .from('profiles')
+      .select('id')
+      .ilike('full_name', `%${term}%`)
+      .limit(500);
+    if (pErr) throw pErr;
+    const ids = (profs ?? []).map((p: { id: string }) => p.id);
+    if (ids.length === 0) return { rows: [], total: 0 };
+    q = q.in('employee_id', ids);
+  }
+
+  const sort = args.sort ?? { col: 'created_at', dir: 'desc' };
+  q = q.order(sort.col, { ascending: sort.dir === 'asc' }).range(from, to);
+
+  const { data, error, count } = await q;
+  if (error) throw error;
+  return { rows: (data ?? []) as InstanceWithEmployee[], total: count ?? 0 };
+}
+
+/**
+ * Lightweight status-count aggregate for a cycle. Single column projection
+ * keeps payload small (~bytes per row) even for 5k+ employees.
+ */
+export async function getCycleStatusCounts(cycleId: string): Promise<Record<AnnualReviewStatus, number> & { total: number }> {
+  const { data, error } = await db
+    .from('annual_review_instances')
+    .select('overall_status')
+    .eq('cycle_id', cycleId);
+  if (error) throw error;
+  const out = {
+    total: 0, not_started: 0, pending_self: 0, pending_manager: 0,
+    pending_skip: 0, pending_bu: 0, pending_hr: 0, completed: 0,
+  } as Record<AnnualReviewStatus, number> & { total: number };
+  for (const r of (data ?? []) as { overall_status: AnnualReviewStatus }[]) {
+    out.total++;
+    out[r.overall_status] = (out[r.overall_status] ?? 0) + 1;
+  }
+  return out;
 }
 
 export async function getInstanceForEmployee(employeeId: string, cycleId: string): Promise<AnnualReviewInstance | null> {
@@ -356,6 +437,32 @@ export async function closeCycle(cycleId: string): Promise<number> {
   const { data, error } = await db.rpc('close_annual_review_cycle', { p_cycle_id: cycleId });
   if (error) throw error;
   return (data as number) ?? 0;
+}
+
+/** Reopen a closed cycle (admin/hr_pms). Reason mandatory; audit-logged. */
+export async function reopenCycle(cycleId: string, reason: string): Promise<AnnualReviewCycle> {
+  const { data, error } = await db.rpc('reopen_annual_review_cycle', {
+    p_cycle_id: cycleId,
+    p_reason: reason,
+  });
+  if (error) throw error;
+  return data as AnnualReviewCycle;
+}
+
+/** Reassign a reviewer on a single instance mid-cycle (admin/hr_pms). */
+export async function reassignReviewer(args: {
+  instanceId: string;
+  role: 'manager' | 'skip_manager' | 'bu_head' | 'hr';
+  newReviewerId: string;
+  reason: string;
+}) {
+  const { error } = await db.rpc('reassign_annual_review_reviewer', {
+    p_instance_id: args.instanceId,
+    p_role: args.role,
+    p_new_reviewer_id: args.newReviewerId,
+    p_reason: args.reason,
+  });
+  if (error) throw error;
 }
 
 /** HR/Admin rating override on a finalized instance. Reason is mandatory (>=3 chars). */

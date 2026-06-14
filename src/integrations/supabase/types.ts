@@ -295,6 +295,44 @@ export type Database = {
           },
         ]
       }
+      annual_review_assignment_overrides: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          id: string
+          instance_id: string
+          new_reviewer_id: string
+          reason: string
+          role: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          instance_id: string
+          new_reviewer_id: string
+          reason: string
+          role: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          instance_id?: string
+          new_reviewer_id?: string
+          reason?: string
+          role?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "annual_review_assignment_overrides_instance_id_fkey"
+            columns: ["instance_id"]
+            isOneToOne: false
+            referencedRelation: "annual_review_instances"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       annual_review_assignment_rules: {
         Row: {
           created_at: string
@@ -361,6 +399,9 @@ export type Database = {
           manager_review_end: string | null
           manager_review_start: string | null
           name: string
+          reopened_at: string | null
+          reopened_by: string | null
+          reopened_reason: string | null
           review_year: number
           self_review_end: string | null
           self_review_start: string | null
@@ -380,6 +421,9 @@ export type Database = {
           manager_review_end?: string | null
           manager_review_start?: string | null
           name: string
+          reopened_at?: string | null
+          reopened_by?: string | null
+          reopened_reason?: string | null
           review_year: number
           self_review_end?: string | null
           self_review_start?: string | null
@@ -399,6 +443,9 @@ export type Database = {
           manager_review_end?: string | null
           manager_review_start?: string | null
           name?: string
+          reopened_at?: string | null
+          reopened_by?: string | null
+          reopened_reason?: string | null
           review_year?: number
           self_review_end?: string | null
           self_review_start?: string | null
@@ -13358,6 +13405,29 @@ export type Database = {
         }
         Returns: Json
       }
+      reassign_annual_review_reviewer: {
+        Args: {
+          p_instance_id: string
+          p_new_reviewer_id: string
+          p_reason: string
+          p_role: string
+        }
+        Returns: {
+          created_at: string
+          created_by: string | null
+          id: string
+          instance_id: string
+          new_reviewer_id: string
+          reason: string
+          role: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "annual_review_assignment_overrides"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       reconcile_org_kpi_inheritance: {
         Args: { p_dry_run?: boolean }
         Returns: Json
@@ -13391,6 +13461,37 @@ export type Database = {
       rename_incident_evidence: {
         Args: { p_evidence_id: string; p_new_file_name: string }
         Returns: Json
+      }
+      reopen_annual_review_cycle: {
+        Args: { p_cycle_id: string; p_reason: string }
+        Returns: {
+          bu_review_end: string | null
+          bu_review_start: string | null
+          created_at: string
+          created_by: string | null
+          description: string | null
+          hr_finalization_deadline: string | null
+          id: string
+          manager_review_end: string | null
+          manager_review_start: string | null
+          name: string
+          reopened_at: string | null
+          reopened_by: string | null
+          reopened_reason: string | null
+          review_year: number
+          self_review_end: string | null
+          self_review_start: string | null
+          skip_review_end: string | null
+          skip_review_start: string | null
+          status: string
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "annual_review_cycles"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       repair_multimonth_workflow_drift_v5: {
         Args: { p_apply?: boolean }

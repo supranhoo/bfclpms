@@ -4,15 +4,16 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { AlertCircle, Loader2 } from 'lucide-react';
+import { AlertCircle, Loader2, UserCog } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { toast } from 'sonner';
 import { FINAL_RATINGS } from '@/lib/annualReview/constants';
 import { computeCriteriaScore, computeOverallScore } from '@/lib/annualReview/scoring';
-import { useFinalizeInstance, useInstanceResponses } from '@/hooks/useAnnualReview';
+import { useFinalizeInstance, useInstanceResponses, useReassignReviewer } from '@/hooks/useAnnualReview';
 import { SystemScoresPanel } from './SystemScoresPanel';
 import { EligibilityInputsEditor } from './EligibilityInputsEditor';
 import { InstanceTimeline } from './InstanceTimeline';
+import { ReassignReviewerDialog } from './ReassignReviewerDialog';
 import type { AnnualReviewInstance, AnnualReviewTemplate } from '@/types/annualReview';
 import type { InstanceWithEmployee } from '@/services/annualReview/annualReviewService';
 
@@ -32,6 +33,7 @@ export function HrFinalizationSheet({
   const [rating, setRating] = useState<string>('Average');
   const [remarks, setRemarks] = useState('');
   const [systemOverrides, setSystemOverrides] = useState<Record<string, number>>({});
+  const [reassignOpen, setReassignOpen] = useState(false);
 
   const sysCfg = template?.sections.system_scores ?? [];
   const criteria = template?.sections.criteria ?? [];
@@ -146,7 +148,15 @@ export function HrFinalizationSheet({
 
           {instance && (
             <div className="space-y-2">
-              <Label>Activity timeline</Label>
+              <div className="flex items-center justify-between">
+                <Label>Activity timeline</Label>
+                <Button
+                  variant="ghost" size="sm" className="gap-1.5 h-7 text-xs"
+                  onClick={() => setReassignOpen(true)}
+                >
+                  <UserCog className="h-3.5 w-3.5" /> Reassign reviewer
+                </Button>
+              </div>
               <InstanceTimeline instanceId={instance.id} />
             </div>
           )}
@@ -158,6 +168,13 @@ export function HrFinalizationSheet({
             {finalize.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />} Finalize
           </Button>
         </SheetFooter>
+        {instance && (
+          <ReassignReviewerDialog
+            open={reassignOpen}
+            onOpenChange={setReassignOpen}
+            instance={instance}
+          />
+        )}
       </SheetContent>
     </Sheet>
   );
