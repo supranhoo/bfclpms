@@ -136,6 +136,22 @@ export function useCloseCycle() {
   });
 }
 
+export function useReopenCycle() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (args: { cycleId: string; reason: string }) => svc.reopenCycle(args.cycleId, args.reason),
+    onSuccess: () => qc.invalidateQueries({ queryKey: annualReviewKeys.all }),
+  });
+}
+
+export function useReassignReviewer() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: svc.reassignReviewer,
+    onSuccess: () => qc.invalidateQueries({ queryKey: annualReviewKeys.all }),
+  });
+}
+
 export function useOverrideRating() {
   const qc = useQueryClient();
   return useMutation({
