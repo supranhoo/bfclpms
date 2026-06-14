@@ -1,116 +1,71 @@
-# Performance Optimization Plan — "Please wait forever" on page loads
+## Goal
+Close out all remaining gaps in the Annual Review module (items A–E from the audit) so it reaches production parity with the rest of the PMS modules.
 
-## 1. Diagnosis (measured, not guessed)
+## Assumptions
+- "Complete" = ship A through E from the prior audit. F (something else) is not in scope.
+- Existing schema, RLS, RPCs, and routes stay intact; this is additive only.
+- No new business policy — we are formalizing what already exists and hardening operations.
 
-I pulled the live slow-query rankings from the database. The top offenders are clear and they line up exactly with what you're seeing — the rocket overlay stays visible as long as **any** query is in flight (gated by `useIsFetching() > 0` in `DashboardLayout.tsx`, with a 15s safety cap). Right now several queries routinely take **1.5s–8s** and a few hit the Postgres **8s statement timeout** (max_ms ≈ 7.99s), which is why some pages feel like they hang forever.
+## Risk & Impact Report
+- **Data Impact:** Additive only — one new column (`annual_review_cycles.reopened_at`, `reopened_by`, `reopened_reason`) plus an `annual_review_assignment_overrides` table for mid-cycle reassignment. No destructive changes. Existing rows untouched.
+- **Workflow Impact:** Reopen is HR-only and audit-logged; reassignment writes an override row that the resolver consults before falling back to the rule engine. No change to the happy path.
+- **UI/UX Impact:** Admin Progress tab gains pagination controls (page size, page nav). New "Reopen" action on closed cycles (confirm dialog). New "Reassign reviewer" row action on instance drawer. New `/reports/annual-review` page mirroring existing report styling. Team page swaps `window.matchMedia` for `useIsMobile()` — no visual change.
+- **Regression Risk:** Medium on the Progress tab (query shape changes). Low elsewhere (additive).
+- **Mitigation:** Server-side pagination behind a typed service method with unit tests; reopen/reassign gated by `has_role('hr_pms'|'admin')` and confirmed via `ConfirmDestructiveDialog`; resolver override path covered by tests; feature flag already gates the module.
+- **Scalability:** Progress tab moves from O(org) memory to O(page_size). Report page uses the same paginated service. Override table is small (1 row per exception).
 
-### Top offenders (from `pg_stat_statements`)
+## Step-by-step Plan
 
+### A. Server-side pagination on Admin Progress tab
+1. Add `listInstancesPaginated({ cycleId, page, pageSize, search, status, sort })` to `annualReviewService.ts` using `.range()` + `count: 'exact'`.
+2. New hook `useAnnualReviewInstancesPaginated` (TanStack Query, `keepPreviousData`, `staleTime: 30s`).
+3. Refactor Progress tab in `AnnualReviewAdmin.tsx` to consume the hook + a shared `<DataTablePagination />` (reuse existing one if present, else local).
+4. Tests: service returns correct slice; hook caches per page key.
 
-| #   | Query                                                                                                                                                               | Calls                 | Mean         | Max            | Total time         |
-| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------- | ------------ | -------------- | ------------------ |
-| 1   | `SELECT … FROM kpis ORDER BY created_at DESC` (unbounde111d paged read of every KPI)                                                                                | 44,522                | **1,498 ms** | 7,994 ms       | **66,685 s**       |
-| 2   | `SELECT id,employee_id,status FROM kpis WHERE category_id=… AND kra_name=… AND kpi_name=… AND review_period=… AND review_year=… AND is_org_level=…` (dedupe lookup) | 58,503                | 177 ms       | 6,438 ms       | 10,339 s           |
-| 3   | `SELECT designation FROM profiles WHERE is_active` (distinct designations)                                                                                          | 5,148                 | **1,812 ms** | 7,985 ms       | 9,327 s            |
-| 4   | `SELECT * FROM org_kpi_data_entry_logs WHERE category_id=… AND kra_name=… AND kpi_name=… AND period=… AND year=…`                                                   | **120,849**           | 66 ms        | 1,070 ms       | 7,918 s            |
-| 5   | `SELECT id,full_name,reporting_manager_id,employee_code FROM profiles WHERE is_active ORDER BY full_name`                                                           | 3,666                 | **2,159 ms** | 7,593 ms       | 7,914 s            |
-| 6   | `profiles + departments` nested embed                                                                                                                               | 2,201                 | 1,229 ms     | 7,342 ms       | 2,706 s            |
-| 7   | `kpis + kra_categories` embed for org-level KPIs in a period                                                                                                        | 498                   | **4,956 ms** | 7,982 ms       | 2,468 s            |
-| 8   | `review_submissions WHERE kpi_id = ANY(...)` (large IN arrays)                                                                                                      | 18.5k / 52.7k / 45.8k | 73–177 ms    | up to 7,941 ms | ~12,800 s combined |
+### B. Documentation
+1. Create `src/modules/annual-review/DOCUMENTATION.md` — schema, RPCs, routes, hooks, components, edge function.
+2. Create `src/modules/annual-review/POLICY.md` — eligibility, scoring, send-back, finalization, reopen, reassignment, acknowledgment/rebuttal.
+3. Create `docs/adr/ADR-annual-review.md` — decisions: separate instance table, role-scoped RLS, edge-function reminders, template versioning via clone.
+4. Add Version History entry to each.
 
+### C. Component / integration tests
+1. `EmployeeResultsView.test.tsx` — renders scores, acknowledge flow, rebuttal submit.
+2. `ManagerCalibration.test.tsx` — distribution math, delta highlighting.
+3. `HrFinalizationSheet.test.tsx` — single + bulk finalize, override rating.
+4. `useAnnualReview.test.ts` — autosave debounce, send-back state.
+5. Service-layer tests for clone RPCs (mock Supabase client).
 
-### Why the overlay stays up
+### D. Standalone Annual Review report page
+1. New route `/reports/annual-review` (lazy-loaded), registered with existing report registry pattern.
+2. Filters: cycle, BU, department, status, rating band.
+3. Columns mirror admin grid; export via the existing xlsx dynamic-import pattern.
+4. RLS-aware — reuses paginated service from step A.
 
-`RouteDataLoadingGate` keeps `PageLoadingOverlay` mounted while any TanStack Query is fetching. When `useAllKpis`, `useProfiles`, `getDistinctDesignations`, or an org-level-kpis embed hits the 8s timeout, the user sees the rocket card for the full 8s — and on a slow route that fires several of these in parallel, it stacks.
+### E. Reopen + mid-cycle reassignment
+1. Migration: add `reopened_at`, `reopened_by`, `reopened_reason` to `annual_review_cycles`; create `annual_review_assignment_overrides (instance_id, role, new_reviewer_id, reason, created_by, created_at)` with GRANTs + RLS + audit trigger.
+2. RPCs: `reopen_annual_review_cycle(cycle_id, reason)` (HR/admin only, writes audit, flips `status` back to `active`, unlocks trigger); `reassign_annual_review_reviewer(instance_id, role, new_reviewer_id, reason)`.
+3. Resolver update: `getEffectiveReviewer(instance, role)` checks overrides table first, then falls back to rule engine.
+4. UI: "Reopen cycle" button on Cycles tab (closed only) + confirm dialog; "Reassign" action in HR finalization sheet's reviewer row.
+5. Tests: reopen restores write access; override takes precedence; non-HR cannot invoke either RPC.
 
----
+### Cleanup
+- Swap `window.matchMedia` in `TeamAnnualReview.tsx` for `useIsMobile()`.
+- Update `mem://index.md` with one-liner pointing to a new `mem://features/annual-review/operations` memory documenting reopen + override precedence rules.
 
-## 2. Risk & Impact Report
+## UI Changes (summary)
+- **Admin → Progress tab:** pagination bar at bottom (page size selector + prev/next + total count). Table itself unchanged.
+- **Admin → Cycles tab:** new "Reopen" button on rows where `status='closed'`. Opens `ConfirmDestructiveDialog` requiring a reason.
+- **HR Finalization sheet:** each reviewer row gets a small "Reassign" link → modal with user picker + reason.
+- **New page** `/reports/annual-review` — standard report layout (filters left, table right, export top-right).
+- **Sidebar:** add "Annual Review" entry under Reports section, gated by same feature flag.
 
-- **Data Impact:** Additive only — new indexes and replacing client embeds with RPCs (no schema removals, no data migration). Backups unaffected.
-- **Workflow Impact:** None. RLS surfaces (admin/manager/auditor/etc.) preserved.
-- **UI/UX Impact:** Loading overlay disappears in <1s for most navigations. No visual changes besides removing the long "Please wait"..
-- **Regression Risk:** Medium-low. The biggest risk is replacing `useAllKpis` (raw paged kpis) with a slimmer, indexed path — covered by existing tests + per-hook smoke tests we'll add.
-- **Scalability Impact:** Removes the unbounded `ORDER BY created_at` full-table scan on `kpis` (currently the #1 cost driver) and the `profiles` full-scan ordered fetch. Cuts dashboard cold-load query volume.
-- **Mitigation:** Ship in 3 small waves behind no flag (rollback = revert the migration + hook diff). Each wave is independently reversible.
+## Tests
+Vitest suites listed in step C, plus migration smoke test for the new table + RPCs.
 
----
+## Documentation / Policy
+DOCUMENTATION.md, POLICY.md, ADR all created in step B and amended after E lands.
 
-## 3. Step-by-step plan
-
-### Wave A — Database indexes (biggest single win, lowest risk)
-
-New migration adds these (plain `CREATE INDEX IF NOT EXISTS`, fits in a migration transaction):
-
-1. `kpis (review_year, review_period, is_org_level)` — fixes #2, #7, #8 (period-scoped lookups).
-2. `kpis (category_id, kra_name, kpi_name, review_year, review_period, is_org_level)` — fixes #2 dedupe lookup (58k calls).
-3. `kpis (status, review_year, review_period)` — fixes #11 status-by-period scan.
-4. `org_kpi_data_entry_logs (category_id, kra_name, kpi_name, review_period, review_year, created_at DESC)` — fixes #4 (120k calls, the chattiest query in the system).
-5. `review_submissions (kpi_id)` — confirms the `kpi_id = ANY(...)` lookups stay on an index-only scan.
-6. `profiles (is_active, full_name)` — fixes #5 ordered list.
-
-Verification: re-run `EXPLAIN (ANALYZE, BUFFERS)` on each via a one-off script; confirm `Index Scan` replaces `Seq Scan` and that `mean_ms` drops below 200ms on the next slow-query pull.
-
-### Wave B — Application-layer query hygiene
-
-Targeted fixes in existing hooks (no new architecture):
-
-1. `**useAllKpis` / `useKpisByPeriod**` — already uses `SLIM_KPI_SELECT`. Tighten the keyset query: drop `ORDER BY created_at DESC` from the unbounded paged read (it's the #1 cost). Caller doesn't need creation order — switch to `ORDER BY id` (PK index) and rely on `.range()`.
-2. **Distinct designations** (#3, 1.8s mean) — replace the full `SELECT designation FROM profiles WHERE is_active` with the existing `useEmployeeFilterOptions` cached query (`staleTime: 5 min`). If a dedicated DB function is cheaper we add `get_distinct_designations()` RPC.
-3. `**useProfiles` ordered fetch** (#5, 2.1s mean) — already paged via `fetchAllPaged`. Bump `staleTime` to 5 min (read-mostly roster) and ensure it's not re-keyed by transient filters.
-4. `**org_kpi_data_entry_logs**` — collapse the per-row "latest log" lookup (120k calls!) into a single `IN (...)` batch keyed by `(category_id, kra_name, kpi_name, review_period, review_year)` rendered for the page, instead of one call per row.
-5. **Confirm `staleTime**` on dashboard-tier hooks (`useSkipLevelTeamMembers`, `useDashboardKraPermissions`, `useProfiles`) is ≥ 5 min per ADR-083 — the dashboard refetches some of these every focus.
-
-### Wave C — Loading-overlay UX
-
-Small, safe tweaks in `src/components/layout/DashboardLayout.tsx`:
-
-1. **150ms grace period** before showing the overlay — most navigations resolve under that and the rocket card never flashes.
-2. **Lower the safety cap from 15s → 6s** (now that no real query should exceed Postgres' 8s timeout, anything > 6s is a true failure and we should hand off to inline error UI instead of keeping the rocket up).
-3. **Don't gate the overlay on background `useIsFetching**` that started *after* the route stabilised — already the intent, but verify by counting fetches snapshot at route-change time and waiting for *that count* to reach 0, instead of any-fetching-anywhere.
-
-### Deliverables per workspace policy
-
-- Migration file with the 6 indexes.
-- Diff to `useKpis.ts`, `useProfiles`/`useEmployeeFilterOptions`, `OrgKpiDataEntry`-related hook, `DashboardLayout.tsx`.
-- Vitest cases: (a) `useAllKpis` returns rows without `created_at` ordering, (b) overlay grace period suppresses sub-150ms loads, (c) overlay disarms within 6s.
-- DOCUMENTATION.md + POLICY.md entries (`§120` Lean-Load) updated.
-- Re-pull `pg_stat_statements` after deploy; record before/after `mean_ms` for queries #1–#5.
-
----
-
-## 4. UI changes
-
-Only the loading overlay behaviour changes:
-
-- **Where:** the centered rocket card (every page during navigation).
-- **What changes:** appears only if loading exceeds 150ms; auto-hides at ≤6s instead of 15s.
-- **Interaction impact:** none — purely presentational.
-- **Responsiveness:** unchanged (existing card layout).
-
----
-
-## 5. Success criteria
-
-- Top-10 slow queries' `mean_ms` drops by ≥70%.
-- Dashboard cold load: overlay visible < 1.5s in the median, < 6s P95.
-- No new console errors; existing Vitest suite green.
-- DOCUMENTATION.md "Version History" + POLICY.md §120 updated in the same commit.
-
----
-
-## 6. Rollback
-
-Each wave is independently revertible:
-
-- Wave A: `DROP INDEX IF EXISTS …` in a follow-up migration.
-- Wave B: revert hook diffs (no schema change).
-- Wave C: revert `DashboardLayout.tsx` (no schema change).
-
----
-
-## 7. Decision notes
-
-- **Indexes before code refactors** — measurement shows the cost is in unindexed scans, not bundle size. Bundle work is deferred until DB latency is under control.
-- **No new RPCs unless Wave A+B don't hit the success criteria** — keeps risk surface small and matches POLICY §120 (Lean-Load) rather than introducing a parallel data path.
-- **Not changing TanStack defaults** (`staleTime: 10 min` is already set in `App.tsx`) — only fixing per-hook outliers.
+## Post-implementation notes
+- Reopen is intentionally manual and audited — no auto-reopen.
+- Overrides are per-instance, not per-cycle, to avoid surprising other employees.
+- Pagination default: 25 rows, max 100.
