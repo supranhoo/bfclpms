@@ -655,6 +655,45 @@ function CyclesTab() {
         </AlertDialogContent>
       </AlertDialog>
 
+      <AlertDialog open={!!reopenSource} onOpenChange={(o) => !o && setReopenSource(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Reopen <span className="font-mono">{reopenSource?.name}</span>?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Reopening flips a closed cycle back to <strong>active</strong>, restoring write access
+              for reviewers and HR. The reason is mandatory and recorded in the audit log.
+              Use this sparingly — most corrections should be done via rating override.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="space-y-1">
+            <Label>Reason</Label>
+            <Textarea
+              rows={3}
+              value={reopenReason}
+              onChange={(e) => setReopenReason(e.target.value)}
+              placeholder="Why is this cycle being reopened?"
+            />
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={async (e) => {
+                e.preventDefault();
+                if (!reopenSource) return;
+                try {
+                  await reopenCycle.mutateAsync({ cycleId: reopenSource.id, reason: reopenReason.trim() });
+                  toast.success('Cycle reopened.');
+                  setReopenSource(null);
+                } catch (err) { toast.error((err as Error).message); }
+              }}
+              disabled={reopenReason.trim().length < 3 || reopenCycle.isPending}
+            >
+              {reopenCycle.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />} Reopen
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <AlertDialog open={!!cloneSource} onOpenChange={(o) => !o && setCloneSource(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
