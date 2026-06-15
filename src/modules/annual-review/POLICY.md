@@ -2,6 +2,12 @@
 
 _Business rules. Update in the same PR as any logic change._
 
+## Internationalisation (2026-06)
+- Every user-visible string in the annual review module MUST be rendered through `useAnnualReviewI18n().t(key, englishFallback)`.
+- Template-authored content (criterion / system-score / eligibility / self-review-field labels and descriptions) MUST go through `tTemplate(kind, id, field, englishFallback)`. Keys follow `<kind>.<id>.<field>`.
+- Provider: `AnnualReviewI18nProvider` is mounted at every annual-review page root (`EmployeeAnnualReview`, `TeamAnnualReview`, `HrFinalizationSheet`). Child components that consume the context never receive `t` via props.
+- Resolution precedence (unchanged): `current === default → fallback` → `template.translations[lang][key]` → `UI_I18N[lang][key]` → english fallback. Numeric data is never translated.
+
 ## Reviewer-chain mapping (2026-06)
 
 - **Manager** = `profiles.reporting_manager_id`.
