@@ -1,68 +1,96 @@
+# Plan — Carry KRA Score in Annual Review Templates
+
 ## Goal
 
-Make the Self stage optional in the per-employee annual-review chain, the same way Manager / Skip / BU / HR already are. Today `self` is hard-pinned across SSOT, DB trigger, RPCs, UI dialog, and bulk uploader.
+Inside the Annual Review **Template Editor** (Admin), allow a System Score to be configured as a **Carry KRA Score**. When that score is used in an instance, the system fetches the employee's existing **month-wise final achieved KRA score** for the fiscal year tied to the cycle, displays the breakdown, and feeds an aggregated value into the appraisal totals.
 
-## Risk & Impact
+## Assumptions
 
-- **Data**: Existing rows keep their `["self",...]` default — additive change. Re-seeder already preserves `enabled_stages`.
-- **Workflow**: Excluding self means the cycle starts at the first enabled stage (Manager / Skip / BU / HR). Reviewers will see no self-score / self-remarks for that employee. Send-back from the first enabled stage stays blocked (no prior stage).
-- **Lifecycle gate**: `set_annual_review_enabled_stages` is currently allowed in `not_started` OR `pending_self`. Once Self is excluded the instance's `overall_status` is whatever the new first stage is (e.g. `pending_manager`), so the gate must be widened — but only for instances that have **not yet been actioned by any reviewer** (no submissions, no completed stage). We'll gate on `overall_status = 'not_started'` OR (`overall_status = first_enabled_pending_status` AND no `annual_review_responses` rows exist).
-- **Regression**: Low. All other paths (auto-advance, send-back, reminders, reports) already key off `enabled_stages` via the resolver helpers.
-- **Scalability**: No new queries on hot paths; one extra `EXISTS` check on `annual_review_responses` inside the RPC.
+- Fiscal cycle is July–June (project memory).
+- `annual_review_cycles.review_year` identifies the fiscal year that should be aggregated.
+- "Final achieved score" per KPI per month = `review_submissions.final_score` (immutable once approved) using the universal scoring cascade as fallback (already implemented in `src/lib/scoring/universalScore.ts`).
+- Monthly KRA score = weight-aware aggregate of an employee's KPIs whose `review_period = <month>` and `review_year = cycle.review_year`, excluding `is_na` per existing N/A governance.
+- This is **read-only carry**: no edits to historical PMS data; nothing recomputes `final_score`.
 
-## Plan
+## Pushback / Clarifications
 
-### 1. SSOT — `src/lib/annualReview/stageChain.ts`
-- Remove `set.add('self')` force-include in `enabledChain`.
-- Keep canonical ordering. Empty subset is invalid → throw in `enabledChain` if the resulting array is empty.
-- Update JSDoc: "Self is no longer mandatory; chain must contain at least one stage."
-- `nextStatus` / `prevStatus` are already chain-driven and need no changes once `self` may be absent.
+1. **Aggregation level** — should the carry value be:
+  - (a) the **overall** weighted average across all 12 months (single number fed into the System Score), or
+  - (b) **selectable month range** (e.g. last 6 months) configured on the template?
+   I will default to **(a) overall weighted average of available months**, with the per-month grid visible for audit. Confirm if you want (b).  
+    
+  This to be (b) **selectable month range**
+2. **Weight conversion** — System Scores have a `weight` cap (max % points). The carry value will be scaled Averahge of Monthly Score. Confirm.
+3. **KRA filter** — include all KRAs, or only KRAs explicitly mapped to the employee in the cycle's fiscal year? Default: **all KRAs the employee had KPIs for** in that review_year.
 
-### 2. DB — new migration `…_allow_self_exclusion.sql`
-- **Trigger** `tg_annual_review_validate_enabled_stages`: drop the `enabled_stages ? 'self'` check; replace with `jsonb_array_length(enabled_stages) >= 1`.
-- **RPC** `set_annual_review_enabled_stages`:
-  - Drop `NOT (... ? 'self')` payload check; require array length ≥ 1 and subset of canonical stages.
-  - Widen lifecycle gate: allow when `overall_status = 'not_started'` OR (`overall_status` equals the pending status of the current first enabled stage AND `NOT EXISTS (SELECT 1 FROM annual_review_responses WHERE instance_id = p_instance_id)`).
-  - Audit log unchanged (`annual_review.enabled_stages_set`).
-- **Start path**: locate where instances move from `not_started` → `pending_self` (cycle start trigger / RPC found in `20260613173449_*.sql`). Use the existing PL/pgSQL helper `annual_review_next_status('not_started', enabled_stages)` so the first stage is honoured. If a `not_started → pending_self` literal exists, replace with the helper call. Confirms self-exclusion produces e.g. `pending_manager` directly.
-- **Auto-complete**: no change needed; `annual_review_next_status` already returns `completed` when no further stages.
+## Risk & Impact Report
 
-### 3. UI — `src/components/annual-review/ChangeWorkflowDialog.tsx`
-- Move `Self Review` into the same toggle list as the others; drop the "Required" badge and the always-on disabled checkbox.
-- Guard: `canSave = isDirty && reason.length ≥ 3 && enabled.size ≥ 1`.
-- Warning banner when `!enabled.has('self')`: "Self Review is disabled — the employee will not be asked to fill self ratings; reviewers start directly at <first stage>."
-- Recompute `next` via `enabledChain` (now self-optional).
+- **Data**: No schema for historical PMS tables. One additive JSONB column on `annual_review_instances` to cache the carried snapshot per system_score id (`carry_score_snapshots jsonb default '{}'`). Template gains a new `source = 'carry_kra'` value plus optional `carry_config` per system score. No destructive change.
+- **Workflow**: Read-only fetch; does not alter PMS workflow status or `final_score` immutability.
+- **UI/UX**: Template editor gets a "Carry KRA Score" source option with a config popover. Reviewer/HR side gains a collapsible "Monthly KRA Breakdown" panel inside `SystemScoresPanel` when the score uses this source.
+- **Regression risk**: Low — additive enum value + new branch in `SystemScoresPanel`. Existing manual sources untouched.
+- **Scalability**: One employee × 12 months × N KPIs. Fetched once per instance load; result cached in `carry_score_snapshots` so subsequent loads are O(1).
+- **Security/RLS**: Reads use existing `review_submissions` policies. Snapshot writes restricted to instance owner / HR via existing RLS on `annual_review_instances`.
 
-### 4. UI — `src/components/annual-review/BulkWorkflowAssignmentDialog.tsx`
-- Add a `Self (Y/N)` column to the template, parser, and preview grid.
-- Preview shows new chain via `describeChain`; rows with empty Self default to `Y` (back-compat).
-- Reject rows where all five toggles end up `N`.
+## Step-by-step Plan
 
-### 5. Service / types
-- `src/services/annualReview/annualReviewService.ts` `setEnabledStages` / `bulkSetEnabledStages`: no logic change beyond passing whatever subset the dialog produced. Error mapping already surfaces the new RPC error strings.
-- `src/types/annualReview.ts`: no enum change; `self` is already part of `AnnualReviewerRole`.
+### 1. Types & SSOT (`src/types/annualReview.ts`)
 
-### 6. Tests
-- `src/lib/annualReview/stageChain.test.ts` — add cases for `['manager','hr']`, `['hr']`, empty (throws).
-- `src/test/annualReview/bulkSetEnabledStages.test.ts` — Self column parsing, all-N row rejection, payload sent without `self`.
-- New `src/test/annualReview/setEnabledStagesSelfOptional.test.ts` — RPC contract test (mock supabase) covering: self-removed payload accepted; empty payload rejected; gate denies when responses exist.
+- Extend `TemplateSystemScore.source` literal union with `'carry_kra'`.
+- Add optional `carry_config?: { aggregation: 'overall_avg' | 'last_n_months'; lastN?: number; excludeNa?: boolean }`.
 
-### 7. Docs & memory
-- `src/modules/annual-review/POLICY.md` — replace "Self is mandatory" with "Chain must contain ≥ 1 stage; excluding Self skips self-rating capture and starts the cycle at the next enabled stage."
-- `src/modules/annual-review/DOCUMENTATION.md` — update the workflow section + add lifecycle gate clarification.
-- `mem/features/annual-review/per-employee-workflow.md` — replace the "self always required" line; note the widened RPC gate.
+### 2. Service (`src/services/annualReview/carryKraScore.ts` — new)
 
-### 8. Rollback
-Revert the migration (recreates `? 'self'` check and narrower gate) + revert the four files in §1, §3, §4. No data backfill needed — existing `enabled_stages` arrays that include `self` remain valid under both schemas.
+- `fetchMonthlyKraScores(employeeId, fiscalYear)` → `{ month: string; avgPct: number; weightedTotal: number; kpiCount: number }[]` ordered Jul…Jun.
+- Implementation: query `review_submissions` join `kpis` filtered by `employee_id`, `kpis.review_year = fiscalYear`, `is_na = false`. Aggregate weight-aware monthly % using existing `universalScore` helper.
+- `computeCarryValue(monthly, weight, cfg)` → numeric scaled to `weight` cap.
 
-## UI changes (visual)
+### 3. Template Editor (`TemplateEditorDialog.tsx`)
 
-- **Dialog**: `Self Review` row becomes a normal checkbox (no "Required" badge, no disabled state). When unticked, an inline amber callout appears under the chain preview reading "Self Review disabled — <Employee> will not submit self ratings."
-- **Bulk dialog**: new `Self` column in the XLSX template and preview table, positioned before `Manager`.
-- No layout, navigation, or responsive changes.
+- In the System Scores table, change Source input → `Select` with options: `Manual`, `Safety`, `HR`, `Carry KRA Score (auto-fetched)`.
+- When `carry_kra` chosen, show a small inline config (aggregation mode + lastN). Disable manual value entry downstream.
 
-## Out of scope
+### 4. SystemScoresPanel (`SystemScoresPanel.tsx`)
 
-- Backfilling historical instances.
-- Changing what self responses already submitted look like for downstream reviewers (none exist when self is excluded pre-start).
-- Reminder copy tweaks — existing templates already key off the current pending stage.
+- For each score where `source === 'carry_kra'`:
+  - Lock numeric input (read-only).
+  - Render a collapsible **"Monthly KRA Breakdown"** table: month, KPI count, avg %, contribution to weight.
+  - Loading + empty states (e.g. "No PMS submissions found for FY {year}").
+
+### 5. Instance load hook (`useAnnualReviewInstance.ts` or service composition)
+
+- After instance + template load, for each `carry_kra` system score: if snapshot missing/stale, call service, store in `values[scoreId]`, and persist snapshot on save.
+
+### 6. DB Migration (additive)
+
+- `ALTER TABLE public.annual_review_instances ADD COLUMN IF NOT EXISTS carry_score_snapshots jsonb NOT NULL DEFAULT '{}'::jsonb;`
+- No new tables; no RLS changes (column inherits).
+
+### 7. Tests
+
+- Unit: `carryKraScore.test.ts` — happy path (all 12 months), partial months, all-NA exclusion, weight scaling, lastN config.
+- Component: snapshot test that `SystemScoresPanel` renders the monthly breakdown only for `carry_kra` sources.
+- Mock fixtures: synthetic employee with mixed monthly submissions.
+
+### 8. Docs & Policy
+
+- **DOCUMENTATION.md** → new subsection under "Annual Review → Templates → System Scores: Carry KRA Score" describing source, config, snapshot caching, fiscal mapping.
+- **POLICY.md** → rule: "Carry KRA Score is read-only and sourced from the employee's PMS `final_score` cascade for the cycle's fiscal year; N/A KPIs are excluded; snapshot is immutable once the annual instance reaches `pending_hr`."
+- **Memory** → add `mem://features/annual-review/carry-kra-score`.
+
+### 9. Rollback
+
+- Drop column `carry_score_snapshots` (additive, safe).
+- Revert files in steps 1–5 and 8.
+
+## UI Change Summary
+
+- **Template Editor** → System Scores row: Source becomes a dropdown; selecting "Carry KRA Score" reveals a config chip and disables manual entry on the appraisal side. Visible only inside the Template dialog.
+- **Reviewer / HR appraisal view (`SystemScoresPanel`)** → New collapsible monthly grid under any carry_kra score. Inputs locked. Mobile: stacked accordion.
+- **No nav, no new route.**
+
+## Out of Scope
+
+- Editing/overriding historical PMS scores.
+- Cross-cycle carry (only the cycle's own fiscal year is fetched).
+- Bulk re-snapshot UI (snapshot refresh happens on instance load while editable).
