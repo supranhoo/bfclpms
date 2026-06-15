@@ -107,8 +107,9 @@ function ProgressTab() {
   const { data: counts = { total: 0, pending_self: 0, completed: 0, not_started: 0, pending_manager: 0, pending_skip: 0, pending_bu: 0, pending_hr: 0 } } = useCycleStatusCounts(activeCycle?.id);
   const [selected, setSelected] = useState<InstanceWithEmployee | null>(null);
   const [uploadOpen, setUploadOpen] = useState(false);
-  const { data: template } = useTemplate(selected?.template_id);
-  const { data: uploadTemplate } = useTemplate(instances[0]?.template_id);
+  const { data: template } = useTemplate(svc.resolveTemplateId(selected) ?? undefined);
+  const { data: uploadTemplate } = useTemplate(svc.resolveTemplateId(instances[0]) ?? undefined);
+  const [changeTplFor, setChangeTplFor] = useState<InstanceWithEmployee | null>(null);
   const sendBack = useSendBackStatus();
   const qc = useQueryClient();
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
