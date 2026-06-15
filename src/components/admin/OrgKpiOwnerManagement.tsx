@@ -12,6 +12,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
+import { normalizeKpiKey } from '@/lib/orgKpiKey';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -65,7 +66,7 @@ export function OrgKpiOwnerManagement({ kpiDefinitions, reviewPeriod, reviewYear
   const ownerLookup = useMemo(() => {
     const map = new Map<string, typeof owners>();
     owners?.forEach(o => {
-      const key = `${o.category_id}||${o.kra_name}||${o.kpi_name}`;
+      const key = normalizeKpiKey(o.category_id, o.kra_name, o.kpi_name);
       const arr = map.get(key) || [];
       arr.push(o);
       map.set(key, arr);
@@ -84,7 +85,7 @@ export function OrgKpiOwnerManagement({ kpiDefinitions, reviewPeriod, reviewYear
     const kpis = kpiDefinitions.filter(k => k.categoryId === categoryId);
     let assigned = 0;
     for (const kpi of kpis) {
-      const key = `${kpi.categoryId}||${kpi.kraName}||${kpi.kpiName}`;
+      const key = normalizeKpiKey(kpi.categoryId, kpi.kraName, kpi.kpiName);
       const existing = ownerLookup.get(key) || [];
       if (existing.some(o => o.owner_id === bulkUserId)) continue;
       try {
@@ -194,7 +195,7 @@ export function OrgKpiOwnerManagement({ kpiDefinitions, reviewPeriod, reviewYear
                   {/* Per-KPI owners */}
                   <div className="space-y-2">
                       {cat.kpis.map(kpi => {
-                        const key = `${kpi.categoryId}||${kpi.kraName}||${kpi.kpiName}`;
+                        const key = normalizeKpiKey(kpi.categoryId, kpi.kraName, kpi.kpiName);
                         const kpiOwners = ownerLookup.get(key) || [];
                         return (
                           <div key={key} className="flex items-center justify-between p-2 border rounded-lg min-w-0 overflow-hidden">

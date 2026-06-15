@@ -1990,14 +1990,14 @@ Full JSON format for maximum control:
 **UI Component: `OrgKpiOwnerDialog`**
 - Opened via UserPlus button in Actions column of Org KPI Data Entry table
 - Shows current KPI info (KRA name, KPI name)
-- Lists current data owners with remove option
+- Lists current data owners with remove option; owner reads canonicalize the requested KRA/KPI signature against `kpis` before querying `org_kpi_data_owners`, so display strings with collapsed whitespace/newlines cannot hide existing owners.
 - Searchable user list to add new owners (by name, email, or employee code)
 
 **Access Control Hooks: `useOrgKpiDataOwner`**
 - `useIsAnyOrgKpiDataOwner()`: Check if current user owns any org KPIs (for route access)
 - `useOrgKpiOwnershipMap()`: Returns map of all ownership for quick lookup
 - `useIsOrgKpiDataOwner(categoryId, kraName, kpiName)`: Check if current user can edit specific KPI
-- `useAssignOrgKpiOwner()`: Mutation to assign owner (admin only)
+- `useAssignOrgKpiOwner()`: Mutation to assign owner (admin only); inserts are idempotent on the existing unique assignment signature to avoid duplicate-key errors when an owner already exists.
 - `useRemoveOrgKpiOwner()`: Mutation to remove owner (admin only)
 
 **Route Guard: `DataOwnerRoute`**
@@ -6731,3 +6731,5 @@ See: `docs/adr/ADR-078.md`, `src/test/reviewNotes/sidebarVisibility.test.ts`.
   - **Tests:** `src/test/safety/activeFilterChips.test.tsx` (4 tests) covers empty state, per-chip removal targeting the right callback, and Clear all wiring. 21/21 Safety filter tests passing (Phases 4+5+6).
   - **Rollback:** revert the new component file + the `applied` state / chip-derivation block in `SafetyIncidents.tsx`. No DB / RLS / RPC change.
   - **Phase 6 (final) of the 6-phase Safety Incident Management enhancement plan.** All six phases (Actual Reporter → Duplicates → Evidence Rename → Excel Export → Advanced Filters → Active Chips) shipped.
+
+- **v2.66.28 (2026-06-15 — Org KPI owner assignment duplicate-key guard):** Fixed the recurring Assign Data Owners duplicate-key error where an existing owner row could be hidden by raw KRA/KPI text mismatch, causing the dialog to show “No data owners assigned” and then attempt a duplicate insert. Owner reads now canonicalize against `kpis` before querying `org_kpi_data_owners`, category owner badges use normalized keys, and assignment uses idempotent upsert on `(category_id, kra_name, kpi_name, owner_id)`. No schema/RLS/RPC change. Regression guard: `src/test/orgKpiOwnerCanonicalization.test.ts` covers canonical signature lookup and normalized owner-list keys. Rollback: revert `src/hooks/useOrgKpiDataOwner.ts`, `src/components/admin/OrgKpiOwnerManagement.tsx`, `src/lib/orgKpiKey.ts`, and this test/doc update.

@@ -2,7 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
-import { normalizeKpiKey, normalizeText } from '@/lib/orgKpiKey';
+import { findCanonicalKpiSignature, normalizeKpiKey, normalizeText } from '@/lib/orgKpiKey';
 
 /**
  * Check if current user is a data owner for any org-level KPI
@@ -97,12 +97,18 @@ export function useIsOrgKpiDataOwner(categoryId: string, kraName: string, kpiNam
       }
 
       // Check if user is designated owner
+      const { data: candidates } = await supabase
+        .from('kpis')
+        .select('kra_name, kpi_name')
+        .eq('category_id', categoryId);
+      const canonical = findCanonicalKpiSignature(candidates, cleanKra, cleanKpi);
+
       const { data } = await supabase
         .from('org_kpi_data_owners')
         .select('id')
         .eq('category_id', categoryId)
-        .eq('kra_name', cleanKra)
-        .eq('kpi_name', cleanKpi)
+        .eq('kra_name', canonical.kraName)
+        .eq('kpi_name', canonical.kpiName)
         .eq('owner_id', user.id)
         .maybeSingle();
 
@@ -122,6 +128,12 @@ export function useOrgKpiOwners(categoryId: string, kraName: string, kpiName: st
   return useQuery({
     queryKey: ['org-kpi-owners', categoryId, cleanKra, cleanKpi, user?.id],
     queryFn: async () => {
+      const { data: candidates } = await supabase
+        .from('kpis')
+        .select('kra_name, kpi_name')
+        .eq('category_id', categoryId);
+      const canonical = findCanonicalKpiSignature(candidates, cleanKra, cleanKpi);
+
       const { data, error } = await supabase
         .from('org_kpi_data_owners')
         .select(`
@@ -129,8 +141,8 @@ export function useOrgKpiOwners(categoryId: string, kraName: string, kpiName: st
           owner:profiles!org_kpi_data_owners_owner_id_fkey(id, full_name, email)
         `)
         .eq('category_id', categoryId)
-        .eq('kra_name', cleanKra)
-        .eq('kpi_name', cleanKpi);
+        .eq('kra_name', canonical.kraName)
+        .eq('kpi_name', canonical.kpiName);
 
       if (error) throw error;
       return data as OrgKpiDataOwner[];
@@ -191,42 +203,37 @@ export function useAssignOrgKpiOwner() {
       let canonicalKra = kraName;
       let canonicalKpi = kpiName;
       try {
-        const norm = (s: string) => (s || '').replace(/\s+/g, ' ').trim();
         const { data: candidates } = await supabase
           .from('kpis')
           .select('kra_name, kpi_name')
           .eq('category_id', categoryId);
-        const match = (candidates || []).find(
-          (k: any) => norm(k.kra_name) === norm(kraName) && norm(k.kpi_name) === norm(kpiName),
-        );
-        if (match) {
-          canonicalKra = (match as any).kra_name;
-          canonicalKpi = (match as any).kpi_name;
-        }
+        const canonical = findCanonicalKpiSignature(candidates, kraName, kpiName);
+        canonicalKra = canonical.kraName;
+        canonicalKpi = canonical.kpiName;
       } catch {
         // fall through with original values
       }
 
       const { data, error } = await supabase
         .from('org_kpi_data_owners')
-        .insert({
+        .upsert({
           category_id: categoryId,
           kra_name: canonicalKra,
           kpi_name: canonicalKpi,
           owner_id: ownerId,
           assigned_by: user?.id,
-        })
+        }, { onConflict: 'category_id,kra_name,kpi_name,owner_id', ignoreDuplicates: true })
         .select()
-        .single();
+        .maybeSingle();
 
       if (error) throw error;
-      return data;
+      return data ?? { alreadyAssigned: true };
     },
-    onSuccess: () => {
+    onSuccess: (result: any) => {
       queryClient.invalidateQueries({ queryKey: ['org-kpi-data-owners'] });
       queryClient.invalidateQueries({ queryKey: ['org-kpi-owners'] });
       queryClient.invalidateQueries({ queryKey: ['org-kpi-owner-check'] });
-      toast({ title: 'Data owner assigned successfully' });
+      toast({ title: result?.alreadyAssigned ? 'Data owner already assigned' : 'Data owner assigned successfully' });
     },
     onError: (error: Error) => {
       toast({ 
