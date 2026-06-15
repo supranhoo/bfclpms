@@ -33,6 +33,7 @@ export const UI_I18N: Record<SupportedLang, Record<string, string>> = {
     'col.weight':         'भार',
     'col.score':          'अंक',
     'col.total':          'कुल',
+    'criteria.your_score': 'आपका स्कोर',
     'status.completed':   'पूर्ण',
     'status.not_started':     'प्रारंभ नहीं हुआ',
     'status.pending_self':    'स्व मूल्यांकन लंबित',

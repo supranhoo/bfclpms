@@ -1,57 +1,87 @@
 ## Goal
-Make the Monthly KRA Breakdown table inside the Carry KRA card more informative by adding **Total Score**, **Out Of**, and **%** columns alongside the existing **Rating (/5)** column.
+Match the uploaded mock for the **Self-Assessment Criteria (Section B)** card when language = Hindi:
+
+- Criterion **name + description** render in Hindi (already wired via `tTemplate`, but the description currently uses the same key and works — verified).
+- The three header badges (`Weight × Score = Total`) render their **labels in Hindi** (`भार × अंक = कुल`). Numbers stay numeric.
+- The 0–5 round button row is replaced by a **grid of option cards** (3 columns desktop / 2 tablet / 1 mobile) when the criterion has authored `options` — each card shows:
+  - radio dot
+  - **bilingual label** `"<English> / <Hindi>"` (joined only when current ≠ default language and a translation exists; otherwise just the active-language label)
+  - `Score: N`
+  - selected card highlighted (amber ring + tinted bg, matching mock)
+- A small heading `आपका स्कोर` ("Your Score") above the grid.
+- Fallback unchanged: criteria **without** `options[]` keep today's 0–5 button row (no regression for legacy templates).
 
 ## What changes visually
-Inside `SystemScoresPanel` → `CarryKraScoreCard` → collapsible "Monthly KRA breakdown" table.
+Location: Employee / Reviewer Annual Review page → "Self-Assessment Criteria" card → each `CriterionRow`.
 
 Before (today):
 ```text
-Month | KPIs | Rating (/5) | Used
+[ Name / Desc ]                 [ Weight | × | Score | = | Total ]
+( 0 ) ( 1 ) ( 2 ) ( 3 ) ( 4 ) ( 5 )      ← round buttons
 ```
 
-After:
+After (when `criterion.options` present):
 ```text
-Month | KPIs | Total Score | Out Of | %    | Rating (/5) | Used
-July  |  0   |     —       |   —    |  —   |     —       |
-Jan   | 10   |   49.70     |  50    | 99.4 |    4.97     | ✓
+[ Name / Desc ]                 [ भार | × | अंक | = | कुल ]
+आपका स्कोर
+┌──────────────────┬──────────────────┬──────────────────┐
+│ ◯  Always on…    │ ◯  Rarely late…  │ ●  Usually on…   │  ← selected
+│    हमेशा समय पर  │    शायद ही…       │    आमतौर पर…     │
+│    Score: 5      │    Score: 4      │    Score: 3      │
+├──────────────────┼──────────────────┼──────────────────┤
+│ ◯ Frequently…    │ ◯ Very poor…     │ ◯ Unacceptable…  │
+│   Score: 2       │   Score: 1       │   Score: 0       │
+└──────────────────┴──────────────────┴──────────────────┘
 ```
 
-- **Total Score** = sum of (kpi_score × kpi_weight) for that month, on the 0–5 scale (the weighted numerator we already compute).
-- **Out Of** = sum of kpi_weight × 5 (perfect month → 100%, independent of KPI count).
-- **%** = Total Score ÷ Out Of × 100 (equivalent to `avg / 5 × 100`).
-- **Rating (/5)** column stays exactly as today (preserves existing meaning + tests + i18n key).
-- Empty months keep an em-dash in all numeric cells.
-- The Carry KRA header summary (Achieved / Out of / Rating) and progress bar are unchanged.
-- Mobile: table already scrolls horizontally inside the collapsible; no layout regression expected.
+Responsiveness: `grid-cols-1 sm:grid-cols-2 lg:grid-cols-3`, min tap target 44×44 (UX rule §2). Selected = `ring-2 ring-amber-500 bg-amber-500/5`. Read-only disables click + dims to 60%.
 
 ## Technical details
 
-1. **`src/types/annualReview.ts`** — extend `CarryKraMonthly` with three additive optional fields:
-   - `totalScore: number | null` (weighted sum, 0–5 scale)
-   - `outOf: number | null` (sum of weights × 5)
-   - `percentage: number | null` (0–100)
-   No breaking change — existing consumers ignore them.
+1. **`src/lib/annualReview/i18n.ts`** — add Hindi + Spanish keys:
+   - `criteria.your_score` → `आपका स्कोर` / `Tu puntuación`
+   (English fallback `"Your Score"` lives at call site.)
+   `col.weight/score/total` already exist — no change.
 
-2. **`src/services/annualReview/carryKraScore.ts`** — `aggregateMonthly` already tracks `weighted` and `weight` internally. Surface them as `totalScore = weighted`, `outOf = weight × KPI_SCALE_MAX`, `percentage = (avg / KPI_SCALE_MAX) × 100`. Null months → null/null/null. No change to `computeCarryRating` / `computeCarryContribution` / `buildCarrySnapshot`.
+2. **`src/components/annual-review/AnnualReviewI18nContext.tsx`** — add a helper exported from the context:
+   ```ts
+   tTemplateBilingual(kind, id, field, fallback) → string
+   ```
+   Returns `fallback` when `current === default`, otherwise `\`${fallback} / ${translated}\`` (skips the join if no translation exists). Used only for option labels per mock.
 
-3. **`src/components/annual-review/SystemScoresPanel.tsx`** — insert `Total Score`, `Out Of`, `%` columns BEFORE the existing `Rating (/5)` column. New translation keys: `col.total_score`, `col.out_of`, `col.percent` (defaults: "Total Score", "Out Of", "%"). Existing `col.rating_5` stays.
+3. **`src/components/annual-review/CriteriaScoringMatrix.tsx`** — additive:
+   - If `criterion.options?.length > 0`: render the new option-card grid (new internal `OptionCardGrid` component in the same file). Selection driven by `score === option.score` (existing `values[criterion.id]` already stores numeric score). Click calls existing `onChangeScore(criterion.id, option.score)` — no service-layer changes.
+   - Else: keep the existing 0–5 button row exactly as today.
+   - Add the `आपका स्कोर` heading above whichever variant renders.
+   - Header badges already use `t('col.weight'…)` etc. — no change needed.
+   - Card uses semantic tokens (`border-border`, `bg-card`, amber accent via existing scale) — no raw hex.
 
-4. **Tests**
-   - Extend `src/services/annualReview/carryKraScore.test.ts`: weights 10 + 30, scores 4 + 3 ⇒ `totalScore = 130`, `outOf = 200`, `percentage = 65`, plus null-month case.
-   - Extend `src/test/annualReview/systemScoresPanelCarry.test.tsx`: assert the four headers render (Total Score, Out Of, %, Rating (/5)) and a populated row shows formatted values.
+4. **Reviewer parity** — same component is reused for Manager/Skip/BU stages; the bilingual + card layout is therefore automatic on every reviewer surface. Manager-side `comparison` chip row stays below the grid as today.
 
-5. **Docs / Policy**
-   - `mem/features/annual-review/carry-kra-score.md` — note the additive monthly fields and the four breakdown columns.
-   - `src/modules/annual-review/DOCUMENTATION.md` — update the Carry KRA section's table description.
-   - `src/modules/annual-review/POLICY.md` — one-line note: monthly Total / Out Of / % are display-only transparency aids and are NOT used in appraisal totals.
+5. **No DB / schema / RLS / workflow change.** Score is still persisted as the numeric `option.score` (0–5), so all downstream math (`computeCriteriaScore`, weighted totals, SystemScoresPanel, snapshots) is untouched.
+
+## Tests
+- `src/test/annualReview/criteriaScoringMatrixOptions.test.tsx` (new):
+  1. Renders 0–5 button row when `criterion.options` is empty/absent (regression guard).
+  2. Renders option-card grid when options present; clicking a card calls `onChangeScore` with the option's `score`.
+  3. With `currentLanguage="hi"` + template translations supplied: labels render as `"English / Hindi"`; header badges show `भार / अंक / कुल`; heading shows `आपका स्कोर`.
+  4. `readOnly` disables clicks and keeps the currently-selected card visually marked.
+- Extend `src/test/annualReview/i18nFallback.test.ts` (or add) to assert `tTemplateBilingual` join + fallback behavior.
 
 ## Risk & Impact
-- **Data**: none — purely derived display fields; no schema change, no migration.
-- **Workflow**: none.
-- **UI**: one table grows from 4 → 7 columns inside an already-collapsible section.
-- **Regression**: very low — header summary, scoring, and snapshot persistence are untouched. Covered by new + existing tests.
-- **Rollback**: revert the four files; no data cleanup needed.
+- **Data**: none.
+- **Workflow / RLS**: none.
+- **UI**: net-additive. Legacy criteria (no `options[]`) look identical to today.
+- **Regression**: low — gated by `criterion.options?.length > 0`. Existing tests for the button row stay green.
+- **Performance**: O(options) per criterion, options are ≤6.
+- **Rollback**: revert the 3 touched files; no data cleanup.
 
 ## Out of scope
-- Header summary, progress bar, scoring math, `system_scores[<id>]` persisted value.
-- `CarryKraMappingPreview` (admin template editor) — if you want the same columns there, say so and I'll mirror it; otherwise it stays as-is for now.
+- Editing options inside the template editor (already covered by existing `CriterionOptionsDialog`).
+- Changing the numeric scale, weighting math, or persisted shape of `criteria_scores`.
+- Bilingual rendering of `criterion.name` / `description` — the mock shows them in Hindi only, and `tTemplate` already handles that.
+
+## Docs / Policy
+- `src/modules/annual-review/DOCUMENTATION.md` — append a 2026-06-15 entry describing the option-card variant and the `tTemplateBilingual` helper.
+- `src/modules/annual-review/POLICY.md` — one-line note: bilingual joined labels are a **display-only** transparency aid; the persisted score remains the numeric `option.score`.
+- `mem://design/annual-review-bilingual-options` (new memory) — short rule: "When `criterion.options` exists and `currentLanguage !== defaultLanguage`, option labels render `EN / translated`; names/descriptions render in active language only."
