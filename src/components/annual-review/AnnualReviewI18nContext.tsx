@@ -1,6 +1,6 @@
 import { createContext, useContext, useMemo, type ReactNode } from 'react';
 import { useAnnualReviewTranslation } from '@/hooks/useAnnualReviewTranslation';
-import type { TemplateSections } from '@/types/annualReview';
+import type { TemplateSections, TemplateDisplayMode } from '@/types/annualReview';
 
 type Translator = (key: string, fallback: string) => string;
 
@@ -9,6 +9,8 @@ interface I18nCtx {
   currentLanguage: string;
   defaultLanguage: string;
   templateTranslations?: TemplateSections['translations'];
+  /** Reviewer-facing display mode for template labels. */
+  displayMode: TemplateDisplayMode;
   /**
    * Lookup a template-authored translation for a section item.
    * Key shape: `<kind>.<id>.<field>` — e.g. `criterion.attendance.name`.
@@ -30,6 +32,7 @@ const defaultCtx: I18nCtx = {
   t: (_k, fb) => fb,
   currentLanguage: 'en',
   defaultLanguage: 'en',
+  displayMode: 'bilingual',
   tTemplate: (_k, _i, _f, fb) => fb,
   tTemplateBilingual: (_k, _i, _f, fb) => fb,
 };
@@ -40,11 +43,13 @@ export function AnnualReviewI18nProvider({
   currentLanguage,
   defaultLanguage,
   templateTranslations,
+  displayMode,
   children,
 }: {
   currentLanguage?: string | null;
   defaultLanguage?: string | null;
   templateTranslations?: TemplateSections['translations'];
+  displayMode?: TemplateDisplayMode | null;
   children: ReactNode;
 }) {
   const { t, currentLanguage: cur, defaultLanguage: def } = useAnnualReviewTranslation({
@@ -52,25 +57,32 @@ export function AnnualReviewI18nProvider({
     defaultLanguage,
     templateTranslations,
   });
+  const mode: TemplateDisplayMode = displayMode ?? 'bilingual';
 
   const value = useMemo<I18nCtx>(() => ({
     t,
     currentLanguage: cur,
     defaultLanguage: def,
     templateTranslations,
+    displayMode: mode,
     tTemplate: (kind, id, field, fb) => {
       if (cur === def) return fb;
+      if (mode === 'english_only') return fb;
       const key = `${kind}:${id}:${field}`;
-      return templateTranslations?.[cur]?.[key] ?? fb;
+      const translated = templateTranslations?.[cur]?.[key];
+      // bilingual + translated_only both return translation when present, else English fallback.
+      return translated ?? fb;
     },
     tTemplateBilingual: (kind, id, field, fb) => {
       if (cur === def) return fb;
+      if (mode === 'english_only') return fb;
       const key = `${kind}:${id}:${field}`;
       const translated = templateTranslations?.[cur]?.[key];
+      if (mode === 'translated_only') return translated || fb;
       if (!translated || translated === fb) return fb;
       return `${fb} / ${translated}`;
     },
-  }), [t, cur, def, templateTranslations]);
+  }), [t, cur, def, templateTranslations, mode]);
 
   return (
     <AnnualReviewI18nContext.Provider value={value}>{children}</AnnualReviewI18nContext.Provider>

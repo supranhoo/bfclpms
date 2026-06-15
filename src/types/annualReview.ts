@@ -124,6 +124,15 @@ export interface TemplateSettings {
   default_language?: string;
 }
 
+/**
+ * How template-authored text (criterion name/description, option labels, field
+ * labels) is shown to reviewers when a non-default language is active.
+ * - `bilingual`        — English / Translated side-by-side (default).
+ * - `english_only`     — always show the authored English, ignore translations.
+ * - `translated_only`  — show only the translation; fall back to English when missing.
+ */
+export type TemplateDisplayMode = 'bilingual' | 'english_only' | 'translated_only';
+
 export interface TemplateSections {
   system_scores?: TemplateSystemScore[];
   criteria?: TemplateCriterion[];
@@ -131,6 +140,8 @@ export interface TemplateSections {
   self_review_fields?: SelfReviewField[];
   settings?: TemplateSettings;
   translations?: Record<string, Record<string, string>>;
+  /** Reviewer-facing label rendering. Defaults to `bilingual` when missing. */
+  display_mode?: TemplateDisplayMode;
 }
 
 export interface AnnualReviewTemplate {
