@@ -56,3 +56,4 @@ UI → hooks (`useAnnualReview.ts`) → services (`annualReviewService.ts`) → 
 - 2026-06-14 — Initial docs. Server-side pagination, standalone report, cycle reopen, mid-cycle reassignment.
 - 2026-06-15 — Seeder now pages `profiles` via `fetchAllPaged`; previously capped at 1000 rows ("Seeded 1000 instances" bug).
 - 2026-06-15 — Part B: per-employee template override (`template_override_id` + `set_annual_review_template_override` RPC + `resolveTemplateId` SSOT + override-safe seeder writer + Progress "Change template" dialog).
+- 2026-06-15 — Part C: bulk CSV/XLSX template assignment dialog (`BulkTemplateAssignmentDialog` + `bulkSetTemplateOverrides` service helper). Thin client-side wrapper over the Part B RPC; no new schema, no new RPC — server-side gates are unchanged.

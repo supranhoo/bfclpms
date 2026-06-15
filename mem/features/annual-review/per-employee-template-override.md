@@ -27,8 +27,12 @@ Both `seedInstancesForCycle` and `seedInstancesByRules` write through `writeSeed
 ## UI surface
 Progress tab in `AnnualReviewAdmin.tsx` exposes a per-row "Change template" button (only when status ∈ not_started / pending_self) → `ChangeTemplateDialog` (current vs new template select, mandatory reason, "Clear override" option when an override is set).
 
+## Bulk CSV/XLSX (Part C)
+`BulkTemplateAssignmentDialog` + `bulkSetTemplateOverrides` (thin loop over the same RPC). Workbook columns: `Employee Code`, `Full Name`, `Current Template`, `Stage`, `New Template`, `Reason`. Use literal `CLEAR` in `New Template` to remove an override. Upload runs a client-side dry-run classifying each row as Apply/Skip/Error before any RPC fires. No new schema, no new RPC — server-side stage/role/reason gates are identical to single-row.
+
 ## Test
-`src/test/annualReview/resolveTemplateId.test.ts` — 5 cases covering null/undefined, override-wins, null override fallback, missing seed.
+- `src/test/annualReview/resolveTemplateId.test.ts` — resolver fallback chain.
+- `src/test/annualReview/bulkSetTemplateOverrides.test.ts` — batch success + per-row failure isolation.
 
 ## Rollback
 `ALTER TABLE public.annual_review_instances DROP COLUMN template_override_id;` + `DROP FUNCTION public.set_annual_review_template_override(uuid, uuid, text);` + revert service helpers + remove dialog. Resolver fallback is naturally safe (returns `template_id`).
