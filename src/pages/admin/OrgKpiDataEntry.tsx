@@ -742,7 +742,11 @@ export default function OrgKpiDataEntry() {
     const auditEntries: Array<any> = [];
 
     if (scope === 'organization') {
-      const key = `${kpi.category_id}||${kpi.kra_name.toLowerCase()}||${kpi.kpi_name.toLowerCase()}||null||null`;
+      // ADR-054 — always look up existing OKV via the canonical kpiKey
+      // helper. Raw .toLowerCase() drifts on \r and whitespace and the
+      // existingValuesMap is keyed via kpiKey(), so a mismatch silently
+      // returned oldVal=null and broke the null-overwrite/audit guard.
+      const key = `${kpiKey(kpi.category_id, kpi.kra_name, kpi.kpi_name)}||null||null`;
       const oldVal = existingValuesMap.get(key)?.achieved_value ?? null;
       toSave.push({
         category_id: kpi.category_id,
@@ -777,9 +781,11 @@ export default function OrgKpiDataEntry() {
       const touchedOnly = values.scopedValues.filter(sv => (sv as any)._touched ?? true);
       touchedOnly.forEach(sv => {
         const isDept = scope === 'department';
+        // ADR-054 — canonical key. See note above for org-scope branch.
+        const baseKey = kpiKey(kpi.category_id, kpi.kra_name, kpi.kpi_name);
         const scopeKey = isDept
-          ? `${kpi.category_id}||${kpi.kra_name.toLowerCase()}||${kpi.kpi_name.toLowerCase()}||${sv.scopeId}||null`
-          : `${kpi.category_id}||${kpi.kra_name.toLowerCase()}||${kpi.kpi_name.toLowerCase()}||null||${sv.scopeId}`;
+          ? `${baseKey}||${sv.scopeId}||null`
+          : `${baseKey}||null||${sv.scopeId}`;
         const oldVal = existingValuesMap.get(scopeKey)?.achieved_value ?? null;
 
         // Guard: skip if this would destructively overwrite a non-null DB value with null
@@ -855,8 +861,22 @@ export default function OrgKpiDataEntry() {
       });
     }
 
+    // RCA 2026-06-15 — Surface "0 of N saved" instead of falsely marking
+    // the card as saved (which then let users hit Propagate against a
+    // value that never reached the DB → "Partial propagation: 0/1
+    // employees updated"). The bulk RPC returns one row per persisted
+    // record; if fewer rows came back than we attempted, throw so the
+    // caller's Save → Propagate chain aborts before invoking the RPC.
     if (safeToSave.length > 0) {
-      await bulkUpsert.mutateAsync(safeToSave);
+      const saved = await bulkUpsert.mutateAsync(safeToSave);
+      const savedCount = Array.isArray(saved) ? saved.length : 0;
+      if (savedCount < safeToSave.length) {
+        const err = new Error(
+          `Save persisted ${savedCount} of ${safeToSave.length} row(s). Refresh and retry before propagating.`,
+        );
+        (err as any).code = 'ORG_KPI_PARTIAL_SAVE';
+        throw err;
+      }
     }
     if (auditEntries.length > 0) {
       try { await insertAuditLogs.mutateAsync(auditEntries); } catch { /* non-blocking */ }
@@ -1047,7 +1067,15 @@ export default function OrgKpiDataEntry() {
     const attemptedCount = consideredScopeIds.length;
     if (attemptedCount > 0 && totalPropagated < attemptedCount) {
       const accountedSkips = totalSkippedBenign + totalSkippedHard;
-      const unaccounted = Math.max(0, attemptedCount - totalPropagated - accountedSkips);
+      // RCA 2026-06-15 — client-side guards (null value, untouched 0) push
+      // the scope into consideredScopeIds but never invoke the RPC, so
+      // they produce NO server skip entry. Count them here so the
+      // shortfall is not misclassified as a KPI-name mismatch.
+      const clientSkips = untouchedZeroSkipCount;
+      const unaccounted = Math.max(
+        0,
+        attemptedCount - totalPropagated - accountedSkips - clientSkips,
+      );
       if (totalSkippedHard > 0) {
         toast({
           title: `Partial propagation: ${totalPropagated}/${attemptedCount} updated`,
@@ -1084,7 +1112,18 @@ export default function OrgKpiDataEntry() {
     // org_kpi_values.status flipped to 'propagated' below while their kpis.status stays 'kra_set'
     // and no review_submissions row is created — the exact "half-propagation" defect.
     let missedEmployeeIds: string[] = [];
-    if ((scope === 'department' || scope === 'employee') && propagatedScopeIds.length > 0) {
+    // RCA 2026-06-15 — for row-level / subset propagation (filterEmployeeIds
+    // present), the user explicitly intended to propagate only the listed
+    // scopes. The full-card half-propagation guard compares against every
+    // mapped employee and would falsely report unvisited employees as
+    // "missed" or "not in your view". Skip it for subset propagation.
+    const isSubsetPropagation =
+      Array.isArray(filterEmployeeIds) && filterEmployeeIds.length > 0;
+    if (
+      (scope === 'department' || scope === 'employee') &&
+      propagatedScopeIds.length > 0 &&
+      !isSubsetPropagation
+    ) {
       try {
         const { data: allOrgKpiRows } = await supabase
           .from('kpis')
