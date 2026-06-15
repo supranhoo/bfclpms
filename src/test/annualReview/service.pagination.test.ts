@@ -69,22 +69,19 @@ describe('listInstancesPaginated', () => {
 });
 
 describe('getCycleStatusCounts', () => {
-  it('groups rows by overall_status and totals', async () => {
+  it('uses count-only queries and is NOT capped at the 1000-row Data API default', async () => {
+    // Regression: previously read overall_status rows unpaged, so cycles
+    // with >1000 employees silently rendered "1000" in the summary cards.
     const inst = makeBuilder();
-    inst.__result = {
-      data: [
-        { overall_status: 'pending_self' },
-        { overall_status: 'pending_self' },
-        { overall_status: 'completed' },
-      ],
-      error: null,
-    };
+    // head: true returns no rows but a real `count`. Mock that shape.
+    inst.__result = { data: null, error: null, count: 2560 };
     tables.set('annual_review_instances', inst);
 
     const c = await svc.getCycleStatusCounts('c1');
-    expect(c.total).toBe(3);
-    expect(c.pending_self).toBe(2);
-    expect(c.completed).toBe(1);
-    expect(c.pending_hr).toBe(0);
+    // 1 total query + 7 per-status queries.
+    expect(inst.select).toHaveBeenCalledTimes(8);
+    expect(inst.select).toHaveBeenCalledWith('id', { count: 'exact', head: true });
+    expect(c.total).toBe(2560);
+    expect(c.total).toBeGreaterThan(1000);
   });
 });
