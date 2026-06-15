@@ -1,139 +1,109 @@
 
-# Development Report — In-System Maintenance Plan (v2)
+# Development Report — Month Filter + Auto-Capture Plan
 
-> Change vs v1: the module lives under **Reports**, not Admin. Permissions, route, registry entry and export filename adjusted accordingly. Everything else stands.
+Two concerns, addressed together:
+1. **Month Filter** on the Development Report page.
+2. **Auto-population** of entries so no one has to type them after each change.
 
-## 1. What the uploaded file is
+---
 
-`101785_PMS_Digitalisation_Self_Evidence.xlsx` is a 4-sheet **BFCL PMS Project Development Report** generated outside the app from `CHANGELOG_2026.md`:
+## 1. Month Filter (UI)
 
-- **Sheet 1 — Cover/Summary**: project meta, reporting period, workstreams, counts (Features=20, Bugs=20, Timeline=45).
-- **Sheet 2 — New Features Built**: `Date / Period | Feature | Module/Area | What Was Built | Status`.
-- **Sheet 3 — Bugs Fixed**: `Date / Period | Bug / Issue | Fix Description | Severity`.
-- **Sheet 4 — Full Development Timeline**: `Date / Period | Item | Summary | Type` (Feature / Bug Fix / Maintenance).
-
-Goal: capture every release item, bug fix and ADR/POLICY change **inside the app** as the SSOT, and turn the XLSX into a one-click export from the **Reports** section.
-
-## 2. Assumptions
-
-- Lives under **Reports → "Development Report"** (`/reports/dev-report`).
-- Read access for **Admin + Management + Auditor**; write (create/edit/delete) restricted to **Admin** only.
-- Output XLSX schema/column order matches the uploaded file exactly so prior evidence submissions remain valid.
-- Single workspace (product-level report), so no per-client scoping; standard RLS.
-
-## 3. Risk & Impact Report
-
-- **Data**: +1 table `dev_report_entries`, +1 enum `dev_report_entry_type`, a few `system_settings` rows for cover meta. Additive; auto-backed-up by `get_backup_table_order()` (no denylist).
-- **Workflow**: none for end users. New report-registry entry `RPT-DEV-001` + menu key `reports-dev-report`. Default visibility: Admin (RW), Management/Auditor (RO).
-- **UI/UX**: new card in `/reports`, new page with 4 tabs (Cover / Features / Bugs / Timeline). Reuses shadcn DataTable, `ConfirmDestructiveDialog`, server pagination, filter chips — consistent with existing report pages.
-- **Regression**: very low. No edits to existing report pages or hooks. Menu/report-registry inserts are additive and feature-flagged.
-- **Mitigation**: gated behind `system_settings.dev_report_enabled` (default OFF) until QA pass; importer ships dry-run; export is read-only.
-- **Scalability**: bounded (~50–200 rows/year). Server pagination (page size 50), indexed `(entry_type, entry_date desc)`. Scales 10y+ trivially.
-
-## 4. Data Model
-
-`public.dev_report_entries`:
+### Where
+Top filter row of `/reports/dev-report`, left of the existing search box:
 
 ```text
-id              uuid pk
-entry_type      dev_report_entry_type   -- 'feature' | 'bug' | 'timeline'
-entry_date      date                    -- exact date when known
-period_label    text                    -- e.g. "2026 Jun W1" when no exact date
-title           text                    -- Feature / Bug / Item
-module_area     text                    -- "Org KPI", "Safety / Backup", ...
-description     text                    -- "What Was Built" / "Fix Description" / "Summary"
-status          text  null              -- features: Shipped / In Progress / Planned
-severity        text  null              -- bugs: Critical / High / Major / Medium / Low
-timeline_type   text  null              -- timeline: Feature / Bug Fix / Maintenance
-adr_refs        text[] null             -- e.g. {ADR-072, POLICY §54 v5}
-linked_commit   text  null
-created_by      uuid -> auth.users
-created_at, updated_at timestamptz
+[ Month ▾ ]  [ Search title/description/module… ]                 [ Export XLSX ]
+[ Cover | Features | Bugs Fixed | Timeline ]
 ```
 
-- Indexes: `(entry_type, entry_date desc)`, `(module_area)`, GIN on `adr_refs`.
-- RLS:
-  - Admin: full CRUD via `has_role(auth.uid(),'admin')`.
-  - Management + Auditor: SELECT only.
-  - Service role: ALL.
-- GRANTs per policy: `SELECT, INSERT, UPDATE, DELETE` to `authenticated`; `ALL` to `service_role` (writes still gated by RLS).
-- Audit trigger writes to `system_audit_logs` on INSERT/UPDATE/DELETE.
+### Behavior
+- Single shadcn `Select` populated from **distinct `to_char(entry_date,'YYYY-MM')`** values present in `dev_report_entries` (DB-driven, no hardcoded months).
+- Options: `All months` (default) + each available month in DESC order, labelled `Jun 2026`, `May 2026`, …
+- Selecting a month:
+  - Filters Features / Bugs / Timeline tabs (server-side `entry_date >= first_of_month AND < first_of_next_month`).
+  - Updates the **Cover** KPI cards (Features / Bug Fixes / Timeline counts) and the **Reporting Period** row to that month's range.
+  - Drives the XLSX export — exported file is scoped to the selected month, filename suffix `_YYYY-MM`.
+- State persisted in URL (`?month=2026-06`) so deep-links and refresh keep the view.
 
-Cover-sheet meta in `system_settings`: `dev_report.project_name`, `dev_report.tech_stack`, `dev_report.repository`, `dev_report.workstreams[]`. Counts and reporting-period are **derived** (RPC) — no manual upkeep.
+### Data layer
+- Extend `useDevReportEntries` to accept `{ month?: string }` and pass `gte/lt` filters.
+- Extend `dev_report_summary(period_from, period_to)` call already in place — just feed the month's bounds.
+- New tiny hook `useDevReportMonths()` → `SELECT DISTINCT to_char(entry_date,'YYYY-MM') ...` (cached 5 min).
 
-## 5. Backend
+---
 
-- Migration: enum + table + indexes + GRANTs + RLS + audit trigger.
-- RPC `dev_report_summary(period_from date, period_to date)` → counts for cover sheet/KPI cards (lean payload).
-- **Report registry**: insert into `report_registry` + `report_field_registry` so the page participates in the existing Report Field Sequence resolver:
-  - `report_id = 'RPT-DEV-001'`, route `/reports/dev-report`.
-  - Default field sets for each sheet (cover/features/bugs/timeline) seeded; required keys (`entry_date`, `title`, `description`) marked `is_required=true` and non-hideable.
+## 2. Auto-Capture — no manual entry per change
 
-## 6. UI
+Goal: every shipped change (feature / fix / migration / policy update) lands in `dev_report_entries` automatically. Manual entry stays as a fallback only.
 
-Route: `/reports/dev-report`, registered via `ReportRoute` with `reportKey="dev-report"`. Reports landing tile added in the existing Reports grid.
+### Source-of-truth signals we already have
+| Signal | Maps to |
+|---|---|
+| New row in `supabase/migrations/*.sql` | `timeline` (type=migration) + `feature` if it adds tables/columns |
+| Entry appended to `CHANGELOG_2026.md` | `feature` or `bug` (by `feat:` / `fix:` prefix) |
+| New ADR file `ADR-XXX` | `timeline` (type=adr) with `adr_refs` populated |
+| `POLICY.md` section change | `timeline` (type=policy) |
+| `audit_logs` rows of type `schema_change` / `policy_change` | optional secondary feed |
 
-```text
-┌────────────────────────────────────────────────────────────┐
-│ Header: Development Report   [Period filter] [Export XLSX] │
-├────────────────────────────────────────────────────────────┤
-│ KPI cards: Features | Bugs | Timeline | Reporting Period   │
-├────────────────────────────────────────────────────────────┤
-│ Tabs: [Cover] [Features] [Bugs Fixed] [Timeline]           │
-│ ─ Tables: server pagination (50/page), search,             │
-│   module + severity + type filters, sort by date           │
-│ ─ Admin-only row actions: Edit / Delete (Confirm dialog)   │
-│ ─ "+ Add entry" dialog (admin), type-aware fields          │
-└────────────────────────────────────────────────────────────┘
-```
+### Pipeline (3 layers, additive)
 
-- Add/Edit dialog: react-hook-form + zod; fields conditional on `entry_type`.
-- Filters: date range (defaults to current FY July–June), module multi-select (distinct), severity/type chips.
-- Empty states + try/catch toasts on every mutation; `ConfirmDestructiveDialog` for deletes (per project policy).
-- Non-admin viewers see read-only tables and the Export button.
+**Layer A — Commit-time capture (primary, zero human effort beyond commit message)**
+- Add a tiny **edge function `dev-report-ingest`** (admin/service-role only) that accepts a normalized payload:
+  ```json
+  { "entry_type":"feature|bug|timeline",
+    "entry_date":"YYYY-MM-DD",
+    "title":"...", "module_area":"...", "description":"...",
+    "severity":"...", "timeline_type":"migration|adr|policy|release",
+    "adr_refs":["ADR-090"], "linked_commit":"<sha>" }
+  ```
+- A repo script `scripts/devReportFromCommit.ts` runs on each push (or locally via `bun run devreport:sync`) and:
+  1. Reads commits since last successful sync (cursor stored in `system_settings.dev_report_last_commit`).
+  2. Parses Conventional Commit prefix (`feat:` → feature, `fix:` → bug, `chore(migration):` → timeline/migration, `docs(policy):` → timeline/policy).
+  3. Detects new files in `supabase/migrations/` and `docs/adr/` for timeline entries.
+  4. POSTs to `dev-report-ingest`.
+- **Idempotent** on `(entry_type, entry_date, linked_commit, title)` — re-runs are safe.
 
-## 7. Export
+**Layer B — DB-trigger capture (secondary, catches in-DB changes)**
+- Trigger on `audit_logs` (or `pg_event_trigger` on DDL where safe) inserts a `timeline` row for migrations executed in production. Performer = `NULL` (per Core rule on automated actions).
+- Filtered by an allowlist in `system_settings.dev_report_capture_config` (zero-hardcoding rule).
 
-`Export XLSX` (uses already-installed `xlsx`) generates the **same 4-sheet workbook**, columns resolved via `useResolvedReportFields('RPT-DEV-001', DEFAULT_FIELDS)`:
+**Layer C — Manual UI (existing) — fallback only**
+- Admin can still add/edit/delete from the page for items the automation missed (e.g. UX-only polish without a commit message).
 
-1. Cover — project/tech/workstreams from `system_settings`, counts from `dev_report_summary`, period from filter.
-2. Features — `entry_type='feature'`.
-3. Bugs Fixed — `entry_type='bug'`.
-4. Timeline — `entry_type='timeline'`.
+### Governance hooks (already drafted, now activated)
+- POLICY.md §131: every shipped change must produce a `dev_report_entries` row — Layer A makes this automatic.
+- Pre-commit lint warns if `feat:`/`fix:` commit lacks a parseable scope/title.
+- Nightly cron edge function `dev-report-reconcile` compares the last 7 days of `audit_logs` schema changes vs `dev_report_entries` and posts a Slack/email digest of any gaps to admin.
 
-Filename template: `{client_corp}_PMS_Digitalisation_Self_Evidence_{YYYYMMDD}.xlsx` (matches 101785 naming; corp id from `system_settings`).
-PDF export deferred to v2.
+---
 
-## 8. Seeding / Importer (one-time)
+## Risk & Impact
+- **Data**: additive only — no schema migration for the filter; auto-capture adds inserts, idempotency key prevents duplicates.
+- **Workflow**: developers keep using Conventional Commits; no new manual step.
+- **UI**: one new Select control; layout unchanged on mobile (filters wrap).
+- **Regression**: month filter is opt-in (`All months` default = current behavior). Auto-capture writes via service-role edge function only — RLS unaffected.
+- **Scalability**: month list query is small (DISTINCT on indexed `entry_date`); server-side pagination already in place.
+- **Backup**: `dev_report_entries` already auto-included (no denylist row) — confirmed.
 
-Admin-only edge function `dev-report-import` that ingests:
-- `CHANGELOG_2026.md` entries in the repo, and
-- the uploaded XLSX (parsed once).
+## Rollout
+1. Ship Month filter + URL persistence + scoped export.
+2. Ship `dev-report-ingest` edge function + idempotency.
+3. Ship `scripts/devReportFromCommit.ts` and wire to CI (or local `bun run` until CI is desired).
+4. Enable Layer B DB trigger behind feature flag `dev_report_auto_capture_enabled`.
+5. Enable nightly reconciliation digest.
 
-Dry-run JSON first; admin confirms, then a single transactional insert with `created_by = service`, `adr_refs` extracted via regex (`ADR-\d+`, `POLICY §\d+`).
-Idempotent on `(entry_type, entry_date, title)`.
+## Out of scope (v1)
+- Multi-month range picker (single month + `All`).
+- Slack webhook (email digest only first).
+- Auto-classifying severity for bugs — defaults to `medium`, admin can edit.
 
-## 9. Tests & Docs
+## Tests
+- `devReportMonthFilter.test.ts` — bounds inclusive/exclusive, URL sync, export filename suffix.
+- `devReportIngestIdempotent.test.ts` — same commit twice = one row.
+- `devReportCommitParser.test.ts` — Conventional Commit → entry mapping table.
+- `devReportReconcile.test.ts` — gap detection between `audit_logs` and entries.
 
-- `src/test/devReportEntriesRls.test.ts` — admin RW / management+auditor RO / others denied.
-- `src/test/devReportExportSchema.test.ts` — locks XLSX column order to the uploaded sample.
-- `src/test/devReportSummaryRpc.test.ts` — count math across exact-date + period-label rows.
-- `src/test/devReportImportIdempotent.test.ts` — re-running importer inserts 0 rows.
-- DOCUMENTATION.md: new "Development Report" section (schema, RPC, export contract, registry IDs).
-- POLICY.md: new clause — *every shipped feature, fix, ADR or POLICY change MUST add a `dev_report_entries` row in the same PR; release evidence is generated from this table, not from external changelogs.*
-- New ADR (`ADR-090`) documenting the move from external changelog to in-system SSOT.
-
-## 10. Rollout
-
-1. Migration + RLS + GRANT + report-registry rows + tests (no UI surface).
-2. Reports page behind `dev_report_enabled = false`.
-3. Importer dry-run on staging; review diff; apply.
-4. Flip flag ON; validate XLSX against uploaded 101785 file (column-order parity test).
-5. Follow-up: PR-template checkbox "Dev Report entry added?" + lint warning on `feat:`/`fix:` commits without a matching row.
-
-## 11. Out of scope (v1)
-
-- Auto-generation from git commit messages.
-- Per-client report instances.
-- PDF export, scheduled email distribution.
-- Direct PR/issue linking beyond the manual `linked_commit` field.
+## Docs / Policy updates (same PR)
+- DOCUMENTATION.md: new "Development Report → Auto-Capture Pipeline" section + Month filter behavior.
+- POLICY.md §131: clarify automation is primary, manual entry is fallback; define commit-message contract.
