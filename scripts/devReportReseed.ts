@@ -48,12 +48,21 @@ for (const f of readdirSync(migDir).sort()) {
   const date = `${ts.slice(0, 4)}-${ts.slice(4, 6)}-${ts.slice(6, 8)}`;
   if (date < FLOOR) continue;
   const body = readFileSync(join(migDir, f), "utf8");
-  const slug = f.replace(/^\d+_/, "").replace(/_[a-f0-9-]{36}\.sql$/, "").replace(/\.sql$/, "").replace(/[-_]+/g, " ").trim();
+  let slug = f.replace(/^\d+_/, "").replace(/_?[a-f0-9-]{36}\.sql$/, "").replace(/\.sql$/, "").replace(/[-_]+/g, " ").trim();
+  // If the slug is just a UUID/hex blob with no descriptive name, blank it so we fall back to comment/table info.
+  if (/^[0-9a-f ]{8,}$/i.test(slug)) slug = "";
   const firstComment = (body.match(/^\s*--\s*(.+)$/m)?.[1] ?? "").slice(0, 180);
   const tables = [...body.matchAll(/CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(?:public\.)?(\w+)/gi)].map((m) => m[1]);
   const funcs = [...body.matchAll(/CREATE\s+(?:OR\s+REPLACE\s+)?FUNCTION\s+(?:public\.)?(\w+)/gi)].map((m) => m[1]);
   const policies = (body.match(/CREATE\s+POLICY/gi) ?? []).length;
-  const title = slug || `Migration ${f}`;
+  const tablesUniq = [...new Set(tables)];
+  const funcsUniq = [...new Set(funcs)];
+  const title =
+    slug ||
+    (firstComment ? firstComment.slice(0, 120) : null) ||
+    (tablesUniq.length ? `Schema: ${tablesUniq.slice(0, 3).join(", ")}` : null) ||
+    (funcsUniq.length ? `Function: ${funcsUniq.slice(0, 3).join(", ")}` : null) ||
+    `Migration ${date}`;
   const descParts: string[] = [];
   if (tables.length) descParts.push(`Tables: ${[...new Set(tables)].join(", ")}`);
   if (funcs.length) descParts.push(`Functions: ${[...new Set(funcs)].slice(0, 8).join(", ")}`);
