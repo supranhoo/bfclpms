@@ -34,6 +34,8 @@ import { AnnualReviewStatusBadge } from '@/components/annual-review/AnnualReview
 import { HrFinalizationSheet } from '@/components/annual-review/HrFinalizationSheet';
 import { SystemScoresUploadDialog } from '@/components/annual-review/SystemScoresUploadDialog';
 import { BulkTemplateAssignmentDialog } from '@/components/annual-review/BulkTemplateAssignmentDialog';
+import { BulkWorkflowAssignmentDialog } from '@/components/annual-review/BulkWorkflowAssignmentDialog';
+import { ChangeWorkflowDialog } from '@/components/annual-review/ChangeWorkflowDialog';
 import { TemplateEditorDialog } from '@/components/annual-review/TemplateEditorDialog';
 import { RuleFiltersEditor, RuleFiltersSummary, EMPTY_FILTERS } from '@/components/annual-review/RuleFiltersEditor';
 import type {
@@ -112,6 +114,8 @@ function ProgressTab() {
   const { data: uploadTemplate } = useTemplate(svc.resolveTemplateId(instances[0]) ?? undefined);
   const [changeTplFor, setChangeTplFor] = useState<InstanceWithEmployee | null>(null);
   const [bulkTplOpen, setBulkTplOpen] = useState(false);
+  const [changeWfFor, setChangeWfFor] = useState<InstanceWithEmployee | null>(null);
+  const [bulkWfOpen, setBulkWfOpen] = useState(false);
   const { data: allTemplates = [] } = useTemplates();
   const sendBack = useSendBackStatus();
   const qc = useQueryClient();
@@ -251,6 +255,9 @@ function ProgressTab() {
           <Button variant="outline" className="gap-2" onClick={() => setBulkTplOpen(true)} disabled={instances.length === 0}>
             <Layers className="h-4 w-4" /> Bulk template assignment
           </Button>
+          <Button variant="outline" className="gap-2" onClick={() => setBulkWfOpen(true)} disabled={instances.length === 0}>
+            <ListChecks className="h-4 w-4" /> Bulk workflow assignment
+          </Button>
         </div>
       </div>
 
@@ -303,9 +310,14 @@ function ProgressTab() {
                   <TableCell className="text-right">{i.final_rating ?? '—'}</TableCell>
                   <TableCell className="text-right">
                     {(i.overall_status === 'not_started' || i.overall_status === 'pending_self') && (
-                      <Button variant="ghost" size="sm" onClick={() => setChangeTplFor(i)} title="Change template">
-                        Change template
-                      </Button>
+                      <>
+                        <Button variant="ghost" size="sm" onClick={() => setChangeTplFor(i)} title="Change template">
+                          Change template
+                        </Button>
+                        <Button variant="ghost" size="sm" onClick={() => setChangeWfFor(i)} title="Change workflow">
+                          Change workflow
+                        </Button>
+                      </>
                     )}
                     <Button variant="ghost" size="sm" onClick={() => setSelected(i)}>Finalize</Button>
                   </TableCell>
@@ -367,6 +379,20 @@ function ProgressTab() {
         cycle={activeCycle}
         instances={instances}
         templates={allTemplates}
+        onDone={refetch}
+      />
+
+      <ChangeWorkflowDialog
+        instance={changeWfFor}
+        onClose={() => setChangeWfFor(null)}
+        onDone={() => { setChangeWfFor(null); refetch(); }}
+      />
+
+      <BulkWorkflowAssignmentDialog
+        open={bulkWfOpen}
+        onOpenChange={setBulkWfOpen}
+        cycle={activeCycle}
+        instances={instances}
         onDone={refetch}
       />
 
