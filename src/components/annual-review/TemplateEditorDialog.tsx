@@ -26,6 +26,7 @@ import { SUPPORTED_LANGUAGES, STAGE_LABEL, STAGE_ORDER } from '@/lib/annualRevie
 import { BLUE_COLLAR_PRESET, BLUE_COLLAR_PRESET_META } from '@/lib/annualReview/blueCollarPreset';
 import { FY_MONTHS } from '@/services/annualReview/carryKraScore';
 import type { CarryKraConfig } from '@/types/annualReview';
+import { CarryKraMappingPreview } from './CarryKraMappingPreview';
 
 const uid = (p: string) => `${p}_${Math.random().toString(36).slice(2, 9)}`;
 
@@ -661,6 +662,7 @@ function CarryKraConfigEditor({
       <p className="text-[10px] text-muted-foreground leading-snug">
         Carry value = average of monthly KRA scores from this employee's PMS history (final → auditor → manager → self).
       </p>
+      <CarryKraMappingPreview cfg={cfg} />
     </div>
   );
 }
