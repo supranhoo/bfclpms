@@ -96,6 +96,7 @@ export default function EmployeeAnnualReview() {
         currentLanguage={lang}
         defaultLanguage={template?.sections.settings?.default_language ?? 'en'}
         templateTranslations={template?.sections.translations}
+        displayMode={template?.sections.display_mode}
       >
         <div className="p-4 md:p-6 space-y-6 max-w-5xl mx-auto">
           <header className="flex flex-wrap items-start justify-between gap-3">
@@ -138,6 +139,7 @@ export default function EmployeeAnnualReview() {
       currentLanguage={lang}
       defaultLanguage={template?.sections.settings?.default_language ?? 'en'}
       templateTranslations={template?.sections.translations}
+      displayMode={template?.sections.display_mode}
     >
     <div className="p-4 md:p-6 space-y-6 max-w-5xl mx-auto">
       <header className="flex flex-wrap items-start justify-between gap-3">
