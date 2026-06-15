@@ -69,11 +69,12 @@ export function aggregateMonthly(
 
   return FY_MONTHS.map((month) => {
     const b = buckets.get(month)!;
-    return {
-      month,
-      avg: b.count > 0 && b.weight > 0 ? +(b.weighted / b.weight).toFixed(2) : null,
-      kpiCount: b.count,
-    };
+    const hasData = b.count > 0 && b.weight > 0;
+    const avg = hasData ? +(b.weighted / b.weight).toFixed(2) : null;
+    const totalScore = hasData ? +b.weighted.toFixed(2) : null;
+    const outOf = hasData ? +(b.weight * KPI_SCALE_MAX).toFixed(2) : null;
+    const percentage = hasData ? +((b.weighted / (b.weight * KPI_SCALE_MAX)) * 100).toFixed(2) : null;
+    return { month, avg, kpiCount: b.count, totalScore, outOf, percentage };
   });
 }
 
