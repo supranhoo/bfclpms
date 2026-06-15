@@ -462,6 +462,7 @@ export type Database = {
           acknowledged_by: string | null
           assigned_rule_id: string | null
           bu_head_id: string | null
+          carry_score_snapshots: Json
           created_at: string
           criteria_weighted_score: number | null
           cycle_id: string
@@ -490,6 +491,7 @@ export type Database = {
           acknowledged_by?: string | null
           assigned_rule_id?: string | null
           bu_head_id?: string | null
+          carry_score_snapshots?: Json
           created_at?: string
           criteria_weighted_score?: number | null
           cycle_id: string
@@ -518,6 +520,7 @@ export type Database = {
           acknowledged_by?: string | null
           assigned_rule_id?: string | null
           bu_head_id?: string | null
+          carry_score_snapshots?: Json
           created_at?: string
           criteria_weighted_score?: number | null
           cycle_id?: string

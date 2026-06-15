@@ -365,6 +365,7 @@ function ProgressTab() {
         onOpenChange={(o) => !o && setSelected(null)}
         instance={selected}
         template={template ?? null}
+        fiscalYear={activeCycle?.review_year ?? null}
       />
 
       <ChangeTemplateDialog
