@@ -53,6 +53,47 @@ export async function setTemplateOverride(args: {
   if (error) throw error;
 }
 
+/**
+ * Bulk apply per-employee template overrides — Part C.
+ *
+ * Thin loop over `setTemplateOverride` (one RPC call per row). Sequential to
+ * keep DB load predictable; rows are typically ≤ a few hundred per upload and
+ * the RPC is cheap (one UPDATE + one audit insert).
+ *
+ * Returns per-row outcomes so the caller can display a precise report.
+ */
+export interface BulkOverrideInput {
+  instanceId: string;
+  templateId: string | null;
+  reason: string;
+  /** Free-form key for the caller's UI (e.g. employee code) — echoed back in the result. */
+  rowKey?: string;
+}
+export interface BulkOverrideResult {
+  rowKey?: string;
+  instanceId: string;
+  ok: boolean;
+  error?: string;
+}
+export async function bulkSetTemplateOverrides(
+  rows: BulkOverrideInput[],
+  onProgress?: (done: number, total: number) => void,
+): Promise<BulkOverrideResult[]> {
+  const out: BulkOverrideResult[] = [];
+  let done = 0;
+  for (const r of rows) {
+    try {
+      await setTemplateOverride({ instanceId: r.instanceId, templateId: r.templateId, reason: r.reason });
+      out.push({ rowKey: r.rowKey, instanceId: r.instanceId, ok: true });
+    } catch (e) {
+      out.push({ rowKey: r.rowKey, instanceId: r.instanceId, ok: false, error: (e as Error).message });
+    }
+    done++;
+    onProgress?.(done, rows.length);
+  }
+  return out;
+}
+
 // ---------- Cycles ----------
 export async function listCycles(): Promise<AnnualReviewCycle[]> {
   const { data, error } = await db.from('annual_review_cycles').select('*').order('review_year', { ascending: false });
