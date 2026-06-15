@@ -229,11 +229,11 @@ export function useAssignOrgKpiOwner() {
       if (error) throw error;
       return data ?? { alreadyAssigned: true };
     },
-    onSuccess: () => {
+    onSuccess: (result: any) => {
       queryClient.invalidateQueries({ queryKey: ['org-kpi-data-owners'] });
       queryClient.invalidateQueries({ queryKey: ['org-kpi-owners'] });
       queryClient.invalidateQueries({ queryKey: ['org-kpi-owner-check'] });
-      toast({ title: 'Data owner assigned successfully' });
+      toast({ title: result?.alreadyAssigned ? 'Data owner already assigned' : 'Data owner assigned successfully' });
     },
     onError: (error: Error) => {
       toast({ 
