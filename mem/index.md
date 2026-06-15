@@ -120,3 +120,4 @@ Lean-Load: debounce search inputs (>200 rows / network); paginate new lists with
 - [Safety Evidence Auto-Naming](mem://features/safety/evidence-rename) — Auto-generated {Stage}_{EmpCode}_v{n} display names; original_file_name + storage path immutable; manual rename removed
 - [Safety Incident Excel Export](mem://features/safety/excel-export) — Safety-Head/Admin .xlsx export with locked columns; server-paginated over the SLA view; reuses existing xlsx dep
 - [Safety Incident Advanced Filters](mem://features/safety/incident-filters) — Array-based multi-select + date-range presets on /safety/incidents; server-side .in/.gte/.lte
+- [Annual Review Per-Employee Workflow](mem://features/annual-review/per-employee-workflow) — enabled_stages column, stageChain SSOT, configurable per-employee stage chain with bulk XLSX
