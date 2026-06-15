@@ -598,3 +598,69 @@ function CriterionOptionsButton({
     </>
   );
 }
+
+function CarryKraConfigEditor({
+  cfg, onChange,
+}: {
+  cfg: CarryKraConfig;
+  onChange: (cfg: CarryKraConfig) => void;
+}) {
+  const months = cfg.months ?? [];
+  const toggleMonth = (m: string) => {
+    const set = new Set(months);
+    set.has(m) ? set.delete(m) : set.add(m);
+    onChange({ ...cfg, months: Array.from(set) });
+  };
+  return (
+    <div className="rounded-md border bg-muted/30 p-2 space-y-2 text-xs">
+      <div className="flex items-center gap-2">
+        <Label className="text-xs whitespace-nowrap">Aggregation</Label>
+        <Select
+          value={cfg.aggregation}
+          onValueChange={(v) => onChange({ ...cfg, aggregation: v as CarryKraConfig['aggregation'] })}
+        >
+          <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="overall_avg">Overall (all 12 months)</SelectItem>
+            <SelectItem value="last_n_months">Last N months</SelectItem>
+            <SelectItem value="selected_months">Selected months</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+      {cfg.aggregation === 'last_n_months' && (
+        <div className="flex items-center gap-2">
+          <Label className="text-xs whitespace-nowrap">N (months)</Label>
+          <Input
+            type="number" min={1} max={12}
+            className="h-8 w-20 text-xs"
+            value={cfg.lastN ?? 6}
+            onChange={(e) => onChange({ ...cfg, lastN: Math.max(1, Math.min(12, Number(e.target.value) || 1)) })}
+          />
+        </div>
+      )}
+      {cfg.aggregation === 'selected_months' && (
+        <div className="flex flex-wrap gap-1.5">
+          {FY_MONTHS.map((m) => {
+            const on = months.includes(m);
+            return (
+              <button
+                type="button" key={m}
+                onClick={() => toggleMonth(m)}
+                className={`px-2 h-6 rounded-full border transition ${on ? 'bg-primary text-primary-foreground border-primary' : 'bg-background border-border hover:bg-muted'}`}
+              >{m.slice(0, 3)}</button>
+            );
+          })}
+        </div>
+      )}
+      <label className="flex items-center gap-2">
+        <Checkbox
+          checked={cfg.excludeNa !== false}
+          onCheckedChange={(v) => onChange({ ...cfg, excludeNa: v === true })}
+        /> Exclude N/A KPIs
+      </label>
+      <p className="text-[10px] text-muted-foreground leading-snug">
+        Carry value = average of monthly KRA scores from this employee's PMS history (final → auditor → manager → self).
+      </p>
+    </div>
+  );
+}
