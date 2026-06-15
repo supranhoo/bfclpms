@@ -124,3 +124,4 @@ Caveats:
 ## Version history
 - 2026-06-14 — Initial policy. Documented reopen, reassignment override precedence, and export scope.
 - 2026-06-15 — Added per-employee configurable workflow (`enabled_stages` + bulk XLSX + override-safe seeder).
+- 2026-06-15 — Added Carry KRA Score system-score source. Template authors may configure a System Score with `source = 'carry_kra'` and a `carry_config` choosing `overall_avg`, `last_n_months`, or `selected_months`. The carry value is the **average of monthly KRA averages** for the cycle's fiscal year (July–June). Monthly scores are weight-aware aggregates of the employee's `review_submissions` (cascade `final_score → auditor → manager → self`), excluding `is_na`. The value is fed into `system_scores[<id>]`, displayed read-only with a monthly breakdown, and is NOT scaled to the score's weight cap. Reads inherit existing PMS RLS; snapshots cached on `annual_review_instances.carry_score_snapshots`.
