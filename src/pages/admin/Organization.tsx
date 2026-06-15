@@ -541,6 +541,10 @@ export default function Organization() {
           </Card>
         </TabsContent>
 
+        <TabsContent value="org-heads">
+          <OrgHeadsTab companyId={activeCompanyId || null} />
+        </TabsContent>
+
         <TabsContent value="departments">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
