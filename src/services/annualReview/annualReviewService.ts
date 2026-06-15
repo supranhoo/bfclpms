@@ -346,6 +346,30 @@ export async function updateInstance(id: string, patch: Partial<AnnualReviewInst
   return data;
 }
 
+/**
+ * Lightweight active-employee search used by admin-only preview surfaces
+ * (e.g. the Template Editor's Carry KRA mapping preview). Read-only, capped.
+ */
+export type EmployeeLite = {
+  id: string; full_name: string | null; employee_code: string | null; designation: string | null;
+};
+export async function searchActiveEmployees(query: string, limit = 20): Promise<EmployeeLite[]> {
+  const q = (query ?? '').trim();
+  let req = db.from('profiles')
+    .select('id, full_name, employee_code, designation')
+    .eq('is_active', true)
+    .eq('is_dummy_employee', false)
+    .order('full_name', { ascending: true })
+    .limit(Math.max(1, Math.min(50, limit)));
+  if (q.length > 0) {
+    const safe = q.replace(/[%,]/g, ' ');
+    req = req.or(`full_name.ilike.%${safe}%,employee_code.ilike.%${safe}%`);
+  }
+  const { data, error } = await req;
+  if (error) throw error;
+  return (data ?? []) as EmployeeLite[];
+}
+
 /** Bulk-seed instances for an entire cycle. Resolves the snapshotted chain.
  *
  *   manager_id  ← profiles.reporting_manager_id
