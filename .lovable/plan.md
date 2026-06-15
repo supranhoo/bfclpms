@@ -1,96 +1,90 @@
-# Plan — Carry KRA Score in Annual Review Templates
+# Plan — Fix Annual Review language switcher
 
-## Goal
+## Root cause
 
-Inside the Annual Review **Template Editor** (Admin), allow a System Score to be configured as a **Carry KRA Score**. When that score is used in an instance, the system fetches the employee's existing **month-wise final achieved KRA score** for the fiscal year tied to the cycle, displays the breakdown, and feeds an aggregated value into the appraisal totals.
+The language dropdown writes to local `lang` state correctly, but almost nothing on the page reads through the `t(...)` translator:
 
-## Assumptions
+1. **Hardcoded English in the page shell** (`EmployeeAnnualReview.tsx`)
+   - "Self-Assessment Criteria", "Qualitative Responses", "Submit your self-review?", confirm-dialog body, "Could not save…", etc. are string literals, not `t()` calls.
+2. **Child components don't receive a translator**
+   - `AnnualReviewStageTracker` renders "Self Review / Manager / Skip Manager / BU Head / HR Final" as hardcoded English.
+   - `AnnualReviewStatusBadge` ("Self Review Pending" in the screenshot) is hardcoded.
+   - `SystemScoresPanel` — "System Scores", "No system scores configured…", "Eligibility criteria not met", "Monthly KRA breakdown", carry-config chips.
+   - `CriteriaScoringMatrix` — column labels WEIGHT / SCORE / TOTAL, "Remarks / justification" placeholder, reviewer label, evidence button.
+   - `LanguageSwitcher` itself uses the static `SUPPORTED_LANGUAGES` labels (fine, those are already in the target language).
+3. **Template-authored content is not translated**
+   - Criterion `name`/`description`, system-score `name`, self-review field `label`/`placeholder`, eligibility-criterion `name`.
+   - The i18n resolver already supports `template.translations[lang][key]` — we just never look up keys like `criterion.<id>.name`.
 
-- Fiscal cycle is July–June (project memory).
-- `annual_review_cycles.review_year` identifies the fiscal year that should be aggregated.
-- "Final achieved score" per KPI per month = `review_submissions.final_score` (immutable once approved) using the universal scoring cascade as fallback (already implemented in `src/lib/scoring/universalScore.ts`).
-- Monthly KRA score = weight-aware aggregate of an employee's KPIs whose `review_period = <month>` and `review_year = cycle.review_year`, excluding `is_na` per existing N/A governance.
-- This is **read-only carry**: no edits to historical PMS data; nothing recomputes `final_score`.
+The dictionary in `src/lib/annualReview/i18n.ts` already contains Hindi/Spanish entries for `stage.*`, `status.*`, `col.*`, `btn.*`, `note.*`, `warn.ineligible`. The static fallback is in place; the UI just isn't calling `t()`.
 
-## Pushback / Clarifications
+## Secondary bug (runtime error on this page)
 
-1. **Aggregation level** — should the carry value be:
-  - (a) the **overall** weighted average across all 12 months (single number fed into the System Score), or
-  - (b) **selectable month range** (e.g. last 6 months) configured on the template?
-   I will default to **(a) overall weighted average of available months**, with the per-month grid visible for audit. Confirm if you want (b).  
-    
-  This to be (b) **selectable month range**
-2. **Weight conversion** — System Scores have a `weight` cap (max % points). The carry value will be scaled Averahge of Monthly Score. Confirm.
-3. **KRA filter** — include all KRAs, or only KRAs explicitly mapped to the employee in the cycle's fiscal year? Default: **all KRAs the employee had KPIs for** in that review_year.
+`EmployeeAnnualReview.tsx` calls `useMemo` at line 65, then issues conditional `return`s at lines 70–78, then calls another `useMemo` at line 114 — so the hook count changes between renders ("Rendered more hooks than during the previous render"). Must be fixed in the same edit, otherwise any change on this page risks re-triggering it.
 
-## Risk & Impact Report
+## Risk & Impact
 
-- **Data**: No schema for historical PMS tables. One additive JSONB column on `annual_review_instances` to cache the carried snapshot per system_score id (`carry_score_snapshots jsonb default '{}'`). Template gains a new `source = 'carry_kra'` value plus optional `carry_config` per system score. No destructive change.
-- **Workflow**: Read-only fetch; does not alter PMS workflow status or `final_score` immutability.
-- **UI/UX**: Template editor gets a "Carry KRA Score" source option with a config popover. Reviewer/HR side gains a collapsible "Monthly KRA Breakdown" panel inside `SystemScoresPanel` when the score uses this source.
-- **Regression risk**: Low — additive enum value + new branch in `SystemScoresPanel`. Existing manual sources untouched.
-- **Scalability**: One employee × 12 months × N KPIs. Fetched once per instance load; result cached in `carry_score_snapshots` so subsequent loads are O(1).
-- **Security/RLS**: Reads use existing `review_submissions` policies. Snapshot writes restricted to instance owner / HR via existing RLS on `annual_review_instances`.
+- **Data impact:** none. Pure i18n / render layer.
+- **Workflow impact:** none. No RPCs touched, no policy/schema changes.
+- **UI/UX impact:** Hindi/Spanish users finally see translated labels on Employee, Team, and HR finalization views. English experience is unchanged (precedence rule: `current === default → fallback`).
+- **Regression risk:** Low. Translator already exists; we only widen its usage. Layout unchanged.
+- **Mitigation:** Snapshot/render tests asserting Hindi strings appear when `lang='hi'` and English when `lang='en'`. Fixing the hook order is a structural correction with an added test.
 
-## Step-by-step Plan
+## Implementation plan
 
-### 1. Types & SSOT (`src/types/annualReview.ts`)
+### 1. Fix hooks-order bug
+In `src/pages/annual-review/EmployeeAnnualReview.tsx`, move all `useMemo` / derived-state hooks above the `if (cycleLoading) … if (!cycle) … if (!instance) …` early returns. Guard the memo bodies with optional chaining so they're safe to run with `instance == null`.
 
-- Extend `TemplateSystemScore.source` literal union with `'carry_kra'`.
-- Add optional `carry_config?: { aggregation: 'overall_avg' | 'last_n_months'; lastN?: number; excludeNa?: boolean }`.
+### 2. Centralise the translator context
+Build a tiny `AnnualReviewI18nContext` (provider + `useAnnualReviewI18n()` hook) so child components don't need each parent to pass `t` through props.
 
-### 2. Service (`src/services/annualReview/carryKraScore.ts` — new)
+- Provider lives at the top of `EmployeeAnnualReview`, `TeamAnnualReview`, and `HrFinalizationSheet`.
+- Value: `{ t, currentLanguage, defaultLanguage, templateTranslations }`.
 
-- `fetchMonthlyKraScores(employeeId, fiscalYear)` → `{ month: string; avgPct: number; weightedTotal: number; kpiCount: number }[]` ordered Jul…Jun.
-- Implementation: query `review_submissions` join `kpis` filtered by `employee_id`, `kpis.review_year = fiscalYear`, `is_na = false`. Aggregate weight-aware monthly % using existing `universalScore` helper.
-- `computeCarryValue(monthly, weight, cfg)` → numeric scaled to `weight` cap.
+### 3. Extend the static dictionary (`src/lib/annualReview/i18n.ts`)
+Add missing keys for both `hi` and `es`:
+- `section.system_scores`, `section.self_assessment`, `section.qualitative`, `section.monthly_kra_breakdown`
+- `system_scores.empty`, `eligibility.title`
+- `col.weight_long`, `col.score_long`, `col.total_long`, `col.remarks_placeholder`, `col.evidence`
+- `confirm.submit.title`, `confirm.submit.body`, `btn.cancel`
+- `note.save_error`
+- `cycle.my_review_by` (used in the header subtitle)
 
-### 3. Template Editor (`TemplateEditorDialog.tsx`)
+### 4. Wire `t()` into components
+- `AnnualReviewStageTracker` — replace literal stage labels with `t('stage.<role>', '<English>')`.
+- `AnnualReviewStatusBadge` — map status → `t('status.<status>', '<English>')`.
+- `SystemScoresPanel` — translate title, empty state, eligibility alert title, monthly-breakdown headers.
+- `CriteriaScoringMatrix` — translate column chip labels and remarks placeholder; allow `reviewerLabel` to be a translation key.
+- `EmployeeAnnualReview` page shell — translate card titles, footer messages, confirm dialog, header subtitle.
 
-- In the System Scores table, change Source input → `Select` with options: `Manual`, `Safety`, `HR`, `Carry KRA Score (auto-fetched)`.
-- When `carry_kra` chosen, show a small inline config (aggregation mode + lastN). Disable manual value entry downstream.
+### 5. Translate template-authored content
+Helper `tTemplate(kind, id, field, fallback)` that looks up `template.translations[lang]["<kind>.<id>.<field>"]` (e.g. `criterion.attendance.name`) and falls back to the English value from `template.sections`. Use it for:
+- `TemplateCriterion.name` / `description`
+- `TemplateSystemScore.name`
+- `SelfReviewField.label` / `placeholder`
+- `EligibilityCriterion.name`
 
-### 4. SystemScoresPanel (`SystemScoresPanel.tsx`)
+This unlocks per-template translations that admins author in the Template Editor without further code changes.
 
-- For each score where `source === 'carry_kra'`:
-  - Lock numeric input (read-only).
-  - Render a collapsible **"Monthly KRA Breakdown"** table: month, KPI count, avg %, contribution to weight.
-  - Loading + empty states (e.g. "No PMS submissions found for FY {year}").
+### 6. Mirror the same wiring on Team & HR views
+`TeamAnnualReview.tsx` and `HrFinalizationSheet.tsx` already render `CriteriaScoringMatrix` / `SystemScoresPanel`; once those children use the context, both views translate automatically. Add the provider + a `LanguageSwitcher` to each (Team reads `instance.language_pref`).
 
-### 5. Instance load hook (`useAnnualReviewInstance.ts` or service composition)
+### 7. Tests (Vitest + Testing Library)
+- `i18n.test.ts` (extend existing) — assert the new keys resolve in `hi` and `es`.
+- `AnnualReviewStageTracker.i18n.test.tsx` — render under the provider with `hi`, expect "स्व मूल्यांकन".
+- `AnnualReviewStatusBadge.i18n.test.tsx` — `hi` + `pending_self` → "स्व मूल्यांकन लंबित".
+- `EmployeeAnnualReview.hooks.test.tsx` — render with `instance` toggling from `null` to a mock; no React warning, no error thrown (regression guard for the hook-order fix).
+- `CriteriaScoringMatrix.i18n.test.tsx` — column chips and remarks placeholder translate.
 
-- After instance + template load, for each `carry_kra` system score: if snapshot missing/stale, call service, store in `values[scoreId]`, and persist snapshot on save.
+### 8. Documentation & policy
+- `src/modules/annual-review/DOCUMENTATION.md` — add an "Internationalisation" section: how the precedence works, where to add static keys, how admins author template translations, list of supported keys.
+- `src/modules/annual-review/POLICY.md` — add rule: "Every user-visible string in the annual review module MUST go through `useAnnualReviewI18n().t(...)`. Template-authored content MUST go through `tTemplate(...)`."
+- `mem/features/annual-review/overview.md` — append note that the i18n context is the SSOT and child components must consume it.
 
-### 6. DB Migration (additive)
+## Out of scope
+- New languages beyond en/hi/es.
+- Translating PMS / Carry-KRA monthly data (numbers).
+- Admin UI for editing per-template translations (already exists via the Template Editor JSON; no change needed).
 
-- `ALTER TABLE public.annual_review_instances ADD COLUMN IF NOT EXISTS carry_score_snapshots jsonb NOT NULL DEFAULT '{}'::jsonb;`
-- No new tables; no RLS changes (column inherits).
-
-### 7. Tests
-
-- Unit: `carryKraScore.test.ts` — happy path (all 12 months), partial months, all-NA exclusion, weight scaling, lastN config.
-- Component: snapshot test that `SystemScoresPanel` renders the monthly breakdown only for `carry_kra` sources.
-- Mock fixtures: synthetic employee with mixed monthly submissions.
-
-### 8. Docs & Policy
-
-- **DOCUMENTATION.md** → new subsection under "Annual Review → Templates → System Scores: Carry KRA Score" describing source, config, snapshot caching, fiscal mapping.
-- **POLICY.md** → rule: "Carry KRA Score is read-only and sourced from the employee's PMS `final_score` cascade for the cycle's fiscal year; N/A KPIs are excluded; snapshot is immutable once the annual instance reaches `pending_hr`."
-- **Memory** → add `mem://features/annual-review/carry-kra-score`.
-
-### 9. Rollback
-
-- Drop column `carry_score_snapshots` (additive, safe).
-- Revert files in steps 1–5 and 8.
-
-## UI Change Summary
-
-- **Template Editor** → System Scores row: Source becomes a dropdown; selecting "Carry KRA Score" reveals a config chip and disables manual entry on the appraisal side. Visible only inside the Template dialog.
-- **Reviewer / HR appraisal view (`SystemScoresPanel`)** → New collapsible monthly grid under any carry_kra score. Inputs locked. Mobile: stacked accordion.
-- **No nav, no new route.**
-
-## Out of Scope
-
-- Editing/overriding historical PMS scores.
-- Cross-cycle carry (only the cycle's own fiscal year is fetched).
-- Bulk re-snapshot UI (snapshot refresh happens on instance load while editable).
+## Rollback
+Each step is additive (provider + key lookups). Reverting the patch removes the provider and restores the English literals — no schema, no data, no RPC changes to undo.
