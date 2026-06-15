@@ -9,14 +9,16 @@ vi.mock('@/services/annualReview/carryKraScore', async () => {
   return {
     ...actual,
     buildCarrySnapshot: vi.fn(async () => ({
-      value: 7.5,
+      value: 75,
+      maxValue: 100,
+      rating: 3.75,
       fiscal_year: 2025,
       config: { aggregation: 'overall_avg', excludeNa: true } as CarryKraConfig,
       computed_at: new Date().toISOString(),
       monthly: actual.FY_MONTHS.map((m: string, i: number) => ({
         month: m,
         kpiCount: i % 3 === 0 ? 0 : 5,
-        avg: i % 3 === 0 ? null : 7 + (i % 5) * 0.5,
+        avg: i % 3 === 0 ? null : 3 + (i % 5) * 0.25,
       })),
     })),
   };
