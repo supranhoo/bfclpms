@@ -2346,6 +2346,60 @@ export type Database = {
           },
         ]
       }
+      dev_report_entries: {
+        Row: {
+          adr_refs: string[]
+          created_at: string
+          created_by: string | null
+          description: string
+          entry_date: string | null
+          entry_type: Database["public"]["Enums"]["dev_report_entry_type"]
+          id: string
+          linked_commit: string | null
+          module_area: string | null
+          period_label: string | null
+          severity: string | null
+          status: string | null
+          timeline_type: string | null
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          adr_refs?: string[]
+          created_at?: string
+          created_by?: string | null
+          description: string
+          entry_date?: string | null
+          entry_type: Database["public"]["Enums"]["dev_report_entry_type"]
+          id?: string
+          linked_commit?: string | null
+          module_area?: string | null
+          period_label?: string | null
+          severity?: string | null
+          status?: string | null
+          timeline_type?: string | null
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          adr_refs?: string[]
+          created_at?: string
+          created_by?: string | null
+          description?: string
+          entry_date?: string | null
+          entry_type?: Database["public"]["Enums"]["dev_report_entry_type"]
+          id?: string
+          linked_commit?: string | null
+          module_area?: string | null
+          period_label?: string | null
+          severity?: string | null
+          status?: string | null
+          timeline_type?: string | null
+          title?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       divisions: {
         Row: {
           code: string | null
@@ -12795,6 +12849,16 @@ export type Database = {
         }
         Returns: number
       }
+      dev_report_summary: {
+        Args: { period_from?: string; period_to?: string }
+        Returns: {
+          bug_count: number
+          feature_count: number
+          max_entry_date: string
+          min_entry_date: string
+          timeline_count: number
+        }[]
+      }
       diagnose_org_kpi_propagation_gap: {
         Args: {
           p_category_id: string
@@ -14155,6 +14219,7 @@ export type Database = {
         | "adjust_covered_period"
         | "shift_next_cycle"
         | "carry_forward_uncovered"
+      dev_report_entry_type: "feature" | "bug" | "timeline"
       iac_scope_type: "global" | "company" | "business_unit" | "department"
       increment_method_type: "full" | "prorated_doj" | "custom"
       kpi_status: "open" | "submitted" | "approved_by_manager" | "locked"
@@ -14431,6 +14496,7 @@ export const Constants = {
         "shift_next_cycle",
         "carry_forward_uncovered",
       ],
+      dev_report_entry_type: ["feature", "bug", "timeline"],
       iac_scope_type: ["global", "company", "business_unit", "department"],
       increment_method_type: ["full", "prorated_doj", "custom"],
       kpi_status: ["open", "submitted", "approved_by_manager", "locked"],

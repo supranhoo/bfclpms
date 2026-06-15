@@ -1,129 +1,139 @@
-## 1. Assumptions
 
-- The screenshot is from `/admin/org-kpi-data`, June 2026, MIS & Reporting → `Raw Material Plan & Other MIS` for employee Bhoopendra Kumar Sinha.
-- Biswajit Sahoo is acting as the data owner/manager, not Admin mode.
-- The requested deliverable is RCA + a safe implementation plan; no code will be changed until approved.
+# Development Report — In-System Maintenance Plan (v2)
 
-## 2. Clarifications
+> Change vs v1: the module lives under **Reports**, not Admin. Permissions, route, registry entry and export filename adjusted accordingly. Everything else stands.
 
-Not Applicable.
+## 1. What the uploaded file is
 
-## 3. RCA, 5 Why
+`101785_PMS_Digitalisation_Self_Evidence.xlsx` is a 4-sheet **BFCL PMS Project Development Report** generated outside the app from `CHANGELOG_2026.md`:
 
-### Observed facts from live data
+- **Sheet 1 — Cover/Summary**: project meta, reporting period, workstreams, counts (Features=20, Bugs=20, Timeline=45).
+- **Sheet 2 — New Features Built**: `Date / Period | Feature | Module/Area | What Was Built | Status`.
+- **Sheet 3 — Bugs Fixed**: `Date / Period | Bug / Issue | Fix Description | Severity`.
+- **Sheet 4 — Full Development Timeline**: `Date / Period | Item | Summary | Type` (Feature / Bug Fix / Maintenance).
 
-- Biswajit Sahoo is active and has manager role.
-- Bhoopendra Kumar Sinha is active.
-- Biswajit is assigned as data owner for this exact KPI.
-- Bhoopendra’s June 2026 child KPI exists and is still `kra_set`.
-- There is no June 2026 `org_kpi_values` row and no `review_submissions` row for Bhoopendra for this KPI.
-- The UI screenshot still shows a local `0` value, a `Saved` label, and also an “Unsaved — wait for autosave…” micro-message. Those two states contradict each other.
-- Backend RPC overload ambiguity is not present now: only one `preview_org_kpi_propagation(...)`, one `propagate_org_kpi_value(...)`, and one resolver function exist.
+Goal: capture every release item, bug fix and ADR/POLICY change **inside the app** as the SSOT, and turn the XLSX into a one-click export from the **Reports** section.
 
-### 5 Why
+## 2. Assumptions
 
-1. **Why did Biswajit see “Partial propagation: 0/1 employees updated”?**
-   - The propagate flow attempted one visible row, but no review submission was written.
+- Lives under **Reports → "Development Report"** (`/reports/dev-report`).
+- Read access for **Admin + Management + Auditor**; write (create/edit/delete) restricted to **Admin** only.
+- Output XLSX schema/column order matches the uploaded file exactly so prior evidence submissions remain valid.
+- Single workspace (product-level report), so no per-client scoping; standard RLS.
 
-2. **Why was no review submission written?**
-   - The value visible in the row was not actually persisted to `org_kpi_values` for June 2026; the page allowed propagation from a local stale/unsaved `0` state.
+## 3. Risk & Impact Report
 
-3. **Why did the page think it was saved?**
-   - `handleCardSave` / `useBulkUpsertOrgKpiValues` can treat a zero-row save result as success. The UI can then clear dirty state and show `Saved` even when the DB accepted zero rows.
+- **Data**: +1 table `dev_report_entries`, +1 enum `dev_report_entry_type`, a few `system_settings` rows for cover meta. Additive; auto-backed-up by `get_backup_table_order()` (no denylist).
+- **Workflow**: none for end users. New report-registry entry `RPT-DEV-001` + menu key `reports-dev-report`. Default visibility: Admin (RW), Management/Auditor (RO).
+- **UI/UX**: new card in `/reports`, new page with 4 tabs (Cover / Features / Bugs / Timeline). Reuses shadcn DataTable, `ConfirmDestructiveDialog`, server pagination, filter chips — consistent with existing report pages.
+- **Regression**: very low. No edits to existing report pages or hooks. Menu/report-registry inserts are additive and feature-flagged.
+- **Mitigation**: gated behind `system_settings.dev_report_enabled` (default OFF) until QA pass; importer ships dry-run; export is read-only.
+- **Scalability**: bounded (~50–200 rows/year). Server pagination (page size 50), indexed `(entry_type, entry_date desc)`. Scales 10y+ trivially.
 
-4. **Why did the row still show `0` and allow propagate?**
-   - The UI preserves local scoped row state after a failed/zero-row save and the per-row Propagate button only checks local value + dirty flag, not “is this value persisted?”. The message still says “wait for autosave” even though autosave was replaced by explicit Save.
+## 4. Data Model
 
-5. **Why did the error say “mismatched KPI names” instead of “unsaved / not persisted”?**
-   - The completeness check only accounts for server skips. Client-side “untouched zero / not persisted zero” skips are not counted as an accounted skip, so the remaining gap falls through to the old “may have mismatched KPI names” toast.
+`public.dev_report_entries`:
 
-## 4. Risk & Impact Report
+```text
+id              uuid pk
+entry_type      dev_report_entry_type   -- 'feature' | 'bug' | 'timeline'
+entry_date      date                    -- exact date when known
+period_label    text                    -- e.g. "2026 Jun W1" when no exact date
+title           text                    -- Feature / Bug / Item
+module_area     text                    -- "Org KPI", "Safety / Backup", ...
+description     text                    -- "What Was Built" / "Fix Description" / "Summary"
+status          text  null              -- features: Shipped / In Progress / Planned
+severity        text  null              -- bugs: Critical / High / Major / Medium / Low
+timeline_type   text  null              -- timeline: Feature / Bug Fix / Maintenance
+adr_refs        text[] null             -- e.g. {ADR-072, POLICY §54 v5}
+linked_commit   text  null
+created_by      uuid -> auth.users
+created_at, updated_at timestamptz
+```
 
-- **Data Impact:** No destructive data change planned. The fix prevents propagation unless the exact scoped value is confirmed saved.
-- **Workflow Impact:** Data owners must Save the row successfully before propagation. This aligns with the explicit-save policy already in the UI.
-- **UI/UX Impact:** The row will stop showing contradictory “Saved” + “Unsaved” states. Propagate will be disabled for unsaved/local-only values.
-- **Regression Risk:** Medium, because Org KPI propagation has multiple historical policies. Mitigation is narrow changes + focused regression tests.
-- **Security Impact:** Active risk found: `propagate_org_kpi_value` is `SECURITY DEFINER` and directly executable by authenticated users without its own authorization gate. The resolver checks authorization, but the write RPC itself must also check it.
-- **Scalability Impact:** No full-table client scans added. Existing chunked saves stay chunked at 500 rows. Additional checks compare attempted-row counts only.
-- **Rollback Strategy:** Revert the frontend changes and, if the DB hardening migration is included, restore the previous RPC definition from the prior migration. No data rollback needed.
+- Indexes: `(entry_type, entry_date desc)`, `(module_area)`, GIN on `adr_refs`.
+- RLS:
+  - Admin: full CRUD via `has_role(auth.uid(),'admin')`.
+  - Management + Auditor: SELECT only.
+  - Service role: ALL.
+- GRANTs per policy: `SELECT, INSERT, UPDATE, DELETE` to `authenticated`; `ALL` to `service_role` (writes still gated by RLS).
+- Audit trigger writes to `system_audit_logs` on INSERT/UPDATE/DELETE.
 
-## 5. Step-by-step Plan
+Cover-sheet meta in `system_settings`: `dev_report.project_name`, `dev_report.tech_stack`, `dev_report.repository`, `dev_report.workstreams[]`. Counts and reporting-period are **derived** (RPC) — no manual upkeep.
 
-### Step 1 — Stop false saved state
+## 5. Backend
 
-- In `src/pages/admin/OrgKpiDataEntry.tsx`, capture the return value from `bulkUpsert.mutateAsync(safeToSave)`.
-- If `safeToSave.length > 0` but returned saved rows are fewer than attempted rows, throw a clear error and do not continue to propagation.
-- Keep existing orphan/hidden-profile toasts, but do not silently mark the card as saved when zero rows were written.
+- Migration: enum + table + indexes + GRANTs + RLS + audit trigger.
+- RPC `dev_report_summary(period_from date, period_to date)` → counts for cover sheet/KPI cards (lean payload).
+- **Report registry**: insert into `report_registry` + `report_field_registry` so the page participates in the existing Report Field Sequence resolver:
+  - `report_id = 'RPT-DEV-001'`, route `/reports/dev-report`.
+  - Default field sets for each sheet (cover/features/bugs/timeline) seeded; required keys (`entry_date`, `title`, `description`) marked `is_required=true` and non-hideable.
 
-### Step 2 — Make row Propagate require persisted data
+## 6. UI
 
-- In `src/components/admin/OrgKpiScopedEntryTable.tsx`, disable row-level Propagate when:
-  - the row is dirty, or
-  - the local achieved value differs from `dbAchievedValue`, or
-  - the local `0` has no saved OKV value.
-- Replace stale copy: “Unsaved — wait for autosave, then Propagate” with explicit-save copy: “Unsaved — click Save row, then Propagate”.
-- Keep the per-row Save button as the expected action.
+Route: `/reports/dev-report`, registered via `ReportRoute` with `reportKey="dev-report"`. Reports landing tile added in the existing Reports grid.
 
-### Step 3 — Fix false mismatch classification
+```text
+┌────────────────────────────────────────────────────────────┐
+│ Header: Development Report   [Period filter] [Export XLSX] │
+├────────────────────────────────────────────────────────────┤
+│ KPI cards: Features | Bugs | Timeline | Reporting Period   │
+├────────────────────────────────────────────────────────────┤
+│ Tabs: [Cover] [Features] [Bugs Fixed] [Timeline]           │
+│ ─ Tables: server pagination (50/page), search,             │
+│   module + severity + type filters, sort by date           │
+│ ─ Admin-only row actions: Edit / Delete (Confirm dialog)   │
+│ ─ "+ Add entry" dialog (admin), type-aware fields          │
+└────────────────────────────────────────────────────────────┘
+```
 
-- In `executeSaveAndPropagate`, account for client-side untouched/unsaved zero skips separately so they do not fall through to “mismatched KPI names”.
-- Keep the dedicated zero-value warning, but do not also show the destructive mismatch toast for the same row.
+- Add/Edit dialog: react-hook-form + zod; fields conditional on `entry_type`.
+- Filters: date range (defaults to current FY July–June), module multi-select (distinct), severity/type chips.
+- Empty states + try/catch toasts on every mutation; `ConfirmDestructiveDialog` for deletes (per project policy).
+- Non-admin viewers see read-only tables and the Export button.
 
-### Step 4 — Normalize remaining save lookups
+## 7. Export
 
-- Replace raw `.toLowerCase()` key construction in `handleCardSave` with the existing `kpiKey(...)` helper.
-- This removes a contradiction with ADR-054 and prevents old-value/audit/null-overwrite logic from drifting on whitespace or carriage returns.
+`Export XLSX` (uses already-installed `xlsx`) generates the **same 4-sheet workbook**, columns resolved via `useResolvedReportFields('RPT-DEV-001', DEFAULT_FIELDS)`:
 
-### Step 5 — Align preview and partial-row guard with actual intent
+1. Cover — project/tech/workstreams from `system_settings`, counts from `dev_report_summary`, period from filter.
+2. Features — `entry_type='feature'`.
+3. Bugs Fixed — `entry_type='bug'`.
+4. Timeline — `entry_type='timeline'`.
 
-- For row-level propagate (`filterEmployeeIds` present), skip the full-card half-propagation guard or compare only the attempted subset.
-- This prevents “N mapped employees not in your view” when the user intentionally propagated one employee.
-- Keep full-card guard unchanged for full-card propagation.
+Filename template: `{client_corp}_PMS_Digitalisation_Self_Evidence_{YYYYMMDD}.xlsx` (matches 101785 naming; corp id from `system_settings`).
+PDF export deferred to v2.
 
-### Step 6 — Harden backend authorization
+## 8. Seeding / Importer (one-time)
 
-- Add a migration to update `public.propagate_org_kpi_value(...)` so each `kpi_id` is writable only when the caller is Admin or an assigned data owner for that KPI’s normalized `(category_id, kra_name, kpi_name)`.
-- Unauthorized direct RPC calls should be rejected before writing `review_submissions`.
-- Preserve the current overwrite policies and approved-row immutability.
+Admin-only edge function `dev-report-import` that ingests:
+- `CHANGELOG_2026.md` entries in the repo, and
+- the uploaded XLSX (parsed once).
 
-## 6. UI Changes
+Dry-run JSON first; admin confirms, then a single transactional insert with `created_by = service`, `adr_refs` extracted via regex (`ADR-\d+`, `POLICY §\d+`).
+Idempotent on `(entry_type, entry_date, title)`.
 
-- **Location:** Org KPI Data Entry → scoped employee row actions.
-- **Visual change:** Propagate arrow remains disabled until the row’s current value is persisted.
-- **Interaction impact:** User flow becomes: edit value → click row Save → see successful save → click row Propagate.
-- **Responsiveness:** No layout changes; only button disabled state and tooltip/microcopy updates.
+## 9. Tests & Docs
 
-## 7. Implementation
+- `src/test/devReportEntriesRls.test.ts` — admin RW / management+auditor RO / others denied.
+- `src/test/devReportExportSchema.test.ts` — locks XLSX column order to the uploaded sample.
+- `src/test/devReportSummaryRpc.test.ts` — count math across exact-date + period-label rows.
+- `src/test/devReportImportIdempotent.test.ts` — re-running importer inserts 0 rows.
+- DOCUMENTATION.md: new "Development Report" section (schema, RPC, export contract, registry IDs).
+- POLICY.md: new clause — *every shipped feature, fix, ADR or POLICY change MUST add a `dev_report_entries` row in the same PR; release evidence is generated from this table, not from external changelogs.*
+- New ADR (`ADR-090`) documenting the move from external changelog to in-system SSOT.
 
-- Surgical frontend changes in:
-  - `src/pages/admin/OrgKpiDataEntry.tsx`
-  - `src/components/admin/OrgKpiScopedEntryTable.tsx`
-- Backend hardening migration for:
-  - `public.propagate_org_kpi_value(jsonb, boolean, text, text)`
-- No changes to unrelated Org KPI workflows, KRA library, or scorecard review screens.
+## 10. Rollout
 
-## 8. Tests
+1. Migration + RLS + GRANT + report-registry rows + tests (no UI surface).
+2. Reports page behind `dev_report_enabled = false`.
+3. Importer dry-run on staging; review diff; apply.
+4. Flip flag ON; validate XLSX against uploaded 101785 file (column-order parity test).
+5. Follow-up: PR-template checkbox "Dev Report entry added?" + lint warning on `feat:`/`fix:` commits without a matching row.
 
-Add/update focused tests:
+## 11. Out of scope (v1)
 
-- Zero-row save result must fail instead of showing saved.
-- Persisted-vs-local row state disables row Propagate.
-- Unsaved zero skip does not emit the “mismatched KPI names” toast.
-- `handleCardSave` uses canonical KPI keys.
-- Row-level propagation subset does not trigger full-card half-propagation warnings.
-- RPC contract test verifies `propagate_org_kpi_value` contains an authorization gate.
-
-## 9. DOCUMENTATION.md updates
-
-- Add a version note explaining explicit Save → Propagate contract.
-- Document that “Saved” means the backend returned at least one persisted row, not only that the mutation completed.
-
-## 10. POLICY.md updates
-
-- Add/adjust Org KPI policy: propagation must only run from persisted OKV rows; local-only values must be blocked.
-- Add security policy: propagation write RPC must enforce Admin/data-owner authorization internally, not rely only on a prior resolver.
-
-## 11. Post-implementation notes
-
-- No data repair should be run automatically for this case. The June row has no saved OKV/review submission, so after the fix Biswajit should Save the row again and then Propagate.
-- Backup impact is unchanged because no new table is introduced.
+- Auto-generation from git commit messages.
+- Per-client report instances.
+- PDF export, scheduled email distribution.
+- Direct PR/issue linking beyond the manual `linked_commit` field.

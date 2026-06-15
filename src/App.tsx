@@ -130,6 +130,7 @@ const TeamVsManagerScoreReport = lazy(() => import("./pages/reports/TeamVsManage
 const KpiScorecardDetail = lazy(() => import("./pages/reports/KpiScorecardDetail"));
 const KpiEmployeeMatrix = lazy(() => import("./pages/reports/KpiEmployeeMatrix"));
 const CustomReport = lazy(() => import("./pages/reports/CustomReport"));
+const DevelopmentReport = lazy(() => import("./pages/reports/DevelopmentReport"));
 
 // Layout components
 import { ReportRoute } from "./components/layout/ReportRoute";
@@ -449,6 +450,11 @@ const App = () => (
                 <Route path="/reports/workflow-resolution" element={
                   <ReportRoute reportKey="workflow-resolution">
                     <Suspense fallback={<PageFallback />}><WorkflowResolutionReport /></Suspense>
+                  </ReportRoute>
+                } />
+                <Route path="/reports/dev-report" element={
+                  <ReportRoute reportKey="dev-report">
+                    <Suspense fallback={<PageFallback />}><DevelopmentReport /></Suspense>
                   </ReportRoute>
                 } />
                 <Route path="/admin/pip" element={

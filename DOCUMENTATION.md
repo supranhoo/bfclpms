@@ -6742,3 +6742,11 @@ See: `docs/adr/ADR-078.md`, `src/test/reviewNotes/sidebarVisibility.test.ts`.
   5. `handleCardSave` `existingValuesMap` lookups now use `kpiKey()` instead of raw `.toLowerCase()` (ADR-054 parity); prevents whitespace/CR drift from masking the null-overwrite guard.
   6. DB migration: `public.propagate_org_kpi_value` now enforces a per-`kpi_id` authorization gate (Admin OR data owner via normalized KRA/KPI). Unauthorized rows skip with reason `not_authorized` and never write `review_submissions`.
   - Files: `src/pages/admin/OrgKpiDataEntry.tsx`, `src/components/admin/OrgKpiScopedEntryTable.tsx`, new migration for `propagate_org_kpi_value`, `POLICY.md §112`. Tests: `src/test/orgKpiSavePartialPersist.test.ts`, `src/test/orgKpiRowPropagateLocalVsDb.test.ts`, `src/test/orgKpiPropagateAuthGate.test.ts`. Rollback: revert the three frontend files and reapply the prior `propagate_org_kpi_value` definition (`20260519172440_*`).
+
+## Development Report (in-app changelog / evidence)
+- Module: `Reports → Development Report` (`/reports/dev-report`, `RPT-DEV-001`).
+- Storage: `public.dev_report_entries` (enum `dev_report_entry_type`: `feature` | `bug` | `timeline`). Cover-sheet meta in `system_settings` (`dev_report.project_name`, `dev_report.tech_stack`, `dev_report.repository`, `dev_report.workstreams`). Feature flag `dev_report_enabled`.
+- Access: Admin (full CRUD), Management + Auditor (read-only), gated by `useReportAccess('dev-report')` defaults + RLS.
+- Backend: `dev_report_summary(period_from, period_to)` returns `(feature_count, bug_count, timeline_count, min_entry_date, max_entry_date)` for the cover sheet and KPI cards.
+- Export: `src/lib/devReportExport.ts → downloadDevReportWorkbook` produces the 4-sheet workbook (Cover / Features / Bugs Fixed / Timeline) with the EXACT column order from `101785_PMS_Digitalisation_Self_Evidence.xlsx`. Column order is locked by `DEV_REPORT_DEFAULT_COLUMNS` and asserted in `src/test/devReportExportSchema.test.ts`.
+- Files: `src/pages/reports/DevelopmentReport.tsx`, `src/components/reports/DevReportEntryDialog.tsx`, `src/hooks/useDevReportEntries.ts`, `src/lib/devReportExport.ts`. Tile registered in `src/pages/reports/ReportsHub.tsx`; route in `src/App.tsx`.

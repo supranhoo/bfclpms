@@ -3726,3 +3726,8 @@ All URL persistence for dashboard filters, view modes, selected entities, and pa
   normalized `(category_id, kra_name, kpi_name)`). Unauthorized rows
   are skipped with reason `not_authorized` and never written to
   `review_submissions`.
+
+§131 Development Report SSOT
+- Every shipped feature, bug fix, ADR or POLICY change MUST be captured as a row in `public.dev_report_entries` in the same PR. Release evidence is generated FROM this table, never from external markdown.
+- The XLSX export column order/labels for sheets Features / Bugs Fixed / Timeline are LOCKED to the schema published in `101785_PMS_Digitalisation_Self_Evidence.xlsx` (see `DEV_REPORT_DEFAULT_COLUMNS`); column rename/hide is allowed only via the Report Field Sequence resolver under `RPT-DEV-001` and never by editing the export builder directly.
+- Admins are the only role allowed to write; Management and Auditor have read-only access. Deletes go through `ConfirmDestructiveDialog`.
