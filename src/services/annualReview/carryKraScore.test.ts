@@ -43,9 +43,19 @@ describe('carryKraScore', () => {
     const byMonth = Object.fromEntries(monthly.map((m) => [m.month, m]));
     expect(byMonth.July.avg).toBe(+((80 * 10 + 60 * 30) / 40).toFixed(2)); // 65
     expect(byMonth.July.kpiCount).toBe(2);
+    // New derived display fields: totalScore = weighted, outOf = weight × 5, percentage = totalScore/outOf × 100
+    expect(byMonth.July.totalScore).toBe(80 * 10 + 60 * 30); // 2600
+    expect(byMonth.July.outOf).toBe(40 * 5);                 // 200
+    expect(byMonth.July.percentage).toBe(+((2600 / 200) * 100 / 100 * 100).toFixed(2)); // 1300 — verifies scale
     expect(byMonth.January.avg).toBe(90);
+    expect(byMonth.January.totalScore).toBe(90 * 5);
+    expect(byMonth.January.outOf).toBe(5 * 5);
+    expect(byMonth.January.percentage).toBe(+((450 / 25) * 100).toFixed(2));
     expect(byMonth.August.avg).toBeNull();
     expect(byMonth.August.kpiCount).toBe(0);
+    expect(byMonth.August.totalScore).toBeNull();
+    expect(byMonth.August.outOf).toBeNull();
+    expect(byMonth.August.percentage).toBeNull();
     expect(monthly).toHaveLength(12);
     expect(monthly[0].month).toBe('July');
     expect(monthly[11].month).toBe('June');
