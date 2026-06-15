@@ -3686,6 +3686,7 @@ All URL persistence for dashboard filters, view modes, selected entities, and pa
 
 - `org_kpi_data_owners.kra_name` and `kpi_name` MUST be byte-identical to the matching row in `kpis`. Whitespace-collapsed variants (e.g. `\n` → `" - "`) are forbidden in storage.
 - `useAssignOrgKpiOwner` MUST canonicalize against `kpis` (whitespace-normalized equality) before insert.
+- Owner reads and owner-list UI lookups MUST use the same canonical/normalized signature before declaring "No data owners"; assignment is idempotent on `(category_id, kra_name, kpi_name, owner_id)` and must not surface duplicate-key errors for already-assigned owners.
 - The legacy "owner invisible to dialog" symptom is treated as a data-integrity bug, never patched by relaxing read-side `.eq()` lookups.
 - Repair operations MUST snapshot to a dated `org_kpi_owner_key_backup_YYYY_MM` table (admin-read RLS) before rewriting.
 
