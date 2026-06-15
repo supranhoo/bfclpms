@@ -480,6 +480,7 @@ export type Database = {
           skip_id: string | null
           system_scores: Json
           template_id: string
+          template_override_id: string | null
           total_score: number | null
           updated_at: string
         }
@@ -506,6 +507,7 @@ export type Database = {
           skip_id?: string | null
           system_scores?: Json
           template_id: string
+          template_override_id?: string | null
           total_score?: number | null
           updated_at?: string
         }
@@ -532,6 +534,7 @@ export type Database = {
           skip_id?: string | null
           system_scores?: Json
           template_id?: string
+          template_override_id?: string | null
           total_score?: number | null
           updated_at?: string
         }
@@ -623,6 +626,13 @@ export type Database = {
           {
             foreignKeyName: "annual_review_instances_template_id_fkey"
             columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "annual_review_templates"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "annual_review_instances_template_override_id_fkey"
+            columns: ["template_override_id"]
             isOneToOne: false
             referencedRelation: "annual_review_templates"
             referencedColumns: ["id"]
@@ -13833,6 +13843,10 @@ export type Database = {
           p_reviewer_role: Database["public"]["Enums"]["annual_reviewer_role"]
         }
         Returns: Database["public"]["Enums"]["annual_review_status"]
+      }
+      set_annual_review_template_override: {
+        Args: { p_instance_id: string; p_reason: string; p_template_id: string }
+        Returns: undefined
       }
       set_safety_setting: {
         Args: { p_description?: string; p_key: string; p_value: Json }
