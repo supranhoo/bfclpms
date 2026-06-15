@@ -542,7 +542,6 @@ export default function Organization() {
         </TabsContent>
 
         <TabsContent value="departments">
-          {/* placeholder anchor */}
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
               <div>
