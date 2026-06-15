@@ -705,10 +705,10 @@ function EmployeeRow({ row, onValueChange, ratingThresholds, targetValue, uom, c
                   if (row.achievedValue === null) return 'No value entered';
                   // Local edit differs from what was persisted to OKV
                   if (row.dbAchievedValue !== undefined && row.dbAchievedValue !== row.achievedValue) {
-                    return 'Unsaved — wait for autosave, then Propagate';
+                    return 'Unsaved — click Save row, then Propagate';
                   }
                   if (row.achievedValue === 0 && (row.dbAchievedValue ?? null) === null) {
-                    return '0 not saved — click cell then Save';
+                    return '0 not saved — click Save row before Propagate';
                   }
                   return undefined;
                 })()}
