@@ -46,7 +46,7 @@ describe('carryKraScore', () => {
     // New derived display fields: totalScore = weighted, outOf = weight × 5, percentage = totalScore/outOf × 100
     expect(byMonth.July.totalScore).toBe(80 * 10 + 60 * 30); // 2600
     expect(byMonth.July.outOf).toBe(40 * 5);                 // 200
-    expect(byMonth.July.percentage).toBe(+((2600 / 200) * 100 / 100 * 100).toFixed(2)); // 1300 — verifies scale
+    expect(byMonth.July.percentage).toBe(+((2600 / 200) * 100).toFixed(2)); // 1300 (test uses out-of-scale scores)
     expect(byMonth.January.avg).toBe(90);
     expect(byMonth.January.totalScore).toBe(90 * 5);
     expect(byMonth.January.outOf).toBe(5 * 5);
