@@ -413,13 +413,7 @@ export async function seedInstancesByRules(args: { cycleId: string; hrUserId: st
     });
   }
 
-  const CHUNK = 200;
-  for (let i = 0; i < rows.length; i += CHUNK) {
-    const { error: upErr } = await db
-      .from('annual_review_instances')
-      .upsert(rows.slice(i, i + CHUNK), { onConflict: 'employee_id,cycle_id' });
-    if (upErr) throw upErr;
-  }
+  await writeSeedRowsPreservingOverrides(args.cycleId, rows);
   return { seeded: rows.length, skipped };
 }
 
