@@ -2,6 +2,29 @@
 
 _Business rules. Update in the same PR as any logic change._
 
+## Reviewer-chain mapping (2026-06)
+
+- **Manager** = `profiles.reporting_manager_id`.
+- **Skip Manager** = manager's `reporting_manager_id`.
+- **BU Head** = `business_units.head_user_id` of the employee's BU
+  (the BU is resolved through the employee's `department_id`).
+  - This value is admin-managed in **Admin → Settings → Organization → Org Heads**.
+  - It can be **auto** (derived from the top of the BU's reporting hierarchy via
+    `public.resolve_bu_head(bu_id)`) or **manual** (set via `set_bu_head` RPC).
+  - If no BU head is configured the seeder falls back to the legacy ancestor walk
+    (2 hops above the skip manager) so old cycles continue to seed.
+- **HR Head (HR Finalization)** = `org_head_config.hr_head_user_id` for the company.
+  - Admin picks the HR business unit in the same screen. `public.resolve_hr_head`
+    returns the top of that BU's hierarchy; `set_hr_head` lets admin/hr_pms
+    override manually.
+  - If unconfigured the seeder falls back to the legacy `hrUserId` argument.
+- Per-instance overrides (`annual_review_assignment_overrides` via
+  `reassign_annual_review_reviewer`) continue to take precedence over the
+  snapshotted reviewer columns.
+- Every change (auto-recalc, manual set, HR BU change) is recorded in
+  `system_audit_logs` with action prefix `org_heads.*`.
+- Writes are restricted to `admin` and `hr_pms`.
+
 ## Eligibility
 - Seeding scopes to `is_active = true AND is_dummy_employee = false`.
 - Rule matching is priority-ordered (lower wins). Empty filter set matches all.

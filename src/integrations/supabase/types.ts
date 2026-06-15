@@ -1344,6 +1344,10 @@ export type Database = {
           code: string | null
           created_at: string
           division_id: string | null
+          head_source: string
+          head_updated_at: string | null
+          head_updated_by: string | null
+          head_user_id: string | null
           id: string
           level: string | null
           name: string
@@ -1352,6 +1356,10 @@ export type Database = {
           code?: string | null
           created_at?: string
           division_id?: string | null
+          head_source?: string
+          head_updated_at?: string | null
+          head_updated_by?: string | null
+          head_user_id?: string | null
           id?: string
           level?: string | null
           name: string
@@ -1360,6 +1368,10 @@ export type Database = {
           code?: string | null
           created_at?: string
           division_id?: string | null
+          head_source?: string
+          head_updated_at?: string | null
+          head_updated_by?: string | null
+          head_user_id?: string | null
           id?: string
           level?: string | null
           name?: string
@@ -1370,6 +1382,34 @@ export type Database = {
             columns: ["division_id"]
             isOneToOne: false
             referencedRelation: "divisions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "business_units_head_updated_by_fkey"
+            columns: ["head_updated_by"]
+            isOneToOne: false
+            referencedRelation: "eligible_login_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "business_units_head_updated_by_fkey"
+            columns: ["head_updated_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "business_units_head_user_id_fkey"
+            columns: ["head_user_id"]
+            isOneToOne: false
+            referencedRelation: "eligible_login_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "business_units_head_user_id_fkey"
+            columns: ["head_user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -6408,6 +6448,85 @@ export type Database = {
           triggered_by?: string | null
         }
         Relationships: []
+      }
+      org_head_config: {
+        Row: {
+          company_id: string | null
+          created_at: string
+          hr_business_unit_id: string | null
+          hr_head_source: string
+          hr_head_updated_at: string | null
+          hr_head_updated_by: string | null
+          hr_head_user_id: string | null
+          id: string
+          updated_at: string
+        }
+        Insert: {
+          company_id?: string | null
+          created_at?: string
+          hr_business_unit_id?: string | null
+          hr_head_source?: string
+          hr_head_updated_at?: string | null
+          hr_head_updated_by?: string | null
+          hr_head_user_id?: string | null
+          id?: string
+          updated_at?: string
+        }
+        Update: {
+          company_id?: string | null
+          created_at?: string
+          hr_business_unit_id?: string | null
+          hr_head_source?: string
+          hr_head_updated_at?: string | null
+          hr_head_updated_by?: string | null
+          hr_head_user_id?: string | null
+          id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "org_head_config_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: true
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "org_head_config_hr_business_unit_id_fkey"
+            columns: ["hr_business_unit_id"]
+            isOneToOne: false
+            referencedRelation: "business_units"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "org_head_config_hr_head_updated_by_fkey"
+            columns: ["hr_head_updated_by"]
+            isOneToOne: false
+            referencedRelation: "eligible_login_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "org_head_config_hr_head_updated_by_fkey"
+            columns: ["hr_head_updated_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "org_head_config_hr_head_user_id_fkey"
+            columns: ["hr_head_user_id"]
+            isOneToOne: false
+            referencedRelation: "eligible_login_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "org_head_config_hr_head_user_id_fkey"
+            columns: ["hr_head_user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       org_kpi_data_entry_logs: {
         Row: {
@@ -13462,6 +13581,8 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      recalculate_bu_head: { Args: { p_bu_id: string }; Returns: string }
+      recalculate_hr_head: { Args: { p_company_id: string }; Returns: string }
       reconcile_org_kpi_inheritance: {
         Args: { p_dry_run?: boolean }
         Returns: Json
@@ -13554,6 +13675,7 @@ export type Database = {
         Args: { p_kpi_id: string; p_reason: string }
         Returns: Json
       }
+      resolve_bu_head: { Args: { p_bu_id: string }; Returns: string }
       resolve_canonical_kpi: {
         Args: { p_category_id: string; p_kpi_name: string; p_kra_name: string }
         Returns: string
@@ -13614,6 +13736,7 @@ export type Database = {
         }
       }
       resolve_global_safety_head: { Args: never; Returns: string }
+      resolve_hr_head: { Args: { p_company_id: string }; Returns: string }
       resolve_org_kpi_target_kpis: {
         Args: {
           p_category_id: string
@@ -13878,6 +14001,18 @@ export type Database = {
       }
       set_annual_review_template_override: {
         Args: { p_instance_id: string; p_reason: string; p_template_id: string }
+        Returns: undefined
+      }
+      set_bu_head: {
+        Args: { p_bu_id: string; p_reason: string; p_user_id: string }
+        Returns: undefined
+      }
+      set_hr_department: {
+        Args: { p_bu_id: string; p_company_id: string }
+        Returns: undefined
+      }
+      set_hr_head: {
+        Args: { p_company_id: string; p_reason: string; p_user_id: string }
         Returns: undefined
       }
       set_safety_setting: {

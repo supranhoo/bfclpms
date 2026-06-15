@@ -18,15 +18,17 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { Building2, Plus, Trash2, Pencil, Check, X, Copy, Settings } from 'lucide-react';
 import { useResolvedTabs } from '@/hooks/useResolvedMenu';
+import { OrgHeadsTab } from '@/components/admin/OrgHeadsTab';
 
 type OrgTabKey =
   | 'divisions' | 'business-units' | 'departments' | 'sub-branches'
   | 'locations' | 'designations' | 'pms-grades' | 'levels'
-  | 'employee-categories' | 'employment-statuses';
+  | 'employee-categories' | 'employment-statuses' | 'org-heads';
 
 const ORG_TAB_DEFS: ReadonlyArray<{ key: OrgTabKey; menuKey: string; label: string }> = [
   { key: 'divisions',            menuKey: 'org-tab-divisions',           label: 'Divisions' },
   { key: 'business-units',       menuKey: 'org-tab-business-units',      label: 'Business Units' },
+  { key: 'org-heads',            menuKey: 'org-tab-org-heads',           label: 'Org Heads' },
   { key: 'departments',          menuKey: 'org-tab-departments',         label: 'Departments' },
   { key: 'sub-branches',         menuKey: 'org-tab-sub-branches',        label: 'Sub-Branches' },
   { key: 'locations',            menuKey: 'org-tab-locations',           label: 'Locations' },
@@ -431,6 +433,7 @@ export default function Organization() {
             'levels':               levels?.length || 0,
             'employee-categories':  employeeCategories?.length || 0,
             'employment-statuses':  employmentStatuses?.length || 0,
+            'org-heads':            filteredBUs.length,
           }}
         />
 
@@ -536,6 +539,10 @@ export default function Organization() {
               </Table>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="org-heads">
+          <OrgHeadsTab companyId={activeCompanyId || null} />
         </TabsContent>
 
         <TabsContent value="departments">
