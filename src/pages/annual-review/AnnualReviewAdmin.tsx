@@ -296,6 +296,11 @@ function ProgressTab() {
                   <TableCell className="text-right tabular-nums">{i.total_score?.toFixed(2) ?? '—'}</TableCell>
                   <TableCell className="text-right">{i.final_rating ?? '—'}</TableCell>
                   <TableCell className="text-right">
+                    {(i.overall_status === 'not_started' || i.overall_status === 'pending_self') && (
+                      <Button variant="ghost" size="sm" onClick={() => setChangeTplFor(i)} title="Change template">
+                        Change template
+                      </Button>
+                    )}
                     <Button variant="ghost" size="sm" onClick={() => setSelected(i)}>Finalize</Button>
                   </TableCell>
                 </TableRow>
