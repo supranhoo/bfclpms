@@ -346,34 +346,67 @@ export async function updateInstance(id: string, patch: Partial<AnnualReviewInst
   return data;
 }
 
-/** Bulk-seed instances for an entire cycle. Resolves the snapshotted chain from profiles.reporting_manager_id. */
-export async function seedInstancesForCycle(args: { cycleId: string; templateId: string; hrUserId: string | null }) {
-  // Pull active, non-dummy employees and map two levels up (mgr → skip).
+/** Bulk-seed instances for an entire cycle. Resolves the snapshotted chain.
+ *
+ *   manager_id  ← profiles.reporting_manager_id
+ *   skip_id     ← manager's reporting_manager_id
+ *   bu_head_id  ← business_units.head_user_id of the employee's BU (admin-managed,
+ *                 auto-derived from top of BU hierarchy or manually overridden).
+ *                 Falls back to the 2-hops-above-skip ancestor only if the BU
+ *                 has no head configured (legacy behaviour).
+ *   hr_id       ← org_head_config.hr_head_user_id for the company. Falls back
+ *                 to args.hrUserId if not configured.
+ */
+export async function seedInstancesForCycle(args: { cycleId: string; templateId: string; hrUserId: string | null; companyId?: string | null }) {
   // POLICY §94 — must page; PostgREST silently caps unranged reads at 1000
-  // and the active roster is >2,500. See mem://architecture/profiles-query-policy.
   const people = await fetchAllPaged<any>((from, to) =>
     db.from('profiles')
-      .select('id, reporting_manager_id, functional_manager_id')
+      .select('id, reporting_manager_id, functional_manager_id, department_id, company_id')
       .eq('is_active', true)
       .eq('is_dummy_employee', false)
       .order('id')
       .range(from, to)
   );
-  const map = new Map<string, { mgr: string | null; func: string | null }>();
-  for (const p of people ?? []) map.set(p.id, { mgr: p.reporting_manager_id, func: p.functional_manager_id });
+  const mgrMap = new Map<string, string | null>();
+  for (const p of people ?? []) mgrMap.set(p.id, p.reporting_manager_id);
+
+  // Department → BU + BU → head lookups (single pass each).
+  const deptIds = [...new Set((people ?? []).map((p: any) => p.department_id).filter(Boolean))];
+  const deptToBu: Record<string, string> = {};
+  for (let i = 0; i < deptIds.length; i += 500) {
+    const slice = deptIds.slice(i, i + 500);
+    const { data: depts, error } = await db.from('departments').select('id, business_unit_id').in('id', slice);
+    if (error) throw error;
+    for (const d of depts ?? []) deptToBu[d.id] = d.business_unit_id;
+  }
+  const { data: bus, error: buErr } = await db.from('business_units').select('id, head_user_id');
+  if (buErr) throw buErr;
+  const buHead: Record<string, string | null> = {};
+  for (const b of bus ?? []) buHead[b.id] = (b as any).head_user_id ?? null;
+
+  // HR head from org_head_config (per company if provided).
+  let hrHead: string | null = args.hrUserId ?? null;
+  {
+    let q = db.from('org_head_config').select('hr_head_user_id, company_id');
+    if (args.companyId) q = q.eq('company_id', args.companyId);
+    const { data: cfg } = await q.limit(1);
+    if (cfg && cfg[0] && (cfg[0] as any).hr_head_user_id) hrHead = (cfg[0] as any).hr_head_user_id;
+  }
 
   const rows = (people ?? []).map((p: any) => {
-    const mgr = map.get(p.id)?.mgr ?? null;
-    const skip = mgr ? map.get(mgr)?.mgr ?? null : null;
-    const bu = skip ? map.get(skip)?.mgr ?? null : null;
+    const mgr = mgrMap.get(p.id) ?? null;
+    const skip = mgr ? mgrMap.get(mgr) ?? null : null;
+    const bu = deptToBu[p.department_id] ? buHead[deptToBu[p.department_id]] ?? null : null;
+    // Legacy fallback when no BU head configured: 2 hops above skip.
+    const buFallback = skip ? mgrMap.get(skip) ?? null : null;
     return {
       employee_id: p.id,
       template_id: args.templateId,
       cycle_id: args.cycleId,
       manager_id: mgr,
       skip_id: skip,
-      bu_head_id: bu,
-      hr_id: args.hrUserId,
+      bu_head_id: bu ?? buFallback,
+      hr_id: hrHead,
     };
   });
 
