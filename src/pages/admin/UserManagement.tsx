@@ -1423,6 +1423,14 @@ export default function UserManagement() {
             <SelectItem value="dummy">Dummy / System</SelectItem>
           </SelectContent>
         </Select>
+        <div className="w-[220px]">
+          <OrgFilterCombobox
+            value={managerFilter}
+            onValueChange={(v) => { setManagerFilter(v || 'all'); handleFilterChange(); }}
+            options={managerFilterOptions}
+            placeholder="Reporting Manager"
+          />
+        </div>
 
         {selectedUserIds.size > 0 && (
           <Button variant="secondary" onClick={() => setBulkDialogOpen(true)}>
