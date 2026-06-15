@@ -252,7 +252,36 @@ export function TemplateEditorDialog({
             }))}
             addLabel="Add Score"
           >
-            {systemScores.length === 0 ? <Empty msg="No system scores. These are pre-calculated percentage contributions (e.g. Safety, HR)." /> : (
+            {systemScores.length === 0 ? (
+              <div className="rounded-md border border-dashed p-4 space-y-3 text-sm">
+                <p className="text-muted-foreground">
+                  No system scores. These are pre-calculated percentage contributions (e.g. Safety, HR).
+                </p>
+                <p className="text-muted-foreground">
+                  <strong className="text-foreground">Carry KRA</strong> pulls month-wise KPI scores from PMS history.
+                  Add a Carry KRA score to configure month selection and preview an employee mapping.
+                </p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setSections((s) => ({
+                    ...s,
+                    system_scores: [
+                      ...systemScores,
+                      {
+                        id: uid('sys'),
+                        name: 'Carry KRA Score',
+                        weight: 0,
+                        source: 'carry_kra',
+                        carry_config: { aggregation: 'overall_avg', excludeNa: true },
+                      },
+                    ],
+                  }))}
+                >
+                  <Plus className="h-4 w-4 mr-1" /> Add Carry KRA Score
+                </Button>
+              </div>
+            ) : (
               <Table>
                 <TableHeader>
                   <TableRow>
