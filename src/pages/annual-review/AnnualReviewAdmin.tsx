@@ -349,6 +349,12 @@ function ProgressTab() {
         template={template ?? null}
       />
 
+      <ChangeTemplateDialog
+        instance={changeTplFor}
+        onClose={() => setChangeTplFor(null)}
+        onDone={() => { setChangeTplFor(null); refetch(); }}
+      />
+
       <AlertDialog open={bulkOpen === 'finalize'} onOpenChange={(o) => !o && setBulkOpen(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
