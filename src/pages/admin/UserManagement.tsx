@@ -541,6 +541,29 @@ export default function UserManagement() {
   );
   const roleOptions = useMemo(() => ALL_APP_ROLES.map(role => ({ value: role, label: ROLE_LABELS[role] })), []);
 
+  // Reporting Manager filter options — distinct managers that are referenced
+  // by at least one profile's reporting_manager_id. Inactive users excluded.
+  const managerFilterOptions = useMemo(() => {
+    const list = profiles ?? [];
+    const byId = new Map(list.map((p: any) => [p.id, p]));
+    const ids = new Set<string>();
+    for (const p of list) {
+      if (p.reporting_manager_id) ids.add(p.reporting_manager_id);
+    }
+    const opts: { value: string; label: string }[] = [];
+    for (const id of ids) {
+      const m: any = byId.get(id);
+      if (!m || m.is_active === false) continue;
+      opts.push({ value: id, label: formatManagerLabel(m.full_name, m.employee_code) });
+    }
+    opts.sort((a, b) => a.label.localeCompare(b.label));
+    return [
+      { value: 'all', label: 'All Managers' },
+      { value: 'none', label: '— No Manager —' },
+      ...opts,
+    ];
+  }, [profiles]);
+
   const totalPages = Math.ceil(filteredProfiles.length / ITEMS_PER_PAGE);
   const paginatedProfiles = filteredProfiles.slice(
     (currentPage - 1) * ITEMS_PER_PAGE,
