@@ -21,10 +21,7 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Loader2 } from 'lucide-react';
-import {
-  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
-  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
+import { SelfReviewSummaryDialog } from '@/components/annual-review/SelfReviewSummaryDialog';
 import { toast } from 'sonner';
 import { computeCriteriaScore } from '@/lib/annualReview/scoring';
 import { fyStartFromCycle } from '@/lib/annualReview/fiscalYear';
@@ -230,27 +227,23 @@ export default function EmployeeAnnualReview() {
             <Button variant="outline" onClick={flush} disabled={saveStatus === 'saving'}>
               {t('btn.save_draft', 'Save draft')}
             </Button>
-            <Button onClick={() => setConfirmOpen(true)} disabled={advance.isPending}>
+            <Button onClick={() => { void flush(); setConfirmOpen(true); }} disabled={advance.isPending}>
               {advance.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />} {t('btn.submit', 'Submit')}
             </Button>
           </div>
         )}
       </footer>
 
-      <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>{t('confirm.submit.title', 'Submit your self-review?')}</AlertDialogTitle>
-            <AlertDialogDescription>
-              {t('confirm.submit.body', 'Once submitted, your responses are locked and forwarded to your manager. You cannot edit them afterwards.')}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>{t('btn.cancel', 'Cancel')}</AlertDialogCancel>
-            <AlertDialogAction onClick={handleSubmit}>{t('btn.submit', 'Submit')}</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <SelfReviewSummaryDialog
+        open={confirmOpen}
+        onOpenChange={setConfirmOpen}
+        onConfirm={handleSubmit}
+        submitting={advance.isPending}
+        template={template}
+        draft={draft}
+        summary={summary}
+        evidenceByCriterion={evidenceByCriterion}
+      />
     </div>
     </AnnualReviewI18nProvider>
   );
