@@ -263,15 +263,74 @@ export async function seedInstancesForCycle(args: { cycleId: string; templateId:
     };
   });
 
-  // Upsert in chunks to stay under the wire limit.
-  const CHUNK = 200;
-  for (let i = 0; i < rows.length; i += CHUNK) {
-    const { error: upErr } = await db
-      .from('annual_review_instances')
-      .upsert(rows.slice(i, i + CHUNK), { onConflict: 'employee_id,cycle_id' });
-    if (upErr) throw upErr;
-  }
+  await writeSeedRowsPreservingOverrides(args.cycleId, rows);
   return rows.length;
+}
+
+/**
+ * Seed writer that NEVER clobbers `template_override_id`.
+ *
+ * Standard upsert would set EXCLUDED.template_override_id (= NULL) on every
+ * conflict, silently wiping per-employee overrides on re-seed.
+ *
+ * Strategy: partition rows into "new" (insert) and "existing" (update only
+ * the seed-controlled columns — never `template_override_id`).
+ */
+async function writeSeedRowsPreservingOverrides(
+  cycleId: string,
+  rows: Array<{
+    employee_id: string;
+    template_id: string;
+    cycle_id: string;
+    manager_id: string | null;
+    skip_id: string | null;
+    bu_head_id: string | null;
+    hr_id: string | null;
+    assigned_rule_id?: string | null;
+  }>,
+) {
+  if (rows.length === 0) return;
+
+  // Existing instance keys for this cycle (paged — same PostgREST cap concern).
+  const existing = await fetchAllPaged<{ id: string; employee_id: string }>((from, to) =>
+    db.from('annual_review_instances')
+      .select('id, employee_id')
+      .eq('cycle_id', cycleId)
+      .order('employee_id')
+      .range(from, to)
+  );
+  const existingByEmp = new Map(existing.map((r) => [r.employee_id, r.id]));
+
+  const toInsert = rows.filter((r) => !existingByEmp.has(r.employee_id));
+  const toUpdate = rows.filter((r) => existingByEmp.has(r.employee_id));
+
+  const CHUNK = 200;
+  for (let i = 0; i < toInsert.length; i += CHUNK) {
+    const { error } = await db
+      .from('annual_review_instances')
+      .insert(toInsert.slice(i, i + CHUNK));
+    if (error) throw error;
+  }
+
+  // Per-row updates — required to preserve template_override_id.
+  // Throughput: ~few hundred ms per 100 rows; acceptable for re-seed ops
+  // which are rare and admin-initiated.
+  for (const r of toUpdate) {
+    const id = existingByEmp.get(r.employee_id)!;
+    const patch: Record<string, unknown> = {
+      template_id: r.template_id,
+      manager_id: r.manager_id,
+      skip_id: r.skip_id,
+      bu_head_id: r.bu_head_id,
+      hr_id: r.hr_id,
+    };
+    if ('assigned_rule_id' in r) patch.assigned_rule_id = r.assigned_rule_id ?? null;
+    const { error } = await db
+      .from('annual_review_instances')
+      .update(patch)
+      .eq('id', id);
+    if (error) throw error;
+  }
 }
 
 /**
