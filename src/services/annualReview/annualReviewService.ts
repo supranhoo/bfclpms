@@ -230,19 +230,37 @@ export async function listInstancesPaginated(
  * keeps payload small (~bytes per row) even for 5k+ employees.
  */
 export async function getCycleStatusCounts(cycleId: string): Promise<Record<AnnualReviewStatus, number> & { total: number }> {
-  const { data, error } = await db
-    .from('annual_review_instances')
-    .select('overall_status')
-    .eq('cycle_id', cycleId);
-  if (error) throw error;
+  // Count-only queries (head: true) so the Data API's default 1000-row payload
+  // cap cannot truncate the result. Previously this loaded `overall_status`
+  // rows unpaged and was silently capped at 1000 on cycles >1k employees.
+  const statuses: AnnualReviewStatus[] = [
+    'not_started', 'pending_self', 'pending_manager',
+    'pending_skip', 'pending_bu', 'pending_hr', 'completed',
+  ];
   const out = {
     total: 0, not_started: 0, pending_self: 0, pending_manager: 0,
     pending_skip: 0, pending_bu: 0, pending_hr: 0, completed: 0,
   } as Record<AnnualReviewStatus, number> & { total: number };
-  for (const r of (data ?? []) as { overall_status: AnnualReviewStatus }[]) {
-    out.total++;
-    out[r.overall_status] = (out[r.overall_status] ?? 0) + 1;
-  }
+
+  const totalRes = await db
+    .from('annual_review_instances')
+    .select('id', { count: 'exact', head: true })
+    .eq('cycle_id', cycleId);
+  if (totalRes.error) throw totalRes.error;
+  out.total = totalRes.count ?? 0;
+
+  const perStatus = await Promise.all(
+    statuses.map((s) =>
+      db.from('annual_review_instances')
+        .select('id', { count: 'exact', head: true })
+        .eq('cycle_id', cycleId)
+        .eq('overall_status', s),
+    ),
+  );
+  statuses.forEach((s, i) => {
+    if (perStatus[i].error) throw perStatus[i].error;
+    out[s] = perStatus[i].count ?? 0;
+  });
   return out;
 }
 
