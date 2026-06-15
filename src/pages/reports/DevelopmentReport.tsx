@@ -295,15 +295,6 @@ function SummaryCard({ label, value, loading }: { label: string; value: string |
   );
 }
 
-function Row({ label, value }: { label: string; value?: string | null }) {
-  return (
-    <div className="grid grid-cols-[200px_1fr] gap-3 py-1 border-b last:border-0">
-      <span className="text-muted-foreground">{label}</span>
-      <span className="font-medium">{value || '—'}</span>
-    </div>
-  );
-}
-
 function lastDayOfMonth(month: string): string {
   const [y, m] = month.split('-').map(Number);
   const d = new Date(Date.UTC(y, m, 0)).getUTCDate();
