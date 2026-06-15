@@ -47,6 +47,7 @@ const DEFAULT_CONFIGS: Record<string, { view_roles: AppRole[]; download_roles: A
   'kpi-scorecard-detail': { view_roles: ['admin', 'management', 'hr_pms', 'auditor'], download_roles: ['admin'] },
   'kpi-employee-matrix': { view_roles: ['admin', 'manager', 'management', 'hr_pms', 'auditor'], download_roles: ['admin'] },
   'workflow-resolution': { view_roles: ['admin', 'hr_pms', 'management', 'auditor'], download_roles: ['admin', 'hr_pms'] },
+  'dev-report': { view_roles: ['admin', 'management', 'auditor'], download_roles: ['admin', 'management'] },
 };
 
 export function useReportAccess() {
