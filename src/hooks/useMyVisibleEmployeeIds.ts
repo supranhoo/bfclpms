@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { fetchAllRpcPaged } from '@/lib/fetchAll';
 
 /**
  * Returns the set of employee IDs the current user is allowed to see in
@@ -24,13 +25,18 @@ export function useMyVisibleEmployeeIds() {
       if (!user?.id) return [];
       // User Management requires inactive employees to be counted/filtered too,
       // so we use the User-Management-specific helper which preserves Org Level
-      // Scope but does NOT drop is_active=false rows. See POLICY note added
-      // alongside migration 20260528_user_mgmt_visible_employee_ids.
-      const { data, error } = await supabase.rpc('get_user_management_visible_employee_ids' as any, {
-        p_user_id: user.id,
-      });
-      if (error) throw error;
-      return (data ?? []).map((r: { employee_id: string }) => r.employee_id);
+      // Scope but does NOT drop is_active=false rows.
+      //
+      // POLICY §125 — PostgREST hard-caps RPC responses at 1000 rows
+      // server-side (silent 206). Avinash 101732 / Onboarding profile owns
+      // 2,571 visible employees; an unpaged call dropped >60% of the
+      // roster (employee 102028 included). Always page this RPC.
+      const rows = await fetchAllRpcPaged<{ employee_id: string }>((from, to) =>
+        (supabase as any)
+          .rpc('get_user_management_visible_employee_ids', { p_user_id: user.id })
+          .range(from, to),
+      );
+      return rows.map((r) => r.employee_id);
     },
     enabled: isReady && !!user?.id && !isAdmin,
     staleTime: 5 * 60 * 1000,
