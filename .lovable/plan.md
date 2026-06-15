@@ -1,67 +1,78 @@
-## Goal
-Replace the fragile "3-hop ancestor" BU Head logic and the cycle-global HR Finalization with **hierarchy-derived heads** that are stored on the BU and on the HR department, with a UI to recalibrate or override them manually.
+## Root cause (RCA)
 
-## Assumptions
-- "BU Head" = the person at the top of the reporting chain among all active employees whose department belongs to that Business Unit.
-- "HR Head" = the person at the top of the reporting chain among active employees in the HR department (`departments.code`/`name` matching HR — to be confirmed; fallback: admin picks the HR department in settings).
-- Auto-resolution rule: among active employees in scope, pick the one whose `reporting_manager_id` is NULL or points outside the scope. If multiple candidates, prefer highest `levels.rank`; tie-breaker = earliest `doj`. If still ambiguous → flag for manual selection.
-- Manual override always wins over auto-resolution.
-- Change is **additive** — old `bu_head_id` snapshot column on `annual_review_instances` stays; we just change *how it gets populated* at seed time and add an admin recompute action.
+Reproduced from the screenshot ("Partial propagation: 0/60 employees updated · 60 employee(s) may have mismatched KPI names"):
+
+In `src/pages/admin/OrgKpiDataEntry.tsx`, `executeSaveAndPropagate` uses the **full mapped employee count** as the denominator for the propagation-completeness check, regardless of how many rows the user is actually propagating in this click:
+
+```ts
+// line 896
+const expectedCount = employeeCountMap.get(kk) ?? 0;   // = 60 (all mapped)
+…
+// line 1037
+if (consideredScopeIds.length > 0 && expectedCount > 0
+    && totalPropagated < expectedCount) {
+  …
+  const unaccounted = Math.max(0, expectedCount - totalPropagated - accountedSkips);
+  …
+  toast({ title: `Partial propagation: ${totalPropagated}/${expectedCount} employees updated`,
+          description: `${unaccounted} employee(s) may have mismatched KPI names…`,
+          variant: 'destructive' });
+}
+```
+
+But upstream, `OrgKpiEntryCard` deliberately ships **only the touched subset** into this handler (line 613-617: `touchedOnly = values.scopedValues.filter(s => s._touched)`). So when the admin uploads/edits 3 rows out of 60:
+
+- The loop iterates 3 scopedValues → `consideredScopeIds.length = 3`.
+- `expectedCount` is still 60.
+- Even if all 3 succeed (or are validly skipped), `totalPropagated + accountedSkips ≤ 3 ≤ 60`, so `unaccounted = 57+` → red "mismatched KPI names" toast against employees that were never part of this submission.
+
+The "0/60" further suggests the 3 attempted rows also returned `propagatedCount: 0` from the RPC (likely a separate workflow-stage skip), but the misleading 60-denominator amplifies it into an org-wide scare. There is no double-rule or schema regression — the completeness math is using the wrong denominator.
+
+## Fix
+
+Use the **attempted subset** as the denominator, not the full mapped population. The full-population guard is still useful, but only when the user is actually propagating the full set (no `filterEmployeeIds`, no touched-only subset).
+
+### Code change (single file)
+
+`src/pages/admin/OrgKpiDataEntry.tsx` — inside `executeSaveAndPropagate`:
+
+1. Compute the **attempted count** = `values.scopedValues.length` after filter, with fallback to `expectedCount` only when nothing has been filtered.
+2. Replace `expectedCount` in the completeness guard with this attempted count.
+3. Update toast copy: `"Partial propagation: X/Y rows updated"` where Y is the attempted subset; keep the "mismatched KPI names" hint only when `unaccounted > 0` against the **attempted** subset (which is the real signal — a touched row whose name didn't resolve server-side).
+4. Keep the existing half-propagation forward-guard at lines 1070+ (it already uses `propagatedScopeIds` vs `kpis` table query and is correctly scoped).
+
+### Why this is safe
+
+- `consideredScopeIds` already tracks exactly what this click attempted; we just stop comparing it to a population we never tried to touch.
+- The benign/hard skip taxonomy and POLICY §88 lock paths are unchanged.
+- No DB / RLS / RPC changes. No policy contradiction.
+- The half-propagation forward-guard (lines 1070-1140) still catches genuine "kpis row exists for employee but propagate wasn't called" defects against the full mapped set.
 
 ## Risk & Impact Report
-- **Data Impact**: Adds `head_user_id` + `head_source` ('auto'|'manual') to `business_units`; adds `hr_head_user_id` + a configurable `hr_department_id` to a new `org_head_config` row (single row, admin-managed). No destructive changes. Existing `annual_review_instances.bu_head_id` / `hr_id` snapshots are untouched for in-flight cycles.
-- **Workflow Impact**: New seeds (and re-seeds) resolve BU/HR from these fields instead of the 3-hop ancestor / cycle-global HR. Per-instance reassignment via existing `annual_review_assignment_overrides` continues to work and still wins.
-- **UI/UX Impact**: New "Org Heads" panel in Admin Settings → Organization. BU table gets a "Head" column with inline change + "Recalculate" button. HR section gets HR department picker + HR head field + Recalculate.
-- **Regression Risk**: Low if we gate the new resolver behind seeding only and leave existing instances alone. Annual Review seeder is the only consumer that changes.
-- **Scalability**: Resolver is O(employees-in-BU) per BU, run on demand (admin click) or at seed time — not on every read.
-- **Mitigation**: Feature is additive; old `bu_head_id`/`hr_id` columns retained; per-instance override path unchanged; resolver covered by unit tests with realistic org trees (flat BU, deep BU, BU with multiple top-level nodes, HR with vacancies).
 
-## Plan
+- **Data Impact:** None. Toast/copy only — no writes change.
+- **Workflow Impact:** None. Skip logic, overwrite policy (ADR-064), POLICY §88 lock unchanged.
+- **UI/UX:** The destructive toast stops firing falsely. When 3 of 3 attempted rows succeed, the success toast already at lines 996-1000 fires correctly. When 1 of 3 attempted rows genuinely mismatches, the destructive toast still fires — with the correct "1/3" denominator.
+- **Regression Risk:** Low. Existing tests `orgKpiPropagationToast.test.ts` and `orgKpiPropagationBenignReasons.test.ts` lock the classifier; we'll extend with a "subset propagation" case.
+- **Scalability:** Identical — no extra queries.
 
-### 1. Schema (migration)
-- `ALTER TABLE business_units ADD COLUMN head_user_id uuid REFERENCES profiles(id), ADD COLUMN head_source text NOT NULL DEFAULT 'auto' CHECK (head_source IN ('auto','manual')), ADD COLUMN head_updated_at timestamptz, ADD COLUMN head_updated_by uuid;`
-- New table `org_head_config` (single-row, admin-managed): `hr_department_id uuid`, `hr_head_user_id uuid`, `hr_head_source text`, audit columns. Full GRANTs + RLS (admin/hr_pms write, authenticated read).
-- Audit log entries via existing `system_audit_logs`.
+## Tests (added)
 
-### 2. Resolver SSOT
-- `src/lib/orgHeads/resolveHead.ts` — pure function `resolveTopOfScope(employees, edges)` returning the candidate(s) + reason.
-- Mirror in PL/pgSQL: `public.resolve_bu_head(bu_id uuid)` and `public.resolve_hr_head()` SECURITY DEFINER functions used by both the admin "Recalculate" RPC and the annual-review seeder.
+`src/test/orgKpiPropagationSubsetDenominator.test.ts` — pure-function tests on the classifier:
 
-### 3. RPCs
-- `set_bu_head(bu_id, user_id, reason)` — admin/hr_pms only, sets `head_source='manual'`, audit-logged.
-- `recalculate_bu_head(bu_id)` — sets `head_source='auto'`, recomputes via resolver.
-- `set_hr_head(user_id, reason)` / `recalculate_hr_head()` / `set_hr_department(dept_id)` — same pattern on `org_head_config`.
+| Scenario | mapped | attempted | propagated | benign | hard | expected toast |
+|---|---|---|---|---|---|---|
+| Upload 3 of 60, all succeed | 60 | 3 | 3 | 0 | 0 | success |
+| Upload 3 of 60, 1 benign skip | 60 | 3 | 2 | 1 | 0 | "already propagated" |
+| Upload 3 of 60, 1 true mismatch | 60 | 3 | 2 | 0 | 0 | partial 2/3 mismatch |
+| Upload 3 of 60, 1 hard skip | 60 | 3 | 2 | 0 | 1 | hard partial 2/3 |
+| Propagate all 60, 57 untouched | 60 | 60 | 60 | 0 | 0 | success |
 
-### 4. Annual Review integration
-- `seedInstancesForCycle()` (and re-seed path) reads `business_units.head_user_id` for `bu_head_id`, and `org_head_config.hr_head_user_id` for `hr_id`, replacing the 2-hop/3-hop ancestor walk and the cycle-global HR argument. Fall back to NULL with a seed warning surfaced in the Cycles tab if a BU has no head or HR is unset.
-- `getEffectiveReviewer()` precedence is unchanged: instance override → snapshotted column.
+## DOCUMENTATION.md / POLICY.md
 
-### 5. Admin UI
-- **Admin → Settings → Organization → Business Units**: add "Head" column with avatar/name + "Auto/Manual" badge + inline "Change…" (employee picker scoped to that BU) + "Recalculate" button.
-- **New "HR Finalization" card** in the same section: HR department picker, current HR head, Change/Recalculate buttons, last-updated meta.
-- **Annual Review Admin → Progress**: keep existing per-instance "Reassign reviewer" dialog as the in-flight override path. No change.
+- POLICY.md → add §111.x: "Propagation completeness is measured against the **attempted subset** for this submission, not the full mapped population. Untouched rows are never counted as missing."
+- DOCUMENTATION.md → update the "Propagation toast taxonomy" section with the new denominator rule and a worked example matching the screenshot.
 
-### 6. Tests + Mocks
-- `resolveHead.test.ts` — flat BU (single node), deep BU (5 levels), BU with two roots (ambiguous → flagged), BU with only inactive employees, HR with vacancy.
-- `setBuHead.rpc.test.ts` + `recalculateBuHead.rpc.test.ts` — admin-only, audit row written, source flips correctly.
-- `seedInstances.headResolution.test.ts` — seeder reads from new fields and ignores 3-hop ancestor.
+## Out of scope (separate follow-ups)
 
-### 7. Documentation
-- `src/modules/annual-review/DOCUMENTATION.md` — "Reviewer chain resolution" section rewritten.
-- `src/modules/annual-review/POLICY.md` — new clause: BU/HR heads are derived from org structure, overridable, audit-logged.
-- `mem://features/annual-review/overview.md` and `mem://architecture/database/per-employee-workflow-resolution` updated.
-
-### 8. Rollback
-- Revert seeder to ancestor walk; drop `org_head_config`; drop new columns on `business_units`. Existing snapshots on instances are unaffected.
-
-## UI Changes (explicit)
-- **Location**: `/admin/settings?section=organization`.
-- **Visual**: New "Heads" column in Business Units table; new "HR Finalization" card below it. Each row shows head name + small "Auto"/"Manual" badge + kebab menu (Change…, Recalculate, View history).
-- **Interaction**: Change opens an employee picker scoped to the BU/HR dept; requires reason ≥3 chars; on save, table refreshes and toast confirms.
-- **Responsive**: Table collapses to stacked cards <768px; head cell becomes a labeled row.
-
-## Open Question (please confirm before build)
-1. How should we identify the **HR department**? Options:
-   - (a) Admin picks it explicitly in the new "HR Finalization" card (most flexible, recommended).
-   - (b) Auto-detect by `departments.code = 'HR'` or name match (fragile across companies).
-2. For multi-company tenancy, should BU heads and HR head be **scoped per `company_id`** (i.e. one HR head per company), or one global HR head? I will assume **per company** unless told otherwise.
+- Investigating why the 3 attempted rows in the screenshot returned `propagatedCount: 0` with no skip reason surfaced. That is a server-side RPC visibility question and warrants its own RCA pass on `propagate_org_kpi_value` after the toast fix lands and we can read clean signals. I will flag it but not bundle it here.
