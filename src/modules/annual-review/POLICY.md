@@ -36,6 +36,14 @@ Caveats:
 - If your filter combo also matches other employees, they will receive the same template.
   Tighten filters or use the per-employee override instead.
 
+**Bulk CSV/XLSX (many employees at once):**
+1. Admin → Progress → **Bulk template assignment** → Download template.
+2. In the workbook, fill `New Template` and `Reason` only for rows you want to change.
+   Use the literal value `CLEAR` in `New Template` to remove an existing override.
+3. Upload → preview classifies every row as Apply / Skip / Error → click **Apply**.
+4. Each successful row hits the same `set_annual_review_template_override` RPC so
+   stage gate, role gate, and audit log are identical to the single-row UI.
+
 ## Reviewer chain
 - Snapshotted at seed time from `profiles.reporting_manager_id` (manager → skip → bu_head). HR is the configured HR user.
 - Mid-cycle change: HR/admin inserts an `annual_review_assignment_overrides` row. Overrides take precedence over the snapshot for that instance + role.
