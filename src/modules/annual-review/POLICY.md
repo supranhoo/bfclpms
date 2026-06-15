@@ -8,6 +8,20 @@ _Business rules. Update in the same PR as any logic change._
 - Filter dimensions: designation, pms_grade, level, department, business unit (joined via department).
 - Seeder MUST page the `profiles` read via `fetchAllPaged` (POLICY §94 / `mem://architecture/profiles-query-policy`). The active roster exceeds the 1000-row PostgREST cap; an unranged read silently drops >60% of employees.
 
+### Single-employee template assignment
+There is no per-employee template field today — assignment is purely rule-based.
+To target one individual:
+1. Open **Admin → Rules**, pick the active cycle.
+2. Create a new rule whose filters uniquely identify that employee
+   (e.g. their exact `designation` + `department`, or `designation` + `pms_grade` + `level`).
+3. Set **priority = 1** so this rule wins before any broader rule.
+4. Pick the desired template and save.
+5. Click **Seed instances by rules**.
+
+Caveats:
+- The seeder upsert is idempotent on `(employee_id, cycle_id)` but does **not** rewrite `template_id` on an already-seeded instance. To change a template post-seed today, delete the instance row (admin SQL) and re-seed, or wait for the per-employee override feature (see `.lovable/plan.md` Part B).
+- If your filter combo also matches other employees, they will receive the same template. Tighten filters or add a higher-priority "exclude" rule below it.
+
 ## Reviewer chain
 - Snapshotted at seed time from `profiles.reporting_manager_id` (manager → skip → bu_head). HR is the configured HR user.
 - Mid-cycle change: HR/admin inserts an `annual_review_assignment_overrides` row. Overrides take precedence over the snapshot for that instance + role.
