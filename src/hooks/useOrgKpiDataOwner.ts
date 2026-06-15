@@ -97,12 +97,18 @@ export function useIsOrgKpiDataOwner(categoryId: string, kraName: string, kpiNam
       }
 
       // Check if user is designated owner
+      const { data: candidates } = await supabase
+        .from('kpis')
+        .select('kra_name, kpi_name')
+        .eq('category_id', categoryId);
+      const canonical = findCanonicalKpiSignature(candidates, cleanKra, cleanKpi);
+
       const { data } = await supabase
         .from('org_kpi_data_owners')
         .select('id')
         .eq('category_id', categoryId)
-        .eq('kra_name', cleanKra)
-        .eq('kpi_name', cleanKpi)
+        .eq('kra_name', canonical.kraName)
+        .eq('kpi_name', canonical.kpiName)
         .eq('owner_id', user.id)
         .maybeSingle();
 
