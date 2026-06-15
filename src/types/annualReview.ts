@@ -132,6 +132,8 @@ export interface AnnualReviewInstance {
   id: string;
   employee_id: string;
   template_id: string;
+  /** Optional per-employee override. NULL → use `template_id`. Resolved via `resolveTemplateId`. */
+  template_override_id?: string | null;
   cycle_id: string;
   assigned_rule_id: string | null;
   overall_status: AnnualReviewStatus;

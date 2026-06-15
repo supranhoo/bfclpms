@@ -107,8 +107,9 @@ function ProgressTab() {
   const { data: counts = { total: 0, pending_self: 0, completed: 0, not_started: 0, pending_manager: 0, pending_skip: 0, pending_bu: 0, pending_hr: 0 } } = useCycleStatusCounts(activeCycle?.id);
   const [selected, setSelected] = useState<InstanceWithEmployee | null>(null);
   const [uploadOpen, setUploadOpen] = useState(false);
-  const { data: template } = useTemplate(selected?.template_id);
-  const { data: uploadTemplate } = useTemplate(instances[0]?.template_id);
+  const { data: template } = useTemplate(svc.resolveTemplateId(selected) ?? undefined);
+  const { data: uploadTemplate } = useTemplate(svc.resolveTemplateId(instances[0]) ?? undefined);
+  const [changeTplFor, setChangeTplFor] = useState<InstanceWithEmployee | null>(null);
   const sendBack = useSendBackStatus();
   const qc = useQueryClient();
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -295,6 +296,11 @@ function ProgressTab() {
                   <TableCell className="text-right tabular-nums">{i.total_score?.toFixed(2) ?? '—'}</TableCell>
                   <TableCell className="text-right">{i.final_rating ?? '—'}</TableCell>
                   <TableCell className="text-right">
+                    {(i.overall_status === 'not_started' || i.overall_status === 'pending_self') && (
+                      <Button variant="ghost" size="sm" onClick={() => setChangeTplFor(i)} title="Change template">
+                        Change template
+                      </Button>
+                    )}
                     <Button variant="ghost" size="sm" onClick={() => setSelected(i)}>Finalize</Button>
                   </TableCell>
                 </TableRow>
@@ -341,6 +347,12 @@ function ProgressTab() {
         onOpenChange={(o) => !o && setSelected(null)}
         instance={selected}
         template={template ?? null}
+      />
+
+      <ChangeTemplateDialog
+        instance={changeTplFor}
+        onClose={() => setChangeTplFor(null)}
+        onDone={() => { setChangeTplFor(null); refetch(); }}
       />
 
       <AlertDialog open={bulkOpen === 'finalize'} onOpenChange={(o) => !o && setBulkOpen(null)}>
@@ -403,6 +415,99 @@ function ProgressTab() {
 // ------------------------------------------------------------------
 // Analytics tab — rating distribution, stage funnel, on-time vs overdue
 // ------------------------------------------------------------------
+
+/**
+ * Per-employee template override dialog (Part B).
+ * Admin / hr_pms only. Service-side RPC enforces role, stage gate, and audit log.
+ * Allowed only while instance is `not_started` or `pending_self`.
+ */
+function ChangeTemplateDialog({
+  instance, onClose, onDone,
+}: {
+  instance: InstanceWithEmployee | null;
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const { data: templates = [] } = useTemplates();
+  const activeTemplates = templates.filter((t) => t.is_active);
+  const [tplId, setTplId] = useState<string>('');
+  const [reason, setReason] = useState<string>('');
+  const currentId = svc.resolveTemplateId(instance) ?? '';
+  const isClearing = tplId === '__clear__';
+
+  // Reset when opening on a new instance.
+  useMemo(() => {
+    setTplId(currentId || '');
+    setReason('');
+  }, [instance?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const save = useMutation({
+    mutationFn: () => {
+      if (!instance) throw new Error('No instance');
+      return svc.setTemplateOverride({
+        instanceId: instance.id,
+        templateId: isClearing ? null : tplId,
+        reason: reason.trim(),
+      });
+    },
+    onSuccess: () => { toast.success('Template updated.'); onDone(); },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const canSave =
+    reason.trim().length >= 3 &&
+    (isClearing
+      ? !!instance?.template_override_id
+      : !!tplId && tplId !== currentId);
+
+  return (
+    <AlertDialog open={!!instance} onOpenChange={(o) => !o && onClose()}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Change template</AlertDialogTitle>
+          <AlertDialogDescription>
+            Override the template for <strong>{instance?.employee?.full_name ?? '—'}</strong> for this
+            cycle only. Allowed before the review starts. The change is audit-logged.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <div className="space-y-3">
+          <div className="text-xs text-muted-foreground">
+            Current: <span className="font-medium">{activeTemplates.find((t) => t.id === currentId)?.name ?? '—'}</span>
+            {instance?.template_override_id && <Badge variant="outline" className="ml-2">override</Badge>}
+          </div>
+          <div className="space-y-1">
+            <Label>New template</Label>
+            <Select value={tplId} onValueChange={setTplId}>
+              <SelectTrigger className="h-10"><SelectValue placeholder="Pick a template" /></SelectTrigger>
+              <SelectContent>
+                {activeTemplates.map((t) => (
+                  <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+                ))}
+                {instance?.template_override_id && (
+                  <SelectItem value="__clear__">— Clear override (use rule-seeded template) —</SelectItem>
+                )}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1">
+            <Label>Reason (min 3 chars)</Label>
+            <Textarea rows={3} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Why is this employee getting a different template?" />
+          </div>
+        </div>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction
+            onClick={(e) => { e.preventDefault(); save.mutate(); }}
+            disabled={!canSave || save.isPending}
+          >
+            {save.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />} Save
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
+
 const STAGE_ORDER = ['not_started','pending_self','pending_manager','pending_skip','pending_bu','pending_hr','completed'] as const;
 const STAGE_LABEL: Record<string, string> = {
   not_started: 'Not started', pending_self: 'Self', pending_manager: 'Manager',

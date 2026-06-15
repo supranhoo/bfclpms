@@ -131,7 +131,9 @@ export default function TeamAnnualReview() {
 
 function ReviewDetail({ instance }: { instance: InstanceWithEmployee }) {
   const { user } = useAuth();
-  const { data: template } = useTemplate(instance.template_id);
+  const { data: template } = useTemplate(
+    (instance as { template_override_id?: string | null }).template_override_id ?? instance.template_id,
+  );
   const { data: responses = [] } = useInstanceResponses(instance.id);
   const advance = useAdvanceStatus();
   const sendBack = useSendBackStatus();

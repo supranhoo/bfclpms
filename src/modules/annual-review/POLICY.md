@@ -9,18 +9,32 @@ _Business rules. Update in the same PR as any logic change._
 - Seeder MUST page the `profiles` read via `fetchAllPaged` (POLICY §94 / `mem://architecture/profiles-query-policy`). The active roster exceeds the 1000-row PostgREST cap; an unranged read silently drops >60% of employees.
 
 ### Single-employee template assignment
-There is no per-employee template field today — assignment is purely rule-based.
-To target one individual:
+There are two ways to assign a template to one employee:
+
+**Recommended — per-employee override (post-seed):**
+1. Open **Admin → Progress**, find the employee.
+2. While they are still in `not_started` or `pending_self`, click **Change template**.
+3. Pick the new template, enter a reason (min 3 chars), Save.
+4. The override is audit-logged. It survives re-seeds and only affects that one employee.
+
+The override is stored on `annual_review_instances.template_override_id` and resolved via the
+`resolveTemplateId(instance)` helper — UI components MUST go through that helper, never read
+`template_id` directly. Once the review has progressed past `pending_self`, the override
+is locked (RPC raises).
+
+**Rule-based (pre-seed) — useful when targeting an exact filter combination:**
 1. Open **Admin → Rules**, pick the active cycle.
-2. Create a new rule whose filters uniquely identify that employee
-   (e.g. their exact `designation` + `department`, or `designation` + `pms_grade` + `level`).
+2. Create a new rule whose filters uniquely identify that employee.
 3. Set **priority = 1** so this rule wins before any broader rule.
 4. Pick the desired template and save.
 5. Click **Seed instances by rules**.
 
 Caveats:
-- The seeder upsert is idempotent on `(employee_id, cycle_id)` but does **not** rewrite `template_id` on an already-seeded instance. To change a template post-seed today, delete the instance row (admin SQL) and re-seed, or wait for the per-employee override feature (see `.lovable/plan.md` Part B).
-- If your filter combo also matches other employees, they will receive the same template. Tighten filters or add a higher-priority "exclude" rule below it.
+- The seeder writer (`writeSeedRowsPreservingOverrides`) updates seeded columns
+  (`template_id`, reviewer chain, `assigned_rule_id`) on re-seed but **never touches
+  `template_override_id`**. Any per-employee override survives re-seed.
+- If your filter combo also matches other employees, they will receive the same template.
+  Tighten filters or use the per-employee override instead.
 
 ## Reviewer chain
 - Snapshotted at seed time from `profiles.reporting_manager_id` (manager → skip → bu_head). HR is the configured HR user.

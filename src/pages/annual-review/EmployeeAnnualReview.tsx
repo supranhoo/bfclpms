@@ -33,7 +33,9 @@ export default function EmployeeAnnualReview() {
   const { user, profile } = useAuth();
   const { data: cycle, isLoading: cycleLoading } = useActiveCycle();
   const { data: instance, isLoading: instLoading } = useMyInstance(user?.id, cycle?.id);
-  const { data: template } = useTemplate(instance?.template_id);
+  const { data: template } = useTemplate(
+    (instance as { template_override_id?: string | null } | null)?.template_override_id ?? instance?.template_id,
+  );
   const { data: responses = [] } = useInstanceResponses(instance?.id);
   const advance = useAdvanceStatus();
   const upload = useUploadEvidence();
