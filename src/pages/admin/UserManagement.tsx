@@ -477,7 +477,13 @@ export default function UserManagement() {
         (employeeTypeFilter === 'real' && !isDummy) ||
         (employeeTypeFilter === 'dummy' && isDummy);
 
-      return matchesSearch && matchesRole && matchesDepartment && matchesStatus && matchesType;
+      const matchesManager =
+        managerFilter === 'all' ||
+        (managerFilter === 'none'
+          ? !p.reporting_manager_id
+          : p.reporting_manager_id === managerFilter);
+
+      return matchesSearch && matchesRole && matchesDepartment && matchesStatus && matchesType && matchesManager;
     });
     // Sort: active first, then inactive — both alphabetical by full_name
     return [...filtered].sort((a, b) => {
@@ -486,7 +492,7 @@ export default function UserManagement() {
       if (aActive !== bActive) return aActive - bActive;
       return (a.full_name || '').localeCompare(b.full_name || '');
     });
-  }, [profiles, debouncedSearch, roleFilter, departmentFilter, statusFilter, viewerIsAdmin, visibleIds, employeeTypeFilter, dummyIds]);
+  }, [profiles, debouncedSearch, roleFilter, departmentFilter, statusFilter, viewerIsAdmin, visibleIds, employeeTypeFilter, dummyIds, managerFilter]);
 
   // Helper: derive division ID from a department ID
   const deriveDivisionFromDept = (deptId: string | null): string => {
