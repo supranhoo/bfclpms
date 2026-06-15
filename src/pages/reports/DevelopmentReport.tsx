@@ -46,9 +46,14 @@ import { DevReportEntryDialog } from '@/components/reports/DevReportEntryDialog'
 import { ConfirmDestructiveDialog } from '@/components/ui/ConfirmDestructiveDialog';
 import { downloadDevReportWorkbook } from '@/lib/devReportExport';
 
-function useDevReportCoverMeta() {
+/**
+ * Lazily fetched only for the XLSX export — the in-app Cover tab has been removed
+ * but the export workbook still ships a Cover sheet per the 101785 evidence schema.
+ */
+function useDevReportCoverMeta(enabled: boolean) {
   return useQuery({
     queryKey: ['system-settings', 'dev_report.cover'],
+    enabled,
     queryFn: async () => {
       const { data, error } = await supabase
         .from('system_settings')
@@ -102,7 +107,7 @@ export default function DevelopmentReport() {
   const month = monthBounds(monthParam) ? monthParam : null;
   const bounds = monthBounds(month);
 
-  const [tab, setTab] = useState<DevReportEntryType | 'cover'>('cover');
+  const [tab, setTab] = useState<DevReportEntryType>('feature');
   const [search, setSearch] = useState('');
   const [editing, setEditing] = useState<DevReportEntry | null>(null);
   const [adding, setAdding] = useState<DevReportEntryType | null>(null);
@@ -115,12 +120,13 @@ export default function DevelopmentReport() {
     bounds ? lastDayOfMonth(month!) : undefined,
   );
   const monthsQ = useDevReportMonths();
-  const coverQ = useDevReportCoverMeta();
+  // Cover meta is only needed when exporting the XLSX; defer the fetch.
+  const [exportRequested, setExportRequested] = useState(false);
+  const coverQ = useDevReportCoverMeta(exportRequested);
   const del = useDeleteDevReportEntry();
 
   const allEntries = entriesQ.data ?? [];
   const filteredByTab = useMemo(() => {
-    if (tab === 'cover') return allEntries;
     return allEntries.filter((e) => e.entry_type === tab);
   }, [allEntries, tab]);
 
@@ -137,9 +143,12 @@ export default function DevelopmentReport() {
   const summary = summaryQ.data;
   const cover = coverQ.data;
 
-  const reportingPeriod = summary?.min_entry_date && summary?.max_entry_date
-    ? `${summary.min_entry_date} – ${summary.max_entry_date}`
-    : '—';
+  // Reporting Period reflects the active month filter, not the global min/max.
+  const reportingPeriod = month
+    ? `${formatMonthLabel(month)} (${monthBounds(month)!.from} – ${lastDayOfMonth(month)})`
+    : summary?.min_entry_date && summary?.max_entry_date
+      ? `All months (${summary.min_entry_date} – ${summary.max_entry_date})`
+      : '—';
 
   const setMonth = (value: string) => {
     const next = new URLSearchParams(searchParams);
@@ -148,14 +157,17 @@ export default function DevelopmentReport() {
     setSearchParams(next, { replace: true });
   };
 
-  const handleExport = () => {
-    if (!cover || !summary) return;
+  const handleExport = async () => {
+    if (!exportRequested) setExportRequested(true);
+    // Wait for cover meta to land before composing the workbook.
+    const coverData = cover ?? (await coverQ.refetch()).data;
+    if (!coverData || !summary) return;
     const today = new Date().toISOString().slice(0, 10);
     const suffix = month ? `_${month.replace('-', '')}` : `_${today.replace(/-/g, '')}`;
     const fname = `BFCL_PMS_Digitalisation_Self_Evidence${suffix}.xlsx`;
     downloadDevReportWorkbook(
       {
-        cover,
+        cover: coverData,
         summary,
         reportingPeriod,
         generatedOn: today,
@@ -203,12 +215,17 @@ export default function DevelopmentReport() {
           />
         </div>
         <div className="flex gap-2">
-          {isAdmin && tab !== 'cover' && (
+          {isAdmin && (
             <Button onClick={() => setAdding(tab)} size="sm">
               <Plus className="h-4 w-4 mr-1" /> Add entry
             </Button>
           )}
-          <Button onClick={handleExport} disabled={!canExport || !cover || !summary} size="sm" variant="outline">
+          <Button
+            onClick={handleExport}
+            disabled={!canExport || !summary || (exportRequested && coverQ.isFetching)}
+            size="sm"
+            variant="outline"
+          >
             <Download className="h-4 w-4 mr-1" /> Export XLSX
           </Button>
         </div>
@@ -216,30 +233,10 @@ export default function DevelopmentReport() {
 
       <Tabs value={tab} onValueChange={(v) => setTab(v as typeof tab)}>
         <TabsList>
-          <TabsTrigger value="cover">Cover</TabsTrigger>
           <TabsTrigger value="feature">Features</TabsTrigger>
           <TabsTrigger value="bug">Bugs Fixed</TabsTrigger>
           <TabsTrigger value="timeline">Timeline</TabsTrigger>
         </TabsList>
-
-        <TabsContent value="cover" className="mt-4">
-          <Card>
-            <CardHeader><CardTitle>Cover / Summary</CardTitle></CardHeader>
-            <CardContent className="space-y-2 text-sm">
-              <Row label="Project" value={cover?.project_name} />
-              <Row label="Tech Stack" value={cover?.tech_stack} />
-              <Row label="Repository" value={cover?.repository} />
-              <Row label="Reporting Period" value={reportingPeriod} />
-              <Row
-                label="Major Workstreams"
-                value={cover?.workstreams?.length ? cover.workstreams.join(', ') : '—'}
-              />
-              <Row label="New Features Logged" value={String(summary?.feature_count ?? 0)} />
-              <Row label="Bugs / Fixes Logged" value={String(summary?.bug_count ?? 0)} />
-              <Row label="Total Timeline Entries" value={String(summary?.timeline_count ?? 0)} />
-            </CardContent>
-          </Card>
-        </TabsContent>
 
         {(['feature', 'bug', 'timeline'] as const).map((t) => (
           <TabsContent key={t} value={t} className="mt-4">
