@@ -24,6 +24,8 @@ import type {
 } from '@/types/annualReview';
 import { SUPPORTED_LANGUAGES, STAGE_LABEL, STAGE_ORDER } from '@/lib/annualReview/constants';
 import { BLUE_COLLAR_PRESET, BLUE_COLLAR_PRESET_META } from '@/lib/annualReview/blueCollarPreset';
+import { FY_MONTHS } from '@/services/annualReview/carryKraScore';
+import type { CarryKraConfig } from '@/types/annualReview';
 
 const uid = (p: string) => `${p}_${Math.random().toString(36).slice(2, 9)}`;
 
@@ -262,8 +264,35 @@ export function TemplateEditorDialog({
                 <TableBody>
                   {systemScores.map((sc, i) => (
                     <TableRow key={sc.id}>
-                      <TableCell><Input className="h-9" value={sc.name} onChange={(ev) => updateAt(setSections, 'system_scores', i, { name: ev.target.value })} /></TableCell>
-                      <TableCell><Input className="h-9" value={sc.source ?? ''} placeholder="manual / safety / hr" onChange={(ev) => updateAt(setSections, 'system_scores', i, { source: ev.target.value })} /></TableCell>
+                      <TableCell>
+                        <Input className="h-9" value={sc.name} onChange={(ev) => updateAt(setSections, 'system_scores', i, { name: ev.target.value })} />
+                      </TableCell>
+                      <TableCell className="space-y-2">
+                        <Select
+                          value={(sc.source as string) ?? 'manual'}
+                          onValueChange={(v) => updateAt(setSections, 'system_scores', i, {
+                            source: v,
+                            carry_config: v === 'carry_kra'
+                              ? (sc.carry_config ?? { aggregation: 'overall_avg', excludeNa: true })
+                              : undefined,
+                          })}
+                        >
+                          <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="manual">Manual entry</SelectItem>
+                            <SelectItem value="safety">Safety</SelectItem>
+                            <SelectItem value="hr">HR</SelectItem>
+                            <SelectItem value="env">Environment</SelectItem>
+                            <SelectItem value="carry_kra">Carry KRA Score (auto-fetched)</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        {sc.source === 'carry_kra' && (
+                          <CarryKraConfigEditor
+                            cfg={sc.carry_config ?? { aggregation: 'overall_avg', excludeNa: true }}
+                            onChange={(cfg) => updateAt(setSections, 'system_scores', i, { carry_config: cfg })}
+                          />
+                        )}
+                      </TableCell>
                       <TableCell><Input className="h-9" type="number" value={sc.weight} onChange={(ev) => updateAt(setSections, 'system_scores', i, { weight: Number(ev.target.value) })} /></TableCell>
                       <TableCell><Button size="icon" variant="ghost" onClick={() => removeAt(setSections, 'system_scores', i)} aria-label="Delete"><Trash2 className="h-4 w-4 text-destructive" /></Button></TableCell>
                     </TableRow>
