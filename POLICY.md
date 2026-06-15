@@ -3701,3 +3701,28 @@ All URL persistence for dashboard filters, view modes, selected entities, and pa
   (`isDataOwner` ‖ explicit user override ‖ `canPerform('data-entry','view')`).
 - New menu items that delegate to a DB-driven gate MUST add a parallel
   filter in `AppSidebar.tsx` instead of relying on a static role list.
+
+## §112 — Org KPI Save → Propagate integrity (June 2026 RCA)
+
+- A row is "Saved" only when the bulk save RPC returns at least one
+  persisted record per attempted row. A successful mutation that
+  persists zero rows MUST be surfaced as an error toast and MUST block
+  the subsequent Propagate step.
+- Row-level Propagate is disabled while the row is dirty OR while the
+  local achieved value differs from the persisted `org_kpi_values.achieved_value`
+  (`dbAchievedValue`). This applies to both employee-scope and
+  department-scope rows. Microcopy must reflect the explicit-save model
+  (no “autosave” language).
+- The propagation completeness check MUST account for client-side
+  skips (null value, untouched zero) before falling through to a
+  "may have mismatched KPI names" toast.
+- Row-level / subset propagation (`filterEmployeeIds` non-empty) MUST
+  NOT trigger the full-card half-propagation guard that compares
+  against every mapped employee.
+- `handleCardSave` MUST look up `existingValuesMap` via the canonical
+  `kpiKey()` helper (ADR-054). Raw `.toLowerCase()` keys are forbidden.
+- Server hardening: `public.propagate_org_kpi_value` enforces a
+  per-`kpi_id` authorization gate (Admin OR registered data owner via
+  normalized `(category_id, kra_name, kpi_name)`). Unauthorized rows
+  are skipped with reason `not_authorized` and never written to
+  `review_submissions`.
