@@ -14,13 +14,16 @@ import * as svc from '@/services/annualReview/annualReviewService';
 import type { InstanceWithEmployee } from '@/services/annualReview/annualReviewService';
 import type { AnnualReviewerRole } from '@/types/annualReview';
 import { enabledChain, describeChain } from '@/lib/annualReview/stageChain';
+import { AlertTriangle } from 'lucide-react';
 
 /**
  * Per-employee workflow override dialog.
  * Admin / hr_pms only. RPC enforces stage gate, role, and audit log.
- * Allowed only while instance is `not_started` or `pending_self`.
+ * Allowed pre-start, or while no reviewer has yet submitted (no responses).
+ * Any stage (including Self) may be disabled — chain must keep ≥1 stage.
  */
 const TOGGLABLE: Array<{ key: AnnualReviewerRole; label: string }> = [
+  { key: 'self',         label: 'Self Review' },
   { key: 'manager',      label: 'Manager Review' },
   { key: 'skip_manager', label: 'Skip Manager Review' },
   { key: 'bu_head',      label: 'BU Head Review' },
@@ -43,8 +46,13 @@ export function ChangeWorkflowDialog({
     setReason('');
   }, [instance?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const next = enabledChain(Array.from(enabled));
+  const hasAny = enabled.size > 0;
+  const next = hasAny ? enabledChain(Array.from(enabled)) : [];
   const isDirty = JSON.stringify(next) !== JSON.stringify(current);
+  const selfDisabled = hasAny && !enabled.has('self');
+  const firstStageLabel = next[0]
+    ? ({ self: 'Self', manager: 'Manager', skip_manager: 'Skip Manager', bu_head: 'BU Head', hr: 'HR' } as const)[next[0]]
+    : '—';
 
   const save = useMutation({
     mutationFn: () => {
@@ -61,12 +69,11 @@ export function ChangeWorkflowDialog({
 
   const toggle = (key: AnnualReviewerRole) => {
     const ns = new Set(enabled);
-    ns.has(key) ? ns.delete(key) : ns.add(key);
-    ns.add('self');
+    if (ns.has(key)) ns.delete(key); else ns.add(key);
     setEnabled(ns);
   };
 
-  const canSave = isDirty && reason.trim().length >= 3 && enabled.has('self');
+  const canSave = isDirty && reason.trim().length >= 3 && hasAny;
 
   return (
     <AlertDialog open={!!instance} onOpenChange={(o) => !o && onClose()}>
@@ -75,8 +82,8 @@ export function ChangeWorkflowDialog({
           <AlertDialogTitle>Change workflow</AlertDialogTitle>
           <AlertDialogDescription>
             Pick which review stages apply to <strong>{instance?.employee?.full_name ?? '—'}</strong> for
-            this cycle only. <em>Self Review</em> is mandatory. Allowed before the review starts. The
-            change is audit-logged.
+            this cycle only. Any stage may be disabled but at least one stage must remain.
+            Allowed before the review starts or while no reviewer has acted. The change is audit-logged.
           </AlertDialogDescription>
         </AlertDialogHeader>
         <div className="space-y-3">
@@ -84,11 +91,6 @@ export function ChangeWorkflowDialog({
             Current chain: <span className="font-medium text-foreground">{describeChain(current)}</span>
           </div>
           <div className="rounded-md border p-3 space-y-2">
-            <div className="flex items-center gap-2 opacity-70">
-              <Checkbox checked disabled aria-label="Self review (always required)" />
-              <span className="text-sm">Self Review</span>
-              <Badge variant="outline" className="ml-auto">Required</Badge>
-            </div>
             {TOGGLABLE.map((s) => (
               <label key={s.key} className="flex items-center gap-2 cursor-pointer">
                 <Checkbox
@@ -97,12 +99,24 @@ export function ChangeWorkflowDialog({
                   aria-label={s.label}
                 />
                 <span className="text-sm">{s.label}</span>
+                {s.key === 'self' && (
+                  <Badge variant="outline" className="ml-auto">Optional</Badge>
+                )}
               </label>
             ))}
           </div>
           <div className="text-xs text-muted-foreground">
-            New chain: <span className="font-medium text-foreground">{describeChain(next)}</span>
+            New chain: <span className="font-medium text-foreground">{hasAny ? describeChain(next) : '— (at least one stage required)'}</span>
           </div>
+          {selfDisabled && (
+            <div className="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 p-2 text-xs text-amber-700 dark:text-amber-300">
+              <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+              <span>
+                Self Review is disabled — <strong>{instance?.employee?.full_name ?? 'the employee'}</strong> will
+                not submit self ratings; the cycle starts at <strong>{firstStageLabel}</strong>.
+              </span>
+            </div>
+          )}
           <div className="space-y-1">
             <Label>Reason (min 3 chars)</Label>
             <Textarea

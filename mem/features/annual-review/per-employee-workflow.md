@@ -6,8 +6,9 @@ type: feature
 
 `annual_review_instances.enabled_stages` (jsonb NOT NULL, default
 `["self","manager","skip_manager","bu_head","hr"]`) is the per-employee
-configurable workflow. Must contain `self`; subset of the canonical 5
-stages. Validated by `tg_annual_review_validate_enabled_stages` trigger.
+configurable workflow. Subset of the canonical 5 stages; any stage
+(including `self`) may be disabled but at least one must remain.
+Validated by `tg_annual_review_validate_enabled_stages` trigger.
 
 ## Resolver SSOT
 `src/lib/annualReview/stageChain.ts` — `enabledChain`, `nextStatus`,
@@ -20,7 +21,10 @@ stages are skipped server-side.
 ## Mutation path
 RPC `set_annual_review_enabled_stages(p_instance_id, p_enabled_stages jsonb, p_reason)`:
 - admin / hr_pms only
-- allowed only when `overall_status IN ('not_started','pending_self')`
+- allowed pre-start (`not_started`/`pending_self`) OR any pending status when
+  no `annual_review_responses` rows exist for the instance
+- when Self is removed pre-start, the RPC re-targets `overall_status` to the
+  first enabled pending stage via `annual_review_first_pending_status`
 - reason mandatory (≥3 chars)
 - audit-logged as `annual_review.enabled_stages_set` with previous, new, reason
 
@@ -39,7 +43,7 @@ the column default. Same guarantee as `template_override_id`.
 - **Admin → Progress**: per-row **Change workflow** dialog
   (`ChangeWorkflowDialog`) + **Bulk workflow assignment** XLSX dialog
   (`BulkWorkflowAssignmentDialog`). Columns: Employee Code, Full Name,
-  Current Stages, Manager (Y/N), Skip (Y/N), BU (Y/N), HR (Y/N), Reason.
+  Current Stages, Self (Y/N), Manager (Y/N), Skip (Y/N), BU (Y/N), HR (Y/N), Reason.
   Y/N parser accepts Y/YES/TRUE/1/X/✓ and N/NO/FALSE/0; blank cell keeps
   current value. Rows where the resulting chain equals the current one are
   Skipped in the preview.

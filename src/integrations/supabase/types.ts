@@ -12662,6 +12662,10 @@ export type Database = {
           source_config_id: string
         }[]
       }
+      annual_review_first_pending_status: {
+        Args: { p_enabled: Json }
+        Returns: Database["public"]["Enums"]["annual_review_status"]
+      }
       annual_review_next_status: {
         Args: {
           p_current: Database["public"]["Enums"]["annual_review_status"]

@@ -6,8 +6,9 @@ import { STAGE_TO_STATUS } from './constants';
  *
  * The canonical chain is `self → manager → skip_manager → bu_head → hr`.
  * Each instance carries an `enabled_stages` array that is a subset of the
- * canonical order. `self` is always required. Disabled stages are skipped
- * entirely (advance jumps past them; send-back jumps back past them).
+ * canonical order. Any stage (including `self`) may be disabled, but the
+ * resulting chain MUST contain at least one stage. Disabled stages are
+ * skipped entirely (advance jumps past them; send-back jumps back past them).
  *
  * UI components MUST go through these helpers — never hardcode the chain.
  */
@@ -34,11 +35,14 @@ function statusToRole(status: AnnualReviewStatus): AnnualReviewerRole | null {
 /** Default chain when an instance hasn't loaded its `enabled_stages` yet. */
 export const DEFAULT_ENABLED: AnnualReviewerRole[] = [...ALL_STAGES];
 
-/** Normalise: dedupe, force 'self' first, drop unknowns, preserve canonical order. */
+/** Normalise: dedupe, drop unknowns, preserve canonical order. At least one stage required. */
 export function enabledChain(enabled: AnnualReviewerRole[] | null | undefined): AnnualReviewerRole[] {
   const set = new Set<AnnualReviewerRole>(enabled?.length ? enabled : DEFAULT_ENABLED);
-  set.add('self'); // never droppable
-  return ALL_STAGES.filter((s) => set.has(s));
+  const chain = ALL_STAGES.filter((s) => set.has(s));
+  if (chain.length === 0) {
+    throw new Error('enabledChain: at least one stage must be enabled');
+  }
+  return chain;
 }
 
 /** Given current pending status, return the next status using the enabled chain. */

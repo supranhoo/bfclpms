@@ -15,10 +15,11 @@ import { describeChain, enabledChain } from '@/lib/annualReview/stageChain';
  *
  * Workbook columns:
  *   Employee Code | Full Name | Current Stages |
- *   Manager (Y/N) | Skip (Y/N) | BU (Y/N) | HR (Y/N) | Reason
+ *   Self (Y/N) | Manager (Y/N) | Skip (Y/N) | BU (Y/N) | HR (Y/N) | Reason
  *
- * Self is always enabled. Rows where the resulting chain == current chain
- * are skipped. Server-side RPC enforces stage gate + admin/hr_pms role.
+ * Any stage (including Self) may be disabled, but at least one must remain.
+ * Rows where the resulting chain == current chain are skipped. Server-side
+ * RPC enforces stage gate + admin/hr_pms role.
  */
 
 const ELIGIBLE_STAGES: AnnualReviewStatus[] = ['not_started', 'pending_self'];
@@ -68,7 +69,7 @@ export function BulkWorkflowAssignmentDialog({
   const reset = () => { setOutcomes(null); setProgress(null); };
 
   const handleExport = () => {
-    const headers = ['Employee Code', 'Full Name', 'Current Stages', 'Manager (Y/N)', 'Skip (Y/N)', 'BU (Y/N)', 'HR (Y/N)', 'Reason'];
+    const headers = ['Employee Code', 'Full Name', 'Current Stages', 'Self (Y/N)', 'Manager (Y/N)', 'Skip (Y/N)', 'BU (Y/N)', 'HR (Y/N)', 'Reason'];
     const data = instances.map((i) => {
       const chain = enabledChain(i.enabled_stages);
       const has = (s: AnnualReviewerRole) => (chain.includes(s) ? 'Y' : 'N');
@@ -76,6 +77,7 @@ export function BulkWorkflowAssignmentDialog({
         'Employee Code': i.employee?.employee_code ?? '',
         'Full Name': i.employee?.full_name ?? '',
         'Current Stages': describeChain(i.enabled_stages),
+        'Self (Y/N)': has('self'),
         'Manager (Y/N)': has('manager'),
         'Skip (Y/N)': has('skip_manager'),
         'BU (Y/N)': has('bu_head'),
@@ -108,20 +110,26 @@ export function BulkWorkflowAssignmentDialog({
 
         const currChain = enabledChain(inst.enabled_stages);
         const cur = (s: AnnualReviewerRole) => currChain.includes(s);
+        const slf = parseFlag(rec['Self (Y/N)'], cur('self'));
         const m = parseFlag(rec['Manager (Y/N)'], cur('manager'));
         const s = parseFlag(rec['Skip (Y/N)'], cur('skip_manager'));
         const b = parseFlag(rec['BU (Y/N)'], cur('bu_head'));
         const h = parseFlag(rec['HR (Y/N)'], cur('hr'));
-        if (m === null || s === null || b === null || h === null) {
+        if (slf === null || m === null || s === null || b === null || h === null) {
           res.push({ kind: 'error', employeeCode: code, reason: 'Invalid Y/N value in one of the stage columns' });
           continue;
         }
 
-        const nextStages: AnnualReviewerRole[] = ['self'];
+        const nextStages: AnnualReviewerRole[] = [];
+        if (slf) nextStages.push('self');
         if (m) nextStages.push('manager');
         if (s) nextStages.push('skip_manager');
         if (b) nextStages.push('bu_head');
         if (h) nextStages.push('hr');
+        if (nextStages.length === 0) {
+          res.push({ kind: 'error', employeeCode: code, reason: 'At least one stage must be enabled' });
+          continue;
+        }
         const next = enabledChain(nextStages);
 
         if (JSON.stringify(next) === JSON.stringify(currChain)) {
@@ -194,7 +202,7 @@ export function BulkWorkflowAssignmentDialog({
           <DialogTitle>Bulk workflow assignment</DialogTitle>
           <DialogDescription>
             Download the workbook, mark <strong>Y</strong> or <strong>N</strong> in each stage column,
-            add a <strong>Reason</strong>, then upload to preview &amp; apply. Self Review is always required.
+            add a <strong>Reason</strong>, then upload to preview &amp; apply. At least one stage must remain enabled.
             Only rows in <em>not started</em> or <em>pending self</em> are eligible.
           </DialogDescription>
         </DialogHeader>
