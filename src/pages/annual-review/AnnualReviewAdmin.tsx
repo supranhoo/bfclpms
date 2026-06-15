@@ -33,6 +33,7 @@ import {
 import { AnnualReviewStatusBadge } from '@/components/annual-review/AnnualReviewStatusBadge';
 import { HrFinalizationSheet } from '@/components/annual-review/HrFinalizationSheet';
 import { SystemScoresUploadDialog } from '@/components/annual-review/SystemScoresUploadDialog';
+import { BulkTemplateAssignmentDialog } from '@/components/annual-review/BulkTemplateAssignmentDialog';
 import { TemplateEditorDialog } from '@/components/annual-review/TemplateEditorDialog';
 import { RuleFiltersEditor, RuleFiltersSummary, EMPTY_FILTERS } from '@/components/annual-review/RuleFiltersEditor';
 import type {
@@ -110,6 +111,8 @@ function ProgressTab() {
   const { data: template } = useTemplate(svc.resolveTemplateId(selected) ?? undefined);
   const { data: uploadTemplate } = useTemplate(svc.resolveTemplateId(instances[0]) ?? undefined);
   const [changeTplFor, setChangeTplFor] = useState<InstanceWithEmployee | null>(null);
+  const [bulkTplOpen, setBulkTplOpen] = useState(false);
+  const { data: allTemplates = [] } = useTemplates();
   const sendBack = useSendBackStatus();
   const qc = useQueryClient();
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -245,6 +248,9 @@ function ProgressTab() {
           <Button variant="outline" className="gap-2" onClick={() => setUploadOpen(true)} disabled={!uploadTemplate}>
             <Upload className="h-4 w-4" /> Bulk system-score upload
           </Button>
+          <Button variant="outline" className="gap-2" onClick={() => setBulkTplOpen(true)} disabled={instances.length === 0}>
+            <Layers className="h-4 w-4" /> Bulk template assignment
+          </Button>
         </div>
       </div>
 
@@ -353,6 +359,15 @@ function ProgressTab() {
         instance={changeTplFor}
         onClose={() => setChangeTplFor(null)}
         onDone={() => { setChangeTplFor(null); refetch(); }}
+      />
+
+      <BulkTemplateAssignmentDialog
+        open={bulkTplOpen}
+        onOpenChange={setBulkTplOpen}
+        cycle={activeCycle}
+        instances={instances}
+        templates={allTemplates}
+        onDone={refetch}
       />
 
       <AlertDialog open={bulkOpen === 'finalize'} onOpenChange={(o) => !o && setBulkOpen(null)}>
