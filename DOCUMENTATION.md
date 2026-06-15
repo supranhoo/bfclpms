@@ -1990,14 +1990,14 @@ Full JSON format for maximum control:
 **UI Component: `OrgKpiOwnerDialog`**
 - Opened via UserPlus button in Actions column of Org KPI Data Entry table
 - Shows current KPI info (KRA name, KPI name)
-- Lists current data owners with remove option
+- Lists current data owners with remove option; owner reads canonicalize the requested KRA/KPI signature against `kpis` before querying `org_kpi_data_owners`, so display strings with collapsed whitespace/newlines cannot hide existing owners.
 - Searchable user list to add new owners (by name, email, or employee code)
 
 **Access Control Hooks: `useOrgKpiDataOwner`**
 - `useIsAnyOrgKpiDataOwner()`: Check if current user owns any org KPIs (for route access)
 - `useOrgKpiOwnershipMap()`: Returns map of all ownership for quick lookup
 - `useIsOrgKpiDataOwner(categoryId, kraName, kpiName)`: Check if current user can edit specific KPI
-- `useAssignOrgKpiOwner()`: Mutation to assign owner (admin only)
+- `useAssignOrgKpiOwner()`: Mutation to assign owner (admin only); inserts are idempotent on the existing unique assignment signature to avoid duplicate-key errors when an owner already exists.
 - `useRemoveOrgKpiOwner()`: Mutation to remove owner (admin only)
 
 **Route Guard: `DataOwnerRoute`**
