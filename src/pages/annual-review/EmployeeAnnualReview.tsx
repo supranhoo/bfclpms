@@ -88,7 +88,7 @@ export default function EmployeeAnnualReview() {
           </div>
           <AnnualReviewStatusBadge status={instance.overall_status} />
         </header>
-        <AnnualReviewStageTracker status={instance.overall_status} />
+        <AnnualReviewStageTracker status={instance.overall_status} enabledStages={instance.enabled_stages} />
         <EmployeeResultsView instance={instance} template={template} responses={responses} />
       </div>
     );
@@ -138,7 +138,7 @@ export default function EmployeeAnnualReview() {
         </div>
       </header>
 
-      <AnnualReviewStageTracker status={instance.overall_status} />
+      <AnnualReviewStageTracker status={instance.overall_status} enabledStages={instance.enabled_stages} />
 
       <SystemScoresPanel
         systemScores={template?.sections.system_scores ?? []}
