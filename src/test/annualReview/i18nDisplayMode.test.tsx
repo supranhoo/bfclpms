@@ -31,8 +31,8 @@ describe('AnnualReviewI18nContext display modes', () => {
     const ctx = pull(undefined, 'hi', trWith);
     expect(ctx.displayMode).toBe('bilingual');
     expect(ctx.tTemplateBilingual('option', 'o5', 'label', 'Always on time')).toBe('Always on time / हमेशा समय पर');
-    // names stay English in bilingual mode
-    expect(ctx.tTemplate('criterion', 'a', 'name', 'Attendance')).toBe('Attendance');
+    // names translate single-language in bilingual mode (preserves prior UX)
+    expect(ctx.tTemplate('criterion', 'a', 'name', 'Attendance')).toBe('उपस्थिति');
   });
 
   it('english_only returns English even when translation exists', () => {
