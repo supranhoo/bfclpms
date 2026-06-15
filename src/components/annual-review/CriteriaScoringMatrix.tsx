@@ -57,12 +57,13 @@ function CriterionRow({
   onRemoveEvidence,
 }: CriteriaScoringMatrixProps & { criterion: TemplateCriterion }) {
   const [uploading, setUploading] = useState(false);
-  const { t, tTemplate } = useAnnualReviewI18n();
+  const { t, tTemplate, tTemplateBilingual } = useAnnualReviewI18n();
   const score = values[criterion.id];
   const w = Number(criterion.weight) || 0;
   const total = typeof score === 'number' ? w * score : null;
   const enableRemarks = criterion.enable_remarks !== false;
   const enableEvidence = !!criterion.enable_evidence;
+  const hasOptions = Array.isArray(criterion.options) && criterion.options.length > 0;
 
   return (
     <Card>
@@ -94,8 +95,57 @@ function CriterionRow({
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          {[0, 1, 2, 3, 4, 5].map((n) => {
+        <div className="space-y-3">
+          <div className="text-sm font-semibold text-foreground">
+            {t('criteria.your_score', 'Your Score')}
+          </div>
+          {hasOptions ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {criterion.options!.map((opt) => {
+                const active = score === opt.score;
+                const c = SCORE_COLOR[opt.score] ?? SCORE_COLOR[0];
+                const label = tTemplateBilingual('option', opt.id, 'label', opt.label);
+                return (
+                  <button
+                    type="button"
+                    key={opt.id}
+                    disabled={readOnly}
+                    onClick={() => onChangeScore?.(criterion.id, opt.score)}
+                    aria-pressed={active}
+                    aria-label={`${opt.label} — Score ${opt.score}`}
+                    className={[
+                      'group text-left rounded-lg border p-3 min-h-[88px] transition-all',
+                      'flex items-start gap-3',
+                      active
+                        ? `border-amber-500 bg-amber-500/5 ring-2 ring-amber-500/40 ${c.text}`
+                        : 'border-border bg-card hover:bg-muted/40 hover:border-muted-foreground/40',
+                      readOnly ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer',
+                    ].join(' ')}
+                  >
+                    <span
+                      className={[
+                        'mt-0.5 inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2 transition-colors',
+                        active ? 'border-amber-500' : 'border-muted-foreground/40 group-hover:border-muted-foreground',
+                      ].join(' ')}
+                      aria-hidden="true"
+                    >
+                      {active && <span className="h-2 w-2 rounded-full bg-amber-500" />}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className={['block text-sm leading-snug', active ? 'font-semibold' : 'font-medium text-foreground'].join(' ')}>
+                        {label}
+                      </span>
+                      <span className="mt-1 block text-xs text-muted-foreground">
+                        {t('col.score', 'Score')}: {opt.score}
+                      </span>
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="flex flex-wrap items-center gap-2">
+              {[0, 1, 2, 3, 4, 5].map((n) => {
             const c = SCORE_COLOR[n];
             const active = score === n;
             return (
@@ -127,9 +177,11 @@ function CriterionRow({
                 </TooltipContent>
               </Tooltip>
             );
-          })}
+              })}
+            </div>
+          )}
           {typeof score === 'number' && reviewerLabel && reviewerLabel !== 'Self' && (
-            <div className="ml-auto rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-1.5 text-xs text-amber-400 max-w-md">
+            <div className="rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-1.5 text-xs text-amber-400 max-w-md">
               <span className="font-semibold">Coaching note:</span> {COACHING_NOTES[score]}
             </div>
           )}

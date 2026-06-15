@@ -124,3 +124,4 @@ Lean-Load: debounce search inputs (>200 rows / network); paginate new lists with
 - [Org Heads (BU & HR head mapping)](mem://features/admin/org-heads) — Admin-managed BU/HR head; auto-resolve from top of hierarchy with manual override; powers Annual Review BU/HR Finalization seeding
 - [Development Report](mem://features/reports/development-report) — Genuine-entry rule, Feb 2026 floor, no Cover tab, filter-driven Reporting Period, reseed tooling
 - [Annual Review Carry KRA Score](mem://features/annual-review/carry-kra-score) — System Score source=carry_kra; month-wise PMS final scores; average-of-monthly aggregation
+- [Annual Review Bilingual Options](mem://design/annual-review-bilingual-options) — Criterion option-card grid with bilingual "EN / translated" labels; persisted score stays numeric option.score (0–5)
