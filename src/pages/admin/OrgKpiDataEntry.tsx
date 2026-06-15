@@ -742,7 +742,11 @@ export default function OrgKpiDataEntry() {
     const auditEntries: Array<any> = [];
 
     if (scope === 'organization') {
-      const key = `${kpi.category_id}||${kpi.kra_name.toLowerCase()}||${kpi.kpi_name.toLowerCase()}||null||null`;
+      // ADR-054 — always look up existing OKV via the canonical kpiKey
+      // helper. Raw .toLowerCase() drifts on \r and whitespace and the
+      // existingValuesMap is keyed via kpiKey(), so a mismatch silently
+      // returned oldVal=null and broke the null-overwrite/audit guard.
+      const key = `${kpiKey(kpi.category_id, kpi.kra_name, kpi.kpi_name)}||null||null`;
       const oldVal = existingValuesMap.get(key)?.achieved_value ?? null;
       toSave.push({
         category_id: kpi.category_id,
@@ -777,9 +781,11 @@ export default function OrgKpiDataEntry() {
       const touchedOnly = values.scopedValues.filter(sv => (sv as any)._touched ?? true);
       touchedOnly.forEach(sv => {
         const isDept = scope === 'department';
+        // ADR-054 — canonical key. See note above for org-scope branch.
+        const baseKey = kpiKey(kpi.category_id, kpi.kra_name, kpi.kpi_name);
         const scopeKey = isDept
-          ? `${kpi.category_id}||${kpi.kra_name.toLowerCase()}||${kpi.kpi_name.toLowerCase()}||${sv.scopeId}||null`
-          : `${kpi.category_id}||${kpi.kra_name.toLowerCase()}||${kpi.kpi_name.toLowerCase()}||null||${sv.scopeId}`;
+          ? `${baseKey}||${sv.scopeId}||null`
+          : `${baseKey}||null||${sv.scopeId}`;
         const oldVal = existingValuesMap.get(scopeKey)?.achieved_value ?? null;
 
         // Guard: skip if this would destructively overwrite a non-null DB value with null
@@ -855,8 +861,22 @@ export default function OrgKpiDataEntry() {
       });
     }
 
+    // RCA 2026-06-15 — Surface "0 of N saved" instead of falsely marking
+    // the card as saved (which then let users hit Propagate against a
+    // value that never reached the DB → "Partial propagation: 0/1
+    // employees updated"). The bulk RPC returns one row per persisted
+    // record; if fewer rows came back than we attempted, throw so the
+    // caller's Save → Propagate chain aborts before invoking the RPC.
     if (safeToSave.length > 0) {
-      await bulkUpsert.mutateAsync(safeToSave);
+      const saved = await bulkUpsert.mutateAsync(safeToSave);
+      const savedCount = Array.isArray(saved) ? saved.length : 0;
+      if (savedCount < safeToSave.length) {
+        const err = new Error(
+          `Save persisted ${savedCount} of ${safeToSave.length} row(s). Refresh and retry before propagating.`,
+        );
+        (err as any).code = 'ORG_KPI_PARTIAL_SAVE';
+        throw err;
+      }
     }
     if (auditEntries.length > 0) {
       try { await insertAuditLogs.mutateAsync(auditEntries); } catch { /* non-blocking */ }
