@@ -195,6 +195,9 @@ function CarryKraScoreCard({
                 <TableRow>
                   <TableHead className="h-8">{t('col.month', 'Month')}</TableHead>
                   <TableHead className="h-8 text-right">{t('col.kpis', 'KPIs')}</TableHead>
+                  <TableHead className="h-8 text-right">{t('col.total_score', 'Total Score')}</TableHead>
+                  <TableHead className="h-8 text-right">{t('col.out_of', 'Out Of')}</TableHead>
+                  <TableHead className="h-8 text-right">{t('col.percent', '%')}</TableHead>
                   <TableHead className="h-8 text-right">{t('col.rating_5', `Rating (/${KPI_SCALE_MAX})`)}</TableHead>
                   <TableHead className="h-8 w-20">{t('col.used', 'Used')}</TableHead>
                 </TableRow>
@@ -204,6 +207,15 @@ function CarryKraScoreCard({
                   <TableRow key={m.month} className={!selectedSet.has(m.month) ? 'opacity-50' : ''}>
                     <TableCell className="py-1.5">{m.month}</TableCell>
                     <TableCell className="py-1.5 text-right tabular-nums">{m.kpiCount}</TableCell>
+                    <TableCell className="py-1.5 text-right tabular-nums">
+                      {m.totalScore == null ? <span className="text-muted-foreground">—</span> : m.totalScore.toFixed(2)}
+                    </TableCell>
+                    <TableCell className="py-1.5 text-right tabular-nums">
+                      {m.outOf == null ? <span className="text-muted-foreground">—</span> : m.outOf.toFixed(2)}
+                    </TableCell>
+                    <TableCell className="py-1.5 text-right tabular-nums">
+                      {m.percentage == null ? <span className="text-muted-foreground">—</span> : `${m.percentage.toFixed(2)}%`}
+                    </TableCell>
                     <TableCell className="py-1.5 text-right tabular-nums">
                       {m.avg == null ? <span className="text-muted-foreground">—</span> : m.avg.toFixed(2)}
                     </TableCell>

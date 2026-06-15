@@ -16,6 +16,7 @@ vi.mock('@/services/annualReview/carryKraScore', async () => {
       config: { aggregation: 'overall_avg', excludeNa: true },
       computed_at: new Date().toISOString(),
       monthly: actual.FY_MONTHS.map((m: string) => ({ month: m, avg: 3.44, kpiCount: 5 })),
+      // Mock supplies the new derived fields too so the table can render them.
     })),
   };
 });

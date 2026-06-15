@@ -80,6 +80,12 @@ export interface CarryKraMonthly {
   month: string;          // 'July'..'June'
   avg: number | null;     // 0..KPI_SCALE_MAX, weight-aware avg of KPI ratings (null = no data)
   kpiCount: number;
+  /** Weighted sum of (kpi_score × kpi_weight) on the 0..KPI_SCALE_MAX scale. Null = no data. */
+  totalScore?: number | null;
+  /** Sum of kpi_weight × KPI_SCALE_MAX — the denominator for a "perfect" month. Null = no data. */
+  outOf?: number | null;
+  /** totalScore / outOf × 100 (0..100). Null = no data. */
+  percentage?: number | null;
 }
 
 export interface CarryKraSnapshot {
