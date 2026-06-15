@@ -22,11 +22,13 @@ export function HrFinalizationSheet({
   onOpenChange,
   instance,
   template,
+  fiscalYear,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   instance: InstanceWithEmployee | AnnualReviewInstance | null;
   template: AnnualReviewTemplate | null;
+  fiscalYear?: number | null;
 }) {
   const finalize = useFinalizeInstance();
   const { data: responses = [] } = useInstanceResponses(instance?.id);
@@ -108,6 +110,8 @@ export function HrFinalizationSheet({
             onChangeValue={(id, v) => setSystemOverrides((p) => ({ ...p, [id]: v }))}
             eligibility={template?.sections.eligibility_criteria}
             eligibilityInputs={instance?.eligibility_inputs}
+            employeeId={instance?.employee_id}
+            fiscalYear={fiscalYear ?? undefined}
           />
 
           {instance && (template?.sections.eligibility_criteria?.length ?? 0) > 0 && (
