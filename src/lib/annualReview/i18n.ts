@@ -75,6 +75,7 @@ export const UI_I18N: Record<SupportedLang, Record<string, string>> = {
     'col.weight':         'Peso',
     'col.score':          'Puntuación',
     'col.total':          'Total',
+    'criteria.your_score': 'Tu puntuación',
     'status.completed':   'Completado',
     'status.not_started':     'No iniciado',
     'status.pending_self':    'Autoevaluación pendiente',
