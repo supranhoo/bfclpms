@@ -1,58 +1,45 @@
-## Goal
+## Problem
 
-Give Admins a per-template setting that controls how template text (criterion name, description, option labels, field labels) is shown to reviewers when a non-English language is active.
+In `EmployeeAnnualReview`, the **Qualitative Responses** section (image attached) renders English labels and `"Write here..."` placeholders even when the user switches language to Hindi. The section title itself translates correctly because it uses the static UI key `section.qualitative`, but each individual field's label and placeholder do not.
 
-Three modes:
-- **Bilingual** — `English / Translated` side-by-side (current behavior)
-- **English only** — always show the authored English text, ignore translations
-- **Translated only** — show only the translation in the active language; fall back to English when a translation is missing
+## Root Cause
 
-## Risk & Impact
+`src/pages/annual-review/EmployeeAnnualReview.tsx` (lines 192, 195) renders qualitative fields like this:
 
-- Data: one new optional field `display_mode` on the template `sections` JSON. No schema migration needed (templates already store a free-form `sections` JSONB). Default `bilingual` preserves today's UI.
-- Workflow: read-only setting — does not affect scoring, persistence, or stage logic.
-- UI/UX: affects only how labels render in `CriteriaScoringMatrix`, plus a new selector in `TemplateEditorDialog` and the preview chip in `CriterionOptionsDialog`.
-- Regression: low — current behavior maps to the new default `bilingual`.
-- Mitigation: unit tests for all three modes × (translation present / missing) and a snapshot of the existing bilingual behavior.
+```tsx
+<Label>{t(`field.${f.id}`, f.label)}…</Label>
+<Textarea placeholder={f.placeholder} … />
+```
 
-## Implementation Steps
+Two bugs:
+1. Uses the static `t()` translator with a **dot-separated** key (`field.<id>`), but the Template Editor saves translations under **colon-separated** template keys (`field:<id>:label`, `field:<id>:placeholder`). So even when admin enters Hindi text for the field in the editor, the renderer never finds it.
+2. `placeholder` is passed through raw — never translated at all.
 
-1. **Type** — `src/types/annualReview.ts`
-   - Add `export type TemplateDisplayMode = 'bilingual' | 'english_only' | 'translated_only';`
-   - Add optional `display_mode?: TemplateDisplayMode` on `TemplateSections`. Default treated as `bilingual` when missing.
+The admin-side editor already collects both `field:<id>:label` and `field:<id>:placeholder` correctly (`TemplateEditorDialog.tsx` lines 477-481). The data is there; the renderer just isn't reading it.
 
-2. **i18n context** — `src/components/annual-review/AnnualReviewI18nContext.tsx`
-   - Accept `displayMode` prop (default `'bilingual'`).
-   - `tTemplate(kind, id, field, fallback)` resolution:
-     - `current === default` → fallback.
-     - mode `english_only` → fallback.
-     - mode `translated_only` → translation if present, else fallback.
-     - mode `bilingual` → fallback (single-line names/descriptions stay single-language, as today).
-   - `tTemplateBilingual(...)`:
-     - `english_only` → fallback.
-     - `translated_only` → translation if present, else fallback.
-     - `bilingual` (current behavior) → `"<English> / <translated>"` when translation exists, else fallback.
+## Plan
 
-3. **Provider wiring** — wherever `<AnnualReviewI18nProvider>` is mounted for the reviewer surfaces (`AnnualReviewEmployeeForm`, `AnnualReviewReviewerForm`, preview inside `TemplateEditorDialog`, `CriterionOptionsDialog`), pass `displayMode={template.sections.display_mode ?? 'bilingual'}`.
+### 1. Fix renderer — `src/pages/annual-review/EmployeeAnnualReview.tsx`
+- Pull `tTemplate` from `useAnnualReviewI18n()` (already imported in the file).
+- Replace `t(\`field.${f.id}\`, f.label)` with `tTemplate('field', f.id, 'label', f.label)`.
+- Translate placeholder: `placeholder={tTemplate('field', f.id, 'placeholder', f.placeholder ?? '')}`.
 
-4. **Admin editor** — `TemplateEditorDialog`
-   - Add a `Select` field "Reviewer display mode" with the three options and helper copy. Persist into `sections.display_mode`.
-   - Show the same chip ("EN / HI", "EN only", "HI only") in the editor's existing language preview row so the admin sees what reviewers will see.
+This automatically respects the per-template **display mode** (bilingual / english_only / translated_only) because `tTemplate` already encapsulates that logic.
 
-5. **Manage Custom Options dialog** — sync the existing `EN + HI` toggle chip to read the template's `display_mode`, so authoring preview matches the reviewer rendering.
+### 2. Tests — extend `src/test/annualReview/i18nDisplayMode.test.tsx`
+Add one assertion per mode that `tTemplate('field', 'f1', 'label', 'EN label')` resolves correctly given a `field:f1:label` translation entry. This locks in the colon-key contract for `field`.
 
-6. **Docs + policy**
-   - `src/modules/annual-review/DOCUMENTATION.md` — append entry describing the new per-template setting, default behavior, and rendering matrix.
-   - `src/modules/annual-review/POLICY.md` — add: "Template display mode controls reviewer-facing label rendering only; persisted scores and option IDs are unaffected."
-   - `mem/design/annual-review-bilingual-options.md` — update to record the new modes and that `bilingual` is the default.
-
-## Tests
-
-- `src/test/annualReview/i18nDisplayMode.test.ts` — table-driven test for `tTemplate` and `tTemplateBilingual` across all three modes × translation-present/missing × current==default.
-- Extend `src/test/annualReview/criteriaScoringMatrixOptions.test.tsx` with three render cases (one per mode) asserting expected option label text.
+### 3. Docs
+- `src/modules/annual-review/DOCUMENTATION.md` — note that `Self Review Fields` labels & placeholders translate via `tTemplate('field', …)` using `field:<id>:label` / `field:<id>:placeholder` keys.
+- `mem/design/annual-review-bilingual-options.md` — append a line: "Qualitative field labels/placeholders also use the canonical colon-key shape and respect `display_mode`."
 
 ## Out of Scope
+- No schema/migration change (translations already persisted).
+- No edits to `TeamAnnualReview` (qualitative remarks there live inside the scoring matrix, not as standalone fields).
+- No new admin UI — the existing per-language inputs in the Template Editor already cover label + placeholder.
 
-- No DB migration. (Setting lives in the existing `sections` JSONB on `annual_review_templates`.)
-- No per-user / global-system mode. Per-template only, as confirmed.
-- No change to scoring, persistence, or workflow.
+## Risk
+- **Data:** none — read-only resolver change.
+- **Workflow:** none — scoring/persistence unchanged.
+- **UI:** Hindi/Spanish reviewers will now see translated label + placeholder for qualitative fields. English reviewers and templates without translations see the existing English text (fallback).
+- **Regression:** very low — change is one component, two lines.
