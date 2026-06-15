@@ -9,6 +9,7 @@ import { AlertCircle, ChevronDown, Calendar, Loader2 } from 'lucide-react';
 import type { TemplateSystemScore, EligibilityCriterion, CarryKraConfig } from '@/types/annualReview';
 import { evaluateEligibility } from '@/lib/annualReview/eligibility';
 import { buildCarrySnapshot, selectMonths, FY_MONTHS } from '@/services/annualReview/carryKraScore';
+import { useAnnualReviewI18n } from '@/components/annual-review/AnnualReviewI18nContext';
 
 export function SystemScoresPanel({
   systemScores,
@@ -32,15 +33,16 @@ export function SystemScoresPanel({
   fiscalYear?: number;
 }) {
   const result = eligibility?.length ? evaluateEligibility(eligibility, eligibilityInputs ?? {}) : null;
+  const { t, tTemplate } = useAnnualReviewI18n();
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>System Scores</CardTitle>
+        <CardTitle>{t('section.system_scores', 'System Scores')}</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
         {systemScores.length === 0 && (
-          <p className="text-sm text-muted-foreground">No system scores configured for this template.</p>
+          <p className="text-sm text-muted-foreground">{t('system_scores.empty', 'No system scores configured for this template.')}</p>
         )}
         <div className="grid gap-4 md:grid-cols-2">
           {systemScores.map((s) => {
@@ -62,7 +64,7 @@ export function SystemScoresPanel({
               <div key={s.id} className="space-y-2 rounded-lg border bg-card p-3">
                 <div className="flex items-center justify-between gap-2">
                   <div>
-                    <p className="text-sm font-medium">{s.name}</p>
+                    <p className="text-sm font-medium">{tTemplate('system_score', s.id, 'name', s.name)}</p>
                     <p className="text-xs text-muted-foreground">Max weight: {s.weight}</p>
                   </div>
                   {readOnly ? (
@@ -88,12 +90,12 @@ export function SystemScoresPanel({
         {result && !result.passed && (
           <Alert variant="destructive">
             <AlertCircle className="h-4 w-4" />
-            <AlertTitle>Eligibility criteria not met</AlertTitle>
+            <AlertTitle>{t('eligibility.title', 'Eligibility criteria not met')}</AlertTitle>
             <AlertDescription>
               <ul className="list-disc pl-5 mt-1 space-y-0.5">
                 {result.failures.map((f) => (
                   <li key={f.criterion.id}>
-                    {f.criterion.name} — expected {f.criterion.operator.replace('_', ' ')} {String(f.criterion.expected_value)}; actual {String(f.actual ?? '—')}
+                    {tTemplate('eligibility', f.criterion.id, 'name', f.criterion.name)} — expected {f.criterion.operator.replace('_', ' ')} {String(f.criterion.expected_value)}; actual {String(f.actual ?? '—')}
                   </li>
                 ))}
               </ul>

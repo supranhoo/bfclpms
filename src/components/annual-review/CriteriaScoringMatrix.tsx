@@ -6,6 +6,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { Loader2, Upload, X } from 'lucide-react';
 import { SCORE_COLOR, SCORE_LABEL } from '@/lib/annualReview/constants';
 import type { TemplateCriterion, EvidenceItem } from '@/types/annualReview';
+import { useAnnualReviewI18n } from '@/components/annual-review/AnnualReviewI18nContext';
 
 const COACHING_NOTES: Record<number, string> = {
   5: 'Reserve "Outstanding" for documented, repeated excellence — avoid leniency bias.',
@@ -56,6 +57,7 @@ function CriterionRow({
   onRemoveEvidence,
 }: CriteriaScoringMatrixProps & { criterion: TemplateCriterion }) {
   const [uploading, setUploading] = useState(false);
+  const { t, tTemplate } = useAnnualReviewI18n();
   const score = values[criterion.id];
   const w = Number(criterion.weight) || 0;
   const total = typeof score === 'number' ? w * score : null;
@@ -67,22 +69,26 @@ function CriterionRow({
       <CardContent className="p-4 md:p-6 space-y-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
-            <h4 className="font-semibold text-base">{criterion.name}</h4>
-            {criterion.description && <p className="text-sm text-muted-foreground mt-0.5">{criterion.description}</p>}
+            <h4 className="font-semibold text-base">{tTemplate('criterion', criterion.id, 'name', criterion.name)}</h4>
+            {criterion.description && (
+              <p className="text-sm text-muted-foreground mt-0.5">
+                {tTemplate('criterion', criterion.id, 'description', criterion.description)}
+              </p>
+            )}
           </div>
           <div className="flex items-center gap-2 text-sm font-mono">
             <div className="rounded-md border border-emerald-500/30 bg-emerald-500/5 px-3 py-1.5">
-              <div className="text-[10px] uppercase text-muted-foreground">Weight</div>
+              <div className="text-[10px] uppercase text-muted-foreground">{t('col.weight', 'Weight')}</div>
               <div className="font-semibold text-emerald-400">{w}</div>
             </div>
             <span className="text-muted-foreground">×</span>
             <div className="rounded-md border border-blue-500/30 bg-blue-500/5 px-3 py-1.5">
-              <div className="text-[10px] uppercase text-muted-foreground">Score</div>
+              <div className="text-[10px] uppercase text-muted-foreground">{t('col.score', 'Score')}</div>
               <div className="font-semibold text-blue-400">{typeof score === 'number' ? score : '–'}</div>
             </div>
             <span className="text-muted-foreground">=</span>
             <div className="rounded-md border border-indigo-500/30 bg-indigo-500/5 px-3 py-1.5">
-              <div className="text-[10px] uppercase text-muted-foreground">Total</div>
+              <div className="text-[10px] uppercase text-muted-foreground">{t('col.total', 'Total')}</div>
               <div className="font-semibold text-indigo-400">{total !== null ? total.toFixed(2) : '–'}</div>
             </div>
           </div>
@@ -146,7 +152,7 @@ function CriterionRow({
           <div className="grid gap-3 md:grid-cols-2 border-t border-border/50 pt-4">
             {enableRemarks && (
               <Textarea
-                placeholder="Remarks / justification"
+                placeholder={t('col.remarks_placeholder', 'Remarks / justification')}
                 value={remarks[criterion.id] ?? ''}
                 onChange={(e) => onChangeRemark?.(criterion.id, e.target.value)}
                 disabled={readOnly}
@@ -158,7 +164,7 @@ function CriterionRow({
                 {!readOnly && (
                   <label className="inline-flex items-center gap-2 h-10 px-3 rounded-md border bg-background hover:bg-muted/50 cursor-pointer text-sm">
                     {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-                    <span>Upload evidence</span>
+                    <span>{t('evidence.upload', 'Upload evidence')}</span>
                     <input
                       type="file"
                       multiple
