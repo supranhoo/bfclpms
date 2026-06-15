@@ -16,6 +16,13 @@ interface I18nCtx {
    * translation is provided for the current language.
    */
   tTemplate: (kind: string, id: string, field: string, fallback: string) => string;
+  /**
+   * Bilingual variant — returns `"<fallback> / <translated>"` when the
+   * current language differs from the default and a translation exists.
+   * Used for option labels where both English + the local rendering are
+   * shown side-by-side per BFCL annual-review UX policy.
+   */
+  tTemplateBilingual: (kind: string, id: string, field: string, fallback: string) => string;
 }
 
 /** Default no-op translator: always returns the english fallback. */
@@ -24,6 +31,7 @@ const defaultCtx: I18nCtx = {
   currentLanguage: 'en',
   defaultLanguage: 'en',
   tTemplate: (_k, _i, _f, fb) => fb,
+  tTemplateBilingual: (_k, _i, _f, fb) => fb,
 };
 
 const AnnualReviewI18nContext = createContext<I18nCtx>(defaultCtx);
@@ -54,6 +62,13 @@ export function AnnualReviewI18nProvider({
       if (cur === def) return fb;
       const key = `${kind}.${id}.${field}`;
       return templateTranslations?.[cur]?.[key] ?? fb;
+    },
+    tTemplateBilingual: (kind, id, field, fb) => {
+      if (cur === def) return fb;
+      const key = `${kind}.${id}.${field}`;
+      const translated = templateTranslations?.[cur]?.[key];
+      if (!translated || translated === fb) return fb;
+      return `${fb} / ${translated}`;
     },
   }), [t, cur, def, templateTranslations]);
 
