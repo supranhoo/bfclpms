@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useAnnualReviewI18n } from '@/components/annual-review/AnnualReviewI18nContext';
 import type {
-  AnnualReviewTemplate, AnnualReviewResponse, EvidenceItem, TemplateCriterion,
+  AnnualReviewTemplate, EvidenceItem, TemplateCriterion,
 } from '@/types/annualReview';
 import type { CriteriaScoreSummary } from '@/lib/annualReview/scoring';
 
@@ -29,7 +29,11 @@ interface Props {
   onConfirm: () => void;
   submitting?: boolean;
   template: AnnualReviewTemplate | undefined | null;
-  draft: Pick<AnnualReviewResponse, 'criteria_scores' | 'qualitative_responses' | 'evidence'>;
+  draft: {
+    criteria_scores?: Record<string, number | undefined>;
+    qualitative_responses?: Record<string, string>;
+    evidence?: EvidenceItem[];
+  };
   summary: CriteriaScoreSummary;
   evidenceByCriterion: Record<string, EvidenceItem[]>;
 }
