@@ -137,6 +137,12 @@ export interface AnnualReviewInstance {
   cycle_id: string;
   assigned_rule_id: string | null;
   overall_status: AnnualReviewStatus;
+  /**
+   * Per-instance enabled stages — subset of the canonical 5-stage chain.
+   * Must contain 'self'. Disabled stages are skipped by advance/send-back RPCs.
+   * Defaults to all 5 stages on net-new instances.
+   */
+  enabled_stages: AnnualReviewerRole[];
   manager_id: string | null;
   skip_id: string | null;
   bu_head_id: string | null;
