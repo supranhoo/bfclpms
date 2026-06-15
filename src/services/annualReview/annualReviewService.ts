@@ -22,6 +22,37 @@ const BUCKET = 'review-evidence';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const db: any = supabase;
 
+/**
+ * SSOT for "which template applies to this instance".
+ * `template_override_id` (per-employee override) wins over `template_id`
+ * (rule-seeded value). Every UI / service path MUST resolve through this
+ * helper — never read `instance.template_id` directly for rendering.
+ */
+export function resolveTemplateId(
+  instance: Pick<AnnualReviewInstance, 'template_id' | 'template_override_id'> | null | undefined,
+): string | null {
+  if (!instance) return null;
+  return instance.template_override_id ?? instance.template_id ?? null;
+}
+
+/**
+ * Set or clear a per-instance template override (admin / hr_pms only).
+ * Pass `templateId = null` to clear. Reason is mandatory (>=3 chars) and is
+ * captured in `system_audit_logs` under `annual_review.template_override_set`.
+ */
+export async function setTemplateOverride(args: {
+  instanceId: string;
+  templateId: string | null;
+  reason: string;
+}) {
+  const { error } = await db.rpc('set_annual_review_template_override', {
+    p_instance_id: args.instanceId,
+    p_template_id: args.templateId,
+    p_reason: args.reason,
+  });
+  if (error) throw error;
+}
+
 // ---------- Cycles ----------
 export async function listCycles(): Promise<AnnualReviewCycle[]> {
   const { data, error } = await db.from('annual_review_cycles').select('*').order('review_year', { ascending: false });
