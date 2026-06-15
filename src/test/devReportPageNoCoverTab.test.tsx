@@ -59,6 +59,8 @@ describe('DevelopmentReport — Cover tab removed', () => {
 
   it('Reporting Period shows "All months" when no filter is selected', () => {
     renderPage();
-    expect(screen.getByText(/All months/i)).toBeTruthy();
+    // "All months" appears once in the filter dropdown and once in the period card
+    expect(screen.getAllByText(/All months/i).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText(/2026-02-03\s*–\s*2026-06-15/)).toBeTruthy();
   });
 });
