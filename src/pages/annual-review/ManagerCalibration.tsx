@@ -39,7 +39,7 @@ export default function ManagerCalibration() {
     [instances, user?.id],
   );
 
-  const templateId = mine[0]?.template_id;
+  const templateId = (mine[0] as { template_override_id?: string | null } | undefined)?.template_override_id ?? mine[0]?.template_id;
   const { data: template } = useTemplate(templateId);
 
   const [rows, setRows] = useState<Row[]>([]);
