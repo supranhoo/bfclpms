@@ -493,7 +493,7 @@ async function writeSeedRowsPreservingOverrides(
  *   - bu_ids           → departments.business_unit_id (joined via department)
  *   - empty filter set → matches all employees
  */
-export async function seedInstancesByRules(args: { cycleId: string; hrUserId: string | null }) {
+export async function seedInstancesByRules(args: { cycleId: string; hrUserId: string | null; companyId?: string | null }) {
   const { data: rules, error: rulesErr } = await db
     .from('annual_review_assignment_rules')
     .select('id, template_id, priority, filters, is_active')
@@ -526,6 +526,20 @@ export async function seedInstancesByRules(args: { cycleId: string; hrUserId: st
     for (const d of depts ?? []) deptToBu[d.id] = d.business_unit_id;
   }
 
+  // BU head + HR head — same admin-managed source as seedInstancesForCycle.
+  const { data: bus, error: buErr } = await db.from('business_units').select('id, head_user_id');
+  if (buErr) throw buErr;
+  const buHead: Record<string, string | null> = {};
+  for (const b of bus ?? []) buHead[b.id] = (b as any).head_user_id ?? null;
+
+  let hrHead: string | null = args.hrUserId ?? null;
+  {
+    let q = db.from('org_head_config').select('hr_head_user_id, company_id');
+    if (args.companyId) q = q.eq('company_id', args.companyId);
+    const { data: cfg } = await q.limit(1);
+    if (cfg && cfg[0] && (cfg[0] as any).hr_head_user_id) hrHead = (cfg[0] as any).hr_head_user_id;
+  }
+
   const mgrMap = new Map<string, string | null>();
   for (const p of people ?? []) mgrMap.set(p.id, p.reporting_manager_id);
 
@@ -547,7 +561,9 @@ export async function seedInstancesByRules(args: { cycleId: string; hrUserId: st
     if (!rule) { skipped++; continue; }
     const mgr = mgrMap.get(p.id) ?? null;
     const skip = mgr ? mgrMap.get(mgr) ?? null : null;
-    const bu = skip ? mgrMap.get(skip) ?? null : null;
+    const buId = deptToBu[p.department_id];
+    const buFromCfg = buId ? buHead[buId] ?? null : null;
+    const buFallback = skip ? mgrMap.get(skip) ?? null : null;
     rows.push({
       employee_id: p.id,
       template_id: rule.template_id,
@@ -555,8 +571,8 @@ export async function seedInstancesByRules(args: { cycleId: string; hrUserId: st
       assigned_rule_id: rule.id,
       manager_id: mgr,
       skip_id: skip,
-      bu_head_id: bu,
-      hr_id: args.hrUserId,
+      bu_head_id: buFromCfg ?? buFallback,
+      hr_id: hrHead,
     });
   }
 
