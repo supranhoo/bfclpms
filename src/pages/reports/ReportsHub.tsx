@@ -204,6 +204,14 @@ const reports: ReportCard[] = [
     color: 'text-cyan-600',
     reportKey: 'kpi-employee-matrix',
   },
+  {
+    title: 'Development Report',
+    description: 'Project development evidence — features built, bugs fixed, and full timeline. Exportable as the 4-sheet PMS Digitalisation Self Evidence workbook.',
+    icon: ClipboardList,
+    path: '/reports/dev-report',
+    color: 'text-slate-600',
+    reportKey: 'dev-report',
+  },
 ];
 
 const ICON_MAP: Record<string, React.ElementType> = {
