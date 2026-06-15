@@ -10,7 +10,7 @@ vi.mock('@/services/annualReview/annualReviewService', () => ({
 
 vi.mock('@/services/annualReview/carryKraScore', async () => {
   const actual = await vi.importActual<any>('@/services/annualReview/carryKraScore');
-  return { ...actual, buildCarrySnapshot: vi.fn(async () => ({ value: 0, fiscal_year: 2025, config: { aggregation: 'overall_avg', excludeNa: true }, computed_at: '', monthly: [] })) };
+  return { ...actual, buildCarrySnapshot: vi.fn(async () => ({ value: 0, rating: 0, maxValue: 100, fiscal_year: 2025, config: { aggregation: 'overall_avg', excludeNa: true }, computed_at: '', monthly: [] })) };
 });
 
 function wrap(ui: React.ReactElement) {
