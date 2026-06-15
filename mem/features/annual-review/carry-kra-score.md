@@ -10,3 +10,4 @@ Annual Review templates support a System Score `source = 'carry_kra'`. When pres
 - `SystemScoresPanel` renders a collapsible Monthly KRA Breakdown for carry_kra cards; numeric value is locked (computed). Requires `employeeId` + `fiscalYear` props.
 - DB: `annual_review_instances.carry_score_snapshots jsonb` reserved for caching the snapshot per system_score id (additive; currently live-fetched via react-query with 60s stale).
 - Template editor exposes the source dropdown + `CarryKraConfigEditor` inline.
+- Template editor also mounts `CarryKraMappingPreview` (collapsible) so admins can pick any active employee + fiscal year and see the exact month-wise KRA mapping the appraisal will pull. Read-only; reuses `buildCarrySnapshot` as the SSOT (no duplicate aggregation).
