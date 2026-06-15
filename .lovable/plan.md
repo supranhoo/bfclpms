@@ -1,44 +1,146 @@
-## Assumptions
-- The screenshot is from Annual Review Admin → Progress for the active cycle.
-- The expected count is the full active, non-dummy employee roster.
-- The current active cycle already has the correct rows in the backend.
+# Per-Employee Configurable Annual Review Workflow
 
-## Clarifications
-Not Applicable.
+Today every annual-review instance walks the fixed chain
+`self → manager → skip → bu → hr`. We will allow Admin/HR to disable any of
+`manager`, `skip_manager`, `bu_head`, `hr` for an individual employee (or in
+bulk). `self` is always required. Stage **order** stays fixed — only the
+set of enabled stages varies.
 
 ## Risk & Impact Report
-- **Data Impact:** No schema or historical data change. Backend verification shows the active annual review cycle has **2,560** instances and **2,560** eligible profiles, so this is not a seeding/data-loss issue.
-- **Workflow Impact:** No workflow or permission change.
-- **UI/UX Impact:** Summary cards will show the full cycle counts instead of the first 1,000 returned by the Data API default cap.
-- **Regression Risk:** Low. The fix is isolated to the count helper used by these cards.
-- **Scalability Impact:** Current `getCycleStatusCounts()` reads `overall_status` without pagination, so the database returns only 1,000 rows by default. I’ll replace it with exact count queries/count aggregation that does not depend on returned row payload size.
-- **Mitigation Plan:** Add/adjust a regression test so future annual-review summary counts cannot silently cap at 1,000 again.
 
-## Step-by-step Plan
-1. Update `getCycleStatusCounts(cycleId)` in `annualReviewService.ts` so it does not load an unpaged list of statuses.
-   - Use exact database counts for total and each status bucket, or a count-only query strategy.
-   - Keep the hook/UI API unchanged.
-2. Add a regression test for the summary-count helper behavior beyond 1,000 rows.
-3. Update `DOCUMENTATION.md` pagination/version-history notes to state summary counts are count-only and not row-list based.
-4. Update `POLICY.md` reporting/pagination wording so large annual-review summaries must not use unpaged reads.
+- **Data**: One additive column on `annual_review_instances`
+  (`enabled_stages jsonb`, default `["self","manager","skip_manager","bu_head","hr"]`).
+  No data backfill needed — existing rows default to the full chain.
+- **Workflow**: `advance_annual_review_status` and
+  `send_back_annual_review_status` now compute next/prev stage from the
+  per-instance enabled set instead of hardcoded CASE. Behaviour is
+  identical when all stages are enabled (full back-compat).
+- **UI/UX**: Employee stepper (`EmployeeAnnualReview`) and admin progress
+  rows render only enabled stages. Reviewer chain UI in Team view unchanged
+  for enabled stages; disabled stages never appear.
+- **Regression**: Status enum unchanged. Bulk finalize (`pending_hr` only)
+  still works for instances whose `hr` is enabled. Instances with `hr`
+  disabled terminate at the last enabled stage (becomes `completed`
+  automatically when that reviewer advances).
+- **Scalability**: One JSONB column read on the same hot path that already
+  reads the instance row. No new queries.
+- **Mitigation**: SSOT resolver in `src/lib/annualReview/stageChain.ts`
+  shared by TS UI and mirrored in PL/pgSQL inside the RPCs. Unit tests
+  cover every subset.
 
-## UI Changes
-- **Visual location:** Annual Review Admin → Progress summary cards.
-- **Visual change:** Values should show **2,560** total and **2,560** self-review pending for the current active cycle, instead of **1,000**.
-- **Interaction impact:** None.
-- **Responsiveness:** No layout change.
+## Pre-implementation assumptions
 
-## Implementation
-Pending your approval to switch from plan mode to build mode.
+- `self` cannot be disabled (employee must always self-assess).
+- Disabled = stage entirely skipped (advance jumps past it, snapshot
+  reviewer slot stays populated but unused).
+- Override allowed only while instance is in `not_started` or
+  `pending_self` (same gate as template override).
+- Default for net-new instances = all 5 stages enabled. Future: rule-based
+  default — out of scope here.
 
-## Tests
-- Add/adjust unit test coverage for status counts over the 1,000-row default limit.
+## Plan
 
-## DOCUMENTATION.md updates
-- Document the fixed summary count contract and version-history entry.
+### 1. Schema (migration)
 
-## POLICY.md updates
-- Add policy guardrail that summary/status counts must be count-only or paged, never unpaged list reads.
+```sql
+ALTER TABLE public.annual_review_instances
+  ADD COLUMN enabled_stages jsonb NOT NULL
+    DEFAULT '["self","manager","skip_manager","bu_head","hr"]'::jsonb;
 
-## Post-implementation notes
-Root cause: `getCycleStatusCounts()` does `.select('overall_status')` without `.range()` or count-only aggregation. The backend has 2,560 rows, but the Data API returns only the first 1,000 rows by default, so the cards are capped at 1,000.
+-- guard: must contain 'self', subset of the 5 known roles
+ALTER TABLE public.annual_review_instances
+  ADD CONSTRAINT enabled_stages_valid
+  CHECK (
+    jsonb_typeof(enabled_stages) = 'array'
+    AND enabled_stages ? 'self'
+    AND NOT EXISTS (
+      SELECT 1 FROM jsonb_array_elements_text(enabled_stages) x
+      WHERE x.value NOT IN ('self','manager','skip_manager','bu_head','hr')
+    )
+  );
+```
+
+### 2. SSOT resolver (`src/lib/annualReview/stageChain.ts`)
+
+```ts
+export const ALL_STAGES = ['self','manager','skip_manager','bu_head','hr'] as const;
+export type StageRole = typeof ALL_STAGES[number];
+export const ROLE_TO_PENDING: Record<StageRole, AnnualReviewStatus> = {
+  self: 'pending_self', manager: 'pending_manager',
+  skip_manager: 'pending_skip', bu_head: 'pending_bu', hr: 'pending_hr',
+};
+export function enabledChain(enabled: StageRole[]): StageRole[] { ... }
+export function nextStatus(current, enabled): AnnualReviewStatus { ... }
+export function prevStatus(currentRole, enabled): AnnualReviewStatus { ... }
+```
+
+### 3. RPC updates (same migration)
+
+Rewrite `advance_annual_review_status` and `send_back_annual_review_status`
+to read `v_inst.enabled_stages` and compute next/prev by index lookup
+instead of fixed CASE. If `hr` is disabled, advancing past the last
+enabled reviewer sets status to `completed` and stamps `finalized_at`.
+
+New RPC mirroring `set_annual_review_template_override`:
+
+```
+set_annual_review_enabled_stages(
+  p_instance_id uuid,
+  p_enabled_stages jsonb,
+  p_reason text
+)
+```
+- admin/hr_pms only, status must be `not_started`/`pending_self`,
+  must contain `self`, reason ≥ 3 chars, audit-logged as
+  `annual_review.enabled_stages_set`.
+
+### 4. Service layer
+`src/services/annualReview/annualReviewService.ts`
+- `setEnabledStages({ instanceId, enabledStages, reason })`
+- `bulkSetEnabledStages(rows)` — sequential loop mirroring
+  `bulkSetTemplateOverrides`.
+
+### 5. UI
+
+- **EmployeeAnnualReview stepper** — filter steps by
+  `instance.enabled_stages` so disabled stages disappear (the screenshot
+  would show 4 dots instead of 5 when, say, BU Head is disabled).
+- **AnnualReviewAdmin → Progress tab** — add **"Change workflow"** row
+  action next to **"Change template"** (same enable gate). Opens
+  `ChangeWorkflowDialog` with 4 checkboxes (Manager, Skip, BU, HR) plus
+  required reason.
+- **Bulk button** **"Bulk workflow assignment"** next to the existing
+  bulk template button. New `BulkWorkflowAssignmentDialog` reuses the
+  XLSX preview/apply pattern. Columns:
+  `Employee Code | Full Name | Current Stages | Manager (Y/N) | Skip (Y/N) | BU (Y/N) | HR (Y/N) | Reason`.
+
+### 6. Tests
+
+- `src/lib/annualReview/stageChain.test.ts` — every subset → next/prev.
+- `src/test/annualReview/setEnabledStages.test.ts` — RPC wrapper happy +
+  permission/stage-gate paths.
+- `src/test/annualReview/bulkSetEnabledStages.test.ts` — per-row failure
+  isolation.
+
+### 7. Documentation & memory
+
+- `src/modules/annual-review/POLICY.md` — new "Per-employee workflow"
+  section, gates, bulk usage, rollback note.
+- `src/modules/annual-review/DOCUMENTATION.md` — column, resolver,
+  RPC contracts, version-history entry.
+- `mem/features/annual-review/per-employee-workflow.md` — new memory
+  file; add to `mem/index.md`.
+
+## Rollback
+
+```
+DROP FUNCTION set_annual_review_enabled_stages(uuid, jsonb, text);
+-- revert advance/send_back RPCs to the previous CASE-based versions
+ALTER TABLE annual_review_instances DROP COLUMN enabled_stages;
+```
+plus revert UI files and service helpers. Resolver collapses to "all
+enabled" naturally.
+
+## Not Applicable
+- No schema change to reviewer-chain snapshot columns.
+- No change to scoring, eligibility, reminders, or report scope.

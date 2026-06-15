@@ -1,23 +1,36 @@
 import { Check } from 'lucide-react';
-import { STAGE_LABEL, STAGE_ORDER, STAGE_TO_STATUS } from '@/lib/annualReview/constants';
+import { STAGE_LABEL, STAGE_TO_STATUS } from '@/lib/annualReview/constants';
+import { enabledChain } from '@/lib/annualReview/stageChain';
 import type { AnnualReviewStatus, AnnualReviewerRole } from '@/types/annualReview';
 
-function stageState(stage: AnnualReviewerRole, status: AnnualReviewStatus): 'done' | 'active' | 'pending' {
+function stageState(
+  stage: AnnualReviewerRole,
+  status: AnnualReviewStatus,
+  chain: AnnualReviewerRole[],
+): 'done' | 'active' | 'pending' {
   if (status === 'completed') return 'done';
   const target = STAGE_TO_STATUS[stage];
-  const idxStage = STAGE_ORDER.indexOf(stage);
-  const idxCurrent = STAGE_ORDER.findIndex((s) => STAGE_TO_STATUS[s] === status);
+  const idxStage = chain.indexOf(stage);
+  const idxCurrent = chain.findIndex((s) => STAGE_TO_STATUS[s] === status);
   if (idxCurrent < 0) return 'pending';
   if (idxStage < idxCurrent) return 'done';
   if (target === status) return 'active';
   return 'pending';
 }
 
-export function AnnualReviewStageTracker({ status }: { status: AnnualReviewStatus }) {
+export function AnnualReviewStageTracker({
+  status,
+  enabledStages,
+}: {
+  status: AnnualReviewStatus;
+  /** Per-instance enabled chain. Omit to render the full 5-stage chain. */
+  enabledStages?: AnnualReviewerRole[];
+}) {
+  const chain = enabledChain(enabledStages);
   return (
     <ol className="flex items-center w-full gap-2 md:gap-4 overflow-x-auto py-2" aria-label="Annual review progress">
-      {STAGE_ORDER.map((stage, i) => {
-        const s = stageState(stage, status);
+      {chain.map((stage, i) => {
+        const s = stageState(stage, status, chain);
         const circle =
           s === 'done'
             ? 'bg-emerald-500/20 border-emerald-500 text-emerald-400'
@@ -33,7 +46,7 @@ export function AnnualReviewStageTracker({ status }: { status: AnnualReviewStatu
             <span className={`text-xs md:text-sm truncate ${s === 'pending' ? 'text-muted-foreground' : 'text-foreground'}`}>
               {STAGE_LABEL[stage]}
             </span>
-            {i < STAGE_ORDER.length - 1 && <div className={`hidden md:block h-px flex-1 ${line}`} />}
+            {i < chain.length - 1 && <div className={`hidden md:block h-px flex-1 ${line}`} />}
           </li>
         );
       })}

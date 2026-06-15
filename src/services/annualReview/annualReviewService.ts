@@ -10,6 +10,7 @@ import type {
   AnnualReviewerRole,
   EvidenceItem,
 } from '@/types/annualReview';
+import { enabledChain } from '@/lib/annualReview/stageChain';
 
 /**
  * Service layer for the Annual Review module — wraps every DB / RPC / storage call
@@ -84,6 +85,60 @@ export async function bulkSetTemplateOverrides(
   for (const r of rows) {
     try {
       await setTemplateOverride({ instanceId: r.instanceId, templateId: r.templateId, reason: r.reason });
+      out.push({ rowKey: r.rowKey, instanceId: r.instanceId, ok: true });
+    } catch (e) {
+      out.push({ rowKey: r.rowKey, instanceId: r.instanceId, ok: false, error: (e as Error).message });
+    }
+    done++;
+    onProgress?.(done, rows.length);
+  }
+  return out;
+}
+
+/**
+ * Set / change the per-instance enabled-stages workflow. Admin / hr_pms only.
+ * Allowed only while the instance is in `not_started` or `pending_self`.
+ * Server-side RPC validates the array (must contain 'self', subset of the
+ * canonical 5 stages), enforces stage gate, and writes an audit log row
+ * (`annual_review.enabled_stages_set`).
+ */
+export async function setEnabledStages(args: {
+  instanceId: string;
+  enabledStages: AnnualReviewerRole[];
+  reason: string;
+}) {
+  const normalised = enabledChain(args.enabledStages);
+  const { error } = await db.rpc('set_annual_review_enabled_stages', {
+    p_instance_id: args.instanceId,
+    p_enabled_stages: normalised,
+    p_reason: args.reason,
+  });
+  if (error) throw error;
+}
+
+export interface BulkEnabledStagesInput {
+  instanceId: string;
+  enabledStages: AnnualReviewerRole[];
+  reason: string;
+  /** Echoed back in the result so the caller can match its source row. */
+  rowKey?: string;
+}
+export interface BulkEnabledStagesResult {
+  rowKey?: string;
+  instanceId: string;
+  ok: boolean;
+  error?: string;
+}
+/** Sequential bulk wrapper — mirrors `bulkSetTemplateOverrides`. */
+export async function bulkSetEnabledStages(
+  rows: BulkEnabledStagesInput[],
+  onProgress?: (done: number, total: number) => void,
+): Promise<BulkEnabledStagesResult[]> {
+  const out: BulkEnabledStagesResult[] = [];
+  let done = 0;
+  for (const r of rows) {
+    try {
+      await setEnabledStages({ instanceId: r.instanceId, enabledStages: r.enabledStages, reason: r.reason });
       out.push({ rowKey: r.rowKey, instanceId: r.instanceId, ok: true });
     } catch (e) {
       out.push({ rowKey: r.rowKey, instanceId: r.instanceId, ok: false, error: (e as Error).message });

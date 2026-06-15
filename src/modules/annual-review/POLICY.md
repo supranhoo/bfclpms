@@ -48,6 +48,27 @@ Caveats:
 - Snapshotted at seed time from `profiles.reporting_manager_id` (manager → skip → bu_head). HR is the configured HR user.
 - Mid-cycle change: HR/admin inserts an `annual_review_assignment_overrides` row. Overrides take precedence over the snapshot for that instance + role.
 
+## Per-employee workflow override
+- Each instance has `enabled_stages` (subset of `self / manager / skip_manager / bu_head / hr`).
+  `self` is always required; any of the other four can be disabled per employee.
+- Disabled stages are **skipped entirely** — the next reviewer in the
+  surviving chain becomes active immediately. If the last enabled stage is
+  not `hr`, completing that stage finalizes the review (sets `completed`
+  and stamps `finalized_at`).
+- Mutation gate: only admin / hr_pms, only while `overall_status ∈ {not_started, pending_self}`,
+  reason ≥ 3 chars. Server-side RPC `set_annual_review_enabled_stages` enforces all three and writes an
+  `annual_review.enabled_stages_set` audit row.
+- Two UI paths in **Admin → Progress**:
+  - **Change workflow** row action (per employee, 4 checkboxes + reason).
+  - **Bulk workflow assignment** XLSX dialog
+    (columns: Employee Code, Full Name, Current Stages, Manager (Y/N), Skip (Y/N), BU (Y/N), HR (Y/N), Reason).
+- The seeder (`writeSeedRowsPreservingOverrides`) never writes
+  `enabled_stages`, so per-employee workflow overrides survive re-seed —
+  identical guarantee to `template_override_id`.
+- Resolver SSOT: `src/lib/annualReview/stageChain.ts` (`enabledChain`,
+  `nextStatus`, `prevStatus`). UI must render the stepper through the
+  resolver — never hardcode the 5-stage chain.
+
 ## Stages & status
 - `not_started → pending_self → pending_manager → pending_skip → pending_bu → pending_hr → completed`.
 - Send-back reverts to the previous stage and clears `is_locked` on the affected response.
@@ -77,3 +98,4 @@ Caveats:
 
 ## Version history
 - 2026-06-14 — Initial policy. Documented reopen, reassignment override precedence, and export scope.
+- 2026-06-15 — Added per-employee configurable workflow (`enabled_stages` + bulk XLSX + override-safe seeder).

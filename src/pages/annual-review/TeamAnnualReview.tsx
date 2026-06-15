@@ -197,7 +197,7 @@ function ReviewDetail({ instance }: { instance: InstanceWithEmployee }) {
             <AnnualReviewStatusBadge status={instance.overall_status} />
           </div>
         </CardHeader>
-        <CardContent><AnnualReviewStageTracker status={instance.overall_status} /></CardContent>
+        <CardContent><AnnualReviewStageTracker status={instance.overall_status} enabledStages={instance.enabled_stages} /></CardContent>
       </Card>
 
       <SystemScoresPanel
