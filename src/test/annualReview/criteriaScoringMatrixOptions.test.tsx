@@ -24,10 +24,10 @@ const baseCriterion: TemplateCriterion = {
 
 const hiTranslations = {
   hi: {
-    'criterion.attendance.name': 'उपस्थिति और समय-पालन',
-    'criterion.attendance.description': 'मैं समय पर काम पर आता हूँ, बिना बताए छुट्टी नहीं लेता।',
-    'option.o5.label': 'हमेशा समय पर, कोई बिना बताए छुट्टी नहीं',
-    'option.o3.label': 'आमतौर पर समय पर, कभी-कभार ही छुट्टी',
+    'criterion:attendance:name': 'उपस्थिति और समय-पालन',
+    'criterion:attendance:description': 'मैं समय पर काम पर आता हूँ, बिना बताए छुट्टी नहीं लेता।',
+    'option:o5:label': 'हमेशा समय पर, कोई बिना बताए छुट्टी नहीं',
+    'option:o3:label': 'आमतौर पर समय पर, कभी-कभार ही छुट्टी',
   },
 };
 
