@@ -20,9 +20,32 @@ Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
 
   try {
+    // Auth: either a valid cron secret (scheduled invocation) OR an
+    // authenticated admin user (manual run from the admin UI).
     const cronSecret = req.headers.get('x-cron-secret');
     const expected = Deno.env.get('CRON_SECRET');
-    if (expected && cronSecret !== expected) {
+    const cronOk = !!expected && cronSecret === expected;
+
+    let adminOk = false;
+    const authHeader = req.headers.get('Authorization');
+    if (!cronOk && authHeader?.startsWith('Bearer ')) {
+      const userClient = createClient(
+        Deno.env.get('SUPABASE_URL')!,
+        Deno.env.get('SUPABASE_ANON_KEY')!,
+        { global: { headers: { Authorization: authHeader } } },
+      );
+      const token = authHeader.replace('Bearer ', '');
+      const { data: claims } = await userClient.auth.getClaims(token);
+      const uid = claims?.claims?.sub;
+      if (uid) {
+        const { data: isAdmin } = await userClient.rpc('has_role', {
+          _user_id: uid, _role: 'admin',
+        });
+        adminOk = !!isAdmin;
+      }
+    }
+
+    if (!cronOk && !adminOk) {
       return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
