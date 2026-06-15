@@ -210,6 +210,8 @@ function ReviewDetail({ instance }: { instance: InstanceWithEmployee }) {
         values={instance.system_scores ?? {}}
         eligibility={template?.sections.eligibility_criteria}
         eligibilityInputs={instance.eligibility_inputs}
+        employeeId={instance.employee_id}
+        fiscalYear={cycle?.review_year}
         readOnly
       />
 
