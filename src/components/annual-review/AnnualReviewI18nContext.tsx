@@ -60,12 +60,12 @@ export function AnnualReviewI18nProvider({
     templateTranslations,
     tTemplate: (kind, id, field, fb) => {
       if (cur === def) return fb;
-      const key = `${kind}.${id}.${field}`;
+      const key = `${kind}:${id}:${field}`;
       return templateTranslations?.[cur]?.[key] ?? fb;
     },
     tTemplateBilingual: (kind, id, field, fb) => {
       if (cur === def) return fb;
-      const key = `${kind}.${id}.${field}`;
+      const key = `${kind}:${id}:${field}`;
       const translated = templateTranslations?.[cur]?.[key];
       if (!translated || translated === fb) return fb;
       return `${fb} / ${translated}`;
