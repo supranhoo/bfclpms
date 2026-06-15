@@ -26,3 +26,20 @@ export function normalizeKpiKey(
 ): string {
   return `${categoryId}||${normalizeText(kraName)}||${normalizeText(kpiName)}`;
 }
+
+export function findCanonicalKpiSignature(
+  candidates: Array<{ kra_name: string | null; kpi_name: string | null }> | null | undefined,
+  kraName: string,
+  kpiName: string
+): { kraName: string; kpiName: string } {
+  const requestedKra = normalizeText(kraName);
+  const requestedKpi = normalizeText(kpiName);
+  const match = (candidates || []).find(
+    candidate => normalizeText(candidate.kra_name) === requestedKra && normalizeText(candidate.kpi_name) === requestedKpi,
+  );
+
+  return {
+    kraName: match?.kra_name ?? kraName,
+    kpiName: match?.kpi_name ?? kpiName,
+  };
+}
