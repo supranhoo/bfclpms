@@ -169,6 +169,25 @@ export function TemplateEditorDialog({
                 </div>
               </div>
             )}
+            {multilingual && (
+              <div className="space-y-1 max-w-md">
+                <Label className="text-xs">Reviewer Display Mode</Label>
+                <Select
+                  value={sections.display_mode ?? 'bilingual'}
+                  onValueChange={(v) => setSections((s) => ({ ...s, display_mode: v as 'bilingual' | 'english_only' | 'translated_only' }))}
+                >
+                  <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="bilingual">Bilingual — English / Translated side-by-side</SelectItem>
+                    <SelectItem value="english_only">English only — ignore translations</SelectItem>
+                    <SelectItem value="translated_only">Translated only — fall back to English when missing</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Controls how criterion names, descriptions, option labels, and field labels render to reviewers when they switch to a non-default language. Does not affect scoring.
+                </p>
+              </div>
+            )}
           </Card>
 
           {/* Eligibility */}
