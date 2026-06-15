@@ -1067,7 +1067,15 @@ export default function OrgKpiDataEntry() {
     const attemptedCount = consideredScopeIds.length;
     if (attemptedCount > 0 && totalPropagated < attemptedCount) {
       const accountedSkips = totalSkippedBenign + totalSkippedHard;
-      const unaccounted = Math.max(0, attemptedCount - totalPropagated - accountedSkips);
+      // RCA 2026-06-15 — client-side guards (null value, untouched 0) push
+      // the scope into consideredScopeIds but never invoke the RPC, so
+      // they produce NO server skip entry. Count them here so the
+      // shortfall is not misclassified as a KPI-name mismatch.
+      const clientSkips = untouchedZeroSkipCount;
+      const unaccounted = Math.max(
+        0,
+        attemptedCount - totalPropagated - accountedSkips - clientSkips,
+      );
       if (totalSkippedHard > 0) {
         toast({
           title: `Partial propagation: ${totalPropagated}/${attemptedCount} updated`,
@@ -1104,7 +1112,18 @@ export default function OrgKpiDataEntry() {
     // org_kpi_values.status flipped to 'propagated' below while their kpis.status stays 'kra_set'
     // and no review_submissions row is created — the exact "half-propagation" defect.
     let missedEmployeeIds: string[] = [];
-    if ((scope === 'department' || scope === 'employee') && propagatedScopeIds.length > 0) {
+    // RCA 2026-06-15 — for row-level / subset propagation (filterEmployeeIds
+    // present), the user explicitly intended to propagate only the listed
+    // scopes. The full-card half-propagation guard compares against every
+    // mapped employee and would falsely report unvisited employees as
+    // "missed" or "not in your view". Skip it for subset propagation.
+    const isSubsetPropagation =
+      Array.isArray(filterEmployeeIds) && filterEmployeeIds.length > 0;
+    if (
+      (scope === 'department' || scope === 'employee') &&
+      propagatedScopeIds.length > 0 &&
+      !isSubsetPropagation
+    ) {
       try {
         const { data: allOrgKpiRows } = await supabase
           .from('kpis')
