@@ -2400,6 +2400,66 @@ export type Database = {
         }
         Relationships: []
       }
+      dev_report_entries_archive_seed: {
+        Row: {
+          adr_refs: string[] | null
+          created_at: string | null
+          created_by: string | null
+          description: string | null
+          entry_date: string | null
+          entry_type:
+            | Database["public"]["Enums"]["dev_report_entry_type"]
+            | null
+          id: string | null
+          linked_commit: string | null
+          module_area: string | null
+          period_label: string | null
+          severity: string | null
+          status: string | null
+          timeline_type: string | null
+          title: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          adr_refs?: string[] | null
+          created_at?: string | null
+          created_by?: string | null
+          description?: string | null
+          entry_date?: string | null
+          entry_type?:
+            | Database["public"]["Enums"]["dev_report_entry_type"]
+            | null
+          id?: string | null
+          linked_commit?: string | null
+          module_area?: string | null
+          period_label?: string | null
+          severity?: string | null
+          status?: string | null
+          timeline_type?: string | null
+          title?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          adr_refs?: string[] | null
+          created_at?: string | null
+          created_by?: string | null
+          description?: string | null
+          entry_date?: string | null
+          entry_type?:
+            | Database["public"]["Enums"]["dev_report_entry_type"]
+            | null
+          id?: string | null
+          linked_commit?: string | null
+          module_area?: string | null
+          period_label?: string | null
+          severity?: string | null
+          status?: string | null
+          timeline_type?: string | null
+          title?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       divisions: {
         Row: {
           code: string | null
