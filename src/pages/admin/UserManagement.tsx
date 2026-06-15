@@ -267,6 +267,7 @@ export default function UserManagement() {
   const [roleFilter, setRoleFilter] = useState<string>('all');
   const [departmentFilter, setDepartmentFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [managerFilter, setManagerFilter] = useState<string>('all');
   const [currentPage, setCurrentPage] = useState(1);
   // v2.67.x — Dummy/System Employee filter (admin-only; never gated by the
   // global visibility setting because admins must always be able to manage
@@ -476,7 +477,13 @@ export default function UserManagement() {
         (employeeTypeFilter === 'real' && !isDummy) ||
         (employeeTypeFilter === 'dummy' && isDummy);
 
-      return matchesSearch && matchesRole && matchesDepartment && matchesStatus && matchesType;
+      const matchesManager =
+        managerFilter === 'all' ||
+        (managerFilter === 'none'
+          ? !p.reporting_manager_id
+          : p.reporting_manager_id === managerFilter);
+
+      return matchesSearch && matchesRole && matchesDepartment && matchesStatus && matchesType && matchesManager;
     });
     // Sort: active first, then inactive — both alphabetical by full_name
     return [...filtered].sort((a, b) => {
@@ -485,7 +492,7 @@ export default function UserManagement() {
       if (aActive !== bActive) return aActive - bActive;
       return (a.full_name || '').localeCompare(b.full_name || '');
     });
-  }, [profiles, debouncedSearch, roleFilter, departmentFilter, statusFilter, viewerIsAdmin, visibleIds, employeeTypeFilter, dummyIds]);
+  }, [profiles, debouncedSearch, roleFilter, departmentFilter, statusFilter, viewerIsAdmin, visibleIds, employeeTypeFilter, dummyIds, managerFilter]);
 
   // Helper: derive division ID from a department ID
   const deriveDivisionFromDept = (deptId: string | null): string => {
@@ -533,6 +540,29 @@ export default function UserManagement() {
     [locationsList],
   );
   const roleOptions = useMemo(() => ALL_APP_ROLES.map(role => ({ value: role, label: ROLE_LABELS[role] })), []);
+
+  // Reporting Manager filter options — distinct managers that are referenced
+  // by at least one profile's reporting_manager_id. Inactive users excluded.
+  const managerFilterOptions = useMemo(() => {
+    const list = profiles ?? [];
+    const byId = new Map(list.map((p: any) => [p.id, p]));
+    const ids = new Set<string>();
+    for (const p of list) {
+      if (p.reporting_manager_id) ids.add(p.reporting_manager_id);
+    }
+    const opts: { value: string; label: string }[] = [];
+    for (const id of ids) {
+      const m: any = byId.get(id);
+      if (!m || m.is_active === false) continue;
+      opts.push({ value: id, label: formatManagerLabel(m.full_name, m.employee_code) });
+    }
+    opts.sort((a, b) => a.label.localeCompare(b.label));
+    return [
+      { value: 'all', label: 'All Managers' },
+      { value: 'none', label: '— No Manager —' },
+      ...opts,
+    ];
+  }, [profiles]);
 
   const totalPages = Math.ceil(filteredProfiles.length / ITEMS_PER_PAGE);
   const paginatedProfiles = filteredProfiles.slice(
@@ -1393,6 +1423,14 @@ export default function UserManagement() {
             <SelectItem value="dummy">Dummy / System</SelectItem>
           </SelectContent>
         </Select>
+        <div className="w-[220px]">
+          <OrgFilterCombobox
+            value={managerFilter}
+            onValueChange={(v) => { setManagerFilter(v || 'all'); handleFilterChange(); }}
+            options={managerFilterOptions}
+            placeholder="Reporting Manager"
+          />
+        </div>
 
         {selectedUserIds.size > 0 && (
           <Button variant="secondary" onClick={() => setBulkDialogOpen(true)}>
