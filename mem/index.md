@@ -122,3 +122,4 @@ Lean-Load: debounce search inputs (>200 rows / network); paginate new lists with
 - [Safety Incident Advanced Filters](mem://features/safety/incident-filters) — Array-based multi-select + date-range presets on /safety/incidents; server-side .in/.gte/.lte
 - [Annual Review Per-Employee Workflow](mem://features/annual-review/per-employee-workflow) — enabled_stages column, stageChain SSOT, configurable per-employee stage chain with bulk XLSX
 - [Org Heads (BU & HR head mapping)](mem://features/admin/org-heads) — Admin-managed BU/HR head; auto-resolve from top of hierarchy with manual override; powers Annual Review BU/HR Finalization seeding
+- [Development Report](mem://features/reports/development-report) — Genuine-entry rule, Feb 2026 floor, no Cover tab, filter-driven Reporting Period, reseed tooling
