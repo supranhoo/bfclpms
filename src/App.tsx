@@ -130,6 +130,7 @@ const TeamVsManagerScoreReport = lazy(() => import("./pages/reports/TeamVsManage
 const KpiScorecardDetail = lazy(() => import("./pages/reports/KpiScorecardDetail"));
 const KpiEmployeeMatrix = lazy(() => import("./pages/reports/KpiEmployeeMatrix"));
 const CustomReport = lazy(() => import("./pages/reports/CustomReport"));
+const DevelopmentReport = lazy(() => import("./pages/reports/DevelopmentReport"));
 
 // Layout components
 import { ReportRoute } from "./components/layout/ReportRoute";
