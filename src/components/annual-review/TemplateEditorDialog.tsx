@@ -320,6 +320,7 @@ export function TemplateEditorDialog({
                           <CarryKraConfigEditor
                             cfg={sc.carry_config ?? { aggregation: 'overall_avg', excludeNa: true }}
                             onChange={(cfg) => updateAt(setSections, 'system_scores', i, { carry_config: cfg })}
+                            weight={Number(sc.weight) || 0}
                           />
                         )}
                       </TableCell>

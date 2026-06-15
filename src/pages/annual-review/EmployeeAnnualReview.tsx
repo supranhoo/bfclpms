@@ -27,6 +27,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { toast } from 'sonner';
 import { computeCriteriaScore } from '@/lib/annualReview/scoring';
+import { fyStartFromCycle } from '@/lib/annualReview/fiscalYear';
 import type { EvidenceItem } from '@/types/annualReview';
 import { EmployeeResultsView } from '@/components/annual-review/EmployeeResultsView';
 
