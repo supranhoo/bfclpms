@@ -1,4 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
+import { fetchAllPaged } from '@/lib/fetchAll';
 import type {
   AnnualReviewAssignmentRule,
   AnnualReviewCycle,
@@ -203,12 +204,16 @@ export async function updateInstance(id: string, patch: Partial<AnnualReviewInst
 /** Bulk-seed instances for an entire cycle. Resolves the snapshotted chain from profiles.reporting_manager_id. */
 export async function seedInstancesForCycle(args: { cycleId: string; templateId: string; hrUserId: string | null }) {
   // Pull active, non-dummy employees and map two levels up (mgr → skip).
-  const { data: people, error } = await db
-    .from('profiles')
-    .select('id, reporting_manager_id, functional_manager_id')
-    .eq('is_active', true)
-    .eq('is_dummy_employee', false);
-  if (error) throw error;
+  // POLICY §94 — must page; PostgREST silently caps unranged reads at 1000
+  // and the active roster is >2,500. See mem://architecture/profiles-query-policy.
+  const people = await fetchAllPaged<any>((from, to) =>
+    db.from('profiles')
+      .select('id, reporting_manager_id, functional_manager_id')
+      .eq('is_active', true)
+      .eq('is_dummy_employee', false)
+      .order('id')
+      .range(from, to)
+  );
   const map = new Map<string, { mgr: string | null; func: string | null }>();
   for (const p of people ?? []) map.set(p.id, { mgr: p.reporting_manager_id, func: p.functional_manager_id });
 
@@ -261,21 +266,27 @@ export async function seedInstancesByRules(args: { cycleId: string; hrUserId: st
   if (rulesErr) throw rulesErr;
   if (!rules || rules.length === 0) throw new Error('No active rules — add a rule first.');
 
-  const { data: people, error: pErr } = await db
-    .from('profiles')
-    .select('id, reporting_manager_id, functional_manager_id, designation, pms_grade, level, department_id')
-    .eq('is_active', true)
-    .eq('is_dummy_employee', false);
-  if (pErr) throw pErr;
+  // POLICY §94 — paged read; >2,500 active employees silently truncate at 1000 otherwise.
+  const people = await fetchAllPaged<any>((from, to) =>
+    db.from('profiles')
+      .select('id, reporting_manager_id, functional_manager_id, designation, pms_grade, level, department_id')
+      .eq('is_active', true)
+      .eq('is_dummy_employee', false)
+      .order('id')
+      .range(from, to)
+  );
 
   // Department → BU lookup (one query, no per-row N+1).
   const deptIds = [...new Set((people ?? []).map((p: any) => p.department_id).filter(Boolean))];
-  let deptToBu: Record<string, string> = {};
-  if (deptIds.length) {
+  const deptToBu: Record<string, string> = {};
+  // Defensive chunking — .in() over >1000 ids hits the same PostgREST cap.
+  const DEPT_CHUNK = 500;
+  for (let i = 0; i < deptIds.length; i += DEPT_CHUNK) {
+    const slice = deptIds.slice(i, i + DEPT_CHUNK);
     const { data: depts, error: dErr } = await db
-      .from('departments').select('id, business_unit_id').in('id', deptIds);
+      .from('departments').select('id, business_unit_id').in('id', slice);
     if (dErr) throw dErr;
-    deptToBu = Object.fromEntries((depts ?? []).map((d: any) => [d.id, d.business_unit_id]));
+    for (const d of depts ?? []) deptToBu[d.id] = d.business_unit_id;
   }
 
   const mgrMap = new Map<string, string | null>();

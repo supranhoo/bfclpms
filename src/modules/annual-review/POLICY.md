@@ -6,6 +6,7 @@ _Business rules. Update in the same PR as any logic change._
 - Seeding scopes to `is_active = true AND is_dummy_employee = false`.
 - Rule matching is priority-ordered (lower wins). Empty filter set matches all.
 - Filter dimensions: designation, pms_grade, level, department, business unit (joined via department).
+- Seeder MUST page the `profiles` read via `fetchAllPaged` (POLICY §94 / `mem://architecture/profiles-query-policy`). The active roster exceeds the 1000-row PostgREST cap; an unranged read silently drops >60% of employees.
 
 ## Reviewer chain
 - Snapshotted at seed time from `profiles.reporting_manager_id` (manager → skip → bu_head). HR is the configured HR user.

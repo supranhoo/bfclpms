@@ -31,6 +31,7 @@ the same PR as any code or schema change._
 - `listInstancesPaginated({ cycleId, page, pageSize, search, status, sort })`. `pageSize` capped at 100.
 - Search resolves via a `profiles.full_name ilike` pre-fetch (cap 500). PostgREST cannot `ilike` across an embedded resource.
 - Summary cards use `getCycleStatusCounts(cycleId)` — one-column projection, ~few KB even at 5k rows.
+- **Seeding (`seedInstancesByRules`, `seedInstancesForCycle`)** reads the active roster via `fetchAllPaged` (POLICY §94). Department→BU lookup chunks `.in(id, …)` at 500 ids/page.
 
 ## Hooks / services / components
 UI → hooks (`useAnnualReview.ts`) → services (`annualReviewService.ts`) → Supabase. No component touches the supabase client directly.
@@ -40,3 +41,4 @@ UI → hooks (`useAnnualReview.ts`) → services (`annualReviewService.ts`) → 
 
 ## Version history
 - 2026-06-14 — Initial docs. Server-side pagination, standalone report, cycle reopen, mid-cycle reassignment.
+- 2026-06-15 — Seeder now pages `profiles` via `fetchAllPaged`; previously capped at 1000 rows ("Seeded 1000 instances" bug).

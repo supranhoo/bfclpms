@@ -16,4 +16,4 @@ How to apply: Wrap with `fetchAllPaged<RowType>((from, to) => supabase.from('pro
 
 Codified in POLICY.md §94. Regression test: src/components/admin/__tests__/employeePickerPaging.test.ts.
 
-Compliant sites (extend when adding new ones): CopyKrasDialog, OrgKpiAddEmployeeDialog, CompetencyManagerTab, ReportAccessTab, AccessProfilesManager AssignmentTab, useEmployeeFilterOptions (distinct-designations/grades), useAdminReports.useKpiMappingMatrix (added v2.66.7.45 / BUG-043 — previously truncated KPI Mapping Matrix to ~996 of ~2,533 employees).
+Compliant sites (extend when adding new ones): CopyKrasDialog, OrgKpiAddEmployeeDialog, CompetencyManagerTab, ReportAccessTab, AccessProfilesManager AssignmentTab, useEmployeeFilterOptions (distinct-designations/grades), useAdminReports.useKpiMappingMatrix (added v2.66.7.45 / BUG-043 — previously truncated KPI Mapping Matrix to ~996 of ~2,533 employees), annualReviewService.seedInstancesByRules + seedInstancesForCycle (added 2026-06-15 — previously capped Annual Review seeder at "Seeded 1000 instances").

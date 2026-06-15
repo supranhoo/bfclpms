@@ -1,42 +1,56 @@
 ## Root Cause
 
-The user "Avinash Kumar" (id `951a9c3f…`) is **not** an `admin` in `user_roles` — his base role is `employee`. He has been given the `Onboarding` **Access Profile** which grants `admin-users` → `can_add = true`.
+Both seed functions in `src/services/annualReview/annualReviewService.ts` read the active roster with an unranged
 
-The frontend "Add User" dialog correctly enables the button (it consults `useMenuAccess`), but the backing edge function `supabase/functions/create-employee/index.ts` (lines 68–80) hard-checks `user_roles.role = 'admin'` and rejects everyone else with **"Unauthorized - admin access required"** — exactly the toast in the screenshot.
+```ts
+db.from('profiles').select(...).eq('is_active', true).eq('is_dummy_employee', false)
+```
 
-This violates the project's Access-Profile / RLS alignment SSOT (`mem/architecture/security/access-profile-rls-alignment.md`), which mandates that any delegated menu right (`admin-users / add`) must be honoured server-side via `public.has_menu_right(_user_id, _menu_key, _action)`.
+PostgREST silently caps that response at **1000 rows**, so with ~2,533 active employees the seeder only ever sees the first 1000 → "Seeded 1000 instances". This is exactly the bug class codified in **POLICY §94 / `mem://architecture/profiles-query-policy`** (must use `fetchAllPaged`).
 
-## Risk & Impact Report
+The same risk exists for the in-function `departments.in('id', deptIds)` lookup once dept-id count exceeds 1000 (not the current symptom, but worth chunking).
 
-- **Data impact**: None — no schema change. Only widens the auth gate from "admin role" to "admin role OR has_menu_right('admin-users','add')".
-- **Workflow impact**: HR / Onboarding profile users (and any future profile that explicitly carries `admin-users.can_add`) can now create employees. Matches the intent of the Access Profile they were assigned.
-- **Security**: `has_menu_right` is SECURITY DEFINER + STABLE and is already the SSOT used by RLS policies; no new privilege surface is introduced. Admin-only paths (role grants, profile deletes) remain untouched.
-- **Regression risk**: Low. Admins keep working (short-circuit). Behaviour for non-privileged users is unchanged (still 403).
-- **Scalability**: Adds at most one extra RPC round-trip on the create path (negligible).
+## Risk & Impact
+
+- **Data:** Currently 1,533 employees are silently missing from every cycle seed. No schema change; fix is read-side only. Upsert already uses `onConflict: 'employee_id,cycle_id'` so re-running after the fix safely top-ups missing instances without duplicating existing ones.
+- **Workflow:** "Seed instances by rules" button behavior unchanged; just returns the true count.
+- **UI:** None (toast text already dynamic).
+- **Regression:** Low — change is isolated to two service functions. Existing upsert chunking (200) preserved.
+- **Scalability:** `fetchAllPaged` walks at 1000/page with a 100-page safety cap (100k employees) — comfortably above the 2k+ headcount.
+- **Rollback:** Single-file revert.
 
 ## Plan
 
-1. **`supabase/functions/create-employee/index.ts`** — after resolving `user`, authorise if **either**:
-   - existing admin check passes, **or**
-   - `supabaseAdmin.rpc('has_menu_right', { _user_id: user.id, _menu_key: 'admin-users', _action: 'add' })` returns `true`.
-   
-   On failure, return the same 403 with a clearer message: `"Unauthorized — 'Add User' permission required"`.
+1. **`src/services/annualReview/annualReviewService.ts`**
+   - Import `fetchAllPaged` from `@/lib/fetchAll`.
+   - In `seedInstancesForCycle`, replace the `profiles` read with:
+     ```ts
+     const people = await fetchAllPaged<any>((from, to) =>
+       db.from('profiles')
+         .select('id, reporting_manager_id, functional_manager_id')
+         .eq('is_active', true).eq('is_dummy_employee', false)
+         .order('id').range(from, to)
+     );
+     ```
+   - Same pattern in `seedInstancesByRules` (with the wider column list it already uses).
+   - Chunk the `departments.in('id', deptIds)` lookup at 500 ids/page (defensive; same class of bug).
 
-2. **No DB migration required** — `has_menu_right` already exists and is used by RLS.
+2. **Re-seed after deploy** — user clicks "Seed instances by rules" again; upsert top-ups the missing ~1,533 rows without touching the existing 1000. Toast will then read e.g. `Seeded 2,533 instances`.
 
-3. **DOCUMENTATION.md / POLICY.md** — append a note to `src/modules/.../POLICY.md` (admin-users section) and `mem/architecture/security/access-profile-rls-alignment.md` entry confirming that `create-employee` edge function honours `admin-users / add`.
+3. **Regression test** — add `src/test/annualReview/seedInstances.paging.test.ts` mirroring `employeePickerPaging.test.ts`: simulate a 2,533-row profile fetch through `fetchAllPaged`, assert full-roster coverage and that the 1000-row cap path would have missed employee #1500.
 
-4. **Tests** — add `supabase/functions/create-employee/auth.test.ts` covering: admin allowed, delegated user allowed, plain employee rejected (mock `auth.getUser` + `from('user_roles')` + `rpc('has_menu_right')`).
+4. **Docs**
+   - `src/modules/annual-review/DOCUMENTATION.md` — add a "Seeding pagination" note under Pagination contract.
+   - `src/modules/annual-review/POLICY.md` — record that seeder MUST use `fetchAllPaged` per POLICY §94.
+   - `mem://architecture/profiles-query-policy` — append `seedInstancesByRules` / `seedInstancesForCycle` to the compliant-sites list.
 
-## UI Changes
+## Out of Scope
 
-None. The dialog already shows for delegated users; only the server response changes from 403 → success.
+- Moving seeding to a SECURITY DEFINER RPC (would be the next step if RLS on `profiles` ever blocks paged reads for the HR/admin caller; not needed today since admins/HR can already read all active profiles).
+- Per-employee template override UI (separate feature discussed earlier).
 
-## Out of Scope (not changed in this patch)
+## Verification
 
-- `update-user-email` and `update-user-profile` still require admin. They can be migrated later under the same SSOT once HR delegation for edits is confirmed by the user.
-- Role grants (`user_roles` writes) remain admin-only per the SSOT.
-
-## Rollback
-
-Single-file revert of `create-employee/index.ts` restores the prior behaviour. No data is mutated by this change itself.
+- Manually re-run "Seed instances by rules" → toast should show the full active headcount (~2,533), not 1000.
+- `SELECT count(*) FROM annual_review_instances WHERE cycle_id = '<id>'` matches active non-dummy roster count.
+- New unit test passes.
