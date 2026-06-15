@@ -38,9 +38,37 @@ export interface DevReportSummary {
 const TABLE = 'dev_report_entries' as const;
 const KEY = ['dev-report-entries'] as const;
 
-export function useDevReportEntries(entryType?: DevReportEntryType) {
+/**
+ * Convert a `YYYY-MM` token into inclusive/exclusive ISO bounds for the month.
+ * Exported for unit testing.
+ */
+export function monthBounds(month?: string | null): { from: string; toExclusive: string } | null {
+  if (!month) return null;
+  const m = /^(\d{4})-(\d{2})$/.exec(month);
+  if (!m) return null;
+  const y = Number(m[1]);
+  const mo = Number(m[2]);
+  if (mo < 1 || mo > 12) return null;
+  const from = `${m[1]}-${m[2]}-01`;
+  const nextY = mo === 12 ? y + 1 : y;
+  const nextM = mo === 12 ? 1 : mo + 1;
+  const toExclusive = `${nextY.toString().padStart(4, '0')}-${nextM
+    .toString()
+    .padStart(2, '0')}-01`;
+  return { from, toExclusive };
+}
+
+export interface DevReportEntriesFilter {
+  entryType?: DevReportEntryType;
+  /** YYYY-MM, filters server-side by entry_date within that month. */
+  month?: string | null;
+}
+
+export function useDevReportEntries(filter: DevReportEntriesFilter = {}) {
+  const { entryType, month } = filter;
+  const bounds = monthBounds(month);
   return useQuery({
-    queryKey: [...KEY, entryType ?? 'all'],
+    queryKey: [...KEY, entryType ?? 'all', month ?? 'all'],
     queryFn: async (): Promise<DevReportEntry[]> => {
       let q = supabase
         .from(TABLE as any)
@@ -48,11 +76,37 @@ export function useDevReportEntries(entryType?: DevReportEntryType) {
         .order('entry_date', { ascending: false, nullsFirst: false })
         .order('created_at', { ascending: false });
       if (entryType) q = q.eq('entry_type', entryType);
+      if (bounds) {
+        q = q.gte('entry_date', bounds.from).lt('entry_date', bounds.toExclusive);
+      }
       const { data, error } = await q;
       if (error) throw error;
       return (data ?? []) as unknown as DevReportEntry[];
     },
     staleTime: 60 * 1000,
+  });
+}
+
+/** Distinct YYYY-MM months that have at least one entry, DESC. */
+export function useDevReportMonths() {
+  return useQuery({
+    queryKey: [...KEY, 'months'],
+    queryFn: async (): Promise<string[]> => {
+      const { data, error } = await supabase
+        .from(TABLE as any)
+        .select('entry_date')
+        .not('entry_date', 'is', null)
+        .order('entry_date', { ascending: false })
+        .limit(5000);
+      if (error) throw error;
+      const seen = new Set<string>();
+      for (const row of (data ?? []) as Array<{ entry_date: string | null }>) {
+        if (!row.entry_date) continue;
+        seen.add(row.entry_date.slice(0, 7));
+      }
+      return Array.from(seen);
+    },
+    staleTime: 5 * 60 * 1000,
   });
 }
 

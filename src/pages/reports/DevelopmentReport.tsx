@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useSearchParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -21,6 +22,13 @@ import {
 } from '@/components/ui/table';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Download, Plus, Pencil, Trash2 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useReportAccess } from '@/hooks/useReportAccess';
@@ -28,6 +36,8 @@ import {
   useDevReportEntries,
   useDevReportSummary,
   useDeleteDevReportEntry,
+  useDevReportMonths,
+  monthBounds,
   formatEntryDateCell,
   type DevReportEntry,
   type DevReportEntryType,
@@ -87,14 +97,24 @@ export default function DevelopmentReport() {
   const { canDownload } = useReportAccess();
   const canExport = canDownload('dev-report') || isAdmin;
 
+  const [searchParams, setSearchParams] = useSearchParams();
+  const monthParam = searchParams.get('month'); // 'YYYY-MM' or null = all
+  const month = monthBounds(monthParam) ? monthParam : null;
+  const bounds = monthBounds(month);
+
   const [tab, setTab] = useState<DevReportEntryType | 'cover'>('cover');
   const [search, setSearch] = useState('');
   const [editing, setEditing] = useState<DevReportEntry | null>(null);
   const [adding, setAdding] = useState<DevReportEntryType | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
-  const entriesQ = useDevReportEntries();
-  const summaryQ = useDevReportSummary();
+  const entriesQ = useDevReportEntries({ month });
+  const summaryQ = useDevReportSummary(
+    bounds?.from,
+    // RPC uses inclusive end; convert exclusive next-month-1st to last day of selected month.
+    bounds ? lastDayOfMonth(month!) : undefined,
+  );
+  const monthsQ = useDevReportMonths();
   const coverQ = useDevReportCoverMeta();
   const del = useDeleteDevReportEntry();
 
@@ -121,10 +141,18 @@ export default function DevelopmentReport() {
     ? `${summary.min_entry_date} – ${summary.max_entry_date}`
     : '—';
 
+  const setMonth = (value: string) => {
+    const next = new URLSearchParams(searchParams);
+    if (value === 'all') next.delete('month');
+    else next.set('month', value);
+    setSearchParams(next, { replace: true });
+  };
+
   const handleExport = () => {
     if (!cover || !summary) return;
     const today = new Date().toISOString().slice(0, 10);
-    const fname = `BFCL_PMS_Digitalisation_Self_Evidence_${today.replace(/-/g, '')}.xlsx`;
+    const suffix = month ? `_${month.replace('-', '')}` : `_${today.replace(/-/g, '')}`;
+    const fname = `BFCL_PMS_Digitalisation_Self_Evidence${suffix}.xlsx`;
     downloadDevReportWorkbook(
       {
         cover,
@@ -153,12 +181,27 @@ export default function DevelopmentReport() {
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <Input
-          placeholder="Search title, description, module…"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="max-w-sm"
-        />
+        <div className="flex flex-wrap items-center gap-2">
+          <Select value={month ?? 'all'} onValueChange={setMonth}>
+            <SelectTrigger className="w-[170px]" aria-label="Filter by month">
+              <SelectValue placeholder="All months" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All months</SelectItem>
+              {(monthsQ.data ?? []).map((m) => (
+                <SelectItem key={m} value={m}>
+                  {formatMonthLabel(m)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Input
+            placeholder="Search title, description, module…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="max-w-sm"
+          />
+        </div>
         <div className="flex gap-2">
           {isAdmin && tab !== 'cover' && (
             <Button onClick={() => setAdding(tab)} size="sm">
@@ -262,6 +305,18 @@ function Row({ label, value }: { label: string; value?: string | null }) {
       <span className="font-medium">{value || '—'}</span>
     </div>
   );
+}
+
+function lastDayOfMonth(month: string): string {
+  const [y, m] = month.split('-').map(Number);
+  const d = new Date(Date.UTC(y, m, 0)).getUTCDate();
+  return `${month}-${String(d).padStart(2, '0')}`;
+}
+
+function formatMonthLabel(month: string): string {
+  const [y, m] = month.split('-').map(Number);
+  const date = new Date(Date.UTC(y, m - 1, 1));
+  return date.toLocaleString('en-US', { month: 'short', year: 'numeric', timeZone: 'UTC' });
 }
 
 function EntriesTable({
