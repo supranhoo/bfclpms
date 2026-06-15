@@ -73,7 +73,9 @@ Caveats:
 
 ## Per-employee workflow override
 - Each instance has `enabled_stages` (subset of `self / manager / skip_manager / bu_head / hr`).
-  `self` is always required; any of the other four can be disabled per employee.
+  Any stage (including `self`) may be disabled per employee; the chain must
+  contain at least one stage. When `self` is disabled the cycle starts at the
+  first remaining enabled stage and no self ratings are captured.
 - Disabled stages are **skipped entirely** — the next reviewer in the
   surviving chain becomes active immediately. If the last enabled stage is
   not `hr`, completing that stage finalizes the review (sets `completed`

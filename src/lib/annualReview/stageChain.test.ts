@@ -8,10 +8,15 @@ describe('enabledChain', () => {
     expect(enabledChain(undefined)).toEqual([...ALL_STAGES]);
   });
 
-  it('forces self even if dropped, preserves canonical order, dedupes', () => {
-    expect(enabledChain(['manager'])).toEqual(['self', 'manager']);
+  it('preserves canonical order, dedupes, allows dropping self', () => {
+    expect(enabledChain(['manager'])).toEqual(['manager']);
+    expect(enabledChain(['hr', 'manager'])).toEqual(['manager', 'hr']);
     expect(enabledChain(['hr', 'manager', 'self'])).toEqual(['self', 'manager', 'hr']);
     expect(enabledChain(['self', 'self', 'manager', 'manager'])).toEqual(['self', 'manager']);
+  });
+
+  it('throws when no stages remain after normalisation', () => {
+    expect(() => enabledChain(['bogus' as never])).toThrow();
   });
 });
 
@@ -33,8 +38,8 @@ describe('nextStatus', () => {
     expect(nextStatus('pending_bu', ['self', 'manager', 'bu_head'])).toBe('completed');
   });
 
-  it('treats missing self as always re-added', () => {
-    expect(nextStatus('pending_self', ['manager'])).toBe('pending_manager');
+  it('handles chains without self', () => {
+    expect(nextStatus('pending_manager', ['manager', 'hr'])).toBe('pending_hr');
   });
 
   it('returns input unchanged for non-pending statuses', () => {

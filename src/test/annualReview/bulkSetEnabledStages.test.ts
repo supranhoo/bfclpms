@@ -10,14 +10,24 @@ import { bulkSetEnabledStages, setEnabledStages } from '@/services/annualReview/
 describe('setEnabledStages', () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it('normalises the chain and forwards to the RPC', async () => {
+  it('normalises the chain and forwards to the RPC (self optional)', async () => {
     (supabase.rpc as ReturnType<typeof vi.fn>).mockResolvedValue({ error: null });
     await setEnabledStages({ instanceId: 'i1', enabledStages: ['hr', 'manager'], reason: 'restructure' });
     expect(supabase.rpc).toHaveBeenCalledWith('set_annual_review_enabled_stages', {
       p_instance_id: 'i1',
-      // canonical order with self forced in
-      p_enabled_stages: ['self', 'manager', 'hr'],
+      // canonical order, self NOT forced in
+      p_enabled_stages: ['manager', 'hr'],
       p_reason: 'restructure',
+    });
+  });
+
+  it('forwards a self-only chain unchanged', async () => {
+    (supabase.rpc as ReturnType<typeof vi.fn>).mockResolvedValue({ error: null });
+    await setEnabledStages({ instanceId: 'i1', enabledStages: ['self'], reason: 'self only' });
+    expect(supabase.rpc).toHaveBeenCalledWith('set_annual_review_enabled_stages', {
+      p_instance_id: 'i1',
+      p_enabled_stages: ['self'],
+      p_reason: 'self only',
     });
   });
 
