@@ -70,9 +70,8 @@ export function AnnualReviewI18nProvider({
       if (mode === 'english_only') return fb;
       const key = `${kind}:${id}:${field}`;
       const translated = templateTranslations?.[cur]?.[key];
-      if (mode === 'translated_only') return translated ?? fb;
-      // bilingual — names/descriptions stay single-language (English) per existing UX
-      return fb;
+      // bilingual + translated_only both return translation when present, else English fallback.
+      return translated ?? fb;
     },
     tTemplateBilingual: (kind, id, field, fb) => {
       if (cur === def) return fb;
