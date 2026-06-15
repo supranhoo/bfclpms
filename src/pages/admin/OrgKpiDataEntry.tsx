@@ -1034,12 +1034,23 @@ export default function OrgKpiDataEntry() {
     // Only flag a true gap. Benign skips (already past initial stage) are
     // already surfaced by the "Already propagated" toast above and must NOT
     // be reported as KPI-name mismatches.
-    if (consideredScopeIds.length > 0 && expectedCount > 0 && totalPropagated < expectedCount) {
+    //
+    // v2.66.14 — RCA: the previous denominator was the full mapped employee
+    // population (`expectedCount` from `employeeCountMap`), but upstream
+    // `OrgKpiEntryCard` only ships the **touched subset** into this handler
+    // (see line 613–617). Uploading data for 3 of 60 employees therefore
+    // produced a misleading "0/60 — 60 may have mismatched KPI names" red
+    // toast even when the 3 attempted rows succeeded. Completeness MUST be
+    // measured against the rows we actually attempted this click; the full
+    // population is still covered by the half-propagation forward-guard
+    // below (which uses `propagatedScopeIds` vs the live `kpis` table).
+    const attemptedCount = consideredScopeIds.length;
+    if (attemptedCount > 0 && totalPropagated < attemptedCount) {
       const accountedSkips = totalSkippedBenign + totalSkippedHard;
-      const unaccounted = Math.max(0, expectedCount - totalPropagated - accountedSkips);
+      const unaccounted = Math.max(0, attemptedCount - totalPropagated - accountedSkips);
       if (totalSkippedHard > 0) {
         toast({
-          title: `Partial propagation: ${totalPropagated}/${expectedCount} updated`,
+          title: `Partial propagation: ${totalPropagated}/${attemptedCount} updated`,
           description: `${totalSkippedHard} could not be advanced (missing rows or race condition). Please refresh and retry.`,
           variant: 'destructive',
         });
@@ -1058,7 +1069,7 @@ export default function OrgKpiDataEntry() {
           });
         } else {
           toast({
-            title: `Partial propagation: ${totalPropagated}/${expectedCount} employees updated`,
+            title: `Partial propagation: ${totalPropagated}/${attemptedCount} employees updated`,
             description: `${unaccounted} employee(s) may have mismatched KPI names. Check the Pending Report for details.`,
             variant: 'destructive',
           });
