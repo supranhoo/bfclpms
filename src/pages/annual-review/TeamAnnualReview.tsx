@@ -117,20 +117,20 @@ export default function TeamAnnualReview() {
       <div className="grid gap-4 md:grid-cols-3">
         <aside className="md:col-span-1">{list}</aside>
         <section className="md:col-span-2 hidden md:block">
-          {selected ? <ReviewDetail instance={selected} /> : <Card><CardContent className="p-6 text-muted-foreground">Pick someone to review.</CardContent></Card>}
+          {selected ? <ReviewDetail instance={selected} fiscalYear={cycle.review_year} /> : <Card><CardContent className="p-6 text-muted-foreground">Pick someone to review.</CardContent></Card>}
         </section>
       </div>
 
       <Sheet open={drawer} onOpenChange={setDrawer}>
         <SheetContent side="bottom" className="h-[92dvh] overflow-y-auto">
-          {selected && <ReviewDetail instance={selected} />}
+          {selected && <ReviewDetail instance={selected} fiscalYear={cycle.review_year} />}
         </SheetContent>
       </Sheet>
     </div>
   );
 }
 
-function ReviewDetail({ instance }: { instance: InstanceWithEmployee }) {
+function ReviewDetail({ instance, fiscalYear }: { instance: InstanceWithEmployee; fiscalYear?: number }) {
   const { user } = useAuth();
   const { data: template } = useTemplate(
     (instance as { template_override_id?: string | null }).template_override_id ?? instance.template_id,
@@ -211,7 +211,7 @@ function ReviewDetail({ instance }: { instance: InstanceWithEmployee }) {
         eligibility={template?.sections.eligibility_criteria}
         eligibilityInputs={instance.eligibility_inputs}
         employeeId={instance.employee_id}
-        fiscalYear={cycle?.review_year}
+        fiscalYear={fiscalYear}
         readOnly
       />
 
