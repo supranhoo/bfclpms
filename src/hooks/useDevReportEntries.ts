@@ -100,7 +100,8 @@ export function useDevReportMonths() {
         .limit(5000);
       if (error) throw error;
       const seen = new Set<string>();
-      for (const row of (data ?? []) as Array<{ entry_date: string | null }>) {
+      const rows = (data ?? []) as unknown as Array<{ entry_date: string | null }>;
+      for (const row of rows) {
         if (!row.entry_date) continue;
         seen.add(row.entry_date.slice(0, 7));
       }
