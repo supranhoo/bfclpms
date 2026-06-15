@@ -27,6 +27,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { toast } from 'sonner';
 import { computeCriteriaScore } from '@/lib/annualReview/scoring';
+import { fyStartFromCycle } from '@/lib/annualReview/fiscalYear';
 import type { EvidenceItem } from '@/types/annualReview';
 import { EmployeeResultsView } from '@/components/annual-review/EmployeeResultsView';
 
@@ -158,7 +159,7 @@ export default function EmployeeAnnualReview() {
         eligibility={template?.sections.eligibility_criteria}
         eligibilityInputs={instance.eligibility_inputs}
         employeeId={instance.employee_id}
-        fiscalYear={cycle.review_year}
+        fiscalYear={fyStartFromCycle(cycle)}
         readOnly
       />
 

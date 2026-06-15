@@ -78,13 +78,18 @@ export interface CarryKraConfig {
 
 export interface CarryKraMonthly {
   month: string;          // 'July'..'June'
-  avg: number | null;     // 0..100, weighted avg of KPI final scores (null = no data)
+  avg: number | null;     // 0..KPI_SCALE_MAX, weight-aware avg of KPI ratings (null = no data)
   kpiCount: number;
 }
 
 export interface CarryKraSnapshot {
   monthly: CarryKraMonthly[];
-  value: number;          // average of monthly avgs over selected months
+  /** Raw rating, 0..KPI_SCALE_MAX, average of selected monthly ratings (ignoring null months). */
+  rating: number;
+  /** Scaled contribution in percentage points = (rating / KPI_SCALE_MAX) * weight. */
+  value: number;
+  /** Max possible contribution = the system-score `weight` passed in. */
+  maxValue: number;
   fiscal_year: number;
   config: CarryKraConfig;
   computed_at: string;

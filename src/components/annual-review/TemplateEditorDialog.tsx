@@ -320,6 +320,7 @@ export function TemplateEditorDialog({
                           <CarryKraConfigEditor
                             cfg={sc.carry_config ?? { aggregation: 'overall_avg', excludeNa: true }}
                             onChange={(cfg) => updateAt(setSections, 'system_scores', i, { carry_config: cfg })}
+                            weight={Number(sc.weight) || 0}
                           />
                         )}
                       </TableCell>
@@ -630,10 +631,11 @@ function CriterionOptionsButton({
 }
 
 function CarryKraConfigEditor({
-  cfg, onChange,
+  cfg, onChange, weight = 100,
 }: {
   cfg: CarryKraConfig;
   onChange: (cfg: CarryKraConfig) => void;
+  weight?: number;
 }) {
   const months = cfg.months ?? [];
   const toggleMonth = (m: string) => {
@@ -689,9 +691,10 @@ function CarryKraConfigEditor({
         /> Exclude N/A KPIs
       </label>
       <p className="text-[10px] text-muted-foreground leading-snug">
-        Carry value = average of monthly KRA scores from this employee's PMS history (final → auditor → manager → self).
+        Rating = weight-aware avg of monthly KPI scores (final → auditor → manager → self) on a 0–{5} scale.
+        Achieved (out of {weight}) = (rating ÷ 5) × max weight.
       </p>
-      <CarryKraMappingPreview cfg={cfg} />
+      <CarryKraMappingPreview cfg={cfg} weight={weight} />
     </div>
   );
 }

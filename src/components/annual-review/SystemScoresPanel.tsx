@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
+import { useEffect } from 'react';
 import { Progress } from '@/components/ui/progress';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -9,6 +10,7 @@ import { AlertCircle, ChevronDown, Calendar, Loader2 } from 'lucide-react';
 import type { TemplateSystemScore, EligibilityCriterion, CarryKraConfig } from '@/types/annualReview';
 import { evaluateEligibility } from '@/lib/annualReview/eligibility';
 import { buildCarrySnapshot, selectMonths, FY_MONTHS } from '@/services/annualReview/carryKraScore';
+import { KPI_SCALE_MAX, fyLabel } from '@/lib/annualReview/fiscalYear';
 import { useAnnualReviewI18n } from '@/components/annual-review/AnnualReviewI18nContext';
 
 export function SystemScoresPanel({
@@ -122,38 +124,55 @@ function CarryKraScoreCard({
   const enabled = !!employeeId && typeof fiscalYear === 'number';
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ['carryKraScore', employeeId, fiscalYear, cfg],
-    queryFn: () => buildCarrySnapshot(employeeId!, fiscalYear!, cfg),
+    queryKey: ['carryKraScore', employeeId, fiscalYear, cfg, score.weight],
+    queryFn: () => buildCarrySnapshot(employeeId!, fiscalYear!, cfg, Number(score.weight) || 0),
     enabled,
     staleTime: 60_000,
   });
 
-  // Sync the computed value into the instance's system_scores map (idempotent).
-  if (data && onChangeValue && Number(storedValue ?? -1) !== data.value) {
-    queueMicrotask(() => onChangeValue(score.id, data.value));
-  }
+  // Idempotent sync of the computed (scaled) value into instance.system_scores.
+  // Side-effects MUST live in useEffect (project core rule).
+  useEffect(() => {
+    if (!data || !onChangeValue) return;
+    if (Number(storedValue ?? -1) === data.value) return;
+    onChangeValue(score.id, data.value);
+  }, [data, onChangeValue, score.id, storedValue]);
 
   const value = data?.value ?? storedValue ?? 0;
+  const maxValue = data?.maxValue ?? (Number(score.weight) || 0);
+  const rating = data?.rating ?? 0;
+  const pct = maxValue > 0 ? Math.min(100, (Number(value) / maxValue) * 100) : 0;
   const selected = data ? selectMonths(data.monthly, cfg) : [];
   const selectedSet = new Set(selected.map((m) => m.month));
 
   return (
     <div className="space-y-2 rounded-lg border bg-card p-3 md:col-span-2">
-      <div className="flex items-start justify-between gap-2">
+      <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="space-y-0.5">
           <p className="text-sm font-medium flex items-center gap-2">
             {tTemplate('system_score', score.id, 'name', score.name)}
             <Badge variant="secondary" className="text-[10px] gap-1"><Calendar className="h-3 w-3" />Carry KRA</Badge>
           </p>
           <p className="text-xs text-muted-foreground">
-            Max weight: {score.weight} · FY{fiscalYear ?? '—'} · {labelForCfg(cfg)}
+            {typeof fiscalYear === 'number' ? fyLabel(fiscalYear) : 'FY —'} · {labelForCfg(cfg)}
           </p>
         </div>
-        <p className="text-sm font-semibold tabular-nums">
-          {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : Number(value).toFixed(2)}
-        </p>
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
+          {isLoading ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <>
+              <Metric label={t('carry.achieved', 'Achieved')} value={Number(value).toFixed(2)} emphasize />
+              <Metric label={t('carry.out_of', 'Out of')} value={Number(maxValue).toFixed(0)} />
+              <Metric
+                label={t('carry.rating', 'Rating')}
+                value={`${Number(rating).toFixed(2)} / ${KPI_SCALE_MAX}`}
+              />
+            </>
+          )}
+        </div>
       </div>
-      <Progress value={Math.min(100, Number(value))} className="h-2" />
+      <Progress value={pct} className="h-2" />
 
       {!enabled && (
         <p className="text-xs text-muted-foreground">Employee context unavailable — cannot fetch carry score.</p>
@@ -176,7 +195,7 @@ function CarryKraScoreCard({
                 <TableRow>
                   <TableHead className="h-8">{t('col.month', 'Month')}</TableHead>
                   <TableHead className="h-8 text-right">{t('col.kpis', 'KPIs')}</TableHead>
-                  <TableHead className="h-8 text-right">{t('col.avg_score', 'Avg Score')}</TableHead>
+                  <TableHead className="h-8 text-right">{t('col.rating_5', `Rating (/${KPI_SCALE_MAX})`)}</TableHead>
                   <TableHead className="h-8 w-20">{t('col.used', 'Used')}</TableHead>
                 </TableRow>
               </TableHeader>
@@ -206,4 +225,13 @@ function labelForCfg(cfg: CarryKraConfig): string {
   if (cfg.aggregation === 'last_n_months') return `last ${cfg.lastN ?? 6} months`;
   if (cfg.aggregation === 'selected_months') return `${(cfg.months ?? []).length} selected months`;
   return 'overall average';
+}
+
+function Metric({ label, value, emphasize }: { label: string; value: string; emphasize?: boolean }) {
+  return (
+    <span className="inline-flex items-baseline gap-1">
+      <span className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</span>
+      <span className={`tabular-nums ${emphasize ? 'text-sm font-semibold' : 'text-xs font-medium'}`}>{value}</span>
+    </span>
+  );
 }

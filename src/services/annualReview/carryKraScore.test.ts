@@ -1,7 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import {
-  aggregateMonthly, selectMonths, computeCarryValue, pickScore, calendarYearForMonth, FY_MONTHS,
+  aggregateMonthly, selectMonths, computeCarryValue, computeCarryRating, computeCarryContribution,
+  pickScore, calendarYearForMonth, FY_MONTHS,
 } from './carryKraScore';
+import { KPI_SCALE_MAX } from '@/lib/annualReview/fiscalYear';
 
 const row = (overrides: Record<string, unknown> = {}) => ({
   kpi_id: 'k', is_na: false,
@@ -66,5 +68,36 @@ describe('carryKraScore', () => {
     ] as any;
     expect(computeCarryValue(monthly, { aggregation: 'overall_avg' })).toBe(70);
     expect(computeCarryValue([], { aggregation: 'overall_avg' })).toBe(0);
+  });
+
+  it('computeCarryRating returns the raw 0..KPI_SCALE_MAX rating', () => {
+    const monthly = [
+      { month: 'July', avg: 3, kpiCount: 1 },
+      { month: 'August', avg: null, kpiCount: 0 },
+      { month: 'September', avg: 4, kpiCount: 1 },
+    ] as any;
+    const rating = computeCarryRating(monthly, { aggregation: 'overall_avg' });
+    expect(rating).toBe(3.5);
+    expect(rating).toBeLessThanOrEqual(KPI_SCALE_MAX);
+  });
+
+  it('computeCarryContribution scales (rating / 5) * weight', () => {
+    expect(computeCarryContribution(5, 100)).toBe(100);
+    expect(computeCarryContribution(3.44, 100)).toBe(68.8);
+    expect(computeCarryContribution(3.5, 40)).toBe(28);
+    expect(computeCarryContribution(0, 100)).toBe(0);
+    expect(computeCarryContribution(4, 0)).toBe(0);
+    expect(computeCarryContribution(Number.NaN, 100)).toBe(0);
+  });
+
+  it('regression — rating is NEVER persisted into appraisal totals (scaling happens in computeCarryContribution)', () => {
+    // The old contract returned the raw 0..5 rating as `value`, silently
+    // under-counting by 20×. Pin the new behavior so future refactors notice.
+    const rating = 3.44;
+    const weight = 100;
+    const old = rating;                                  // pre-fix: 3.44 ❌
+    const fixed = computeCarryContribution(rating, weight); // post-fix: 68.8 ✅
+    expect(old).not.toBe(fixed);
+    expect(fixed).toBe(68.8);
   });
 });

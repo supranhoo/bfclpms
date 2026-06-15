@@ -15,6 +15,7 @@ import { AnnualReviewStageTracker } from '@/components/annual-review/AnnualRevie
 import { AnnualReviewStatusBadge } from '@/components/annual-review/AnnualReviewStatusBadge';
 import { CriteriaScoringMatrix } from '@/components/annual-review/CriteriaScoringMatrix';
 import { SystemScoresPanel } from '@/components/annual-review/SystemScoresPanel';
+import { fyStartFromCycle } from '@/lib/annualReview/fiscalYear';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -117,13 +118,13 @@ export default function TeamAnnualReview() {
       <div className="grid gap-4 md:grid-cols-3">
         <aside className="md:col-span-1">{list}</aside>
         <section className="md:col-span-2 hidden md:block">
-          {selected ? <ReviewDetail instance={selected} fiscalYear={cycle.review_year} /> : <Card><CardContent className="p-6 text-muted-foreground">Pick someone to review.</CardContent></Card>}
+          {selected ? <ReviewDetail instance={selected} fiscalYear={fyStartFromCycle(cycle)} /> : <Card><CardContent className="p-6 text-muted-foreground">Pick someone to review.</CardContent></Card>}
         </section>
       </div>
 
       <Sheet open={drawer} onOpenChange={setDrawer}>
         <SheetContent side="bottom" className="h-[92dvh] overflow-y-auto">
-          {selected && <ReviewDetail instance={selected} fiscalYear={cycle.review_year} />}
+          {selected && <ReviewDetail instance={selected} fiscalYear={fyStartFromCycle(cycle)} />}
         </SheetContent>
       </Sheet>
     </div>

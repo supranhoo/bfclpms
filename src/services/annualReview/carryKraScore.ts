@@ -2,6 +2,7 @@ import { supabase } from '@/integrations/supabase/client';
 import type {
   CarryKraConfig, CarryKraMonthly, CarryKraSnapshot,
 } from '@/types/annualReview';
+import { KPI_SCALE_MAX } from '@/lib/annualReview/fiscalYear';
 
 /** Fiscal year months (July → June). */
 export const FY_MONTHS = [
@@ -88,12 +89,33 @@ export function selectMonths(monthly: CarryKraMonthly[], cfg: CarryKraConfig): C
   return monthly; // overall_avg
 }
 
-/** Average of monthly avgs (ignoring null months). */
-export function computeCarryValue(monthly: CarryKraMonthly[], cfg: CarryKraConfig): number {
+/**
+ * Average of monthly KPI ratings (0..KPI_SCALE_MAX), ignoring null months.
+ * This is the **raw rating** — NOT yet scaled to the system score's weight.
+ */
+export function computeCarryRating(monthly: CarryKraMonthly[], cfg: CarryKraConfig): number {
   const chosen = selectMonths(monthly, cfg).filter((m) => m.avg != null);
   if (chosen.length === 0) return 0;
   const sum = chosen.reduce((a, m) => a + (m.avg ?? 0), 0);
   return +(sum / chosen.length).toFixed(2);
+}
+
+/**
+ * Scaled contribution in percentage points fed into the appraisal total.
+ *   contribution = (rating / KPI_SCALE_MAX) * weight
+ *
+ * SSOT scaling lives here so system_scores[<id>] never contains a raw 0..5
+ * mini-value masquerading as percentage points (see POLICY.md).
+ */
+export function computeCarryContribution(rating: number, weight: number): number {
+  if (!Number.isFinite(rating) || !Number.isFinite(weight) || weight <= 0) return 0;
+  const v = (rating / KPI_SCALE_MAX) * weight;
+  return +v.toFixed(2);
+}
+
+/** Back-compat: legacy name, returns raw rating (0..KPI_SCALE_MAX). */
+export function computeCarryValue(monthly: CarryKraMonthly[], cfg: CarryKraConfig): number {
+  return computeCarryRating(monthly, cfg);
 }
 
 /** Fetch raw submissions + KPI metadata for an employee for the fiscal year window. */
@@ -122,11 +144,16 @@ export async function buildCarrySnapshot(
   employeeId: string,
   fyStart: number,
   cfg: CarryKraConfig,
+  weight: number,
 ): Promise<CarryKraSnapshot> {
   const monthly = await fetchMonthlyKraScores(employeeId, fyStart, cfg.excludeNa ?? true);
+  const rating = computeCarryRating(monthly, cfg);
+  const value = computeCarryContribution(rating, weight);
   return {
     monthly,
-    value: computeCarryValue(monthly, cfg),
+    rating,
+    value,
+    maxValue: Math.max(0, Number(weight) || 0),
     fiscal_year: fyStart,
     config: cfg,
     computed_at: new Date().toISOString(),

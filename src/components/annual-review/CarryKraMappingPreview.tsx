@@ -18,6 +18,7 @@ import {
 } from '@/services/annualReview/carryKraScore';
 import { searchActiveEmployees, type EmployeeLite } from '@/services/annualReview/annualReviewService';
 import type { CarryKraConfig } from '@/types/annualReview';
+import { KPI_SCALE_MAX } from '@/lib/annualReview/fiscalYear';
 
 function currentFyStart(): number {
   const now = new Date();
@@ -36,7 +37,7 @@ function labelForCfg(cfg: CarryKraConfig): string {
  * KRA config card. Reuses `buildCarrySnapshot` so the preview is byte-for-byte
  * identical to what the employee will see at review time. Read-only.
  */
-export function CarryKraMappingPreview({ cfg }: { cfg: CarryKraConfig }) {
+export function CarryKraMappingPreview({ cfg, weight = 100 }: { cfg: CarryKraConfig; weight?: number }) {
   const [open, setOpen] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -62,8 +63,8 @@ export function CarryKraMappingPreview({ cfg }: { cfg: CarryKraConfig }) {
 
   const enabled = !!employee?.id;
   const snapshot = useQuery({
-    queryKey: ['carryKraPreview', employee?.id, fyStart, cfg],
-    queryFn: () => buildCarrySnapshot(employee!.id, fyStart, cfg),
+    queryKey: ['carryKraPreview', employee?.id, fyStart, cfg, weight],
+    queryFn: () => buildCarrySnapshot(employee!.id, fyStart, cfg, weight),
     enabled,
     staleTime: 60_000,
   });
@@ -173,7 +174,12 @@ export function CarryKraMappingPreview({ cfg }: { cfg: CarryKraConfig }) {
           <>
             <div className="flex flex-wrap items-center justify-between gap-2 rounded-md bg-muted/30 px-2 py-1.5 text-xs">
               <div className="flex items-center gap-2">
-                <Badge variant="secondary" className="font-mono">Carry: {snapshot.data.value.toFixed(2)}</Badge>
+                <Badge variant="secondary" className="font-mono">
+                  Achieved {snapshot.data.value.toFixed(2)} / {snapshot.data.maxValue.toFixed(0)}
+                </Badge>
+                <Badge variant="outline" className="font-mono">
+                  Rating {snapshot.data.rating.toFixed(2)} / {KPI_SCALE_MAX}
+                </Badge>
                 <span className="text-muted-foreground">
                   {monthsWithData} / 12 months with data · {labelForCfg(cfg)}
                 </span>
@@ -187,7 +193,7 @@ export function CarryKraMappingPreview({ cfg }: { cfg: CarryKraConfig }) {
                 <TableRow>
                   <TableHead className="h-8 text-xs">Month</TableHead>
                   <TableHead className="h-8 text-right text-xs">KPIs</TableHead>
-                  <TableHead className="h-8 text-right text-xs">Avg Score</TableHead>
+                  <TableHead className="h-8 text-right text-xs">Rating (/{KPI_SCALE_MAX})</TableHead>
                   <TableHead className="h-8 w-16 text-xs">Used</TableHead>
                 </TableRow>
               </TableHeader>
