@@ -13,6 +13,7 @@ import { useBulkEmployeeWorkflows } from '@/hooks/useWorkflowConfig';
 import { useEmployeeScoresForPeriod } from '@/hooks/useEmployeeScoresForPeriod';
 import { useOrgKpiPeriodCounts } from '@/hooks/useOrgKpiPeriodCounts';
 import { resolvePendingStatuses, resolveReviewableStatuses, DEFAULT_WORKFLOW_STAGES } from '@/lib/workflowEngine';
+import { matchesTeamTile, type TeamTile } from '@/lib/teamReviewTileFilter';
 import { getScoreBadgeClass } from '@/lib/reviewConstants';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -800,27 +801,26 @@ export function EmployeeSelectorGrid({
         const reviewableStatuses = resolveReviewableStatuses(engineLevel, stages);
         
         if (viewLevel === 'team') {
-          if (statusFilter === 'pending_kra_set' && kpi.status === 'kra_set' && (isFullAccess || isDirect)) {
-            employeeIds.add(kpi.employee_id);
-          } else if (statusFilter === 'pending_direct' && (isFullAccess || isDirect) && kpi.status === 'self_review') {
-            employeeIds.add(kpi.employee_id);
-          } else if (statusFilter === 'pending_skip') {
-            // For full-access roles we don't have indirect membership; resolve
-            // skip-reviewable statuses from the employee's own workflow stages.
-            const skipReviewable = isIndirect
-              ? reviewableStatuses
-              : (isFullAccess ? resolveReviewableStatuses('skip_level', stages) : []);
-            if ((isFullAccess || isIndirect) && skipReviewable.includes(kpi.status || '')) {
+          // Stage-true tile filtering — see src/lib/teamReviewTileFilter.ts.
+          // Full-access roles (admin / hr_pms / auditor / management) do NOT
+          // bypass stage gating: an employee surfaces under Direct Pending
+          // only when their resolved workflow actually contains manager_check,
+          // and under Skip-Level Pending only when it contains skip_level_check.
+          const tile = statusFilter as TeamTile;
+          if (
+            tile === 'pending_kra_set' ||
+            tile === 'pending_direct' ||
+            tile === 'pending_skip' ||
+            tile === 'reviewed'
+          ) {
+            if (matchesTeamTile(tile, {
+              kpiStatus: kpi.status,
+              stages,
+              isDirect,
+              isIndirect,
+              isFullAccess,
+            })) {
               employeeIds.add(kpi.employee_id);
-            }
-          } else if (statusFilter === 'reviewed') {
-            if ((isFullAccess || isDirect) && !['kra_set', 'self_review'].includes(kpi.status || '')) {
-              employeeIds.add(kpi.employee_id);
-            } else if (isIndirect) {
-              const slIdx = stages.indexOf('skip_level_check');
-              if (slIdx >= 0 && stages.slice(slIdx).includes(kpi.status || '')) {
-                employeeIds.add(kpi.employee_id);
-              }
             }
           }
         } else if (viewLevel === 'audit') {

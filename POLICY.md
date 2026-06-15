@@ -3068,6 +3068,18 @@ Sum invariant: `KRA Set + Direct Pending + Skip-Level Pending + Reviewed === Tot
 
 The standalone "Total KPIs" tile is REMOVED — its number now lives as the denominator of the Reviewed tile to keep the row at six tiles. Implementation: `src/components/review/EmployeeSelectorGrid.tsx` `renderStatsCards()` team branch + `StatCard.denominator` prop. Tile grid uses `grid-cols-2 md:grid-cols-3 xl:grid-cols-6`. Regression: `src/test/teamReviewsFullAccessTiles.test.ts` (sum invariant + `kraSetPending` case).
 
+## §132 — Team Reviews Tile Filters Are Stage-True (v2.66.11.x)
+Clicking a tile on `/dashboard?view=team` MUST narrow the employee grid to employees who actually have a KPI at that tile's stage. Full-access roles (`admin`, `hr_pms`, `auditor`, `management`) DO NOT bypass stage gating:
+
+- **Direct Pending** — only employees whose resolved workflow contains `manager_check` AND whose KPI is at `self_review`.
+- **Skip-Level Pending** — only employees whose resolved workflow contains `skip_level_check` AND whose KPI status is in `resolveReviewableStatuses('skip_level', stages)`.
+- **KRA Set** — only employees whose resolved workflow contains `self_review` (so KRAs-only chains without a review stage don't surface).
+- **Reviewed** — direct reports past `self_review`; indirect reports at/after `skip_level_check`; full-access fallback past KRA Set/self_review.
+
+**Why.** Before this rule, the inline filter in `EmployeeSelectorGrid.tsx` accepted any `self_review` KPI for full-access viewers, surfacing employees on `self_hr_pms` / `self_audit_mgmt` templates (no manager_check stage) under Direct Pending — including employees badged "Indirect / N reviewed". This contradicted §126/§127 tile counts.
+
+**Implementation.** Predicate lives in `src/lib/teamReviewTileFilter.ts::matchesTeamTile`; called from the `viewLevel === 'team'` branch of the `displayMembers` `useMemo` in `EmployeeSelectorGrid.tsx`. Regression: `src/test/teamReviewTileFilter.test.ts`.
+
 ## §127.1 — Reviewer-Stage Tile Parity (v2.66.11.8)
 The 6-tile composition rule of §127 extends to all reviewer-stage dashboards. **HR PMS Review**, **Manager Review** (`pending_manager_review`), and **Skip Mgr Review** (`pending_skip_review`) MUST present six tiles using the same `grid-cols-2 md:grid-cols-3 xl:grid-cols-6` layout, in this order:
 
