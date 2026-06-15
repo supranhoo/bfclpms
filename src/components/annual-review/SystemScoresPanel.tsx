@@ -139,7 +139,7 @@ function CarryKraScoreCard({
   }, [data, onChangeValue, score.id, storedValue]);
 
   const value = data?.value ?? storedValue ?? 0;
-  const maxValue = data?.maxValue ?? Number(score.weight) || 0;
+  const maxValue = data?.maxValue ?? (Number(score.weight) || 0);
   const rating = data?.rating ?? 0;
   const pct = maxValue > 0 ? Math.min(100, (Number(value) / maxValue) * 100) : 0;
   const selected = data ? selectMonths(data.monthly, cfg) : [];
