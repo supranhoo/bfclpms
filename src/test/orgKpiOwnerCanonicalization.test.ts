@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { findCanonicalKpiSignature, normalizeKpiKey } from '@/lib/orgKpiKey';
 
 // Mirrors the inline helper in useAssignOrgKpiOwner.
 const norm = (s: string) => (s || '').replace(/\s+/g, ' ').trim();
@@ -20,5 +21,19 @@ describe('Org KPI owner canonical-key matching', () => {
 
   it('does not falsely match a different KPI', () => {
     expect(norm('Adherence to Budget')).not.toBe(norm(masterKra));
+  });
+
+  it('returns the canonical database signature before owner insert/read', () => {
+    const submittedKpi = masterKpi.replace(/\n/g, ' ');
+    expect(findCanonicalKpiSignature([{ kra_name: masterKra, kpi_name: masterKpi }], masterKra, submittedKpi)).toEqual({
+      kraName: masterKra,
+      kpiName: masterKpi,
+    });
+  });
+
+  it('uses normalized lookup keys so existing owners are not shown as missing', () => {
+    const ownerRowKey = normalizeKpiKey('cat-1', masterKra, masterKpi);
+    const dialogKey = normalizeKpiKey('cat-1', masterKra, masterKpi.replace(/\n/g, ' '));
+    expect(dialogKey).toBe(ownerRowKey);
   });
 });
