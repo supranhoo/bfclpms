@@ -1099,9 +1099,17 @@ export default function Organization() {
 function OrgTabsList({ counts }: { counts: Record<OrgTabKey, number> }) {
   const tabs = useResolvedTabs(ORG_TAB_DEFS);
   return (
-    <TabsList className="flex-wrap">
+    // v2.66.15 — The shared TabsList is locked to `h-10` (see
+    // src/components/ui/tabs.tsx). With 11 tabs the default `flex-wrap`
+    // overflowed that fixed height, producing the broken second row in the
+    // Organization Structure screenshot. Override with `h-auto` so the
+    // container grows with content, and switch to a horizontal scroll strip
+    // on `md+` where there is room for a single row.
+    <TabsList
+      className="h-auto flex flex-wrap gap-1 justify-start md:flex-nowrap md:overflow-x-auto md:[scrollbar-width:thin]"
+    >
       {tabs.map((t) => (
-        <TabsTrigger key={t.key} value={t.key}>
+        <TabsTrigger key={t.key} value={t.key} className="shrink-0">
           {t.label} ({counts[t.key as OrgTabKey] ?? 0})
         </TabsTrigger>
       ))}
