@@ -468,6 +468,7 @@ export type Database = {
           eligibility_inputs: Json
           employee_id: string
           employee_rebuttal: string | null
+          enabled_stages: Json
           final_rating: string | null
           finalized_at: string | null
           finalized_by: string | null
@@ -495,6 +496,7 @@ export type Database = {
           eligibility_inputs?: Json
           employee_id: string
           employee_rebuttal?: string | null
+          enabled_stages?: Json
           final_rating?: string | null
           finalized_at?: string | null
           finalized_by?: string | null
@@ -522,6 +524,7 @@ export type Database = {
           eligibility_inputs?: Json
           employee_id?: string
           employee_rebuttal?: string | null
+          enabled_stages?: Json
           final_rating?: string | null
           finalized_at?: string | null
           finalized_by?: string | null
@@ -12426,6 +12429,27 @@ export type Database = {
           source_config_id: string
         }[]
       }
+      annual_review_next_status: {
+        Args: {
+          p_current: Database["public"]["Enums"]["annual_review_status"]
+          p_enabled: Json
+        }
+        Returns: Database["public"]["Enums"]["annual_review_status"]
+      }
+      annual_review_prev_role: {
+        Args: {
+          p_enabled: Json
+          p_role: Database["public"]["Enums"]["annual_reviewer_role"]
+        }
+        Returns: Database["public"]["Enums"]["annual_reviewer_role"]
+      }
+      annual_review_prev_status: {
+        Args: {
+          p_enabled: Json
+          p_role: Database["public"]["Enums"]["annual_reviewer_role"]
+        }
+        Returns: Database["public"]["Enums"]["annual_review_status"]
+      }
       apply_final_score_rule: { Args: { p_kpi_id: string }; Returns: undefined }
       apply_workflow_global_default_migration: {
         Args: never
@@ -13843,6 +13867,14 @@ export type Database = {
           p_reviewer_role: Database["public"]["Enums"]["annual_reviewer_role"]
         }
         Returns: Database["public"]["Enums"]["annual_review_status"]
+      }
+      set_annual_review_enabled_stages: {
+        Args: {
+          p_enabled_stages: Json
+          p_instance_id: string
+          p_reason: string
+        }
+        Returns: undefined
       }
       set_annual_review_template_override: {
         Args: { p_instance_id: string; p_reason: string; p_template_id: string }
