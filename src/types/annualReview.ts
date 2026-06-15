@@ -59,7 +59,35 @@ export interface TemplateSystemScore {
   id: string;
   name: string;
   weight: number;        // max percentage points contributed
-  source?: 'manual' | 'safety' | 'hr' | 'env' | string;
+  source?: 'manual' | 'safety' | 'hr' | 'env' | 'carry_kra' | string;
+  /** Only used when source === 'carry_kra'. */
+  carry_config?: CarryKraConfig;
+}
+
+export type CarryKraAggregation = 'overall_avg' | 'last_n_months' | 'selected_months';
+
+export interface CarryKraConfig {
+  aggregation: CarryKraAggregation;
+  /** Used when aggregation === 'last_n_months'. */
+  lastN?: number;
+  /** Used when aggregation === 'selected_months'. Month names: 'July'..'June'. */
+  months?: string[];
+  /** Default true — exclude is_na submissions. */
+  excludeNa?: boolean;
+}
+
+export interface CarryKraMonthly {
+  month: string;          // 'July'..'June'
+  avg: number | null;     // 0..100, weighted avg of KPI final scores (null = no data)
+  kpiCount: number;
+}
+
+export interface CarryKraSnapshot {
+  monthly: CarryKraMonthly[];
+  value: number;          // average of monthly avgs over selected months
+  fiscal_year: number;
+  config: CarryKraConfig;
+  computed_at: string;
 }
 
 export type EligibilityOperator = 'equals' | 'not_equals' | 'gt' | 'gte' | 'lt' | 'lte';
