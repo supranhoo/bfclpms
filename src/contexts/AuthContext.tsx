@@ -327,6 +327,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // pre-bootstrap empty cache after login/refresh.
     queryClient.invalidateQueries({ queryKey: ['employee-performance-summary'] });
     queryClient.invalidateQueries({ queryKey: ['employee-performance-trends'] });
+    // BUG (Avinash 101732 → 102028 invisible): the access-profile scoped
+    // visibility query was first issued before auth.uid() was available, so
+    // `get_user_management_visible_employee_ids` returned 0 rows and the
+    // resulting empty Set silently filtered the entire roster to "0 of 0".
+    // Invalidate once auth is ready so the scoped roster recovers.
+    queryClient.invalidateQueries({ queryKey: ['my-visible-employee-ids'] });
   }, [isReady, user?.id, queryClient]);
 
   const signIn = async (email: string, password: string, rememberMe: boolean = true) => {

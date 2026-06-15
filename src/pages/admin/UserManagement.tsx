@@ -216,6 +216,9 @@ export default function UserManagement() {
   const isMobile = useIsMobile();
   const navigate = useNavigate();
   const { data: profiles, isLoading } = useProfiles();
+  // queryClient is initialized later, but we need it for the recovery
+  // refetch trigger below. The existing `queryClient` declaration is at
+  // line ~228 in this file (already in scope here).
   const { data: departments } = useDepartments();
   const { data: designationsList } = useDesignations();
   const { data: pmsGradesList } = usePmsGrades();
@@ -424,6 +427,22 @@ export default function UserManagement() {
   // employees that match at least one Org Level Scope row mapped to them.
   // Admins receive `visibleIds === null` → no narrowing.
   const { visibleIds, isAdmin: viewerIsAdmin } = useMyVisibleEmployeeIds();
+
+  // Recovery for the "0 of 0 while backend says 2571" race (Avinash 101732
+  // → 102028 invisible): when the visibility set says there ARE visible
+  // employees but the cached `useProfiles()` roster is empty, force a
+  // refetch of the roster cache once. The auth-ready invalidation in
+  // AuthContext is the primary fix; this is defense-in-depth for any
+  // window where the visibility query lands after the roster query but
+  // before the auth-ready invalidation completes.
+  useEffect(() => {
+    if (viewerIsAdmin) return;
+    if (!visibleIds || visibleIds.size === 0) return;
+    if (isLoading) return;
+    if ((profiles?.length ?? 0) > 0) return;
+    queryClient.invalidateQueries({ queryKey: ['profiles'] });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewerIsAdmin, visibleIds, profiles, isLoading]);
 
   // Admin-side dummy/system employee map — drives badge + Employee Type filter.
   // Admins ALWAYS see everyone here regardless of the global visibility setting.
@@ -1210,6 +1229,11 @@ export default function UserManagement() {
   const { data: userStats } = useQuery({
     queryKey: ['user-mgmt-stats'],
     staleTime: 60_000,
+    // Only full-access (admin) viewers should see GLOBAL profile head-counts
+    // in the stat cards. Scoped (access-profile) viewers must see counts
+    // that match the roster rendered below, otherwise the cards mislead
+    // ("Total 2571 / Showing 0 of 0"). See POLICY §NEW.
+    enabled: viewerIsAdmin,
     queryFn: async () => {
       const [totalRes, inactiveRes] = await Promise.all([
         supabase.from('profiles').select('*', { count: 'exact', head: true }),
@@ -1223,11 +1247,26 @@ export default function UserManagement() {
       };
     },
   });
+  // Scoped viewers: derive stats from the access-profile-narrowed roster
+  // so the cards never disagree with the table beneath them.
+  const scopedRoster = useMemo(() => {
+    if (viewerIsAdmin || !visibleIds) return profiles ?? [];
+    return (profiles ?? []).filter(p => visibleIds.has(p.id));
+  }, [viewerIsAdmin, visibleIds, profiles]);
+  const scopedInactive = useMemo(
+    () => scopedRoster.filter(p => (p as any).is_active === false).length,
+    [scopedRoster],
+  );
   const rosterLen = profiles?.length || 0;
-  const totalUsers = userStats?.total ?? rosterLen;
-  const inactiveUsers = userStats?.inactive ?? 0;
+  const totalUsers = viewerIsAdmin
+    ? (userStats?.total ?? rosterLen)
+    : scopedRoster.length;
+  const inactiveUsers = viewerIsAdmin
+    ? (userStats?.inactive ?? 0)
+    : scopedInactive;
   const activeUsers = Math.max(0, totalUsers - inactiveUsers);
-  const admins = profiles?.filter(p => (p.user_roles as any)?.[0]?.role === 'admin').length || 0;
+  const admins = (viewerIsAdmin ? (profiles ?? []) : scopedRoster)
+    .filter(p => (p.user_roles as any)?.[0]?.role === 'admin').length;
 
   if (isLoading) {
     return <UserManagementSkeleton />;
