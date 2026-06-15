@@ -1069,7 +1069,13 @@ function DepartmentRow({ row, onValueChange, ratingThresholds, targetValue, uom,
   const effectiveTarget = row.targetValue != null ? row.targetValue : targetValue;
   const effectiveUom = row.uom != null ? row.uom : uom;
   const isSentBack = !!sentBackInfo;
-  const canPropagate = (row.achievedValue !== null || rowIsNa) && !isPropagating;
+  // RCA 2026-06-15 — see EmployeeRow note. Block propagation when the
+  // local achieved value has not been persisted to OKV yet.
+  const localMatchesDb =
+    row.dbAchievedValue === undefined ||
+    row.dbAchievedValue === row.achievedValue;
+  const canPropagate =
+    (row.achievedValue !== null || rowIsNa) && !isPropagating && localMatchesDb;
 
   return (
     <TableRow className={`${rowIsNa ? 'opacity-60' : ''} ${isSentBack ? 'border-l-2 border-l-amber-500 bg-amber-50/30 dark:bg-amber-950/20' : ''}`}>
