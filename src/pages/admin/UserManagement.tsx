@@ -1229,6 +1229,11 @@ export default function UserManagement() {
   const { data: userStats } = useQuery({
     queryKey: ['user-mgmt-stats'],
     staleTime: 60_000,
+    // Only full-access (admin) viewers should see GLOBAL profile head-counts
+    // in the stat cards. Scoped (access-profile) viewers must see counts
+    // that match the roster rendered below, otherwise the cards mislead
+    // ("Total 2571 / Showing 0 of 0"). See POLICY §NEW.
+    enabled: viewerIsAdmin,
     queryFn: async () => {
       const [totalRes, inactiveRes] = await Promise.all([
         supabase.from('profiles').select('*', { count: 'exact', head: true }),
@@ -1242,11 +1247,26 @@ export default function UserManagement() {
       };
     },
   });
+  // Scoped viewers: derive stats from the access-profile-narrowed roster
+  // so the cards never disagree with the table beneath them.
+  const scopedRoster = useMemo(() => {
+    if (viewerIsAdmin || !visibleIds) return profiles ?? [];
+    return (profiles ?? []).filter(p => visibleIds.has(p.id));
+  }, [viewerIsAdmin, visibleIds, profiles]);
+  const scopedInactive = useMemo(
+    () => scopedRoster.filter(p => (p as any).is_active === false).length,
+    [scopedRoster],
+  );
   const rosterLen = profiles?.length || 0;
-  const totalUsers = userStats?.total ?? rosterLen;
-  const inactiveUsers = userStats?.inactive ?? 0;
+  const totalUsers = viewerIsAdmin
+    ? (userStats?.total ?? rosterLen)
+    : scopedRoster.length;
+  const inactiveUsers = viewerIsAdmin
+    ? (userStats?.inactive ?? 0)
+    : scopedInactive;
   const activeUsers = Math.max(0, totalUsers - inactiveUsers);
-  const admins = profiles?.filter(p => (p.user_roles as any)?.[0]?.role === 'admin').length || 0;
+  const admins = (viewerIsAdmin ? (profiles ?? []) : scopedRoster)
+    .filter(p => (p.user_roles as any)?.[0]?.role === 'admin').length;
 
   if (isLoading) {
     return <UserManagementSkeleton />;
