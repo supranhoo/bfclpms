@@ -653,6 +653,14 @@ function EmployeeRow({ row, onValueChange, ratingThresholds, targetValue, uom, c
   const rowIsNa = row.isNa ?? false;
   const isSentBack = !!sentBackInfo;
 
+  // RCA 2026-06-15 — Defence in depth: block row Propagate when the
+  // local value diverges from the last persisted DB value, even if the
+  // dirty flag was inadvertently cleared. Prevents propagating an
+  // unsaved/local-only value (e.g. visible "0" never written to OKV).
+  const localMatchesDb =
+    row.dbAchievedValue === undefined ||
+    row.dbAchievedValue === row.achievedValue;
+
   // Derive counts from full observations if available, else fall back to legacy counts
   const counts = observations
     ? {
@@ -665,7 +673,8 @@ function EmployeeRow({ row, onValueChange, ratingThresholds, targetValue, uom, c
   const hasObservations = observations && observations.length > 0;
   const totalObs = counts ? counts.positive + counts.concern + counts.neutral : 0;
 
-  const canPropagate = (numVal !== null || rowIsNa) && !isPropagating;
+  const canPropagate =
+    (numVal !== null || rowIsNa) && !isPropagating && localMatchesDb;
 
   return (
     <>
