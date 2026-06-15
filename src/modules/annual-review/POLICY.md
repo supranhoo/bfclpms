@@ -73,6 +73,7 @@ Caveats:
 ## Reporting
 - `/reports/annual-review` is read-only. Bulk operations live in Admin → Progress only.
 - Exports cover the currently visible page (≤ 100 rows). Narrow filters for wider exports.
+- Summary/status counts MUST use count-only queries (`head: true, count: 'exact'`) or a paged read. Unpaged `.select(column)` reads are forbidden for cycle-wide aggregates — the Data API caps payloads at 1000 rows and silently undercounts large cycles.
 
 ## Version history
 - 2026-06-14 — Initial policy. Documented reopen, reassignment override precedence, and export scope.
