@@ -117,6 +117,7 @@ function CarryKraScoreCard({
   fiscalYear?: number;
   onChangeValue?: (id: string, value: number) => void;
 }) {
+  const { t, tTemplate } = useAnnualReviewI18n();
   const cfg: CarryKraConfig = score.carry_config ?? { aggregation: 'overall_avg', excludeNa: true };
   const enabled = !!employeeId && typeof fiscalYear === 'number';
 
@@ -141,7 +142,7 @@ function CarryKraScoreCard({
       <div className="flex items-start justify-between gap-2">
         <div className="space-y-0.5">
           <p className="text-sm font-medium flex items-center gap-2">
-            {score.name}
+            {tTemplate('system_score', score.id, 'name', score.name)}
             <Badge variant="secondary" className="text-[10px] gap-1"><Calendar className="h-3 w-3" />Carry KRA</Badge>
           </p>
           <p className="text-xs text-muted-foreground">
@@ -167,16 +168,16 @@ function CarryKraScoreCard({
       {data && (
         <Collapsible>
           <CollapsibleTrigger className="flex items-center gap-1.5 text-xs font-medium text-primary hover:underline">
-            <ChevronDown className="h-3.5 w-3.5" /> Monthly KRA breakdown ({data.monthly.filter((m) => m.avg != null).length} of 12 months with data)
+            <ChevronDown className="h-3.5 w-3.5" /> {t('section.monthly_kra_breakdown', 'Monthly KRA breakdown')} ({data.monthly.filter((m) => m.avg != null).length} / 12)
           </CollapsibleTrigger>
           <CollapsibleContent className="pt-2">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="h-8">Month</TableHead>
-                  <TableHead className="h-8 text-right">KPIs</TableHead>
-                  <TableHead className="h-8 text-right">Avg Score</TableHead>
-                  <TableHead className="h-8 w-20">Used</TableHead>
+                  <TableHead className="h-8">{t('col.month', 'Month')}</TableHead>
+                  <TableHead className="h-8 text-right">{t('col.kpis', 'KPIs')}</TableHead>
+                  <TableHead className="h-8 text-right">{t('col.avg_score', 'Avg Score')}</TableHead>
+                  <TableHead className="h-8 w-20">{t('col.used', 'Used')}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
