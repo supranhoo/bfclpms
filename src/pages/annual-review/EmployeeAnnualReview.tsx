@@ -15,6 +15,7 @@ import { CriteriaScoringMatrix } from '@/components/annual-review/CriteriaScorin
 import { SystemScoresPanel } from '@/components/annual-review/SystemScoresPanel';
 import { LanguageSwitcher } from '@/components/annual-review/LanguageSwitcher';
 import { useAnnualReviewTranslation } from '@/hooks/useAnnualReviewTranslation';
+import { AnnualReviewI18nProvider } from '@/components/annual-review/AnnualReviewI18nContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -67,6 +68,16 @@ export default function EmployeeAnnualReview() {
     [template, draft.criteria_scores],
   );
 
+  const evidenceByCriterion = useMemo(() => {
+    const map: Record<string, EvidenceItem[]> = {};
+    for (const e of draft.evidence ?? []) {
+      const [cid, ...rest] = e.name.split('::');
+      const realName = rest.length ? rest.join('::') : e.name;
+      (map[cid] ||= []).push({ ...e, name: realName });
+    }
+    return map;
+  }, [draft.evidence]);
+
   if (cycleLoading || instLoading) {
     return <div className="p-6 flex items-center gap-2 text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Loading…</div>;
   }
@@ -80,17 +91,23 @@ export default function EmployeeAnnualReview() {
   // Finalized: show the read-only results & acknowledgment view.
   if (instance.overall_status === 'completed') {
     return (
-      <div className="p-4 md:p-6 space-y-6 max-w-5xl mx-auto">
-        <header className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h1 className="text-2xl font-bold">{cycle.name}</h1>
-            <p className="text-sm text-muted-foreground">My annual review · {profile?.full_name}</p>
-          </div>
-          <AnnualReviewStatusBadge status={instance.overall_status} />
-        </header>
-        <AnnualReviewStageTracker status={instance.overall_status} enabledStages={instance.enabled_stages} />
-        <EmployeeResultsView instance={instance} template={template} responses={responses} />
-      </div>
+      <AnnualReviewI18nProvider
+        currentLanguage={lang}
+        defaultLanguage={template?.sections.settings?.default_language ?? 'en'}
+        templateTranslations={template?.sections.translations}
+      >
+        <div className="p-4 md:p-6 space-y-6 max-w-5xl mx-auto">
+          <header className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h1 className="text-2xl font-bold">{cycle.name}</h1>
+              <p className="text-sm text-muted-foreground">{t('cycle.my_review_by', 'My annual review')} · {profile?.full_name}</p>
+            </div>
+            <AnnualReviewStatusBadge status={instance.overall_status} />
+          </header>
+          <AnnualReviewStageTracker status={instance.overall_status} enabledStages={instance.enabled_stages} />
+          <EmployeeResultsView instance={instance} template={template} responses={responses} />
+        </div>
+      </AnnualReviewI18nProvider>
     );
   }
 
@@ -111,26 +128,21 @@ export default function EmployeeAnnualReview() {
     return tagged;
   };
 
-  const evidenceByCriterion = useMemo(() => {
-    const map: Record<string, EvidenceItem[]> = {};
-    for (const e of draft.evidence ?? []) {
-      const [cid, ...rest] = e.name.split('::');
-      const realName = rest.length ? rest.join('::') : e.name;
-      (map[cid] ||= []).push({ ...e, name: realName });
-    }
-    return map;
-  }, [draft.evidence]);
-
   const availLangs = template?.sections.settings?.enable_multilingual
     ? template.sections.settings.available_languages ?? ['en']
     : ['en'];
 
   return (
+    <AnnualReviewI18nProvider
+      currentLanguage={lang}
+      defaultLanguage={template?.sections.settings?.default_language ?? 'en'}
+      templateTranslations={template?.sections.translations}
+    >
     <div className="p-4 md:p-6 space-y-6 max-w-5xl mx-auto">
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold">{cycle.name}</h1>
-          <p className="text-sm text-muted-foreground">My annual review · {profile?.full_name}</p>
+          <p className="text-sm text-muted-foreground">{t('cycle.my_review_by', 'My annual review')} · {profile?.full_name}</p>
         </div>
         <div className="flex items-center gap-3">
           {availLangs.length > 1 && <LanguageSwitcher value={lang} onChange={setLang} available={availLangs} />}
@@ -151,7 +163,7 @@ export default function EmployeeAnnualReview() {
       />
 
       <Card>
-        <CardHeader><CardTitle>Self-Assessment Criteria</CardTitle></CardHeader>
+        <CardHeader><CardTitle>{t('section.self_assessment', 'Self-Assessment Criteria')}</CardTitle></CardHeader>
         <CardContent>
           <CriteriaScoringMatrix
             criteria={(template?.sections.criteria ?? []).filter((c) => !c.reviewer_stages?.length || c.reviewer_stages.includes('self'))}
@@ -170,7 +182,7 @@ export default function EmployeeAnnualReview() {
 
       {(template?.sections.self_review_fields ?? []).length > 0 && (
         <Card>
-          <CardHeader><CardTitle>Qualitative Responses</CardTitle></CardHeader>
+          <CardHeader><CardTitle>{t('section.qualitative', 'Qualitative Responses')}</CardTitle></CardHeader>
           <CardContent className="space-y-4">
             {template!.sections.self_review_fields!.map((f) => (
               <div key={f.id} className="space-y-1">
@@ -194,7 +206,7 @@ export default function EmployeeAnnualReview() {
             ? t('note.locked', 'Your review is locked.')
             : saveStatus === 'saving' ? t('note.saving', 'Saving draft…')
             : saveStatus === 'saved'   ? t('note.saved', 'Draft saved')
-            : saveStatus === 'error'   ? 'Could not save — retry your last edit.'
+            : saveStatus === 'error'   ? t('note.save_error', 'Could not save — retry your last edit.')
             : `Score: ${summary.totalCriteriaScore.toFixed(2)} / ${summary.maxCriteriaScore.toFixed(2)}`}
         </div>
         {!locked && (
@@ -212,17 +224,18 @@ export default function EmployeeAnnualReview() {
       <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Submit your self-review?</AlertDialogTitle>
+            <AlertDialogTitle>{t('confirm.submit.title', 'Submit your self-review?')}</AlertDialogTitle>
             <AlertDialogDescription>
-              Once submitted, your responses are locked and forwarded to your manager. You cannot edit them afterwards.
+              {t('confirm.submit.body', 'Once submitted, your responses are locked and forwarded to your manager. You cannot edit them afterwards.')}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleSubmit}>Submit</AlertDialogAction>
+            <AlertDialogCancel>{t('btn.cancel', 'Cancel')}</AlertDialogCancel>
+            <AlertDialogAction onClick={handleSubmit}>{t('btn.submit', 'Submit')}</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
     </div>
+    </AnnualReviewI18nProvider>
   );
 }

@@ -2,6 +2,7 @@ import { Check } from 'lucide-react';
 import { STAGE_LABEL, STAGE_TO_STATUS } from '@/lib/annualReview/constants';
 import { enabledChain } from '@/lib/annualReview/stageChain';
 import type { AnnualReviewStatus, AnnualReviewerRole } from '@/types/annualReview';
+import { useAnnualReviewI18n } from '@/components/annual-review/AnnualReviewI18nContext';
 
 function stageState(
   stage: AnnualReviewerRole,
@@ -27,6 +28,7 @@ export function AnnualReviewStageTracker({
   enabledStages?: AnnualReviewerRole[];
 }) {
   const chain = enabledChain(enabledStages);
+  const { t } = useAnnualReviewI18n();
   return (
     <ol className="flex items-center w-full gap-2 md:gap-4 overflow-x-auto py-2" aria-label="Annual review progress">
       {chain.map((stage, i) => {
@@ -44,7 +46,7 @@ export function AnnualReviewStageTracker({
               {s === 'done' ? <Check className="h-4 w-4" /> : i + 1}
             </div>
             <span className={`text-xs md:text-sm truncate ${s === 'pending' ? 'text-muted-foreground' : 'text-foreground'}`}>
-              {STAGE_LABEL[stage]}
+              {t(`stage.${stage}`, STAGE_LABEL[stage])}
             </span>
             {i < chain.length - 1 && <div className={`hidden md:block h-px flex-1 ${line}`} />}
           </li>
