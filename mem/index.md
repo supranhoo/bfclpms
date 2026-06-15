@@ -121,3 +121,4 @@ Lean-Load: debounce search inputs (>200 rows / network); paginate new lists with
 - [Safety Incident Excel Export](mem://features/safety/excel-export) — Safety-Head/Admin .xlsx export with locked columns; server-paginated over the SLA view; reuses existing xlsx dep
 - [Safety Incident Advanced Filters](mem://features/safety/incident-filters) — Array-based multi-select + date-range presets on /safety/incidents; server-side .in/.gte/.lte
 - [Annual Review Per-Employee Workflow](mem://features/annual-review/per-employee-workflow) — enabled_stages column, stageChain SSOT, configurable per-employee stage chain with bulk XLSX
+- [Org Heads (BU & HR head mapping)](mem://features/admin/org-heads) — Admin-managed BU/HR head; auto-resolve from top of hierarchy with manual override; powers Annual Review BU/HR Finalization seeding
