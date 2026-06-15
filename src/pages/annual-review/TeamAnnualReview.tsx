@@ -30,6 +30,7 @@ import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 import type { AnnualReviewerRole, EvidenceItem } from '@/types/annualReview';
 import type { InstanceWithEmployee } from '@/services/annualReview/annualReviewService';
+import { enabledChain } from '@/lib/annualReview/stageChain';
 
 const STAGE_FOR_REVIEWER = (inst: InstanceWithEmployee, uid: string): AnnualReviewerRole | null => {
   if (inst.overall_status === 'pending_manager' && inst.manager_id === uid) return 'manager';
@@ -185,6 +186,10 @@ function ReviewDetail({ instance }: { instance: InstanceWithEmployee }) {
     } catch (e) { toast.error((e as Error).message); }
   };
 
+  // Hide Send Back when current role is the first enabled stage — no prior stage exists.
+  const chain = enabledChain(instance.enabled_stages);
+  const canSendBack = !!role && role !== 'self' && chain.indexOf(role) > 0;
+
   return (
     <div className="space-y-4">
       <Card>
@@ -231,7 +236,7 @@ function ReviewDetail({ instance }: { instance: InstanceWithEmployee }) {
         <div className="sticky bottom-0 bg-background/80 backdrop-blur border-t py-3 flex items-center justify-between gap-3">
           <span className="text-xs text-muted-foreground">{status === 'saving' ? 'Saving…' : status === 'saved' ? 'Draft saved' : status === 'error' ? 'Save error' : ''}</span>
           <div className="flex gap-2">
-            {role !== 'self' && (
+            {canSendBack && (
               <Button variant="outline" onClick={() => setSendBackOpen(true)} disabled={sendBack.isPending}>
                 Send back
               </Button>
