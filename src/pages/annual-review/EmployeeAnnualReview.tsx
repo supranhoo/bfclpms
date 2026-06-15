@@ -134,6 +134,19 @@ export default function EmployeeAnnualReview() {
     ? template.sections.settings.available_languages ?? ['en']
     : ['en'];
 
+  // Template-authored translations for qualitative fields. Uses the canonical
+  // colon-key shape (`field:<id>:label` / `field:<id>:placeholder`) and respects
+  // the per-template `display_mode` (bilingual / english_only / translated_only).
+  const defLang = template?.sections.settings?.default_language ?? 'en';
+  const displayMode = template?.sections.display_mode ?? 'bilingual';
+  const translations = template?.sections.translations;
+  const tField = (id: string, field: 'label' | 'placeholder', fb: string) => {
+    if (!fb && field === 'placeholder') return '';
+    if (lang === defLang || displayMode === 'english_only') return fb;
+    const v = translations?.[lang]?.[`field:${id}:${field}`];
+    return v || fb;
+  };
+
   return (
     <AnnualReviewI18nProvider
       currentLanguage={lang}
@@ -189,10 +202,10 @@ export default function EmployeeAnnualReview() {
           <CardContent className="space-y-4">
             {template!.sections.self_review_fields!.map((f) => (
               <div key={f.id} className="space-y-1">
-                <Label>{t(`field.${f.id}`, f.label)}{f.required && <span className="text-destructive"> *</span>}</Label>
+                <Label>{tField(f.id, 'label', f.label)}{f.required && <span className="text-destructive"> *</span>}</Label>
                 <Textarea
                   rows={3}
-                  placeholder={f.placeholder}
+                  placeholder={tField(f.id, 'placeholder', f.placeholder ?? '')}
                   value={(draft.qualitative_responses ?? {})[f.id] ?? ''}
                   disabled={!!locked}
                   onChange={(e) => setDraft((p) => ({ ...p, qualitative_responses: { ...(p.qualitative_responses ?? {}), [f.id]: e.target.value } }))}
