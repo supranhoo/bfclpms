@@ -902,6 +902,11 @@ function RulesTab() {
               Rules are evaluated in priority order (lower number first). The first rule matching an employee assigns their template.
               Leave all filters empty to match every employee.
             </p>
+            <div className="mt-2 rounded-md border border-dashed bg-muted/40 p-3 text-xs text-muted-foreground space-y-1">
+              <p className="font-medium text-foreground">Assign a template to one employee</p>
+              <p>Create a rule whose filters uniquely match that person (e.g. their exact designation + department, or designation + grade + level) and set <strong>priority = 1</strong> so it wins before broader rules. Then click <strong>Seed instances by rules</strong>.</p>
+              <p>Note: the seeder does not rewrite the template on an already-seeded instance. To change a template post-seed, delete that instance and re-seed.</p>
+            </div>
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="grid gap-2 md:grid-cols-4 items-end">
