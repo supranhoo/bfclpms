@@ -74,6 +74,44 @@ export async function setInstanceStageWeightsOverride(args: {
 }
 
 /**
+ * Bulk wrapper for per-instance final-score weight overrides (Phase 3).
+ * One RPC per row, sequential to keep load predictable. Matches the shape
+ * of `bulkSetTemplateOverrides` / `bulkSetEnabledStages`.
+ */
+export interface BulkStageWeightsInput {
+  instanceId: string;
+  weights: Record<string, number> | null;
+  reason: string;
+  rowKey?: string;
+}
+export interface BulkStageWeightsResult {
+  rowKey?: string;
+  instanceId: string;
+  ok: boolean;
+  error?: string;
+}
+export async function bulkSetStageWeightsOverrides(
+  rows: BulkStageWeightsInput[],
+  onProgress?: (done: number, total: number) => void,
+): Promise<BulkStageWeightsResult[]> {
+  const out: BulkStageWeightsResult[] = [];
+  let done = 0;
+  for (const r of rows) {
+    try {
+      await setInstanceStageWeightsOverride({
+        instanceId: r.instanceId, weights: r.weights, reason: r.reason,
+      });
+      out.push({ rowKey: r.rowKey, instanceId: r.instanceId, ok: true });
+    } catch (e) {
+      out.push({ rowKey: r.rowKey, instanceId: r.instanceId, ok: false, error: (e as Error).message });
+    }
+    done++;
+    onProgress?.(done, rows.length);
+  }
+  return out;
+}
+
+/**
  * Bulk apply per-employee template overrides — Part C.
  *
  * Thin loop over `setTemplateOverride` (one RPC call per row). Sequential to
