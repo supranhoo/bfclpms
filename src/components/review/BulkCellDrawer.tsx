@@ -21,6 +21,7 @@ import { KpiReviewPanel, type ViewLevel } from './KpiReviewPanel';
 import { KpiTimeline } from '@/components/dashboard/KpiTimeline';
 import { AchievedValueScoreInput } from './AchievedValueScoreInput';
 import { validateBulkRemark, BULK_REMARK_MIN_LENGTH } from '@/lib/bulkCellDrawerRemarks';
+import { kpiHasScoringLogic } from '@/lib/reviewScoring';
 import { Switch } from '@/components/ui/switch';
 import { MultiFileUpload } from '@/components/ui/MultiFileUpload';
 import { useAuth } from '@/contexts/AuthContext';
@@ -88,12 +89,10 @@ export function BulkCellDrawer({ row, viewerStage, open, onOpenChange, canReopen
   const kpiDetail = detail.data?.kpi as any;
   const submission = detail.data?.submission as any;
 
-  // KPI has thresholds defined → achievement-driven scoring is available.
-  const hasThresholds = useMemo(() => {
-    if (!kpiDetail) return false;
-    return [kpiDetail.r0, kpiDetail.r1, kpiDetail.r2, kpiDetail.r3, kpiDetail.r4, kpiDetail.r5]
-      .some((v) => v !== null && v !== undefined && v !== '');
-  }, [kpiDetail]);
+  // KPI has automated scoring logic → mirror dashboard scoring input.
+  // Numeric: needs R0..R5 thresholds. Binary/Tiered: needs qualitative_options.
+  // POLICY §BULK-REVIEW-SCORING-PARITY.
+  const hasScoringLogic = useMemo(() => kpiHasScoringLogic(kpiDetail), [kpiDetail]);
 
   // Seed reviewer inputs when the drawer is opened for a (new) row.
   useEffect(() => {
@@ -110,10 +109,11 @@ export function BulkCellDrawer({ row, viewerStage, open, onOpenChange, canReopen
     setReviewerEvidenceUrls(Array.isArray(existing) ? existing : []);
   }, [open, row?.submission_id, submission?.achieved_value, viewerStage, submission]);
 
-  // Auto-enable manual mode when KPI has no rating thresholds.
+  // Auto-enable manual mode only when the KPI has no scoring logic at all
+  // (no thresholds AND no qualitative options). Otherwise mirror the dashboard.
   useEffect(() => {
-    if (kpiDetail && !hasThresholds) setManualMode(true);
-  }, [kpiDetail, hasThresholds]);
+    if (kpiDetail && !hasScoringLogic) setManualMode(true);
+  }, [kpiDetail, hasScoringLogic]);
 
   if (!row) return null;
 
@@ -298,7 +298,7 @@ export function BulkCellDrawer({ row, viewerStage, open, onOpenChange, canReopen
               </div>
 
               {/* Achievement-driven scoring — parity with stage page. Hidden when N/A. */}
-              {!isNa && kpiDetail && !manualMode && hasThresholds && (
+              {!isNa && kpiDetail && !manualMode && hasScoringLogic && (
                 <AchievedValueScoreInput
                   kpi={kpiDetail}
                   achievedValue={achieved}
@@ -312,7 +312,7 @@ export function BulkCellDrawer({ row, viewerStage, open, onOpenChange, canReopen
               )}
 
               {/* Manual 0–5 fallback (auto-on when thresholds missing). */}
-              {!isNa && (manualMode || !hasThresholds) && (
+              {!isNa && (manualMode || !hasScoringLogic) && (
                 <div>
                   <Label className="text-xs">Manual rating (0–5)</Label>
                   <Input
@@ -323,7 +323,7 @@ export function BulkCellDrawer({ row, viewerStage, open, onOpenChange, canReopen
                 </div>
               )}
 
-              {!isNa && hasThresholds && (
+              {!isNa && hasScoringLogic && (
                 <Button
                   type="button"
                   variant="link"
