@@ -89,10 +89,29 @@ export function TemplateEditorDialog({
   const criteria = sections.criteria ?? [];
   const selfFields = sections.self_review_fields ?? [];
 
-  const systemWeight = systemScores.reduce((a, x) => a + (Number(x.weight) || 0), 0);
-  const criteriaWeight = criteria.reduce((a, x) => a + (Number(x.weight) || 0), 0);
-  const combined = systemWeight + criteriaWeight;
-  const weightOk = combined === 100;
+  const round2 = (n: number) => Math.round(n * 100) / 100;
+  const isWeightInRange = (w: number) => Number.isFinite(w) && w >= 0 && w <= 100;
+
+  const systemWeight = round2(systemScores.reduce((a, x) => a + (Number(x.weight) || 0), 0));
+  const criteriaWeight = round2(criteria.reduce((a, x) => a + (Number(x.weight) || 0), 0));
+  const combined = round2(systemWeight + criteriaWeight);
+  const weightOk = Math.abs(combined - 100) < 0.01;
+
+  const rowsValid = [...systemScores, ...criteria].every((r) => isWeightInRange(Number(r.weight)));
+  const criteriaHaveWeight = criteria.length > 0 && criteria.every((c) => Number(c.weight) > 0);
+
+  const activeBlockers: string[] = [];
+  if (!weightOk) activeBlockers.push(`Combined weight is ${combined}% (must be exactly 100%).`);
+  if (!rowsValid) activeBlockers.push('One or more weights are outside the 0–100 range.');
+  if (criteria.length === 0) activeBlockers.push('Add at least one criterion before publishing.');
+  else if (!criteriaHaveWeight) activeBlockers.push('Every criterion must have a weight greater than 0.');
+
+  const canSave = !!name.trim() && rowsValid && (!isActive || activeBlockers.length === 0);
+  const saveAsDraft = () => {
+    setIsActive(false);
+    // defer mutation to next tick so state flush propagates through save mutation
+    setTimeout(() => save.mutate(), 0);
+  };
 
   const applyPreset = () => {
     setName(BLUE_COLLAR_PRESET_META.name);
@@ -343,7 +362,20 @@ export function TemplateEditorDialog({
                           />
                         )}
                       </TableCell>
-                      <TableCell><Input className="h-9" type="number" value={sc.weight} onChange={(ev) => updateAt(setSections, 'system_scores', i, { weight: Number(ev.target.value) })} /></TableCell>
+                      <TableCell>
+                        <Input
+                          className={`h-9 ${isWeightInRange(Number(sc.weight)) ? '' : 'border-destructive focus-visible:ring-destructive'}`}
+                          type="number"
+                          min={0}
+                          max={100}
+                          step="0.01"
+                          value={sc.weight}
+                          onChange={(ev) => updateAt(setSections, 'system_scores', i, { weight: Number(ev.target.value) })}
+                        />
+                        {!isWeightInRange(Number(sc.weight)) && (
+                          <p className="text-xs text-destructive mt-1">Weight must be between 0 and 100.</p>
+                        )}
+                      </TableCell>
                       <TableCell><Button size="icon" variant="ghost" onClick={() => removeAt(setSections, 'system_scores', i)} aria-label="Delete"><Trash2 className="h-4 w-4 text-destructive" /></Button></TableCell>
                     </TableRow>
                   ))}
@@ -356,9 +388,14 @@ export function TemplateEditorDialog({
           <SectionShell
             title="Criteria"
             titleExtra={
-              <Badge variant={weightOk ? 'default' : 'destructive'} className={weightOk ? 'bg-emerald-500/15 text-emerald-500 border-emerald-500/30' : ''}>
-                Combined Weight (System + Criteria): {combined}% {weightOk ? '✓' : '— must equal 100%'}
-              </Badge>
+              <div className="flex flex-col items-end gap-1">
+                <Badge variant={weightOk ? 'default' : 'destructive'} className={weightOk ? 'bg-emerald-500/15 text-emerald-500 border-emerald-500/30' : ''}>
+                  System {systemWeight}% + Criteria {criteriaWeight}% = {combined}% {weightOk ? '✓' : '— must equal 100%'}
+                </Badge>
+                {criteria.length > 0 && !criteriaHaveWeight && (
+                  <span className="text-xs text-destructive">Every criterion must have a weight greater than 0.</span>
+                )}
+              </div>
             }
             extraActions={
               <Button variant="outline" size="sm" onClick={applyPreset} className="gap-1.5">
@@ -408,7 +445,21 @@ export function TemplateEditorDialog({
                         ))}
                       </TableCell>
                       <TableCell className="align-top">
-                        <Input className="h-9" type="number" value={c.weight} onChange={(ev) => updateAt(setSections, 'criteria', i, { weight: Number(ev.target.value) })} />
+                        <Input
+                          className={`h-9 ${isWeightInRange(Number(c.weight)) && (Number(c.weight) > 0 || !isActive) ? '' : 'border-destructive focus-visible:ring-destructive'}`}
+                          type="number"
+                          min={0}
+                          max={100}
+                          step="0.01"
+                          value={c.weight}
+                          onChange={(ev) => updateAt(setSections, 'criteria', i, { weight: Number(ev.target.value) })}
+                        />
+                        {!isWeightInRange(Number(c.weight)) && (
+                          <p className="text-xs text-destructive mt-1">0 – 100 only.</p>
+                        )}
+                        {isWeightInRange(Number(c.weight)) && Number(c.weight) === 0 && isActive && (
+                          <p className="text-xs text-destructive mt-1">Required &gt; 0 when Active.</p>
+                        )}
                       </TableCell>
                       <TableCell className="align-top">
                         <CriterionConfigPopover criterion={c} onChange={(patch) => updateAt(setSections, 'criteria', i, patch)} />
@@ -490,9 +541,34 @@ export function TemplateEditorDialog({
           </SectionShell>
         </div>
 
+        {isActive && activeBlockers.length > 0 && (
+          <div className="mt-4 rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm">
+            <p className="font-medium text-destructive mb-1">Cannot save as Active</p>
+            <ul className="list-disc pl-5 space-y-0.5 text-destructive">
+              {activeBlockers.map((b) => <li key={b}>{b}</li>)}
+            </ul>
+            <p className="text-xs text-muted-foreground mt-2">
+              Fix the issues above or save as Draft to keep editing.
+            </p>
+          </div>
+        )}
         <DialogFooter className="mt-4">
           <Button variant="ghost" onClick={() => onOpenChange(false)}>Cancel</Button>
-          <Button onClick={() => save.mutate()} disabled={!name || save.isPending}>
+          {isActive && activeBlockers.length > 0 && rowsValid && !!name.trim() && (
+            <Button
+              variant="outline"
+              onClick={saveAsDraft}
+              disabled={save.isPending}
+              title="Save with Active disabled so you can keep editing."
+            >
+              {save.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />} Save as Draft
+            </Button>
+          )}
+          <Button
+            onClick={() => save.mutate()}
+            disabled={!canSave || save.isPending}
+            title={canSave ? undefined : (activeBlockers[0] ?? 'Template name is required.')}
+          >
             {save.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />} Save Template
           </Button>
         </DialogFooter>
