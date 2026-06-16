@@ -321,10 +321,14 @@ export async function listInstancesPaginated(
 
   const term = args.search?.trim();
   if (term) {
+    // Match either full_name OR employee_code (the latter is what users
+    // typically paste from HR records). PostgREST `.or()` accepts comma-
+    // separated filters; escape commas in the term defensively.
+    const safe = term.replace(/[(),]/g, ' ');
     const { data: profs, error: pErr } = await db
       .from('profiles')
       .select('id')
-      .ilike('full_name', `%${term}%`)
+      .or(`full_name.ilike.%${safe}%,employee_code.ilike.%${safe}%`)
       .limit(500);
     if (pErr) throw pErr;
     const ids = (profs ?? []).map((p: { id: string }) => p.id);
@@ -420,8 +424,13 @@ export async function fetchAllInstancesForExport(args: {
   let restrictIds: string[] | null = null;
   const term = args.search?.trim();
   if (term) {
+    const safe = term.replace(/[(),]/g, ' ');
     const profs = await fetchAllPaged<{ id: string }>((from, to) =>
-      db.from('profiles').select('id').ilike('full_name', `%${term}%`).order('id').range(from, to),
+      db.from('profiles')
+        .select('id')
+        .or(`full_name.ilike.%${safe}%,employee_code.ilike.%${safe}%`)
+        .order('id')
+        .range(from, to),
     );
     restrictIds = profs.map((p) => p.id);
     if (restrictIds.length === 0) return [];

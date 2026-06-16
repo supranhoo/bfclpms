@@ -311,7 +311,7 @@ function ProgressTab() {
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-2">
           <Input
-            placeholder="Search employees…"
+            placeholder="Search by name or employee code…"
             value={search}
             onChange={(e) => { setSearch(e.target.value); setPage(1); }}
             className="max-w-xs"

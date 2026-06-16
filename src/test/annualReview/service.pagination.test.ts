@@ -9,6 +9,8 @@ const makeBuilder = () => {
   b.eq = vi.fn().mockImplementation(() => b);
   b.in = vi.fn().mockImplementation(() => b);
   b.ilike = vi.fn().mockImplementation(() => b);
+  b.or = vi.fn().mockImplementation(() => b);
+  b.not = vi.fn().mockImplementation(() => b);
   b.order = vi.fn().mockImplementation(() => b);
   b.range = vi.fn().mockImplementation(() => b);
   b.limit = vi.fn().mockImplementation(() => b);
