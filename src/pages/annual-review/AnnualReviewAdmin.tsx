@@ -1080,6 +1080,7 @@ function TemplatesTab() {
                     )}
                     </div>
                     {t.description && <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{t.description}</p>}
+                    <TemplateWeightsSummary template={t} />
                   </div>
                   <div className="flex items-center gap-2">
                     <Button variant="outline" size="sm" onClick={() => openEdit(t)} className="gap-1.5">
