@@ -1169,25 +1169,48 @@ function TemplatesTab() {
 
 function TemplateWeightsSummary({ template }: { template: AnnualReviewTemplate }) {
   const w = (template.sections as { stage_weights?: Record<string, number> } | undefined)?.stage_weights;
-  if (!w || Object.keys(w).length === 0) {
-    return (
-      <p className="text-xs text-muted-foreground mt-1">
-        Final-score blend: <span className="italic">legacy (criteria 100%)</span>
-      </p>
-    );
-  }
   const LABEL: Record<string, string> = {
     self: 'Self', manager: 'Mgr', skip_manager: 'Skip', bu_head: 'BU',
     hr: 'HR', system: 'Sys', criteria: 'Crit',
   };
-  const parts = Object.entries(w)
-    .filter(([, v]) => typeof v === 'number' && v > 0)
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([k, v]) => `${LABEL[k] ?? k} ${v}%`);
+  const COLOR: Record<string, string> = {
+    self: 'hsl(var(--primary))',
+    manager: 'hsl(var(--chart-2, 142 76% 36%))',
+    skip_manager: 'hsl(var(--chart-3, 38 92% 50%))',
+    bu_head: 'hsl(var(--chart-4, 280 65% 60%))',
+    hr: 'hsl(var(--chart-5, 340 75% 55%))',
+    system: 'hsl(var(--muted-foreground))',
+    criteria: 'hsl(var(--accent-foreground))',
+  };
+  const isLegacy = !w || Object.keys(w).length === 0;
+  const entries = isLegacy
+    ? [['criteria', 100] as [string, number]]
+    : Object.entries(w!).filter(([, v]) => typeof v === 'number' && v > 0).sort(([a], [b]) => a.localeCompare(b));
+  const total = entries.reduce((acc, [, v]) => acc + v, 0) || 1;
   return (
-    <p className="text-xs text-muted-foreground mt-1 tabular-nums">
-      Final-score blend: {parts.join(' · ')}
-    </p>
+    <div className="mt-2 space-y-1">
+      <div className="flex items-center gap-2">
+        <span className="text-xs text-muted-foreground">Final-score blend</span>
+        {isLegacy && <Badge variant="outline" className="text-[10px]">legacy</Badge>}
+      </div>
+      <div className="flex h-2 w-full overflow-hidden rounded-full border bg-muted/40" role="img" aria-label="Final-score weight blend">
+        {entries.map(([k, v]) => (
+          <div
+            key={k}
+            style={{ width: `${(v / total) * 100}%`, background: COLOR[k] ?? 'hsl(var(--primary))' }}
+            title={`${LABEL[k] ?? k} ${v}%`}
+          />
+        ))}
+      </div>
+      <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] tabular-nums text-muted-foreground">
+        {entries.map(([k, v]) => (
+          <span key={k} className="inline-flex items-center gap-1">
+            <span className="inline-block h-2 w-2 rounded-sm" style={{ background: COLOR[k] ?? 'hsl(var(--primary))' }} />
+            {LABEL[k] ?? k} {v}%
+          </span>
+        ))}
+      </div>
+    </div>
   );
 }
 
