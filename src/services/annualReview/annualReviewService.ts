@@ -291,6 +291,8 @@ export interface ListInstancesPaginatedArgs {
   pageSize: number;      // max 100 enforced server-side via caller
   search?: string;
   status?: AnnualReviewStatus | 'all';
+  /** Phase 4: restrict to instances with a custom stage_weights_override. */
+  hasOverride?: boolean;
   sort?: { col: 'created_at' | 'overall_status' | 'total_score'; dir: 'asc' | 'desc' };
 }
 
@@ -315,6 +317,7 @@ export async function listInstancesPaginated(
     .eq('cycle_id', args.cycleId);
 
   if (args.status && args.status !== 'all') q = q.eq('overall_status', args.status);
+  if (args.hasOverride) q = q.not('stage_weights_override', 'is', null);
 
   const term = args.search?.trim();
   if (term) {
