@@ -480,6 +480,7 @@ export type Database = {
           manager_id: string | null
           overall_status: Database["public"]["Enums"]["annual_review_status"]
           skip_id: string | null
+          stage_weights_override: Json | null
           system_scores: Json
           template_id: string
           template_override_id: string | null
@@ -509,6 +510,7 @@ export type Database = {
           manager_id?: string | null
           overall_status?: Database["public"]["Enums"]["annual_review_status"]
           skip_id?: string | null
+          stage_weights_override?: Json | null
           system_scores?: Json
           template_id: string
           template_override_id?: string | null
@@ -538,6 +540,7 @@ export type Database = {
           manager_id?: string | null
           overall_status?: Database["public"]["Enums"]["annual_review_status"]
           skip_id?: string | null
+          stage_weights_override?: Json | null
           system_scores?: Json
           template_id?: string
           template_override_id?: string | null
@@ -12665,6 +12668,15 @@ export type Database = {
           source_config_id: string
         }[]
       }
+      annual_review_compute_final_score: {
+        Args: {
+          p_criteria_weighted_score: number
+          p_responses_by_role: Json
+          p_stage_weights: Json
+          p_system_score_total: number
+        }
+        Returns: Json
+      }
       annual_review_first_pending_status: {
         Args: { p_enabled: Json }
         Returns: Database["public"]["Enums"]["annual_review_status"]
@@ -12689,6 +12701,10 @@ export type Database = {
           p_role: Database["public"]["Enums"]["annual_reviewer_role"]
         }
         Returns: Database["public"]["Enums"]["annual_review_status"]
+      }
+      annual_review_validate_stage_weights: {
+        Args: { p_weights: Json }
+        Returns: boolean
       }
       apply_final_score_rule: { Args: { p_kpi_id: string }; Returns: undefined }
       apply_workflow_global_default_migration: {
@@ -14128,6 +14144,10 @@ export type Database = {
           p_instance_id: string
           p_reason: string
         }
+        Returns: undefined
+      }
+      set_annual_review_stage_weights_override: {
+        Args: { p_instance_id: string; p_reason: string; p_weights: Json }
         Returns: undefined
       }
       set_annual_review_template_override: {

@@ -55,6 +55,25 @@ export async function setTemplateOverride(args: {
 }
 
 /**
+ * Set or clear the per-instance final-score weight override (Phase 2).
+ * Pass `weights = null` to clear. Reason is mandatory; admin/hr_pms only —
+ * enforced inside the RPC. Audit-logged under
+ * `annual_review.stage_weights_override_set`.
+ */
+export async function setInstanceStageWeightsOverride(args: {
+  instanceId: string;
+  weights: Record<string, number> | null;
+  reason: string;
+}) {
+  const { error } = await db.rpc('set_annual_review_stage_weights_override', {
+    p_instance_id: args.instanceId,
+    p_weights: args.weights,
+    p_reason: args.reason,
+  });
+  if (error) throw error;
+}
+
+/**
  * Bulk apply per-employee template overrides — Part C.
  *
  * Thin loop over `setTemplateOverride` (one RPC call per row). Sequential to

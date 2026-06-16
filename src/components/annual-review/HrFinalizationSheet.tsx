@@ -9,6 +9,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { toast } from 'sonner';
 import { FINAL_RATINGS } from '@/lib/annualReview/constants';
 import { computeCriteriaScore, computeOverallScore } from '@/lib/annualReview/scoring';
+import { resolveStageWeights, computeFinalScore, responsesToRoleMap } from '@/lib/annualReview/finalScore';
 import { useFinalizeInstance, useInstanceResponses, useReassignReviewer } from '@/hooks/useAnnualReview';
 import { SystemScoresPanel } from './SystemScoresPanel';
 import { EligibilityInputsEditor } from './EligibilityInputsEditor';
@@ -56,6 +57,24 @@ export function HrFinalizationSheet({
   }, [criteria, responses]);
 
   const overall = computeOverallScore(sysCfg, merged, sumCriteria);
+
+  // Phase 2 — blended final score preview using configurable stage weights.
+  const stageWeights = useMemo(
+    () => resolveStageWeights(instance ?? null, template ?? null),
+    [instance, template],
+  );
+  const blended = useMemo(() => {
+    const systemSum = Object.values(merged ?? {}).reduce((a, n) => a + (Number(n) || 0), 0);
+    return computeFinalScore({
+      stageWeights,
+      responsesByRole: responsesToRoleMap(responses ?? []),
+      systemScoreTotal: systemSum,
+      criteriaWeightedScore: sumCriteria.totalCriteriaScore,
+    });
+  }, [stageWeights, responses, merged, sumCriteria.totalCriteriaScore]);
+  const usingBlend =
+    (Object.values(stageWeights).some((v) => (v ?? 0) > 0)) &&
+    !(stageWeights.criteria === 100 && Object.keys(stageWeights).length === 1);
 
   const missingStages = useMemo(() => {
     const need = ['self', 'manager', 'skip_manager', 'bu_head'] as const;
@@ -133,6 +152,31 @@ export function HrFinalizationSheet({
               <span className="text-muted-foreground">Overall (capped at 100)</span>
               <span className="font-semibold text-lg tabular-nums text-primary">{overall.toFixed(2)}</span>
             </div>
+            {usingBlend && (
+              <div className="mt-2 border-t pt-2 space-y-1">
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Blended final score (configured weights)</span>
+                  <span className="font-semibold tabular-nums">
+                    {blended.rawScore_0_100 != null ? blended.rawScore_0_100.toFixed(2) : '—'}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Rating axis (out of 5)</span>
+                  <span className="font-semibold tabular-nums">
+                    {blended.scaled_0_5 != null ? blended.scaled_0_5.toFixed(2) : '—'} / 5
+                  </span>
+                </div>
+                <p className="text-[10px] text-muted-foreground">
+                  Blend:{' '}
+                  {Object.entries(stageWeights)
+                    .filter(([, v]) => (v ?? 0) > 0)
+                    .map(([k, v]) => `${k} ${v}%`)
+                    .join(' · ')}
+                  {blended.renormalised && ' · weights renormalised (some stages missing)'}
+                  {instance?.stage_weights_override ? ' · per-employee override active' : ''}
+                </p>
+              </div>
+            )}
           </div>
 
           <div className="grid gap-2">

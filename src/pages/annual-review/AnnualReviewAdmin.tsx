@@ -42,6 +42,7 @@ import { SystemScoresUploadDialog } from '@/components/annual-review/SystemScore
 import { BulkTemplateAssignmentDialog } from '@/components/annual-review/BulkTemplateAssignmentDialog';
 import { BulkWorkflowAssignmentDialog } from '@/components/annual-review/BulkWorkflowAssignmentDialog';
 import { ChangeWorkflowDialog } from '@/components/annual-review/ChangeWorkflowDialog';
+import { InstanceStageWeightsDialog } from '@/components/annual-review/InstanceStageWeightsDialog';
 import { TemplateEditorDialog } from '@/components/annual-review/TemplateEditorDialog';
 import { RuleFiltersEditor, RuleFiltersSummary, EMPTY_FILTERS } from '@/components/annual-review/RuleFiltersEditor';
 import type {
@@ -157,6 +158,7 @@ function ProgressTab() {
   const [bulkTplOpen, setBulkTplOpen] = useState(false);
   const [changeWfFor, setChangeWfFor] = useState<InstanceWithEmployee | null>(null);
   const [bulkWfOpen, setBulkWfOpen] = useState(false);
+  const [weightsFor, setWeightsFor] = useState<InstanceWithEmployee | null>(null);
   const { data: allTemplates = [] } = useTemplates();
   const sendBack = useSendBackStatus();
   const qc = useQueryClient();
@@ -406,6 +408,9 @@ function ProgressTab() {
                             <DropdownMenuItem onClick={() => setChangeWfFor(i)}>
                               <ListChecks className="h-4 w-4 mr-2" /> Change workflow
                             </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => setWeightsFor(i)}>
+                              <Scale className="h-4 w-4 mr-2" /> Customise weights
+                            </DropdownMenuItem>
                           </>
                         )}
                       </DropdownMenuContent>
@@ -478,6 +483,14 @@ function ProgressTab() {
         instance={changeWfFor}
         onClose={() => setChangeWfFor(null)}
         onDone={() => { setChangeWfFor(null); refetch(); }}
+      />
+
+      <InstanceStageWeightsDialog
+        open={!!weightsFor}
+        onOpenChange={(o) => !o && setWeightsFor(null)}
+        instance={weightsFor}
+        template={template ?? null}
+        onSaved={() => { setWeightsFor(null); refetch(); }}
       />
 
       <BulkWorkflowAssignmentDialog
