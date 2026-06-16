@@ -276,6 +276,17 @@ function ProgressTab() {
               <SelectItem value="completed">Completed</SelectItem>
             </SelectContent>
           </Select>
+          <Button
+            type="button"
+            size="sm"
+            variant={customWeightsOnly ? 'default' : 'outline'}
+            className="gap-1.5 h-10"
+            onClick={() => { setCustomWeightsOnly((v) => !v); setPage(1); }}
+            aria-pressed={customWeightsOnly}
+            title="Show only employees with a custom final-score weight override"
+          >
+            <Scale className="h-4 w-4" /> Custom weights only
+          </Button>
         </div>
         <div className="flex items-center gap-2">
           <Button
