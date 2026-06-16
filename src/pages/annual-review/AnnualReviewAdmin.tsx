@@ -1034,6 +1034,9 @@ function CyclesTab() {
 // Tab 3 — Templates (visual builder via TemplateEditorDialog)
 // ------------------------------------------------------------------
 function TemplatesTab() {
+  return <TemplatesTabImpl />;
+}
+
 function TemplateWeightsSummary({ template }: { template: AnnualReviewTemplate }) {
   const w = (template.sections as { stage_weights?: Record<string, number> } | undefined)?.stage_weights;
   if (!w || Object.keys(w).length === 0) {
@@ -1058,7 +1061,7 @@ function TemplateWeightsSummary({ template }: { template: AnnualReviewTemplate }
   );
 }
 
-function TemplatesTab_INNER() {
+function TemplatesTabImpl() {
   const { data: templates = [], refetch } = useTemplates();
   const [editorOpen, setEditorOpen] = useState(false);
   const [editing, setEditing] = useState<AnnualReviewTemplate | null>(null);
