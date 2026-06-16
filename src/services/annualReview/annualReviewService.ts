@@ -293,6 +293,12 @@ export interface ListInstancesPaginatedArgs {
   status?: AnnualReviewStatus | 'all';
   /** Phase 4: restrict to instances with a custom stage_weights_override. */
   hasOverride?: boolean;
+  /** Restrict to employees whose profile.department_id matches. */
+  departmentId?: string;
+  /** Restrict to employees whose department belongs to this business_unit. */
+  businessUnitId?: string;
+  /** Restrict to instances whose instance.manager_id matches. */
+  managerId?: string;
   sort?: { col: 'created_at' | 'overall_status' | 'total_score'; dir: 'asc' | 'desc' };
 }
 
@@ -318,8 +324,16 @@ export async function listInstancesPaginated(
 
   if (args.status && args.status !== 'all') q = q.eq('overall_status', args.status);
   if (args.hasOverride) q = q.not('stage_weights_override', 'is', null);
+  if (args.managerId) q = q.eq('manager_id', args.managerId);
+
+  // Resolve org-tree filters (department / BU) to a profile-id allowlist,
+  // intersected with any name/code search ids. Mirrors the search pattern:
+  // PostgREST cannot filter across an embedded resource directly.
+  const orgIds = await resolveEmployeeIdsForOrgFilters(args);
+  if (orgIds && orgIds.length === 0) return { rows: [], total: 0 };
 
   const term = args.search?.trim();
+  let restrictIds: string[] | null = orgIds;
   if (term) {
     // Match either full_name OR employee_code (the latter is what users
     // typically paste from HR records). PostgREST `.or()` accepts comma-
@@ -331,10 +345,15 @@ export async function listInstancesPaginated(
       .or(`full_name.ilike.%${safe}%,employee_code.ilike.%${safe}%`)
       .limit(500);
     if (pErr) throw pErr;
-    const ids = (profs ?? []).map((p: { id: string }) => p.id);
+    let ids = (profs ?? []).map((p: { id: string }) => p.id);
+    if (orgIds) {
+      const set = new Set(orgIds);
+      ids = ids.filter((id) => set.has(id));
+    }
     if (ids.length === 0) return { rows: [], total: 0 };
-    q = q.in('employee_id', ids);
+    restrictIds = ids;
   }
+  if (restrictIds) q = q.in('employee_id', restrictIds);
 
   const sort = args.sort ?? { col: 'created_at', dir: 'desc' };
   q = q.order(sort.col, { ascending: sort.dir === 'asc' }).range(from, to);
@@ -342,6 +361,47 @@ export async function listInstancesPaginated(
   const { data, error, count } = await q;
   if (error) throw error;
   return { rows: (data ?? []) as InstanceWithEmployee[], total: count ?? 0 };
+}
+
+/**
+ * Returns the set of profile.ids that match the (optional) department_id /
+ * business_unit_id filters. Returns `null` when no org filter is active.
+ * Paged at 1000 to bypass the Data API default cap.
+ */
+async function resolveEmployeeIdsForOrgFilters(
+  args: { departmentId?: string; businessUnitId?: string },
+): Promise<string[] | null> {
+  if (!args.departmentId && !args.businessUnitId) return null;
+
+  // If BU is set, expand to department_ids first.
+  let deptIds: string[] | null = null;
+  if (args.businessUnitId) {
+    const { data, error } = await db
+      .from('departments')
+      .select('id')
+      .eq('business_unit_id', args.businessUnitId);
+    if (error) throw error;
+    deptIds = (data ?? []).map((d: { id: string }) => d.id);
+    if (args.departmentId) deptIds = deptIds.includes(args.departmentId) ? [args.departmentId] : [];
+    if (deptIds.length === 0) return [];
+  } else if (args.departmentId) {
+    deptIds = [args.departmentId];
+  }
+
+  // Page through profiles in case >1000 employees in the chosen dept/BU.
+  const PAGE = 1000;
+  const out: string[] = [];
+  for (let from = 0; ; from += PAGE) {
+    let pq = db.from('profiles').select('id').order('id').range(from, from + PAGE - 1);
+    if (deptIds && deptIds.length > 0) pq = pq.in('department_id', deptIds);
+    const { data, error } = await pq;
+    if (error) throw error;
+    const batch = data ?? [];
+    for (const p of batch) out.push((p as { id: string }).id);
+    if (batch.length < PAGE) break;
+    if (out.length > 50_000) break; // hard safety cap
+  }
+  return out;
 }
 
 /**
