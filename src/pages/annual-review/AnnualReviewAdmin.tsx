@@ -41,6 +41,7 @@ import { fyStartFromCycle } from '@/lib/annualReview/fiscalYear';
 import { SystemScoresUploadDialog } from '@/components/annual-review/SystemScoresUploadDialog';
 import { BulkTemplateAssignmentDialog } from '@/components/annual-review/BulkTemplateAssignmentDialog';
 import { BulkWorkflowAssignmentDialog } from '@/components/annual-review/BulkWorkflowAssignmentDialog';
+import { BulkStageWeightsAssignmentDialog } from '@/components/annual-review/BulkStageWeightsAssignmentDialog';
 import { ChangeWorkflowDialog } from '@/components/annual-review/ChangeWorkflowDialog';
 import { InstanceStageWeightsDialog } from '@/components/annual-review/InstanceStageWeightsDialog';
 import { TemplateEditorDialog } from '@/components/annual-review/TemplateEditorDialog';
@@ -158,6 +159,7 @@ function ProgressTab() {
   const [bulkTplOpen, setBulkTplOpen] = useState(false);
   const [changeWfFor, setChangeWfFor] = useState<InstanceWithEmployee | null>(null);
   const [bulkWfOpen, setBulkWfOpen] = useState(false);
+  const [bulkWeightsOpen, setBulkWeightsOpen] = useState(false);
   const [weightsFor, setWeightsFor] = useState<InstanceWithEmployee | null>(null);
   const { data: allTemplates = [] } = useTemplates();
   const sendBack = useSendBackStatus();
@@ -321,6 +323,9 @@ function ProgressTab() {
           </Button>
           <Button variant="outline" className="gap-2" onClick={() => setBulkWfOpen(true)} disabled={instances.length === 0}>
             <ListChecks className="h-4 w-4" /> Bulk workflow assignment
+          </Button>
+          <Button variant="outline" className="gap-2" onClick={() => setBulkWeightsOpen(true)} disabled={instances.length === 0}>
+            <Scale className="h-4 w-4" /> Bulk stage weights
           </Button>
         </div>
       </div>
