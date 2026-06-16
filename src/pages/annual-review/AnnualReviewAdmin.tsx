@@ -145,6 +145,9 @@ function ProgressTab() {
   const { data: paged, refetch } = useAnnualReviewInstancesPaginated(paginatedArgs);
   const instances = paged?.rows ?? [];
   const total = paged?.total ?? 0;
+  const pageInstanceIds = useMemo(() => instances.map((i) => i.id), [instances]);
+  const { data: stageScoresMap = {} } = useInstanceStageScores(pageInstanceIds);
+  const [exporting, setExporting] = useState(false);
   const { data: counts = { total: 0, pending_self: 0, completed: 0, not_started: 0, pending_manager: 0, pending_skip: 0, pending_bu: 0, pending_hr: 0 } } = useCycleStatusCounts(activeCycle?.id);
   const [selected, setSelected] = useState<InstanceWithEmployee | null>(null);
   const [uploadOpen, setUploadOpen] = useState(false);
@@ -282,10 +285,31 @@ function ProgressTab() {
           </Button>
           <Button
             variant="outline" className="gap-2"
-            onClick={() => exportProgress(activeCycle.name, filtered)}
-            disabled={filtered.length === 0}
+            onClick={async () => {
+              if (!activeCycle) return;
+              setExporting(true);
+              try {
+                const all = await svc.fetchAllInstancesForExport({
+                  cycleId: activeCycle.id,
+                  search,
+                  status: statusFilter as any,
+                });
+                const ids = all.map((i) => i.id);
+                const scores = await svc.fetchInstanceStageScores(ids);
+                exportProgress(activeCycle.name, all, scores, {
+                  Search: search || '(none)',
+                  Stage: statusFilter,
+                });
+                toast.success(`Exported ${all.length} row${all.length === 1 ? '' : 's'}.`);
+              } catch (e) {
+                toast.error((e as Error).message);
+              } finally {
+                setExporting(false);
+              }
+            }}
+            disabled={total === 0 || exporting}
           >
-            <Download className="h-4 w-4" /> Export to Excel
+            {exporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />} Export to Excel
           </Button>
           <Button variant="outline" className="gap-2" onClick={() => setUploadOpen(true)} disabled={!uploadTemplate}>
             <Upload className="h-4 w-4" /> Bulk system-score upload
