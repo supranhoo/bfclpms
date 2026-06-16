@@ -531,6 +531,8 @@ function ProgressTab() {
         />
       )}
 
+      <RecentStageWeightOverridesPanel cycleId={activeCycle?.id} />
+
       <AlertDialog open={bulkOpen === 'finalize'} onOpenChange={(o) => !o && setBulkOpen(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
