@@ -393,6 +393,7 @@ export interface ApplyResult {
 
 export async function applyUnifiedChanges(
   rows: RowChange[],
+  instancesById: Map<string, svc.InstanceWithEmployee>,
   onProgress?: (done: number, total: number) => void,
 ): Promise<ApplyResult> {
   const eligible = rows.filter((r) => r.edits.length > 0 && r.errors.length === 0);
@@ -401,6 +402,14 @@ export async function applyUnifiedChanges(
   const result: ApplyResult = { applied: 0, failed: 0, rowErrors: [] };
 
   for (const r of eligible) {
+    const inst = instancesById.get(r.instanceId);
+    // Mutable copies so multi-edit rows accumulate updates across cells.
+    let sysScores: Record<string, number> = { ...(inst?.system_scores ?? {}) };
+    let eligInputs: Record<string, string | number | boolean> = {
+      ...((inst?.eligibility_inputs as Record<string, string | number | boolean>) ?? {}),
+    };
+    let sysDirty = false;
+    let eligDirty = false;
     try {
       for (const e of r.edits) {
         switch (e.kind) {
@@ -417,22 +426,17 @@ export async function applyUnifiedChanges(
               reason: r.reason,
             });
             break;
-          case 'system_score': {
-            const inst = await svc.getInstance(r.instanceId);
-            const next = { ...(inst.system_scores ?? {}), [e.key]: e.value };
-            await svc.updateInstance(r.instanceId, { system_scores: next });
-            break;
-          }
-          case 'eligibility': {
-            const inst = await svc.getInstance(r.instanceId);
-            const next = {
-              ...((inst.eligibility_inputs as Record<string, unknown>) ?? {}),
-              [e.key]: e.value,
-            };
-            await svc.updateInstance(r.instanceId, { eligibility_inputs: next as Record<string, string | number | boolean> });
-            break;
-          }
+          case 'system_score':
+            sysScores[e.key] = e.value; sysDirty = true; break;
+          case 'eligibility':
+            eligInputs[e.key] = e.value; eligDirty = true; break;
         }
+      }
+      if (sysDirty || eligDirty) {
+        const patch: Record<string, unknown> = {};
+        if (sysDirty) patch.system_scores = sysScores;
+        if (eligDirty) patch.eligibility_inputs = eligInputs;
+        await svc.updateInstance(r.instanceId, patch as Partial<svc.InstanceWithEmployee>);
       }
       result.applied++;
     } catch (err) {
