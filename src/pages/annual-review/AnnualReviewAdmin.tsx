@@ -594,7 +594,7 @@ function ProgressTab() {
           <p className="text-muted-foreground">
             Showing <span className="tabular-nums">{filtered.length === 0 ? 0 : (page - 1) * pageSize + 1}–{(page - 1) * pageSize + filtered.length}</span> of <span className="tabular-nums">{total}</span>
             {' · '}
-            <span className="text-xs">Export to Excel includes all filtered rows.</span>
+            <span className="text-xs">Download data → Progress snapshot exports all filtered rows.</span>
           </p>
           <div className="flex items-center gap-2">
             <Label className="text-xs">Rows</Label>
