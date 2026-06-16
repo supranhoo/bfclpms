@@ -291,6 +291,8 @@ export interface ListInstancesPaginatedArgs {
   pageSize: number;      // max 100 enforced server-side via caller
   search?: string;
   status?: AnnualReviewStatus | 'all';
+  /** Phase 4: restrict to instances with a custom stage_weights_override. */
+  hasOverride?: boolean;
   sort?: { col: 'created_at' | 'overall_status' | 'total_score'; dir: 'asc' | 'desc' };
 }
 
@@ -315,6 +317,7 @@ export async function listInstancesPaginated(
     .eq('cycle_id', args.cycleId);
 
   if (args.status && args.status !== 'all') q = q.eq('overall_status', args.status);
+  if (args.hasOverride) q = q.not('stage_weights_override', 'is', null);
 
   const term = args.search?.trim();
   if (term) {
@@ -410,6 +413,7 @@ export async function fetchAllInstancesForExport(args: {
   cycleId: string;
   search?: string;
   status?: AnnualReviewStatus | 'all';
+  hasOverride?: boolean;
   onProgress?: (loaded: number) => void;
 }): Promise<InstanceWithEmployee[]> {
   // 1) Optional name search → restrict to matching employee_ids (max 5000).
@@ -431,6 +435,7 @@ export async function fetchAllInstancesForExport(args: {
       .select('*')
       .eq('cycle_id', args.cycleId);
     if (args.status && args.status !== 'all') q = q.eq('overall_status', args.status);
+    if (args.hasOverride) q = q.not('stage_weights_override', 'is', null);
     if (restrictIds) q = q.in('employee_id', restrictIds);
     return q.order('created_at', { ascending: false }).range(from, to);
   });
@@ -484,6 +489,97 @@ export async function updateInstance(id: string, patch: Partial<AnnualReviewInst
   const { data, error } = await db.from('annual_review_instances').update(patch).eq('id', id).select('*').single();
   if (error) throw error;
   return data;
+}
+
+// ---------- Phase 4: recent stage-weight override audit feed ----------
+/**
+ * Reads the immutable `system_audit_logs` rows emitted by
+ * `set_annual_review_stage_weights_override`, joined with the employee/profile
+ * for the affected instance. RLS already restricts visibility to admins.
+ * Returns rows newest-first, capped at `limit`.
+ */
+export interface StageWeightsOverrideAudit {
+  id: string;
+  created_at: string;
+  performed_by: string | null;
+  performer_name: string | null;
+  instance_id: string;
+  employee_id: string | null;
+  employee_name: string | null;
+  employee_code: string | null;
+  previous: Record<string, number> | null;
+  next: Record<string, number> | null;
+  reason: string | null;
+}
+export async function listRecentStageWeightsOverrideAudits(
+  cycleId: string | undefined,
+  limit = 25,
+): Promise<StageWeightsOverrideAudit[]> {
+  const { data: rows, error } = await db
+    .from('system_audit_logs')
+    .select('id, created_at, performed_by, metadata')
+    .eq('action', 'annual_review.stage_weights_override_set')
+    .order('created_at', { ascending: false })
+    .limit(Math.max(1, Math.min(200, limit * 4)));
+  if (error) throw error;
+
+  const raw = (rows ?? []) as Array<{
+    id: string; created_at: string; performed_by: string | null;
+    metadata: { instance_id?: string; previous?: any; next?: any; reason?: string } | null;
+  }>;
+
+  // Hydrate instance → employee. If a cycleId filter is set, drop rows whose
+  // instance is not part of that cycle.
+  const instIds = Array.from(new Set(raw.map((r) => r.metadata?.instance_id).filter(Boolean) as string[]));
+  const instMap = new Map<string, { employee_id: string | null; cycle_id: string | null }>();
+  if (instIds.length) {
+    const { data: insts, error: iErr } = await db
+      .from('annual_review_instances')
+      .select('id, employee_id, cycle_id')
+      .in('id', instIds);
+    if (iErr) throw iErr;
+    (insts ?? []).forEach((i: any) => instMap.set(i.id, { employee_id: i.employee_id, cycle_id: i.cycle_id }));
+  }
+
+  const empIds = Array.from(new Set([
+    ...Array.from(instMap.values()).map((v) => v.employee_id),
+    ...raw.map((r) => r.performed_by),
+  ].filter(Boolean) as string[]));
+  const profMap = new Map<string, { full_name: string | null; employee_code: string | null }>();
+  if (empIds.length) {
+    const { data: profs, error: pErr } = await db
+      .from('profiles')
+      .select('id, full_name, employee_code')
+      .in('id', empIds);
+    if (pErr) throw pErr;
+    (profs ?? []).forEach((p: any) => profMap.set(p.id, { full_name: p.full_name, employee_code: p.employee_code }));
+  }
+
+  const out: StageWeightsOverrideAudit[] = [];
+  for (const r of raw) {
+    const instanceId = r.metadata?.instance_id ?? null;
+    if (!instanceId) continue;
+    const inst = instMap.get(instanceId);
+    if (cycleId && inst?.cycle_id !== cycleId) continue;
+    const employeeId = inst?.employee_id ?? null;
+    const emp = employeeId ? profMap.get(employeeId) : null;
+    const performer = r.performed_by ? profMap.get(r.performed_by) : null;
+    out.push({
+      id: r.id,
+      created_at: r.created_at,
+      performed_by: r.performed_by,
+      performer_name: performer?.full_name ?? null,
+      instance_id: instanceId,
+      employee_id: employeeId,
+      employee_name: emp?.full_name ?? null,
+      employee_code: emp?.employee_code ?? null,
+      previous: (r.metadata?.previous ?? null) as Record<string, number> | null,
+      next: (r.metadata?.next ?? null) as Record<string, number> | null,
+      reason: r.metadata?.reason ?? null,
+    });
+    if (out.length >= limit) break;
+  }
+  return out;
 }
 
 /**

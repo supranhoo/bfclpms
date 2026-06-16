@@ -45,6 +45,7 @@ import { BulkStageWeightsAssignmentDialog } from '@/components/annual-review/Bul
 import { ChangeWorkflowDialog } from '@/components/annual-review/ChangeWorkflowDialog';
 import { InstanceStageWeightsDialog } from '@/components/annual-review/InstanceStageWeightsDialog';
 import { TemplateEditorDialog } from '@/components/annual-review/TemplateEditorDialog';
+import { RecentStageWeightOverridesPanel } from '@/components/annual-review/RecentStageWeightOverridesPanel';
 import { RuleFiltersEditor, RuleFiltersSummary, EMPTY_FILTERS } from '@/components/annual-review/RuleFiltersEditor';
 import type {
   AnnualReviewCycle, AnnualReviewTemplate, AssignmentFilters, AnnualReviewerRole,
@@ -141,8 +142,9 @@ function ProgressTab() {
   const [pageSize, setPageSize] = useState(25);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending_self' | 'pending_manager' | 'pending_skip' | 'pending_bu' | 'pending_hr' | 'completed' | 'not_started'>('all');
+  const [customWeightsOnly, setCustomWeightsOnly] = useState(false);
   const paginatedArgs = activeCycle
-    ? { cycleId: activeCycle.id, page, pageSize, search, status: statusFilter }
+    ? { cycleId: activeCycle.id, page, pageSize, search, status: statusFilter, hasOverride: customWeightsOnly }
     : undefined;
   const { data: paged, refetch } = useAnnualReviewInstancesPaginated(paginatedArgs);
   const instances = paged?.rows ?? [];
@@ -274,6 +276,17 @@ function ProgressTab() {
               <SelectItem value="completed">Completed</SelectItem>
             </SelectContent>
           </Select>
+          <Button
+            type="button"
+            size="sm"
+            variant={customWeightsOnly ? 'default' : 'outline'}
+            className="gap-1.5 h-10"
+            onClick={() => { setCustomWeightsOnly((v) => !v); setPage(1); }}
+            aria-pressed={customWeightsOnly}
+            title="Show only employees with a custom final-score weight override"
+          >
+            <Scale className="h-4 w-4" /> Custom weights only
+          </Button>
         </div>
         <div className="flex items-center gap-2">
           <Button
@@ -297,6 +310,7 @@ function ProgressTab() {
                   cycleId: activeCycle.id,
                   search,
                   status: statusFilter as any,
+                  hasOverride: customWeightsOnly,
                 });
                 const ids = all.map((i) => i.id);
                 const scores = await svc.fetchInstanceStageScores(ids);
@@ -516,6 +530,8 @@ function ProgressTab() {
           onDone={refetch}
         />
       )}
+
+      <RecentStageWeightOverridesPanel cycleId={activeCycle?.id} />
 
       <AlertDialog open={bulkOpen === 'finalize'} onOpenChange={(o) => !o && setBulkOpen(null)}>
         <AlertDialogContent>

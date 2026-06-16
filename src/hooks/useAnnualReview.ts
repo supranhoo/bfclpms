@@ -48,6 +48,15 @@ export const useCycleStatusCounts = (cycleId?: string) =>
     enabled: !!cycleId,
     staleTime: 30_000,
   });
+
+/** Phase 4: recent stage-weight override audit feed for the Progress tab. */
+export const useRecentStageWeightsOverrideAudits = (cycleId?: string, limit = 25) =>
+  useQuery({
+    queryKey: [...annualReviewKeys.all, 'stageWeightsOverrideAudits', cycleId ?? '', limit],
+    queryFn: () => svc.listRecentStageWeightsOverrideAudits(cycleId, limit),
+    enabled: !!cycleId,
+    staleTime: 30_000,
+  });
 export const useMyInstance = (employeeId?: string, cycleId?: string) =>
   useQuery({
     queryKey: annualReviewKeys.myInstance(employeeId ?? '', cycleId ?? ''),
