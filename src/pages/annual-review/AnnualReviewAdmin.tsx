@@ -627,13 +627,14 @@ function ProgressTab() {
         </div>
       </Card>
 
-      {uploadTemplate && (
-        <SystemScoresUploadDialog
-          open={uploadOpen}
-          onOpenChange={setUploadOpen}
-          template={uploadTemplate}
+      {activeCycle && (
+        <UnifiedBulkDialog
+          open={unifiedOpen}
+          onOpenChange={setUnifiedOpen}
           cycle={activeCycle}
-          rows={instances}
+          instances={instances}
+          templates={allTemplates}
+          systemTemplate={uploadTemplate ?? null}
           onDone={refetch}
         />
       )}
@@ -651,15 +652,6 @@ function ProgressTab() {
         onDone={() => { setChangeTplFor(null); refetch(); }}
       />
 
-      <BulkTemplateAssignmentDialog
-        open={bulkTplOpen}
-        onOpenChange={setBulkTplOpen}
-        cycle={activeCycle}
-        instances={instances}
-        templates={allTemplates}
-        onDone={refetch}
-      />
-
       <ChangeWorkflowDialog
         instance={changeWfFor}
         onClose={() => setChangeWfFor(null)}
@@ -673,25 +665,6 @@ function ProgressTab() {
         template={template ?? null}
         onSaved={() => { setWeightsFor(null); refetch(); }}
       />
-
-      <BulkWorkflowAssignmentDialog
-        open={bulkWfOpen}
-        onOpenChange={setBulkWfOpen}
-        cycle={activeCycle}
-        instances={instances}
-        onDone={refetch}
-      />
-
-      {activeCycle && (
-        <BulkStageWeightsAssignmentDialog
-          open={bulkWeightsOpen}
-          onOpenChange={setBulkWeightsOpen}
-          cycle={activeCycle}
-          instances={instances}
-          templatesById={new Map(allTemplates.map((t) => [t.id, t]))}
-          onDone={refetch}
-        />
-      )}
 
       <RecentStageWeightOverridesPanel cycleId={activeCycle?.id} />
 
