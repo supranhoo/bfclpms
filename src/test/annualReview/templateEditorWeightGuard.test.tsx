@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { TemplateEditorDialog } from '@/components/annual-review/TemplateEditorDialog';
 import type { AnnualReviewTemplate } from '@/types/annualReview';
 
-const upsertTemplate = vi.fn(async () => ({ id: 't1' }));
+const upsertTemplate = vi.fn(async (_input: unknown) => ({ id: 't1' }));
 vi.mock('@/services/annualReview/annualReviewService', () => ({
   upsertTemplate: (input: unknown) => upsertTemplate(input),
   searchActiveEmployees: vi.fn(async () => []),
