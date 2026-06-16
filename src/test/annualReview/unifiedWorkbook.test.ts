@@ -31,9 +31,9 @@ function mkInst(overrides: any = {}): any {
   };
 }
 
-function wb2file(wb: XLSX.WorkBook): File {
+function wb2file(wb: XLSX.WorkBook): ArrayBuffer {
   const buf = XLSX.write(wb, { type: 'array', bookType: 'xlsx' });
-  return new File([buf], 'x.xlsx');
+  return buf as ArrayBuffer;
 }
 
 describe('unifiedWorkbook — builder', () => {
