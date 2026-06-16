@@ -34,6 +34,7 @@ import {
   useBulkReviewSnapshotAll,
   useBulkManagementApprove,
   useBulkWriteStageScores,
+  useBulkSaveStageDrafts,
   useBulkOrgKpiFlags,
   useBulkEmployeeAttrs,
   useMyReviewScope,
@@ -179,6 +180,7 @@ export default function BulkReviewDashboard() {
   const [kpiFocusKey, setKpiFocusKey] = useUrlFilterStateNullable('kpi');
   const approve = useBulkManagementApprove();
   const stageWrite = useBulkWriteStageScores();
+  const stageDraft = useBulkSaveStageDrafts();
   // Stable batch id generated when the dialog opens; reused for storage scoping + RPC.
   const [batchId, setBatchId] = useState<string>('');
 
@@ -639,6 +641,61 @@ export default function BulkReviewDashboard() {
           ? 'Approval stuck — escalate to admin'
           : bulkAction.kind === 'mgmt' ? 'Approval failed' : 'Sign-off failed',
         description: msg,
+        variant: 'destructive',
+      });
+    }
+  };
+
+  // POLICY §111.7.a.8 — Save the dialog's typed inputs as a draft against the
+  // reviewer's own stage columns. NO workflow advancement, NO final-score
+  // stamping. Reviewer can resume from the single-row scorecard or reopen the
+  // bulk dialog later and the values pre-hydrate via reviewerDraftHydration.
+  const handleSaveDraft = async (
+    reason: string,
+    attachmentUrls: string[],
+    extras?: {
+      achievedValues?: Record<string, number | string | null>;
+      isNa?: Record<string, boolean>;
+      naReasons?: Record<string, string>;
+    },
+  ) => {
+    if (!bulkAction || bulkAction.kind !== 'stage' || !bulkAction.stage) return;
+    if (bulkAction.stage === 'functional_manager') {
+      toast({
+        title: 'Draft not supported for Functional Manager',
+        description: 'The Functional Manager bulk pipeline is not yet enabled.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    const cells = loadedRows
+      .filter(r => r.submission_id && selectedIds.has(r.submission_id))
+      .map(r => ({ submission_id: r.submission_id!, expected_row_version: r.row_version ?? null }));
+    if (cells.length === 0) return;
+    try {
+      const res = await stageDraft.mutateAsync({
+        stage: bulkAction.stage as 'manager' | 'skip_level' | 'hr_pms' | 'auditor',
+        cells,
+        reason,
+        attachment_urls: attachmentUrls,
+        achieved_values: extras?.achievedValues,
+        is_na: extras?.isNa,
+        na_reasons: extras?.naReasons,
+      });
+      const skipped = res.skipped ?? [];
+      toast({
+        title: `Draft saved for ${res.applied} of ${cells.length} cell${cells.length === 1 ? '' : 's'}`,
+        description: [
+          'Workflow not advanced — reviewers can resume from the KPI scorecard.',
+          skipped.length > 0 ? summariseSkipReasons(skipped) : null,
+        ].filter(Boolean).join(' · '),
+      });
+      setSelectedIds(new Set());
+      setConfirmApprove(false);
+    } catch (e: any) {
+      toast({
+        title: 'Saving draft failed',
+        description: String(e?.message ?? e),
         variant: 'destructive',
       });
     }
@@ -1164,6 +1221,13 @@ export default function BulkReviewDashboard() {
         onConfirm={({ reason, attachmentUrls, achievedValues, isOverride, isNa, naReasons }) =>
           handleBulkApprove(reason, attachmentUrls, { achievedValues, isOverride, isNa, naReasons })
         }
+        onSaveDraft={
+          bulkAction?.kind === 'stage' && bulkAction.stage !== 'functional_manager'
+            ? ({ reason, attachmentUrls, achievedValues, isNa, naReasons }) =>
+                handleSaveDraft(reason, attachmentUrls, { achievedValues, isNa, naReasons })
+            : undefined
+        }
+        isSavingDraft={stageDraft.isPending}
         mode={bulkAction?.kind === 'stage' ? 'signoff' : 'approve'}
         stageLabel={
           bulkAction?.kind === 'stage'
