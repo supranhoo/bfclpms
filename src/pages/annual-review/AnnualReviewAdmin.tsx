@@ -1034,6 +1034,31 @@ function CyclesTab() {
 // Tab 3 — Templates (visual builder via TemplateEditorDialog)
 // ------------------------------------------------------------------
 function TemplatesTab() {
+function TemplateWeightsSummary({ template }: { template: AnnualReviewTemplate }) {
+  const w = (template.sections as { stage_weights?: Record<string, number> } | undefined)?.stage_weights;
+  if (!w || Object.keys(w).length === 0) {
+    return (
+      <p className="text-xs text-muted-foreground mt-1">
+        Final-score blend: <span className="italic">legacy (criteria 100%)</span>
+      </p>
+    );
+  }
+  const LABEL: Record<string, string> = {
+    self: 'Self', manager: 'Mgr', skip_manager: 'Skip', bu_head: 'BU',
+    hr: 'HR', system: 'Sys', criteria: 'Crit',
+  };
+  const parts = Object.entries(w)
+    .filter(([, v]) => typeof v === 'number' && v > 0)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([k, v]) => `${LABEL[k] ?? k} ${v}%`);
+  return (
+    <p className="text-xs text-muted-foreground mt-1 tabular-nums">
+      Final-score blend: {parts.join(' · ')}
+    </p>
+  );
+}
+
+function TemplatesTab_INNER() {
   const { data: templates = [], refetch } = useTemplates();
   const [editorOpen, setEditorOpen] = useState(false);
   const [editing, setEditing] = useState<AnnualReviewTemplate | null>(null);
