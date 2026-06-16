@@ -12763,6 +12763,19 @@ export type Database = {
         }
         Returns: Json
       }
+      bulk_save_stage_drafts: {
+        Args: {
+          p_achieved_values?: Json
+          p_attachment_urls?: Json
+          p_batch_reason?: string
+          p_cells: Json
+          p_is_na?: Json
+          p_manual_scores?: Json
+          p_na_reasons?: Json
+          p_stage: string
+        }
+        Returns: Json
+      }
       bulk_scope_preview: {
         Args: { p_filters?: Json; p_period: string; p_year: number }
         Returns: Json
