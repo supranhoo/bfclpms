@@ -485,6 +485,9 @@ function ProgressTab() {
                       search,
                       status: statusFilter as any,
                       hasOverride: customWeightsOnly,
+                      departmentId: departmentId || undefined,
+                      businessUnitId: businessUnitId || undefined,
+                      managerId: managerId || undefined,
                     });
                     const ids = all.map((i) => i.id);
                     const scores = await svc.fetchInstanceStageScores(ids);
