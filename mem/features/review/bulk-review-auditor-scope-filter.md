@@ -58,3 +58,14 @@ uncovered employee was silently hidden, looking like the KPI didn't exist.
   `src/test/bulkReview/auditScopeAndCategoryFilters.test.ts` regression
   case "hides a row whose kpi_id and employee_id are both outside the
   assigned scope".
+
+## Reviewer Achieved entry parity (June 2026 — POLICY §111.7.a.7)
+
+In sign-off mode `BulkSignoffPreview.isRowEditable` is just `editable`
+(handler present). Every active-stage reviewer (Manager / Skip-Level /
+HR PMS / Auditor / Management) can type Achvd, pick a Yes-No / tier
+option, or tick N/A on any row in their selection — empty Achvd carries
+the previous stage forward (unchanged default). Admin "Override" keeps
+its exclusive bypass of prior-stage gates / row-version conflicts /
+already-scored rows / final-unlock. Regression:
+`src/test/bulkReview/bulkSignoffPreviewEditable.test.tsx`.

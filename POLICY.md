@@ -205,6 +205,32 @@ touching the underlying achievement evidence, which violates Policy §88
 keeps `p_manual_scores` for backward-compat callers, but the dashboard MUST
 NOT pass it.
 
+### §111.7.a.7 Reviewer Achieved/N-A parity with the Dashboard (v2.66.13.14)
+
+In sign-off mode (`mode='signoff'`) every active-stage reviewer — Manager,
+Skip-Level, HR PMS, Auditor, Management — MAY, per row in their selection:
+
+- leave **Achvd** blank → previous stage's score is carried forward
+  (legacy default, unchanged); OR
+- type an **Achieved** value (or pick a Yes/No / tier option for binary /
+  tiered KPIs) → engine recomputes the 0–5 rating from the row's OWN
+  `kpis` thresholds, exactly as the single-cell dashboard scorecard does
+  (POLICY §BULK-REVIEW-SCORING-PARITY); OR
+- tick **N/A** → row recorded as not-applicable with the shared dialog
+  remark.
+
+This is purely a per-row entry capability and grants **zero** additional
+bypass: rows are still restricted to those already in the reviewer's
+sign-off selection (active stage + scope filters), `final_score`
+immutability (§88) is untouched, and approved / row-version-conflicting /
+already-scored rows remain unreachable without the admin Override toggle
+(§111.7.a.3). The Override toggle keeps its existing semantics — it is the
+only path that unlocks gated rows.
+
+Regression: `src/test/bulkReview/bulkSignoffPreviewEditable.test.tsx`
+(reviewer + carried-source row enables Achieved input, no-data row stays
+editable, approve-Final + non-admin remains read-only).
+
 ## §111.6 Bulk Scoring KPI Detail RPC Source Contract (RCA 2026-05-25)
 
 The Bulk Scoring detail/write-as-Manager drawer RPC (`kpi_cell_detail`) MUST source organization KPI detail metadata from `public.org_kpi_values`. The obsolete `public.org_kpis` relation MUST NOT be referenced or recreated as a compatibility shim. Category display in this drawer MUST come from the mapped employee KPI (`kpis.category_id`) joined to `kra_categories`, so category visibility remains tied to the KPI row actually being reviewed. Workflow metadata MUST use the supported `get_employee_workflow(employee, period, year)` helper and degrade gracefully if workflow resolution fails. Regression: `src/test/kpiCellDetailContract.test.ts`.

@@ -238,10 +238,12 @@ export function BulkSignoffPreview({
         <p className="text-[10px] text-muted-foreground leading-relaxed">
           <strong>Stage columns</strong> show every reviewer score on file. The
           <strong> {stageLabel ?? 'target stage'}</strong> column is highlighted
-          — that is the column this bulk action will stamp. <strong>Resolved</strong> is
-          the value that will be written (carried from the highest prior stage
-          or computed from <strong>Achieved</strong>). Type an Achieved value to
-          auto-compute the rating on rows marked ●.
+          — that is the column this bulk action will stamp. Per row you can:
+          leave <strong>Achvd</strong> blank to carry the previous stage's
+          score forward, type a value (or pick a Yes/No / tier option) to let
+          the engine compute your stage's score from the KPI thresholds, or
+          tick <strong>N/A</strong> to mark the row not-applicable. The Remark
+          and Evidence apply to every row you sign off.
         </p>
       )}
 
@@ -331,10 +333,14 @@ function CellTable({
     return ruleByKpiId?.get(id);
   };
 
-  const isRowEditable = (c: CellPreview): boolean => {
-    if (!editable) return false;
-    // Rows with no resolvable score always need input; admin override unlocks all.
-    return c.source === 'none' || isOverride;
+  const isRowEditable = (_c: CellPreview): boolean => {
+    // In sign-off mode the active-stage reviewer can always type their own
+    // Achieved value (empty = carry the previous stage forward). In approve-
+    // Final mode the parent passes `onCellInputChange` only for admin
+    // override, so `editable` already encodes the right gate. Admins keep
+    // their `isOverride` escape hatch for unlocking gated rows.
+    void isOverride;
+    return editable;
   };
 
   const isRowNa = (c: CellPreview): boolean =>

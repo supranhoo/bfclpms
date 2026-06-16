@@ -1,92 +1,76 @@
-## Problem
+# Bulk Sign-off — let the active-stage reviewer enter their own Achieved value
 
-In the Bulk Review side drawer (`BulkCellDrawer`), the reviewer sees **"Manual rating (0–5)"** even when the KPI has a proper scoring logic. The dashboard / single-cell scorecard correctly drives the score from:
-- Achieved value → R5..R0 thresholds (numeric KPIs), or
-- Yes/No selection (binary KPIs), or
-- Tier selection (tiered KPIs).
+## Why Aayush can't type anything in the dialog
 
-Bulk Review must behave identically — the reviewer should never type a raw 0–5 when the KPI has a defined scoring logic.
+In `src/components/review/BulkSignoffPreview.tsx` the Achvd / N/A inputs are gated by:
 
-## Root Cause
-
-`BulkCellDrawer.tsx` decides whether to show the achievement-based input via:
-
-```ts
-const hasThresholds = [r0..r5].some(v => v !== null && v !== '' );
+```
+isRowEditable(c) = c.source === 'none' || isOverride
 ```
 
-This check **ignores qualitative KPIs** (`uom_type = 'binary' | 'tiered'`), whose scoring lives in `qualitative_options`, not in R0..R5. For those KPIs `hasThresholds = false`, so the drawer auto-flips to Manual mode (line 115) — which is exactly what the screenshot shows.
+For the 5 rows in your screenshot the Self stage already scored 5.0, so the snapshot returns `source = 'self'` (Self's value is **carried forward** into the Auditor column). The predicate therefore returns `false`, the input becomes read-only, and the only way to type a value today is the **admin-only** "Override" checkbox — which Aayush, as Auditor, doesn't have.
 
-`AchievedValueScoreInput` already supports binary + tiered (it renders Yes/No or tier chips and computes the score), so the fix is purely in the gating logic.
+So the behaviour is by design, but the design is wrong: it forces every reviewer to either rubber-stamp the previous stage or open the single-cell drawer one row at a time. That contradicts the dashboard (where each stage can re-enter the Achieved value and the engine recomputes the score) and breaks parity with `POLICY §BULK-REVIEW-SCORING-PARITY`.
+
+## Goal
+
+In the Bulk Sign-off dialog, the **active-stage reviewer** (Auditor / Manager / HR PMS / Skip-Level / Management) can, per row:
+
+1. Leave Achvd blank → previous stage's score is carried forward (today's default — unchanged).
+2. Type an Achieved value (or pick a Yes-No / tier option) → engine computes 0–5 from KPI thresholds, exactly like the dashboard. Written to **their own stage column only**.
+3. Tick N/A → row recorded as not-applicable with the shared remark (today this is admin-only when source≠'none' — will be opened to reviewers too).
+
+Admin "Override stage score only" stays exactly as it is — it is the only path that bypasses prior-stage gates / row-version conflicts / already-scored rows / final-unlock.
 
 ## Risk & Impact Report
 
-- **Data Impact:** None. No schema, no RLS, no historical rows touched. Same write path (`achieved_values` map + computed score) already used for numeric KPIs.
-- **Workflow Impact:** None. Same roles, same stages, same RPC.
-- **UI/UX Impact:** Manual 0–5 input disappears for any KPI that has either numeric thresholds OR qualitative options. The "Use manual 0–5 rating instead" escape hatch is preserved for the rare case of thresholdless KPIs (and as a recoverable fallback).
-- **Regression Risk:** Low. Single-cell scorecards already use the same component with the same inputs; we're just routing Bulk Review through it for qualitative KPIs too.
-- **Scalability:** No change to data volume or queries.
-- **Mitigation:** Unit tests for the new gating predicate covering numeric / binary / tiered / thresholdless KPIs.
+- **Data impact:** none on schema. Same RPC, same audit columns. Reviewers can already write their stage column via the per-cell drawer — this just lets them do it in bulk.
+- **Workflow impact:** zero new bypass. Eligible rows are still only the ones already in the reviewer's sign-off selection (i.e. already at their active stage and passing scope filters). No change to RLS, no change to advancement rules.
+- **POLICY §88 (immutability):** unchanged. Approved/final rows are not in the selection set and remain unreachable without admin override.
+- **UI:** Achvd input becomes editable for all rows in sign-off mode; an empty input still means "carry forward". Helper copy under the table is updated to describe the three options.
+- **Regression risk:** medium-low. Only the `isRowEditable` predicate and the `allowNa` gate in sign-off mode change. Admin override path and approve-Final path are untouched.
+- **Scalability:** no extra queries; per-row state already exists in the `inputs` Map.
 
-## Plan
+## Changes (surgical)
 
-### 1. Extract a single predicate `kpiHasScoringLogic(kpi)`
+### 1. `src/components/review/BulkSignoffPreview.tsx`
+- Replace `isRowEditable` with:
+  ```
+  // In sign-off mode the active-stage reviewer can always type their own
+  // Achieved value; an empty input means "carry forward the previous stage".
+  // Admin override additionally unlocks rows that were skipped by gates.
+  const isRowEditable = (_c) => editable; // editable = !!onCellInputChange
+  ```
+  (`source === 'none'` rows are already covered because `editable` is true; `isOverride` keeps its current meaning for admins.)
+- Pass `allowNa = true` for sign-off mode in the parent (see #2) and keep the existing approve-Final behaviour unchanged.
 
-New helper in `src/lib/reviewScoring.ts` (or co-located if already present):
+### 2. `src/components/review/BulkApproveDialog.tsx`
+- In `<BulkSignoffPreview …/>` pass `allowNa={isSignoff}` so reviewers can mark N/A in bulk too (today only admin override exposes it).
+- No change to the admin "Override" panel.
 
-```ts
-export function kpiHasScoringLogic(kpi: {
-  uom_type?: string | null;
-  qualitative_options?: unknown[] | null;
-  r0?: string | null; r1?: string | null; r2?: string | null;
-  r3?: string | null; r4?: string | null; r5?: string | null;
-}): boolean {
-  const uom = kpi?.uom_type ?? 'numeric';
-  if (uom === 'binary' || uom === 'tiered') {
-    return Array.isArray(kpi.qualitative_options) && kpi.qualitative_options.length > 0;
-  }
-  return [kpi.r0, kpi.r1, kpi.r2, kpi.r3, kpi.r4, kpi.r5]
-    .some(v => v !== null && v !== undefined && v !== '');
-}
-```
+### 3. Helper copy (under the preview table, sign-off mode only)
+Replace the current single-line hint with:
+> Leave **Achvd** blank to carry the previous stage's score forward. Type a value (or pick a Yes/No/tier option) to let the engine compute your stage's score from the KPI thresholds. Tick **N/A** to mark the row not-applicable. The Remark and Evidence apply to every row you sign off.
 
-This becomes the **SSOT** for "does this KPI have an automated scoring mechanism?" Reused anywhere we need to decide between auto vs manual entry.
+### 4. Tests (`src/test/bulkReview/`)
+- New `bulkSignoffPreview.editable.test.tsx`:
+  - reviewer + `source='self'` row → Achvd input is enabled
+  - reviewer + `source='none'` row → Achvd input is enabled
+  - approve-Final mode + non-admin → Achvd input is disabled (regression guard)
+  - admin override unchanged → still enables every row including frozen / gated ones
+- Extend existing `BulkApproveDialog` test (if any) to assert N/A column renders for reviewer signoff.
 
-### 2. Wire it into `BulkCellDrawer.tsx`
+### 5. Docs / Policy
+- `DOCUMENTATION.md` — Bulk Sign-off section: add the three-option contract (blank / typed / N/A) and call out parity with the dashboard.
+- `POLICY.md §BULK-REVIEW-SCORING-PARITY` — extend with: "In sign-off mode the active-stage reviewer MAY enter an Achieved value or mark N/A on any row in their selection. Empty Achvd carries the previous stage's score forward. Admin Override remains the only path that bypasses workflow / immutability gates."
+- `mem://features/review/bulk-review-auditor-scope-filter` — add a one-liner that the dialog now mirrors the dashboard input for all reviewer roles.
 
-- Replace the inline `hasThresholds` memo with `kpiHasScoringLogic(kpiDetail)`.
-- Rename the local variable to `hasScoringLogic` for clarity.
-- All three gates (render `AchievedValueScoreInput`, render manual fallback, auto-enable manual mode in the seeding `useEffect`) use the new flag — no other changes.
-- Toggle label updated: "Use manual 0–5 rating instead" remains, but only appears as an explicit reviewer escape; default is always auto.
+## Out of scope
 
-### 3. Defensive guard on the write payload
-
-`handleWrite` already sends `achieved_values` only when `!manualMode`. No change needed, but add an assertion-style comment that links to POLICY §dashboard-scoring-parity.
-
-### 4. Tests (`src/test/reviewScoring.test.ts`, new)
-
-- numeric KPI with R5..R0 → true
-- numeric KPI with all R blank → false
-- binary KPI with `qualitative_options=[{label:'Yes',score:5},{label:'No',score:0}]` → true
-- binary KPI with empty `qualitative_options` → false
-- tiered KPI with 3 tiers → true
-- unknown uom_type defaults to numeric branch
-
-Plus a render test for `BulkCellDrawer` (or a focused logic test on the gating function) verifying a binary KPI no longer falls back to Manual 0–5.
-
-### 5. Docs / Policy sync
-
-- `DOCUMENTATION.md` → Bulk Review section: note that the cell drawer uses `kpiHasScoringLogic` and mirrors dashboard scoring for numeric, binary, and tiered KPIs.
-- `POLICY.md` → new clause **§BULK-REVIEW-SCORING-PARITY**: "The Bulk Review cell drawer MUST present the same scoring input as the single-cell scorecard for the KPI's `uom_type`. Manual 0–5 entry is allowed only as an explicit reviewer override, or when the KPI has neither numeric thresholds nor qualitative options defined."
-- Bump `DOCUMENTATION.md` version + changelog entry.
-
-## Out of Scope
-
-- No changes to `AchievedValueScoreInput` itself.
-- No changes to the write RPC, validators, or RLS.
-- No changes to single-cell scorecards (they already behave correctly).
-- No visual redesign of the drawer beyond swapping the input block.
+- Inline editing directly in the bulk-scoring grid (no drawer / dialog) — separate, larger change with its own draft-persistence story.
+- Changing the "skipped" cells UX or the admin override semantics.
+- Any RPC / schema changes.
 
 ## Rollback
 
-Single-file revert of `BulkCellDrawer.tsx` + delete the helper + test files. No DB migration to roll back.
+Pure UI revert of `isRowEditable` and the `allowNa` prop. No data migrations.
