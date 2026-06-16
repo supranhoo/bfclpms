@@ -1,76 +1,57 @@
-# Bulk Sign-off — let the active-stage reviewer enter their own Achieved value
+# Confirming reviewer Achieved entry for Manager / Skip-Level / HR PMS / Auditor — and flagging Functional Manager
 
-## Why Aayush can't type anything in the dialog
+You and the last shipped fix agree: **typing an Achieved value (engine computes the score)** and **admin Override (bypass gates / re-stamp frozen rows)** are two different features. The behaviour you described is now the contract — this plan just confirms which roles are covered today and which one isn't, so we don't ship a half-fix.
 
-In `src/components/review/BulkSignoffPreview.tsx` the Achvd / N/A inputs are gated by:
+## What's already live (v2.66.13.14)
 
-```
-isRowEditable(c) = c.source === 'none' || isOverride
-```
+In sign-off mode (`/review/bulk-scoring` → "Sign off N cells") the per-row Achvd / N/A inputs are editable for every active-stage reviewer the platform supports today:
 
-For the 5 rows in your screenshot the Self stage already scored 5.0, so the snapshot returns `source = 'self'` (Self's value is **carried forward** into the Auditor column). The predicate therefore returns `false`, the input becomes read-only, and the only way to type a value today is the **admin-only** "Override" checkbox — which Aayush, as Auditor, doesn't have.
+| Reviewer role | Achvd editable | N/A editable | Override toggle |
+|---|---|---|---|
+| Manager (`manager`) | ✅ | ✅ | ❌ (admin only) |
+| Skip-Level (`skip_level`) | ✅ | ✅ | ❌ (admin only) |
+| HR PMS (`hr_pms`) | ✅ | ✅ | ❌ (admin only) |
+| Auditor (`auditor`) | ✅ | ✅ | ❌ (admin only) |
+| Management (`management`) — terminal Approve flow | read-only (POLICY §88) | n/a | ✅ admin only |
+| Admin | ✅ everywhere | ✅ everywhere | ✅ |
 
-So the behaviour is by design, but the design is wrong: it forces every reviewer to either rubber-stamp the previous stage or open the single-cell drawer one row at a time. That contradicts the dashboard (where each stage can re-enter the Achieved value and the engine recomputes the score) and breaks parity with `POLICY §BULK-REVIEW-SCORING-PARITY`.
+- Empty Achvd → previous stage's score carries forward (unchanged default).
+- Typed Achvd / Yes-No / tier → engine recomputes 0–5 from the row's OWN KPI thresholds — identical to the dashboard scorecard (`kpiHasScoringLogic`, POLICY §BULK-REVIEW-SCORING-PARITY).
+- Admin Override stays the **only** path that bypasses prior-stage gates, row-version conflicts, already-scored rows, and final-unlock.
 
-## Goal
+Regression test: `src/test/bulkReview/bulkSignoffPreviewEditable.test.tsx` (3 cases).
 
-In the Bulk Sign-off dialog, the **active-stage reviewer** (Auditor / Manager / HR PMS / Skip-Level / Management) can, per row:
+## What is NOT covered today — Functional Manager
 
-1. Leave Achvd blank → previous stage's score is carried forward (today's default — unchanged).
-2. Type an Achieved value (or pick a Yes-No / tier option) → engine computes 0–5 from KPI thresholds, exactly like the dashboard. Written to **their own stage column only**.
-3. Tick N/A → row recorded as not-applicable with the shared remark (today this is admin-only when source≠'none' — will be opened to reviewers too).
+You also mentioned Functional Manager. The current bulk pipeline does **not** plumb that stage end-to-end:
 
-Admin "Override stage score only" stays exactly as it is — it is the only path that bypasses prior-stage gates / row-version conflicts / already-scored rows / final-unlock.
+- `src/lib/bulkActionForStage.ts` defines `BulkStage = 'manager' | 'skip_level' | 'hr_pms' | 'auditor'` — `functional_manager` is missing, so no bulk sign-off button is rendered for that role.
+- `BulkSignoffPreview` already has a `'fn-mgr'` source label but the stage-write RPC (`public.bulk_write_stage_scores(p_stage…)`) only accepts the four stages above. Adding FM there is a separate, larger ticket (RPC signature + cascade ordering + audit type + workflow advancement + tests). I will NOT silently piggy-back it on this change.
 
-## Risk & Impact Report
+If you want Functional Manager included, I'll spec it as its own plan with the RPC + workflow + audit work — say the word and I'll draft it.
 
-- **Data impact:** none on schema. Same RPC, same audit columns. Reviewers can already write their stage column via the per-cell drawer — this just lets them do it in bulk.
-- **Workflow impact:** zero new bypass. Eligible rows are still only the ones already in the reviewer's sign-off selection (i.e. already at their active stage and passing scope filters). No change to RLS, no change to advancement rules.
-- **POLICY §88 (immutability):** unchanged. Approved/final rows are not in the selection set and remain unreachable without admin override.
-- **UI:** Achvd input becomes editable for all rows in sign-off mode; an empty input still means "carry forward". Helper copy under the table is updated to describe the three options.
-- **Regression risk:** medium-low. Only the `isRowEditable` predicate and the `allowNa` gate in sign-off mode change. Admin override path and approve-Final path are untouched.
-- **Scalability:** no extra queries; per-row state already exists in the `inputs` Map.
+## What I'll do in this plan (build mode)
 
-## Changes (surgical)
+Verification-only, no new code:
 
-### 1. `src/components/review/BulkSignoffPreview.tsx`
-- Replace `isRowEditable` with:
-  ```
-  // In sign-off mode the active-stage reviewer can always type their own
-  // Achieved value; an empty input means "carry forward the previous stage".
-  // Admin override additionally unlocks rows that were skipped by gates.
-  const isRowEditable = (_c) => editable; // editable = !!onCellInputChange
-  ```
-  (`source === 'none'` rows are already covered because `editable` is true; `isOverride` keeps its current meaning for admins.)
-- Pass `allowNa = true` for sign-off mode in the parent (see #2) and keep the existing approve-Final behaviour unchanged.
+1. Run the existing reviewer-editable regression suite to confirm the four roles above are green.
+2. Open the live Bulk Sign-off dialog as a non-admin reviewer (using the test harness) and assert in a new test that the Achvd input is rendered for `mode='signoff' + isAdmin=false`, and that the admin Override panel is NOT rendered — guards against a future regression that re-locks reviewers.
 
-### 2. `src/components/review/BulkApproveDialog.tsx`
-- In `<BulkSignoffPreview …/>` pass `allowNa={isSignoff}` so reviewers can mark N/A in bulk too (today only admin override exposes it).
-- No change to the admin "Override" panel.
+### Tests to add
+- `src/test/bulkApproveDialogSignoffMode.test.tsx` → extend with one case: non-admin sign-off mode renders the Per-cell preview with editable Achvd inputs AND does NOT render the "Override … score only (admin)" panel.
 
-### 3. Helper copy (under the preview table, sign-off mode only)
-Replace the current single-line hint with:
-> Leave **Achvd** blank to carry the previous stage's score forward. Type a value (or pick a Yes/No/tier option) to let the engine compute your stage's score from the KPI thresholds. Tick **N/A** to mark the row not-applicable. The Remark and Evidence apply to every row you sign off.
+## Risk & Impact
 
-### 4. Tests (`src/test/bulkReview/`)
-- New `bulkSignoffPreview.editable.test.tsx`:
-  - reviewer + `source='self'` row → Achvd input is enabled
-  - reviewer + `source='none'` row → Achvd input is enabled
-  - approve-Final mode + non-admin → Achvd input is disabled (regression guard)
-  - admin override unchanged → still enables every row including frozen / gated ones
-- Extend existing `BulkApproveDialog` test (if any) to assert N/A column renders for reviewer signoff.
+- Data / RLS / RPC / scoring / workflow / audit / backup: no change.
+- UI: no change (test-only addition).
+- Regression risk: none — pure assertions over already-shipped behaviour.
 
-### 5. Docs / Policy
-- `DOCUMENTATION.md` — Bulk Sign-off section: add the three-option contract (blank / typed / N/A) and call out parity with the dashboard.
-- `POLICY.md §BULK-REVIEW-SCORING-PARITY` — extend with: "In sign-off mode the active-stage reviewer MAY enter an Achieved value or mark N/A on any row in their selection. Empty Achvd carries the previous stage's score forward. Admin Override remains the only path that bypasses workflow / immutability gates."
-- `mem://features/review/bulk-review-auditor-scope-filter` — add a one-liner that the dialog now mirrors the dashboard input for all reviewer roles.
+## Out of scope (separate tickets if you want them)
 
-## Out of scope
-
-- Inline editing directly in the bulk-scoring grid (no drawer / dialog) — separate, larger change with its own draft-persistence story.
-- Changing the "skipped" cells UX or the admin override semantics.
-- Any RPC / schema changes.
+- Functional Manager bulk sign-off (RPC + role plumbing).
+- Letting Management override the Final on terminal approve without the admin role.
+- Inline editing directly in the bulk-scoring grid (no drawer / dialog).
 
 ## Rollback
 
-Pure UI revert of `isRowEditable` and the `allowNa` prop. No data migrations.
+Delete the added test case. No app code changes.
