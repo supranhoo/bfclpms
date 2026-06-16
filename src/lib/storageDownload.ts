@@ -73,6 +73,18 @@ export function buildEvidenceFileName(
  * @param fileName - Optional descriptive filename for the download
  */
 export async function openStorageFile(publicUrl: string, fileName?: string): Promise<void> {
+  // Route previewable evidence (PDF / image) through the in-app preview dialog
+  // via a global custom event. The EvidencePreviewProvider mounted in App.tsx
+  // listens for `evidence-preview` and opens a modal. Falls back to direct
+  // download when no listener is present (e.g. in tests).
+  if (typeof window !== 'undefined' && isPreviewableEvidence(fileName ?? publicUrl)) {
+    const detail = { url: publicUrl, fileName: fileName ?? null };
+    const ev = new CustomEvent('evidence-preview', { detail, cancelable: true });
+    const dispatched = window.dispatchEvent(ev);
+    // If a listener handled it (called preventDefault), stop here.
+    if (dispatched === false || ev.defaultPrevented) return;
+    // Otherwise fall through to download (no provider mounted).
+  }
   try {
     // Parse bucket and path from public URL
     // Format: https://<ref>.supabase.co/storage/v1/object/public/<bucket>/<path>
@@ -117,4 +129,17 @@ export async function openStorageFile(publicUrl: string, fileName?: string): Pro
     // Graceful fallback
     window.open(publicUrl, '_blank');
   }
+}
+
+/**
+ * Detects whether an evidence file is previewable in-browser.
+ * Returns 'pdf', 'image', or null based on file extension.
+ */
+export function isPreviewableEvidence(urlOrName: string | null | undefined): 'pdf' | 'image' | null {
+  if (!urlOrName) return null;
+  const cleaned = urlOrName.split('?')[0].split('#')[0];
+  const ext = (cleaned.split('.').pop() || '').toLowerCase();
+  if (ext === 'pdf') return 'pdf';
+  if (['png', 'jpg', 'jpeg', 'webp', 'gif', 'svg'].includes(ext)) return 'image';
+  return null;
 }
