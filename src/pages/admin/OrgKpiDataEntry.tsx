@@ -890,6 +890,31 @@ export default function OrgKpiDataEntry() {
     filterEmployeeIds?: string[],
   ) => {
     await handleCardSave(kpi, values);
+    // POLICY §ORG-KPI-PROPAGATION — chained Save → Propagate handoff.
+    // `handleCardSave` has now persisted every safe-to-save row to
+    // `org_kpi_values`. The local `values.scopedValues` snapshot was
+    // captured BEFORE the save and still carries the pre-save
+    // `dbAchievedValue` (often `null` for fresh entries). That stale
+    // snapshot causes the untouched-zero guard below to misclassify
+    // freshly-saved `0` values as "unsaved" → false destructive toast.
+    // Treat every row we just attempted to save as DB-confirmed for
+    // this action, so the in-loop guards see the post-save truth.
+    if (values.scopedValues) {
+      const scope0 = ((kpi as any).org_level_scope as OrgLevelScope) || 'employee';
+      if (scope0 === 'department' || scope0 === 'employee') {
+        values.scopedValues = values.scopedValues.map(sv => {
+          // Mirror the same "drop null-overwrite of non-null DB value"
+          // rule used by `handleCardSave`; everything else is now DB-confirmed.
+          if (sv.achievedValue === null && !sv.isNa) return sv;
+          return {
+            ...sv,
+            // After save, the local value IS the DB value.
+            dbAchievedValue: sv.isNa ? null : sv.achievedValue,
+            _touched: true,
+          } as typeof sv;
+        });
+      }
+    }
     const scope = ((kpi as any).org_level_scope as OrgLevelScope) || 'employee';
     
     // Track which scope IDs were actually propagated
