@@ -210,6 +210,11 @@ export interface AnnualReviewInstance {
   eligibility_inputs: Record<string, string | number | boolean>;
   criteria_weighted_score: number | null;
   total_score: number | null;
+  /** Phase 2 — per-employee final-score weight override. NULL → use template. */
+  stage_weights_override?: Partial<Record<
+    'self' | 'manager' | 'skip_manager' | 'bu_head' | 'hr' | 'system' | 'criteria',
+    number
+  >> | null;
   final_rating: string | null;
   hr_remarks: string | null;
   language_pref: string;
