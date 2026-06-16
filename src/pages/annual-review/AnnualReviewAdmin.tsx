@@ -455,19 +455,10 @@ function ProgressTab() {
           >
             <Bell className="h-4 w-4" /> Send reminders now
           </Button>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" className="gap-2" disabled={exporting}>
-                {exporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-                Download data
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-72">
-              <DropdownMenuLabel>Choose dataset</DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                disabled={total === 0 || exporting}
-                onSelect={async () => {
+          <Button
+            variant="outline" className="gap-2"
+            disabled={total === 0 || exporting}
+            onClick={async () => {
                   if (!activeCycle) return;
                   setExporting(true);
                   try {
@@ -499,90 +490,18 @@ function ProgressTab() {
                   } finally {
                     setExporting(false);
                   }
-                }}
-              >
-                <BarChart3 className="h-4 w-4 mr-2" />
-                <div className="flex flex-col">
-                  <span>Progress snapshot (.xlsx)</span>
-                  <span className="text-[10px] text-muted-foreground">All filtered rows · scores · weights</span>
-                </div>
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuLabel className="text-xs">Bulk-edit templates</DropdownMenuLabel>
-              <DropdownMenuItem
-                disabled={!uploadTemplate || instances.length === 0}
-                onSelect={() => {
-                  if (!activeCycle || !uploadTemplate) return;
-                  downloadSystemScoresTemplate(activeCycle, uploadTemplate, instances);
-                  toast.success('System-score template downloaded.');
-                }}
-              >
-                <Upload className="h-4 w-4 mr-2" /> System scores
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                disabled={instances.length === 0}
-                onSelect={() => {
-                  if (!activeCycle) return;
-                  downloadTemplateAssignmentTemplate(activeCycle, allTemplates, instances);
-                  toast.success('Template-assignment sheet downloaded.');
-                }}
-              >
-                <Layers className="h-4 w-4 mr-2" /> Template assignments
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                disabled={instances.length === 0}
-                onSelect={() => {
-                  if (!activeCycle) return;
-                  downloadWorkflowAssignmentTemplate(activeCycle, instances);
-                  toast.success('Workflow-assignment sheet downloaded.');
-                }}
-              >
-                <ListChecks className="h-4 w-4 mr-2" /> Workflow assignments
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                disabled={instances.length === 0}
-                onSelect={() => {
-                  if (!activeCycle) return;
-                  downloadStageWeightsTemplate(activeCycle, instances, new Map(allTemplates.map((t) => [t.id, t])));
-                  toast.success('Stage-weights sheet downloaded.');
-                }}
-              >
-                <Scale className="h-4 w-4 mr-2" /> Stage weights
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" className="gap-2" disabled={instances.length === 0}>
-                <Upload className="h-4 w-4" /> Upload data
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-72">
-              <DropdownMenuLabel>Choose dataset</DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                disabled={!uploadTemplate}
-                onSelect={() => setUploadOpen(true)}
-              >
-                <Upload className="h-4 w-4 mr-2" />
-                <div className="flex flex-col">
-                  <span>System scores</span>
-                  {!uploadTemplate && (
-                    <span className="text-[10px] text-muted-foreground">Requires an active template</span>
-                  )}
-                </div>
-              </DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => setBulkTplOpen(true)}>
-                <Layers className="h-4 w-4 mr-2" /> Template assignments
-              </DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => setBulkWfOpen(true)}>
-                <ListChecks className="h-4 w-4 mr-2" /> Workflow assignments
-              </DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => setBulkWeightsOpen(true)}>
-                <Scale className="h-4 w-4 mr-2" /> Stage weights
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+            }}
+          >
+            {exporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <BarChart3 className="h-4 w-4" />}
+            Progress snapshot
+          </Button>
+          <Button
+            variant="outline" className="gap-2"
+            disabled={instances.length === 0}
+            onClick={() => setUnifiedOpen(true)}
+          >
+            <Upload className="h-4 w-4" /> Bulk workbook
+          </Button>
         </div>
       </div>
 
