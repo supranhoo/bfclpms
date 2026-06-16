@@ -213,12 +213,14 @@ function describeWeights(w: StageWeights | null): string {
 }
 
 export async function parseUnifiedWorkbook(
-  file: File,
+  file: File | Blob | ArrayBuffer,
   instances: svc.InstanceWithEmployee[],
   templates: AnnualReviewTemplate[],
   systemTemplate: AnnualReviewTemplate | null,
 ): Promise<ParseResult> {
-  const buf = await file.arrayBuffer();
+  const buf = file instanceof ArrayBuffer
+    ? file
+    : await (file as Blob).arrayBuffer();
   const wb = XLSX.read(buf);
   if (!wb.SheetNames.includes(SHEET_MAIN)) {
     return { rows: [], fatal: [`Missing sheet "${SHEET_MAIN}". Download a fresh workbook.`] };
