@@ -660,21 +660,13 @@ export default function BulkReviewDashboard() {
     },
   ) => {
     if (!bulkAction || bulkAction.kind !== 'stage' || !bulkAction.stage) return;
-    if (bulkAction.stage === 'functional_manager') {
-      toast({
-        title: 'Draft not supported for Functional Manager',
-        description: 'The Functional Manager bulk pipeline is not yet enabled.',
-        variant: 'destructive',
-      });
-      return;
-    }
     const cells = loadedRows
       .filter(r => r.submission_id && selectedIds.has(r.submission_id))
       .map(r => ({ submission_id: r.submission_id!, expected_row_version: r.row_version ?? null }));
     if (cells.length === 0) return;
     try {
       const res = await stageDraft.mutateAsync({
-        stage: bulkAction.stage as 'manager' | 'skip_level' | 'hr_pms' | 'auditor',
+        stage: bulkAction.stage,
         cells,
         reason,
         attachment_urls: attachmentUrls,
@@ -1222,7 +1214,7 @@ export default function BulkReviewDashboard() {
           handleBulkApprove(reason, attachmentUrls, { achievedValues, isOverride, isNa, naReasons })
         }
         onSaveDraft={
-          bulkAction?.kind === 'stage' && bulkAction.stage !== 'functional_manager'
+          bulkAction?.kind === 'stage'
             ? ({ reason, attachmentUrls, achievedValues, isNa, naReasons }) =>
                 handleSaveDraft(reason, attachmentUrls, { achievedValues, isNa, naReasons })
             : undefined
