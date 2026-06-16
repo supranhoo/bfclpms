@@ -1,137 +1,84 @@
-## Brainstorm & Plan — Annual Review Admin · Progress tab makeover
 
-Scope: redesign the red-boxed Progress section. Keeps Analytics/Calibration/Cycles/Templates/Rules tabs untouched. UI polish + 5 functional additions.
+# Consolidate Annual Review Admin toolbar — Download / Upload only
 
----
+## Goal
+Replace the 5 highlighted toolbar buttons on `AnnualReviewAdmin` with just two:
 
-### Risk & Impact (read this first)
+1. **Download data** (covers today's *Export to Excel* + new download templates for each bulk operation)
+2. **Upload data** (covers *Bulk system-score upload*, *Bulk template assignment*, *Bulk workflow assignment*, *Bulk stage weights*)
 
-| Area | Impact |
-|---|---|
-| Data | Additive only. New DB column on `annual_review_templates.sections` (JSON key `stage_weights`) + optional override on `annual_review_instances` (new JSONB col). No destructive change. |
-| Workflow | Final-score formula gains a configurable "preferred weightage distribution". Default = current behavior (criteria_weighted_score + system_scores) — feature gated by presence of `stage_weights`. |
-| UI | Toolbar redesign, new per-stage score columns, full-roster pagination already exists server-side — just expose it correctly. |
-| Regression risk | Medium. Touches export, finalize math, and bulk dialogs. Mitigation: pure helpers + unit tests; flag-driven rollout (stage-weighted scoring only fires when admin opts in per template). |
-| Scalability | Already paginated (25/50/100). Excel export will stream all pages via `fetchAllPaged` cap 5000 with progress toast. |
-| Rollback | Revert UI files; new column is nullable and ignored if empty. |
+The user picks the dataset *inside* each dialog. Same capabilities, fewer entry points, lower cognitive load.
 
----
+## Assumptions
+- No change to underlying services, RPCs, RLS, or audit behaviour — purely a UI surface refactor.
+- All four bulk dialogs already accept Excel input today (`SystemScoresUploadDialog`, `BulkTemplateAssignmentDialog`, `BulkWorkflowAssignmentDialog`, `BulkStageWeightsAssignmentDialog`). We keep those engines, just wrap entry under one shell.
+- "Export to Excel" today exports the progress grid. That becomes the *Progress snapshot* download option.
+- Role gating (Admin / HR PMS) and disabled rules (e.g. system-score upload requires `uploadTemplate`) are preserved per-dataset inside the new dialogs.
 
-### 1. UI makeover (Progress section only)
+## Clarifications
+None blocking — the request is explicit. If you'd rather keep "Send reminders now" outside the consolidation (it's a different verb), say so; the current plan leaves it untouched.
 
-Current issues (per screenshot):
-- Toolbar feels broken: filter row + 5 action buttons wrap awkwardly, no visual grouping.
-- Table looks empty (Score/Rating dashes, no per-stage columns, row actions look like plain links).
-- No clear pagination footer in the visible frame.
+## Risk & Impact Report
+- **Data Impact:** None. No schema, RLS, or service changes.
+- **Workflow Impact:** Same actions, fewer clicks-to-discover, +1 click-to-execute (dataset picker step). Net neutral-to-positive.
+- **UI/UX:** Toolbar shrinks from 6 → 3 buttons (Send reminders / Download / Upload). Consistent iconography.
+- **Regression Risk:** Low. Existing dialogs are reused as-is and mounted from a new wrapper. Risk concentrated in: (a) disabled-state logic per dataset, (b) reset of dataset picker on close.
+- **Scalability:** No change — server-side pagination and existing export batching untouched.
+- **Mitigation:** Unit tests for the new wrapper's dataset routing + disabled states; keep underlying dialogs unchanged so their existing tests still cover them.
 
-Redesign:
-- **Toolbar:** two clean rows inside a `Card`.
-  - Row 1: Search (grows), Stage filter, Reviewer filter (new), Template filter (new), "Clear filters".
-  - Row 2: Primary action `Finalize selected` (only enabled with selection) + overflow `…` menu containing Send reminders, Export to Excel, Bulk system-score upload, Bulk template assignment, Bulk workflow assignment. Reduces button clutter from 5 → 1 + menu.
-- **Table:** new columns — Employee · Stage · Self · Manager · Skip · BU · HR · System · Final · Rating · Actions. Score cells show `—` when stage not yet submitted, dimmed; submitted cells in tabular-nums with subtle bg.
-- **Row actions:** consolidate into a single `⋯` menu (Change template, Change workflow, Finalize, View timeline).
-- **Footer pagination:** show `Showing 1–25 of 2,560` + page jumper + rows-per-page selector (already wired, just style consistently).
-- **Empty/loading:** `Skeleton` rows on first load instead of blank table.
+## Step-by-step plan
 
----
+1. **New wrapper: `AdminDataActionsDialog.tsx`** (single file, two modes)
+   - Props: `open`, `onOpenChange`, `mode: 'download' | 'upload'`, plus the same context props the current 4 dialogs need (`cycle`, `instances`, `templatesById`, `onRefresh`, `uploadTemplate`, filter snapshot for export).
+   - Renders a small radio/segmented list of datasets:
+     - **Download mode:** `Progress snapshot (xlsx)`, `System-score template`, `Template assignment sheet`, `Workflow assignment sheet`, `Stage weights sheet`.
+     - **Upload mode:** `System scores`, `Template assignments`, `Workflow assignments`, `Stage weights`.
+   - On dataset select → renders the matching existing dialog body inline (or, simplest: delegates by opening the existing dialog and closing the wrapper). Recommended: **delegate** — keeps blast radius minimal.
+   - Each option shows a one-line description and a "disabled reason" when not actionable (e.g. *"Requires an active template with system-score config"* for system-score upload).
 
-### 2. Export to Excel — full dataset
+2. **Toolbar refactor in `AnnualReviewAdmin.tsx`**
+   - Remove the 4 bulk buttons + the standalone *Export to Excel* button.
+   - Add two buttons: `Download data` (icon: `Download`) and `Upload data` (icon: `Upload`).
+   - Wire to new state `actionsDialog: null | 'download' | 'upload'`.
+   - Keep `Send reminders now` as-is.
+   - Keep the per-row context menu actions and the selection action bar (Bulk send back / Bulk finalize) untouched — those are *selection-driven*, not dataset-driven, so they don't belong in this consolidation.
 
-Today: `exportProgress` only exports the current page (`filtered` = page rows).
+3. **Download routing**
+   - `Progress snapshot` → reuses today's `exportProgress(...)` flow verbatim (including the current filter snapshot annotations).
+   - The other four download options call small new helpers `downloadXTemplate()` that generate the *exact* xlsx schema each upload dialog already expects. Where a "download template" helper already exists in the upload dialog, expose it; otherwise add one alongside the dialog file.
+   - All downloads run through a single progress/toast surface in the wrapper.
 
-Fix:
-- New service `svc.fetchAllInstancesForExport(cycleId, { search, status, reviewerFilter, templateFilter })` using `fetchAllPaged` (page 500). Honors current filters but ignores pagination.
-- Multi-sheet workbook:
-  - `Progress` — one row per employee, all stage scores + final.
-  - `Stage Detail` — long-format (employee × stage) for pivot.
-  - `Filters` — what was applied, exported by, timestamp.
-- Toast progress: "Exporting 2,560 rows…". Disable button while running. No more "current page only" caveat.
+4. **Upload routing**
+   - Selecting a dataset opens the matching existing dialog (`SystemScoresUploadDialog`, `BulkTemplateAssignmentDialog`, `BulkWorkflowAssignmentDialog`, `BulkStageWeightsAssignmentDialog`) with its current props. Wrapper closes itself when it hands off.
 
----
+5. **Tests** (`src/test/annualReview/adminDataActions.test.tsx`)
+   - Renders wrapper in `download` mode → shows 5 options; clicking *Progress snapshot* invokes the export service mock.
+   - Renders wrapper in `upload` mode → shows 4 options; system-score row is disabled with the expected reason when `uploadTemplate` is null.
+   - Toolbar test: only `Send reminders`, `Download data`, `Upload data` are present.
+   - Existing 87 annual-review tests must still pass unchanged.
 
-### 3. Full pagination + per-stage scoring visibility
+6. **Docs & policy sync**
+   - `DOCUMENTATION.md` → Admin toolbar section: replace the 5-button list with the 2-action consolidated description + dataset matrix.
+   - `POLICY.md` → note that bulk operations are dataset-picker driven; role/disabled rules unchanged.
+   - Add an ADR entry under `docs/adr/` (next free number) capturing the UX rationale and that no data contracts changed.
 
-- Pagination already server-side; UI gets a polished footer (above).
-- Per-stage scoring: extend `useAnnualReviewInstancesPaginated` to also return each instance's `annual_review_responses` rollup keyed by `reviewer_role` (single `IN` query batched per page) → display per-stage `weighted_score` in the new columns. No N+1.
+## UI Changes (explicit)
+- **Location:** Top-right action cluster of `AnnualReviewAdmin` page header.
+- **Before:** `Send reminders now · Export to Excel · Bulk system-score upload · Bulk template assignment · Bulk workflow assignment · Bulk stage weights` (6 buttons).
+- **After:** `Send reminders now · Download data · Upload data` (3 buttons).
+- **New dialog:** Centered modal, title `Download data` or `Upload data`, body = vertical list of dataset cards (icon · label · one-line helper · disabled hint when applicable), footer = `Cancel` only (selection itself is the primary action).
+- **Responsiveness:** 3 buttons wrap cleanly on narrow screens; dialog uses existing `Dialog` component (already responsive).
+- **Interaction:** One extra click vs. today, but discoverability is higher because every bulk dataset is listed in one place with its description.
 
----
+## Implementation notes
+- Reuse existing dialog components — do not re-implement their forms.
+- Centralize dataset metadata in a single `ADMIN_DATA_DATASETS` array so adding a new dataset later is one entry, not new buttons.
+- Keep `exportProgress` exactly as-is; only its caller moves.
 
-### 4. Template assignment via Excel upload
+## Rollback
+Pure UI change. Revert the toolbar JSX and delete the wrapper file to restore the previous surface — no data migrations involved.
 
-New dialog `BulkTemplateUploadDialog` (sits alongside existing chooser):
-- **Step 1 — Download template:** Excel with columns `Employee Code | Employee Name (read-only) | Current Template | New Template Name` — pre-filled with all in-scope employees. A second sheet `Templates` lists every active template name as a dropdown source (data validation).
-- **Step 2 — Upload:** parse, validate (unknown template names, ineligible stages, locked instances), show preview grid with row-level errors and a "skip invalid, apply valid" toggle.
-- **Step 3 — Apply:** calls existing `svc.setTemplateOverride` per row inside a batched mutation with progress bar. Atomic per-row; failures collected and re-exportable.
-
----
-
-### 5. Workflow assignment via Excel upload
-
-Same UX pattern as #4, columns:
-`Employee Code | Self (Y/N) | Manager (Y/N) | Skip (Y/N) | BU (Y/N) | HR (Y/N) | Manager Email | Skip Email | BU Email | HR Email`
-- Y/N toggles map to `enabled_stages`.
-- Email columns resolve to `profiles.id` via `auth_lookup_attempts`/profiles lookup; unresolved → row error.
-- Validation prevents disabling `self` (policy invariant). Calls existing per-instance workflow update service in batches.
-
-Both dialogs reuse a new shared `<ExcelBulkUploadPanel>` (download template → upload → validate → preview → apply).
-
----
-
-### 6. Preferred weightage distribution for final scoring
-
-The plan is to make the final 5/5 a **weighted blend of stage scores + system scores**, configurable per template, with a per-instance override.
-
-**Where it lives**
-- New section on `TemplateEditorDialog` → "Final score weights":
-  - Rows for each enabled stage (Self, Manager, Skip, BU, HR) + one row "System scores" + one row "Criteria (default)".
-  - Each row: numeric weight (0–100). Live total badge ("Total: 100%"). Save blocked unless total = 100.
-  - Stored under `template.sections.stage_weights = { self: 20, manager: 50, bu_head: 30, system: 0, criteria: 0 }`.
-- Per-instance override: new column `annual_review_instances.stage_weights_override JSONB NULL`, editable from the row "⋯ → Customise weights" by HR/Admin, audit-logged.
-
-**Resolver (SSOT)**
-- New pure helper `src/lib/annualReview/finalScore.ts`:
-  - `resolveStageWeights(instance, template) → Record<key, number>` — instance override → template.stage_weights → legacy default (criteria 100%).
-  - `computeFinalScore({ stageWeights, responsesByRole, systemScoreTotal, criteriaWeightedScore }) → { rawScore_0_100, scaled_0_5 }` — only includes keys with non-null inputs; renormalises if some stages skipped (with policy flag).
-- Mirror as PL/pgSQL `public.annual_review_compute_final_score(instance_id)` so server triggers and finalization RPC stay consistent.
-
-**Backward compatibility**
-- If `stage_weights` absent → legacy formula (current behavior). No silent change.
-- Display: Progress row "Final" column tooltip shows the blend formula in use.
-
-**Tests** (new file `src/test/annualReview/finalScore.test.ts`):
-- Legacy fallback when no weights.
-- Standard 20/50/30 blend matches hand-computed value.
-- Missing reviewer stage → renormalisation.
-- Instance override beats template.
-- Reject weights totalling ≠ 100 at validation layer.
-
----
-
-### Files to add / change
-
-Add:
-- `src/components/annual-review/ExcelBulkUploadPanel.tsx` (shared 3-step flow)
-- `src/components/annual-review/BulkTemplateUploadDialog.tsx`
-- `src/components/annual-review/BulkWorkflowUploadDialog.tsx`
-- `src/components/annual-review/StageWeightsEditor.tsx` (used in TemplateEditorDialog + per-instance)
-- `src/components/annual-review/InstanceStageWeightsDialog.tsx`
-- `src/lib/annualReview/finalScore.ts` + test
-- New migration: `annual_review_instances.stage_weights_override JSONB`, plus `annual_review_compute_final_score` SQL function.
-
-Change:
-- `src/pages/annual-review/AnnualReviewAdmin.tsx` — Progress tab UI restructure, new columns, overflow menu.
-- `src/services/annualReview/annualReviewService.ts` — `fetchAllInstancesForExport`, batched per-stage response fetch, weight resolver wiring in `bulkFinalize`/`overrideRating`.
-- `src/components/annual-review/TemplateEditorDialog.tsx` — embed `StageWeightsEditor`.
-- `src/components/annual-review/HrFinalizationSheet.tsx` — show effective blend + preview.
-- `DOCUMENTATION.md` + `POLICY.md` + `docs/adr/ADR-annual-review.md` — record final-score policy, Excel upload flows, export contract.
-
----
-
-### Open questions before build
-
-1. **Stage-weights scale:** lock to total = 100, or allow any total and auto-renormalise? (I recommend strict 100% for auditability.)
-2. **Excel upload — partial apply:** allow "skip invalid rows, apply valid"? (Recommend yes, with downloadable error report.)
-3. **Per-instance weight override:** restrict to Admin + HR PMS only, or also BU/Management? (Recommend Admin + HR PMS.)
-4. **Backfill:** for the current active cycle, leave legacy formula until admin sets weights, or migrate existing templates to an explicit `{criteria: 100}` so the UI always shows weights? (Recommend explicit backfill — no behavior change but clearer UI.)
-
-Approve, tweak any of the four, or tell me which sub-items to drop and I'll build.
+## Not Applicable
+- Backup coverage (no schema change)
+- Offline resilience (no new write paths)
+- Pagination (existing service-layer pagination untouched)
