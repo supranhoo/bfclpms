@@ -51,6 +51,10 @@ import type {
   AnnualReviewCycle, AnnualReviewTemplate, AssignmentFilters, AnnualReviewerRole,
 } from '@/types/annualReview';
 import type { InstanceWithEmployee } from '@/services/annualReview/annualReviewService';
+import {
+  resolveStageWeights, computeFinalScore, STAGE_WEIGHT_KEYS,
+  type StageWeightKey, type StageWeights,
+} from '@/lib/annualReview/finalScore';
 
 export default function AnnualReviewAdmin() {
   return (
@@ -89,9 +93,28 @@ function exportProgress(
   rows: InstanceWithEmployee[],
   stageScores: Record<string, Partial<Record<'self' | 'manager' | 'skip_manager' | 'bu_head' | 'hr', number | null>>>,
   filtersApplied: Record<string, string>,
+  templatesById: Record<string, AnnualReviewTemplate> = {},
 ) {
   const data = rows.map((i) => {
     const s = stageScores[i.id] ?? {};
+    const tpl = templatesById[svc.resolveTemplateId(i) ?? ''] ?? null;
+    const weights = resolveStageWeights(i, tpl);
+    const sysTotal = Object.values(i.system_scores ?? {})
+      .reduce<number>((acc, v) => acc + (typeof v === 'number' ? v : 0), 0) || null;
+    const blend = computeFinalScore({
+      stageWeights: weights,
+      responsesByRole: {
+        self: s.self ?? null, manager: s.manager ?? null,
+        skip_manager: s.skip_manager ?? null, bu_head: s.bu_head ?? null, hr: s.hr ?? null,
+      },
+      systemScoreTotal: sysTotal,
+      criteriaWeightedScore: i.criteria_weighted_score ?? null,
+    });
+    const weightsSource = i.stage_weights_override
+      ? 'override'
+      : (tpl?.sections as { stage_weights?: StageWeights } | undefined)?.stage_weights
+        ? 'template'
+        : 'legacy';
     return {
     'Employee Code': i.employee?.employee_code ?? '',
     'Employee Name': i.employee?.full_name ?? '',
@@ -104,6 +127,17 @@ function exportProgress(
       'HR Score': s.hr ?? '',
     'Total Score': i.total_score ?? '',
     'Criteria Weighted Score': i.criteria_weighted_score ?? '',
+    'Weights Source': weightsSource,
+    'Weight Self %': weights.self ?? '',
+    'Weight Manager %': weights.manager ?? '',
+    'Weight Skip %': weights.skip_manager ?? '',
+    'Weight BU %': weights.bu_head ?? '',
+    'Weight HR %': weights.hr ?? '',
+    'Weight System %': weights.system ?? '',
+    'Weight Criteria %': weights.criteria ?? '',
+    'Blended Final (0-100)': blend.rawScore_0_100 ?? '',
+    'Blended Final (0-5)': blend.scaled_0_5 ?? '',
+    'Blend Renormalised': blend.renormalised ? 'yes' : 'no',
     'Final Rating': i.final_rating ?? '',
     'Finalized At': i.finalized_at ?? '',
     };
@@ -121,6 +155,27 @@ function exportProgress(
       });
     });
   }
+  const weightsSheet: Array<Record<string, string | number>> = [];
+  for (const i of rows) {
+    const tpl = templatesById[svc.resolveTemplateId(i) ?? ''] ?? null;
+    const weights = resolveStageWeights(i, tpl);
+    const source = i.stage_weights_override
+      ? 'override'
+      : (tpl?.sections as { stage_weights?: StageWeights } | undefined)?.stage_weights
+        ? 'template'
+        : 'legacy';
+    for (const key of STAGE_WEIGHT_KEYS as StageWeightKey[]) {
+      const w = weights[key];
+      if (w == null || w === 0) continue;
+      weightsSheet.push({
+        'Employee Code': i.employee?.employee_code ?? '',
+        'Employee Name': i.employee?.full_name ?? '',
+        'Bucket': key,
+        'Weight %': w,
+        'Source': source,
+      });
+    }
+  }
   const filterRows = Object.entries(filtersApplied).map(([k, v]) => ({ Filter: k, Value: v }));
   filterRows.push({ Filter: 'Exported At', Value: new Date().toISOString() });
   filterRows.push({ Filter: 'Row Count', Value: String(rows.length) });
@@ -128,6 +183,7 @@ function exportProgress(
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(data), 'Progress');
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(detail), 'Stage Detail');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(weightsSheet), 'Weights Breakdown');
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(filterRows), 'Filters');
   const safe = cycleName.replace(/[^a-zA-Z0-9._-]/g, '_');
   XLSX.writeFile(wb, `annual-review-progress_${safe}_${new Date().toISOString().slice(0, 10)}.xlsx`);
@@ -314,10 +370,17 @@ function ProgressTab() {
                 });
                 const ids = all.map((i) => i.id);
                 const scores = await svc.fetchInstanceStageScores(ids);
+                const tplIds = Array.from(new Set(
+                  all.map((i) => svc.resolveTemplateId(i)).filter((x): x is string => !!x),
+                ));
+                const tplList = await Promise.all(tplIds.map((tid) => svc.getTemplate(tid).catch(() => null)));
+                const tplMap: Record<string, AnnualReviewTemplate> = {};
+                for (const t of tplList) if (t) tplMap[t.id] = t;
                 exportProgress(activeCycle.name, all, scores, {
                   Search: search || '(none)',
                   Stage: statusFilter,
-                });
+                  'Custom weights only': customWeightsOnly ? 'yes' : 'no',
+                }, tplMap);
                 toast.success(`Exported ${all.length} row${all.length === 1 ? '' : 's'}.`);
               } catch (e) {
                 toast.error((e as Error).message);
