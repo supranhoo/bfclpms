@@ -1082,14 +1082,27 @@ export default function OrgKpiDataEntry() {
 
       // ADR-063 — explain the silent-zero guard so admins stop wondering why
       // rows that visibly show "0" never advance. The guard itself is still
-      // intentional (POLICY §111.7 — never push an unedited value), but the
-      // user must be told it fired.
+      // intentional (POLICY §ORG-KPI-PROPAGATION — never push an unedited
+      // value), but the user must be told it fired. Microcopy MUST match
+      // the explicit-Save model (no "autosave" wording, per ADR-075 +
+      // POLICY §ORG-KPI-PROPAGATION).
       if (untouchedZeroSkipCount > 0) {
         toast({
           title: `${untouchedZeroSkipCount} row(s) holding 0 were not propagated`,
           description:
-            'They show "0" in the cell but have not been saved to the database yet. Click into each cell, type the value, click Save (row or card), then click Propagate again.',
+            'They show "0" in the cell but have not been saved yet. Click Save (row or card) and then Propagate.',
           variant: 'destructive',
+        });
+      }
+
+      // POLICY §ORG-KPI-PROPAGATION — server-side authorization gate.
+      // Show governance-specific copy instead of the generic
+      // "could not be advanced (race condition)" wording.
+      if (notAuthorizedCount > 0) {
+        toast({
+          title: `${notAuthorizedCount} employee KPI(s) skipped — not authorized`,
+          description:
+            'Some mapped employees are outside your data-owner authorization for this KPI. Ask an Admin or the assigned Data Owner to propagate for them.',
         });
       }
     }
