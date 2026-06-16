@@ -6,7 +6,7 @@ import type { AnnualReviewTemplate } from '@/types/annualReview';
 
 const upsertTemplate = vi.fn(async () => ({ id: 't1' }));
 vi.mock('@/services/annualReview/annualReviewService', () => ({
-  upsertTemplate: (...a: unknown[]) => upsertTemplate(...a),
+  upsertTemplate: (input: unknown) => upsertTemplate(input),
   searchActiveEmployees: vi.fn(async () => []),
 }));
 
