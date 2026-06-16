@@ -214,8 +214,27 @@ function ProgressTab() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending_self' | 'pending_manager' | 'pending_skip' | 'pending_bu' | 'pending_hr' | 'completed' | 'not_started'>('all');
   const [customWeightsOnly, setCustomWeightsOnly] = useState(false);
+  const [departmentId, setDepartmentId] = useState<string>('');
+  const [businessUnitId, setBusinessUnitId] = useState<string>('');
+  const [managerId, setManagerId] = useState<string>('');
+  const [managerPickerOpen, setManagerPickerOpen] = useState(false);
+  const { data: businessUnits = [] } = useBusinessUnits();
+  const { data: departments = [] } = useDepartments(businessUnitId || undefined);
+  const { data: profilesLite = [] } = useActiveProfilesLite();
+  const selectedManager = profilesLite.find((p) => p.id === managerId);
+  const anyOrgFilter = !!(departmentId || businessUnitId || managerId);
+  const resetFilters = () => {
+    setSearch(''); setStatusFilter('all'); setCustomWeightsOnly(false);
+    setDepartmentId(''); setBusinessUnitId(''); setManagerId(''); setPage(1);
+  };
   const paginatedArgs = activeCycle
-    ? { cycleId: activeCycle.id, page, pageSize, search, status: statusFilter, hasOverride: customWeightsOnly }
+    ? {
+        cycleId: activeCycle.id, page, pageSize, search,
+        status: statusFilter, hasOverride: customWeightsOnly,
+        departmentId: departmentId || undefined,
+        businessUnitId: businessUnitId || undefined,
+        managerId: managerId || undefined,
+      }
     : undefined;
   const { data: paged, refetch } = useAnnualReviewInstancesPaginated(paginatedArgs);
   const instances = paged?.rows ?? [];
