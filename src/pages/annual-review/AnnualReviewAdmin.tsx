@@ -348,7 +348,7 @@ function ProgressTab() {
             placeholder="Search by name or employee code…"
             value={search}
             onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-            className="max-w-xs"
+            className="w-64"
           />
           <Select
             value={statusFilter}
@@ -366,6 +366,75 @@ function ProgressTab() {
               <SelectItem value="completed">Completed</SelectItem>
             </SelectContent>
           </Select>
+          <Select
+            value={businessUnitId || 'all'}
+            onValueChange={(v) => { setBusinessUnitId(v === 'all' ? '' : v); setDepartmentId(''); setPage(1); }}
+          >
+            <SelectTrigger className="w-48 h-10"><SelectValue placeholder="All business units" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All business units</SelectItem>
+              {businessUnits.map((b) => (
+                <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select
+            value={departmentId || 'all'}
+            onValueChange={(v) => { setDepartmentId(v === 'all' ? '' : v); setPage(1); }}
+          >
+            <SelectTrigger className="w-52 h-10"><SelectValue placeholder="All departments" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All departments</SelectItem>
+              {departments.map((d) => (
+                <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Popover open={managerPickerOpen} onOpenChange={setManagerPickerOpen}>
+            <PopoverTrigger asChild>
+              <Button
+                variant="outline"
+                role="combobox"
+                aria-expanded={managerPickerOpen}
+                className="h-10 w-56 justify-between gap-2 font-normal"
+              >
+                <span className={cn('truncate', !selectedManager && 'text-muted-foreground')}>
+                  {selectedManager ? formatSafetyProfileLabel(selectedManager) : 'All managers'}
+                </span>
+                {managerId ? (
+                  <X
+                    className="h-3.5 w-3.5 opacity-60 hover:opacity-100"
+                    onClick={(e) => { e.stopPropagation(); setManagerId(''); setPage(1); }}
+                  />
+                ) : (
+                  <ChevronsUpDown className="h-3.5 w-3.5 opacity-50" />
+                )}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-72 p-0" align="start">
+              <Command>
+                <CommandInput placeholder="Search manager…" />
+                <CommandList>
+                  <CommandEmpty>No matches.</CommandEmpty>
+                  <CommandGroup>
+                    {profilesLite.slice(0, 200).map((p) => (
+                      <CommandItem
+                        key={p.id}
+                        value={`${p.full_name ?? ''} ${p.employee_code ?? ''}`}
+                        onSelect={() => {
+                          setManagerId(p.id === managerId ? '' : p.id);
+                          setManagerPickerOpen(false); setPage(1);
+                        }}
+                      >
+                        <Check className={cn('mr-2 h-4 w-4', managerId === p.id ? 'opacity-100' : 'opacity-0')} />
+                        {formatSafetyProfileLabel(p)}
+                      </CommandItem>
+                    ))}
+                  </CommandGroup>
+                </CommandList>
+              </Command>
+            </PopoverContent>
+          </Popover>
           <Button
             type="button"
             size="sm"
@@ -377,6 +446,11 @@ function ProgressTab() {
           >
             <Scale className="h-4 w-4" /> Custom weights only
           </Button>
+          {(anyOrgFilter || search || statusFilter !== 'all' || customWeightsOnly) && (
+            <Button type="button" size="sm" variant="ghost" className="h-10 gap-1.5" onClick={resetFilters}>
+              <X className="h-4 w-4" /> Clear filters
+            </Button>
+          )}
         </div>
         <div className="flex items-center gap-2">
           <Button
