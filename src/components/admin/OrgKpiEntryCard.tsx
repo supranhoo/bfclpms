@@ -622,6 +622,22 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
           : values;
       })();
       await onSave(narrowed);
+      // POLICY §112 — reflect persisted DB value locally so the per-row
+      // Propagate guard (and `dbAchievedValue`-matches-local check) does
+      // not need to wait for the next snapshot refetch. Critical for
+      // saved zero values which otherwise look "unsaved" and trigger the
+      // "row(s) holding 0 were not propagated" toast.
+      const savedScopeIds: string[] = scopeId
+        ? [scopeId]
+        : Array.from(touchedScopeIdsRef.current);
+      if (savedScopeIds.length > 0) {
+        const savedSet = new Set(savedScopeIds);
+        setScopedValues(prev => prev.map(r =>
+          savedSet.has(r.scopeId)
+            ? { ...r, dbAchievedValue: r.isNa ? null : r.achievedValue }
+            : r,
+        ));
+      }
       // ADR-081 — Row Save must only clear dirty state for the saved row.
       // Card Save clears everything as before.
       if (scopeId) {
