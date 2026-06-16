@@ -331,10 +331,14 @@ function CellTable({
     return ruleByKpiId?.get(id);
   };
 
-  const isRowEditable = (c: CellPreview): boolean => {
-    if (!editable) return false;
-    // Rows with no resolvable score always need input; admin override unlocks all.
-    return c.source === 'none' || isOverride;
+  const isRowEditable = (_c: CellPreview): boolean => {
+    // In sign-off mode the active-stage reviewer can always type their own
+    // Achieved value (empty = carry the previous stage forward). In approve-
+    // Final mode the parent passes `onCellInputChange` only for admin
+    // override, so `editable` already encodes the right gate. Admins keep
+    // their `isOverride` escape hatch for unlocking gated rows.
+    void isOverride;
+    return editable;
   };
 
   const isRowNa = (c: CellPreview): boolean =>
