@@ -63,7 +63,7 @@ describe('TemplateEditorDialog — weight save guard', () => {
     t.sections.system_scores![0].weight = 100;
     t.sections.criteria![0].weight = 0; // total still 100 via system, but criterion is 0
     wrap(<TemplateEditorDialog open onOpenChange={() => {}} template={t} onSaved={() => {}} />);
-    expect(screen.getByText(/Every criterion must have a weight greater than 0/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Every criterion must have a weight greater than 0/i).length).toBeGreaterThan(0);
     expect(screen.getByRole('button', { name: /Save Template/i })).toBeDisabled();
   });
 
