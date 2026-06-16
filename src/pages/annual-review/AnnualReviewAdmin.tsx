@@ -18,6 +18,15 @@ import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Textarea } from '@/components/ui/textarea';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import {
+  Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList,
+} from '@/components/ui/command';
+import {
+  useBusinessUnits, useDepartments, useActiveProfilesLite, formatSafetyProfileLabel,
+} from '@/hooks/useSafetyOrg';
+import { Check, ChevronsUpDown, X } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -64,7 +73,7 @@ import {
 
 export default function AnnualReviewAdmin() {
   return (
-    <div className="p-4 md:p-6 max-w-7xl mx-auto space-y-6">
+    <div className="p-4 md:p-6 max-w-[1600px] mx-auto space-y-6">
       <header>
         <h1 className="text-2xl font-bold">Annual Review Admin</h1>
         <p className="text-sm text-muted-foreground">Manage cycles, templates, rules, and finalize reviews.</p>
