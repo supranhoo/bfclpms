@@ -299,6 +299,7 @@ function ProgressTab() {
                   cycleId: activeCycle.id,
                   search,
                   status: statusFilter as any,
+                  hasOverride: customWeightsOnly,
                 });
                 const ids = all.map((i) => i.id);
                 const scores = await svc.fetchInstanceStageScores(ids);
