@@ -1,84 +1,65 @@
-
-# Consolidate Annual Review Admin toolbar — Download / Upload only
-
 ## Goal
-Replace the 5 highlighted toolbar buttons on `AnnualReviewAdmin` with just two:
 
-1. **Download data** (covers today's *Export to Excel* + new download templates for each bulk operation)
-2. **Upload data** (covers *Bulk system-score upload*, *Bulk template assignment*, *Bulk workflow assignment*, *Bulk stage weights*)
+Improve the Annual Review Admin → Progress tab so admins can slice the 2,560-row grid by **Department**, **Business Unit**, and **Reporting Manager**, and use the screen width effectively.
 
-The user picks the dataset *inside* each dialog. Same capabilities, fewer entry points, lower cognitive load.
+## Problems (from screenshot)
 
-## Assumptions
-- No change to underlying services, RPCs, RLS, or audit behaviour — purely a UI surface refactor.
-- All four bulk dialogs already accept Excel input today (`SystemScoresUploadDialog`, `BulkTemplateAssignmentDialog`, `BulkWorkflowAssignmentDialog`, `BulkStageWeightsAssignmentDialog`). We keep those engines, just wrap entry under one shell.
-- "Export to Excel" today exports the progress grid. That becomes the *Progress snapshot* download option.
-- Role gating (Admin / HR PMS) and disabled rules (e.g. system-score upload requires `uploadTemplate`) are preserved per-dataset inside the new dialogs.
+1. Filters above the table are minimal (search + stage only). Department / BU / Manager are commonly asked for but missing.
+2. The page is capped at `max-w-7xl mx-auto` so on a 1474px viewport ~25% of the width is dead space; the table itself only uses half the width.
+3. Toolbar is split into two halves with a big gap; filters look disconnected from the action buttons.
 
-## Clarifications
-None blocking — the request is explicit. If you'd rather keep "Send reminders now" outside the consolidation (it's a different verb), say so; the current plan leaves it untouched.
+## Risk & Impact
 
-## Risk & Impact Report
-- **Data Impact:** None. No schema, RLS, or service changes.
-- **Workflow Impact:** Same actions, fewer clicks-to-discover, +1 click-to-execute (dataset picker step). Net neutral-to-positive.
-- **UI/UX:** Toolbar shrinks from 6 → 3 buttons (Send reminders / Download / Upload). Consistent iconography.
-- **Regression Risk:** Low. Existing dialogs are reused as-is and mounted from a new wrapper. Risk concentrated in: (a) disabled-state logic per dataset, (b) reset of dataset picker on close.
-- **Scalability:** No change — server-side pagination and existing export batching untouched.
-- **Mitigation:** Unit tests for the new wrapper's dataset routing + disabled states; keep underlying dialogs unchanged so their existing tests still cover them.
+- **Data**: read-only. No schema, RLS, or migration changes.
+- **Workflow**: no behavior change for any role beyond admins gaining filter capability.
+- **Scalability**: filters apply server-side via the existing `listInstancesPaginated` (paged at ≤100). Department/BU resolved through `profiles → departments → business_units` using the same id-prefetch pattern as `search`. No full-table scans.
+- **Regression**: low — additive args (`departmentId?`, `businessUnitId?`, `managerId?`) default to undefined, preserving current queries. Existing pagination/sort/export honored.
+- **UI**: only the Progress tab toolbar + page container width change. Other tabs (Analytics / Calibration / Cycles / Templates / Rules) untouched.
 
-## Step-by-step plan
+## Plan
 
-1. **New wrapper: `AdminDataActionsDialog.tsx`** (single file, two modes)
-   - Props: `open`, `onOpenChange`, `mode: 'download' | 'upload'`, plus the same context props the current 4 dialogs need (`cycle`, `instances`, `templatesById`, `onRefresh`, `uploadTemplate`, filter snapshot for export).
-   - Renders a small radio/segmented list of datasets:
-     - **Download mode:** `Progress snapshot (xlsx)`, `System-score template`, `Template assignment sheet`, `Workflow assignment sheet`, `Stage weights sheet`.
-     - **Upload mode:** `System scores`, `Template assignments`, `Workflow assignments`, `Stage weights`.
-   - On dataset select → renders the matching existing dialog body inline (or, simplest: delegates by opening the existing dialog and closing the wrapper). Recommended: **delegate** — keeps blast radius minimal.
-   - Each option shows a one-line description and a "disabled reason" when not actionable (e.g. *"Requires an active template with system-score config"* for system-score upload).
+### 1. Service — `src/services/annualReview/annualReviewService.ts`
+- Extend `ListInstancesPaginatedArgs` with optional `departmentId`, `businessUnitId`, `managerId`.
+- In `listInstancesPaginated`:
+  - `managerId` → direct `.eq('manager_id', …)` on the instance row.
+  - `departmentId` / `businessUnitId` → resolve to a `profile_ids[]` list once (cap 2000, batched), then `.in('employee_id', ids)`. When combined with `search`, intersect the two id lists in-memory before the final query (no extra DB round-trip beyond the existing one).
+- Mirror the same filters in `fetchAllInstancesForExport` so "Download data → Progress snapshot" honors the active filters (consistency rule).
 
-2. **Toolbar refactor in `AnnualReviewAdmin.tsx`**
-   - Remove the 4 bulk buttons + the standalone *Export to Excel* button.
-   - Add two buttons: `Download data` (icon: `Download`) and `Upload data` (icon: `Upload`).
-   - Wire to new state `actionsDialog: null | 'download' | 'upload'`.
-   - Keep `Send reminders now` as-is.
-   - Keep the per-row context menu actions and the selection action bar (Bulk send back / Bulk finalize) untouched — those are *selection-driven*, not dataset-driven, so they don't belong in this consolidation.
+### 2. UI — `src/pages/annual-review/AnnualReviewAdmin.tsx`
+- Page container: change `max-w-7xl mx-auto` → `max-w-[1600px] mx-auto` (or `max-w-screen-2xl`) so the grid breathes on wide screens but stays readable on laptops. Keep `p-4 md:p-6`.
+- Replace the ad-hoc toolbar with a single `Card` that contains:
+  - Row 1: search input (flex-1, max ~360px) + Stage select + **Department** select + **Business Unit** select + **Manager** combobox + "Custom weights only" toggle.
+  - Row 2 (right-aligned): Send reminders / Download data / Upload data (unchanged).
+- Selects use existing hooks/data:
+  - Departments → `useDepartments()` (already in `useSafetyOrg.ts`, reusable; or a thin new `useAllDepartments()` on `departments` table).
+  - Business Units → `useBusinessUnits()` from same file.
+  - Manager → searchable combobox sourced from `useActiveProfilesLite()` (paged hook already exists). Default closed; type-ahead.
+- All three new filters reset `page` to 1 on change, mirror into `ProgressTab` local state (no URL params — matches current behavior).
+- Show a small "Clear filters" link when any of dept/BU/manager/search is set.
 
-3. **Download routing**
-   - `Progress snapshot` → reuses today's `exportProgress(...)` flow verbatim (including the current filter snapshot annotations).
-   - The other four download options call small new helpers `downloadXTemplate()` that generate the *exact* xlsx schema each upload dialog already expects. Where a "download template" helper already exists in the upload dialog, expose it; otherwise add one alongside the dialog file.
-   - All downloads run through a single progress/toast surface in the wrapper.
+### 3. Density
+- Table wrapper: drop the fixed inner width assumption; let the table fill the new container (`w-full`). No column-width changes — only the parent grows.
+- Pagination row keeps tabular-nums showing/of layout.
 
-4. **Upload routing**
-   - Selecting a dataset opens the matching existing dialog (`SystemScoresUploadDialog`, `BulkTemplateAssignmentDialog`, `BulkWorkflowAssignmentDialog`, `BulkStageWeightsAssignmentDialog`) with its current props. Wrapper closes itself when it hands off.
+### 4. Tests — `src/test/annualReview/service.pagination.test.ts`
+- Add cases:
+  - `departmentId` triggers a `profiles` lookup and `.in('employee_id', …)`.
+  - `managerId` adds `.eq('manager_id', …)` on instances (no profile lookup).
+  - `businessUnitId` joins `departments → profiles` then `.in('employee_id', …)`.
+  - Combining `search + departmentId` intersects ids and returns empty when disjoint.
+- Existing 91 tests must continue to pass.
 
-5. **Tests** (`src/test/annualReview/adminDataActions.test.tsx`)
-   - Renders wrapper in `download` mode → shows 5 options; clicking *Progress snapshot* invokes the export service mock.
-   - Renders wrapper in `upload` mode → shows 4 options; system-score row is disabled with the expected reason when `uploadTemplate` is null.
-   - Toolbar test: only `Send reminders`, `Download data`, `Upload data` are present.
-   - Existing 87 annual-review tests must still pass unchanged.
+### 5. Docs
+- `DOCUMENTATION.md`: note v2.66.35 — "Progress tab: department / BU / manager filters; widened admin container."
+- `POLICY.md`: no policy change (no new permissions). Add one line under Admin Progress: "Filters are additive and server-side; export respects the active filter set."
 
-6. **Docs & policy sync**
-   - `DOCUMENTATION.md` → Admin toolbar section: replace the 5-button list with the 2-action consolidated description + dataset matrix.
-   - `POLICY.md` → note that bulk operations are dataset-picker driven; role/disabled rules unchanged.
-   - Add an ADR entry under `docs/adr/` (next free number) capturing the UX rationale and that no data contracts changed.
+## Out of scope
 
-## UI Changes (explicit)
-- **Location:** Top-right action cluster of `AnnualReviewAdmin` page header.
-- **Before:** `Send reminders now · Export to Excel · Bulk system-score upload · Bulk template assignment · Bulk workflow assignment · Bulk stage weights` (6 buttons).
-- **After:** `Send reminders now · Download data · Upload data` (3 buttons).
-- **New dialog:** Centered modal, title `Download data` or `Upload data`, body = vertical list of dataset cards (icon · label · one-line helper · disabled hint when applicable), footer = `Cancel` only (selection itself is the primary action).
-- **Responsiveness:** 3 buttons wrap cleanly on narrow screens; dialog uses existing `Dialog` component (already responsive).
-- **Interaction:** One extra click vs. today, but discoverability is higher because every bulk dataset is listed in one place with its description.
+- No changes to row actions, dialogs, or stage logic.
+- No URL persistence for filters (can be a follow-up if requested).
+- No column re-ordering or new columns.
 
-## Implementation notes
-- Reuse existing dialog components — do not re-implement their forms.
-- Centralize dataset metadata in a single `ADMIN_DATA_DATASETS` array so adding a new dataset later is one entry, not new buttons.
-- Keep `exportProgress` exactly as-is; only its caller moves.
+## Verification
 
-## Rollback
-Pure UI change. Revert the toolbar JSX and delete the wrapper file to restore the previous surface — no data migrations involved.
-
-## Not Applicable
-- Backup coverage (no schema change)
-- Offline resilience (no new write paths)
-- Pagination (existing service-layer pagination untouched)
+- `bunx vitest run src/test/annualReview` — all green.
+- Manual check on Progress tab: pick a department → row count and pagination update; combine with search and stage; "Download data → Progress snapshot" exports only filtered rows.
