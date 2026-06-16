@@ -3,6 +3,7 @@ import {
   useCycles, useTemplates, useRules, useCycleInstances, useActiveCycle, useTemplate,
   useSendBackStatus, useCloseCycle, useOverrideRating, useCloneTemplate, useCloneCycle,
   useAnnualReviewInstancesPaginated, useCycleStatusCounts, useReopenCycle,
+  useInstanceStageScores,
 } from '@/hooks/useAnnualReview';
 import * as svc from '@/services/annualReview/annualReviewService';
 import { useAuth } from '@/contexts/AuthContext';
@@ -25,7 +26,11 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
 import { toast } from 'sonner';
-import { Loader2, Upload, Settings2, ListChecks, Calendar, Layers, Pencil, Plus, Download, BarChart3, CheckCheck, Undo2, Lock, Bell, Scale, Copy, Unlock } from 'lucide-react';
+import { Loader2, Upload, Settings2, ListChecks, Calendar, Layers, Pencil, Plus, Download, BarChart3, CheckCheck, Undo2, Lock, Bell, Scale, Copy, Unlock, MoreHorizontal } from 'lucide-react';
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
+  DropdownMenuSeparator, DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import * as XLSX from 'xlsx';
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Cell,
@@ -72,23 +77,55 @@ export default function AnnualReviewAdmin() {
 }
 
 /**
- * Exports the active-cycle progress grid to an .xlsx workbook (single sheet).
- * Columns kept lean & deterministic for downstream pivot use.
+ * Exports the active-cycle progress grid to an .xlsx workbook.
+ * `rows` should be the FULL filtered dataset (not just the visible page).
+ * Includes a long-format "Stage Detail" sheet for pivot use.
  */
-function exportProgress(cycleName: string, rows: InstanceWithEmployee[]) {
-  const data = rows.map((i) => ({
+function exportProgress(
+  cycleName: string,
+  rows: InstanceWithEmployee[],
+  stageScores: Record<string, Partial<Record<'self' | 'manager' | 'skip_manager' | 'bu_head' | 'hr', number | null>>>,
+  filtersApplied: Record<string, string>,
+) {
+  const data = rows.map((i) => {
+    const s = stageScores[i.id] ?? {};
+    return {
     'Employee Code': i.employee?.employee_code ?? '',
     'Employee Name': i.employee?.full_name ?? '',
     'Designation': i.employee?.designation ?? '',
     'Stage': i.overall_status,
+      'Self Score': s.self ?? '',
+      'Manager Score': s.manager ?? '',
+      'Skip Score': s.skip_manager ?? '',
+      'BU Head Score': s.bu_head ?? '',
+      'HR Score': s.hr ?? '',
     'Total Score': i.total_score ?? '',
     'Criteria Weighted Score': i.criteria_weighted_score ?? '',
     'Final Rating': i.final_rating ?? '',
     'Finalized At': i.finalized_at ?? '',
-  }));
-  const ws = XLSX.utils.json_to_sheet(data);
+    };
+  });
+  const detail: Array<Record<string, string | number>> = [];
+  for (const i of rows) {
+    const s = stageScores[i.id] ?? {};
+    (['self', 'manager', 'skip_manager', 'bu_head', 'hr'] as const).forEach((role) => {
+      if (s[role] == null) return;
+      detail.push({
+        'Employee Code': i.employee?.employee_code ?? '',
+        'Employee Name': i.employee?.full_name ?? '',
+        'Stage': role,
+        'Weighted Score': s[role] as number,
+      });
+    });
+  }
+  const filterRows = Object.entries(filtersApplied).map(([k, v]) => ({ Filter: k, Value: v }));
+  filterRows.push({ Filter: 'Exported At', Value: new Date().toISOString() });
+  filterRows.push({ Filter: 'Row Count', Value: String(rows.length) });
+
   const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'Progress');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(data), 'Progress');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(detail), 'Stage Detail');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(filterRows), 'Filters');
   const safe = cycleName.replace(/[^a-zA-Z0-9._-]/g, '_');
   XLSX.writeFile(wb, `annual-review-progress_${safe}_${new Date().toISOString().slice(0, 10)}.xlsx`);
 }
@@ -108,6 +145,9 @@ function ProgressTab() {
   const { data: paged, refetch } = useAnnualReviewInstancesPaginated(paginatedArgs);
   const instances = paged?.rows ?? [];
   const total = paged?.total ?? 0;
+  const pageInstanceIds = useMemo(() => instances.map((i) => i.id), [instances]);
+  const { data: stageScoresMap = {} } = useInstanceStageScores(pageInstanceIds);
+  const [exporting, setExporting] = useState(false);
   const { data: counts = { total: 0, pending_self: 0, completed: 0, not_started: 0, pending_manager: 0, pending_skip: 0, pending_bu: 0, pending_hr: 0 } } = useCycleStatusCounts(activeCycle?.id);
   const [selected, setSelected] = useState<InstanceWithEmployee | null>(null);
   const [uploadOpen, setUploadOpen] = useState(false);
@@ -245,10 +285,31 @@ function ProgressTab() {
           </Button>
           <Button
             variant="outline" className="gap-2"
-            onClick={() => exportProgress(activeCycle.name, filtered)}
-            disabled={filtered.length === 0}
+            onClick={async () => {
+              if (!activeCycle) return;
+              setExporting(true);
+              try {
+                const all = await svc.fetchAllInstancesForExport({
+                  cycleId: activeCycle.id,
+                  search,
+                  status: statusFilter as any,
+                });
+                const ids = all.map((i) => i.id);
+                const scores = await svc.fetchInstanceStageScores(ids);
+                exportProgress(activeCycle.name, all, scores, {
+                  Search: search || '(none)',
+                  Stage: statusFilter,
+                });
+                toast.success(`Exported ${all.length} row${all.length === 1 ? '' : 's'}.`);
+              } catch (e) {
+                toast.error((e as Error).message);
+              } finally {
+                setExporting(false);
+              }
+            }}
+            disabled={total === 0 || exporting}
           >
-            <Download className="h-4 w-4" /> Export to Excel
+            {exporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />} Export to Excel
           </Button>
           <Button variant="outline" className="gap-2" onClick={() => setUploadOpen(true)} disabled={!uploadTemplate}>
             <Upload className="h-4 w-4" /> Bulk system-score upload
@@ -287,13 +348,23 @@ function ProgressTab() {
                 </TableHead>
                 <TableHead>Employee</TableHead>
                 <TableHead>Stage</TableHead>
-                <TableHead className="text-right">Score</TableHead>
+                <TableHead className="text-right">Self</TableHead>
+                <TableHead className="text-right">Manager</TableHead>
+                <TableHead className="text-right">Skip</TableHead>
+                <TableHead className="text-right">BU</TableHead>
+                <TableHead className="text-right">HR</TableHead>
+                <TableHead className="text-right">Final</TableHead>
                 <TableHead className="text-right">Rating</TableHead>
-                <TableHead></TableHead>
+                <TableHead className="w-12"></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filtered.map((i) => (
+              {filtered.map((i) => {
+                const ss = stageScoresMap[i.id] ?? {};
+                const fmt = (v: number | null | undefined) =>
+                  v == null ? <span className="text-muted-foreground/50">—</span> : v.toFixed(1);
+                const canChange = i.overall_status === 'not_started' || i.overall_status === 'pending_self';
+                return (
                 <TableRow key={i.id} className="min-h-10">
                   <TableCell>
                     <Checkbox
@@ -307,25 +378,44 @@ function ProgressTab() {
                     <div className="text-xs text-muted-foreground">{i.employee?.employee_code}</div>
                   </TableCell>
                   <TableCell><AnnualReviewStatusBadge status={i.overall_status} /></TableCell>
-                  <TableCell className="text-right tabular-nums">{i.total_score?.toFixed(2) ?? '—'}</TableCell>
-                  <TableCell className="text-right">{i.final_rating ?? '—'}</TableCell>
+                  <TableCell className="text-right tabular-nums">{fmt(ss.self)}</TableCell>
+                  <TableCell className="text-right tabular-nums">{fmt(ss.manager)}</TableCell>
+                  <TableCell className="text-right tabular-nums">{fmt(ss.skip_manager)}</TableCell>
+                  <TableCell className="text-right tabular-nums">{fmt(ss.bu_head)}</TableCell>
+                  <TableCell className="text-right tabular-nums">{fmt(ss.hr)}</TableCell>
+                  <TableCell className="text-right tabular-nums font-medium">{i.total_score?.toFixed(2) ?? <span className="text-muted-foreground/50">—</span>}</TableCell>
+                  <TableCell className="text-right">{i.final_rating ?? <span className="text-muted-foreground/50">—</span>}</TableCell>
                   <TableCell className="text-right">
-                    {(i.overall_status === 'not_started' || i.overall_status === 'pending_self') && (
-                      <>
-                        <Button variant="ghost" size="sm" onClick={() => setChangeTplFor(i)} title="Change template">
-                          Change template
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Row actions">
+                          <MoreHorizontal className="h-4 w-4" />
                         </Button>
-                        <Button variant="ghost" size="sm" onClick={() => setChangeWfFor(i)} title="Change workflow">
-                          Change workflow
-                        </Button>
-                      </>
-                    )}
-                    <Button variant="ghost" size="sm" onClick={() => setSelected(i)}>Finalize</Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem onClick={() => setSelected(i)}>
+                          <CheckCheck className="h-4 w-4 mr-2" /> Finalize / View
+                        </DropdownMenuItem>
+                        {canChange && (
+                          <>
+                            <DropdownMenuItem onClick={() => setChangeTplFor(i)}>
+                              <Layers className="h-4 w-4 mr-2" /> Change template
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => setChangeWfFor(i)}>
+                              <ListChecks className="h-4 w-4 mr-2" /> Change workflow
+                            </DropdownMenuItem>
+                          </>
+                        )}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </TableCell>
                 </TableRow>
-              ))}
+                );
+              })}
               {filtered.length === 0 && (
-                <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-8">No instances.</TableCell></TableRow>
+                <TableRow><TableCell colSpan={11} className="text-center text-muted-foreground py-8">No instances.</TableCell></TableRow>
               )}
             </TableBody>
           </Table>
@@ -334,7 +424,7 @@ function ProgressTab() {
           <p className="text-muted-foreground">
             Showing <span className="tabular-nums">{filtered.length === 0 ? 0 : (page - 1) * pageSize + 1}–{(page - 1) * pageSize + filtered.length}</span> of <span className="tabular-nums">{total}</span>
             {' · '}
-            <span className="text-xs">Export covers this page only — narrow the filter for a focused export.</span>
+            <span className="text-xs">Export to Excel includes all filtered rows.</span>
           </p>
           <div className="flex items-center gap-2">
             <Label className="text-xs">Rows</Label>

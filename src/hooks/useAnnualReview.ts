@@ -68,6 +68,19 @@ export const useInstanceResponses = (instanceId?: string) =>
   });
 
 /**
+ * Per-stage weighted_score rollup for a set of instances (one batched .in()
+ * query per 200 IDs). Used by the Progress grid to show per-reviewer scores
+ * inline without N+1 loads. Skips empty arrays.
+ */
+export const useInstanceStageScores = (instanceIds: string[]) =>
+  useQuery({
+    queryKey: [...annualReviewKeys.all, 'stageScores', ...instanceIds].slice(0, 50),
+    queryFn: () => svc.fetchInstanceStageScores(instanceIds),
+    enabled: instanceIds.length > 0,
+    staleTime: 30_000,
+  });
+
+/**
  * Master switch read for the Annual Review module — used by the sidebar to
  * gate the entry points. Evaluates `admin_feature_flags.annual_review_enabled`
  * server-side (admins bypass once the master switch is ON).

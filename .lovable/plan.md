@@ -1,349 +1,137 @@
-## 1. Assumptions
+## Brainstorm & Plan — Annual Review Admin · Progress tab makeover
 
-- The reported issue is the recurring Org KPI Data Entry propagation problem shown in the attached screenshots:
-  - `row(s) holding 0 were not propagated`
-  - `employee KPI(s) could not be advanced — Repair Gap`
-  - rows visually showing saved/propagated while a red toast says propagation failed.
-- Scope is investigation + resolution plan only; no code or database changes are being made yet.
-- Org KPI must remain conservative: never propagate a local-only value that failed to persist, but never block a deliberately saved `0`.
+Scope: redesign the red-boxed Progress section. Keeps Analytics/Calibration/Cycles/Templates/Rules tabs untouched. UI polish + 5 functional additions.
 
-## 2. Clarifications
+---
 
-Decision needed before implementation:
+### Risk & Impact (read this first)
 
-1. **Policy cleanup depth:** should we only add Org KPI-specific clarifications, or also renumber/rename duplicate POLICY sections like the multiple `§111` / `§112` collisions?
-2. **`not_authorized` classification:** I recommend treating it as an expected/diagnostic skip, not a generic “Repair Gap” failure. It should show clear authorization wording, not “refresh and retry.”
+| Area | Impact |
+|---|---|
+| Data | Additive only. New DB column on `annual_review_templates.sections` (JSON key `stage_weights`) + optional override on `annual_review_instances` (new JSONB col). No destructive change. |
+| Workflow | Final-score formula gains a configurable "preferred weightage distribution". Default = current behavior (criteria_weighted_score + system_scores) — feature gated by presence of `stage_weights`. |
+| UI | Toolbar redesign, new per-stage score columns, full-roster pagination already exists server-side — just expose it correctly. |
+| Regression risk | Medium. Touches export, finalize math, and bulk dialogs. Mitigation: pure helpers + unit tests; flag-driven rollout (stage-weighted scoring only fires when admin opts in per template). |
+| Scalability | Already paginated (25/50/100). Excel export will stream all pages via `fetchAllPaged` cap 5000 with progress toast. |
+| Rollback | Revert UI files; new column is nullable and ignored if empty. |
 
-## 3. Risk & Impact Report
+---
 
-### Data Impact
-- No direct data deletion proposed.
-- Propagation writes affect `kpis`, `review_submissions`, `org_kpi_values`, and audit logs.
-- The resolution must preserve already-approved/finalized scores and must not overwrite frozen downstream submissions except through existing Admin override rules.
+### 1. UI makeover (Progress section only)
 
-### Workflow Impact
-- Data Owner flow remains: enter value → Save → Propagate.
-- Saved `0` should propagate like any other saved value.
-- Already-propagated / reviewer-locked rows should not show destructive errors.
-- True missing scorecard rows should still surface as a repair action.
+Current issues (per screenshot):
+- Toolbar feels broken: filter row + 5 action buttons wrap awkwardly, no visual grouping.
+- Table looks empty (Score/Rating dashes, no per-stage columns, row actions look like plain links).
+- No clear pagination footer in the visible frame.
 
-### UI/UX Impact
-- Red error toasts will be reduced to true failures only.
-- Zero-value rows will show explicit, current guidance: save row/card first, then propagate.
-- Repair Gap messaging will be reserved for real gaps, not already-propagated or authorization-skipped rows.
+Redesign:
+- **Toolbar:** two clean rows inside a `Card`.
+  - Row 1: Search (grows), Stage filter, Reviewer filter (new), Template filter (new), "Clear filters".
+  - Row 2: Primary action `Finalize selected` (only enabled with selection) + overflow `…` menu containing Send reminders, Export to Excel, Bulk system-score upload, Bulk template assignment, Bulk workflow assignment. Reduces button clutter from 5 → 1 + menu.
+- **Table:** new columns — Employee · Stage · Self · Manager · Skip · BU · HR · System · Final · Rating · Actions. Score cells show `—` when stage not yet submitted, dimmed; submitted cells in tabular-nums with subtle bg.
+- **Row actions:** consolidate into a single `⋯` menu (Change template, Change workflow, Finalize, View timeline).
+- **Footer pagination:** show `Showing 1–25 of 2,560` + page jumper + rows-per-page selector (already wired, just style consistently).
+- **Empty/loading:** `Skeleton` rows on first load instead of blank table.
 
-### Regression Risk
-- High if fixes are made piecemeal again.
-- Main risk areas:
-  - saved-zero guard
-  - half-propagation forward guard
-  - skip-reason classification
-  - stale snapshot/cache refresh
-  - policy/test contradictions.
+---
 
-### Mitigation Plan
-- Consolidate predicates into small pure helpers where possible.
-- Add regression tests for full Save → Propagate workflows, not only isolated predicates.
-- Update `DOCUMENTATION.md` and `POLICY.md` in the same change.
-- Keep changes surgical; no broad Org KPI refactor.
+### 2. Export to Excel — full dataset
 
-### Scalability Impact
-- Avoid adding per-employee N+1 reads.
-- Use existing snapshot maps (`propagatedEmpIdsByKey`, `kraSetEmpIdsByKey`, mapped employee ids) instead of loading full datasets blindly.
-- Any repair-gap validation should compare sets already available from snapshot/RPC results.
-- No pagination change needed for this fix because the touched surface already works on scoped card rows and snapshot maps; however, no new unbounded client reads should be introduced.
+Today: `exportProgress` only exports the current page (`filtered` = page rows).
 
-## 4. Detailed RCA Findings
+Fix:
+- New service `svc.fetchAllInstancesForExport(cycleId, { search, status, reviewerFilter, templateFilter })` using `fetchAllPaged` (page 500). Honors current filters but ignores pagination.
+- Multi-sheet workbook:
+  - `Progress` — one row per employee, all stage scores + final.
+  - `Stage Detail` — long-format (employee × stage) for pivot.
+  - `Filters` — what was applied, exported by, timestamp.
+- Toast progress: "Exporting 2,560 rows…". Disable button while running. No more "current page only" caveat.
 
-### Finding A — Saved `0` is still vulnerable in the chained Save → Propagate path
+---
 
-Current code has a DB-aware guard:
+### 3. Full pagination + per-stage scoring visibility
 
-- `src/pages/admin/OrgKpiDataEntry.tsx:961-979`
-- It allows `0` only when `dbAchievedValue === 0`.
+- Pagination already server-side; UI gets a polished footer (above).
+- Per-stage scoring: extend `useAnnualReviewInstancesPaginated` to also return each instance's `annual_review_responses` rollup keyed by `reviewer_role` (single `IN` query batched per page) → display per-stage `weighted_score` in the new columns. No N+1.
 
-But the chained Save → Propagate path can call `getValues()` before the save result has updated local `dbAchievedValue`:
+---
 
-- `src/components/admin/OrgKpiEntryCard.tsx:686-690`
-- `src/components/admin/OrgKpiEntryCard.tsx:529-574`
-- Optimistic `dbAchievedValue` update exists in `performSave()` at `src/components/admin/OrgKpiEntryCard.tsx:630-640`, but chained `handleSaveAndPropagate()` bypasses `performSave()` and calls `onSaveAndPropagate(getValues())` directly.
+### 4. Template assignment via Excel upload
 
-**RCA:** the saved-zero fix was applied to the explicit Save path, but not fully to the chained Save → Propagate path.
+New dialog `BulkTemplateUploadDialog` (sits alongside existing chooser):
+- **Step 1 — Download template:** Excel with columns `Employee Code | Employee Name (read-only) | Current Template | New Template Name` — pre-filled with all in-scope employees. A second sheet `Templates` lists every active template name as a dropdown source (data validation).
+- **Step 2 — Upload:** parse, validate (unknown template names, ineligible stages, locked instances), show preview grid with row-level errors and a "skip invalid, apply valid" toggle.
+- **Step 3 — Apply:** calls existing `svc.setTemplateOverride` per row inside a batched mutation with progress bar. Atomic per-row; failures collected and re-exportable.
 
-### Finding B — Repair Gap guard compares the wrong truth sets
+---
 
-The forward guard currently compares:
+### 5. Workflow assignment via Excel upload
 
-- all matching `kpis` rows from a direct query
-- against `propagatedScopeIds`, which only contains rows propagated in the current click.
+Same UX pattern as #4, columns:
+`Employee Code | Self (Y/N) | Manager (Y/N) | Skip (Y/N) | BU (Y/N) | HR (Y/N) | Manager Email | Skip Email | BU Email | HR Email`
+- Y/N toggles map to `enabled_stages`.
+- Email columns resolve to `profiles.id` via `auth_lookup_attempts`/profiles lookup; unresolved → row error.
+- Validation prevents disabling `self` (policy invariant). Calls existing per-instance workflow update service in batches.
 
-Relevant lines:
+Both dialogs reuse a new shared `<ExcelBulkUploadPanel>` (download template → upload → validate → preview → apply).
 
-- `src/pages/admin/OrgKpiDataEntry.tsx:1017-1021`
-- `src/pages/admin/OrgKpiDataEntry.tsx:1136-1171`
+---
 
-This misclassifies already-propagated or reviewer-locked rows as “missed,” because those rows correctly return `propagatedCount = 0` in the current click.
+### 6. Preferred weightage distribution for final scoring
 
-**RCA:** current-click success count is being treated as total propagation truth. The authoritative truth should include snapshot-propagated employees and employees past `kra_set`.
+The plan is to make the final 5/5 a **weighted blend of stage scores + system scores**, configurable per template, with a per-instance override.
 
-### Finding C — Skip reason rules conflict
+**Where it lives**
+- New section on `TemplateEditorDialog` → "Final score weights":
+  - Rows for each enabled stage (Self, Manager, Skip, BU, HR) + one row "System scores" + one row "Criteria (default)".
+  - Each row: numeric weight (0–100). Live total badge ("Total: 100%"). Save blocked unless total = 100.
+  - Stored under `template.sections.stage_weights = { self: 20, manager: 50, bu_head: 30, system: 0, criteria: 0 }`.
+- Per-instance override: new column `annual_review_instances.stage_weights_override JSONB NULL`, editable from the row "⋯ → Customise weights" by HR/Admin, audit-logged.
 
-Policy says backend propagation can return `not_authorized`:
+**Resolver (SSOT)**
+- New pure helper `src/lib/annualReview/finalScore.ts`:
+  - `resolveStageWeights(instance, template) → Record<key, number>` — instance override → template.stage_weights → legacy default (criteria 100%).
+  - `computeFinalScore({ stageWeights, responsesByRole, systemScoreTotal, criteriaWeightedScore }) → { rawScore_0_100, scaled_0_5 }` — only includes keys with non-null inputs; renormalises if some stages skipped (with policy flag).
+- Mirror as PL/pgSQL `public.annual_review_compute_final_score(instance_id)` so server triggers and finalization RPC stay consistent.
 
-- `POLICY.md:3744-3748`
+**Backward compatibility**
+- If `stage_weights` absent → legacy formula (current behavior). No silent change.
+- Display: Progress row "Final" column tooltip shows the blend formula in use.
 
-But the canonical benign skip set omits it:
-
-- `POLICY.md:3000-3005`
-- `src/test/orgKpiPropagationBenignReasons.test.ts:22`
-
-**RCA:** a later authorization hardening rule introduced `not_authorized`, but the toast classification policy/test were not updated. This creates false destructive errors and bad repair guidance.
-
-### Finding D — Snapshot/cache invalidation is incomplete after propagation
-
-Propagation invalidates several query keys, but not the Org KPI snapshot key that feeds:
-
-- `propagatedEmpsByKey`
-- `kraSetEmpIdsByKey`
-- mapped employee sets.
-
-Relevant lines:
-
-- `src/hooks/usePropagateOrgKpiValue.ts:323-330`
-- `src/pages/admin/OrgKpiDataEntry.tsx:1264`
-
-**RCA:** status chips and guard logic depend on snapshot truth, but the snapshot is not consistently refreshed after writes.
-
-### Finding E — POLICY numbering conflicts are real
-
-There are multiple unrelated `§111` and `§112` sections. Examples:
-
-- `POLICY.md:2326` — `§112` menu visibility
-- `POLICY.md:2603` — `§112` safety incident schema
-- `POLICY.md:3717` — `§112` Org KPI Save → Propagate integrity
-
-**RCA:** repeated policy numbers make cross-references ambiguous. ADRs and tests can cite “POLICY §112” but mean different business rules.
-
-### Finding F — ADR/test drift remains
-
-Examples:
-
-- `docs/adr/ADR-063.md` still contains autosave-era language even though ADR-075 removed autosave.
-- Some older tests use local stubs instead of canonical helpers, increasing risk of policy drift.
-
-**RCA:** repeated fixes updated runtime code but did not fully retire or supersede older ADR/test assumptions.
-
-### Finding G — Live data confirms mixed states, not one single failure mode
-
-Read-only backend check on screenshot-like employees showed mixed states:
-
-- Some rows: `org_kpi_values.achieved_value = 0`, `kpis.status = kra_set`, no `review_submissions` row.
-- Some rows: already propagated with `review_submissions` present.
-- Some rows: approved/frozen.
-
-**RCA:** the UI is handling a mixed card: true pending saved-zero rows, already-propagated rows, and locked rows. The current toast logic collapses these into broad red errors.
-
-## 5. Five Why Analysis
-
-### Problem 1: Saved `0` still reports “not propagated”
-
-1. Why? The untouched-zero guard still fires.
-2. Why? It sees `dbAchievedValue !== 0`.
-3. Why? In chained Save → Propagate, values are captured before save updates the local DB snapshot.
-4. Why? The optimistic `dbAchievedValue` mirror exists only in `performSave()`, not in the direct `handleSaveAndPropagate()` path.
-5. Why? Fixes were added incrementally to symptoms, not to a single shared Save → Propagate state transition contract.
-
-Root cause: no single source of truth for “this row was persisted in this action and is safe to propagate.”
-
-### Problem 2: Repair Gap reports already-propagated rows
-
-1. Why? The guard says employees were missed.
-2. Why? It compares all matching employee KPIs against only current-click propagation successes.
-3. Why? Already-propagated / reviewer-locked rows return skip counts, not propagation successes.
-4. Why? The guard does not consult snapshot truth before declaring a gap.
-5. Why? The guard was added as a safety net after half-propagation incidents, but later benign-skip policies were not integrated into it.
-
-Root cause: forward guard uses an incomplete denominator/comparison set.
-
-### Problem 3: Policies keep conflicting
-
-1. Why? Org KPI fixes reference POLICY sections inconsistently.
-2. Why? `§111` / `§112` numbers are reused for unrelated modules.
-3. Why? Later patches appended new policy blocks without unique namespaces.
-4. Why? Regression tests often copied local predicates instead of importing canonical helpers.
-5. Why? Documentation updates were treated as release notes, not as an enforceable rule registry.
-
-Root cause: policy namespace drift and duplicated business-rule predicates.
-
-## 6. Step-by-step Resolution Plan
-
-### Step 1 — Establish one Org KPI propagation contract
-
-Create or update a small shared pure helper for Org KPI propagation decisions:
-
-- `isSavedZeroSafeToPropagate(row)`
-- `classifyPropagationSkip(reason)`
-- `derivePropagationGapStatus(...)`
-
-Expected rules:
-
-- saved `0` is valid when `dbAchievedValue === 0` OR the same save transaction confirms persistence.
-- local-only `0` remains blocked.
-- `not_in_kra_set`, `reviewer_locked`, `no_target_rows`, `approved_immutable` are non-retry/benign or protected-state skips.
-- `not_authorized` gets a clear authorization message, not Repair Gap.
-- true `kpi_not_found` / race conditions remain destructive.
-
-Verification:
-- Unit tests for every skip reason.
-- Tests for saved zero vs unsaved zero.
-
-### Step 2 — Fix chained Save → Propagate state handoff
-
-Update the direct `handleSaveAndPropagate()` path so the values passed to propagation reflect rows successfully persisted by `handleCardSave()`.
-
-Minimal safe approach:
-
-- Have `handleCardSave()` return the persisted scope ids and achieved values.
-- Before the propagation loop, treat those returned rows as DB-confirmed for this action.
-- Do not rely only on pre-save `dbAchievedValue` from `getValues()`.
-
-Verification:
-- Test: fresh row with local `0`, click Save → Propagate, should not trigger untouched-zero skip.
-- Test: row with visible `0` but save persisted zero rows should abort before propagation.
-
-### Step 3 — Repair the half-propagation forward guard
-
-Change the Repair Gap guard to compute “missed” as:
-
-```text
-mapped employees
-minus current-click propagated employees
-minus already-propagated snapshot employees
-minus employees already past kra_set / reviewer-locked
-minus explicitly client-skipped rows with user-facing explanation
-minus authorized/visibility-protected skips with correct message
-```
-
-Do not flag rows already proven by snapshot truth.
-
-Verification:
-- Test: 36 already propagated / reviewer-locked rows should show no red Repair Gap toast.
-- Test: truly missing `review_submissions` for visible `kra_set` employees still shows Repair Gap.
-
-### Step 4 — Refresh all Org KPI read models after save/propagate
-
-After save/propagate, invalidate/refetch:
-
-- `org-kpi-values`
-- `org-kpi-submission-fallback`
-- `org-level-kpis-with-employees`
-- relevant KPI/review-submission keys already present.
-
-Verification:
-- Status chips update without manual refresh.
-- Header counts match row pills immediately after propagation.
-
-### Step 5 — Update UI messages
-
-Replace ambiguous or stale red toasts with state-specific messages:
-
-- Unsaved zero: “0 has not been saved yet. Click Save, then Propagate.”
-- Saved zero but blocked: should not occur; treat as bug path.
-- Already propagated: neutral informational toast.
-- Not authorized: “Some mapped employees are outside your data-owner authorization. Ask an Admin or assigned Data Owner.”
-- True gap: keep Repair Gap button guidance.
-
-Verification:
-- Tests assert no autosave wording remains in source, ADR, and policy.
-
-### Step 6 — Policy/rule cleanup
-
-Update `POLICY.md` and ADR notes:
-
-- Add a uniquely named Org KPI propagation section/anchor, e.g. `§ORG-KPI-PROPAGATION`.
-- Mark old duplicate `§111` / `§112` cross-references as superseded where practical.
-- Update ADR-063 with an explicit supersession note by ADR-075 and the new Org KPI propagation policy.
-- Add `not_authorized` classification rule.
-
-Verification:
-- Static test or doc scan to prevent new “wait for autosave” Org KPI copy.
-- Static test for duplicate Org KPI policy references if feasible.
-
-### Step 7 — Test coverage upgrade
-
-Add/extend tests for:
-
-1. Fresh saved `0` propagates in chained Save → Propagate.
-2. Unsaved/local-only `0` is blocked.
-3. Partial save aborts propagation.
-4. Already-propagated rows do not trigger Repair Gap.
-5. `not_authorized` gets authorization messaging, not mismatch/repair wording.
-6. Snapshot query key invalidation includes Org KPI snapshot.
-7. No autosave wording remains in Org KPI UI/policy/ADR.
-
-## 7. UI Changes
-
-### Exact Location
-- `/admin/org-kpi-data`
-- Scoped Org KPI card rows and Propagate toasts.
-
-### Visual Changes
-- No layout redesign.
-- Toast copy changes only.
-- Existing status pills remain.
-- Repair Gap toast appears only for true visible gaps.
-
-### Interaction Impact
-- Saved `0` can be propagated without retyping.
-- If save fails/partially persists, Propagate remains blocked with explicit error.
-- Already propagated/reviewer-locked rows show informational feedback instead of red errors.
-
-### Responsiveness
-- No mobile/desktop layout changes.
-- Existing buttons and tables remain unchanged.
-
-## 8. Implementation
-
-Not Applicable in this plan response. Implementation will follow after approval.
-
-## 9. Tests
-
-Planned tests:
-
-- Unit tests for shared propagation helper.
-- Regression tests for Save → Propagate zero handoff.
-- Static tests for query invalidation and forbidden autosave wording.
-- Toast classification tests for `not_authorized`, `approved_immutable`, `reviewer_locked`, `no_target_rows`.
-
-## 10. DOCUMENTATION.md updates
-
-Planned:
-
-- Add a new version entry documenting:
-  - chained saved-zero fix
-  - Repair Gap guard correction
-  - skip-reason classification update
-  - snapshot invalidation update
-  - no schema/data-loss impact.
-
-## 11. POLICY.md updates
-
-Planned:
-
-- Add/supersede an Org KPI propagation policy anchor.
-- Resolve `not_authorized` classification conflict.
-- Clarify saved-zero contract.
-- Clarify Repair Gap denominator rules.
-- Mark autosave-era ADR wording as superseded.
-
-## 12. Post-implementation notes
-
-Rollback strategy:
-
-- Frontend-only parts can be reverted file-by-file.
-- If no migration is used, no data rollback needed.
-- If policy-only docs are updated, rollback is documentation-only.
-
-Final recommendation:
-
-- Fix this as a policy/logic consolidation, not another one-line toast change. The repeated recurrence is caused by fragmented predicates and conflicting rules, not a single missing condition.
+**Tests** (new file `src/test/annualReview/finalScore.test.ts`):
+- Legacy fallback when no weights.
+- Standard 20/50/30 blend matches hand-computed value.
+- Missing reviewer stage → renormalisation.
+- Instance override beats template.
+- Reject weights totalling ≠ 100 at validation layer.
+
+---
+
+### Files to add / change
+
+Add:
+- `src/components/annual-review/ExcelBulkUploadPanel.tsx` (shared 3-step flow)
+- `src/components/annual-review/BulkTemplateUploadDialog.tsx`
+- `src/components/annual-review/BulkWorkflowUploadDialog.tsx`
+- `src/components/annual-review/StageWeightsEditor.tsx` (used in TemplateEditorDialog + per-instance)
+- `src/components/annual-review/InstanceStageWeightsDialog.tsx`
+- `src/lib/annualReview/finalScore.ts` + test
+- New migration: `annual_review_instances.stage_weights_override JSONB`, plus `annual_review_compute_final_score` SQL function.
+
+Change:
+- `src/pages/annual-review/AnnualReviewAdmin.tsx` — Progress tab UI restructure, new columns, overflow menu.
+- `src/services/annualReview/annualReviewService.ts` — `fetchAllInstancesForExport`, batched per-stage response fetch, weight resolver wiring in `bulkFinalize`/`overrideRating`.
+- `src/components/annual-review/TemplateEditorDialog.tsx` — embed `StageWeightsEditor`.
+- `src/components/annual-review/HrFinalizationSheet.tsx` — show effective blend + preview.
+- `DOCUMENTATION.md` + `POLICY.md` + `docs/adr/ADR-annual-review.md` — record final-score policy, Excel upload flows, export contract.
+
+---
+
+### Open questions before build
+
+1. **Stage-weights scale:** lock to total = 100, or allow any total and auto-renormalise? (I recommend strict 100% for auditability.)
+2. **Excel upload — partial apply:** allow "skip invalid rows, apply valid"? (Recommend yes, with downloadable error report.)
+3. **Per-instance weight override:** restrict to Admin + HR PMS only, or also BU/Management? (Recommend Admin + HR PMS.)
+4. **Backfill:** for the current active cycle, leave legacy formula until admin sets weights, or migrate existing templates to an explicit `{criteria: 100}` so the UI always shows weights? (Recommend explicit backfill — no behavior change but clearer UI.)
+
+Approve, tweak any of the four, or tell me which sub-items to drop and I'll build.

@@ -340,6 +340,89 @@ export async function listInstancesForReviewer(reviewerId: string, cycleId: stri
   return data ?? [];
 }
 
+// ---------- Export-wide fetcher ----------
+/**
+ * Streams ALL instances in a cycle (paged via fetchAllPaged) honoring the same
+ * filters as the on-screen grid. Used by Export to Excel so the workbook is
+ * never limited to the current visible page.
+ *
+ * Per POLICY §94 + large-export-pagination-policy: ordered .range() walk,
+ * profiles resolved separately via .in().
+ */
+export async function fetchAllInstancesForExport(args: {
+  cycleId: string;
+  search?: string;
+  status?: AnnualReviewStatus | 'all';
+  onProgress?: (loaded: number) => void;
+}): Promise<InstanceWithEmployee[]> {
+  // 1) Optional name search → restrict to matching employee_ids (max 5000).
+  let restrictIds: string[] | null = null;
+  const term = args.search?.trim();
+  if (term) {
+    const profs = await fetchAllPaged<{ id: string }>((from, to) =>
+      db.from('profiles').select('id').ilike('full_name', `%${term}%`).order('id').range(from, to),
+    );
+    restrictIds = profs.map((p) => p.id);
+    if (restrictIds.length === 0) return [];
+  }
+
+  // 2) Stream instances (slim select, no embedded join — RLS-heavy join would
+  //    blow the per-page timeout). Embed employee profile on a second pass.
+  const rows = await fetchAllPaged<AnnualReviewInstance>((from, to) => {
+    let q = db
+      .from('annual_review_instances')
+      .select('*')
+      .eq('cycle_id', args.cycleId);
+    if (args.status && args.status !== 'all') q = q.eq('overall_status', args.status);
+    if (restrictIds) q = q.in('employee_id', restrictIds);
+    return q.order('created_at', { ascending: false }).range(from, to);
+  });
+  args.onProgress?.(rows.length);
+
+  // 3) Hydrate employee profiles via .in() batches of 200.
+  const empIds = Array.from(new Set(rows.map((r) => r.employee_id).filter(Boolean)));
+  const profileMap = new Map<string, { id: string; full_name: string | null; employee_code: string | null; designation: string | null }>();
+  const BATCH = 200;
+  for (let i = 0; i < empIds.length; i += BATCH) {
+    const slice = empIds.slice(i, i + BATCH);
+    const { data, error } = await db
+      .from('profiles')
+      .select('id, full_name, employee_code, designation')
+      .in('id', slice);
+    if (error) throw error;
+    (data ?? []).forEach((p: any) => profileMap.set(p.id, p));
+  }
+  return rows.map((r) => ({ ...r, employee: profileMap.get(r.employee_id) }));
+}
+
+// ---------- Per-stage response rollup ----------
+/**
+ * Fetches submitted reviewer responses for a set of instances and returns a
+ * map of `instance_id → reviewer_role → weighted_score`. Single .in() query —
+ * used by the Progress grid to show per-stage scores without N+1 loads.
+ */
+export async function fetchInstanceStageScores(
+  instanceIds: string[],
+): Promise<Record<string, Partial<Record<AnnualReviewerRole, number | null>>>> {
+  const out: Record<string, Partial<Record<AnnualReviewerRole, number | null>>> = {};
+  if (instanceIds.length === 0) return out;
+  const BATCH = 200;
+  for (let i = 0; i < instanceIds.length; i += BATCH) {
+    const slice = instanceIds.slice(i, i + BATCH);
+    const { data, error } = await db
+      .from('annual_review_responses')
+      .select('instance_id, reviewer_role, weighted_score, submitted_at')
+      .in('instance_id', slice)
+      .not('submitted_at', 'is', null);
+    if (error) throw error;
+    for (const r of (data ?? []) as Array<{ instance_id: string; reviewer_role: AnnualReviewerRole; weighted_score: number | null }>) {
+      const slot = (out[r.instance_id] ??= {});
+      slot[r.reviewer_role] = r.weighted_score;
+    }
+  }
+  return out;
+}
+
 export async function updateInstance(id: string, patch: Partial<AnnualReviewInstance>): Promise<AnnualReviewInstance> {
   const { data, error } = await db.from('annual_review_instances').update(patch).eq('id', id).select('*').single();
   if (error) throw error;
