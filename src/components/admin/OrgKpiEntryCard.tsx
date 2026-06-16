@@ -567,6 +567,10 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
             isNa: s.isNa,
             subFactors: s.subFactors,
             _touched: touchedScopeIdsRef.current.has(s.scopeId),
+            // POLICY §112 — carry the last persisted DB value so the
+            // Propagate guard can tell a SAVED 0 (allow) from a stale
+            // visible 0 that was never written to OKV (block).
+            dbAchievedValue: s.dbAchievedValue ?? null,
           }))
         : undefined,
     };
