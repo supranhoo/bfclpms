@@ -958,12 +958,21 @@ export default function OrgKpiDataEntry() {
           consideredScopeIds.push(sv.scopeId);
           continue;
         }
-        // v2.65.4 + ADR-063 — Block silent zero-propagation, but no longer
-        // silently. The user sees `0` in the cell and (rightly) expects it to
-        // flow through; we still refuse to push it without an explicit edit
-        // so a stale render can't poison the scorecard, but we now COUNT the
-        // skips and emit a single explanatory toast after the loop.
-        if (!(sv as any)._touched && sv.achievedValue === 0 && !sv.isNa) {
+        // POLICY §112 (June 2026 RCA) — Block silent zero-propagation only
+        // when the value is NOT confirmed in `org_kpi_values`. If the
+        // persisted `dbAchievedValue` is already 0, the data owner saved it
+        // explicitly and Propagate must be allowed even when the row was
+        // not re-touched this session. Previously, every untouched 0 was
+        // skipped — causing the "row(s) holding 0 were not propagated"
+        // red toast after a perfectly valid Save → Propagate.
+        const dbVal = (sv as any).dbAchievedValue;
+        const zeroSavedToDb = dbVal === 0;
+        if (
+          !(sv as any)._touched &&
+          sv.achievedValue === 0 &&
+          !sv.isNa &&
+          !zeroSavedToDb
+        ) {
           consideredScopeIds.push(sv.scopeId);
           untouchedZeroSkipCount += 1;
           continue;
