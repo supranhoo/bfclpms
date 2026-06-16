@@ -238,10 +238,12 @@ export function BulkSignoffPreview({
         <p className="text-[10px] text-muted-foreground leading-relaxed">
           <strong>Stage columns</strong> show every reviewer score on file. The
           <strong> {stageLabel ?? 'target stage'}</strong> column is highlighted
-          — that is the column this bulk action will stamp. <strong>Resolved</strong> is
-          the value that will be written (carried from the highest prior stage
-          or computed from <strong>Achieved</strong>). Type an Achieved value to
-          auto-compute the rating on rows marked ●.
+          — that is the column this bulk action will stamp. Per row you can:
+          leave <strong>Achvd</strong> blank to carry the previous stage's
+          score forward, type a value (or pick a Yes/No / tier option) to let
+          the engine compute your stage's score from the KPI thresholds, or
+          tick <strong>N/A</strong> to mark the row not-applicable. The Remark
+          and Evidence apply to every row you sign off.
         </p>
       )}
 
