@@ -890,6 +890,31 @@ export default function OrgKpiDataEntry() {
     filterEmployeeIds?: string[],
   ) => {
     await handleCardSave(kpi, values);
+    // POLICY §ORG-KPI-PROPAGATION — chained Save → Propagate handoff.
+    // `handleCardSave` has now persisted every safe-to-save row to
+    // `org_kpi_values`. The local `values.scopedValues` snapshot was
+    // captured BEFORE the save and still carries the pre-save
+    // `dbAchievedValue` (often `null` for fresh entries). That stale
+    // snapshot causes the untouched-zero guard below to misclassify
+    // freshly-saved `0` values as "unsaved" → false destructive toast.
+    // Treat every row we just attempted to save as DB-confirmed for
+    // this action, so the in-loop guards see the post-save truth.
+    if (values.scopedValues) {
+      const scope0 = ((kpi as any).org_level_scope as OrgLevelScope) || 'employee';
+      if (scope0 === 'department' || scope0 === 'employee') {
+        values.scopedValues = values.scopedValues.map(sv => {
+          // Mirror the same "drop null-overwrite of non-null DB value"
+          // rule used by `handleCardSave`; everything else is now DB-confirmed.
+          if (sv.achievedValue === null && !sv.isNa) return sv;
+          return {
+            ...sv,
+            // After save, the local value IS the DB value.
+            dbAchievedValue: sv.isNa ? null : sv.achievedValue,
+            _touched: true,
+          } as typeof sv;
+        });
+      }
+    }
     const scope = ((kpi as any).org_level_scope as OrgLevelScope) || 'employee';
     
     // Track which scope IDs were actually propagated
@@ -912,6 +937,10 @@ export default function OrgKpiDataEntry() {
     // ADR-063 — surface (instead of silently dropping) zero values that the
     // user can see in the UI but never explicitly edited this session.
     let untouchedZeroSkipCount = 0;
+    // POLICY §ORG-KPI-PROPAGATION — `not_authorized` skips are counted
+    // separately so we can show a governance-specific toast instead of
+    // bucketing them under generic "could not be advanced".
+    let notAuthorizedCount = 0;
     const kk = kpiKey(kpi.category_id, kpi.kra_name, kpi.kpi_name);
     const expectedCount = employeeCountMap.get(kk) ?? 0;
     
@@ -1010,6 +1039,12 @@ export default function OrgKpiDataEntry() {
             s.reason === 'approved_immutable'
           ) {
             totalSkippedBenign++;
+          } else if (s.reason === 'not_authorized') {
+            // POLICY §ORG-KPI-PROPAGATION — server-side authorization
+            // gate (admin OR data owner). Treated as benign for toast
+            // classification, but surfaced with its own governance copy.
+            notAuthorizedCount++;
+            totalSkippedBenign++;
           } else {
             totalSkippedHard++;
           }
@@ -1047,14 +1082,27 @@ export default function OrgKpiDataEntry() {
 
       // ADR-063 — explain the silent-zero guard so admins stop wondering why
       // rows that visibly show "0" never advance. The guard itself is still
-      // intentional (POLICY §111.7 — never push an unedited value), but the
-      // user must be told it fired.
+      // intentional (POLICY §ORG-KPI-PROPAGATION — never push an unedited
+      // value), but the user must be told it fired. Microcopy MUST match
+      // the explicit-Save model (no "autosave" wording, per ADR-075 +
+      // POLICY §ORG-KPI-PROPAGATION).
       if (untouchedZeroSkipCount > 0) {
         toast({
           title: `${untouchedZeroSkipCount} row(s) holding 0 were not propagated`,
           description:
-            'They show "0" in the cell but have not been saved to the database yet. Click into each cell, type the value, click Save (row or card), then click Propagate again.',
+            'They show "0" in the cell but have not been saved yet. Click Save (row or card) and then Propagate.',
           variant: 'destructive',
+        });
+      }
+
+      // POLICY §ORG-KPI-PROPAGATION — server-side authorization gate.
+      // Show governance-specific copy instead of the generic
+      // "could not be advanced (race condition)" wording.
+      if (notAuthorizedCount > 0) {
+        toast({
+          title: `${notAuthorizedCount} employee KPI(s) skipped — not authorized`,
+          description:
+            'Some mapped employees are outside your data-owner authorization for this KPI. Ask an Admin or the assigned Data Owner to propagate for them.',
         });
       }
     }
@@ -1148,7 +1196,24 @@ export default function OrgKpiDataEntry() {
         const propagatedSet = new Set(propagatedScopeIds);
         // For department scope, propagatedScopeIds are department IDs — only check employee scope here
         if (scope === 'employee') {
-          const missed = (allOrgKpiRows || []).filter(r => !propagatedSet.has(r.employee_id));
+          // POLICY §ORG-KPI-PROPAGATION — the half-propagation forward
+          // guard MUST subtract truth sets already proven by the snapshot
+          // (`propagatedEmpsByKey`) and the workflow stage
+          // (`kraSetEmpIdsByKey` — anyone past `kra_set`). Otherwise
+          // employees correctly propagated in a previous session look
+          // like a "missed" gap and trigger a false "could not be
+          // advanced — Repair Gap" toast.
+          const alreadyPropagatedSet = propagatedEmpsByKey.get(kk) || new Set<string>();
+          const kraSetSet = kraSetEmpIdsByKey.get(kk) || new Set<string>();
+          const missed = (allOrgKpiRows || []).filter(r => {
+            const eid = r.employee_id as string;
+            if (propagatedSet.has(eid)) return false;
+            if (alreadyPropagatedSet.has(eid)) return false;
+            // Any employee already past `kra_set` is reviewer-locked
+            // (POLICY §88). The data owner can no longer act on them.
+            if (!kraSetSet.has(eid)) return false;
+            return true;
+          });
           missedEmployeeIds = missed.map(r => r.employee_id);
           if (missed.length > 0) {
             // v2.66.13 — Distinguish "hidden by RLS" (benign for data owners)
@@ -1261,8 +1326,15 @@ export default function OrgKpiDataEntry() {
       }
     }
     
+    // POLICY §ORG-KPI-PROPAGATION — refresh ALL Org KPI read models so
+    // the status chips, per-row pills, header counts and forward-guard
+    // truth sets reflect the post-propagation reality immediately.
+    // Missing `org-level-kpis-with-employees` here was the root cause
+    // of "Saved + Propagated pills but red 0-propagated toast".
     queryClient.invalidateQueries({ queryKey: ['org-kpi-values'] });
-  }, [handleCardSave, propagate, selectedPeriod, selectedYear, queryClient, profile?.id, insertAuditLogs, employeeCountMap, allProfiles, isAdmin, toast, mappedEmployeesMap, kraSetEmpIdsByKey]);
+    queryClient.invalidateQueries({ queryKey: ['org-kpi-submission-fallback'] });
+    queryClient.invalidateQueries({ queryKey: ['org-level-kpis-with-employees'] });
+  }, [handleCardSave, propagate, selectedPeriod, selectedYear, queryClient, profile?.id, insertAuditLogs, employeeCountMap, allProfiles, isAdmin, toast, mappedEmployeesMap, kraSetEmpIdsByKey, propagatedEmpsByKey]);
 
   /**
    * Phase A4 — Pre-flight propagation gate.

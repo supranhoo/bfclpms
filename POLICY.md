@@ -3747,6 +3747,99 @@ All URL persistence for dashboard filters, view modes, selected entities, and pa
   are skipped with reason `not_authorized` and never written to
   `review_submissions`.
 
+## §ORG-KPI-PROPAGATION — Org KPI Save → Propagate consolidated contract (June 2026 RCA, supersedes scattered §111.x / §112 wording)
+
+This section is the single source of truth for the Org KPI Data Entry
+Save → Propagate workflow. Where this contract conflicts with earlier
+§111.x / §112 wording, this section wins. ADR-063 ("wait for autosave"
+microcopy) is explicitly superseded by ADR-075 (explicit Save) and by
+this contract.
+
+1. **Save persistence gate.** A row is "Saved" only when the bulk save
+   RPC returns at least one persisted record per attempted row. A
+   partial save MUST throw `ORG_KPI_PARTIAL_SAVE` and MUST block the
+   chained Propagate.
+
+2. **Chained Save → Propagate handoff.** After `handleCardSave`
+   succeeds inside `executeSaveAndPropagate`, every scoped row that
+   was attempted (achievedValue !== null OR isNa) MUST be promoted to
+   DB-confirmed for that action: its `dbAchievedValue` is set to the
+   just-saved value and `_touched` is set to `true`. Without this, the
+   stale pre-save snapshot causes freshly-saved `0` values to be
+   misclassified as unsaved.
+
+3. **Untouched-zero guard is DB-aware.** A local `0` is suppressed only
+   when `_touched === false AND achievedValue === 0 AND !isNa AND
+   dbAchievedValue !== 0`. Once a data owner saved `0`
+   (`dbAchievedValue === 0`), Propagate MUST allow it through in this
+   or any later session. Microcopy MUST use the explicit Save model —
+   never refer to autosave.
+
+4. **Row-level Propagate gating.** Disabled while the row is dirty OR
+   while the local achieved value differs from the persisted
+   `org_kpi_values.achieved_value` (`dbAchievedValue`). Applies to both
+   employee-scope and department-scope rows.
+
+5. **Skip-reason classification (canonical set).** Server-returned
+   skip reasons MUST bucket as follows:
+
+   - **Benign / informational (no destructive toast):**
+     `not_in_kra_set`, `reviewer_locked`, `no_target_rows`,
+     `approved_immutable`, `not_authorized`.
+   - **Hard (destructive toast — refresh / retry):**
+     `kpi_not_found`, `race_lost_during_advance`, and any future
+     reason not in the benign list.
+
+   `not_authorized` MUST surface a dedicated governance toast
+   ("Some mapped employees are outside your data-owner authorization
+   for this KPI"), not generic "could not be advanced" or Repair-Gap
+   wording.
+
+6. **Half-propagation forward guard (Repair Gap).** The guard MUST
+   compute "missed" employees as:
+
+   ```text
+   missed = expectedEmployees
+          − propagatedThisClick
+          − alreadyPropagatedSnapshot (propagatedEmpsByKey)
+          − reviewerLocked (employees past kra_set, per kraSetEmpIdsByKey)
+   ```
+
+   The previous formulation compared the full `kpis` table only
+   against `propagatedThisClick`, falsely flagging already-propagated
+   and reviewer-locked employees as "could not be advanced".
+
+7. **Subset propagation.** When `filterEmployeeIds` is non-empty
+   (row-level / multi-select Propagate), the full-card half-propagation
+   forward guard MUST be skipped entirely.
+
+8. **Snapshot/cache invalidation after propagation.** Every Save →
+   Propagate completion MUST invalidate, at minimum:
+   `['org-kpi-values']`, `['org-kpi-submission-fallback']`, and
+   `['org-level-kpis-with-employees']`. Status chips, per-row pills,
+   and the forward-guard truth sets all derive from these keys; a
+   missing invalidation here was the root cause of "Saved + Propagated
+   pills but red 0-propagated toast".
+
+9. **Canonical key lookups.** `handleCardSave` MUST look up
+   `existingValuesMap` via the canonical `kpiKey()` helper (ADR-054).
+   Raw `.toLowerCase()` keys are forbidden.
+
+10. **Server hardening.** `public.propagate_org_kpi_value` enforces a
+    per-`kpi_id` authorization gate (Admin OR registered data owner via
+    normalized `(category_id, kra_name, kpi_name)`). Unauthorized rows
+    skip with reason `not_authorized` and never write
+    `review_submissions`. See clause 5 for the toast classification.
+
+Regression suite (must stay green):
+`orgKpiSavedZeroPropagates.test.ts`,
+`orgKpiSavePartialPersist.test.ts`,
+`orgKpiRowPropagateLocalVsDb.test.ts`,
+`orgKpiPropagationBenignReasons.test.ts`,
+`orgKpiPropagationToast.test.ts`,
+`orgKpiPropagationSubsetDenominator.test.ts`,
+`orgKpiSavePropagateHandoff.test.ts`.
+
 §131 Development Report SSOT
 - Every shipped feature, bug fix, ADR or POLICY change MUST be captured as a row in `public.dev_report_entries` in the same PR. Release evidence is generated FROM this table, never from external markdown.
 - Dev Report Auto-Capture Pipeline (primary): automated entries are POSTed to the admin-only edge function `dev-report-ingest`. The function is idempotent on `(entry_type, entry_date, linked_commit, title)` (enforced by `uq_dev_report_entries_ingest_key`) so re-runs of the same commit/import never duplicate rows. Manual entry via the Development Report screen remains as a fallback only.
