@@ -47,6 +47,12 @@ import { InstanceStageWeightsDialog } from '@/components/annual-review/InstanceS
 import { TemplateEditorDialog } from '@/components/annual-review/TemplateEditorDialog';
 import { RecentStageWeightOverridesPanel } from '@/components/annual-review/RecentStageWeightOverridesPanel';
 import { RuleFiltersEditor, RuleFiltersSummary, EMPTY_FILTERS } from '@/components/annual-review/RuleFiltersEditor';
+import {
+  downloadSystemScoresTemplate,
+  downloadTemplateAssignmentTemplate,
+  downloadWorkflowAssignmentTemplate,
+  downloadStageWeightsTemplate,
+} from '@/lib/annualReview/bulkTemplates';
 import type {
   AnnualReviewCycle, AnnualReviewTemplate, AssignmentFilters, AnnualReviewerRole,
 } from '@/types/annualReview';
@@ -356,54 +362,131 @@ function ProgressTab() {
           >
             <Bell className="h-4 w-4" /> Send reminders now
           </Button>
-          <Button
-            variant="outline" className="gap-2"
-            onClick={async () => {
-              if (!activeCycle) return;
-              setExporting(true);
-              try {
-                const all = await svc.fetchAllInstancesForExport({
-                  cycleId: activeCycle.id,
-                  search,
-                  status: statusFilter as any,
-                  hasOverride: customWeightsOnly,
-                });
-                const ids = all.map((i) => i.id);
-                const scores = await svc.fetchInstanceStageScores(ids);
-                const tplIds = Array.from(new Set(
-                  all.map((i) => svc.resolveTemplateId(i)).filter((x): x is string => !!x),
-                ));
-                const tplList = await Promise.all(tplIds.map((tid) => svc.getTemplate(tid).catch(() => null)));
-                const tplMap: Record<string, AnnualReviewTemplate> = {};
-                for (const t of tplList) if (t) tplMap[t.id] = t;
-                exportProgress(activeCycle.name, all, scores, {
-                  Search: search || '(none)',
-                  Stage: statusFilter,
-                  'Custom weights only': customWeightsOnly ? 'yes' : 'no',
-                }, tplMap);
-                toast.success(`Exported ${all.length} row${all.length === 1 ? '' : 's'}.`);
-              } catch (e) {
-                toast.error((e as Error).message);
-              } finally {
-                setExporting(false);
-              }
-            }}
-            disabled={total === 0 || exporting}
-          >
-            {exporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />} Export to Excel
-          </Button>
-          <Button variant="outline" className="gap-2" onClick={() => setUploadOpen(true)} disabled={!uploadTemplate}>
-            <Upload className="h-4 w-4" /> Bulk system-score upload
-          </Button>
-          <Button variant="outline" className="gap-2" onClick={() => setBulkTplOpen(true)} disabled={instances.length === 0}>
-            <Layers className="h-4 w-4" /> Bulk template assignment
-          </Button>
-          <Button variant="outline" className="gap-2" onClick={() => setBulkWfOpen(true)} disabled={instances.length === 0}>
-            <ListChecks className="h-4 w-4" /> Bulk workflow assignment
-          </Button>
-          <Button variant="outline" className="gap-2" onClick={() => setBulkWeightsOpen(true)} disabled={instances.length === 0}>
-            <Scale className="h-4 w-4" /> Bulk stage weights
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" className="gap-2" disabled={exporting}>
+                {exporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                Download data
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-72">
+              <DropdownMenuLabel>Choose dataset</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                disabled={total === 0 || exporting}
+                onSelect={async () => {
+                  if (!activeCycle) return;
+                  setExporting(true);
+                  try {
+                    const all = await svc.fetchAllInstancesForExport({
+                      cycleId: activeCycle.id,
+                      search,
+                      status: statusFilter as any,
+                      hasOverride: customWeightsOnly,
+                    });
+                    const ids = all.map((i) => i.id);
+                    const scores = await svc.fetchInstanceStageScores(ids);
+                    const tplIds = Array.from(new Set(
+                      all.map((i) => svc.resolveTemplateId(i)).filter((x): x is string => !!x),
+                    ));
+                    const tplList = await Promise.all(tplIds.map((tid) => svc.getTemplate(tid).catch(() => null)));
+                    const tplMap: Record<string, AnnualReviewTemplate> = {};
+                    for (const t of tplList) if (t) tplMap[t.id] = t;
+                    exportProgress(activeCycle.name, all, scores, {
+                      Search: search || '(none)',
+                      Stage: statusFilter,
+                      'Custom weights only': customWeightsOnly ? 'yes' : 'no',
+                    }, tplMap);
+                    toast.success(`Exported ${all.length} row${all.length === 1 ? '' : 's'}.`);
+                  } catch (e) {
+                    toast.error((e as Error).message);
+                  } finally {
+                    setExporting(false);
+                  }
+                }}
+              >
+                <BarChart3 className="h-4 w-4 mr-2" />
+                <div className="flex flex-col">
+                  <span>Progress snapshot (.xlsx)</span>
+                  <span className="text-[10px] text-muted-foreground">All filtered rows · scores · weights</span>
+                </div>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuLabel className="text-xs">Bulk-edit templates</DropdownMenuLabel>
+              <DropdownMenuItem
+                disabled={!uploadTemplate || instances.length === 0}
+                onSelect={() => {
+                  if (!activeCycle || !uploadTemplate) return;
+                  downloadSystemScoresTemplate(activeCycle, uploadTemplate, instances);
+                  toast.success('System-score template downloaded.');
+                }}
+              >
+                <Upload className="h-4 w-4 mr-2" /> System scores
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                disabled={instances.length === 0}
+                onSelect={() => {
+                  if (!activeCycle) return;
+                  downloadTemplateAssignmentTemplate(activeCycle, allTemplates, instances);
+                  toast.success('Template-assignment sheet downloaded.');
+                }}
+              >
+                <Layers className="h-4 w-4 mr-2" /> Template assignments
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                disabled={instances.length === 0}
+                onSelect={() => {
+                  if (!activeCycle) return;
+                  downloadWorkflowAssignmentTemplate(activeCycle, instances);
+                  toast.success('Workflow-assignment sheet downloaded.');
+                }}
+              >
+                <ListChecks className="h-4 w-4 mr-2" /> Workflow assignments
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                disabled={instances.length === 0}
+                onSelect={() => {
+                  if (!activeCycle) return;
+                  downloadStageWeightsTemplate(activeCycle, instances, new Map(allTemplates.map((t) => [t.id, t])));
+                  toast.success('Stage-weights sheet downloaded.');
+                }}
+              >
+                <Scale className="h-4 w-4 mr-2" /> Stage weights
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" className="gap-2" disabled={instances.length === 0}>
+                <Upload className="h-4 w-4" /> Upload data
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-72">
+              <DropdownMenuLabel>Choose dataset</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                disabled={!uploadTemplate}
+                onSelect={() => setUploadOpen(true)}
+              >
+                <Upload className="h-4 w-4 mr-2" />
+                <div className="flex flex-col">
+                  <span>System scores</span>
+                  {!uploadTemplate && (
+                    <span className="text-[10px] text-muted-foreground">Requires an active template</span>
+                  )}
+                </div>
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => setBulkTplOpen(true)}>
+                <Layers className="h-4 w-4 mr-2" /> Template assignments
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => setBulkWfOpen(true)}>
+                <ListChecks className="h-4 w-4 mr-2" /> Workflow assignments
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => setBulkWeightsOpen(true)}>
+                <Scale className="h-4 w-4 mr-2" /> Stage weights
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 
@@ -511,7 +594,7 @@ function ProgressTab() {
           <p className="text-muted-foreground">
             Showing <span className="tabular-nums">{filtered.length === 0 ? 0 : (page - 1) * pageSize + 1}–{(page - 1) * pageSize + filtered.length}</span> of <span className="tabular-nums">{total}</span>
             {' · '}
-            <span className="text-xs">Export to Excel includes all filtered rows.</span>
+            <span className="text-xs">Download data → Progress snapshot exports all filtered rows.</span>
           </p>
           <div className="flex items-center gap-2">
             <Label className="text-xs">Rows</Label>
