@@ -60,7 +60,7 @@ export function isValidStageWeights(w: StageWeights | null | undefined): boolean
  * Returns a shallow copy — callers may mutate freely.
  */
 export function resolveStageWeights(
-  instance: Pick<AnnualReviewInstance, 'stage_weights_override'> & { stage_weights_override?: StageWeights | null } | null | undefined,
+  instance: (Partial<AnnualReviewInstance> & { stage_weights_override?: StageWeights | null }) | null | undefined,
   template: Pick<AnnualReviewTemplate, 'sections'> | null | undefined,
 ): StageWeights {
   const override = (instance?.stage_weights_override ?? null) as StageWeights | null;
