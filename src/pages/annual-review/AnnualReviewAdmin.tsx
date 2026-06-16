@@ -506,6 +506,17 @@ function ProgressTab() {
         onDone={refetch}
       />
 
+      {activeCycle && (
+        <BulkStageWeightsAssignmentDialog
+          open={bulkWeightsOpen}
+          onOpenChange={setBulkWeightsOpen}
+          cycle={activeCycle}
+          instances={instances}
+          templatesById={new Map(allTemplates.map((t) => [t.id, t]))}
+          onDone={refetch}
+        />
+      )}
+
       <AlertDialog open={bulkOpen === 'finalize'} onOpenChange={(o) => !o && setBulkOpen(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
