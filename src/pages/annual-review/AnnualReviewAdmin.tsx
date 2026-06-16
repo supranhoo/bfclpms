@@ -3,6 +3,7 @@ import {
   useCycles, useTemplates, useRules, useCycleInstances, useActiveCycle, useTemplate,
   useSendBackStatus, useCloseCycle, useOverrideRating, useCloneTemplate, useCloneCycle,
   useAnnualReviewInstancesPaginated, useCycleStatusCounts, useReopenCycle,
+  useInstanceStageScores,
 } from '@/hooks/useAnnualReview';
 import * as svc from '@/services/annualReview/annualReviewService';
 import { useAuth } from '@/contexts/AuthContext';
@@ -25,7 +26,11 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
 import { toast } from 'sonner';
-import { Loader2, Upload, Settings2, ListChecks, Calendar, Layers, Pencil, Plus, Download, BarChart3, CheckCheck, Undo2, Lock, Bell, Scale, Copy, Unlock } from 'lucide-react';
+import { Loader2, Upload, Settings2, ListChecks, Calendar, Layers, Pencil, Plus, Download, BarChart3, CheckCheck, Undo2, Lock, Bell, Scale, Copy, Unlock, MoreHorizontal } from 'lucide-react';
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
+  DropdownMenuSeparator, DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import * as XLSX from 'xlsx';
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Cell,
@@ -72,23 +77,55 @@ export default function AnnualReviewAdmin() {
 }
 
 /**
- * Exports the active-cycle progress grid to an .xlsx workbook (single sheet).
- * Columns kept lean & deterministic for downstream pivot use.
+ * Exports the active-cycle progress grid to an .xlsx workbook.
+ * `rows` should be the FULL filtered dataset (not just the visible page).
+ * Includes a long-format "Stage Detail" sheet for pivot use.
  */
-function exportProgress(cycleName: string, rows: InstanceWithEmployee[]) {
-  const data = rows.map((i) => ({
+function exportProgress(
+  cycleName: string,
+  rows: InstanceWithEmployee[],
+  stageScores: Record<string, Partial<Record<'self' | 'manager' | 'skip_manager' | 'bu_head' | 'hr', number | null>>>,
+  filtersApplied: Record<string, string>,
+) {
+  const data = rows.map((i) => {
+    const s = stageScores[i.id] ?? {};
+    return {
     'Employee Code': i.employee?.employee_code ?? '',
     'Employee Name': i.employee?.full_name ?? '',
     'Designation': i.employee?.designation ?? '',
     'Stage': i.overall_status,
+      'Self Score': s.self ?? '',
+      'Manager Score': s.manager ?? '',
+      'Skip Score': s.skip_manager ?? '',
+      'BU Head Score': s.bu_head ?? '',
+      'HR Score': s.hr ?? '',
     'Total Score': i.total_score ?? '',
     'Criteria Weighted Score': i.criteria_weighted_score ?? '',
     'Final Rating': i.final_rating ?? '',
     'Finalized At': i.finalized_at ?? '',
-  }));
-  const ws = XLSX.utils.json_to_sheet(data);
+    };
+  });
+  const detail: Array<Record<string, string | number>> = [];
+  for (const i of rows) {
+    const s = stageScores[i.id] ?? {};
+    (['self', 'manager', 'skip_manager', 'bu_head', 'hr'] as const).forEach((role) => {
+      if (s[role] == null) return;
+      detail.push({
+        'Employee Code': i.employee?.employee_code ?? '',
+        'Employee Name': i.employee?.full_name ?? '',
+        'Stage': role,
+        'Weighted Score': s[role] as number,
+      });
+    });
+  }
+  const filterRows = Object.entries(filtersApplied).map(([k, v]) => ({ Filter: k, Value: v }));
+  filterRows.push({ Filter: 'Exported At', Value: new Date().toISOString() });
+  filterRows.push({ Filter: 'Row Count', Value: String(rows.length) });
+
   const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'Progress');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(data), 'Progress');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(detail), 'Stage Detail');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(filterRows), 'Filters');
   const safe = cycleName.replace(/[^a-zA-Z0-9._-]/g, '_');
   XLSX.writeFile(wb, `annual-review-progress_${safe}_${new Date().toISOString().slice(0, 10)}.xlsx`);
 }
