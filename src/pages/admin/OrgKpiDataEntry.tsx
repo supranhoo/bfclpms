@@ -937,6 +937,10 @@ export default function OrgKpiDataEntry() {
     // ADR-063 — surface (instead of silently dropping) zero values that the
     // user can see in the UI but never explicitly edited this session.
     let untouchedZeroSkipCount = 0;
+    // POLICY §ORG-KPI-PROPAGATION — `not_authorized` skips are counted
+    // separately so we can show a governance-specific toast instead of
+    // bucketing them under generic "could not be advanced".
+    let notAuthorizedCount = 0;
     const kk = kpiKey(kpi.category_id, kpi.kra_name, kpi.kpi_name);
     const expectedCount = employeeCountMap.get(kk) ?? 0;
     
@@ -1022,7 +1026,6 @@ export default function OrgKpiDataEntry() {
         totalPropagated += result.propagatedCount;
         // Aggregate skip reasons for the summary toast
         const skipped = result.skipped || [];
-        let scopeNotAuthorized = 0;
         for (const s of skipped) {
           // v2.66.10.3 — `reviewer_locked` (employee already past kra_set/
           // self_review per POLICY §88) and `no_target_rows` (resolver
@@ -1037,22 +1040,14 @@ export default function OrgKpiDataEntry() {
           ) {
             totalSkippedBenign++;
           } else if (s.reason === 'not_authorized') {
-            // POLICY §ORG-KPI-PROPAGATION — `not_authorized` is the
-            // server-side gate from `propagate_org_kpi_value` (Admin OR
-            // registered data owner via normalized KRA/KPI). It is a
-            // governance/authorization condition, not a data integrity
-            // failure. Surface with a dedicated explanatory toast rather
-            // than the destructive "could not be advanced" wording.
-            scopeNotAuthorized++;
+            // POLICY §ORG-KPI-PROPAGATION — server-side authorization
+            // gate (admin OR data owner). Treated as benign for toast
+            // classification, but surfaced with its own governance copy.
+            notAuthorizedCount++;
             totalSkippedBenign++;
           } else {
             totalSkippedHard++;
           }
-        }
-        if (scopeNotAuthorized > 0) {
-          (executeSaveAndPropagate as any).__notAuthorizedCount =
-            ((executeSaveAndPropagate as any).__notAuthorizedCount || 0) +
-            scopeNotAuthorized;
         }
         // Only treat as "propagated" if the server actually wrote a row.
         if (result.propagatedCount > 0) {
