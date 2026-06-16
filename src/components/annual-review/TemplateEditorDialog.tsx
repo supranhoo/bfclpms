@@ -27,6 +27,8 @@ import { BLUE_COLLAR_PRESET, BLUE_COLLAR_PRESET_META } from '@/lib/annualReview/
 import { FY_MONTHS } from '@/services/annualReview/carryKraScore';
 import type { CarryKraConfig } from '@/types/annualReview';
 import { CarryKraMappingPreview } from './CarryKraMappingPreview';
+import { StageWeightsEditor } from './StageWeightsEditor';
+import type { StageWeights } from '@/lib/annualReview/finalScore';
 
 const uid = (p: string) => `${p}_${Math.random().toString(36).slice(2, 9)}`;
 
@@ -207,6 +209,24 @@ export function TemplateEditorDialog({
                 </p>
               </div>
             )}
+          </Card>
+
+          {/* Final score weight blend (Phase 2) */}
+          <Card className="p-4 space-y-3">
+            <div>
+              <div className="font-semibold">Final score weights</div>
+              <p className="text-xs text-muted-foreground">
+                Choose how the final score (out of 5) is blended across stages.
+                Leave a stage blank to disable it. Must total exactly 100%.
+                If left empty, the legacy criteria-only formula is used.
+              </p>
+            </div>
+            <StageWeightsEditor
+              value={sections.stage_weights ?? null}
+              onChange={(next: StageWeights) =>
+                setSections((s) => ({ ...s, stage_weights: next }))
+              }
+            />
           </Card>
 
           {/* Eligibility */}
