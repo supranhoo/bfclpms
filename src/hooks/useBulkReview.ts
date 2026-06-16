@@ -391,6 +391,47 @@ export function useBulkManagementApprove() {
   });
 }
 
+/**
+ * Bulk Save as Draft (POLICY §111.7.a.8) — persists the reviewer's typed
+ * Achvd / manual score / N/A / remark / evidence onto each cell's per-stage
+ * columns WITHOUT advancing workflow status or touching final_score.
+ * Reviewer can resume the row from the single-row scorecard.
+ */
+export function useBulkSaveStageDrafts() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (args: {
+      stage: 'manager' | 'skip_level' | 'hr_pms' | 'auditor';
+      cells: BulkWriteCell[];
+      reason?: string;
+      attachment_urls?: string[];
+      achieved_values?: Record<string, number | string | null>;
+      manual_scores?: Record<string, number>;
+      is_na?: Record<string, boolean>;
+      na_reasons?: Record<string, string>;
+    }): Promise<BulkWriteResult> => {
+      const { data, error } = await supabase.rpc('bulk_save_stage_drafts' as any, {
+        p_stage: args.stage,
+        p_cells: args.cells as any,
+        p_batch_reason: args.reason ?? null,
+        p_attachment_urls: (args.attachment_urls ?? []) as any,
+        p_achieved_values: (args.achieved_values ?? null) as any,
+        p_manual_scores: (args.manual_scores ?? null) as any,
+        p_is_na: (args.is_na ?? null) as any,
+        p_na_reasons: (args.na_reasons ?? null) as any,
+      });
+      if (error) throw error;
+      return data as unknown as BulkWriteResult;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['bulk_review_snapshot'] });
+      qc.invalidateQueries({ queryKey: ['bulk_review_snapshot_all'] });
+      qc.invalidateQueries({ queryKey: ['bulk_scope_preview'] });
+      qc.invalidateQueries({ queryKey: ['kpi_cell_detail'] });
+    },
+  });
+}
+
 // ============= M5: Re-open =============
 export function useBulkReopenCells() {
   const qc = useQueryClient();

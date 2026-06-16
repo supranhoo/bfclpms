@@ -62,6 +62,13 @@ interface Props {
     inputs: Map<string, CellInputs>,
     isOverride: boolean,
   ) => void;
+  /**
+   * Sign-off mode only — when provided, renders a secondary "Save as Draft"
+   * button. Draft persists the typed Achvd / N/A / remark / evidence into the
+   * reviewer's own stage columns WITHOUT advancing workflow. POLICY §111.7.a.8.
+   */
+  onSaveDraft?: (payload: BulkApproveSubmit) => void;
+  isSavingDraft?: boolean;
 }
 
 /**
@@ -82,6 +89,8 @@ export function BulkApproveDialog({
   kpiIdBySubmissionId,
   isAdmin = false,
   onInputsChange,
+  onSaveDraft,
+  isSavingDraft = false,
 }: Props) {
   const [reason, setReason] = useState('');
   const [urls, setUrls] = useState<string[]>([]);
@@ -133,6 +142,15 @@ export function BulkApproveDialog({
   const verbing = isSignoff ? 'Signing off' : 'Approving';
   const titleSuffix = isSignoff && stageLabel ? ` as ${stageLabel}` : '';
 
+  // Draft is offered only in sign-off mode and only when the parent wires the
+  // handler (keeps Final approve binary). Draft has NO remark minimum and does
+  // NOT require any input — but we still gate it on the reviewer having
+  // *something* to save so the button isn't a no-op tap.
+  const showDraft = isSignoff && typeof onSaveDraft === 'function';
+  const hasAnyDraftableInput =
+    inputs.size > 0 || urls.length > 0 || trimmedLen > 0;
+  const canSaveDraft = showDraft && !isLoading && !isSavingDraft && hasAnyDraftableInput;
+
   const handleConfirm = () => {
     if (!canSubmit) return;
     const achievedValues: Record<string, number | string | null> = {};
@@ -155,6 +173,36 @@ export function BulkApproveDialog({
       batchId,
       achievedValues: Object.keys(achievedValues).length > 0 ? achievedValues : undefined,
       isOverride: isOverride || undefined,
+      isNa: Object.keys(isNa).length > 0 ? isNa : undefined,
+      naReasons: Object.keys(naReasons).length > 0 ? naReasons : undefined,
+    });
+  };
+
+  // Draft uses the same payload shape so the parent can reuse the existing
+  // BulkApproveSubmit pipeline. Difference: remark is optional (may be empty),
+  // and the parent routes to the draft RPC instead of the sign-off RPC.
+  const handleSaveDraft = () => {
+    if (!canSaveDraft || !onSaveDraft) return;
+    const achievedValues: Record<string, number | string | null> = {};
+    const isNa: Record<string, boolean> = {};
+    const naReasons: Record<string, string> = {};
+    const trimmedReason = reason.trim();
+    inputs.forEach((v, sid) => {
+      if (v.isNa === true) {
+        isNa[sid] = true;
+        if (trimmedReason) naReasons[sid] = trimmedReason;
+        return;
+      }
+      if (v.achievedOverride != null && v.achievedOverride !== '') {
+        achievedValues[sid] = v.achievedOverride;
+      }
+    });
+    onSaveDraft({
+      reason: trimmedReason,
+      attachmentUrls: urls,
+      batchId,
+      achievedValues: Object.keys(achievedValues).length > 0 ? achievedValues : undefined,
+      isOverride: undefined, // override is admin-only sign-off; not part of drafts
       isNa: Object.keys(isNa).length > 0 ? isNa : undefined,
       naReasons: Object.keys(naReasons).length > 0 ? naReasons : undefined,
     });
@@ -319,11 +367,22 @@ export function BulkApproveDialog({
         </div>
 
         <DialogFooter className="gap-2 border-t border-border bg-background/95 backdrop-blur px-6 py-3">
-          <Button variant="outline" onClick={onCancel} disabled={isLoading}>
+          <Button variant="outline" onClick={onCancel} disabled={isLoading || isSavingDraft}>
             Cancel
           </Button>
+          {showDraft && (
+            <Button
+              variant="secondary"
+              onClick={handleSaveDraft}
+              disabled={!canSaveDraft}
+              title="Save typed values, remark and evidence without advancing the workflow"
+            >
+              {isSavingDraft && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {isSavingDraft ? 'Saving draft…' : 'Save as Draft'}
+            </Button>
+          )}
           <div className="flex flex-col items-end gap-1">
-            <Button onClick={handleConfirm} disabled={!canSubmit}>
+            <Button onClick={handleConfirm} disabled={!canSubmit || isSavingDraft}>
               {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               {isLoading
                 ? `${verbing}…`
