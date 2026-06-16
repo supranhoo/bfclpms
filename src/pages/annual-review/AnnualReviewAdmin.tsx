@@ -47,21 +47,12 @@ import {
 import { AnnualReviewStatusBadge } from '@/components/annual-review/AnnualReviewStatusBadge';
 import { HrFinalizationSheet } from '@/components/annual-review/HrFinalizationSheet';
 import { fyStartFromCycle } from '@/lib/annualReview/fiscalYear';
-import { SystemScoresUploadDialog } from '@/components/annual-review/SystemScoresUploadDialog';
-import { BulkTemplateAssignmentDialog } from '@/components/annual-review/BulkTemplateAssignmentDialog';
-import { BulkWorkflowAssignmentDialog } from '@/components/annual-review/BulkWorkflowAssignmentDialog';
-import { BulkStageWeightsAssignmentDialog } from '@/components/annual-review/BulkStageWeightsAssignmentDialog';
+import { UnifiedBulkDialog } from '@/components/annual-review/UnifiedBulkDialog';
 import { ChangeWorkflowDialog } from '@/components/annual-review/ChangeWorkflowDialog';
 import { InstanceStageWeightsDialog } from '@/components/annual-review/InstanceStageWeightsDialog';
 import { TemplateEditorDialog } from '@/components/annual-review/TemplateEditorDialog';
 import { RecentStageWeightOverridesPanel } from '@/components/annual-review/RecentStageWeightOverridesPanel';
 import { RuleFiltersEditor, RuleFiltersSummary, EMPTY_FILTERS } from '@/components/annual-review/RuleFiltersEditor';
-import {
-  downloadSystemScoresTemplate,
-  downloadTemplateAssignmentTemplate,
-  downloadWorkflowAssignmentTemplate,
-  downloadStageWeightsTemplate,
-} from '@/lib/annualReview/bulkTemplates';
 import type {
   AnnualReviewCycle, AnnualReviewTemplate, AssignmentFilters, AnnualReviewerRole,
 } from '@/types/annualReview';
