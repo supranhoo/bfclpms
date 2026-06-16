@@ -68,6 +68,42 @@ describe('listInstancesPaginated', () => {
     expect(inst.eq).toHaveBeenCalledWith('overall_status', 'pending_hr');
     expect(inst.range).toHaveBeenCalledWith(25, 49);
   });
+
+  it('applies managerId as direct .eq on the instance row (no profile lookup)', async () => {
+    const inst = makeBuilder();
+    inst.__result = { data: [], error: null, count: 0 };
+    tables.set('annual_review_instances', inst);
+    await svc.listInstancesPaginated({ cycleId: 'c1', page: 1, pageSize: 25, managerId: 'mgr-1' });
+    expect(inst.eq).toHaveBeenCalledWith('manager_id', 'mgr-1');
+  });
+
+  it('resolves departmentId to a profile-id allowlist applied with .in', async () => {
+    const profiles = makeBuilder();
+    profiles.__result = { data: [{ id: 'p1' }, { id: 'p2' }], error: null };
+    tables.set('profiles', profiles);
+    const inst = makeBuilder();
+    inst.__result = { data: [], error: null, count: 0 };
+    tables.set('annual_review_instances', inst);
+    await svc.listInstancesPaginated({ cycleId: 'c1', page: 1, pageSize: 25, departmentId: 'd1' });
+    expect(profiles.in).toHaveBeenCalledWith('department_id', ['d1']);
+    expect(inst.in).toHaveBeenCalledWith('employee_id', ['p1', 'p2']);
+  });
+
+  it('resolves businessUnitId via departments → profiles', async () => {
+    const depts = makeBuilder();
+    depts.__result = { data: [{ id: 'd1' }, { id: 'd2' }], error: null };
+    tables.set('departments', depts);
+    const profiles = makeBuilder();
+    profiles.__result = { data: [{ id: 'p9' }], error: null };
+    tables.set('profiles', profiles);
+    const inst = makeBuilder();
+    inst.__result = { data: [], error: null, count: 0 };
+    tables.set('annual_review_instances', inst);
+    await svc.listInstancesPaginated({ cycleId: 'c1', page: 1, pageSize: 25, businessUnitId: 'bu1' });
+    expect(depts.eq).toHaveBeenCalledWith('business_unit_id', 'bu1');
+    expect(profiles.in).toHaveBeenCalledWith('department_id', ['d1', 'd2']);
+    expect(inst.in).toHaveBeenCalledWith('employee_id', ['p9']);
+  });
 });
 
 describe('getCycleStatusCounts', () => {
