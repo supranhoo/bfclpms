@@ -1,65 +1,107 @@
 ## Goal
 
-Improve the Annual Review Admin → Progress tab so admins can slice the 2,560-row grid by **Department**, **Business Unit**, and **Reporting Manager**, and use the screen width effectively.
+Replace the 5-option "Download data" + 4-option "Upload data" menus on the Annual Review Admin Progress tab with **one** download workbook and **one** upload workbook. The workbook carries every editable field per employee; on upload, the system applies **only the cells the user actually changed** — everything else is skipped (governance-safe).
 
-## Problems (from screenshot)
+---
 
-1. Filters above the table are minimal (search + stage only). Department / BU / Manager are commonly asked for but missing.
-2. The page is capped at `max-w-7xl mx-auto` so on a 1474px viewport ~25% of the width is dead space; the table itself only uses half the width.
-3. Toolbar is split into two halves with a big gap; filters look disconnected from the action buttons.
+## Risk & Impact Report
 
-## Risk & Impact
+| Area | Impact |
+|---|---|
+| Data | No schema change. Writes flow through the same RPCs (`setTemplateOverride`, `setInstanceStageWeightsOverride`, `updateInstance`, `bulkSetEnabledStages`). All RLS / audit logs unchanged. |
+| Workflow | Eligibility gates (`not_started` / `pending_self`) still enforced server-side. A row that touches an ineligible field reports an error in the preview rather than silently failing. |
+| UI/UX | Toolbar collapses from 2 dropdowns × 5 items → 2 plain buttons. Old per-dataset dialogs stay in code (deep-link / fallback) but are removed from the toolbar. |
+| Regression | The four existing builders in `src/lib/annualReview/bulkTemplates.ts` are reused — output workbook is their **outer join** on Employee Code. Existing dialogs and their tests stay intact. |
+| Scalability | Cycle has at most ~few thousand employees; one workbook with ~15-20 columns is well within XLSX limits. Apply step batches one RPC per changed field per row, sequential (matches current bulk dialogs). |
+| Mitigation | Dry-run preview (rows × changed-field count, with per-cell from→to diff) before any write. Snapshot of original values embedded as a hidden sheet `__baseline` so the parser can detect deltas even if the user re-sorts rows. |
 
-- **Data**: read-only. No schema, RLS, or migration changes.
-- **Workflow**: no behavior change for any role beyond admins gaining filter capability.
-- **Scalability**: filters apply server-side via the existing `listInstancesPaginated` (paged at ≤100). Department/BU resolved through `profiles → departments → business_units` using the same id-prefetch pattern as `search`. No full-table scans.
-- **Regression**: low — additive args (`departmentId?`, `businessUnitId?`, `managerId?`) default to undefined, preserving current queries. Existing pagination/sort/export honored.
-- **UI**: only the Progress tab toolbar + page container width change. Other tabs (Analytics / Calibration / Cycles / Templates / Rules) untouched.
+---
 
-## Plan
+## Pros / Cons of the unified approach
 
-### 1. Service — `src/services/annualReview/annualReviewService.ts`
-- Extend `ListInstancesPaginatedArgs` with optional `departmentId`, `businessUnitId`, `managerId`.
-- In `listInstancesPaginated`:
-  - `managerId` → direct `.eq('manager_id', …)` on the instance row.
-  - `departmentId` / `businessUnitId` → resolve to a `profile_ids[]` list once (cap 2000, batched), then `.in('employee_id', ids)`. When combined with `search`, intersect the two id lists in-memory before the final query (no extra DB round-trip beyond the existing one).
-- Mirror the same filters in `fetchAllInstancesForExport` so "Download data → Progress snapshot" honors the active filters (consistency rule).
+**Pros**
+1. One mental model: download → edit anywhere → upload. No "which template do I need?".
+2. Eliminates the risk of overwriting unrelated fields — upload is **delta-only**, driven by a baseline snapshot.
+3. Cross-field edits in one pass (e.g. change template AND adjust stage weights for the same person).
+4. Single audit trail entry per row's reason.
 
-### 2. UI — `src/pages/annual-review/AnnualReviewAdmin.tsx`
-- Page container: change `max-w-7xl mx-auto` → `max-w-[1600px] mx-auto` (or `max-w-screen-2xl`) so the grid breathes on wide screens but stays readable on laptops. Keep `p-4 md:p-6`.
-- Replace the ad-hoc toolbar with a single `Card` that contains:
-  - Row 1: search input (flex-1, max ~360px) + Stage select + **Department** select + **Business Unit** select + **Manager** combobox + "Custom weights only" toggle.
-  - Row 2 (right-aligned): Send reminders / Download data / Upload data (unchanged).
-- Selects use existing hooks/data:
-  - Departments → `useDepartments()` (already in `useSafetyOrg.ts`, reusable; or a thin new `useAllDepartments()` on `departments` table).
-  - Business Units → `useBusinessUnits()` from same file.
-  - Manager → searchable combobox sourced from `useActiveProfilesLite()` (paged hook already exists). Default closed; type-ahead.
-- All three new filters reset `page` to 1 on change, mirror into `ProgressTab` local state (no URL params — matches current behavior).
-- Show a small "Clear filters" link when any of dept/BU/manager/search is set.
+**Cons / mitigations**
+1. Wider sheet (~18 columns). Mitigation: column grouping + freeze header + a `README` sheet describing each column and allowed values.
+2. Reason column must cover multiple field changes per row. Mitigation: one mandatory `Reason` per row; reused for every field changed on that row (matches today's per-dialog UX).
+3. Heterogeneous validation (templates / Y-N / numeric weights / system scores). Mitigation: per-cell validators reuse the exact rules already in the four dialogs.
 
-### 3. Density
-- Table wrapper: drop the fixed inner width assumption; let the table fill the new container (`w-full`). No column-width changes — only the parent grows.
-- Pagination row keeps tabular-nums showing/of layout.
+---
 
-### 4. Tests — `src/test/annualReview/service.pagination.test.ts`
-- Add cases:
-  - `departmentId` triggers a `profiles` lookup and `.in('employee_id', …)`.
-  - `managerId` adds `.eq('manager_id', …)` on instances (no profile lookup).
-  - `businessUnitId` joins `departments → profiles` then `.in('employee_id', …)`.
-  - Combining `search + departmentId` intersects ids and returns empty when disjoint.
-- Existing 91 tests must continue to pass.
+## Design — Unified workbook
 
-### 5. Docs
-- `DOCUMENTATION.md`: note v2.66.35 — "Progress tab: department / BU / manager filters; widened admin container."
-- `POLICY.md`: no policy change (no new permissions). Add one line under Admin Progress: "Filters are additive and server-side; export respects the active filter set."
+**Sheet 1: `Annual Review`** — one row per instance.
 
-## Out of scope
+Frozen columns (read-only, greyed):
+- `Employee Code`, `Full Name`, `Department`, `Business Unit`, `Manager`, `Current Stage`
 
-- No changes to row actions, dialogs, or stage logic.
-- No URL persistence for filters (can be a follow-up if requested).
-- No column re-ordering or new columns.
+Editable column groups (headers prefixed so users see grouping):
+- **Template** — `Template (current)`, `Template (new)` *(blank = no change, `CLEAR` = remove override)*
+- **Workflow stages** — `Self`, `Manager`, `Skip`, `BU`, `HR` *(Y / N, blank = no change)*
+- **Stage weights %** — `Self %`, `Manager %`, `Skip %`, `BU Head %`, `HR %`, `System %`, `Criteria %` *(blank = no change; if **any** weight cell is edited the row's weights must sum to 100)*
+- **System scores** — one column per `template.sections.system_scores[*].name`
+- **Eligibility** — one column per `template.sections.eligibility_criteria[*].name`
+- `Reason` *(required if any editable cell on the row is changed)*
 
-## Verification
+**Sheet 2: `__baseline`** (hidden) — snapshot of every editable cell at download time, keyed by `instance_id` (also written into a hidden column on Sheet 1). The parser diffs Sheet 1 against `__baseline` to compute the change-set per row. If `__baseline` is missing/tampered the upload falls back to "blank = no change" semantics and warns the user.
 
-- `bunx vitest run src/test/annualReview` — all green.
-- Manual check on Progress tab: pick a department → row count and pagination update; combine with search and stage; "Download data → Progress snapshot" exports only filtered rows.
+**Sheet 3: `README`** — column reference, allowed values, stage-eligibility rules.
+
+---
+
+## Implementation Steps
+
+### Step 1 — `src/lib/annualReview/unifiedWorkbook.ts` (new)
+- `buildUnifiedWorkbook({ cycle, template, instances, templatesById, lookup })` — composes the 3 sheets above. Reuses logic from the existing `bulkTemplates.ts` builders for column lists.
+- `parseUnifiedWorkbook(file)` → returns `{ rowChanges: Array<{ instanceId, employeeCode, reason, fieldEdits: FieldEdit[] }>, parseErrors }`. Diffs against `__baseline`.
+
+### Step 2 — `src/lib/annualReview/unifiedApply.ts` (new)
+- `classifyChanges(changes, instances, templates)` → reuses each dialog's existing validator to produce per-cell outcomes (`apply` / `noop` / `error`) — the union of the four current classifiers, plus the `not_started | pending_self` eligibility gate for template / workflow / weights edits.
+- `applyChanges(outcomes, onProgress)` → routes each cell to the right service call:
+  - template → `bulkSetTemplateOverrides`
+  - workflow Y/N → `bulkSetEnabledStages`
+  - stage weights → `bulkSetInstanceStageWeights` (existing)
+  - system scores / eligibility → `updateInstance(id, { system_scores, eligibility_inputs })`
+- Per-row reason is reused for every RPC the row triggers.
+
+### Step 3 — `src/components/annual-review/UnifiedBulkDialog.tsx` (new)
+- One dialog: `Download workbook` button + file picker for upload.
+- After parse → preview table grouped by row with expandable per-cell diff (from → to).
+- Counters: `N rows · M cell changes · K errors`.
+- `Apply` button → calls `applyChanges` with progress bar.
+
+### Step 4 — `src/pages/annual-review/AnnualReviewAdmin.tsx`
+- Replace the two `DropdownMenu` toolbars with two plain buttons: **Download workbook**, **Upload workbook** (both open `UnifiedBulkDialog`).
+- Keep `Progress snapshot` export as a separate item *only* if it includes computed fields the unified workbook intentionally excludes (decision below). Default plan: **fold it in** — the unified workbook is the snapshot, since it already contains every editable field plus the read-only employee/stage columns.
+- Remove imports for the four bulk dialogs from this page (files retained for now, deleted in a follow-up after one cycle of use).
+
+### Step 5 — Tests (`src/test/annualReview/unifiedWorkbook.test.ts`)
+- Headers contract: required column groups exist.
+- Parser: blank cell ⇒ no change; modified cell ⇒ change; baseline tamper ⇒ warning + falls back safely.
+- Classifier: ineligible stage rejects template / workflow / weights edits but still accepts system scores when policy allows.
+- Apply router: each field type calls the matching service (mocked) exactly once.
+
+### Step 6 — Docs
+- `DOCUMENTATION.md` — new section "Unified bulk workbook (v2.66.36)" describing sheets, delta semantics, governance.
+- `POLICY.md` — clarify: "Bulk edits via the unified workbook are delta-only. Cells left unchanged from the downloaded baseline are never written. Per-row `Reason` is mandatory whenever any cell changes."
+
+---
+
+## UI Changes
+
+- **Where:** `/annual-review/admin` → Progress tab toolbar (second row).
+- **Before:** `[Send reminders] [Download data ▾] [Upload data ▾]`
+- **After:** `[Send reminders] [Download workbook] [Upload workbook]`
+- Inside the upload dialog: preview table with per-row expandable diff, then `Apply N changes` button.
+- No responsive impact; uses the same dialog width as the current bulk dialogs.
+
+---
+
+## Out of Scope
+- Schema changes, new RPCs, new RLS policies.
+- Removing the four legacy dialog files (kept one cycle for rollback).
+- Changing column rendering in the main table.
