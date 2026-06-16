@@ -1,105 +1,77 @@
-## Goal
-In the Annual Review **Template Editor** (`src/components/annual-review/TemplateEditorDialog.tsx`), guarantee that a template's combined weightage (System Scores + Criteria) equals **exactly 100%** before it can be saved as **Active**. Drafts (Inactive) may still be saved with any total so authors can work-in-progress.
+# Plan: Preview KPI Evidence (PDF / Image) Instead of Force-Download
 
-## Current Behaviour (deficiency)
-- `combined = systemWeight + criteriaWeight` is computed and a destructive Badge shows `— must equal 100%` when off.
-- The **Save Template** button is only disabled on `!name || save.isPending` — the weight check is purely cosmetic, so 80% or 120% templates save and reach reviewers.
-- No per-row validation; negative numbers and decimals slip through.
+## Assumptions
+- "Evidence" = files attached to a KPI submission, surfaced via `openStorageFile()` today (triggers a browser download / new tab).
+- Scope: PMS evidence only. Safety module already has `EvidencePreviewDialog` and is out of scope.
+- Supported preview types: PDF (`application/pdf`) + images (`png`, `jpg`, `jpeg`, `webp`, `gif`, `svg`). All other types continue to download as today.
+- Files live in the `review-evidence` Supabase bucket (public URL today). No bucket/RLS changes needed.
 
-## Risk & Impact
-- Data: none destructive — adds client-side guard + one extra precondition in the existing save handler. No schema change.
-- Workflow: prevents publishing a misweighted template; protects downstream score math in `computeCriteriaScore` / `computeOverallScore`.
-- UI: existing Save button gains a disabled state + tooltip; new inline error helpers on weight inputs and a sticky summary line.
-- Regression: low — drafts retain today's freedom; only `is_active === true` saves get the new gate.
-- Scalability: pure in-memory math over <50 rows. No query/API impact.
+## Clarifications (assumed unless you say otherwise)
+1. Preview opens in an in-app modal (Dialog on desktop, Drawer on mobile) — same pattern as `KraPreviewDialog`.
+2. Modal always shows a **Download** button + **Open in new tab** button, so existing download behaviour is still one click away.
+3. Non-previewable types (DOCX/XLSX/etc.) keep current behaviour (download via `openStorageFile`).
 
-## Validation Rules
+## Risk & Impact Report
+- **Data Impact:** None. Read-only; uses existing public URLs + `supabase.storage.download()` (already used by `openStorageFile`).
+- **Workflow Impact:** None. No status, RLS, or policy changes.
+- **UI/UX Impact:** Each evidence "View" button now opens a preview modal instead of immediately downloading. Download is preserved inside the modal and via a secondary affordance on the list.
+- **Regression Risk:** Low — change is additive (new component + swap click handler). Files that aren't PDF/image bypass the modal and use the existing `openStorageFile()` path unchanged.
+- **Scalability:** PDFs stream into an `<iframe src=blob:...>`; images into `<img>`. Blob URLs revoked on close. No new queries.
+- **Mitigation:** Feature is purely presentational; rollback = revert the new component + handler swap. Add unit tests for type detection + modal open/close.
 
-**On input (per row, both System Scores and Criteria tables):**
-1. `weight` must be a finite number, `>= 0`, `<= 100`, max 2 decimals.
-2. Highlight the row's weight input with `border-destructive` + helper text when invalid.
+## Step-by-Step Plan
 
-**On save:**
-3. `name.trim().length > 0` (already enforced).
-4. If `isActive === true`:
-   - `combined === 100` (use `Math.round(combined * 100) === 10000` to dodge float drift).
-   - Every criterion has `weight > 0` (a zero-weight criterion is meaningless once published).
-   - At least one criterion exists.
-5. If `isActive === false` (Draft): only rule 1 + 3 apply — author can save partial work.
+1. **New shared component** `src/components/review/EvidencePreviewDialog.tsx`
+   - Props: `open`, `onOpenChange`, `url`, `fileName`, `mimeHint?`.
+   - Detects type from extension (and optional mime hint).
+   - PDF → `<iframe>` of blob URL.
+   - Image → `<img>` (object-contain, max-h 80vh).
+   - Other → shows "Preview not available" + Download button.
+   - Buttons: **Download** (uses existing `openStorageFile`) and **Open in new tab**.
+   - Mobile: Drawer; Desktop: Dialog (mirrors `KraPreviewDialog`).
+   - Fetches the file once via `supabase.storage.from(bucket).download(path)` (reusing the parsing logic already in `storageDownload.ts`) to avoid browser-extension blocks on direct `.supabase.co` URLs.
 
-## UI / UX Changes
-Location: `TemplateEditorDialog.tsx`.
+2. **New helper** in `src/lib/storageDownload.ts`
+   - `isPreviewableEvidence(urlOrName: string): 'pdf' | 'image' | null` — pure function, exported and unit-tested.
+   - No change to existing `openStorageFile` signature.
 
-1. **Sticky summary bar** above the Save button:
-   - Pill: `System X% + Criteria Y% = Z%` — emerald when 100, destructive when not.
-   - Sub-line lists blockers: `Active templates require weights to total exactly 100% (currently 98%).`
-2. **Save button** — `disabled` when active-mode rules fail. Wrap in a `Tooltip` explaining why (so the disabled state is discoverable). Keep enabled in Draft mode.
-3. **Second action — "Save as Draft"** — visible only when active-mode validation fails; clicking flips `isActive=false` locally and saves, so authors aren't stuck.
-4. **Per-row error** — small `text-destructive text-xs` under the weight input when the row's value is out of range.
-5. **Criteria/System tab badges** — small numeric badge on each TabsTrigger showing that section's subtotal; destructive variant when the section's contribution makes the combined off.
+3. **Wire-up (surgical, one prop per site — handler swap only):**
+   - `src/components/review/ReviewTrailCard.tsx`
+   - `src/components/review/ReviewTrailCardCompact.tsx`
+   - `src/components/review/ReviewStageCard.tsx`
+   - `src/components/review/SelfReviewSheet.tsx`
+   - `src/components/review/DailySubmissionGrid.tsx`
+   - `src/components/review/DailySubmissionSummary.tsx`
+   - `src/components/review/WeeklySubmissionTable.tsx`
+   - `src/components/review/ObservationReplyThread.tsx`
+   - `src/components/admin/OrgKpiAuditCard.tsx`
+   - `src/components/admin/OrgKpiEvidenceManagerSheet.tsx`
+   - `src/components/admin/OrgKpiFileUpload.tsx` (the existing "View" button)
+   - `src/components/ui/EvidenceUpload.tsx`, `src/components/ui/MultiFileUpload.tsx`
+   - Behaviour: if `isPreviewableEvidence(url)` → open dialog; else → existing `openStorageFile()`.
 
-## Example Messages
-- Summary (invalid): `Combined weight is 96%. Adjust System Scores or Criteria to reach exactly 100% before saving as Active.`
-- Save tooltip (disabled): `Cannot save: weights total 102% (must equal 100%). Save as Draft to keep editing.`
-- Per-row: `Weight must be between 0 and 100.`
-- Zero-criterion guard: `Each criterion must have a weight greater than 0.`
-- Empty criteria: `Add at least one criterion before publishing.`
-- Success (unchanged): `Template saved`.
+4. **Tests** `src/test/review/evidencePreview.test.tsx`
+   - `isPreviewableEvidence` returns `'pdf'` for `.pdf`, `'image'` for png/jpg/jpeg/webp/gif/svg, `null` for docx/xlsx.
+   - Dialog renders `<iframe>` for PDF, `<img>` for image, "Preview not available" for unsupported.
+   - Clicking Download calls `openStorageFile` with the original URL + filename.
 
-## Sample Logic
-```ts
-const EPS = 0.01;
-const round2 = (n: number) => Math.round(n * 100) / 100;
+5. **Docs**
+   - `DOCUMENTATION.md` → new "Evidence Preview" section under PMS Review UI.
+   - `POLICY.md` → note that previewing is read-only and does not affect audit trail.
 
-const combined = round2(systemWeight + criteriaWeight);
-const weightOk = Math.abs(combined - 100) < EPS;
+## UI Changes
+- **Where:** Every "View"/file-link button on KPI evidence across the review surfaces listed above.
+- **What changes visually:**
+  - PDF / image files now open a centered modal (desktop) or full-height drawer (mobile) with the rendered preview, a header showing the filename, and `Download` + `Open in new tab` buttons.
+  - Non-previewable files unchanged (still download / open in new tab).
+- **Interaction impact:** One extra click is required to download a previewable file (download moves from immediate to inside the modal), but the most-requested action (look at the file) now happens in-context without leaving the review.
+- **Responsiveness:** Dialog `max-w-5xl h-[85vh]` on desktop; Drawer `max-h-[90vh]` on mobile. Iframe/img fluid inside.
 
-const rowsValid = [...systemScores, ...criteria].every(
-  (r) => Number.isFinite(r.weight) && r.weight >= 0 && r.weight <= 100,
-);
-const criteriaHaveWeight = criteria.length > 0 && criteria.every((c) => c.weight > 0);
-
-const activeBlockers: string[] = [];
-if (!weightOk)            activeBlockers.push(`Total is ${combined}% (must be 100%).`);
-if (!rowsValid)           activeBlockers.push('One or more weights are out of 0–100 range.');
-if (!criteriaHaveWeight)  activeBlockers.push('Every criterion needs a weight > 0.');
-
-const canSave =
-  !!name.trim() &&
-  rowsValid &&
-  (!isActive || (weightOk && criteriaHaveWeight));
-```
-Wire `disabled={!canSave || save.isPending}` on the Save button and surface `activeBlockers` in the tooltip/summary.
-
-## Implementation Steps
-1. Add `round2`, `weightOk`, `rowsValid`, `criteriaHaveWeight`, `activeBlockers`, `canSave` memos in `TemplateEditorDialog`.
-2. Replace existing single Badge with the sticky summary bar (emerald/destructive) + blocker list.
-3. Add per-row red border + helper text on weight inputs using a small `WeightInput` wrapper.
-4. Update Save button: `disabled={!canSave}`, wrap in `<Tooltip>` with the blocker message.
-5. Add **Save as Draft** secondary button shown only when `isActive && !canSave`; on click → `setIsActive(false); save.mutate()`.
-6. Add weight subtotal badges to the System Scores and Criteria TabsTriggers.
-7. No backend / RLS / migration changes.
-
-## Tests
-New `src/test/annualReview/templateEditorWeightGuard.test.tsx`:
-- Active + total 100 → Save enabled.
-- Active + total 98 → Save disabled, blocker message visible, "Save as Draft" appears.
-- Active + criterion with weight 0 → Save disabled with zero-weight message.
-- Draft (isActive=false) + total 80 → Save enabled.
-- Row weight set to 150 → row shows error, Save disabled even in Draft.
-
-## Docs
-- `src/modules/annual-review/DOCUMENTATION.md` → Template Editor section: document the active-vs-draft save gate.
-- `src/modules/annual-review/POLICY.md` → add rule: "Active Annual Review templates MUST have combined weightage = 100% and no zero-weight criteria. Drafts are exempt."
-
-## Audit Steps
-1. Open existing Active template, change one weight by ±2 → Save button disables, summary shows new total, tooltip explains.
-2. Click **Save as Draft** → template persists with `is_active=false`; reopen → Save re-enables.
-3. Restore weights to 100 with `is_active=true` → Save enabled, toast `Template saved`.
-4. Verify in DB (`annual_review_templates`) that no row exists with `is_active=true` and sum of weights ≠ 100 after this change.
+## Out of Scope
+- Server-side thumbnail generation.
+- Office document preview (DOCX/XLSX). Keeps current download behaviour.
+- Safety module (already has its own preview dialog).
+- Any change to upload, deletion, or storage policies.
 
 ## Rollback
-Pure client change in one file + one test file. Revert the file to remove the guard; no data migration needed.
-
-## Not Applicable
-Schema, RLS, edge functions, backups.
+Revert the new component + the per-call-site handler swap. No schema/RLS/migration touched.
