@@ -1326,8 +1326,15 @@ export default function OrgKpiDataEntry() {
       }
     }
     
+    // POLICY §ORG-KPI-PROPAGATION — refresh ALL Org KPI read models so
+    // the status chips, per-row pills, header counts and forward-guard
+    // truth sets reflect the post-propagation reality immediately.
+    // Missing `org-level-kpis-with-employees` here was the root cause
+    // of "Saved + Propagated pills but red 0-propagated toast".
     queryClient.invalidateQueries({ queryKey: ['org-kpi-values'] });
-  }, [handleCardSave, propagate, selectedPeriod, selectedYear, queryClient, profile?.id, insertAuditLogs, employeeCountMap, allProfiles, isAdmin, toast, mappedEmployeesMap, kraSetEmpIdsByKey]);
+    queryClient.invalidateQueries({ queryKey: ['org-kpi-submission-fallback'] });
+    queryClient.invalidateQueries({ queryKey: ['org-level-kpis-with-employees'] });
+  }, [handleCardSave, propagate, selectedPeriod, selectedYear, queryClient, profile?.id, insertAuditLogs, employeeCountMap, allProfiles, isAdmin, toast, mappedEmployeesMap, kraSetEmpIdsByKey, propagatedEmpsByKey]);
 
   /**
    * Phase A4 — Pre-flight propagation gate.
