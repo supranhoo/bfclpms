@@ -1,77 +1,64 @@
-# Plan: Preview KPI Evidence (PDF / Image) Instead of Force-Download
+## 1. Assumptions
+- The reported red toast is the Org KPI Data Entry error: `row(s) holding 0 were not propagated`.
+- The row visibly shows `0`, has been saved, and should be eligible for Propagate without retyping `0`.
+- This is a frontend state/validation bug, not a backend permission/RLS failure.
 
-## Assumptions
-- "Evidence" = files attached to a KPI submission, surfaced via `openStorageFile()` today (triggers a browser download / new tab).
-- Scope: PMS evidence only. Safety module already has `EvidencePreviewDialog` and is out of scope.
-- Supported preview types: PDF (`application/pdf`) + images (`png`, `jpg`, `jpeg`, `webp`, `gif`, `svg`). All other types continue to download as today.
-- Files live in the `review-evidence` Supabase bucket (public URL today). No bucket/RLS changes needed.
+## 2. Clarifications
+- Not Applicable — the screenshot and current code path identify the exact failure.
 
-## Clarifications (assumed unless you say otherwise)
-1. Preview opens in an in-app modal (Dialog on desktop, Drawer on mobile) — same pattern as `KraPreviewDialog`.
-2. Modal always shows a **Download** button + **Open in new tab** button, so existing download behaviour is still one click away.
-3. Non-previewable types (DOCX/XLSX/etc.) keep current behaviour (download via `openStorageFile`).
+## 3. Risk & Impact Report
+- **Data Impact:** No schema or data migration. Prevents valid persisted `0` values from being skipped during propagation.
+- **Workflow Impact:** Data owners/admins can Save `0` once, then Propagate normally. Unsaved visible `0` values remain blocked.
+- **UI/UX Impact:** Removes the false destructive toast for saved zero rows; existing Save/Propagate buttons and layout remain unchanged.
+- **Regression Risk:** Medium in Org KPI Data Entry only, because zero handling was intentionally guarded after prior incidents.
+- **Mitigation Plan:** Preserve the guard for `0` values that are not confirmed persisted; add regression tests for saved vs unsaved zero rows.
+- **Scalability Impact:** No new queries, no extra API calls, no rendering expansion. Existing scoped-row filtering remains intact.
+- **Backup/Data Integrity:** No database/table changes, so backup coverage is unaffected.
+- **Rollback:** Revert the small frontend/test/docs changes; no data rollback needed.
 
-## Risk & Impact Report
-- **Data Impact:** None. Read-only; uses existing public URLs + `supabase.storage.download()` (already used by `openStorageFile`).
-- **Workflow Impact:** None. No status, RLS, or policy changes.
-- **UI/UX Impact:** Each evidence "View" button now opens a preview modal instead of immediately downloading. Download is preserved inside the modal and via a secondary affordance on the list.
-- **Regression Risk:** Low — change is additive (new component + swap click handler). Files that aren't PDF/image bypass the modal and use the existing `openStorageFile()` path unchanged.
-- **Scalability:** PDFs stream into an `<iframe src=blob:...>`; images into `<img>`. Blob URLs revoked on close. No new queries.
-- **Mitigation:** Feature is purely presentational; rollback = revert the new component + handler swap. Add unit tests for type detection + modal open/close.
+## 4. Step-by-step Plan
+1. **Root-cause fix in `OrgKpiEntryCard.tsx`**
+   - Include each scoped row’s persisted DB value (`dbAchievedValue`) in the Save/Propagate payload.
+   - After a successful explicit row/card Save, update the local row snapshot so `dbAchievedValue` matches the saved value, including `0`.
+   - Keep sibling unsaved rows dirty and untouched exactly as today.
 
-## Step-by-Step Plan
+2. **Validation fix in `OrgKpiDataEntry.tsx`**
+   - Change the untouched-zero skip guard from “skip any `_touched: false` + value `0`” to “skip only when `_touched: false` + value `0` + DB-persisted value is not `0`”.
+   - This preserves protection against stale/fallback visible zeros while allowing explicitly saved zeros.
+   - Update the toast text to remove obsolete “autosave” wording and match the explicit Save model.
 
-1. **New shared component** `src/components/review/EvidencePreviewDialog.tsx`
-   - Props: `open`, `onOpenChange`, `url`, `fileName`, `mimeHint?`.
-   - Detects type from extension (and optional mime hint).
-   - PDF → `<iframe>` of blob URL.
-   - Image → `<img>` (object-contain, max-h 80vh).
-   - Other → shows "Preview not available" + Download button.
-   - Buttons: **Download** (uses existing `openStorageFile`) and **Open in new tab**.
-   - Mobile: Drawer; Desktop: Dialog (mirrors `KraPreviewDialog`).
-   - Fetches the file once via `supabase.storage.from(bucket).download(path)` (reusing the parsing logic already in `storageDownload.ts`) to avoid browser-extension blocks on direct `.supabase.co` URLs.
+3. **Tests**
+   - Add/update Org KPI regression tests for:
+     - unsaved untouched `0` is still blocked;
+     - saved/persisted untouched `0` is allowed;
+     - touched `0` remains allowed in direct Save → Propagate;
+     - partial-save guard remains unchanged.
 
-2. **New helper** in `src/lib/storageDownload.ts`
-   - `isPreviewableEvidence(urlOrName: string): 'pdf' | 'image' | null` — pure function, exported and unit-tested.
-   - No change to existing `openStorageFile` signature.
+4. **DOCUMENTATION.md updates**
+   - Add a new version-history entry documenting the RCA and fix: saved zero rows now propagate; unsaved visible zeros remain blocked.
 
-3. **Wire-up (surgical, one prop per site — handler swap only):**
-   - `src/components/review/ReviewTrailCard.tsx`
-   - `src/components/review/ReviewTrailCardCompact.tsx`
-   - `src/components/review/ReviewStageCard.tsx`
-   - `src/components/review/SelfReviewSheet.tsx`
-   - `src/components/review/DailySubmissionGrid.tsx`
-   - `src/components/review/DailySubmissionSummary.tsx`
-   - `src/components/review/WeeklySubmissionTable.tsx`
-   - `src/components/review/ObservationReplyThread.tsx`
-   - `src/components/admin/OrgKpiAuditCard.tsx`
-   - `src/components/admin/OrgKpiEvidenceManagerSheet.tsx`
-   - `src/components/admin/OrgKpiFileUpload.tsx` (the existing "View" button)
-   - `src/components/ui/EvidenceUpload.tsx`, `src/components/ui/MultiFileUpload.tsx`
-   - Behaviour: if `isPreviewableEvidence(url)` → open dialog; else → existing `openStorageFile()`.
+5. **POLICY.md updates**
+   - Amend §112 to state that the untouched-zero guard applies only when the browser cannot confirm the `0` exists in `org_kpi_values.achieved_value`.
+   - Clarify microcopy must say “Save row” / “Save changes”, not “autosave”.
 
-4. **Tests** `src/test/review/evidencePreview.test.tsx`
-   - `isPreviewableEvidence` returns `'pdf'` for `.pdf`, `'image'` for png/jpg/jpeg/webp/gif/svg, `null` for docx/xlsx.
-   - Dialog renders `<iframe>` for PDF, `<img>` for image, "Preview not available" for unsupported.
-   - Clicking Download calls `openStorageFile` with the original URL + filename.
+## 5. UI Changes
+- **Location:** Admin → Org KPI Data Entry → scoped employee/department rows → Propagate actions.
+- **Visual change:** No layout or component redesign.
+- **Message change:** The destructive toast should no longer appear for saved zero rows. If a visible zero is not saved, the message will instruct the user to click Save row / Save changes before Propagate.
+- **Interaction impact:** Users can enter `0`, click Save, then click Propagate without retyping the value.
+- **Responsiveness:** No responsive layout changes.
 
-5. **Docs**
-   - `DOCUMENTATION.md` → new "Evidence Preview" section under PMS Review UI.
-   - `POLICY.md` → note that previewing is read-only and does not affect audit trail.
+## 6. Implementation
+- Pending approval. No code changes made in plan mode.
 
-## UI Changes
-- **Where:** Every "View"/file-link button on KPI evidence across the review surfaces listed above.
-- **What changes visually:**
-  - PDF / image files now open a centered modal (desktop) or full-height drawer (mobile) with the rendered preview, a header showing the filename, and `Download` + `Open in new tab` buttons.
-  - Non-previewable files unchanged (still download / open in new tab).
-- **Interaction impact:** One extra click is required to download a previewable file (download moves from immediate to inside the modal), but the most-requested action (look at the file) now happens in-context without leaving the review.
-- **Responsiveness:** Dialog `max-w-5xl h-[85vh]` on desktop; Drawer `max-h-[90vh]` on mobile. Iframe/img fluid inside.
+## 7. Tests
+- Add/adjust targeted unit tests only; no broad suite required.
 
-## Out of Scope
-- Server-side thumbnail generation.
-- Office document preview (DOCX/XLSX). Keeps current download behaviour.
-- Safety module (already has its own preview dialog).
-- Any change to upload, deletion, or storage policies.
+## 8. DOCUMENTATION.md updates
+- Required and included in the implementation plan.
 
-## Rollback
-Revert the new component + the per-call-site handler swap. No schema/RLS/migration touched.
+## 9. POLICY.md updates
+- Required and included in the implementation plan.
+
+## 10. Post-implementation notes
+- After implementation, verify the relevant tests and ensure the screenshot scenario no longer triggers the false red toast.

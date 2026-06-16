@@ -3728,6 +3728,14 @@ All URL persistence for dashboard filters, view modes, selected entities, and pa
 - The propagation completeness check MUST account for client-side
   skips (null value, untouched zero) before falling through to a
   "may have mismatched KPI names" toast.
+- The untouched-zero skip guard MUST be DB-aware: a local `0` is
+  only suppressed when the persisted `org_kpi_values.achieved_value`
+  is NOT also `0`. Once a data owner explicitly saved `0`
+  (`dbAchievedValue === 0`), Propagate MUST allow it through in the
+  same or any later session, even if the row was not re-touched.
+  Microcopy for the skip toast MUST use the explicit Save model
+  ("Click Save (row or card), then Propagate again") — never refer
+  to autosave, which no longer exists on this surface.
 - Row-level / subset propagation (`filterEmployeeIds` non-empty) MUST
   NOT trigger the full-card half-propagation guard that compares
   against every mapped employee.
