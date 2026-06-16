@@ -1053,7 +1053,7 @@ export default function OrgKpiDataEntry() {
         toast({
           title: `${untouchedZeroSkipCount} row(s) holding 0 were not propagated`,
           description:
-            'They show "0" in the cell but were never edited this session. Click into each cell, retype 0 (or the correct value), wait for autosave, then click Propagate again.',
+            'They show "0" in the cell but have not been saved to the database yet. Click into each cell, type the value, click Save (row or card), then click Propagate again.',
           variant: 'destructive',
         });
       }
