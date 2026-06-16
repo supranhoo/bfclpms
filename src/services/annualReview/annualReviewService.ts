@@ -413,6 +413,7 @@ export async function fetchAllInstancesForExport(args: {
   cycleId: string;
   search?: string;
   status?: AnnualReviewStatus | 'all';
+  hasOverride?: boolean;
   onProgress?: (loaded: number) => void;
 }): Promise<InstanceWithEmployee[]> {
   // 1) Optional name search → restrict to matching employee_ids (max 5000).
@@ -434,6 +435,7 @@ export async function fetchAllInstancesForExport(args: {
       .select('*')
       .eq('cycle_id', args.cycleId);
     if (args.status && args.status !== 'all') q = q.eq('overall_status', args.status);
+    if (args.hasOverride) q = q.not('stage_weights_override', 'is', null);
     if (restrictIds) q = q.in('employee_id', restrictIds);
     return q.order('created_at', { ascending: false }).range(from, to);
   });
