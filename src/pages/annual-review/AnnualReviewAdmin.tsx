@@ -236,6 +236,8 @@ function ProgressTab() {
   const { data: counts = { total: 0, pending_self: 0, completed: 0, not_started: 0, pending_manager: 0, pending_skip: 0, pending_bu: 0, pending_hr: 0 } } = useCycleStatusCounts(activeCycle?.id);
   const [selected, setSelected] = useState<InstanceWithEmployee | null>(null);
   const [unifiedOpen, setUnifiedOpen] = useState(false);
+  const [bulkInstances, setBulkInstances] = useState<InstanceWithEmployee[] | null>(null);
+  const [bulkLoading, setBulkLoading] = useState(false);
   const { data: template } = useTemplate(svc.resolveTemplateId(selected) ?? undefined);
   const { data: uploadTemplate } = useTemplate(svc.resolveTemplateId(instances[0]) ?? undefined);
   const [changeTplFor, setChangeTplFor] = useState<InstanceWithEmployee | null>(null);
@@ -494,10 +496,31 @@ function ProgressTab() {
           </Button>
           <Button
             variant="outline" className="gap-2"
-            disabled={instances.length === 0}
-            onClick={() => setUnifiedOpen(true)}
+            disabled={total === 0 || bulkLoading}
+            onClick={async () => {
+              if (!activeCycle) return;
+              setBulkLoading(true);
+              try {
+                const rows = await svc.fetchAllInstancesForExport({
+                  cycleId: activeCycle.id,
+                  search,
+                  status: statusFilter,
+                  hasOverride: customWeightsOnly,
+                  departmentId: departmentId || undefined,
+                  businessUnitId: businessUnitId || undefined,
+                  managerId: managerId || undefined,
+                });
+                setBulkInstances(rows);
+                setUnifiedOpen(true);
+              } catch (e) {
+                toast.error((e as Error).message);
+              } finally {
+                setBulkLoading(false);
+              }
+            }}
           >
-            <Upload className="h-4 w-4" /> Bulk workbook
+            {bulkLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+            Bulk workbook
           </Button>
         </div>
       </div>
@@ -626,9 +649,12 @@ function ProgressTab() {
       {activeCycle && (
         <UnifiedBulkDialog
           open={unifiedOpen}
-          onOpenChange={setUnifiedOpen}
+          onOpenChange={(o) => {
+            setUnifiedOpen(o);
+            if (!o) setBulkInstances(null);
+          }}
           cycle={activeCycle}
-          instances={instances}
+          instances={bulkInstances ?? []}
           templates={allTemplates}
           systemTemplate={uploadTemplate ?? null}
           onDone={refetch}
