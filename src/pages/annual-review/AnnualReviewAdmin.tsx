@@ -758,6 +758,47 @@ const STAGE_LABEL: Record<string, string> = {
 function AnalyticsTab() {
   const { data: activeCycle } = useActiveCycle();
   const { data: instances = [] } = useCycleInstances(activeCycle?.id);
+  const instanceIds = useMemo(() => instances.map((i) => i.id), [instances]);
+  const { data: stageScoresMap = {} } = useInstanceStageScores(instanceIds);
+  const { data: allTemplates = [] } = useTemplates();
+  const templatesById = useMemo(() => {
+    const m: Record<string, AnnualReviewTemplate> = {};
+    for (const t of allTemplates) m[t.id] = t;
+    return m;
+  }, [allTemplates]);
+
+  const blendedData = useMemo(() => {
+    const buckets = [
+      { label: '< 2.0', min: 0, max: 2, count: 0 },
+      { label: '2.0–3.0', min: 2, max: 3, count: 0 },
+      { label: '3.0–4.0', min: 3, max: 4, count: 0 },
+      { label: '4.0–4.5', min: 4, max: 4.5, count: 0 },
+      { label: '4.5–5.0', min: 4.5, max: 5.0001, count: 0 },
+    ];
+    let scored = 0;
+    for (const i of instances) {
+      const tpl = templatesById[svc.resolveTemplateId(i) ?? ''] ?? null;
+      const weights = resolveStageWeights(i, tpl);
+      const s = stageScoresMap[i.id] ?? {};
+      const sysTotal = Object.values(i.system_scores ?? {})
+        .reduce<number>((acc, v) => acc + (typeof v === 'number' ? v : 0), 0) || null;
+      const blend = computeFinalScore({
+        stageWeights: weights,
+        responsesByRole: {
+          self: s.self ?? null, manager: s.manager ?? null,
+          skip_manager: s.skip_manager ?? null, bu_head: s.bu_head ?? null, hr: s.hr ?? null,
+        },
+        systemScoreTotal: sysTotal,
+        criteriaWeightedScore: i.criteria_weighted_score ?? null,
+      });
+      if (blend.scaled_0_5 == null) continue;
+      scored++;
+      const v = blend.scaled_0_5;
+      const b = buckets.find((bk) => v >= bk.min && v < bk.max);
+      if (b) b.count++;
+    }
+    return { buckets, scored };
+  }, [instances, templatesById, stageScoresMap]);
 
   const ratingData = useMemo(() => {
     const map = new Map<string, number>();
@@ -830,6 +871,32 @@ function AnalyticsTab() {
                 <Tooltip />
                 <Bar dataKey="count" radius={[4,4,0,0]}>
                   {ratingData.map((_, idx) => <Cell key={idx} fill={COLORS[idx % COLORS.length]} />)}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card className="md:col-span-2">
+        <CardHeader>
+          <CardTitle className="text-base">Blended final-score distribution</CardTitle>
+          <p className="text-xs text-muted-foreground">
+            Live blend of the configured weights (self/manager/skip/BU/HR/system/criteria) across {blendedData.scored} scored employee{blendedData.scored === 1 ? '' : 's'}. Recomputes as reviewers submit — independent of HR's manual final rating.
+          </p>
+        </CardHeader>
+        <CardContent style={{ height: 260 }}>
+          {blendedData.scored === 0 ? (
+            <p className="text-sm text-muted-foreground p-4">No stage scores available yet.</p>
+          ) : (
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={blendedData.buckets} margin={{ left: 8, right: 16 }}>
+                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                <XAxis dataKey="label" />
+                <YAxis allowDecimals={false} />
+                <Tooltip />
+                <Bar dataKey="count" radius={[4,4,0,0]}>
+                  {blendedData.buckets.map((_, idx) => <Cell key={idx} fill={COLORS[idx % COLORS.length]} />)}
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
