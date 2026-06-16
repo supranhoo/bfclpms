@@ -1196,7 +1196,24 @@ export default function OrgKpiDataEntry() {
         const propagatedSet = new Set(propagatedScopeIds);
         // For department scope, propagatedScopeIds are department IDs — only check employee scope here
         if (scope === 'employee') {
-          const missed = (allOrgKpiRows || []).filter(r => !propagatedSet.has(r.employee_id));
+          // POLICY §ORG-KPI-PROPAGATION — the half-propagation forward
+          // guard MUST subtract truth sets already proven by the snapshot
+          // (`propagatedEmpsByKey`) and the workflow stage
+          // (`kraSetEmpIdsByKey` — anyone past `kra_set`). Otherwise
+          // employees correctly propagated in a previous session look
+          // like a "missed" gap and trigger a false "could not be
+          // advanced — Repair Gap" toast.
+          const alreadyPropagatedSet = propagatedEmpsByKey.get(kk) || new Set<string>();
+          const kraSetSet = kraSetEmpIdsByKey.get(kk) || new Set<string>();
+          const missed = (allOrgKpiRows || []).filter(r => {
+            const eid = r.employee_id as string;
+            if (propagatedSet.has(eid)) return false;
+            if (alreadyPropagatedSet.has(eid)) return false;
+            // Any employee already past `kra_set` is reviewer-locked
+            // (POLICY §88). The data owner can no longer act on them.
+            if (!kraSetSet.has(eid)) return false;
+            return true;
+          });
           missedEmployeeIds = missed.map(r => r.employee_id);
           if (missed.length > 0) {
             // v2.66.13 — Distinguish "hidden by RLS" (benign for data owners)
