@@ -649,9 +649,12 @@ function ProgressTab() {
       {activeCycle && (
         <UnifiedBulkDialog
           open={unifiedOpen}
-          onOpenChange={setUnifiedOpen}
+          onOpenChange={(o) => {
+            setUnifiedOpen(o);
+            if (!o) setBulkInstances(null);
+          }}
           cycle={activeCycle}
-          instances={instances}
+          instances={bulkInstances ?? []}
           templates={allTemplates}
           systemTemplate={uploadTemplate ?? null}
           onDone={refetch}
