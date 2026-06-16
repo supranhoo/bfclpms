@@ -235,15 +235,11 @@ function ProgressTab() {
   const [exporting, setExporting] = useState(false);
   const { data: counts = { total: 0, pending_self: 0, completed: 0, not_started: 0, pending_manager: 0, pending_skip: 0, pending_bu: 0, pending_hr: 0 } } = useCycleStatusCounts(activeCycle?.id);
   const [selected, setSelected] = useState<InstanceWithEmployee | null>(null);
-  const [uploadOpen, setUploadOpen] = useState(false);
   const [unifiedOpen, setUnifiedOpen] = useState(false);
   const { data: template } = useTemplate(svc.resolveTemplateId(selected) ?? undefined);
   const { data: uploadTemplate } = useTemplate(svc.resolveTemplateId(instances[0]) ?? undefined);
   const [changeTplFor, setChangeTplFor] = useState<InstanceWithEmployee | null>(null);
-  const [bulkTplOpen, setBulkTplOpen] = useState(false);
   const [changeWfFor, setChangeWfFor] = useState<InstanceWithEmployee | null>(null);
-  const [bulkWfOpen, setBulkWfOpen] = useState(false);
-  const [bulkWeightsOpen, setBulkWeightsOpen] = useState(false);
   const [weightsFor, setWeightsFor] = useState<InstanceWithEmployee | null>(null);
   const { data: allTemplates = [] } = useTemplates();
   const sendBack = useSendBackStatus();
