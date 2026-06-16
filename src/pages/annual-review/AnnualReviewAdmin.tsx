@@ -47,6 +47,12 @@ import { InstanceStageWeightsDialog } from '@/components/annual-review/InstanceS
 import { TemplateEditorDialog } from '@/components/annual-review/TemplateEditorDialog';
 import { RecentStageWeightOverridesPanel } from '@/components/annual-review/RecentStageWeightOverridesPanel';
 import { RuleFiltersEditor, RuleFiltersSummary, EMPTY_FILTERS } from '@/components/annual-review/RuleFiltersEditor';
+import {
+  downloadSystemScoresTemplate,
+  downloadTemplateAssignmentTemplate,
+  downloadWorkflowAssignmentTemplate,
+  downloadStageWeightsTemplate,
+} from '@/lib/annualReview/bulkTemplates';
 import type {
   AnnualReviewCycle, AnnualReviewTemplate, AssignmentFilters, AnnualReviewerRole,
 } from '@/types/annualReview';
