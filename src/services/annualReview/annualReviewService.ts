@@ -478,10 +478,15 @@ export async function fetchAllInstancesForExport(args: {
   search?: string;
   status?: AnnualReviewStatus | 'all';
   hasOverride?: boolean;
+  departmentId?: string;
+  businessUnitId?: string;
+  managerId?: string;
   onProgress?: (loaded: number) => void;
 }): Promise<InstanceWithEmployee[]> {
-  // 1) Optional name search → restrict to matching employee_ids (max 5000).
+  // 1) Optional name search + org filters → restrict to matching employee_ids.
   let restrictIds: string[] | null = null;
+  const orgIds = await resolveEmployeeIdsForOrgFilters(args);
+  if (orgIds && orgIds.length === 0) return [];
   const term = args.search?.trim();
   if (term) {
     const safe = term.replace(/[(),]/g, ' ');
@@ -493,7 +498,13 @@ export async function fetchAllInstancesForExport(args: {
         .range(from, to),
     );
     restrictIds = profs.map((p) => p.id);
+    if (orgIds) {
+      const set = new Set(orgIds);
+      restrictIds = restrictIds.filter((id) => set.has(id));
+    }
     if (restrictIds.length === 0) return [];
+  } else if (orgIds) {
+    restrictIds = orgIds;
   }
 
   // 2) Stream instances (slim select, no embedded join — RLS-heavy join would
@@ -505,6 +516,7 @@ export async function fetchAllInstancesForExport(args: {
       .eq('cycle_id', args.cycleId);
     if (args.status && args.status !== 'all') q = q.eq('overall_status', args.status);
     if (args.hasOverride) q = q.not('stage_weights_override', 'is', null);
+    if (args.managerId) q = q.eq('manager_id', args.managerId);
     if (restrictIds) q = q.in('employee_id', restrictIds);
     return q.order('created_at', { ascending: false }).range(from, to);
   });
