@@ -45,6 +45,7 @@ import { BulkStageWeightsAssignmentDialog } from '@/components/annual-review/Bul
 import { ChangeWorkflowDialog } from '@/components/annual-review/ChangeWorkflowDialog';
 import { InstanceStageWeightsDialog } from '@/components/annual-review/InstanceStageWeightsDialog';
 import { TemplateEditorDialog } from '@/components/annual-review/TemplateEditorDialog';
+import { RecentStageWeightOverridesPanel } from '@/components/annual-review/RecentStageWeightOverridesPanel';
 import { RuleFiltersEditor, RuleFiltersSummary, EMPTY_FILTERS } from '@/components/annual-review/RuleFiltersEditor';
 import type {
   AnnualReviewCycle, AnnualReviewTemplate, AssignmentFilters, AnnualReviewerRole,
@@ -141,8 +142,9 @@ function ProgressTab() {
   const [pageSize, setPageSize] = useState(25);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending_self' | 'pending_manager' | 'pending_skip' | 'pending_bu' | 'pending_hr' | 'completed' | 'not_started'>('all');
+  const [customWeightsOnly, setCustomWeightsOnly] = useState(false);
   const paginatedArgs = activeCycle
-    ? { cycleId: activeCycle.id, page, pageSize, search, status: statusFilter }
+    ? { cycleId: activeCycle.id, page, pageSize, search, status: statusFilter, hasOverride: customWeightsOnly }
     : undefined;
   const { data: paged, refetch } = useAnnualReviewInstancesPaginated(paginatedArgs);
   const instances = paged?.rows ?? [];
