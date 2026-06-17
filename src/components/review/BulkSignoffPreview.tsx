@@ -8,7 +8,7 @@
 
 import { useState } from 'react';
 import {
-  ChevronDown, ChevronRight, Calculator, AlertTriangle, ArrowUp, ArrowDown,
+  ChevronDown, ChevronRight, Calculator, AlertTriangle,
   ShieldAlert,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
@@ -21,7 +21,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Card, CardContent } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import { cn } from '@/lib/utils';
-import type { ImpactSummary, CellPreview, EmployeeRollup } from '@/lib/bulkSignoffImpact';
+import type { ImpactSummary, CellPreview } from '@/lib/bulkSignoffImpact';
 import type { CarriedSource, KpiRule, CellInputs } from '@/lib/carriedScoreResolver';
 import type { QualitativeOption } from '@/lib/qualitativeUom';
 
@@ -118,7 +118,7 @@ export function BulkSignoffPreview({
 
   if (!preview || preview.cells.length === 0) return null;
 
-  const { totals, cells, perEmployee } = preview;
+  const { totals, cells } = preview;
 
   // Hoist KRA · KPI banner when every selected cell shares the same KPI
   // (common case: one bulk action targets one KPI across many employees).
@@ -247,15 +247,6 @@ export function BulkSignoffPreview({
         </p>
       )}
 
-      {/* ── Per-employee rollup ──────────────────────────────────────── */}
-      {perEmployee.length > 0 && (
-        <div className="rounded-md border border-border">
-          <div className="px-3 py-2 text-xs font-medium border-b border-border bg-muted/30">
-            Per-employee impact (Dashboard parity)
-          </div>
-          <EmployeeRollupTable rollups={perEmployee} />
-        </div>
-      )}
     </div>
   );
 }
