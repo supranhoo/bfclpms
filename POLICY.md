@@ -17,6 +17,36 @@ Safety incident reporting remains open to every authenticated employee per §Pha
 
 ## §111.7 Bulk Review Action Resolver (codified 2026-05-25; cascade addendum 2026-05-25)
 
+### §111.7.s Stage-readiness visibility (RCA 2026-06-17)
+
+The Bulk Review dashboard MUST surface a KPI row to a reviewer stage
+(Manager, Functional Manager, Skip-Level, Auditor, HR PMS, Management)
+ONLY when the KPI's current `status` equals the stage immediately
+preceding the requested viewer stage in that KPI's resolved workflow
+(per `get_employee_workflow`). Workflow status follows the project
+convention "status = last COMPLETED stage". Implementation is centralised
+in `public.my_review_scope(p_period, p_year, p_stage)` and MUST NOT be
+duplicated in client code.
+
+Hard guarantees:
+
+- Auditor-stage KPIs (status = `manager_check` and workflow contains
+  `audit`) MUST NOT appear in the HR PMS view, and vice-versa.
+- HR PMS-stage KPIs (status = `audit` and workflow contains
+  `hr_pms_review`) MUST NOT appear in the Auditor view, even when the
+  same person holds both roles.
+- Management sees a row only when status = `hr_pms_review` (or the
+  immediate predecessor in a custom workflow that omits HR PMS).
+- Manager / Functional Manager / Skip-Level checks are AND-combined
+  with their existing reporting-relationship / assignment checks; the
+  readiness gate never widens visibility, only narrows it.
+- The stage token mapping is canonical: `manager`→`manager_check`,
+  `functional_manager`→`functional_manager_check`,
+  `skip_level`→`skip_level_check`, `auditor`→`audit`,
+  `hr_pms`→`hr_pms_review`, `management`→`management_review`.
+
+Regression: `src/test/bulkReview/myReviewScopeStageReadiness.test.ts`.
+
 ## §44.3 Production Incentive Rate Cascade — Per-Employee Company Source (RCA 2026-05-29)
 
 The `compute-monthly-incentives` edge function MUST source each employee's
