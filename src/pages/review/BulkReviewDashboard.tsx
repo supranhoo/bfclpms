@@ -1166,18 +1166,20 @@ export default function BulkReviewDashboard() {
                       aria-pressed={adminStageReadyOnly}
                     >
                       <ListChecks className="h-3.5 w-3.5" />
-                      {adminStageReadyOnly ? 'Stage-ready only' : 'All stages'}
+                      {adminStageReadyOnly
+                        ? `${viewerStage.replace('_', ' ')}-ready only`
+                        : 'All stages (QA)'}
                       {stageReadyScope && (
                         <Badge variant="outline" className="ml-1 h-4 px-1 text-[10px] tabular-nums">
-                          {stageReadyScope.total}
+                          {adminStageReadyOnly ? loadedRows.length : stageReadyScope.total}
                         </Badge>
                       )}
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent side="bottom" className="max-w-[320px] text-xs">
                     {adminStageReadyOnly
-                      ? `Admin view: showing only KPIs whose previous workflow stage has been completed for ${viewerStage.replace('_', ' ')} in ${period} ${year}. Rows still upstream are hidden. Click to see the full matrix for QA.`
-                      : `Admin QA view: showing every KPI in scope including rows still pending earlier stages. Click to restrict to stage-ready rows only.`}
+                      ? `Admin role-ready view: only KPIs currently waiting at ${viewerStage.replace('_', ' ')} in ${period} ${year} are visible AND actionable. Upstream rows are hidden so they cannot accidentally be signed off. Click to switch to full QA view.`
+                      : `Admin QA view: every KPI in scope is shown (including rows still pending earlier stages). Rows outside ${viewerStage.replace('_', ' ')} readiness are visible for inspection but should NOT be bulk-signed at this stage — switch the filter back ON before sign-off.`}
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
