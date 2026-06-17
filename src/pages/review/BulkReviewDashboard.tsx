@@ -449,6 +449,28 @@ export default function BulkReviewDashboard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isReviewerRole, myReviewScope, rawRows]);
 
+  // Prune stale selections when role-ready filter, scope, or stage changes
+  // so a row selected in QA mode does not silently survive into a sign-off
+  // batch after the user switches the filter ON. We intersect selectedIds
+  // with the submission IDs of currently *visible/actionable* rows.
+  useEffect(() => {
+    if (selectedIds.size === 0) return;
+    const visibleSubIds = new Set<string>();
+    for (const r of loadedRows) {
+      if (r.submission_id) visibleSubIds.add(r.submission_id);
+    }
+    let changed = false;
+    const next = new Set<string>();
+    selectedIds.forEach((id) => {
+      if (visibleSubIds.has(id)) next.add(id);
+      else changed = true;
+    });
+    if (changed) setSelectedIds(next);
+    // Intentionally watching loadedRows reference; selectedIds is read but
+    // setter call is conditional so we avoid the lint loop.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loadedRows, viewerStage, adminStageReadyOnly, myScopeOnly]);
+
   // Count of rows hidden specifically by the non-due filter (post other filters
   // except non-due itself) — surfaced as a badge so users know how many rows
   // are being suppressed.
