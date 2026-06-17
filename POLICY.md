@@ -1760,6 +1760,8 @@ When an admin changes an employee's (or department's/PMS grade's) workflow templ
 
 6. **Incident Reference**: User 201091 (Upendra Singh, role: manager) was granted `admin-incentive-data` override but could not see any employees on Incentive Data Entry. Root cause: (a) `profiles` RLS had no policy for this menu key, and (b) eligibility/production tables checked for `admin-incentive` instead of `admin-incentive-data`. Fixed in v1.79.0 by adding dedicated RLS policies.
 
+7. **Report Visibility (`reports-incentive`)**: Users granted the `reports-incentive` menu key (via direct override or active access profile) MUST be able to read `employee_incentive_records` and active `profiles` rows for the Incentive Report page. Write operations on incentive records (Confirm, Mark Paid, status override, compute writes) remain gated by `admin-incentive` / admin / HR PMS — `reports-incentive` is strictly read-only. Incident reference: Sandeep Kumar (200291), 2026-06-17 — saw "No incentive records yet" with 36 records present because no SELECT policy on `employee_incentive_records` covered `reports-incentive`. Fix: additive SELECT policy `Reports-incentive users can read incentive records`.
+
 ---
 
 ### §73 — Incentive Edge Function RBAC: Shared Auth Helper
