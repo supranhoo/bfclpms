@@ -14199,6 +14199,13 @@ export type Database = {
         }
         Returns: Json
       }
+      stage_ready_kpis: {
+        Args: { p_period: string; p_stage: string; p_year: number }
+        Returns: {
+          employee_id: string
+          kpi_id: string
+        }[]
+      }
       start_drill: { Args: { p_drill_id: string }; Returns: Json }
       submit_audit_run: { Args: { p_run_id: string }; Returns: Json }
       submit_permit: { Args: { p_permit_id: string }; Returns: Json }
