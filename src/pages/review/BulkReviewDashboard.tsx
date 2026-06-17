@@ -168,6 +168,24 @@ export default function BulkReviewDashboard() {
       window.localStorage.setItem('bulkReview.myScopeOnly', String(myScopeOnly));
     }
   }, [myScopeOnly]);
+  // Admin-only "Stage-ready only" — when an admin uses the viewer-stage
+  // dropdown to act AS another stage, hide rows whose previous workflow
+  // stage has not yet been completed (e.g. don't show a self_review row in
+  // the HR PMS view). Default ON; persisted in localStorage. Independent
+  // of reviewer-identity scope (admins aren't a reviewer).
+  const [adminStageReadyOnly, setAdminStageReadyOnly] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return true;
+    const raw = window.localStorage.getItem('bulkReview.adminStageReadyOnly');
+    return raw === null ? true : raw === 'true';
+  });
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(
+        'bulkReview.adminStageReadyOnly',
+        String(adminStageReadyOnly),
+      );
+    }
+  }, [adminStageReadyOnly]);
   const [scopeLoaded, setScopeLoaded] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [activeRow, setActiveRow] = useState<BulkReviewRow | null>(null);
