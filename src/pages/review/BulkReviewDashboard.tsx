@@ -374,6 +374,13 @@ export default function BulkReviewDashboard() {
     period, year, viewerStage, isAdminViewer,
   );
   const stageReadyScope = stageReadyScopeQ.data;
+  // Fail-closed gate: while the admin role-ready scope is loading or errored,
+  // we must NOT leak upstream rows into the actionable view. If the filter is
+  // ON and the data isn't here yet, treat the role-ready set as empty.
+  const stageReadyReady =
+    !isAdminViewer
+    || !adminStageReadyOnly
+    || (!stageReadyScopeQ.isLoading && !stageReadyScopeQ.isError && !!stageReadyScope);
 
   /** Row predicate: is this row inside the current user's resolved-reviewer scope? */
   const isRowInMyScope = (r: BulkReviewRow): boolean =>
@@ -422,11 +429,14 @@ export default function BulkReviewDashboard() {
     // has not been completed yet (admin path; reviewer-identity is not
     // applicable). Mirrors the gate baked into my_review_scope for
     // reviewer roles.
-    if (isAdminViewer && adminStageReadyOnly && stageReadyScope) {
-      rows = rows.filter(r => isRowInMyReviewScope(r, stageReadyScope.pairs));
+    if (isAdminViewer && adminStageReadyOnly) {
+      // Fail-closed: if the role-ready pair set is still loading/errored,
+      // hide every row instead of silently showing the full scope.
+      const pairs = stageReadyScope?.pairs ?? new Set<string>();
+      rows = rows.filter(r => isRowInMyReviewScope(r, pairs));
     }
     return rows;
-  }, [rawRows, search, hideEmpty, hideNonDue, period, year, kraNames, designations, grades, managerIds, allowedEmpSet, categoryIds, isReviewerRole, myScopeOnly, myReviewScope, isAdminViewer, adminStageReadyOnly, stageReadyScope]);
+  }, [rawRows, search, hideEmpty, hideNonDue, period, year, kraNames, designations, grades, managerIds, allowedEmpSet, categoryIds, isReviewerRole, myScopeOnly, myReviewScope, isAdminViewer, adminStageReadyOnly, stageReadyScope, stageReadyReady]);
 
   // Count of currently-loaded rows that fall inside the auditor's scope —
   // surfaced as a muted chip so even with the toggle off the auditor knows
