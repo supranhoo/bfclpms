@@ -374,6 +374,13 @@ export default function BulkReviewDashboard() {
     period, year, viewerStage, isAdminViewer,
   );
   const stageReadyScope = stageReadyScopeQ.data;
+  // Fail-closed gate: while the admin role-ready scope is loading or errored,
+  // we must NOT leak upstream rows into the actionable view. If the filter is
+  // ON and the data isn't here yet, treat the role-ready set as empty.
+  const stageReadyReady =
+    !isAdminViewer
+    || !adminStageReadyOnly
+    || (!stageReadyScopeQ.isLoading && !stageReadyScopeQ.isError && !!stageReadyScope);
 
   /** Row predicate: is this row inside the current user's resolved-reviewer scope? */
   const isRowInMyScope = (r: BulkReviewRow): boolean =>
@@ -422,11 +429,14 @@ export default function BulkReviewDashboard() {
     // has not been completed yet (admin path; reviewer-identity is not
     // applicable). Mirrors the gate baked into my_review_scope for
     // reviewer roles.
-    if (isAdminViewer && adminStageReadyOnly && stageReadyScope) {
-      rows = rows.filter(r => isRowInMyReviewScope(r, stageReadyScope.pairs));
+    if (isAdminViewer && adminStageReadyOnly) {
+      // Fail-closed: if the role-ready pair set is still loading/errored,
+      // hide every row instead of silently showing the full scope.
+      const pairs = stageReadyScope?.pairs ?? new Set<string>();
+      rows = rows.filter(r => isRowInMyReviewScope(r, pairs));
     }
     return rows;
-  }, [rawRows, search, hideEmpty, hideNonDue, period, year, kraNames, designations, grades, managerIds, allowedEmpSet, categoryIds, isReviewerRole, myScopeOnly, myReviewScope, isAdminViewer, adminStageReadyOnly, stageReadyScope]);
+  }, [rawRows, search, hideEmpty, hideNonDue, period, year, kraNames, designations, grades, managerIds, allowedEmpSet, categoryIds, isReviewerRole, myScopeOnly, myReviewScope, isAdminViewer, adminStageReadyOnly, stageReadyScope, stageReadyReady]);
 
   // Count of currently-loaded rows that fall inside the auditor's scope —
   // surfaced as a muted chip so even with the toggle off the auditor knows
@@ -438,6 +448,28 @@ export default function BulkReviewDashboard() {
     return n;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isReviewerRole, myReviewScope, rawRows]);
+
+  // Prune stale selections when role-ready filter, scope, or stage changes
+  // so a row selected in QA mode does not silently survive into a sign-off
+  // batch after the user switches the filter ON. We intersect selectedIds
+  // with the submission IDs of currently *visible/actionable* rows.
+  useEffect(() => {
+    if (selectedIds.size === 0) return;
+    const visibleSubIds = new Set<string>();
+    for (const r of loadedRows) {
+      if (r.submission_id) visibleSubIds.add(r.submission_id);
+    }
+    let changed = false;
+    const next = new Set<string>();
+    selectedIds.forEach((id) => {
+      if (visibleSubIds.has(id)) next.add(id);
+      else changed = true;
+    });
+    if (changed) setSelectedIds(next);
+    // Intentionally watching loadedRows reference; selectedIds is read but
+    // setter call is conditional so we avoid the lint loop.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loadedRows, viewerStage, adminStageReadyOnly, myScopeOnly]);
 
   // Count of rows hidden specifically by the non-due filter (post other filters
   // except non-due itself) — surfaced as a badge so users know how many rows
@@ -1134,18 +1166,20 @@ export default function BulkReviewDashboard() {
                       aria-pressed={adminStageReadyOnly}
                     >
                       <ListChecks className="h-3.5 w-3.5" />
-                      {adminStageReadyOnly ? 'Stage-ready only' : 'All stages'}
+                      {adminStageReadyOnly
+                        ? `${viewerStage.replace('_', ' ')}-ready only`
+                        : 'All stages (QA)'}
                       {stageReadyScope && (
                         <Badge variant="outline" className="ml-1 h-4 px-1 text-[10px] tabular-nums">
-                          {stageReadyScope.total}
+                          {adminStageReadyOnly ? loadedRows.length : stageReadyScope.total}
                         </Badge>
                       )}
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent side="bottom" className="max-w-[320px] text-xs">
                     {adminStageReadyOnly
-                      ? `Admin view: showing only KPIs whose previous workflow stage has been completed for ${viewerStage.replace('_', ' ')} in ${period} ${year}. Rows still upstream are hidden. Click to see the full matrix for QA.`
-                      : `Admin QA view: showing every KPI in scope including rows still pending earlier stages. Click to restrict to stage-ready rows only.`}
+                      ? `Admin role-ready view: only KPIs currently waiting at ${viewerStage.replace('_', ' ')} in ${period} ${year} are visible AND actionable. Upstream rows are hidden so they cannot accidentally be signed off. Click to switch to full QA view.`
+                      : `Admin QA view: every KPI in scope is shown (including rows still pending earlier stages). Rows outside ${viewerStage.replace('_', ' ')} readiness are visible for inspection but should NOT be bulk-signed at this stage — switch the filter back ON before sign-off.`}
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
@@ -1235,7 +1269,7 @@ export default function BulkReviewDashboard() {
             <div className="sticky bottom-4 z-10 mx-auto max-w-fit">
               <Card className="shadow-lg">
                 <CardContent className="py-3 px-4 flex items-center gap-3">
-                  <span className="text-sm font-medium">{selectedIds.size} selected</span>
+                  <span className="text-sm font-medium">{selectedRows.length} selected</span>
                   <Button size="sm" variant="outline" onClick={() => setSelectedIds(new Set())}>
                     Clear
                   </Button>
@@ -1265,7 +1299,7 @@ export default function BulkReviewDashboard() {
 
       <BulkApproveDialog
         open={confirmApprove}
-        cellCount={selectedIds.size}
+        cellCount={selectedRows.length}
         batchId={batchId || 'pending'}
         uploaderUserId={user?.id ?? 'anonymous'}
         isLoading={isActionPending}
