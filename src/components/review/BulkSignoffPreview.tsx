@@ -8,7 +8,7 @@
 
 import { useState } from 'react';
 import {
-  ChevronDown, ChevronRight, Calculator, AlertTriangle, ArrowUp, ArrowDown,
+  ChevronDown, ChevronRight, Calculator, AlertTriangle,
   ShieldAlert,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
@@ -21,7 +21,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Card, CardContent } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import { cn } from '@/lib/utils';
-import type { ImpactSummary, CellPreview, EmployeeRollup } from '@/lib/bulkSignoffImpact';
+import type { ImpactSummary, CellPreview } from '@/lib/bulkSignoffImpact';
 import type { CarriedSource, KpiRule, CellInputs } from '@/lib/carriedScoreResolver';
 import type { QualitativeOption } from '@/lib/qualitativeUom';
 
@@ -118,7 +118,7 @@ export function BulkSignoffPreview({
 
   if (!preview || preview.cells.length === 0) return null;
 
-  const { totals, cells, perEmployee } = preview;
+  const { totals, cells } = preview;
 
   // Hoist KRA · KPI banner when every selected cell shares the same KPI
   // (common case: one bulk action targets one KPI across many employees).
@@ -247,15 +247,6 @@ export function BulkSignoffPreview({
         </p>
       )}
 
-      {/* ── Per-employee rollup ──────────────────────────────────────── */}
-      {perEmployee.length > 0 && (
-        <div className="rounded-md border border-border">
-          <div className="px-3 py-2 text-xs font-medium border-b border-border bg-muted/30">
-            Per-employee impact (Dashboard parity)
-          </div>
-          <EmployeeRollupTable rollups={perEmployee} />
-        </div>
-      )}
     </div>
   );
 }
@@ -619,80 +610,6 @@ function CellTable({
             </Card>
           );
         })}
-      </div>
-    </div>
-  );
-}
-
-function EmployeeRollupTable({ rollups }: { rollups: EmployeeRollup[] }) {
-  return (
-    <div className="max-h-48 overflow-auto">
-      <table className="w-full text-xs hidden md:table">
-        <thead className="sticky top-0 bg-background z-10">
-          <tr className="border-b border-border">
-            <th className="text-left p-2 font-medium text-muted-foreground">Employee</th>
-            <th className="text-right p-2 font-medium text-muted-foreground">Cells</th>
-            <th className="text-right p-2 font-medium text-muted-foreground">Σ Wt%</th>
-            <th className="text-right p-2 font-medium text-muted-foreground">Self avg</th>
-            <th className="text-right p-2 font-medium text-muted-foreground">Mgr avg</th>
-            <th className="text-right p-2 font-medium text-muted-foreground">Current</th>
-            <th className="text-right p-2 font-medium text-muted-foreground">Projected</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rollups.map(e => (
-            <tr key={e.employee_id} className="border-b border-border/50 hover:bg-muted/50">
-              <td className="p-2 truncate max-w-[160px]">{e.employee_name}</td>
-              <td className="p-2 text-right tabular-nums">{e.cellsInBatch}</td>
-              <td className="p-2 text-right tabular-nums">{e.batchWeightSum}%</td>
-              <td className={cn('p-2 text-right tabular-nums', scoreTone(e.selfAvg ?? null))}>
-                {e.selfAvg == null ? '—' : e.selfAvg.toFixed(2)}
-              </td>
-              <td className={cn('p-2 text-right tabular-nums', scoreTone(e.managerAvg ?? null))}>
-                {e.managerAvg == null ? '—' : e.managerAvg.toFixed(2)}
-              </td>
-              <td className="p-2 text-right tabular-nums">{e.currentOverall.toFixed(2)}</td>
-              <td className="p-2 text-right tabular-nums font-medium">
-                <span className="inline-flex items-center gap-1 justify-end">
-                  {e.projectedOverall.toFixed(2)}
-                  {e.delta > 0 && (
-                    <span className="text-emerald-600 dark:text-emerald-400 inline-flex items-center">
-                      <ArrowUp className="h-3 w-3" aria-hidden /> {fmt(e.delta, true)}
-                    </span>
-                  )}
-                  {e.delta < 0 && (
-                    <span className="text-destructive inline-flex items-center">
-                      <ArrowDown className="h-3 w-3" aria-hidden /> {fmt(e.delta)}
-                    </span>
-                  )}
-                </span>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-
-      <div className="md:hidden divide-y divide-border">
-        {rollups.map(e => (
-          <div key={e.employee_id} className="p-3 space-y-1">
-            <div className="flex items-center justify-between gap-2">
-              <span className="font-medium text-sm truncate">{e.employee_name}</span>
-              <span className="text-xs tabular-nums text-muted-foreground">
-                {e.cellsInBatch} cells · {e.batchWeightSum}%
-              </span>
-            </div>
-            <div className="flex items-center justify-between text-xs tabular-nums">
-              <span>Current {e.currentOverall.toFixed(2)}</span>
-              <span className={cn(
-                'font-medium',
-                e.delta > 0 && 'text-emerald-600 dark:text-emerald-400',
-                e.delta < 0 && 'text-destructive',
-              )}>
-                → {e.projectedOverall.toFixed(2)} ({fmt(e.delta, true)})
-              </span>
-            </div>
-          </div>
-        ))}
       </div>
     </div>
   );
