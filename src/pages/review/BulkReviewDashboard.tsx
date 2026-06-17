@@ -368,6 +368,12 @@ export default function BulkReviewDashboard() {
   const myReviewScopeQ = useMyReviewScope(period, year, viewerStage, isReviewerRole);
   const myReviewScope = myReviewScopeQ.data;
   const isAuditor = effectiveRole === 'auditor';
+  // Admin viewing-as another stage: enable stage-readiness filter.
+  const isAdminViewer = effectiveRole === 'admin';
+  const stageReadyScopeQ = useStageReadyScope(
+    period, year, viewerStage, isAdminViewer,
+  );
+  const stageReadyScope = stageReadyScopeQ.data;
 
   /** Row predicate: is this row inside the current user's resolved-reviewer scope? */
   const isRowInMyScope = (r: BulkReviewRow): boolean =>
