@@ -1122,6 +1122,34 @@ export default function BulkReviewDashboard() {
                 </Tooltip>
               </TooltipProvider>
             )}
+            {isAdminViewer && (
+              <TooltipProvider delayDuration={150}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant={adminStageReadyOnly ? 'secondary' : 'ghost'}
+                      size="sm"
+                      className="h-7 px-2 text-[11px] gap-1"
+                      onClick={() => setAdminStageReadyOnly(v => !v)}
+                      aria-pressed={adminStageReadyOnly}
+                    >
+                      <ListChecks className="h-3.5 w-3.5" />
+                      {adminStageReadyOnly ? 'Stage-ready only' : 'All stages'}
+                      {stageReadyScope && (
+                        <Badge variant="outline" className="ml-1 h-4 px-1 text-[10px] tabular-nums">
+                          {stageReadyScope.total}
+                        </Badge>
+                      )}
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom" className="max-w-[320px] text-xs">
+                    {adminStageReadyOnly
+                      ? `Admin view: showing only KPIs whose previous workflow stage has been completed for ${viewerStage.replace('_', ' ')} in ${period} ${year}. Rows still upstream are hidden. Click to see the full matrix for QA.`
+                      : `Admin QA view: showing every KPI in scope including rows still pending earlier stages. Click to restrict to stage-ready rows only.`}
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
           </div>
         </div>
       </div>
