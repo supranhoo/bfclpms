@@ -38,6 +38,7 @@ import {
   useBulkOrgKpiFlags,
   useBulkEmployeeAttrs,
   useMyReviewScope,
+  useStageReadyScope,
   type BulkScopeFilters,
   type BulkReviewRow,
 } from '@/hooks/useBulkReview';
@@ -61,7 +62,7 @@ import { isRowInMyReviewScope, matchesCategoryFilter } from '@/lib/bulkAuditScop
 import { computeOrgKpiCoverageGaps } from '@/lib/orgKpiAuditCoverage';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { CalendarClock } from 'lucide-react';
+import { CalendarClock, ListChecks } from 'lucide-react';
 import { useUrlFilterStateNullable } from '@/hooks/useUrlFilterState';
 import { buildBulkSignoffImpact, type ImpactSummary } from '@/lib/bulkSignoffImpact';
 import { useBulkSignoffPreviewData } from '@/hooks/useBulkSignoffPreviewData';
