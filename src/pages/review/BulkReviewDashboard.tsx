@@ -1084,7 +1084,7 @@ export default function BulkReviewDashboard() {
                   </TooltipTrigger>
                   <TooltipContent side="bottom" className="max-w-[320px] text-xs">
                     {myScopeOnly
-                      ? `Showing only KPIs where you are the resolved reviewer for the active stage (${viewerStage.replace('_', ' ')}) in ${period} ${year}. Click to see all loaded KPIs.`
+                      ? `Showing only KPIs currently waiting on your stage (${viewerStage.replace('_', ' ')}) — i.e. the previous stage has been completed and you are the resolved reviewer in ${period} ${year}. Rows still pending earlier stages are intentionally hidden. Click to see all loaded KPIs.`
                       : `Showing every KPI in the loaded scope, including those routed to other reviewers. Click to restrict to KPIs where you are the resolved ${viewerStage.replace('_', ' ')}.`}
                   </TooltipContent>
                 </Tooltip>
