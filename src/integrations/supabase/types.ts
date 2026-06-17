@@ -13826,6 +13826,17 @@ export type Database = {
         }
         Returns: Json
       }
+      repair_org_kpi_late_self_backfill: {
+        Args: {
+          p_category_id: string
+          p_dry_run?: boolean
+          p_kpi_name: string
+          p_kra_name: string
+          p_review_period: string
+          p_review_year: number
+        }
+        Returns: Json
+      }
       repair_sibling_frequency_drift_v5: {
         Args: { p_apply?: boolean; p_kpi_id?: string }
         Returns: Json
