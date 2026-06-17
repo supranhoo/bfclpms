@@ -418,8 +418,15 @@ export default function BulkReviewDashboard() {
     if (isReviewerRole && myScopeOnly && myReviewScope) {
       rows = rows.filter(isRowInMyScope);
     }
+    // Admin "Stage-ready only" — hide rows whose previous workflow stage
+    // has not been completed yet (admin path; reviewer-identity is not
+    // applicable). Mirrors the gate baked into my_review_scope for
+    // reviewer roles.
+    if (isAdminViewer && adminStageReadyOnly && stageReadyScope) {
+      rows = rows.filter(r => isRowInMyReviewScope(r, stageReadyScope.pairs));
+    }
     return rows;
-  }, [rawRows, search, hideEmpty, hideNonDue, period, year, kraNames, designations, grades, managerIds, allowedEmpSet, categoryIds, isReviewerRole, myScopeOnly, myReviewScope]);
+  }, [rawRows, search, hideEmpty, hideNonDue, period, year, kraNames, designations, grades, managerIds, allowedEmpSet, categoryIds, isReviewerRole, myScopeOnly, myReviewScope, isAdminViewer, adminStageReadyOnly, stageReadyScope]);
 
   // Count of currently-loaded rows that fall inside the auditor's scope —
   // surfaced as a muted chip so even with the toggle off the auditor knows
