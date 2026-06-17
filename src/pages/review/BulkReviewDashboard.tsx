@@ -1267,7 +1267,7 @@ export default function BulkReviewDashboard() {
             <div className="sticky bottom-4 z-10 mx-auto max-w-fit">
               <Card className="shadow-lg">
                 <CardContent className="py-3 px-4 flex items-center gap-3">
-                  <span className="text-sm font-medium">{selectedIds.size} selected</span>
+                  <span className="text-sm font-medium">{selectedRows.length} selected</span>
                   <Button size="sm" variant="outline" onClick={() => setSelectedIds(new Set())}>
                     Clear
                   </Button>
@@ -1297,7 +1297,7 @@ export default function BulkReviewDashboard() {
 
       <BulkApproveDialog
         open={confirmApprove}
-        cellCount={selectedIds.size}
+        cellCount={selectedRows.length}
         batchId={batchId || 'pending'}
         uploaderUserId={user?.id ?? 'anonymous'}
         isLoading={isActionPending}
