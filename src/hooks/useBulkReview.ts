@@ -558,3 +558,46 @@ export function useMyReviewScope(
     },
   });
 }
+
+/**
+ * Admin-only "Stage-ready" scope for Bulk Review.
+ *
+ * Returns the (kpi_id, employee_id) pairs whose status equals the
+ * predecessor of `stage` in the resolved workflow for `(period, year)` —
+ * i.e. KPIs currently waiting at that stage, irrespective of who the
+ * resolved reviewer is. The underlying RPC `stage_ready_kpis` is admin-
+ * guarded and returns an empty set for non-admins.
+ *
+ * Used by the Bulk Review "Stage-ready only" filter so an admin acting
+ * through the viewer-stage dropdown does not see pre-stage rows.
+ */
+export function useStageReadyScope(
+  period: string,
+  year: number,
+  stage: MyScopeStage | string,
+  enabled: boolean,
+) {
+  return useQuery({
+    queryKey: ['stage_ready_kpis', period, year, stage],
+    enabled: enabled && !!period && !!year && !!stage,
+    staleTime: 5 * 60 * 1000,
+    queryFn: async (): Promise<MyReviewScope> => {
+      const { data, error } = await supabase.rpc('stage_ready_kpis' as any, {
+        p_period: period,
+        p_year: year,
+        p_stage: stage,
+      });
+      if (error) throw error;
+      const rows = (data ?? []) as Array<{ kpi_id: string; employee_id: string }>;
+      const pairs = new Set<string>();
+      const kpiIds = new Set<string>();
+      const employeeIds = new Set<string>();
+      for (const r of rows) {
+        pairs.add(`${r.kpi_id}|${r.employee_id}`);
+        kpiIds.add(r.kpi_id);
+        employeeIds.add(r.employee_id);
+      }
+      return { pairs, kpiIds, employeeIds, total: pairs.size };
+    },
+  });
+}
