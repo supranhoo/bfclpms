@@ -110,4 +110,27 @@ describe('Admin Stage-ready filter — bulk review', () => {
   it('unknown stage token yields empty set (defensive)', () => {
     expect(stageReadyPairs(rows, 'employee', true).size).toBe(0);
   });
+
+  // v2.66.39 — Mirrors the live May 2026 shape: the dominant HR PMS-ready
+  // workflow skips audit (`…manager_check → hr_pms_review …`), so the
+  // predecessor for HR PMS is `manager_check`, not `audit`. The original
+  // SQL bug (enum vs text) silently returned 0 here; this test exists so
+  // any future predicate rewrite continues to surface these rows.
+  it('REGRESSION (v2.66.39): HR PMS-ready when predecessor is manager_check', () => {
+    const wf = ['kra_set', 'self_review', 'manager_check', 'hr_pms_review', 'approved'];
+    const ready: SimRow = {
+      kpi_id: 'kpi-may26-mgr-pred',
+      employee_id: 'e-mgr-pred',
+      status: 'manager_check',
+      workflow: wf,
+    };
+    const notReady: SimRow = {
+      kpi_id: 'kpi-may26-self-pred',
+      employee_id: 'e-self-pred',
+      status: 'self_review',
+      workflow: wf,
+    };
+    const pairs = stageReadyPairs([ready, notReady], 'hr_pms', true);
+    expect(Array.from(pairs)).toEqual(['kpi-may26-mgr-pred|e-mgr-pred']);
+  });
 });
