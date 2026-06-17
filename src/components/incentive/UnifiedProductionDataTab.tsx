@@ -129,6 +129,7 @@ export function UnifiedProductionDataTab({ programs }: { programs: Program[] }) 
           programName={selectedProgram?.name}
           onMonthYearChange={handleMonthYearChange}
           filterByCompany={filterByCompany}
+          selectedCompanyId={selectedCompanyId}
         />
       ) : (
         <ProductionTargetGrid controlledProgramId={selectedProgramId} onMonthYearChange={handleMonthYearChange} />
