@@ -13,6 +13,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useQuery } from '@tanstack/react-query';
 import { fetchAllPaged } from '@/lib/fetchAll';
+import { useCompanyFilter } from '@/hooks/useCompanyFilter';
 
 const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -26,9 +27,10 @@ interface Props {
   programName?: string;
   onMonthYearChange?: (month: string, year: number) => void;
   filterByCompany?: (employeeId: string | undefined | null) => boolean;
+  selectedCompanyId?: string;
 }
 
-export function ProductionDailyGrid({ programId, programName, onMonthYearChange, filterByCompany }: Props) {
+export function ProductionDailyGrid({ programId, programName, onMonthYearChange, filterByCompany, selectedCompanyId }: Props) {
   const now = new Date();
   const [month, setMonth] = useState(MONTHS[now.getMonth()]);
   const [year, setYear] = useState(now.getFullYear());
@@ -212,6 +214,31 @@ export function ProductionDailyGrid({ programId, programName, onMonthYearChange,
 
   const isLoading = ratesLoading || entriesLoading || mappedLoading;
 
+  // Diagnostic empty-state — picks the first matching reason so operators can
+  // distinguish "no mappings" vs "no rates" vs "no rate resolved" vs "company
+  // filter empty". RCA 2026-06-17.
+  const { companies } = useCompanyFilter();
+  const companyName = useMemo(() => {
+    if (!selectedCompanyId || selectedCompanyId === 'all') return '';
+    return companies.find(c => c.id === selectedCompanyId)?.name ?? '';
+  }, [companies, selectedCompanyId]);
+
+  const emptyStateMessage = useMemo(() => {
+    if (mappedEmployees.length === 0) {
+      return 'This program has no employee mappings. Open Program Mapping (Incentive Config) to add employees.';
+    }
+    if (rates.length === 0) {
+      return 'No production rates configured. Open the program\'s "Production Rates" tab to add a rate.';
+    }
+    if (employeeRates.size === 0) {
+      return `Rates exist, but none of the ${mappedEmployees.length} mapped employees resolve to a rate for ${month} ${year}. Check effective dates and employee/department/BU/company coverage.`;
+    }
+    if (companyName) {
+      return `No mapped employees match the selected company filter "${companyName}". Clear the company filter or pick another company.`;
+    }
+    return 'No employees to display with the current filters.';
+  }, [mappedEmployees.length, rates.length, employeeRates.size, companyName, month, year]);
+
   const sourceBadge = (source: string) => {
     const variants: Record<string, 'default' | 'secondary' | 'outline'> = {
       employee: 'default', department: 'secondary', bu: 'outline', company: 'outline', common: 'outline',
@@ -250,7 +277,7 @@ export function ProductionDailyGrid({ programId, programName, onMonthYearChange,
         {isLoading ? (
           <p className="text-center text-muted-foreground py-8">Loading...</p>
         ) : gridEmployees.length === 0 ? (
-          <p className="text-center text-muted-foreground py-8">No employees with resolved production rates. Configure rates in the program's "Production Rates" tab first.</p>
+          <p className="text-center text-muted-foreground py-8">{emptyStateMessage}</p>
         ) : (
           <>
             <div className="overflow-x-auto border rounded-md">
