@@ -38,6 +38,7 @@ import {
   useBulkOrgKpiFlags,
   useBulkEmployeeAttrs,
   useMyReviewScope,
+  useStageReadyScope,
   type BulkScopeFilters,
   type BulkReviewRow,
 } from '@/hooks/useBulkReview';
@@ -61,7 +62,7 @@ import { isRowInMyReviewScope, matchesCategoryFilter } from '@/lib/bulkAuditScop
 import { computeOrgKpiCoverageGaps } from '@/lib/orgKpiAuditCoverage';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { CalendarClock } from 'lucide-react';
+import { CalendarClock, ListChecks } from 'lucide-react';
 import { useUrlFilterStateNullable } from '@/hooks/useUrlFilterState';
 import { buildBulkSignoffImpact, type ImpactSummary } from '@/lib/bulkSignoffImpact';
 import { useBulkSignoffPreviewData } from '@/hooks/useBulkSignoffPreviewData';
@@ -167,6 +168,24 @@ export default function BulkReviewDashboard() {
       window.localStorage.setItem('bulkReview.myScopeOnly', String(myScopeOnly));
     }
   }, [myScopeOnly]);
+  // Admin-only "Stage-ready only" — when an admin uses the viewer-stage
+  // dropdown to act AS another stage, hide rows whose previous workflow
+  // stage has not yet been completed (e.g. don't show a self_review row in
+  // the HR PMS view). Default ON; persisted in localStorage. Independent
+  // of reviewer-identity scope (admins aren't a reviewer).
+  const [adminStageReadyOnly, setAdminStageReadyOnly] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return true;
+    const raw = window.localStorage.getItem('bulkReview.adminStageReadyOnly');
+    return raw === null ? true : raw === 'true';
+  });
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(
+        'bulkReview.adminStageReadyOnly',
+        String(adminStageReadyOnly),
+      );
+    }
+  }, [adminStageReadyOnly]);
   const [scopeLoaded, setScopeLoaded] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [activeRow, setActiveRow] = useState<BulkReviewRow | null>(null);
@@ -349,6 +368,12 @@ export default function BulkReviewDashboard() {
   const myReviewScopeQ = useMyReviewScope(period, year, viewerStage, isReviewerRole);
   const myReviewScope = myReviewScopeQ.data;
   const isAuditor = effectiveRole === 'auditor';
+  // Admin viewing-as another stage: enable stage-readiness filter.
+  const isAdminViewer = effectiveRole === 'admin';
+  const stageReadyScopeQ = useStageReadyScope(
+    period, year, viewerStage, isAdminViewer,
+  );
+  const stageReadyScope = stageReadyScopeQ.data;
 
   /** Row predicate: is this row inside the current user's resolved-reviewer scope? */
   const isRowInMyScope = (r: BulkReviewRow): boolean =>
@@ -393,8 +418,15 @@ export default function BulkReviewDashboard() {
     if (isReviewerRole && myScopeOnly && myReviewScope) {
       rows = rows.filter(isRowInMyScope);
     }
+    // Admin "Stage-ready only" — hide rows whose previous workflow stage
+    // has not been completed yet (admin path; reviewer-identity is not
+    // applicable). Mirrors the gate baked into my_review_scope for
+    // reviewer roles.
+    if (isAdminViewer && adminStageReadyOnly && stageReadyScope) {
+      rows = rows.filter(r => isRowInMyReviewScope(r, stageReadyScope.pairs));
+    }
     return rows;
-  }, [rawRows, search, hideEmpty, hideNonDue, period, year, kraNames, designations, grades, managerIds, allowedEmpSet, categoryIds, isReviewerRole, myScopeOnly, myReviewScope]);
+  }, [rawRows, search, hideEmpty, hideNonDue, period, year, kraNames, designations, grades, managerIds, allowedEmpSet, categoryIds, isReviewerRole, myScopeOnly, myReviewScope, isAdminViewer, adminStageReadyOnly, stageReadyScope]);
 
   // Count of currently-loaded rows that fall inside the auditor's scope —
   // surfaced as a muted chip so even with the toggle off the auditor knows
@@ -1086,6 +1118,34 @@ export default function BulkReviewDashboard() {
                     {myScopeOnly
                       ? `Showing only KPIs currently waiting on your stage (${viewerStage.replace('_', ' ')}) — i.e. the previous stage has been completed and you are the resolved reviewer in ${period} ${year}. Rows still pending earlier stages are intentionally hidden. Click to see all loaded KPIs.`
                       : `Showing every KPI in the loaded scope, including those routed to other reviewers. Click to restrict to KPIs where you are the resolved ${viewerStage.replace('_', ' ')}.`}
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
+            {isAdminViewer && (
+              <TooltipProvider delayDuration={150}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant={adminStageReadyOnly ? 'secondary' : 'ghost'}
+                      size="sm"
+                      className="h-7 px-2 text-[11px] gap-1"
+                      onClick={() => setAdminStageReadyOnly(v => !v)}
+                      aria-pressed={adminStageReadyOnly}
+                    >
+                      <ListChecks className="h-3.5 w-3.5" />
+                      {adminStageReadyOnly ? 'Stage-ready only' : 'All stages'}
+                      {stageReadyScope && (
+                        <Badge variant="outline" className="ml-1 h-4 px-1 text-[10px] tabular-nums">
+                          {stageReadyScope.total}
+                        </Badge>
+                      )}
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom" className="max-w-[320px] text-xs">
+                    {adminStageReadyOnly
+                      ? `Admin view: showing only KPIs whose previous workflow stage has been completed for ${viewerStage.replace('_', ' ')} in ${period} ${year}. Rows still upstream are hidden. Click to see the full matrix for QA.`
+                      : `Admin QA view: showing every KPI in scope including rows still pending earlier stages. Click to restrict to stage-ready rows only.`}
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>

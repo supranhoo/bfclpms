@@ -47,6 +47,31 @@ Hard guarantees:
 
 Regression: `src/test/bulkReview/myReviewScopeStageReadiness.test.ts`.
 
+### §111.7.t Admin stage-aware viewing (RCA 2026-06-17)
+
+When an `admin` user uses the Bulk Review viewer-stage dropdown to act
+AS another stage (Manager / Skip-Level / Auditor / HR PMS / Management),
+the dashboard MUST surface a separate **"Stage-ready only"** filter and
+default it to ON. The filter hides any row whose current `kpis.status`
+is not equal to the predecessor of the chosen viewer stage in the
+resolved workflow — the same readiness gate enforced for reviewers in
+§111.7.s, applied independently of reviewer-identity.
+
+Hard guarantees:
+
+- Admin viewing as HR PMS MUST NOT see rows with status
+  `self_review` / `manager_check` (pre-Auditor) unless the toggle is
+  explicitly switched OFF for QA.
+- The toggle is admin-only. Reviewer roles continue to use the
+  "My scope only" toggle backed by `my_review_scope`.
+- Backing RPC `public.stage_ready_kpis(p_period, p_year, p_stage)` is
+  SECURITY DEFINER + admin-guarded (`has_role(auth.uid(), 'admin')`)
+  and returns an empty set for any non-admin caller — no workflow
+  position leak.
+- No write paths are affected; the filter is read-only.
+
+Regression: `src/test/bulkReview/adminStageReadyFilter.test.ts`.
+
 ## §44.3 Production Incentive Rate Cascade — Per-Employee Company Source (RCA 2026-05-29)
 
 The `compute-monthly-incentives` edge function MUST source each employee's
