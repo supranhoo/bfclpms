@@ -1,5 +1,6 @@
 import { format } from 'date-fns';
 import { useQueryHistory, QueryWithDetails } from '@/hooks/useQueryWorkflow';
+import { openStorageFile } from '@/lib/storageDownload';
 import {
   Dialog,
   DialogContent,
@@ -133,7 +134,7 @@ export function QueryHistoryDialog({ kpiId, kpiName, open, onOpenChange }: Query
               <button
                 type="button"
                 onClick={(e) => { e.preventDefault(); void openStorageFile(query.resolution_evidence_url!); }}
-                className="inline-thread inline-flex items-center gap-2 text-xs text-primary hover:underline"
+                className="inline-flex items-center gap-2 text-xs text-primary hover:underline"
               >
                 <Paperclip className="h-3 w-3" />
                 View Response Attachment
