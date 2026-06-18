@@ -734,12 +734,7 @@ export default function UserManagement() {
 
       // Update role if not employee (default)
       if (data.role !== 'employee' && response.data?.profile?.id) {
-        const { error: roleError } = await supabase
-          .from('user_roles')
-          .update({ role: data.role })
-          .eq('user_id', response.data.profile.id);
-        
-        if (roleError) throw roleError;
+        await setFunctionalRole(response.data.profile.id, data.role);
       }
 
       // v2.67.x — Persist Dummy/System Employee flag post-create. The
@@ -859,11 +854,7 @@ export default function UserManagement() {
     mutationFn: async ({ userIds, role, managerId }: { userIds: string[]; role?: AppRole; managerId?: string | null }) => {
       for (const userId of userIds) {
         if (role) {
-          const { error: roleError } = await supabase
-            .from('user_roles')
-            .update({ role })
-            .eq('user_id', userId);
-          if (roleError) throw roleError;
+          await setFunctionalRole(userId, role);
         }
         if (managerId !== undefined) {
           const { error: profileError } = await supabase
