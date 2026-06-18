@@ -1921,6 +1921,23 @@ export default function UserManagement() {
                       options={roleOptions}
                       placeholder="Select role"
                     />
+                    {(() => {
+                      const extra = ((selectedUser?.user_roles as any[]) || [])
+                        .map((r) => r.role as string)
+                        .filter((r) => r === 'platform_owner' || r === 'implementation_admin');
+                      if (extra.length === 0) return null;
+                      return (
+                        <p className="text-xs text-muted-foreground">
+                          Also has:{' '}
+                          {extra.map((r) => (
+                            <Badge key={r} variant="secondary" className="ml-1 text-[10px]">
+                              {r}
+                            </Badge>
+                          ))}
+                          <span className="ml-1">— managed in Identity &amp; Access Console</span>
+                        </p>
+                      );
+                    })()}
                   </div>
                   <div className="flex items-center justify-between rounded-lg border p-3 h-fit">
                     <div className="space-y-0.5">
