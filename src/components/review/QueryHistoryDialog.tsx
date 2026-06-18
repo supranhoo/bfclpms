@@ -90,15 +90,14 @@ export function QueryHistoryDialog({ kpiId, kpiName, open, onOpenChange }: Query
             <p className="text-sm">{query.reason}</p>
           </div>
           {query.evidence_url && (
-            <a
-              href={query.evidence_url}
-              target="_blank"
-              rel="noopener noreferrer"
+            <button
+              type="button"
+              onClick={(e) => { e.preventDefault(); void openStorageFile(query.evidence_url!); }}
               className="inline-flex items-center gap-2 text-xs text-primary hover:underline"
             >
               <Paperclip className="h-3 w-3" />
               View Query Attachment
-            </a>
+            </button>
           )}
         </div>
       </div>
@@ -131,15 +130,14 @@ export function QueryHistoryDialog({ kpiId, kpiName, open, onOpenChange }: Query
               </div>
             )}
             {query.resolution_evidence_url && (
-              <a
-                href={query.resolution_evidence_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 text-xs text-primary hover:underline"
+              <button
+                type="button"
+                onClick={(e) => { e.preventDefault(); void openStorageFile(query.resolution_evidence_url!); }}
+                className="inline-thread inline-flex items-center gap-2 text-xs text-primary hover:underline"
               >
                 <Paperclip className="h-3 w-3" />
                 View Response Attachment
-              </a>
+              </button>
             )}
           </div>
         </div>

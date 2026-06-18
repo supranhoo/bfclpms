@@ -3,6 +3,7 @@ import { Badge } from '@/components/ui/badge';
 import { User, Briefcase, Shield, FileText, ExternalLink, MessageSquare } from 'lucide-react';
 import { ReviewSubmission } from '@/hooks/useKpis';
 import { getScoreBadgeClass, getScoreLabel } from '@/lib/reviewConstants';
+import { openStorageFile } from '@/lib/storageDownload';
 
 interface PreviousLevelRemarksProps {
   submission: ReviewSubmission | null | undefined;
@@ -61,16 +62,15 @@ function RemarkItem({ icon: Icon, iconColor, borderColor, bgColor, title, score,
       
       {evidenceUrl && (
         <div className="mt-2 pl-8">
-          <a 
-            href={evidenceUrl} 
-            target="_blank" 
-            rel="noopener noreferrer"
+          <button
+            type="button"
+            onClick={(e) => { e.preventDefault(); void openStorageFile(evidenceUrl); }}
             className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline"
           >
             <FileText className="h-3 w-3" />
             View Evidence
             <ExternalLink className="h-3 w-3" />
-          </a>
+          </button>
         </div>
       )}
     </div>

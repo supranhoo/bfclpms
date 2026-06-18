@@ -147,15 +147,14 @@ export function InboxDetailSheet({
           {item.evidenceUrl && (
             <div className="space-y-2">
               <Label className="text-xs text-muted-foreground">Attachment</Label>
-              <a
-                href={item.evidenceUrl}
-                target="_blank"
-                rel="noopener noreferrer"
+              <button
+                type="button"
+                onClick={(e) => { e.preventDefault(); void openStorageFile(item.evidenceUrl!); }}
                 className="inline-flex items-center gap-2 text-sm text-primary hover:underline"
               >
                 <Paperclip className="h-4 w-4" />
                 View Attachment
-              </a>
+              </button>
             </div>
           )}
 
