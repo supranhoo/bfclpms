@@ -20,43 +20,34 @@ export function useEmployeeFilterOptions(args: UseEmployeeFilterOptionsArgs = {}
   // Fetch departments
   const { data: departments } = useDepartments();
 
-  // Fetch distinct designations from profiles
+  // Fetch distinct designations from profiles.
+  // v2.66.14 (Wave 2 perf): single SECURITY DEFINER RPC replaces the paged
+  // 2,500-row scan + JS Set dedupe. Was the #3 slow query (mean 1.65s/page,
+  // 9.5M ms cumulative). The RPC does DISTINCT in Postgres using the
+  // idx_profiles_active_designation index added in Wave 1.
   const { data: designations } = useQuery({
     queryKey: ['distinct-designations', profilesVersion, user?.id],
     staleTime: 5 * 60_000,
     gcTime: 15 * 60_000,
     queryFn: async () => {
-      // Paged fetch — bypasses PostgREST's 1000-row default cap so distinct
-      // designations from rows beyond row 1000 are not silently dropped.
-      const data = await fetchAllPaged<{ designation: string | null }>((from, to) =>
-        supabase
-          .from('profiles')
-          .select('designation')
-          .eq('is_active', true)
-          .not('designation', 'is', null)
-          .range(from, to)
-      );
-      return [...new Set(data.map(p => p.designation))].filter(Boolean).sort() as string[];
+      const { data, error } = await (supabase as any)
+        .rpc('get_distinct_active_designations');
+      if (error) throw error;
+      return (data ?? []).map((r: { designation: string }) => r.designation);
     },
     enabled: isReady && !!user,
   });
 
-  // Fetch distinct PMS grades from profiles
+  // Fetch distinct PMS grades from profiles (same RPC pattern).
   const { data: grades } = useQuery({
     queryKey: ['distinct-grades', profilesVersion, user?.id],
     staleTime: 5 * 60_000,
     gcTime: 15 * 60_000,
     queryFn: async () => {
-      // Paged fetch — bypasses PostgREST's 1000-row default cap.
-      const data = await fetchAllPaged<{ pms_grade: string | null }>((from, to) =>
-        supabase
-          .from('profiles')
-          .select('pms_grade')
-          .eq('is_active', true)
-          .not('pms_grade', 'is', null)
-          .range(from, to)
-      );
-      return [...new Set(data.map(p => p.pms_grade))].filter(Boolean).sort() as string[];
+      const { data, error } = await (supabase as any)
+        .rpc('get_distinct_active_pms_grades');
+      if (error) throw error;
+      return (data ?? []).map((r: { pms_grade: string }) => r.pms_grade);
     },
     enabled: enabledGrades && isReady && !!user,
   });
