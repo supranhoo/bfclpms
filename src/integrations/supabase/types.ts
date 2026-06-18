@@ -14182,6 +14182,13 @@ export type Database = {
         Args: { p_bu_id: string; p_reason: string; p_user_id: string }
         Returns: undefined
       }
+      set_functional_role: {
+        Args: {
+          p_new_role: Database["public"]["Enums"]["app_role"]
+          p_user_id: string
+        }
+        Returns: undefined
+      }
       set_hr_department: {
         Args: { p_bu_id: string; p_company_id: string }
         Returns: undefined
