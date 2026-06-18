@@ -1,5 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { fetchProgramMappingsPaged } from '@/services/incentiveProgramMappings';
+import { fetchAllPaged } from '@/lib/fetchAll';
 
 /**
  * Counts active employee mappings for a given incentive program.
@@ -33,11 +35,8 @@ export function useIncentiveProgramMappedEmployeeIds(programId?: string) {
     queryKey: ['incentive-program-mapped-employee-ids', programId],
     enabled,
     queryFn: async () => {
-      const { data: mappings, error: mErr } = await supabase
-        .from('incentive_program_mappings')
-        .select('mapping_type, mapping_value')
-        .eq('program_id', programId!);
-      if (mErr) throw mErr;
+      // Paged read — see services/incentiveProgramMappings.ts
+      const mappings = await fetchProgramMappingsPaged(programId!);
 
       const eligible = new Set<string>();
       const divIds: string[] = [];
@@ -66,23 +65,53 @@ export function useIncentiveProgramMappedEmployeeIds(programId?: string) {
       if (buIds.length > 0) {
         const { data: buDepts } = await supabase.from('departments').select('id').in('business_unit_id', buIds);
         if (buDepts?.length) {
-          const { data: buEmps } = await supabase
-            .from('profiles').select('id').eq('is_active', true)
-            .in('department_id', buDepts.map((d: any) => d.id));
-          buEmps?.forEach((e: any) => eligible.add(e.id));
+          const buEmps = await fetchAllPaged<any>((from, to) =>
+            supabase
+              .from('profiles')
+              .select('id')
+              .eq('is_active', true)
+              .in('department_id', buDepts.map((d: any) => d.id))
+              .order('id')
+              .range(from, to) as any,
+          );
+          buEmps.forEach((e: any) => eligible.add(e.id));
         }
       }
       if (deptIds.length > 0) {
-        const { data } = await supabase.from('profiles').select('id').eq('is_active', true).in('department_id', deptIds);
-        data?.forEach((e: any) => eligible.add(e.id));
+        const rows = await fetchAllPaged<any>((from, to) =>
+          supabase
+            .from('profiles')
+            .select('id')
+            .eq('is_active', true)
+            .in('department_id', deptIds)
+            .order('id')
+            .range(from, to) as any,
+        );
+        rows.forEach((e: any) => eligible.add(e.id));
       }
       if (desigs.length > 0) {
-        const { data } = await supabase.from('profiles').select('id').eq('is_active', true).in('designation', desigs);
-        data?.forEach((e: any) => eligible.add(e.id));
+        const rows = await fetchAllPaged<any>((from, to) =>
+          supabase
+            .from('profiles')
+            .select('id')
+            .eq('is_active', true)
+            .in('designation', desigs)
+            .order('id')
+            .range(from, to) as any,
+        );
+        rows.forEach((e: any) => eligible.add(e.id));
       }
       if (grades.length > 0) {
-        const { data } = await supabase.from('profiles').select('id').eq('is_active', true).in('pms_grade', grades);
-        data?.forEach((e: any) => eligible.add(e.id));
+        const rows = await fetchAllPaged<any>((from, to) =>
+          supabase
+            .from('profiles')
+            .select('id')
+            .eq('is_active', true)
+            .in('pms_grade', grades)
+            .order('id')
+            .range(from, to) as any,
+        );
+        rows.forEach((e: any) => eligible.add(e.id));
       }
       return Array.from(eligible);
     },

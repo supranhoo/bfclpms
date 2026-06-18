@@ -2,6 +2,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useMemo } from 'react';
+import { fetchAllPaged } from '@/lib/fetchAll';
+import { fetchProgramMappingsPaged, fetchAllProgramMappingsPaged } from '@/services/incentiveProgramMappings';
 
 export interface EligibilityRow {
   id?: string;
@@ -83,13 +85,11 @@ export function useResolvedProgramEmployees(programId?: string | 'all') {
   const { data: mappings = [] } = useQuery({
     queryKey: ['incentive-program-mappings-resolve', programId],
     queryFn: async () => {
-      let query = supabase.from('incentive_program_mappings').select('*, incentive_programs(name)');
+      // Paged — `incentive_program_mappings` can hold thousands of rows.
       if (programId && programId !== 'all') {
-        query = query.eq('program_id', programId);
+        return await fetchProgramMappingsPaged(programId);
       }
-      const { data, error } = await query;
-      if (error) throw error;
-      return data || [];
+      return await fetchAllProgramMappingsPaged();
     },
   });
 
@@ -112,12 +112,15 @@ export function useResolvedProgramEmployees(programId?: string | 'all') {
   const { data: allProfiles = [] } = useQuery({
     queryKey: ['profiles-for-mapping'],
     queryFn: async () => {
-      const { data } = await supabase
-        .from('profiles')
-        .select('id, full_name, employee_code, department_id, designation, departments(name)')
-        .eq('is_active', true)
-        .order('employee_code');
-      return data || [];
+      // POLICY §94 — paged profile list to bypass the 1,000-row PostgREST cap.
+      return await fetchAllPaged<any>((from, to) =>
+        supabase
+          .from('profiles')
+          .select('id, full_name, employee_code, department_id, designation, pms_grade, departments(name)')
+          .eq('is_active', true)
+          .order('employee_code')
+          .range(from, to) as any,
+      );
     },
   });
 
