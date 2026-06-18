@@ -36,6 +36,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { invalidateProfileCaches } from '@/lib/profileCacheKeys';
+import { setFunctionalRole } from '@/lib/userRoles';
 import { Users, Search, Shield, Edit2, Plus, ChevronLeft, ChevronRight, UserPlus, KeyRound, Copy, Check, Trash2, Package, Calendar, Phone, UserX, UserCheck, Sparkles, GitBranch } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
@@ -661,17 +662,19 @@ export default function UserManagement() {
         );
       }
 
-      const { data: roleRows, error: roleError } = await supabase
-        .from('user_roles')
-        .update({ role })
-        .eq('user_id', userId)
-        .select('user_id');
-
-      if (roleError) throw roleError;
-      if (!roleRows || roleRows.length === 0) {
-        throw new Error(
-          'You do not have permission to change this user\u2019s role. Only Admins can update roles.'
-        );
+      // Use the SECURITY DEFINER RPC so we swap only the FUNCTIONAL role and
+      // preserve platform_owner / implementation_admin rows. See
+      // src/lib/userRoles.ts for the RCA — a blanket UPDATE on user_roles
+      // hit UNIQUE(user_id, role) for multi-role users.
+      try {
+        await setFunctionalRole(userId, role);
+      } catch (e: any) {
+        if (e?.code === '42501') {
+          throw new Error(
+            'You do not have permission to change this user\u2019s role. Only Admins can update roles.'
+          );
+        }
+        throw e;
       }
     },
     onSuccess: () => {
@@ -731,12 +734,7 @@ export default function UserManagement() {
 
       // Update role if not employee (default)
       if (data.role !== 'employee' && response.data?.profile?.id) {
-        const { error: roleError } = await supabase
-          .from('user_roles')
-          .update({ role: data.role })
-          .eq('user_id', response.data.profile.id);
-        
-        if (roleError) throw roleError;
+        await setFunctionalRole(response.data.profile.id, data.role);
       }
 
       // v2.67.x — Persist Dummy/System Employee flag post-create. The
@@ -856,11 +854,7 @@ export default function UserManagement() {
     mutationFn: async ({ userIds, role, managerId }: { userIds: string[]; role?: AppRole; managerId?: string | null }) => {
       for (const userId of userIds) {
         if (role) {
-          const { error: roleError } = await supabase
-            .from('user_roles')
-            .update({ role })
-            .eq('user_id', userId);
-          if (roleError) throw roleError;
+          await setFunctionalRole(userId, role);
         }
         if (managerId !== undefined) {
           const { error: profileError } = await supabase
@@ -1927,6 +1921,23 @@ export default function UserManagement() {
                       options={roleOptions}
                       placeholder="Select role"
                     />
+                    {(() => {
+                      const extra = ((selectedUser?.user_roles as any[]) || [])
+                        .map((r) => r.role as string)
+                        .filter((r) => r === 'platform_owner' || r === 'implementation_admin');
+                      if (extra.length === 0) return null;
+                      return (
+                        <p className="text-xs text-muted-foreground">
+                          Also has:{' '}
+                          {extra.map((r) => (
+                            <Badge key={r} variant="secondary" className="ml-1 text-[10px]">
+                              {r}
+                            </Badge>
+                          ))}
+                          <span className="ml-1">— managed in Identity &amp; Access Console</span>
+                        </p>
+                      );
+                    })()}
                   </div>
                   <div className="flex items-center justify-between rounded-lg border p-3 h-fit">
                     <div className="space-y-0.5">

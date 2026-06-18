@@ -1,40 +1,94 @@
-## Root Cause: Mandala's Self/Achvd is blank because the org-KPI value is "pending" (not propagated)
+## Error
 
-### What the data shows
+```
+Failed to update user
+duplicate key value violates unique constraint "user_roles_user_id_role_key"
+```
+Triggered from Admin → User Management → Edit User → Save Changes, for **Vivek Kumar Dansena (101784)**.
 
-For the May 2026 "Implement 5S practices" org KPI, the org-level value was entered with `achieved_value=2`, `remarks='2S Achieved'` for many employees, but each employee row in `org_kpi_values` has its own `status`:
+## Evidence (verified against DB)
 
-- `status='propagated'` → `review_submissions.self_score` and `achieved_value` are filled (2.00) → row renders normally (Ashish, Bidroha, Deepak, etc.)
-- `status='pending'` → `review_submissions.self_score = NULL`, `achieved_value = NULL`, only `self_remarks='2S Achieved'` got copied → row shows blank Self/Achvd in the bulk dialog.
+`user_roles` rows for this user:
 
-Mandala Naga Raju (200570) is in the `pending` bucket. The Journey card you screenshotted reads from the OKV master (so it shows Self=2 with rating 2 via fallback), while the Bulk Sign-off dialog reads `review_submissions.self_score`, which is NULL. That mismatch is the blank cell.
+| user_id | role |
+|---|---|
+| ca38…2926 | `admin` |
+| ca38…2926 | `platform_owner` |
 
-A scan of all OKV rows for this KPI / May 2026 confirms 12 employees are in `pending` state — exactly the rows you noticed: Mandala, Shiv Prakash Rai, Prakash Chandra Goswami, plus 9 others (Aakash, Ajay B., Ajay Kumar, Amit, Ankit, Ashish Kataria, Ashok, Deepak Ranjan, Deepesh, Dinesh).
+The user has **two** rows in `user_roles`. The constraint `user_roles_user_id_role_key` is `UNIQUE (user_id, role)`.
 
-### Why this happened
+## 5-Why
 
-When the OKV was entered, the per-employee propagation step did not complete for these 12 employees (RLS skip, batch interruption, or the employee/KPI pair was created after the original propagation). The manager later entered manager_score=2 directly, but Self was never back-filled.
+1. **Why did Save Changes fail?** Postgres rejected the write with a duplicate-key error on `(user_id, role)`.
+2. **Why was a duplicate produced?** The Edit User mutation runs `UPDATE user_roles SET role = :newRole WHERE user_id = :userId`. With two existing rows, both get rewritten to the same role → collision on the unique key.
+3. **Why does the code do a blanket UPDATE?** It was written assuming each user has exactly one row in `user_roles` (UI treats role as singular: `user_roles[0].role`).
+4. **Why does this user have two rows?** `user_roles` schema permits multiple roles per user (it's a junction table), and `platform_owner` was granted in addition to `admin` (legitimate — platform/implementation roles can co-exist with functional roles).
+5. **Why didn't this surface earlier?** Almost every employee has exactly one functional role, so the singular assumption held in practice. Multi-role users (platform_owner / implementation_admin layered on top of admin) are rare and only break on edit.
 
-### Two-step fix (requires-approval)
+## Root Cause
 
-1. **Repair the data** (one migration, idempotent):
-   - For every OKV row with `status='pending'` that has a matching `review_submissions` row with `self_score IS NULL` and `kpi.status IN ('self_review','manager_check')`, copy `okv.achieved_value` → `rs.achieved_value` and `rs.self_score`, set `rs.self_rating` from the rating-scale lookup, mark `okv.status='propagated'`. Scope: this specific KPI + period, then a follow-up pass for the global backlog.
-   - Audit-log every write (POLICY §111.7.t.1, Submission Score Integrity memory).
+Mismatch between **data model** (many roles per user) and **write path** (assumes one row, uses blanket `UPDATE`). The same bug exists in:
 
-2. **Prevent the blank-cell UX going forward** (UI parity):
-   - In the Bulk Sign-off snapshot builder, when `self_score IS NULL` and a matching OKV row exists with `achieved_value IS NOT NULL`, hydrate Self/Achvd from OKV at display time (read-only fallback, same source the Journey card already uses). The "carry-forward" save logic remains unchanged.
-   - Mark the cell with a small "OKV pending" tooltip so admins know the underlying `review_submissions` write hasn't happened yet.
+- `src/pages/admin/UserManagement.tsx` → `updateUser` mutation (line ~664)
+- `src/pages/admin/UserManagement.tsx` → `bulkUpdateUsers` mutation (line ~859)
+- `src/pages/admin/UserManagement.tsx` → `createUser` post-create role update (line ~734)
 
-### Tests
-- Add a `bulkSignoffImpact.test.ts` case: OKV value present + `rs.self_score=NULL` → CellPreview.stageScores.self comes from OKV, source is unchanged ("manager" if manager_score is the carried-forward), and the row is no longer blank.
-- Backfill repair: dry-run + assertion that no `kpi.status` past `manager_check` is touched.
+The Edit User dialog also silently hides the second role — admin sees "admin" only, has no idea `platform_owner` exists, and any save will either fail (current) or wipe the second role (after naive fix). Both outcomes are wrong.
 
-### Risk & Impact
-- **Data Impact**: Repair writes only to rows that are currently NULL/pending; nothing is overwritten. Reversible via the audit-log entries.
-- **Workflow Impact**: None — same scores the org-KPI editor already shows.
-- **Regression Risk**: Low; the UI fallback is display-only and gated on `self_score IS NULL`.
-- **UI Impact**: The 12 blank rows in this dialog (and any similar pending OKVs) will start showing Self/Achvd consistent with the Journey card.
+## Risk & Impact
+
+- **Data**: Naive fix (delete-all + insert-one) would silently strip `platform_owner` / `implementation_admin` from layered users — a privilege change disguised as a profile edit. **Must not do that.**
+- **Workflow**: Admins currently cannot save any edits (even non-role edits like mobile number) for multi-role users, because the role UPDATE runs unconditionally.
+- **UI**: One field, multiple underlying rows — needs disclosure.
+- **Regression**: Low if we (a) skip the role write when role is unchanged, (b) preserve non-functional roles (`platform_owner`, `implementation_admin`) on functional-role swaps.
+- **Scope**: 3 call sites in one file; ~12 multi-role users in DB (will verify before rollout).
+
+## CAPA — Plan
+
+### Corrective (fix the bug now)
+
+1. **`updateUser` mutation** — change role write to:
+   - Read existing roles for `user_id`.
+   - If selected `editRole` already exists in the set → **no-op** (skip the role UPDATE entirely; still run the profile UPDATE).
+   - Else: in one batch — delete only the **functional** role rows (`admin`, `manager`, `employee`, `auditor`, `management`, `hr_pms`, `skip_level`) for this user, then insert the new functional role. **Preserve** `platform_owner` and `implementation_admin` rows untouched.
+   - Wrap as a small `updateUserFunctionalRole(userId, newRole)` helper in `src/lib/userRoles.ts` so all three call sites share one implementation.
+
+2. **`bulkUpdateUsers`** — call the same helper per user inside the loop.
+
+3. **`createUser`** — same helper; new users only have `employee` so it collapses to a single update, but the helper handles it idempotently.
+
+4. **Edit User dialog (UI disclosure)** — under the role select, when the user has additional non-functional roles, show a small read-only chip row: "Also has: platform_owner". Pure rendering, no logic change.
+
+### Preventive
+
+5. **Unit tests** (`src/test/admin/userRoleUpdate.test.ts`):
+   - User with single role → role swap works.
+   - User with `admin` + `platform_owner`, edit role to `admin` (unchanged) → no DB write, no error.
+   - User with `admin` + `platform_owner`, swap functional role to `manager` → `manager` row exists, `platform_owner` row preserved, no duplicate-key error.
+   - Mock data updated to include a multi-role profile.
+
+6. **DB-side guard** — add a SECURITY DEFINER RPC `public.set_functional_role(p_user_id uuid, p_new_role app_role)` that encapsulates the delete-functional + insert logic atomically, so future call sites cannot reintroduce the bug. The hooks call the RPC; the raw `update` on `user_roles` from the client is removed.
+
+### Documentation & Policy
+
+7. **DOCUMENTATION.md** — new entry under "User Management → Role Edits": clarify that functional and platform roles are independent layers and that Edit User only manages the functional role.
+8. **POLICY.md** — add governance rule: "Functional role edits MUST NOT mutate `platform_owner` or `implementation_admin` assignments. Platform-tier roles are granted/revoked only via the Identity & Access Console."
 
 ### Rollback
-- Code: revert the snapshot-builder fallback (single function).
-- Data: per-row reversal using the audit-log batch ID.
+
+All changes are additive (new RPC + helper). To revert: drop the RPC and restore the previous `UPDATE user_roles…` call site. No destructive schema changes.
+
+## Technical Summary
+
+| File | Change |
+|---|---|
+| `supabase/migrations/<ts>_set_functional_role.sql` | New RPC `set_functional_role(uuid, app_role)`; admin-only; deletes functional-role rows for user, inserts new one in one statement; audit log entry. |
+| `src/lib/userRoles.ts` (new) | `setFunctionalRole(userId, role)` wrapper around the RPC. |
+| `src/pages/admin/UserManagement.tsx` | Replace 3 inline `user_roles` writes with helper; add "Also has: …" chip row in Edit dialog. |
+| `src/test/admin/userRoleUpdate.test.ts` (new) | 3 scenarios above. |
+| `DOCUMENTATION.md`, `POLICY.md` | Versioned entry as above. |
+
+## Out of scope
+
+- Multi-functional-role assignment UI (not requested; today's UI is single-select).
+- Backfill / cleanup of any existing duplicates (DB already has the unique constraint — no duplicates possible).
