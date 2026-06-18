@@ -19,7 +19,9 @@ serve(async (req) => {
     const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
 
     const validKeys = new Set<string>();
-    if (anonKey) validKeys.add(anonKey);
+    // SECURITY: anon key is a PUBLIC browser-bundled value — do not accept it
+    // as authorization. Only the service-role key (cron) or a matching
+    // CRON_SECRET (below) may invoke this function.
     if (serviceRoleKey) validKeys.add(serviceRoleKey);
 
     let authorized = false;

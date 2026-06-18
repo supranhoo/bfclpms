@@ -37,6 +37,22 @@ Deno.serve(async (req) => {
 
   const url = Deno.env.get('SUPABASE_URL')!;
   const key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+
+  // SECURITY: require either a CRON_SECRET header or a Bearer / apikey equal
+  // to the service-role key. Previously this function had no auth gate at all.
+  const cronSecret = Deno.env.get('CRON_SECRET');
+  const provided = req.headers.get('x-cron-secret');
+  const bearer = (req.headers.get('authorization') ?? '').replace(/^Bearer\s+/i, '');
+  const apikey = req.headers.get('apikey') ?? '';
+  const cronOk = !!cronSecret && provided === cronSecret;
+  const srvOk = !!key && (bearer === key || apikey === key);
+  if (!cronOk && !srvOk) {
+    return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+      status: 401,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+
   const supabase = createClient(url, key, { auth: { persistSession: false } });
 
   const summary: Record<string, unknown> = {};
