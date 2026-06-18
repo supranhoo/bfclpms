@@ -22,9 +22,12 @@ const validateCaller = async (req: Request): Promise<{ authorized: boolean; erro
 
   // Collect all valid keys for comparison
   const validKeys = new Set<string>();
-  if (anonKey) validKeys.add(anonKey);
+  // SECURITY: anon / publishable keys are PUBLIC values bundled in every browser.
+  // Treating them as proof of authorization lets anyone on the internet trigger
+  // outbound email. Accept only the service-role key here; user-initiated calls
+  // are still allowed via the Bearer-JWT path below, and DB triggers are
+  // authorized via the stored key in system_settings (separate check below).
   if (serviceRoleKey) validKeys.add(serviceRoleKey);
-  if (publishableKey) validKeys.add(publishableKey);
 
   // Debug logging for trigger auth diagnosis
   console.log("[validateCaller] authHeader present:", !!authHeader, "apikey header present:", !!apiKeyHeader);
