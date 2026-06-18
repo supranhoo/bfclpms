@@ -81,5 +81,15 @@ export function useSentBackOrgKpiEmployees(
       return map;
     },
     enabled: !!categoryId && !!kraName && !!kpiName && !!reviewPeriod && !!reviewYear,
+    // POLICY §120 — Lean-Load. This hook is invoked once per Org KPI row in
+    // the Org KPI Data Entry page (often 50–100 rows per period). Without a
+    // staleTime the same (categoryId+kra+kpi+period+year) tuple was re-fetched
+    // on every render/focus event, producing 71k+ DB calls to the kpis table
+    // (see pg_stat_statements 18-Jun-2026 audit). Sent-back state only changes
+    // when a reviewer issues or resolves a send_back marker — both invalidate
+    // this key explicitly elsewhere — so a 5-minute stale window is safe.
+    staleTime: 5 * 60_000,
+    gcTime: 10 * 60_000,
+    refetchOnWindowFocus: false,
   });
 }
