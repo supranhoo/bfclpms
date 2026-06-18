@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -6,13 +6,15 @@ import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { MultiSelectFilter } from '@/components/ui/multi-select-filter';
-import { Users, Search, ArrowUpDown, ChevronLeft, ChevronRight } from 'lucide-react';
-import { useProgramMappings, useAddProgramMapping, useRemoveProgramMapping, useBulkAddProgramMappings, useBulkRemoveProgramMappings } from '@/hooks/useIncentivePrograms';
+import { Users, Search, ArrowUpDown, ChevronLeft, ChevronRight, Save, Undo2 } from 'lucide-react';
+import { useProgramMappings, useBulkAddProgramMappings, useBulkRemoveProgramMappings } from '@/hooks/useIncentivePrograms';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { fetchAllPaged } from '@/lib/fetchAll';
 import { useCompanyFilter } from '@/hooks/useCompanyFilter';
 import { CompanyFilter } from '@/components/reports/CompanyFilter';
+import { useToast } from '@/hooks/use-toast';
 
 interface Props {
   programId: string;
@@ -22,13 +24,13 @@ type SortKey = 'full_name' | 'company_name' | 'designation' | 'department_name' 
 type SortDir = 'asc' | 'desc';
 
 const PAGE_SIZE = 20;
+type ViewMode = 'all' | 'mapped' | 'unmapped' | 'pending';
 
 export function ProgramEmployeeMapping({ programId }: Props) {
   const { data: mappings = [], isLoading } = useProgramMappings(programId);
-  const addMapping = useAddProgramMapping();
-  const removeMapping = useRemoveProgramMapping();
   const bulkAdd = useBulkAddProgramMappings();
   const bulkRemove = useBulkRemoveProgramMappings();
+  const { toast } = useToast();
 
   const {
     companies,
@@ -47,6 +49,10 @@ export function ProgramEmployeeMapping({ programId }: Props) {
   const [sortKey, setSortKey] = useState<SortKey>('full_name');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
   const [page, setPage] = useState(0);
+  const [viewMode, setViewMode] = useState<ViewMode>('all');
+  // Staged-edit draft set of mapped employee IDs. Initialised from saved
+  // mappings; mutated by checkbox clicks. Persisted only on Apply Changes.
+  const [draftMapped, setDraftMapped] = useState<Set<string>>(new Set());
 
   // Fetch all active employees with org joins
   const { data: allEmployees = [] } = useQuery({
@@ -86,7 +92,7 @@ export function ProgramEmployeeMapping({ programId }: Props) {
   }, [allEmployees, getCompanyName]);
 
   // Build mapped employee IDs set + id lookup
-  const mappedSet = useMemo(() => {
+  const savedMappedSet = useMemo(() => {
     const s = new Set<string>();
     mappings.forEach((m: any) => {
       if (m.mapping_type === 'employee') s.add(m.mapping_value);
@@ -101,6 +107,26 @@ export function ProgramEmployeeMapping({ programId }: Props) {
     });
     return m;
   }, [mappings]);
+
+  // Reset draft whenever the saved set changes (initial load, after apply,
+  // or after switching programs).
+  useEffect(() => {
+    setDraftMapped(new Set(savedMappedSet));
+  }, [savedMappedSet]);
+
+  const pendingAdds = useMemo(() => {
+    const out: string[] = [];
+    draftMapped.forEach(id => { if (!savedMappedSet.has(id)) out.push(id); });
+    return out;
+  }, [draftMapped, savedMappedSet]);
+
+  const pendingRemoves = useMemo(() => {
+    const out: string[] = [];
+    savedMappedSet.forEach(id => { if (!draftMapped.has(id)) out.push(id); });
+    return out;
+  }, [draftMapped, savedMappedSet]);
+
+  const hasPending = pendingAdds.length > 0 || pendingRemoves.length > 0;
 
   // Distinct filter options
   const filterOptions = useMemo(() => {
@@ -125,9 +151,17 @@ export function ProgramEmployeeMapping({ programId }: Props) {
     };
   }, [employeesWithCompany]);
 
-  // Filter + search
+  // Filter + search (view mode applied first)
   const filtered = useMemo(() => {
     let list = employeesWithCompany;
+    if (viewMode === 'mapped') list = list.filter((e: any) => draftMapped.has(e.id));
+    else if (viewMode === 'unmapped') list = list.filter((e: any) => !draftMapped.has(e.id));
+    else if (viewMode === 'pending') {
+      list = list.filter((e: any) =>
+        (draftMapped.has(e.id) && !savedMappedSet.has(e.id)) ||
+        (!draftMapped.has(e.id) && savedMappedSet.has(e.id)),
+      );
+    }
     // Company filter
     if (selectedCompanyId !== 'all') {
       list = list.filter((e: any) => filterByCompany(e.id));
@@ -144,7 +178,7 @@ export function ProgramEmployeeMapping({ programId }: Props) {
     if (filterDesig.length > 0) list = list.filter((e: any) => filterDesig.includes(e.designation));
     if (filterGrade.length > 0) list = list.filter((e: any) => filterGrade.includes(e.pms_grade));
     return list;
-  }, [employeesWithCompany, selectedCompanyId, filterByCompany, search, filterDivision, filterBU, filterDept, filterDesig, filterGrade]);
+  }, [employeesWithCompany, viewMode, draftMapped, savedMappedSet, selectedCompanyId, filterByCompany, search, filterDivision, filterBU, filterDept, filterDesig, filterGrade]);
 
   // Sort
   const sorted = useMemo(() => {
@@ -173,32 +207,65 @@ export function ProgramEmployeeMapping({ programId }: Props) {
     }
   };
 
+  // Staged toggle — checkbox click mutates the local draft only.
   const toggleEmployee = useCallback((empId: string) => {
-    if (mappingIdByEmp.has(empId)) {
-      removeMapping.mutate(mappingIdByEmp.get(empId)!);
-    } else {
-      addMapping.mutate({ program_id: programId, mapping_type: 'employee', mapping_value: empId });
-    }
-  }, [mappingIdByEmp, programId, addMapping, removeMapping]);
+    setDraftMapped(prev => {
+      const next = new Set(prev);
+      if (next.has(empId)) next.delete(empId);
+      else next.add(empId);
+      return next;
+    });
+  }, []);
 
-  // Select all filtered (that are not already mapped)
-  const unmappedFiltered = filtered.filter((e: any) => !mappedSet.has(e.id));
-  const allFilteredMapped = unmappedFiltered.length === 0 && filtered.length > 0;
+  // Bulk staged toggles over the currently filtered rows.
+  const filteredUnmapped = filtered.filter((e: any) => !draftMapped.has(e.id));
+  const filteredMapped = filtered.filter((e: any) => draftMapped.has(e.id));
+  const allFilteredMappedInDraft = filteredUnmapped.length === 0 && filtered.length > 0;
 
-  const selectAllFiltered = () => {
-    const rows = unmappedFiltered.map((e: any) => ({
-      program_id: programId,
-      mapping_type: 'employee' as const,
-      mapping_value: e.id,
-    }));
-    if (rows.length > 0) bulkAdd.mutate(rows);
+  const stageMapFiltered = () => {
+    if (!filteredUnmapped.length) return;
+    setDraftMapped(prev => {
+      const next = new Set(prev);
+      filteredUnmapped.forEach((e: any) => next.add(e.id));
+      return next;
+    });
+  };
+  const stageUnmapFiltered = () => {
+    if (!filteredMapped.length) return;
+    setDraftMapped(prev => {
+      const next = new Set(prev);
+      filteredMapped.forEach((e: any) => next.delete(e.id));
+      return next;
+    });
   };
 
-  const clearAllFiltered = () => {
-    const ids = filtered
-      .map((e: any) => mappingIdByEmp.get(e.id))
-      .filter(Boolean) as string[];
-    if (ids.length > 0) bulkRemove.mutate(ids);
+  const discardChanges = () => {
+    setDraftMapped(new Set(savedMappedSet));
+  };
+
+  const applyChanges = async () => {
+    if (!hasPending) return;
+    try {
+      if (pendingAdds.length) {
+        await bulkAdd.mutateAsync(pendingAdds.map(id => ({
+          program_id: programId,
+          mapping_type: 'employee' as const,
+          mapping_value: id,
+        })));
+      }
+      if (pendingRemoves.length) {
+        const ids = pendingRemoves
+          .map(empId => mappingIdByEmp.get(empId))
+          .filter(Boolean) as string[];
+        if (ids.length) await bulkRemove.mutateAsync(ids);
+      }
+      toast({
+        title: 'Mapping updated',
+        description: `Added ${pendingAdds.length}, removed ${pendingRemoves.length}.`,
+      });
+    } catch (e: any) {
+      toast({ title: 'Failed to apply changes', description: e?.message ?? String(e), variant: 'destructive' });
+    }
   };
 
   const clearFilters = () => {
@@ -230,13 +297,55 @@ export function ProgramEmployeeMapping({ programId }: Props) {
           <Users className="h-5 w-5" /> Employee Mapping
         </CardTitle>
         <CardDescription>
-          Define which employees are enrolled in this program. Select employees from the table below.
+          Define which employees are enrolled in this program. Tick or untick rows to stage changes,
+          then click <strong>Apply Changes</strong> to save. Use <strong>Discard Changes</strong> to revert.
         </CardDescription>
-        <div className="flex flex-wrap gap-1 pt-1">
-          <Badge variant="secondary">{mappedSet.size} employee(s) mapped</Badge>
+        <div className="flex flex-wrap items-center gap-1 pt-1">
+          <Badge variant="secondary">{savedMappedSet.size} saved</Badge>
+          <Badge variant="outline">{draftMapped.size} in draft</Badge>
+          {pendingAdds.length > 0 && (
+            <Badge className="bg-emerald-600 hover:bg-emerald-600">+{pendingAdds.length} to add</Badge>
+          )}
+          {pendingRemoves.length > 0 && (
+            <Badge variant="destructive">−{pendingRemoves.length} to remove</Badge>
+          )}
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
+        {/* Staged-change action bar */}
+        <div className="flex flex-wrap items-center gap-2 p-2 rounded-md border bg-muted/30">
+          <span className="text-xs text-muted-foreground mr-auto">
+            {hasPending
+              ? `Pending: +${pendingAdds.length} / −${pendingRemoves.length}. Click Apply to save.`
+              : 'No pending changes.'}
+          </span>
+          <Select value={viewMode} onValueChange={(v: ViewMode) => { setViewMode(v); resetPage(); }}>
+            <SelectTrigger className="h-8 w-[160px] text-xs"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All employees</SelectItem>
+              <SelectItem value="mapped">Mapped only</SelectItem>
+              <SelectItem value="unmapped">Unmapped only</SelectItem>
+              <SelectItem value="pending">Pending changes</SelectItem>
+            </SelectContent>
+          </Select>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={discardChanges}
+            disabled={!hasPending || bulkAdd.isPending || bulkRemove.isPending}
+          >
+            <Undo2 className="h-3.5 w-3.5 mr-1" /> Discard
+          </Button>
+          <Button
+            size="sm"
+            onClick={applyChanges}
+            disabled={!hasPending || bulkAdd.isPending || bulkRemove.isPending}
+          >
+            <Save className="h-3.5 w-3.5 mr-1" />
+            {bulkAdd.isPending || bulkRemove.isPending ? 'Saving…' : 'Apply Changes'}
+          </Button>
+        </div>
+
         {/* Filters */}
         <div className="grid grid-cols-2 md:grid-cols-6 gap-2">
           <CompanyFilter
@@ -298,8 +407,11 @@ export function ProgramEmployeeMapping({ programId }: Props) {
               className="pl-8 h-8 text-sm"
             />
           </div>
-          <Button variant="outline" size="sm" onClick={selectAllFiltered} disabled={allFilteredMapped || bulkAdd.isPending}>
-            {allFilteredMapped ? '✓ All Selected' : `Select All (${unmappedFiltered.length})`}
+          <Button variant="outline" size="sm" onClick={stageMapFiltered} disabled={filteredUnmapped.length === 0}>
+            Map filtered ({filteredUnmapped.length})
+          </Button>
+          <Button variant="outline" size="sm" onClick={stageUnmapFiltered} disabled={filteredMapped.length === 0}>
+            Unmap filtered ({filteredMapped.length})
           </Button>
           {hasFilters && (
             <Button variant="ghost" size="sm" onClick={clearFilters}>Clear Filters</Button>
@@ -313,8 +425,8 @@ export function ProgramEmployeeMapping({ programId }: Props) {
               <TableRow>
                 <TableHead className="w-10">
                   <Checkbox
-                    checked={allFilteredMapped && filtered.length > 0}
-                    onCheckedChange={() => allFilteredMapped ? clearAllFiltered() : selectAllFiltered()}
+                    checked={allFilteredMappedInDraft}
+                    onCheckedChange={() => allFilteredMappedInDraft ? stageUnmapFiltered() : stageMapFiltered()}
                     disabled={filtered.length === 0}
                   />
                 </TableHead>
@@ -339,7 +451,7 @@ export function ProgramEmployeeMapping({ programId }: Props) {
                 <TableRow key={emp.id} className="cursor-pointer" onClick={() => toggleEmployee(emp.id)}>
                   <TableCell>
                     <Checkbox
-                      checked={mappedSet.has(emp.id)}
+                      checked={draftMapped.has(emp.id)}
                       onCheckedChange={() => toggleEmployee(emp.id)}
                       onClick={(e) => e.stopPropagation()}
                     />

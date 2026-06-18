@@ -14,6 +14,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useQuery } from '@tanstack/react-query';
 import { fetchAllPaged } from '@/lib/fetchAll';
 import { useCompanyFilter } from '@/hooks/useCompanyFilter';
+import { fetchProgramMappingsPaged } from '@/services/incentiveProgramMappings';
 
 const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -51,12 +52,8 @@ export function ProductionDailyGrid({ programId, programName, onMonthYearChange,
     enabled: !!programId,
     queryFn: async () => {
       // Get mappings for this program
-      const { data: mappings } = await supabase
-        .from('incentive_program_mappings')
-        .select('mapping_type, mapping_value')
-        .eq('program_id', programId);
-
-      if (!mappings || mappings.length === 0) return [];
+      const mappings = await fetchProgramMappingsPaged(programId);
+      if (!mappings.length) return [];
 
       // Resolve employees from mappings
       const employeeIds = new Set<string>();

@@ -11,6 +11,7 @@ import type { CustomTab, CustomTabField } from '@/hooks/useIncentiveCustomTabs';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { fetchAllPaged } from '@/lib/fetchAll';
+import { fetchProgramMappingsPaged } from '@/services/incentiveProgramMappings';
 
 interface Props {
   tab: CustomTab;
@@ -34,12 +35,8 @@ export function CustomTabDataGrid({ tab, programId, onEditTab, onDeleteTab }: Pr
   const { data: mappedEmployees = [] } = useQuery({
     queryKey: ['program-mapped-employees-for-custom-tab', programId],
     queryFn: async () => {
-      const { data: mappings } = await supabase
-        .from('incentive_program_mappings')
-        .select('mapping_type, mapping_value')
-        .eq('program_id', programId);
-
-      const employeeIds = (mappings || [])
+      const mappings = await fetchProgramMappingsPaged(programId);
+      const employeeIds = mappings
         .filter((m: any) => m.mapping_type === 'employee')
         .map((m: any) => m.mapping_value);
 

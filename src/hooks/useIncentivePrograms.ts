@@ -1,6 +1,11 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import {
+  fetchProgramMappingsPaged,
+  bulkAddProgramMappingsBatched,
+  bulkRemoveProgramMappingsBatched,
+} from '@/services/incentiveProgramMappings';
 
 // ── Programs ──
 
@@ -128,13 +133,11 @@ export function useProgramMappings(programId?: string) {
     queryKey: ['incentive-program-mappings', programId],
     enabled: !!programId,
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('incentive_program_mappings')
-        .select('*')
-        .eq('program_id', programId!)
-        .order('mapping_type');
-      if (error) throw error;
-      return data;
+      // Paged read — `incentive_program_mappings` can hold thousands of rows
+      // per program (Metal Sizing currently has 2,560). Unpaged reads
+      // silently truncate at the PostgREST 1,000-row cap, which historically
+      // hid mapped employees from downstream data-entry grids.
+      return await fetchProgramMappingsPaged(programId!);
     },
   });
 }
@@ -171,8 +174,7 @@ export function useBulkAddProgramMappings() {
   return useMutation({
     mutationFn: async (rows: { program_id: string; mapping_type: string; mapping_value: string }[]) => {
       if (rows.length === 0) return;
-      const { error } = await supabase.from('incentive_program_mappings').insert(rows);
-      if (error) throw error;
+      await bulkAddProgramMappingsBatched(rows as any);
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['incentive-program-mappings'] });
@@ -188,8 +190,7 @@ export function useBulkRemoveProgramMappings() {
   return useMutation({
     mutationFn: async (ids: string[]) => {
       if (ids.length === 0) return;
-      const { error } = await supabase.from('incentive_program_mappings').delete().in('id', ids);
-      if (error) throw error;
+      await bulkRemoveProgramMappingsBatched(ids);
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['incentive-program-mappings'] });

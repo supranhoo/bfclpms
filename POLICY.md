@@ -1,5 +1,21 @@
 ## §111.7.t.3 Functional vs Platform-tier Role Separation (codified 2026-06-18)
 
+## §INCENTIVE-MAPPING-PAGING Incentive Program Mappings — paged reads + staged-save UX (codified 2026-06-18)
+
+**Why.** `incentive_program_mappings` regularly holds thousands of rows per program (Metal Sizing: 2,560). Unranged PostgREST reads silently cap at 1,000 rows and have historically hidden mapped employees from Incentive Data Entry, eligibility resolution, custom-tab grids, and the compute edge function while still showing them in Incentive Configuration. This is identical in shape to the §94 profiles-cap class of bug.
+
+**Rule (reads).** Every client read of `incentive_program_mappings` that returns a list MUST go through `fetchProgramMappingsPaged()` or `fetchAllProgramMappingsPaged()` in `src/services/incentiveProgramMappings.ts`. Direct `supabase.from('incentive_program_mappings').select(...)` for list reads is forbidden. The `compute-monthly-incentives` edge function MUST also page this read via `.range(...)`. `head: true` count queries are exempt.
+
+**Rule (writes).** Bulk add/remove MUST use `bulkAddProgramMappingsBatched()` / `bulkRemoveProgramMappingsBatched()` with a 500-row batch size to avoid request-size/URL-length failures on large draft applies.
+
+**Rule (UX).** The Employee Mapping admin UI MUST use a staged-save flow: checkbox clicks mutate a local draft only; persistence happens via an explicit **Apply Changes** action with a matching **Discard Changes** action. The UI MUST expose pending-add and pending-remove counts and an explicit unmap path (per-row toggle in Mapped view and **Unmap filtered** bulk action). Per-click silent persistence is forbidden because it makes mass changes (especially removals) irreversible and confusing.
+
+**Compliant call sites.** `useProgramMappings`, `useResolvedProgramEmployees`, `useIncentiveProgramMappedEmployeeIds`, `ProductionDailyGrid`, `CustomTabDataGrid`, `ProgramEmployeeMapping`, `supabase/functions/compute-monthly-incentives/index.ts`.
+
+**Regression coverage.** `src/test/incentiveProgramMappingsPaging.test.ts` pins (a) the paged helper returns all 2,560 rows including past index 1,000, (b) the 500-row batch chunking, and (c) the saved-vs-draft pending-add/remove computation used by the UX.
+
+**Rollback.** Revert the service and consumer patches; no schema or RLS change was required.
+
 Functional roles (`admin`, `manager`, `employee`, `auditor`, `management`, `hr_pms`, `skip_level`) and platform-tier roles (`platform_owner`, `implementation_admin`) coexist as independent rows in `public.user_roles` and are governed separately.
 
 - The User Management → Edit User dialog manages ONLY the functional role. It MUST NOT insert, update, or delete `platform_owner` or `implementation_admin` rows under any code path (create, edit, or bulk update).
