@@ -52,11 +52,25 @@ serve(async (req) => {
       .eq('program_id', program_id)
       .eq('is_active', true);
 
-    // 2. Resolve program mappings to get eligible employee IDs
-    const { data: mappings } = await supabase
-      .from('incentive_program_mappings')
-      .select('mapping_type, mapping_value')
-      .eq('program_id', program_id);
+    // 2. Resolve program mappings to get eligible employee IDs.
+    //    Paged — `incentive_program_mappings` can exceed the PostgREST
+    //    1,000-row cap (e.g. Metal Sizing has 2,560 employee rows).
+    const mappings: { mapping_type: string; mapping_value: string }[] = [];
+    {
+      const PAGE = 1000;
+      for (let from = 0; from < 100_000; from += PAGE) {
+        const { data, error } = await supabase
+          .from('incentive_program_mappings')
+          .select('mapping_type, mapping_value')
+          .eq('program_id', program_id)
+          .order('id', { ascending: true })
+          .range(from, from + PAGE - 1);
+        if (error) throw error;
+        const rows = data ?? [];
+        mappings.push(...rows);
+        if (rows.length < PAGE) break;
+      }
+    }
 
     let employeeFilter: string[] | null = null; // null = no mappings = all employees
 
