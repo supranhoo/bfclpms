@@ -33,15 +33,16 @@ export const MAPPING_WRITE_BATCH_SIZE = 500;
  */
 export async function fetchProgramMappingsPaged(programId: string): Promise<ProgramMappingRow[]> {
   if (!programId) return [];
-  return await fetchAllPaged<ProgramMappingRow>((from, to) =>
+  const rows = await fetchAllPaged<any>((from, to) =>
     supabase
       .from('incentive_program_mappings')
       .select('id, program_id, mapping_type, mapping_value, created_at')
       .eq('program_id', programId)
       .order('created_at', { ascending: true })
       .order('id', { ascending: true })
-      .range(from, to),
+      .range(from, to) as any,
   );
+  return rows as ProgramMappingRow[];
 }
 
 /**
@@ -49,14 +50,15 @@ export async function fetchProgramMappingsPaged(programId: string): Promise<Prog
  * eligibility resolution for the "all programs" view). Paged.
  */
 export async function fetchAllProgramMappingsPaged(): Promise<(ProgramMappingRow & { incentive_programs?: { name: string } | null })[]> {
-  return await fetchAllPaged<any>((from, to) =>
+  const rows = await fetchAllPaged<any>((from, to) =>
     supabase
       .from('incentive_program_mappings')
       .select('id, program_id, mapping_type, mapping_value, created_at, incentive_programs(name)')
       .order('program_id', { ascending: true })
       .order('id', { ascending: true })
-      .range(from, to),
+      .range(from, to) as any,
   );
+  return rows as (ProgramMappingRow & { incentive_programs?: { name: string } | null })[];
 }
 
 function chunk<T>(arr: T[], size: number): T[][] {
