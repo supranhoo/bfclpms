@@ -1,5 +1,6 @@
 import { format } from 'date-fns';
 import { X, Bell, MessageSquare, User, Calendar, Paperclip, ExternalLink, Clock, CheckCircle2, MessageCircle, Send, ArrowRight } from 'lucide-react';
+import { openStorageFile } from '@/lib/storageDownload';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -147,15 +148,14 @@ export function InboxDetailSheet({
           {item.evidenceUrl && (
             <div className="space-y-2">
               <Label className="text-xs text-muted-foreground">Attachment</Label>
-              <a
-                href={item.evidenceUrl}
-                target="_blank"
-                rel="noopener noreferrer"
+              <button
+                type="button"
+                onClick={(e) => { e.preventDefault(); void openStorageFile(item.evidenceUrl!); }}
                 className="inline-flex items-center gap-2 text-sm text-primary hover:underline"
               >
                 <Paperclip className="h-4 w-4" />
                 View Attachment
-              </a>
+              </button>
             </div>
           )}
 

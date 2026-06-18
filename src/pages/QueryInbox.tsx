@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { openStorageFile } from '@/lib/storageDownload';
 import { useToast } from '@/hooks/use-toast';
 import { usePaginatedNotifications, useToggleNotificationRead, useMarkAllNotificationsRead, NotificationFilters } from '@/hooks/usePaginatedNotifications';
 import { useUnreadNotificationCount } from '@/hooks/useNotifications';
@@ -820,15 +821,14 @@ export default function QueryInbox() {
               {selectedQuery?.evidence_url && (
                 <div>
                   <Label className="text-xs text-muted-foreground">Query Attachment</Label>
-                  <a
-                    href={selectedQuery.evidence_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
+                  <button
+                    type="button"
+                    onClick={(e) => { e.preventDefault(); void openStorageFile(selectedQuery.evidence_url!); }}
                     className="flex items-center gap-2 text-sm text-primary hover:underline mt-1"
                   >
                     <Paperclip className="h-4 w-4" />
                     View Attachment
-                  </a>
+                  </button>
                 </div>
               )}
             </div>
