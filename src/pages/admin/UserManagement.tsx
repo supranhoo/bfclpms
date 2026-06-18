@@ -661,17 +661,19 @@ export default function UserManagement() {
         );
       }
 
-      const { data: roleRows, error: roleError } = await supabase
-        .from('user_roles')
-        .update({ role })
-        .eq('user_id', userId)
-        .select('user_id');
-
-      if (roleError) throw roleError;
-      if (!roleRows || roleRows.length === 0) {
-        throw new Error(
-          'You do not have permission to change this user\u2019s role. Only Admins can update roles.'
-        );
+      // Use the SECURITY DEFINER RPC so we swap only the FUNCTIONAL role and
+      // preserve platform_owner / implementation_admin rows. See
+      // src/lib/userRoles.ts for the RCA — a blanket UPDATE on user_roles
+      // hit UNIQUE(user_id, role) for multi-role users.
+      try {
+        await setFunctionalRole(userId, role);
+      } catch (e: any) {
+        if (e?.code === '42501') {
+          throw new Error(
+            'You do not have permission to change this user\u2019s role. Only Admins can update roles.'
+          );
+        }
+        throw e;
       }
     },
     onSuccess: () => {
