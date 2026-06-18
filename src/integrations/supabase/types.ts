@@ -13087,6 +13087,18 @@ export type Database = {
         Args: { _manager_id: string }
         Returns: string[]
       }
+      get_distinct_active_designations: {
+        Args: never
+        Returns: {
+          designation: string
+        }[]
+      }
+      get_distinct_active_pms_grades: {
+        Args: never
+        Returns: {
+          pms_grade: string
+        }[]
+      }
       get_employee_workflow: {
         Args: {
           employee_uuid: string
