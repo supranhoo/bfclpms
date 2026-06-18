@@ -1,3 +1,15 @@
+## §111.7.t.3 Functional vs Platform-tier Role Separation (codified 2026-06-18)
+
+Functional roles (`admin`, `manager`, `employee`, `auditor`, `management`, `hr_pms`, `skip_level`) and platform-tier roles (`platform_owner`, `implementation_admin`) coexist as independent rows in `public.user_roles` and are governed separately.
+
+- The User Management → Edit User dialog manages ONLY the functional role. It MUST NOT insert, update, or delete `platform_owner` or `implementation_admin` rows under any code path (create, edit, or bulk update).
+- Every client write to functional roles MUST go through the SECURITY DEFINER RPC `public.set_functional_role(p_user_id, p_new_role)`. Direct `UPDATE`/`DELETE`/`INSERT` against `public.user_roles` from browser code is prohibited for this flow.
+- The RPC is admin-gated (`has_role(auth.uid(), 'admin')`), is idempotent when the requested role already matches, replaces only functional rows, preserves platform-tier rows, and writes a `functional_role_changed` row to `system_audit_logs`.
+- Platform-tier roles are granted or revoked exclusively via the Identity & Access Console (`/admin/iac`).
+- The Edit User dialog MUST disclose any preserved platform-tier roles via a read-only "Also has: …" chip so the admin can see what is intentionally untouched.
+
+Regression: `src/test/admin/userRoleUpdate.test.ts`. Migration: `set_functional_role` (2026-06-18).
+
 ## §Phase18-Safety Server-Authoritative Incident Submission RPC (2026-05-30)
 
 Org-wide rollout invariant. Safety incident creation MUST go through the SECURITY DEFINER RPC `public.report_safety_incident(p_payload jsonb)`. Browser code MUST NOT call `.from('safety_incidents').insert(...)` directly. The RPC stamps `reporter_id` from the verified session (`auth.uid()`) — any `reporter_id` field in the client payload is ignored — and dedupes atomically on `(reporter_id, client_submission_id)`. Unauthenticated callers receive `not_authenticated` (`42501`); missing `client_submission_id` receives `22023`. EXECUTE is granted to `authenticated` only; `anon` and `PUBLIC` are revoked. The existing restrictive INSERT policy `Authenticated users can report incidents` is RETAINED as defence-in-depth so any direct-insert attempt continues to be gated. Reporting access is universal to every authenticated employee regardless of role or module access; downstream SELECT/UPDATE/DELETE, stage transitions (`transition_safety_incident` RPC), evidence rules, and `client_submission_id` UNIQUE idempotency are unchanged. Rollback = drop the RPC and revert `src/lib/safetyIncidentSubmit.ts` + `useReportSafetyIncident()` to direct insert. Regression: `src/test/safety/incidentReportRlsPolicy.test.ts`.
