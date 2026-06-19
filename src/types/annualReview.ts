@@ -118,6 +118,31 @@ export interface SelfReviewField {
   required?: boolean;
 }
 
+/** A row in the reusable Self Review Field library. */
+export interface SelfReviewLibraryEntry {
+  id: string;
+  kind: 'field' | 'bundle';
+  key: string;
+  category: string;
+  label_en: string;
+  label_hi: string | null;
+  placeholder_en: string | null;
+  placeholder_hi: string | null;
+  required: boolean;
+  is_builtin: boolean;
+  is_active: boolean;
+  sort_order: number;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SelfReviewLibraryBundleItem {
+  bundle_id: string;
+  field_id: string;
+  position: number;
+}
+
 export interface TemplateSettings {
   enable_multilingual?: boolean;
   available_languages?: string[];
