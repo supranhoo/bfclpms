@@ -1,5 +1,24 @@
 ## §111.7.t.3 Functional vs Platform-tier Role Separation (codified 2026-06-18)
 
+## §ANNUAL-REVIEW-SELF-REVIEW-LIBRARY Annual Review — Self Review Field Library (codified 2026-06-19, v2.66.48)
+
+**Scope.** A shared, RLS-protected library of reusable Self Review questions (fields) and ordered packs (bundles), surfaced inside the **Annual Review → Template Editor → Self Review Fields** section. Inserts produce normal `sections.self_review_fields[]` + `sections.translations.hi[...]` rows — reviewer/self-review runtime is unchanged.
+
+**Access.**
+- *Read:* any authenticated user (active rows only; admin/hr_pms may also see inactive).
+- *Create / Update / Deactivate:* `admin` + `hr_pms` only (RLS + UI gated via `useAuth().effectiveRole`).
+- *Delete:* `admin` + `hr_pms` AND `is_builtin = false`. Built-in entries cannot be hard-deleted at any tier — only deactivated.
+
+**Bilingual rule.** HI label/placeholder are imported into the template's translations map **only** when the template has Hindi enabled (`settings.enable_multilingual === true` AND `'hi' ∈ settings.available_languages`). When Hindi is off, EN-only insertion proceeds and the editor shows a non-blocking toast.
+
+**Zero hardcoding.** The 12 curated fields and 2 starter bundles are seeded as `is_builtin = true` rows — they are data, not code. Categories are free-text and surfaced as chips driven by distinct values in the table.
+
+**Runtime contract.** `mapEntryToTemplateField` and `mapBundleToTemplateFields` are the **only** sanctioned way to turn a library row into editor state. Both emit a fresh `SelfReviewField.id` per insertion so duplicate inserts of the same library entry produce independent fields and translations.
+
+**Out of scope (v1).** Versioning per entry, per-template lockdown ("only library fields"), languages beyond EN+HI, CSV bulk import, multi-company partitioning (a future `company_id` column is anticipated but not added).
+
+**No schema/RPC/RLS/audit/backup change to existing tables.** Two new tables (`annual_review_self_review_library`, `annual_review_self_review_bundle_items`) are additive and covered by the automatic backup roster.
+
 ## §INCENTIVE-MAPPING-PAGING Incentive Program Mappings — paged reads + staged-save UX (codified 2026-06-18)
 
 **Why.** `incentive_program_mappings` regularly holds thousands of rows per program (Metal Sizing: 2,560). Unranged PostgREST reads silently cap at 1,000 rows and have historically hidden mapped employees from Incentive Data Entry, eligibility resolution, custom-tab grids, and the compute edge function while still showing them in Incentive Configuration. This is identical in shape to the §94 profiles-cap class of bug.
