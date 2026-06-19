@@ -17,6 +17,20 @@ export code paths. Profile lookups for export rosters must be chunked
 Rationale: prevents the recurrence of the Metal Sizing dashes-only export
 regression (BUG-`metal-sizing-export-dashes`, v2.66.45).
 
+### Extension (codified 2026-06-19) — Display-vs-Data invariant
+
+Any paginated incentive grid (currently `ProductionDailyGrid`) MUST surface a
+**Grand Total** computed over the full filtered roster as the primary,
+visually-dominant footer figure. Per-page subtotals MAY be shown but MUST be
+(a) explicitly labelled (e.g. *"This page only (N of M)"*), (b) demoted in
+visual weight, and (c) auto-hidden when `totalPages === 1`. When a Company
+filter is active and matching rows exist in `employee_incentive_records` for
+the same `(program, period, company)`, a parity indicator MUST be shown
+comparing the live Grand Total to the records-table sum so the user can see
+whether a recompute is pending. Rationale: prevents the recurrence of
+BUG-`bfcl-june-109654` (v2.66.46) where a per-page subtotal was mistaken for
+the program total.
+
 **Rule (reads).** Every client read of `incentive_program_mappings` that returns a list MUST go through `fetchProgramMappingsPaged()` or `fetchAllProgramMappingsPaged()` in `src/services/incentiveProgramMappings.ts`. Direct `supabase.from('incentive_program_mappings').select(...)` for list reads is forbidden. The `compute-monthly-incentives` edge function MUST also page this read via `.range(...)`. `head: true` count queries are exempt.
 
 **Rule (writes).** Bulk add/remove MUST use `bulkAddProgramMappingsBatched()` / `bulkRemoveProgramMappingsBatched()` with a 500-row batch size to avoid request-size/URL-length failures on large draft applies.
