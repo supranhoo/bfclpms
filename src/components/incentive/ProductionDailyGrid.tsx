@@ -8,7 +8,7 @@ import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { Badge } from '@/components/ui/badge';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Label } from '@/components/ui/label';
-import { Save, Search, Filter, X, ChevronsLeft, ChevronLeft, ChevronRight, ChevronsRight } from 'lucide-react';
+import { Save, Search, Filter, X, ChevronsLeft, ChevronLeft, ChevronRight, ChevronsRight, Info, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { useProductionRates, useProductionDailyEntries, useBulkUpsertDailyEntries } from '@/hooks/useProductionDailyEntries';
 import { resolveEmployeeRate, resolveEmployeeCompanyId } from '@/lib/incentiveRateResolver';
 import { useAuth } from '@/contexts/AuthContext';
@@ -16,6 +16,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { useQuery } from '@tanstack/react-query';
 import { fetchAllPaged } from '@/lib/fetchAll';
 import { useCompanyFilter } from '@/hooks/useCompanyFilter';
+import { useIncentiveReportParity } from '@/hooks/useIncentiveReportParity';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { fetchProgramMappingsPaged } from '@/services/incentiveProgramMappings';
 import {
   applyDailyGridFilters,
