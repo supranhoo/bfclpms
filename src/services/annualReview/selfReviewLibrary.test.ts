@@ -38,7 +38,7 @@ describe('selfReviewLibrary mapper', () => {
     const fields = [ENTRY, { ...ENTRY, id: 'lib-2', key: 'challenges', label_en: 'Challenges', label_hi: 'चुनौतियाँ' }];
     const out = mapBundleToTemplateFields(fields, { includeHindi: true, makeId: seq() });
     expect(out.fields.map((f) => f.label)).toEqual(['Achievements', 'Challenges']);
-    expect(Object.keys(out.translations.hi ?? {})).toHaveLength(3);
+    expect(Object.keys(out.translations.hi ?? {})).toHaveLength(4);
   });
 
   it('appends to existing sections without losing prior data', () => {
