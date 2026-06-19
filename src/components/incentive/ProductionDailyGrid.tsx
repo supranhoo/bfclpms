@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback, memo } from 'react';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -6,7 +6,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { Badge } from '@/components/ui/badge';
-import { Save } from 'lucide-react';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Label } from '@/components/ui/label';
+import { Save, Search, Filter, X, ChevronsLeft, ChevronLeft, ChevronRight, ChevronsRight } from 'lucide-react';
 import { useProductionRates, useProductionDailyEntries, useBulkUpsertDailyEntries } from '@/hooks/useProductionDailyEntries';
 import { resolveEmployeeRate, resolveEmployeeCompanyId } from '@/lib/incentiveRateResolver';
 import { useAuth } from '@/contexts/AuthContext';
@@ -15,6 +17,15 @@ import { useQuery } from '@tanstack/react-query';
 import { fetchAllPaged } from '@/lib/fetchAll';
 import { useCompanyFilter } from '@/hooks/useCompanyFilter';
 import { fetchProgramMappingsPaged } from '@/services/incentiveProgramMappings';
+import {
+  applyDailyGridFilters,
+  paginate,
+  pageCount,
+  hasActiveFilters,
+  EMPTY_FILTERS,
+  PAGE_SIZE_OPTIONS,
+  type DailyGridFilters,
+} from '@/lib/incentiveGrid';
 
 const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
