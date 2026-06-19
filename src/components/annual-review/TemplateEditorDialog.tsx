@@ -14,7 +14,7 @@ import {
 } from '@/components/ui/popover';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Plus, Trash2, Settings2, Sparkles, Loader2, Languages, ListOrdered } from 'lucide-react';
+import { Plus, Trash2, Settings2, Sparkles, Loader2, Languages, ListOrdered, Library } from 'lucide-react';
 import { CriterionOptionsDialog } from './CriterionOptionsDialog';
 import { toast } from 'sonner';
 import * as svc from '@/services/annualReview/annualReviewService';
@@ -35,7 +35,6 @@ import { SelfReviewLibraryManager } from './SelfReviewLibraryManager';
 import { SelfReviewLabelCombobox } from './SelfReviewLabelCombobox';
 import { applyEntriesToSections, mapEntryToTemplateField } from '@/services/annualReview/selfReviewLibrary';
 import { useAuth } from '@/contexts/AuthContext';
-import { Library } from 'lucide-react';
 
 const uid = (p: string) => `${p}_${Math.random().toString(36).slice(2, 9)}`;
 
