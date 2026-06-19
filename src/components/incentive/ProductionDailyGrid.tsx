@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -6,7 +6,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { Badge } from '@/components/ui/badge';
-import { Save } from 'lucide-react';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Label } from '@/components/ui/label';
+import { Save, Search, Filter, X, ChevronsLeft, ChevronLeft, ChevronRight, ChevronsRight } from 'lucide-react';
 import { useProductionRates, useProductionDailyEntries, useBulkUpsertDailyEntries } from '@/hooks/useProductionDailyEntries';
 import { resolveEmployeeRate, resolveEmployeeCompanyId } from '@/lib/incentiveRateResolver';
 import { useAuth } from '@/contexts/AuthContext';
@@ -15,6 +17,15 @@ import { useQuery } from '@tanstack/react-query';
 import { fetchAllPaged } from '@/lib/fetchAll';
 import { useCompanyFilter } from '@/hooks/useCompanyFilter';
 import { fetchProgramMappingsPaged } from '@/services/incentiveProgramMappings';
+import {
+  applyDailyGridFilters,
+  paginate,
+  pageCount,
+  hasActiveFilters,
+  EMPTY_FILTERS,
+  PAGE_SIZE_OPTIONS,
+  type DailyGridFilters,
+} from '@/lib/incentiveGrid';
 
 const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -156,6 +167,34 @@ export function ProductionDailyGrid({ programId, programName, onMonthYearChange,
     });
   }, [mappedEmployees, employeeRates, filterByCompany]);
 
+  // ── Filters + Pagination (client-side) ─────────────────────────────
+  const [filters, setFilters] = useState<DailyGridFilters>(EMPTY_FILTERS);
+  const [pageSize, setPageSize] = useState<number>(50);
+  const [pageIndex, setPageIndex] = useState(0);
+
+  // Reset to first page when context that changes the row set changes.
+  useEffect(() => {
+    setPageIndex(0);
+  }, [programId, month, year, dateRange, filters, pageSize, selectedCompanyId]);
+
+  const rateOf = useCallback(
+    (emp: any) => employeeRates.get(emp.id)?.rate ?? 0,
+    [employeeRates],
+  );
+
+  const filteredEmployees = useMemo(
+    () => applyDailyGridFilters(gridEmployees as any[], filters, rateOf),
+    [gridEmployees, filters, rateOf],
+  );
+
+  const pagedEmployees = useMemo(
+    () => paginate(filteredEmployees, pageIndex, pageSize),
+    [filteredEmployees, pageIndex, pageSize],
+  );
+
+  const totalPages = pageCount(filteredEmployees.length, pageSize);
+  const filtersActive = hasActiveFilters(filters);
+
   // Initialize from DB
   useEffect(() => {
     const entryMap = new Map((entries as any[]).map((e: any) => [e.employee_id, e.daily_values || {}]));
@@ -188,14 +227,21 @@ export function ProductionDailyGrid({ programId, programName, onMonthYearChange,
     return ` (${dateRange})`;
   }, [dateRange]);
 
-  const grandTotal = useMemo(() => {
-    return Math.round(gridEmployees.reduce((sum, emp) => {
-      const rateInfo = employeeRates.get(emp.id);
-      const rate = rateInfo?.rate || 0;
+  const filteredGrandTotal = useMemo(() => {
+    return Math.round(filteredEmployees.reduce((sum, emp: any) => {
+      const rate = employeeRates.get(emp.id)?.rate || 0;
       return sum + getTotal(emp.id, visibleDays) * rate;
     }, 0));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [localData, gridEmployees, employeeRates, visibleDays]);
+  }, [localData, filteredEmployees, employeeRates, visibleDays]);
+
+  const pageTotal = useMemo(() => {
+    return Math.round(pagedEmployees.reduce((sum, emp: any) => {
+      const rate = employeeRates.get(emp.id)?.rate || 0;
+      return sum + getTotal(emp.id, visibleDays) * rate;
+    }, 0));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [localData, pagedEmployees, employeeRates, visibleDays]);
 
   const handleSave = () => {
     const payload = gridEmployees.map((emp: any) => ({
@@ -277,6 +323,82 @@ export function ProductionDailyGrid({ programId, programName, onMonthYearChange,
           <p className="text-center text-muted-foreground py-8">{emptyStateMessage}</p>
         ) : (
           <>
+            {/* Toolbar: global search + column filters + page size */}
+            <div className="flex items-center gap-2 flex-wrap mb-3">
+              <div className="relative">
+                <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" aria-hidden />
+                <Input
+                  value={filters.global}
+                  onChange={e => setFilters(f => ({ ...f, global: e.target.value }))}
+                  placeholder="Search code, name, desig, dept…"
+                  className="h-9 w-64 pl-7 text-sm"
+                  aria-label="Search employees"
+                />
+              </div>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" size="sm" className="h-9">
+                    <Filter className="h-3.5 w-3.5 mr-1" />
+                    Column Filters
+                    {filtersActive && <Badge variant="secondary" className="ml-2 h-5 px-1.5 text-[10px]">on</Badge>}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-80 space-y-3" align="start">
+                  <div className="grid grid-cols-1 gap-2">
+                    <div>
+                      <Label className="text-xs">Code</Label>
+                      <Input value={filters.code} onChange={e => setFilters(f => ({ ...f, code: e.target.value }))} className="h-8 text-sm" />
+                    </div>
+                    <div>
+                      <Label className="text-xs">Name</Label>
+                      <Input value={filters.name} onChange={e => setFilters(f => ({ ...f, name: e.target.value }))} className="h-8 text-sm" />
+                    </div>
+                    <div>
+                      <Label className="text-xs">Designation</Label>
+                      <Input value={filters.designation} onChange={e => setFilters(f => ({ ...f, designation: e.target.value }))} className="h-8 text-sm" />
+                    </div>
+                    <div>
+                      <Label className="text-xs">Department</Label>
+                      <Input value={filters.department} onChange={e => setFilters(f => ({ ...f, department: e.target.value }))} className="h-8 text-sm" />
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <Label className="text-xs">Rate min</Label>
+                        <Input type="number" value={filters.rateMin} onChange={e => setFilters(f => ({ ...f, rateMin: e.target.value }))} className="h-8 text-sm" />
+                      </div>
+                      <div>
+                        <Label className="text-xs">Rate max</Label>
+                        <Input type="number" value={filters.rateMax} onChange={e => setFilters(f => ({ ...f, rateMax: e.target.value }))} className="h-8 text-sm" />
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex justify-end">
+                    <Button variant="ghost" size="sm" onClick={() => setFilters(EMPTY_FILTERS)}>
+                      <X className="h-3.5 w-3.5 mr-1" /> Clear all
+                    </Button>
+                  </div>
+                </PopoverContent>
+              </Popover>
+              <Select value={String(pageSize)} onValueChange={v => setPageSize(Number(v))}>
+                <SelectTrigger className="h-9 w-[110px] text-sm" aria-label="Rows per page">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {PAGE_SIZE_OPTIONS.map(s => (
+                    <SelectItem key={s} value={String(s)}>{s} / page</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <span className="text-xs text-muted-foreground ml-auto">
+                Showing <span className="font-medium text-foreground">{pagedEmployees.length}</span>
+                {' '}of{' '}
+                <span className="font-medium text-foreground">{filteredEmployees.length.toLocaleString('en-IN')}</span>
+                {filtersActive && (
+                  <> (filtered from {gridEmployees.length.toLocaleString('en-IN')})</>
+                )}
+              </span>
+            </div>
+
             <div className="overflow-x-auto border rounded-md">
               <Table>
                 <TableHeader>
@@ -294,7 +416,13 @@ export function ProductionDailyGrid({ programId, programName, onMonthYearChange,
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {gridEmployees.map((emp: any) => {
+                  {pagedEmployees.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={5 + visibleDays.length + 2} className="text-center text-muted-foreground py-6 text-sm">
+                        No employees match the current filters.
+                      </TableCell>
+                    </TableRow>
+                  ) : pagedEmployees.map((emp: any) => {
                     const rateInfo = employeeRates.get(emp.id);
                     const effectiveRate = rateInfo?.rate || 0;
                     const rateSource = rateInfo?.source || 'none';
@@ -332,13 +460,36 @@ export function ProductionDailyGrid({ programId, programName, onMonthYearChange,
               </Table>
             </div>
 
-            <div className="flex items-center justify-between mt-4">
-              <p className="text-sm font-semibold">
-                Grand Total: <span className="text-primary">₹{grandTotal.toLocaleString('en-IN')}</span>
-              </p>
-              <Button onClick={handleSave} disabled={bulkUpsert.isPending}>
-                <Save className="h-4 w-4 mr-1" /> Save All
-              </Button>
+            <div className="flex items-center justify-between gap-3 flex-wrap mt-4">
+              <div className="flex items-center gap-1">
+                <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => setPageIndex(0)} disabled={pageIndex === 0} aria-label="First page">
+                  <ChevronsLeft className="h-4 w-4" />
+                </Button>
+                <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => setPageIndex(p => Math.max(0, p - 1))} disabled={pageIndex === 0} aria-label="Previous page">
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <span className="text-xs px-2 tabular-nums">
+                  Page <span className="font-medium">{pageIndex + 1}</span> / {totalPages}
+                </span>
+                <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => setPageIndex(p => Math.min(totalPages - 1, p + 1))} disabled={pageIndex >= totalPages - 1} aria-label="Next page">
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+                <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => setPageIndex(totalPages - 1)} disabled={pageIndex >= totalPages - 1} aria-label="Last page">
+                  <ChevronsRight className="h-4 w-4" />
+                </Button>
+              </div>
+              <div className="flex items-center gap-4 text-sm">
+                <span className="text-muted-foreground">
+                  Page Total: <span className="font-semibold text-foreground tabular-nums">₹{pageTotal.toLocaleString('en-IN')}</span>
+                </span>
+                <span className="font-semibold">
+                  {filtersActive ? 'Filtered Total' : 'Grand Total'}:{' '}
+                  <span className="text-primary tabular-nums">₹{filteredGrandTotal.toLocaleString('en-IN')}</span>
+                </span>
+                <Button onClick={handleSave} disabled={bulkUpsert.isPending} title="Saves all mapped employees, not just the visible page.">
+                  <Save className="h-4 w-4 mr-1" /> Save All
+                </Button>
+              </div>
             </div>
           </>
         )}
