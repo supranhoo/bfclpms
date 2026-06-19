@@ -718,6 +718,93 @@ export type Database = {
           },
         ]
       }
+      annual_review_self_review_bundle_items: {
+        Row: {
+          bundle_id: string
+          field_id: string
+          position: number
+        }
+        Insert: {
+          bundle_id: string
+          field_id: string
+          position?: number
+        }
+        Update: {
+          bundle_id?: string
+          field_id?: string
+          position?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "annual_review_self_review_bundle_items_bundle_id_fkey"
+            columns: ["bundle_id"]
+            isOneToOne: false
+            referencedRelation: "annual_review_self_review_library"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "annual_review_self_review_bundle_items_field_id_fkey"
+            columns: ["field_id"]
+            isOneToOne: false
+            referencedRelation: "annual_review_self_review_library"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      annual_review_self_review_library: {
+        Row: {
+          category: string
+          created_at: string
+          created_by: string | null
+          id: string
+          is_active: boolean
+          is_builtin: boolean
+          key: string
+          kind: string
+          label_en: string
+          label_hi: string | null
+          placeholder_en: string | null
+          placeholder_hi: string | null
+          required: boolean
+          sort_order: number
+          updated_at: string
+        }
+        Insert: {
+          category?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          is_active?: boolean
+          is_builtin?: boolean
+          key: string
+          kind: string
+          label_en: string
+          label_hi?: string | null
+          placeholder_en?: string | null
+          placeholder_hi?: string | null
+          required?: boolean
+          sort_order?: number
+          updated_at?: string
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          is_active?: boolean
+          is_builtin?: boolean
+          key?: string
+          kind?: string
+          label_en?: string
+          label_hi?: string | null
+          placeholder_en?: string | null
+          placeholder_hi?: string | null
+          required?: boolean
+          sort_order?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       annual_review_templates: {
         Row: {
           created_at: string
