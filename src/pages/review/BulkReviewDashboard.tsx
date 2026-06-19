@@ -1227,6 +1227,15 @@ export default function BulkReviewDashboard() {
                     {adminStageReadyOnly
                       ? `Admin role-ready view: only KPIs currently waiting at ${viewerStage.replace('_', ' ')} in ${period} ${year} are visible AND actionable. Upstream rows are hidden so they cannot accidentally be signed off. Click to switch to full QA view.`
                       : `Admin QA view: every KPI in scope is shown (including rows still pending earlier stages). Rows outside ${viewerStage.replace('_', ' ')} readiness are visible for inspection but should NOT be bulk-signed at this stage — switch the filter back ON before sign-off.`}
+                    {stageReadyBreakdown.total > 0 && (
+                      <div className="mt-2 pt-2 border-t border-border/50 space-y-0.5 tabular-nums">
+                        <div className="font-medium text-foreground">Of {stageReadyBreakdown.total} loaded rows:</div>
+                        <div>• {stageReadyBreakdown.ready} actionable at {viewerStage.replace('_', ' ')} now</div>
+                        <div>• {stageReadyBreakdown.upstream} still waiting on a prior stage</div>
+                        <div>• {stageReadyBreakdown.past} already at/past {viewerStage.replace('_', ' ')}</div>
+                        <div>• {stageReadyBreakdown.noStage} on a workflow that doesn't include {viewerStage.replace('_', ' ')}</div>
+                      </div>
+                    )}
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
