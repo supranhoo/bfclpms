@@ -227,14 +227,21 @@ export function ProductionDailyGrid({ programId, programName, onMonthYearChange,
     return ` (${dateRange})`;
   }, [dateRange]);
 
-  const grandTotal = useMemo(() => {
-    return Math.round(gridEmployees.reduce((sum, emp) => {
-      const rateInfo = employeeRates.get(emp.id);
-      const rate = rateInfo?.rate || 0;
+  const filteredGrandTotal = useMemo(() => {
+    return Math.round(filteredEmployees.reduce((sum, emp: any) => {
+      const rate = employeeRates.get(emp.id)?.rate || 0;
       return sum + getTotal(emp.id, visibleDays) * rate;
     }, 0));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [localData, gridEmployees, employeeRates, visibleDays]);
+  }, [localData, filteredEmployees, employeeRates, visibleDays]);
+
+  const pageTotal = useMemo(() => {
+    return Math.round(pagedEmployees.reduce((sum, emp: any) => {
+      const rate = employeeRates.get(emp.id)?.rate || 0;
+      return sum + getTotal(emp.id, visibleDays) * rate;
+    }, 0));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [localData, pagedEmployees, employeeRates, visibleDays]);
 
   const handleSave = () => {
     const payload = gridEmployees.map((emp: any) => ({
