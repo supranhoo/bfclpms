@@ -167,6 +167,34 @@ export function ProductionDailyGrid({ programId, programName, onMonthYearChange,
     });
   }, [mappedEmployees, employeeRates, filterByCompany]);
 
+  // ── Filters + Pagination (client-side) ─────────────────────────────
+  const [filters, setFilters] = useState<DailyGridFilters>(EMPTY_FILTERS);
+  const [pageSize, setPageSize] = useState<number>(50);
+  const [pageIndex, setPageIndex] = useState(0);
+
+  // Reset to first page when context that changes the row set changes.
+  useEffect(() => {
+    setPageIndex(0);
+  }, [programId, month, year, dateRange, filters, pageSize, selectedCompanyId]);
+
+  const rateOf = useCallback(
+    (emp: any) => employeeRates.get(emp.id)?.rate ?? 0,
+    [employeeRates],
+  );
+
+  const filteredEmployees = useMemo(
+    () => applyDailyGridFilters(gridEmployees as any[], filters, rateOf),
+    [gridEmployees, filters, rateOf],
+  );
+
+  const pagedEmployees = useMemo(
+    () => paginate(filteredEmployees, pageIndex, pageSize),
+    [filteredEmployees, pageIndex, pageSize],
+  );
+
+  const totalPages = pageCount(filteredEmployees.length, pageSize);
+  const filtersActive = hasActiveFilters(filters);
+
   // Initialize from DB
   useEffect(() => {
     const entryMap = new Map((entries as any[]).map((e: any) => [e.employee_id, e.daily_values || {}]));
