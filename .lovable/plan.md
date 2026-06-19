@@ -1,147 +1,103 @@
 ## 1. Assumptions
-- This is about **Incentive Configuration → Metal Sizing → Employee Mapping** and the downstream visibility in **Incentive Data Entry → Metal Sizing**.
-- The mapping table is expected to support programs with more than 1,000 directly mapped employees. Current Metal Sizing has **2,560 employee mapping rows**, so any unpaged read is unsafe.
-- The desired UX is: selecting employees should **not immediately persist** each click; admins should be able to review additions/removals and then save.
+- Target page: **Incentive Data Entry → Production Data → Metal Sizing** (the daily grid in `src/components/incentive/ProductionDailyGrid.tsx`).
+- Performance issue at scale: 2,560 employees × 31 days = ~79k inputs in one DOM render. This is why the page feels heavy.
+- Pagination should be **client-side** (data is already loaded once for save consistency) but render only the current page of rows.
+- "Excel-like filters" = per-column header filters (text search + multi-select for categorical columns) plus a global search box — not full pivot/sort UI.
+- Saving still posts the FULL `localData` set (across all pages) — pagination must not drop unsaved edits on other pages.
 
-## 2. Clarifications
-- Not required before implementation: I will default to a safe staged-save UX with **Apply Changes** and **Discard Changes**.
-- I will keep the fix focused on incentive employee mapping and mapping consumers; I will not expand into unrelated Incentive Data Entry Excel filters unless you ask separately.
+## 2. Clarifications (defaulted, change if needed)
+- Default page size: **50 rows**, options 25 / 50 / 100 / 200.
+- Filterable columns: **Code, Name, Designation, Department, Rate/Ton**. Day columns stay numeric input only.
+- Grand Total: shows **filtered grand total** + **page grand total** separately so admins always see both.
+- Apply same pattern to `ProductionTargetGrid` and `VesselDataEntryGrid`? **Out of scope** for this PR — keep change surgical. Will note as follow-up.
 
 ## 3. Risk & Impact Report
-- **Data Impact:**
-  - No schema change planned.
-  - Existing `incentive_program_mappings` rows remain intact.
-  - Add/remove operations will still target the existing unique constraint: `(program_id, mapping_type, mapping_value)`.
-- **Workflow Impact:**
-  - Mapping changes become staged: checkbox clicks modify a local draft, and persistence happens only when the admin clicks **Apply Changes**.
-  - Explicit unmap support will be added for selected/mapped employees.
-- **UI/UX Impact:**
-  - Mapping grid will show pending additions/removals before save.
-  - Add clear actions: **Apply Changes**, **Discard Changes**, **Unmap Selected**, and a mapped/unmapped/all view filter.
-- **Regression Risk:**
-  - Medium: mapping is used by configuration, eligibility, daily production entry, custom tabs, reports, and compute functions.
-  - Main risk is accidentally changing eligibility resolution semantics; mitigation is shared helper/service plus tests using >1,000 rows.
-- **Scalability Impact:**
-  - Fixes the 1,000-row PostgREST cap by paging mapping reads with `.range()`.
-  - Bulk add/remove will be chunked, default batch size **500**, to avoid request-size and URL-length failures.
-  - UI remains client-paginated for the full active employee roster, which is already loaded through `fetchAllPaged`.
-- **Backup/Data Integrity:**
-  - No new tables; existing backup coverage remains unchanged.
-- **Rollback Strategy:**
-  - Revert the service/hook/UI changes. No destructive migration or data conversion is involved.
+- **Data Impact:** None. No schema change. Save payload still covers all employees in `gridEmployees`, regardless of which page is shown.
+- **Workflow Impact:** None — same edit/save flow, just paginated rendering.
+- **UI/UX Impact:** New toolbar row (global search, column filters toggle, page size). New footer (pagination controls + dual totals).
+- **Regression Risk:** Medium — `localData` state must persist across page changes; filter logic must not break sticky columns or the existing "diagnostic empty state".
+- **Scalability Impact:** DOM input count drops from ~79k → ~1.5k per page (50 rows × 31 days). Initial paint and typing latency dramatically improve.
+- **Backup/Integrity:** N/A.
+- **Rollback:** Pure component-level change. Revert single file.
 
 ## 4. Step-by-step Plan
 
-### Step 1 — Centralize incentive mapping access
-Create a small service/helper layer for incentive mapping operations:
-- `fetchProgramMappingsPaged(programId)`
-  - Uses `fetchAllPaged` over `incentive_program_mappings`.
-  - Stable ordering by `created_at` and/or `id`.
-  - Returns all mapping rows, not just the first 1,000.
-- `bulkAddProgramMappingsBatched(rows)`
-  - Uses batches of 500.
-  - Uses duplicate-safe write behavior against the existing unique constraint.
-- `bulkRemoveProgramMappingsBatched(ids)`
-  - Deletes by mapping IDs in batches of 500.
+### Step 1 — Add filter + pagination state
+In `ProductionDailyGrid.tsx`:
+- `globalSearch: string`
+- `columnFilters: { code, name, designation, department, rateMin, rateMax }`
+- `pageSize: 25 | 50 | 100 | 200` (default 50)
+- `pageIndex: number` (reset to 0 when filters/program/month change)
 
-### Step 2 — Fix all mapping reads that can truncate at 1,000
-Update the following consumers to use the paged mapping helper:
-- `useProgramMappings()` in `src/hooks/useIncentivePrograms.ts`
-- `ProductionDailyGrid` mapped employee query
-- `useResolvedProgramEmployees()` in `src/hooks/useIncentiveEligibility.ts`
-- `useIncentiveProgramMappedEmployeeIds()` in `src/hooks/useIncentiveProgramMappingCount.ts`
-- `CustomTabDataGrid` mapped employee query
-- Relevant incentive compute/export paths where `incentive_program_mappings` is currently read without `.range()`
+### Step 2 — Derive `filteredEmployees` from `gridEmployees`
+Memoized. Applies global search across code+name+desig+dept, plus per-column substring filters. Rate filter as numeric range.
 
-This directly addresses the Metal Sizing case where 2,560 rows exist but only 1,000 may be read.
+### Step 3 — Derive `pagedEmployees`
+`filteredEmployees.slice(pageIndex * pageSize, (pageIndex + 1) * pageSize)`.
+Render loop iterates `pagedEmployees`, NOT `gridEmployees`.
 
-### Step 3 — Fix profile-list cap in eligibility mapping
-`useResolvedProgramEmployees()` also has an unpaged `profiles` list read. Replace it with `fetchAllPaged` per the existing Profiles Query Policy so employees beyond the 1,000th active profile are not hidden.
+### Step 4 — Preserve unsaved edits
+`localData` keeps every employee's values (already keyed by employee id). Switching pages re-renders rows from `localData[emp.id]`, so unsaved cells on page 1 remain when navigating to page 2 and back.
 
-### Step 4 — Redesign ProgramEmployeeMapping persistence UX
-Change `ProgramEmployeeMapping` from immediate mutation-on-click to staged editing:
-- Load saved mapped IDs into `savedMappedSet`.
-- Maintain `draftMappedSet` locally.
-- Checkbox click toggles draft state only.
-- Show counters:
-  - Saved mapped count
-  - Pending additions
-  - Pending removals
-- Add actions:
-  - **Apply Changes**: batch-add new IDs and batch-remove removed IDs
-  - **Discard Changes**: reset draft to saved state
-  - **Unmap Selected** / checkbox toggles for mapped rows
-- Disable save while mutation is pending.
-- Refresh mapping query after successful apply.
+### Step 5 — Update totals
+- `pageTotal` (visible page rows × visibleDays × rate)
+- `filteredGrandTotal` (all filtered rows)
+- Keep existing `grandTotal` as filteredGrandTotal — show both in footer.
 
-### Step 5 — Add clear remove/unmap controls
-Add visibility and controls that make removal obvious:
-- View filter: **All / Mapped / Unmapped / Pending Changes**
-- Header checkbox behavior:
-  - In Mapped view: unmap filtered rows from draft
-  - In Unmapped view: map filtered rows into draft
-  - In All view: apply current all-filtered behavior but staged only
-- Keep existing search and org filters.
+### Step 6 — Save behavior
+`handleSave` continues to post for **all `gridEmployees`** (or optionally `filteredEmployees` if a filter is active — default keep `gridEmployees` so admins never silently lose untouched-but-prior data). Document this clearly in the UI tooltip.
 
-### Step 6 — Preserve downstream data entry behavior
-Do not change production-entry formulas or rate resolution.
-Only ensure the data-entry grids receive the complete mapped employee set.
+### Step 7 — Toolbar UI
+Above the table:
+```
+[ Global search ] [ Columns filter popover ] [ Page size: 50 ▾ ] [ 247 of 2560 shown ]
+```
+Column-filter popover lists Code/Name/Desig/Dept text fields + Rate min/max. "Clear all" button.
 
-### Step 7 — Add audit trail where feasible
-For successful bulk mapping changes, add a `system_audit_logs` entry containing:
-- action name such as `incentive_program_mapping_bulk_update`
-- program ID
-- added count
-- removed count
-- performed user ID when available
+### Step 8 — Pagination footer
+```
+Showing 1–50 of 2,560 (filtered: 247)        [« ‹ Page 1 / 52 › »]
+Page Total: ₹X     Filtered Grand Total: ₹Y
+```
+Includes input to jump to page N.
 
-If client-side audit insertion is blocked by RLS, implement this as a follow-up via approved backend function/RPC; do not weaken RLS.
+### Step 9 — Performance hardening
+- Wrap row in a `React.memo`-ed `<DailyGridRow>` so unrelated rows don't re-render on a single cell change.
+- Lift `handleCellChange` into a `useCallback` to keep memo stable.
+- Skip resolving rates inside row (already memoized in `employeeRates` map).
+
+### Step 10 — Tests (Vitest)
+- Filter logic: search "Aabid" returns 1 row from a mock of 2,600.
+- Pagination logic: page 3 of size 50 returns rows 100–149.
+- Edits-preserved-across-pages: setting day 5 = 10 on page 1, switching to page 2, switching back, value still 10.
+- Save payload covers all employees, not just current page.
 
 ## 5. UI Changes
-- **Location:** Incentive Configuration → selected program → Employee Mapping.
-- **Visual changes:**
-  - Add a staged-change action bar above the table.
-  - Add mapped status/view filter.
-  - Add pending-change badges.
-  - Add explicit save/discard controls.
-- **Interaction impact:**
-  - Clicking a checkbox no longer immediately writes to the database.
-  - Admins can remove mapped employees by unchecking them and applying changes.
-- **Responsiveness:**
-  - Keep existing responsive filter grid.
-  - Keep table pagination at 20 rows unless changing it is requested.
-  - Ensure action buttons wrap on smaller screens.
+- **Location:** Top of `ProductionDailyGrid` card (after the existing month/range toolbar), and a new footer above Save All.
+- **Visual:**
+  - Toolbar: search input + filter popover trigger + page-size select + count badge.
+  - Footer: prev/next/first/last buttons, page indicator, dual totals.
+- **Interaction:** Filtering or changing page size resets to page 1. Sticky left columns and existing toggle group untouched.
+- **Responsive:** Toolbar wraps on small screens; pagination footer wraps as `flex-wrap`.
 
 ## 6. Implementation
-- Build a mapping service/helper first.
-- Refactor hooks to use the service.
-- Refactor `ProgramEmployeeMapping` state model from immediate persistence to draft persistence.
-- Update mapping consumers to use paged reads.
-- Keep changes surgical; no unrelated refactors.
+Single file change: `src/components/incentive/ProductionDailyGrid.tsx`. Extract `DailyGridRow` as a small in-file `React.memo` component.
 
 ## 7. Tests
-Add regression tests with realistic mock data:
-- **Mapping pagination test:** simulate 2,560 mapping rows and assert all are returned, including rows beyond index 1,000.
-- **Draft UX logic test:** saved set + draft toggles produce correct additions/removals.
-- **Batch write test:** 1,200 additions/removals are split into 500-sized batches.
-- **Data-entry visibility regression:** employee mapped beyond row 1,000 remains visible after mapping resolution.
-- **Profile paging regression:** `useResolvedProgramEmployees` uses `fetchAllPaged` and `.range()` for active profiles.
+New file: `src/test/productionDailyGridFilters.test.ts` covering the filter, pagination, and edit-preservation helpers (extract pure helpers `applyDailyGridFilters` and `paginate` from the component into the same file or `src/lib/incentiveGrid.ts` for testability).
 
 ## 8. DOCUMENTATION.md updates
-Update documentation with:
-- Root cause: `incentive_program_mappings` reads were unpaged, causing Metal Sizing’s 2,560 mappings to truncate at 1,000.
-- New mapping UX: staged edits with apply/discard.
-- New technical standard: incentive mapping list reads must use paged helpers.
-- Version history entry for this bug fix.
+Add v2.66.44 entry:
+- Production Daily Grid now paginates (default 50) and supports column + global filters.
+- DOM render cost reduced ~50× for large programs (Metal Sizing 2,560 emp).
+- Save still persists all employees, not just current page.
 
 ## 9. POLICY.md updates
-Add/extend policy:
-- Incentive program mappings are large datasets and must never be read through unpaged `.select()` calls.
-- Bulk mapping operations must be batched.
-- Mapping UI must support both add and remove flows explicitly.
-- Direct checkbox clicks must not silently persist without a visible pending/save flow.
+Extend Pagination policy:
+- Any incentive data-entry grid rendering >200 employees MUST paginate client-side.
+- Edits to off-page rows must be preserved in component state until Save.
+- Filters must operate on the full mapped roster, not just the rendered page.
 
 ## 10. Post-implementation notes
-- After implementation, verify Metal Sizing shows all mapped employees consistently in Configuration and Data Entry.
-- Re-check any program with more than 1,000 mappings.
-- If compute/report paths still show discrepancies, inspect edge-function mapping resolution next, but the planned sweep should cover the known unpaged reads.
+- Verify on Metal Sizing (2,560 emp) that typing latency is normal and Save All still writes all rows.
+- Follow-up tickets (not in this PR): apply same toolbar to `ProductionTargetGrid` and `VesselDataEntryGrid`; consider virtualized rows (`@tanstack/react-virtual`) if page size 200 still lags.
