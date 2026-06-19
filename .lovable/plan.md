@@ -1,58 +1,68 @@
 
-## Problem (RCA)
+## Assumptions
 
-`IncentiveDataExport.exportDailyData` in `src/components/incentive/IncentiveDataExport.tsx` has three defects that together produce the screenshot (all `—` placeholders, only Rate/Ton populated, rows truncated):
+- "Incentive Data Entry's Sum" = the **Page Total** line at the footer of `ProductionDailyGrid` (`₹{pageTotal}`), not the **Grand Total / Filtered Total** next to it.
+- "Incentive Report" total = `summaryStats.totalAmount` in `MonthlyIncentiveTable`, which sums `employee_incentive_records.incentive_amount` for the selected period/company.
+- BFCL is selected via the Company filter in both screens; period = June 2026; program = Metal Sizing (the only daily program with June 2026 entries).
 
-1. **1,000-row PostgREST cap on every read.** `incentive_production_rates`, `production_daily_entries`, and `profiles` are all fetched with unranged `.select(...)`. Metal Sizing has 2,560 mappings and 2,412 June entries — everything past row 1,000 is silently dropped.
-2. **Wrong roster source.** `allEmpIds` is built from `rates` (only `rate_type='employee'`) + `entries`. Metal Sizing uses a `common` rate, so `empIds` from rates is empty; the export only sees employees who already have a saved daily entry, and even then only the first 1,000. The on-screen grid sources its roster from `incentive_program_mappings` (via `fetchProgramMappingsPaged` + `useIncentiveEligibility`), so the Excel does not match the grid.
-3. **Profile lookup misses → dashes.** Because `profiles` is also capped at 1,000 and the `.in('id', empIds)` list itself can exceed URL limits for 2,500+ ids, most rows resolve `profileMap.get(empId) === undefined` and render `—` for Employee / Code / Designation / Department.
+## RCA — verified against the database
 
-The vessel and target exporters have the same 1k-cap risk but are not in the reported screenshot; we'll fix `daily` (the reported one) and harden `vessel`/`target` defensively since they're a one-line change.
+DB confirms the report is correct and the **whole grid total also matches the report**. The mismatch is a UI labelling problem, not a data problem.
+
+| Source | Value | Origin |
+|---|---|---|
+| Incentive Report — BFCL, June 2026 | **₹270,332** | 218 records × `incentive_amount` (production 551 t × company rate 490.62) |
+| Data Entry — Grand Total (BFCL filter) | **≈ ₹270,332** | 123 BFCL employees × tons (551) × 490.62 |
+| Data Entry — **Page Total** (page 1, page size 50 of 123) | **≈ ₹109,654** | 50 visible rows × ~4.47 t avg × 490.62 |
+
+Math: 109,654 / 490.62 = 223.5 t; 223.5 / 551 = **40.6 %** → that is exactly 50/123 of the BFCL roster, i.e. one page of the default 50-row pagination.
+
+So the number the user is reading is the **per-page** subtotal, not the program total. The Grand Total ribbon two columns to its right already shows ~₹270,xxx that matches the report.
+
+Verification path (run after deploy): toggle page size to "All" or page through every page — Page Total cumulates to Grand Total, which equals the report.
 
 ## Risk & Impact Report
 
-- **Data Impact:** Read-only. No schema, RLS, or write paths touched.
-- **Workflow Impact:** None. Export button behavior unchanged; output becomes correct and complete.
-- **UI/UX Impact:** None visually. File contents change (full roster, populated employee columns, all days, correct totals).
-- **Regression Risk:** Low. Isolated to `IncentiveDataExport.tsx`. Reuses already-vetted helpers (`fetchProgramMappingsPaged`, `fetchAllPaged`, `useIncentiveEligibility` resolution path) that the grid uses, guaranteeing parity.
-- **Scalability:** Paged reads at 1k chunks + chunked `.in(...)` profile fetches (batches of 500 ids) keep memory bounded and avoid URL-length errors at 5k+ employees.
-- **Mitigation:** Unit tests for the new pure helpers; manual verification by exporting Metal Sizing June 2026 and confirming row count == grid row count (2,560) and June total matches the grid's `filteredGrandTotal`.
+- **Data Impact:** None. Numbers in DB are already consistent (verified).
+- **Workflow Impact:** None. Save behavior, computation, and edge function unchanged.
+- **UI/UX Impact:** Footer summary becomes self-explanatory; users stop confusing per-page subtotal with the program total.
+- **Regression Risk:** Very low — pure presentation changes in one file (`ProductionDailyGrid.tsx` lines 481–492). No data, hook, or query changes.
+- **Scalability:** Unchanged. Same memoised reductions, same paginated render.
+- **Mitigation:** Add a unit test for the existing `getTotal` / aggregation helpers' parity with the per-page slice (Grand Total = Σ Page Totals across all pages); manual screenshot QA at default page size.
 
-## Plan
+## UI Changes (only file: `src/components/incentive/ProductionDailyGrid.tsx`)
 
-### Step 1 — New pure helper: `src/lib/incentiveExportData.ts`
-- `resolveDailyExportRoster(programId, month, year)` returns `{ employees, rates, entries, daysInMonth }`.
-- Roster comes from the **same resolution path as the grid**: program mappings (paged) → eligibility resolution → final employee list. This guarantees Configuration ↔ Data Entry ↔ Export parity.
-- Reads use `fetchAllPaged` for `incentive_production_rates` and `production_daily_entries`.
-- Profile fetch batched via `chunk(ids, 500)` then `.in('id', batch)` with paged read inside each batch.
+1. **Reorder & re-weight the footer:** show **Grand Total / Filtered Total** first and largest (primary text, bold, larger font), with the **company name in the label** when a company filter is active (e.g. *"Grand Total — BFCL: ₹2,70,332"*).
+2. **De-emphasise Page Total** as a secondary muted line: *"This page only (50 of 123): ₹1,09,654"*; auto-hide when `totalPages === 1`.
+3. **Add an info tooltip** (`Info` icon next to Page Total) explaining: *"Page Total covers only the rows visible on this page. Grand Total covers every employee matching your current filters and is what the Incentive Report sums."*
+4. **Sticky parity badge** next to Grand Total: when a Company filter is active and a record set exists in `employee_incentive_records` for the same program/period/company, fetch its sum and display *"Matches Report ✓"* (green) or *"Differs from Report — recompute pending"* (amber) with the delta. The check is read-only against the records table.
+5. **Responsive:** footer wraps to a stacked two-row layout below `sm` so the Grand Total never gets clipped on mobile.
 
-### Step 2 — Refactor `IncentiveDataExport.tsx`
-- `exportDailyData` becomes a thin wrapper that calls `resolveDailyExportRoster` and maps rows to the existing column shape (Employee / Code / Designation / Department / Rate/Ton / Day 1…N / Total / Amount). Column order and headers unchanged.
-- `exportVesselData`: swap raw `.select` for `fetchAllPaged` on `incentive_vessel_rates` and `vessel_monthly_entries`; source roster from program mappings for parity. (Same pattern, smaller scope.)
-- `exportTargetData`: paged read on `production_targets` (defensive; usually small).
+No new pages, routes, or tabs. No touch to header, body, or save flow.
 
-### Step 3 — Tests: `src/test/incentiveExportData.test.ts`
-- Roster equals grid roster when mappings > 1,000.
-- Common-rate program: every employee gets `commonRate`, not 0.
-- Employee-rate override wins over common.
-- Entry values map to correct Day columns; Total = sum of daily values; Amount = Total × rate.
-- Profile batching: 2,600-id input produces a single deduped `profileMap` covering all ids.
+## Plan (step → verification)
 
-### Step 4 — Docs & policy
-- `DOCUMENTATION.md`: new entry "v2.66.45 — Incentive Excel export pagination & roster parity" describing the three RCAs and the fix.
-- `POLICY.md`: extend the existing Incentive Mapping Paging policy to cover **exports** — "All Excel/CSV exports for incentive programs MUST source roster from `fetchProgramMappingsPaged` (or the eligibility resolver) and use `fetchAllPaged` for every related read. Direct `.select(...)` on `incentive_production_rates`, `production_daily_entries`, `incentive_vessel_rates`, `vessel_monthly_entries`, `production_targets` is forbidden in export code paths."
-
-### Step 5 — Verification
-- Manual: export Metal Sizing → June 2026; confirm 2,560 rows, all employee columns populated, total matches grid.
-- `vitest run incentiveExportData` green.
+1. **Footer refactor** in `ProductionDailyGrid.tsx` → screenshot at default (page 1) BFCL filter shows Grand Total prominent; Page Total muted.
+2. **Add `useIncentiveReportParity` hook** (`src/hooks/useIncentiveReportParity.ts`) — single `select sum(incentive_amount)` from `employee_incentive_records` for `(program_id, review_period, review_year, company_id)`, paged via `fetchAllPaged`. Hook returns `{ recordsTotal, isLoading, hasRecords }`.
+3. **Wire parity badge** → verify by toggling company filter (BFCL ⇄ All) and confirming the badge shows ✓ for BFCL=June 2026.
+4. **Unit tests** (`src/test/productionDailyGridFooter.test.ts`):
+   - `pageTotal` ≤ `filteredGrandTotal` for any `pageIndex`, `pageSize`, filter combination.
+   - Sum of `pageTotal` across all pages == `filteredGrandTotal` (no rounding drift > ₹1).
+   - Parity badge label correctly computes delta and rounds to nearest ₹.
+5. **DOCUMENTATION.md** → add `v2.66.46 — Page Total vs Grand Total clarity + Incentive Report parity badge` entry with the RCA, the math (50/123 page-slice → 40.6 % under-report), and the UI change list.
+6. **POLICY.md** → extend `§INCENTIVE-MAPPING-PAGING` with a **Display-vs-Data invariant**: "Any paginated incentive grid MUST surface a Grand Total computed over the full filtered roster, labelled distinctly from Page Total. Where `employee_incentive_records` rows exist for the same scope, a parity indicator MUST be shown so users see whether a recompute is pending."
 
 ## Files
 
-- **Add:** `src/lib/incentiveExportData.ts`, `src/test/incentiveExportData.test.ts`
-- **Edit:** `src/components/incentive/IncentiveDataExport.tsx`, `DOCUMENTATION.md`, `POLICY.md`
+- **Edit:** `src/components/incentive/ProductionDailyGrid.tsx`, `DOCUMENTATION.md`, `POLICY.md`
+- **Add:** `src/hooks/useIncentiveReportParity.ts`, `src/test/productionDailyGridFooter.test.ts`
 
-## Out of scope
+## Out of scope (push-back per Rule 15)
 
-- UI changes to the export button or dialog.
-- Server-side export (would require an edge function; not justified at current volumes).
-- Backfill/repair — no data was lost, only the export read truncated.
+- Auto-running the compute edge function from the grid — destructive side-effect, must remain explicit on the Report screen.
+- Removing pagination or raising the default page size — would re-introduce the 80k-input render bottleneck fixed in v2.66.44.
+- Changing how records are written by `compute-monthly-incentives` — DB is already correct, no behavioural change warranted.
+
+## Rollback
+
+Revert the single component patch and delete the two new files; no schema or RPC changes.
