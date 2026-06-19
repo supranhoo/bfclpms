@@ -48,6 +48,7 @@ import { AnnualReviewStatusBadge } from '@/components/annual-review/AnnualReview
 import { HrFinalizationSheet } from '@/components/annual-review/HrFinalizationSheet';
 import { fyStartFromCycle } from '@/lib/annualReview/fiscalYear';
 import { UnifiedBulkDialog } from '@/components/annual-review/UnifiedBulkDialog';
+import { AnnualReviewExportMenu } from '@/components/annual-review/AnnualReviewExportMenu';
 import { ChangeWorkflowDialog } from '@/components/annual-review/ChangeWorkflowDialog';
 import { InstanceStageWeightsDialog } from '@/components/annual-review/InstanceStageWeightsDialog';
 import { TemplateEditorDialog } from '@/components/annual-review/TemplateEditorDialog';
@@ -522,6 +523,18 @@ function ProgressTab() {
             {bulkLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
             Bulk workbook
           </Button>
+          <AnnualReviewExportMenu
+            cycle={activeCycle ?? null}
+            filters={{
+              search,
+              status: statusFilter,
+              hasOverride: customWeightsOnly,
+              departmentId: departmentId || undefined,
+              businessUnitId: businessUnitId || undefined,
+              managerId: managerId || undefined,
+            }}
+            total={total}
+          />
         </div>
       </div>
 
