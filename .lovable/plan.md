@@ -1,84 +1,118 @@
-## Goal
 
-Add a single, role-gated **Download / Template** menu on the Annual Review Admin → Progress toolbar (next to *Progress snapshot* and *Bulk workbook*) that exposes four downloads. All exports respect the page's current filters (cycle, search, status, BU, dept, manager, custom-weights). Visible only to `admin` + `hr_pms`.
+# Self Review Field Library
 
-## Risk & Impact Report
+Add a reusable library for Self Review Fields inside the Annual Review **New / Edit Template** editor. Authors can insert single fields or whole bundles, in English + Hindi, from curated presets and from an org-saved store.
 
-- **Data Impact:** Read-only exports. No schema, no RLS change. Reuses `svc.fetchAllInstancesForExport`, `fetchInstanceStageScores`, `getTemplate`, `annual_review_responses`. New optional `workflow_settings` keys `annual_review_export_*` (additive, defaulted).
-- **Workflow Impact:** None. Seeding template *download* only — re-import is out of scope for v1 (called out below).
-- **UI Impact:** One new `DropdownMenu` button on Admin → Progress toolbar; no layout shift. PDF preview reuses existing `KraPreviewDialog` pattern.
-- **Regression Risk:** Low — additive component + service helpers. Existing *Progress snapshot* and *System scores* dialogs untouched.
-- **Scalability:** Reuses paginated `fetchAllInstancesForExport` (already capped + batched). PDF generation per-employee is on-demand only; bulk PDF disabled for >50 rows with a guarded toast.
-- **Mitigation:** Role gate at component level *and* server (RLS already restricts the reads). Hard row cap = 5,000 for Excel bulk, 50 for PDF bulk.
+## Risk & Impact
 
-## Plan
+- **Data:** New table `annual_review_self_review_library` (+ child `annual_review_self_review_bundle_items`). Additive only. No change to `annual_review_templates` schema or existing fields.
+- **Workflow:** Editor-only. Picking from library still produces normal `self_review_fields[]` + `translations` entries — reviewer/self-review runtime unchanged.
+- **UI/UX:** Adds an "Add from Library" button + "Insert Bundle" action next to existing "Add Field"; adds an inline EN-label combobox on each new field row. No layout shift on existing rows.
+- **Regression:** Low. Insertion goes through the same `setSections` updater used today; if the library RPC fails we still allow the legacy "Add Field" flow.
+- **Scalability:** Library is small (≈10s–100s of rows). Server-side `ilike` search + `limit 50`. No client-side full table dumps.
+- **Mitigation:** RLS-locked writes (admin + hr_pms), unit tests on the insertion mapper, feature flag `annual_review_self_review_library_enabled` in `workflow_settings`.
 
-### 1. Role-gated entrypoint
-- New `AnnualReviewExportMenu` component on `AnnualReviewAdmin.tsx` toolbar.
-- Visibility: `effectiveRole in ['admin','hr_pms']`. Optional `workflow_settings` override (`annual_review_export_roles`) parsed like `useKraExportConfig`.
+## Data Model
 
-### 2. Four download options
+```text
+annual_review_self_review_library
+  id uuid pk
+  kind text check in ('field','bundle')      -- single field OR multi-field pack
+  key  text unique                            -- stable slug, e.g. 'achievements'
+  category text                               -- 'general' | 'blue_collar' | 'manager' | 'custom' | ...
+  label_en text not null
+  label_hi text
+  placeholder_en text
+  placeholder_hi text
+  required boolean default false
+  is_builtin boolean default false            -- seeded curated entries; not deletable
+  is_active  boolean default true
+  sort_order int default 0
+  created_by uuid, created_at, updated_at
 
-| # | Option | What it produces |
-|---|---|---|
-| A | **Blank reviewer template (Excel)** | One workbook per cycle. Sheet 1: instructions. Sheet 2: criteria grid (Employee Code, Full Name, Designation, BU, Dept, Manager, then one column per template criterion grouped by section + comments column per stage). Empty cells. |
-| B | **Blank reviewer template (PDF)** | Per-employee printable KRA-style sheet (header = company + cycle + employee block; body = sections × criteria with scoring scale legend; footer = signature blocks for Self/Manager/Skip/BU/HR). Single PDF or per-employee zip. |
-| C | **Bulk results export (Excel)** | Same row set as Progress snapshot but expanded: instance core + per-stage scores + per-criterion scores (from `annual_review_responses`) + eligibility inputs + system scores + final rating + override flags. Admin-configurable column visibility via `annual_review_export_columns` (workflow_setting JSON; defaults = all). |
-| D | **Cycle seeding template (Excel)** | Pre-populated workbook (employees × criteria) for offline drafting; columns marked "Score" and "Comment" per stage, with data-validation drop-downs from the template's rating scale. Re-import is **NOT** in v1 (explicit out-of-scope note in the menu tooltip). |
+annual_review_self_review_bundle_items
+  bundle_id uuid fk -> library(id) on delete cascade   -- only when parent.kind='bundle'
+  field_id  uuid fk -> library(id)                     -- must reference kind='field'
+  position  int
+  pk (bundle_id, field_id)
+```
 
-### 3. Service layer additions (no UI logic)
-- `src/services/annualReview/exports.ts`:
-  - `buildBlankReviewerWorkbook(cycle, template, rows)`
-  - `buildReviewerPdfBlob(cycle, template, employee, config)` (reuses `jspdf` + `jspdf-autotable` already in `kraExport.ts`)
-  - `buildBulkResultsWorkbook(cycle, instances, responses, scores, templatesById, visibleColumns)`
-  - `buildSeedingWorkbook(cycle, template, rows)`
-- Each helper is pure and unit-testable; no DB calls inside.
+RLS:
+- `SELECT` to `authenticated` where `is_active = true` (so any editor user can read).
+- `INSERT/UPDATE/DELETE` only when `has_role(uid,'admin') OR has_role(uid,'hr_pms')`; additionally `is_builtin` rows cannot be deleted (trigger guard) — only deactivated.
+- GRANT block per project policy. `service_role` full access for seeding.
 
-### 4. Configuration (zero-hardcoding)
-New `workflow_settings` keys (category=`export`), all optional with safe defaults:
-- `annual_review_export_enabled` (bool, default true)
-- `annual_review_export_roles` (string[], default `['admin','hr_pms']`)
-- `annual_review_export_pdf_roles` (string[], default `['admin','hr_pms']`)
-- `annual_review_export_columns` (string[], default = all known columns)
-- `annual_review_export_show_logo` / `_show_employee_details` (bool, default true)
+Seed migration: ~12 curated fields (achievements, challenges, learnings, support needed, goals next year, training needs, peer feedback, safety observations, ideas/innovation, customer feedback, attendance reflection, tool care) + 2 starter bundles (Blue-Collar 5-Q from existing preset, Manager 7-Q). Hindi populated from existing `BLUE_COLLAR_PRESET` translations where applicable.
 
-Read via a new `useAnnualReviewExportConfig` hook mirroring `useKraExportConfig`.
+## Service Layer (`src/services/annualReview/selfReviewLibrary.ts`)
 
-### 5. PDF rendering
-- Reuses existing PDF helpers (`generateKraSheetPdfBlob` pattern) → new `generateAnnualReviewPdfBlob` in `src/lib/annualReviewExport.ts`.
-- Preview through existing `KraPreviewDialog` (rename-safe wrapper or generic `PdfPreviewDialog`).
-- Per-employee picker dialog: search employees in current filter scope, choose one → preview/download.
-- Bulk PDF (cap 50): zips per-employee PDFs client-side via `jszip` (already a transitive dep — verify; if not present, fall back to multi-page single PDF).
+Pure functions, unit-testable:
+- `listLibrary({ search, category, kind, limit=50 })`
+- `getBundleFields(bundleId)`
+- `createEntry(input)` / `updateEntry(id, patch)` / `deactivateEntry(id)`
+- `mapEntryToTemplateField(entry, opts)` → `{ field: SelfReviewField, translations: { hi: {...} } }`
+- `mapBundleToTemplateFields(bundleId, opts)` → `{ fields, translations }`
 
-### 6. Tests (vitest)
-- `exports.test.ts`: snapshot column order for each workbook; empty-template safety; criterion grouping order matches `template.sections`.
-- `useAnnualReviewExportConfig.test.ts`: role gating, default values, JSON parsing.
-- `annualReviewPdfExport.test.ts`: PDF blob size > 0; header contains cycle + employee code; signature block present.
-
-### 7. Documentation & Policy
-- `DOCUMENTATION.md` → new "Annual Review → Exports" subsection (4 options, roles, configs, row caps).
-- `POLICY.md` → add export-access clause (Admin + HR PMS only by default, configurable).
-- Memory file `mem/features/annual-review/exports.md`.
+The mapper is what plugs into existing `sections.self_review_fields` + `sections.translations['hi']` — zero changes to runtime contracts.
 
 ## UI Changes
 
-- **Location:** `AnnualReviewAdmin.tsx` → Progress tab toolbar, between *Progress snapshot* and *Bulk workbook*.
-- **Trigger:** `Download ▾` outline button with `FileDown` icon.
-- **Menu items:** Blank reviewer template (Excel) · Blank reviewer template (PDF) · Bulk results export (Excel) · Cycle seeding template (Excel).
-- **Disabled states:** "no rows in filter" → menu disabled with tooltip; >5000 rows → Excel disabled; >50 rows → PDF disabled.
-- **Per-PDF flow:** opens `EmployeePickerDialog` → `PdfPreviewDialog` (reused).
-- Responsive: button collapses to icon below `sm`.
+Location: `TemplateEditorDialog.tsx` → **Self Review Fields** section (line ~509).
+
+Toolbar (right of section title):
+- `Add Field` (existing, unchanged)
+- `Add from Library ▾` — opens `SelfReviewLibraryPicker` dialog
+- Inside picker dropdown menu: "Insert Bundle…" tab + "Insert Fields…" tab
+
+`SelfReviewLibraryPicker` dialog:
+- Search input (debounced, server-side ilike)
+- Category filter chips (driven by distinct categories returned)
+- Tabs: Fields | Bundles
+- List rows show EN label, HI label (muted), required pill, source badge (Built-in / Org)
+- Multi-select with checkboxes; bundle row inserts all child fields atomically
+- Footer: "Insert N selected"
+- Admin/HR PMS only: "Manage library…" link → opens `SelfReviewLibraryManager` drawer (CRUD + activate/deactivate; built-ins can only toggle active)
+
+Inline combobox per new field row:
+- The existing `Field Label *` input becomes an autocomplete (Command + Popover) that suggests library entries matching the typed text.
+- Selecting a suggestion auto-fills label, placeholder, required, and HI translations (if multilingual on).
+- Free text still allowed — pressing Enter without selection keeps current behaviour.
+
+Bilingual behaviour:
+- If template `multilingual=true` and `hi` is in available_languages → mapper writes `translations.hi['field:<id>:label' / ':placeholder']`.
+- If `hi` not enabled → mapper still inserts the field but skips HI translation; a toast offers "Enable Hindi to import translations".
+
+Responsiveness: dialog `max-w-2xl`, list virtualised with simple windowing only if >200 visible.
+
+## Permissions
+
+- Read: any authenticated editor user (so non-admins editing a template can still insert from library).
+- Write (create/update/deactivate): admin + hr_pms, enforced by RLS + UI gating via `useUserRoles`.
+- Built-in rows: never hard-deleted; UI hides delete button and trigger blocks at DB level.
+
+## Step-by-step
+
+1. **Migration** — create both tables with GRANTs, RLS, built-in delete-guard trigger, then seed curated fields + 2 bundles.
+2. **Types** — extend `src/types/annualReview.ts` with `SelfReviewLibraryEntry`, `SelfReviewLibraryBundleItem`.
+3. **Service** — implement `selfReviewLibrary.ts` + `mapEntryToTemplateField` mapper.
+4. **Hook** — `useSelfReviewLibrary` (react-query) with search/category/kind params and `useUpsertLibraryEntry` mutation.
+5. **UI components** — `SelfReviewLibraryPicker.tsx` (dialog), `SelfReviewLibraryManager.tsx` (admin CRUD drawer), `SelfReviewLabelCombobox.tsx` (inline suggest).
+6. **Editor wiring** — patch `TemplateEditorDialog.tsx` Self Review Fields section: add toolbar buttons, swap label `Input` for combobox, append fields via `setSections`.
+7. **Feature flag** — read `annual_review_self_review_library_enabled` (default `true`) from `useAnnualReviewExportConfig`-style hook.
+8. **Tests** — `selfReviewLibrary.test.ts` (mapper EN-only, mapper EN+HI, bundle expansion, dedup of `id` collisions), RLS smoke (admin can insert, employee cannot).
+9. **Docs** — DOCUMENTATION.md v2.66.48 changelog entry; POLICY.md `§ANNUAL-REVIEW-SELF-REVIEW-LIBRARY` (scope, roles, built-in immutability, bilingual rules).
+10. **Memory** — update `mem/features/annual-review/exports.md` neighbour file with a new `mem/features/annual-review/self-review-library.md` entry + index.md reference.
 
 ## Out of Scope (v1)
 
-- Seeding template re-import (planned for v2 once the column contract is locked).
-- Email-to-reviewer (would need SMTP config; stubbed "Coming soon" like KRA Export).
-- Per-stage role-scoped exports (Manager/Skip/BU view) — explicitly excluded per role answer.
+- Versioning / change history per library entry.
+- Per-template lockdown ("only library fields allowed").
+- Languages other than EN + HI.
+- Bulk import from CSV.
+- Sharing library across tenants/companies (multi-company partitioning) — design leaves room via optional `company_id` column added later.
 
-## Tests + Mock Data
+## Technical Details
 
-Mock cycle + template (3 sections × 4 criteria), 6 instances spanning every stage, with/without overrides, including N/A criteria. Covers Excel column ordering, PDF rendering, role gating, and row caps.
-
-## Rollback
-
-Pure additive: remove the new menu file, the `exports.ts` helpers, the `annualReviewExport.ts` lib, the hook, and the four `workflow_settings` keys. No schema migration, so rollback = revert PR.
+- **Files added:** migration, `src/services/annualReview/selfReviewLibrary.ts`, `selfReviewLibrary.test.ts`, `src/hooks/useSelfReviewLibrary.ts`, `src/components/annual-review/SelfReviewLibraryPicker.tsx`, `SelfReviewLibraryManager.tsx`, `SelfReviewLabelCombobox.tsx`.
+- **Files edited:** `src/components/annual-review/TemplateEditorDialog.tsx` (Self Review Fields section only), `src/types/annualReview.ts` (+ types), `DOCUMENTATION.md`, `POLICY.md`, `mem/index.md`.
+- **Rollback:** drop the two new tables + revert editor patch hunk; no destructive change to existing data.

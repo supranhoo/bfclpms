@@ -14,13 +14,14 @@ import {
 } from '@/components/ui/popover';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Plus, Trash2, Settings2, Sparkles, Loader2, Languages, ListOrdered } from 'lucide-react';
+import { Plus, Trash2, Settings2, Sparkles, Loader2, Languages, ListOrdered, Library } from 'lucide-react';
 import { CriterionOptionsDialog } from './CriterionOptionsDialog';
 import { toast } from 'sonner';
 import * as svc from '@/services/annualReview/annualReviewService';
 import type {
   AnnualReviewTemplate, TemplateSections, TemplateCriterion, TemplateSystemScore,
   EligibilityCriterion, SelfReviewField, AnnualReviewerRole, CriterionOption,
+  SelfReviewLibraryEntry,
 } from '@/types/annualReview';
 import { SUPPORTED_LANGUAGES, STAGE_LABEL, STAGE_ORDER } from '@/lib/annualReview/constants';
 import { BLUE_COLLAR_PRESET, BLUE_COLLAR_PRESET_META } from '@/lib/annualReview/blueCollarPreset';
@@ -29,6 +30,11 @@ import type { CarryKraConfig } from '@/types/annualReview';
 import { CarryKraMappingPreview } from './CarryKraMappingPreview';
 import { StageWeightsEditor } from './StageWeightsEditor';
 import type { StageWeights } from '@/lib/annualReview/finalScore';
+import { SelfReviewLibraryPicker } from './SelfReviewLibraryPicker';
+import { SelfReviewLibraryManager } from './SelfReviewLibraryManager';
+import { SelfReviewLabelCombobox } from './SelfReviewLabelCombobox';
+import { applyEntriesToSections, mapEntryToTemplateField } from '@/services/annualReview/selfReviewLibrary';
+import { useAuth } from '@/contexts/AuthContext';
 
 const uid = (p: string) => `${p}_${Math.random().toString(36).slice(2, 9)}`;
 
@@ -55,6 +61,10 @@ export function TemplateEditorDialog({
   const [description, setDescription] = useState('');
   const [isActive, setIsActive] = useState(true);
   const [sections, setSections] = useState<TemplateSections>(emptySections());
+  const [libPickerOpen, setLibPickerOpen] = useState(false);
+  const [libManagerOpen, setLibManagerOpen] = useState(false);
+  const { effectiveRole } = useAuth();
+  const canManageLibrary = effectiveRole === 'admin' || effectiveRole === 'hr_pms';
 
   useEffect(() => {
     if (open) {
@@ -513,6 +523,11 @@ export function TemplateEditorDialog({
               ...s, self_review_fields: [...selfFields, { id: uid('f'), label: '', placeholder: '', required: false }],
             }))}
             addLabel="Add Field"
+            extraActions={
+              <Button size="sm" variant="outline" className="gap-1.5" onClick={() => setLibPickerOpen(true)}>
+                <Library className="h-4 w-4" /> Add from Library
+              </Button>
+            }
           >
             {selfFields.length === 0 ? <Empty msg="No self-review fields." /> : (
               <div className="space-y-3">
@@ -521,7 +536,23 @@ export function TemplateEditorDialog({
                     <div className="grid gap-2 md:grid-cols-[1fr_1fr_auto_auto] items-end">
                       <div className="space-y-1">
                         <Label className="text-xs">Field Label *</Label>
-                        <Input className="h-9" value={f.label} onChange={(ev) => updateAt(setSections, 'self_review_fields', i, { label: ev.target.value })} />
+                        <SelfReviewLabelCombobox
+                          value={f.label}
+                          onChange={(v) => updateAt(setSections, 'self_review_fields', i, { label: v })}
+                          placeholder="Type to search the library or enter a new label…"
+                          onPickLibraryEntry={(entry) => {
+                            const includeHindi = multilingual && extraLangs.includes('hi');
+                            const mapped = mapEntryToTemplateField(entry, { includeHindi, makeId: () => f.id });
+                            updateAt(setSections, 'self_review_fields', i, {
+                              label: mapped.field.label,
+                              placeholder: mapped.field.placeholder ?? '',
+                              required: !!mapped.field.required,
+                            });
+                            if (mapped.translations.hi) {
+                              Object.entries(mapped.translations.hi).forEach(([k, v]) => setTr('hi', k, v));
+                            }
+                          }}
+                        />
                       </div>
                       <div className="space-y-1">
                         <Label className="text-xs">Placeholder</Label>
@@ -593,6 +624,25 @@ export function TemplateEditorDialog({
           </Button>
         </DialogFooter>
       </DialogContent>
+      <SelfReviewLibraryPicker
+        open={libPickerOpen}
+        onOpenChange={setLibPickerOpen}
+        includeHindi={multilingual && extraLangs.includes('hi')}
+        canManage={canManageLibrary}
+        onManage={() => { setLibPickerOpen(false); setLibManagerOpen(true); }}
+        onInsert={(entries) => {
+          const includeHindi = multilingual && extraLangs.includes('hi');
+          setSections((s) => applyEntriesToSections(s, entries, { includeHindi }));
+          if (!includeHindi && entries.some((e) => e.label_hi || e.placeholder_hi)) {
+            toast.message('Hindi translations skipped — enable Hindi in template settings to import them.');
+          } else {
+            toast.success(`Inserted ${entries.length} field${entries.length === 1 ? '' : 's'} from library`);
+          }
+        }}
+      />
+      {canManageLibrary && (
+        <SelfReviewLibraryManager open={libManagerOpen} onOpenChange={setLibManagerOpen} />
+      )}
     </Dialog>
   );
 }
