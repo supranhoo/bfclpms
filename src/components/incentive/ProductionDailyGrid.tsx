@@ -279,8 +279,7 @@ export function ProductionDailyGrid({ programId, programName, onMonthYearChange,
 
   // Diagnostic empty-state — picks the first matching reason so operators can
   // distinguish "no mappings" vs "no rates" vs "no rate resolved" vs "company
-  // filter empty". RCA 2026-06-17.
-  const { companies } = useCompanyFilter();
+  // filter empty". RCA 2026-06-17. (`companies` already sourced above.)
   const companyName = useMemo(() => {
     if (!selectedCompanyId || selectedCompanyId === 'all') return '';
     return companies.find(c => c.id === selectedCompanyId)?.name ?? '';
