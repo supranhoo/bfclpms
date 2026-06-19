@@ -5,8 +5,7 @@ import * as XLSX from 'xlsx';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { fetchAllPaged } from '@/lib/fetchAll';
-import { fetchProgramMappingsPaged } from '@/services/incentiveProgramMappings';
-import { resolveDailyExportData, fetchProfilesByIdsPaged } from '@/lib/incentiveExportData';
+import { resolveDailyExportData } from '@/lib/incentiveExportData';
 
 interface ExportProps {
   programId: string;
