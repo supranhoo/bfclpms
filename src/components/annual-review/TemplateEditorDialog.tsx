@@ -61,6 +61,10 @@ export function TemplateEditorDialog({
   const [description, setDescription] = useState('');
   const [isActive, setIsActive] = useState(true);
   const [sections, setSections] = useState<TemplateSections>(emptySections());
+  const [libPickerOpen, setLibPickerOpen] = useState(false);
+  const [libManagerOpen, setLibManagerOpen] = useState(false);
+  const { effectiveRole } = useAuth();
+  const canManageLibrary = effectiveRole === 'admin' || effectiveRole === 'hr_pms';
 
   useEffect(() => {
     if (open) {
