@@ -550,6 +550,53 @@ export default function BulkReviewDashboard() {
     return count;
   }, [loadedRows]);
 
+  // ── Stage-ready breakdown (admin viewer) ────────────────────────────────
+  // When the "<stage>-ready only" toggle is ON, admins frequently see counts
+  // that look surprisingly low (e.g. "1 of 384"). The reason is that the
+  // RPC `stage_ready_kpis` correctly excludes rows that are either upstream
+  // (still waiting on a previous stage) or already past the viewer stage —
+  // a row whose status equals or follows the viewer stage in canonical
+  // order has been actioned (or moved beyond) and is not actionable now.
+  //
+  // We surface that "why" inline so reviewers like Vivek don't have to ask.
+  // Counts are derived from rawRows + stageReadyScope.pairs only — no new
+  // RPC, no extra round-trip. Order is the canonical workflow order; the
+  // per-employee resolved workflow may skip stages, so the breakdown is a
+  // best-effort hint, not a sign-off authority. Sign-off still routes
+  // strictly through stage_ready_kpis (the pairs Set above).
+  const stageReadyBreakdown = useMemo(() => {
+    if (!isAdminViewer || !scopeLoaded) {
+      return { ready: 0, past: 0, upstream: 0, noStage: 0, total: 0 };
+    }
+    const STATUS_ORDER = [
+      'kra_set', 'self_review', 'manager_check', 'functional_manager_check',
+      'skip_level_check', 'audit', 'hr_pms_review', 'management_review', 'approved',
+    ];
+    const VIEWER_TO_STATUS: Record<string, string> = {
+      manager: 'manager_check',
+      functional_manager: 'functional_manager_check',
+      skip_level: 'skip_level_check',
+      auditor: 'audit',
+      hr_pms: 'hr_pms_review',
+      management: 'management_review',
+    };
+    const target = VIEWER_TO_STATUS[viewerStage];
+    const targetIdx = target ? STATUS_ORDER.indexOf(target) : -1;
+    const pairs = stageReadyScope?.pairs ?? new Set<string>();
+    let ready = 0, past = 0, upstream = 0, noStage = 0;
+    for (const r of rawRows) {
+      if (!r.kpi_id || !r.employee_id) continue;
+      const key = `${r.kpi_id}|${r.employee_id}`;
+      if (pairs.has(key)) { ready++; continue; }
+      if (targetIdx < 0) { noStage++; continue; }
+      const sIdx = STATUS_ORDER.indexOf((r.status ?? '') as string);
+      if (sIdx < 0) noStage++;
+      else if (sIdx >= targetIdx) past++;
+      else upstream++;
+    }
+    return { ready, past, upstream, noStage, total: rawRows.length };
+  }, [isAdminViewer, scopeLoaded, viewerStage, stageReadyScope, rawRows]);
+
   const bulkAction = bulkActionForStage(effectiveRole, viewerStage);
   const canApprove = !!bulkAction;
   const isActionPending = bulkAction?.kind === 'mgmt' ? approve.isPending : stageWrite.isPending;
@@ -1180,6 +1227,15 @@ export default function BulkReviewDashboard() {
                     {adminStageReadyOnly
                       ? `Admin role-ready view: only KPIs currently waiting at ${viewerStage.replace('_', ' ')} in ${period} ${year} are visible AND actionable. Upstream rows are hidden so they cannot accidentally be signed off. Click to switch to full QA view.`
                       : `Admin QA view: every KPI in scope is shown (including rows still pending earlier stages). Rows outside ${viewerStage.replace('_', ' ')} readiness are visible for inspection but should NOT be bulk-signed at this stage — switch the filter back ON before sign-off.`}
+                    {stageReadyBreakdown.total > 0 && (
+                      <div className="mt-2 pt-2 border-t border-border/50 space-y-0.5 tabular-nums">
+                        <div className="font-medium text-foreground">Of {stageReadyBreakdown.total} loaded rows:</div>
+                        <div>• {stageReadyBreakdown.ready} actionable at {viewerStage.replace('_', ' ')} now</div>
+                        <div>• {stageReadyBreakdown.upstream} still waiting on a prior stage</div>
+                        <div>• {stageReadyBreakdown.past} already at/past {viewerStage.replace('_', ' ')}</div>
+                        <div>• {stageReadyBreakdown.noStage} on a workflow that doesn't include {viewerStage.replace('_', ' ')}</div>
+                      </div>
+                    )}
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
