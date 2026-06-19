@@ -21,6 +21,7 @@ import * as svc from '@/services/annualReview/annualReviewService';
 import type {
   AnnualReviewTemplate, TemplateSections, TemplateCriterion, TemplateSystemScore,
   EligibilityCriterion, SelfReviewField, AnnualReviewerRole, CriterionOption,
+  SelfReviewLibraryEntry,
 } from '@/types/annualReview';
 import { SUPPORTED_LANGUAGES, STAGE_LABEL, STAGE_ORDER } from '@/lib/annualReview/constants';
 import { BLUE_COLLAR_PRESET, BLUE_COLLAR_PRESET_META } from '@/lib/annualReview/blueCollarPreset';
@@ -29,6 +30,12 @@ import type { CarryKraConfig } from '@/types/annualReview';
 import { CarryKraMappingPreview } from './CarryKraMappingPreview';
 import { StageWeightsEditor } from './StageWeightsEditor';
 import type { StageWeights } from '@/lib/annualReview/finalScore';
+import { SelfReviewLibraryPicker } from './SelfReviewLibraryPicker';
+import { SelfReviewLibraryManager } from './SelfReviewLibraryManager';
+import { SelfReviewLabelCombobox } from './SelfReviewLabelCombobox';
+import { applyEntriesToSections, mapEntryToTemplateField } from '@/services/annualReview/selfReviewLibrary';
+import { useAuth } from '@/contexts/AuthContext';
+import { Library } from 'lucide-react';
 
 const uid = (p: string) => `${p}_${Math.random().toString(36).slice(2, 9)}`;
 
