@@ -1,103 +1,58 @@
-## 1. Assumptions
-- Target page: **Incentive Data Entry → Production Data → Metal Sizing** (the daily grid in `src/components/incentive/ProductionDailyGrid.tsx`).
-- Performance issue at scale: 2,560 employees × 31 days = ~79k inputs in one DOM render. This is why the page feels heavy.
-- Pagination should be **client-side** (data is already loaded once for save consistency) but render only the current page of rows.
-- "Excel-like filters" = per-column header filters (text search + multi-select for categorical columns) plus a global search box — not full pivot/sort UI.
-- Saving still posts the FULL `localData` set (across all pages) — pagination must not drop unsaved edits on other pages.
 
-## 2. Clarifications (defaulted, change if needed)
-- Default page size: **50 rows**, options 25 / 50 / 100 / 200.
-- Filterable columns: **Code, Name, Designation, Department, Rate/Ton**. Day columns stay numeric input only.
-- Grand Total: shows **filtered grand total** + **page grand total** separately so admins always see both.
-- Apply same pattern to `ProductionTargetGrid` and `VesselDataEntryGrid`? **Out of scope** for this PR — keep change surgical. Will note as follow-up.
+## Problem (RCA)
 
-## 3. Risk & Impact Report
-- **Data Impact:** None. No schema change. Save payload still covers all employees in `gridEmployees`, regardless of which page is shown.
-- **Workflow Impact:** None — same edit/save flow, just paginated rendering.
-- **UI/UX Impact:** New toolbar row (global search, column filters toggle, page size). New footer (pagination controls + dual totals).
-- **Regression Risk:** Medium — `localData` state must persist across page changes; filter logic must not break sticky columns or the existing "diagnostic empty state".
-- **Scalability Impact:** DOM input count drops from ~79k → ~1.5k per page (50 rows × 31 days). Initial paint and typing latency dramatically improve.
-- **Backup/Integrity:** N/A.
-- **Rollback:** Pure component-level change. Revert single file.
+`IncentiveDataExport.exportDailyData` in `src/components/incentive/IncentiveDataExport.tsx` has three defects that together produce the screenshot (all `—` placeholders, only Rate/Ton populated, rows truncated):
 
-## 4. Step-by-step Plan
+1. **1,000-row PostgREST cap on every read.** `incentive_production_rates`, `production_daily_entries`, and `profiles` are all fetched with unranged `.select(...)`. Metal Sizing has 2,560 mappings and 2,412 June entries — everything past row 1,000 is silently dropped.
+2. **Wrong roster source.** `allEmpIds` is built from `rates` (only `rate_type='employee'`) + `entries`. Metal Sizing uses a `common` rate, so `empIds` from rates is empty; the export only sees employees who already have a saved daily entry, and even then only the first 1,000. The on-screen grid sources its roster from `incentive_program_mappings` (via `fetchProgramMappingsPaged` + `useIncentiveEligibility`), so the Excel does not match the grid.
+3. **Profile lookup misses → dashes.** Because `profiles` is also capped at 1,000 and the `.in('id', empIds)` list itself can exceed URL limits for 2,500+ ids, most rows resolve `profileMap.get(empId) === undefined` and render `—` for Employee / Code / Designation / Department.
 
-### Step 1 — Add filter + pagination state
-In `ProductionDailyGrid.tsx`:
-- `globalSearch: string`
-- `columnFilters: { code, name, designation, department, rateMin, rateMax }`
-- `pageSize: 25 | 50 | 100 | 200` (default 50)
-- `pageIndex: number` (reset to 0 when filters/program/month change)
+The vessel and target exporters have the same 1k-cap risk but are not in the reported screenshot; we'll fix `daily` (the reported one) and harden `vessel`/`target` defensively since they're a one-line change.
 
-### Step 2 — Derive `filteredEmployees` from `gridEmployees`
-Memoized. Applies global search across code+name+desig+dept, plus per-column substring filters. Rate filter as numeric range.
+## Risk & Impact Report
 
-### Step 3 — Derive `pagedEmployees`
-`filteredEmployees.slice(pageIndex * pageSize, (pageIndex + 1) * pageSize)`.
-Render loop iterates `pagedEmployees`, NOT `gridEmployees`.
+- **Data Impact:** Read-only. No schema, RLS, or write paths touched.
+- **Workflow Impact:** None. Export button behavior unchanged; output becomes correct and complete.
+- **UI/UX Impact:** None visually. File contents change (full roster, populated employee columns, all days, correct totals).
+- **Regression Risk:** Low. Isolated to `IncentiveDataExport.tsx`. Reuses already-vetted helpers (`fetchProgramMappingsPaged`, `fetchAllPaged`, `useIncentiveEligibility` resolution path) that the grid uses, guaranteeing parity.
+- **Scalability:** Paged reads at 1k chunks + chunked `.in(...)` profile fetches (batches of 500 ids) keep memory bounded and avoid URL-length errors at 5k+ employees.
+- **Mitigation:** Unit tests for the new pure helpers; manual verification by exporting Metal Sizing June 2026 and confirming row count == grid row count (2,560) and June total matches the grid's `filteredGrandTotal`.
 
-### Step 4 — Preserve unsaved edits
-`localData` keeps every employee's values (already keyed by employee id). Switching pages re-renders rows from `localData[emp.id]`, so unsaved cells on page 1 remain when navigating to page 2 and back.
+## Plan
 
-### Step 5 — Update totals
-- `pageTotal` (visible page rows × visibleDays × rate)
-- `filteredGrandTotal` (all filtered rows)
-- Keep existing `grandTotal` as filteredGrandTotal — show both in footer.
+### Step 1 — New pure helper: `src/lib/incentiveExportData.ts`
+- `resolveDailyExportRoster(programId, month, year)` returns `{ employees, rates, entries, daysInMonth }`.
+- Roster comes from the **same resolution path as the grid**: program mappings (paged) → eligibility resolution → final employee list. This guarantees Configuration ↔ Data Entry ↔ Export parity.
+- Reads use `fetchAllPaged` for `incentive_production_rates` and `production_daily_entries`.
+- Profile fetch batched via `chunk(ids, 500)` then `.in('id', batch)` with paged read inside each batch.
 
-### Step 6 — Save behavior
-`handleSave` continues to post for **all `gridEmployees`** (or optionally `filteredEmployees` if a filter is active — default keep `gridEmployees` so admins never silently lose untouched-but-prior data). Document this clearly in the UI tooltip.
+### Step 2 — Refactor `IncentiveDataExport.tsx`
+- `exportDailyData` becomes a thin wrapper that calls `resolveDailyExportRoster` and maps rows to the existing column shape (Employee / Code / Designation / Department / Rate/Ton / Day 1…N / Total / Amount). Column order and headers unchanged.
+- `exportVesselData`: swap raw `.select` for `fetchAllPaged` on `incentive_vessel_rates` and `vessel_monthly_entries`; source roster from program mappings for parity. (Same pattern, smaller scope.)
+- `exportTargetData`: paged read on `production_targets` (defensive; usually small).
 
-### Step 7 — Toolbar UI
-Above the table:
-```
-[ Global search ] [ Columns filter popover ] [ Page size: 50 ▾ ] [ 247 of 2560 shown ]
-```
-Column-filter popover lists Code/Name/Desig/Dept text fields + Rate min/max. "Clear all" button.
+### Step 3 — Tests: `src/test/incentiveExportData.test.ts`
+- Roster equals grid roster when mappings > 1,000.
+- Common-rate program: every employee gets `commonRate`, not 0.
+- Employee-rate override wins over common.
+- Entry values map to correct Day columns; Total = sum of daily values; Amount = Total × rate.
+- Profile batching: 2,600-id input produces a single deduped `profileMap` covering all ids.
 
-### Step 8 — Pagination footer
-```
-Showing 1–50 of 2,560 (filtered: 247)        [« ‹ Page 1 / 52 › »]
-Page Total: ₹X     Filtered Grand Total: ₹Y
-```
-Includes input to jump to page N.
+### Step 4 — Docs & policy
+- `DOCUMENTATION.md`: new entry "v2.66.45 — Incentive Excel export pagination & roster parity" describing the three RCAs and the fix.
+- `POLICY.md`: extend the existing Incentive Mapping Paging policy to cover **exports** — "All Excel/CSV exports for incentive programs MUST source roster from `fetchProgramMappingsPaged` (or the eligibility resolver) and use `fetchAllPaged` for every related read. Direct `.select(...)` on `incentive_production_rates`, `production_daily_entries`, `incentive_vessel_rates`, `vessel_monthly_entries`, `production_targets` is forbidden in export code paths."
 
-### Step 9 — Performance hardening
-- Wrap row in a `React.memo`-ed `<DailyGridRow>` so unrelated rows don't re-render on a single cell change.
-- Lift `handleCellChange` into a `useCallback` to keep memo stable.
-- Skip resolving rates inside row (already memoized in `employeeRates` map).
+### Step 5 — Verification
+- Manual: export Metal Sizing → June 2026; confirm 2,560 rows, all employee columns populated, total matches grid.
+- `vitest run incentiveExportData` green.
 
-### Step 10 — Tests (Vitest)
-- Filter logic: search "Aabid" returns 1 row from a mock of 2,600.
-- Pagination logic: page 3 of size 50 returns rows 100–149.
-- Edits-preserved-across-pages: setting day 5 = 10 on page 1, switching to page 2, switching back, value still 10.
-- Save payload covers all employees, not just current page.
+## Files
 
-## 5. UI Changes
-- **Location:** Top of `ProductionDailyGrid` card (after the existing month/range toolbar), and a new footer above Save All.
-- **Visual:**
-  - Toolbar: search input + filter popover trigger + page-size select + count badge.
-  - Footer: prev/next/first/last buttons, page indicator, dual totals.
-- **Interaction:** Filtering or changing page size resets to page 1. Sticky left columns and existing toggle group untouched.
-- **Responsive:** Toolbar wraps on small screens; pagination footer wraps as `flex-wrap`.
+- **Add:** `src/lib/incentiveExportData.ts`, `src/test/incentiveExportData.test.ts`
+- **Edit:** `src/components/incentive/IncentiveDataExport.tsx`, `DOCUMENTATION.md`, `POLICY.md`
 
-## 6. Implementation
-Single file change: `src/components/incentive/ProductionDailyGrid.tsx`. Extract `DailyGridRow` as a small in-file `React.memo` component.
+## Out of scope
 
-## 7. Tests
-New file: `src/test/productionDailyGridFilters.test.ts` covering the filter, pagination, and edit-preservation helpers (extract pure helpers `applyDailyGridFilters` and `paginate` from the component into the same file or `src/lib/incentiveGrid.ts` for testability).
-
-## 8. DOCUMENTATION.md updates
-Add v2.66.44 entry:
-- Production Daily Grid now paginates (default 50) and supports column + global filters.
-- DOM render cost reduced ~50× for large programs (Metal Sizing 2,560 emp).
-- Save still persists all employees, not just current page.
-
-## 9. POLICY.md updates
-Extend Pagination policy:
-- Any incentive data-entry grid rendering >200 employees MUST paginate client-side.
-- Edits to off-page rows must be preserved in component state until Save.
-- Filters must operate on the full mapped roster, not just the rendered page.
-
-## 10. Post-implementation notes
-- Verify on Metal Sizing (2,560 emp) that typing latency is normal and Save All still writes all rows.
-- Follow-up tickets (not in this PR): apply same toolbar to `ProductionTargetGrid` and `VesselDataEntryGrid`; consider virtualized rows (`@tanstack/react-virtual`) if page size 200 still lags.
+- UI changes to the export button or dialog.
+- Server-side export (would require an edge function; not justified at current volumes).
+- Backfill/repair — no data was lost, only the export read truncated.

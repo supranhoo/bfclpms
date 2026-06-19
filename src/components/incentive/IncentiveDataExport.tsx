@@ -4,6 +4,8 @@ import { Download, Loader2 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { fetchAllPaged } from '@/lib/fetchAll';
+import { resolveDailyExportData } from '@/lib/incentiveExportData';
 
 interface ExportProps {
   programId: string;
@@ -52,17 +54,23 @@ export function IncentiveDataExport({ programId, programName, programType, month
 }
 
 async function exportVesselData(programId: string, month: string, year: number): Promise<XLSX.WorkSheet> {
-  const { data: rates } = await supabase
-    .from('incentive_vessel_rates')
-    .select('employee_id, rate_per_vessel, profiles:employee_id(full_name, employee_code)')
-    .eq('program_id', programId);
-
-  const { data: entries } = await supabase
-    .from('vessel_monthly_entries')
-    .select('employee_id, vessels_handled, remarks')
-    .eq('program_id', programId)
-    .eq('month', month)
-    .eq('year', year);
+  // Paged reads — bypass the 1,000-row PostgREST cap.
+  const rates = await fetchAllPaged<any>((from, to) =>
+    supabase
+      .from('incentive_vessel_rates')
+      .select('employee_id, rate_per_vessel, profiles:employee_id(full_name, employee_code)')
+      .eq('program_id', programId)
+      .range(from, to) as any,
+  );
+  const entries = await fetchAllPaged<any>((from, to) =>
+    supabase
+      .from('vessel_monthly_entries')
+      .select('employee_id, vessels_handled, remarks')
+      .eq('program_id', programId)
+      .eq('month', month)
+      .eq('year', year)
+      .range(from, to) as any,
+  );
 
   const entryMap = new Map((entries || []).map((e: any) => [e.employee_id, e]));
   const rows = (rates || []).map((r: any) => {
@@ -83,59 +91,25 @@ async function exportVesselData(programId: string, month: string, year: number):
 }
 
 async function exportDailyData(programId: string, month: string, year: number): Promise<XLSX.WorkSheet> {
-  const { data: rates } = await supabase
-    .from('incentive_production_rates')
-    .select('employee_id, entity_id, rate_per_ton, rate_type')
-    .eq('program_id', programId);
+  // Roster + rates + entries all sourced via the shared resolver, which
+  // mirrors the on-screen grid (mappings → cascade), pages every read past
+  // the 1k cap, and batches profile lookups. Fixes empty/dash export rows.
+  const { employees, entries, daysInMonth, empRates, commonRate } =
+    await resolveDailyExportData(programId, month, year);
 
-  const { data: entries } = await supabase
-    .from('production_daily_entries')
-    .select('employee_id, daily_values')
-    .eq('program_id', programId)
-    .eq('month', month)
-    .eq('year', year);
+  const entryMap = new Map(entries.map((e) => [e.employee_id, e.daily_values || {}]));
 
-  // Fetch employee profiles for all unique employee IDs from entries
-  const empIds = [...new Set([
-    ...(rates || []).filter((r: any) => r.rate_type === 'employee').map((r: any) => r.employee_id),
-    ...(entries || []).map((e: any) => e.employee_id),
-  ].filter(Boolean))];
-
-  const { data: profiles } = empIds.length
-    ? await supabase.from('profiles').select('id, full_name, employee_code, designation, department_id, departments(name)').in('id', empIds)
-    : { data: [] };
-
-  const profileMap = new Map((profiles || []).map((p: any) => [p.id, p]));
-  const entryMap = new Map((entries || []).map((e: any) => [e.employee_id, e.daily_values || {}]));
-
-  // Build rate lookup: employee-level first, then common
-  const empRates = new Map<string, number>();
-  let commonRate = 0;
-  (rates || []).forEach((r: any) => {
-    if (r.rate_type === 'employee' && r.employee_id) empRates.set(r.employee_id, r.rate_per_ton);
-    if (r.rate_type === 'common') commonRate = r.rate_per_ton;
-  });
-
-  const monthIdx = ['January','February','March','April','May','June','July','August','September','October','November','December'].indexOf(month);
-  const daysInMonth = new Date(year, monthIdx + 1, 0).getDate();
-
-  // Use entry employee IDs as the grid
-  const allEmpIds = [...new Set([...empIds, ...(entries || []).map((e: any) => e.employee_id)])];
-
-  const rows = allEmpIds.map(empId => {
-    const p = profileMap.get(empId);
-    const dailyVals = entryMap.get(empId) || {};
-    const rate = empRates.get(empId) ?? commonRate;
+  const rows = employees.map((p) => {
+    const dailyVals: Record<string, any> = entryMap.get(p.id) || {};
+    const rate = empRates.get(p.id) ?? commonRate;
     let total = 0;
-
     const row: Record<string, any> = {
-      'Employee': p?.full_name || '—',
-      'Code': p?.employee_code || '—',
-      'Designation': p?.designation || '—',
-      'Department': (p as any)?.departments?.name || '—',
+      'Employee': p.full_name || '—',
+      'Code': p.employee_code || '—',
+      'Designation': p.designation || '—',
+      'Department': p.departments?.name || '—',
       'Rate/Ton (₹)': rate,
     };
-
     for (let d = 1; d <= daysInMonth; d++) {
       const val = Number(dailyVals[String(d)] || 0);
       row[`Day ${d}`] = val || '';
@@ -150,13 +124,16 @@ async function exportDailyData(programId: string, month: string, year: number): 
 }
 
 async function exportTargetData(programId: string, month: string, year: number): Promise<XLSX.WorkSheet> {
-  const { data: targets } = await supabase
-    .from('production_targets')
-    .select('*')
-    .eq('program_id', programId)
-    .eq('month', month)
-    .eq('year', year)
-    .order('created_at');
+  const targets = await fetchAllPaged<any>((from, to) =>
+    supabase
+      .from('production_targets')
+      .select('*')
+      .eq('program_id', programId)
+      .eq('month', month)
+      .eq('year', year)
+      .order('created_at')
+      .range(from, to) as any,
+  );
 
   const rows = (targets || []).map((t: any) => ({
     'Sub-Unit / Furnace': t.sub_unit_label || '',

@@ -4,6 +4,19 @@
 
 **Why.** `incentive_program_mappings` regularly holds thousands of rows per program (Metal Sizing: 2,560). Unranged PostgREST reads silently cap at 1,000 rows and have historically hidden mapped employees from Incentive Data Entry, eligibility resolution, custom-tab grids, and the compute edge function while still showing them in Incentive Configuration. This is identical in shape to the §94 profiles-cap class of bug.
 
+### Extension (codified 2026-06-19) — Excel / CSV exports
+
+All Excel/CSV exports for incentive programs MUST source the employee roster
+from `fetchProgramMappingsPaged` (or the equivalent resolver in
+`src/lib/incentiveExportData.ts`) and use `fetchAllPaged` for every related
+read. Direct unranged `.select(...)` on `incentive_production_rates`,
+`production_daily_entries`, `incentive_vessel_rates`,
+`vessel_monthly_entries`, and `production_targets` is **forbidden** in
+export code paths. Profile lookups for export rosters must be chunked
+(≤500 ids per `.in('id', batch)`) to avoid PostgREST URL-length errors.
+Rationale: prevents the recurrence of the Metal Sizing dashes-only export
+regression (BUG-`metal-sizing-export-dashes`, v2.66.45).
+
 **Rule (reads).** Every client read of `incentive_program_mappings` that returns a list MUST go through `fetchProgramMappingsPaged()` or `fetchAllProgramMappingsPaged()` in `src/services/incentiveProgramMappings.ts`. Direct `supabase.from('incentive_program_mappings').select(...)` for list reads is forbidden. The `compute-monthly-incentives` edge function MUST also page this read via `.range(...)`. `head: true` count queries are exempt.
 
 **Rule (writes).** Bulk add/remove MUST use `bulkAddProgramMappingsBatched()` / `bulkRemoveProgramMappingsBatched()` with a 500-row batch size to avoid request-size/URL-length failures on large draft applies.
