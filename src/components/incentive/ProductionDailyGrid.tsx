@@ -497,14 +497,56 @@ export function ProductionDailyGrid({ programId, programName, onMonthYearChange,
                   <ChevronsRight className="h-4 w-4" />
                 </Button>
               </div>
-              <div className="flex items-center gap-4 text-sm">
-                <span className="text-muted-foreground">
-                  Page Total: <span className="font-semibold text-foreground tabular-nums">₹{pageTotal.toLocaleString('en-IN')}</span>
-                </span>
-                <span className="font-semibold">
-                  {filtersActive ? 'Filtered Total' : 'Grand Total'}:{' '}
-                  <span className="text-primary tabular-nums">₹{filteredGrandTotal.toLocaleString('en-IN')}</span>
-                </span>
+              <div className="flex items-center gap-4 text-sm flex-wrap justify-end">
+                <div className="flex flex-col items-end gap-0.5">
+                  <div className="flex items-center gap-2">
+                    <span className="text-base font-semibold">
+                      {filtersActive ? 'Filtered Total' : 'Grand Total'}
+                      {activeCompany && <span className="text-muted-foreground font-normal"> — {activeCompany.code || activeCompany.name}</span>}
+                      :{' '}
+                      <span className="text-primary tabular-nums text-lg">₹{filteredGrandTotal.toLocaleString('en-IN')}</span>
+                    </span>
+                    {parity.data?.hasRecords && (() => {
+                      const delta = filteredGrandTotal - (parity.data?.recordsTotal ?? 0);
+                      const matches = Math.abs(delta) <= 1;
+                      return (
+                        <TooltipProvider delayDuration={150}>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Badge
+                                variant={matches ? 'secondary' : 'outline'}
+                                className={matches ? 'gap-1 border-green-600/40 text-green-700 dark:text-green-400' : 'gap-1 border-amber-500/50 text-amber-700 dark:text-amber-400'}
+                              >
+                                {matches ? <CheckCircle2 className="h-3 w-3" /> : <AlertTriangle className="h-3 w-3" />}
+                                {matches ? 'Matches Report' : `Δ ₹${Math.abs(delta).toLocaleString('en-IN')}`}
+                              </Badge>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              Incentive Report total for this scope: ₹{(parity.data?.recordsTotal ?? 0).toLocaleString('en-IN')}.
+                              {matches ? ' Grid matches the last computed report.' : ' Recompute pending — run "Compute" on the Incentive Report.'}
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      );
+                    })()}
+                  </div>
+                  {totalPages > 1 && (
+                    <span className="text-xs text-muted-foreground flex items-center gap-1">
+                      This page only ({pagedEmployees.length} of {filteredEmployees.length.toLocaleString('en-IN')}):{' '}
+                      <span className="tabular-nums text-foreground/80">₹{pageTotal.toLocaleString('en-IN')}</span>
+                      <TooltipProvider delayDuration={150}>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Info className="h-3 w-3 cursor-help" />
+                          </TooltipTrigger>
+                          <TooltipContent className="max-w-xs">
+                            Page Total covers only the rows visible on this page. Grand Total covers every employee matching your current filters and is what the Incentive Report sums.
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </span>
+                  )}
+                </div>
                 <Button onClick={handleSave} disabled={bulkUpsert.isPending} title="Saves all mapped employees, not just the visible page.">
                   <Save className="h-4 w-4 mr-1" /> Save All
                 </Button>
