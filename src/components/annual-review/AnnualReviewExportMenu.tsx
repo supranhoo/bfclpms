@@ -16,7 +16,6 @@ import { useAppSettings } from '@/hooks/useAppSettings';
 import {
   useAnnualReviewExportConfig, canUseAnnualReviewExport,
 } from '@/hooks/useAnnualReviewExportConfig';
-import { useTemplate } from '@/hooks/annualReview/useAnnualReview';
 import * as svc from '@/services/annualReview/annualReviewService';
 import {
   buildBlankReviewerWorkbook, buildBulkResultsWorkbook, buildSeedingWorkbook,
@@ -48,8 +47,6 @@ export function AnnualReviewExportMenu({ cycle, filters, total }: Props) {
   const { effectiveRole } = useAuth();
   const cfg = useAnnualReviewExportConfig();
   const { data: appSettings } = useAppSettings();
-  const { data: templateForCycle } = useTemplate(undefined);
-
   const [busy, setBusy] = useState<null | string>(null);
   const [pdfPickerOpen, setPdfPickerOpen] = useState(false);
   const [pdfBlob, setPdfBlob] = useState<Blob | null>(null);
