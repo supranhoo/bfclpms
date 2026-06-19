@@ -55,6 +55,24 @@ export function ProductionDailyGrid({ programId, programName, onMonthYearChange,
   const { data: entries = [], isLoading: entriesLoading } = useProductionDailyEntries(programId, month, year);
   const bulkUpsert = useBulkUpsertDailyEntries();
 
+  // Read-only company metadata for the parity badge (own selectedCompanyId state is
+  // unused — we rely on the prop from the parent so toggles stay in sync).
+  const { companies, employeeCompanyMap } = useCompanyFilter();
+  const activeCompany = useMemo(
+    () => (selectedCompanyId && selectedCompanyId !== 'all'
+      ? companies.find(c => c.id === selectedCompanyId) ?? null
+      : null),
+    [selectedCompanyId, companies],
+  );
+
+  const parity = useIncentiveReportParity({
+    programId,
+    month,
+    year,
+    companyId: selectedCompanyId,
+    employeeCompanyMap,
+  });
+
   useEffect(() => {
     onMonthYearChange?.(month, year);
   }, [month, year, onMonthYearChange]);
