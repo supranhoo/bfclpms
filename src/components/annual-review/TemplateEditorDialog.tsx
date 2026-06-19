@@ -624,6 +624,25 @@ export function TemplateEditorDialog({
           </Button>
         </DialogFooter>
       </DialogContent>
+      <SelfReviewLibraryPicker
+        open={libPickerOpen}
+        onOpenChange={setLibPickerOpen}
+        includeHindi={multilingual && extraLangs.includes('hi')}
+        canManage={canManageLibrary}
+        onManage={() => { setLibPickerOpen(false); setLibManagerOpen(true); }}
+        onInsert={(entries) => {
+          const includeHindi = multilingual && extraLangs.includes('hi');
+          setSections((s) => applyEntriesToSections(s, entries, { includeHindi }));
+          if (!includeHindi && entries.some((e) => e.label_hi || e.placeholder_hi)) {
+            toast.message('Hindi translations skipped — enable Hindi in template settings to import them.');
+          } else {
+            toast.success(`Inserted ${entries.length} field${entries.length === 1 ? '' : 's'} from library`);
+          }
+        }}
+      />
+      {canManageLibrary && (
+        <SelfReviewLibraryManager open={libManagerOpen} onOpenChange={setLibManagerOpen} />
+      )}
     </Dialog>
   );
 }
