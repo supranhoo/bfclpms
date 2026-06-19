@@ -523,6 +523,11 @@ export function TemplateEditorDialog({
               ...s, self_review_fields: [...selfFields, { id: uid('f'), label: '', placeholder: '', required: false }],
             }))}
             addLabel="Add Field"
+            extraActions={
+              <Button size="sm" variant="outline" className="gap-1.5" onClick={() => setLibPickerOpen(true)}>
+                <Library className="h-4 w-4" /> Add from Library
+              </Button>
+            }
           >
             {selfFields.length === 0 ? <Empty msg="No self-review fields." /> : (
               <div className="space-y-3">
@@ -531,7 +536,23 @@ export function TemplateEditorDialog({
                     <div className="grid gap-2 md:grid-cols-[1fr_1fr_auto_auto] items-end">
                       <div className="space-y-1">
                         <Label className="text-xs">Field Label *</Label>
-                        <Input className="h-9" value={f.label} onChange={(ev) => updateAt(setSections, 'self_review_fields', i, { label: ev.target.value })} />
+                        <SelfReviewLabelCombobox
+                          value={f.label}
+                          onChange={(v) => updateAt(setSections, 'self_review_fields', i, { label: v })}
+                          placeholder="Type to search the library or enter a new label…"
+                          onPickLibraryEntry={(entry) => {
+                            const includeHindi = multilingual && extraLangs.includes('hi');
+                            const mapped = mapEntryToTemplateField(entry, { includeHindi, makeId: () => f.id });
+                            updateAt(setSections, 'self_review_fields', i, {
+                              label: mapped.field.label,
+                              placeholder: mapped.field.placeholder ?? '',
+                              required: !!mapped.field.required,
+                            });
+                            if (mapped.translations.hi) {
+                              Object.entries(mapped.translations.hi).forEach(([k, v]) => setTr('hi', k, v));
+                            }
+                          }}
+                        />
                       </div>
                       <div className="space-y-1">
                         <Label className="text-xs">Placeholder</Label>
