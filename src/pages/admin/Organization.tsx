@@ -458,7 +458,6 @@ export default function Organization() {
             'levels':               levels?.length || 0,
             'employee-categories':  employeeCategories?.length || 0,
             'employment-statuses':  employmentStatuses?.length || 0,
-            'org-heads':            1,
           }}
         />
 
