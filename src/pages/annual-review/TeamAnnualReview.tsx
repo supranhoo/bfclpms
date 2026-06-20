@@ -35,9 +35,8 @@ import { enabledChain } from '@/lib/annualReview/stageChain';
 import { useProxyEligibility } from '@/hooks/useProxyEligibility';
 import { AssistedSubmissionDialog } from '@/components/annual-review/AssistedSubmissionDialog';
 import { Badge } from '@/components/ui/badge';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { EmployeeDirectoryDialog } from '@/components/annual-review/EmployeeDirectoryDialog';
-import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 
 const STAGE_FOR_REVIEWER = (inst: InstanceWithEmployee, uid: string): AnnualReviewerRole | null => {
