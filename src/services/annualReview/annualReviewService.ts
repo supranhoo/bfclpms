@@ -11,6 +11,7 @@ import type {
   EvidenceItem,
 } from '@/types/annualReview';
 import { enabledChain } from '@/lib/annualReview/stageChain';
+import { getHrHeadUserId } from '@/services/orgHeads/hrHeadResolver';
 
 /**
  * Service layer for the Annual Review module — wraps every DB / RPC / storage call
