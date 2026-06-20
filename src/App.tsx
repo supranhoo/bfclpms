@@ -71,6 +71,7 @@ const CustomMenuPage = lazy(() => import("./pages/CustomMenuPage"));
 // Annual Review module (Phase 1)
 const EmployeeAnnualReview = lazy(() => import("./pages/annual-review/EmployeeAnnualReview"));
 const TeamAnnualReview = lazy(() => import("./pages/annual-review/TeamAnnualReview"));
+const TeamAnnualReviewDetail = lazy(() => import("./pages/annual-review/TeamAnnualReviewDetail"));
 const AnnualReviewAdmin = lazy(() => import("./pages/annual-review/AnnualReviewAdmin"));
 const ManagerCalibration = lazy(() => import("./pages/annual-review/ManagerCalibration"));
 const AnnualReviewReport = lazy(() => import("./pages/reports/AnnualReviewReport"));
@@ -582,6 +583,11 @@ const App = () => (
                 <Route path="/annual-review/team" element={
                   <ProtectedRoute allowedRoles={['admin','manager','hr_pms','skip_level','management']}>
                     <Suspense fallback={<PageFallback />}><TeamAnnualReview /></Suspense>
+                  </ProtectedRoute>
+                } />
+                <Route path="/annual-review/team/:instanceId" element={
+                  <ProtectedRoute allowedRoles={['admin','manager','hr_pms','skip_level','management']}>
+                    <Suspense fallback={<PageFallback />}><TeamAnnualReviewDetail /></Suspense>
                   </ProtectedRoute>
                 } />
                 <Route path="/annual-review/calibrate" element={

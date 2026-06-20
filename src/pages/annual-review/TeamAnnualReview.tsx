@@ -1,39 +1,16 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { useIsMobile } from '@/hooks/use-mobile';
 import {
   useActiveCycle,
   useReviewerInstancesPaginated,
-  useTemplate,
-  useInstanceResponses,
-  useAdvanceStatus,
-  useDebouncedResponseDraft,
-  useUploadEvidence,
-  useSendBackStatus,
 } from '@/hooks/useAnnualReview';
-import { AnnualReviewStageTracker } from '@/components/annual-review/AnnualReviewStageTracker';
 import { AnnualReviewStatusBadge } from '@/components/annual-review/AnnualReviewStatusBadge';
-import { CriteriaScoringMatrix } from '@/components/annual-review/CriteriaScoringMatrix';
-import { SystemScoresPanel } from '@/components/annual-review/SystemScoresPanel';
-import { fyStartFromCycle } from '@/lib/annualReview/fiscalYear';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Loader2, ChevronRight, Scale, Search, Users, UserPlus, ChevronLeft } from 'lucide-react';
-import { Link } from 'react-router-dom';
-import { Sheet, SheetContent } from '@/components/ui/sheet';
-import {
-  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
-  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
-import { Textarea } from '@/components/ui/textarea';
-import { Label } from '@/components/ui/label';
-import { toast } from 'sonner';
-import type { AnnualReviewerRole, AnnualReviewStatus, EvidenceItem } from '@/types/annualReview';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import type { AnnualReviewerRole, AnnualReviewStatus } from '@/types/annualReview';
 import type { InstanceWithEmployee } from '@/services/annualReview/annualReviewService';
-import { enabledChain } from '@/lib/annualReview/stageChain';
-import { useProxyEligibility } from '@/hooks/useProxyEligibility';
-import { AssistedSubmissionDialog } from '@/components/annual-review/AssistedSubmissionDialog';
 import { Badge } from '@/components/ui/badge';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { EmployeeDirectoryDialog } from '@/components/annual-review/EmployeeDirectoryDialog';
@@ -41,8 +18,6 @@ import { supabase } from '@/integrations/supabase/client';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
-import { LanguageSwitcher } from '@/components/annual-review/LanguageSwitcher';
-import { AnnualReviewI18nProvider } from '@/components/annual-review/AnnualReviewI18nContext';
 
 const QUEUE_PAGE_SIZE_KEY = 'annual-review:team:pageSize';
 const PAGE_SIZE_OPTIONS = [10, 20, 50] as const;
@@ -70,24 +45,24 @@ export default function TeamAnnualReview() {
   const { user, isAdmin, hasRole } = useAuth();
   const { data: cycle } = useActiveCycle();
   const queryClient = useQueryClient();
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [search, setSearch] = useState('');
-  const [debouncedSearch, setDebouncedSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState<AnnualReviewStatus | 'all'>('all');
-  const [page, setPage] = useState(1);
+  const navigate = useNavigate();
+  const [urlParams, setUrlParams] = useSearchParams();
+
+  // ----- URL-synced queue state (restored on Back from the detail page) -----
+  const urlSearch  = urlParams.get('q') ?? '';
+  const urlStatus  = (urlParams.get('status') as AnnualReviewStatus | 'all' | null) ?? 'all';
+  const urlPage    = Math.max(1, Number(urlParams.get('page') ?? '1') || 1);
+
+  const [search, setSearch] = useState(urlSearch);
+  const [debouncedSearch, setDebouncedSearch] = useState(urlSearch);
+  const [statusFilter, setStatusFilter] = useState<AnnualReviewStatus | 'all'>(urlStatus);
+  const [page, setPage] = useState(urlPage);
   const [pageSize, setPageSize] = useState<number>(() => {
     if (typeof window === 'undefined') return DEFAULT_PAGE_SIZE;
     const raw = Number(window.localStorage.getItem(QUEUE_PAGE_SIZE_KEY));
     return PAGE_SIZE_OPTIONS.includes(raw as typeof PAGE_SIZE_OPTIONS[number]) ? raw : DEFAULT_PAGE_SIZE;
   });
-  // Remember instances we've seen across pages so the right-pane stays mounted
-  // when the user pages forward/back or arrives via the directory dialog.
-  const [seen, setSeen] = useState<Map<string, InstanceWithEmployee>>(new Map());
-  const [drawer, setDrawer] = useState(false);
   const [directoryOpen, setDirectoryOpen] = useState(false);
-  const [autoAssistedForInstance, setAutoAssistedForInstance] = useState<string | null>(null);
-
-  const isMobile = useIsMobile();
 
   const canSearchDirectory = isAdmin || hasRole('hr_pms');
 
@@ -113,6 +88,16 @@ export default function TeamAnnualReview() {
   }, [search]);
   useEffect(() => { setPage(1); }, [debouncedSearch, statusFilter, pageSize]);
 
+  // Mirror queue state into the URL so the detail page's Back button restores
+  // the exact filters/page (and a browser refresh stays put).
+  useEffect(() => {
+    const next = new URLSearchParams();
+    if (debouncedSearch) next.set('q', debouncedSearch);
+    if (statusFilter !== 'all') next.set('status', statusFilter);
+    if (page !== 1) next.set('page', String(page));
+    setUrlParams(next, { replace: true });
+  }, [debouncedSearch, statusFilter, page, setUrlParams]);
+
   const { data: paged, isLoading, isFetching } = useReviewerInstancesPaginated(
     user?.id,
     cycle?.id,
@@ -122,40 +107,31 @@ export default function TeamAnnualReview() {
   const total = paged?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
-  // Cache every row we've ever loaded so right-pane survives pagination/search.
-  useEffect(() => {
-    if (!rows.length) return;
-    setSeen((prev) => {
-      const next = new Map(prev);
-      for (const r of rows) next.set(r.id, r);
-      return next;
-    });
-  }, [rows]);
-
-  // Auto-select first row of the current page when nothing is selected.
-  useEffect(() => {
-    if (!selectedId && rows.length) setSelectedId(rows[0].id);
-  }, [rows, selectedId]);
-
-  const selected = (selectedId && (rows.find((r) => r.id === selectedId) ?? seen.get(selectedId))) ?? null;
-
   const setStoredPageSize = (n: number) => {
     setPageSize(n);
     try { window.localStorage.setItem(QUEUE_PAGE_SIZE_KEY, String(n)); } catch { /* ignore */ }
   };
 
-  const onPick = (id: string) => {
-    setSelectedId(id);
-    if (isMobile) setDrawer(true);
+  // Build the canonical "back to queue" URL that the detail page will restore.
+  const returnTo = useMemo(() => {
+    const qs = new URLSearchParams();
+    if (debouncedSearch) qs.set('q', debouncedSearch);
+    if (statusFilter !== 'all') qs.set('status', statusFilter);
+    if (page !== 1) qs.set('page', String(page));
+    const s = qs.toString();
+    return s ? `/annual-review/team?${s}` : '/annual-review/team';
+  }, [debouncedSearch, statusFilter, page]);
+
+  const goToDetail = (instanceId: string, opts: { autoOpenAssisted?: boolean } = {}) => {
+    const url = `/annual-review/team/${instanceId}${opts.autoOpenAssisted ? '?assisted=1' : ''}`;
+    navigate(url, { state: { siblings: rows.map((r) => r.id), returnTo } });
   };
 
   const handleDirectoryPick = (instanceId: string, opts: { autoOpenAssisted: boolean }) => {
-    setSelectedId(instanceId);
-    if (opts.autoOpenAssisted) setAutoAssistedForInstance(instanceId);
-    if (isMobile) setDrawer(true);
-    // Make sure the new instance becomes visible everywhere
+    // Refresh caches so the freshly-created instance is visible on return.
     void queryClient.invalidateQueries({ queryKey: ['annual-review'] });
     void queryClient.invalidateQueries({ queryKey: ['annualReview'] });
+    goToDetail(instanceId, { autoOpenAssisted: opts.autoOpenAssisted });
   };
 
   if (!cycle) return <div className="p-6">No active annual review cycle.</div>;
@@ -164,8 +140,19 @@ export default function TeamAnnualReview() {
   const fromN = total === 0 ? 0 : (page - 1) * pageSize + 1;
   const toN = Math.min(page * pageSize, total);
 
-  const list = (
-    <div className="space-y-3">
+  return (
+    <div className="p-4 md:p-6 max-w-5xl mx-auto">
+      <header className="flex items-start justify-between mb-4 gap-3">
+        <div>
+          <h1 className="text-2xl font-bold">Team Annual Review</h1>
+          <p className="text-sm text-muted-foreground">{cycle.name}</p>
+        </div>
+        <Button asChild variant="outline" className="gap-1.5">
+          <Link to="/annual-review/calibrate"><Scale className="h-4 w-4" /> Calibration worksheet</Link>
+        </Button>
+      </header>
+
+      <div className="space-y-3">
       {/* Directory entry-point (Admin / HR PMS, behind feature flag) */}
       {directoryEnabled && (
         <div className="rounded-lg border bg-card p-3 space-y-2">
@@ -235,7 +222,6 @@ export default function TeamAnnualReview() {
       <ul className="space-y-1">
         {rows.map((i) => {
           const stage = user ? STAGE_FOR_REVIEWER(i, user.id) : null;
-          const isSelected = selectedId === i.id;
           const initials = (i.employee?.full_name ?? '?')
             .trim().split(/\s+/).slice(0, 2)
             .map((p) => p[0]?.toUpperCase() ?? '').join('') || '?';
@@ -243,8 +229,8 @@ export default function TeamAnnualReview() {
             <li key={i.id}>
               <button
                 type="button"
-                onClick={() => onPick(i.id)}
-                className={`w-full text-left rounded-md border p-3 transition-colors min-h-16 hover:bg-muted/50 ${isSelected ? 'bg-primary/5 border-l-2 border-l-primary border-primary/40' : ''}`}
+                onClick={() => goToDetail(i.id)}
+                className="w-full text-left rounded-md border p-3 transition-colors min-h-16 hover:bg-muted/50 hover:border-primary/40"
               >
                 <div className="flex items-center gap-3">
                   <div className="h-8 w-8 rounded-full bg-primary/10 text-primary flex items-center justify-center text-[11px] font-semibold shrink-0">
@@ -310,49 +296,7 @@ export default function TeamAnnualReview() {
           </div>
         </div>
       )}
-    </div>
-  );
-
-  return (
-    <div className="p-4 md:p-6">
-      <header className="flex items-start justify-between mb-4 gap-3">
-        <div>
-          <h1 className="text-2xl font-bold">Team Annual Review</h1>
-          <p className="text-sm text-muted-foreground">{cycle.name}</p>
-        </div>
-        <Button asChild variant="outline" className="gap-1.5">
-          <Link to="/annual-review/calibrate"><Scale className="h-4 w-4" /> Calibration worksheet</Link>
-        </Button>
-      </header>
-
-      <div className="grid gap-4 md:grid-cols-3">
-        <aside className="md:col-span-1">{list}</aside>
-        <section className="md:col-span-2 hidden md:block">
-          {selected ? (
-            <ReviewDetail
-              instance={selected}
-              fiscalYear={fyStartFromCycle(cycle)}
-              autoOpenAssisted={autoAssistedForInstance === selected.id}
-              onAutoAssistedConsumed={() => setAutoAssistedForInstance(null)}
-            />
-          ) : (
-            <Card><CardContent className="p-6 text-muted-foreground">Pick someone to review.</CardContent></Card>
-          )}
-        </section>
       </div>
-
-      <Sheet open={drawer} onOpenChange={setDrawer}>
-        <SheetContent side="bottom" className="h-[92dvh] overflow-y-auto">
-          {selected && (
-            <ReviewDetail
-              instance={selected}
-              fiscalYear={fyStartFromCycle(cycle)}
-              autoOpenAssisted={autoAssistedForInstance === selected.id}
-              onAutoAssistedConsumed={() => setAutoAssistedForInstance(null)}
-            />
-          )}
-        </SheetContent>
-      </Sheet>
 
       <EmployeeDirectoryDialog
         open={directoryOpen}
@@ -362,246 +306,5 @@ export default function TeamAnnualReview() {
         onSelectInstance={handleDirectoryPick}
       />
     </div>
-  );
-}
-
-function ReviewDetail({
-  instance,
-  fiscalYear,
-  autoOpenAssisted = false,
-  onAutoAssistedConsumed,
-}: {
-  instance: InstanceWithEmployee;
-  fiscalYear?: number;
-  autoOpenAssisted?: boolean;
-  onAutoAssistedConsumed?: () => void;
-}) {
-  const { user, profile } = useAuth();
-  const queryClient = useQueryClient();
-  const { data: template } = useTemplate(
-    (instance as { template_override_id?: string | null }).template_override_id ?? instance.template_id,
-  );
-  const { data: responses = [] } = useInstanceResponses(instance.id);
-  const advance = useAdvanceStatus();
-  const sendBack = useSendBackStatus();
-  const upload = useUploadEvidence();
-  const stageRole = user ? STAGE_FOR_REVIEWER(instance, user.id) : null;
-  // Proxy assistance: enabled only for pending_self when no native role applies.
-  const { data: proxyEligible } = useProxyEligibility(
-    instance.id,
-    !stageRole && instance.overall_status === 'pending_self',
-  );
-  const proxyMode = !stageRole && instance.overall_status === 'pending_self' && proxyEligible === true;
-  const role: AnnualReviewerRole | null = stageRole ?? (proxyMode ? 'self' : null);
-  const myResponse = role ? responses.find((r) => r.reviewer_role === role) ?? null : null;
-  const locked = !role || myResponse?.is_locked;
-  const [sendBackOpen, setSendBackOpen] = useState(false);
-  const [sendBackReason, setSendBackReason] = useState('');
-  const [assistedOpen, setAssistedOpen] = useState(false);
-
-  // ----- Multilingual support (parity with EmployeeAnnualReview) -----
-  const defLang = template?.sections.settings?.default_language ?? 'en';
-  const availLangs = template?.sections.settings?.enable_multilingual
-    ? template.sections.settings.available_languages ?? ['en']
-    : ['en'];
-  const [lang, setLang] = useState<string>(defLang);
-  useEffect(() => { setLang(defLang); }, [template?.id, defLang]);
-
-  // When the directory flow lands on an assisted-mode candidate, open the
-  // selfie capture automatically once proxy eligibility resolves true.
-  useEffect(() => {
-    if (autoOpenAssisted && proxyMode) {
-      setAssistedOpen(true);
-      onAutoAssistedConsumed?.();
-    }
-  }, [autoOpenAssisted, proxyMode, onAutoAssistedConsumed]);
-
-  const { draft, setDraft, flush, status } = useDebouncedResponseDraft({
-    instanceId: instance.id,
-    reviewerId: user?.id ?? '',
-    role: role ?? 'manager',
-    initial: myResponse,
-    enabled: !!role && !locked,
-  });
-
-  const comparison = useMemo(() => {
-    const labels: Record<AnnualReviewerRole, string> = { self: 'Self', manager: 'Manager', skip_manager: 'Skip', bu_head: 'BU', hr: 'HR' };
-    const previous: { label: string; values: Record<string, number | undefined> }[] = [];
-    for (const r of responses) {
-      if (r.reviewer_role !== role) previous.push({ label: labels[r.reviewer_role], values: r.criteria_scores });
-    }
-    return previous;
-  }, [responses, role]);
-
-  const onUpload = async (criterionId: string, file: File): Promise<EvidenceItem | void> => {
-    if (!user || !role) return;
-    const ev = await upload.mutateAsync({ instanceId: instance.id, reviewerId: user.id, role, file });
-    const tagged: EvidenceItem = { ...ev, name: `${criterionId}::${ev.name}` };
-    setDraft((p) => ({ ...p, evidence: [...(p.evidence ?? []), tagged] }));
-    return tagged;
-  };
-
-  const handleSubmit = async () => {
-    if (!role) return;
-    if (proxyMode) {
-      // Save draft then open verification dialog. Final submission happens inside the dialog.
-      try { await flush(); setAssistedOpen(true); }
-      catch (e) { toast.error((e as Error).message); }
-      return;
-    }
-    try { await flush(); await advance.mutateAsync({ instanceId: instance.id, role }); toast.success('Submitted.'); }
-    catch (e) { toast.error((e as Error).message); }
-  };
-
-  const handleSendBack = async () => {
-    if (!role || role === 'self') return;
-    try {
-      await sendBack.mutateAsync({ instanceId: instance.id, role, reason: sendBackReason.trim() || null });
-      toast.success('Returned to previous stage.');
-      setSendBackOpen(false);
-      setSendBackReason('');
-    } catch (e) { toast.error((e as Error).message); }
-  };
-
-  // Hide Send Back when current role is the first enabled stage — no prior stage exists.
-  const chain = enabledChain(instance.enabled_stages);
-  const canSendBack = !!role && role !== 'self' && chain.indexOf(role) > 0;
-
-  return (
-    <AnnualReviewI18nProvider
-      currentLanguage={lang}
-      defaultLanguage={defLang}
-      templateTranslations={template?.sections.translations}
-      displayMode={template?.sections.display_mode}
-    >
-    <div className="space-y-4">
-      <Card>
-        <CardHeader>
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <CardTitle>{instance.employee?.full_name ?? instance.employee_id}</CardTitle>
-              <p className="text-sm text-muted-foreground">{instance.employee?.employee_code} · {instance.employee?.designation ?? '—'}</p>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              {availLangs.length > 1 && (
-                <LanguageSwitcher value={lang} onChange={setLang} available={availLangs} />
-              )}
-              <AnnualReviewStatusBadge status={instance.overall_status} />
-              {instance.submitted_via_proxy && (
-                <Badge variant="secondary" className="text-xs">Submitted with assistance</Badge>
-              )}
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent><AnnualReviewStageTracker status={instance.overall_status} enabledStages={instance.enabled_stages} /></CardContent>
-      </Card>
-
-      {proxyMode && (
-        <Card className="border-amber-500/40 bg-amber-50/40 dark:bg-amber-950/20">
-          <CardContent className="p-4 text-sm">
-            <p className="font-medium">Assisted self-review mode</p>
-            <p className="text-muted-foreground mt-1">
-              You are filling the self-stage on behalf of <strong>{instance.employee?.full_name ?? 'this employee'}</strong>.
-              A live selfie of the employee is required before submission.
-            </p>
-          </CardContent>
-        </Card>
-      )}
-
-      <SystemScoresPanel
-        systemScores={template?.sections.system_scores ?? []}
-        values={instance.system_scores ?? {}}
-        eligibility={template?.sections.eligibility_criteria}
-        eligibilityInputs={instance.eligibility_inputs}
-        employeeId={instance.employee_id}
-        fiscalYear={fiscalYear}
-        readOnly
-      />
-
-      <Card>
-        <CardHeader>
-          <CardTitle>{role ? `${role.replace('_', ' ')} review` : 'Read-only view'}</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <CriteriaScoringMatrix
-            criteria={(template?.sections.criteria ?? []).filter((c) => !c.reviewer_stages?.length || (role && c.reviewer_stages.includes(role)))}
-            values={draft.criteria_scores ?? {}}
-            remarks={(draft.qualitative_responses ?? {}) as Record<string, string>}
-            readOnly={!!locked}
-            reviewerLabel={role ?? undefined}
-            comparison={comparison}
-            onChangeScore={(id, v) => setDraft((p) => ({ ...p, criteria_scores: { ...(p.criteria_scores ?? {}), [id]: v } }))}
-            onChangeRemark={(id, t) => setDraft((p) => ({ ...p, qualitative_responses: { ...(p.qualitative_responses ?? {}), [id]: t } }))}
-            onUploadEvidence={onUpload}
-          />
-        </CardContent>
-      </Card>
-
-      {role && !locked && (
-        <div className="sticky bottom-0 bg-background/80 backdrop-blur border-t py-3 flex items-center justify-between gap-3">
-          <span className="text-xs text-muted-foreground">{status === 'saving' ? 'Saving…' : status === 'saved' ? 'Draft saved' : status === 'error' ? 'Save error' : ''}</span>
-          <div className="flex gap-2">
-            {canSendBack && (
-              <Button variant="outline" onClick={() => setSendBackOpen(true)} disabled={sendBack.isPending}>
-                Send back
-              </Button>
-            )}
-            <Button variant="outline" onClick={flush}>Save draft</Button>
-            <Button onClick={handleSubmit} disabled={advance.isPending}>
-              {advance.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              {proxyMode ? 'Verify & Submit on behalf' : 'Submit & forward'}
-            </Button>
-          </div>
-        </div>
-      )}
-
-      <AlertDialog open={sendBackOpen} onOpenChange={setSendBackOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Send back to previous stage?</AlertDialogTitle>
-            <AlertDialogDescription>
-              The previous reviewer will be notified and able to revise their response.
-              This action is recorded in the audit log.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <div className="space-y-1.5">
-            <Label htmlFor="ar-sendback-reason">Reason (optional)</Label>
-            <Textarea
-              id="ar-sendback-reason"
-              rows={3}
-              value={sendBackReason}
-              onChange={(e) => setSendBackReason(e.target.value)}
-              placeholder="What needs to be revised?"
-            />
-          </div>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleSendBack} disabled={sendBack.isPending}>
-              {sendBack.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />} Send back
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      {proxyMode && (
-        <AssistedSubmissionDialog
-          open={assistedOpen}
-          onOpenChange={setAssistedOpen}
-          instanceId={instance.id}
-          employeeUserId={instance.employee_id}
-          employeeName={instance.employee?.full_name ?? 'Employee'}
-          proxyRoleLabel={
-            instance.manager_id === user?.id ? 'reporting_manager'
-              : instance.skip_id === user?.id ? 'skip_level'
-              : 'authorized_proxy'
-          }
-          proxyDisplayName={profile?.full_name ?? 'Proxy'}
-          onSubmitted={() => {
-            void queryClient.invalidateQueries({ queryKey: ['annual-review'] });
-          }}
-        />
-      )}
-    </div>
-    </AnnualReviewI18nProvider>
   );
 }

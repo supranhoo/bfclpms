@@ -100,6 +100,19 @@ export const useReviewerInstancesPaginated = (
     staleTime: 30_000,
     placeholderData: keepPreviousData,
   });
+
+/**
+ * Single-instance fetcher for the Team Annual Review detail page.
+ * Cached separately so navigation between list and detail is instant when the
+ * row was already loaded as part of the paged queue.
+ */
+export const useReviewInstance = (instanceId: string | undefined) =>
+  useQuery({
+    queryKey: [...annualReviewKeys.all, 'instanceById', instanceId ?? ''],
+    queryFn: () => svc.getInstanceById(instanceId!),
+    enabled: !!instanceId,
+    staleTime: 15_000,
+  });
 export const useInstanceResponses = (instanceId?: string) =>
   useQuery({
     queryKey: annualReviewKeys.responses(instanceId ?? ''),

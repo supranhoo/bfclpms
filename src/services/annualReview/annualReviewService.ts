@@ -525,6 +525,22 @@ export async function listInstancesForReviewerPaginated(
   return { rows: (data ?? []) as InstanceWithEmployee[], total: count ?? 0 };
 }
 
+/**
+ * Single-instance lookup used by the dedicated detail page
+ * (`/annual-review/team/:instanceId`). RLS gates access to the row.
+ */
+export async function getInstanceById(id: string): Promise<InstanceWithEmployee | null> {
+  const { data, error } = await db
+    .from('annual_review_instances')
+    .select(
+      '*, employee:profiles!annual_review_instances_employee_id_fkey(id, full_name, employee_code, designation)',
+    )
+    .eq('id', id)
+    .maybeSingle();
+  if (error) throw error;
+  return (data as InstanceWithEmployee | null) ?? null;
+}
+
 // ---------- Export-wide fetcher ----------
 /**
  * Streams ALL instances in a cycle (paged via fetchAllPaged) honoring the same
