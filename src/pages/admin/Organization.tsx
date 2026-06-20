@@ -536,6 +536,7 @@ export default function Organization() {
                     <TableHead>Division</TableHead>
                     <TableHead>Departments</TableHead>
                     <TableHead>Employees</TableHead>
+                    <TableHead>Head</TableHead>
                     <TableHead className="w-[80px]">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -551,6 +552,15 @@ export default function Organization() {
                         <TableCell>{deptCount}</TableCell>
                         <TableCell>
                           {hasEmployees ? <Badge variant="secondary">In Use</Badge> : <Badge variant="outline">Unused</Badge>}
+                        </TableCell>
+                        <TableCell>
+                          <BuHeadColumn
+                            bu={{ id: bu.id, name: bu.name }}
+                            head={buHeadById.get(bu.id) as any}
+                            profiles={(profiles ?? []) as any}
+                            deptIndex={deptIndex}
+                            buIndex={buIndex}
+                          />
                         </TableCell>
                         <TableCell>
                           {!hasEmployees && (
@@ -569,7 +579,7 @@ export default function Organization() {
         </TabsContent>
 
         <TabsContent value="org-heads">
-          <OrgHeadsTab companyId={activeCompanyId || null} />
+          <HrFinalizationCard companyId={activeCompanyId || null} />
         </TabsContent>
 
         <TabsContent value="departments">
