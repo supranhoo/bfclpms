@@ -1044,6 +1044,7 @@ export type Database = {
       }
       app_settings: {
         Row: {
+          annual_review_directory_search_enabled: boolean
           app_name: string
           assisted_self_submission_enabled: boolean
           created_at: string
@@ -1065,6 +1066,7 @@ export type Database = {
           view_mode_strip_color: string
         }
         Insert: {
+          annual_review_directory_search_enabled?: boolean
           app_name?: string
           assisted_self_submission_enabled?: boolean
           created_at?: string
@@ -1086,6 +1088,7 @@ export type Database = {
           view_mode_strip_color?: string
         }
         Update: {
+          annual_review_directory_search_enabled?: boolean
           app_name?: string
           assisted_self_submission_enabled?: boolean
           created_at?: string
@@ -13103,6 +13106,13 @@ export type Database = {
         }
         Returns: number
       }
+      create_or_get_annual_review_instance: {
+        Args: { p_cycle_id: string; p_employee_id: string }
+        Returns: {
+          instance_id: string
+          was_created: boolean
+        }[]
+      }
       decide_permit_level: {
         Args: { p_decision: string; p_notes?: string; p_permit_id: string }
         Returns: Json
@@ -14361,6 +14371,26 @@ export type Database = {
       scan_kpi_duplicate_groups: {
         Args: { p_fuzzy_threshold?: number; p_include_skipped?: boolean }
         Returns: Json
+      }
+      search_active_employees_for_review: {
+        Args: {
+          p_cycle_id: string
+          p_limit?: number
+          p_offset?: number
+          p_query: string
+        }
+        Returns: {
+          department_id: string
+          designation: string
+          employee_code: string
+          employee_id: string
+          full_name: string
+          has_email: boolean
+          has_signed_in: boolean
+          in_my_queue: boolean
+          instance_id: string
+          overall_status: string
+        }[]
       }
       send_back_annual_review_status: {
         Args: {
