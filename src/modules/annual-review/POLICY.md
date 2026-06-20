@@ -19,11 +19,12 @@ _Business rules. Update in the same PR as any logic change._
     `public.resolve_bu_head(bu_id)`) or **manual** (set via `set_bu_head` RPC).
   - If no BU head is configured the seeder falls back to the legacy ancestor walk
     (2 hops above the skip manager) so old cycles continue to seed.
-- **HR Head (HR Finalization)** = `org_head_config.hr_head_user_id` for the company.
-  - Admin picks the HR business unit in the same screen. `public.resolve_hr_head`
-    returns the top of that BU's hierarchy; `set_hr_head` lets admin/hr_pms
-    override manually.
-  - If unconfigured the seeder falls back to the legacy `hrUserId` argument.
+- **HR Head (HR Finalization)** = `head_user_id` of the BU named "HR" (case-insensitive)
+  within the cycle's company. Managed inline on the Business Units tab through the
+  same Auto/Manual controls as any other BU head (`resolve_bu_head` / `set_bu_head`).
+  No separate HR Finalization screen.
+  - If unconfigured (no BU named HR, or its head is empty) the seeder falls back
+    to the legacy `hrUserId` argument.
 - Per-instance overrides (`annual_review_assignment_overrides` via
   `reassign_annual_review_reviewer`) continue to take precedence over the
   snapshotted reviewer columns.
