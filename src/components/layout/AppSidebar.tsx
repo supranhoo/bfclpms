@@ -74,7 +74,7 @@ const getStaticMenuItems = (policyVisibleRoles: string[]) => ({
     { title: 'KPI Registry', icon: GitMerge, path: '/registry', menuKey: 'registry-browser', roles: ['admin', 'manager', 'hr_pms', 'management', 'auditor', 'skip_level'] },
   ],
   manager: [
-    { title: 'Team Reviews', icon: Users, path: '/dashboard?view=team', menuKey: 'team-reviews', roles: ['manager', 'admin', 'management'] },
+    { title: 'Team Reviews', icon: Users, path: '/dashboard?view=team', menuKey: 'team-reviews', roles: ['manager', 'admin', 'management', 'skip_level'] },
   ],
   hr_pms: [
     { title: 'HR PMS Review', icon: ClipboardCheck, path: '/dashboard?view=hr_pms', menuKey: 'hr-pms-review', roles: ['hr_pms', 'admin'] },
