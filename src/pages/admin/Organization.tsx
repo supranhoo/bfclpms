@@ -604,6 +604,7 @@ export default function Organization() {
                     <TableHead>Business Unit</TableHead>
                     <TableHead>Sub-Branches</TableHead>
                     <TableHead>Employees</TableHead>
+                    <TableHead>Head</TableHead>
                     <TableHead className="w-[80px]">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -620,6 +621,16 @@ export default function Organization() {
                         <TableCell>{sbCount}</TableCell>
                         <TableCell>
                           {hasEmployees ? <Badge variant="secondary">{empCount} employees</Badge> : <Badge variant="outline">Unused</Badge>}
+                        </TableCell>
+                        <TableCell>
+                          <OrgHeadColumn
+                            scope="department"
+                            entity={{ id: dept.id, name: dept.name }}
+                            head={deptHeadById.get(dept.id)}
+                            profiles={(profiles ?? []) as any}
+                            deptIndex={deptIndex}
+                            buIndex={buIndex}
+                          />
                         </TableCell>
                         <TableCell>
                           {!hasEmployees && (
