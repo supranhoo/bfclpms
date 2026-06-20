@@ -1,46 +1,40 @@
-## Problem
-
-The "Change head" dialog has a Search input and a separate Select dropdown. The Select is a native-style Radix Select that does NOT consume the search term until the user opens it — and even then, typing inside the trigger jumps via first-letter keyboard nav instead of filtering. The two controls are visually disconnected and the user can't tell that typing into Search narrows the dropdown.
-
-## Fix
-
-Replace the split "Search + Select" with a single **searchable combobox** (Popover + Command pattern already used elsewhere in the app, e.g. shadcn `Command` + `CommandInput`).
-
-### Behavior
-- Single trigger button shows current pick ("Pick someone" placeholder).
-- Click → popover opens with a search input at top and a scrollable list below.
-- Typing filters by `full_name` OR `employee_code` (case-insensitive, same logic as today).
-- Each row shows: `Name (employee_code) — Department · BU` (unchanged context line).
-- Empty state: "No employees found".
-- Cap render to 200 matches (unchanged).
-- Selecting closes the popover and sets `pickUserId`.
-
-### Files to change (surgical)
-1. `src/components/admin/BuHeadColumn.tsx` — swap the Search `<Input>` + `<Select>` block for a `<Popover>` containing `<Command><CommandInput/><CommandList><CommandEmpty/><CommandGroup>…<CommandItem/></CommandGroup></CommandList></Command>`. Remove the separate `searchTerm` Input; keep the filter logic but drive it off the `CommandInput`.
-2. `src/components/admin/HrFinalizationCard.tsx` — apply the identical combobox replacement for the HR head picker (same UX bug exists there per code read).
-
-No changes to services, queries, mutations, RLS, or schema. No DB migration. No business logic change.
-
-### Out of scope
-- BU-select dropdown in HrFinalizationCard (line 116) — only ~N items, search not needed.
-- Recalc/save behavior, audit log, validation rules — unchanged.
+## Goal
+Remove the standalone "HR Finalization" tab. The HR Head is now simply the head of the Business Unit named **HR** — managed inline on the Business Units tab like every other BU head. Annual Review reads the HR head from that BU's `head_user_id`.
 
 ## Risk & Impact
+- **Data**: No schema changes. `org_head_config` is left in place (read-only, deprecated) to avoid destructive migration; it's no longer written or read by app code. Rollback = revert code only.
+- **Workflow**: Annual Review HR Finalization stage now resolves `hr_id` from the BU named `HR` (case-insensitive, scoped to the cycle's company). Fallback chain (override → existing args.hrUserId) preserved.
+- **UI**: One tab disappears from Admin → Organization. BU Head column already handles the "HR" BU row — nothing new to learn.
+- **Regression**: Low. Single resolver path; all callers go through one helper.
+- **Scalability**: Same single-row lookup as today.
 
-- **Data**: none.
-- **UI**: dialog gains a combined search-and-pick control; reason textarea, Save/Cancel unchanged.
-- **Regression**: low — Popover+Command is already used across the project; selection still writes `pickUserId` the same way, so `setBuHead`/`setHrHead` calls are unchanged.
-- **A11y**: Command provides keyboard nav + screen-reader labels out of the box.
-- **Perf**: still capped at 200 rendered rows; filter runs in-memory over already-loaded `activeProfiles`.
+## Plan
 
-## Verification
+1. **Resolver helper** (new, `src/services/orgHeads/hrHeadResolver.ts`)
+   - `getHrHeadUserId(companyId: string | null): Promise<string | null>` — SELECT `head_user_id` FROM `business_units` WHERE `lower(name) = 'hr'` AND `company_id = $1` (or NULL company) LIMIT 1.
 
-- Open dialog → type "saj" → list narrows to Sajid Raza in real time.
-- Type employee code "100264" → same row appears.
-- Pick row → trigger shows the name, Save enables once reason ≥ 3 chars.
-- Repeat in HR Finalization card.
+2. **Annual Review service** (`src/services/annualReview/annualReviewService.ts`)
+   - Replace the two `org_head_config` reads (≈ lines 805–811 and 955–958) with `getHrHeadUserId(companyId)`. Keep existing fallback to `args.hrUserId`.
 
-## Docs
+3. **Admin Organization page** (`src/pages/admin/Organization.tsx`)
+   - Remove the `org-heads` tab entry (line 34) and its render block (line 582).
+   - Remove the `HrFinalizationCard` import.
 
-- `mem/features/admin/org-heads.md` — one-line note that the picker uses a searchable combobox (Popover + Command).
-- No POLICY.md change (no business rule change).
+4. **Delete dead component**
+   - `src/components/admin/HrFinalizationCard.tsx` — remove.
+   - Keep `src/components/annual-review/HrFinalizationSheet.tsx` (different concern: per-cycle stage UI). Verify it doesn't import the deleted card.
+
+5. **Docs / memory sync**
+   - `mem/features/admin/org-heads.md`: rewrite Storage + UI sections — HR head = `business_units.head_user_id` of the BU named "HR". Drop `org_head_config` references from the active SSOT (note as deprecated).
+   - `src/modules/annual-review/POLICY.md` + `DOCUMENTATION.md`: update the "HR Head" definition to point at the BU-named-HR rule.
+
+6. **Tests**
+   - Add unit test for `getHrHeadUserId`: returns head_user_id for matching BU; null when no BU named HR exists; case-insensitive match.
+   - Update any annual-review service tests that mock `org_head_config` to mock the BU lookup instead.
+
+## What changes visually
+- Admin → Organization: the **HR Finalization** tab is gone. The BU named "HR" on the **Business Units** tab now serves as the single place to view/change the HR head (Auto/Manual badge, recalculate, change-head picker — same controls as every other BU).
+
+## Out of scope
+- Dropping `org_head_config` table/RPCs (left for a later cleanup migration once we've confirmed no external readers).
+- Any change to `BuHeadColumn`, the searchable picker, or `resolve_bu_head` logic.
