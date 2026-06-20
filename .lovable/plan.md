@@ -1,139 +1,95 @@
+## Issues observed
 
-## Goal
-Make the Team Annual Review page look enterprise-grade and replace the always-on text filter with an explicit **click-to-search** experience that can find *any* active employee in the company (gated to Admin / HR PMS), then auto-create their annual review instance and drop the user into Assisted self-review mode.
+### 1. Why all ~1,000 employees show up
+`useReviewerInstances` → `listInstancesForReviewer` runs:
 
----
-
-## Risk & Impact Report
-
-- **Data impact:** Adds one RPC `public.create_or_get_annual_review_instance(p_employee_id, p_cycle_id)` (SECURITY DEFINER) that idempotently inserts a row into `annual_review_instances` if one is missing for that employee+cycle, applying the standard assignment-rule resolver. No schema additions; only function + tightened RLS check.
-- **Workflow impact:** Reviewer queue (`useReviewerInstances`) is unchanged. The new dialog is an *additional* entry point; users who never touch it see today's behaviour. Auto-created instances respect the existing per-employee workflow resolver.
-- **UI/UX impact:** Left rail becomes a slim sticky column with a single "Find employee" CTA; the searchable directory moves into a full-width modal. The selected employee still drives the right pane exactly as today.
-- **Regression risk:** Medium-low. Existing `filtered` list logic is preserved for the queue. New code paths are additive.
-- **Scalability:** Server-side search via Postgres trigram on `profiles.full_name` + `employee_code` with `is_active = true`, limit 50, debounce 250 ms, paginated "Load more". No full-table client loads.
-- **Mitigation:** New RPC + dialog covered by unit tests; route guard for Admin/HR PMS only; existing reviewers retain queue view; feature flag `app_settings.annual_review_directory_search_enabled` for staged rollout.
-
----
-
-## UI Plan (detailed)
-
-### 1. Page shell (right column unchanged)
-```
-┌────────────────────────────────────────────────────────────────────────┐
-│ Team Annual Review                                  [Calibration ws]   │
-│ Annual Review · 2025-26                                                │
-├──────────────┬─────────────────────────────────────────────────────────┤
-│  Left rail   │  Selected employee header + stage tracker               │
-│  (sticky)    │  Assisted-mode banner (if applicable)                   │
-│              │  System scores                                          │
-│              │  Self-review matrix                                     │
-└──────────────┴─────────────────────────────────────────────────────────┘
+```ts
+db.from('annual_review_instances')
+  .select('*, employee:profiles!...(...)')
+  .eq('cycle_id', cycleId)
+  .or('manager_id.eq.X,skip_id.eq.X,bu_head_id.eq.X,hr_id.eq.X');
 ```
 
-### 2. Left rail (new "Find employee" CTA + compact queue)
-- Width: `w-[320px]` desktop, full-width drawer on mobile.
-- Top block (sticky, `bg-card`, `border-b`):
-  - Heading `My queue` with count badge `{filtered.length}`.
-  - Primary button **`Find employee`** (`variant="default"`, `Search` icon, `h-10 w-full`). Opens the directory dialog (see §3).
-  - Helper text below button: `Search across all active employees` — visible only for Admin / HR PMS.
-- Body: existing queue list, but card design refreshed:
-  - Avatar initials circle (32 px), name (`font-medium text-sm`), `employee_code · designation` muted, status chip right-aligned.
-  - Row height `h-16`, hover `bg-muted/50`, selected `bg-primary/5 border-l-2 border-primary`.
-  - Empty state: Lucide `Users` icon + `No employees in your queue` + secondary `Find employee` button.
+No `.range()` / `.limit()` and no pagination. Whenever the signed-in user is mapped as **HR / BU head / skip / manager** to many employees (e.g. HR PMS, a senior manager, or a user who appears as `hr_id` for the whole org), the OR-clause matches the entire cycle — and PostgREST silently caps the response at the Data API's **1,000-row hard limit**. That is exactly what's being rendered into the left rail today, all at once, with no paging.
 
-### 3. "Find employee" full-width dialog
-- Component: `EmployeeDirectoryDialog` (`shadcn Dialog`, `max-w-4xl`, `h-[80vh]`).
-- Header: title `Find employee`, subtitle `Search active employees and start an assisted annual review`.
-- Sticky search bar:
-  - Large `Input` with `Search` icon, placeholder `Name or employee code…`, autofocus.
-  - Right side: `Filter` chips — Department, Location, Designation, Has-instance (toggle). Chips populated from existing master-data hooks.
-  - Submit on Enter OR debounce 250 ms after typing; explicit `Search` button for click-to-search satisfaction.
-- Results area (`overflow-auto`):
-  - Loading: 6 skeleton rows.
-  - Empty (no query): illustration + `Start typing or click Search`.
-  - Empty (with query): `No active employee matches "<q>"`.
-  - Result row (`h-14`, `grid-cols-[40px_1fr_auto_auto]`):
-    - Avatar initials
-    - Name (`font-medium`) + `code · designation · department` muted line
-    - Status pill: `In your queue` / `Has instance` / `No instance yet`
-    - Action button: `Open` (existing instance) or `Start assisted review` (auto-create) — single primary button per row.
-  - Footer: `Showing N of M · Load more` button (server pagination 50 / page).
-- Accessibility: `role="dialog"`, focus-trap, `Esc` closes, results announced via `aria-live="polite"`.
+It is also why the "Find employee" CTA appears redundant on those accounts — the queue itself already dumps every mapped employee.
 
-### 4. Selection flow
-1. User clicks a result.
-2. If `instance_id` exists → close dialog, set `selectedId`, scroll right pane into view.
-3. If no instance → call new RPC `create_or_get_annual_review_instance`, toast `Creating annual review…`, on success set `selectedId` and open the existing `AssistedSubmissionDialog` automatically (because employee has no login per current eligibility rule). If the employee *does* have a login, just open the standard self-review pane.
-4. Errors surface inline in the dialog footer plus a `sonner` toast.
-
-### 5. Visual / token compliance
-- All colours via semantic tokens (`bg-card`, `text-muted-foreground`, `border-border`, `bg-primary/5`).
-- Lucide icons only (`Search`, `Users`, `UserPlus`, `Building2`, `MapPin`).
-- Spacing on 4 / 8 px grid, touch targets ≥ `h-10`.
-- Skeletons (not spinners) for loading; sticky header inside dialog scroll area.
+### 2. Why the multilingual option is missing on this page
+`AnnualReviewI18nProvider` + `<LanguageSwitcher>` are mounted only in `EmployeeAnnualReview.tsx`. `TeamAnnualReview.tsx` renders `CriteriaScoringMatrix` directly without the provider, so `tTemplate` / `tTemplateBilingual` fall back to the no-op default and the toggle UI never renders. The template *does* carry `sections.translations` + `display_mode`, we just never read them on the reviewer side.
 
 ---
 
-## Technical Plan
+## Risk & Impact
 
-### Files to add
-- `src/components/annual-review/EmployeeDirectoryDialog.tsx` — dialog UI + server search + selection callback.
-- `src/hooks/annualReview/useEmployeeDirectorySearch.ts` — React Query infinite-query hitting `profiles` via a thin `searchActiveEmployees(q, filters, cursor)` service.
-- `src/services/annualReview/employeeDirectory.ts` — service-layer wrapper (RLS-aware).
-- `src/services/annualReview/createOrGetInstance.ts` — calls the new RPC, returns `{ instanceId, created }`.
-- `src/test/annualReview/employeeDirectory.test.ts` — search ranking, empty state, permission gating.
-- `src/test/annualReview/createOrGetInstance.test.ts` — idempotency, error mapping.
-
-### Files to modify
-- `src/pages/annual-review/TeamAnnualReview.tsx`
-  - Replace inline `Input` filter with new left-rail header (queue count + `Find employee` button).
-  - Mount `EmployeeDirectoryDialog`; on result selection, run create-or-get, then `setSelectedId` and conditionally open `AssistedSubmissionDialog`.
-  - Keep client-side `search` text filter for the queue (operates only on already-loaded queue rows; default empty).
-- `src/components/annual-review/AssistedSubmissionDialog.tsx` — accept `autoOpen` prop so the directory flow can trigger it post-creation.
-- `mem/features/annual-review/assisted-submission` — append "Directory entry point" section.
-- `DOCUMENTATION.md`, `POLICY.md` — add Annual Review directory search policy (who can search, what they can create, audit trail).
-
-### Database migration (single migration file)
-- `create or replace function public.search_active_employees_for_review(p_query text, p_cycle_id uuid, p_limit int default 50, p_offset int default 0) returns table(...) security definer` — joins `profiles` (`is_active = true`) with `annual_review_instances` (left), filters by `full_name ILIKE` or `employee_code ILIKE`. Caller authorisation: `has_role(auth.uid(),'admin') OR has_role(auth.uid(),'hr_pms')`.
-- `create or replace function public.create_or_get_annual_review_instance(p_employee_id uuid, p_cycle_id uuid) returns uuid security definer` — idempotent insert applying existing assignment-rule resolver; raises `permission_denied` for non-admin/HR.
-- Feature flag column: `alter table public.app_settings add column if not exists annual_review_directory_search_enabled boolean not null default false;`
-- No new tables; no GRANT changes required beyond the functions' default `EXECUTE` to `authenticated`.
-
-### Permission model
-- Search RPC: Admin, HR PMS only. Reporting Managers / Skip Managers continue to see the queue.
-- Create-or-get RPC: same gate, plus must respect existing per-employee workflow resolution.
-- Every create writes a row in `system_audit_logs` (`event = 'annual_review.instance.auto_created'`, payload includes employee + cycle + initiator).
+- **Data**: read-only changes; no schema. Reviewer list switches from "fetch-all" to paged windows — fewer rows per render, identical security envelope (same RLS, same OR-clause).
+- **Workflow**: queue order and selection semantics preserved. Auto-select-first becomes "auto-select first row of current page".
+- **UI/UX**: left rail gets a header count, page-size selector, pager footer; review pane gets a language switcher when the template has >1 language. No new top-level navigation.
+- **Regression**: directory dialog flow, assisted-mode auto-open, mobile drawer, calibration link — all untouched. Tests for `listInstancesForReviewer` extended, not rewritten.
+- **Scalability**: removes the 1,000-row ceiling. Per-page cost is bounded (default 20), with `count: 'exact'` for the pager.
 
 ---
 
-## Step-by-Step Execution & Verification
-1. Migration: add feature flag + 2 RPCs → verify with `psql` smoke query (search returns ≤ limit, create_or_get is idempotent).
-2. Service layer + hooks → unit tests for happy path, no-results, unauthorised.
-3. `EmployeeDirectoryDialog` UI → Storybook-style manual check: empty / loading / results / load-more / error.
-4. Wire into `TeamAnnualReview` behind feature flag → verify Admin user sees button, manager-only user does not.
-5. Selection flow → for an employee without login, confirm `AssistedSubmissionDialog` auto-opens with selfie capture; for one with login, confirm standard self-review pane loads.
-6. Accessibility pass: keyboard nav, focus trap, `aria-live` results, contrast ≥ 4.5:1.
-7. Regression check on existing reviewer queue (search box behaviour on queue rows preserved).
+## Plan
+
+### A. Paginate the reviewer queue (root-cause fix for issue #1)
+
+1. **Service** (`src/services/annualReview/annualReviewService.ts`)
+   - Add `listInstancesForReviewerPaginated({ reviewerId, cycleId, page, pageSize, search?, status? })`:
+     - `select('*, employee:profiles!...(id, full_name, employee_code, designation)', { count: 'exact' })`
+     - same `.or(...)` reviewer filter
+     - optional `overall_status` eq + name/code `ilike` (resolved to `employee_id` via a slim profile lookup, mirroring `listInstancesPaginated`)
+     - `.order('created_at', { ascending: false }).range(from, to)`
+     - returns `{ rows, total, page, pageSize }`
+   - Keep `listInstancesForReviewer` for export-only callers (or migrate them); mark deprecated in JSDoc.
+
+2. **Hook** (`src/hooks/useAnnualReview.ts`)
+   - Add `useReviewerInstancesPaginated(reviewerId, cycleId, { page, pageSize, search, status })` with `keepPreviousData: true` and a stable query key.
+
+3. **UI** (`src/pages/annual-review/TeamAnnualReview.tsx`)
+   - Replace `useReviewerInstances` usage with the paginated hook.
+   - Left rail header: `My queue · {total}` + page-size selector (10 / 20 / 50, default 20, persisted in `localStorage`).
+   - Move filter input from client-side `useMemo` to **server-side search** (debounced 300 ms; resets page to 1).
+   - Add a status chip filter row (All / Pending self / Pending manager / …) — server-driven.
+   - Footer: `shadcn/ui` `<Pagination>` showing `Page X of Y` + Prev/Next, plus "Showing N–M of T".
+   - Auto-select changes to: first row of the current page; if user navigates page and `selectedId` is not in the new page, keep the detail pane mounted (we already fall back to `instances.find` — extend to a tiny in-memory cache keyed by id so detail still resolves across pages).
+   - Empty / loading states updated for paged context (skeleton rows, not a single spinner).
+
+4. **Tests**
+   - Extend `src/test/annualReview/service.pagination.test.ts` with cases for `listInstancesForReviewerPaginated`: applies `.or()` once, honours `range`, returns `count`, filters by `status`, scopes name search to reviewer's set.
+   - Component test: pager renders correct totals, page change triggers refetch with new range, search debounce resets to page 1.
+
+### B. Multilingual support on the reviewer page (root-cause fix for issue #4)
+
+1. Wrap `TeamAnnualReview`'s return tree in `<AnnualReviewI18nProvider … templateTranslations={template?.sections.translations} displayMode={template?.sections.display_mode}>`.
+   - Provider needs the *selected* instance's template. Mount it inside `ReviewDetail` (which already loads `template`) — same pattern as `EmployeeAnnualReview`.
+2. Inside `ReviewDetail` header (next to the status badges), render `<LanguageSwitcher>` when `availableLanguages.length > 1`, using `template.sections.default_language` + `sections.translations` to compute `availLangs`.
+3. State: `const [lang, setLang] = useState(template?.sections.default_language ?? 'en')`; reset when `template?.id` changes.
+4. No changes to `CriteriaScoringMatrix` — it already consumes `useAnnualReviewI18n()` for bilingual labels.
+5. Test: render `ReviewDetail` with a template that has `translations` for `en` + `hi`; assert switcher is visible and toggling re-renders criterion labels via `tTemplate`.
+
+### C. Documentation & policy sync
+
+- `mem/features/annual-review/assisted-submission` — note the queue is now paged; the directory dialog stays the primary "find anyone" path for Admin/HR.
+- `DOCUMENTATION.md` → Annual Review section: add "Reviewer queue pagination" subsection with page size + ordering rules.
+- `POLICY.md` → restate the Data API 1,000-row ceiling rule and require **all reviewer-scoped lists** to use server-side pagination (no `.or()` fetch-all).
 
 ---
 
-## Tests & Mock Data
-- `employeeDirectory.test.ts` — search ranks exact `employee_code` first, then prefix name, then trigram; empty query short-circuits; unauthorised caller throws.
-- `createOrGetInstance.test.ts` — second call returns same `instanceId`; respects cycle; rejects non-admin.
-- Updated mock data: 3 sample active employees without instances + 2 without login emails to exercise auto-Assisted flow.
+## Files
+
+**Edit**
+- `src/services/annualReview/annualReviewService.ts` — add paginated fetcher
+- `src/hooks/useAnnualReview.ts` — add `useReviewerInstancesPaginated`
+- `src/pages/annual-review/TeamAnnualReview.tsx` — paged list + i18n provider + language switcher
+- `mem/features/annual-review/assisted-submission`
+- `DOCUMENTATION.md`, `POLICY.md`
+
+**Add**
+- `src/test/annualReview/reviewerInstances.paginated.test.ts`
+- `src/test/annualReview/teamAnnualReview.languageSwitcher.test.tsx`
 
 ---
 
-## Documentation & Policy Updates
-- `DOCUMENTATION.md` → new section *Annual Review · Directory Search & Auto-Instance*.
-- `POLICY.md` → who can initiate proxy creation, audit requirements, feature-flag rollout.
-- `mem/features/annual-review/assisted-submission` → append directory entry-point + RPC names.
+## Open question (one)
 
----
-
-## Rollback Strategy
-- Toggle `annual_review_directory_search_enabled = false` → UI hides the new button, queue behaviour reverts.
-- RPCs are additive; safe to leave deployed.
-- No destructive schema changes.
-
-**Verdict on current screenshot:** It is functional but not professional — the search field reads as a placeholder text box with no clear action, list rows are visually noisy (badge competes with name), and there's no affordance for finding an out-of-queue employee. The plan above addresses all three.
+Default page size for the reviewer queue — **20** (recommended, matches existing `listInstancesPaginated`) or **10** (tighter for senior managers with hundreds of reports, requires more pager clicks)? Confirm or pick another value and I'll wire it as the default in `localStorage`.

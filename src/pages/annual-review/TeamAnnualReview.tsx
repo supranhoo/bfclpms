@@ -3,7 +3,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useIsMobile } from '@/hooks/use-mobile';
 import {
   useActiveCycle,
-  useReviewerInstances,
+  useReviewerInstancesPaginated,
   useTemplate,
   useInstanceResponses,
   useAdvanceStatus,
@@ -19,7 +19,7 @@ import { fyStartFromCycle } from '@/lib/annualReview/fiscalYear';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Loader2, ChevronRight, Scale, Search, Users, UserPlus } from 'lucide-react';
+import { Loader2, ChevronRight, Scale, Search, Users, UserPlus, ChevronLeft } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Sheet, SheetContent } from '@/components/ui/sheet';
 import {
@@ -29,7 +29,7 @@ import {
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
-import type { AnnualReviewerRole, EvidenceItem } from '@/types/annualReview';
+import type { AnnualReviewerRole, AnnualReviewStatus, EvidenceItem } from '@/types/annualReview';
 import type { InstanceWithEmployee } from '@/services/annualReview/annualReviewService';
 import { enabledChain } from '@/lib/annualReview/stageChain';
 import { useProxyEligibility } from '@/hooks/useProxyEligibility';
@@ -38,6 +38,25 @@ import { Badge } from '@/components/ui/badge';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { EmployeeDirectoryDialog } from '@/components/annual-review/EmployeeDirectoryDialog';
 import { supabase } from '@/integrations/supabase/client';
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select';
+import { LanguageSwitcher } from '@/components/annual-review/LanguageSwitcher';
+import { AnnualReviewI18nProvider } from '@/components/annual-review/AnnualReviewI18nContext';
+
+const QUEUE_PAGE_SIZE_KEY = 'annual-review:team:pageSize';
+const PAGE_SIZE_OPTIONS = [10, 20, 50] as const;
+const DEFAULT_PAGE_SIZE = 20;
+
+const STATUS_FILTERS: { value: AnnualReviewStatus | 'all'; label: string }[] = [
+  { value: 'all', label: 'All' },
+  { value: 'pending_self', label: 'Self' },
+  { value: 'pending_manager', label: 'Manager' },
+  { value: 'pending_skip', label: 'Skip' },
+  { value: 'pending_bu', label: 'BU' },
+  { value: 'pending_hr', label: 'HR' },
+  { value: 'completed', label: 'Done' },
+];
 
 const STAGE_FOR_REVIEWER = (inst: InstanceWithEmployee, uid: string): AnnualReviewerRole | null => {
   if (inst.overall_status === 'pending_manager' && inst.manager_id === uid) return 'manager';
@@ -51,9 +70,19 @@ export default function TeamAnnualReview() {
   const { user, isAdmin, hasRole } = useAuth();
   const { data: cycle } = useActiveCycle();
   const queryClient = useQueryClient();
-  const { data: instances = [], isLoading } = useReviewerInstances(user?.id, cycle?.id);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<AnnualReviewStatus | 'all'>('all');
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState<number>(() => {
+    if (typeof window === 'undefined') return DEFAULT_PAGE_SIZE;
+    const raw = Number(window.localStorage.getItem(QUEUE_PAGE_SIZE_KEY));
+    return PAGE_SIZE_OPTIONS.includes(raw as typeof PAGE_SIZE_OPTIONS[number]) ? raw : DEFAULT_PAGE_SIZE;
+  });
+  // Remember instances we've seen across pages so the right-pane stays mounted
+  // when the user pages forward/back or arrives via the directory dialog.
+  const [seen, setSeen] = useState<Map<string, InstanceWithEmployee>>(new Map());
   const [drawer, setDrawer] = useState(false);
   const [directoryOpen, setDirectoryOpen] = useState(false);
   const [autoAssistedForInstance, setAutoAssistedForInstance] = useState<string | null>(null);
@@ -77,25 +106,43 @@ export default function TeamAnnualReview() {
   });
   const directoryEnabled = canSearchDirectory && directoryFlag === true;
 
-  const filtered = useMemo(
-    () => instances.filter((i) =>
-      !search
-      || (i.employee?.full_name ?? '').toLowerCase().includes(search.toLowerCase())
-      || (i.employee?.employee_code ?? '').toLowerCase().includes(search.toLowerCase()),
-    ),
-    [instances, search],
-  );
-
+  // Debounce search → 300ms, reset to page 1 on change.
   useEffect(() => {
-    if (!selectedId && filtered.length) setSelectedId(filtered[0].id);
-  }, [filtered, selectedId]);
+    const t = setTimeout(() => setDebouncedSearch(search.trim()), 300);
+    return () => clearTimeout(t);
+  }, [search]);
+  useEffect(() => { setPage(1); }, [debouncedSearch, statusFilter, pageSize]);
 
-  // The selected instance may come from the directory dialog (not in `filtered`).
-  // Fall back to `instances` so picks outside the reviewer queue still render.
-  const selected =
-    filtered.find((i) => i.id === selectedId)
-    ?? instances.find((i) => i.id === selectedId)
-    ?? null;
+  const { data: paged, isLoading, isFetching } = useReviewerInstancesPaginated(
+    user?.id,
+    cycle?.id,
+    { page, pageSize, search: debouncedSearch || undefined, status: statusFilter },
+  );
+  const rows = paged?.rows ?? [];
+  const total = paged?.total ?? 0;
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+
+  // Cache every row we've ever loaded so right-pane survives pagination/search.
+  useEffect(() => {
+    if (!rows.length) return;
+    setSeen((prev) => {
+      const next = new Map(prev);
+      for (const r of rows) next.set(r.id, r);
+      return next;
+    });
+  }, [rows]);
+
+  // Auto-select first row of the current page when nothing is selected.
+  useEffect(() => {
+    if (!selectedId && rows.length) setSelectedId(rows[0].id);
+  }, [rows, selectedId]);
+
+  const selected = (selectedId && (rows.find((r) => r.id === selectedId) ?? seen.get(selectedId))) ?? null;
+
+  const setStoredPageSize = (n: number) => {
+    setPageSize(n);
+    try { window.localStorage.setItem(QUEUE_PAGE_SIZE_KEY, String(n)); } catch { /* ignore */ }
+  };
 
   const onPick = (id: string) => {
     setSelectedId(id);
@@ -108,10 +155,14 @@ export default function TeamAnnualReview() {
     if (isMobile) setDrawer(true);
     // Make sure the new instance becomes visible everywhere
     void queryClient.invalidateQueries({ queryKey: ['annual-review'] });
+    void queryClient.invalidateQueries({ queryKey: ['annualReview'] });
   };
 
   if (!cycle) return <div className="p-6">No active annual review cycle.</div>;
-  if (isLoading) return <div className="p-6 flex items-center gap-2"><Loader2 className="h-4 w-4 animate-spin" /> Loading…</div>;
+  if (isLoading && !paged) return <div className="p-6 flex items-center gap-2"><Loader2 className="h-4 w-4 animate-spin" /> Loading…</div>;
+
+  const fromN = total === 0 ? 0 : (page - 1) * pageSize + 1;
+  const toN = Math.min(page * pageSize, total);
 
   const list = (
     <div className="space-y-3">
@@ -138,22 +189,51 @@ export default function TeamAnnualReview() {
           <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
             My queue
           </span>
-          <Badge variant="secondary" className="text-[10px]">{filtered.length}</Badge>
+          <Badge variant="secondary" className="text-[10px]">{total}</Badge>
+          {isFetching && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}
+        </div>
+        <div className="flex items-center gap-1">
+          <span className="text-[10px] text-muted-foreground">Per page</span>
+          <Select value={String(pageSize)} onValueChange={(v) => setStoredPageSize(Number(v))}>
+            <SelectTrigger className="h-7 w-[64px] text-xs"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {PAGE_SIZE_OPTIONS.map((n) => (
+                <SelectItem key={n} value={String(n)}>{n}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
       </div>
 
       <div className="relative">
         <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
         <Input
-          placeholder="Filter queue by name or code…"
+          placeholder="Search by name or code…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="pl-8 h-9 text-sm"
         />
       </div>
 
+      <div className="flex flex-wrap gap-1">
+        {STATUS_FILTERS.map((s) => (
+          <button
+            key={s.value}
+            type="button"
+            onClick={() => setStatusFilter(s.value)}
+            className={`text-[11px] px-2 py-1 rounded-full border transition-colors ${
+              statusFilter === s.value
+                ? 'bg-primary text-primary-foreground border-primary'
+                : 'bg-background hover:bg-muted border-border text-muted-foreground'
+            }`}
+          >
+            {s.label}
+          </button>
+        ))}
+      </div>
+
       <ul className="space-y-1">
-        {filtered.map((i) => {
+        {rows.map((i) => {
           const stage = user ? STAGE_FOR_REVIEWER(i, user.id) : null;
           const isSelected = selectedId === i.id;
           const initials = (i.employee?.full_name ?? '?')
@@ -189,10 +269,10 @@ export default function TeamAnnualReview() {
             </li>
           );
         })}
-        {filtered.length === 0 && (
+        {rows.length === 0 && (
           <li className="rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground">
             <Users className="h-8 w-8 mx-auto mb-2 text-muted-foreground/50" />
-            <p>No employees in your queue.</p>
+            <p>{debouncedSearch || statusFilter !== 'all' ? 'No matches on this page.' : 'No employees in your queue.'}</p>
             {directoryEnabled && (
               <Button variant="link" className="mt-1 h-auto p-0" onClick={() => setDirectoryOpen(true)}>
                 Find an employee
@@ -201,6 +281,35 @@ export default function TeamAnnualReview() {
           </li>
         )}
       </ul>
+
+      {total > 0 && (
+        <div className="flex items-center justify-between pt-2 border-t">
+          <span className="text-[11px] text-muted-foreground">
+            {fromN}–{toN} of {total}
+          </span>
+          <div className="flex items-center gap-1">
+            <Button
+              variant="outline" size="sm" className="h-7 px-2"
+              disabled={page <= 1 || isFetching}
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              aria-label="Previous page"
+            >
+              <ChevronLeft className="h-3.5 w-3.5" />
+            </Button>
+            <span className="text-[11px] tabular-nums px-1">
+              Page {page} / {totalPages}
+            </span>
+            <Button
+              variant="outline" size="sm" className="h-7 px-2"
+              disabled={page >= totalPages || isFetching}
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              aria-label="Next page"
+            >
+              <ChevronRight className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 
@@ -290,6 +399,14 @@ function ReviewDetail({
   const [sendBackReason, setSendBackReason] = useState('');
   const [assistedOpen, setAssistedOpen] = useState(false);
 
+  // ----- Multilingual support (parity with EmployeeAnnualReview) -----
+  const defLang = template?.sections.settings?.default_language ?? 'en';
+  const availLangs = template?.sections.settings?.enable_multilingual
+    ? template.sections.settings.available_languages ?? ['en']
+    : ['en'];
+  const [lang, setLang] = useState<string>(defLang);
+  useEffect(() => { setLang(defLang); }, [template?.id, defLang]);
+
   // When the directory flow lands on an assisted-mode candidate, open the
   // selfie capture automatically once proxy eligibility resolves true.
   useEffect(() => {
@@ -351,6 +468,12 @@ function ReviewDetail({
   const canSendBack = !!role && role !== 'self' && chain.indexOf(role) > 0;
 
   return (
+    <AnnualReviewI18nProvider
+      currentLanguage={lang}
+      defaultLanguage={defLang}
+      templateTranslations={template?.sections.translations}
+      displayMode={template?.sections.display_mode}
+    >
     <div className="space-y-4">
       <Card>
         <CardHeader>
@@ -360,6 +483,9 @@ function ReviewDetail({
               <p className="text-sm text-muted-foreground">{instance.employee?.employee_code} · {instance.employee?.designation ?? '—'}</p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
+              {availLangs.length > 1 && (
+                <LanguageSwitcher value={lang} onChange={setLang} available={availLangs} />
+              )}
               <AnnualReviewStatusBadge status={instance.overall_status} />
               {instance.submitted_via_proxy && (
                 <Badge variant="secondary" className="text-xs">Submitted with assistance</Badge>
@@ -476,5 +602,6 @@ function ReviewDetail({
         />
       )}
     </div>
+    </AnnualReviewI18nProvider>
   );
 }

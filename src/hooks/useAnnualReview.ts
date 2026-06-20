@@ -69,6 +69,37 @@ export const useReviewerInstances = (reviewerId?: string, cycleId?: string) =>
     queryFn: () => svc.listInstancesForReviewer(reviewerId!, cycleId!),
     enabled: !!reviewerId && !!cycleId,
   });
+
+/**
+ * Paginated reviewer queue — replaces `useReviewerInstances` on the Team page.
+ * Uses `keepPreviousData` so page changes don't flash an empty list.
+ */
+export const useReviewerInstancesPaginated = (
+  reviewerId: string | undefined,
+  cycleId: string | undefined,
+  opts: { page: number; pageSize: number; search?: string; status?: svc.ListReviewerInstancesPaginatedArgs['status'] },
+) =>
+  useQuery({
+    queryKey: [
+      ...annualReviewKeys.all,
+      'reviewerInstancesPaginated',
+      reviewerId ?? '',
+      cycleId ?? '',
+      opts,
+    ],
+    queryFn: () =>
+      svc.listInstancesForReviewerPaginated({
+        reviewerId: reviewerId!,
+        cycleId: cycleId!,
+        page: opts.page,
+        pageSize: opts.pageSize,
+        search: opts.search,
+        status: opts.status,
+      }),
+    enabled: !!reviewerId && !!cycleId,
+    staleTime: 30_000,
+    placeholderData: keepPreviousData,
+  });
 export const useInstanceResponses = (instanceId?: string) =>
   useQuery({
     queryKey: annualReviewKeys.responses(instanceId ?? ''),
