@@ -84,7 +84,16 @@ export function CopyKrasDialog({ isOpen, onClose }: CopyKrasDialogProps) {
   const years = Array.from({ length: 5 }, (_, i) => now.getFullYear() - 2 + i);
 
   // Shared, cached roster fetch (POLICY §94 paged read, 5-min staleTime).
-  const { data: employees = [] } = useActiveEmployeesForCopy({ enabled: isOpen });
+  // Source picker includes inactive employees (historical KRA cloning); target
+  // picker is filtered to active-only below.
+  const { data: employees = [] } = useActiveEmployeesForCopy({
+    enabled: isOpen,
+    includeInactive: true,
+  });
+  const activeEmployees = useMemo(
+    () => employees.filter((e) => e.isActive !== false),
+    [employees],
+  );
 
   // Fetch source employee's KPIs
   const { data: sourceKpis = [], isLoading: sourceKpisLoading } = useQuery<SourceKpi[]>({
