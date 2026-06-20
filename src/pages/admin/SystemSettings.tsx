@@ -26,6 +26,7 @@ import { DataRepairTab } from '@/components/admin/DataRepairTab';
 import { ReportBuilderTab } from '@/components/admin/ReportBuilderTab';
 import { UploadSettingsTab } from '@/components/admin/UploadSettingsTab';
 import { OrgKpiGovernanceSettings } from '@/components/admin/OrgKpiGovernanceSettings';
+import { AssistedSubmissionSettings } from '@/components/admin/AssistedSubmissionSettings';
 import { FeatureFlagsTab } from '@/components/admin/FeatureFlagsTab';
 import { DummyEmployeeVisibilityCard } from '@/components/admin/DummyEmployeeVisibilityCard';
 import { EmployeeMasterFieldsCard } from '@/components/admin/EmployeeMasterFieldsCard';
@@ -547,6 +548,8 @@ export default function SystemSettings() {
             </Card>
 
             <OrgKpiGovernanceSettings />
+
+            <AssistedSubmissionSettings />
 
             <DummyEmployeeVisibilityCard />
 
