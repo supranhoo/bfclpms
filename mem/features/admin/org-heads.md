@@ -6,7 +6,10 @@ type: feature
 
 ## Storage
 - `business_units.head_user_id` (+ `head_source` 'auto'|'manual', `head_updated_at`, `head_updated_by`)
-- `org_head_config(company_id PK)` — `hr_business_unit_id`, `hr_head_user_id`, `hr_head_source`, ...
+- HR head = `business_units.head_user_id` of the BU named `HR` (case-insensitive)
+  within the cycle's company (BU → division → company). No separate config row.
+- `org_head_config` table still exists but is **deprecated and unused** by app code
+  (left in place to avoid destructive migration; safe to drop later).
 
 ## Resolver SSOT
 - `public.resolve_bu_head(p_bu_id)` — top of reporting hierarchy among ACTIVE candidates.
@@ -19,23 +22,23 @@ type: feature
   (`departments` has no `division_id`; division is reached via `business_units.division_id`.
   `levels.rank` does not exist — an earlier version referencing it raised
   "WITHIN GROUP is required for ordered-set aggregate rank".)
-- `public.resolve_hr_head(company_id)` — delegates to `resolve_bu_head(hr_business_unit_id)`.
+- HR head resolution lives in `src/services/orgHeads/hrHeadResolver.ts`
+  (`getHrHeadUserId(companyId)`); the DB `resolve_hr_head` RPC is no longer called.
 
 ## RPCs (admin / hr_pms only, audit-logged as `org_heads.*`)
 - `set_bu_head(bu_id, user_id, reason)` — manual override, reason >=3 chars.
 - `recalculate_bu_head(bu_id)` — re-derives via resolver, flips source back to 'auto'.
-- `set_hr_department(company_id, bu_id)` — picks the HR BU.
-- `set_hr_head(company_id, user_id, reason)` / `recalculate_hr_head(company_id)`.
+- `set_hr_department`, `set_hr_head`, `recalculate_hr_head` — deprecated, no UI callers.
 
 ## UI
-- BU Head lives **inline on the Business Units tab** as a "Head" column with
-  Auto/Manual badge + recalculate / change buttons per row.
-- HR Head lives on the **HR Finalization** tab (formerly "Org Heads").
-- Change-head picker accepts **any active employee company-wide** (cross-BU
-  allowed for matrix structures); the dropdown shows `Department · BU` context.
+- BU Head and HR Head both live **inline on the Business Units tab** as a "Head"
+  column (Auto/Manual badge + recalculate / change buttons per row). The HR head
+  is simply the head of the BU named "HR" — no separate HR Finalization tab.
+- Change-head picker = searchable combobox (Popover + Command); accepts **any
+  active employee company-wide**, shows `Department · BU` context.
 
 ## Annual Review integration
-`seedInstancesForCycle` / `seedInstancesByRules` now read `business_units.head_user_id`
-for `bu_head_id` and `org_head_config.hr_head_user_id` for `hr_id`. Legacy 3-hop ancestor
-walk and `args.hrUserId` survive as fallbacks when the new fields are empty. Per-instance
+`seedInstancesForCycle` / `seedInstancesByRules` read `business_units.head_user_id`
+for `bu_head_id`, and call `getHrHeadUserId(companyId)` (BU-named-"HR" lookup) for
+`hr_id`. Legacy 3-hop ancestor walk and `args.hrUserId` survive as fallbacks. Per-instance
 `annual_review_assignment_overrides` still wins.
