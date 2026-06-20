@@ -148,16 +148,6 @@ export default function TeamAnnualReview() {
           <p className="text-sm text-muted-foreground">{cycle.name}</p>
         </div>
         <div className="flex items-center gap-2">
-          {directoryEnabled && (
-            <Button
-              type="button"
-              onClick={() => setDirectoryOpen(true)}
-              className="gap-1.5 lg:hidden"
-              size="sm"
-            >
-              <Search className="h-4 w-4" /> Find employee
-            </Button>
-          )}
           <Button asChild variant="outline" size="sm" className="gap-1.5">
             <Link to="/annual-review/calibrate"><Scale className="h-4 w-4" /> Calibration worksheet</Link>
           </Button>
@@ -167,20 +157,6 @@ export default function TeamAnnualReview() {
       <div className="lg:grid lg:grid-cols-[260px_1fr] lg:gap-6">
         {/* LEFT RAIL — desktop only */}
         <aside className="hidden lg:flex flex-col gap-3">
-          {directoryEnabled && (
-            <div className="rounded-lg border bg-card p-3 space-y-2">
-              <Button
-                type="button"
-                onClick={() => setDirectoryOpen(true)}
-                className="w-full h-9 gap-2"
-              >
-                <Search className="h-4 w-4" /> Find employee
-              </Button>
-              <p className="text-[11px] text-muted-foreground leading-snug">
-                Search any active employee and start their annual review — even outside your direct team.
-              </p>
-            </div>
-          )}
           <div className="rounded-lg border bg-card p-3 space-y-3">
             <div className="flex items-center gap-2">
               <Users className="h-4 w-4 text-muted-foreground" />
@@ -232,7 +208,9 @@ export default function TeamAnnualReview() {
             <div className="relative flex-1 min-w-0">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
               <Input
-                placeholder="Search by name or code…"
+                placeholder={directoryEnabled
+                  ? 'Search your queue by name or code…'
+                  : 'Search by name or code…'}
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className="pl-8 h-9 text-sm"
@@ -254,6 +232,18 @@ export default function TeamAnnualReview() {
                 </button>
               ))}
             </div>
+            {directoryEnabled && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setDirectoryOpen(true)}
+                className="h-9 gap-1.5 shrink-0"
+                title="Search the full employee directory and start a review for anyone — even outside your team."
+              >
+                <UserPlus className="h-4 w-4" /> All employees
+              </Button>
+            )}
           </div>
 
           {/* Grid of employees */}
@@ -302,10 +292,16 @@ export default function TeamAnnualReview() {
             {rows.length === 0 && (
               <li className="col-span-full rounded-md border border-dashed p-8 text-center text-sm text-muted-foreground">
                 <Users className="h-8 w-8 mx-auto mb-2 text-muted-foreground/50" />
-                <p>{debouncedSearch || statusFilter !== 'all' ? 'No matches on this page.' : 'No employees in your queue.'}</p>
+                <p>
+                  {debouncedSearch || statusFilter !== 'all'
+                    ? 'No matches in your queue.'
+                    : 'No employees in your queue.'}
+                </p>
                 {directoryEnabled && (
                   <Button variant="link" className="mt-1 h-auto p-0" onClick={() => setDirectoryOpen(true)}>
-                    Find an employee
+                    {debouncedSearch
+                      ? `Search all employees for “${debouncedSearch}”`
+                      : 'Search all employees'}
                   </Button>
                 )}
               </li>
