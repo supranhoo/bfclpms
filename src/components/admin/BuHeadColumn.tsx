@@ -2,12 +2,12 @@ import { useMemo, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select';
+  Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList,
+} from '@/components/ui/command';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -16,7 +16,8 @@ import { useToast } from '@/hooks/use-toast';
 import {
   setBuHead, recalculateBuHead, type BuHeadRow,
 } from '@/services/orgHeads/orgHeadsService';
-import { RefreshCw, Pencil, ShieldAlert } from 'lucide-react';
+import { RefreshCw, Pencil, ShieldAlert, Check, ChevronsUpDown } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 /** Profile shape used for the picker. Kept loose so callers can pass
  * whatever shape `useProfiles()` returns. */
@@ -51,6 +52,7 @@ export function BuHeadColumn({ bu, head, profiles, deptIndex, buIndex }: BuHeadC
   const [pickUserId, setPickUserId] = useState('');
   const [pickReason, setPickReason] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
+  const [pickerOpen, setPickerOpen] = useState(false);
 
   const profileById = useMemo(() => {
     const m = new Map<string, PickerProfile>();
@@ -95,6 +97,7 @@ export function BuHeadColumn({ bu, head, profiles, deptIndex, buIndex }: BuHeadC
       setPickUserId('');
       setPickReason('');
       setSearchTerm('');
+      setPickerOpen(false);
     },
     onError: (e: Error) => toast({ title: 'Update failed', description: e.message, variant: 'destructive' }),
   });
@@ -107,6 +110,8 @@ export function BuHeadColumn({ bu, head, profiles, deptIndex, buIndex }: BuHeadC
     const parts = [dept?.name, buName].filter(Boolean);
     return parts.length ? ` — ${parts.join(' · ')}` : '';
   };
+
+  const selectedProfile = pickUserId ? profileById.get(pickUserId) : null;
 
   return (
     <div className="flex items-center justify-between gap-2 min-w-[220px]">
@@ -157,33 +162,64 @@ export function BuHeadColumn({ bu, head, profiles, deptIndex, buIndex }: BuHeadC
           </AlertDialogHeader>
           <div className="space-y-3">
             <div className="space-y-1">
-              <Label>Search</Label>
-              <Input
-                placeholder="Name or employee code"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
-              <p className="text-[11px] text-muted-foreground">
-                Showing active employees across the company. Tip: usually the BU's own
-                top manager.
-              </p>
-            </div>
-            <div className="space-y-1">
               <Label>New head</Label>
-              <Select value={pickUserId} onValueChange={setPickUserId}>
-                <SelectTrigger><SelectValue placeholder="Pick someone" /></SelectTrigger>
-                <SelectContent>
-                  {filteredPool.length === 0 && (
-                    <div className="px-2 py-1.5 text-xs text-muted-foreground">No matches.</div>
-                  )}
-                  {filteredPool.map(p => (
-                    <SelectItem key={p.id} value={p.id}>
-                      {p.full_name} {p.employee_code ? `(${p.employee_code})` : ''}
-                      {contextFor(p)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Popover open={pickerOpen} onOpenChange={setPickerOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    role="combobox"
+                    aria-expanded={pickerOpen}
+                    className="w-full justify-between font-normal"
+                  >
+                    <span className="truncate">
+                      {selectedProfile
+                        ? `${selectedProfile.full_name}${selectedProfile.employee_code ? ` (${selectedProfile.employee_code})` : ''}`
+                        : 'Pick someone'}
+                    </span>
+                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+                  <Command shouldFilter={false}>
+                    <CommandInput
+                      placeholder="Search name or employee code…"
+                      value={searchTerm}
+                      onValueChange={setSearchTerm}
+                    />
+                    <CommandList>
+                      <CommandEmpty>No employees found.</CommandEmpty>
+                      <CommandGroup>
+                        {filteredPool.map(p => (
+                          <CommandItem
+                            key={p.id}
+                            value={p.id}
+                            onSelect={() => {
+                              setPickUserId(p.id);
+                              setPickerOpen(false);
+                            }}
+                          >
+                            <Check
+                              className={cn(
+                                'mr-2 h-4 w-4',
+                                pickUserId === p.id ? 'opacity-100' : 'opacity-0',
+                              )}
+                            />
+                            <span className="truncate">
+                              {p.full_name}
+                              {p.employee_code ? ` (${p.employee_code})` : ''}
+                              <span className="text-muted-foreground">{contextFor(p)}</span>
+                            </span>
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
+              <p className="text-[11px] text-muted-foreground">
+                Showing active employees across the company. Tip: usually the BU's own top manager.
+              </p>
             </div>
             <div className="space-y-1">
               <Label>Reason (min 3 chars)</Label>
