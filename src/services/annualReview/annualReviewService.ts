@@ -958,6 +958,12 @@ export async function seedInstancesByRules(args: { cycleId: string; hrUserId: st
   const buHead: Record<string, string | null> = {};
   for (const b of bus ?? []) buHead[b.id] = (b as any).head_user_id ?? null;
 
+  // Department head snapshot map (mirrors BU head map).
+  const { data: depts3, error: dh2Err } = await db.from('departments').select('id, head_user_id');
+  if (dh2Err) throw dh2Err;
+  const deptHead: Record<string, string | null> = {};
+  for (const d of depts3 ?? []) deptHead[d.id] = (d as any).head_user_id ?? null;
+
   let hrHead: string | null = args.hrUserId ?? null;
   {
     const resolved = await getHrHeadUserId(args.companyId ?? null);
@@ -996,6 +1002,7 @@ export async function seedInstancesByRules(args: { cycleId: string; hrUserId: st
       manager_id: mgr,
       skip_id: skip,
       bu_head_id: buFromCfg ?? buFallback,
+      dept_head_id: p.department_id ? deptHead[p.department_id] ?? null : null,
       hr_id: hrHead,
     });
   }
