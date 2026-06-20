@@ -464,6 +464,67 @@ export async function listInstancesForReviewer(reviewerId: string, cycleId: stri
   return data ?? [];
 }
 
+// ---------- Reviewer-scoped pagination ----------
+/**
+ * Server-paginated reviewer queue for the Team Annual Review page.
+ *
+ * Why this exists: the unpaginated `listInstancesForReviewer` is silently capped
+ * at the PostgREST 1,000-row Data API ceiling — senior managers / HR PMS users
+ * mapped to large org slices saw the whole cycle render at once. This fetcher
+ * applies the same reviewer `.or(...)` envelope but with `count: 'exact'` +
+ * `.range()`, plus an optional status filter and an employee name/code search
+ * resolved through a slim profile pre-fetch (mirrors `listInstancesPaginated`).
+ */
+export interface ListReviewerInstancesPaginatedArgs {
+  reviewerId: string;
+  cycleId: string;
+  page: number;          // 1-indexed
+  pageSize: number;
+  search?: string;
+  status?: AnnualReviewStatus | 'all';
+}
+
+export async function listInstancesForReviewerPaginated(
+  args: ListReviewerInstancesPaginatedArgs,
+): Promise<PaginatedInstances> {
+  const pageSize = Math.min(Math.max(args.pageSize, 1), 100);
+  const from = (Math.max(args.page, 1) - 1) * pageSize;
+  const to = from + pageSize - 1;
+
+  let q = db
+    .from('annual_review_instances')
+    .select(
+      '*, employee:profiles!annual_review_instances_employee_id_fkey(id, full_name, employee_code, designation)',
+      { count: 'exact' },
+    )
+    .eq('cycle_id', args.cycleId)
+    .or(
+      `manager_id.eq.${args.reviewerId},skip_id.eq.${args.reviewerId},bu_head_id.eq.${args.reviewerId},hr_id.eq.${args.reviewerId}`,
+    );
+
+  if (args.status && args.status !== 'all') q = q.eq('overall_status', args.status);
+
+  const term = args.search?.trim();
+  if (term) {
+    const safe = term.replace(/[(),]/g, ' ');
+    const { data: profs, error: pErr } = await db
+      .from('profiles')
+      .select('id')
+      .or(`full_name.ilike.%${safe}%,employee_code.ilike.%${safe}%`)
+      .limit(500);
+    if (pErr) throw pErr;
+    const ids = (profs ?? []).map((p: { id: string }) => p.id);
+    if (ids.length === 0) return { rows: [], total: 0 };
+    q = q.in('employee_id', ids);
+  }
+
+  q = q.order('created_at', { ascending: false }).range(from, to);
+
+  const { data, error, count } = await q;
+  if (error) throw error;
+  return { rows: (data ?? []) as InstanceWithEmployee[], total: count ?? 0 };
+}
+
 // ---------- Export-wide fetcher ----------
 /**
  * Streams ALL instances in a cycle (paged via fetchAllPaged) honoring the same
