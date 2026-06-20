@@ -307,7 +307,6 @@ export default function TeamAnnualReview() {
             </div>
           )}
         </div>
-      </div>
 
       <EmployeeDirectoryDialog
         open={directoryOpen}
