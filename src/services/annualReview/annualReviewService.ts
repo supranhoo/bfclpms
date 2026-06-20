@@ -803,6 +803,12 @@ export async function seedInstancesForCycle(args: { cycleId: string; templateId:
   const buHead: Record<string, string | null> = {};
   for (const b of bus ?? []) buHead[b.id] = (b as any).head_user_id ?? null;
 
+  // Department head map (mirrors BU head map). Used to snapshot dept_head_id.
+  const { data: depts2, error: dh1Err } = await db.from('departments').select('id, head_user_id');
+  if (dh1Err) throw dh1Err;
+  const deptHead: Record<string, string | null> = {};
+  for (const d of depts2 ?? []) deptHead[d.id] = (d as any).head_user_id ?? null;
+
   // HR head = head_user_id of the BU named "HR" within the company.
   // (Replaces deprecated org_head_config source; managed inline on the
   // Business Units tab via BuHeadColumn.)
@@ -825,6 +831,7 @@ export async function seedInstancesForCycle(args: { cycleId: string; templateId:
       manager_id: mgr,
       skip_id: skip,
       bu_head_id: bu ?? buFallback,
+      dept_head_id: p.department_id ? deptHead[p.department_id] ?? null : null,
       hr_id: hrHead,
     };
   });
