@@ -7,7 +7,7 @@ import {
 import { AnnualReviewStatusBadge } from '@/components/annual-review/AnnualReviewStatusBadge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Loader2, ChevronRight, Scale, Search, Users, UserPlus, ChevronLeft } from 'lucide-react';
+import { Loader2, ChevronRight, Scale, Search, UserPlus, ChevronLeft } from 'lucide-react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import type { AnnualReviewerRole, AnnualReviewStatus } from '@/types/annualReview';
 import type { InstanceWithEmployee } from '@/services/annualReview/annualReviewService';
