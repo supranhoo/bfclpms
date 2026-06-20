@@ -13257,6 +13257,7 @@ export type Database = {
           id: string
         }[]
       }
+      get_public_branding: { Args: never; Returns: Json }
       get_public_registry_view: {
         Args: { p_category_id?: string; p_search?: string }
         Returns: Json

@@ -27,6 +27,39 @@ export function useAppSettings() {
   return useQuery({
     queryKey: ['app-settings'],
     queryFn: async (): Promise<AppSettings | null> => {
+      // If user is signed out, fall back to public branding RPC
+      // (anon SELECT on app_settings is no longer permitted; sensitive
+      // fields like pms_policy_content stay behind authenticated access).
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (!sessionData.session) {
+        const { data: branding, error: brandingError } = await supabase.rpc('get_public_branding');
+        if (brandingError) {
+          console.error('Error fetching public branding:', brandingError);
+          throw brandingError;
+        }
+        if (!branding) return null;
+        const b = branding as Record<string, unknown>;
+        const wallpapers = Array.isArray(b.login_wallpapers)
+          ? (b.login_wallpapers as unknown[]).filter((x): x is string => typeof x === 'string')
+          : [];
+        return {
+          id: (b.id as string) ?? APP_SETTINGS_ID,
+          organization_name: (b.organization_name as string) ?? '',
+          app_name: (b.app_name as string) ?? '',
+          logo_url: (b.logo_url as string | null) ?? null,
+          login_background_url: (b.login_background_url as string | null) ?? null,
+          login_wallpapers: wallpapers,
+          login_hero_headline: (b.login_hero_headline as string | null) ?? null,
+          login_hero_description: (b.login_hero_description as string | null) ?? null,
+          pms_policy_url: null,
+          pms_policy_content: null,
+          pms_policy_visible_roles: [],
+          view_mode_strip_color: (b.view_mode_strip_color as string) || '#3b82f6',
+          created_at: '',
+          updated_at: '',
+        };
+      }
+
       const { data, error } = await supabase
         .from('app_settings')
         .select('*')
