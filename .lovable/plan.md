@@ -1,117 +1,73 @@
-## Recommendation
+## Goal
+The current `/annual-review/team` page wraps everything in `max-w-5xl mx-auto` and renders each employee as a tall, full-width card with the status badge on a second row. On a 1440px desktop only ~5 employees fit above the fold. Re-cast it as a denser dashboard that uses the full width and stays clean on tablet/mobile — desktop-first.
 
-Yes — splitting makes sense. Why:
-
-- **Cognitive load**: the right pane today holds the full review form (system scores, eligibility, criteria matrix, evidence, send-back). That competes for attention with the 2,560-row queue. Two pages let each one breathe.
-- **Deep linking & sharing**: a dedicated detail URL (`/annual-review/team/:instanceId`) is bookmarkable, shareable with HR, and survives refresh.
-- **Mobile parity**: the bottom-sheet drawer becomes unnecessary — small screens just navigate.
-- **Performance**: the list page no longer mounts `useTemplate` / `useInstanceResponses` / `useDebouncedResponseDraft` for the auto-selected first row, so the queue loads faster.
-- **State isolation**: the directory-dialog "open assisted on land" flow becomes a simple URL param instead of cross-component state.
-
-Trade-off: one extra click to switch reviewees. Mitigated by a "Back to queue" link plus prev/next arrows in the detail header.
-
----
+## Scope (UI/presentation only)
+No business logic, services, hooks, RLS, or routing changes. Same data, same handlers (`goToDetail`, `handleDirectoryPick`), same URL-synced filters, same pagination contract. Only the layout, density and responsive breakpoints in `TeamAnnualReview.tsx` change.
 
 ## Risk & Impact
+- **Data / workflow / regression:** none — purely visual.
+- **UI/UX:** intentional restructure of the queue. Tap targets stay ≥44px; status badge moves inline next to the chevron.
+- **Mitigation:** keep semantic markup (`<ul>/<li><button>`), preserve aria labels, keep keyboard focus order identical.
 
-- **Data**: no schema, no RLS changes. Same hooks, same RPCs.
-- **Workflow**: identical permissions and stage logic.
-- **UI/UX**: removes the side-by-side layout; queue page becomes full-width with a denser grid (since right pane is gone). Detail page is centered, max-w ~5xl, matching `EmployeeAnnualReview`.
-- **Regression risk**: medium-low. Directory dialog → "auto open assisted" must survive the navigation. Calibration link, mobile drawer, back navigation, and React Query cache all need verification.
-- **Scalability**: improved — list page drops heavy form hooks.
+## Desktop layout (≥1280px) — primary target
+```text
+┌───────────────────────────────────────────────────────────────────────┐
+│  Team Annual Review · Annual Review 2025-26      [Calibration sheet] │
+├──────────────────────┬────────────────────────────────────────────────┤
+│ LEFT RAIL (280px)    │ RIGHT: queue grid                              │
+│                      │                                                │
+│ ╭ Find employee ╮    │ [Search……………………]  [All|Self|Mgr|Skip|BU|HR|Done│
+│ │ button + hint │    │                                                │
+│ ╰──────────────╯     │ ┌──── card ────┐ ┌──── card ────┐ ┌── card ──┐│
+│                      │ │ AK Ashish…   │ │ AK Abhiranj… │ │ UK Umes… ││
+│ My queue   2560      │ │ 101903·Appr. │ │ 200792·TK    │ │ 200221·H ││
+│                      │ │ • Self Pend. │ │ • Self Pend. │ │ • Self P ││
+│ Per page [20 ▾]      │ └──────────────┘ └──────────────┘ └──────────┘│
+│                      │ … 3-col grid, ~9 cards above the fold …       │
+│                      │                                                │
+│                      │ 1–20 of 2560        ‹  Page 1 / 128  ›        │
+└──────────────────────┴────────────────────────────────────────────────┘
+```
+- Container becomes `max-w-[1600px]` with `lg:grid lg:grid-cols-[280px_1fr] gap-6`.
+- The "Find employee" panel, queue counter and per-page selector collapse into the left rail on `lg+`, removing the giant full-width blue button that dominates the current view.
+- Cards become a **CSS grid**: `grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-3`. Each card ~96px tall with avatar, name, code·designation, and status badge inline at the bottom.
 
----
+## Tablet (768–1279px)
+- Single column layout (no left rail). "Find employee" becomes a compact header action button (not full-width).
+- Queue grid: `sm:grid-cols-2` → 2 cards per row.
+- Filter chips + search stay in one row that wraps.
 
-## Plan
+## Mobile (<768px)
+- Stacked single column (current behaviour, but with tighter card padding `p-3` → `p-2.5`, smaller avatar `h-9 w-9`, status badge moves to the same line as the name on the second row).
+- "Find employee" CTA stays prominent but height reduced from `h-12` to `h-10`.
+- Per-page selector + queue count move into a compact bar above the list.
 
-### A. Routes
+## Card spec (shared)
+```text
+┌───────────────────────────────────────────────┐
+│ ⓘ  Ashish Kumar                         ›    │
+│    101903 · Apprentice GET                    │
+│    ● Self Review Pending     [Assisted]       │
+└───────────────────────────────────────────────┘
+```
+- min-height 84px, hover/focus ring via `hover:border-primary/40 focus-visible:ring-2`.
+- Status badge rendered with `size="sm"` style (smaller dot + text) — variant added locally if `AnnualReviewStatusBadge` doesn't expose one (kept inside this file as a CSS wrapper, no badge component change).
 
-- Add `/annual-review/team/:instanceId` (lazy `TeamAnnualReviewDetail`) in `src/App.tsx`, guarded the same way as `/annual-review/team`.
-- Keep `/annual-review/team` as the list page (queue only).
-- Sidebar entry unchanged.
-
-### B. Split the component
-
-Today `TeamAnnualReview.tsx` contains both `TeamAnnualReview` (list) and `ReviewDetail`. Refactor:
-
-1. **`src/pages/annual-review/TeamAnnualReview.tsx`** — keep only the list:
-   - Removes the right-section `<section className="md:col-span-2">` and the bottom `<Sheet>` drawer.
-   - Removes `selected`, `seen`, `autoAssistedForInstance` cross-pane state.
-   - Layout becomes a single column (or 2-col grid on xl screens with the directory CTA + filters above the list) — list items take full width, taller density, room for stage badge + last-updated + reviewer-stage chip.
-   - Row click → `navigate('/annual-review/team/' + id)` (optionally `?assisted=1` when chosen via the directory's auto-assisted candidate).
-   - "Find employee" directory dialog stays on the list page; `handleDirectoryPick` navigates instead of setting local state.
-
-2. **`src/pages/annual-review/TeamAnnualReviewDetail.tsx`** (new):
-   - Reads `:instanceId` from the URL, plus `?assisted=1`.
-   - Loads the instance via a new lean hook `useReviewInstance(id)` (single-row `select('*, employee:profiles!...(...)').eq('id', id).single()`), with cache hydration from `annualReview` query cache when available so navigation is instant.
-   - Renders the existing `ReviewDetail` body, prefixed with a sticky page header containing:
-     - **Back** button → `/annual-review/team` (preserves `?page=N&search=…&status=…` so the user returns to the same queue page).
-     - Employee summary (avatar, name, code, designation).
-     - Language switcher + status badge.
-     - Optional **Prev / Next** arrows that walk the current queue page's row IDs (passed through `location.state` from the list, falling back to undefined when navigated cold).
-   - Wraps in `AnnualReviewI18nProvider` exactly like today.
-   - If `instance` is `null` or unauthorised, render a friendly empty card with a back link.
-
-3. **`ReviewDetail` body** stays largely intact — extract it into `src/components/annual-review/TeamReviewDetailContent.tsx` so both old call-sites are deleted and both pages import the same content. No logic changes; just move-and-export.
-
-### C. List → Detail handoff
-
-- Store the **current page's instance IDs + queue filters** in `location.state` when navigating to detail, e.g. `navigate('/annual-review/team/' + id, { state: { siblings: rows.map(r => r.id), returnTo: '/annual-review/team?...' } })`.
-- Detail page uses `state.siblings` for Prev/Next; missing state → arrows hidden, only Back rendered.
-- Persist queue UI state (`page`, `search`, `statusFilter`, `pageSize`) in the URL as query params on the list page so Back round-trips cleanly. (`pageSize` continues to be persisted in `localStorage` as today.)
-
-### D. Mobile
-
-- List page is naturally mobile-first single-column now. Tap → navigate. No drawer needed; remove `<Sheet>` from list.
-- Detail page uses the same content stack vertically — same as `EmployeeAnnualReview`.
-
-### E. Directory dialog (Admin / HR PMS)
-
-- `handleDirectoryPick(instanceId, { autoOpenAssisted })` becomes:
-  ```ts
-  navigate(`/annual-review/team/${instanceId}${autoOpenAssisted ? '?assisted=1' : ''}`);
-  void queryClient.invalidateQueries({ queryKey: ['annualReview'] });
-  ```
-- Detail page reads `?assisted=1` and forwards as the `autoOpenAssisted` prop to `TeamReviewDetailContent`.
-
-### F. Empty state on list page
-
-- Auto-select-first-row behaviour is removed (no right pane). The list page just shows the queue; an explicit click is required to open a review. This matches the user's mental model from the request.
-
-### G. Tests
-
-- `src/test/annualReview/teamAnnualReview.list.test.tsx` — row click navigates with `siblings` in state; Back URL contains current filters.
-- `src/test/annualReview/teamAnnualReviewDetail.test.tsx` — loads instance by id; renders `LanguageSwitcher`; honours `?assisted=1`; Prev/Next walks `siblings`.
-- Existing pagination/service tests untouched.
-
-### H. Docs & policy
-
-- `mem/features/annual-review/assisted-submission` — note the new detail URL contract.
-- `DOCUMENTATION.md` (Annual Review section) — document the two-page split + URL params.
-- `POLICY.md` — note that detail page enforces the same reviewer/proxy access via existing hooks; no new role.
-
----
-
-## Files
-
-**Add**
-- `src/pages/annual-review/TeamAnnualReviewDetail.tsx`
-- `src/components/annual-review/TeamReviewDetailContent.tsx` (extracted body)
-- `src/hooks/useAnnualReview.ts` — new `useReviewInstance(id)` export
-- `src/services/annualReview/annualReviewService.ts` — new `getInstanceById(id)`
-- `src/test/annualReview/teamAnnualReview.list.test.tsx`
-- `src/test/annualReview/teamAnnualReviewDetail.test.tsx`
-
-**Edit**
-- `src/App.tsx` — register the detail route
-- `src/pages/annual-review/TeamAnnualReview.tsx` — strip right pane, drawer, detail; URL-sync filters; navigate on row click
-- `mem/features/annual-review/assisted-submission`, `DOCUMENTATION.md`, `POLICY.md`
-
-**Delete**
-- nothing
-
----
+## Steps
+1. **Refactor `TeamAnnualReview.tsx` layout only:**
+   - Replace root `max-w-5xl` with `max-w-[1600px]` and the `lg` two-column grid.
+   - Extract the directory CTA, queue meta (count + per-page) into a `<aside>` sidebar block that re-flows above the grid on `<lg`.
+   - Replace `<ul className="space-y-1">` with `<ul className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-3">`.
+   - Rework the `<li><button>` card markup: single-row header (avatar + name/code/designation + chevron), single-row footer (status badge + Assisted chip + "Awaiting you" highlight).
+   - Move pagination footer outside the grid, full-width under it.
+2. **Density polish:** reduce vertical paddings on header (`mb-4` → `mb-3`), tighten filter chip row (`gap-1` stays, but moved next to the search field on `md+`).
+3. **Verification (manual via preview):**
+   - Desktop 1440px: count visible cards above the fold (target ≥9).
+   - Tablet 820px: 2-col grid, no horizontal scroll.
+   - Mobile 375px: single column, tap targets ≥44px, no clipped text.
+   - Keyboard tab order: Find employee → Search → Filter chips → first card → … → pagination.
+4. **Docs:** append a short entry to `DOCUMENTATION.md` under the Annual Review section noting the new dashboard layout and breakpoints. No `POLICY.md` change (no policy impact).
+5. **Tests:** not applicable — pure presentational change, existing pagination/service tests still cover behaviour. Add a smoke render test only if you want; default plan = skip to keep change surgical.
 
 ## Open question (one)
-
-When the user taps **Back** from the detail page, should the list restore the **exact previous page + filters + scroll position** (recommended — requires URL-syncing `page/search/status`), or just return to the **default queue (page 1, no filters)**? Confirm "exact restore" and I'll wire the URL params; pick the simpler one and I'll skip the URL-sync work.
+Do you want the **"Find employee" CTA in a left sidebar** on desktop (as drawn above), or kept as a compact button in the page header next to "Calibration worksheet"? Sidebar gives it permanent prominence; header button gives the grid the full width. I'll default to **sidebar on desktop, header-button on tablet/mobile** unless you say otherwise.
