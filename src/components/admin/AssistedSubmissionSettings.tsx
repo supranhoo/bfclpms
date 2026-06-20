@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
-import { Camera } from 'lucide-react';
+import { Camera, Search } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -16,33 +16,63 @@ export function AssistedSubmissionSettings() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('app_settings')
-        .select('assisted_self_submission_enabled')
+        .select('assisted_self_submission_enabled, annual_review_directory_search_enabled')
         .eq('id', APP_SETTINGS_ID)
         .maybeSingle();
       if (error) throw error;
-      return data as { assisted_self_submission_enabled: boolean } | null;
+      return data as {
+        assisted_self_submission_enabled: boolean;
+        annual_review_directory_search_enabled: boolean;
+      } | null;
     },
   });
   const [enabled, setEnabled] = useState(false);
+  const [directoryEnabled, setDirectoryEnabled] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => { if (data) setEnabled(!!data.assisted_self_submission_enabled); }, [data]);
+  useEffect(() => {
+    if (data) {
+      setEnabled(!!data.assisted_self_submission_enabled);
+      setDirectoryEnabled(!!data.annual_review_directory_search_enabled);
+    }
+  }, [data]);
 
-  const toggle = async (v: boolean) => {
-    const prev = enabled;
-    setEnabled(v); setSaving(true);
+  const update = async (
+    patch: Partial<{ assisted_self_submission_enabled: boolean; annual_review_directory_search_enabled: boolean }>,
+    rollback: () => void,
+    label: string,
+  ) => {
+    setSaving(true);
     try {
       const { error } = await supabase
         .from('app_settings')
-        .update({ assisted_self_submission_enabled: v, updated_at: new Date().toISOString() })
+        .update({ ...patch, updated_at: new Date().toISOString() })
         .eq('id', APP_SETTINGS_ID);
       if (error) throw error;
       qc.invalidateQueries({ queryKey: ['assisted-submission-flag'] });
-      toast({ title: 'Setting updated', description: `Assisted Annual Review submission → ${v ? 'ON' : 'OFF'}` });
+      toast({ title: 'Setting updated', description: label });
     } catch (err) {
-      setEnabled(prev);
+      rollback();
       toast({ title: 'Update failed', description: (err as Error).message, variant: 'destructive' });
     } finally { setSaving(false); }
+  };
+
+  const toggle = (v: boolean) => {
+    const prev = enabled; setEnabled(v);
+    return update(
+      { assisted_self_submission_enabled: v },
+      () => setEnabled(prev),
+      `Assisted Annual Review submission → ${v ? 'ON' : 'OFF'}`,
+    );
+  };
+
+  const toggleDirectory = (v: boolean) => {
+    const prev = directoryEnabled; setDirectoryEnabled(v);
+    return update(
+      { annual_review_directory_search_enabled: v },
+      () => setDirectoryEnabled(prev),
+      `Annual Review directory search → ${v ? 'ON' : 'OFF'}`,
+    );
   };
 
   return (
@@ -54,7 +84,7 @@ export function AssistedSubmissionSettings() {
           behalf of blue-collar / non-login employees, gated by a live selfie of the employee.
         </CardDescription>
       </CardHeader>
-      <CardContent>
+      <CardContent className="space-y-4">
         <div className="flex items-center justify-between p-4 rounded-lg border">
           <div className="space-y-1 pr-4">
             <Label htmlFor="assisted-flag" className="text-base font-medium">Enable assisted submission</Label>
@@ -64,6 +94,25 @@ export function AssistedSubmissionSettings() {
             </p>
           </div>
           <Switch id="assisted-flag" checked={enabled} disabled={isLoading || saving} onCheckedChange={toggle} />
+        </div>
+
+        <div className="flex items-center justify-between p-4 rounded-lg border">
+          <div className="space-y-1 pr-4">
+            <Label htmlFor="directory-flag" className="text-base font-medium flex items-center gap-2">
+              <Search className="h-4 w-4" /> Enable directory search on Team Annual Review
+            </Label>
+            <p className="text-sm text-muted-foreground">
+              When ON, Admin and HR PMS see a <span className="font-medium">Find employee</span> button on the Team
+              Annual Review page. They can search any active employee, auto-create the review instance, and start the
+              assisted flow. All auto-creations are written to the system audit log.
+            </p>
+          </div>
+          <Switch
+            id="directory-flag"
+            checked={directoryEnabled}
+            disabled={isLoading || saving}
+            onCheckedChange={toggleDirectory}
+          />
         </div>
       </CardContent>
     </Card>
