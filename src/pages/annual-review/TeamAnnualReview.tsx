@@ -142,10 +142,14 @@ export default function TeamAnnualReview() {
 
   return (
     <div className="p-4 md:p-6 max-w-[1600px] mx-auto">
-      <header className="flex items-start justify-between mb-3 gap-3">
+      <header className="flex flex-col sm:flex-row sm:items-start justify-between mb-3 gap-3">
         <div>
           <h1 className="text-2xl font-bold">Team Annual Review</h1>
-          <p className="text-sm text-muted-foreground">{cycle.name}</p>
+          <div className="flex items-center gap-2 mt-1">
+            <p className="text-sm text-muted-foreground">{cycle.name}</p>
+            <Badge variant="secondary" className="text-[10px]">{total} in queue</Badge>
+            {isFetching && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}
+          </div>
         </div>
         <div className="flex items-center gap-2">
           <Button asChild variant="outline" size="sm" className="gap-1.5">
@@ -154,32 +158,7 @@ export default function TeamAnnualReview() {
         </div>
       </header>
 
-      <div className="lg:grid lg:grid-cols-[260px_1fr] lg:gap-6">
-        {/* LEFT RAIL — desktop only */}
-        <aside className="hidden lg:flex flex-col gap-3">
-          <div className="rounded-lg border bg-card p-3 space-y-3">
-            <div className="flex items-center gap-2">
-              <Users className="h-4 w-4 text-muted-foreground" />
-              <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">My queue</span>
-              <Badge variant="secondary" className="text-[10px] ml-auto">{total}</Badge>
-            </div>
-            <div className="text-[11px] text-muted-foreground tabular-nums">
-              Showing {fromN}–{toN} of {total}
-            </div>
-          </div>
-        </aside>
-
-        {/* RIGHT — queue */}
-        <div className="space-y-3 min-w-0">
-          {/* Mobile/tablet meta bar */}
-          <div className="flex items-center justify-between lg:hidden">
-            <div className="flex items-center gap-2">
-              <Users className="h-4 w-4 text-muted-foreground" />
-              <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">My queue</span>
-              <Badge variant="secondary" className="text-[10px]">{total}</Badge>
-              {isFetching && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}
-            </div>
-          </div>
+      <div className="space-y-3 min-w-0">
 
           {/* Search + filters */}
           <div className="flex flex-col md:flex-row md:items-center gap-2">
@@ -328,7 +307,6 @@ export default function TeamAnnualReview() {
             </div>
           )}
         </div>
-      </div>
 
       <EmployeeDirectoryDialog
         open={directoryOpen}
