@@ -352,7 +352,7 @@ export function CopyKrasDialog({ isOpen, onClose }: CopyKrasDialogProps) {
                   <div className="space-y-2">
                     <EmployeeCombobox
                       multiple
-                      employees={employees}
+                      employees={activeEmployees}
                       value={targetEmployeeIds}
                       onChange={setTargetEmployeeIds}
                       excludeIds={sourceEmployeeId ? [sourceEmployeeId] : []}
