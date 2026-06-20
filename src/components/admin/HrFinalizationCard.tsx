@@ -5,10 +5,13 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Input } from '@/components/ui/input';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import {
+  Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList,
+} from '@/components/ui/command';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -18,7 +21,8 @@ import { useProfiles, useBusinessUnits } from '@/hooks/useOrganization';
 import {
   getOrgHeadConfig, setHrDepartment, setHrHead, recalculateHrHead,
 } from '@/services/orgHeads/orgHeadsService';
-import { RefreshCw, Pencil, ShieldAlert } from 'lucide-react';
+import { RefreshCw, Pencil, ShieldAlert, Check, ChevronsUpDown } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 /** HR Finalization card. Picks the HR business unit and the HR head used
  * by the Annual Review HR Finalization stage. Extracted from the old
@@ -44,6 +48,7 @@ export function HrFinalizationCard({ companyId }: { companyId: string | null }) 
   const [pickUserId, setPickUserId] = useState('');
   const [pickReason, setPickReason] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
+  const [pickerOpen, setPickerOpen] = useState(false);
 
   // Pool: all active employees company-wide. Cross-BU is allowed for HR
   // head too (consistent with BU head picker).
@@ -90,6 +95,7 @@ export function HrFinalizationCard({ companyId }: { companyId: string | null }) 
       setPickUserId('');
       setPickReason('');
       setSearchTerm('');
+      setPickerOpen(false);
     },
     onError: (e: Error) => toast({ title: 'Update failed', description: e.message, variant: 'destructive' }),
   });
@@ -98,6 +104,8 @@ export function HrFinalizationCard({ companyId }: { companyId: string | null }) 
 
   const hrHeadProfile = hrCfgQ.data?.hr_head_user_id
     ? profileById.get(hrCfgQ.data.hr_head_user_id) : null;
+
+  const selectedProfile = pickUserId ? profileById.get(pickUserId) : null;
 
   return (
     <Card>
@@ -176,28 +184,60 @@ export function HrFinalizationCard({ companyId }: { companyId: string | null }) 
           </AlertDialogHeader>
           <div className="space-y-3">
             <div className="space-y-1">
-              <Label>Search</Label>
-              <Input
-                placeholder="Name or employee code"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
-            </div>
-            <div className="space-y-1">
               <Label>New HR head</Label>
-              <Select value={pickUserId} onValueChange={setPickUserId}>
-                <SelectTrigger><SelectValue placeholder="Pick someone" /></SelectTrigger>
-                <SelectContent>
-                  {filteredPool.length === 0 && (
-                    <div className="px-2 py-1.5 text-xs text-muted-foreground">No matches.</div>
-                  )}
-                  {filteredPool.map((p: any) => (
-                    <SelectItem key={p.id} value={p.id}>
-                      {p.full_name} {p.employee_code ? `(${p.employee_code})` : ''}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Popover open={pickerOpen} onOpenChange={setPickerOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    role="combobox"
+                    aria-expanded={pickerOpen}
+                    className="w-full justify-between font-normal"
+                  >
+                    <span className="truncate">
+                      {selectedProfile
+                        ? `${selectedProfile.full_name}${selectedProfile.employee_code ? ` (${selectedProfile.employee_code})` : ''}`
+                        : 'Pick someone'}
+                    </span>
+                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+                  <Command shouldFilter={false}>
+                    <CommandInput
+                      placeholder="Search name or employee code…"
+                      value={searchTerm}
+                      onValueChange={setSearchTerm}
+                    />
+                    <CommandList>
+                      <CommandEmpty>No employees found.</CommandEmpty>
+                      <CommandGroup>
+                        {filteredPool.map((p: any) => (
+                          <CommandItem
+                            key={p.id}
+                            value={p.id}
+                            onSelect={() => {
+                              setPickUserId(p.id);
+                              setPickerOpen(false);
+                            }}
+                          >
+                            <Check
+                              className={cn(
+                                'mr-2 h-4 w-4',
+                                pickUserId === p.id ? 'opacity-100' : 'opacity-0',
+                              )}
+                            />
+                            <span className="truncate">
+                              {p.full_name}
+                              {p.employee_code ? ` (${p.employee_code})` : ''}
+                            </span>
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
             </div>
             <div className="space-y-1">
               <Label>Reason (min 3 chars)</Label>
