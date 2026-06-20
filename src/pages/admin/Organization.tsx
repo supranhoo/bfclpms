@@ -20,18 +20,16 @@ import { Building2, Plus, Trash2, Pencil, Check, X, Copy, Settings } from 'lucid
 import { useResolvedTabs } from '@/hooks/useResolvedMenu';
 import { useQuery } from '@tanstack/react-query';
 import { BuHeadColumn } from '@/components/admin/BuHeadColumn';
-import { HrFinalizationCard } from '@/components/admin/HrFinalizationCard';
 import { listBuHeads } from '@/services/orgHeads/orgHeadsService';
 
 type OrgTabKey =
   | 'divisions' | 'business-units' | 'departments' | 'sub-branches'
   | 'locations' | 'designations' | 'pms-grades' | 'levels'
-  | 'employee-categories' | 'employment-statuses' | 'org-heads';
+  | 'employee-categories' | 'employment-statuses';
 
 const ORG_TAB_DEFS: ReadonlyArray<{ key: OrgTabKey; menuKey: string; label: string }> = [
   { key: 'divisions',            menuKey: 'org-tab-divisions',           label: 'Divisions' },
   { key: 'business-units',       menuKey: 'org-tab-business-units',      label: 'Business Units' },
-  { key: 'org-heads',            menuKey: 'org-tab-org-heads',           label: 'HR Finalization' },
   { key: 'departments',          menuKey: 'org-tab-departments',         label: 'Departments' },
   { key: 'sub-branches',         menuKey: 'org-tab-sub-branches',        label: 'Sub-Branches' },
   { key: 'locations',            menuKey: 'org-tab-locations',           label: 'Locations' },
@@ -576,10 +574,6 @@ export default function Organization() {
               </Table>
             </CardContent>
           </Card>
-        </TabsContent>
-
-        <TabsContent value="org-heads">
-          <HrFinalizationCard companyId={activeCompanyId || null} />
         </TabsContent>
 
         <TabsContent value="departments">
