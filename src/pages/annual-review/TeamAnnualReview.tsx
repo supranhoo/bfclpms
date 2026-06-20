@@ -141,161 +141,206 @@ export default function TeamAnnualReview() {
   const toN = Math.min(page * pageSize, total);
 
   return (
-    <div className="p-4 md:p-6 max-w-5xl mx-auto">
-      <header className="flex items-start justify-between mb-4 gap-3">
+    <div className="p-4 md:p-6 max-w-[1600px] mx-auto">
+      <header className="flex items-start justify-between mb-3 gap-3">
         <div>
           <h1 className="text-2xl font-bold">Team Annual Review</h1>
           <p className="text-sm text-muted-foreground">{cycle.name}</p>
         </div>
-        <Button asChild variant="outline" className="gap-1.5">
-          <Link to="/annual-review/calibrate"><Scale className="h-4 w-4" /> Calibration worksheet</Link>
-        </Button>
+        <div className="flex items-center gap-2">
+          {directoryEnabled && (
+            <Button
+              type="button"
+              onClick={() => setDirectoryOpen(true)}
+              className="gap-1.5 lg:hidden"
+              size="sm"
+            >
+              <Search className="h-4 w-4" /> Find employee
+            </Button>
+          )}
+          <Button asChild variant="outline" size="sm" className="gap-1.5">
+            <Link to="/annual-review/calibrate"><Scale className="h-4 w-4" /> Calibration worksheet</Link>
+          </Button>
+        </div>
       </header>
 
-      <div className="space-y-3">
-      {/* Directory entry-point (Admin / HR PMS, behind feature flag) */}
-      {directoryEnabled && (
-        <div className="rounded-lg border bg-card p-3 space-y-2">
-          <Button
-            type="button"
-            onClick={() => setDirectoryOpen(true)}
-            className="w-full h-10 gap-2"
-          >
-            <Search className="h-4 w-4" />
-            Find employee
-          </Button>
-          <p className="text-[11px] text-muted-foreground">
-            Search any active employee and start their annual review — even outside your direct team.
-          </p>
-        </div>
-      )}
-
-      <div className="flex items-center justify-between px-1">
-        <div className="flex items-center gap-2">
-          <Users className="h-4 w-4 text-muted-foreground" />
-          <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            My queue
-          </span>
-          <Badge variant="secondary" className="text-[10px]">{total}</Badge>
-          {isFetching && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}
-        </div>
-        <div className="flex items-center gap-1">
-          <span className="text-[10px] text-muted-foreground">Per page</span>
-          <Select value={String(pageSize)} onValueChange={(v) => setStoredPageSize(Number(v))}>
-            <SelectTrigger className="h-7 w-[64px] text-xs"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              {PAGE_SIZE_OPTIONS.map((n) => (
-                <SelectItem key={n} value={String(n)}>{n}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
-
-      <div className="relative">
-        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-        <Input
-          placeholder="Search by name or code…"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="pl-8 h-9 text-sm"
-        />
-      </div>
-
-      <div className="flex flex-wrap gap-1">
-        {STATUS_FILTERS.map((s) => (
-          <button
-            key={s.value}
-            type="button"
-            onClick={() => setStatusFilter(s.value)}
-            className={`text-[11px] px-2 py-1 rounded-full border transition-colors ${
-              statusFilter === s.value
-                ? 'bg-primary text-primary-foreground border-primary'
-                : 'bg-background hover:bg-muted border-border text-muted-foreground'
-            }`}
-          >
-            {s.label}
-          </button>
-        ))}
-      </div>
-
-      <ul className="space-y-1">
-        {rows.map((i) => {
-          const stage = user ? STAGE_FOR_REVIEWER(i, user.id) : null;
-          const initials = (i.employee?.full_name ?? '?')
-            .trim().split(/\s+/).slice(0, 2)
-            .map((p) => p[0]?.toUpperCase() ?? '').join('') || '?';
-          return (
-            <li key={i.id}>
-              <button
+      <div className="lg:grid lg:grid-cols-[260px_1fr] lg:gap-6">
+        {/* LEFT RAIL — desktop only */}
+        <aside className="hidden lg:flex flex-col gap-3">
+          {directoryEnabled && (
+            <div className="rounded-lg border bg-card p-3 space-y-2">
+              <Button
                 type="button"
-                onClick={() => goToDetail(i.id)}
-                className="w-full text-left rounded-md border p-3 transition-colors min-h-16 hover:bg-muted/50 hover:border-primary/40"
+                onClick={() => setDirectoryOpen(true)}
+                className="w-full h-9 gap-2"
               >
-                <div className="flex items-center gap-3">
-                  <div className="h-8 w-8 rounded-full bg-primary/10 text-primary flex items-center justify-center text-[11px] font-semibold shrink-0">
-                    {initials}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="font-medium text-sm truncate">{i.employee?.full_name ?? i.employee_id}</p>
-                    <p className="text-xs text-muted-foreground truncate">{i.employee?.employee_code} · {i.employee?.designation ?? '—'}</p>
-                  </div>
-                  <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                </div>
-                <div className="mt-2 flex flex-wrap items-center gap-2">
-                  <AnnualReviewStatusBadge status={i.overall_status} />
-                  {stage && <span className="text-[11px] font-medium text-amber-600 dark:text-amber-400">Awaiting you</span>}
-                  {i.submitted_via_proxy && (
-                    <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground">
-                      <UserPlus className="h-3 w-3" /> Assisted
-                    </span>
-                  )}
-                </div>
-              </button>
-            </li>
-          );
-        })}
-        {rows.length === 0 && (
-          <li className="rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground">
-            <Users className="h-8 w-8 mx-auto mb-2 text-muted-foreground/50" />
-            <p>{debouncedSearch || statusFilter !== 'all' ? 'No matches on this page.' : 'No employees in your queue.'}</p>
-            {directoryEnabled && (
-              <Button variant="link" className="mt-1 h-auto p-0" onClick={() => setDirectoryOpen(true)}>
-                Find an employee
+                <Search className="h-4 w-4" /> Find employee
               </Button>
-            )}
-          </li>
-        )}
-      </ul>
-
-      {total > 0 && (
-        <div className="flex items-center justify-between pt-2 border-t">
-          <span className="text-[11px] text-muted-foreground">
-            {fromN}–{toN} of {total}
-          </span>
-          <div className="flex items-center gap-1">
-            <Button
-              variant="outline" size="sm" className="h-7 px-2"
-              disabled={page <= 1 || isFetching}
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-              aria-label="Previous page"
-            >
-              <ChevronLeft className="h-3.5 w-3.5" />
-            </Button>
-            <span className="text-[11px] tabular-nums px-1">
-              Page {page} / {totalPages}
-            </span>
-            <Button
-              variant="outline" size="sm" className="h-7 px-2"
-              disabled={page >= totalPages || isFetching}
-              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-              aria-label="Next page"
-            >
-              <ChevronRight className="h-3.5 w-3.5" />
-            </Button>
+              <p className="text-[11px] text-muted-foreground leading-snug">
+                Search any active employee and start their annual review — even outside your direct team.
+              </p>
+            </div>
+          )}
+          <div className="rounded-lg border bg-card p-3 space-y-3">
+            <div className="flex items-center gap-2">
+              <Users className="h-4 w-4 text-muted-foreground" />
+              <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">My queue</span>
+              <Badge variant="secondary" className="text-[10px] ml-auto">{total}</Badge>
+            </div>
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-muted-foreground">Per page</span>
+              <Select value={String(pageSize)} onValueChange={(v) => setStoredPageSize(Number(v))}>
+                <SelectTrigger className="h-7 w-[72px] text-xs"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {PAGE_SIZE_OPTIONS.map((n) => (
+                    <SelectItem key={n} value={String(n)}>{n}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="text-[11px] text-muted-foreground tabular-nums">
+              Showing {fromN}–{toN} of {total}
+            </div>
           </div>
+        </aside>
+
+        {/* RIGHT — queue */}
+        <div className="space-y-3 min-w-0">
+          {/* Mobile/tablet meta bar */}
+          <div className="flex items-center justify-between lg:hidden">
+            <div className="flex items-center gap-2">
+              <Users className="h-4 w-4 text-muted-foreground" />
+              <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">My queue</span>
+              <Badge variant="secondary" className="text-[10px]">{total}</Badge>
+              {isFetching && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}
+            </div>
+            <div className="flex items-center gap-1">
+              <span className="text-[10px] text-muted-foreground">Per page</span>
+              <Select value={String(pageSize)} onValueChange={(v) => setStoredPageSize(Number(v))}>
+                <SelectTrigger className="h-7 w-[64px] text-xs"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {PAGE_SIZE_OPTIONS.map((n) => (
+                    <SelectItem key={n} value={String(n)}>{n}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          {/* Search + filters */}
+          <div className="flex flex-col md:flex-row md:items-center gap-2">
+            <div className="relative flex-1 min-w-0">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+              <Input
+                placeholder="Search by name or code…"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="pl-8 h-9 text-sm"
+              />
+            </div>
+            <div className="flex flex-wrap gap-1">
+              {STATUS_FILTERS.map((s) => (
+                <button
+                  key={s.value}
+                  type="button"
+                  onClick={() => setStatusFilter(s.value)}
+                  className={`text-[11px] px-2.5 py-1 rounded-full border transition-colors ${
+                    statusFilter === s.value
+                      ? 'bg-primary text-primary-foreground border-primary'
+                      : 'bg-background hover:bg-muted border-border text-muted-foreground'
+                  }`}
+                >
+                  {s.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Grid of employees */}
+          <ul className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-2.5">
+            {rows.map((i) => {
+              const stage = user ? STAGE_FOR_REVIEWER(i, user.id) : null;
+              const initials = (i.employee?.full_name ?? '?')
+                .trim().split(/\s+/).slice(0, 2)
+                .map((p) => p[0]?.toUpperCase() ?? '').join('') || '?';
+              return (
+                <li key={i.id}>
+                  <button
+                    type="button"
+                    onClick={() => goToDetail(i.id)}
+                    className="group w-full h-full text-left rounded-lg border bg-card p-3 transition-all hover:bg-muted/40 hover:border-primary/40 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 flex flex-col gap-2 min-h-[96px]"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <div className="h-9 w-9 rounded-full bg-primary/10 text-primary flex items-center justify-center text-[11px] font-semibold shrink-0">
+                        {initials}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="font-medium text-sm leading-tight truncate">{i.employee?.full_name ?? i.employee_id}</p>
+                        <p className="text-[11px] text-muted-foreground truncate mt-0.5">
+                          {i.employee?.employee_code} · {i.employee?.designation ?? '—'}
+                        </p>
+                      </div>
+                      <ChevronRight className="h-4 w-4 text-muted-foreground/60 group-hover:text-primary shrink-0" />
+                    </div>
+                    <div className="flex flex-wrap items-center gap-1.5 mt-auto">
+                      <AnnualReviewStatusBadge status={i.overall_status} />
+                      {stage && (
+                        <span className="text-[10px] font-medium text-amber-600 dark:text-amber-400">
+                          Awaiting you
+                        </span>
+                      )}
+                      {i.submitted_via_proxy && (
+                        <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground">
+                          <UserPlus className="h-3 w-3" /> Assisted
+                        </span>
+                      )}
+                    </div>
+                  </button>
+                </li>
+              );
+            })}
+            {rows.length === 0 && (
+              <li className="col-span-full rounded-md border border-dashed p-8 text-center text-sm text-muted-foreground">
+                <Users className="h-8 w-8 mx-auto mb-2 text-muted-foreground/50" />
+                <p>{debouncedSearch || statusFilter !== 'all' ? 'No matches on this page.' : 'No employees in your queue.'}</p>
+                {directoryEnabled && (
+                  <Button variant="link" className="mt-1 h-auto p-0" onClick={() => setDirectoryOpen(true)}>
+                    Find an employee
+                  </Button>
+                )}
+              </li>
+            )}
+          </ul>
+
+          {total > 0 && (
+            <div className="flex items-center justify-between pt-3 border-t">
+              <span className="text-[11px] text-muted-foreground tabular-nums">
+                {fromN}–{toN} of {total}
+              </span>
+              <div className="flex items-center gap-1">
+                <Button
+                  variant="outline" size="sm" className="h-7 px-2"
+                  disabled={page <= 1 || isFetching}
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  aria-label="Previous page"
+                >
+                  <ChevronLeft className="h-3.5 w-3.5" />
+                </Button>
+                <span className="text-[11px] tabular-nums px-1">
+                  Page {page} / {totalPages}
+                </span>
+                <Button
+                  variant="outline" size="sm" className="h-7 px-2"
+                  disabled={page >= totalPages || isFetching}
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  aria-label="Next page"
+                >
+                  <ChevronRight className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            </div>
+          )}
         </div>
-      )}
       </div>
 
       <EmployeeDirectoryDialog
