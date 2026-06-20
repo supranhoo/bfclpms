@@ -63,6 +63,30 @@ export default function Organization() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
+  // BU heads index for the inline "Head" column on the Business Units tab.
+  // Kept here (not inside BuHeadColumn) so all rows share a single query.
+  const buHeadsQuery = useQuery({ queryKey: ['org-heads', 'bus'], queryFn: listBuHeads });
+  const buHeadById = useMemo(() => {
+    const m = new Map<string, (typeof buHeadsQuery.data extends Array<infer T> ? T : never)>();
+    (buHeadsQuery.data ?? []).forEach((h) => m.set(h.id, h as any));
+    return m;
+  }, [buHeadsQuery.data]);
+
+  // Lookup maps consumed by BuHeadColumn to render Department · BU context
+  // inside the change-head picker.
+  const deptIndex = useMemo(() => {
+    const m = new Map<string, { name: string; business_unit_id: string | null }>();
+    (departments ?? []).forEach((d: any) => {
+      m.set(d.id, { name: d.name, business_unit_id: d.business_unit_id ?? null });
+    });
+    return m;
+  }, [departments]);
+  const buIndex = useMemo(() => {
+    const m = new Map<string, string>();
+    (businessUnits ?? []).forEach((bu: any) => m.set(bu.id, bu.name));
+    return m;
+  }, [businessUnits]);
+
   const [dialogOpen, setDialogOpen] = useState(false);
   const [dialogType, setDialogType] = useState<'division' | 'bu' | 'department' | 'sub-branch' | 'designation' | 'pms-grade' | 'level' | 'location' | 'employee-category' | 'employment-status'>('division');
   const [formName, setFormName] = useState('');
