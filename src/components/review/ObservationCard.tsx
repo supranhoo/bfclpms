@@ -19,6 +19,7 @@ import { KpiObservation, ObservationType, ObserverRole, ObservationVisibility } 
 import { ObservationReplyThread } from './ObservationReplyThread';
 import { cn } from '@/lib/utils';
 import { isWithinEditWindow } from '@/lib/editWindow';
+import { openStorageFile, buildEvidenceFileName } from '@/lib/storageDownload';
 
 export type ObservationStatus = 'open' | 'acknowledged' | 'resolved';
 
@@ -179,27 +180,35 @@ export function ObservationCard({
         {(evidenceUrls.length > 0 || legacyUrl) && (
           <div className="flex flex-wrap gap-1.5 pt-1">
             {evidenceUrls.map((url, i) => (
-              <a
+              <button
                 key={i}
-                href={url}
-                target="_blank"
-                rel="noopener noreferrer"
+                type="button"
+                onClick={() =>
+                  openStorageFile(
+                    url,
+                    buildEvidenceFileName(url, null, null, 'Observation', i, evidenceUrls.length),
+                  )
+                }
                 className="text-xs text-primary hover:underline flex items-center gap-1"
               >
                 <FileText className="h-3 w-3" />
                 Attachment {i + 1}
-              </a>
+              </button>
             ))}
             {!evidenceUrls.length && legacyUrl && (
-              <a
-                href={legacyUrl}
-                target="_blank"
-                rel="noopener noreferrer"
+              <button
+                type="button"
+                onClick={() =>
+                  openStorageFile(
+                    legacyUrl,
+                    buildEvidenceFileName(legacyUrl, null, null, 'Observation'),
+                  )
+                }
                 className="text-xs text-primary hover:underline flex items-center gap-1"
               >
                 <FileText className="h-3 w-3" />
                 View Evidence
-              </a>
+              </button>
             )}
           </div>
         )}
