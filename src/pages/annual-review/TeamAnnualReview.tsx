@@ -19,7 +19,7 @@ import { fyStartFromCycle } from '@/lib/annualReview/fiscalYear';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Loader2, ChevronRight, Scale } from 'lucide-react';
+import { Loader2, ChevronRight, Scale, Search, Users, UserPlus } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Sheet, SheetContent } from '@/components/ui/sheet';
 import {
@@ -36,6 +36,9 @@ import { useProxyEligibility } from '@/hooks/useProxyEligibility';
 import { AssistedSubmissionDialog } from '@/components/annual-review/AssistedSubmissionDialog';
 import { Badge } from '@/components/ui/badge';
 import { useQueryClient } from '@tanstack/react-query';
+import { EmployeeDirectoryDialog } from '@/components/annual-review/EmployeeDirectoryDialog';
+import { useQuery } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
 
 const STAGE_FOR_REVIEWER = (inst: InstanceWithEmployee, uid: string): AnnualReviewerRole | null => {
   if (inst.overall_status === 'pending_manager' && inst.manager_id === uid) return 'manager';
@@ -46,17 +49,41 @@ const STAGE_FOR_REVIEWER = (inst: InstanceWithEmployee, uid: string): AnnualRevi
 };
 
 export default function TeamAnnualReview() {
-  const { user } = useAuth();
+  const { user, isAdmin, hasRole } = useAuth();
   const { data: cycle } = useActiveCycle();
+  const queryClient = useQueryClient();
   const { data: instances = [], isLoading } = useReviewerInstances(user?.id, cycle?.id);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [drawer, setDrawer] = useState(false);
+  const [directoryOpen, setDirectoryOpen] = useState(false);
+  const [autoAssistedForInstance, setAutoAssistedForInstance] = useState<string | null>(null);
 
   const isMobile = useIsMobile();
 
+  const canSearchDirectory = isAdmin || hasRole('hr_pms');
+
+  const { data: directoryFlag } = useQuery({
+    queryKey: ['app-settings', 'annual_review_directory_search_enabled'],
+    enabled: canSearchDirectory,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('app_settings')
+        .select('annual_review_directory_search_enabled')
+        .maybeSingle();
+      if (error) return false;
+      return Boolean(data?.annual_review_directory_search_enabled);
+    },
+    staleTime: 60_000,
+  });
+  const directoryEnabled = canSearchDirectory && directoryFlag === true;
+
   const filtered = useMemo(
-    () => instances.filter((i) => !search || (i.employee?.full_name ?? '').toLowerCase().includes(search.toLowerCase())),
+    () => instances.filter((i) =>
+      !search
+      || (i.employee?.full_name ?? '').toLowerCase().includes(search.toLowerCase())
+      || (i.employee?.employee_code ?? '').toLowerCase().includes(search.toLowerCase()),
+    ),
     [instances, search],
   );
 
@@ -64,45 +91,116 @@ export default function TeamAnnualReview() {
     if (!selectedId && filtered.length) setSelectedId(filtered[0].id);
   }, [filtered, selectedId]);
 
-  const selected = filtered.find((i) => i.id === selectedId) ?? null;
+  // The selected instance may come from the directory dialog (not in `filtered`).
+  // Fall back to `instances` so picks outside the reviewer queue still render.
+  const selected =
+    filtered.find((i) => i.id === selectedId)
+    ?? instances.find((i) => i.id === selectedId)
+    ?? null;
 
   const onPick = (id: string) => {
     setSelectedId(id);
     if (isMobile) setDrawer(true);
   };
 
+  const handleDirectoryPick = (instanceId: string, opts: { autoOpenAssisted: boolean }) => {
+    setSelectedId(instanceId);
+    if (opts.autoOpenAssisted) setAutoAssistedForInstance(instanceId);
+    if (isMobile) setDrawer(true);
+    // Make sure the new instance becomes visible everywhere
+    void queryClient.invalidateQueries({ queryKey: ['annual-review'] });
+  };
+
   if (!cycle) return <div className="p-6">No active annual review cycle.</div>;
   if (isLoading) return <div className="p-6 flex items-center gap-2"><Loader2 className="h-4 w-4 animate-spin" /> Loading…</div>;
 
   const list = (
-    <div className="space-y-2">
-      <Input placeholder="Search employee…" value={search} onChange={(e) => setSearch(e.target.value)} />
+    <div className="space-y-3">
+      {/* Directory entry-point (Admin / HR PMS, behind feature flag) */}
+      {directoryEnabled && (
+        <div className="rounded-lg border bg-card p-3 space-y-2">
+          <Button
+            type="button"
+            onClick={() => setDirectoryOpen(true)}
+            className="w-full h-10 gap-2"
+          >
+            <Search className="h-4 w-4" />
+            Find employee
+          </Button>
+          <p className="text-[11px] text-muted-foreground">
+            Search any active employee and start their annual review — even outside your direct team.
+          </p>
+        </div>
+      )}
+
+      <div className="flex items-center justify-between px-1">
+        <div className="flex items-center gap-2">
+          <Users className="h-4 w-4 text-muted-foreground" />
+          <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            My queue
+          </span>
+          <Badge variant="secondary" className="text-[10px]">{filtered.length}</Badge>
+        </div>
+      </div>
+
+      <div className="relative">
+        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+        <Input
+          placeholder="Filter queue by name or code…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="pl-8 h-9 text-sm"
+        />
+      </div>
+
       <ul className="space-y-1">
         {filtered.map((i) => {
           const stage = user ? STAGE_FOR_REVIEWER(i, user.id) : null;
+          const isSelected = selectedId === i.id;
+          const initials = (i.employee?.full_name ?? '?')
+            .trim().split(/\s+/).slice(0, 2)
+            .map((p) => p[0]?.toUpperCase() ?? '').join('') || '?';
           return (
             <li key={i.id}>
               <button
                 type="button"
                 onClick={() => onPick(i.id)}
-                className={`w-full text-left rounded-md border p-3 hover:bg-muted/50 transition-colors min-h-10 ${selectedId === i.id ? 'bg-muted border-primary/50' : ''}`}
+                className={`w-full text-left rounded-md border p-3 transition-colors min-h-16 hover:bg-muted/50 ${isSelected ? 'bg-primary/5 border-l-2 border-l-primary border-primary/40' : ''}`}
               >
-                <div className="flex items-center justify-between gap-2">
-                  <div className="min-w-0">
-                    <p className="font-medium truncate">{i.employee?.full_name ?? i.employee_id}</p>
+                <div className="flex items-center gap-3">
+                  <div className="h-8 w-8 rounded-full bg-primary/10 text-primary flex items-center justify-center text-[11px] font-semibold shrink-0">
+                    {initials}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="font-medium text-sm truncate">{i.employee?.full_name ?? i.employee_id}</p>
                     <p className="text-xs text-muted-foreground truncate">{i.employee?.employee_code} · {i.employee?.designation ?? '—'}</p>
                   </div>
                   <ChevronRight className="h-4 w-4 text-muted-foreground" />
                 </div>
                 <div className="mt-2 flex flex-wrap items-center gap-2">
                   <AnnualReviewStatusBadge status={i.overall_status} />
-                  {stage && <span className="text-xs text-amber-500">Awaiting you</span>}
+                  {stage && <span className="text-[11px] font-medium text-amber-600 dark:text-amber-400">Awaiting you</span>}
+                  {i.submitted_via_proxy && (
+                    <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground">
+                      <UserPlus className="h-3 w-3" /> Assisted
+                    </span>
+                  )}
                 </div>
               </button>
             </li>
           );
         })}
-        {filtered.length === 0 && <li className="text-sm text-muted-foreground p-4 text-center">No reports.</li>}
+        {filtered.length === 0 && (
+          <li className="rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground">
+            <Users className="h-8 w-8 mx-auto mb-2 text-muted-foreground/50" />
+            <p>No employees in your queue.</p>
+            {directoryEnabled && (
+              <Button variant="link" className="mt-1 h-auto p-0" onClick={() => setDirectoryOpen(true)}>
+                Find an employee
+              </Button>
+            )}
+          </li>
+        )}
       </ul>
     </div>
   );
@@ -122,20 +220,54 @@ export default function TeamAnnualReview() {
       <div className="grid gap-4 md:grid-cols-3">
         <aside className="md:col-span-1">{list}</aside>
         <section className="md:col-span-2 hidden md:block">
-          {selected ? <ReviewDetail instance={selected} fiscalYear={fyStartFromCycle(cycle)} /> : <Card><CardContent className="p-6 text-muted-foreground">Pick someone to review.</CardContent></Card>}
+          {selected ? (
+            <ReviewDetail
+              instance={selected}
+              fiscalYear={fyStartFromCycle(cycle)}
+              autoOpenAssisted={autoAssistedForInstance === selected.id}
+              onAutoAssistedConsumed={() => setAutoAssistedForInstance(null)}
+            />
+          ) : (
+            <Card><CardContent className="p-6 text-muted-foreground">Pick someone to review.</CardContent></Card>
+          )}
         </section>
       </div>
 
       <Sheet open={drawer} onOpenChange={setDrawer}>
         <SheetContent side="bottom" className="h-[92dvh] overflow-y-auto">
-          {selected && <ReviewDetail instance={selected} fiscalYear={fyStartFromCycle(cycle)} />}
+          {selected && (
+            <ReviewDetail
+              instance={selected}
+              fiscalYear={fyStartFromCycle(cycle)}
+              autoOpenAssisted={autoAssistedForInstance === selected.id}
+              onAutoAssistedConsumed={() => setAutoAssistedForInstance(null)}
+            />
+          )}
         </SheetContent>
       </Sheet>
+
+      <EmployeeDirectoryDialog
+        open={directoryOpen}
+        onOpenChange={setDirectoryOpen}
+        cycleId={cycle.id}
+        cycleName={cycle.name}
+        onSelectInstance={handleDirectoryPick}
+      />
     </div>
   );
 }
 
-function ReviewDetail({ instance, fiscalYear }: { instance: InstanceWithEmployee; fiscalYear?: number }) {
+function ReviewDetail({
+  instance,
+  fiscalYear,
+  autoOpenAssisted = false,
+  onAutoAssistedConsumed,
+}: {
+  instance: InstanceWithEmployee;
+  fiscalYear?: number;
+  autoOpenAssisted?: boolean;
+  onAutoAssistedConsumed?: () => void;
+}) {
   const { user, profile } = useAuth();
   const queryClient = useQueryClient();
   const { data: template } = useTemplate(
@@ -158,6 +290,15 @@ function ReviewDetail({ instance, fiscalYear }: { instance: InstanceWithEmployee
   const [sendBackOpen, setSendBackOpen] = useState(false);
   const [sendBackReason, setSendBackReason] = useState('');
   const [assistedOpen, setAssistedOpen] = useState(false);
+
+  // When the directory flow lands on an assisted-mode candidate, open the
+  // selfie capture automatically once proxy eligibility resolves true.
+  useEffect(() => {
+    if (autoOpenAssisted && proxyMode) {
+      setAssistedOpen(true);
+      onAutoAssistedConsumed?.();
+    }
+  }, [autoOpenAssisted, proxyMode, onAutoAssistedConsumed]);
 
   const { draft, setDraft, flush, status } = useDebouncedResponseDraft({
     instanceId: instance.id,
