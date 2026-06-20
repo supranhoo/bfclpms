@@ -20,6 +20,7 @@ export interface EmployeeOption {
   name: string;
   code: string;
   department: string;
+  isActive?: boolean;
 }
 
 interface BaseProps {
@@ -155,6 +156,9 @@ export function EmployeeCombobox(props: Props) {
                           {emp.code && (
                             <Badge variant="outline" className="text-[10px] h-4 px-1">{emp.code}</Badge>
                           )}
+                          {emp.isActive === false && (
+                            <Badge variant="destructive" className="text-[10px] h-4 px-1">Inactive</Badge>
+                          )}
                         </div>
                         {emp.department && (
                           <span className="text-xs text-muted-foreground truncate">{emp.department}</span>
@@ -272,6 +276,9 @@ export function EmployeeCombobox(props: Props) {
                           <span className="text-sm font-medium truncate">{emp.name}</span>
                           {emp.code && (
                             <Badge variant="outline" className="text-[10px] h-4 px-1">{emp.code}</Badge>
+                          )}
+                          {emp.isActive === false && (
+                            <Badge variant="destructive" className="text-[10px] h-4 px-1">Inactive</Badge>
                           )}
                         </div>
                         {emp.department && (
