@@ -34,7 +34,6 @@ import type { InstanceWithEmployee } from '@/services/annualReview/annualReviewS
 import { enabledChain } from '@/lib/annualReview/stageChain';
 import { useProxyEligibility } from '@/hooks/useProxyEligibility';
 import { AssistedSubmissionDialog } from '@/components/annual-review/AssistedSubmissionDialog';
-import { useAuth } from '@/contexts/AuthContext';
 import { Badge } from '@/components/ui/badge';
 import { useQueryClient } from '@tanstack/react-query';
 
