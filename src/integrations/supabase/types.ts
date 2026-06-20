@@ -479,8 +479,10 @@ export type Database = {
           language_pref: string
           manager_id: string | null
           overall_status: Database["public"]["Enums"]["annual_review_status"]
+          proxy_submission_id: string | null
           skip_id: string | null
           stage_weights_override: Json | null
+          submitted_via_proxy: boolean
           system_scores: Json
           template_id: string
           template_override_id: string | null
@@ -509,8 +511,10 @@ export type Database = {
           language_pref?: string
           manager_id?: string | null
           overall_status?: Database["public"]["Enums"]["annual_review_status"]
+          proxy_submission_id?: string | null
           skip_id?: string | null
           stage_weights_override?: Json | null
+          submitted_via_proxy?: boolean
           system_scores?: Json
           template_id: string
           template_override_id?: string | null
@@ -539,8 +543,10 @@ export type Database = {
           language_pref?: string
           manager_id?: string | null
           overall_status?: Database["public"]["Enums"]["annual_review_status"]
+          proxy_submission_id?: string | null
           skip_id?: string | null
           stage_weights_override?: Json | null
+          submitted_via_proxy?: boolean
           system_scores?: Json
           template_id?: string
           template_override_id?: string | null
@@ -644,6 +650,84 @@ export type Database = {
             columns: ["template_override_id"]
             isOneToOne: false
             referencedRelation: "annual_review_templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      annual_review_proxy_submissions: {
+        Row: {
+          captured_at: string
+          created_at: string
+          declaration_text: string
+          employee_user_id: string
+          id: string
+          instance_id: string
+          ip: string | null
+          proxy_role: string
+          proxy_user_id: string
+          selfie_path: string
+          user_agent: string | null
+        }
+        Insert: {
+          captured_at?: string
+          created_at?: string
+          declaration_text: string
+          employee_user_id: string
+          id?: string
+          instance_id: string
+          ip?: string | null
+          proxy_role: string
+          proxy_user_id: string
+          selfie_path: string
+          user_agent?: string | null
+        }
+        Update: {
+          captured_at?: string
+          created_at?: string
+          declaration_text?: string
+          employee_user_id?: string
+          id?: string
+          instance_id?: string
+          ip?: string | null
+          proxy_role?: string
+          proxy_user_id?: string
+          selfie_path?: string
+          user_agent?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "annual_review_proxy_submissions_employee_user_id_fkey"
+            columns: ["employee_user_id"]
+            isOneToOne: false
+            referencedRelation: "eligible_login_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "annual_review_proxy_submissions_employee_user_id_fkey"
+            columns: ["employee_user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "annual_review_proxy_submissions_instance_id_fkey"
+            columns: ["instance_id"]
+            isOneToOne: false
+            referencedRelation: "annual_review_instances"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "annual_review_proxy_submissions_proxy_user_id_fkey"
+            columns: ["proxy_user_id"]
+            isOneToOne: false
+            referencedRelation: "eligible_login_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "annual_review_proxy_submissions_proxy_user_id_fkey"
+            columns: ["proxy_user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -961,6 +1045,7 @@ export type Database = {
       app_settings: {
         Row: {
           app_name: string
+          assisted_self_submission_enabled: boolean
           created_at: string
           enable_org_kpi_auto_inherit: boolean
           enable_org_kpi_autopull: boolean
@@ -981,6 +1066,7 @@ export type Database = {
         }
         Insert: {
           app_name?: string
+          assisted_self_submission_enabled?: boolean
           created_at?: string
           enable_org_kpi_auto_inherit?: boolean
           enable_org_kpi_autopull?: boolean
@@ -1001,6 +1087,7 @@ export type Database = {
         }
         Update: {
           app_name?: string
+          assisted_self_submission_enabled?: boolean
           created_at?: string
           enable_org_kpi_auto_inherit?: boolean
           enable_org_kpi_autopull?: boolean
@@ -8044,6 +8131,7 @@ export type Database = {
           created_at: string
           deactivated_at: string | null
           department_id: string | null
+          designated_proxy_user_id: string | null
           designation: string | null
           doj: string | null
           email: string | null
@@ -8077,6 +8165,7 @@ export type Database = {
           created_at?: string
           deactivated_at?: string | null
           department_id?: string | null
+          designated_proxy_user_id?: string | null
           designation?: string | null
           doj?: string | null
           email?: string | null
@@ -8110,6 +8199,7 @@ export type Database = {
           created_at?: string
           deactivated_at?: string | null
           department_id?: string | null
+          designated_proxy_user_id?: string | null
           designation?: string | null
           doj?: string | null
           email?: string | null
@@ -8147,6 +8237,20 @@ export type Database = {
             columns: ["department_id"]
             isOneToOne: false
             referencedRelation: "departments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "profiles_designated_proxy_user_id_fkey"
+            columns: ["designated_proxy_user_id"]
+            isOneToOne: false
+            referencedRelation: "eligible_login_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "profiles_designated_proxy_user_id_fkey"
+            columns: ["designated_proxy_user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
           {
@@ -12899,6 +13003,10 @@ export type Database = {
             }
             Returns: Json
           }
+      can_proxy_submit_annual_review: {
+        Args: { _instance_id: string; _proxy_user_id: string }
+        Returns: boolean
+      }
       can_view_kpi_row: {
         Args: {
           _category_id: string
