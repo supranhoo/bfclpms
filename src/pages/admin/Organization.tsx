@@ -18,7 +18,10 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { Building2, Plus, Trash2, Pencil, Check, X, Copy, Settings } from 'lucide-react';
 import { useResolvedTabs } from '@/hooks/useResolvedMenu';
-import { OrgHeadsTab } from '@/components/admin/OrgHeadsTab';
+import { useQuery } from '@tanstack/react-query';
+import { BuHeadColumn } from '@/components/admin/BuHeadColumn';
+import { HrFinalizationCard } from '@/components/admin/HrFinalizationCard';
+import { listBuHeads } from '@/services/orgHeads/orgHeadsService';
 
 type OrgTabKey =
   | 'divisions' | 'business-units' | 'departments' | 'sub-branches'
@@ -28,7 +31,7 @@ type OrgTabKey =
 const ORG_TAB_DEFS: ReadonlyArray<{ key: OrgTabKey; menuKey: string; label: string }> = [
   { key: 'divisions',            menuKey: 'org-tab-divisions',           label: 'Divisions' },
   { key: 'business-units',       menuKey: 'org-tab-business-units',      label: 'Business Units' },
-  { key: 'org-heads',            menuKey: 'org-tab-org-heads',           label: 'Org Heads' },
+  { key: 'org-heads',            menuKey: 'org-tab-org-heads',           label: 'HR Finalization' },
   { key: 'departments',          menuKey: 'org-tab-departments',         label: 'Departments' },
   { key: 'sub-branches',         menuKey: 'org-tab-sub-branches',        label: 'Sub-Branches' },
   { key: 'locations',            menuKey: 'org-tab-locations',           label: 'Locations' },
@@ -59,6 +62,30 @@ export default function Organization() {
   const { data: profiles } = useProfiles();
   const queryClient = useQueryClient();
   const { toast } = useToast();
+
+  // BU heads index for the inline "Head" column on the Business Units tab.
+  // Kept here (not inside BuHeadColumn) so all rows share a single query.
+  const buHeadsQuery = useQuery({ queryKey: ['org-heads', 'bus'], queryFn: listBuHeads });
+  const buHeadById = useMemo(() => {
+    const m = new Map<string, (typeof buHeadsQuery.data extends Array<infer T> ? T : never)>();
+    (buHeadsQuery.data ?? []).forEach((h) => m.set(h.id, h as any));
+    return m;
+  }, [buHeadsQuery.data]);
+
+  // Lookup maps consumed by BuHeadColumn to render Department · BU context
+  // inside the change-head picker.
+  const deptIndex = useMemo(() => {
+    const m = new Map<string, { name: string; business_unit_id: string | null }>();
+    (departments ?? []).forEach((d: any) => {
+      m.set(d.id, { name: d.name, business_unit_id: d.business_unit_id ?? null });
+    });
+    return m;
+  }, [departments]);
+  const buIndex = useMemo(() => {
+    const m = new Map<string, string>();
+    (businessUnits ?? []).forEach((bu: any) => m.set(bu.id, bu.name));
+    return m;
+  }, [businessUnits]);
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [dialogType, setDialogType] = useState<'division' | 'bu' | 'department' | 'sub-branch' | 'designation' | 'pms-grade' | 'level' | 'location' | 'employee-category' | 'employment-status'>('division');
@@ -433,7 +460,7 @@ export default function Organization() {
             'levels':               levels?.length || 0,
             'employee-categories':  employeeCategories?.length || 0,
             'employment-statuses':  employmentStatuses?.length || 0,
-            'org-heads':            filteredBUs.length,
+            'org-heads':            1,
           }}
         />
 
@@ -509,6 +536,7 @@ export default function Organization() {
                     <TableHead>Division</TableHead>
                     <TableHead>Departments</TableHead>
                     <TableHead>Employees</TableHead>
+                    <TableHead>Head</TableHead>
                     <TableHead className="w-[80px]">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -524,6 +552,15 @@ export default function Organization() {
                         <TableCell>{deptCount}</TableCell>
                         <TableCell>
                           {hasEmployees ? <Badge variant="secondary">In Use</Badge> : <Badge variant="outline">Unused</Badge>}
+                        </TableCell>
+                        <TableCell>
+                          <BuHeadColumn
+                            bu={{ id: bu.id, name: bu.name }}
+                            head={buHeadById.get(bu.id) as any}
+                            profiles={(profiles ?? []) as any}
+                            deptIndex={deptIndex}
+                            buIndex={buIndex}
+                          />
                         </TableCell>
                         <TableCell>
                           {!hasEmployees && (
@@ -542,7 +579,7 @@ export default function Organization() {
         </TabsContent>
 
         <TabsContent value="org-heads">
-          <OrgHeadsTab companyId={activeCompanyId || null} />
+          <HrFinalizationCard companyId={activeCompanyId || null} />
         </TabsContent>
 
         <TabsContent value="departments">

@@ -20,7 +20,11 @@ type: feature
 - `set_hr_head(company_id, user_id, reason)` / `recalculate_hr_head(company_id)`.
 
 ## UI
-`/admin/settings?section=organization` -> **Org Heads** tab (added between Business Units and Departments).
+- BU Head lives **inline on the Business Units tab** as a "Head" column with
+  Auto/Manual badge + recalculate / change buttons per row.
+- HR Head lives on the **HR Finalization** tab (formerly "Org Heads").
+- Change-head picker accepts **any active employee company-wide** (cross-BU
+  allowed for matrix structures); the dropdown shows `Department · BU` context.
 
 ## Annual Review integration
 `seedInstancesForCycle` / `seedInstancesByRules` now read `business_units.head_user_id`

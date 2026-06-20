@@ -1,0 +1,210 @@
+import { useMemo, useState } from 'react';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { useToast } from '@/hooks/use-toast';
+import {
+  setBuHead, recalculateBuHead, type BuHeadRow,
+} from '@/services/orgHeads/orgHeadsService';
+import { RefreshCw, Pencil, ShieldAlert } from 'lucide-react';
+
+/** Profile shape used for the picker. Kept loose so callers can pass
+ * whatever shape `useProfiles()` returns. */
+export interface PickerProfile {
+  id: string;
+  full_name: string | null;
+  employee_code: string | null;
+  is_active: boolean | null;
+  department_id: string | null;
+}
+
+export interface BuHeadColumnProps {
+  bu: { id: string; name: string };
+  head: Pick<BuHeadRow, 'head_user_id' | 'head_source'> | undefined;
+  /** All profiles loaded by the parent page (active + inactive). The component
+   * filters to active itself so the parent doesn't have to. */
+  profiles: PickerProfile[];
+  /** Optional lookup of `department_id -> { name, business_unit_id }` so the
+   * picker can show context (Department · BU) per candidate. */
+  deptIndex: Map<string, { name: string; business_unit_id: string | null }>;
+  /** Optional lookup of `business_unit_id -> name` for picker context. */
+  buIndex: Map<string, string>;
+}
+
+/** Inline cell + actions for the Business Units table. Owns its own
+ * change-head dialog so callers only need to render <BuHeadColumn /> once
+ * per row. */
+export function BuHeadColumn({ bu, head, profiles, deptIndex, buIndex }: BuHeadColumnProps) {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const [open, setOpen] = useState(false);
+  const [pickUserId, setPickUserId] = useState('');
+  const [pickReason, setPickReason] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
+
+  const profileById = useMemo(() => {
+    const m = new Map<string, PickerProfile>();
+    profiles.forEach(p => m.set(p.id, p));
+    return m;
+  }, [profiles]);
+
+  const activeProfiles = useMemo(
+    () => profiles
+      .filter(p => p.is_active !== false)
+      .sort((a, b) => (a.full_name ?? '').localeCompare(b.full_name ?? '')),
+    [profiles],
+  );
+
+  const filteredPool = useMemo(() => {
+    const t = searchTerm.trim().toLowerCase();
+    const base = t
+      ? activeProfiles.filter(p =>
+          (p.full_name ?? '').toLowerCase().includes(t) ||
+          (p.employee_code ?? '').toLowerCase().includes(t))
+      : activeProfiles;
+    return base.slice(0, 200);
+  }, [activeProfiles, searchTerm]);
+
+  const headProfile = head?.head_user_id ? profileById.get(head.head_user_id) ?? null : null;
+
+  const recalc = useMutation({
+    mutationFn: () => recalculateBuHead(bu.id),
+    onSuccess: () => {
+      toast({ title: 'Recalculated from hierarchy' });
+      qc.invalidateQueries({ queryKey: ['org-heads', 'bus'] });
+    },
+    onError: (e: Error) => toast({ title: 'Recalculation failed', description: e.message, variant: 'destructive' }),
+  });
+
+  const save = useMutation({
+    mutationFn: () => setBuHead(bu.id, pickUserId, pickReason.trim()),
+    onSuccess: () => {
+      toast({ title: 'Head updated' });
+      qc.invalidateQueries({ queryKey: ['org-heads', 'bus'] });
+      setOpen(false);
+      setPickUserId('');
+      setPickReason('');
+      setSearchTerm('');
+    },
+    onError: (e: Error) => toast({ title: 'Update failed', description: e.message, variant: 'destructive' }),
+  });
+
+  const canSave = !!pickUserId && pickReason.trim().length >= 3;
+
+  const contextFor = (p: PickerProfile) => {
+    const dept = p.department_id ? deptIndex.get(p.department_id) : undefined;
+    const buName = dept?.business_unit_id ? buIndex.get(dept.business_unit_id) : undefined;
+    const parts = [dept?.name, buName].filter(Boolean);
+    return parts.length ? ` — ${parts.join(' · ')}` : '';
+  };
+
+  return (
+    <div className="flex items-center justify-between gap-2 min-w-[220px]">
+      <div className="min-w-0">
+        {headProfile ? (
+          <>
+            <div className="font-medium truncate">{headProfile.full_name}</div>
+            <div className="text-xs text-muted-foreground truncate">
+              {headProfile.employee_code ?? '—'}
+            </div>
+          </>
+        ) : (
+          <span className="text-muted-foreground inline-flex items-center gap-1 text-sm">
+            <ShieldAlert className="h-3.5 w-3.5" /> Not set
+          </span>
+        )}
+      </div>
+      <div className="flex items-center gap-1 shrink-0">
+        <Badge variant={head?.head_source === 'manual' ? 'default' : 'secondary'}>
+          {head?.head_source === 'manual' ? 'Manual' : 'Auto'}
+        </Badge>
+        <Button
+          variant="ghost" size="icon" className="h-7 w-7"
+          title="Recalculate from hierarchy"
+          disabled={recalc.isPending}
+          onClick={() => recalc.mutate()}
+        >
+          <RefreshCw className="h-3.5 w-3.5" />
+        </Button>
+        <Button
+          variant="ghost" size="icon" className="h-7 w-7"
+          title="Change head"
+          onClick={() => setOpen(true)}
+        >
+          <Pencil className="h-3.5 w-3.5" />
+        </Button>
+      </div>
+
+      <AlertDialog open={open} onOpenChange={(o) => !o && setOpen(false)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Change head of {bu.name}</AlertDialogTitle>
+            <AlertDialogDescription>
+              The selected person becomes the BU head. Pick any active employee
+              (cross-BU allowed for matrix structures). The change is audit-logged
+              and marked Manual until you recalculate from the hierarchy again.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <Label>Search</Label>
+              <Input
+                placeholder="Name or employee code"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+              <p className="text-[11px] text-muted-foreground">
+                Showing active employees across the company. Tip: usually the BU's own
+                top manager.
+              </p>
+            </div>
+            <div className="space-y-1">
+              <Label>New head</Label>
+              <Select value={pickUserId} onValueChange={setPickUserId}>
+                <SelectTrigger><SelectValue placeholder="Pick someone" /></SelectTrigger>
+                <SelectContent>
+                  {filteredPool.length === 0 && (
+                    <div className="px-2 py-1.5 text-xs text-muted-foreground">No matches.</div>
+                  )}
+                  {filteredPool.map(p => (
+                    <SelectItem key={p.id} value={p.id}>
+                      {p.full_name} {p.employee_code ? `(${p.employee_code})` : ''}
+                      {contextFor(p)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <Label>Reason (min 3 chars)</Label>
+              <Textarea
+                rows={3} value={pickReason}
+                onChange={(e) => setPickReason(e.target.value)}
+                placeholder="Why is this manual override required?"
+              />
+            </div>
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={!canSave || save.isPending}
+              onClick={(e) => { e.preventDefault(); save.mutate(); }}
+            >
+              Save
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+}
