@@ -399,6 +399,14 @@ function ReviewDetail({
   const [sendBackReason, setSendBackReason] = useState('');
   const [assistedOpen, setAssistedOpen] = useState(false);
 
+  // ----- Multilingual support (parity with EmployeeAnnualReview) -----
+  const defLang = template?.sections.settings?.default_language ?? 'en';
+  const availLangs = template?.sections.settings?.enable_multilingual
+    ? template.sections.settings.available_languages ?? ['en']
+    : ['en'];
+  const [lang, setLang] = useState<string>(defLang);
+  useEffect(() => { setLang(defLang); }, [template?.id, defLang]);
+
   // When the directory flow lands on an assisted-mode candidate, open the
   // selfie capture automatically once proxy eligibility resolves true.
   useEffect(() => {
@@ -460,6 +468,12 @@ function ReviewDetail({
   const canSendBack = !!role && role !== 'self' && chain.indexOf(role) > 0;
 
   return (
+    <AnnualReviewI18nProvider
+      currentLanguage={lang}
+      defaultLanguage={defLang}
+      templateTranslations={template?.sections.translations}
+      displayMode={template?.sections.display_mode}
+    >
     <div className="space-y-4">
       <Card>
         <CardHeader>
@@ -469,6 +483,9 @@ function ReviewDetail({
               <p className="text-sm text-muted-foreground">{instance.employee?.employee_code} · {instance.employee?.designation ?? '—'}</p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
+              {availLangs.length > 1 && (
+                <LanguageSwitcher value={lang} onChange={setLang} available={availLangs} />
+              )}
               <AnnualReviewStatusBadge status={instance.overall_status} />
               {instance.submitted_via_proxy && (
                 <Badge variant="secondary" className="text-xs">Submitted with assistance</Badge>
@@ -585,5 +602,6 @@ function ReviewDetail({
         />
       )}
     </div>
+    </AnnualReviewI18nProvider>
   );
 }
