@@ -1,0 +1,46 @@
+---
+name: Assisted Annual Review Submission
+description: Proxy-submit the Annual Review self-stage for blue-collar / non-login employees with mandatory live selfie verification and immutable audit
+type: feature
+---
+
+# Assisted Annual Review Submission
+
+## Who may proxy-submit (self stage only)
+- Reporting Manager (`annual_review_instances.manager_id`)
+- Skip-Level Manager (`annual_review_instances.skip_id`)
+- HR PMS, Admin (via `has_role`)
+- Optional per-employee `profiles.designated_proxy_user_id`
+
+## Eligibility (auto-detected)
+- Feature flag `app_settings.assisted_self_submission_enabled` must be ON.
+- Employee profile has no email OR `auth.users.last_sign_in_at IS NULL`.
+- Instance must be at `pending_self`.
+- Encapsulated by SECURITY DEFINER fn `public.can_proxy_submit_annual_review(instance_id, proxy_user_id)`.
+
+## Verification (mandatory)
+- Live webcam selfie via `getUserMedia({ facingMode:'user' })`. **No file picker is allowed** — capture only.
+- Signed declaration checkbox required before submit.
+- Stored in private bucket `proxy-selfies` at `{instance_id}/{epochMs}.jpg`.
+
+## Audit trail (immutable)
+- Table `annual_review_proxy_submissions` (INSERT + SELECT policies only; no UPDATE/DELETE).
+- Captures: instance_id, employee_user_id, proxy_user_id, proxy_role, selfie_path, captured_at, user_agent, declaration_text.
+- `annual_review_instances.submitted_via_proxy = true` and `proxy_submission_id` populated on submit.
+
+## Visibility
+- Public badge "Submitted with assistance" on instance header.
+- Audit row + selfie visible only to: proxy, employee, reporting manager, skip-level, HR PMS, Admin.
+- Selfie URLs created via `createSignedUrl` (5 min) — bucket never made public.
+
+## Code map
+- DB: `public.can_proxy_submit_annual_review`, `public.submit_annual_review_self_as_proxy` (SECURITY DEFINER).
+- Service: `src/services/annualReview/proxySubmission.ts` — `checkProxyEligibility`, `submitWithAssistance`, `getProxyAuditForInstance`, `createSignedSelfieUrl`. Upload is rolled back via `.remove([path])` on any post-upload failure.
+- Hook: `src/hooks/useProxyEligibility.ts`.
+- UI: `src/components/annual-review/AssistedSubmissionDialog.tsx`, entry point on `src/pages/annual-review/TeamAnnualReview.tsx` (proxy mode is auto-detected at `pending_self` when no native reviewer role applies).
+- Admin: `src/components/admin/AssistedSubmissionSettings.tsx` (in SystemSettings → General).
+
+## Constraints
+- Never bypass the eligibility RPC client-side. Proxy mode flips on only when `useProxyEligibility` resolves `true` AND no native stage role applies.
+- Do not relax the "no file picker" rule. Gallery uploads defeat the verification.
+- Audit table must stay append-only. Do not add UPDATE/DELETE policies.

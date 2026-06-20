@@ -32,6 +32,10 @@ import { toast } from 'sonner';
 import type { AnnualReviewerRole, EvidenceItem } from '@/types/annualReview';
 import type { InstanceWithEmployee } from '@/services/annualReview/annualReviewService';
 import { enabledChain } from '@/lib/annualReview/stageChain';
+import { useProxyEligibility } from '@/hooks/useProxyEligibility';
+import { AssistedSubmissionDialog } from '@/components/annual-review/AssistedSubmissionDialog';
+import { Badge } from '@/components/ui/badge';
+import { useQueryClient } from '@tanstack/react-query';
 
 const STAGE_FOR_REVIEWER = (inst: InstanceWithEmployee, uid: string): AnnualReviewerRole | null => {
   if (inst.overall_status === 'pending_manager' && inst.manager_id === uid) return 'manager';
@@ -132,7 +136,8 @@ export default function TeamAnnualReview() {
 }
 
 function ReviewDetail({ instance, fiscalYear }: { instance: InstanceWithEmployee; fiscalYear?: number }) {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
+  const queryClient = useQueryClient();
   const { data: template } = useTemplate(
     (instance as { template_override_id?: string | null }).template_override_id ?? instance.template_id,
   );
@@ -140,11 +145,19 @@ function ReviewDetail({ instance, fiscalYear }: { instance: InstanceWithEmployee
   const advance = useAdvanceStatus();
   const sendBack = useSendBackStatus();
   const upload = useUploadEvidence();
-  const role = user ? STAGE_FOR_REVIEWER(instance, user.id) : null;
+  const stageRole = user ? STAGE_FOR_REVIEWER(instance, user.id) : null;
+  // Proxy assistance: enabled only for pending_self when no native role applies.
+  const { data: proxyEligible } = useProxyEligibility(
+    instance.id,
+    !stageRole && instance.overall_status === 'pending_self',
+  );
+  const proxyMode = !stageRole && instance.overall_status === 'pending_self' && proxyEligible === true;
+  const role: AnnualReviewerRole | null = stageRole ?? (proxyMode ? 'self' : null);
   const myResponse = role ? responses.find((r) => r.reviewer_role === role) ?? null : null;
   const locked = !role || myResponse?.is_locked;
   const [sendBackOpen, setSendBackOpen] = useState(false);
   const [sendBackReason, setSendBackReason] = useState('');
+  const [assistedOpen, setAssistedOpen] = useState(false);
 
   const { draft, setDraft, flush, status } = useDebouncedResponseDraft({
     instanceId: instance.id,
@@ -173,6 +186,12 @@ function ReviewDetail({ instance, fiscalYear }: { instance: InstanceWithEmployee
 
   const handleSubmit = async () => {
     if (!role) return;
+    if (proxyMode) {
+      // Save draft then open verification dialog. Final submission happens inside the dialog.
+      try { await flush(); setAssistedOpen(true); }
+      catch (e) { toast.error((e as Error).message); }
+      return;
+    }
     try { await flush(); await advance.mutateAsync({ instanceId: instance.id, role }); toast.success('Submitted.'); }
     catch (e) { toast.error((e as Error).message); }
   };
@@ -200,11 +219,28 @@ function ReviewDetail({ instance, fiscalYear }: { instance: InstanceWithEmployee
               <CardTitle>{instance.employee?.full_name ?? instance.employee_id}</CardTitle>
               <p className="text-sm text-muted-foreground">{instance.employee?.employee_code} · {instance.employee?.designation ?? '—'}</p>
             </div>
-            <AnnualReviewStatusBadge status={instance.overall_status} />
+            <div className="flex flex-wrap items-center gap-2">
+              <AnnualReviewStatusBadge status={instance.overall_status} />
+              {instance.submitted_via_proxy && (
+                <Badge variant="secondary" className="text-xs">Submitted with assistance</Badge>
+              )}
+            </div>
           </div>
         </CardHeader>
         <CardContent><AnnualReviewStageTracker status={instance.overall_status} enabledStages={instance.enabled_stages} /></CardContent>
       </Card>
+
+      {proxyMode && (
+        <Card className="border-amber-500/40 bg-amber-50/40 dark:bg-amber-950/20">
+          <CardContent className="p-4 text-sm">
+            <p className="font-medium">Assisted self-review mode</p>
+            <p className="text-muted-foreground mt-1">
+              You are filling the self-stage on behalf of <strong>{instance.employee?.full_name ?? 'this employee'}</strong>.
+              A live selfie of the employee is required before submission.
+            </p>
+          </CardContent>
+        </Card>
+      )}
 
       <SystemScoresPanel
         systemScores={template?.sections.system_scores ?? []}
@@ -246,7 +282,8 @@ function ReviewDetail({ instance, fiscalYear }: { instance: InstanceWithEmployee
             )}
             <Button variant="outline" onClick={flush}>Save draft</Button>
             <Button onClick={handleSubmit} disabled={advance.isPending}>
-              {advance.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />} Submit & forward
+              {advance.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              {proxyMode ? 'Verify & Submit on behalf' : 'Submit & forward'}
             </Button>
           </div>
         </div>
@@ -279,6 +316,25 @@ function ReviewDetail({ instance, fiscalYear }: { instance: InstanceWithEmployee
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {proxyMode && (
+        <AssistedSubmissionDialog
+          open={assistedOpen}
+          onOpenChange={setAssistedOpen}
+          instanceId={instance.id}
+          employeeUserId={instance.employee_id}
+          employeeName={instance.employee?.full_name ?? 'Employee'}
+          proxyRoleLabel={
+            instance.manager_id === user?.id ? 'reporting_manager'
+              : instance.skip_id === user?.id ? 'skip_level'
+              : 'authorized_proxy'
+          }
+          proxyDisplayName={profile?.full_name ?? 'Proxy'}
+          onSubmitted={() => {
+            void queryClient.invalidateQueries({ queryKey: ['annual-review'] });
+          }}
+        />
+      )}
     </div>
   );
 }

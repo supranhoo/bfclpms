@@ -127,3 +127,4 @@ Lean-Load: debounce search inputs (>200 rows / network); paginate new lists with
 - [Annual Review Carry KRA Score](mem://features/annual-review/carry-kra-score) — System Score source=carry_kra; month-wise PMS final scores; average-of-monthly aggregation
 - [Annual Review Bilingual Options](mem://design/annual-review-bilingual-options) — Criterion option-card grid with bilingual "EN / translated" labels; persisted score stays numeric option.score (0–5)
 - [Annual Review Self Review Library](mem://features/annual-review/self-review-library) — Curated + org-saved bilingual Self Review fields/bundles, RLS by admin/hr_pms, plugged into Template Editor
+- [Assisted Annual Review Submission](mem://features/annual-review/assisted-submission) — Proxy self-stage submit for non-login employees with live selfie verification, immutable audit, feature-flag gated
