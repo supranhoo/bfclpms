@@ -20,6 +20,7 @@ export interface EmployeeOption {
   name: string;
   code: string;
   department: string;
+  isActive?: boolean;
 }
 
 interface BaseProps {
