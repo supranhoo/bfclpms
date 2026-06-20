@@ -34,9 +34,6 @@ export interface AnnualReviewCycle {
   created_by: string | null;
   created_at: string;
   updated_at: string;
-  /** Assisted submission audit linkage (Phase 3). */
-  submitted_via_proxy?: boolean;
-  proxy_submission_id?: string | null;
 }
 
 /** A single 0-5 option on a criterion. */
