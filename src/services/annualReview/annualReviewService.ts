@@ -802,13 +802,13 @@ export async function seedInstancesForCycle(args: { cycleId: string; templateId:
   const buHead: Record<string, string | null> = {};
   for (const b of bus ?? []) buHead[b.id] = (b as any).head_user_id ?? null;
 
-  // HR head from org_head_config (per company if provided).
+  // HR head = head_user_id of the BU named "HR" within the company.
+  // (Replaces deprecated org_head_config source; managed inline on the
+  // Business Units tab via BuHeadColumn.)
   let hrHead: string | null = args.hrUserId ?? null;
   {
-    let q = db.from('org_head_config').select('hr_head_user_id, company_id');
-    if (args.companyId) q = q.eq('company_id', args.companyId);
-    const { data: cfg } = await q.limit(1);
-    if (cfg && cfg[0] && (cfg[0] as any).hr_head_user_id) hrHead = (cfg[0] as any).hr_head_user_id;
+    const resolved = await getHrHeadUserId(args.companyId ?? null);
+    if (resolved) hrHead = resolved;
   }
 
   const rows = (people ?? []).map((p: any) => {
@@ -952,10 +952,8 @@ export async function seedInstancesByRules(args: { cycleId: string; hrUserId: st
 
   let hrHead: string | null = args.hrUserId ?? null;
   {
-    let q = db.from('org_head_config').select('hr_head_user_id, company_id');
-    if (args.companyId) q = q.eq('company_id', args.companyId);
-    const { data: cfg } = await q.limit(1);
-    if (cfg && cfg[0] && (cfg[0] as any).hr_head_user_id) hrHead = (cfg[0] as any).hr_head_user_id;
+    const resolved = await getHrHeadUserId(args.companyId ?? null);
+    if (resolved) hrHead = resolved;
   }
 
   const mgrMap = new Map<string, string | null>();
