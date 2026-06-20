@@ -44,3 +44,9 @@ type: feature
 - Never bypass the eligibility RPC client-side. Proxy mode flips on only when `useProxyEligibility` resolves `true` AND no native stage role applies.
 - Do not relax the "no file picker" rule. Gallery uploads defeat the verification.
 - Audit table must stay append-only. Do not add UPDATE/DELETE policies.
+## Directory entry point (June 2026)
+- Admin / HR PMS get a **Find employee** button on Team Annual Review when `app_settings.annual_review_directory_search_enabled = true`.
+- Server search: `public.search_active_employees_for_review(p_query, p_cycle_id, p_limit, p_offset)` — restricted to admin/hr_pms, returns `has_email`, `has_signed_in`, existing `instance_id`, and whether caller is `in_my_queue`.
+- Auto-create: `public.create_or_get_annual_review_instance(p_employee_id, p_cycle_id)` is idempotent, resolves template from highest-priority active assignment rule, copies reporting_manager → manager and that manager's reporting_manager → skip, writes `system_audit_logs` event `annual_review.instance.auto_created`.
+- UI: `src/components/annual-review/EmployeeDirectoryDialog.tsx`. After selection, `TeamAnnualReview` sets `selectedId` and auto-opens `AssistedSubmissionDialog` when the employee has no email/login (proxy eligibility returns true).
+- Tests: `src/test/annualReview/employeeDirectory.test.ts`.
