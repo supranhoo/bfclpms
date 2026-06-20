@@ -1,40 +1,101 @@
 ## Goal
-Remove the standalone "HR Finalization" tab. The HR Head is now simply the head of the Business Unit named **HR** — managed inline on the Business Units tab like every other BU head. Annual Review reads the HR head from that BU's `head_user_id`.
+Add **Department Head** with the same model as BU Head: an Auto/Manual head per department, inline column on the Departments tab, audited mutation RPCs, and wired into the Annual Review reviewer chain plus available to notifications/reports.
 
 ## Risk & Impact
-- **Data**: No schema changes. `org_head_config` is left in place (read-only, deprecated) to avoid destructive migration; it's no longer written or read by app code. Rollback = revert code only.
-- **Workflow**: Annual Review HR Finalization stage now resolves `hr_id` from the BU named `HR` (case-insensitive, scoped to the cycle's company). Fallback chain (override → existing args.hrUserId) preserved.
-- **UI**: One tab disappears from Admin → Organization. BU Head column already handles the "HR" BU row — nothing new to learn.
-- **Regression**: Low. Single resolver path; all callers go through one helper.
-- **Scalability**: Same single-row lookup as today.
+- **Data**: Additive only. Adds 4 columns to `public.departments` and a `dept_head_id` snapshot column to `annual_review_instances`. Rollback = drop columns; no data loss for existing rows (defaults NULL / `'auto'`).
+- **Workflow**: Annual Review seeders (`seedInstancesForCycle`, `seedInstancesByRules`) gain a new snapshot field `dept_head_id`. Existing instances are unaffected (column nullable). New cycles populate it. UI / stage chain that uses it is a follow-up surface; the seed write is non-breaking.
+- **UI**: New "Head" column on the Departments tab — same `BuHeadColumn`-style control (badge + Recalculate + Change picker with searchable combobox). One new admin action; no other screens change.
+- **Regression**: Low. Pattern is a 1:1 copy of the proven BU Head pipeline. Reviewer chain change is additive (new column, new seeded value); consumers that don't read it keep working.
+- **Scalability**: Lookups are O(department). One extra SELECT per seed batch (mirrors the existing BU head map).
+
+## What changes visually
+**Admin → Organization → Departments tab**: a new **Head** column to the right of `Sub-branches` / before actions, showing:
+- Employee name + employee code, or "—" if unset
+- Auto/Manual badge
+- "Recalculate" icon button (admin/hr_pms only)
+- "Change" button → opens the same searchable combobox dialog used for BU heads (any active employee, shows `Department · BU`, reason required ≥3 chars for manual override)
+
+No other screens change in this delivery. (Annual Review UI surfacing of `dept_head_id` is out of scope below.)
 
 ## Plan
 
-1. **Resolver helper** (new, `src/services/orgHeads/hrHeadResolver.ts`)
-   - `getHrHeadUserId(companyId: string | null): Promise<string | null>` — SELECT `head_user_id` FROM `business_units` WHERE `lower(name) = 'hr'` AND `company_id = $1` (or NULL company) LIMIT 1.
+### 1. Migration `add_department_heads`
+```sql
+-- 1a. Columns on departments
+ALTER TABLE public.departments
+  ADD COLUMN head_user_id uuid REFERENCES public.profiles(id) ON DELETE SET NULL,
+  ADD COLUMN head_source text NOT NULL DEFAULT 'auto' CHECK (head_source IN ('auto','manual')),
+  ADD COLUMN head_updated_at timestamptz,
+  ADD COLUMN head_updated_by uuid REFERENCES public.profiles(id) ON DELETE SET NULL;
+CREATE INDEX idx_departments_head_user_id ON public.departments(head_user_id);
 
-2. **Annual Review service** (`src/services/annualReview/annualReviewService.ts`)
-   - Replace the two `org_head_config` reads (≈ lines 805–811 and 955–958) with `getHrHeadUserId(companyId)`. Keep existing fallback to `args.hrUserId`.
+-- 1b. Resolver — department-only scope, mirrors resolve_bu_head tie-break
+CREATE OR REPLACE FUNCTION public.resolve_department_head(p_dept_id uuid)
+RETURNS uuid LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public AS $$
+DECLARE v_winner uuid;
+BEGIN
+  WITH scope AS (
+    SELECT p.id, p.reporting_manager_id, p.doj, p.level_id
+    FROM public.profiles p
+    WHERE p.department_id = p_dept_id
+      AND COALESCE(p.is_active,true) = true
+      AND COALESCE(p.is_dummy_employee,false) = false
+  ),
+  roots AS (
+    SELECT s.* FROM scope s
+    LEFT JOIN scope mgr ON mgr.id = s.reporting_manager_id
+    WHERE s.reporting_manager_id IS NULL OR mgr.id IS NULL
+  )
+  SELECT r.id INTO v_winner
+  FROM roots r
+  LEFT JOIN public.levels lv ON lv.id = r.level_id
+  ORDER BY
+    CASE lv.name
+      WHEN 'M0' THEN 0 WHEN 'M1' THEN 1 WHEN 'M2' THEN 2 WHEN 'M3' THEN 3
+      WHEN 'M4' THEN 4 WHEN 'M5' THEN 5 WHEN 'M6' THEN 6 WHEN 'M7' THEN 7
+      WHEN 'W1' THEN 8 WHEN 'W2' THEN 9 WHEN 'W3' THEN 10 WHEN 'W4' THEN 11
+      WHEN 'W5' THEN 12 ELSE 99 END ASC,
+    r.doj ASC NULLS LAST, r.id ASC
+  LIMIT 1;
+  RETURN v_winner;
+END $$;
 
-3. **Admin Organization page** (`src/pages/admin/Organization.tsx`)
-   - Remove the `org-heads` tab entry (line 34) and its render block (line 582).
-   - Remove the `HrFinalizationCard` import.
+-- 1c. RPCs: set_department_head / recalculate_department_head
+-- (admin or hr_pms only; reason ≥3 chars; writes system_audit_logs
+--  with actions 'org_heads.dept_head_set' and 'org_heads.dept_head_recalculated')
 
-4. **Delete dead component**
-   - `src/components/admin/HrFinalizationCard.tsx` — remove.
-   - Keep `src/components/annual-review/HrFinalizationSheet.tsx` (different concern: per-cycle stage UI). Verify it doesn't import the deleted card.
+-- 1d. Snapshot column on annual_review_instances
+ALTER TABLE public.annual_review_instances
+  ADD COLUMN dept_head_id uuid REFERENCES public.profiles(id) ON DELETE SET NULL;
+```
+Grants already cover `departments` and `annual_review_instances`; no new GRANT needed (columns inherit table-level privileges).
 
-5. **Docs / memory sync**
-   - `mem/features/admin/org-heads.md`: rewrite Storage + UI sections — HR head = `business_units.head_user_id` of the BU named "HR". Drop `org_head_config` references from the active SSOT (note as deprecated).
-   - `src/modules/annual-review/POLICY.md` + `DOCUMENTATION.md`: update the "HR Head" definition to point at the BU-named-HR rule.
+### 2. Service layer (`src/services/orgHeads/orgHeadsService.ts`)
+Add parallel functions:
+- `listDepartmentHeads(): Promise<DeptHeadRow[]>`
+- `setDepartmentHead(deptId, userId, reason)`
+- `recalculateDepartmentHead(deptId): Promise<string | null>`
 
-6. **Tests**
-   - Add unit test for `getHrHeadUserId`: returns head_user_id for matching BU; null when no BU named HR exists; case-insensitive match.
-   - Update any annual-review service tests that mock `org_head_config` to mock the BU lookup instead.
+### 3. UI — generalise `BuHeadColumn` or add `DeptHeadColumn`
+Refactor `src/components/admin/BuHeadColumn.tsx` into a generic `OrgHeadColumn` driven by `{ scope: 'bu' | 'department', id }` so we don't duplicate the searchable picker / dialog. Mount it on the Departments tab in `src/pages/admin/Organization.tsx` as a new "Head" column. The Business Units tab keeps the exact same behaviour through the new generic component.
 
-## What changes visually
-- Admin → Organization: the **HR Finalization** tab is gone. The BU named "HR" on the **Business Units** tab now serves as the single place to view/change the HR head (Auto/Manual badge, recalculate, change-head picker — same controls as every other BU).
+### 4. Annual Review seeders
+In `seedInstancesForCycle` and `seedInstancesByRules` (`src/services/annualReview/annualReviewService.ts`):
+- Fetch a `deptHead[dept_id]` map alongside the existing `buHead` map.
+- Add `dept_head_id: deptHead[p.department_id] ?? null` to each seeded row.
+- No change to existing `bu_head_id` / `hr_id` logic.
 
-## Out of scope
-- Dropping `org_head_config` table/RPCs (left for a later cleanup migration once we've confirmed no external readers).
-- Any change to `BuHeadColumn`, the searchable picker, or `resolve_bu_head` logic.
+### 5. Tests
+- Unit test for the resolver (mocked rows): department-only scope, level tie-break, NULL when no candidates.
+- Service test: `setDepartmentHead` writes manual + audit row; `recalculateDepartmentHead` writes auto.
+- Seeder test: rows include `dept_head_id` matching the department's head; unaffected when head is null.
+
+### 6. Docs / memory
+- `mem/features/admin/org-heads.md`: add "Department Head" section with storage, resolver, RPCs, UI mount point.
+- `src/modules/annual-review/POLICY.md`: add `dept_head_id` to the snapshot definition list.
+- `DOCUMENTATION.md` change log entry.
+
+## Out of scope (future)
+- Surfacing `dept_head_id` as an explicit reviewer stage in the Annual Review stage chain UI / overrides.
+- Notifications wired to `dept_head_id` (column is available; no event triggers added yet).
+- Migrating existing instances backwards to populate `dept_head_id`.
