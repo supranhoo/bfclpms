@@ -163,17 +163,6 @@ export default function TeamAnnualReview() {
               <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">My queue</span>
               <Badge variant="secondary" className="text-[10px] ml-auto">{total}</Badge>
             </div>
-            <div className="flex items-center justify-between text-xs">
-              <span className="text-muted-foreground">Per page</span>
-              <Select value={String(pageSize)} onValueChange={(v) => setStoredPageSize(Number(v))}>
-                <SelectTrigger className="h-7 w-[72px] text-xs"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {PAGE_SIZE_OPTIONS.map((n) => (
-                    <SelectItem key={n} value={String(n)}>{n}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
             <div className="text-[11px] text-muted-foreground tabular-nums">
               Showing {fromN}–{toN} of {total}
             </div>
@@ -189,17 +178,6 @@ export default function TeamAnnualReview() {
               <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">My queue</span>
               <Badge variant="secondary" className="text-[10px]">{total}</Badge>
               {isFetching && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}
-            </div>
-            <div className="flex items-center gap-1">
-              <span className="text-[10px] text-muted-foreground">Per page</span>
-              <Select value={String(pageSize)} onValueChange={(v) => setStoredPageSize(Number(v))}>
-                <SelectTrigger className="h-7 w-[64px] text-xs"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {PAGE_SIZE_OPTIONS.map((n) => (
-                    <SelectItem key={n} value={String(n)}>{n}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
             </div>
           </div>
 
@@ -309,10 +287,23 @@ export default function TeamAnnualReview() {
           </ul>
 
           {total > 0 && (
-            <div className="flex items-center justify-between pt-3 border-t">
-              <span className="text-[11px] text-muted-foreground tabular-nums">
-                {fromN}–{toN} of {total}
-              </span>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-3 border-t">
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                  <span>Per page</span>
+                  <Select value={String(pageSize)} onValueChange={(v) => setStoredPageSize(Number(v))}>
+                    <SelectTrigger className="h-7 w-[64px] text-xs"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {PAGE_SIZE_OPTIONS.map((n) => (
+                        <SelectItem key={n} value={String(n)}>{n}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <span className="text-[11px] text-muted-foreground tabular-nums">
+                  {fromN}–{toN} of {total}
+                </span>
+              </div>
               <div className="flex items-center gap-1">
                 <Button
                   variant="outline" size="sm" className="h-7 px-2"
