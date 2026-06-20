@@ -9,10 +9,16 @@ type: feature
 - `org_head_config(company_id PK)` — `hr_business_unit_id`, `hr_head_user_id`, `hr_head_source`, ...
 
 ## Resolver SSOT
-- `public.resolve_bu_head(bu_id)` — top of reporting hierarchy among ACTIVE employees whose
-  department belongs to that BU. Tie-break: earliest `doj` (NULLS LAST), then `id`.
-  (Note: `levels.rank` does not exist in this schema; an earlier resolver version that
-  referenced it raised "WITHIN GROUP is required for ordered-set aggregate rank".)
+- `public.resolve_bu_head(p_bu_id)` — top of reporting hierarchy among ACTIVE candidates.
+  Candidate scope = employees whose department is in the BU, PLUS division-level
+  employees (department name = division name, within the same division — covers
+  cross-BU division heads like Sajid in dept "DRI" leading both 1050 TPD and 3X100 TPD).
+  Roots = candidate whose `reporting_manager_id` is NULL or outside the candidate set.
+  Tie-break: **level seniority** (M0=0 … M7=7, W1=8 … W5=12, NULL/unknown=99) ASC,
+  then `doj` ASC NULLS LAST, then `id`.
+  (`departments` has no `division_id`; division is reached via `business_units.division_id`.
+  `levels.rank` does not exist — an earlier version referencing it raised
+  "WITHIN GROUP is required for ordered-set aggregate rank".)
 - `public.resolve_hr_head(company_id)` — delegates to `resolve_bu_head(hr_business_unit_id)`.
 
 ## RPCs (admin / hr_pms only, audit-logged as `org_heads.*`)
