@@ -14,7 +14,9 @@ import {
 } from '@/components/ui/alert-dialog';
 import { useToast } from '@/hooks/use-toast';
 import {
-  setBuHead, recalculateBuHead, type BuHeadRow,
+  setBuHead, recalculateBuHead,
+  setDepartmentHead, recalculateDepartmentHead,
+  type BuHeadRow,
 } from '@/services/orgHeads/orgHeadsService';
 import { RefreshCw, Pencil, ShieldAlert, Check, ChevronsUpDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -29,23 +31,24 @@ export interface PickerProfile {
   department_id: string | null;
 }
 
-export interface BuHeadColumnProps {
-  bu: { id: string; name: string };
+export type OrgHeadScope = 'bu' | 'department';
+
+export interface OrgHeadColumnProps {
+  /** Scope decides which RPCs are called and which query key to invalidate. */
+  scope: OrgHeadScope;
+  /** The entity (BU or Department) identity for mutations + dialog title. */
+  entity: { id: string; name: string };
   head: Pick<BuHeadRow, 'head_user_id' | 'head_source'> | undefined;
-  /** All profiles loaded by the parent page (active + inactive). The component
-   * filters to active itself so the parent doesn't have to. */
   profiles: PickerProfile[];
-  /** Optional lookup of `department_id -> { name, business_unit_id }` so the
-   * picker can show context (Department · BU) per candidate. */
   deptIndex: Map<string, { name: string; business_unit_id: string | null }>;
-  /** Optional lookup of `business_unit_id -> name` for picker context. */
   buIndex: Map<string, string>;
 }
 
-/** Inline cell + actions for the Business Units table. Owns its own
- * change-head dialog so callers only need to render <BuHeadColumn /> once
- * per row. */
-export function BuHeadColumn({ bu, head, profiles, deptIndex, buIndex }: BuHeadColumnProps) {
+/** Inline cell + actions used by both the Business Units and Departments
+ * tabs. Owns its own change-head dialog so callers only render it once per
+ * row. The scope prop chooses between the BU and Department RPC pipelines.
+ */
+export function OrgHeadColumn({ scope, entity, head, profiles, deptIndex, buIndex }: OrgHeadColumnProps) {
   const { toast } = useToast();
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
@@ -53,6 +56,11 @@ export function BuHeadColumn({ bu, head, profiles, deptIndex, buIndex }: BuHeadC
   const [pickReason, setPickReason] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [pickerOpen, setPickerOpen] = useState(false);
+
+  const queryKey = scope === 'bu' ? ['org-heads', 'bus'] : ['org-heads', 'departments'];
+  const scopeLabel = scope === 'bu' ? 'BU' : 'Department';
+  const recalcFn = scope === 'bu' ? recalculateBuHead : recalculateDepartmentHead;
+  const setFn = scope === 'bu' ? setBuHead : setDepartmentHead;
 
   const profileById = useMemo(() => {
     const m = new Map<string, PickerProfile>();
@@ -80,19 +88,19 @@ export function BuHeadColumn({ bu, head, profiles, deptIndex, buIndex }: BuHeadC
   const headProfile = head?.head_user_id ? profileById.get(head.head_user_id) ?? null : null;
 
   const recalc = useMutation({
-    mutationFn: () => recalculateBuHead(bu.id),
+    mutationFn: () => recalcFn(entity.id),
     onSuccess: () => {
       toast({ title: 'Recalculated from hierarchy' });
-      qc.invalidateQueries({ queryKey: ['org-heads', 'bus'] });
+      qc.invalidateQueries({ queryKey });
     },
     onError: (e: Error) => toast({ title: 'Recalculation failed', description: e.message, variant: 'destructive' }),
   });
 
   const save = useMutation({
-    mutationFn: () => setBuHead(bu.id, pickUserId, pickReason.trim()),
+    mutationFn: () => setFn(entity.id, pickUserId, pickReason.trim()),
     onSuccess: () => {
       toast({ title: 'Head updated' });
-      qc.invalidateQueries({ queryKey: ['org-heads', 'bus'] });
+      qc.invalidateQueries({ queryKey });
       setOpen(false);
       setPickUserId('');
       setPickReason('');
@@ -153,11 +161,12 @@ export function BuHeadColumn({ bu, head, profiles, deptIndex, buIndex }: BuHeadC
       <AlertDialog open={open} onOpenChange={(o) => !o && setOpen(false)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Change head of {bu.name}</AlertDialogTitle>
+            <AlertDialogTitle>Change head of {entity.name}</AlertDialogTitle>
             <AlertDialogDescription>
-              The selected person becomes the BU head. Pick any active employee
-              (cross-BU allowed for matrix structures). The change is audit-logged
-              and marked Manual until you recalculate from the hierarchy again.
+              The selected person becomes the {scopeLabel} head. Pick any active
+              employee (cross-{scopeLabel} allowed for matrix structures). The
+              change is audit-logged and marked Manual until you recalculate
+              from the hierarchy again.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <div className="space-y-3">
@@ -218,7 +227,7 @@ export function BuHeadColumn({ bu, head, profiles, deptIndex, buIndex }: BuHeadC
                 </PopoverContent>
               </Popover>
               <p className="text-[11px] text-muted-foreground">
-                Showing active employees across the company. Tip: usually the BU's own top manager.
+                Showing active employees across the company. Tip: usually the {scopeLabel}'s own top manager.
               </p>
             </div>
             <div className="space-y-1">
@@ -243,4 +252,12 @@ export function BuHeadColumn({ bu, head, profiles, deptIndex, buIndex }: BuHeadC
       </AlertDialog>
     </div>
   );
+}
+
+/** Back-compat wrapper for the existing Business Units tab caller. */
+export interface BuHeadColumnProps extends Omit<OrgHeadColumnProps, 'scope' | 'entity'> {
+  bu: { id: string; name: string };
+}
+export function BuHeadColumn({ bu, ...rest }: BuHeadColumnProps) {
+  return <OrgHeadColumn scope="bu" entity={bu} {...rest} />;
 }

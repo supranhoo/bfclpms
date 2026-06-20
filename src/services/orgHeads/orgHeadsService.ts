@@ -21,6 +21,18 @@ export interface BuHeadRow {
   head_updated_by: string | null;
 }
 
+/** Department head row — same shape as BuHeadRow plus business_unit_id for context. */
+export interface DeptHeadRow {
+  id: string;
+  name: string;
+  code: string | null;
+  business_unit_id: string | null;
+  head_user_id: string | null;
+  head_source: HeadSource;
+  head_updated_at: string | null;
+  head_updated_by: string | null;
+}
+
 export interface OrgHeadConfigRow {
   id: string;
   company_id: string | null;
@@ -79,6 +91,30 @@ export async function setHrHead(companyId: string | null, userId: string, reason
 
 export async function recalculateHrHead(companyId: string | null): Promise<string | null> {
   const { data, error } = await supabase.rpc('recalculate_hr_head' as any, { p_company_id: companyId });
+  if (error) throw error;
+  return (data as string | null) ?? null;
+}
+
+// ---------- Department Heads (mirror of BU head pipeline) ----------
+
+export async function listDepartmentHeads(): Promise<DeptHeadRow[]> {
+  const { data, error } = await supabase
+    .from('departments')
+    .select('id, name, code, business_unit_id, head_user_id, head_source, head_updated_at, head_updated_by')
+    .order('name', { ascending: true });
+  if (error) throw error;
+  return (data ?? []) as DeptHeadRow[];
+}
+
+export async function setDepartmentHead(deptId: string, userId: string, reason: string): Promise<void> {
+  const { error } = await supabase.rpc('set_department_head' as any, {
+    p_dept_id: deptId, p_user_id: userId, p_reason: reason,
+  });
+  if (error) throw error;
+}
+
+export async function recalculateDepartmentHead(deptId: string): Promise<string | null> {
+  const { data, error } = await supabase.rpc('recalculate_department_head' as any, { p_dept_id: deptId });
   if (error) throw error;
   return (data as string | null) ?? null;
 }

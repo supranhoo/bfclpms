@@ -19,6 +19,11 @@ _Business rules. Update in the same PR as any logic change._
     `public.resolve_bu_head(bu_id)`) or **manual** (set via `set_bu_head` RPC).
   - If no BU head is configured the seeder falls back to the legacy ancestor walk
     (2 hops above the skip manager) so old cycles continue to seed.
+- **Department Head** = `departments.head_user_id` of the employee's department.
+  - Admin-managed inline on the Departments tab. Auto-derived via
+    `public.resolve_department_head(dept_id)` or manually set via
+    `set_department_head` RPC. Snapshotted to `annual_review_instances.dept_head_id`
+    at seed time. Nullable when the department has no candidates.
 - **HR Head (HR Finalization)** = `head_user_id` of the BU named "HR" (case-insensitive)
   within the cycle's company. Managed inline on the Business Units tab through the
   same Auto/Manual controls as any other BU head (`resolve_bu_head` / `set_bu_head`).

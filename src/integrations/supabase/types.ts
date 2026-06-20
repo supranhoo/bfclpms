@@ -466,6 +466,7 @@ export type Database = {
           created_at: string
           criteria_weighted_score: number | null
           cycle_id: string
+          dept_head_id: string | null
           eligibility_inputs: Json
           employee_id: string
           employee_rebuttal: string | null
@@ -498,6 +499,7 @@ export type Database = {
           created_at?: string
           criteria_weighted_score?: number | null
           cycle_id: string
+          dept_head_id?: string | null
           eligibility_inputs?: Json
           employee_id: string
           employee_rebuttal?: string | null
@@ -530,6 +532,7 @@ export type Database = {
           created_at?: string
           criteria_weighted_score?: number | null
           cycle_id?: string
+          dept_head_id?: string | null
           eligibility_inputs?: Json
           employee_id?: string
           employee_rebuttal?: string | null
@@ -580,6 +583,20 @@ export type Database = {
             columns: ["cycle_id"]
             isOneToOne: false
             referencedRelation: "annual_review_cycles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "annual_review_instances_dept_head_id_fkey"
+            columns: ["dept_head_id"]
+            isOneToOne: false
+            referencedRelation: "eligible_login_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "annual_review_instances_dept_head_id_fkey"
+            columns: ["dept_head_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
           {
@@ -2464,6 +2481,10 @@ export type Database = {
           business_unit_id: string | null
           code: string | null
           created_at: string
+          head_source: string
+          head_updated_at: string | null
+          head_updated_by: string | null
+          head_user_id: string | null
           id: string
           level: string | null
           name: string
@@ -2472,6 +2493,10 @@ export type Database = {
           business_unit_id?: string | null
           code?: string | null
           created_at?: string
+          head_source?: string
+          head_updated_at?: string | null
+          head_updated_by?: string | null
+          head_user_id?: string | null
           id?: string
           level?: string | null
           name: string
@@ -2480,6 +2505,10 @@ export type Database = {
           business_unit_id?: string | null
           code?: string | null
           created_at?: string
+          head_source?: string
+          head_updated_at?: string | null
+          head_updated_by?: string | null
+          head_user_id?: string | null
           id?: string
           level?: string | null
           name?: string
@@ -2490,6 +2519,34 @@ export type Database = {
             columns: ["business_unit_id"]
             isOneToOne: false
             referencedRelation: "business_units"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "departments_head_updated_by_fkey"
+            columns: ["head_updated_by"]
+            isOneToOne: false
+            referencedRelation: "eligible_login_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "departments_head_updated_by_fkey"
+            columns: ["head_updated_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "departments_head_user_id_fkey"
+            columns: ["head_user_id"]
+            isOneToOne: false
+            referencedRelation: "eligible_login_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "departments_head_user_id_fkey"
+            columns: ["head_user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -13960,6 +14017,10 @@ export type Database = {
         }
       }
       recalculate_bu_head: { Args: { p_bu_id: string }; Returns: string }
+      recalculate_department_head: {
+        Args: { p_dept_id: string }
+        Returns: string
+      }
       recalculate_hr_head: { Args: { p_company_id: string }; Returns: string }
       reconcile_org_kpi_inheritance: {
         Args: { p_dry_run?: boolean }
@@ -14093,6 +14154,7 @@ export type Database = {
             }
             Returns: string
           }
+      resolve_department_head: { Args: { p_dept_id: string }; Returns: string }
       resolve_final_score_rule: {
         Args: {
           p_employee_id: string
@@ -14418,6 +14480,10 @@ export type Database = {
       }
       set_bu_head: {
         Args: { p_bu_id: string; p_reason: string; p_user_id: string }
+        Returns: undefined
+      }
+      set_department_head: {
+        Args: { p_dept_id: string; p_reason: string; p_user_id: string }
         Returns: undefined
       }
       set_functional_role: {
