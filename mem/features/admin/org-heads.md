@@ -10,7 +10,9 @@ type: feature
 
 ## Resolver SSOT
 - `public.resolve_bu_head(bu_id)` — top of reporting hierarchy among ACTIVE employees whose
-  department belongs to that BU. Tie-break: highest `levels.rank`, then earliest `doj`.
+  department belongs to that BU. Tie-break: earliest `doj` (NULLS LAST), then `id`.
+  (Note: `levels.rank` does not exist in this schema; an earlier resolver version that
+  referenced it raised "WITHIN GROUP is required for ordered-set aggregate rank".)
 - `public.resolve_hr_head(company_id)` — delegates to `resolve_bu_head(hr_business_unit_id)`.
 
 ## RPCs (admin / hr_pms only, audit-logged as `org_heads.*`)
