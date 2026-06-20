@@ -14433,6 +14433,10 @@ export type Database = {
         }[]
       }
       start_drill: { Args: { p_drill_id: string }; Returns: Json }
+      submit_annual_review_self_as_proxy: {
+        Args: { p_instance_id: string; p_proxy_submission_id: string }
+        Returns: Database["public"]["Enums"]["annual_review_status"]
+      }
       submit_audit_run: { Args: { p_run_id: string }; Returns: Json }
       submit_permit: { Args: { p_permit_id: string }; Returns: Json }
       suggest_alias_candidates: {
