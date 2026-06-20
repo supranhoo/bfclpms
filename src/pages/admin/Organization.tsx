@@ -19,8 +19,8 @@ import { useToast } from '@/hooks/use-toast';
 import { Building2, Plus, Trash2, Pencil, Check, X, Copy, Settings } from 'lucide-react';
 import { useResolvedTabs } from '@/hooks/useResolvedMenu';
 import { useQuery } from '@tanstack/react-query';
-import { BuHeadColumn } from '@/components/admin/BuHeadColumn';
-import { listBuHeads } from '@/services/orgHeads/orgHeadsService';
+import { BuHeadColumn, OrgHeadColumn } from '@/components/admin/BuHeadColumn';
+import { listBuHeads, listDepartmentHeads } from '@/services/orgHeads/orgHeadsService';
 
 type OrgTabKey =
   | 'divisions' | 'business-units' | 'departments' | 'sub-branches'
@@ -69,6 +69,14 @@ export default function Organization() {
     (buHeadsQuery.data ?? []).forEach((h) => m.set(h.id, h as any));
     return m;
   }, [buHeadsQuery.data]);
+
+  // Department heads — mirrors the BU heads pattern.
+  const deptHeadsQuery = useQuery({ queryKey: ['org-heads', 'departments'], queryFn: listDepartmentHeads });
+  const deptHeadById = useMemo(() => {
+    const m = new Map<string, any>();
+    (deptHeadsQuery.data ?? []).forEach((h: any) => m.set(h.id, h));
+    return m;
+  }, [deptHeadsQuery.data]);
 
   // Lookup maps consumed by BuHeadColumn to render Department · BU context
   // inside the change-head picker.
