@@ -250,6 +250,9 @@ export interface AnnualReviewInstance {
   employee_rebuttal?: string | null;
   created_at: string;
   updated_at: string;
+  /** Assisted submission audit linkage (Phase 3). */
+  submitted_via_proxy?: boolean;
+  proxy_submission_id?: string | null;
 }
 
 export interface EvidenceItem {
