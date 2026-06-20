@@ -18,7 +18,10 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { Building2, Plus, Trash2, Pencil, Check, X, Copy, Settings } from 'lucide-react';
 import { useResolvedTabs } from '@/hooks/useResolvedMenu';
-import { OrgHeadsTab } from '@/components/admin/OrgHeadsTab';
+import { useQuery } from '@tanstack/react-query';
+import { BuHeadColumn } from '@/components/admin/BuHeadColumn';
+import { HrFinalizationCard } from '@/components/admin/HrFinalizationCard';
+import { listBuHeads } from '@/services/orgHeads/orgHeadsService';
 
 type OrgTabKey =
   | 'divisions' | 'business-units' | 'departments' | 'sub-branches'
@@ -28,7 +31,7 @@ type OrgTabKey =
 const ORG_TAB_DEFS: ReadonlyArray<{ key: OrgTabKey; menuKey: string; label: string }> = [
   { key: 'divisions',            menuKey: 'org-tab-divisions',           label: 'Divisions' },
   { key: 'business-units',       menuKey: 'org-tab-business-units',      label: 'Business Units' },
-  { key: 'org-heads',            menuKey: 'org-tab-org-heads',           label: 'Org Heads' },
+  { key: 'org-heads',            menuKey: 'org-tab-org-heads',           label: 'HR Finalization' },
   { key: 'departments',          menuKey: 'org-tab-departments',         label: 'Departments' },
   { key: 'sub-branches',         menuKey: 'org-tab-sub-branches',        label: 'Sub-Branches' },
   { key: 'locations',            menuKey: 'org-tab-locations',           label: 'Locations' },
