@@ -1,4 +1,3 @@
-import { useMemo } from 'react';
 import { useQueries } from '@tanstack/react-query';
 import type { AnnualReviewTemplate, CarryKraConfig } from '@/types/annualReview';
 import { buildCarrySnapshot } from '@/services/annualReview/carryKraScore';
