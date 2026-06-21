@@ -4,6 +4,7 @@ import { openStorageFile, buildEvidenceFileName } from '@/lib/storageDownload';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Info } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { RatingLevel } from '@/hooks/useKpis';
 import { getRatingLevelColor, ratingLevelToLabel } from '@/lib/reviewConstants';
@@ -21,6 +22,11 @@ interface ReviewStageCardProps {
   status: StageStatus;
   isNA?: boolean;
   achievedValue?: number | null;
+  /**
+   * When provided and `achievedValue` is null, render "—" with a tooltip
+   * explaining the value could not be reconstructed (Self stage RCA Jun-2026).
+   */
+  achievedValueUnknownReason?: string | null;
   kpiName?: string | null;
   employeeCode?: string | null;
   /**
@@ -70,6 +76,7 @@ export function ReviewStageCard({
   status,
   isNA = false,
   achievedValue,
+  achievedValueUnknownReason,
   kpiName,
   employeeCode,
   isLoading = false,
@@ -115,6 +122,21 @@ export function ReviewStageCard({
         {!isPending && achievedValue !== null && achievedValue !== undefined && (
           <div className="text-xs text-muted-foreground mb-1">
             Value: <span className="font-medium text-foreground">{achievedValue}</span>
+          </div>
+        )}
+        {!isPending && (achievedValue === null || achievedValue === undefined) && achievedValueUnknownReason && (
+          <div className="text-xs text-muted-foreground mb-1 inline-flex items-center gap-1">
+            Value: <span className="font-medium text-foreground">—</span>
+            <TooltipProvider delayDuration={150}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Info className="h-3 w-3 cursor-help" />
+                </TooltipTrigger>
+                <TooltipContent className="max-w-xs">
+                  <p className="text-xs">{achievedValueUnknownReason}</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
           </div>
         )}
         {isLoading && !isPending ? (
