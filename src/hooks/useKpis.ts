@@ -72,6 +72,13 @@ export interface ReviewSubmission {
   kpi_id: string;
   performance_review_id: string | null;
   achieved_value: number | null;
+  /**
+   * Frozen employee-entered value at self-submit / org-KPI propagation.
+   * Read-only mirror used by KpiJourneySection Self stage (RCA Jun-2026).
+   * Falls back to derivation when null (pre-migration rows). Never write
+   * to this column from reviewer stages.
+   */
+  self_achieved_value: number | null;
   manager_achieved_value: number | null;
   auditor_achieved_value: number | null;
   management_achieved_value: number | null;
