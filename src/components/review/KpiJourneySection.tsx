@@ -28,6 +28,7 @@ import {
   isRenamedFromCurrent,
 } from '@/lib/prevMonthCanonicalMatch';
 import { resolveEffectiveChain, isPercolatedSiblingSubmission } from '@/lib/multimonthCycle';
+import { resolveSelfAchievedValue } from '@/lib/review/resolveSelfAchievedValue';
 
 const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -503,15 +504,30 @@ export function KpiJourneySection({
     evidenceUrls: string[];
     achievedValue: number | null;
   }> = {
-    self: buildStage(
-      User, 'blue', 'Self',
-      submission?.self_score ?? null, submission?.self_rating ?? null,
-      submission?.self_remarks ?? null,
-      buildEvidenceUrls(submission?.self_evidence_urls, submission?.self_evidence_url),
-      // Only use orgAchievedValue fallback when a submission record exists (propagation occurred)
-      // Otherwise we'd show a phantom score for unpropagated org KPIs still at kra_set
-      submission ? (submission.achieved_value ?? orgAchievedValue ?? null) : null
-    ),
+    self: (() => {
+      // RCA Jun-2026: `review_submissions.achieved_value` is mutated by
+      // downstream reviewer stages (auditor bulk sign-off, etc.), so it can
+      // disagree with the frozen `self_score`. Resolve a self-specific value
+      // before handing to buildStage. See lib/review/resolveSelfAchievedValue.
+      const resolved = resolveSelfAchievedValue(submission as any, kpi as any);
+      const fallback = submission ? (resolved.value ?? null) : null;
+      const selfValue = submission
+        ? (resolved.source === 'unknown'
+            ? null
+            : (fallback ?? orgAchievedValue ?? null))
+        : null;
+      const stage = buildStage(
+        User, 'blue', 'Self',
+        submission?.self_score ?? null, submission?.self_rating ?? null,
+        submission?.self_remarks ?? null,
+        buildEvidenceUrls(submission?.self_evidence_urls, submission?.self_evidence_url),
+        selfValue,
+      );
+      (stage as any).achievedValueUnknownReason = resolved.source === 'unknown'
+        ? 'Original self-entered value is not stored separately and was overwritten by a later reviewer edit. See the audit log for the original value.'
+        : null;
+      return stage;
+    })(),
     manager: buildStage(
       Briefcase, 'amber', 'Manager',
       submission?.manager_score ?? null, submission?.manager_rating ?? null,
