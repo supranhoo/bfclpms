@@ -90,7 +90,7 @@ describe('annual review exports', () => {
     const headers = sheetHeaders(wb, 'Criteria');
     expect(headers).toEqual([
       'Employee Code', 'Full Name', 'Designation',
-      'Self Comments', 'Manager Comments', 'Skip Comments', 'BU Head Comments', 'HR Comments',
+      'Self Comments', 'Manager Comments', 'Skip Comments', 'Dept Head Comments', 'BU Head Comments', 'HR Comments',
     ]);
   });
 });
