@@ -25,6 +25,8 @@ import { Loader2 } from 'lucide-react';
 import { SelfReviewSummaryDialog } from '@/components/annual-review/SelfReviewSummaryDialog';
 import { toast } from 'sonner';
 import { computeCriteriaScore } from '@/lib/annualReview/scoring';
+import { computeScoreComposition } from '@/lib/annualReview/scoringComposition';
+import { AppraisalCompositionCard } from '@/components/annual-review/AppraisalCompositionCard';
 import { fyStartFromCycle } from '@/lib/annualReview/fiscalYear';
 import type { EvidenceItem } from '@/types/annualReview';
 import { EmployeeResultsView } from '@/components/annual-review/EmployeeResultsView';
@@ -65,6 +67,11 @@ export default function EmployeeAnnualReview() {
   const summary = useMemo(
     () => computeCriteriaScore(template?.sections.criteria ?? [], draft.criteria_scores ?? {}),
     [template, draft.criteria_scores],
+  );
+
+  const composition = useMemo(
+    () => computeScoreComposition(template, instance?.system_scores ?? {}, draft.criteria_scores ?? {}),
+    [template, instance?.system_scores, draft.criteria_scores],
   );
 
   const evidenceByCriterion = useMemo(() => {
@@ -166,6 +173,8 @@ export default function EmployeeAnnualReview() {
 
       <AnnualReviewStageTracker status={instance.overall_status} enabledStages={instance.enabled_stages} />
 
+      <AppraisalCompositionCard composition={composition} variant="full" />
+
       <SystemScoresPanel
         systemScores={template?.sections.system_scores ?? []}
         values={instance.system_scores ?? {}}
@@ -226,13 +235,16 @@ export default function EmployeeAnnualReview() {
       )}
 
       <footer className="flex flex-wrap items-center justify-between gap-3 sticky bottom-0 bg-background/80 backdrop-blur border-t py-3">
-        <div className="text-xs text-muted-foreground">
-          {locked
-            ? t('note.locked', 'Your review is locked.')
-            : saveStatus === 'saving' ? t('note.saving', 'Saving draft…')
-            : saveStatus === 'saved'   ? t('note.saved', 'Draft saved')
-            : saveStatus === 'error'   ? t('note.save_error', 'Could not save — retry your last edit.')
-            : `Score: ${summary.totalCriteriaScore.toFixed(2)} / ${summary.maxCriteriaScore.toFixed(2)}`}
+        <div className="flex flex-col gap-1">
+          <div className="text-xs text-muted-foreground">
+            {locked
+              ? t('note.locked', 'Your review is locked.')
+              : saveStatus === 'saving' ? t('note.saving', 'Saving draft…')
+              : saveStatus === 'saved'   ? t('note.saved', 'Draft saved')
+              : saveStatus === 'error'   ? t('note.save_error', 'Could not save — retry your last edit.')
+              : t('note.draft', 'Draft')}
+          </div>
+          <AppraisalCompositionCard composition={composition} variant="inline" />
         </div>
         {!locked && (
           <div className="flex gap-2">
@@ -254,6 +266,7 @@ export default function EmployeeAnnualReview() {
         template={template}
         draft={draft}
         summary={summary}
+        composition={composition}
         evidenceByCriterion={evidenceByCriterion}
       />
     </div>
