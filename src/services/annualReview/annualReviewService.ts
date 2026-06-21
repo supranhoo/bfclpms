@@ -791,6 +791,17 @@ export async function searchActiveEmployees(query: string, limit = 20): Promise<
  *                 to args.hrUserId if not configured.
  */
 export async function seedInstancesForCycle(args: { cycleId: string; templateId: string; hrUserId: string | null; companyId?: string | null }) {
+  // Cycle-level default workflow chain (admin-configurable on the Cycle editor).
+  // Stamped onto each new instance.enabled_stages; per-employee overrides
+  // (set_annual_review_enabled_stages) still win, and the writer preserves them.
+  const { data: cycleRow, error: cycleErr } = await db
+    .from('annual_review_cycles')
+    .select('default_enabled_stages')
+    .eq('id', args.cycleId)
+    .single();
+  if (cycleErr) throw cycleErr;
+  const defaultStages = ((cycleRow as { default_enabled_stages?: unknown } | null)?.default_enabled_stages
+    ?? ['self','manager','skip_manager','dept_head','bu_head','hr']) as AnnualReviewerRole[];
   // POLICY §94 — must page; PostgREST silently caps unranged reads at 1000
   const people = await fetchAllPaged<any>((from, to) =>
     db.from('profiles')
@@ -847,6 +858,7 @@ export async function seedInstancesForCycle(args: { cycleId: string; templateId:
       bu_head_id: bu ?? buFallback,
       dept_head_id: p.department_id ? deptHead[p.department_id] ?? null : null,
       hr_id: hrHead,
+      enabled_stages: defaultStages,
     };
   });
 
@@ -874,6 +886,8 @@ async function writeSeedRowsPreservingOverrides(
     bu_head_id: string | null;
     hr_id: string | null;
     assigned_rule_id?: string | null;
+    dept_head_id?: string | null;
+    enabled_stages?: AnnualReviewerRole[];
   }>,
 ) {
   if (rows.length === 0) return;
