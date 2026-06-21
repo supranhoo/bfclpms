@@ -46,20 +46,6 @@ export function useResolvedSystemScores(
     if (snap && typeof snap.value === 'number') out[s.id] = snap.value;
   });
 
-  if (typeof window !== 'undefined' && carryEntries.length > 0) {
-    // eslint-disable-next-line no-console
-    console.debug('[useResolvedSystemScores]', {
-      enabled,
-      employeeId,
-      fiscalYear,
-      carryIds: carryEntries.map((s) => s.id),
-      snapValues: queries.map((q) => q.data?.value),
-      isLoading: queries.some((q) => q.isLoading),
-      isError: queries.map((q) => q.error && (q.error as Error).message),
-      out,
-    });
-  }
-
   const isLoading = queries.some((q) => q.isLoading);
   return { values: out, isLoading };
 }
