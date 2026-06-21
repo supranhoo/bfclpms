@@ -80,11 +80,14 @@ Caveats:
    stage gate, role gate, and audit log are identical to the single-row UI.
 
 ## Reviewer chain
-- Snapshotted at seed time from `profiles.reporting_manager_id` (manager → skip → bu_head). HR is the configured HR user.
+- Canonical chain order (2026-06-21): **Self → Manager → Skip → Dept Head → BU Head → HR**.
+- Snapshotted at seed time from `profiles.reporting_manager_id` (manager → skip), `departments.head_user_id` (dept_head), and `business_units.head_user_id` (bu_head). HR is the configured HR user.
 - Mid-cycle change: HR/admin inserts an `annual_review_assignment_overrides` row. Overrides take precedence over the snapshot for that instance + role.
+- **Auto-skip at advance time:** the `advance_annual_review_status` / `send_back_annual_review_status` RPCs walk `public.annual_review_effective_chain(instance_id)`, which is `enabled_stages` further filtered to drop any stage whose reviewer slot resolves to NULL, points at an `is_active = false` profile, or equals `employee_id`. The `self` stage is never auto-skipped. Auto-skips are recorded in `system_audit_logs` (`annual_review.stage_auto_skipped`).
+- **Cycle-level default:** `annual_review_cycles.default_enabled_stages` is the workflow chain stamped onto every newly-seeded instance. Admin-editable on Annual Review Admin → Cycles. Per-employee overrides via `set_annual_review_enabled_stages` still win and survive re-seed.
 
 ## Per-employee workflow override
-- Each instance has `enabled_stages` (subset of `self / manager / skip_manager / bu_head / hr`).
+- Each instance has `enabled_stages` (subset of `self / manager / skip_manager / dept_head / bu_head / hr`).
   Any stage (including `self`) may be disabled per employee; the chain must
   contain at least one stage. When `self` is disabled the cycle starts at the
   first remaining enabled stage and no self ratings are captured.
@@ -145,3 +148,4 @@ Caveats:
 - 2026-06-15 — Bilingual joined option labels (`"<English> / <translated>"`) are a **display-only transparency aid** rendered by `tTemplateBilingual` when `currentLanguage !== defaultLanguage`. The persisted value for any criterion score is always the numeric `option.score` (0–5). Reviewer UIs MUST NOT persist, compare, or parse the joined label string.- 2026-06-15 — Template translation lookup key is `kind:id:field` (colon-separated). Writers (`CriterionOptionsDialog`, `TemplateEditorDialog`) and readers (`tTemplate`, `tTemplateBilingual` in `AnnualReviewI18nContext`) MUST use the same shape. Mixing dot/colon separators silently drops translations.
 
 - 2026-06-15 — `TemplateSections.display_mode` controls **reviewer-facing label rendering only**. Persisted appraisal data (scores, option IDs, weighted totals, stage transitions) MUST be unaffected by the chosen mode. Default mode for legacy templates without the field is `bilingual` to preserve existing UX.
+- 2026-06-21 — Inserted Department Head between Skip Manager and BU Head in the canonical chain. Added `annual_review_cycles.default_enabled_stages` as the cycle-level configurable default; the seeder stamps it onto each new instance. Added `public.annual_review_effective_chain(instance_id)` and rewired Advance / Send-back to walk the effective chain so stages whose reviewer is null, deactivated, or equals the employee are auto-skipped at runtime. Backfilled `dept_head` into every in-flight instance and active cycle default.
