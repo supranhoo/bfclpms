@@ -948,6 +948,16 @@ async function writeSeedRowsPreservingOverrides(
  *   - empty filter set → matches all employees
  */
 export async function seedInstancesByRules(args: { cycleId: string; hrUserId: string | null; companyId?: string | null }) {
+  // Cycle-level default workflow chain — stamped on each new instance.
+  const { data: cycleRow, error: cycleErr } = await db
+    .from('annual_review_cycles')
+    .select('default_enabled_stages')
+    .eq('id', args.cycleId)
+    .single();
+  if (cycleErr) throw cycleErr;
+  const defaultStages = ((cycleRow as { default_enabled_stages?: unknown } | null)?.default_enabled_stages
+    ?? ['self','manager','skip_manager','dept_head','bu_head','hr']) as AnnualReviewerRole[];
+
   const { data: rules, error: rulesErr } = await db
     .from('annual_review_assignment_rules')
     .select('id, template_id, priority, filters, is_active')
@@ -1032,6 +1042,7 @@ export async function seedInstancesByRules(args: { cycleId: string; hrUserId: st
       bu_head_id: buFromCfg ?? buFallback,
       dept_head_id: p.department_id ? deptHead[p.department_id] ?? null : null,
       hr_id: hrHead,
+      enabled_stages: defaultStages,
     });
   }
 
