@@ -1,4 +1,3 @@
-import { useMemo } from 'react';
 import { useQueries } from '@tanstack/react-query';
 import type { AnnualReviewTemplate, CarryKraConfig } from '@/types/annualReview';
 import { buildCarrySnapshot } from '@/services/annualReview/carryKraScore';
@@ -41,18 +40,12 @@ export function useResolvedSystemScores(
   });
 
   const base = instance?.system_scores ?? {};
-
-  const values = useMemo(() => {
-    const out: Record<string, number> = { ...base };
-    carryEntries.forEach((s, i) => {
-      const snap = queries[i]?.data;
-      if (snap && typeof snap.value === 'number') out[s.id] = snap.value;
-    });
-    return out;
-    // queries identity is fine to depend on through its data values
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [base, ...carryEntries.map((s, i) => queries[i]?.data?.value), ...carryEntries.map((s) => s.id)]);
+  const out: Record<string, number> = { ...base };
+  carryEntries.forEach((s, i) => {
+    const snap = queries[i]?.data;
+    if (snap && typeof snap.value === 'number') out[s.id] = snap.value;
+  });
 
   const isLoading = queries.some((q) => q.isLoading);
-  return { values, isLoading };
+  return { values: out, isLoading };
 }
