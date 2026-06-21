@@ -5,13 +5,14 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Progress } from '@/components/ui/progress';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useAnnualReviewI18n } from '@/components/annual-review/AnnualReviewI18nContext';
 import type {
   AnnualReviewTemplate, EvidenceItem, TemplateCriterion,
 } from '@/types/annualReview';
 import type { CriteriaScoreSummary } from '@/lib/annualReview/scoring';
+import type { ScoreComposition } from '@/lib/annualReview/scoringComposition';
+import { AppraisalCompositionCard } from '@/components/annual-review/AppraisalCompositionCard';
 import { shouldHideCriteriaCard, criteriaForStage, systemScoresFullyAllocated } from '@/lib/annualReview/templateVisibility';
 
 /**
@@ -37,12 +38,13 @@ interface Props {
     evidence?: EvidenceItem[];
   };
   summary: CriteriaScoreSummary;
+  composition: ScoreComposition;
   evidenceByCriterion: Record<string, EvidenceItem[]>;
 }
 
 export function SelfReviewSummaryDialog({
   open, onOpenChange, onConfirm, submitting,
-  template, draft, summary, evidenceByCriterion,
+  template, draft, summary, composition, evidenceByCriterion,
 }: Props) {
   const { t, tTemplate, tTemplateBilingual } = useAnnualReviewI18n();
 
@@ -60,9 +62,6 @@ export function SelfReviewSummaryDialog({
   );
   const hasBlockers = missingRequired.length > 0;
 
-  const pct = summary.maxCriteriaScore > 0
-    ? (summary.totalCriteriaScore / summary.maxCriteriaScore) * 100
-    : 0;
   const evidenceCount = draft.evidence?.length ?? 0;
 
   return (
@@ -80,31 +79,8 @@ export function SelfReviewSummaryDialog({
 
         <ScrollArea className="flex-1">
           <div className="px-6 py-5 space-y-6">
-            {/* Score banner — only when criteria contribute to score */}
-            {!hideCriteria && (
-            <div className="rounded-lg border bg-gradient-to-br from-primary/5 to-primary/10 p-5">
-              <div className="flex flex-wrap items-end justify-between gap-4">
-                <div>
-                  <div className="text-[11px] text-muted-foreground uppercase tracking-wider font-medium">
-                    {t('summary.total_score', 'Total Score')}
-                  </div>
-                  <div className="text-3xl font-bold mt-1 text-foreground">
-                    {summary.totalCriteriaScore.toFixed(2)}
-                    <span className="text-muted-foreground text-lg font-normal ml-1">
-                      / {summary.maxCriteriaScore.toFixed(2)}
-                    </span>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <div className="text-[11px] text-muted-foreground uppercase tracking-wider font-medium">
-                    {t('summary.weighted_achievement', 'Weighted achievement')}
-                  </div>
-                  <div className="text-3xl font-bold mt-1 text-primary">{pct.toFixed(1)}%</div>
-                </div>
-              </div>
-              <Progress value={pct} className="h-2 mt-4" />
-            </div>
-            )}
+            {/* Score composition — always shows System + Criteria → Overall */}
+            <AppraisalCompositionCard composition={composition} variant="full" />
 
             {/* No-criteria explainer */}
             {hideCriteria && (
