@@ -59,4 +59,11 @@ describe('templateVisibility', () => {
   it('returns false when template is null', () => {
     expect(shouldHideCriteriaCard(null, 'self')).toBe(false);
   });
+
+  it('regression: empty criteria + system scores summing to 100 + qualitative fields → hide', () => {
+    const t = tpl([], [40, 60]); // exact shape of the screenshot scenario
+    expect(shouldHideCriteriaCard(t, 'self')).toBe(true);
+    expect(criteriaForStage(t, 'self')).toEqual([]);
+    expect(systemScoresFullyAllocated(t)).toBe(true);
+  });
 });
