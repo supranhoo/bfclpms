@@ -28,6 +28,8 @@ import { UomType } from '@/lib/qualitativeUom';
 
 type AchievedSubmission = {
   achieved_value?: number | null;
+  /** §SELF-SNAPSHOT-DISPLAY Part 2: dedicated frozen self snapshot. */
+  self_achieved_value?: number | null;
   self_score?: number | null;
   manager_achieved_value?: number | null;
   auditor_achieved_value?: number | null;
@@ -118,6 +120,15 @@ export function resolveSelfAchievedValue(
   kpi: ThresholdSource,
 ): ResolvedSelfValue {
   if (!submission) return { value: null, source: 'pristine' };
+
+  // Part 2: dedicated column is the source of truth when present. Written
+  // by `useSubmitSelfReview` and `propagate_org_kpi_value`, backfilled
+  // from kpi_audit_logs for historical rows. Reviewer-stage RPCs do NOT
+  // touch it, so it survives auditor/manager overrides.
+  if (submission.self_achieved_value != null) {
+    return { value: submission.self_achieved_value, source: 'pristine' };
+  }
+
   const av = submission.achieved_value ?? null;
   const selfScore = submission.self_score ?? null;
 
