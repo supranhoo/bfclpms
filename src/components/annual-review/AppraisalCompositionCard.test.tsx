@@ -38,6 +38,8 @@ describe('AppraisalCompositionCard (full)', () => {
     expect(screen.queryByText('Criteria Score')).not.toBeInTheDocument();
     expect(screen.getByText('Overall')).toBeInTheDocument();
     expect(screen.getByText('Auto-fetched (e.g. KRA)')).toBeInTheDocument();
+    expect(screen.getByText('/ 5')).toBeInTheDocument();
+    expect(screen.getByText('4.95')).toBeInTheDocument();
   });
 
   it('collapses to a single Overall column when only Criteria contributes', () => {
