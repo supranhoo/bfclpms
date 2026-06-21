@@ -1,106 +1,86 @@
 ## Goal
 
-Reshape the annual-review reviewer chain to **self → manager → skip → dept_head → bu_head → hr**, make the default configurable per cycle, and skip any stage whose reviewer is missing / inactive / equals the employee — both at seed time and at every advance.
+Extend the Annual Review effective-chain resolver so that when the same person is mapped to multiple reviewer slots (e.g. Jaspal as manager + dept_head + bu_head), they only review **once** — at the **highest** stage they qualify for. Lower duplicate stages are auto-skipped with an audit reason.
 
-## Assumptions
+## Risk & Impact Report
 
-- `departments.head_user_id` is already populated (work shipped last turn).
-- `pending_dept` is a brand-new status; we add it to `annual_review_status`.
-- `dept_head` is a brand-new role; we add it to `annual_reviewer_role`.
-- `annual_review_instances.dept_head_id` already exists.
-- "Customisable for all users" = one default chain per cycle (admin sets it on the Cycle dialog). Per-employee overrides keep winning.
+- **Data impact:** No schema changes. Only the body of `public.annual_review_effective_chain(uuid)` and the mirrored TS helper `effectiveChain()` change. No backfill needed — resolver is computed on every advance.
+- **Workflow impact:** In-flight instances will see lower-tier duplicate stages skipped on the next `advance_annual_review_status` call. Stages that were already completed are not retroactively touched (we only short-circuit `pending_*` transitions). 
+- **UI impact:** `AnnualReviewStageTracker` already dims auto-skipped stages with a tooltip — the new skip reason `duplicate_reviewer` reuses that path. No new components.
+- **Regression risk:** Low. The existing skip conditions (NULL / inactive / self) are preserved; we add one more condition evaluated **after** them. Test coverage extended.
+- **Scalability:** O(n) over a fixed 6-stage chain — negligible.
+- **Rollback:** Single migration replacing two functions. Revert = re-run the prior `CREATE OR REPLACE`. Additive only.
 
-## Risk & Impact
+## Canonical Resolution Rules (new)
 
-- **Data:** Enum additions are non-destructive. Backfill **rewrites `enabled_stages`** on every non-completed instance in active cycles to insert `dept_head` in its canonical slot. Existing self/manager/skip/bu/hr selections are preserved verbatim; we only insert `dept_head` if it was not previously present.
-- **Workflow:** A stage formerly Pending BU could now stop at Pending Dept first. We narrow the blast radius by only flipping the instance into `pending_dept` on the **next** advance, not retroactively.
-- **UI/UX:** New stepper segment; one new checkbox in workflow & cycle dialogs.
-- **Regression risk:** Medium. Stepper / stage-labels / reviewer-dashboard `.or()` filters / send-back chain / notification recipient resolver all read the stage list — every one must be updated together.
-- **Scalability:** No new heavy queries. Auto-skip resolver runs once per advance.
-- **Mitigation:** SSOT lives in `stageChain.ts` + matching SQL helpers; updating those two files cascades everywhere. Migrations are additive (enum + column) plus one bounded UPDATE.
+Evaluation order = **top-down by seniority**: `hr → bu_head → dept_head → skip_manager → manager → self`.
 
-## Step-by-step plan
+For each stage walk:
 
-### 1. DB migration `annual_review_dept_head_stage`
+1. If the slot is NULL → skip (`reason: no_reviewer_mapped`)
+2. Else if reviewer profile `is_active = false` → skip (`reason: reviewer_inactive`)
+3. Else if reviewer = employee → skip (`reason: self_assignment`)
+4. **NEW:** else if reviewer ID already appears at a **higher** stage in the resolved chain → skip (`reason: duplicate_reviewer`)
+5. Else → keep stage
 
-1. `ALTER TYPE public.annual_reviewer_role ADD VALUE IF NOT EXISTS 'dept_head' AFTER 'skip_manager';`
-2. `ALTER TYPE public.annual_review_status ADD VALUE IF NOT EXISTS 'pending_dept' AFTER 'pending_skip';`
-   (Both enum changes must commit before any function references them — done in a `DO $$ ... $$` block then `COMMIT;` then the rest.)
-3. `ALTER TABLE annual_review_cycles ADD COLUMN default_enabled_stages jsonb NOT NULL DEFAULT '["self","manager","skip_manager","dept_head","bu_head","hr"]'::jsonb;` + reuse the existing validator pattern via a CHECK-free trigger (mirrors instance validator, allows `dept_head`).
-4. Update **default** on `annual_review_instances.enabled_stages` to the same 6-element array and **extend the validator trigger** to accept `dept_head`.
-5. Replace `annual_review_next_status`, `annual_review_prev_status`, `annual_review_prev_role` with the new canonical order `(self,1)…(dept_head,4)(bu_head,5)(hr,6)` and a `pending_dept ↔ dept_head` mapping.
-6. New helper `public.annual_review_effective_chain(p_inst_id uuid) RETURNS text[]` — returns the enabled stages further filtered to drop any stage whose reviewer slot resolves to NULL, points at an `is_active=false` profile, or equals `employee_id`. `self` is never dropped (employees can always self-review).
-7. Rewrite `advance_annual_review_status` and `send_back_annual_review_status` to compute `v_chain := effective_chain(inst_id)` and walk that chain instead of `enabled_stages`. Auth check stays gated on `enabled_stages` membership (auto-skipped stages are never callable). Add `dept_head` arm to the auth `CASE`.
-8. Backfill (still inside the same migration — bounded by status):
-   ```sql
-   UPDATE annual_review_instances
-      SET enabled_stages = (
-        SELECT jsonb_agg(s ORDER BY ord)
-          FROM (VALUES ('self',1),('manager',2),('skip_manager',3),
-                       ('dept_head',4),('bu_head',5),('hr',6)) t(s,ord)
-         WHERE enabled_stages ? s OR s = 'dept_head'
-      )
-    WHERE overall_status NOT IN ('completed')
-      AND NOT (enabled_stages ? 'dept_head');
-   ```
-   Active cycles also get `default_enabled_stages` re-stamped to include `dept_head`.
-9. Audit row in `system_audit_logs` whenever advance auto-skips a stage (action `annual_review.stage_auto_skipped`, payload `{ skipped, reason: 'null'|'inactive'|'self_loop' }`).
+The forward execution order (`self → manager → skip → dept → bu → hr`) is unchanged for stepping; only the **de-dup pass** runs top-down so the highest tier wins.
 
-### 2. TypeScript SSOT — `src/lib/annualReview/stageChain.ts` & `constants.ts`
+### Worked example — Ankit / Jaspal
 
-- `ALL_STAGES = ['self','manager','skip_manager','dept_head','bu_head','hr']`.
-- Add `dept_head: 'pending_dept'` to `STAGE_TO_STATUS` and reverse map.
-- Add `effectiveChain(instance)` helper mirroring the SQL resolver for client-side stepper rendering (null / inactive / self-loop filter — needs `dept_head_id`, profile activity, and `employee_id`).
-- Update `enabledChain` validator to accept `dept_head`.
+Slots: manager=Jaspal, skip=Jaspal's mgr, dept=Jaspal, bu=Jaspal, hr=HR-X
 
-### 3. Service & seeder — `src/services/annualReview/annualReviewService.ts`
+Top-down pass keeps Jaspal at `bu_head`; marks `dept_head` and `manager` as duplicates.
 
-- Both `seedInstancesForCycle` and `seedInstancesByRules` already fetch `deptHead`; just **stamp `enabled_stages` from `cycle.default_enabled_stages`** instead of the hardcoded default. Override-safe writer is unchanged.
-- Reviewer-dashboard `.or(...)` filters add `dept_head_id.eq.${reviewerId}`.
+Final effective forward chain: `self → skip → bu_head → hr`.
 
-### 4. UI
+### Highest-stage data seeding
 
-- **Admin → Cycles dialog:** add a "Workflow stages" section (6 checkboxes; `self` disabled-checked). Writes `default_enabled_stages`. _Visual: new fieldset under the existing cycle date fields. Mobile: stacks under the date column. Self checkbox shown but disabled (always-on)._
-- **Admin → Progress → Change workflow dialog:** add the `Dept Head` checkbox in canonical order.
-- **Bulk workflow XLSX:** add `Dept (Y/N)` column; preserve other columns; update template, parser, validator, applyer.
-- **Stepper / stage badges / send-back menus:** read from `effectiveChain(instance)` so a stage that will auto-skip is rendered greyed-out with a tooltip ("No reviewer mapped").
-- **HR Finalization & reviewer dashboards:** wire the new `dept_head` queue (mirrors BU queue layout).
+When the self-review submits and we transition to the first reviewer stage, the payload (scores, comments, evidence pointers) is written to the row keyed by the **highest non-skipped stage** that resolves to that reviewer. This guarantees Jaspal sees the data in his single `pending_bu` action — not orphaned on a skipped `pending_manager` row.
 
-### 5. Tests
+## Implementation Steps
 
-- `stageChain.test.ts` — new order, dept_head insertion, `effectiveChain` skips null / inactive / employee-self.
-- `annualReviewService.seed.test.ts` — seeded `enabled_stages` matches the cycle's `default_enabled_stages`; `dept_head_id` populated.
-- New `advance_auto_skip.test.ts` (vitest hitting a mocked Supabase client) — when `dept_head_id` is null, advancing `skip_manager` lands on `pending_bu` and writes the audit row.
-- Update existing chain-ordering tests + the `templateEditorWeightGuard` suite stays untouched.
+### 1. SQL migration — replace resolver + advance helpers
 
-### 6. SSOT docs
+File: `supabase/migrations/<ts>_dedupe_duplicate_reviewers.sql`
 
-- `src/modules/annual-review/POLICY.md`:
-  - "Reviewer chain" section gets the new canonical order and auto-skip rules (null / inactive / self-loop).
-  - "Per-employee workflow override" expands the checkbox list and references the cycle-level default.
-  - New version history entry dated today.
-- `src/modules/annual-review/DOCUMENTATION.md`: stage list, RPC signatures, new `annual_review_effective_chain` helper, `default_enabled_stages` column.
-- `mem/features/annual-review/overview.md`: one-liner pointing at the new dept_head stage.
-- `mem/features/annual-review/per-employee-workflow.md`: add `dept_head` to the enabled-stage list.
+- `CREATE OR REPLACE FUNCTION public.annual_review_effective_chain(p_inst_id uuid)` — returns `TABLE(stage annual_reviewer_role, reviewer_id uuid, skipped boolean, skip_reason text)`. New body does:
+  1. Build raw chain in seniority order (`hr, bu_head, dept_head, skip_manager, manager, self`).
+  2. Apply rules 1–4 sequentially, remembering kept reviewer IDs in a `uuid[]` accumulator.
+  3. Return rows re-sorted into forward execution order for callers.
+- `CREATE OR REPLACE FUNCTION public.advance_annual_review_status(...)` — unchanged logic, but iterate over forward chain from the resolver and log a `system_audit_logs` row `annual_review.stage_auto_skipped` with `skip_reason` whenever a row has `skipped = true`.
+- `CREATE OR REPLACE FUNCTION public.send_back_annual_review_status(...)` — same skip-aware walk in reverse.
+- Highest-stage seeding: in `advance_annual_review_status`, when transitioning out of `self`, resolve the first non-skipped reviewer stage from the **top** of the seniority list that matches the next pending stage's reviewer_id, and copy the self-submission payload into that target stage's response row.
 
-## UI Changes (summary)
+### 2. TS SSOT mirror
 
-| Where | What |
-| --- | --- |
-| Cycle editor | New "Workflow stages" fieldset, 6 checkboxes, `self` fixed-on. |
-| Per-employee workflow dialog | +1 checkbox `Dept Head`. |
-| Bulk workflow XLSX | +1 column `Dept (Y/N)`. |
-| Stepper (Employee + Team + HR pages) | New segment between Skip and BU. Auto-skipped stages render dim with tooltip. |
-| Admin → Progress filter | "Stage" filter dropdown gets `Pending Dept`. |
-| Reviewer dashboard queues | New "Pending Dept Head" tab parity with BU. |
+File: `src/lib/annualReview/stageChain.ts`
 
-## Rollback
+- Update `effectiveChain(instance, profilesById)` to match the SQL contract exactly: same seniority-first de-dup pass, same skip-reason enum.
+- Export `SkipReason = 'no_reviewer_mapped' | 'reviewer_inactive' | 'self_assignment' | 'duplicate_reviewer'`.
 
-- `enabled_stages` backfill is reversible via a sibling UPDATE removing `dept_head` from non-completed instances; new column / enum values can stay (additive, no consumer if UI rolls back).
-- All UI changes are pure React; revert the commit.
+### 3. UI surface
 
-## Out of scope
+File: `src/components/annual-review/AnnualReviewStageTracker.tsx`
 
-- Notification email copy for the dept-head stage (uses existing reviewer template — copy tweak is a follow-up).
-- Reordering stages beyond inserting `dept_head` (we keep manager → skip → dept → bu fixed).
-- Cross-cycle backfill of historical, already-completed instances.
+- Map `duplicate_reviewer` → tooltip copy: `"Skipped — same reviewer already acts at <higher stage label>"`. Uses existing dim style; no layout change.
+
+### 4. Tests
+
+- `src/lib/annualReview/stageChain.test.ts` — add cases:
+  - manager+dept+bu all same person → keeps only `bu_head`
+  - dept+bu same person, manager different → keeps `manager` and `bu_head`, skips `dept_head`
+  - self also accidentally mapped as bu_head → existing `self_assignment` still wins (rule 3 before rule 4)
+- `src/test/orgHeadsSeederIntegration.test.ts` — add a duplicate-reviewer fixture asserting the resolver picks the top tier.
+- New SQL parity test in `src/test/` invoking the RPC with three duplicate-mapping fixtures and asserting `skipped`/`skip_reason` rows.
+
+### 5. Docs & memory
+
+- `src/modules/annual-review/POLICY.md` — append a "Duplicate reviewer de-duplication" subsection with the worked Ankit/Jaspal example.
+- `mem/features/annual-review/overview.md` — add bullet under auto-skip rules: top-down de-dup, highest tier wins, payload seeded to highest stage.
+- `.lovable/plan.md` — append entry for this change.
+
+## Out of Scope
+
+- Notification template copy changes.
+- Retroactive recalculation of already-completed instances.
+- Any change to the forward execution order or to the cycle-level `default_enabled_stages` UI.
