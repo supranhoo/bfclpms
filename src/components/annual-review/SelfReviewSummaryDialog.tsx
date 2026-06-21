@@ -12,6 +12,7 @@ import type {
   AnnualReviewTemplate, EvidenceItem, TemplateCriterion,
 } from '@/types/annualReview';
 import type { CriteriaScoreSummary } from '@/lib/annualReview/scoring';
+import { shouldHideCriteriaCard, criteriaForStage, systemScoresFullyAllocated } from '@/lib/annualReview/templateVisibility';
 
 /**
  * Pre-submit summary dialog for the employee self-review.
@@ -45,8 +46,9 @@ export function SelfReviewSummaryDialog({
 }: Props) {
   const { t, tTemplate, tTemplateBilingual } = useAnnualReviewI18n();
 
-  const criteria: TemplateCriterion[] = (template?.sections.criteria ?? [])
-    .filter((c) => !c.reviewer_stages?.length || c.reviewer_stages.includes('self'));
+  const hideCriteria = shouldHideCriteriaCard(template, 'self');
+  const criteria: TemplateCriterion[] = criteriaForStage(template, 'self');
+  const systemFull = systemScoresFullyAllocated(template);
   const fields = template?.sections.self_review_fields ?? [];
   const responses = draft.qualitative_responses ?? {};
   const scores = draft.criteria_scores ?? {};
@@ -78,7 +80,8 @@ export function SelfReviewSummaryDialog({
 
         <ScrollArea className="flex-1">
           <div className="px-6 py-5 space-y-6">
-            {/* Score banner */}
+            {/* Score banner — only when criteria contribute to score */}
+            {!hideCriteria && (
             <div className="rounded-lg border bg-gradient-to-br from-primary/5 to-primary/10 p-5">
               <div className="flex flex-wrap items-end justify-between gap-4">
                 <div>
@@ -101,9 +104,25 @@ export function SelfReviewSummaryDialog({
               </div>
               <Progress value={pct} className="h-2 mt-4" />
             </div>
+            )}
+
+            {/* No-criteria explainer */}
+            {hideCriteria && (
+              <div className="rounded-lg border bg-muted/30 p-4 text-sm text-muted-foreground">
+                {systemFull
+                  ? t(
+                      'summary.system_full_notice',
+                      "This template's system scores already total 100%. There are no self-assessment criteria to score — your qualitative responses below will be submitted.",
+                    )
+                  : t(
+                      'summary.no_self_criteria_notice',
+                      'This template has no self-assessment criteria mapped. Your qualitative responses below will be submitted.',
+                    )}
+              </div>
+            )}
 
             {/* Criteria */}
-            {criteria.length > 0 && (
+            {!hideCriteria && criteria.length > 0 && (
               <section>
                 <h3 className="text-sm font-semibold mb-2 flex items-center gap-2">
                   {t('summary.criteria', 'Criteria')}
@@ -221,6 +240,18 @@ export function SelfReviewSummaryDialog({
                   {t('summary.evidence', 'Evidence')}
                   <Badge variant="secondary" className="font-normal">{evidenceCount}</Badge>
                 </h3>
+                {hideCriteria ? (
+                  <div className="rounded-lg border divide-y text-sm overflow-hidden">
+                    <ul className="p-3 space-y-1">
+                      {(draft.evidence ?? []).map((e) => (
+                        <li key={e.path} className="flex items-center gap-2 text-foreground">
+                          <FileText className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                          <span className="truncate">{e.name}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : (
                 <div className="rounded-lg border divide-y text-sm overflow-hidden">
                   {criteria.map((c) => {
                     const files = evidenceByCriterion[c.id] ?? [];
@@ -242,6 +273,7 @@ export function SelfReviewSummaryDialog({
                     );
                   })}
                 </div>
+                )}
               </section>
             ) : (
               <section className="rounded-lg border border-dashed p-4 flex items-center gap-2 text-sm text-muted-foreground">

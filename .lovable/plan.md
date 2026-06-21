@@ -1,72 +1,61 @@
 ## Goal
 
-Hide the Self-Assessment / Reviewer "Criteria" card on every annual-review stage page when **either** condition is true:
+Make the **Self-Review Pre-Submit Dialog** (`SelfReviewSummaryDialog.tsx`) consistent with the criteria-card hide rule we just shipped. When criteria don't contribute to the score (no self-criteria mapped OR `system_scores` weights ≥ 100), the dialog must NOT show the misleading "Total Score 0.00 / 0.00 — Weighted Achievement 0.0%" banner or the empty Criteria section.
 
-1. No criteria are mapped to that stage (`reviewer_stages` filter yields zero rows), OR
-2. The template's `system_scores` weights already sum to 100, leaving criteria with no mathematical contribution.
+## Root Cause
 
-Submit flow is unchanged — the reviewer/employee still clicks Submit to advance.
+The dialog renders the score banner unconditionally and renders the Criteria section gated only on `criteria.length > 0`. It doesn't consult `shouldHideCriteriaCard`, so when system scores already total 100% — or when no self-criteria are mapped — the user sees a meaningless 0.00 score block and a misleading 0% achievement bar.
 
 ## Risk & Impact Report
 
-- **Data impact:** None. Pure presentational filter on existing template config. Stored `criteria_scores` are untouched.
-- **Workflow impact:** None. Advance / send-back RPCs continue to work; submit button still posts.
-- **UI/UX impact:** Empty criteria card disappears from Employee + Manager + Dept + BU + HR review pages when condition holds. A small info banner replaces it ("No criteria to score for this stage — Submit to advance"). Qualitative card (already conditional) is unaffected.
-- **Regression risk:** Low. Templates with criteria mapped to specific stages continue to render normally on those stages. The 100%-system-score case is rare today but valid (system-only templates).
-- **Scalability:** O(1) — single derived boolean per render.
-- **Rollback:** Revert two component edits + one helper.
+- **Data impact:** None. Purely presentational; persistence and submit logic untouched.
+- **Workflow impact:** None. Submit / Cancel buttons unchanged. `hasBlockers` (required qualitative fields) gate still applies.
+- **UI/UX impact:** When criteria are hidden, the score banner and the Criteria section disappear. The Qualitative Responses section and the Evidence section remain. If there's nothing besides system scores + qualitative responses, the dialog shows a single muted line: "System scores are already weighted at 100% — no self-assessment criteria to score." (or the no-criteria-mapped variant).
+- **Regression risk:** Low. Templates with self-criteria continue to render the existing banner and criteria table unchanged. Tests stay green.
+- **Scalability:** O(1).
+- **Rollback:** Single component edit.
 
 ## Implementation Steps
 
-### 1. Add a shared SSOT helper
+### 1. Reuse the SSOT helper
 
-File: `src/lib/annualReview/templateVisibility.ts` (new)
+`SelfReviewSummaryDialog.tsx`:
 
-- `criteriaForStage(template, stage)` — returns `Criterion[]` filtered by `reviewer_stages` (mirrors the inline filter in `EmployeeAnnualReview.tsx` line 182).
-- `systemScoresFullyAllocated(template)` — sums `system_scores[].weight`; returns `true` when sum >= 100.
-- `shouldHideCriteriaCard(template, stage)` — returns `true` when `criteriaForStage(...).length === 0` OR `systemScoresFullyAllocated(template)`.
-- Pure functions, fully unit-testable.
+- Import `shouldHideCriteriaCard`, `criteriaForStage`, `systemScoresFullyAllocated` from `@/lib/annualReview/templateVisibility`.
+- Derive `hideCriteria = shouldHideCriteriaCard(template, 'self')`.
+- Replace the inline `(template?.sections.criteria ?? []).filter(...)` with `criteriaForStage(template, 'self')` for consistency.
 
-### 2. Apply in employee self-review page
+### 2. Gate the score banner + criteria section
 
-File: `src/pages/annual-review/EmployeeAnnualReview.tsx`
+- Render the Total Score / Weighted Achievement banner only when `!hideCriteria`.
+- Render the Criteria section only when `!hideCriteria && criteria.length > 0` (the second guard becomes redundant once hide rule is on, kept defensively).
+- Render the Evidence per-criterion loop only when `!hideCriteria` (it currently iterates over `criteria` to group files; when hidden, fall back to a flat list of all `draft.evidence` files).
 
-- Replace the unconditional `<Card>` wrapper around `CriteriaScoringMatrix` (lines 178–194) with a conditional render gated by `shouldHideCriteriaCard(template, 'self')`.
-- When hidden, render a single muted info banner: `"No self-assessment criteria for this template. Review the system scores above and click Submit to advance."`
-- Submit button + footer unchanged.
+### 3. Insert a clarifying notice when hidden
 
-### 3. Apply in reviewer (team) page
-
-File: `src/components/annual-review/TeamReviewDetailContent.tsx`
-
-- Locate the criteria matrix render block; gate it with `shouldHideCriteriaCard(template, currentReviewerRole)` where `currentReviewerRole` is the stage being reviewed.
-- Same info banner copy, parameterised by stage label.
+- When `hideCriteria === true`, insert a single muted card above the Qualitative section:
+  - If `systemScoresFullyAllocated(template)` → "This template's system scores already total 100%. There are no self-assessment criteria to score — your qualitative responses below will be submitted."
+  - Else → "This template has no self-assessment criteria mapped. Your qualitative responses below will be submitted."
 
 ### 4. Tests
 
-File: `src/lib/annualReview/templateVisibility.test.ts` (new)
+Add to `src/lib/annualReview/templateVisibility.test.ts` (already exists) a regression case asserting `shouldHideCriteriaCard` returns `true` for the exact scenario from the screenshot — template with 4 required qualitative fields, zero criteria, and system scores summing to 100. (Already covered by existing test "hides every stage when system scores sum to 100"; will add the empty-criteria-+-fields combo explicitly for clarity.)
 
-- Template with no criteria → hide for every stage.
-- Template with criteria but none mapped to `self` → hide for `self`, show for stages that ARE mapped.
-- Template with `system_scores` summing to 100 → hide for every stage even if criteria exist.
-- Template with `system_scores` summing to 99 → show.
-- Template with mixed `reviewer_stages` (e.g. some criteria for `manager` only) → correct per-stage decision.
+No new test file needed.
 
 ### 5. Docs
 
-- `src/modules/annual-review/POLICY.md` — add version-history entry documenting the new visibility rule and the two trigger conditions.
-- `mem/features/annual-review/overview.md` — one-line addition under the rendering section.
+- `src/modules/annual-review/POLICY.md` — append note to the existing 2026-06-21 visibility entry that the same rule extends to the pre-submit summary dialog.
 
 ## Out of Scope
 
-- Auto-advancing past the self stage (user explicitly chose to keep Submit).
-- Changing the scoring math or `criteria_scores` storage.
-- Hiding the Qualitative Responses card (already conditional).
-- Admin-side validation warning when a template is configured with no self criteria — could be a follow-up.
+- Changing scoring math, eligibility, or system-score rendering.
+- Hiding the dialog entirely (the qualitative responses + evidence still need explicit confirmation).
+- Renaming the dialog title — copy remains "Review your self-assessment before submitting" so the action stays familiar.
 
 ## UI Change Summary
 
-- **Where:** Employee Annual Review page + Team Review Detail page.
-- **What changes visually:** Self-Assessment Criteria (or stage-equivalent) `<Card>` disappears; replaced by a muted single-line info banner. Stepper, system scores panel, qualitative card, and footer are unchanged.
-- **Interaction impact:** None — Submit button retains the same position and behaviour.
-- **Responsiveness:** Info banner uses existing `Card` styling, no new breakpoints.
+- **Where:** Pre-submit confirmation dialog launched from Employee Annual Review page.
+- **What changes visually:** When criteria are hidden, the blue "TOTAL SCORE 0.00 / 0.00 — WEIGHTED ACHIEVEMENT 0.0%" banner and the criteria table disappear. A single muted line explains why. Qualitative Responses and Evidence sections render as today.
+- **Interaction impact:** None. Footer buttons, blockers, language switcher all unchanged.
+- **Responsiveness:** No layout changes outside the gated sections.
