@@ -1,126 +1,55 @@
-## Goal
+## Problem
 
-Surface the **true scoring model** to the employee (and reviewers) so it's obvious that the final appraisal = `System Score (auto, e.g. Carry KRA) + Criteria Score (self/manager-rated) → capped at 100`.
-
-Right now the form only shows the **criteria** portion as "Total Score". The System Score (which may already be 80–100% of the appraisal) is rendered as a card with its own progress bar but is never combined into a single visible total, leaving users — and the pre-submit dialog — looking at "0.00 / 0.00" when in reality the appraisal is mostly System driven.
+The composition card shows `System 0.00 / 100` even though the Carry KRA card below it has clearly fetched `Achieved 99.00 / Out Of 100`.
 
 ## Root Cause
 
-`computeOverallScore(systemScoresConfig, systemScoresValues, criteriaSummary)` already correctly returns the combined number — but **no UI surface calls it for the employee**. `EmployeeAnnualReview.tsx` only uses `computeCriteriaScore(...)` and pipes that summary into the footer + `SelfReviewSummaryDialog`. The dialog and footer treat the criteria score as "Total". The System Score panel shows per-line "Max weight" and a bar but never explains "this contributes X of 100 to your appraisal".
+`computeScoreComposition` reads the System contribution from `instance.system_scores`. For a `carry_kra` source, that map is **only populated** when `CarryKraScoreCard` calls `onChangeValue` — which it can't on the employee/team pages because we render `SystemScoresPanel` with `readOnly` and no `onChangeValue` prop. The Carry value lives only inside the card's own `useQuery` state.
 
-## Risk & Impact Report
+So:
+- The card renders the right number (its own local query).
+- The composition reads zero (the persisted map is empty until a writer sets it).
+- The Overall and System columns stay at 0.
 
-- **Data impact:** None. Pure presentation; persistence, advance/send-back, audit untouched.
-- **Workflow impact:** None. Submit flow, blockers, RPC contracts unchanged.
-- **UI/UX impact:** New compact "Appraisal Composition" summary card appears at the top of the employee page (and in the pre-submit dialog) showing `System X / Wsys + Criteria Y / Wcrit = Overall Z / 100`, with a single progress bar. The existing System Scores panel gets a clearer per-line "Contributes X of Y points" caption. Footer "Score: …" line replaced with the same Overall total.
-- **Regression risk:** Low — all changes funnel through the existing `computeOverallScore` SSOT. Templates with only criteria or only system-scores render the same numbers, just with clearer labels.
-- **Scalability:** O(n) over template config — negligible.
-- **Rollback:** Revert three component edits + one new component.
+## Fix (surgical, presentation-only)
 
-## Conceptual Model (made explicit in UI copy)
+Introduce a tiny hook that resolves the *displayed* system-score map by overlaying live carry-KRA fetches on top of `instance.system_scores`. Both the composition card and (transparently) the existing system panel will see the same numbers, with no extra network calls thanks to TanStack Query's `queryKey` dedupe.
 
-```
-                      Appraisal (out of 100)
-                                  |
-              +-------------------+--------------------+
-              |                                        |
-        System Score                               Criteria Score
-   (auto, e.g. Carry KRA)                       (rated by reviewer)
-        weight = Wsys                              weight = Wcrit
-              |                                        |
-     value already in % points              Σ(weight × score) / Σ(weight × 5)
-                                            scaled into % points
-              |                                        |
-              +-------------------+--------------------+
-                                  |
-                            Overall = clamp( Sys + Crit , 0..100 )
-```
+### 1. New hook — `src/hooks/useResolvedSystemScores.ts`
 
-Two invariants we will now show on screen:
+- Signature:
+  `useResolvedSystemScores(template, instance, fiscalYear): { values: Record<string, number>; isLoading: boolean }`
+- For each `template.sections.system_scores[s]`:
+  - If `s.source === 'carry_kra'`: call `useQuery` with the **same key** the card uses (`['carryKraScore', employeeId, fiscalYear, cfg, weight]`) so the network request is shared. Use `buildCarrySnapshot` as `queryFn`. Override `values[s.id]` with the resulting `value`.
+  - Else: keep `instance.system_scores[s.id] ?? 0`.
+- Hooks must be order-stable, so iterate `system_scores` with `useQueries` (TanStack) — one batch per render.
+- Returns the merged map and an aggregate `isLoading` flag.
 
-1. `Wsys + Wcrit ≤ 100` (admin-configured; we display the configured caps).
-2. `Overall = systemTotal + criteriaContribution`, capped at 100.
+### 2. Wire the hook into the two pages
 
-## Implementation Steps
+- `src/pages/annual-review/EmployeeAnnualReview.tsx`: replace `instance.system_scores ?? {}` in the `composition` memo with the hook's resolved `values`. The `SystemScoresPanel` keeps reading raw `instance.system_scores` — its own internal card still does the same fetch and the query cache dedupes it.
+- `src/components/annual-review/TeamReviewDetailContent.tsx`: same change for the composition memo.
 
-### 1. New SSOT helper for the "composition" view
+### 3. Tests
 
-File: `src/lib/annualReview/scoringComposition.ts` (new)
+- `src/hooks/useResolvedSystemScores.test.tsx` (new) — render with a mocked `buildCarrySnapshot` returning `{ value: 99, maxValue: 100, rating: 4.95, monthly: [] }`, assert the returned map contains `kra: 99` while a `manual` entry passes through unchanged. Cover the "no carry sources" early-return case (no queries fired).
+- `src/lib/annualReview/scoringComposition.test.ts` — add one regression case asserting that when `system_scores` map is populated externally with the resolved value, composition surfaces `System 99/100 / Overall 99/100`. (No code change to `computeScoreComposition` — purely a regression guardrail.)
 
-- `computeScoreComposition(template, systemScoresValues, criteriaScores)` returns:
-  - `systemActual`, `systemMax` (sum of `system_scores[].weight`)
-  - `criteriaActual` (the criteria contribution **scaled** into percentage points using `criteriaActualPct = (totalCriteriaScore / maxCriteriaScore) * Wcrit` so it matches what gets added to the final overall — falls back to 0 when `maxCriteriaScore` is 0)
-  - `criteriaMax` = `100 − systemMax` (the room the criteria can fill, derived; clamped ≥ 0)
-  - `overallActual`, `overallMax = 100`
-  - `criteriaRaw`, `criteriaRawMax` (the existing `totalCriteriaScore / maxCriteriaScore` numbers, kept for the "raw" mini-display inside the Criteria table)
-- Pure function, fully unit-testable.
+### 4. Docs
 
-**Important:** the existing `computeOverallScore` treats `system_scores[id]` as already-in-percentage-points and just **adds** `criteriaSummary.totalCriteriaScore`. We will keep that contract for back-compat. The new `composition` helper normalises *for display* so the user sees consistent "/100" math.
+- `src/modules/annual-review/POLICY.md` — append a version-history line: "Composition card reads carry-KRA system scores via `useResolvedSystemScores`, which overlays live `buildCarrySnapshot` results on top of `instance.system_scores`. The persisted map is unchanged; this is a display alignment so the composition reflects what the Carry KRA card shows."
+- `mem/features/annual-review/overview.md` — one-line addition noting the resolved-values hook.
 
-### 2. New shared UI component
+## Risk & Impact
 
-File: `src/components/annual-review/AppraisalCompositionCard.tsx` (new)
-
-- Compact 3-column card: `System Score · Criteria Score · Overall`. Each shows `value / max` and a thin progress bar. Bottom row: single 100-cap progress bar with the Overall percentage.
-- Variants:
-  - `variant="full"` — used at the top of the employee page and inside the pre-submit dialog.
-  - `variant="inline"` — used in the sticky footer (single line: "Overall X / 100 · System X · Criteria Y").
-- Empty-state friendly: if `systemMax === 0` it hides the System column; if `criteriaMax === 0` (template = 100% system) it hides the Criteria column and clearly says "Auto-scored — no criteria to rate".
-
-### 3. Wire into the Employee page
-
-File: `src/pages/annual-review/EmployeeAnnualReview.tsx`
-
-- Import `computeScoreComposition` + `AppraisalCompositionCard`.
-- Derive `composition` via `useMemo` from `template`, `instance.system_scores`, `draft.criteria_scores`.
-- Render `<AppraisalCompositionCard variant="full" composition={composition} />` directly under the stage tracker (above System Scores panel) so the breakdown is the first thing the employee sees.
-- Replace the footer line `Score: ${summary.totalCriteriaScore} / ${summary.maxCriteriaScore}` with `<AppraisalCompositionCard variant="inline" composition={composition} />`.
-
-### 4. Wire into the pre-submit dialog
-
-File: `src/components/annual-review/SelfReviewSummaryDialog.tsx`
-
-- Add `composition` to props (computed in the parent and passed in).
-- Replace the current "Total Score 0.00 / 0.00 · Weighted Achievement 0.0%" gradient banner with `<AppraisalCompositionCard variant="full" composition={composition} />`.
-- Keep the criteria table beneath as today (only when not hidden by the existing visibility rule).
-- The "system-full notice" we just added is no longer needed when the composition card itself spells it out — keep the explainer text but render it inside the card's empty-state for the Criteria column.
-
-### 5. Clarify each System Score card line
-
-File: `src/components/annual-review/SystemScoresPanel.tsx`
-
-- Per-line: replace `Max weight: {s.weight}` with `Contributes {value} / {s.weight} points to your appraisal` (uses `t('system_scores.contribution', …)`).
-- For Carry KRA cards: add a single muted line under the existing Achieved/Out Of/Rating row saying `"Auto-computed from KRA monthly scores · contributes to your appraisal total above"`.
-
-### 6. Wire into reviewer (team) page (parity)
-
-File: `src/components/annual-review/TeamReviewDetailContent.tsx`
-
-- Same `AppraisalCompositionCard` rendered under the stage header so reviewers see the same breakdown as the employee — using the reviewer's own draft criteria scores layered on top of the instance's system scores.
-
-### 7. Tests
-
-- `src/lib/annualReview/scoringComposition.test.ts` (new) — cases:
-  - 100% system (carry_kra weight=100, no criteria) → composition shows Sys 80/100, Crit 0/0, Overall 80/100.
-  - 50/50 split (system weight 50, criteria weights summing 50, perfect 5-rating on every criterion) → 50 + 50 = 100.
-  - Partial criteria scoring → criteria scaled proportionally, overall clamped at 100.
-  - Empty template → all zeros, no division by zero.
-  - Backward parity: `composition.overallActual === computeOverallScore(...)` for every case.
-
-### 8. Docs + memory
-
-- `src/modules/annual-review/POLICY.md` — append version-history entry: "Appraisal composition is surfaced as System + Criteria + Overall in the employee form, footer, pre-submit dialog and team-review page. SSOT: `scoringComposition.ts` + `AppraisalCompositionCard.tsx`. The persisted math (`computeOverallScore`) is unchanged."
-- `mem/features/annual-review/overview.md` — one-line addition: "Employee + reviewer UI shows the System / Criteria / Overall breakdown via `AppraisalCompositionCard`; `computeOverallScore` remains the persistence SSOT."
-
-## UI Change Summary
-
-- **Where:** Employee Annual Review page (top + footer), Self-Review Pre-Submit dialog (replaces the criteria-only banner), Team Review Detail page (top), System Scores panel (per-line caption).
-- **What changes visually:** A new 3-column composition card with progress bars makes "System + Criteria = Overall (/100)" obvious. Per-system-score lines explicitly say how much they contribute. Footer always shows the same Overall number.
-- **Interaction impact:** None. No buttons or flows change.
-- **Responsiveness:** Card collapses to single-column on mobile; existing card primitives.
+- **Data impact:** None. We do not write to `instance.system_scores`. The persisted Overall (computed server-side at finalize) is unaffected.
+- **Workflow impact:** None.
+- **UI/UX:** The composition card now matches the Carry KRA card the user already sees (99/100 → Overall 99/100 in the screenshot). Brief flash from `0.00` to the real number on first paint while the query resolves (handled by an `isLoading` skeleton inside the card if desired — small follow-up, not blocking).
+- **Regression risk:** Low. Same `useQuery` key as the card → cache shared, no duplicate fetch.
+- **Scalability:** O(carry_kra count) per render, typically 1.
+- **Rollback:** Revert the hook + two-line page edits.
 
 ## Out of Scope
 
-- Changing the persisted scoring math (`computeOverallScore` stays the SSOT for what gets saved).
-- Admin-side template editor changes — we already enforce weight caps via the template editor.
-- Changing how the reviewer overrides system scores; that path is admin-only and remains unchanged.
+- Persisting `instance.system_scores` from the client. That's an admin/server concern and is unaffected by this fix.
+- The "Eligibility criteria not met" banner — separate matter (eligibility inputs aren't populated for this employee). Flag for a follow-up if you want me to investigate after this fix lands.
