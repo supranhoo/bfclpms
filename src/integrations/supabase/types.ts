@@ -393,6 +393,7 @@ export type Database = {
           bu_review_start: string | null
           created_at: string
           created_by: string | null
+          default_enabled_stages: Json
           description: string | null
           hr_finalization_deadline: string | null
           id: string
@@ -415,6 +416,7 @@ export type Database = {
           bu_review_start?: string | null
           created_at?: string
           created_by?: string | null
+          default_enabled_stages?: Json
           description?: string | null
           hr_finalization_deadline?: string | null
           id?: string
@@ -437,6 +439,7 @@ export type Database = {
           bu_review_start?: string | null
           created_at?: string
           created_by?: string | null
+          default_enabled_stages?: Json
           description?: string | null
           hr_finalization_deadline?: string | null
           id?: string
@@ -12928,6 +12931,10 @@ export type Database = {
         }
         Returns: Json
       }
+      annual_review_effective_chain: {
+        Args: { p_instance_id: string }
+        Returns: Json
+      }
       annual_review_first_pending_status: {
         Args: { p_enabled: Json }
         Returns: Database["public"]["Enums"]["annual_review_status"]
@@ -14063,6 +14070,7 @@ export type Database = {
           bu_review_start: string | null
           created_at: string
           created_by: string | null
+          default_enabled_stages: Json
           description: string | null
           hr_finalization_deadline: string | null
           id: string
