@@ -19,7 +19,11 @@ Deno.serve(async (req) => {
   try {
     const cronSecret = req.headers.get('x-cron-secret');
     const expected = Deno.env.get('CRON_SECRET');
-    if (expected && cronSecret !== expected) {
+    const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+    const bearer = (req.headers.get('authorization') ?? '').replace(/^Bearer\s+/i, '');
+    const cronOk = !!expected && cronSecret === expected;
+    const srvOk = !!serviceKey && bearer === serviceKey;
+    if (!cronOk && !srvOk) {
       return new Response(JSON.stringify({ error: 'Unauthorized' }), {
         status: 401,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
