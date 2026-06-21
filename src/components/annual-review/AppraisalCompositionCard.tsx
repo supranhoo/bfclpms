@@ -126,7 +126,7 @@ function Column({
         <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">{label}</span>
       </div>
       {max <= 0 ? (
-        <div className={`text-xs text-muted-foreground italic min-h-[2.25rem] ${isRight ? '' : ''}`}>{emptyText ?? '—'}</div>
+        <div className="text-xs text-muted-foreground italic min-h-[2.25rem]">{emptyText ?? '—'}</div>
       ) : (
         <>
           <div className={`tabular-nums ${emphasize ? 'text-2xl font-bold text-primary' : 'text-xl font-semibold'}`}>
