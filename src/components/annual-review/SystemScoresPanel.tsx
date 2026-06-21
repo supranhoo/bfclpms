@@ -67,7 +67,11 @@ export function SystemScoresPanel({
                 <div className="flex items-center justify-between gap-2">
                   <div>
                     <p className="text-sm font-medium">{tTemplate('system_score', s.id, 'name', s.name)}</p>
-                    <p className="text-xs text-muted-foreground">Max weight: {s.weight}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {t('system_scores.contribution', 'Contributes {actual} / {max} points to your appraisal')
+                        .replace('{actual}', Number(v).toFixed(2))
+                        .replace('{max}', String(s.weight))}
+                    </p>
                   </div>
                   {readOnly ? (
                     <p className="text-sm font-semibold tabular-nums">{Number(v).toFixed(2)}</p>

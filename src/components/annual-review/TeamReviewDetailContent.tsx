@@ -32,6 +32,8 @@ import { Badge } from '@/components/ui/badge';
 import { useQueryClient } from '@tanstack/react-query';
 import { LanguageSwitcher } from '@/components/annual-review/LanguageSwitcher';
 import { AnnualReviewI18nProvider } from '@/components/annual-review/AnnualReviewI18nContext';
+import { computeScoreComposition } from '@/lib/annualReview/scoringComposition';
+import { AppraisalCompositionCard } from '@/components/annual-review/AppraisalCompositionCard';
 
 /**
  * Maps an instance + viewer to the role they're currently expected to fill.
@@ -147,6 +149,11 @@ export function TeamReviewDetailContent({
   const chain = enabledChain(instance.enabled_stages);
   const canSendBack = !!role && role !== 'self' && chain.indexOf(role) > 0;
 
+  const composition = useMemo(
+    () => computeScoreComposition(template, instance.system_scores ?? {}, draft.criteria_scores ?? {}),
+    [template, instance.system_scores, draft.criteria_scores],
+  );
+
   return (
     <AnnualReviewI18nProvider
       currentLanguage={lang}
@@ -197,6 +204,8 @@ export function TeamReviewDetailContent({
         fiscalYear={fiscalYear}
         readOnly
       />
+
+      <AppraisalCompositionCard composition={composition} variant="full" />
 
       {role && shouldHideCriteriaCard(template, role) ? (
         <Card>
