@@ -474,7 +474,7 @@ export async function listInstancesForReviewer(reviewerId: string, cycleId: stri
     .from('annual_review_instances')
     .select('*, employee:profiles!annual_review_instances_employee_id_fkey(id, full_name, employee_code, designation)')
     .eq('cycle_id', cycleId)
-    .or(`manager_id.eq.${reviewerId},skip_id.eq.${reviewerId},bu_head_id.eq.${reviewerId},hr_id.eq.${reviewerId}`);
+    .or(`manager_id.eq.${reviewerId},skip_id.eq.${reviewerId},dept_head_id.eq.${reviewerId},bu_head_id.eq.${reviewerId},hr_id.eq.${reviewerId}`);
   if (error) throw error;
   return data ?? [];
 }
@@ -514,7 +514,7 @@ export async function listInstancesForReviewerPaginated(
     )
     .eq('cycle_id', args.cycleId)
     .or(
-      `manager_id.eq.${args.reviewerId},skip_id.eq.${args.reviewerId},bu_head_id.eq.${args.reviewerId},hr_id.eq.${args.reviewerId}`,
+      `manager_id.eq.${args.reviewerId},skip_id.eq.${args.reviewerId},dept_head_id.eq.${args.reviewerId},bu_head_id.eq.${args.reviewerId},hr_id.eq.${args.reviewerId}`,
     );
 
   if (args.status && args.status !== 'all') q = q.eq('overall_status', args.status);
