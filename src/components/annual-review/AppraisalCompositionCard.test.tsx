@@ -8,10 +8,12 @@ const base: ScoreComposition = {
   systemMax: 0,
   criteriaActual: 0,
   criteriaMax: 0,
-  criteriaRawActual: 0,
+  criteriaRaw: 0,
   criteriaRawMax: 0,
   overallActual: 0,
   overallMax: 100,
+  hasSystem: false,
+  hasCriteria: false,
 };
 
 describe('AppraisalCompositionCard (full)', () => {
