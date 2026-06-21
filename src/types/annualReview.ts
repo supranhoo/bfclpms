@@ -236,6 +236,7 @@ export interface AnnualReviewInstance {
   enabled_stages: AnnualReviewerRole[];
   manager_id: string | null;
   skip_id: string | null;
+  dept_head_id: string | null;
   bu_head_id: string | null;
   hr_id: string | null;
   system_scores: Record<string, number>;
