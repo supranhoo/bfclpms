@@ -58,6 +58,13 @@ function renderDialog(opts: {
           evidence: [],
         }}
         summary={{ totalCriteriaScore: 100, maxCriteriaScore: 100 }}
+        composition={{
+          systemActual: 0, systemMax: 0,
+          criteriaActual: 100, criteriaMax: 100,
+          criteriaRaw: 100, criteriaRawMax: 100,
+          overallActual: 100, overallMax: 100,
+          hasSystem: false, hasCriteria: true,
+        }}
         evidenceByCriterion={{}}
       />
     </AnnualReviewI18nProvider>,
