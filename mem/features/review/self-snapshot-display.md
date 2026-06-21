@@ -25,8 +25,18 @@ displayed achieved value through `resolveSelfAchievedValue`
 **Do not** add a third UI fallback that reads `submission.achieved_value`
 for the Self stage — it reintroduces this bug.
 
-**Follow-up (Part 2, pending):** add a dedicated
-`review_submissions.self_achieved_value` column, backfill from
-`kpi_audit_logs` (`ORG_KPI_PROPAGATED` / self-submit events), stop
-overwriting `achieved_value` from auditor/manager flows, and switch the
-resolver to read the new column.
+**Part 2 (shipped 2026-06-21):** `review_submissions.self_achieved_value`
+exists and is the source of truth. Writers: `useSubmitSelfReview`
+(employee path) and `propagate_org_kpi_value` RPC (org KPI data-owner
+path). Historical rows were backfilled from `kpi_audit_logs`. The
+resolver reads this column first and only falls back to recovery logic
+when it is null (pre-migration data). Reviewer-stage RPCs MUST NOT write
+this column — keeping it write-once at self-submit is what guarantees
+the frozen snapshot.
+
+**Still out of scope:** auditor/manager bulk sign-off and stage-edit
+RPCs still overwrite the shared `achieved_value`. That is now harmless
+for the Self card (it no longer reads `achieved_value`), but if other
+UIs ever start treating `achieved_value` as "self value" they will
+regress this fix. Anchor new UIs to `self_achieved_value` (preferred)
+or `resolveSelfAchievedValue`.
