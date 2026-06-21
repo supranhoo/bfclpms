@@ -1,3 +1,4 @@
+- 2026-06-21 — **Empty criteria card hidden.** The Self-Assessment / reviewer Criteria card is now hidden on every stage page when EITHER (a) no criteria are mapped to that stage via `reviewer_stages`, OR (b) `system_scores` weights already sum to ≥ 100 (criteria can contribute nothing). When hidden, a single muted info banner replaces the card and the Submit button is unchanged — the employee/reviewer still explicitly submits to advance. SSOT helper: `src/lib/annualReview/templateVisibility.ts` (`shouldHideCriteriaCard`, `criteriaForStage`, `systemScoresFullyAllocated`). Applied in `EmployeeAnnualReview.tsx` and `TeamReviewDetailContent.tsx`. Read-only views (no active role) continue to render the full criteria list.
 # Annual Review Module — Policy
 
 _Business rules. Update in the same PR as any logic change._

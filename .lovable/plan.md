@@ -1,96 +1,72 @@
 ## Goal
 
-Extend the Annual Review effective-chain resolver so that when the same person is mapped to multiple reviewer slots (e.g. Jaspal as manager + dept_head + bu_head), they only review **once** — at the **highest** stage they qualify for. Lower duplicate stages are auto-skipped with an audit reason.
+Hide the Self-Assessment / Reviewer "Criteria" card on every annual-review stage page when **either** condition is true:
+
+1. No criteria are mapped to that stage (`reviewer_stages` filter yields zero rows), OR
+2. The template's `system_scores` weights already sum to 100, leaving criteria with no mathematical contribution.
+
+Submit flow is unchanged — the reviewer/employee still clicks Submit to advance.
 
 ## Risk & Impact Report
 
-- **Data impact:** No schema changes. Only the body of `public.annual_review_effective_chain(uuid)` and the mirrored TS helper `effectiveChain()` change. No backfill needed — resolver is computed on every advance.
-- **Workflow impact:** In-flight instances will see lower-tier duplicate stages skipped on the next `advance_annual_review_status` call. Stages that were already completed are not retroactively touched (we only short-circuit `pending_*` transitions). 
-- **UI impact:** `AnnualReviewStageTracker` already dims auto-skipped stages with a tooltip — the new skip reason `duplicate_reviewer` reuses that path. No new components.
-- **Regression risk:** Low. The existing skip conditions (NULL / inactive / self) are preserved; we add one more condition evaluated **after** them. Test coverage extended.
-- **Scalability:** O(n) over a fixed 6-stage chain — negligible.
-- **Rollback:** Single migration replacing two functions. Revert = re-run the prior `CREATE OR REPLACE`. Additive only.
-
-## Canonical Resolution Rules (new)
-
-Evaluation order = **top-down by seniority**: `hr → bu_head → dept_head → skip_manager → manager → self`.
-
-For each stage walk:
-
-1. If the slot is NULL → skip (`reason: no_reviewer_mapped`)
-2. Else if reviewer profile `is_active = false` → skip (`reason: reviewer_inactive`)
-3. Else if reviewer = employee → skip (`reason: self_assignment`)
-4. **NEW:** else if reviewer ID already appears at a **higher** stage in the resolved chain → skip (`reason: duplicate_reviewer`)
-5. Else → keep stage
-
-The forward execution order (`self → manager → skip → dept → bu → hr`) is unchanged for stepping; only the **de-dup pass** runs top-down so the highest tier wins.
-
-### Worked example — Ankit / Jaspal
-
-Slots: manager=Jaspal, skip=Jaspal's mgr, dept=Jaspal, bu=Jaspal, hr=HR-X
-
-Top-down pass keeps Jaspal at `bu_head`; marks `dept_head` and `manager` as duplicates.
-
-Final effective forward chain: `self → skip → bu_head → hr`.
-
-### Highest-stage data seeding
-
-When the self-review submits and we transition to the first reviewer stage, the payload (scores, comments, evidence pointers) is written to the row keyed by the **highest non-skipped stage** that resolves to that reviewer. This guarantees Jaspal sees the data in his single `pending_bu` action — not orphaned on a skipped `pending_manager` row.
+- **Data impact:** None. Pure presentational filter on existing template config. Stored `criteria_scores` are untouched.
+- **Workflow impact:** None. Advance / send-back RPCs continue to work; submit button still posts.
+- **UI/UX impact:** Empty criteria card disappears from Employee + Manager + Dept + BU + HR review pages when condition holds. A small info banner replaces it ("No criteria to score for this stage — Submit to advance"). Qualitative card (already conditional) is unaffected.
+- **Regression risk:** Low. Templates with criteria mapped to specific stages continue to render normally on those stages. The 100%-system-score case is rare today but valid (system-only templates).
+- **Scalability:** O(1) — single derived boolean per render.
+- **Rollback:** Revert two component edits + one helper.
 
 ## Implementation Steps
 
-### 1. SQL migration — replace resolver + advance helpers
+### 1. Add a shared SSOT helper
 
-File: `supabase/migrations/<ts>_dedupe_duplicate_reviewers.sql`
+File: `src/lib/annualReview/templateVisibility.ts` (new)
 
-- `CREATE OR REPLACE FUNCTION public.annual_review_effective_chain(p_inst_id uuid)` — returns `TABLE(stage annual_reviewer_role, reviewer_id uuid, skipped boolean, skip_reason text)`. New body does:
-  1. Build raw chain in seniority order (`hr, bu_head, dept_head, skip_manager, manager, self`).
-  2. Apply rules 1–4 sequentially, remembering kept reviewer IDs in a `uuid[]` accumulator.
-  3. Return rows re-sorted into forward execution order for callers.
-- `CREATE OR REPLACE FUNCTION public.advance_annual_review_status(...)` — unchanged logic, but iterate over forward chain from the resolver and log a `system_audit_logs` row `annual_review.stage_auto_skipped` with `skip_reason` whenever a row has `skipped = true`.
-- `CREATE OR REPLACE FUNCTION public.send_back_annual_review_status(...)` — same skip-aware walk in reverse.
-- Highest-stage seeding: in `advance_annual_review_status`, when transitioning out of `self`, resolve the first non-skipped reviewer stage from the **top** of the seniority list that matches the next pending stage's reviewer_id, and copy the self-submission payload into that target stage's response row.
+- `criteriaForStage(template, stage)` — returns `Criterion[]` filtered by `reviewer_stages` (mirrors the inline filter in `EmployeeAnnualReview.tsx` line 182).
+- `systemScoresFullyAllocated(template)` — sums `system_scores[].weight`; returns `true` when sum >= 100.
+- `shouldHideCriteriaCard(template, stage)` — returns `true` when `criteriaForStage(...).length === 0` OR `systemScoresFullyAllocated(template)`.
+- Pure functions, fully unit-testable.
 
-### 2. TS SSOT mirror
+### 2. Apply in employee self-review page
 
-File: `src/lib/annualReview/stageChain.ts`
+File: `src/pages/annual-review/EmployeeAnnualReview.tsx`
 
-- Update `effectiveChain(instance, profilesById)` to match the SQL contract exactly: same seniority-first de-dup pass, same skip-reason enum.
-- Export `SkipReason = 'no_reviewer_mapped' | 'reviewer_inactive' | 'self_assignment' | 'duplicate_reviewer'`.
+- Replace the unconditional `<Card>` wrapper around `CriteriaScoringMatrix` (lines 178–194) with a conditional render gated by `shouldHideCriteriaCard(template, 'self')`.
+- When hidden, render a single muted info banner: `"No self-assessment criteria for this template. Review the system scores above and click Submit to advance."`
+- Submit button + footer unchanged.
 
-### 3. UI surface
+### 3. Apply in reviewer (team) page
 
-File: `src/components/annual-review/AnnualReviewStageTracker.tsx`
+File: `src/components/annual-review/TeamReviewDetailContent.tsx`
 
-- Map `duplicate_reviewer` → tooltip copy: `"Skipped — same reviewer already acts at <higher stage label>"`. Uses existing dim style; no layout change.
+- Locate the criteria matrix render block; gate it with `shouldHideCriteriaCard(template, currentReviewerRole)` where `currentReviewerRole` is the stage being reviewed.
+- Same info banner copy, parameterised by stage label.
 
 ### 4. Tests
 
-- `src/lib/annualReview/stageChain.test.ts` — add cases:
-  - manager+dept+bu all same person → keeps only `bu_head`
-  - dept+bu same person, manager different → keeps `manager` and `bu_head`, skips `dept_head`
-  - self also accidentally mapped as bu_head → existing `self_assignment` still wins (rule 3 before rule 4)
-- `src/test/orgHeadsSeederIntegration.test.ts` — add a duplicate-reviewer fixture asserting the resolver picks the top tier.
-- New SQL parity test in `src/test/` invoking the RPC with three duplicate-mapping fixtures and asserting `skipped`/`skip_reason` rows.
+File: `src/lib/annualReview/templateVisibility.test.ts` (new)
 
-### 5. Docs & memory
+- Template with no criteria → hide for every stage.
+- Template with criteria but none mapped to `self` → hide for `self`, show for stages that ARE mapped.
+- Template with `system_scores` summing to 100 → hide for every stage even if criteria exist.
+- Template with `system_scores` summing to 99 → show.
+- Template with mixed `reviewer_stages` (e.g. some criteria for `manager` only) → correct per-stage decision.
 
-- `src/modules/annual-review/POLICY.md` — append a "Duplicate reviewer de-duplication" subsection with the worked Ankit/Jaspal example.
-- `mem/features/annual-review/overview.md` — add bullet under auto-skip rules: top-down de-dup, highest tier wins, payload seeded to highest stage.
-- `.lovable/plan.md` — append entry for this change.
+### 5. Docs
+
+- `src/modules/annual-review/POLICY.md` — add version-history entry documenting the new visibility rule and the two trigger conditions.
+- `mem/features/annual-review/overview.md` — one-line addition under the rendering section.
 
 ## Out of Scope
 
-- Notification template copy changes.
-- Retroactive recalculation of already-completed instances.
-- Any change to the forward execution order or to the cycle-level `default_enabled_stages` UI.
+- Auto-advancing past the self stage (user explicitly chose to keep Submit).
+- Changing the scoring math or `criteria_scores` storage.
+- Hiding the Qualitative Responses card (already conditional).
+- Admin-side validation warning when a template is configured with no self criteria — could be a follow-up.
 
----
+## UI Change Summary
 
-## 2026-06-21 — Status: Shipped
-
-- Migration `dedupe_duplicate_reviewers`: new `annual_review_effective_chain_details(uuid)` resolver implementing the four-rule skip pass with top-down seniority dedup; existing `annual_review_effective_chain(uuid)` now layered on top; `advance_annual_review_status` audit payload extended with `skipped_stages` breakdown.
-- TS SSOT mirror: `src/lib/annualReview/effectiveChain.ts` (`resolveEffectiveChain`, `effectiveStages`, `SkipReason`).
-- Tests: `src/lib/annualReview/effectiveChain.test.ts` — 5 cases (Ankit/Jaspal worked example, partial collision, self-vs-duplicate precedence, null/inactive precedence, self always kept). All green.
-- Docs: POLICY.md version-history entry + memory `mem/features/annual-review/overview.md` updated.
-- Tracker UI dim/tooltip deferred — current `AnnualReviewStageTracker` renders configured `enabled_stages`, and skipped stages are already captured in the audit log. Will pick up effective-chain rendering in a follow-up.
+- **Where:** Employee Annual Review page + Team Review Detail page.
+- **What changes visually:** Self-Assessment Criteria (or stage-equivalent) `<Card>` disappears; replaced by a muted single-line info banner. Stepper, system scores panel, qualitative card, and footer are unchanged.
+- **Interaction impact:** None — Submit button retains the same position and behaviour.
+- **Responsiveness:** Info banner uses existing `Card` styling, no new breakpoints.

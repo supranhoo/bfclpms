@@ -11,6 +11,7 @@ import {
 import { AnnualReviewStageTracker } from '@/components/annual-review/AnnualReviewStageTracker';
 import { AnnualReviewStatusBadge } from '@/components/annual-review/AnnualReviewStatusBadge';
 import { CriteriaScoringMatrix } from '@/components/annual-review/CriteriaScoringMatrix';
+import { shouldHideCriteriaCard, criteriaForStage } from '@/lib/annualReview/templateVisibility';
 import { SystemScoresPanel } from '@/components/annual-review/SystemScoresPanel';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -197,24 +198,34 @@ export function TeamReviewDetailContent({
         readOnly
       />
 
-      <Card>
-        <CardHeader>
-          <CardTitle>{role ? `${role.replace('_', ' ')} review` : 'Read-only view'}</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <CriteriaScoringMatrix
-            criteria={(template?.sections.criteria ?? []).filter((c) => !c.reviewer_stages?.length || (role && c.reviewer_stages.includes(role)))}
-            values={draft.criteria_scores ?? {}}
-            remarks={(draft.qualitative_responses ?? {}) as Record<string, string>}
-            readOnly={!!locked}
-            reviewerLabel={role ?? undefined}
-            comparison={comparison}
-            onChangeScore={(id, v) => setDraft((p) => ({ ...p, criteria_scores: { ...(p.criteria_scores ?? {}), [id]: v } }))}
-            onChangeRemark={(id, t) => setDraft((p) => ({ ...p, qualitative_responses: { ...(p.qualitative_responses ?? {}), [id]: t } }))}
-            onUploadEvidence={onUpload}
-          />
-        </CardContent>
-      </Card>
+      {role && shouldHideCriteriaCard(template, role) ? (
+        <Card>
+          <CardContent className="p-4 text-sm text-muted-foreground">
+            No criteria to score for the {role.replace('_', ' ')} stage on this template. Review the system scores above and click Submit to advance.
+          </CardContent>
+        </Card>
+      ) : (
+        <Card>
+          <CardHeader>
+            <CardTitle>{role ? `${role.replace('_', ' ')} review` : 'Read-only view'}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <CriteriaScoringMatrix
+              criteria={role
+                ? criteriaForStage(template, role)
+                : (template?.sections.criteria ?? [])}
+              values={draft.criteria_scores ?? {}}
+              remarks={(draft.qualitative_responses ?? {}) as Record<string, string>}
+              readOnly={!!locked}
+              reviewerLabel={role ?? undefined}
+              comparison={comparison}
+              onChangeScore={(id, v) => setDraft((p) => ({ ...p, criteria_scores: { ...(p.criteria_scores ?? {}), [id]: v } }))}
+              onChangeRemark={(id, t) => setDraft((p) => ({ ...p, qualitative_responses: { ...(p.qualitative_responses ?? {}), [id]: t } }))}
+              onUploadEvidence={onUpload}
+            />
+          </CardContent>
+        </Card>
+      )}
 
       {role && !locked && (
         <div className="sticky bottom-0 bg-background/80 backdrop-blur border-t py-3 flex items-center justify-between gap-3">
