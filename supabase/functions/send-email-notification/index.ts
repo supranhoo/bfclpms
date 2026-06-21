@@ -101,14 +101,25 @@ const validateCaller = async (req: Request): Promise<{ authorized: boolean; erro
     console.error("[validateCaller] Failed to read stored key for Bearer match:", e);
   }
 
-  // Allow authenticated user callers (admin test emails from frontend)
+  // Allow authenticated user callers ONLY if they have the 'admin' role.
+  // SECURITY: previously any authenticated employee could invoke this
+  // function and send template emails to arbitrary recipients using the
+  // company's email infrastructure (phishing / spam risk).
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabase = createClient(supabaseUrl, serviceRoleKey || anonKey!);
     const { data: { user }, error } = await supabase.auth.getUser(token);
     if (!error && user) {
-      console.log("[validateCaller] Authorized via user JWT for:", user.email);
-      return { authorized: true };
+      const { data: isAdmin, error: roleErr } = await supabase.rpc("has_role", {
+        _user_id: user.id,
+        _role: "admin",
+      });
+      if (!roleErr && isAdmin === true) {
+        console.log("[validateCaller] Authorized via admin user JWT for:", user.email);
+        return { authorized: true };
+      }
+      console.log("[validateCaller] User JWT valid but not admin:", user.email);
+      return { authorized: false, error: "Admin role required" };
     }
   } catch (e) {
     console.error("[validateCaller] Failed to verify user JWT:", e);

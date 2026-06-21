@@ -19,11 +19,20 @@ Deno.serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
     const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-    // No auth gate: this endpoint is idempotent and only flips
-    // already-stuck rows (>30 min old) to `failed`. It does not read,
-    // write, or expose any backup contents. Designed for invocation by
-    // pg_cron via pg_net, which does not have a stable secret-sharing
-    // mechanism in this project.
+    // Auth gate: require cron secret OR service-role bearer. Prevents
+    // unauthenticated callers from flipping backup_logs rows and from
+    // enumerating internal backup IDs via the response body.
+    const cronSecret = Deno.env.get('CRON_SECRET')
+    const provided = req.headers.get('x-cron-secret')
+    const bearer = (req.headers.get('authorization') ?? '').replace(/^Bearer\s+/i, '')
+    const cronOk = !!cronSecret && provided === cronSecret
+    const srvOk = !!serviceRoleKey && bearer === serviceRoleKey
+    if (!cronOk && !srvOk) {
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
 
     const supabase = createClient(supabaseUrl, serviceRoleKey)
     const cutoff = new Date(Date.now() - 30 * 60 * 1000).toISOString()

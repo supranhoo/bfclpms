@@ -264,6 +264,16 @@ async function processPmsBatch(sb: ReturnType<typeof admin>, rewrite: boolean) {
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
   try {
+    // Auth gate: cron secret OR service-role bearer token.
+    const cronSecret = Deno.env.get('CRON_SECRET');
+    const provided = req.headers.get('x-cron-secret');
+    const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+    const bearer = (req.headers.get('authorization') ?? '').replace(/^Bearer\s+/i, '');
+    const cronOk = !!cronSecret && provided === cronSecret;
+    const srvOk = !!serviceKey && bearer === serviceKey;
+    if (!cronOk && !srvOk) {
+      return jsonResponse({ error: 'Unauthorized' }, 401);
+    }
     const sb = admin();
     const settings = await readSettings(sb);
     if (!settings.enabled) {
