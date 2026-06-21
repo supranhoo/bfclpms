@@ -931,6 +931,9 @@ export function useSubmitSelfReview() {
           .upsert({
             kpi_id,
             achieved_value: is_na ? null : achieved_value,
+            // §SELF-SNAPSHOT-DISPLAY Part 2: write the frozen self-entered
+            // value alongside the (shared, reviewer-mutable) achieved_value.
+            self_achieved_value: is_na ? null : achieved_value,
             self_rating: is_na ? null : self_rating,
             self_score: is_na ? null : self_score,
             self_remarks,
