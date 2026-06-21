@@ -9170,6 +9170,7 @@ export type Database = {
           na_reason: string | null
           performance_review_id: string | null
           row_version: number
+          self_achieved_value: number | null
           self_evidence_url: string | null
           self_evidence_urls: Json | null
           self_rating: Database["public"]["Enums"]["rating_level"] | null
@@ -9236,6 +9237,7 @@ export type Database = {
           na_reason?: string | null
           performance_review_id?: string | null
           row_version?: number
+          self_achieved_value?: number | null
           self_evidence_url?: string | null
           self_evidence_urls?: Json | null
           self_rating?: Database["public"]["Enums"]["rating_level"] | null
@@ -9302,6 +9304,7 @@ export type Database = {
           na_reason?: string | null
           performance_review_id?: string | null
           row_version?: number
+          self_achieved_value?: number | null
           self_evidence_url?: string | null
           self_evidence_urls?: Json | null
           self_rating?: Database["public"]["Enums"]["rating_level"] | null
