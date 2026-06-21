@@ -12935,6 +12935,16 @@ export type Database = {
         Args: { p_instance_id: string }
         Returns: Json
       }
+      annual_review_effective_chain_details: {
+        Args: { p_instance_id: string }
+        Returns: {
+          duplicate_of: Database["public"]["Enums"]["annual_reviewer_role"]
+          reviewer_id: string
+          skip_reason: string
+          skipped: boolean
+          stage: Database["public"]["Enums"]["annual_reviewer_role"]
+        }[]
+      }
       annual_review_first_pending_status: {
         Args: { p_enabled: Json }
         Returns: Database["public"]["Enums"]["annual_review_status"]
