@@ -28,6 +28,7 @@ import { computeCriteriaScore } from '@/lib/annualReview/scoring';
 import { computeScoreComposition } from '@/lib/annualReview/scoringComposition';
 import { AppraisalCompositionCard } from '@/components/annual-review/AppraisalCompositionCard';
 import { fyStartFromCycle } from '@/lib/annualReview/fiscalYear';
+import { useResolvedSystemScores } from '@/hooks/useResolvedSystemScores';
 import type { EvidenceItem } from '@/types/annualReview';
 import { EmployeeResultsView } from '@/components/annual-review/EmployeeResultsView';
 
@@ -69,9 +70,15 @@ export default function EmployeeAnnualReview() {
     [template, draft.criteria_scores],
   );
 
+  const { values: resolvedSystemScores } = useResolvedSystemScores(
+    template,
+    instance,
+    cycle ? fyStartFromCycle(cycle) : undefined,
+  );
+
   const composition = useMemo(
-    () => computeScoreComposition(template, instance?.system_scores ?? {}, draft.criteria_scores ?? {}),
-    [template, instance?.system_scores, draft.criteria_scores],
+    () => computeScoreComposition(template, resolvedSystemScores, draft.criteria_scores ?? {}),
+    [template, resolvedSystemScores, draft.criteria_scores],
   );
 
   const evidenceByCriterion = useMemo(() => {
