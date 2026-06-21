@@ -24,6 +24,11 @@ export function AppraisalCompositionCard({
   const { t } = useAnnualReviewI18n();
   const { systemActual, systemMax, criteriaActual, criteriaMax, overallActual, overallMax } = composition;
   const overallPct = overallMax > 0 ? (overallActual / overallMax) * 100 : 0;
+  const showCriteria = criteriaMax > 0;
+  const showSystem = systemMax > 0;
+  const visibleCols = (showSystem ? 1 : 0) + (showCriteria ? 1 : 0) + 1;
+  const gridColsClass =
+    visibleCols === 3 ? 'sm:grid-cols-3' : visibleCols === 2 ? 'sm:grid-cols-2' : 'sm:grid-cols-1';
 
   if (variant === 'inline') {
     return (
@@ -48,21 +53,25 @@ export function AppraisalCompositionCard({
   return (
     <Card>
       <CardContent className="p-4 space-y-3">
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <Column
-            label={t('comp.system', 'System Score')}
-            hint={t('comp.system_hint', 'Auto-fetched (e.g. KRA)')}
-            actual={systemActual}
-            max={systemMax}
-            emptyText={t('comp.no_system', 'No system score configured')}
-          />
-          <Column
-            label={t('comp.criteria', 'Criteria Score')}
-            hint={t('comp.criteria_hint', 'Rated against criteria')}
-            actual={criteriaActual}
-            max={criteriaMax}
-            emptyText={t('comp.no_criteria', 'Auto-scored — no criteria to rate')}
-          />
+        <div className={`grid grid-cols-1 ${gridColsClass} gap-3`}>
+          {showSystem && (
+            <Column
+              label={t('comp.system', 'System Score')}
+              hint={t('comp.system_hint', 'Auto-fetched (e.g. KRA)')}
+              actual={systemActual}
+              max={systemMax}
+              emptyText={t('comp.no_system', 'No system score configured')}
+            />
+          )}
+          {showCriteria && (
+            <Column
+              label={t('comp.criteria', 'Criteria Score')}
+              hint={t('comp.criteria_hint', 'Rated against criteria')}
+              actual={criteriaActual}
+              max={criteriaMax}
+              emptyText={t('comp.no_criteria', 'Auto-scored — no criteria to rate')}
+            />
+          )}
           <Column
             label={t('comp.overall', 'Overall')}
             hint={t('comp.overall_hint', 'System + Criteria, capped at 100')}
