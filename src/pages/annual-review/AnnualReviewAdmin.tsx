@@ -1092,6 +1092,11 @@ function CyclesTab() {
           <div className="space-y-1"><Label className="text-xs">HR finalization deadline</Label>
             <Input type="date" value={draft.hr_finalization_deadline ?? ''} onChange={(e) => setDraft({ ...draft, hr_finalization_deadline: e.target.value })} />
           </div>
+          <CycleDefaultStagesFieldset
+            value={(draft.default_enabled_stages as AnnualReviewerRole[] | undefined)
+              ?? ['self','manager','skip_manager','dept_head','bu_head','hr']}
+            onChange={(next) => setDraft({ ...draft, default_enabled_stages: next })}
+          />
           <Button className="w-full" disabled={save.isPending || !draft.name} onClick={() => save.mutate()}>
             {save.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />} Save
           </Button>
