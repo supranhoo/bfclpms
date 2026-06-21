@@ -1,91 +1,50 @@
-## RCA — "Self Value changed from 1 → 3, but Rating stuck at 2"
+## Problem
 
-### Confirmed evidence (DB + audit logs for KPI `8b6e2e67…`)
+When Criteria isn't mapped, the breakdown card shows two columns with the **same** number:
 
-| When | Actor | Action | `achieved_value` | `self_score` | `auditor_achieved_value` |
-|---|---|---|---|---|---|
-| Jun 15 15:40 | Data owner (Samir Dey) | `ORG_KPI_PROPAGATED` | 1 | 2 | — |
-| Jun 16 09:35 | Data owner | re-propagated (idempotent) | 1 | 2 | — |
-| Jun 20 15:43 | Auditor bulk sign-off | `BULK_STAGE_SIGNOFF_AUDITOR` (`achieved_in=3`, `prev_carried=2`) | **overwritten → 3** | **NOT touched → still 2** | 3 |
-| Jun 20 17:34 | Auditor | `AUDITOR_REVIEWED` (score 0) | 3 | 2 | 3 |
-| Jun 21 11:38 | Management | approved | 3 | 2 | 3 |
+- `SYSTEM SCORE 99.00 / 100`
+- `OVERALL 99.00 / 100`
 
-So the value really did flip 1 → 3 on the row, and the Self badge in the journey card reads two different fields:
-- **"Value: 3"** ← `review_submissions.achieved_value` (the shared/current column)
-- **"Rating: 2"** ← `review_submissions.self_score` (frozen at self-submit time)
+Plus a full-width progress bar repeating `99.0%`. With only one contributor, System == Overall by definition, so the breakdown adds no information — it just looks like a bug ("why is this printed twice?").
 
-### 5-Why
+The mirror case is true if a template ever had Criteria-only (no System): Criteria would equal Overall.
 
-1. **Why does Self show Value 3 but Rating 2?**
-   The card reads `Value` from `achieved_value` and `Rating` from `self_score`. They came from different points in time.
-2. **Why did `achieved_value` change after self-submission?**
-   The auditor bulk sign-off (`BULK_STAGE_SIGNOFF_AUDITOR`) wrote the auditor's new value (3) into both `auditor_achieved_value` and the shared `achieved_value` column.
-3. **Why does the auditor flow touch `achieved_value` at all?**
-   Legacy code treats `review_submissions.achieved_value` as the "current canonical" value rather than the **employee-submitted snapshot**. Every stage update was overwriting it.
-4. **Why does `self_score` not move with it?**
-   `self_score` is correctly frozen at self-submit (snapshot integrity / immutability policy). Only `achieved_value` was wrongly mutated.
-5. **Why didn't the UI catch the mismatch?**
-   `KpiJourneySection.buildStage('Self', …)` reads `submission.achieved_value` for Self's `Value` and `submission.self_score` for Self's `Rating`. There is no invariant that ties them together — they come from independent columns.
+## Goal
 
-**Root cause:** The "Self" stage in the journey UI is **not source-pure**. It mixes a live/mutable column (`achieved_value`) with a frozen column (`self_score`). The bulk auditor sign-off (and likely any reviewer-stage value edit) overwrites `achieved_value`, breaking the Self snapshot displayed to the auditor/manager.
+The composition card should only show a *breakdown* when there is actually something to break down (System **and** Criteria both contribute). Otherwise collapse to a single, non-redundant summary.
 
----
+## Proposed behavior
 
-## Risk & Impact Report
+In `AppraisalCompositionCard.tsx` (`variant="full"`):
 
-- **Data Impact:** No data corruption — `self_score`/`self_rating` are correct (rating 2 for value 1 under the May-26 scale). Only the **displayed Value** under Self is misleading. `auditor_achieved_value`/`manager_achieved_value` already capture stage-specific values; we can rely on them.
-- **Workflow Impact:** None — no scoring change. Final scores remain correct (auditor 0, management 0, final 0).
-- **UI/UX Impact:** Self card will now show the **employee-submitted value (1)** with Rating 2, which is internally consistent and matches what HR/audit reviewers expect to see.
-- **Regression Risk:** Medium — many places read `submission.achieved_value` assuming "latest". We must keep that semantic where it's needed (Manager/Auditor cards, calculations) and only change the Self card to use a frozen self snapshot.
-- **Scalability:** No query changes; purely a read-path fix plus optional historical backfill.
+1. Compute `contributingParts = (systemMax > 0 ? 1 : 0) + (criteriaMax > 0 ? 1 : 0)`.
+2. **If `contributingParts >= 2`** → render today's layout (System + Criteria + Overall, 3 columns), unchanged.
+3. **If `contributingParts <= 1`** → render a single "Overall" column only (no duplicate System/Criteria card, no full-width progress bar underneath). The single column keeps the score, "/ 100", and a short hint like:
+   - "Auto-fetched from KRA" when only System contributes.
+   - "Rated against criteria" when only Criteria contributes.
+   - "No score configured" when neither contributes (defensive — shouldn't normally happen).
 
----
+The `inline` variant already hides System/Criteria chips when their max is 0, so no change there.
 
-## Fix Plan (two parts — UI first, then storage hardening)
+No other components, no business logic, no scoring math touched.
 
-### Part 1 — UI fix (immediate, no schema change) ✅ ship now
-In `src/components/review/KpiJourneySection.tsx`, change Self stage's `achievedValue` to a **self-snapshot resolver**:
+## Risk & Impact
 
-```ts
-const selfDisplayValue = resolveSelfAchievedValue(submission);
-```
+- **Data impact:** None — purely presentational.
+- **Workflow impact:** None.
+- **UI/UX:** Reviewers no longer see the same number printed twice when only one component contributes. Templates with both components keep the existing 3-column view unchanged.
+- **Regression risk:** Low. Only `AppraisalCompositionCard` (`full` variant) layout branches. Callers (form header, pre-submit dialog) pass the same `ScoreComposition` and don't depend on the internal column count.
+- **Mitigation:** Add unit tests for the three cases (both contribute, system-only, criteria-only) asserting which columns render.
 
-Resolver logic:
-1. If `submission.self_score` and `submission.self_rating` exist, derive Self's value from the latest **audit-log entry of type** `ORG_KPI_PROPAGATED` / `SELF_REVIEWED` for this KPI (new_value.achieved_value) **OR** reverse-derive via the May-26 scale.
-2. Cheap path (no extra query): treat `achieved_value` as Self's value **only when no reviewer stage has written a stage-specific achieved_value** (i.e. `auditor_achieved_value`, `manager_achieved_value`, `management_achieved_value`, `hr_pms_achieved_value` all null). Otherwise, fall back to "—" with a tooltip "Original self value not stored — see audit log".
-3. If we add a column (Part 2), use it directly.
+## Files
 
-Tests: `KpiJourneySection.test.tsx` — given a submission with `achieved_value=3, auditor_achieved_value=3, self_score=2`, Self card must NOT show "Value: 3"; it must show the snapshotted value (or "—" with tooltip).
+- `src/components/annual-review/AppraisalCompositionCard.tsx` — branch the `full` variant on `contributingParts`.
+- `src/components/annual-review/AppraisalCompositionCard.test.tsx` *(new)* — render tests for the three cases.
+- `POLICY.md` — short note under the annual-review composition section: "Breakdown card collapses to a single Overall summary when only one component (System or Criteria) contributes — duplicate columns are suppressed."
+- `DOCUMENTATION.md` — same one-liner in the AppraisalCompositionCard section.
 
-### Part 2 — Storage hardening (next migration)
-Add `review_submissions.self_achieved_value numeric` and:
-1. **Backfill** from the earliest `ORG_KPI_PROPAGATED` / `self_submitted` audit log per row.
-2. **Write** to it from: `usePropagateOrgKpiValue` (data-owner path), `SelfReviewSheet` submit, and any place currently writing `self_score`. Keep it immutable after that.
-3. **Stop overwriting** `review_submissions.achieved_value` from auditor/manager bulk sign-off and reviewer edits — write only to the stage-specific `*_achieved_value` columns. (`BULK_STAGE_SIGNOFF_AUDITOR` RPC + AuditScorecard + ManagementScorecard.)
-4. Update `KpiJourneySection` to read `self_achieved_value` for Self.
-5. Update POLICY.md (§ Snapshot Immutability) and DOCUMENTATION.md.
+## Not in scope
 
-Rollback: `self_achieved_value` is additive; Part 1 UI fallback covers rows without it.
-
-### Part 3 — Verification
-- Re-open this very KPI in the modal → Self should now show **Value 1, Rating 2** (consistent), Auditor **Value 3, Rating 0**, Management **Value 3, Rating 0**.
-- Run propagation again on a different employee, then auditor edits — assert `achieved_value` is no longer overwritten and Self snapshot persists.
-- Unit tests for the resolver + an integration test for the auditor bulk sign-off (asserts `achieved_value` unchanged when `self_achieved_value` is present).
-
----
-
-### Files to touch (estimate)
-
-**Part 1 (now):**
-- `src/components/review/KpiJourneySection.tsx` — Self stage value resolver
-- `src/components/review/KpiJourneySection.test.tsx` — new case
-- `mem/features/review/self-snapshot-display.md` — new memory
-
-**Part 2 (follow-up):**
-- New migration: add `self_achieved_value` + backfill from `kpi_audit_logs`
-- `src/hooks/usePropagateOrgKpiValue.ts`, `src/components/review/SelfReviewSheet.tsx` — write new column
-- Edge / RPC `propagate_org_kpi_value`, `bulk_stage_signoff_auditor` (and equivalents) — stop writing `achieved_value`; write to stage columns only
-- `src/components/review/AuditScorecard.tsx`, `ManagementScorecard.tsx` — same
-- POLICY.md, DOCUMENTATION.md updates
-
-Confirm and I'll start with Part 1 (UI-only, safe, immediate visual fix), then queue Part 2 as a follow-up migration so we never reproduce this mismatch.
+- Removing the card entirely.
+- Changing the sticky-footer inline summary (already handles zero-max correctly).
+- Any scoring / template / RLS changes.
