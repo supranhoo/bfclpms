@@ -84,3 +84,13 @@ File: `src/components/annual-review/AnnualReviewStageTracker.tsx`
 - Notification template copy changes.
 - Retroactive recalculation of already-completed instances.
 - Any change to the forward execution order or to the cycle-level `default_enabled_stages` UI.
+
+---
+
+## 2026-06-21 — Status: Shipped
+
+- Migration `dedupe_duplicate_reviewers`: new `annual_review_effective_chain_details(uuid)` resolver implementing the four-rule skip pass with top-down seniority dedup; existing `annual_review_effective_chain(uuid)` now layered on top; `advance_annual_review_status` audit payload extended with `skipped_stages` breakdown.
+- TS SSOT mirror: `src/lib/annualReview/effectiveChain.ts` (`resolveEffectiveChain`, `effectiveStages`, `SkipReason`).
+- Tests: `src/lib/annualReview/effectiveChain.test.ts` — 5 cases (Ankit/Jaspal worked example, partial collision, self-vs-duplicate precedence, null/inactive precedence, self always kept). All green.
+- Docs: POLICY.md version-history entry + memory `mem/features/annual-review/overview.md` updated.
+- Tracker UI dim/tooltip deferred — current `AnnualReviewStageTracker` renders configured `enabled_stages`, and skipped stages are already captured in the audit log. Will pick up effective-chain rendering in a follow-up.
