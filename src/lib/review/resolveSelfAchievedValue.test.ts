@@ -11,6 +11,19 @@ const kpiMayGrievance = {
 };
 
 describe('resolveSelfAchievedValue', () => {
+  it('prefers self_achieved_value column when present (Part 2)', () => {
+    const out = resolveSelfAchievedValue(
+      {
+        achieved_value: 3,
+        self_achieved_value: 1,
+        self_score: 2,
+        auditor_achieved_value: 3,
+      },
+      kpiMayGrievance,
+    );
+    expect(out).toEqual({ value: 1, source: 'pristine' });
+  });
+
   it('returns achieved_value when no reviewer wrote a stage value (pristine)', () => {
     const out = resolveSelfAchievedValue(
       { achieved_value: 1, self_score: 2 },
