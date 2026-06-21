@@ -33,7 +33,7 @@ const rows: InstanceWithEmployee[] = [
   {
     id: 'i1', employee_id: 'e1', template_id: 't1', cycle_id: 'c1', assigned_rule_id: null,
     overall_status: 'pending_manager', enabled_stages: ['self', 'manager', 'hr'],
-    manager_id: null, skip_id: null, bu_head_id: null, hr_id: null,
+    manager_id: null, skip_id: null, dept_head_id: null, bu_head_id: null, hr_id: null,
     system_scores: { s1: 8 }, eligibility_inputs: { eligible: true },
     criteria_weighted_score: 72, total_score: 80, final_rating: null, hr_remarks: null,
     language_pref: 'en', finalized_at: null, finalized_by: null,
@@ -90,7 +90,7 @@ describe('annual review exports', () => {
     const headers = sheetHeaders(wb, 'Criteria');
     expect(headers).toEqual([
       'Employee Code', 'Full Name', 'Designation',
-      'Self Comments', 'Manager Comments', 'Skip Comments', 'BU Head Comments', 'HR Comments',
+      'Self Comments', 'Manager Comments', 'Skip Comments', 'Dept Head Comments', 'BU Head Comments', 'HR Comments',
     ]);
   });
 });

@@ -26,6 +26,7 @@ const TOGGLABLE: Array<{ key: AnnualReviewerRole; label: string }> = [
   { key: 'self',         label: 'Self Review' },
   { key: 'manager',      label: 'Manager Review' },
   { key: 'skip_manager', label: 'Skip Manager Review' },
+  { key: 'dept_head',    label: 'Department Head Review' },
   { key: 'bu_head',      label: 'BU Head Review' },
   { key: 'hr',           label: 'HR Finalization' },
 ];
@@ -51,7 +52,7 @@ export function ChangeWorkflowDialog({
   const isDirty = JSON.stringify(next) !== JSON.stringify(current);
   const selfDisabled = hasAny && !enabled.has('self');
   const firstStageLabel = next[0]
-    ? ({ self: 'Self', manager: 'Manager', skip_manager: 'Skip Manager', bu_head: 'BU Head', hr: 'HR' } as const)[next[0]]
+    ? ({ self: 'Self', manager: 'Manager', skip_manager: 'Skip Manager', dept_head: 'Department Head', bu_head: 'BU Head', hr: 'HR' } as const)[next[0]]
     : '—';
 
   const save = useMutation({

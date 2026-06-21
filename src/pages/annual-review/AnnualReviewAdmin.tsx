@@ -1042,6 +1042,56 @@ function AnalyticsTab() {
 // ------------------------------------------------------------------
 // Tab 2 — Cycles
 // ------------------------------------------------------------------
+/**
+ * Cycle-level workflow chain editor. Six checkboxes; `self` is always on.
+ * Writes a flat AnnualReviewerRole[] in canonical order back to the parent.
+ */
+function CycleDefaultStagesFieldset({
+  value, onChange,
+}: {
+  value: AnnualReviewerRole[];
+  onChange: (next: AnnualReviewerRole[]) => void;
+}) {
+  const STAGES: Array<{ key: AnnualReviewerRole; label: string }> = [
+    { key: 'self',         label: 'Self Review' },
+    { key: 'manager',      label: 'Manager' },
+    { key: 'skip_manager', label: 'Skip Manager' },
+    { key: 'dept_head',    label: 'Department Head' },
+    { key: 'bu_head',      label: 'BU Head' },
+    { key: 'hr',           label: 'HR Finalization' },
+  ];
+  const ordered = STAGES.map((s) => s.key);
+  const set = new Set(value);
+  const toggle = (key: AnnualReviewerRole) => {
+    if (key === 'self') return; // always on
+    const next = new Set(set);
+    if (next.has(key)) next.delete(key); else next.add(key);
+    onChange(ordered.filter((s) => next.has(s)));
+  };
+  return (
+    <div className="space-y-1">
+      <Label className="text-xs">Default workflow stages</Label>
+      <div className="rounded-md border p-3 space-y-1.5">
+        {STAGES.map((s) => (
+          <label key={s.key} className="flex items-center gap-2 text-sm cursor-pointer">
+            <Checkbox
+              checked={set.has(s.key)}
+              disabled={s.key === 'self'}
+              onCheckedChange={() => toggle(s.key)}
+            />
+            <span>{s.label}</span>
+            {s.key === 'self' && <Badge variant="outline" className="ml-auto text-[10px]">Always on</Badge>}
+          </label>
+        ))}
+        <p className="text-[11px] text-muted-foreground pt-1">
+          Applied to every new instance seeded for this cycle. Stages where the reviewer is missing,
+          deactivated, or is the employee themselves are auto-skipped at advance time.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 function CyclesTab() {
   const { data: cycles = [], refetch } = useCycles();
   const [draft, setDraft] = useState<Partial<AnnualReviewCycle>>({ name: '', review_year: new Date().getFullYear(), status: 'draft' });
@@ -1092,6 +1142,11 @@ function CyclesTab() {
           <div className="space-y-1"><Label className="text-xs">HR finalization deadline</Label>
             <Input type="date" value={draft.hr_finalization_deadline ?? ''} onChange={(e) => setDraft({ ...draft, hr_finalization_deadline: e.target.value })} />
           </div>
+          <CycleDefaultStagesFieldset
+            value={(draft.default_enabled_stages as AnnualReviewerRole[] | undefined)
+              ?? ['self','manager','skip_manager','dept_head','bu_head','hr']}
+            onChange={(next) => setDraft({ ...draft, default_enabled_stages: next })}
+          />
           <Button className="w-full" disabled={save.isPending || !draft.name} onClick={() => save.mutate()}>
             {save.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />} Save
           </Button>

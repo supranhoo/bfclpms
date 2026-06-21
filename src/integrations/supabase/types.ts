@@ -393,6 +393,7 @@ export type Database = {
           bu_review_start: string | null
           created_at: string
           created_by: string | null
+          default_enabled_stages: Json
           description: string | null
           hr_finalization_deadline: string | null
           id: string
@@ -415,6 +416,7 @@ export type Database = {
           bu_review_start?: string | null
           created_at?: string
           created_by?: string | null
+          default_enabled_stages?: Json
           description?: string | null
           hr_finalization_deadline?: string | null
           id?: string
@@ -437,6 +439,7 @@ export type Database = {
           bu_review_start?: string | null
           created_at?: string
           created_by?: string | null
+          default_enabled_stages?: Json
           description?: string | null
           hr_finalization_deadline?: string | null
           id?: string
@@ -12928,6 +12931,10 @@ export type Database = {
         }
         Returns: Json
       }
+      annual_review_effective_chain: {
+        Args: { p_instance_id: string }
+        Returns: Json
+      }
       annual_review_first_pending_status: {
         Args: { p_enabled: Json }
         Returns: Database["public"]["Enums"]["annual_review_status"]
@@ -14063,6 +14070,7 @@ export type Database = {
           bu_review_start: string | null
           created_at: string
           created_by: string | null
+          default_enabled_stages: Json
           description: string | null
           hr_finalization_deadline: string | null
           id: string
@@ -14626,6 +14634,7 @@ export type Database = {
         | "pending_self"
         | "pending_manager"
         | "pending_skip"
+        | "pending_dept"
         | "pending_bu"
         | "pending_hr"
         | "completed"
@@ -14633,6 +14642,7 @@ export type Database = {
         | "self"
         | "manager"
         | "skip_manager"
+        | "dept_head"
         | "bu_head"
         | "hr"
       annual_score_method: "avg_all" | "last_6" | "custom"
@@ -14899,6 +14909,7 @@ export const Constants = {
         "pending_self",
         "pending_manager",
         "pending_skip",
+        "pending_dept",
         "pending_bu",
         "pending_hr",
         "completed",
@@ -14907,6 +14918,7 @@ export const Constants = {
         "self",
         "manager",
         "skip_manager",
+        "dept_head",
         "bu_head",
         "hr",
       ],

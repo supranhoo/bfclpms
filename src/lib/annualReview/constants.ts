@@ -24,6 +24,7 @@ export const STATUS_LABEL: Record<AnnualReviewStatus, string> = {
   pending_self:    'Self Review Pending',
   pending_manager: 'Manager Review Pending',
   pending_skip:    'Skip Mgr Review Pending',
+  pending_dept:    'Dept Head Review Pending',
   pending_bu:      'BU Head Review Pending',
   pending_hr:      'HR Finalization Pending',
   completed:       'Completed',
@@ -34,18 +35,20 @@ export const STATUS_BADGE_CLASS: Record<AnnualReviewStatus, string> = {
   pending_self:    'bg-blue-500/15 text-blue-400 border-blue-500/30',
   pending_manager: 'bg-amber-500/15 text-amber-400 border-amber-500/30',
   pending_skip:    'bg-purple-500/15 text-purple-400 border-purple-500/30',
+  pending_dept:    'bg-teal-500/15 text-teal-400 border-teal-500/30',
   pending_bu:      'bg-indigo-500/15 text-indigo-400 border-indigo-500/30',
   pending_hr:      'bg-yellow-500/15 text-yellow-400 border-yellow-500/30',
   completed:       'bg-emerald-500/15 text-emerald-400 border-emerald-500/30',
 };
 
 /** Stages in canonical order for the stepper UI. */
-export const STAGE_ORDER: AnnualReviewerRole[] = ['self', 'manager', 'skip_manager', 'bu_head', 'hr'];
+export const STAGE_ORDER: AnnualReviewerRole[] = ['self', 'manager', 'skip_manager', 'dept_head', 'bu_head', 'hr'];
 
 export const STAGE_LABEL: Record<AnnualReviewerRole, string> = {
   self:          'Self Review',
   manager:       'Manager',
   skip_manager:  'Skip Manager',
+  dept_head:     'Dept Head',
   bu_head:       'BU Head',
   hr:            'HR Final',
 };
@@ -55,6 +58,7 @@ export const STAGE_TO_STATUS: Record<AnnualReviewerRole, AnnualReviewStatus> = {
   self:         'pending_self',
   manager:      'pending_manager',
   skip_manager: 'pending_skip',
+  dept_head:    'pending_dept',
   bu_head:      'pending_bu',
   hr:           'pending_hr',
 };

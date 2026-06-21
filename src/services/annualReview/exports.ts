@@ -13,9 +13,9 @@ import type {
 } from '@/types/annualReview';
 import type { InstanceWithEmployee } from './annualReviewService';
 
-const STAGE_ORDER: AnnualReviewerRole[] = ['self', 'manager', 'skip_manager', 'bu_head', 'hr'];
+const STAGE_ORDER: AnnualReviewerRole[] = ['self', 'manager', 'skip_manager', 'dept_head', 'bu_head', 'hr'];
 const STAGE_LABEL: Record<AnnualReviewerRole, string> = {
-  self: 'Self', manager: 'Manager', skip_manager: 'Skip', bu_head: 'BU Head', hr: 'HR',
+  self: 'Self', manager: 'Manager', skip_manager: 'Skip', dept_head: 'Dept Head', bu_head: 'BU Head', hr: 'HR',
 };
 
 export interface BlankReviewerWorkbookOpts {
@@ -229,7 +229,7 @@ export function buildReviewerPdfBlob(opts: ReviewerPdfOpts): Blob {
 
   const criteria = template.sections.criteria ?? [];
   const scoreByRole: Record<AnnualReviewerRole, Record<string, number>> = {
-    self: {}, manager: {}, skip_manager: {}, bu_head: {}, hr: {},
+    self: {}, manager: {}, skip_manager: {}, dept_head: {}, bu_head: {}, hr: {},
   };
   for (const r of responses) {
     scoreByRole[r.reviewer_role] = r.criteria_scores ?? {};
@@ -242,13 +242,14 @@ export function buildReviewerPdfBlob(opts: ReviewerPdfOpts): Blob {
     scoreByRole.self[c.id] ?? '',
     scoreByRole.manager[c.id] ?? '',
     scoreByRole.skip_manager[c.id] ?? '',
+    scoreByRole.dept_head[c.id] ?? '',
     scoreByRole.bu_head[c.id] ?? '',
     scoreByRole.hr[c.id] ?? '',
   ]);
 
   autoTable(doc, {
     startY: y,
-    head: [['#', 'Criterion', 'Wt', 'Self', 'Mgr', 'Skip', 'BU', 'HR']],
+    head: [['#', 'Criterion', 'Wt', 'Self', 'Mgr', 'Skip', 'Dept', 'BU', 'HR']],
     body,
     theme: 'grid',
     styles: { fontSize: 8, cellPadding: 1.5 },
@@ -256,7 +257,7 @@ export function buildReviewerPdfBlob(opts: ReviewerPdfOpts): Blob {
     columnStyles: {
       0: { cellWidth: 8 }, 1: { cellWidth: 70 }, 2: { cellWidth: 12 },
       3: { cellWidth: 14 }, 4: { cellWidth: 14 }, 5: { cellWidth: 14 },
-      6: { cellWidth: 14 }, 7: { cellWidth: 14 },
+      6: { cellWidth: 14 }, 7: { cellWidth: 14 }, 8: { cellWidth: 14 },
     },
   });
   y = (doc as any).lastAutoTable.finalY + 6;
@@ -279,8 +280,8 @@ export function buildReviewerPdfBlob(opts: ReviewerPdfOpts): Blob {
   autoTable(doc, {
     startY: y, theme: 'grid',
     styles: { fontSize: 8, cellPadding: 4, minCellHeight: 18, valign: 'bottom' },
-    head: [['Self', 'Manager', 'Skip', 'BU Head', 'HR']],
-    body: [['', '', '', '', '']],
+    head: [['Self', 'Manager', 'Skip', 'Dept Head', 'BU Head', 'HR']],
+    body: [['', '', '', '', '', '']],
   });
 
   return doc.output('blob');

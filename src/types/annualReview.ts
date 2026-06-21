@@ -8,11 +8,12 @@ export type AnnualReviewStatus =
   | 'pending_self'
   | 'pending_manager'
   | 'pending_skip'
+  | 'pending_dept'
   | 'pending_bu'
   | 'pending_hr'
   | 'completed';
 
-export type AnnualReviewerRole = 'self' | 'manager' | 'skip_manager' | 'bu_head' | 'hr';
+export type AnnualReviewerRole = 'self' | 'manager' | 'skip_manager' | 'dept_head' | 'bu_head' | 'hr';
 
 export type CycleStatus = 'draft' | 'active' | 'closed';
 
@@ -31,6 +32,12 @@ export interface AnnualReviewCycle {
   bu_review_start: string | null;
   bu_review_end: string | null;
   hr_finalization_deadline: string | null;
+  /**
+   * Cycle-level default workflow chain — JSON array of reviewer roles.
+   * Seeder stamps this onto each new instance.enabled_stages. Must contain
+   * 'self'. Defaults to the full 6-stage canonical chain on net-new cycles.
+   */
+  default_enabled_stages?: AnnualReviewerRole[];
   created_by: string | null;
   created_at: string;
   updated_at: string;
@@ -229,6 +236,7 @@ export interface AnnualReviewInstance {
   enabled_stages: AnnualReviewerRole[];
   manager_id: string | null;
   skip_id: string | null;
+  dept_head_id: string | null;
   bu_head_id: string | null;
   hr_id: string | null;
   system_scores: Record<string, number>;

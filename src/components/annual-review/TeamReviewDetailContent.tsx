@@ -106,7 +106,7 @@ export function TeamReviewDetailContent({
   });
 
   const comparison = useMemo(() => {
-    const labels: Record<AnnualReviewerRole, string> = { self: 'Self', manager: 'Manager', skip_manager: 'Skip', bu_head: 'BU', hr: 'HR' };
+    const labels: Record<AnnualReviewerRole, string> = { self: 'Self', manager: 'Manager', skip_manager: 'Skip', dept_head: 'Dept', bu_head: 'BU', hr: 'HR' };
     const previous: { label: string; values: Record<string, number | undefined> }[] = [];
     for (const r of responses) {
       if (r.reviewer_role !== role) previous.push({ label: labels[r.reviewer_role], values: r.criteria_scores });
