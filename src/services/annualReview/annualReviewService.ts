@@ -240,7 +240,21 @@ export async function getTemplate(id: string): Promise<AnnualReviewTemplate> {
 }
 
 export async function upsertTemplate(t: Partial<AnnualReviewTemplate>): Promise<AnnualReviewTemplate> {
-  const { data, error } = await db.from('annual_review_templates').upsert(t).select('*').single();
+  // Partial updates (e.g. activation toggle sending only { id, is_active })
+  // must use UPDATE — a blind upsert triggers NOT NULL on `name` because
+  // Postgres validates constraints before the ON CONFLICT resolver runs.
+  if (t.id) {
+    const { id, ...patch } = t;
+    const { data, error } = await db
+      .from('annual_review_templates')
+      .update(patch)
+      .eq('id', id)
+      .select('*')
+      .single();
+    if (error) throw error;
+    return data;
+  }
+  const { data, error } = await db.from('annual_review_templates').insert(t).select('*').single();
   if (error) throw error;
   return data;
 }
