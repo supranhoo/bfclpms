@@ -109,7 +109,7 @@ export function AppraisalCompositionCard({
 }
 
 function Column({
-  label, hint, actual, max, emphasize, emptyText, align = 'left',
+  label, hint, actual, max, emphasize, emptyText, align = 'left', showOutOf5,
 }: {
   label: string;
   hint: string;
@@ -118,8 +118,10 @@ function Column({
   emphasize?: boolean;
   emptyText?: string;
   align?: 'left' | 'right';
+  showOutOf5?: boolean;
 }) {
   const pct = max > 0 ? Math.min(100, (actual / max) * 100) : 0;
+  const outOf5 = max > 0 ? (actual / max) * 5 : 0;
   const isRight = align === 'right';
   return (
     <div className={`rounded-md border bg-card/40 p-3 space-y-1.5 ${isRight ? 'text-right' : ''}`}>
@@ -134,6 +136,13 @@ function Column({
             {actual.toFixed(2)}
             <span className="text-muted-foreground text-sm font-normal ml-1">/ {max}</span>
           </div>
+          {showOutOf5 && (
+            <div className={`text-xs tabular-nums ${isRight ? '' : ''}`}>
+              <span className="text-muted-foreground">= </span>
+              <span className="font-semibold text-foreground">{outOf5.toFixed(2)}</span>
+              <span className="text-muted-foreground"> / 5</span>
+            </div>
+          )}
           <Progress value={pct} className="h-1.5" />
         </>
       )}
