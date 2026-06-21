@@ -12,6 +12,7 @@ import {
 import { AnnualReviewStageTracker } from '@/components/annual-review/AnnualReviewStageTracker';
 import { AnnualReviewStatusBadge } from '@/components/annual-review/AnnualReviewStatusBadge';
 import { CriteriaScoringMatrix } from '@/components/annual-review/CriteriaScoringMatrix';
+import { shouldHideCriteriaCard, criteriaForStage } from '@/lib/annualReview/templateVisibility';
 import { SystemScoresPanel } from '@/components/annual-review/SystemScoresPanel';
 import { LanguageSwitcher } from '@/components/annual-review/LanguageSwitcher';
 import { useAnnualReviewTranslation } from '@/hooks/useAnnualReviewTranslation';
@@ -175,23 +176,34 @@ export default function EmployeeAnnualReview() {
         readOnly
       />
 
-      <Card>
-        <CardHeader><CardTitle>{t('section.self_assessment', 'Self-Assessment Criteria')}</CardTitle></CardHeader>
-        <CardContent>
-          <CriteriaScoringMatrix
-            criteria={(template?.sections.criteria ?? []).filter((c) => !c.reviewer_stages?.length || c.reviewer_stages.includes('self'))}
-            values={draft.criteria_scores ?? {}}
-            remarks={(draft.qualitative_responses ?? {}) as Record<string, string>}
-            evidence={evidenceByCriterion}
-            readOnly={!!locked}
-            reviewerLabel="Self"
-            onChangeScore={(id, v) => setDraft((p) => ({ ...p, criteria_scores: { ...(p.criteria_scores ?? {}), [id]: v } }))}
-            onChangeRemark={(id, txt) => setDraft((p) => ({ ...p, qualitative_responses: { ...(p.qualitative_responses ?? {}), [id]: txt } }))}
-            onUploadEvidence={onUpload}
-            onRemoveEvidence={(_, path) => setDraft((p) => ({ ...p, evidence: (p.evidence ?? []).filter((e) => e.path !== path) }))}
-          />
-        </CardContent>
-      </Card>
+      {shouldHideCriteriaCard(template, 'self') ? (
+        <Card>
+          <CardContent className="p-4 text-sm text-muted-foreground">
+            {t(
+              'section.no_self_criteria',
+              'No self-assessment criteria for this template. Review the system scores above and click Submit to advance.',
+            )}
+          </CardContent>
+        </Card>
+      ) : (
+        <Card>
+          <CardHeader><CardTitle>{t('section.self_assessment', 'Self-Assessment Criteria')}</CardTitle></CardHeader>
+          <CardContent>
+            <CriteriaScoringMatrix
+              criteria={criteriaForStage(template, 'self')}
+              values={draft.criteria_scores ?? {}}
+              remarks={(draft.qualitative_responses ?? {}) as Record<string, string>}
+              evidence={evidenceByCriterion}
+              readOnly={!!locked}
+              reviewerLabel="Self"
+              onChangeScore={(id, v) => setDraft((p) => ({ ...p, criteria_scores: { ...(p.criteria_scores ?? {}), [id]: v } }))}
+              onChangeRemark={(id, txt) => setDraft((p) => ({ ...p, qualitative_responses: { ...(p.qualitative_responses ?? {}), [id]: txt } }))}
+              onUploadEvidence={onUpload}
+              onRemoveEvidence={(_, path) => setDraft((p) => ({ ...p, evidence: (p.evidence ?? []).filter((e) => e.path !== path) }))}
+            />
+          </CardContent>
+        </Card>
+      )}
 
       {(template?.sections.self_review_fields ?? []).length > 0 && (
         <Card>
