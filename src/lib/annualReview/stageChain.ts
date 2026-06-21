@@ -14,11 +14,11 @@ import { STAGE_TO_STATUS } from './constants';
  */
 
 export const ALL_STAGES: readonly AnnualReviewerRole[] = [
-  'self', 'manager', 'skip_manager', 'bu_head', 'hr',
+  'self', 'manager', 'skip_manager', 'dept_head', 'bu_head', 'hr',
 ] as const;
 
 const STAGE_LABEL_DEFAULT: Record<AnnualReviewerRole, string> = {
-  self: 'Self', manager: 'Manager', skip_manager: 'Skip', bu_head: 'BU', hr: 'HR',
+  self: 'Self', manager: 'Manager', skip_manager: 'Skip', dept_head: 'Dept', bu_head: 'BU', hr: 'HR',
 };
 
 function statusToRole(status: AnnualReviewStatus): AnnualReviewerRole | null {
@@ -26,6 +26,7 @@ function statusToRole(status: AnnualReviewStatus): AnnualReviewerRole | null {
     case 'pending_self':    return 'self';
     case 'pending_manager': return 'manager';
     case 'pending_skip':    return 'skip_manager';
+    case 'pending_dept':    return 'dept_head';
     case 'pending_bu':      return 'bu_head';
     case 'pending_hr':      return 'hr';
     default: return null;
