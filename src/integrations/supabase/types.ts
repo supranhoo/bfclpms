@@ -14626,6 +14626,7 @@ export type Database = {
         | "pending_self"
         | "pending_manager"
         | "pending_skip"
+        | "pending_dept"
         | "pending_bu"
         | "pending_hr"
         | "completed"
@@ -14633,6 +14634,7 @@ export type Database = {
         | "self"
         | "manager"
         | "skip_manager"
+        | "dept_head"
         | "bu_head"
         | "hr"
       annual_score_method: "avg_all" | "last_6" | "custom"
@@ -14899,6 +14901,7 @@ export const Constants = {
         "pending_self",
         "pending_manager",
         "pending_skip",
+        "pending_dept",
         "pending_bu",
         "pending_hr",
         "completed",
@@ -14907,6 +14910,7 @@ export const Constants = {
         "self",
         "manager",
         "skip_manager",
+        "dept_head",
         "bu_head",
         "hr",
       ],
