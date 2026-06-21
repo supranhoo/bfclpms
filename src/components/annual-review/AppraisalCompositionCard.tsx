@@ -67,6 +67,7 @@ export function AppraisalCompositionCard({
             actual={overallActual}
             max={overallMax}
             emphasize
+            align="right"
           />
         ) : (
           <>
@@ -107,7 +108,7 @@ export function AppraisalCompositionCard({
 }
 
 function Column({
-  label, hint, actual, max, emphasize, emptyText,
+  label, hint, actual, max, emphasize, emptyText, align = 'left',
 }: {
   label: string;
   hint: string;
@@ -115,11 +116,13 @@ function Column({
   max: number;
   emphasize?: boolean;
   emptyText?: string;
+  align?: 'left' | 'right';
 }) {
   const pct = max > 0 ? Math.min(100, (actual / max) * 100) : 0;
+  const isRight = align === 'right';
   return (
-    <div className="rounded-md border bg-card/40 p-3 space-y-1.5">
-      <div className="flex items-baseline justify-between gap-2">
+    <div className={`rounded-md border bg-card/40 p-3 space-y-1.5 ${isRight ? 'text-right' : ''}`}>
+      <div className={`flex items-baseline gap-2 ${isRight ? 'justify-end' : 'justify-between'}`}>
         <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">{label}</span>
       </div>
       {max <= 0 ? (
