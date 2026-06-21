@@ -829,6 +829,7 @@ export function KpiJourneySection({
                 status={status}
                 isNA={stageIsNA}
                 achievedValue={data.achievedValue}
+                achievedValueUnknownReason={(data as any).achievedValueUnknownReason ?? null}
                 kpiName={kpi.kpi_name}
                 employeeCode={resolvedEmployeeCode !== '-' ? resolvedEmployeeCode : null}
                 isLoading={isLoading && !submission}
