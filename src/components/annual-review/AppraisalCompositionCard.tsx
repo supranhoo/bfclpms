@@ -68,6 +68,7 @@ export function AppraisalCompositionCard({
             max={overallMax}
             emphasize
             align="right"
+            showOutOf5
           />
         ) : (
           <>
