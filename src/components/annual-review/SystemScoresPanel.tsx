@@ -98,13 +98,40 @@ export function SystemScoresPanel({
             <AlertCircle className="h-4 w-4" />
             <AlertTitle>{t('eligibility.title', 'Eligibility criteria not met')}</AlertTitle>
             <AlertDescription>
-              <ul className="list-disc pl-5 mt-1 space-y-0.5">
-                {result.failures.map((f) => (
-                  <li key={f.criterion.id}>
-                    {tTemplate('eligibility', f.criterion.id, 'name', f.criterion.name)} — expected {f.criterion.operator.replace('_', ' ')} {String(f.criterion.expected_value)}; actual {String(f.actual ?? '—')}
-                  </li>
-                ))}
-              </ul>
+              <div className="mt-2 overflow-hidden rounded-md border border-destructive/30">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-destructive/5 hover:bg-destructive/5">
+                      <TableHead className="h-8 text-destructive">{t('eligibility.col.criterion', 'Criterion')}</TableHead>
+                      <TableHead className="h-8 text-destructive">{t('eligibility.col.condition', 'Condition')}</TableHead>
+                      <TableHead className="h-8 text-right text-destructive">{t('eligibility.col.expected', 'Expected')}</TableHead>
+                      <TableHead className="h-8 text-right text-destructive">{t('eligibility.col.actual', 'Actual')}</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {result.failures.map((f) => (
+                      <TableRow key={f.criterion.id}>
+                        <TableCell className="py-1.5 font-medium">
+                          {tTemplate('eligibility', f.criterion.id, 'name', f.criterion.name)}
+                        </TableCell>
+                        <TableCell className="py-1.5 text-muted-foreground">
+                          {f.criterion.operator.replace(/_/g, ' ')}
+                        </TableCell>
+                        <TableCell className="py-1.5 text-right tabular-nums">
+                          {String(f.criterion.expected_value)}
+                        </TableCell>
+                        <TableCell className="py-1.5 text-right tabular-nums">
+                          {f.actual == null || f.actual === '' ? (
+                            <span className="text-muted-foreground">—</span>
+                          ) : (
+                            String(f.actual)
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
             </AlertDescription>
           </Alert>
         )}
