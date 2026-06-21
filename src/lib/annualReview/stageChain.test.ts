@@ -24,7 +24,8 @@ describe('nextStatus', () => {
   it('walks the full chain by default', () => {
     expect(nextStatus('pending_self',    null)).toBe('pending_manager');
     expect(nextStatus('pending_manager', null)).toBe('pending_skip');
-    expect(nextStatus('pending_skip',    null)).toBe('pending_bu');
+    expect(nextStatus('pending_skip',    null)).toBe('pending_dept');
+    expect(nextStatus('pending_dept',    null)).toBe('pending_bu');
     expect(nextStatus('pending_bu',      null)).toBe('pending_hr');
     expect(nextStatus('pending_hr',      null)).toBe('completed');
   });
@@ -52,6 +53,8 @@ describe('prevStatus', () => {
   it('walks back through the full chain', () => {
     expect(prevStatus('manager',      null)).toBe('pending_self');
     expect(prevStatus('skip_manager', null)).toBe('pending_manager');
+    expect(prevStatus('dept_head',    null)).toBe('pending_skip');
+    expect(prevStatus('bu_head',      null)).toBe('pending_dept');
     expect(prevStatus('hr',           null)).toBe('pending_bu');
   });
 
@@ -67,7 +70,7 @@ describe('prevStatus', () => {
 
 describe('describeChain', () => {
   it('renders a human label', () => {
-    expect(describeChain(null)).toBe('Self → Manager → Skip → BU → HR');
+    expect(describeChain(null)).toBe('Self → Manager → Skip → Dept → BU → HR');
     expect(describeChain(['self', 'hr'])).toBe('Self → HR');
   });
 });
