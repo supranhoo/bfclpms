@@ -69,7 +69,7 @@ export function BulkWorkflowAssignmentDialog({
   const reset = () => { setOutcomes(null); setProgress(null); };
 
   const handleExport = () => {
-    const headers = ['Employee Code', 'Full Name', 'Current Stages', 'Self (Y/N)', 'Manager (Y/N)', 'Skip (Y/N)', 'BU (Y/N)', 'HR (Y/N)', 'Reason'];
+    const headers = ['Employee Code', 'Full Name', 'Current Stages', 'Self (Y/N)', 'Manager (Y/N)', 'Skip (Y/N)', 'Dept (Y/N)', 'BU (Y/N)', 'HR (Y/N)', 'Reason'];
     const data = instances.map((i) => {
       const chain = enabledChain(i.enabled_stages);
       const has = (s: AnnualReviewerRole) => (chain.includes(s) ? 'Y' : 'N');
@@ -80,6 +80,7 @@ export function BulkWorkflowAssignmentDialog({
         'Self (Y/N)': has('self'),
         'Manager (Y/N)': has('manager'),
         'Skip (Y/N)': has('skip_manager'),
+        'Dept (Y/N)': has('dept_head'),
         'BU (Y/N)': has('bu_head'),
         'HR (Y/N)': has('hr'),
         'Reason': '',
@@ -113,9 +114,10 @@ export function BulkWorkflowAssignmentDialog({
         const slf = parseFlag(rec['Self (Y/N)'], cur('self'));
         const m = parseFlag(rec['Manager (Y/N)'], cur('manager'));
         const s = parseFlag(rec['Skip (Y/N)'], cur('skip_manager'));
+        const d = parseFlag(rec['Dept (Y/N)'], cur('dept_head'));
         const b = parseFlag(rec['BU (Y/N)'], cur('bu_head'));
         const h = parseFlag(rec['HR (Y/N)'], cur('hr'));
-        if (slf === null || m === null || s === null || b === null || h === null) {
+        if (slf === null || m === null || s === null || d === null || b === null || h === null) {
           res.push({ kind: 'error', employeeCode: code, reason: 'Invalid Y/N value in one of the stage columns' });
           continue;
         }
@@ -124,6 +126,7 @@ export function BulkWorkflowAssignmentDialog({
         if (slf) nextStages.push('self');
         if (m) nextStages.push('manager');
         if (s) nextStages.push('skip_manager');
+        if (d) nextStages.push('dept_head');
         if (b) nextStages.push('bu_head');
         if (h) nextStages.push('hr');
         if (nextStages.length === 0) {
