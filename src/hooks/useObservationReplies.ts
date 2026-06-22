@@ -151,9 +151,14 @@ export function useResolveObservation() {
 
   return useMutation({
     mutationFn: async ({ observationId, kpiId }: { observationId: string; kpiId: string }) => {
+      const { data: auth } = await supabase.auth.getUser();
       const { data, error } = await supabase
         .from('kpi_observations')
-        .update({ status: 'resolved' })
+        .update({
+          status: 'resolved',
+          resolved_at: new Date().toISOString(),
+          resolved_by: auth?.user?.id ?? null,
+        })
         .eq('id', observationId)
         .select()
         .single();
