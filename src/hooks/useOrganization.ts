@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tansta
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { fetchAllPaged, fetchAllRpcPaged } from '@/lib/fetchAll';
+import { useAuth } from '@/contexts/AuthContext';
 
 /**
  * v2.66.11.14 — Defensive UUID guard.
@@ -308,11 +309,13 @@ export function useDeleteKraCategory() {
   });
 }
 
-export function useProfiles() {
+export function useProfiles(options?: { enabled?: boolean }) {
+  const { isReady, user } = useAuth();
   return useQuery({
-    queryKey: ['profiles'],
+    queryKey: ['profiles', user?.id],
     staleTime: 5 * 60_000,
     gcTime: 15 * 60_000,
+    enabled: isReady && !!user?.id && options?.enabled !== false,
     queryFn: async () => {
       // v2.66.11.0 — Use SECURITY DEFINER RPC to bypass per-row RLS
       // evaluation cost. Lifts statement_timeout to 30s and short-circuits
@@ -385,9 +388,10 @@ export function useTeamMembers(managerId: string | undefined) {
  * Respects the employee-level override (workflow_config) with fallback to the default template.
  * Returns null when stage is null (meaning "no filter needed").
  */
-export function useProfilesByWorkflowStage(stage: string | null, reviewPeriod?: string, reviewYear?: number) {
+export function useProfilesByWorkflowStage(stage: string | null, reviewPeriod?: string, reviewYear?: number, options?: { enabled?: boolean }) {
+  const { isReady, user } = useAuth();
   return useQuery({
-    queryKey: ['profiles-by-workflow-stage', stage, reviewPeriod, reviewYear],
+    queryKey: ['profiles-by-workflow-stage', stage, reviewPeriod, reviewYear, user?.id],
     staleTime: 60_000,
     gcTime: 10 * 60_000,
     queryFn: async () => {
@@ -578,7 +582,7 @@ export function useProfilesByWorkflowStage(stage: string | null, reviewPeriod?: 
 
       return filtered;
     },
-    enabled: !!stage,
+    enabled: isReady && !!user?.id && !!stage && options?.enabled !== false,
     placeholderData: keepPreviousData,
   });
 }
