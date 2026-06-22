@@ -13409,6 +13409,7 @@ export type Database = {
           business_unit_id: string
           company_id: string
           department_id: string
+          department_name: string
           designation: string
           division_id: string
           employee_code: string
