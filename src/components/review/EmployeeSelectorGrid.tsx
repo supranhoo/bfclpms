@@ -1089,8 +1089,8 @@ export function EmployeeSelectorGrid({
 
     const memberIds = new Set(demographicFilteredMembers.map(m => m.id));
     const relevantKpis = periodKpis.filter(k => memberIds.has(k.employee_id));
-    const skipIds = new Set(skipLevelMembers?.map(m => m.id) || []);
-    const directIds = new Set(teamMembers?.map(m => m.id) || []);
+    const skipIds = skipIdSet;
+    const directIds = directIdSet;
 
     if (viewLevel === 'team') {
       // Merged view: separate direct pending, skip-level pending, and reviewed counts
