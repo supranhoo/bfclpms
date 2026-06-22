@@ -3341,13 +3341,13 @@ Patched call sites (v2.66.11.12): `CopyKrasDialog`, `BulkTemplateAssignDialog`. 
 
 **Diagnostic precedence.** `TeamReviewsZeroDiagnostic.diagnoseEmptyTeam` evaluates `dataLoadError` BEFORE the `no_reports_mapped / reports_without_kpis / kpis_filtered_out` branches, so an upstream RPC or network error never masquerades as "No KPIs assigned".
 
-**Manager Team Reviews roster source (v2.66.11.19).** For non-full-access `viewLevel === 'team'`, the roster source is strictly `useTeamMembers(viewerId)` ∪ `useSkipLevelTeamMembers(viewerId)`. Org-wide `useProfiles()` and `useProfilesByWorkflowStage()` are auxiliary in that mode and MUST NOT be enabled or counted as fatal unless the user is full-access, in Explorer/Cross-check, or opening a KPI deep link that requires profile lookup. The fatal `data_load_error` branch for plain manager Team Reviews is therefore limited to `teamError || skipError`; `profilesError`, `stageFilteredError`, period-KPI errors, and submission-score errors must degrade tiles/toasts only and never replace a successfully loaded manager roster.
+**Manager Team Reviews roster source (v2.66.36).** For non-full-access `viewLevel === 'team'`, the roster source is strictly `useTeamMembers(viewerId)` ∪ `useSkipLevelTeamMembers(viewerId)`. Org-wide `useProfiles()` and `useProfilesByWorkflowStage()` are auxiliary in that mode and MUST NOT be enabled or counted as fatal unless the user is full-access, in Explorer/Cross-check, or opening a KPI deep link that requires profile lookup. The fatal `data_load_error` branch for plain manager Team Reviews is therefore limited to `teamError || skipError`; `profilesError`, `stageFilteredError`, period-KPI errors, and submission-score errors must degrade tiles/toasts only and never replace a successfully loaded manager roster.
 
 **Regression:** `src/test/teamReviewsZeroDiagnostic.test.ts` adds a `data_load_error` case; `src/test/managerScopeFilterGate.test.ts` (3 tests) protects the `isFullAccess` gate on the `mgr` filter; `src/test/teamReviewsManagerRosterQueryGate.test.ts` protects manager-only query enabling and fatal-error scoping.
 
 ---
 
-## §132 — Audit Assignment Carry-Forward on KRA Rollover (v2.66.11.19)
+## §132 — Audit Assignment Carry-Forward on KRA Rollover (v2.66.36)
 
 **Context.** `audit_kpi_level_assignments` is the per-KPI auditor mapping table (`UNIQUE(kpi_id)`, `FK → kpis ON DELETE CASCADE`). Historically the `auto-rollover-kpis` edge function cloned KPIs across periods but did NOT clone these mappings, leaving every new period with zero auditor assignments until Admin re-mapped them manually. Confirmed for April 2026: 2,267 KPIs / 0 assignments.
 

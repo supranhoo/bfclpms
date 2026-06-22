@@ -468,7 +468,7 @@ export function EmployeeSelectorGrid({
       : requiredStage
         ? stageFilteredLoading
         : (isFullAccess ? profilesLoading : teamLoading);
-  // v2.66.11.19 — Manager Team Reviews roster source is direct + skip only.
+  // v2.66.36 — Manager Team Reviews roster source is direct + skip only.
   // Org-wide profile / stage-filter queries are auxiliary there and must not
   // blank Sajid-style manager rosters when the direct/skip queries succeed.
   const rosterDataError = viewLevel === 'team' && !isFullAccess
