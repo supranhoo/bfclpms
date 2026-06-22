@@ -60,12 +60,18 @@ export function useSentBackOrgKpiEmployees(
 
       // 3. Get raiser names
       const raiserIds = [...new Set(queries.map(q => q.raised_by))];
-      const { data: profiles } = await supabase
-        .from('profiles')
-        .select('id, full_name, email')
-        .in('id', raiserIds);
+      // PII hardening (2026-06-22): Org KPI Data Owners no longer have a
+      // broad profile SELECT policy, so direct `profiles` reads return zero
+      // rows here. Route through the SECURITY DEFINER directory RPC so the
+      // "sent back by" sender name is not silently displayed as "Unknown".
+      const { data: profiles } = await supabase.rpc(
+        'get_profile_directory_entries',
+        { _ids: raiserIds }
+      );
 
-      const profileMap = new Map(profiles?.map(p => [p.id, p.full_name || p.email || 'Unknown']) || []);
+      const profileMap = new Map(
+        (profiles || []).map(p => [p.id, p.full_name || 'Unknown'])
+      );
 
       // 4. Build map — only keep latest per employee
       for (const q of queries) {
