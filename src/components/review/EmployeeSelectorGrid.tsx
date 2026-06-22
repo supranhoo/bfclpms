@@ -2023,7 +2023,11 @@ export function EmployeeSelectorGrid({
 
       {/* v2.66.11.11 — Zero-state diagnostic for Manager / Skip-Level on Team Reviews
           v2.66.11.13 — adds a data_load_error branch so RPC/network failures stop
-          showing the misleading "No KPIs assigned" banner. */}
+          showing the misleading "No KPIs assigned" banner.
+          v2.66.11.16 — `data_load_error` is now scoped to ROSTER-CRITICAL queries
+          only. A failing secondary query (period KPIs, submission scores) must
+          not blank out the roster — the grid degrades gracefully and Sajid's
+          13 direct reports remain selectable. See POLICY §128. */}
       {!isExploreMode && viewLevel === 'team' && !isFullAccess && stats.totalEmployees === 0 && (
         <TeamReviewsZeroDiagnostic
           directCount={teamMembers?.length ?? 0}
@@ -2033,7 +2037,7 @@ export function EmployeeSelectorGrid({
           selectedPeriod={selectedPeriod}
           selectedYear={selectedYear}
           dataLoadError={
-            !!periodKpisError || !!teamError || !!skipError ||
+            !!teamError || !!skipError ||
             !!profilesError || !!stageFilteredError
           }
           onRefresh={() => {
@@ -2338,8 +2342,11 @@ export function EmployeeSelectorGrid({
             // grid previously rendered "No employees found" with no recourse.
             // Now we surface an explicit error block with retry so admins
             // (incl. Vivek 101784 case) can recover without a full page reload.
+            // v2.66.11.16 (POLICY §128) — ROSTER-CRITICAL only. Period-KPI and
+            // submission-score failures are secondary: they degrade KPI tiles
+            // but must not replace the roster with a fatal state.
             const dataError =
-              profilesError || teamError || skipError || stageFilteredError || periodKpisError || submissionScoresError;
+              profilesError || teamError || skipError || stageFilteredError;
             if (dataError) {
               return (
                 <div className="text-center py-12 text-muted-foreground">
