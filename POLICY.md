@@ -3307,10 +3307,11 @@ All reviewer roles (Admin, HR PMS, Management, Auditor, Manager, Skip-Level Mana
 - The **Org KPIs** tile is informational and shows period-wide entered/propagated/total counts to every role. No additional RLS exposure — counts come from `org_kpi_values.status` only.
 - Tile #1 label is always **"Total Employees"** (previously read "Team Size" for non-full-access roles).
 - When a Manager / Skip-Level user lands on Team Reviews and `Total Employees === 0`, a **diagnostic banner** (`TeamReviewsZeroDiagnostic`) explains the cause:
+  - `data_load_error` — roster-critical query failed → refresh/retry
   - `no_reports_mapped` — empty roster → fix in User Management
   - `reports_without_kpis` — roster exists but no KPIs assigned for the period → check KRA Issuance
   - `kpis_filtered_out` — KPIs exist but filters or stage hide them
-- Pure helper `diagnoseEmptyTeam` is unit-tested in `src/test/teamReviewsZeroDiagnostic.test.ts` (5 tests).
+- Pure helper `diagnoseEmptyTeam` is unit-tested in `src/test/teamReviewsZeroDiagnostic.test.ts`.
 
 ---
 
@@ -3340,7 +3341,9 @@ Patched call sites (v2.66.11.12): `CopyKrasDialog`, `BulkTemplateAssignDialog`. 
 
 **Diagnostic precedence.** `TeamReviewsZeroDiagnostic.diagnoseEmptyTeam` evaluates `dataLoadError` BEFORE the `no_reports_mapped / reports_without_kpis / kpis_filtered_out` branches, so an upstream RPC or network error never masquerades as "No KPIs assigned".
 
-**Regression:** `src/test/teamReviewsZeroDiagnostic.test.ts` adds a `data_load_error` case; `src/test/managerScopeFilterGate.test.ts` (3 tests) protects the `isFullAccess` gate on the `mgr` filter.
+**Manager Team Reviews roster source (v2.66.11.19).** For non-full-access `viewLevel === 'team'`, the roster source is strictly `useTeamMembers(viewerId)` ∪ `useSkipLevelTeamMembers(viewerId)`. Org-wide `useProfiles()` and `useProfilesByWorkflowStage()` are auxiliary in that mode and MUST NOT be enabled or counted as fatal unless the user is full-access, in Explorer/Cross-check, or opening a KPI deep link that requires profile lookup. The fatal `data_load_error` branch for plain manager Team Reviews is therefore limited to `teamError || skipError`; `profilesError`, `stageFilteredError`, period-KPI errors, and submission-score errors must degrade tiles/toasts only and never replace a successfully loaded manager roster.
+
+**Regression:** `src/test/teamReviewsZeroDiagnostic.test.ts` adds a `data_load_error` case; `src/test/managerScopeFilterGate.test.ts` (3 tests) protects the `isFullAccess` gate on the `mgr` filter; `src/test/teamReviewsManagerRosterQueryGate.test.ts` protects manager-only query enabling and fatal-error scoping.
 
 ---
 
