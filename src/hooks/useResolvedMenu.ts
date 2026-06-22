@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
 import { applyOverrides, buildLabelMap, groupByParent } from '@/lib/menu/applyOverrides';
 import type { MenuOverrideRow, MenuRegistryRow, ResolvedMenuNode } from '@/lib/menu/types';
 
@@ -38,11 +39,16 @@ async function fetchOverrides(): Promise<MenuOverrideRow[]> {
 
 /** Master switch — when false, the app uses default labels everywhere. */
 export function useMenuOverridesEnabled() {
+  const { isReady } = useAuth();
   return useQuery({
     queryKey: ['menu-overrides-enabled'],
     queryFn: fetchEnabled,
     staleTime: FLAG_STALE_MS,
     refetchOnWindowFocus: true,
+    // v2.66.11.15 — pre-auth guard. system_settings RLS routes through
+    // has_role() which `anon` cannot execute; firing before the JWT
+    // lands surfaces as 'permission denied for function has_role'.
+    enabled: isReady,
   });
 }
 

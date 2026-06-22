@@ -14,6 +14,7 @@
  */
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
 
 const DEFAULT_CLIENT_KEY = 'default';
 
@@ -82,10 +83,16 @@ export function resolveAction(snap: EntitlementSnapshot, actionKey: string): boo
 }
 
 export function useEntitlement() {
+  const { isReady } = useAuth();
   const query = useQuery({
     queryKey: ['hub-entitlement-snapshot'],
     queryFn: fetchSnapshot,
     staleTime: 5 * 60 * 1000,
+    // v2.66.11.15 — pre-auth guard. system_settings RLS calls has_role()
+    // which the `anon` role cannot execute, so a request fired before the
+    // JWT lands returns 'permission denied for function has_role' and
+    // poisons downstream queries (Sajid Raza Team Reviews regression).
+    enabled: isReady,
   });
 
   const snap: EntitlementSnapshot =
@@ -116,10 +123,13 @@ async function fetchPilotFlag(): Promise<boolean> {
 }
 
 export function useEnforcementPilot() {
+  const { isReady } = useAuth();
   const query = useQuery({
     queryKey: ['hub-enforcement-pilot'],
     queryFn: fetchPilotFlag,
     staleTime: 10 * 60 * 1000,
+    // v2.66.11.15 — pre-auth guard, see useEntitlement above.
+    enabled: isReady,
   });
   return {
     loading: query.isLoading,
