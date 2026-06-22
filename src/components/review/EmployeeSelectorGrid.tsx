@@ -472,17 +472,18 @@ export function EmployeeSelectorGrid({
     }
   }, [isExplorerCapable, exploreParam, statusFilter, setStatusFilter]);
   const isLoading = viewLevel === 'team'
-    ? (isFullAccess ? profilesLoading : (teamLoading || skipLevelLoading))
+    ? (isFullAccess ? profilesLoading : managerRosterLoading)
     : isCrossCheckMode
       ? profilesLoading
       : requiredStage
         ? stageFilteredLoading
         : (isFullAccess ? profilesLoading : teamLoading);
-  // v2.66.37 — Manager Team Reviews roster source is direct + skip only.
-  // Org-wide profile / stage-filter queries are auxiliary there and must not
-  // blank Sajid-style manager rosters when the direct/skip queries succeed.
+  // v2.66.38 — Manager Team Reviews roster source is the server-side
+  // `get_manager_team_roster` RPC. Org-wide profile / stage-filter / direct
+  // / skip-level client queries are auxiliary and must not blank the
+  // dashboard when the authoritative RPC roster succeeds.
   const rosterDataError = viewLevel === 'team' && !isFullAccess
-    ? !!teamError || !!skipError
+    ? !!managerRosterError
     : !!profilesError || !!teamError || !!skipError || !!stageFilteredError;
 
   // Build merged base members with relationship tags for team view.
