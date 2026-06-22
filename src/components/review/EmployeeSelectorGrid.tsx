@@ -196,9 +196,10 @@ export function EmployeeSelectorGrid({
   const fetchingProfilesAll = useIsFetching({ queryKey: ['profiles'] });
   const fetchingTeam = useIsFetching({ queryKey: ['team-members'] });
   const fetchingSkip = useIsFetching({ queryKey: ['skip-level-team-members'] });
+  const fetchingManagerRoster = useIsFetching({ queryKey: ['manager-team-roster'] });
   const isRefreshing =
     fetchingProfiles + fetchingKpis + fetchingSubmissionScores +
-    fetchingProfilesAll + fetchingTeam + fetchingSkip > 0;
+    fetchingProfilesAll + fetchingTeam + fetchingSkip + fetchingManagerRoster > 0;
 
   // Refresh handler — invalidates every dataset feeding the reviewer grid.
   // Per POLICY.md §103, refresh actions rely on the inline button spinner only;
@@ -214,6 +215,7 @@ export function EmployeeSelectorGrid({
       'profiles',
       'team-members',
       'skip-level-team-members',
+      'manager-team-roster',
       'employee-scores-for-period',
       'bulk-employee-workflows',
       'employee-filter-options',
