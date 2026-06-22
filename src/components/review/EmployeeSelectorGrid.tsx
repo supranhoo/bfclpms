@@ -6,7 +6,7 @@ import { useMyKpiLevelAssignments } from '@/hooks/useMyKpiLevelAssignments';
 import { useAuditorWorkloadSummary } from '@/hooks/useAuditorWorkloadSummary';
 import { AuditAssignmentDialog } from '@/components/admin/AuditAssignmentDialog';
 import { useAuth } from '@/contexts/AuthContext';
-import { useTeamMembers, useProfiles, useSkipLevelTeamMembers, useProfilesByWorkflowStage } from '@/hooks/useOrganization';
+import { useTeamMembers, useProfiles, useSkipLevelTeamMembers, useProfilesByWorkflowStage, useManagerTeamRoster } from '@/hooks/useOrganization';
 import { useKpisByPeriodRanges, useReviewSubmissionScoresByKpiIds, KPI } from '@/hooks/useKpis';
 import { useEmployeeFilterOptions } from '@/hooks/useEmployeeFilterOptions';
 import { useBulkEmployeeWorkflows } from '@/hooks/useWorkflowConfig';
@@ -196,9 +196,10 @@ export function EmployeeSelectorGrid({
   const fetchingProfilesAll = useIsFetching({ queryKey: ['profiles'] });
   const fetchingTeam = useIsFetching({ queryKey: ['team-members'] });
   const fetchingSkip = useIsFetching({ queryKey: ['skip-level-team-members'] });
+  const fetchingManagerRoster = useIsFetching({ queryKey: ['manager-team-roster'] });
   const isRefreshing =
     fetchingProfiles + fetchingKpis + fetchingSubmissionScores +
-    fetchingProfilesAll + fetchingTeam + fetchingSkip > 0;
+    fetchingProfilesAll + fetchingTeam + fetchingSkip + fetchingManagerRoster > 0;
 
   // Refresh handler — invalidates every dataset feeding the reviewer grid.
   // Per POLICY.md §103, refresh actions rely on the inline button spinner only;
@@ -214,6 +215,7 @@ export function EmployeeSelectorGrid({
       'profiles',
       'team-members',
       'skip-level-team-members',
+      'manager-team-roster',
       'employee-scores-for-period',
       'bulk-employee-workflows',
       'employee-filter-options',
@@ -229,6 +231,16 @@ export function EmployeeSelectorGrid({
   const { data: skipLevelMembers, isLoading: skipLevelLoading, isError: skipError, refetch: refetchSkip } = useSkipLevelTeamMembers(
     (viewLevel === 'team' || viewLevel === 'skip_level') ? viewerId : undefined
   );
+  // v2.66.38 — Server-side manager roster (direct + skip-level merged).
+  // Authoritative source for non-full-access Team Reviews; replaces the
+  // brittle pair of client-side profile joins as the fatal dependency.
+  const managerRosterEnabled = viewLevel === 'team' && !isFullAccess;
+  const {
+    data: managerRoster,
+    isLoading: managerRosterLoading,
+    isError: managerRosterError,
+    refetch: refetchManagerRoster,
+  } = useManagerTeamRoster(managerRosterEnabled ? viewerId : undefined);
 
   // Map each reviewer panel to the workflow stage it requires employees to have
   const PANEL_REQUIRED_STAGE: Partial<Record<Exclude<ViewMode, 'self'>, string>> = {
@@ -462,17 +474,18 @@ export function EmployeeSelectorGrid({
     }
   }, [isExplorerCapable, exploreParam, statusFilter, setStatusFilter]);
   const isLoading = viewLevel === 'team'
-    ? (isFullAccess ? profilesLoading : (teamLoading || skipLevelLoading))
+    ? (isFullAccess ? profilesLoading : managerRosterLoading)
     : isCrossCheckMode
       ? profilesLoading
       : requiredStage
         ? stageFilteredLoading
         : (isFullAccess ? profilesLoading : teamLoading);
-  // v2.66.37 — Manager Team Reviews roster source is direct + skip only.
-  // Org-wide profile / stage-filter queries are auxiliary there and must not
-  // blank Sajid-style manager rosters when the direct/skip queries succeed.
+  // v2.66.38 — Manager Team Reviews roster source is the server-side
+  // `get_manager_team_roster` RPC. Org-wide profile / stage-filter / direct
+  // / skip-level client queries are auxiliary and must not blank the
+  // dashboard when the authoritative RPC roster succeeds.
   const rosterDataError = viewLevel === 'team' && !isFullAccess
-    ? !!teamError || !!skipError
+    ? !!managerRosterError
     : !!profilesError || !!teamError || !!skipError || !!stageFilteredError;
 
   // Build merged base members with relationship tags for team view.
@@ -495,11 +508,18 @@ export function EmployeeSelectorGrid({
           relationship: (skipIds.has(p.id) ? 'indirect' : directIds.has(p.id) ? 'direct' : undefined) as 'direct' | 'indirect' | undefined,
         }));
       } else {
-        // Manager: merge direct + indirect
-        const directSet = new Set(teamMembers?.map(m => m.id) || []);
-        const directTagged = (teamMembers || []).map(m => ({ ...m, relationship: 'direct' as const }));
-        const indirectTagged = (skipLevelMembers || []).filter(m => !directSet.has(m.id)).map(m => ({ ...m, relationship: 'indirect' as const }));
-        resolved = [...directTagged, ...indirectTagged];
+        // v2.66.38 — Manager roster comes from server-side RPC with
+        // relationship already tagged. Falls back to legacy direct/skip
+        // hooks ONLY if the RPC hasn't loaded yet (keepPreviousData) so
+        // initial paint stays warm.
+        if (managerRoster && managerRoster.length >= 0) {
+          resolved = managerRoster as EmployeeProfile[];
+        } else {
+          const directSet = new Set(teamMembers?.map(m => m.id) || []);
+          const directTagged = (teamMembers || []).map(m => ({ ...m, relationship: 'direct' as const }));
+          const indirectTagged = (skipLevelMembers || []).filter(m => !directSet.has(m.id)).map(m => ({ ...m, relationship: 'indirect' as const }));
+          resolved = [...directTagged, ...indirectTagged];
+        }
       }
     } else if ((viewLevel === 'audit' || viewLevel === 'management') && statusFilter === 'cross_check') {
       // Cross-check mode: bypass workflow stage filter, show ALL employees
@@ -521,7 +541,7 @@ export function EmployeeSelectorGrid({
     // already filter is_active=true, so this is a no-op for them.
     if (!isFullAccess) return withoutViewer;
     return applyEmployeeStatusFilter(withoutViewer, empStatus, (p) => p.is_active);
-  }, [viewLevel, teamMembers, skipLevelMembers, allProfiles, isFullAccess, requiredStage, stageFilteredProfiles, statusFilter, user?.id, empStatus]);
+  }, [viewLevel, teamMembers, skipLevelMembers, managerRoster, allProfiles, isFullAccess, requiredStage, stageFilteredProfiles, statusFilter, user?.id, empStatus]);
 
   // Auto-open KPI from URL
   useEffect(() => {
@@ -2054,8 +2074,8 @@ export function EmployeeSelectorGrid({
           13 direct reports remain selectable. See POLICY §128. */}
       {!isExploreMode && viewLevel === 'team' && !isFullAccess && stats.totalEmployees === 0 && (
         <TeamReviewsZeroDiagnostic
-          directCount={teamMembers?.length ?? 0}
-          skipCount={skipLevelMembers?.length ?? 0}
+          directCount={(managerRoster?.filter(m => m.relationship === 'direct').length) ?? teamMembers?.length ?? 0}
+          skipCount={(managerRoster?.filter(m => m.relationship === 'indirect').length) ?? skipLevelMembers?.length ?? 0}
           periodKpiCount={periodKpis?.length ?? 0}
           totalEmployees={stats.totalEmployees}
           selectedPeriod={selectedPeriod}
@@ -2064,6 +2084,7 @@ export function EmployeeSelectorGrid({
             rosterDataError
           }
           onRefresh={() => {
+            refetchManagerRoster();
             refetchTeam();
             refetchSkip();
             refetchPeriodKpis();
@@ -2383,6 +2404,7 @@ export function EmployeeSelectorGrid({
                       variant="outline"
                       size="sm"
                       onClick={() => {
+                        refetchManagerRoster();
                         refetchProfiles();
                         refetchTeam();
                         refetchSkip();
