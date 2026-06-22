@@ -40,7 +40,7 @@ export function diagnoseEmptyTeam(input: {
       code: 'data_load_error',
       title: 'Dashboard data could not be loaded',
       message:
-        'The roster or KPI query failed to return. This is usually a transient network or backend issue — try Refresh roster, or reload the page in a moment.',
+        'The roster query failed to return. This is usually a transient network or backend issue — try Refresh roster, or reload the page in a moment.',
     };
   }
 
