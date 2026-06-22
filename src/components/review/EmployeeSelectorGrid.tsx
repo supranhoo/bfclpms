@@ -732,7 +732,7 @@ export function EmployeeSelectorGrid({
     }
 
     return filtered;
-  }, [baseMembers, searchQuery, selectedDepartment, selectedDesignation, selectedGrade, selectedManager]);
+  }, [baseMembers, searchQuery, selectedDepartment, selectedDesignation, selectedGrade, selectedManager, isFullAccess]);
 
   // Auditor workload stats: compute pending/in-audit/forwarded per auditor + unassigned
   const { auditorWorkloadStats, unassignedStats } = useMemo(() => {
@@ -2061,8 +2061,7 @@ export function EmployeeSelectorGrid({
           selectedPeriod={selectedPeriod}
           selectedYear={selectedYear}
           dataLoadError={
-            !!teamError || !!skipError ||
-            !!profilesError || !!stageFilteredError
+            rosterDataError
           }
           onRefresh={() => {
             refetchTeam();
@@ -2369,9 +2368,7 @@ export function EmployeeSelectorGrid({
             // v2.66.11.16 (POLICY §128) — ROSTER-CRITICAL only. Period-KPI and
             // submission-score failures are secondary: they degrade KPI tiles
             // but must not replace the roster with a fatal state.
-            const dataError =
-              profilesError || teamError || skipError || stageFilteredError;
-            if (dataError) {
+            if (rosterDataError) {
               return (
                 <div className="text-center py-12 text-muted-foreground">
                   <AlertTriangle className="h-12 w-12 mx-auto mb-4 text-destructive/70" />
