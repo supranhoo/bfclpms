@@ -58,7 +58,7 @@
 - Completed: `src/test/teamReviewsManagerRosterQueryGate.test.ts` added for enabled gates and manager fatal-error scoping.
 
 ## DOCUMENTATION.md updates
-- Completed: `DOCUMENTATION.md` now records v2.66.11.19 RCA and fix.
+- Completed: `DOCUMENTATION.md` now records v2.66.37 RCA and fix.
 
 ## POLICY.md updates
 - Completed: `POLICY.md` §131 now defines manager Team Reviews direct+skip roster source and auxiliary-query non-fatal behavior.
