@@ -13463,6 +13463,15 @@ export type Database = {
         Args: { p_period: string; p_year: number }
         Returns: Json
       }
+      get_profile_directory_entries: {
+        Args: { _ids: string[] }
+        Returns: {
+          employee_code: string
+          full_name: string
+          id: string
+          is_active: boolean
+        }[]
+      }
       get_profiles_for_audit_display: {
         Args: { p_user_ids: string[] }
         Returns: {
