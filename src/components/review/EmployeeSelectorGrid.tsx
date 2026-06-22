@@ -2402,6 +2402,7 @@ export function EmployeeSelectorGrid({
                       variant="outline"
                       size="sm"
                       onClick={() => {
+                        refetchManagerRoster();
                         refetchProfiles();
                         refetchTeam();
                         refetchSkip();
