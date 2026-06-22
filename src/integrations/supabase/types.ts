@@ -14527,8 +14527,6 @@ export type Database = {
         Returns: Json
       }
       should_send_email: { Args: { p_user_id: string }; Returns: boolean }
-      show_limit: { Args: never; Returns: number }
-      show_trgm: { Args: { "": string }; Returns: string[] }
       split_definition: {
         Args: {
           p_keep_alias_ids: string[]
