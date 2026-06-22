@@ -539,7 +539,7 @@ export function EmployeeSelectorGrid({
     // already filter is_active=true, so this is a no-op for them.
     if (!isFullAccess) return withoutViewer;
     return applyEmployeeStatusFilter(withoutViewer, empStatus, (p) => p.is_active);
-  }, [viewLevel, teamMembers, skipLevelMembers, allProfiles, isFullAccess, requiredStage, stageFilteredProfiles, statusFilter, user?.id, empStatus]);
+  }, [viewLevel, teamMembers, skipLevelMembers, managerRoster, allProfiles, isFullAccess, requiredStage, stageFilteredProfiles, statusFilter, user?.id, empStatus]);
 
   // Auto-open KPI from URL
   useEffect(() => {
