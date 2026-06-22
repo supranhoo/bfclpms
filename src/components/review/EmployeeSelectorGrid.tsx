@@ -2072,8 +2072,8 @@ export function EmployeeSelectorGrid({
           13 direct reports remain selectable. See POLICY §128. */}
       {!isExploreMode && viewLevel === 'team' && !isFullAccess && stats.totalEmployees === 0 && (
         <TeamReviewsZeroDiagnostic
-          directCount={teamMembers?.length ?? 0}
-          skipCount={skipLevelMembers?.length ?? 0}
+          directCount={(managerRoster?.filter(m => m.relationship === 'direct').length) ?? teamMembers?.length ?? 0}
+          skipCount={(managerRoster?.filter(m => m.relationship === 'indirect').length) ?? skipLevelMembers?.length ?? 0}
           periodKpiCount={periodKpis?.length ?? 0}
           totalEmployees={stats.totalEmployees}
           selectedPeriod={selectedPeriod}
@@ -2082,6 +2082,7 @@ export function EmployeeSelectorGrid({
             rosterDataError
           }
           onRefresh={() => {
+            refetchManagerRoster();
             refetchTeam();
             refetchSkip();
             refetchPeriodKpis();
