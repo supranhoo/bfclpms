@@ -260,6 +260,23 @@ export function EmployeeSelectorGrid({
       variant: 'default',
     });
   }, [rosterMeta?.fallbackUsed, toast]);
+
+  // v2.66.11.16 (POLICY §128) — Secondary KPI/score query failures degrade
+  // the dashboard tiles but must NOT blank the roster. Surface a single
+  // non-fatal toast so reviewers know stats may be incomplete while the
+  // employee grid keeps working.
+  const secondaryErrorToastRef = useRef(false);
+  useEffect(() => {
+    const secondaryFailed = !!periodKpisError || !!submissionScoresError;
+    if (!secondaryFailed || secondaryErrorToastRef.current) return;
+    secondaryErrorToastRef.current = true;
+    toast({
+      title: 'KPI stats partially unavailable',
+      description:
+        'Period KPI metrics could not be loaded. The employee roster is unaffected — use Refresh to retry.',
+      variant: 'default',
+    });
+  }, [periodKpisError, submissionScoresError, toast]);
   const [searchParams] = useSearchParams();
   const autoOpenKpiId = searchParams.get('kpi');
 
