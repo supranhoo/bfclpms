@@ -424,7 +424,7 @@ export function ProductionDailyGrid({ programId, programName, onMonthYearChange,
                     const empVals = localData[emp.id] || {};
                     const total = getTotal(emp.id, visibleDays);
                     const amount = Math.round(total * effectiveRate);
-                    const deptName = (emp as any).departments?.name || '—';
+                    const deptName = (emp as any).department_name || '—';
                     return (
                       <TableRow key={emp.id}>
                         <TableCell className="sticky left-0 bg-background z-10 text-xs font-mono">{emp.employee_code || '—'}</TableCell>
