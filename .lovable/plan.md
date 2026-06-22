@@ -1,45 +1,43 @@
-# Fix: "Only title/description may be edited on an observation" when Mark Resolved
+## Wave G — Restrict `SECURITY DEFINER` function execution
 
-## Root Cause (RCA)
+### Finding
+Linter reports ~521 instances of "Public Can Execute SECURITY DEFINER Function". Live DB check confirms:
+- 261 `SECURITY DEFINER` functions in `public`
+- 260 of them have `EXECUTE` granted to `anon` (the default `PUBLIC`/`anon` grant)
+- 261 also granted to `authenticated` (intended)
 
-The `Mark Resolved` button on `kpi_observations` is shown only to the observation raiser (`isRaiser` in `ObservationReplyThread.tsx`). The hook `useResolveObservation` performs:
+`SECURITY DEFINER` runs with the owner's (postgres) privileges, bypassing RLS. Leaving `anon` `EXECUTE` means an unauthenticated request can invoke any of these and read/mutate data the policies were meant to gate on `auth.uid()`.
 
-```ts
-supabase.from('kpi_observations').update({ status: 'resolved' }).eq('id', observationId)
-```
+### Risk & Impact Report
+- **Data impact**: None to stored rows. Only changes who may *invoke* server-side functions.
+- **Workflow impact**: All logged-in flows continue (we keep `authenticated` + `service_role`). Anon (logged-out) flows that legitimately need a definer call must be kept on an explicit allowlist.
+- **Allowlist of anon-callable definer functions** (must keep `anon EXECUTE`):
+  1. `public.get_public_branding()` — login screen branding before sign-in
+  2. `public.lookup_synthetic_email_by_code(text, text)` — employee-code → email resolution for login (per `mem/architecture/security/employee-code-login`)
+  3. `public.get_public_registry_view(text, uuid)` — public KPI registry view, currently exposed unauthenticated
+- **Regression risk**: Low. Trigger functions (`send_email_on_notification`, `notify_*`, `repercolate_*`, etc.) execute via triggers as `postgres`, not via the API — revoking from `anon` does not affect them. The only behavioural change is that unauthenticated `rpc()` calls to non-allowlisted functions will return `permission denied`.
+- **Mitigation**: Use a single set-based migration that loops `pg_proc` and revokes from `PUBLIC` + `anon`, skipping the allowlist. Re-grant `EXECUTE` to `authenticated` + `service_role` to be explicit (idempotent). Re-run the linter to confirm count drops to 0.
 
-But the BEFORE UPDATE trigger `guard_observation_self_edit` (migration `20260528034544`) explicitly blocks the creator (`auth.uid() = OLD.created_by`) from changing **any** field other than `title`/`description` — including `status`. So when Ayush (the auditor who raised the observation) tries to resolve their own observation, the trigger raises:
+### Plan
+1. Single migration:
+   - `DO` block iterating every `pg_proc` row where `pronamespace = 'public'::regnamespace AND prosecdef AND proname NOT IN (<allowlist>)`.
+   - For each: `REVOKE EXECUTE ON FUNCTION public.<name>(<args>) FROM PUBLIC, anon;` and `GRANT EXECUTE ... TO authenticated, service_role;`
+   - For the 3 allowlisted functions: leave `anon EXECUTE` intact (no-op), but still ensure `authenticated`/`service_role` are granted.
+2. Re-run `supabase--linter`; expect ~521 → 0 for this finding (and overall ~525 → ~4).
+3. Smoke-check (post-migration):
+   - Logged-out: login page still loads branding; employee-code login still resolves email.
+   - Logged-in: open a review, run a KPI scoring action, open Safety Analytics — all RPCs continue to succeed under `authenticated`.
 
-> Only title/description may be edited on an observation
+### Not changing
+- The current-view findings (`email_logs public read`, `clients`, `realtime.messages`, `review-evidence` bucket, `safety_incident_routing_rules`) — those are separate from the Wave G batch and out of scope for this step.
 
-This is a **policy/trigger bug**, not an RLS issue. The UI intent (raiser can resolve) contradicts the trigger.
+### Test / verify
+- `supabase--linter` re-run, expect Wave G cleared.
+- Manual smoke of login + 1 review action + Safety Analytics page.
 
-## Risk & Impact Report
+### Rollback
+- A single inverse migration: `GRANT EXECUTE ON FUNCTION public.<name>(<args>) TO PUBLIC;` over the same set. Trivial because no schema or data changed.
 
-- **Data Impact**: Schema unchanged. Only the trigger function `guard_observation_self_edit` is replaced (CREATE OR REPLACE). Additive, fully reversible.
-- **Workflow Impact**: Restores intended behavior — the raiser can mark their own observation as `resolved` (and undo to `open`). All other workflow fields (`score_impact`, `is_applied`, `visibility`, `observation_type`, `observer_role`, `ticket_number`, `reviewed_by`, `reviewed_at`, evidence) remain locked for the creator path.
-- **UI/UX**: No visual change. The error toast simply stops appearing; the existing success toast fires.
-- **Regression Risk**: Low. Trigger continues to block all the fields it blocked before, except status (limited to `open ↔ resolved` transitions by the creator). `resolved_at` / `resolved_by` allowed to be set alongside.
-- **Mitigation**: Vitest unit test asserting the resolve mutation issues `update({ status: 'resolved' })` only; manual verify via Mark Resolved button.
-
-## Plan
-
-1. **New migration** that `CREATE OR REPLACE`s `public.guard_observation_self_edit` to:
-   - Continue blocking creator edits on `observer_role`, `observation_type`, `score_impact`, `is_applied`, `visibility`, `ticket_number`, `reviewed_by`, `reviewed_at`, evidence fields, immutable keys (`kpi_id`, `created_by`, `created_at`).
-   - **Allow** `status` transitions by the creator only between `open` and `resolved` (raise otherwise).
-   - **Allow** `resolved_at` / `resolved_by` changes when paired with a `status` change.
-   - Keep the existing `edited_at` bump on title/description changes.
-2. **Hook hardening** (`useResolveObservation`): also send `resolved_at: new Date().toISOString()` and `resolved_by: user.id` (and the open-toggle path if applicable) so audit fields are populated. No UI change.
-3. **Unit test** in `src/test/` mocking supabase to assert the update payload shape.
-4. **Docs**: Append a note to `mem://features/review/kpi-observations-system` clarifying "raiser may resolve own observation".
-
-## Files Touched
-
-- `supabase/migrations/<new>_fix_observation_self_resolve.sql` (new)
-- `src/hooks/useObservationReplies.ts` (extend update payload with `resolved_at`/`resolved_by`)
-- `src/test/observationResolve.test.ts` (new)
-- `mem://features/review/kpi-observations-system` (note)
-
-## Rollback
-
-Drop the new migration / re-apply the previous trigger body. No data migration involved.
+### Documentation / Policy
+- Append Wave G entry to `docs/safety/phase1/security-scan.md` Phase 1 disposition table.
+- Record the anon-callable definer-function allowlist as a memory under `mem://security/anon-callable-definer-allowlist` so future migrations don't accidentally re-revoke it.
