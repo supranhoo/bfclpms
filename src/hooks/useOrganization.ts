@@ -618,7 +618,8 @@ export function useSkipLevelTeamMembers(userId: string | undefined) {
       if (error) throw error;
       return data || [];
     },
-    enabled: !!userId,
+    // v2.66.11.14 — UUID guard prevents `"undefined"` from reaching PostgREST.
+    enabled: isUuid(userId),
     placeholderData: keepPreviousData,
   });
 }
