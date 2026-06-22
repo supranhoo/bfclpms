@@ -1,5 +1,19 @@
 ## §111.7.t.3 Functional vs Platform-tier Role Separation (codified 2026-06-18)
 
+## §PII-DIRECTORY-RPC Profile name/code lookups go through the directory RPC (codified 2026-06-22, expanded post-audit)
+
+**Rule.** Any UI feature reachable by a non-admin role that needs to display a profile **name** or **employee code** MUST resolve it through one of these `SECURITY DEFINER` RPCs — never via a direct `.from('profiles')` SELECT or a PostgREST `profiles:fk(...)` embed:
+
+- `public.get_profile_directory_entries(_ids uuid[])` — for arbitrary ID-list lookups (returns `id, full_name, employee_code, is_active` only; no email/PII).
+- `public.get_incentive_program_employees(_program_id uuid)` — for program-scoped pickers.
+- `public.get_manager_team_roster(_viewer_id uuid)` — for direct + skip-level team views.
+
+**Why.** The 2026-06-22 migrations dropped the broad `profiles` SELECT policies for Org KPI Data Owners, Value Enterers, and Incentive Data Entry users (menuKey-access roles, not `role='admin'`). Direct profile reads from those screens now return **zero rows** silently — manifesting as "Unknown" labels (Vessel Data Entry, Sent-Back KPI sender), broken @mention search, and the Sandeep 200291 / Sajid Raza class of "empty grid even though data exists" regressions.
+
+**How to apply.** On any new code path: (1) prefer an existing directory RPC; (2) if a new shape is required, add a new `SECURITY DEFINER ... SET search_path = public` RPC that returns only non-sensitive identifiers and gate it with `auth.uid() IS NOT NULL`; (3) never re-introduce a broad `profiles` SELECT policy as a "fix"; (4) add a Vitest mirror of `src/test/profileDirectoryRpcUsage.test.ts` locking the contract on the new hook source.
+
+**Cross-links.** RCAs: Sandeep 200291 (v2.66.49), Sajid Raza Team Reviews tile mismatch, audit follow-up v2.66.50.
+
 ## §ANNUAL-REVIEW-SELF-REVIEW-LIBRARY Annual Review — Self Review Field Library (codified 2026-06-19, v2.66.48)
 
 **Scope.** A shared, RLS-protected library of reusable Self Review questions (fields) and ordered packs (bundles), surfaced inside the **Annual Review → Template Editor → Self Review Fields** section. Inserts produce normal `sections.self_review_fields[]` + `sections.translations.hi[...]` rows — reviewer/self-review runtime is unchanged.
