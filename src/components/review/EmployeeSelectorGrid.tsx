@@ -6,7 +6,7 @@ import { useMyKpiLevelAssignments } from '@/hooks/useMyKpiLevelAssignments';
 import { useAuditorWorkloadSummary } from '@/hooks/useAuditorWorkloadSummary';
 import { AuditAssignmentDialog } from '@/components/admin/AuditAssignmentDialog';
 import { useAuth } from '@/contexts/AuthContext';
-import { useTeamMembers, useProfiles, useSkipLevelTeamMembers, useProfilesByWorkflowStage } from '@/hooks/useOrganization';
+import { useTeamMembers, useProfiles, useSkipLevelTeamMembers, useProfilesByWorkflowStage, useManagerTeamRoster } from '@/hooks/useOrganization';
 import { useKpisByPeriodRanges, useReviewSubmissionScoresByKpiIds, KPI } from '@/hooks/useKpis';
 import { useEmployeeFilterOptions } from '@/hooks/useEmployeeFilterOptions';
 import { useBulkEmployeeWorkflows } from '@/hooks/useWorkflowConfig';
@@ -229,6 +229,16 @@ export function EmployeeSelectorGrid({
   const { data: skipLevelMembers, isLoading: skipLevelLoading, isError: skipError, refetch: refetchSkip } = useSkipLevelTeamMembers(
     (viewLevel === 'team' || viewLevel === 'skip_level') ? viewerId : undefined
   );
+  // v2.66.38 — Server-side manager roster (direct + skip-level merged).
+  // Authoritative source for non-full-access Team Reviews; replaces the
+  // brittle pair of client-side profile joins as the fatal dependency.
+  const managerRosterEnabled = viewLevel === 'team' && !isFullAccess;
+  const {
+    data: managerRoster,
+    isLoading: managerRosterLoading,
+    isError: managerRosterError,
+    refetch: refetchManagerRoster,
+  } = useManagerTeamRoster(managerRosterEnabled ? viewerId : undefined);
 
   // Map each reviewer panel to the workflow stage it requires employees to have
   const PANEL_REQUIRED_STAGE: Partial<Record<Exclude<ViewMode, 'self'>, string>> = {
