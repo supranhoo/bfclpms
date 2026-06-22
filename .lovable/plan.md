@@ -1,67 +1,67 @@
 ## Assumptions
-- Sajid is still seeing the Team Reviews page fail with `Dashboard data could not be loaded` and zero employees.
-- The earlier auth-readiness guards are present, but the current visible error can still be caused by a secondary dashboard query failure, not necessarily the roster query itself.
-- Current backend logs did not show fresh `uuid "null"`, `uuid "undefined"`, `has_role`, or timeout errors in the last 2 hours, so I should not make a database permission change without stronger evidence.
+- The screenshot is Sajid Raza in non-full-access Manager → Team Reviews.
+- The backend is healthy; recent logs show no fresh UUID/permission/timeout database errors.
+- Sajid still has 13 active direct reports in the database, so the UI is incorrectly treating an auxiliary query as roster-fatal.
 
 ## Clarifications
 - Not Applicable.
 
 ## Risk & Impact Report
-- **Data Impact:** No schema/data change planned. No RLS weakening; no anonymous permission grant.
-- **Workflow Impact:** Team Reviews should stop collapsing the whole roster because a non-critical KPI/score/helper query failed.
-- **UI/UX Impact:** Same screen; error banner becomes more accurate and scoped. If roster loads but KPI stats fail, employees should still be selectable instead of showing a full dashboard failure.
-- **Regression Risk:** Medium, because the page combines many queries and one broad error flag currently drives the zero-state.
-- **Mitigation Plan:** Add regression tests for the diagnostic decision tree and source-level guards; keep query behavior additive/fallback-based.
-- **Scalability Impact:** Preserve existing paged/chunked fetch patterns. No full unbounded dataset loads added.
+- **Data Impact:** No schema, RLS, historical data, audit, or backup changes.
+- **Workflow Impact:** Manager Team Reviews should load from direct + skip-level roster only; Admin/HR PMS/Audit/Management views keep existing org-wide behavior.
+- **UI/UX Impact:** Same visual layout. The fatal dashboard block will appear only when the actual manager roster queries fail; otherwise Sajid’s employee cards should render.
+- **Regression Risk:** Low-to-medium because `EmployeeSelectorGrid` is shared across reviewer dashboards.
+- **Scalability Impact:** Improves manager load path by avoiding unnecessary org-wide profile/RPC dependency; existing pagination/windowing remains unchanged.
+- **Mitigation Plan:** Add source-level regression tests for manager Team view query gating and fatal-error scoping.
+- **Rollback Strategy:** Revert the small `EmployeeSelectorGrid` gating changes and related tests/docs.
 
 ## Step-by-step Plan
-1. **Identify and narrow the failing error condition**
-   - Update the Team Reviews error-state logic so `data_load_error` is only triggered by roster-critical queries (`teamMembers`, `skipLevelMembers`, `profiles`, `stageFilteredProfiles`) and not by secondary KPI/submission score queries.
-   - Keep secondary KPI failures visible but non-blocking where possible.
+1. **Separate roster-critical errors by role/view**
+   - For non-full-access `viewLevel === 'team'`, treat only `teamError` and `skipError` as fatal.
+   - Do not let `profilesError` or `stageFilteredError` blank manager Team Reviews when those queries are not the roster source.
 
-2. **Harden secondary query inputs**
-   - Sanitize KPI/profile ID arrays before `.in(...)` lookups using the existing UUID validation pattern.
-   - Apply this specifically to KPI relation hydration and submission-score fan-out paths that can receive stale or null IDs.
+2. **Stop unnecessary org-wide profile fetch for manager Team Reviews**
+   - Change `useProfiles()` to accept an `enabled` option.
+   - In `EmployeeSelectorGrid`, enable `useProfiles()` only when the current view actually needs all profiles: full-access views, cross-check/explorer, or KPI deep-link auto-open.
+   - Manager Team view will rely on `teamMembers + skipLevelMembers` only.
 
-3. **Make the page recover gracefully**
-   - If KPI or submission score reads fail, return safe empty maps/lists where the roster can still render, and show the existing refresh affordance rather than replacing the roster with a fatal state.
-   - Keep fatal behavior only when the employee roster itself cannot be read.
+3. **Guard stage-filtered roster fetch**
+   - Change `useProfilesByWorkflowStage()` to accept an `enabled` option.
+   - Enable it only when `requiredStage` exists and the current view actually uses stage-filtered profiles.
 
-4. **Add targeted diagnostics that will be visible if the issue persists**
-   - Add a small source-level diagnostic around the Team Reviews query status object so future console captures show exactly which query failed (`team`, `skip`, `profiles`, `stage`, `kpis`, or `submissionScores`).
-   - Avoid logging secrets or full payloads.
+4. **Keep secondary KPI failures non-blocking**
+   - Preserve the current toast-only handling for KPI/submission score errors.
+   - Keep employee roster rendering even if KPI stat data is unavailable.
 
 5. **Tests**
-   - Extend `teamReviewsZeroDiagnostic.test.ts` to confirm KPI-only failures do not produce the full `data_load_error` branch.
-   - Add/extend a source regression test to ensure ID arrays are filtered before `.in('id', ...)` / `.in('kpi_id', ...)` calls in the dashboard feed.
+   - Extend/add regression tests verifying:
+     - Manager Team view does not pass `profilesError`/`stageFilteredError` into `data_load_error`.
+     - `useProfiles()` and `useProfilesByWorkflowStage()` support `enabled` gates.
+     - Manager Team view uses direct/skip roster hooks as the only fatal roster dependencies.
 
-6. **Documentation.md updates**
-   - Add a version-history note explaining that Team Reviews roster availability is separated from non-critical KPI/stat query failures.
+6. **DOCUMENTATION.md updates**
+   - Add a version-history note documenting this RCA: manager Team Reviews must not depend on org-wide profile/stage queries.
 
-7. **Policy.md updates**
-   - Add/update the Team Reviews dashboard policy: roster-critical failures may block the grid; non-critical metric failures must degrade gracefully and must not hide employees.
-
-8. **Post-implementation verification**
-   - Run the targeted Team Reviews tests.
-   - Use live preview/log signals to verify the banner no longer appears for a secondary query failure and that the roster can render independently.
+7. **POLICY.md updates**
+   - Add/update the Team Reviews policy: non-full-access manager roster source is direct + skip-level only; auxiliary profile/KPI/stage queries must not blank the roster.
 
 ## UI Changes
-- **Location:** Team Reviews dashboard error/zero-state area.
-- **Visual change:** No redesign. The existing fatal dashboard banner should appear only when the roster cannot load; non-critical stat issues should not replace the team member grid.
-- **Interaction impact:** `Refresh roster` remains available. Employee cards should remain selectable if roster data exists.
-- **Responsiveness:** No layout changes.
+- **Exact location:** `/dashboard?view=team`, Team Reviews panel.
+- **Visual change:** No redesign; Sajid should see employee cards instead of the “Dashboard data could not be loaded” block when direct/skip roster queries succeed.
+- **Interaction impact:** Refresh/Retry remains unchanged.
+- **Responsiveness:** Not Applicable; layout unchanged.
 
 ## Implementation
-- Pending approval.
+- Completed: `EmployeeSelectorGrid` now gates org-wide profile/stage queries and scopes manager Team Reviews fatal errors to direct/skip roster hooks only.
 
 ## Tests
-- Pending approval: targeted Vitest/source tests only.
+- Completed: `src/test/teamReviewsManagerRosterQueryGate.test.ts` added for enabled gates and manager fatal-error scoping.
 
 ## DOCUMENTATION.md updates
-- Pending approval.
+- Completed: `DOCUMENTATION.md` now records v2.66.37 RCA and fix.
 
 ## POLICY.md updates
-- Pending approval.
+- Completed: `POLICY.md` §131 now defines manager Team Reviews direct+skip roster source and auxiliary-query non-fatal behavior.
 
 ## Post-implementation notes
-- Rollback is straightforward: revert the Team Reviews error-scope and sanitization changes. No database rollback required.
+- I found the database still has Sajid’s 13 active direct reports and the hosted backend is responding normally, so the next fix should be in the Team Reviews query-gating path, not the database.

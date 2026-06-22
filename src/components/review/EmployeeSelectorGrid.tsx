@@ -178,6 +178,14 @@ export function EmployeeSelectorGrid({
   const queryClient = useQueryClient();
   const clearAllFilters = useClearAllFilters();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const autoOpenKpiId = searchParams.get('kpi');
+  const [statusFilter, setStatusFilter] = useUrlFilterState('status', 'all');
+  const isFullAccess = role === 'admin' || role === 'auditor' || role === 'management' || role === 'hr_pms';
+  const isExplorerCapable = viewLevel === 'audit' || viewLevel === 'management';
+  const exploreParam = searchParams.get('explore');
+  const isCrossCheckMode = isExplorerCapable && statusFilter === 'cross_check';
+  const isExploreMode = isExplorerCapable && (statusFilter === 'cross_check' || exploreParam === '1');
   const { data: bulkReviewFlagOn } = useBulkReviewFlag();
   // Track in-flight fetches for the data this grid depends on so the refresh
   // button can show a spinner and stay disabled until refetches settle.
@@ -215,7 +223,8 @@ export function EmployeeSelectorGrid({
   }, [queryClient]);
 
   const { data: teamMembers, isLoading: teamLoading, isError: teamError, refetch: refetchTeam } = useTeamMembers(viewerId);
-  const { data: allProfiles, isLoading: profilesLoading, isError: profilesError, refetch: refetchProfiles } = useProfiles();
+  const profilesEnabled = isFullAccess || isExploreMode || !!autoOpenKpiId;
+  const { data: allProfiles, isLoading: profilesLoading, isError: profilesError, refetch: refetchProfiles } = useProfiles({ enabled: profilesEnabled });
   // Fetch skip-level members for team view (merged) or standalone skip_level view
   const { data: skipLevelMembers, isLoading: skipLevelLoading, isError: skipError, refetch: refetchSkip } = useSkipLevelTeamMembers(
     (viewLevel === 'team' || viewLevel === 'skip_level') ? viewerId : undefined
@@ -236,7 +245,8 @@ export function EmployeeSelectorGrid({
   // Fetch only employees whose resolved workflow template includes the required stage
   const selectedPeriodForFilter = periodSelection.selectedMonth;
   const selectedYearForFilter = periodSelection.selectedYear;
-  const { data: stageFilteredProfiles, isLoading: stageFilteredLoading, isError: stageFilteredError, refetch: refetchStageFiltered } = useProfilesByWorkflowStage(requiredStage, selectedPeriodForFilter, selectedYearForFilter);
+  const stageFilteredEnabled = !!requiredStage && !isExploreMode;
+  const { data: stageFilteredProfiles, isLoading: stageFilteredLoading, isError: stageFilteredError, refetch: refetchStageFiltered } = useProfilesByWorkflowStage(requiredStage, selectedPeriodForFilter, selectedYearForFilter, { enabled: stageFilteredEnabled });
 
   // Lazy-load PMS Grades only after the user opens the "More filters" popover
   // (or if a grade is already preset via URL ?grade=...)
@@ -260,9 +270,6 @@ export function EmployeeSelectorGrid({
       variant: 'default',
     });
   }, [rosterMeta?.fallbackUsed, toast]);
-
-  const [searchParams] = useSearchParams();
-  const autoOpenKpiId = searchParams.get('kpi');
 
   // Derived values from period selection
   const selectedPeriod = periodSelection.selectedMonth;
@@ -304,7 +311,6 @@ export function EmployeeSelectorGrid({
       React.startTransition(() => setSearchQueryRef.current(val));
     }, 250);
   }, []);
-  const [statusFilter, setStatusFilter] = useUrlFilterState('status', 'all');
   const [selectedDepartment, setSelectedDepartment] = useUrlFilterStateNullable('dept');
   const [selectedDesignation, setSelectedDesignation] = useUrlFilterStateNullable('desig');
   const [selectedGrade, setSelectedGrade] = useUrlFilterStateNullable('grade');
@@ -371,8 +377,6 @@ export function EmployeeSelectorGrid({
       variant: 'default',
     });
   }, [periodKpisError, submissionScoresError, toast]);
-
-  const isFullAccess = role === 'admin' || role === 'auditor' || role === 'management' || role === 'hr_pms';
 
   // ADR-063 RCA — diagnostic for Vivek's empty Team Reviews. Will be removed
   // once the failing branch is identified.
@@ -448,13 +452,9 @@ export function EmployeeSelectorGrid({
   };
 
   // isLoading accounts for stage-filtered fetch when a required stage is active
-  const isExplorerCapable = viewLevel === 'audit' || viewLevel === 'management';
-  const isCrossCheckMode = isExplorerCapable && statusFilter === 'cross_check';
   // v2.65.0 — Explorer Mode (auditor + management read-only org-wide browse).
   // Treat Explorer Mode as a UI-level alias of cross_check; auto-applies when
   // ?explore=1 is in the URL or when the user toggles the pill.
-  const exploreParam = searchParams.get('explore');
-  const isExploreMode = isExplorerCapable && (statusFilter === 'cross_check' || exploreParam === '1');
   // Auto-promote to cross_check when ?explore=1 is set but status filter hasn't caught up yet
   useEffect(() => {
     if (isExplorerCapable && exploreParam === '1' && statusFilter !== 'cross_check') {
@@ -468,6 +468,12 @@ export function EmployeeSelectorGrid({
       : requiredStage
         ? stageFilteredLoading
         : (isFullAccess ? profilesLoading : teamLoading);
+  // v2.66.37 — Manager Team Reviews roster source is direct + skip only.
+  // Org-wide profile / stage-filter queries are auxiliary there and must not
+  // blank Sajid-style manager rosters when the direct/skip queries succeed.
+  const rosterDataError = viewLevel === 'team' && !isFullAccess
+    ? !!teamError || !!skipError
+    : !!profilesError || !!teamError || !!skipError || !!stageFilteredError;
 
   // Build merged base members with relationship tags for team view.
   //
@@ -726,7 +732,7 @@ export function EmployeeSelectorGrid({
     }
 
     return filtered;
-  }, [baseMembers, searchQuery, selectedDepartment, selectedDesignation, selectedGrade, selectedManager]);
+  }, [baseMembers, searchQuery, selectedDepartment, selectedDesignation, selectedGrade, selectedManager, isFullAccess]);
 
   // Auditor workload stats: compute pending/in-audit/forwarded per auditor + unassigned
   const { auditorWorkloadStats, unassignedStats } = useMemo(() => {
@@ -2055,8 +2061,7 @@ export function EmployeeSelectorGrid({
           selectedPeriod={selectedPeriod}
           selectedYear={selectedYear}
           dataLoadError={
-            !!teamError || !!skipError ||
-            !!profilesError || !!stageFilteredError
+            rosterDataError
           }
           onRefresh={() => {
             refetchTeam();
@@ -2363,9 +2368,7 @@ export function EmployeeSelectorGrid({
             // v2.66.11.16 (POLICY §128) — ROSTER-CRITICAL only. Period-KPI and
             // submission-score failures are secondary: they degrade KPI tiles
             // but must not replace the roster with a fatal state.
-            const dataError =
-              profilesError || teamError || skipError || stageFilteredError;
-            if (dataError) {
+            if (rosterDataError) {
               return (
                 <div className="text-center py-12 text-muted-foreground">
                   <AlertTriangle className="h-12 w-12 mx-auto mb-4 text-destructive/70" />

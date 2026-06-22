@@ -1,6 +1,6 @@
 ---
 name: team-reviews-zero-kpi-rca
-description: Reviewer SECURITY DEFINER RPCs must qualify CTE id columns; ?mgr filter is admin-only; KRA-issuance flows invalidate ['kpis-by-period-ranges']; KRA Issuance report has a Managers Without KRAs panel; reviewer scope ignores department
+description: Team Reviews RCA: manager roster is direct+skip only; auxiliary profile/stage/KPI failures must not blank it; RPC id hygiene; ?mgr admin-only
 type: feature
 ---
 **RPC hygiene (POLICY §131, v2.66.11.13).** SECURITY DEFINER reviewer helpers with `RETURNS TABLE (id uuid, …)` MUST qualify CTE columns as `SELECT p.id AS profile_id` and reference `cte.profile_id`. Bare `id` inside CTEs raises `42702 ambiguous column` only in the non-full-access branch, silently zeroing manager dashboards (Sajid Raza true RCA, 105 affected reviewers covering ~4,700 reports).
@@ -8,6 +8,8 @@ type: feature
 **Hidden URL filter gating.** `EmployeeSelectorGrid` applies `?mgr=<uuid>` only when `isFullAccess === true`. Stale admin-session URL params must never narrow a manager's roster.
 
 **Diagnostic precedence.** `diagnoseEmptyTeam` evaluates `dataLoadError` BEFORE `no_reports_mapped / reports_without_kpis / kpis_filtered_out` so RPC failures never display "No KPIs assigned".
+
+**Manager roster fatal gate (v2.66.37).** Plain non-full-access Manager Team Reviews uses only `useTeamMembers(viewerId) ∪ useSkipLevelTeamMembers(viewerId)` as the roster source. `useProfiles()`, `useProfilesByWorkflowStage()`, period KPI reads, and submission-score reads are auxiliary in that mode: they may affect stats/toasts/deep links, but must not enable unnecessarily or trip the fatal dashboard error when direct/skip roster queries succeed. `rosterDataError` for manager Team = `teamError || skipError` only.
 
 **Auth-ready cache eviction.** `AuthContext` invalidates `['kpis-by-period-ranges']`, `['profiles']`, `['profiles-by-workflow-stage']`, `['team-members']`, `['skip-level-team-members']` on first auth-ready transition.
 
@@ -19,4 +21,4 @@ type: feature
 
 **Auth-readiness fan-out gate (v2.66.11.14).** A second occurrence of the same banner for the same user was traced to an auth-readiness race, not the RPC fix above. Two symptoms in Postgres logs: (a) `permission denied for function has_role` on `public.system_settings` (request hit PostgREST as `anon` because the JWT was not yet attached — `authenticated` has EXECUTE, `anon` does not, and granting `anon` is REJECTED because it would weaken every RLS policy invoking `has_role`); (b) `invalid input syntax for type uuid: "undefined"` on `profiles.reporting_manager_id`. Fix: `EmployeeSelectorGrid` now derives `viewerId = authReady ? user?.id : undefined` and feeds that into `useTeamMembers` / `useSkipLevelTeamMembers`; both hooks gate `enabled` on a strict `isUuid()` regex, not `!!`. Contract: **no dashboard query may fire before `authReady === true` AND its uuid input is a valid UUID.** Regression: `src/test/teamMembersAuthReadyGate.test.ts`.
 
-Regression: `src/test/managersWithoutKras.test.ts` (predicate / indirect hops / minReports), `src/test/teamReviewsZeroDiagnostic.test.ts` (incl. data_load_error branch), `src/test/managerScopeFilterGate.test.ts` (admin-only `mgr` filter gate).
+Regression: `src/test/managersWithoutKras.test.ts` (predicate / indirect hops / minReports), `src/test/teamReviewsZeroDiagnostic.test.ts` (incl. data_load_error branch), `src/test/managerScopeFilterGate.test.ts` (admin-only `mgr` filter gate), `src/test/teamReviewsManagerRosterQueryGate.test.ts` (manager roster query/fatal gate).
