@@ -13440,6 +13440,25 @@ export type Database = {
           weightage: number
         }[]
       }
+      get_manager_team_roster: {
+        Args: { _viewer_id: string }
+        Returns: {
+          avatar_url: string
+          department_code: string
+          department_id: string
+          department_name: string
+          designation: string
+          email: string
+          employee_code: string
+          full_name: string
+          id: string
+          is_active: boolean
+          mobile_number: string
+          pms_grade: string
+          relationship: string
+          reporting_manager_id: string
+        }[]
+      }
       get_org_kpi_data_entry_snapshot: {
         Args: { p_period: string; p_year: number }
         Returns: Json
