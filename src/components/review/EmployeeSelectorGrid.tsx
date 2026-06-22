@@ -506,11 +506,18 @@ export function EmployeeSelectorGrid({
           relationship: (skipIds.has(p.id) ? 'indirect' : directIds.has(p.id) ? 'direct' : undefined) as 'direct' | 'indirect' | undefined,
         }));
       } else {
-        // Manager: merge direct + indirect
-        const directSet = new Set(teamMembers?.map(m => m.id) || []);
-        const directTagged = (teamMembers || []).map(m => ({ ...m, relationship: 'direct' as const }));
-        const indirectTagged = (skipLevelMembers || []).filter(m => !directSet.has(m.id)).map(m => ({ ...m, relationship: 'indirect' as const }));
-        resolved = [...directTagged, ...indirectTagged];
+        // v2.66.38 — Manager roster comes from server-side RPC with
+        // relationship already tagged. Falls back to legacy direct/skip
+        // hooks ONLY if the RPC hasn't loaded yet (keepPreviousData) so
+        // initial paint stays warm.
+        if (managerRoster && managerRoster.length >= 0) {
+          resolved = managerRoster as EmployeeProfile[];
+        } else {
+          const directSet = new Set(teamMembers?.map(m => m.id) || []);
+          const directTagged = (teamMembers || []).map(m => ({ ...m, relationship: 'direct' as const }));
+          const indirectTagged = (skipLevelMembers || []).filter(m => !directSet.has(m.id)).map(m => ({ ...m, relationship: 'indirect' as const }));
+          resolved = [...directTagged, ...indirectTagged];
+        }
       }
     } else if ((viewLevel === 'audit' || viewLevel === 'management') && statusFilter === 'cross_check') {
       // Cross-check mode: bypass workflow stage filter, show ALL employees
