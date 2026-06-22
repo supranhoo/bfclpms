@@ -3,6 +3,20 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { fetchAllPaged, fetchAllRpcPaged } from '@/lib/fetchAll';
 
+/**
+ * v2.66.11.14 — Defensive UUID guard.
+ *
+ * Prevents `enabled: !!id` from firing a request when callers accidentally
+ * pass the literal string `"undefined"` / `"null"` (URL-param coercion,
+ * stale local-storage value, or an auth-readiness race). Without this guard
+ * the query reaches PostgREST and fails with
+ * `invalid input syntax for type uuid: "undefined"`, which then trips the
+ * Team Reviews `data_load_error` banner even for managers whose roster is
+ * intact. Pure regex check — no allocations on the hot path.
+ */
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const isUuid = (v: unknown): v is string => typeof v === 'string' && UUID_RE.test(v);
+
 export function useDivisions(companyId?: string) {
   return useQuery({
     queryKey: ['divisions', companyId],
@@ -355,7 +369,9 @@ export function useTeamMembers(managerId: string | undefined) {
       if (error) throw error;
       return data;
     },
-    enabled: !!managerId,
+    // v2.66.11.14 — also reject the literal strings "undefined"/"null" that
+    // can creep in from URL params or pre-auth renders.
+    enabled: isUuid(managerId),
     placeholderData: keepPreviousData,
   });
 }
@@ -602,7 +618,8 @@ export function useSkipLevelTeamMembers(userId: string | undefined) {
       if (error) throw error;
       return data || [];
     },
-    enabled: !!userId,
+    // v2.66.11.14 — UUID guard prevents `"undefined"` from reaching PostgREST.
+    enabled: isUuid(userId),
     placeholderData: keepPreviousData,
   });
 }

@@ -168,7 +168,13 @@ export function EmployeeSelectorGrid({
   onPeriodSelectionChange,
   onSelectEmployee,
 }: EmployeeSelectorGridProps) {
-  const { user, effectiveRole: role } = useAuth();
+  const { user, effectiveRole: role, isReady: authReady } = useAuth();
+  // v2.66.11.14 — Single readiness gate for every dashboard data fetch.
+  // Prevents the auth-readiness race that caused PostgREST errors
+  // (`permission denied for function has_role`, `uuid: "undefined"`) and
+  // tripped the Team Reviews `data_load_error` banner for managers whose
+  // roster was actually intact (Sajid Raza, v2.66.11.14 RCA).
+  const viewerId = authReady ? user?.id : undefined;
   const queryClient = useQueryClient();
   const clearAllFilters = useClearAllFilters();
   const navigate = useNavigate();
@@ -208,11 +214,11 @@ export function EmployeeSelectorGrid({
     ].forEach((key) => queryClient.invalidateQueries({ queryKey: [key] }));
   }, [queryClient]);
 
-  const { data: teamMembers, isLoading: teamLoading, isError: teamError, refetch: refetchTeam } = useTeamMembers(user?.id);
+  const { data: teamMembers, isLoading: teamLoading, isError: teamError, refetch: refetchTeam } = useTeamMembers(viewerId);
   const { data: allProfiles, isLoading: profilesLoading, isError: profilesError, refetch: refetchProfiles } = useProfiles();
   // Fetch skip-level members for team view (merged) or standalone skip_level view
   const { data: skipLevelMembers, isLoading: skipLevelLoading, isError: skipError, refetch: refetchSkip } = useSkipLevelTeamMembers(
-    (viewLevel === 'team' || viewLevel === 'skip_level') ? user?.id : undefined
+    (viewLevel === 'team' || viewLevel === 'skip_level') ? viewerId : undefined
   );
 
   // Map each reviewer panel to the workflow stage it requires employees to have
