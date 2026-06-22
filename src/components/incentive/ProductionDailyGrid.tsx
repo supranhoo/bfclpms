@@ -14,11 +14,13 @@ import { resolveEmployeeRate, resolveEmployeeCompanyId } from '@/lib/incentiveRa
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useQuery } from '@tanstack/react-query';
-import { fetchAllPaged } from '@/lib/fetchAll';
 import { useCompanyFilter } from '@/hooks/useCompanyFilter';
 import { useIncentiveReportParity } from '@/hooks/useIncentiveReportParity';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { fetchProgramMappingsPaged } from '@/services/incentiveProgramMappings';
+// Mapped-employee roster is resolved server-side via SECURITY DEFINER RPC.
+// Direct `from('profiles')` reads from this grid are forbidden — they break
+// for non-admin Incentive Data Entry users after PII hardening dropped the
+// broad `profiles` SELECT policy. See POLICY → Incentive Mapped Employees.
 import {
   applyDailyGridFilters,
   paginate,
@@ -82,44 +84,22 @@ export function ProductionDailyGrid({ programId, programName, onMonthYearChange,
     queryKey: ['mapped-employees-for-grid', programId],
     enabled: !!programId,
     queryFn: async () => {
-      // Get mappings for this program
-      const mappings = await fetchProgramMappingsPaged(programId);
-      if (!mappings.length) return [];
-
-      // Resolve employees from mappings
-      const employeeIds = new Set<string>();
-      const deptIds: string[] = [];
-      const buIds: string[] = [];
-      const divIds: string[] = [];
-      const desigs: string[] = [];
-
-      for (const m of mappings) {
-        if (m.mapping_type === 'employee') employeeIds.add(m.mapping_value);
-        else if (m.mapping_type === 'department') deptIds.push(m.mapping_value);
-        else if (m.mapping_type === 'business_unit') buIds.push(m.mapping_value);
-        else if (m.mapping_type === 'division') divIds.push(m.mapping_value);
-        else if (m.mapping_type === 'designation') desigs.push(m.mapping_value);
-      }
-
-      // Fetch ALL active profiles (paged — PostgREST caps unranged reads at 1000 rows; active roster ~2.5k)
-      const allProfiles = await fetchAllPaged<any>((from, to) =>
-        supabase
-          .from('profiles')
-          .select('id, full_name, employee_code, email, designation, company_id, department_id, departments(id, name, business_unit_id, business_units(id, division_id, divisions(id, company_id)))')
-          .eq('is_active', true)
-          .order('full_name')
-          .range(from, to)
-      );
-      if (!allProfiles.length) return [];
-
-      return allProfiles.filter(p => {
-        if (employeeIds.has(p.id)) return true;
-        if (deptIds.length && p.department_id && deptIds.includes(p.department_id)) return true;
-        const buId = (p as any).departments?.business_unit_id;
-        if (buIds.length && buId && buIds.includes(buId)) return true;
-        if (desigs.length && p.designation && desigs.includes(p.designation)) return true;
-        return false;
+      // Single round trip — RPC resolves every mapping_type server-side and
+      // returns only non-PII identification + organisational scope fields.
+      const { data, error } = await supabase.rpc('get_incentive_program_employees', {
+        _program_id: programId,
       });
+      if (error) throw error;
+      return (data ?? []) as Array<{
+        id: string;
+        full_name: string;
+        employee_code: string | null;
+        designation: string | null;
+        department_id: string | null;
+        business_unit_id: string | null;
+        division_id: string | null;
+        company_id: string | null;
+      }>;
     },
   });
 
@@ -153,22 +133,18 @@ export function ProductionDailyGrid({ programId, programName, onMonthYearChange,
     const map = new Map<string, { rate: number; source: string }>();
     for (const emp of mappedEmployees) {
       const deptId = emp.department_id;
-      const dept = (emp as any).departments;
-      const buId = dept?.business_unit_id || null;
-      // Use shared resolver — single source of truth, parity with compute edge function.
+      const buId = (emp as any).business_unit_id ?? null;
+      const divisionId = (emp as any).division_id ?? null;
+      // RPC already pre-resolved company_id (profile → division fallback).
+      // We still call the shared resolver for parity with the compute edge
+      // function, but the lookup maps degenerate to a single hop.
       const companyId = resolveEmployeeCompanyId({
         profileCompanyId: (emp as any).company_id ?? null,
         departmentId: deptId,
         deptToBu: new Map([[deptId, buId]]),
-        buToDivision: buId
-          ? new Map([[buId, dept?.business_units?.division_id ?? null]])
-          : null,
-        divToCompany: dept?.business_units?.division_id
-          ? new Map([[dept.business_units.division_id, dept?.business_units?.divisions?.company_id ?? null]])
-          : null,
-        buToCompany: buId
-          ? new Map([[buId, dept?.business_units?.divisions?.company_id ?? null]])
-          : null,
+        buToDivision: buId ? new Map([[buId, divisionId]]) : null,
+        divToCompany: null,
+        buToCompany: null,
       });
       const resolved = resolveEmployeeRate(emp.id, deptId, buId, rates as any[], companyId, targetDate);
       if (resolved.source !== 'none') {
@@ -448,7 +424,7 @@ export function ProductionDailyGrid({ programId, programName, onMonthYearChange,
                     const empVals = localData[emp.id] || {};
                     const total = getTotal(emp.id, visibleDays);
                     const amount = Math.round(total * effectiveRate);
-                    const deptName = (emp as any).departments?.name || '—';
+                    const deptName = (emp as any).department_name || '—';
                     return (
                       <TableRow key={emp.id}>
                         <TableCell className="sticky left-0 bg-background z-10 text-xs font-mono">{emp.employee_code || '—'}</TableCell>
