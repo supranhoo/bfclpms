@@ -11,7 +11,14 @@ export function useProductionRates(programId: string) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('incentive_production_rates')
-        .select('*, profiles:employee_id(id, full_name, employee_code, email, designation, departments(name))')
+        // IMPORTANT: do NOT embed `profiles` here.
+        // Non-admin Incentive Data Entry users no longer have broad SELECT on
+        // `public.profiles` (PII hardening 2026-06-22). An embedded join would
+        // make PostgREST return zero rows for those users, which the data-entry
+        // grid then mis-renders as "No production rates configured".
+        // Employee names for the admin Production Rates tab are resolved
+        // separately via the `get_profile_directory_entries` SECURITY DEFINER RPC.
+        .select('*')
         .eq('program_id', programId)
         .order('rate_type')
         .order('effective_from', { ascending: false });
