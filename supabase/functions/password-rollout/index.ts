@@ -183,23 +183,24 @@ async function processOneUser(
           app_name: appName,
         };
 
-        // IMPORTANT: Lovable Cloud rejects requests where `Authorization` and
-        // `apikey` carry different keys ("Conflicting API keys"). Send the
-        // anon/publishable key in BOTH headers so the gateway accepts the call
-        // and `send-email-notification`'s validateCaller authorizes via the
-        // matching anon key path.
-        const anonKey =
-          Deno.env.get("SUPABASE_ANON_KEY") ??
-          Deno.env.get("SUPABASE_PUBLISHABLE_KEY") ??
-          serviceRoleKey;
+        // Server-to-server call: `send-email-notification`'s validateCaller
+        // rejects anon/publishable keys (they are public values bundled in
+        // every browser) and accepts only the service-role key or an admin
+        // JWT. Send the service-role key in both `Authorization` and `apikey`
+        // so the gateway sees matching keys and the receiver authorizes.
+        if (!serviceRoleKey) {
+          throw new Error(
+            "SUPABASE_SERVICE_ROLE_KEY is not configured for password-rollout; cannot dispatch email."
+          );
+        }
         const emailResponse = await fetch(
           `${supabaseUrl}/functions/v1/send-email-notification`,
           {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
-              Authorization: `Bearer ${anonKey}`,
-              apikey: anonKey,
+              Authorization: `Bearer ${serviceRoleKey}`,
+              apikey: serviceRoleKey,
             },
             body: JSON.stringify(emailBody),
           }
