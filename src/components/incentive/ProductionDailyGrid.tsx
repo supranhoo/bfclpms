@@ -53,7 +53,7 @@ export function ProductionDailyGrid({ programId, programName, onMonthYearChange,
   const [dateRange, setDateRange] = useState<DateRange>('all');
   const { user } = useAuth();
 
-  const { data: rates = [], isLoading: ratesLoading } = useProductionRates(programId);
+  const { data: rates = [], isLoading: ratesLoading, error: ratesError } = useProductionRates(programId);
   const { data: entries = [], isLoading: entriesLoading } = useProductionDailyEntries(programId, month, year);
   const bulkUpsert = useBulkUpsertDailyEntries();
 
@@ -262,6 +262,9 @@ export function ProductionDailyGrid({ programId, programName, onMonthYearChange,
   }, [companies, selectedCompanyId]);
 
   const emptyStateMessage = useMemo(() => {
+    if (ratesError) {
+      return `Could not load production rates: ${(ratesError as any)?.message || 'unknown error'}. Please refresh; if the problem persists, contact an administrator.`;
+    }
     if (mappedEmployees.length === 0) {
       return 'This program has no employee mappings. Open Program Mapping (Incentive Config) to add employees.';
     }
@@ -275,7 +278,7 @@ export function ProductionDailyGrid({ programId, programName, onMonthYearChange,
       return `No mapped employees match the selected company filter "${companyName}". Clear the company filter or pick another company.`;
     }
     return 'No employees to display with the current filters.';
-  }, [mappedEmployees.length, rates.length, employeeRates.size, companyName, month, year]);
+  }, [ratesError, mappedEmployees.length, rates.length, employeeRates.size, companyName, month, year]);
 
   const sourceBadge = (source: string) => {
     const variants: Record<string, 'default' | 'secondary' | 'outline'> = {

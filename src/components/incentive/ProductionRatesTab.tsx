@@ -157,7 +157,10 @@ export function ProductionRatesTab({ programId }: Props) {
   const getAppliesTo = (r: any): string => {
     if (r.rate_type === 'common') return 'All Employees';
     if (r.rate_type === 'employee') {
-      const profile = r.profiles;
+      // `useProductionRates` no longer embeds the `profiles` join (PII hardening
+      // 2026-06-22). Resolve the employee from the locally-fetched roster used
+      // by this admin-only configuration tab.
+      const profile = allProfiles.find((p: any) => p.id === r.employee_id);
       return formatEmployeeName(profile?.full_name, profile?.email || '', profile?.employee_code);
     }
     if (r.rate_type === 'department') {

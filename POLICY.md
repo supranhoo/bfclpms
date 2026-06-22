@@ -50,6 +50,20 @@ whether a recompute is pending. Rationale: prevents the recurrence of
 BUG-`bfcl-june-109654` (v2.66.46) where a per-page subtotal was mistaken for
 the program total.
 
+### Extension (codified 2026-06-22) — No `profiles` embed on rate/entry reads
+
+Incentive production-data screens MUST NOT embed `profiles(...)` joins in
+`incentive_production_rates`, `production_daily_entries`,
+`incentive_vessel_rates`, or `vessel_monthly_entries` reads. Non-admin
+Incentive Data Entry users intentionally lack broad SELECT on `public.profiles`
+after the 2026-06-22 PII hardening, so any embedded profile join silently
+returns zero rows for them and surfaces as a misleading
+"No production rates configured" empty state. Employee identification for
+these screens MUST come from the SECURITY DEFINER RPCs
+`public.get_incentive_program_employees(_program_id)` and
+`public.get_profile_directory_entries(_ids)`. Rationale: BUG-`metal-sizing-200291`
+(v2.66.49).
+
 **Rule (reads).** Every client read of `incentive_program_mappings` that returns a list MUST go through `fetchProgramMappingsPaged()` or `fetchAllProgramMappingsPaged()` in `src/services/incentiveProgramMappings.ts`. Direct `supabase.from('incentive_program_mappings').select(...)` for list reads is forbidden. The `compute-monthly-incentives` edge function MUST also page this read via `.range(...)`. `head: true` count queries are exempt.
 
 **Rule (writes).** Bulk add/remove MUST use `bulkAddProgramMappingsBatched()` / `bulkRemoveProgramMappingsBatched()` with a 500-row batch size to avoid request-size/URL-length failures on large draft applies.
