@@ -73,7 +73,7 @@ export const ModuleCard = React.forwardRef<HTMLDivElement, ModuleCardProps>(func
         }
       }}
       className={cn(
-        'group relative overflow-hidden rounded-xl border border-border/60 bg-card',
+        'group relative flex min-h-[200px] flex-col overflow-hidden rounded-xl border border-border/60 bg-card',
         'shadow-sm transition-all duration-300 ease-out',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:ring-offset-2',
         isComingSoon
