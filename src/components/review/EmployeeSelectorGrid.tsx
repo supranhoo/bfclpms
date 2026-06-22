@@ -254,6 +254,36 @@ export function EmployeeSelectorGrid({
   };
   const requiredStage = PANEL_REQUIRED_STAGE[viewLevel] ?? null;
 
+  // Authoritative direct/skip-level ID sets for Team view.
+  //
+  // BUG-`sajid-team-tiles-zero` (2026-06-22): the tile counter and tile filter
+  // previously read `directIds`/`skipIds` exclusively from `useTeamMembers` /
+  // `useSkipLevelTeamMembers`. For a non-full-access manager whose roster comes
+  // from the v2.66.44 server-side RPC (`useManagerTeamRoster`), those legacy
+  // hooks may be empty/stale — so every employee falls through both
+  // `isDirect`/`isIndirect` branches and the Direct Pending / Skip-Level
+  // Pending / Reviewed tiles render 0, even though each employee card still
+  // shows live "1 pending" badges from `getEmployeeKpiStats`.
+  //
+  // Prefer the manager-roster relationship tags whenever they are present; the
+  // legacy hooks remain as a fallback for full-access roles (admin / hr_pms /
+  // auditor / management) that intentionally skip the RPC.
+  const { directIdSet, skipIdSet } = useMemo(() => {
+    if (managerRoster && managerRoster.length > 0) {
+      const direct = new Set<string>();
+      const skip = new Set<string>();
+      managerRoster.forEach((m: any) => {
+        if (m.relationship === 'direct') direct.add(m.id);
+        else if (m.relationship === 'indirect') skip.add(m.id);
+      });
+      return { directIdSet: direct, skipIdSet: skip };
+    }
+    return {
+      directIdSet: new Set<string>(teamMembers?.map(m => m.id) || []),
+      skipIdSet: new Set<string>(skipLevelMembers?.map(m => m.id) || []),
+    };
+  }, [managerRoster, teamMembers, skipLevelMembers]);
+
   // Fetch only employees whose resolved workflow template includes the required stage
   const selectedPeriodForFilter = periodSelection.selectedMonth;
   const selectedYearForFilter = periodSelection.selectedYear;
@@ -840,8 +870,8 @@ export function EmployeeSelectorGrid({
     } else if (statusFilter !== 'all' && statusFilter !== 'my_assigned' && periodKpis) {
       const employeeIds = new Set<string>();
       // For merged team view, build direct + skip-level member sets for relationship detection
-      const skipIds = viewLevel === 'team' ? new Set(skipLevelMembers?.map(m => m.id) || []) : new Set<string>();
-      const directIds = viewLevel === 'team' ? new Set(teamMembers?.map(m => m.id) || []) : new Set<string>();
+      const skipIds = viewLevel === 'team' ? skipIdSet : new Set<string>();
+      const directIds = viewLevel === 'team' ? directIdSet : new Set<string>();
       
       periodKpis.forEach(kpi => {
         const stages = getStages(kpi.employee_id);
@@ -958,7 +988,7 @@ export function EmployeeSelectorGrid({
     });
 
     return filtered;
-  }, [demographicFilteredMembers, statusFilter, periodKpis, viewLevel, workflowMap, skipLevelMembers, teamMembers, myAssignedEmployeeIds, myKpiLevelData, auditorFilter, auditorWorkloadMap, unassignedStats]);
+  }, [demographicFilteredMembers, statusFilter, periodKpis, viewLevel, workflowMap, skipIdSet, directIdSet, myAssignedEmployeeIds, myKpiLevelData, auditorFilter, auditorWorkloadMap, unassignedStats]);
 
   // Split display members into assigned/others for audit view
   const { assignedMembers, otherMembers } = useMemo(() => {
@@ -1059,8 +1089,8 @@ export function EmployeeSelectorGrid({
 
     const memberIds = new Set(demographicFilteredMembers.map(m => m.id));
     const relevantKpis = periodKpis.filter(k => memberIds.has(k.employee_id));
-    const skipIds = new Set(skipLevelMembers?.map(m => m.id) || []);
-    const directIds = new Set(teamMembers?.map(m => m.id) || []);
+    const skipIds = skipIdSet;
+    const directIds = directIdSet;
 
     if (viewLevel === 'team') {
       // Merged view: separate direct pending, skip-level pending, and reviewed counts
@@ -1280,7 +1310,7 @@ export function EmployeeSelectorGrid({
         totalKpis: relevantKpis.length,
       };
     }
-  }, [periodKpis, demographicFilteredMembers, viewLevel, workflowMap, skipLevelMembers, teamMembers, submissionScoreMap, isFullAccess]);
+  }, [periodKpis, demographicFilteredMembers, viewLevel, workflowMap, skipIdSet, directIdSet, submissionScoreMap, isFullAccess]);
   // v2.66.11.17 — RCA closed. The HR PMS Reviewed tile is mathematically
   // correct (see DOCUMENTATION v2.66.11.17). The visible-list gap was a
   // symptom of zero-scored KPIs stuck at pre-HR-PMS stages, addressed by
@@ -1366,7 +1396,7 @@ export function EmployeeSelectorGrid({
 
     const profileMap = new Map((allProfiles || []).map(p => [p.id, p]));
     const deptMap = new Map((departments || []).map(d => [d.id, d.name]));
-    const skipIds = new Set(skipLevelMembers?.map(m => m.id) || []);
+    const skipIds = skipIdSet;
 
     const getPendingKpis = (employeeId: string, relationship?: 'direct' | 'indirect'): KPI[] => {
       const empKpis = periodKpis.filter(k => k.employee_id === employeeId);
