@@ -988,7 +988,7 @@ export function EmployeeSelectorGrid({
     });
 
     return filtered;
-  }, [demographicFilteredMembers, statusFilter, periodKpis, viewLevel, workflowMap, skipLevelMembers, teamMembers, myAssignedEmployeeIds, myKpiLevelData, auditorFilter, auditorWorkloadMap, unassignedStats]);
+  }, [demographicFilteredMembers, statusFilter, periodKpis, viewLevel, workflowMap, skipIdSet, directIdSet, myAssignedEmployeeIds, myKpiLevelData, auditorFilter, auditorWorkloadMap, unassignedStats]);
 
   // Split display members into assigned/others for audit view
   const { assignedMembers, otherMembers } = useMemo(() => {
@@ -1310,7 +1310,7 @@ export function EmployeeSelectorGrid({
         totalKpis: relevantKpis.length,
       };
     }
-  }, [periodKpis, demographicFilteredMembers, viewLevel, workflowMap, skipLevelMembers, teamMembers, submissionScoreMap, isFullAccess]);
+  }, [periodKpis, demographicFilteredMembers, viewLevel, workflowMap, skipIdSet, directIdSet, submissionScoreMap, isFullAccess]);
   // v2.66.11.17 — RCA closed. The HR PMS Reviewed tile is mathematically
   // correct (see DOCUMENTATION v2.66.11.17). The visible-list gap was a
   // symptom of zero-scored KPIs stuck at pre-HR-PMS stages, addressed by
