@@ -52,16 +52,16 @@
 - **Responsiveness:** Not Applicable; layout unchanged.
 
 ## Implementation
-- Pending approval.
+- Completed: `EmployeeSelectorGrid` now gates org-wide profile/stage queries and scopes manager Team Reviews fatal errors to direct/skip roster hooks only.
 
 ## Tests
-- Pending approval; source regression tests will be added/updated.
+- Completed: `src/test/teamReviewsManagerRosterQueryGate.test.ts` added for enabled gates and manager fatal-error scoping.
 
 ## DOCUMENTATION.md updates
-- Pending approval; version-history entry will be added.
+- Completed: `DOCUMENTATION.md` now records v2.66.11.19 RCA and fix.
 
 ## POLICY.md updates
-- Pending approval; Team Reviews roster-fatal query policy will be added/updated.
+- Completed: `POLICY.md` §131 now defines manager Team Reviews direct+skip roster source and auxiliary-query non-fatal behavior.
 
 ## Post-implementation notes
 - I found the database still has Sajid’s 13 active direct reports and the hosted backend is responding normally, so the next fix should be in the Team Reviews query-gating path, not the database.
