@@ -1,0 +1,1 @@
+ALTER VIEW public.eligible_login_users SET (security_invoker = true);
