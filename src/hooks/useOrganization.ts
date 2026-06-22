@@ -380,6 +380,49 @@ export function useTeamMembers(managerId: string | undefined) {
 }
 
 /**
+ * v2.66.38 — Manager Team Reviews roster (direct + skip-level, server-side).
+ *
+ * Backed by `get_manager_team_roster(_viewer_id)` SECURITY DEFINER RPC.
+ * Replaces the brittle pair of client-side `profiles` joins
+ * (`useTeamMembers` + `useSkipLevelTeamMembers`) that intermittently failed
+ * for non-full-access managers and blanked the dashboard (Sajid Raza RCA).
+ * Returns rows shaped like EmployeeProfile, with `relationship` already set
+ * ('direct' | 'indirect') and a `departments` object for display.
+ */
+export function useManagerTeamRoster(viewerId: string | undefined) {
+  return useQuery({
+    queryKey: ['manager-team-roster', viewerId],
+    staleTime: 2 * 60_000,
+    gcTime: 15 * 60_000,
+    enabled: isUuid(viewerId),
+    placeholderData: keepPreviousData,
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc('get_manager_team_roster', {
+        _viewer_id: viewerId!,
+      });
+      if (error) throw error;
+      return (data || []).map((r: any) => ({
+        id: r.id,
+        full_name: r.full_name,
+        email: r.email,
+        designation: r.designation,
+        employee_code: r.employee_code,
+        avatar_url: r.avatar_url,
+        department_id: r.department_id,
+        reporting_manager_id: r.reporting_manager_id,
+        pms_grade: r.pms_grade,
+        mobile_number: r.mobile_number,
+        is_active: r.is_active,
+        relationship: r.relationship as 'direct' | 'indirect',
+        departments: r.department_id
+          ? { id: r.department_id, name: r.department_name, code: r.department_code }
+          : null,
+      }));
+    },
+  });
+}
+
+/**
  * Fetch skip-level subordinates: employees whose reporting manager reports to the given user.
  * i.e. SELECT p.* FROM profiles p JOIN profiles rm ON p.reporting_manager_id = rm.id WHERE rm.reporting_manager_id = :userId
  */
