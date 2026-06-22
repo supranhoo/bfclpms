@@ -245,7 +245,7 @@ export function EmployeeSelectorGrid({
   // Fetch only employees whose resolved workflow template includes the required stage
   const selectedPeriodForFilter = periodSelection.selectedMonth;
   const selectedYearForFilter = periodSelection.selectedYear;
-  const stageFilteredEnabled = !!requiredStage && !isCrossCheckMode;
+  const stageFilteredEnabled = !!requiredStage && !isExploreMode;
   const { data: stageFilteredProfiles, isLoading: stageFilteredLoading, isError: stageFilteredError, refetch: refetchStageFiltered } = useProfilesByWorkflowStage(requiredStage, selectedPeriodForFilter, selectedYearForFilter, { enabled: stageFilteredEnabled });
 
   // Lazy-load PMS Grades only after the user opens the "More filters" popover
@@ -468,6 +468,12 @@ export function EmployeeSelectorGrid({
       : requiredStage
         ? stageFilteredLoading
         : (isFullAccess ? profilesLoading : teamLoading);
+  // v2.66.11.19 — Manager Team Reviews roster source is direct + skip only.
+  // Org-wide profile / stage-filter queries are auxiliary there and must not
+  // blank Sajid-style manager rosters when the direct/skip queries succeed.
+  const rosterDataError = viewLevel === 'team' && !isFullAccess
+    ? !!teamError || !!skipError
+    : !!profilesError || !!teamError || !!skipError || !!stageFilteredError;
 
   // Build merged base members with relationship tags for team view.
   //
