@@ -355,6 +355,23 @@ export function EmployeeSelectorGrid({
   // Compute overall weighted scores per employee for this period
   const employeeScoreMap = useEmployeeScoresForPeriod(periodKpis, submissionScoreMap);
 
+  // v2.66.11.16 (POLICY §128) — Secondary KPI/score query failures degrade
+  // the dashboard tiles but must NOT blank the roster. Surface a single
+  // non-fatal toast so reviewers know stats may be incomplete while the
+  // employee grid keeps working.
+  const secondaryErrorToastRef = useRef(false);
+  useEffect(() => {
+    const secondaryFailed = !!periodKpisError || !!submissionScoresError;
+    if (!secondaryFailed || secondaryErrorToastRef.current) return;
+    secondaryErrorToastRef.current = true;
+    toast({
+      title: 'KPI stats partially unavailable',
+      description:
+        'Period KPI metrics could not be loaded. The employee roster is unaffected — use Refresh to retry.',
+      variant: 'default',
+    });
+  }, [periodKpisError, submissionScoresError, toast]);
+
   const isFullAccess = role === 'admin' || role === 'auditor' || role === 'management' || role === 'hr_pms';
 
   // ADR-063 RCA — diagnostic for Vivek's empty Team Reviews. Will be removed
