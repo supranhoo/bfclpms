@@ -124,42 +124,17 @@ export function useSafetyAnalytics(businessUnitId?: string | null) {
   return useQuery<SafetyAnalyticsPayload>({
     queryKey: [...KEY, businessUnitId ?? 'all'],
     queryFn: async () => {
-      // Materialized views are not in the generated types — use untyped client.
-      const sb = supabase as unknown as {
-        from: (t: string) => {
-          select: (cols: string) => {
-            eq: (c: string, v: string) => Promise<{ data: unknown }>;
-            limit: (n: number) => { maybeSingle: () => Promise<{ data: unknown }> };
-            then: Promise<{ data: unknown }>['then'];
-          } & Promise<{ data: unknown }>;
-        };
-      };
-      const fetchView = async (table: string) => {
-        const q = sb.from(table).select('*');
-        const res = businessUnitId
-          ? await (q as unknown as { eq: (c: string, v: string) => Promise<{ data: unknown }> }).eq(
-              'business_unit_id',
-              businessUnitId,
-            )
-          : await q;
-        return (res.data as unknown[]) ?? [];
-      };
-      const [sev, oc, audit, permit] = await Promise.all([
-        fetchView('mv_safety_severity_rate'),
-        fetchView('mv_safety_incidents_open_vs_closed'),
-        fetchView('mv_safety_audit_scoreboard'),
-        fetchView('mv_safety_permit_throughput'),
-      ]);
-      const trend = await fetchView('mv_safety_incident_monthly_trend');
-
-      return {
-        severity: sev as SafetyAnalyticsPayload['severity'],
-        open_vs_closed: oc as SafetyAnalyticsPayload['open_vs_closed'],
-        audit_scoreboard: audit as SafetyAnalyticsPayload['audit_scoreboard'],
-        permit_throughput: permit as SafetyAnalyticsPayload['permit_throughput'],
-        monthly_trend: trend as SafetyAnalyticsPayload['monthly_trend'],
-        refreshed_at: new Date().toISOString(),
-      };
+      // MVs are revoked from anon/authenticated (Wave D security). Read via
+      // the service-role-backed `safety-analytics` edge function instead.
+      const { data, error } = await supabase.functions.invoke('safety-analytics', {
+        body: { business_unit_id: businessUnitId ?? null },
+      });
+      if (error) throw error;
+      const payload = (data as { ok: boolean; error?: string; result?: SafetyAnalyticsPayload });
+      if (!payload?.ok || !payload.result) {
+        throw new Error(payload?.error || 'Failed to load safety analytics');
+      }
+      return payload.result;
     },
     staleTime: 60_000,
   });
