@@ -59,6 +59,15 @@ export function useOrgKpiAuditLog(
       })) as OrgKpiAuditEntry[];
     },
     enabled: enabled && !!categoryId && !!kraName && !!kpiName,
+    // Perf (Wave 4): called once per Org KPI row in the data-entry page
+    // (often 50–100 rows). Without a staleTime each render/focus refetched
+    // the same tuple, matching the pre-fix pattern of
+    // useSentBackOrgKpiEmployees that drove 138k+ daily calls to
+    // org_kpi_data_entry_logs. Mutations in this file invalidate the
+    // query key explicitly, so a 5-min stale window is safe.
+    staleTime: 5 * 60_000,
+    gcTime: 10 * 60_000,
+    refetchOnWindowFocus: false,
   });
 }
 
