@@ -1396,7 +1396,7 @@ export function EmployeeSelectorGrid({
 
     const profileMap = new Map((allProfiles || []).map(p => [p.id, p]));
     const deptMap = new Map((departments || []).map(d => [d.id, d.name]));
-    const skipIds = new Set(skipLevelMembers?.map(m => m.id) || []);
+    const skipIds = skipIdSet;
 
     const getPendingKpis = (employeeId: string, relationship?: 'direct' | 'indirect'): KPI[] => {
       const empKpis = periodKpis.filter(k => k.employee_id === employeeId);
