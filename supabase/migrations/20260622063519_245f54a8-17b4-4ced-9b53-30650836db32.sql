@@ -1,0 +1,9 @@
+ALTER FUNCTION public.assign_permit_number() SET search_path = public;
+ALTER FUNCTION public.guard_permit_status_write() SET search_path = public;
+ALTER FUNCTION public.month_name_to_index(p_month text) SET search_path = public;
+ALTER FUNCTION public.normalize_kpi_text(p text) SET search_path = public;
+ALTER FUNCTION public.normalize_kpi_text_value(txt text) SET search_path = public;
+ALTER FUNCTION public.tg_normalize_kpi_text() SET search_path = public;
+ALTER FUNCTION public.safety_assets_touch_updated_at() SET search_path = public;
+ALTER FUNCTION public.safety_drills_block_status_writes() SET search_path = public;
+ALTER FUNCTION public.touch_updated_at_hub() SET search_path = public;
