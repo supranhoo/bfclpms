@@ -13403,6 +13403,19 @@ export type Database = {
           template_name: string
         }[]
       }
+      get_incentive_program_employees: {
+        Args: { _program_id: string }
+        Returns: {
+          business_unit_id: string
+          company_id: string
+          department_id: string
+          designation: string
+          division_id: string
+          employee_code: string
+          full_name: string
+          id: string
+        }[]
+      }
       get_kpi_accessible_user_ids: {
         Args: { p_kpi_id: string }
         Returns: string[]

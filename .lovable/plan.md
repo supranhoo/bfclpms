@@ -1,84 +1,90 @@
-## Assumptions
-- The failing page is Team Reviews for Sajid Raza at `/dashboard?view=team` on the published/custom domain.
-- The desired outcome is to show Sajid’s active direct reports instead of the fatal “Couldn’t load this dashboard” state.
-- Existing policy remains: inactive users stay hidden, and manager Team Reviews is direct + skip-level roster scoped.
+## Root Cause
 
-## Clarifications
-- Not Applicable.
+User **200291 (Sandeep Kumar, employee role)** is an Incentive Data Entry user. The Metal Sizing program has **292 employee mappings** in `incentive_program_mappings` — so the database is fine.
+
+The breakage was introduced by the most recent security hardening migration (`20260622104035_…`), which dropped three broad `profiles` SELECT policies including **`"Incentive data entry users can view active profiles"`**. `ProductionDailyGrid.tsx` (line 105-122) reads the full active profile roster via `fetchAllPaged` and then filters those profiles against the program's mapping IDs. Without that policy, RLS now returns essentially zero rows for non-admin incentive-data-entry users, so `mappedEmployees.length === 0`, and the diagnostic empty-state correctly falls through to the message:
+
+> "This program has no employee mappings. Open Program Mapping (Incentive Config) to add employees."
+
+The message is misleading; the real problem is that the page can no longer see the profiles for the employees it is allowed to operate on.
 
 ## Risk & Impact Report
-- **Data Impact:** No historical KPI/review data changes. One additive backend function/migration is likely required to provide a manager-scoped roster RPC; no destructive schema changes.
-- **Workflow Impact:** Manager Team Reviews will load roster from one policy-safe backend function instead of two client-side `profiles` queries. Review permissions and scoring workflow remain unchanged.
-- **UI/UX Impact:** Same screen and layout. The only visible change is that the Team Members list should render employees; the fatal error appears only if the new roster RPC itself fails.
-- **Regression Risk:** Medium, because Team Reviews shares data with KPI stats, filters, and export. Mitigation: keep existing hooks untouched where possible and switch only the manager Team Reviews roster source.
-- **Scalability Impact:** The current skip-level path can return 172+ rows and uses client-side joins. The fix should return a bounded, slim roster payload from the backend and keep existing UI pagination.
-- **Rollback Strategy:** Revert the new hook/component wiring and drop/ignore the additive RPC if needed; no data loss.
 
-## Step-by-step Plan
-1. **Confirm the root cause in code**
-   - Treat this as a roster-source failure, not a KPI stats failure.
-   - The backend is healthy and Sajid has 13 active direct reports plus 172 active skip-level reports.
-   - The UI still enters `rosterDataError`, meaning `useTeamMembers` or `useSkipLevelTeamMembers` is failing in the browser path.
+- **Data Impact**: No schema change. New `SECURITY DEFINER` RPC returns only the columns the grid needs (id, full_name, employee_code, designation, department_id, business_unit_id, division_id, company_id) — no email, mobile_number, DOJ, or other PII. This preserves the PII hardening intent.
+- **Workflow Impact**: Restores Incentive Production / Eligibility data entry for non-admin users mapped to the program.
+- **UI/UX Impact**: None visible beyond the grid populating again.
+- **Regression Risk**: Low. Only the data source for `mappedEmployees` changes; downstream rate resolution, filters, save flow remain untouched.
+- **Scalability**: RPC resolves mappings → employee universe server-side in a single round trip. Avoids fetching the entire ~2.5k active profile roster on the client.
+- **Mitigation**: Unit test + manual verification with Sandeep's account context.
 
-2. **Add a backend roster RPC for manager Team Reviews**
-   - Create a `SECURITY DEFINER` read function for the authenticated viewer’s team roster.
-   - It should return only active employees visible to the viewer: direct reports and skip-level reports.
-   - It should include only fields needed by the grid plus department display fields.
-   - Grant execute to `authenticated` and `service_role` only.
+## Plan
 
-3. **Add a dedicated frontend hook**
-   - Add `useManagerTeamRoster(viewerId)` in the organization hook layer.
-   - Gate it by valid UUID/auth readiness.
-   - Query the new RPC with React Query and keep previous data.
-   - Preserve pagination/data-size safety.
+### 1. New SECURITY DEFINER RPC
 
-4. **Switch non-full-access Team Reviews to the RPC roster source**
-   - In `EmployeeSelectorGrid`, for `viewLevel === 'team' && !isFullAccess`, use the RPC roster as the fatal roster dependency.
-   - Keep existing `useTeamMembers` / `useSkipLevelTeamMembers` only where they are still needed for counts or as a non-fatal fallback, or replace direct/skip counts from the RPC relationship field.
-   - Do not let auxiliary profile/stage/KPI errors blank the roster.
+`public.get_incentive_program_employees(_program_id uuid)` returns the mapped-employee universe by resolving every `mapping_type` (`employee`, `department`, `business_unit`, `division`, `designation`) against `profiles` server-side, restricted to `is_active = true`. Returns only fields the grid needs — no PII columns. Guarded with `auth.uid() IS NOT NULL` and an `EXISTS` check that the caller has access to the Incentive Data Entry menu (matches the existing access-profile pattern used by `_shared/incentive-auth.ts`).
 
-5. **Make the fatal error diagnostic actionable**
-   - If the RPC fails, show a technical-safe error context in the existing diagnostic, e.g. “Team roster service failed,” while keeping user-facing wording concise.
-   - Avoid exposing secrets or raw tokens.
+Grants: `EXECUTE` to `authenticated` + `service_role`; revoked from `anon`.
 
-6. **Regression tests and mock data**
-   - Add/update tests proving manager Team Reviews uses the new RPC roster source as the fatal dependency.
-   - Test success path with 13 direct reports and skip-level rows.
-   - Test failure path where auxiliary KPI/profile queries fail but roster still renders.
-   - Test RPC grants/function definition text where practical.
+### 2. Frontend: `src/components/incentive/ProductionDailyGrid.tsx`
 
-7. **DOCUMENTATION.md updates**
-   - Add version history entry documenting the manager Team Reviews roster source change.
-   - Document the RPC boundary, auth gating, and why browser-side direct/skip `profiles` queries are no longer the fatal source.
+Replace the paged `profiles` fetch + client-side filter (lines 80-124) with a single `supabase.rpc('get_incentive_program_employees', { _program_id: programId })` call. The returned rows already carry `department_id`, `business_unit_id`, `division_id`, `company_id`, so the existing `resolveEmployeeCompanyId` / `resolveEmployeeRate` calls are adapted to read these flat fields instead of the nested `departments.business_units.divisions` shape.
 
-8. **POLICY.md updates**
-   - Update the Team Reviews roster policy section: non-full-access manager roster is resolved server-side, active users only, direct + skip-level relationship tagged, auxiliary KPI stat failures are non-fatal.
+### 3. Verification
 
-## UI Changes
-- **Location:** Team Reviews page, Team Members panel.
-- **Visual change:** No redesign. The list should render employees instead of the centered fatal error.
-- **Interaction impact:** Retry/Refresh still works; filters and pagination stay the same.
-- **Responsiveness:** No layout changes; existing responsive grid/list behavior remains.
+- Vitest: extend `src/test/incentiveDataEntryEmptyStates.test.ts` with a case asserting that when the RPC returns ≥1 row the empty-state message switches away from "no employee mappings". Add a new test `src/test/incentiveProgramEmployeesRpc.test.ts` mocking the RPC to confirm the grid hook consumes it.
+- Manual: simulate Sandeep's session via Playwright on `/incentive/data-entry`, pick Metal Sizing, confirm grid rows appear.
 
-## Implementation
-- Pending your approval. No files will be edited until approved.
+### 4. Docs / Policy
 
-## Tests
-- Add/update Vitest coverage for the new roster source and fallback/error behavior.
-- Run only targeted tests relevant to Team Reviews roster loading.
+- `DOCUMENTATION.md` §Incentive Data Entry: note the RPC as the canonical mapped-employee source.
+- `POLICY.md` §Incentive Mapping Paging: forbid the old `from('profiles').select(...).eq('is_active', true)` pattern in incentive grids; require the RPC.
+- `mem/architecture/profiles-query-policy`: append RPC reference and the PII rationale.
+- `@security-memory`: note the RPC is the sanctioned replacement for the dropped `"Incentive data entry users can view active profiles"` policy.
 
-## DOCUMENTATION.md updates
-- Will be updated in the same implementation step.
+### 5. Untouched (called out, not changed)
 
-## POLICY.md updates
-- Will be updated in the same implementation step.
+The same dropped policies also affected:
+- `"Authenticated users can view org kpi data owner profiles"`
+- `"Authenticated users can view org kpi value enterer profiles"`
 
-## Post-implementation notes
-- After approval and implementation, I will verify the exact signal that matters: Team Reviews should no longer enter `rosterDataError` when Sajid’s backend roster exists.
+If Org KPI Data Entry users report the same symptom, they will need analogous RPCs (`get_org_kpi_*_employees`). Out of scope for this fix — flagged so we can address quickly if reported.
 
-<presentation-actions>
-  <presentation-open-history>View History</presentation-open-history>
-</presentation-actions>
-<presentation-actions>
-<presentation-link url="https://docs.lovable.dev/tips-tricks/troubleshooting">Troubleshooting docs</presentation-link>
-</presentation-actions>
+## Rollback
+
+Drop the RPC and revert `ProductionDailyGrid.tsx` — fully additive change.
+
+## Technical Detail (engineers)
+
+```sql
+CREATE OR REPLACE FUNCTION public.get_incentive_program_employees(_program_id uuid)
+RETURNS TABLE (
+  id uuid, full_name text, employee_code text, designation text,
+  department_id uuid, business_unit_id uuid, division_id uuid, company_id uuid
+)
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
+  WITH m AS (
+    SELECT mapping_type, mapping_value
+    FROM public.incentive_program_mappings
+    WHERE program_id = _program_id
+  )
+  SELECT DISTINCT p.id, p.full_name, p.employee_code, p.designation,
+         p.department_id,
+         d.business_unit_id,
+         bu.division_id,
+         COALESCE(p.company_id, div.company_id)
+  FROM public.profiles p
+  LEFT JOIN public.departments d   ON d.id  = p.department_id
+  LEFT JOIN public.business_units bu ON bu.id = d.business_unit_id
+  LEFT JOIN public.divisions div   ON div.id = bu.division_id
+  WHERE p.is_active = true
+    AND auth.uid() IS NOT NULL
+    AND EXISTS (
+      SELECT 1 FROM m
+      WHERE (m.mapping_type = 'employee'      AND m.mapping_value::uuid = p.id)
+         OR (m.mapping_type = 'department'    AND m.mapping_value::uuid = p.department_id)
+         OR (m.mapping_type = 'business_unit' AND m.mapping_value::uuid = d.business_unit_id)
+         OR (m.mapping_type = 'division'      AND m.mapping_value::uuid = bu.division_id)
+         OR (m.mapping_type = 'designation'   AND m.mapping_value = p.designation)
+    );
+$$;
+```
