@@ -378,8 +378,6 @@ export function EmployeeSelectorGrid({
     });
   }, [periodKpisError, submissionScoresError, toast]);
 
-  const isFullAccess = role === 'admin' || role === 'auditor' || role === 'management' || role === 'hr_pms';
-
   // ADR-063 RCA — diagnostic for Vivek's empty Team Reviews. Will be removed
   // once the failing branch is identified.
   useEffect(() => {
@@ -454,13 +452,9 @@ export function EmployeeSelectorGrid({
   };
 
   // isLoading accounts for stage-filtered fetch when a required stage is active
-  const isExplorerCapable = viewLevel === 'audit' || viewLevel === 'management';
-  const isCrossCheckMode = isExplorerCapable && statusFilter === 'cross_check';
   // v2.65.0 — Explorer Mode (auditor + management read-only org-wide browse).
   // Treat Explorer Mode as a UI-level alias of cross_check; auto-applies when
   // ?explore=1 is in the URL or when the user toggles the pill.
-  const exploreParam = searchParams.get('explore');
-  const isExploreMode = isExplorerCapable && (statusFilter === 'cross_check' || exploreParam === '1');
   // Auto-promote to cross_check when ?explore=1 is set but status filter hasn't caught up yet
   useEffect(() => {
     if (isExplorerCapable && exploreParam === '1' && statusFilter !== 'cross_check') {
