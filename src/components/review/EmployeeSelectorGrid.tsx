@@ -870,8 +870,8 @@ export function EmployeeSelectorGrid({
     } else if (statusFilter !== 'all' && statusFilter !== 'my_assigned' && periodKpis) {
       const employeeIds = new Set<string>();
       // For merged team view, build direct + skip-level member sets for relationship detection
-      const skipIds = viewLevel === 'team' ? new Set(skipLevelMembers?.map(m => m.id) || []) : new Set<string>();
-      const directIds = viewLevel === 'team' ? new Set(teamMembers?.map(m => m.id) || []) : new Set<string>();
+      const skipIds = viewLevel === 'team' ? skipIdSet : new Set<string>();
+      const directIds = viewLevel === 'team' ? directIdSet : new Set<string>();
       
       periodKpis.forEach(kpi => {
         const stages = getStages(kpi.employee_id);
