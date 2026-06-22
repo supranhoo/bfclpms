@@ -369,7 +369,9 @@ export function useTeamMembers(managerId: string | undefined) {
       if (error) throw error;
       return data;
     },
-    enabled: !!managerId,
+    // v2.66.11.14 — also reject the literal strings "undefined"/"null" that
+    // can creep in from URL params or pre-auth renders.
+    enabled: isUuid(managerId),
     placeholderData: keepPreviousData,
   });
 }
