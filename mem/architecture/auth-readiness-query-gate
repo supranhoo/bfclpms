@@ -14,3 +14,5 @@ How to apply:
 4. AuthContext invalidates `org-level-kpis*`, `org-kpi-values`, `org-kpi-data-owners*`, `org-kpi-data-owner-names`, `org-kpi-owners`, `org-kpi-owner-check`, `kpis*`, `my-kpis` on the not-ready → ready transition to evict any caches that raced (defence-in-depth).
 
 Reference: ADR-052, POLICY §96. Triggered by Chandan Pandit (Org KPI Data Entry blank-until-refresh bug, May 2026).
+
+v2.66.11.15 extension: `system_settings`-reading hooks must also gate on `isReady` because that table's RLS calls `has_role()`, which the `anon` role cannot execute. Gated hooks: `useEntitlement`, `useEnforcementPilot` (`src/hooks/useEntitlement.ts`), `useMenuOverridesEnabled` (`src/hooks/useResolvedMenu.ts`). Pre-auth firing produced `permission denied for function has_role` and broke Sajid Raza's Team Reviews dashboard.
