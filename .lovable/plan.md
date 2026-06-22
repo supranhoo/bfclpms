@@ -1,64 +1,67 @@
-## What I checked
+## Assumptions
+- Sajid is still seeing the Team Reviews page fail with `Dashboard data could not be loaded` and zero employees.
+- The earlier auth-readiness guards are present, but the current visible error can still be caused by a secondary dashboard query failure, not necessarily the roster query itself.
+- Current backend logs did not show fresh `uuid "null"`, `uuid "undefined"`, `has_role`, or timeout errors in the last 2 hours, so I should not make a database permission change without stronger evidence.
 
-- DB: Sajid Raza (`b68f5bce-…`) is active and has **13 active direct reports** — data is fine.
-- Postgres logs (last 2 h) still show **two distinct errors** even after the previous auth-ready gate:
-  1. `permission denied for function has_role` on `SELECT FROM public.system_settings WHERE setting_key = $1` — request is hitting PostgREST as **`anon`** (pre-JWT), and `system_settings` RLS calls `has_role()` which `anon` cannot execute.
-  2. `invalid input syntax for type uuid: "null"` on `SELECT id, full_name, email FROM public.profiles WHERE id = ANY ($1)` — a `.in('id', [...])` somewhere is passing the literal string `"null"`.
-- Source review: `useEntitlement`, `useEnforcementPilot`, `useMenuOverridesEnabled` (and the menu/registry queries it gates) fire **unconditionally** at app boot — no `enabled: isReady` guard. They are the source of the `system_settings` pre-auth hit.
-- The previous gate only covered `useTeamMembers` / `useSkipLevelTeamMembers`; the UUID-"null" call site has **not** been identified yet.
+## Clarifications
+- Not Applicable.
 
 ## Risk & Impact Report
+- **Data Impact:** No schema/data change planned. No RLS weakening; no anonymous permission grant.
+- **Workflow Impact:** Team Reviews should stop collapsing the whole roster because a non-critical KPI/score/helper query failed.
+- **UI/UX Impact:** Same screen; error banner becomes more accurate and scoped. If roster loads but KPI stats fail, employees should still be selectable instead of showing a full dashboard failure.
+- **Regression Risk:** Medium, because the page combines many queries and one broad error flag currently drives the zero-state.
+- **Mitigation Plan:** Add regression tests for the diagnostic decision tree and source-level guards; keep query behavior additive/fallback-based.
+- **Scalability Impact:** Preserve existing paged/chunked fetch patterns. No full unbounded dataset loads added.
 
-- **Data Impact:** None. No schema, RLS, or data change.
-- **Workflow Impact:** None. Hooks return the same payload, just delayed by ~1 RTT until `isReady === true`.
-- **UI/UX:** Sidebar/feature-flag-driven UI continues to render with the existing default-off snapshot during the pre-auth window — identical to today's first-paint.
-- **Regression Risk:** Low. The gated hooks already tolerate `data === undefined` (they fall back to safe defaults). Adding `enabled: isReady` only postpones the first fetch.
-- **Scalability:** Slight improvement — eliminates one wasted pre-auth round-trip per page load.
-- **Mitigation:** Unit test that asserts each hook's `enabled` is `false` when `isReady === false`.
+## Step-by-step Plan
+1. **Identify and narrow the failing error condition**
+   - Update the Team Reviews error-state logic so `data_load_error` is only triggered by roster-critical queries (`teamMembers`, `skipLevelMembers`, `profiles`, `stageFilteredProfiles`) and not by secondary KPI/submission score queries.
+   - Keep secondary KPI failures visible but non-blocking where possible.
 
-## Plan
+2. **Harden secondary query inputs**
+   - Sanitize KPI/profile ID arrays before `.in(...)` lookups using the existing UUID validation pattern.
+   - Apply this specifically to KPI relation hydration and submission-score fan-out paths that can receive stale or null IDs.
 
-### Step 1 — Gate the system_settings / menu hooks on auth-ready
-File: `src/hooks/useEntitlement.ts`
-- Import `useAuth`.
-- In both `useEntitlement` and `useEnforcementPilot`, set `enabled: isReady`.
+3. **Make the page recover gracefully**
+   - If KPI or submission score reads fail, return safe empty maps/lists where the roster can still render, and show the existing refresh affordance rather than replacing the roster with a fatal state.
+   - Keep fatal behavior only when the employee roster itself cannot be read.
 
-File: `src/hooks/useResolvedMenu.ts`
-- In `useMenuOverridesEnabled`, set `enabled: isReady`.
-- `useResolvedMenu` already chains off `useMenuOverridesEnabled` — no extra change needed.
+4. **Add targeted diagnostics that will be visible if the issue persists**
+   - Add a small source-level diagnostic around the Team Reviews query status object so future console captures show exactly which query failed (`team`, `skip`, `profiles`, `stage`, `kpis`, or `submissionScores`).
+   - Avoid logging secrets or full payloads.
 
-Verification: Postgres logs should stop emitting `permission denied for function has_role` on `system_settings` once Sajid reloads.
+5. **Tests**
+   - Extend `teamReviewsZeroDiagnostic.test.ts` to confirm KPI-only failures do not produce the full `data_load_error` branch.
+   - Add/extend a source regression test to ensure ID arrays are filtered before `.in('id', ...)` / `.in('kpi_id', ...)` calls in the dashboard feed.
 
-### Step 2 — Trace the lingering `uuid: "null"` site
-The failing query has the exact column shape `id, full_name, email` and uses `.in('id', …)`. None of the 17 matching call sites obviously fires on Team Reviews initial load, so I will:
-- Add a **temporary** wrapper in `src/integrations/supabase/client.ts` (or a thin debug helper imported by suspects) that logs `console.error('[uuid-null-trace]', stack)` whenever a `.in('id', arr)` array contains the string `"null"` or `"undefined"`. The wrapper is dev/build-mode only — gated behind `import.meta.env.DEV`.
-- Ship Step 1 immediately; ask Sajid to reload once. The console trace will pin the exact call site without another guessing round.
-- Remove the trace and ship the targeted fix in a follow-up.
+6. **Documentation.md updates**
+   - Add a version-history note explaining that Team Reviews roster availability is separated from non-critical KPI/stat query failures.
 
-### Step 3 — Tests
-File: `src/test/systemSettingsAuthReadyGate.test.ts` (new)
-- Asserts `useEntitlement`, `useEnforcementPilot`, `useMenuOverridesEnabled` queries have `enabled === false` when `isReady === false`, and `true` otherwise. Mock `useAuth` per @workspace/test patterns.
+7. **Policy.md updates**
+   - Add/update the Team Reviews dashboard policy: roster-critical failures may block the grid; non-critical metric failures must degrade gracefully and must not hide employees.
 
-### Step 4 — Memory + docs
-- Append a line to `mem/architecture/auth-readiness-query-gate` listing the three newly gated hooks.
-- Add a short `.lovable/plan.md` entry: "Sajid Team Reviews — Phase 2: gate system_settings hooks; trace uuid:null source".
+8. **Post-implementation verification**
+   - Run the targeted Team Reviews tests.
+   - Use live preview/log signals to verify the banner no longer appears for a secondary query failure and that the roster can render independently.
 
-## What I will NOT do (and why)
+## UI Changes
+- **Location:** Team Reviews dashboard error/zero-state area.
+- **Visual change:** No redesign. The existing fatal dashboard banner should appear only when the roster cannot load; non-critical stat issues should not replace the team member grid.
+- **Interaction impact:** `Refresh roster` remains available. Employee cards should remain selectable if roster data exists.
+- **Responsiveness:** No layout changes.
 
-- **Not** granting `anon` EXECUTE on `public.has_role` — would silently weaken every RLS policy that uses it (rejected previously, still rejected).
-- **Not** rewriting `system_settings` RLS to permit anon — feature-flag rows are mixed with sensitive admin-only keys; per-row policy carving is out of scope and unnecessary once Step 1 lands.
-- **Not** blanket-gating every hook — only the three confirmed pre-auth offenders. Anything else stays untouched per the surgical-change rule.
+## Implementation
+- Pending approval.
 
-## Technical Notes
+## Tests
+- Pending approval: targeted Vitest/source tests only.
 
-- `enabled: isReady` is the same pattern already in use in `EmployeeSelectorGrid` and `useTeamMembers` (v2.66.11.14). No new abstraction is introduced.
-- The `[uuid-null-trace]` helper is deliberately ephemeral: it lives for one diagnostic cycle, then is removed in the same PR as the real fix.
+## DOCUMENTATION.md updates
+- Pending approval.
 
-## Deliverables checklist
+## POLICY.md updates
+- Pending approval.
 
-- [ ] Edit `useEntitlement.ts` (2 hooks gated)
-- [ ] Edit `useResolvedMenu.ts` (1 hook gated)
-- [ ] New `systemSettingsAuthReadyGate.test.ts`
-- [ ] Temporary uuid-null trace in client wrapper (dev-only)
-- [ ] Memory + plan updates
-- [ ] Manual verification: Sajid reload → no more `permission denied for function has_role` in `postgres_logs`
+## Post-implementation notes
+- Rollback is straightforward: revert the Team Reviews error-scope and sanitization changes. No database rollback required.

@@ -51,4 +51,25 @@ describe('diagnoseEmptyTeam (v2.66.11.11)', () => {
     expect(d.code).toBe('data_load_error');
     expect(d.title).toMatch(/could not be loaded/i);
   });
+
+  /**
+   * v2.66.11.16 (POLICY §128) — Sajid Raza RCA continuation.
+   * Secondary KPI / submission-score query failures must NOT escalate to
+   * the dashboard-wide fatal state. The caller is now responsible for
+   * passing `dataLoadError = false` whenever only secondary queries fail
+   * so the diagnostic falls through to the period-specific "no KPIs"
+   * message and the roster remains usable.
+   */
+  it('does not escalate to data_load_error for secondary KPI failures (v2.66.11.16)', () => {
+    const d = diagnoseEmptyTeam({
+      ...base,
+      directCount: 13,
+      skipCount: 0,
+      periodKpiCount: 0,
+      // caller passes false because only periodKpisError / submissionScoresError flipped
+      dataLoadError: false,
+    });
+    expect(d.code).not.toBe('data_load_error');
+    expect(d.code).toBe('reports_without_kpis');
+  });
 });
