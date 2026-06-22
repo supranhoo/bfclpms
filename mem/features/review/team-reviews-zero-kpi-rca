@@ -9,7 +9,7 @@ type: feature
 
 **Diagnostic precedence.** `diagnoseEmptyTeam` evaluates `dataLoadError` BEFORE `no_reports_mapped / reports_without_kpis / kpis_filtered_out` so RPC failures never display "No KPIs assigned".
 
-**Manager roster fatal gate (v2.66.36).** Plain non-full-access Manager Team Reviews uses only `useTeamMembers(viewerId) ∪ useSkipLevelTeamMembers(viewerId)` as the roster source. `useProfiles()`, `useProfilesByWorkflowStage()`, period KPI reads, and submission-score reads are auxiliary in that mode: they may affect stats/toasts/deep links, but must not enable unnecessarily or trip the fatal dashboard error when direct/skip roster queries succeed. `rosterDataError` for manager Team = `teamError || skipError` only.
+**Manager roster fatal gate (v2.66.37).** Plain non-full-access Manager Team Reviews uses only `useTeamMembers(viewerId) ∪ useSkipLevelTeamMembers(viewerId)` as the roster source. `useProfiles()`, `useProfilesByWorkflowStage()`, period KPI reads, and submission-score reads are auxiliary in that mode: they may affect stats/toasts/deep links, but must not enable unnecessarily or trip the fatal dashboard error when direct/skip roster queries succeed. `rosterDataError` for manager Team = `teamError || skipError` only.
 
 **Auth-ready cache eviction.** `AuthContext` invalidates `['kpis-by-period-ranges']`, `['profiles']`, `['profiles-by-workflow-stage']`, `['team-members']`, `['skip-level-team-members']` on first auth-ready transition.
 

@@ -1,5 +1,5 @@
 /**
- * v2.66.36 — Team Reviews manager roster gate.
+ * v2.66.37 — Team Reviews manager roster gate.
  *
  * Non-full-access Manager Team Reviews must be driven by direct + skip-level
  * roster hooks only. Org-wide profile/stage queries are auxiliary and must not
@@ -19,7 +19,7 @@ const orgSrc = () => readFileSync(
   'utf8',
 );
 
-describe('Team Reviews manager roster query gate (v2.66.36)', () => {
+describe('Team Reviews manager roster query gate (v2.66.37)', () => {
   it('makes all-profiles and stage-filter queries opt-in', () => {
     const src = orgSrc();
 
