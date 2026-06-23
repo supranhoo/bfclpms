@@ -64,7 +64,7 @@ export function useOrgKpiImpact(
           threshold_mode,
           profiles!kpis_employee_id_fkey(
             id, full_name, employee_code, department_id, designation, is_active,
-            departments(id, name)
+            departments!profiles_department_fk(id, name)
           )
         `)
         .eq('category_id', categoryId!)

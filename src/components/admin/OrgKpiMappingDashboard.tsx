@@ -49,7 +49,7 @@ function useOrgKpiFullMapping(reviewPeriod: string, reviewYear: number) {
           id, category_id, kra_name, kpi_name, employee_id, status, org_level_scope,
           kra_categories(id, name, color),
           profiles!kpis_employee_id_fkey(id, full_name, employee_code, department_id, designation,
-            departments(id, name)
+            departments!profiles_department_fk(id, name)
           )
         `)
         .eq('is_org_level', true)

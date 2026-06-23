@@ -138,7 +138,7 @@ export function useKpiMappingMatrix(filters: KpiMappingFilters, page: number, so
           .from('profiles')
           .select(`
             id, full_name, employee_code, pms_grade, designation, department_id, is_active,
-            departments (id, name, business_units (id, name, divisions (id, name)))
+            departments!profiles_department_fk (id, name, business_units (id, name, divisions (id, name)))
           `)
           .order('full_name')
           .range(from, to)

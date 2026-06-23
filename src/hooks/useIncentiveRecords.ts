@@ -9,7 +9,7 @@ export function useIncentiveRecords(reviewPeriod?: string, reviewYear?: number, 
     queryFn: async () => {
       let query = supabase
         .from('employee_incentive_records')
-        .select('*, profiles:employee_id(full_name, employee_code, department_id, designation, departments(name)), incentive_slabs:matched_slab_id(min_value, max_value, incentive_percent, rating_label)')
+        .select('*, profiles:employee_id(full_name, employee_code, department_id, designation, departments!profiles_department_fk(name)), incentive_slabs:matched_slab_id(min_value, max_value, incentive_percent, rating_label)')
         .eq('review_period', reviewPeriod!)
         .eq('review_year', reviewYear!)
         .order('final_incentive_percent', { ascending: false });
@@ -174,7 +174,7 @@ async function fetchAllIncentiveRecords(filters: IncentiveReportFilters) {
       .from('employee_incentive_records')
       .select(`
         *,
-        profiles:employee_id(full_name, employee_code, designation, department_id, departments(name, business_units(name, divisions(name)))),
+        profiles:employee_id(full_name, employee_code, designation, department_id, departments!profiles_department_fk(name, business_units(name, divisions(name)))),
         incentive_slabs:matched_slab_id(min_value, max_value, incentive_percent, rating_label),
         incentive_programs:program_id(name, incentive_base)
       `)

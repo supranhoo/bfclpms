@@ -216,7 +216,7 @@ export default function ManagementDashboard() {
 
       const [currentKpis, profilesResult, openQueryResult] = await Promise.all([
         fetchFiscalData(),
-        supabase.from('profiles').select('id, full_name, employee_code, department_id, reporting_manager_id, departments (name, business_unit_id, business_units (name, division_id, divisions (name)))'),
+        supabase.from('profiles').select('id, full_name, employee_code, department_id, reporting_manager_id, departments!profiles_department_fk (name, business_unit_id, business_units (name, division_id, divisions (name)))'),
         supabase.from('kpi_queries').select('kpi_id').eq('status', 'open').eq('query_type', 'query'),
       ]);
 

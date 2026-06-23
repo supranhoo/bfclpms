@@ -8,7 +8,7 @@ export function useIncentiveRevisions(filters?: { affectedPeriod?: string; affec
     queryFn: async () => {
       let query = supabase
         .from('incentive_score_revisions')
-        .select('*, profiles:employee_id(full_name, employee_code, department_id, departments(name))')
+        .select('*, profiles:employee_id(full_name, employee_code, department_id, departments!profiles_department_fk(name))')
         .order('created_at', { ascending: false });
 
       if (filters?.affectedPeriod) query = query.eq('affected_period', filters.affectedPeriod);

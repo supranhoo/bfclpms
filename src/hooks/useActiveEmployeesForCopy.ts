@@ -23,7 +23,7 @@ export function useActiveEmployeesForCopy(
       const data = await fetchAllPaged<any>((from, to) => {
         let q = supabase
           .from('profiles')
-          .select('id, full_name, employee_code, is_active, departments:department_id(name)')
+          .select('id, full_name, employee_code, is_active, departments:departments!profiles_department_fk(name)')
           .order('full_name')
           .range(from, to);
         if (!includeInactive) q = q.eq('is_active', true);

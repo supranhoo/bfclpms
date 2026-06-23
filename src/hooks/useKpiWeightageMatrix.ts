@@ -106,7 +106,7 @@ export function useKpiWeightageMatrix(
       // ── Step 1: paginated employee list (restricted to mapped employees) ─
       let profilesQuery = supabase
         .from('profiles')
-        .select('id, full_name, employee_code, department_id, is_active, departments(name)', { count: 'exact' })
+        .select('id, full_name, employee_code, department_id, is_active, departments!profiles_department_fk(name)', { count: 'exact' })
         .in('id', eligibleArr)
         .order('full_name', { ascending: true });
 

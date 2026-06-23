@@ -49,7 +49,7 @@ export function useProfilesWithHierarchy() {
             employee_code,
             department_id,
             reporting_manager_id,
-            departments (
+            departments!profiles_department_fk (
               id, 
               name, 
               business_unit_id,

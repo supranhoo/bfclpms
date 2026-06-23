@@ -154,7 +154,7 @@ export function useKpiEmployeeMatrix(filters: MatrixFilters, options?: { enabled
         const batch = employeeIds.slice(i, i + 500);
         const { data, error } = await supabase
           .from('profiles')
-          .select('id, full_name, employee_code, department_id, designation, pms_grade, is_active, departments(name)')
+          .select('id, full_name, employee_code, department_id, designation, pms_grade, is_active, departments!profiles_department_fk(name)')
           .in('id', batch);
         if (error) throw error;
         (data || []).forEach((p: any) => profileMap.set(p.id, p));

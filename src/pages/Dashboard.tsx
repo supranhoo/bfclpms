@@ -154,7 +154,7 @@ export default function Dashboard() {
 
         const { data: empProfile } = await supabase
           .from('profiles')
-          .select('id, full_name, email, designation, employee_code, avatar_url, department_id, reporting_manager_id, departments(id, name, code)')
+          .select('id, full_name, email, designation, employee_code, avatar_url, department_id, reporting_manager_id, departments!profiles_department_fk(id, name, code)')
           .eq('id', employeeParam)
           .single();
 
@@ -200,7 +200,7 @@ export default function Dashboard() {
 
         const { data: empProfile } = await supabase
           .from('profiles')
-          .select('id, full_name, email, designation, employee_code, avatar_url, department_id, reporting_manager_id, departments(id, name, code)')
+          .select('id, full_name, email, designation, employee_code, avatar_url, department_id, reporting_manager_id, departments!profiles_department_fk(id, name, code)')
           .eq('id', employeeParam)
           .single();
 
@@ -277,7 +277,7 @@ export default function Dashboard() {
       const restoreEmployee = async () => {
         const { data: empProfile } = await supabase
           .from('profiles')
-          .select('id, full_name, email, designation, employee_code, avatar_url, department_id, reporting_manager_id, departments(id, name, code)')
+          .select('id, full_name, email, designation, employee_code, avatar_url, department_id, reporting_manager_id, departments!profiles_department_fk(id, name, code)')
           .eq('id', employeeParam)
           .single();
         if (empProfile) {

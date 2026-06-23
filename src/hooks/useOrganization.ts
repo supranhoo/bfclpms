@@ -359,7 +359,7 @@ export function useTeamMembers(managerId: string | undefined) {
         .from('profiles')
         .select(`
           *,
-          departments (id, name, code)
+          departments!profiles_department_fk (id, name, code)
         `)
         .eq('reporting_manager_id', managerId!)
         // BUG-036 / POLICY §107 — defense-in-depth: even a corrupt
@@ -653,7 +653,7 @@ export function useSkipLevelTeamMembers(userId: string | undefined) {
         .from('profiles')
         .select(`
           *,
-          departments (id, name, code)
+          departments!profiles_department_fk (id, name, code)
         `)
         .in('reporting_manager_id', directReportIds)
         // BUG-036 / POLICY §107 — never include the viewer themselves in
