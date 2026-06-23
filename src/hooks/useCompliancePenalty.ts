@@ -135,7 +135,7 @@ export function useNonCompliantEmployees(
         .select(`
           id, employee_id, kpi_name, kra_name, frequency, is_org_level, status, category_id,
           frequency_cycle_start,
-          profiles!kpis_employee_id_fkey ( full_name, employee_code, department_id, departments ( name ) )
+          profiles!kpis_employee_id_fkey ( full_name, employee_code, department_id, departments!profiles_department_fk ( name ) )
         `)
         .eq('review_period', filterMonth)
         .eq('review_year', filterYear)
@@ -445,7 +445,7 @@ export function useCompliancePenalizedKpis(filterMonth?: string, filterYear?: nu
         .from('kpis')
         .select(`
           id, employee_id, kpi_name, kra_name, status,
-          profiles!kpis_employee_id_fkey ( full_name, employee_code, department_id, departments ( name ) )
+          profiles!kpis_employee_id_fkey ( full_name, employee_code, department_id, departments!profiles_department_fk ( name ) )
         `)
         .in('id', kpiIds)
         .eq('status', 'approved');

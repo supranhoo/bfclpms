@@ -103,7 +103,7 @@ export function useTrainingNeeds(filters?: {
           *,
           employee:profiles!training_needs_employee_id_fkey(
             id, full_name, employee_code, department_id, designation,
-            department:departments(id, name)
+            department:departments!profiles_department_fk(id, name)
           ),
           category:kra_categories(id, name),
           kpi:kpis(id, kra_name, kpi_name)
@@ -235,7 +235,7 @@ export function useTNIByDepartment(reviewPeriod?: string, reviewYear?: number, p
           employee_id,
           employee:profiles!training_needs_employee_id_fkey(
             id, department_id,
-            department:departments(id, name)
+            department:departments!profiles_department_fk(id, name)
           ),
           category:kra_categories(id, name)
         `);

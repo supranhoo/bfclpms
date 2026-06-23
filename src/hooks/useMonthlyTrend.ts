@@ -160,7 +160,7 @@ export function useMonthlyTrend(filters: MonthlyTrendFilters) {
           const batch = empIds.slice(i, i + 500);
           const { data } = await supabase
             .from('profiles')
-            .select('id, full_name, employee_code, designation, department_id, reporting_manager_id, is_active, departments(name)')
+            .select('id, full_name, employee_code, designation, department_id, reporting_manager_id, is_active, departments!profiles_department_fk(name)')
             .in('id', batch);
           (data ?? []).forEach((p: any) => profileMap.set(p.id, p));
         }
