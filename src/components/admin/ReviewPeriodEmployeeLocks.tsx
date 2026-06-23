@@ -34,7 +34,7 @@ export default function ReviewPeriodEmployeeLocks({ locks, onToggleLock, saving 
     queryFn: async () => {
       const { data, error } = await supabase
         .from('profiles')
-        .select('id, full_name, email, employee_code, department_id, departments(name)')
+        .select('id, full_name, email, employee_code, department_id, departments!profiles_department_fk(name)')
         .order('full_name');
       if (error) throw error;
       return data || [];

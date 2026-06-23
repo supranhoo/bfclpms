@@ -229,7 +229,7 @@ export function AffectedKpisTable({ categoryId, kraName, kpiName, reviewPeriod, 
       if (empIds.length > 0) {
         const { data: profs } = await supabase
           .from('profiles')
-          .select('id, full_name, employee_code, departments(name)')
+          .select('id, full_name, employee_code, departments!profiles_department_fk(name)')
           .in('id', empIds);
         const map: Record<string, { name: string; code: string | null; department: string | null }> = {};
         (profs || []).forEach((p: any) => {

@@ -70,7 +70,7 @@ export default function VarianceReport() {
           id, kra_name, kpi_name, category_id, employee_id, review_period,
           review_submissions(auditor_score, management_score),
           profiles!kpis_employee_id_fkey(employee_code, full_name, department_id,
-            departments(name)),
+            departments!profiles_department_fk(name)),
           kra_categories!kpis_category_id_fkey(name)
         `)
         .eq('review_period', month)

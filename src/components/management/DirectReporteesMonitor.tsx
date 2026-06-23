@@ -74,7 +74,7 @@ export function DirectReporteesMonitor({ fiscalStartYear, selectedMonths }: Dire
       // Build profiles query
       let profilesQuery = supabase
         .from('profiles')
-        .select('id, full_name, employee_code, designation, department_id, departments (name, business_unit_id)')
+        .select('id, full_name, employee_code, designation, department_id, departments!profiles_department_fk (name, business_unit_id)')
         .eq('reporting_manager_id', effectiveManagerId)
         .eq('is_active', true);
 

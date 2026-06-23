@@ -68,7 +68,7 @@ export default function ManagerTeamKpiReport() {
           id, kpi_name, employee_id, review_period,
           review_submissions(final_score),
           profiles!kpis_employee_id_fkey(employee_code, full_name, department_id, reporting_manager_id,
-            departments(name))
+            departments!profiles_department_fk(name))
         `)
         .eq('review_period', month)
         .eq('review_year', year);

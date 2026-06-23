@@ -131,7 +131,7 @@ export default function KpiJourneyReport() {
       while (hasMore) {
         const { data } = await supabase
           .from('kpis')
-          .select('employee_id, profiles!inner(department_id, departments(name))')
+          .select('employee_id, profiles!inner(department_id, departments!profiles_department_fk(name))')
           .eq('review_year', parseInt(selectedYear))
           .eq('review_period', selectedPeriod)
           .range(offset, offset + batchSize - 1);

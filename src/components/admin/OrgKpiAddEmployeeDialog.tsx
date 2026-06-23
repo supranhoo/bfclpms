@@ -53,7 +53,7 @@ export function OrgKpiAddEmployeeDialog({
       const data = await fetchAllPaged<EmployeeRow>((from, to) =>
         (supabase as any)
           .from('profiles')
-          .select('id, full_name, employee_code, department_id, designation, departments(id, name)')
+          .select('id, full_name, employee_code, department_id, designation, departments!profiles_department_fk(id, name)')
           .eq('is_active', true)
           .order('full_name')
           .range(from, to)

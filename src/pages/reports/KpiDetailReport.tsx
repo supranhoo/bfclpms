@@ -207,7 +207,7 @@ export default function KpiDetailReport() {
       // Fetch profiles with department info
       const { data: profiles, error: profErr } = await supabase
         .from('profiles')
-        .select('id, employee_code, full_name, departments ( name )');
+        .select('id, employee_code, full_name, departments!profiles_department_fk ( name )');
       if (profErr) throw profErr;
 
       const profileMap = new Map((profiles ?? []).map(p => [p.id, p]));

@@ -103,7 +103,7 @@ export default function TeamVsManagerScoreReport() {
             review_submissions(final_score, is_na),
             profiles!kpis_employee_id_fkey(
               employee_code, full_name, reporting_manager_id, designation,
-              departments(name)
+              departments!profiles_department_fk(name)
             )
           `)
           .eq('review_period', month)
