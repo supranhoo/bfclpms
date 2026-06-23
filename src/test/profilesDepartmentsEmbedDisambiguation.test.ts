@@ -24,6 +24,7 @@ const ALLOWED_PARENTS = [
   'sub_branches',
   'template_bundles',
   'incentive_programs',
+  'incentive_slabs',
 ];
 
 function walk(dir: string): string[] {
