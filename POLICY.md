@@ -1,5 +1,23 @@
 ## §111.7.t.3 Functional vs Platform-tier Role Separation (codified 2026-06-18)
 
+## §EMBED-FK-HINT PostgREST profiles→departments embed disambiguation (codified 2026-06-23)
+
+**Rule.** `public.departments` has three FK relationships with `public.profiles` (`profiles.department_id → departments.id`, `departments.head_user_id → profiles.id`, `departments.head_updated_by → profiles.id`). Any PostgREST embed of `departments(...)` reached **through** the `profiles` table MUST pin the foreign key explicitly:
+
+```ts
+// ❌ Throws: "more than one relationship was found for 'profiles' and 'departments'"
+profiles!kpis_employee_id_fkey ( ..., departments ( name ) )
+
+// ✅ Required
+profiles!kpis_employee_id_fkey ( ..., departments!profiles_department_fk ( name ) )
+```
+
+**Scope.** Applies to every `.select(...)` string in `src/hooks`, `src/pages`, `src/components`, and `src/services`. Embeds reached from a single-FK parent (`sub_branches`, `template_bundles`, `incentive_programs`, `incentive_slabs`) are exempt.
+
+**Enforcement.** `src/test/profilesDepartmentsEmbedDisambiguation.test.ts` fails CI on any new unhinted embed.
+
+**Why.** Sandeep 200291 hit this on the Incentive Report (2026-06-23). Same class of failure as the PII-hardening drop on 2026-06-22 — silently breaks user-facing screens once a second FK appears between two tables.
+
 ## §PII-DIRECTORY-RPC Profile name/code lookups go through the directory RPC (codified 2026-06-22, expanded post-audit)
 
 **Rule.** Any UI feature reachable by a non-admin role that needs to display a profile **name** or **employee code** MUST resolve it through one of these `SECURITY DEFINER` RPCs — never via a direct `.from('profiles')` SELECT or a PostgREST `profiles:fk(...)` embed:
