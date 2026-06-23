@@ -61,7 +61,7 @@ export function ProgramEmployeeMapping({ programId }: Props) {
       const data = await fetchAllPaged<any>((from, to) =>
         supabase
           .from('profiles')
-          .select('id, full_name, employee_code, designation, pms_grade, level, department_id, departments(name, business_unit_id, business_units(name, division_id, divisions(name)))')
+          .select('id, full_name, employee_code, designation, pms_grade, level, department_id, departments!profiles_department_fk(name, business_unit_id, business_units(name, division_id, divisions(name)))')
           .eq('is_active', true)
           .order('full_name')
           .range(from, to)

@@ -171,7 +171,7 @@ export default function KpiStatusTracker() {
       // Fetch profiles with department + division chain
       const { data: profiles, error: profErr } = await supabase
         .from('profiles')
-        .select('id, employee_code, full_name, designation, department_id, departments ( name, business_units ( divisions ( name ) ) )');
+        .select('id, employee_code, full_name, designation, department_id, departments!profiles_department_fk ( name, business_units ( divisions ( name ) ) )');
       if (profErr) throw profErr;
 
       const profileMap = new Map((profiles ?? []).map(p => [p.id, p]));
