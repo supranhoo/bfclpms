@@ -116,7 +116,7 @@ export function useResolvedProgramEmployees(programId?: string | 'all') {
       return await fetchAllPaged<any>((from, to) =>
         supabase
           .from('profiles')
-          .select('id, full_name, employee_code, department_id, designation, pms_grade, departments(name)')
+          .select('id, full_name, employee_code, department_id, designation, pms_grade, departments!profiles_department_fk(name)')
           .eq('is_active', true)
           .order('employee_code')
           .range(from, to) as any,
