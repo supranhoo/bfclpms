@@ -75,7 +75,7 @@ export function useOverdueKraSetKpis(deadlineDay: number, filterMonth?: string, 
         .from('kpis')
         .select(`
           id, employee_id, kpi_name, kra_name, review_period, review_year, frequency, is_org_level,
-          profiles!kpis_employee_id_fkey!inner ( full_name, employee_code, department_id, reporting_manager_id, is_active, departments ( name ) )
+          profiles!kpis_employee_id_fkey!inner ( full_name, employee_code, department_id, reporting_manager_id, is_active, departments!profiles_department_fk ( name ) )
         `)
         .eq('status', 'kra_set')
         .eq('is_org_level', false)
@@ -190,7 +190,7 @@ export function useOverdueTeamReviewKpis(deadlineDay: number, filterMonth?: stri
         .from('kpis')
         .select(`
           id, employee_id, kpi_name, kra_name, review_period, review_year, frequency, is_org_level,
-          profiles!kpis_employee_id_fkey!inner ( full_name, employee_code, department_id, reporting_manager_id, is_active, departments ( name ) )
+          profiles!kpis_employee_id_fkey!inner ( full_name, employee_code, department_id, reporting_manager_id, is_active, departments!profiles_department_fk ( name ) )
         `)
         .eq('status', 'self_review')
         .eq('is_org_level', false)
@@ -727,7 +727,7 @@ export function useSentBackKpisTab(filterMonth?: string, filterYear?: number) {
         .from('kpis')
         .select(`
           id, employee_id, kpi_name, kra_name, review_period, review_year, frequency, is_org_level, status,
-          profiles!kpis_employee_id_fkey ( full_name, employee_code, email, department_id, departments ( name ) )
+          profiles!kpis_employee_id_fkey ( full_name, employee_code, email, department_id, departments!profiles_department_fk ( name ) )
         `)
         .in('id', kpiIds)
         .eq('is_org_level', false)
@@ -885,7 +885,7 @@ export function useAutoScoredKpis(filterMonth?: string, filterYear?: number) {
         .from('kpis')
         .select(`
           id, employee_id, kpi_name, kra_name, review_period, review_year, frequency, status,
-          profiles!kpis_employee_id_fkey ( full_name, employee_code, department_id, departments ( name ) )
+          profiles!kpis_employee_id_fkey ( full_name, employee_code, department_id, departments!profiles_department_fk ( name ) )
         `)
         .in('id', kpiIds)
         .eq('status', 'approved');
@@ -956,7 +956,7 @@ export function usePenalizedManagerKpis(filterMonth?: string, filterYear?: numbe
         .from('kpis')
         .select(`
           id, employee_id, kpi_name, kra_name, review_period, review_year, frequency, status,
-          profiles!kpis_employee_id_fkey ( full_name, employee_code, department_id, departments ( name ) )
+          profiles!kpis_employee_id_fkey ( full_name, employee_code, department_id, departments!profiles_department_fk ( name ) )
         `)
         .in('id', kpiIds)
         .eq('status', 'approved');
@@ -1149,7 +1149,7 @@ export function useOverdueSkipLevelKpis(deadlineDay: number, filterMonth?: strin
         .from('kpis')
         .select(`
           id, employee_id, kpi_name, kra_name, review_period, review_year, frequency, is_org_level,
-          profiles!kpis_employee_id_fkey!inner ( full_name, employee_code, department_id, reporting_manager_id, is_active, departments ( name ) )
+          profiles!kpis_employee_id_fkey!inner ( full_name, employee_code, department_id, reporting_manager_id, is_active, departments!profiles_department_fk ( name ) )
         `)
         .eq('status', 'manager_check')
         .eq('is_org_level', false)
