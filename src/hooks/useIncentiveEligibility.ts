@@ -34,7 +34,7 @@ export function useIncentiveEligibility(reviewPeriod?: string, reviewYear?: numb
     queryFn: async () => {
       const { data, error } = await supabase
         .from('employee_incentive_eligibility')
-        .select('*, profiles:employee_id(full_name, employee_code, department_id, departments(name), business_units:department_id(business_units(name)))')
+        .select('*, profiles:employee_id(full_name, employee_code, department_id, departments!profiles_department_fk(name), business_units:department_id(business_units(name)))')
         .eq('review_period', reviewPeriod!)
         .eq('review_year', reviewYear!);
       if (error) throw error;

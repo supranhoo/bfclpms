@@ -199,7 +199,7 @@ export default function EmployeePerformanceSummary() {
             reporting_manager_id,
             functional_manager_id,
             is_active,
-            departments (name, business_units (name, divisions (name)))
+            departments!profiles_department_fk (name, business_units (name, divisions (name)))
           `)
           .order('id')
           .range(from, to)
