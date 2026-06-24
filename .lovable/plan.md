@@ -1,30 +1,46 @@
-## Confirmation
+## Issue
 
-Yes, this is safe to hide. The placeholder card only renders when `shouldHideCriteriaCard(template, 'self')` is true — i.e. the template has zero criteria mapped to the Self stage. In that case the employee has nothing to score, so the card adds no value and can be suppressed.
+The "Review your self-assessment before submitting" dialog (`SelfReviewSummaryDialog.tsx`) becomes unscrollable when content exceeds the viewport. With a 1903×855 screen and a tall template (Qualitative Responses + criteria + evidence list), the content overflows the dialog body but the inner scroll surface doesn't actually scroll — the user is stuck and the footer "Cancel / Confirm & Submit" is unreachable.
 
-The system-score panel, composition card, stage tracker, self-review fields (if any), evidence uploader, and the Submit button all sit OUTSIDE this block (see `EmployeeAnnualReview.tsx` lines 183–222) and are unaffected — the employee can still review system scores and submit.
+## Root cause
 
-## Change
+The dialog uses shadcn's `<ScrollArea>` wrapped in a flex column:
 
-`src/pages/annual-review/EmployeeAnnualReview.tsx` (lines 195–222):
+```
+<DialogContent className="... max-h-[90vh] flex flex-col overflow-hidden">
+  <DialogHeader .../>
+  <ScrollArea className="flex-1 min-h-0 h-full">…</ScrollArea>
+  <DialogFooter .../>
+</DialogContent>
+```
 
-- Replace the ternary with `{!shouldHideCriteriaCard(template, 'self') && ( <Card>…CriteriaScoringMatrix…</Card> )}`.
-- Drop the placeholder `<Card>` and its `section.no_self_criteria` i18n string usage at this call site. (Leave the translation key in the i18n catalog for now — zero-cost, allows reuse if we ever want to re-enable it via a setting.)
+Radix `ScrollArea`'s internal viewport reads its parent's *measured* height via CSS, not flex. In a `flex-1 min-h-0` parent the Radix viewport gets `height: 100%` of a zero-intrinsic-height box, so the scroll thumb never appears and the wheel/touch events get swallowed by the underlying div. This is a known shadcn-in-Dialog pitfall.
+
+## Fix
+
+Replace the `<ScrollArea>` body with a plain native-scroll container — the standard shadcn-Dialog pattern that works reliably inside `max-h-[90vh] flex flex-col`:
+
+```
+<div className="flex-1 min-h-0 overflow-y-auto overscroll-contain">
+  <div className="px-6 py-5 space-y-6">…existing children…</div>
+</div>
+```
+
+Single-file change to `src/components/annual-review/SelfReviewSummaryDialog.tsx` (lines 80 and 261). Remove the `ScrollArea` import too.
 
 ## Risk & Impact
 
-- **UI:** When a Self-stage template has no criteria, employees see one fewer card. Submit flow unchanged.
-- **Workflow / scoring:** None. `criteriaForStage(template, 'self')` already returns `[]` in this case, so `computeCriteriaScore` returns 0 regardless.
-- **Other stages:** Out of scope. Manager / Skip / Dept / BU / HR views are not touched.
-- **Regression:** Minimal — single conditional render swap.
-- **Rollback:** Re-introduce the placeholder card.
+- **UI:** Scrollbar is the browser-native one instead of the shadcn styled thumb. Acceptable trade-off for reachability; matches the pattern already used in other long dialogs in this codebase.
+- **Workflow / scoring:** None.
+- **Regression:** Minimal — only the inner scroll surface changes.
+- **Rollback:** Re-introduce `<ScrollArea>`.
 
 ## Tests / Docs
 
-- Extend the existing `EmployeeAnnualReview` render test (or add one) asserting: when `template.sections.criteria` has no `self`-stage rows, neither the placeholder card nor the matrix renders, and Submit is still present.
-- DOCUMENTATION.md → add a v2.66.57 entry under the Annual Review section noting the empty-state suppression.
-- POLICY.md → append a one-liner under the existing Annual Review section: "If a stage has no mapped criteria for the current viewer's role, that stage's criteria card MUST be omitted entirely — do not render a placeholder."
+- Add a render smoke test (or extend the existing one) asserting the dialog body has `overflow-y-auto` and `max-h` constrained.
+- DOCUMENTATION.md → append a v2.66.58 entry noting the scroll fix.
+- POLICY.md → add a one-liner: "Long dialogs MUST use native `overflow-y-auto` inside `max-h-[90vh] flex flex-col`, not Radix `ScrollArea` (which fails to size in a flex parent)."
 
 ## Out of scope
 
-- No change to Manager/Skip/Dept/BU/HR self-criteria empty-state handling. If you want symmetric behaviour for reviewer stages too, say the word and I'll extend it in the same patch.
+- No styling/content change to the dialog body. The footer width/clip you see in the screenshot is the underlying page's Save button (outside the dialog), not a dialog-footer issue.
