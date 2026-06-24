@@ -154,14 +154,31 @@ export function ProductionDailyGrid({ programId, programName, onMonthYearChange,
     return map;
   }, [mappedEmployees, rates, targetDate]);
 
-  // Only show employees that have a resolved rate (and pass company filter)
+  // Only show employees that have a resolved rate (and pass company filter).
+  //
+  // IMPORTANT (RCA 2026-06-24): we deliberately ignore the `filterByCompany`
+  // prop when `selectedCompanyId` is supplied. That prop is sourced from
+  // `useCompanyFilter`, which builds its employee→company map from a broad
+  // `from('profiles').select(...)` read. After PII hardening (2026-06-22)
+  // non-admin Incentive Data Entry users can only SELECT a partial slice of
+  // `profiles`, so the resulting `companyEmployeeIds` Set is non-null but
+  // missing most mapped employees — causing the grid to show
+  // "No mapped employees match the selected company filter" even though the
+  // RPC returned a full roster. The RPC `get_incentive_program_employees`
+  // already pre-resolves `company_id` server-side (profile → division
+  // fallback), so we filter on that field directly and stay RLS-agnostic.
   const gridEmployees = useMemo(() => {
+    const useRpcCompanyId = !!selectedCompanyId && selectedCompanyId !== 'all';
     return mappedEmployees.filter(e => {
       if (!employeeRates.has(e.id)) return false;
-      if (filterByCompany && !filterByCompany(e.id)) return false;
+      if (useRpcCompanyId) {
+        if ((e as any).company_id !== selectedCompanyId) return false;
+      } else if (filterByCompany && !filterByCompany(e.id)) {
+        return false;
+      }
       return true;
     });
-  }, [mappedEmployees, employeeRates, filterByCompany]);
+  }, [mappedEmployees, employeeRates, filterByCompany, selectedCompanyId]);
 
   // ── Filters + Pagination (client-side) ─────────────────────────────
   const [filters, setFilters] = useState<DailyGridFilters>(EMPTY_FILTERS);
