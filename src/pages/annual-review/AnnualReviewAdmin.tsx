@@ -53,6 +53,10 @@ import { AnnualReviewExportMenu } from '@/components/annual-review/AnnualReviewE
 import { ChangeWorkflowDialog } from '@/components/annual-review/ChangeWorkflowDialog';
 import { InstanceStageWeightsDialog } from '@/components/annual-review/InstanceStageWeightsDialog';
 import { TemplateEditorDialog } from '@/components/annual-review/TemplateEditorDialog';
+import {
+  useShowReviewerNamesInStepper,
+  useSetShowReviewerNamesInStepper,
+} from '@/hooks/useAnnualReviewSettings';
 import { RecentStageWeightOverridesPanel } from '@/components/annual-review/RecentStageWeightOverridesPanel';
 import { RuleFiltersEditor, RuleFiltersSummary, EMPTY_FILTERS } from '@/components/annual-review/RuleFiltersEditor';
 import type {
@@ -72,13 +76,14 @@ export default function AnnualReviewAdmin() {
         <p className="text-sm text-muted-foreground">Manage cycles, templates, rules, and finalize reviews.</p>
       </header>
       <Tabs defaultValue="progress" className="w-full">
-        <TabsList className="grid w-full grid-cols-3 md:grid-cols-6">
+        <TabsList className="grid w-full grid-cols-3 md:grid-cols-7">
           <TabsTrigger value="progress" className="gap-1.5"><ListChecks className="h-4 w-4" />Progress</TabsTrigger>
           <TabsTrigger value="analytics" className="gap-1.5"><BarChart3 className="h-4 w-4" />Analytics</TabsTrigger>
           <TabsTrigger value="calibration" className="gap-1.5"><Scale className="h-4 w-4" />Calibration</TabsTrigger>
           <TabsTrigger value="cycles" className="gap-1.5"><Calendar className="h-4 w-4" />Cycles</TabsTrigger>
           <TabsTrigger value="templates" className="gap-1.5"><Settings2 className="h-4 w-4" />Templates</TabsTrigger>
           <TabsTrigger value="rules" className="gap-1.5"><Layers className="h-4 w-4" />Rules</TabsTrigger>
+          <TabsTrigger value="settings" className="gap-1.5"><Settings2 className="h-4 w-4" />Settings</TabsTrigger>
         </TabsList>
         <TabsContent value="progress" className="mt-4"><ProgressTab /></TabsContent>
         <TabsContent value="analytics" className="mt-4"><AnalyticsTab /></TabsContent>
@@ -86,8 +91,47 @@ export default function AnnualReviewAdmin() {
         <TabsContent value="cycles" className="mt-4"><CyclesTab /></TabsContent>
         <TabsContent value="templates" className="mt-4"><TemplatesTab /></TabsContent>
         <TabsContent value="rules" className="mt-4"><RulesTab /></TabsContent>
+        <TabsContent value="settings" className="mt-4"><SettingsTab /></TabsContent>
       </Tabs>
     </div>
+  );
+}
+
+/**
+ * Annual-Review-module settings panel. Currently exposes the
+ * "show reviewer names in stepper" admin toggle (default OFF).
+ */
+function SettingsTab() {
+  const { data: showNames = false, isLoading } = useShowReviewerNamesInStepper();
+  const setMut = useSetShowReviewerNamesInStepper();
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Display Settings</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-6">
+        <div className="flex items-start justify-between gap-4">
+          <div className="space-y-1">
+            <Label className="text-sm font-medium">Show reviewer names in workflow stepper</Label>
+            <p className="text-xs text-muted-foreground max-w-xl">
+              When ON, each stage in the Annual Review progress tracker displays the mapped
+              reviewer&apos;s name (e.g. &ldquo;Ramesh Kumar&rdquo;) beneath the stage label.
+              Stages whose reviewer slot is empty render &ldquo;— Unassigned&rdquo;.
+            </p>
+          </div>
+          <Switch
+            checked={showNames}
+            disabled={isLoading || setMut.isPending}
+            onCheckedChange={(v) => {
+              setMut.mutate(v, {
+                onSuccess: () => toast.success(`Reviewer names ${v ? 'enabled' : 'hidden'}.`),
+                onError: (e) => toast.error((e as Error).message),
+              });
+            }}
+          />
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
