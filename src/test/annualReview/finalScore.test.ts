@@ -106,6 +106,31 @@ describe('annualReview/finalScore', () => {
       expect(r.rawScore_0_100).toBe(80);
       expect(r.renormalised).toBe(false);
     });
+
+    it('includes dept_head contribution when weighted', () => {
+      const r = computeFinalScore({
+        stageWeights: { self: 20, manager: 40, dept_head: 20, bu_head: 20 },
+        responsesByRole: { self: 80, manager: 60, dept_head: 90, bu_head: 70 },
+        systemScoreTotal: null,
+        criteriaWeightedScore: null,
+      });
+      // 0.2*80 + 0.4*60 + 0.2*90 + 0.2*70 = 16 + 24 + 18 + 14 = 72
+      expect(r.rawScore_0_100).toBeCloseTo(72, 4);
+      expect(r.contributing).toContain('dept_head');
+      expect(r.renormalised).toBe(false);
+    });
+
+    it('renormalises away dept_head when its response is missing', () => {
+      const r = computeFinalScore({
+        stageWeights: { manager: 50, dept_head: 50 },
+        responsesByRole: { manager: 80 }, // dept_head missing
+        systemScoreTotal: null,
+        criteriaWeightedScore: null,
+      });
+      expect(r.rawScore_0_100).toBe(80);
+      expect(r.renormalised).toBe(true);
+      expect(r.contributing).toEqual(['manager']);
+    });
   });
 
   describe('responsesToRoleMap', () => {
