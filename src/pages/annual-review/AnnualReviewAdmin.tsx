@@ -211,14 +211,19 @@ function ProgressTab() {
   const [businessUnitId, setBusinessUnitId] = useState<string>('');
   const [managerId, setManagerId] = useState<string>('');
   const [managerPickerOpen, setManagerPickerOpen] = useState(false);
+  const [pmsGrade, setPmsGrade] = useState<string>('');
+  const [level, setLevel] = useState<string>('');
   const { data: businessUnits = [] } = useBusinessUnits();
   const { data: departments = [] } = useDepartments(businessUnitId || undefined);
   const { data: profilesLite = [] } = useActiveProfilesLite();
+  const { data: pmsGrades = [] } = usePmsGrades();
+  const { data: levels = [] } = useLevels();
   const selectedManager = profilesLite.find((p) => p.id === managerId);
-  const anyOrgFilter = !!(departmentId || businessUnitId || managerId);
+  const anyOrgFilter = !!(departmentId || businessUnitId || managerId || pmsGrade || level);
   const resetFilters = () => {
     setSearch(''); setStatusFilter('all'); setCustomWeightsOnly(false);
-    setDepartmentId(''); setBusinessUnitId(''); setManagerId(''); setPage(1);
+    setDepartmentId(''); setBusinessUnitId(''); setManagerId('');
+    setPmsGrade(''); setLevel(''); setPage(1);
   };
   const paginatedArgs = activeCycle
     ? {
@@ -227,6 +232,8 @@ function ProgressTab() {
         departmentId: departmentId || undefined,
         businessUnitId: businessUnitId || undefined,
         managerId: managerId || undefined,
+        pmsGrade: pmsGrade || undefined,
+        level: level || undefined,
       }
     : undefined;
   const { data: paged, refetch } = useAnnualReviewInstancesPaginated(paginatedArgs);
