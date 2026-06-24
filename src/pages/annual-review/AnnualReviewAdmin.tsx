@@ -106,6 +106,7 @@ function SettingsTab() {
   const { data: showNames = false, isLoading } = useShowReviewerNamesInStepper();
   const setMut = useSetShowReviewerNamesInStepper();
   return (
+    <div className="space-y-6">
     <Card>
       <CardHeader>
         <CardTitle>Display Settings</CardTitle>
