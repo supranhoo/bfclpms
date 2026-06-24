@@ -1,43 +1,49 @@
-## Goal
-Add **PMS Grade** and **Level** filters to the Annual Review Admin → Progress tab filter row, next to the existing BU / Department / Manager filters. Server-side filtering, master-data driven, included in the export "Filters" sheet.
+## Issue
+
+On the Cycles tab, the date range editor shows pairs for Self / Manager / Skip / BU only — there is no **Department Head** date pair, even though `dept_head` is a first-class stage in the workflow chain (it appears in the "Default workflow stages" checklist and in `ALL_STAGES`).
+
+Verified:
+- `src/lib/annualReview/stageChain.ts` canonical chain: `self → manager → skip_manager → dept_head → bu_head → hr`.
+- `src/pages/annual-review/AnnualReviewAdmin.tsx` line 1172 iterates only `['self_review','manager_review','skip_review','bu_review']` for the date pairs.
+- DB `annual_review_cycles` columns: only `self_/manager_/skip_/bu_review_start|end` exist — `dept_review_*` is missing.
+
+So Dept Head is mapped in the workflow but the cycle has no window dates for it, and there is no DB field to store them.
 
 ## Risk & Impact
-- **Data**: Read-only. No schema change. Uses existing `profiles.pms_grade` / `profiles.level` columns and existing `usePmsGrades` / `useLevels` master-data hooks.
-- **Workflow**: None. Pure filter narrowing.
-- **UI**: Two extra `<Select>` controls in the same filter row. Row already wraps; no layout regression expected on standard widths.
-- **Regression**: Low. `listInstancesPaginated` gets two optional args; the existing org-id resolver gains two more optional predicates and stays `null` when no org filter is active.
-- **Scalability**: Grade/Level resolve through the same paged (1000/batch) profile scan already used for dept/BU — bounded and unchanged in complexity.
-- **Mitigation**: Unit tests for the resolver (grade-only, level-only, grade+level, grade+dept intersection); update existing admin filter tests; export sheet assertion includes the two new keys.
 
-## UI changes
-Location: `src/pages/annual-review/AnnualReviewAdmin.tsx`, Progress tab filter row (between "All departments" and "All managers"):
-- Add `Select` "All PMS grades" populated from `usePmsGrades()` (option value = grade `name`, since `profiles.pms_grade` is the name string in the existing code path at line 1018).
-- Add `Select` "All levels" populated from `useLevels()` (option value = level `name`).
-- Both clear via the existing "all" sentinel pattern.
-- Selected values are echoed into the export's `filtersApplied` map (`pms_grade`, `level`) so the exported "Filters" sheet records them.
-- No change to bulk actions, table columns, or row rendering.
+- **Data:** Additive — two new nullable timestamptz columns on `annual_review_cycles`. No backfill. Existing cycles continue working (NULL = no enforced window, same as today for other stages when blank).
+- **Workflow:** None. Stage chain logic already supports `dept_head`. Reminder/lock logic that reads window dates per stage will start respecting Dept Head dates only after they are set.
+- **UI:** One extra date pair row in the New/Edit cycle card, placed between Skip and BU (canonical order).
+- **Regression:** Low — touches the cycle editor row map, the clone payload, and the export mock. No scoring path changes.
+- **Scalability:** Two scalar columns; no query impact.
+- **Rollback:** Drop the two columns + revert UI + revert mock.
 
-## Technical plan
-1. `src/services/annualReview/annualReviewService.ts`
-   - Extend `ListInstancesPaginatedArgs` with `pmsGrade?: string` and `level?: string`.
-   - Extend `resolveEmployeeIdsForOrgFilters` signature + early-return guard to also activate when `pmsGrade` or `level` is set. After resolving `deptIds` (existing logic), add `.eq('pms_grade', args.pmsGrade)` / `.eq('level', args.level)` to the paged `profiles` query. Keep `null` return when no filter is active.
-   - Pass the new args through `listInstancesPaginated` (no other call sites need changes; the function is the single entry used by the admin grid).
-2. `src/pages/annual-review/AnnualReviewAdmin.tsx`
-   - Add `pmsGrade` / `level` `useState` strings + `usePmsGrades()` / `useLevels()` from `@/hooks/useOrganization`.
-   - Add two `Select` controls mirroring the BU/department pattern (same `w-48 h-10` sizing, same "all" sentinel).
-   - Include both in the `useAnnualReviewInstances` args and in the `filtersApplied` object passed to the workbook exporter.
-   - Add them to `anyOrgFilter` so the "any filter active" UX (clear button etc., if present) stays consistent.
-3. Tests
-   - `src/services/annualReview/*.test.ts`: new cases for `resolveEmployeeIdsForOrgFilters` with grade-only, level-only, grade+dept intersection (mocked supabase per existing patterns).
-   - Extend the admin export test (if present) to assert the two new keys appear in the `Filters` sheet rows.
-4. Docs
-   - `DOCUMENTATION.md`: bump patch version, note new admin filters and the resolver extension.
-   - `POLICY.md`: under Annual Review admin filters, add Grade/Level as allowed narrowing dimensions (read-only, no effect on scoring).
+## Plan
 
-## Rollback
-Pure additive: revert the two files + tests + docs. No DB migration to undo.
+1. **Migration** — add `dept_review_start timestamptz NULL`, `dept_review_end timestamptz NULL` to `public.annual_review_cycles`. No grants needed (existing table). No RLS change.
+
+2. **UI (`AnnualReviewAdmin.tsx`)** — extend the stage list at line 1172 to `['self_review','manager_review','skip_review','dept_review','bu_review']` so the loop renders the Dept Head date pair in canonical order (after Skip, before BU). No other change to the editor.
+
+3. **Service / clone payload** — verify `svc.upsertCycle` and `useCloneCycle` pass through unknown keys; if they whitelist columns, add `dept_review_start`/`_end` to the list. (Need to read `annualReviewService.ts` cycle helpers to confirm — will adjust as part of build.)
+
+4. **Reminders / window enforcement** — audit `annual-review-reminders` edge fn and any service that reads `${stage}_review_start|_end` to ensure `dept` is handled symmetrically with the other stages (read-only check; only edit if a hard-coded stage list excludes it).
+
+5. **Types** — regenerated automatically from the migration (`src/integrations/supabase/types.ts`). Update `AnnualReviewCycle` type in `src/types/annualReview.ts` if it has an explicit shape rather than re-exporting the DB row.
+
+6. **Tests**
+   - `src/services/annualReview/exports.test.ts` — add `dept_review_start/end: null` to the mock cycle.
+   - New: extend any cycle-form test (or add a smoke render test) to assert all five date pairs render.
+
+7. **Docs**
+   - `DOCUMENTATION.md` — add a v2.66.56 entry: "Annual Review cycle now exposes Dept Head review window dates (`dept_review_start/_end`), mirroring the other stages."
+   - `POLICY.md` — note that the cycle window for Dept Head is optional (NULL = no enforced window) and that the stage is still controlled by `default_enabled_stages` / per-instance `enabled_stages`.
 
 ## Out of scope
-- Persisting filter selections across sessions.
-- Adding Grade/Level columns to the table (filter only, per request).
-- Analytics / Calibration tabs (separate query paths; can mirror later if asked).
+
+- No change to scoring, weights, or workflow advance logic.
+- No backfill of dates for existing cycles (admins set them when editing).
+- No change to the existing flat weights / two-tier pool config.
+
+## Rollback
+
+Revert UI commit + drop the two new columns. Existing cycles unaffected because the columns are NULL.
