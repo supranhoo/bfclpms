@@ -255,7 +255,7 @@ function SettingsTab() {
 function exportProgress(
   cycleName: string,
   rows: InstanceWithEmployee[],
-  stageScores: Record<string, Partial<Record<'self' | 'manager' | 'skip_manager' | 'bu_head' | 'hr', number | null>>>,
+  stageScores: Record<string, Partial<Record<'self' | 'manager' | 'skip_manager' | 'dept_head' | 'bu_head' | 'hr', number | null>>>,
   filtersApplied: Record<string, string>,
   templatesById: Record<string, AnnualReviewTemplate> = {},
 ) {
