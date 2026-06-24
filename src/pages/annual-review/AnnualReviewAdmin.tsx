@@ -434,6 +434,30 @@ function ProgressTab() {
               </Command>
             </PopoverContent>
           </Popover>
+          <Select
+            value={pmsGrade || 'all'}
+            onValueChange={(v) => { setPmsGrade(v === 'all' ? '' : v); setPage(1); }}
+          >
+            <SelectTrigger className="w-44 h-10"><SelectValue placeholder="All PMS grades" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All PMS grades</SelectItem>
+              {(pmsGrades ?? []).map((g: { id: string; name: string }) => (
+                <SelectItem key={g.id} value={g.name}>{g.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select
+            value={level || 'all'}
+            onValueChange={(v) => { setLevel(v === 'all' ? '' : v); setPage(1); }}
+          >
+            <SelectTrigger className="w-40 h-10"><SelectValue placeholder="All levels" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All levels</SelectItem>
+              {(levels ?? []).map((l: { id: string; name: string }) => (
+                <SelectItem key={l.id} value={l.name}>{l.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           <Button
             type="button"
             size="sm"
