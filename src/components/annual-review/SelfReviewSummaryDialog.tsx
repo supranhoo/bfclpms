@@ -5,7 +5,6 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { useAnnualReviewI18n } from '@/components/annual-review/AnnualReviewI18nContext';
 import type {
   AnnualReviewTemplate, EvidenceItem, TemplateCriterion,
@@ -77,7 +76,7 @@ export function SelfReviewSummaryDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <ScrollArea className="flex-1 min-h-0 h-full">
+        <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain">
           <div className="px-6 py-5 space-y-6">
             {/* Score composition — always shows System + Criteria → Overall */}
             <AppraisalCompositionCard composition={composition} variant="full" />
@@ -258,7 +257,7 @@ export function SelfReviewSummaryDialog({
               </section>
             )}
           </div>
-        </ScrollArea>
+        </div>
 
         <DialogFooter className="p-4 border-t bg-muted/30 gap-2 sm:gap-2 flex-row items-center flex-wrap">
           {hasBlockers ? (
