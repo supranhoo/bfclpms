@@ -1,3 +1,7 @@
+- The Dept Head cycle window pair is optional (NULL = no enforced window); stage participation remains governed by `default_enabled_stages` / per-instance `enabled_stages`, never by the date columns.
+
+### §AR-EMPTY-CRITERIA-CARD — Annual Review: no placeholder for empty self-criteria (v2.66.57, 2026-06-24)
+- If a stage has no mapped criteria for the current viewer's role (`shouldHideCriteriaCard(template, role)` returns true), that stage's criteria card MUST be omitted entirely. Do not render a "no criteria" placeholder card — it adds visual noise without action. This currently applies to the employee Self stage; extend symmetrically when other stage views grow the same empty case.
 ## §111.7.t.3 Functional vs Platform-tier Role Separation (codified 2026-06-18)
 
 ## §EMBED-FK-HINT PostgREST profiles→departments embed disambiguation (codified 2026-06-23)

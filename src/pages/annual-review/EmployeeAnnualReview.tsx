@@ -192,16 +192,7 @@ export default function EmployeeAnnualReview() {
         readOnly
       />
 
-      {shouldHideCriteriaCard(template, 'self') ? (
-        <Card>
-          <CardContent className="p-4 text-sm text-muted-foreground">
-            {t(
-              'section.no_self_criteria',
-              'No self-assessment criteria for this template. Review the system scores above and click Submit to advance.',
-            )}
-          </CardContent>
-        </Card>
-      ) : (
+      {!shouldHideCriteriaCard(template, 'self') && (
         <Card>
           <CardHeader><CardTitle>{t('section.self_assessment', 'Self-Assessment Criteria')}</CardTitle></CardHeader>
           <CardContent>
