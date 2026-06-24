@@ -287,6 +287,7 @@ function exportProgress(
       'Self Score': s.self ?? '',
       'Manager Score': s.manager ?? '',
       'Skip Score': s.skip_manager ?? '',
+      'Dept Head Score': s.dept_head ?? '',
       'BU Head Score': s.bu_head ?? '',
       'HR Score': s.hr ?? '',
     'Total Score': i.total_score ?? '',
@@ -295,6 +296,7 @@ function exportProgress(
     'Weight Self %': weights.self ?? '',
     'Weight Manager %': weights.manager ?? '',
     'Weight Skip %': weights.skip_manager ?? '',
+    'Weight Dept %': weights.dept_head ?? '',
     'Weight BU %': weights.bu_head ?? '',
     'Weight HR %': weights.hr ?? '',
     'Weight System %': weights.system ?? '',
@@ -762,6 +764,7 @@ function ProgressTab() {
                 <TableHead className="text-right">Self</TableHead>
                 <TableHead className="text-right">Manager</TableHead>
                 <TableHead className="text-right">Skip</TableHead>
+                <TableHead className="text-right">Dept</TableHead>
                 <TableHead className="text-right">BU</TableHead>
                 <TableHead className="text-right">HR</TableHead>
                 <TableHead className="text-right">Final</TableHead>
@@ -792,6 +795,7 @@ function ProgressTab() {
                   <TableCell className="text-right tabular-nums">{fmt(ss.self)}</TableCell>
                   <TableCell className="text-right tabular-nums">{fmt(ss.manager)}</TableCell>
                   <TableCell className="text-right tabular-nums">{fmt(ss.skip_manager)}</TableCell>
+                  <TableCell className="text-right tabular-nums">{fmt(ss.dept_head)}</TableCell>
                   <TableCell className="text-right tabular-nums">{fmt(ss.bu_head)}</TableCell>
                   <TableCell className="text-right tabular-nums">{fmt(ss.hr)}</TableCell>
                   <TableCell className="text-right tabular-nums font-medium">{i.total_score?.toFixed(2) ?? <span className="text-muted-foreground/50">—</span>}</TableCell>
@@ -829,7 +833,7 @@ function ProgressTab() {
                 );
               })}
               {filtered.length === 0 && (
-                <TableRow><TableCell colSpan={11} className="text-center text-muted-foreground py-8">No instances.</TableCell></TableRow>
+                <TableRow><TableCell colSpan={12} className="text-center text-muted-foreground py-8">No instances.</TableCell></TableRow>
               )}
             </TableBody>
           </Table>
@@ -1052,10 +1056,10 @@ function ChangeTemplateDialog({
   );
 }
 
-const STAGE_ORDER = ['not_started','pending_self','pending_manager','pending_skip','pending_bu','pending_hr','completed'] as const;
+const STAGE_ORDER = ['not_started','pending_self','pending_manager','pending_skip','pending_dept','pending_bu','pending_hr','completed'] as const;
 const STAGE_LABEL: Record<string, string> = {
   not_started: 'Not started', pending_self: 'Self', pending_manager: 'Manager',
-  pending_skip: 'Skip', pending_bu: 'BU', pending_hr: 'HR', completed: 'Completed',
+  pending_skip: 'Skip', pending_dept: 'Dept', pending_bu: 'BU', pending_hr: 'HR', completed: 'Completed',
 };
 
 function AnalyticsTab() {
@@ -1528,13 +1532,14 @@ function TemplatesTab() {
 function TemplateWeightsSummary({ template }: { template: AnnualReviewTemplate }) {
   const w = (template.sections as { stage_weights?: Record<string, number> } | undefined)?.stage_weights;
   const LABEL: Record<string, string> = {
-    self: 'Self', manager: 'Mgr', skip_manager: 'Skip', bu_head: 'BU',
-    hr: 'HR', system: 'Sys', criteria: 'Crit',
+    self: 'Self', manager: 'Mgr', skip_manager: 'Skip', dept_head: 'Dept',
+    bu_head: 'BU', hr: 'HR', system: 'Sys', criteria: 'Crit',
   };
   const COLOR: Record<string, string> = {
     self: 'hsl(var(--primary))',
     manager: 'hsl(var(--chart-2, 142 76% 36%))',
     skip_manager: 'hsl(var(--chart-3, 38 92% 50%))',
+    dept_head: 'hsl(var(--chart-1, 12 76% 61%))',
     bu_head: 'hsl(var(--chart-4, 280 65% 60%))',
     hr: 'hsl(var(--chart-5, 340 75% 55%))',
     system: 'hsl(var(--muted-foreground))',
