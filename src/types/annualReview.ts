@@ -182,9 +182,24 @@ export interface TemplateSections {
    * sum to 100. When absent the legacy {criteria:100} default applies.
    */
   stage_weights?: Partial<Record<
-    'self' | 'manager' | 'skip_manager' | 'bu_head' | 'hr' | 'system' | 'criteria',
+    'self' | 'manager' | 'skip_manager' | 'dept_head' | 'bu_head' | 'hr' | 'system' | 'criteria',
     number
   >>;
+  /**
+   * Two-tier final-score config (Phase 3).
+   * Outer pools (System vs Criteria, must sum to 100) and a Criteria reviewer
+   * mix (per-role weights inside the criteria pool, must sum to 100). When
+   * present and valid this drives the derived `stage_weights` snapshot used by
+   * the math engine + SQL trigger. Backward compatible: `stage_weights` keeps
+   * working when `stage_weights_v2` is absent.
+   */
+  stage_weights_v2?: {
+    pools: { system?: number; criteria?: number };
+    criteria_mix: Partial<Record<
+      'self' | 'manager' | 'skip_manager' | 'dept_head' | 'bu_head' | 'hr',
+      number
+    >>;
+  };
 }
 
 export interface AnnualReviewTemplate {
@@ -247,7 +262,7 @@ export interface AnnualReviewInstance {
   total_score: number | null;
   /** Phase 2 — per-employee final-score weight override. NULL → use template. */
   stage_weights_override?: Partial<Record<
-    'self' | 'manager' | 'skip_manager' | 'bu_head' | 'hr' | 'system' | 'criteria',
+    'self' | 'manager' | 'skip_manager' | 'dept_head' | 'bu_head' | 'hr' | 'system' | 'criteria',
     number
   >> | null;
   final_rating: string | null;

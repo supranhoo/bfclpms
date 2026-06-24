@@ -42,6 +42,62 @@ export const STAGE_WEIGHT_KEYS: StageWeightKey[] = [
 
 export const LEGACY_STAGE_WEIGHTS: StageWeights = { criteria: 100 };
 
+/** Roles eligible to receive a slice of the Criteria pool in v2 config. */
+export type CriteriaMixRole = Exclude<StageWeightKey, 'system' | 'criteria'>;
+
+export const CRITERIA_MIX_ROLES: CriteriaMixRole[] = [
+  'self', 'manager', 'skip_manager', 'dept_head', 'bu_head', 'hr',
+];
+
+/**
+ * Two-tier weight config (Phase 3).
+ * `pools` splits the final score between the System Score and the Criteria
+ * (reviewer) pool. `criteria_mix` splits the criteria pool across reviewer
+ * roles. Both groups must independently sum to 100.
+ */
+export interface StageWeightsV2 {
+  pools: { system?: number; criteria?: number };
+  criteria_mix: Partial<Record<CriteriaMixRole, number>>;
+}
+
+function sumValues(map: Record<string, number | undefined> | undefined): number {
+  if (!map) return 0;
+  let t = 0;
+  for (const k of Object.keys(map)) {
+    const v = map[k];
+    if (v == null) continue;
+    if (!Number.isFinite(v) || v < 0) return Number.NaN;
+    t += v;
+  }
+  return t;
+}
+
+/** True when v2 pools sum to 100 and criteria_mix sums to 100 (±0.01). */
+export function isValidStageWeightsV2(v: StageWeightsV2 | null | undefined): boolean {
+  if (!v || !v.pools || !v.criteria_mix) return false;
+  const poolTotal = sumValues(v.pools as Record<string, number | undefined>);
+  const mixTotal = sumValues(v.criteria_mix as Record<string, number | undefined>);
+  if (!Number.isFinite(poolTotal) || !Number.isFinite(mixTotal)) return false;
+  return Math.abs(poolTotal - 100) < 0.01 && Math.abs(mixTotal - 100) < 0.01;
+}
+
+/**
+ * Derive the flat StageWeights snapshot from a valid v2 config.
+ * Result always sums to 100 (within rounding).
+ */
+export function flattenStageWeightsV2(v: StageWeightsV2): StageWeights {
+  const out: StageWeights = {};
+  const system = Number(v.pools?.system) || 0;
+  const criteria = Number(v.pools?.criteria) || 0;
+  if (system > 0) out.system = Number(system.toFixed(4));
+  for (const role of CRITERIA_MIX_ROLES) {
+    const pct = Number(v.criteria_mix?.[role]) || 0;
+    if (pct <= 0 || criteria <= 0) continue;
+    out[role] = Number(((criteria * pct) / 100).toFixed(4));
+  }
+  return out;
+}
+
 /** True when every weight is a finite, non-negative number and they sum to 100 (±0.01). */
 export function isValidStageWeights(w: StageWeights | null | undefined): boolean {
   if (!w) return false;
@@ -66,7 +122,12 @@ export function resolveStageWeights(
 ): StageWeights {
   const override = (instance?.stage_weights_override ?? null) as StageWeights | null;
   if (isValidStageWeights(override)) return { ...override! };
-  const tpl = (template?.sections as { stage_weights?: StageWeights } | undefined)?.stage_weights ?? null;
+  const sections = template?.sections as
+    | { stage_weights?: StageWeights; stage_weights_v2?: StageWeightsV2 }
+    | undefined;
+  const v2 = sections?.stage_weights_v2 ?? null;
+  if (isValidStageWeightsV2(v2)) return flattenStageWeightsV2(v2!);
+  const tpl = sections?.stage_weights ?? null;
   if (isValidStageWeights(tpl)) return { ...tpl! };
   return { ...LEGACY_STAGE_WEIGHTS };
 }

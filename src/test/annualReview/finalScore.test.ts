@@ -5,6 +5,9 @@ import {
   resolveStageWeights,
   responsesToRoleMap,
   LEGACY_STAGE_WEIGHTS,
+  isValidStageWeightsV2,
+  flattenStageWeightsV2,
+  type StageWeightsV2,
 } from '@/lib/annualReview/finalScore';
 
 describe('annualReview/finalScore', () => {
@@ -140,6 +143,110 @@ describe('annualReview/finalScore', () => {
         { reviewer_role: 'manager', weighted_score: 70, submitted_at: null } as any,
       ]);
       expect(m).toEqual({ self: 80 });
+    });
+  });
+
+  describe('stage_weights_v2 (two-tier)', () => {
+    it('isValidStageWeightsV2 accepts pools=100 and mix=100', () => {
+      const v: StageWeightsV2 = {
+        pools: { system: 60, criteria: 40 },
+        criteria_mix: { self: 0, dept_head: 70, bu_head: 30 },
+      };
+      expect(isValidStageWeightsV2(v)).toBe(true);
+    });
+
+    it('isValidStageWeightsV2 rejects bad totals or negatives', () => {
+      expect(isValidStageWeightsV2(null)).toBe(false);
+      expect(isValidStageWeightsV2({
+        pools: { system: 50, criteria: 40 },
+        criteria_mix: { manager: 100 },
+      })).toBe(false);
+      expect(isValidStageWeightsV2({
+        pools: { system: 100 },
+        criteria_mix: { manager: 50, bu_head: 40 }, // 90
+      })).toBe(false);
+      expect(isValidStageWeightsV2({
+        pools: { system: -10, criteria: 110 },
+        criteria_mix: { manager: 100 },
+      })).toBe(false);
+    });
+
+    it('flattenStageWeightsV2 derives correct flat blend (60/40, dept 70 / bu 30)', () => {
+      const flat = flattenStageWeightsV2({
+        pools: { system: 60, criteria: 40 },
+        criteria_mix: { self: 0, dept_head: 70, bu_head: 30 },
+      });
+      // 40 * 0.7 = 28, 40 * 0.3 = 12, system 60
+      expect(flat).toEqual({ system: 60, dept_head: 28, bu_head: 12 });
+    });
+
+    it('resolveStageWeights prefers v2 when valid', () => {
+      const tpl = {
+        sections: {
+          stage_weights: { criteria: 100 }, // legacy flat present
+          stage_weights_v2: {
+            pools: { system: 60, criteria: 40 },
+            criteria_mix: { self: 0, dept_head: 70, bu_head: 30 },
+          },
+        },
+      } as any;
+      expect(resolveStageWeights(null, tpl)).toEqual({
+        system: 60, dept_head: 28, bu_head: 12,
+      });
+    });
+
+    it('resolveStageWeights falls through to flat when v2 invalid', () => {
+      const tpl = {
+        sections: {
+          stage_weights: { self: 20, manager: 50, bu_head: 30 },
+          stage_weights_v2: {
+            pools: { system: 60, criteria: 30 }, // doesn't sum to 100
+            criteria_mix: { manager: 100 },
+          },
+        },
+      } as any;
+      expect(resolveStageWeights(null, tpl)).toEqual({ self: 20, manager: 50, bu_head: 30 });
+    });
+
+    it('end-to-end: v2-derived blend matches hand-entered flat blend in computeFinalScore', () => {
+      const v2: StageWeightsV2 = {
+        pools: { system: 60, criteria: 40 },
+        criteria_mix: { self: 0, dept_head: 70, bu_head: 30 },
+      };
+      const derived = flattenStageWeightsV2(v2);
+      const inputs = {
+        responsesByRole: { self: 50, dept_head: 80, bu_head: 60 },
+        systemScoreTotal: 75,
+        criteriaWeightedScore: null,
+      } as const;
+      const fromV2 = computeFinalScore({ stageWeights: derived, ...inputs });
+      const fromFlat = computeFinalScore({
+        stageWeights: { system: 60, dept_head: 28, bu_head: 12 },
+        ...inputs,
+      });
+      expect(fromV2.rawScore_0_100).toBe(fromFlat.rawScore_0_100);
+      // self has 0 weight → must not appear or affect the result
+      expect(fromV2.contributing).not.toContain('self');
+      // 0.6*75 + 0.28*80 + 0.12*60 = 45 + 22.4 + 7.2 = 74.6
+      expect(fromV2.rawScore_0_100).toBeCloseTo(74.6, 4);
+    });
+
+    it('v2 with self=0 does not give self any weight when self response missing', () => {
+      const v2: StageWeightsV2 = {
+        pools: { system: 50, criteria: 50 },
+        criteria_mix: { self: 0, manager: 100 },
+      };
+      const flat = flattenStageWeightsV2(v2);
+      const r = computeFinalScore({
+        stageWeights: flat,
+        responsesByRole: { manager: 80 }, // no self
+        systemScoreTotal: 70,
+        criteriaWeightedScore: null,
+      });
+      // 0.5*70 + 0.5*80 = 75 — no renormalisation, self carries no weight
+      expect(r.rawScore_0_100).toBe(75);
+      expect(r.renormalised).toBe(false);
+      expect(r.contributing.sort()).toEqual(['manager', 'system']);
     });
   });
 });
