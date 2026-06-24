@@ -314,6 +314,10 @@ export interface ListInstancesPaginatedArgs {
   businessUnitId?: string;
   /** Restrict to instances whose instance.manager_id matches. */
   managerId?: string;
+  /** Restrict to employees whose profile.pms_grade matches (master-data name). */
+  pmsGrade?: string;
+  /** Restrict to employees whose profile.level matches (master-data name). */
+  level?: string;
   sort?: { col: 'created_at' | 'overall_status' | 'total_score'; dir: 'asc' | 'desc' };
 }
 
@@ -384,9 +388,9 @@ export async function listInstancesPaginated(
  * Paged at 1000 to bypass the Data API default cap.
  */
 async function resolveEmployeeIdsForOrgFilters(
-  args: { departmentId?: string; businessUnitId?: string },
+  args: { departmentId?: string; businessUnitId?: string; pmsGrade?: string; level?: string },
 ): Promise<string[] | null> {
-  if (!args.departmentId && !args.businessUnitId) return null;
+  if (!args.departmentId && !args.businessUnitId && !args.pmsGrade && !args.level) return null;
 
   // If BU is set, expand to department_ids first.
   let deptIds: string[] | null = null;
@@ -409,6 +413,8 @@ async function resolveEmployeeIdsForOrgFilters(
   for (let from = 0; ; from += PAGE) {
     let pq = db.from('profiles').select('id').order('id').range(from, from + PAGE - 1);
     if (deptIds && deptIds.length > 0) pq = pq.in('department_id', deptIds);
+    if (args.pmsGrade) pq = pq.eq('pms_grade', args.pmsGrade);
+    if (args.level) pq = pq.eq('level', args.level);
     const { data, error } = await pq;
     if (error) throw error;
     const batch = data ?? [];
@@ -573,6 +579,8 @@ export async function fetchAllInstancesForExport(args: {
   departmentId?: string;
   businessUnitId?: string;
   managerId?: string;
+  pmsGrade?: string;
+  level?: string;
   onProgress?: (loaded: number) => void;
 }): Promise<InstanceWithEmployee[]> {
   // 1) Optional name search + org filters → restrict to matching employee_ids.

@@ -38,6 +38,8 @@ interface Props {
     departmentId?: string;
     businessUnitId?: string;
     managerId?: string;
+    pmsGrade?: string;
+    level?: string;
   };
   /** Total rows currently matching filters (for cap checks). */
   total: number;

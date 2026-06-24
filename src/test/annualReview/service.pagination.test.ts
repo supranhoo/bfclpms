@@ -104,6 +104,30 @@ describe('listInstancesPaginated', () => {
     expect(profiles.in).toHaveBeenCalledWith('department_id', ['d1', 'd2']);
     expect(inst.in).toHaveBeenCalledWith('employee_id', ['p9']);
   });
+
+  it('resolves pmsGrade via profiles.pms_grade .eq and intersects with name search', async () => {
+    const profiles = makeBuilder();
+    profiles.__result = { data: [{ id: 'p7' }], error: null };
+    tables.set('profiles', profiles);
+    const inst = makeBuilder();
+    inst.__result = { data: [], error: null, count: 0 };
+    tables.set('annual_review_instances', inst);
+    await svc.listInstancesPaginated({ cycleId: 'c1', page: 1, pageSize: 25, pmsGrade: 'M3' });
+    expect(profiles.eq).toHaveBeenCalledWith('pms_grade', 'M3');
+    expect(inst.in).toHaveBeenCalledWith('employee_id', ['p7']);
+  });
+
+  it('resolves level via profiles.level .eq', async () => {
+    const profiles = makeBuilder();
+    profiles.__result = { data: [{ id: 'p3' }, { id: 'p4' }], error: null };
+    tables.set('profiles', profiles);
+    const inst = makeBuilder();
+    inst.__result = { data: [], error: null, count: 0 };
+    tables.set('annual_review_instances', inst);
+    await svc.listInstancesPaginated({ cycleId: 'c1', page: 1, pageSize: 25, level: 'L2' });
+    expect(profiles.eq).toHaveBeenCalledWith('level', 'L2');
+    expect(inst.in).toHaveBeenCalledWith('employee_id', ['p3', 'p4']);
+  });
 });
 
 describe('getCycleStatusCounts', () => {

@@ -25,6 +25,7 @@ import {
 import {
   useBusinessUnits, useDepartments, useActiveProfilesLite, formatSafetyProfileLabel,
 } from '@/hooks/useSafetyOrg';
+import { usePmsGrades, useLevels } from '@/hooks/useOrganization';
 import { Check, ChevronsUpDown, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
@@ -210,14 +211,19 @@ function ProgressTab() {
   const [businessUnitId, setBusinessUnitId] = useState<string>('');
   const [managerId, setManagerId] = useState<string>('');
   const [managerPickerOpen, setManagerPickerOpen] = useState(false);
+  const [pmsGrade, setPmsGrade] = useState<string>('');
+  const [level, setLevel] = useState<string>('');
   const { data: businessUnits = [] } = useBusinessUnits();
   const { data: departments = [] } = useDepartments(businessUnitId || undefined);
   const { data: profilesLite = [] } = useActiveProfilesLite();
+  const { data: pmsGrades = [] } = usePmsGrades();
+  const { data: levels = [] } = useLevels();
   const selectedManager = profilesLite.find((p) => p.id === managerId);
-  const anyOrgFilter = !!(departmentId || businessUnitId || managerId);
+  const anyOrgFilter = !!(departmentId || businessUnitId || managerId || pmsGrade || level);
   const resetFilters = () => {
     setSearch(''); setStatusFilter('all'); setCustomWeightsOnly(false);
-    setDepartmentId(''); setBusinessUnitId(''); setManagerId(''); setPage(1);
+    setDepartmentId(''); setBusinessUnitId(''); setManagerId('');
+    setPmsGrade(''); setLevel(''); setPage(1);
   };
   const paginatedArgs = activeCycle
     ? {
@@ -226,6 +232,8 @@ function ProgressTab() {
         departmentId: departmentId || undefined,
         businessUnitId: businessUnitId || undefined,
         managerId: managerId || undefined,
+        pmsGrade: pmsGrade || undefined,
+        level: level || undefined,
       }
     : undefined;
   const { data: paged, refetch } = useAnnualReviewInstancesPaginated(paginatedArgs);
@@ -426,6 +434,30 @@ function ProgressTab() {
               </Command>
             </PopoverContent>
           </Popover>
+          <Select
+            value={pmsGrade || 'all'}
+            onValueChange={(v) => { setPmsGrade(v === 'all' ? '' : v); setPage(1); }}
+          >
+            <SelectTrigger className="w-44 h-10"><SelectValue placeholder="All PMS grades" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All PMS grades</SelectItem>
+              {(pmsGrades ?? []).map((g: { id: string; name: string }) => (
+                <SelectItem key={g.id} value={g.name}>{g.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select
+            value={level || 'all'}
+            onValueChange={(v) => { setLevel(v === 'all' ? '' : v); setPage(1); }}
+          >
+            <SelectTrigger className="w-40 h-10"><SelectValue placeholder="All levels" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All levels</SelectItem>
+              {(levels ?? []).map((l: { id: string; name: string }) => (
+                <SelectItem key={l.id} value={l.name}>{l.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           <Button
             type="button"
             size="sm"
@@ -470,6 +502,8 @@ function ProgressTab() {
                       departmentId: departmentId || undefined,
                       businessUnitId: businessUnitId || undefined,
                       managerId: managerId || undefined,
+                      pmsGrade: pmsGrade || undefined,
+                      level: level || undefined,
                     });
                     const ids = all.map((i) => i.id);
                     const scores = await svc.fetchInstanceStageScores(ids);
@@ -483,6 +517,8 @@ function ProgressTab() {
                       Search: search || '(none)',
                       Stage: statusFilter,
                       'Custom weights only': customWeightsOnly ? 'yes' : 'no',
+                      'PMS Grade': pmsGrade || '(all)',
+                      Level: level || '(all)',
                     }, tplMap);
                     toast.success(`Exported ${all.length} row${all.length === 1 ? '' : 's'}.`);
                   } catch (e) {
@@ -510,6 +546,8 @@ function ProgressTab() {
                   departmentId: departmentId || undefined,
                   businessUnitId: businessUnitId || undefined,
                   managerId: managerId || undefined,
+                  pmsGrade: pmsGrade || undefined,
+                  level: level || undefined,
                 });
                 setBulkInstances(rows);
                 setUnifiedOpen(true);
@@ -532,6 +570,8 @@ function ProgressTab() {
               departmentId: departmentId || undefined,
               businessUnitId: businessUnitId || undefined,
               managerId: managerId || undefined,
+              pmsGrade: pmsGrade || undefined,
+              level: level || undefined,
             }}
             total={total}
           />
