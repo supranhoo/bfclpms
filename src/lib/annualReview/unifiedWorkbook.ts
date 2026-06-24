@@ -49,6 +49,7 @@ const WT_COL: Record<StageWeightKey, string> = {
   self:         'WT Self %',
   manager:      'WT Manager %',
   skip_manager: 'WT Skip %',
+  dept_head:    'WT Dept %',
   bu_head:      'WT BU %',
   hr:           'WT HR %',
   system:       'WT System %',
