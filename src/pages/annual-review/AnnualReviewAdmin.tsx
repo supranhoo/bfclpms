@@ -57,6 +57,7 @@ import {
   useShowReviewerNamesInStepper,
   useSetShowReviewerNamesInStepper,
 } from '@/hooks/useAnnualReviewSettings';
+import { AssistedSubmissionSettings } from '@/components/admin/AssistedSubmissionSettings';
 import { RecentStageWeightOverridesPanel } from '@/components/annual-review/RecentStageWeightOverridesPanel';
 import { RuleFiltersEditor, RuleFiltersSummary, EMPTY_FILTERS } from '@/components/annual-review/RuleFiltersEditor';
 import type {
@@ -132,6 +133,8 @@ function SettingsTab() {
         </div>
       </CardContent>
     </Card>
+    <AssistedSubmissionSettings />
+    </div>
   );
 }
 
