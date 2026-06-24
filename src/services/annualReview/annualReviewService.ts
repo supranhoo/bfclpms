@@ -314,6 +314,10 @@ export interface ListInstancesPaginatedArgs {
   businessUnitId?: string;
   /** Restrict to instances whose instance.manager_id matches. */
   managerId?: string;
+  /** Restrict to employees whose profile.pms_grade matches (master-data name). */
+  pmsGrade?: string;
+  /** Restrict to employees whose profile.level matches (master-data name). */
+  level?: string;
   sort?: { col: 'created_at' | 'overall_status' | 'total_score'; dir: 'asc' | 'desc' };
 }
 
