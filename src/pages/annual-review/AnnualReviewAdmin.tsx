@@ -502,6 +502,8 @@ function ProgressTab() {
                       departmentId: departmentId || undefined,
                       businessUnitId: businessUnitId || undefined,
                       managerId: managerId || undefined,
+                      pmsGrade: pmsGrade || undefined,
+                      level: level || undefined,
                     });
                     const ids = all.map((i) => i.id);
                     const scores = await svc.fetchInstanceStageScores(ids);
@@ -515,6 +517,8 @@ function ProgressTab() {
                       Search: search || '(none)',
                       Stage: statusFilter,
                       'Custom weights only': customWeightsOnly ? 'yes' : 'no',
+                      'PMS Grade': pmsGrade || '(all)',
+                      Level: level || '(all)',
                     }, tplMap);
                     toast.success(`Exported ${all.length} row${all.length === 1 ? '' : 's'}.`);
                   } catch (e) {
@@ -542,6 +546,8 @@ function ProgressTab() {
                   departmentId: departmentId || undefined,
                   businessUnitId: businessUnitId || undefined,
                   managerId: managerId || undefined,
+                  pmsGrade: pmsGrade || undefined,
+                  level: level || undefined,
                 });
                 setBulkInstances(rows);
                 setUnifiedOpen(true);
@@ -564,6 +570,8 @@ function ProgressTab() {
               departmentId: departmentId || undefined,
               businessUnitId: businessUnitId || undefined,
               managerId: managerId || undefined,
+              pmsGrade: pmsGrade || undefined,
+              level: level || undefined,
             }}
             total={total}
           />
