@@ -141,7 +141,7 @@ export default function EmployeeAnnualReview() {
             </div>
             <AnnualReviewStatusBadge status={instance.overall_status} />
           </header>
-          <AnnualReviewStageTracker status={instance.overall_status} enabledStages={instance.enabled_stages} reviewerNamesByStage={reviewerNamesByStage} />
+          <AnnualReviewStageTracker status={instance.overall_status} enabledStages={visibleStages} reviewerNamesByStage={reviewerNamesByStage} skippedStages={skippedStages} />
           <EmployeeResultsView instance={instance} template={template} responses={responses} />
         </div>
       </AnnualReviewI18nProvider>
@@ -201,7 +201,7 @@ export default function EmployeeAnnualReview() {
         </div>
       </header>
 
-      <AnnualReviewStageTracker status={instance.overall_status} enabledStages={instance.enabled_stages} reviewerNamesByStage={reviewerNamesByStage} />
+      <AnnualReviewStageTracker status={instance.overall_status} enabledStages={visibleStages} reviewerNamesByStage={reviewerNamesByStage} skippedStages={skippedStages} />
 
       <AppraisalCompositionCard composition={composition} variant="full" />
 

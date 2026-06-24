@@ -191,7 +191,7 @@ export function TeamReviewDetailContent({
             </div>
           </div>
         </CardHeader>
-        <CardContent><AnnualReviewStageTracker status={instance.overall_status} enabledStages={instance.enabled_stages} reviewerNamesByStage={reviewerNamesByStage} /></CardContent>
+        <CardContent><AnnualReviewStageTracker status={instance.overall_status} enabledStages={visibleStages} reviewerNamesByStage={reviewerNamesByStage} skippedStages={skippedStages} /></CardContent>
       </Card>
 
       {proxyMode && (
