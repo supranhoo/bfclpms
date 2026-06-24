@@ -12,6 +12,7 @@ import { AnnualReviewStageTracker } from '@/components/annual-review/AnnualRevie
 import { useShowReviewerNamesInStepper } from '@/hooks/useAnnualReviewSettings';
 import { useActiveProfilesLite } from '@/hooks/useSafetyOrg';
 import { buildReviewerNamesByStage } from '@/lib/annualReview/reviewerNames';
+import { computeVisibleStages, computeStageResolutions } from '@/lib/annualReview/visibleStages';
 import { AnnualReviewStatusBadge } from '@/components/annual-review/AnnualReviewStatusBadge';
 import { CriteriaScoringMatrix } from '@/components/annual-review/CriteriaScoringMatrix';
 import { shouldHideCriteriaCard, criteriaForStage } from '@/lib/annualReview/templateVisibility';
@@ -84,6 +85,17 @@ export function TeamReviewDetailContent({
     () => (showReviewerNames ? buildReviewerNamesByStage(instance, profilesLite) : undefined),
     [showReviewerNames, instance, profilesLite],
   );
+  const visibleStages = useMemo(
+    () => computeVisibleStages(instance, profilesLite) ?? instance.enabled_stages,
+    [instance, profilesLite],
+  );
+  const skippedStages = useMemo(() => {
+    const rows = computeStageResolutions(instance, profilesLite);
+    if (!rows) return undefined;
+    return rows
+      .filter((r) => r.skipped && r.skipReason)
+      .map((r) => ({ stage: r.stage, reason: r.skipReason! }));
+  }, [instance, profilesLite]);
   const { data: proxyEligible } = useProxyEligibility(
     instance.id,
     !stageRole && instance.overall_status === 'pending_self',
@@ -191,7 +203,7 @@ export function TeamReviewDetailContent({
             </div>
           </div>
         </CardHeader>
-        <CardContent><AnnualReviewStageTracker status={instance.overall_status} enabledStages={instance.enabled_stages} reviewerNamesByStage={reviewerNamesByStage} /></CardContent>
+        <CardContent><AnnualReviewStageTracker status={instance.overall_status} enabledStages={visibleStages} reviewerNamesByStage={reviewerNamesByStage} skippedStages={skippedStages} /></CardContent>
       </Card>
 
       {proxyMode && (

@@ -1,78 +1,89 @@
 ## Problem
 
-The Annual Review stepper shows **Ankit Choudhary** as "HR Final" even though **Jaspal** is now the HR BU Head. This happens because `annual_review_instances.hr_id` was frozen at seed time and is never updated when the HR BU Head changes.
+For Ankit, **Dept Head** and **BU Head** are unmapped, so the workflow engine already auto-skips them and advances directly from Self → HR Final (Jaspal). But the **stepper still renders them as "— Unassigned"**, making it look like the review is stuck or mis-configured.
+
+The workflow execution and the UI are out of sync:
+
+- **Execution (SQL `annual_review_effective_chain_details` + `resolveEffectiveChain`)** — already drops stages with no mapped reviewer / self-assignment / inactive reviewer / duplicate reviewer.
+- **Stepper (`AnnualReviewStageTracker`)** — renders the raw `enabled_stages` array, so dropped stages still appear.
+
+## Decision
+
+Hide auto-skipped stages from the stepper everywhere, so the visual chain matches what the engine actually executes. For Ankit this means the tracker collapses to:
+
+```text
+1 Self Review  →  2 HR Final (Jaspal)
+```
+
+No new admin toggle — auto-skip is already a system rule (driven by reviewer mapping). The stepper just needs to honour it.
 
 ## Risk & Impact Report
 
-- **Data Impact:** Updates `hr_id` on existing `annual_review_instances` rows. Only non-finalized instances should be touched to preserve audit trail of completed reviews.
-- **Workflow Impact:** In-flight reviews will route to the new HR Final approver instead of the old one. Pending HR-stage approvals re-assign automatically.
-- **UI/UX Impact:** Stepper immediately reflects the current HR BU Head. No visual layout change.
-- **Regression Risk:** Low if scoped to instances whose HR stage isn't yet completed. Risk of overwriting a deliberate per-instance reassignment (via Reassign Reviewer dialog) — mitigated by skipping rows that have an override record in `annual_review_assignment_overrides` for the HR role.
-- **Mitigation:** Audit-log every auto-reassignment; admin toggle controls whether cascade runs; dry-run preview before bulk apply.
+- **Data Impact:** None. `enabled_stages` is not modified; this is presentation only.
+- **Workflow Impact:** None. Engine already skips these stages via `nextStatus`/SQL chain.
+- **UI/UX Impact:** Stepper hides stages with no mapped reviewer (or self-assignment / inactive / duplicate reviewer). Step numbers re-number from the surviving stages so the chain reads cleanly (1, 2, ... not 1, 4).
+- **Regression Risk:** Low. Two call sites; one shared helper already exists (`effectiveStages` in `src/lib/annualReview/effectiveChain.ts`).
+- **Mitigation:** Snapshot test of stepper with unmapped Dept/BU + unit test of helper output for this exact scenario.
 
 ## Plan
 
-### 1. Admin Setting (toggle)
+### 1. Compute the effective chain at the call sites
 
-Add a new boolean to `annual_review_settings`:
+In both `src/pages/annual-review/EmployeeAnnualReview.tsx` and `src/components/annual-review/TeamReviewDetailContent.tsx`:
 
-- `auto_reassign_hr_on_bu_head_change` (default: **false** to preserve current behavior)
+- Already have `profiles` from `useActiveProfilesLite()` (active profiles only).
+- Build `activeById` = `Object.fromEntries(profiles.map(p => [p.id, true]))`.
+- Compute:
 
-Surface it in **Annual Review → Admin → Settings → Display Settings** card as a `Switch` with helper text:
-> "When HR BU Head changes, automatically re-point HR Final on all non-finalized review instances to the new BU Head."
+```ts
+const visibleStages = useMemo(() => {
+  if (!instance || !profiles) return instance?.enabled_stages;
+  return effectiveStages({
+    enabledStages: instance.enabled_stages,
+    employeeId: instance.employee_id,
+    reviewers: {
+      manager:      instance.manager_id,
+      skip_manager: instance.skip_id,
+      dept_head:    instance.dept_head_id,
+      bu_head:      instance.bu_head_id,
+      hr:           instance.hr_id,
+    },
+    activeById,
+  });
+}, [instance, profiles, activeById]);
+```
 
-### 2. One-time Repair Action (immediate fix for current issue)
+- Pass `enabledStages={visibleStages}` to `AnnualReviewStageTracker`.
 
-Add a button in the same Settings card: **"Sync HR Final to current BU Head now"**.
+Fallback to raw `instance.enabled_stages` while profiles are still loading — prevents a flicker that hides everything.
 
-Flow:
-1. Click → opens `ConfirmDestructiveDialog` showing a preview count: "X instances will be re-pointed from previous HR to Jaspal (current BU Head)."
-2. Confirm → calls a new RPC `sync_hr_final_to_current_bu_head(cycle_id uuid)`.
-3. RPC updates `annual_review_instances.hr_id` for rows where:
-   - `cycle_id` matches the active cycle
-   - HR stage is **not yet completed** (status before `hr_approved` / not finalized)
-   - No active override exists in `annual_review_assignment_overrides` for the HR role on that instance
-4. Writes one audit row per change to `system_audit_logs` (performer = current admin).
+### 2. Tooltip for hidden stages (transparency)
 
-### 3. Going-Forward Cascade (driven by the toggle)
+Add a small "ⓘ Some stages were skipped" hint to the stepper header **only when** `visibleStages.length < enabled_stages.length`, with a tooltip listing the dropped stages and the reason (`no_reviewer_mapped`, `self_assignment`, `reviewer_inactive`, `duplicate_reviewer`). Uses the data already returned by `resolveEffectiveChain`.
 
-When admin updates `business_units.head_user_id` for the HR BU (via Admin → Organization → Business Units), a DB trigger checks the setting:
+### 3. Reviewer-name map stays as-is
 
-- If `auto_reassign_hr_on_bu_head_change = true` → runs the same SECURITY DEFINER function as step 2, scoped to non-finalized instances, with `performed_by = NULL` (system attribution per memory rule).
-- If `false` → no change (today's behavior); admins use the manual sync button or per-instance Reassign Reviewer dialog.
+`buildReviewerNamesByStage` still produces all 6 entries; the stepper only looks up entries for the stages it actually renders, so dropped stages aren't queried.
 
-### 4. Per-instance fix (no code, available today)
+### 4. Tests
 
-For the immediate Ankit→Jaspal case the admin can also open the instance and use **Reassign Reviewer → HR** with a reason. Documented in DOCUMENTATION.md as the surgical option.
+- Update `stageTrackerReviewerNames.test.tsx` (and add a sibling test) to verify a Self+HR-only chain renders 2 numbered steps with names "Self Review" / "HR Final" and no "Dept Head" or "BU Head".
+- Add `effectiveChain.test.ts` case: enabled = [self, manager, skip, dept, bu, hr], reviewers = {manager: null, skip: null, dept: null, bu: null, hr: 'jaspal'}, employee = ankit → `effectiveStages` returns `['self', 'hr']`.
+
+### 5. Docs / Policy
+
+- `DOCUMENTATION.md` → "Annual Review > Stepper" section: state that the stepper shows the **effective** chain (auto-skipped stages are hidden) and reference the four skip reasons.
+- `POLICY.md` → reaffirm: an unmapped reviewer slot = stage auto-skipped, both in execution AND in the UI.
 
 ## Technical Details
 
-**Schema:**
-```sql
-ALTER TABLE public.annual_review_settings
-  ADD COLUMN auto_reassign_hr_on_bu_head_change boolean NOT NULL DEFAULT false;
-```
-
-**New RPC:** `public.sync_hr_final_to_current_bu_head(p_cycle_id uuid)` — SECURITY DEFINER, admin-only, returns count of updated rows.
-
-**New trigger:** `trg_bu_head_change_cascade_hr` on `business_units` AFTER UPDATE OF `head_user_id` WHEN BU name = 'HR' — calls the same function gated by the setting.
-
-**Frontend:**
-- `src/hooks/useAnnualReviewSettings.ts` — extend with `useAutoReassignHrOnBuHeadChange` getter/setter.
-- `src/pages/annual-review/AnnualReviewAdmin.tsx` — add Switch + "Sync now" button in Display Settings card.
-- New service `src/services/annualReview/hrFinalSync.ts` — wraps the RPC.
-
-**Tests:**
-- Unit: toggle hook, RPC scope (skips finalized, skips overrides), trigger gated by setting.
-- Mock data: cycle with mix of in-progress, finalized, and overridden instances.
-
-**Docs:**
-- DOCUMENTATION.md → "HR Final resolution" section: add toggle + manual sync + per-instance override hierarchy.
-- POLICY.md → "When HR BU Head changes": describe default (preserve), opt-in cascade, and immutability of finalized HR stage.
+- Affected files:
+  - `src/components/annual-review/AnnualReviewStageTracker.tsx` — accept optional `skippedStagesInfo` prop for the info hint (no behaviour change otherwise).
+  - `src/pages/annual-review/EmployeeAnnualReview.tsx` — compute & pass `visibleStages`.
+  - `src/components/annual-review/TeamReviewDetailContent.tsx` — same.
+- SSOT used: existing `resolveEffectiveChain` / `effectiveStages` from `src/lib/annualReview/effectiveChain.ts` (already mirrors the SQL contract).
+- No DB migration. No new RPC. No new setting.
 
 ## Rollback
 
-- Toggle defaults to `false` — no behavior change on deploy.
-- Repair action is opt-in (admin must click).
-- Trigger is a no-op when toggle is off; can be dropped without data loss.
-- Each update is audit-logged so individual rows can be reverted if needed.
+- Pure UI change. Revert the two call sites to pass `instance.enabled_stages` and the stepper goes back to the current behaviour. No data to undo.

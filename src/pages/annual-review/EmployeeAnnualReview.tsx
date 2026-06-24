@@ -13,6 +13,7 @@ import { AnnualReviewStageTracker } from '@/components/annual-review/AnnualRevie
 import { useShowReviewerNamesInStepper } from '@/hooks/useAnnualReviewSettings';
 import { useActiveProfilesLite } from '@/hooks/useSafetyOrg';
 import { buildReviewerNamesByStage } from '@/lib/annualReview/reviewerNames';
+import { computeVisibleStages, computeStageResolutions } from '@/lib/annualReview/visibleStages';
 import { AnnualReviewStatusBadge } from '@/components/annual-review/AnnualReviewStatusBadge';
 import { CriteriaScoringMatrix } from '@/components/annual-review/CriteriaScoringMatrix';
 import { shouldHideCriteriaCard, criteriaForStage } from '@/lib/annualReview/templateVisibility';
@@ -52,6 +53,18 @@ export default function EmployeeAnnualReview() {
     () => (showReviewerNames && instance ? buildReviewerNamesByStage(instance, profiles) : undefined),
     [showReviewerNames, instance, profiles],
   );
+  const visibleStages = useMemo(
+    () => (instance ? computeVisibleStages(instance, profiles) ?? instance.enabled_stages : undefined),
+    [instance, profiles],
+  );
+  const skippedStages = useMemo(() => {
+    if (!instance) return undefined;
+    const rows = computeStageResolutions(instance, profiles);
+    if (!rows) return undefined;
+    return rows
+      .filter((r) => r.skipped && r.skipReason)
+      .map((r) => ({ stage: r.stage, reason: r.skipReason! }));
+  }, [instance, profiles]);
 
   const myResponse = responses.find((r) => r.reviewer_role === 'self') ?? null;
   const locked = myResponse?.is_locked || (instance && instance.overall_status !== 'pending_self');
@@ -128,7 +141,7 @@ export default function EmployeeAnnualReview() {
             </div>
             <AnnualReviewStatusBadge status={instance.overall_status} />
           </header>
-          <AnnualReviewStageTracker status={instance.overall_status} enabledStages={instance.enabled_stages} reviewerNamesByStage={reviewerNamesByStage} />
+          <AnnualReviewStageTracker status={instance.overall_status} enabledStages={visibleStages} reviewerNamesByStage={reviewerNamesByStage} skippedStages={skippedStages} />
           <EmployeeResultsView instance={instance} template={template} responses={responses} />
         </div>
       </AnnualReviewI18nProvider>
@@ -188,7 +201,7 @@ export default function EmployeeAnnualReview() {
         </div>
       </header>
 
-      <AnnualReviewStageTracker status={instance.overall_status} enabledStages={instance.enabled_stages} reviewerNamesByStage={reviewerNamesByStage} />
+      <AnnualReviewStageTracker status={instance.overall_status} enabledStages={visibleStages} reviewerNamesByStage={reviewerNamesByStage} skippedStages={skippedStages} />
 
       <AppraisalCompositionCard composition={composition} variant="full" />
 
