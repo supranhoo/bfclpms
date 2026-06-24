@@ -246,7 +246,7 @@ describe('annualReview/finalScore', () => {
       // 0.5*70 + 0.5*80 = 75 — no renormalisation, self carries no weight
       expect(r.rawScore_0_100).toBe(75);
       expect(r.renormalised).toBe(false);
-      expect(r.contributing).toEqual(['system', 'manager']);
+      expect(r.contributing.sort()).toEqual(['manager', 'system']);
     });
   });
 });
