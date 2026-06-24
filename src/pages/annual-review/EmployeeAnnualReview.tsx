@@ -10,6 +10,9 @@ import {
   useDebouncedResponseDraft,
 } from '@/hooks/useAnnualReview';
 import { AnnualReviewStageTracker } from '@/components/annual-review/AnnualReviewStageTracker';
+import { useShowReviewerNamesInStepper } from '@/hooks/useAnnualReviewSettings';
+import { useActiveProfilesLite } from '@/hooks/useSafetyOrg';
+import { buildReviewerNamesByStage } from '@/lib/annualReview/reviewerNames';
 import { AnnualReviewStatusBadge } from '@/components/annual-review/AnnualReviewStatusBadge';
 import { CriteriaScoringMatrix } from '@/components/annual-review/CriteriaScoringMatrix';
 import { shouldHideCriteriaCard, criteriaForStage } from '@/lib/annualReview/templateVisibility';
@@ -42,6 +45,13 @@ export default function EmployeeAnnualReview() {
   const { data: responses = [] } = useInstanceResponses(instance?.id);
   const advance = useAdvanceStatus();
   const upload = useUploadEvidence();
+
+  const { data: showReviewerNames = false } = useShowReviewerNamesInStepper();
+  const { data: profiles } = useActiveProfilesLite();
+  const reviewerNamesByStage = useMemo(
+    () => (showReviewerNames && instance ? buildReviewerNamesByStage(instance, profiles) : undefined),
+    [showReviewerNames, instance, profiles],
+  );
 
   const myResponse = responses.find((r) => r.reviewer_role === 'self') ?? null;
   const locked = myResponse?.is_locked || (instance && instance.overall_status !== 'pending_self');
@@ -118,7 +128,7 @@ export default function EmployeeAnnualReview() {
             </div>
             <AnnualReviewStatusBadge status={instance.overall_status} />
           </header>
-          <AnnualReviewStageTracker status={instance.overall_status} enabledStages={instance.enabled_stages} />
+          <AnnualReviewStageTracker status={instance.overall_status} enabledStages={instance.enabled_stages} reviewerNamesByStage={reviewerNamesByStage} />
           <EmployeeResultsView instance={instance} template={template} responses={responses} />
         </div>
       </AnnualReviewI18nProvider>
@@ -178,7 +188,7 @@ export default function EmployeeAnnualReview() {
         </div>
       </header>
 
-      <AnnualReviewStageTracker status={instance.overall_status} enabledStages={instance.enabled_stages} />
+      <AnnualReviewStageTracker status={instance.overall_status} enabledStages={instance.enabled_stages} reviewerNamesByStage={reviewerNamesByStage} />
 
       <AppraisalCompositionCard composition={composition} variant="full" />
 
