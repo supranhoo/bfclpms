@@ -18,6 +18,7 @@ export function SystemScoresPanel({
   values,
   eligibility,
   eligibilityInputs,
+  eligibilityRemark,
   readOnly = false,
   onChangeValue,
   employeeId,
@@ -27,6 +28,7 @@ export function SystemScoresPanel({
   values: Record<string, number>;
   eligibility?: EligibilityCriterion[];
   eligibilityInputs?: Record<string, unknown>;
+  eligibilityRemark?: string | null;
   readOnly?: boolean;
   onChangeValue?: (id: string, value: number) => void;
   /** Required for source=carry_kra fetches. */
@@ -108,8 +110,7 @@ export function SystemScoresPanel({
                   <TableHeader>
                     <TableRow className="bg-destructive/5 hover:bg-destructive/5">
                       <TableHead className="h-8 text-destructive">{t('eligibility.col.criterion', 'Criterion')}</TableHead>
-                      <TableHead className="h-8 text-destructive">{t('eligibility.col.condition', 'Condition')}</TableHead>
-                      <TableHead className="h-8 text-right text-destructive">{t('eligibility.col.expected', 'Expected')}</TableHead>
+                      <TableHead className="h-8 text-destructive">{t('eligibility.col.policy_description', 'Policy Description')}</TableHead>
                       <TableHead className="h-8 text-right text-destructive">{t('eligibility.col.actual', 'Actual')}</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -120,10 +121,9 @@ export function SystemScoresPanel({
                           {tTemplate('eligibility', f.criterion.id, 'name', f.criterion.name)}
                         </TableCell>
                         <TableCell className="py-1.5 text-muted-foreground">
-                          {f.criterion.operator.replace(/_/g, ' ')}
-                        </TableCell>
-                        <TableCell className="py-1.5 text-right tabular-nums">
-                          {String(f.criterion.expected_value)}
+                          {f.criterion.description
+                            ? tTemplate('eligibility', f.criterion.id, 'description', f.criterion.description)
+                            : `${f.criterion.operator.replace(/_/g, ' ')} ${String(f.criterion.expected_value)}`}
                         </TableCell>
                         <TableCell className="py-1.5 text-right tabular-nums">
                           {f.actual == null || f.actual === '' ? (
@@ -137,6 +137,14 @@ export function SystemScoresPanel({
                   </TableBody>
                 </Table>
               </div>
+              {eligibilityRemark && eligibilityRemark.trim() && (
+                <div className="mt-3 rounded-md border border-destructive/30 bg-destructive/5 p-3">
+                  <p className="text-xs font-semibold text-destructive uppercase tracking-wide">
+                    {t('eligibility.remark_label', 'Remark from HR')}
+                  </p>
+                  <p className="mt-1 text-sm whitespace-pre-wrap">{eligibilityRemark}</p>
+                </div>
+              )}
             </AlertDescription>
           </Alert>
         )}
