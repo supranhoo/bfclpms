@@ -180,6 +180,11 @@ export function useBulkRollbackOrgKpiPropagation() {
       const performedBy = profile?.id;
 
       // 1. Find all propagated org_kpi_values for this KRA+KPI combination
+      // NOTE: The UI defines "propagated" as status IN ('propagated','approved')
+      // (see src/pages/admin/OrgKpiDataEntry.tsx — `isPropagated` derivation).
+      // The bulk rollback must mirror that union, otherwise cards whose scopes
+      // are mixed propagated/approved (or stale after individual rollbacks) will
+      // throw "No propagated scopes found" while the button is still showing.
       const { data: orgValues, error: orgError } = await supabase
         .from('org_kpi_values')
         .select('id, achieved_value, category_id')
@@ -187,11 +192,16 @@ export function useBulkRollbackOrgKpiPropagation() {
         .eq('kpi_name', kpiName)
         .eq('review_period', reviewPeriod)
         .eq('review_year', reviewYear)
-        .eq('status', 'propagated');
+        .in('status', ['propagated', 'approved']);
 
       if (orgError) throw orgError;
       if (!orgValues || orgValues.length === 0) {
-        throw new Error('No propagated scopes found for this KPI. Nothing to roll back.');
+        // Refresh the stale card before surfacing the error so the user sees
+        // the current truth (e.g. all scopes already rolled back individually).
+        queryClient.invalidateQueries({ queryKey: ['org-kpi-values'] });
+        throw new Error(
+          'All scopes for this KPI have already been rolled back or are not in a propagated/approved state. The view has been refreshed.'
+        );
       }
 
       // 2. Find all employee KPIs matching this org KPI (is_org_level = true)
@@ -307,6 +317,8 @@ export function useBulkRollbackOrgKpiPropagation() {
       });
     },
     onError: (error: Error) => {
+      // Always refresh on error so a stale card cannot keep the user stuck.
+      queryClient.invalidateQueries({ queryKey: ['org-kpi-values'] });
       toast({
         title: 'Bulk rollback failed',
         description: error.message,
