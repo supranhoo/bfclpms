@@ -1,4 +1,4 @@
-import { Check } from 'lucide-react';
+import { Check, Info } from 'lucide-react';
 import { STAGE_LABEL, STAGE_TO_STATUS } from '@/lib/annualReview/constants';
 import { enabledChain } from '@/lib/annualReview/stageChain';
 import type { AnnualReviewStatus, AnnualReviewerRole } from '@/types/annualReview';
@@ -19,10 +19,23 @@ function stageState(
   return 'pending';
 }
 
+export interface SkippedStageInfo {
+  stage: AnnualReviewerRole;
+  reason: 'no_reviewer_mapped' | 'self_assignment' | 'reviewer_inactive' | 'duplicate_reviewer';
+}
+
+const SKIP_REASON_LABEL: Record<SkippedStageInfo['reason'], string> = {
+  no_reviewer_mapped: 'no reviewer mapped',
+  self_assignment: 'reviewer is the employee',
+  reviewer_inactive: 'reviewer is inactive',
+  duplicate_reviewer: 'same reviewer at a higher stage',
+};
+
 export function AnnualReviewStageTracker({
   status,
   enabledStages,
   reviewerNamesByStage,
+  skippedStages,
 }: {
   status: AnnualReviewStatus;
   /** Per-instance enabled chain. Omit to render the full 5-stage chain. */
@@ -33,11 +46,38 @@ export function AnnualReviewStageTracker({
    * admin setting `show_reviewer_names_in_stepper`.
    */
   reviewerNamesByStage?: Partial<Record<AnnualReviewerRole, string | null>>;
+  /**
+   * Stages that were auto-skipped by the workflow engine (no reviewer mapped
+   * etc). When non-empty, renders a small "Some stages were skipped" hint
+   * above the tracker so users understand why the chain is shorter than the
+   * cycle's default.
+   */
+  skippedStages?: SkippedStageInfo[];
 }) {
   const chain = enabledChain(enabledStages);
   const { t } = useAnnualReviewI18n();
   const showNames = reviewerNamesByStage !== undefined;
+  const hasSkipped = !!skippedStages?.length;
   return (
+    <div className="space-y-2">
+    {hasSkipped && (
+      <div
+        className="flex items-start gap-1.5 text-xs text-muted-foreground"
+        title={skippedStages!.map((s) => `${STAGE_LABEL[s.stage]} — ${SKIP_REASON_LABEL[s.reason]}`).join('\n')}
+      >
+        <Info className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+        <span>
+          {skippedStages!.length} stage{skippedStages!.length === 1 ? '' : 's'} auto-skipped:{' '}
+          {skippedStages!.map((s, i) => (
+            <span key={s.stage}>
+              {i > 0 && ', '}
+              <span className="font-medium">{STAGE_LABEL[s.stage]}</span>
+              <span className="text-muted-foreground/70"> ({SKIP_REASON_LABEL[s.reason]})</span>
+            </span>
+          ))}
+        </span>
+      </div>
+    )}
     <ol className="flex items-center w-full gap-2 md:gap-4 overflow-x-auto py-2" aria-label="Annual review progress">
       {chain.map((stage, i) => {
         const s = stageState(stage, status, chain);
@@ -72,5 +112,6 @@ export function AnnualReviewStageTracker({
         );
       })}
     </ol>
+    </div>
   );
 }
