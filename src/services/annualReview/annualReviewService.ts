@@ -579,6 +579,8 @@ export async function fetchAllInstancesForExport(args: {
   departmentId?: string;
   businessUnitId?: string;
   managerId?: string;
+  pmsGrade?: string;
+  level?: string;
   onProgress?: (loaded: number) => void;
 }): Promise<InstanceWithEmployee[]> {
   // 1) Optional name search + org filters → restrict to matching employee_ids.
