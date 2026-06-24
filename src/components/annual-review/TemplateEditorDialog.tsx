@@ -363,7 +363,15 @@ export function TemplateEditorDialog({
                   {systemScores.map((sc, i) => (
                     <TableRow key={sc.id}>
                       <TableCell>
-                        <Input className="h-9" value={sc.name} onChange={(ev) => updateAt(setSections, 'system_scores', i, { name: ev.target.value })} />
+                        <div className="space-y-2">
+                          <Input className="h-9" value={sc.name} onChange={(ev) => updateAt(setSections, 'system_scores', i, { name: ev.target.value })} placeholder="Name" />
+                          <Textarea
+                            rows={2}
+                            value={sc.description ?? ''}
+                            onChange={(ev) => updateAt(setSections, 'system_scores', i, { description: ev.target.value })}
+                            placeholder="Description (optional) — shown to reviewers on the form"
+                          />
+                        </div>
                       </TableCell>
                       <TableCell className="space-y-2">
                         <Select

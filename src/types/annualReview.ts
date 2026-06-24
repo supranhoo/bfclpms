@@ -65,6 +65,8 @@ export interface TemplateCriterion {
 export interface TemplateSystemScore {
   id: string;
   name: string;
+  /** Optional human-readable description shown in the editor and the review form. */
+  description?: string;
   weight: number;        // max percentage points contributed
   source?: 'manual' | 'safety' | 'hr' | 'env' | 'carry_kra' | string;
   /** Only used when source === 'carry_kra'. */
