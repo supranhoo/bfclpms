@@ -1116,10 +1116,13 @@ export async function sendBackStatus(
 export async function updateEligibilityInputs(
   instanceId: string,
   inputs: Record<string, string | number | boolean>,
+  remark?: string | null,
 ) {
+  const patch: Record<string, unknown> = { eligibility_inputs: inputs };
+  if (remark !== undefined) patch.eligibility_remark = remark && remark.trim() ? remark.trim() : null;
   const { data, error } = await db
     .from('annual_review_instances')
-    .update({ eligibility_inputs: inputs })
+    .update(patch)
     .eq('id', instanceId)
     .select('*')
     .single();

@@ -120,6 +120,8 @@ export interface EligibilityCriterion {
   type: 'number' | 'boolean' | 'string';
   operator: EligibilityOperator;
   expected_value: string | number | boolean;
+  /** HR-authored human-readable rule shown to the employee in place of operator/expected. */
+  description?: string;
 }
 
 export interface SelfReviewField {
@@ -275,6 +277,8 @@ export interface AnnualReviewInstance {
   acknowledged_at?: string | null;
   acknowledged_by?: string | null;
   employee_rebuttal?: string | null;
+  /** Free-text remark recorded by the HR-input submitter; visible to the employee when set. */
+  eligibility_remark?: string | null;
   created_at: string;
   updated_at: string;
   /** Assisted submission audit linkage (Phase 3). */

@@ -202,6 +202,7 @@ export function TeamReviewDetailContent({
         values={instance.system_scores ?? {}}
         eligibility={template?.sections.eligibility_criteria}
         eligibilityInputs={instance.eligibility_inputs}
+        eligibilityRemark={instance.eligibility_remark}
         employeeId={instance.employee_id}
         fiscalYear={fiscalYear}
         readOnly

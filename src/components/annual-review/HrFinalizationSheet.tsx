@@ -129,6 +129,7 @@ export function HrFinalizationSheet({
             onChangeValue={(id, v) => setSystemOverrides((p) => ({ ...p, [id]: v }))}
             eligibility={template?.sections.eligibility_criteria}
             eligibilityInputs={instance?.eligibility_inputs}
+            eligibilityRemark={instance?.eligibility_remark}
             employeeId={instance?.employee_id}
             fiscalYear={fiscalYear ?? undefined}
           />
@@ -138,6 +139,7 @@ export function HrFinalizationSheet({
               instanceId={instance.id}
               criteria={template!.sections.eligibility_criteria!}
               initial={(instance.eligibility_inputs ?? {}) as Record<string, string | number | boolean>}
+              initialRemark={instance.eligibility_remark ?? ''}
             />
           )}
 
