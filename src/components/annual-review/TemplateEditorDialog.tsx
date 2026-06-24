@@ -261,6 +261,7 @@ export function TemplateEditorDialog({
                     <TableHead className="w-32">Type</TableHead>
                     <TableHead className="w-32">Rule</TableHead>
                     <TableHead className="w-40">Expected Value</TableHead>
+                    <TableHead>Policy Description</TableHead>
                     <TableHead className="w-10" />
                   </TableRow>
                 </TableHeader>
@@ -304,6 +305,15 @@ export function TemplateEditorDialog({
                             value={String(e.expected_value ?? '')}
                             onChange={(ev) => updateAt(setSections, 'eligibility_criteria', i, { expected_value: e.type === 'number' ? Number(ev.target.value) : ev.target.value })} />
                         )}
+                      </TableCell>
+                      <TableCell>
+                        <textarea
+                          className="w-full min-h-[60px] rounded-md border bg-background px-2 py-1.5 text-sm"
+                          rows={2}
+                          placeholder="e.g. Absent days in FY must be less than 1"
+                          value={e.description ?? ''}
+                          onChange={(ev) => updateAt(setSections, 'eligibility_criteria', i, { description: ev.target.value })}
+                        />
                       </TableCell>
                       <TableCell>
                         <Button size="icon" variant="ghost" onClick={() => removeAt(setSections, 'eligibility_criteria', i)} aria-label="Delete">
