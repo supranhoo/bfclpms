@@ -28,6 +28,7 @@ export type StageWeightKey =
   | 'self'
   | 'manager'
   | 'skip_manager'
+  | 'dept_head'
   | 'bu_head'
   | 'hr'
   | 'system'
@@ -36,7 +37,7 @@ export type StageWeightKey =
 export type StageWeights = Partial<Record<StageWeightKey, number>>;
 
 export const STAGE_WEIGHT_KEYS: StageWeightKey[] = [
-  'self', 'manager', 'skip_manager', 'bu_head', 'hr', 'system', 'criteria',
+  'self', 'manager', 'skip_manager', 'dept_head', 'bu_head', 'hr', 'system', 'criteria',
 ];
 
 export const LEGACY_STAGE_WEIGHTS: StageWeights = { criteria: 100 };
@@ -76,6 +77,7 @@ export function roleToWeightKey(role: AnnualReviewerRole): StageWeightKey | null
     case 'self': return 'self';
     case 'manager': return 'manager';
     case 'skip_manager': return 'skip_manager';
+    case 'dept_head': return 'dept_head';
     case 'bu_head': return 'bu_head';
     case 'hr': return 'hr';
     default: return null;

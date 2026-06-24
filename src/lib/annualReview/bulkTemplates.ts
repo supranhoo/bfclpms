@@ -28,6 +28,7 @@ const COL_WEIGHTS: Record<StageWeightKey, string> = {
   self: 'Self %',
   manager: 'Manager %',
   skip_manager: 'Skip %',
+  dept_head: 'Dept Head %',
   bu_head: 'BU Head %',
   hr: 'HR %',
   system: 'System %',
