@@ -29,6 +29,8 @@ export interface AnnualReviewCycle {
   manager_review_end: string | null;
   skip_review_start: string | null;
   skip_review_end: string | null;
+  dept_review_start: string | null;
+  dept_review_end: string | null;
   bu_review_start: string | null;
   bu_review_end: string | null;
   hr_finalization_deadline: string | null;

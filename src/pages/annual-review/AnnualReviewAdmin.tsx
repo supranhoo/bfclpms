@@ -1169,7 +1169,7 @@ function CyclesTab() {
               </SelectContent>
             </Select>
           </div>
-          {(['self_review','manager_review','skip_review','bu_review'] as const).map((k) => (
+          {(['self_review','manager_review','skip_review','dept_review','bu_review'] as const).map((k) => (
             <div key={k} className="grid grid-cols-2 gap-2">
               <div className="space-y-1"><Label className="text-xs">{k.replace('_',' ')} start</Label>
                 <Input type="date" value={(draft as Record<string, unknown>)[`${k}_start`] as string ?? ''} onChange={(e) => setDraft({ ...draft, [`${k}_start`]: e.target.value })} />

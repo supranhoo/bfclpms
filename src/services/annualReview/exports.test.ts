@@ -12,6 +12,7 @@ const cycle: AnnualReviewCycle = {
   self_review_start: null, self_review_end: null,
   manager_review_start: null, manager_review_end: null,
   skip_review_start: null, skip_review_end: null,
+  dept_review_start: null, dept_review_end: null,
   bu_review_start: null, bu_review_end: null,
   hr_finalization_deadline: null,
   created_by: null, created_at: '', updated_at: '',

@@ -394,6 +394,8 @@ export type Database = {
           created_at: string
           created_by: string | null
           default_enabled_stages: Json
+          dept_review_end: string | null
+          dept_review_start: string | null
           description: string | null
           hr_finalization_deadline: string | null
           id: string
@@ -417,6 +419,8 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           default_enabled_stages?: Json
+          dept_review_end?: string | null
+          dept_review_start?: string | null
           description?: string | null
           hr_finalization_deadline?: string | null
           id?: string
@@ -440,6 +444,8 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           default_enabled_stages?: Json
+          dept_review_end?: string | null
+          dept_review_start?: string | null
           description?: string | null
           hr_finalization_deadline?: string | null
           id?: string
@@ -14126,6 +14132,8 @@ export type Database = {
           created_at: string
           created_by: string | null
           default_enabled_stages: Json
+          dept_review_end: string | null
+          dept_review_start: string | null
           description: string | null
           hr_finalization_deadline: string | null
           id: string
