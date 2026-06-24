@@ -1,3 +1,5 @@
+### §AR-DIALOG-SCROLL — Long dialogs use native overflow, not Radix ScrollArea (v2.66.58, 2026-06-24)
+- Any dialog whose body can grow taller than the viewport MUST scroll the body via a native `<div className="flex-1 min-h-0 overflow-y-auto overscroll-contain">` inside a `max-h-[90vh] flex flex-col` `<DialogContent>`. Do not use shadcn `<ScrollArea>` for the dialog body — Radix's internal viewport collapses to zero height inside a `flex-1 min-h-0` parent, leaving the dialog unscrollable and the footer unreachable (RCA: SelfReviewSummaryDialog, June 2026). Header and footer remain outside the scroll container so action buttons stay pinned.
 - The Dept Head cycle window pair is optional (NULL = no enforced window); stage participation remains governed by `default_enabled_stages` / per-instance `enabled_stages`, never by the date columns.
 
 ### §AR-EMPTY-CRITERIA-CARD — Annual Review: no placeholder for empty self-criteria (v2.66.57, 2026-06-24)
