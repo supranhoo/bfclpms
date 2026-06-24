@@ -28,8 +28,7 @@ import { BLUE_COLLAR_PRESET, BLUE_COLLAR_PRESET_META } from '@/lib/annualReview/
 import { FY_MONTHS } from '@/services/annualReview/carryKraScore';
 import type { CarryKraConfig } from '@/types/annualReview';
 import { CarryKraMappingPreview } from './CarryKraMappingPreview';
-import { StageWeightsEditor } from './StageWeightsEditor';
-import type { StageWeights } from '@/lib/annualReview/finalScore';
+import { StageWeightsBlendEditor } from './StageWeightsBlendEditor';
 import { SelfReviewLibraryPicker } from './SelfReviewLibraryPicker';
 import { SelfReviewLibraryManager } from './SelfReviewLibraryManager';
 import { SelfReviewLabelCombobox } from './SelfReviewLabelCombobox';
@@ -226,15 +225,21 @@ export function TemplateEditorDialog({
             <div>
               <div className="font-semibold">Final score weights</div>
               <p className="text-xs text-muted-foreground">
-                Choose how the final score (out of 5) is blended across stages.
-                Leave a stage blank to disable it. Must total exactly 100%.
-                If left empty, the legacy criteria-only formula is used.
+                Two-tier blend: split between the System Score and the Criteria
+                pool, then distribute the Criteria pool across reviewers.
+                If both groups are blank or invalid, the legacy criteria-only
+                formula is used.
               </p>
             </div>
-            <StageWeightsEditor
-              value={sections.stage_weights ?? null}
-              onChange={(next: StageWeights) =>
-                setSections((s) => ({ ...s, stage_weights: next }))
+            <StageWeightsBlendEditor
+              v2={sections.stage_weights_v2 ?? null}
+              flat={sections.stage_weights ?? null}
+              onChange={({ v2, flat }) =>
+                setSections((s) => ({
+                  ...s,
+                  stage_weights_v2: v2 ?? undefined,
+                  stage_weights: flat ?? undefined,
+                }))
               }
             />
           </Card>
