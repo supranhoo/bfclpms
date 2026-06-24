@@ -10,6 +10,9 @@ import {
   useDebouncedResponseDraft,
 } from '@/hooks/useAnnualReview';
 import { AnnualReviewStageTracker } from '@/components/annual-review/AnnualReviewStageTracker';
+import { useShowReviewerNamesInStepper } from '@/hooks/useAnnualReviewSettings';
+import { useActiveProfilesLite, formatSafetyProfileLabel } from '@/hooks/useSafetyOrg';
+import { buildReviewerNamesByStage } from '@/lib/annualReview/reviewerNames';
 import { AnnualReviewStatusBadge } from '@/components/annual-review/AnnualReviewStatusBadge';
 import { CriteriaScoringMatrix } from '@/components/annual-review/CriteriaScoringMatrix';
 import { shouldHideCriteriaCard, criteriaForStage } from '@/lib/annualReview/templateVisibility';
