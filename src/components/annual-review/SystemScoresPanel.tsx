@@ -67,6 +67,11 @@ export function SystemScoresPanel({
                 <div className="flex items-center justify-between gap-2">
                   <div>
                     <p className="text-sm font-medium">{tTemplate('system_score', s.id, 'name', s.name)}</p>
+                    {s.description && (
+                      <p className="mt-0.5 text-xs text-muted-foreground whitespace-pre-wrap">
+                        {tTemplate('system_score', s.id, 'description', s.description)}
+                      </p>
+                    )}
                     <p className="text-xs text-muted-foreground">
                       {t('system_scores.contribution', 'Contributes {actual} / {max} points to your appraisal')
                         .replace('{actual}', Number(v).toFixed(2))
@@ -184,6 +189,11 @@ function CarryKraScoreCard({
             {tTemplate('system_score', score.id, 'name', score.name)}
             <Badge variant="secondary" className="text-[10px] gap-1"><Calendar className="h-3 w-3" />Carry KRA</Badge>
           </p>
+          {score.description && (
+            <p className="text-xs text-muted-foreground whitespace-pre-wrap">
+              {tTemplate('system_score', score.id, 'description', score.description)}
+            </p>
+          )}
           <p className="text-xs text-muted-foreground">
             {typeof fiscalYear === 'number' ? fyLabel(fiscalYear) : 'FY —'} · {labelForCfg(cfg)}
           </p>
