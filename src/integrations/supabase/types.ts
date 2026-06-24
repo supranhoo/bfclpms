@@ -14059,6 +14059,15 @@ export type Database = {
         Args: { p_instance_id: string; p_new_rating: string; p_reason: string }
         Returns: undefined
       }
+      preview_hr_final_sync: {
+        Args: { p_cycle_id: string }
+        Returns: {
+          current_hr_id: string
+          employee_id: string
+          instance_id: string
+          target_hr_id: string
+        }[]
+      }
       preview_org_kpi_propagation: {
         Args: {
           p_kpi_ids: string[]
@@ -14689,6 +14698,10 @@ export type Database = {
       suspend_permit: {
         Args: { p_permit_id: string; p_reason: string }
         Returns: Json
+      }
+      sync_hr_final_to_current_bu_head: {
+        Args: { p_cycle_id: string; p_performed_by?: string }
+        Returns: number
       }
       transition_safety_incident:
         | {
