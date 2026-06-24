@@ -477,6 +477,7 @@ export type Database = {
           cycle_id: string
           dept_head_id: string | null
           eligibility_inputs: Json
+          eligibility_remark: string | null
           employee_id: string
           employee_rebuttal: string | null
           enabled_stages: Json
@@ -510,6 +511,7 @@ export type Database = {
           cycle_id: string
           dept_head_id?: string | null
           eligibility_inputs?: Json
+          eligibility_remark?: string | null
           employee_id: string
           employee_rebuttal?: string | null
           enabled_stages?: Json
@@ -543,6 +545,7 @@ export type Database = {
           cycle_id?: string
           dept_head_id?: string | null
           eligibility_inputs?: Json
+          eligibility_remark?: string | null
           employee_id?: string
           employee_rebuttal?: string | null
           enabled_stages?: Json

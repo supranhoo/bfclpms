@@ -1,0 +1,1 @@
+ALTER TABLE public.annual_review_instances ADD COLUMN IF NOT EXISTS eligibility_remark text;
