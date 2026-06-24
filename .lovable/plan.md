@@ -1,70 +1,78 @@
-## Goal
-Admin-controlled toggle that, when ON, shows the mapped reviewer's name beneath each stage label in the Annual Review stepper (e.g., under "Dept Head" → "Ramesh Kumar"). When OFF (default = current behavior), only the stage label is shown.
+## Problem
 
-## Assumptions
-- Setting is a single global flag for the Annual Review module (not per-cycle, not per-employee). Confirm if you want it per-cycle instead.
-- Names come from already-loaded `instance.manager_id / skip_id / dept_head_id / bu_head_id / hr_id` resolved against the existing active-profiles cache (no extra fetch round-trip).
-- "Self" stage shows the employee's own name only when the toggle is ON (consistent treatment).
-- If a stage is enabled in the chain but its reviewer slot on the instance is NULL (unmapped), we render a muted `— Unassigned` line so admins notice gaps. Confirm if you'd rather hide the line entirely.
+The Annual Review stepper shows **Ankit Choudhary** as "HR Final" even though **Jaspal** is now the HR BU Head. This happens because `annual_review_instances.hr_id` was frozen at seed time and is never updated when the HR BU Head changes.
 
-## Risk & Impact
-- **Data**: 1 new row in `public.annual_review_settings` (new table, single-row keyed config) OR reuse `app_settings`. Additive, RLS: admin write / authenticated read. No history-changing migrations.
-- **Workflow**: None — purely presentational.
-- **UI/UX**: Stepper grows by one line of text per stage when ON; remains single-line when OFF. Existing horizontal scroll already handles overflow.
-- **Regression**: Low. Tracker is consumed in `EmployeeAnnualReview` and `TeamReviewDetailContent` only; both already pass `instance` in scope.
-- **Scalability**: Setting is read once per page via React Query (cached). No N+1.
-- **Rollback**: Drop the row / flip flag OFF. Tracker falls back to label-only rendering automatically.
+## Risk & Impact Report
+
+- **Data Impact:** Updates `hr_id` on existing `annual_review_instances` rows. Only non-finalized instances should be touched to preserve audit trail of completed reviews.
+- **Workflow Impact:** In-flight reviews will route to the new HR Final approver instead of the old one. Pending HR-stage approvals re-assign automatically.
+- **UI/UX Impact:** Stepper immediately reflects the current HR BU Head. No visual layout change.
+- **Regression Risk:** Low if scoped to instances whose HR stage isn't yet completed. Risk of overwriting a deliberate per-instance reassignment (via Reassign Reviewer dialog) — mitigated by skipping rows that have an override record in `annual_review_assignment_overrides` for the HR role.
+- **Mitigation:** Audit-log every auto-reassignment; admin toggle controls whether cascade runs; dry-run preview before bulk apply.
 
 ## Plan
 
-1. **DB — settings storage**
-   - New migration: `public.annual_review_settings` (id uuid pk, key text unique, value jsonb, updated_at, updated_by). GRANTs + RLS: `SELECT` to `authenticated`, `INSERT/UPDATE` to admins only (via `has_role`).
-   - Seed row: `key='show_reviewer_names_in_stepper', value=false`.
+### 1. Admin Setting (toggle)
 
-2. **Service + hook**
-   - `src/services/annualReview/annualReviewSettings.ts`: `getShowReviewerNames()`, `setShowReviewerNames(boolean)`.
-   - `src/hooks/useAnnualReviewSettings.ts`: `useShowReviewerNames()` (React Query, staleTime 5 min) + `useSetShowReviewerNames()` mutation invalidating the key.
+Add a new boolean to `annual_review_settings`:
 
-3. **Admin UI** — `src/pages/annual-review/AnnualReviewAdmin.tsx`
-   - Add a new `Settings` tab (icon: `Settings2`) at the end of the existing TabsList.
-   - Inside: a single `Switch` row — "Show reviewer names in workflow stepper" with helper text "When ON, each stage in the progress tracker displays the mapped reviewer's name below the stage label." Wired to the hook.
+- `auto_reassign_hr_on_bu_head_change` (default: **false** to preserve current behavior)
 
-4. **Tracker** — `src/components/annual-review/AnnualReviewStageTracker.tsx`
-   - Accept optional `reviewerNamesByStage?: Partial<Record<AnnualReviewerRole, string | null>>` prop.
-   - When prop is provided AND non-empty, render the name (or muted "— Unassigned") on a second line under the stage label.
-   - No behavior change when prop is omitted (keeps existing tests green).
+Surface it in **Annual Review → Admin → Settings → Display Settings** card as a `Switch` with helper text:
+> "When HR BU Head changes, automatically re-point HR Final on all non-finalized review instances to the new BU Head."
 
-5. **Callers**
-   - `EmployeeAnnualReview.tsx` and `TeamReviewDetailContent.tsx`:
-     - Read `useShowReviewerNames()`.
-     - If ON, build `reviewerNamesByStage` by mapping `instance.{manager_id, skip_id, dept_head_id, bu_head_id, hr_id}` and `employee_id` through the already-loaded active-profiles list (`formatSafetyProfileLabel` for consistent formatting).
-     - Pass to `<AnnualReviewStageTracker reviewerNamesByStage={...} />`.
+### 2. One-time Repair Action (immediate fix for current issue)
 
-6. **Tests**
-   - `annualReviewSettings.test.ts` — get/set round-trip + admin-only write guard.
-   - `AnnualReviewStageTracker.test.tsx` — renders names when prop provided; renders "Unassigned" for null; hides line when prop omitted.
-   - Update `i18nContext.test.tsx` snapshot if affected.
+Add a button in the same Settings card: **"Sync HR Final to current BU Head now"**.
 
-7. **Docs**
-   - `DOCUMENTATION.md` v2.66.60 entry: setting key, RLS, default OFF, where it surfaces.
-   - `POLICY.md` §AR-STEPPER-NAME-VISIBILITY: visibility is admin-controlled; default OFF; ON shows mapped reviewer name (or "Unassigned" placeholder) under each enabled stage; setting is global per tenant.
+Flow:
+1. Click → opens `ConfirmDestructiveDialog` showing a preview count: "X instances will be re-pointed from previous HR to Jaspal (current BU Head)."
+2. Confirm → calls a new RPC `sync_hr_final_to_current_bu_head(cycle_id uuid)`.
+3. RPC updates `annual_review_instances.hr_id` for rows where:
+   - `cycle_id` matches the active cycle
+   - HR stage is **not yet completed** (status before `hr_approved` / not finalized)
+   - No active override exists in `annual_review_assignment_overrides` for the HR role on that instance
+4. Writes one audit row per change to `system_audit_logs` (performer = current admin).
 
-## UI Changes (visual)
-Stepper item, ON state:
-```
-(2)  Dept Head
-     Ramesh Kumar
-```
-OFF state (unchanged):
-```
-(2)  Dept Head
+### 3. Going-Forward Cascade (driven by the toggle)
+
+When admin updates `business_units.head_user_id` for the HR BU (via Admin → Organization → Business Units), a DB trigger checks the setting:
+
+- If `auto_reassign_hr_on_bu_head_change = true` → runs the same SECURITY DEFINER function as step 2, scoped to non-finalized instances, with `performed_by = NULL` (system attribution per memory rule).
+- If `false` → no change (today's behavior); admins use the manual sync button or per-instance Reassign Reviewer dialog.
+
+### 4. Per-instance fix (no code, available today)
+
+For the immediate Ankit→Jaspal case the admin can also open the instance and use **Reassign Reviewer → HR** with a reason. Documented in DOCUMENTATION.md as the surgical option.
+
+## Technical Details
+
+**Schema:**
+```sql
+ALTER TABLE public.annual_review_settings
+  ADD COLUMN auto_reassign_hr_on_bu_head_change boolean NOT NULL DEFAULT false;
 ```
 
-## Out of Scope
-- Per-cycle or per-template overrides.
-- Showing reviewer emails / avatars.
-- Changing the existing `ChangeWorkflowDialog` UI (which already shows names elsewhere).
+**New RPC:** `public.sync_hr_final_to_current_bu_head(p_cycle_id uuid)` — SECURITY DEFINER, admin-only, returns count of updated rows.
 
-## Open Questions
-1. Global setting OR per-cycle? (Default in plan: **global**.)
-2. For unmapped stages: render muted "— Unassigned" (plan default) or hide the line entirely?
+**New trigger:** `trg_bu_head_change_cascade_hr` on `business_units` AFTER UPDATE OF `head_user_id` WHEN BU name = 'HR' — calls the same function gated by the setting.
+
+**Frontend:**
+- `src/hooks/useAnnualReviewSettings.ts` — extend with `useAutoReassignHrOnBuHeadChange` getter/setter.
+- `src/pages/annual-review/AnnualReviewAdmin.tsx` — add Switch + "Sync now" button in Display Settings card.
+- New service `src/services/annualReview/hrFinalSync.ts` — wraps the RPC.
+
+**Tests:**
+- Unit: toggle hook, RPC scope (skips finalized, skips overrides), trigger gated by setting.
+- Mock data: cycle with mix of in-progress, finalized, and overridden instances.
+
+**Docs:**
+- DOCUMENTATION.md → "HR Final resolution" section: add toggle + manual sync + per-instance override hierarchy.
+- POLICY.md → "When HR BU Head changes": describe default (preserve), opt-in cascade, and immutability of finalized HR stage.
+
+## Rollback
+
+- Toggle defaults to `false` — no behavior change on deploy.
+- Repair action is opt-in (admin must click).
+- Trigger is a no-op when toggle is off; can be dropped without data loss.
+- Each update is audit-logged so individual rows can be reverted if needed.

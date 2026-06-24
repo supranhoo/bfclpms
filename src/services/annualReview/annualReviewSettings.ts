@@ -3,6 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 /** Keys used in `public.annual_review_settings`. */
 export const AR_SETTING_KEYS = {
   showReviewerNamesInStepper: 'show_reviewer_names_in_stepper',
+  autoReassignHrOnBuHeadChange: 'auto_reassign_hr_on_bu_head_change',
 } as const;
 
 export type ArSettingKey = (typeof AR_SETTING_KEYS)[keyof typeof AR_SETTING_KEYS];
@@ -50,3 +51,9 @@ export const getShowReviewerNamesInStepper = () =>
 
 export const setShowReviewerNamesInStepper = (value: boolean) =>
   setBoolSetting(AR_SETTING_KEYS.showReviewerNamesInStepper, value);
+
+export const getAutoReassignHrOnBuHeadChange = () =>
+  getBoolSetting(AR_SETTING_KEYS.autoReassignHrOnBuHeadChange, false);
+
+export const setAutoReassignHrOnBuHeadChange = (value: boolean) =>
+  setBoolSetting(AR_SETTING_KEYS.autoReassignHrOnBuHeadChange, value);

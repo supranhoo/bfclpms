@@ -56,8 +56,13 @@ import { TemplateEditorDialog } from '@/components/annual-review/TemplateEditorD
 import {
   useShowReviewerNamesInStepper,
   useSetShowReviewerNamesInStepper,
+  useAutoReassignHrOnBuHeadChange,
+  useSetAutoReassignHrOnBuHeadChange,
 } from '@/hooks/useAnnualReviewSettings';
 import { AssistedSubmissionSettings } from '@/components/admin/AssistedSubmissionSettings';
+import { ConfirmDestructiveDialog } from '@/components/ui/ConfirmDestructiveDialog';
+import { previewHrFinalSync, applyHrFinalSync } from '@/services/annualReview/hrFinalSync';
+import { RefreshCw } from 'lucide-react';
 import { RecentStageWeightOverridesPanel } from '@/components/annual-review/RecentStageWeightOverridesPanel';
 import { RuleFiltersEditor, RuleFiltersSummary, EMPTY_FILTERS } from '@/components/annual-review/RuleFiltersEditor';
 import type {
@@ -105,6 +110,48 @@ export default function AnnualReviewAdmin() {
 function SettingsTab() {
   const { data: showNames = false, isLoading } = useShowReviewerNamesInStepper();
   const setMut = useSetShowReviewerNamesInStepper();
+  const { data: autoHr = false, isLoading: autoHrLoading } = useAutoReassignHrOnBuHeadChange();
+  const setAutoHrMut = useSetAutoReassignHrOnBuHeadChange();
+  const { data: activeCycle } = useActiveCycle();
+  const [syncOpen, setSyncOpen] = useState(false);
+  const [syncPreview, setSyncPreview] = useState<number | null>(null);
+  const [syncBusy, setSyncBusy] = useState(false);
+
+  async function openSyncDialog() {
+    if (!activeCycle?.id) {
+      toast.error('No active cycle. Start a cycle before syncing HR Final.');
+      return;
+    }
+    setSyncBusy(true);
+    try {
+      const rows = await previewHrFinalSync(activeCycle.id);
+      setSyncPreview(rows.length);
+      setSyncOpen(true);
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setSyncBusy(false);
+    }
+  }
+
+  async function confirmSync() {
+    if (!activeCycle?.id) return;
+    setSyncBusy(true);
+    try {
+      const updated = await applyHrFinalSync(activeCycle.id);
+      toast.success(
+        updated === 0
+          ? 'No HR Final assignments needed updating.'
+          : `Updated HR Final on ${updated} instance${updated === 1 ? '' : 's'}.`,
+      );
+      setSyncOpen(false);
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setSyncBusy(false);
+    }
+  }
+
   return (
     <div className="space-y-6">
     <Card>
@@ -132,9 +179,70 @@ function SettingsTab() {
             }}
           />
         </div>
+        <div className="flex items-start justify-between gap-4 border-t pt-4">
+          <div className="space-y-1">
+            <Label className="text-sm font-medium">
+              Auto re-assign HR Final when HR BU Head changes
+            </Label>
+            <p className="text-xs text-muted-foreground max-w-xl">
+              When ON, updating the HR Business Unit Head automatically re-points the
+              <strong> HR Final </strong> approver on every <em>non-finalized</em>
+              annual review instance to the new BU Head. Finalized reviews and instances
+              with a manual per-instance reassignment are never touched.
+            </p>
+          </div>
+          <Switch
+            checked={autoHr}
+            disabled={autoHrLoading || setAutoHrMut.isPending}
+            onCheckedChange={(v) => {
+              setAutoHrMut.mutate(v, {
+                onSuccess: () =>
+                  toast.success(`Auto re-assign HR Final ${v ? 'enabled' : 'disabled'}.`),
+                onError: (e) => toast.error((e as Error).message),
+              });
+            }}
+          />
+        </div>
+        <div className="flex items-start justify-between gap-4 border-t pt-4">
+          <div className="space-y-1">
+            <Label className="text-sm font-medium">Sync HR Final to current BU Head now</Label>
+            <p className="text-xs text-muted-foreground max-w-xl">
+              One-time action. Re-points HR Final on every non-finalized instance in the
+              active cycle to the current HR BU Head. Skips finalized reviews and
+              instances with a manual override. Each change is audit-logged.
+            </p>
+          </div>
+          <Button
+            variant="outline"
+            onClick={openSyncDialog}
+            disabled={syncBusy || !activeCycle?.id}
+          >
+            {syncBusy ? (
+              <Loader2 className="h-4 w-4 animate-spin mr-2" />
+            ) : (
+              <RefreshCw className="h-4 w-4 mr-2" />
+            )}
+            Sync now
+          </Button>
+        </div>
       </CardContent>
     </Card>
     <AssistedSubmissionSettings />
+    <ConfirmDestructiveDialog
+      open={syncOpen}
+      onCancel={() => setSyncOpen(false)}
+      onConfirm={confirmSync}
+      isLoading={syncBusy}
+      title="Sync HR Final to current BU Head?"
+      description={
+        syncPreview === null
+          ? 'Computing preview...'
+          : syncPreview === 0
+            ? 'All non-finalized instances already point to the current HR BU Head. No changes will be made.'
+            : `${syncPreview} non-finalized review instance${syncPreview === 1 ? '' : 's'} will be re-pointed to the current HR BU Head. Each change is audit-logged. Continue?`
+      }
+      confirmLabel={syncPreview && syncPreview > 0 ? 'Sync now' : 'OK'}
+    />
     </div>
   );
 }
