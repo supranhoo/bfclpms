@@ -4181,3 +4181,11 @@ Whether the Annual Review workflow stepper reveals the mapped reviewer's name be
 When ON, every enabled stage shows a second line containing the formatted reviewer label (`"Full Name (EMP_CODE)"` via `formatSafetyProfileLabel`). Stages whose corresponding reviewer slot on the instance (`manager_id` / `skip_id` / `dept_head_id` / `bu_head_id` / `hr_id`) is NULL render a muted "— Unassigned" placeholder; this is intentional so admins can detect unfilled chains at a glance. The "Self" line shows the employee's own name.
 
 The setting affects display only — workflow advancement, RLS, and stage chain resolution are unchanged. Writes are admin-only at the RLS layer (`has_role(auth.uid(),'admin')`); reads are available to all authenticated users so reviewers see the same stepper.
+
+## Profile Identity Integrity (2026-06-25)
+
+- Every `public.profiles` row represents exactly one human. `profiles.employee_code` is unique (`profiles_employee_code_key`). `profiles.email` is unique case-insensitively when not NULL (`ux_profiles_email_ci`). Two employees may not share an email; the second employee's profile must carry `email = NULL` and `has_real_email = false`.
+- All changes to `full_name`, `employee_code`, `email`, or `is_active` on `profiles` are immutably logged to `system_audit_logs` (action `profile.identity_changed`) by the `trg_profiles_identity_audit` BEFORE-UPDATE trigger. This is non-bypassable through normal write paths.
+- Admin-driven identity repair must go through the SECURITY DEFINER RPCs `repair_profile_identity(...)` (rename / re-identify / clear email / inactivate) or `create_repair_profile(...)` (mint a fresh no-email profile). Both gate on `has_role(auth.uid(), 'admin')` and write a `profile.identity_repaired` or `profile.repair_created` audit row.
+- The diagnostic surface for admins is the function `list_profile_identity_drift()` (auth-vs-profile mismatches) and the view `v_profile_email_duplicates` (any residual shared emails). Both should always return zero rows in steady state.
+- Forward-looking rule for bulk user imports: match on `employee_code`, never on `email`. An import row whose matched profile id already holds a different `employee_code` or `full_name` must be rejected unless the admin explicitly opts in to "rename" — preventing the original class of identity-swap regressions.
