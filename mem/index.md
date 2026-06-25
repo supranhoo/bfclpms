@@ -17,6 +17,7 @@ Lean-Load: debounce search inputs (>200 rows / network); paginate new lists with
 - [System Settings Ownership Inventory](mem://infrastructure/system-settings-ownership-inventory) — Complete audit of settings surfaces, tables, keys, role ownership, RBAC enforcement, gaps
 - [Safety Perf CAPA Wave 1](mem://infrastructure/safety-perf-capa-wave-1) — Forbids unbounded incidents reads; SafetyHome SLA queue + KPI drill-down + incidents accident-join scoped to server-side predicates (v2.66.19)
 - [Self Snapshot Display](mem://features/review/self-snapshot-display) — Self stage card must reconstruct achieved value via resolveSelfAchievedValue, never read mutable achieved_value directly
+- [Profile Identity Integrity](mem://architecture/security/profile-identity-integrity) — profiles email/code uniqueness, audit trigger, admin repair RPCs, drift diagnostics, bulk-import match-by-code rule
 
 ## Memories
 - [Annual Review System](mem://features/annual-review/overview) — Phase 1 module: 5 tables, snapshot reviewer chain, advance RPC, multilingual + XLSX, feature-flag gated

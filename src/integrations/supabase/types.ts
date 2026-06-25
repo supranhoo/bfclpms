@@ -12925,6 +12925,15 @@ export type Database = {
           },
         ]
       }
+      v_profile_email_duplicates: {
+        Row: {
+          email_lc: string | null
+          employee_codes: string[] | null
+          full_names: string[] | null
+          profile_count: number | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       _filter_files_for_employee: {
@@ -13225,6 +13234,15 @@ export type Database = {
           instance_id: string
           was_created: boolean
         }[]
+      }
+      create_repair_profile: {
+        Args: {
+          p_employee_code: string
+          p_full_name: string
+          p_reason?: string
+          p_set_inactive?: boolean
+        }
+        Returns: string
       }
       decide_permit_level: {
         Args: { p_decision: string; p_notes?: string; p_permit_id: string }
@@ -13967,6 +13985,18 @@ export type Database = {
           profile_id: string
         }[]
       }
+      list_profile_identity_drift: {
+        Args: never
+        Returns: {
+          auth_email: string
+          auth_employee_code: string
+          auth_full_name: string
+          profile_email: string
+          profile_employee_code: string
+          profile_full_name: string
+          profile_id: string
+        }[]
+      }
       log_standardization_action: {
         Args: {
           p_action_type: string
@@ -14225,6 +14255,18 @@ export type Database = {
           p_review_year: number
         }
         Returns: Json
+      }
+      repair_profile_identity: {
+        Args: {
+          p_clear_email?: boolean
+          p_new_email: string
+          p_new_employee_code: string
+          p_new_full_name: string
+          p_reason?: string
+          p_set_inactive?: boolean
+          p_target_id: string
+        }
+        Returns: string
       }
       repair_sibling_frequency_drift_v5: {
         Args: { p_apply?: boolean; p_kpi_id?: string }

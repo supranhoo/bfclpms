@@ -1,77 +1,98 @@
-## Assumptions
-- The reported case is Metal Sizing, June 2026, employee code `SK130`, day `11`, value `2`.
-- The user-visible issue is real because the grid’s load query is capped by the backend default row limit and can omit SK130 even though the database row exists.
-- No destructive data repair is needed for SK130: database verification shows `daily_values = {"11": 2}` for SK130 in Metal Sizing / June 2026.
+# Updated Plan — Fix Profile Identity / Duplicate-Email Cleanup
 
-## Clarifications
-Not Applicable.
+## 1. Assumptions
 
-## Risk & Impact Report
-- **Data Impact:** No schema deletion or historical data rewrite. A read-path fix is needed so all June 2026 Metal Sizing rows are loaded, not just the first 1,000.
-- **Workflow Impact:** Administrators and incentive data-entry users will see persisted entries correctly after refresh; save behavior remains explicit through **Save All**.
-- **UI/UX Impact:** No layout redesign. Only persistence/feedback safeguards may change if needed.
-- **Regression Risk:** Medium. Incentive grids deal with large row counts, filters, totals, and save batching; changing fetch behavior must not slow the page or break totals.
-- **Scalability Impact:** High relevance. Current Metal Sizing June 2026 has 2,412 daily-entry rows; unranged reads cap at 1,000. Reads must be paged and ordered.
-- **Mitigation Plan:** Add targeted tests that fail on unranged `production_daily_entries` reads and verify paged reads preserve SK130-like rows beyond index 1,000.
-- **Rollback Strategy:** Revert the daily-entry hook/service changes and documentation entries; no data rollback required.
+- The 23-row table in the user's message is the **authoritative decision list**. Each pair represents one real shared email and two real employees; only ONE of them should keep the email going forward.
+- DB check confirms only **one `profiles` row exists per email** today; the "second" employee in each pair lives only in `auth.users.raw_user_meta_data` (the original signup truth) and is missing from `public.profiles`.
+- "Remove the email ID" = set `profiles.email = NULL` and `has_real_email = false` on that employee; do NOT delete the auth user yet (a separate audit pass will handle orphaned auth rows).
+- "Inactive this Employee" = set `profiles.is_active = false`, `deactivated_at = now()`, and clear email.
+- Email uniqueness will be enforced going forward by a partial unique index on `profiles(lower(email)) WHERE email IS NOT NULL`.
 
-## RCA Summary
-- **Database check:** SK130 exists and is active. The Metal Sizing program exists. The SK130 row exists in `production_daily_entries` with day 11 value `2`.
-- **Observed failure mode:** The browser GET request for `production_daily_entries` requests all June 2026 rows without pagination/range. Backend responses are capped at 1,000 rows by default.
-- **Proof:** A limited first-1,000 query for Metal Sizing / June 2026 does **not** contain SK130, while the full database query by employee does contain `{"11": 2}`.
-- **Root cause:** `useProductionDailyEntries()` performs an unranged `.select('*')` against a table that now exceeds 1,000 matching rows. The grid seeds local state from that incomplete snapshot, so SK130 appears blank after refresh even though the value was saved.
-- **Contributing cause:** The existing dirty-cell fix protects unsaved input during re-renders, but it does not solve post-refresh hydration when the saved row is outside the first 1,000 rows.
+## 2. Risk & Impact Report
 
-## Five Whys
-1. **Why did SK130’s day-11 value disappear after refresh?** The refreshed grid did not hydrate SK130’s saved row into local state.
-2. **Why was the row not hydrated?** The daily entries query returned only the first 1,000 rows for Metal Sizing / June 2026.
-3. **Why only 1,000 rows?** The query used an unranged `.select('*')`, and the backend applies a default 1,000-row cap.
-4. **Why did the code assume this was safe?** Earlier datasets were smaller, and pagination rules were already enforced for mappings/exports but not for the editable daily-entry load path.
-5. **Why was this not caught earlier?** Tests covered mapping pagination and dirty-state preservation, but not daily-entry hydration for >1,000 saved rows.
+- **Data:** 23 profile rows touched (some re-identified, some created, some inactivated, some email-cleared). All changes are reversible via the new `system_audit_logs` rows the repair RPC writes.
+- **Workflow:** Re-identifying a profile (e.g., 101814 HEMA → 101784 Vivek) carries the same `id` into all child rows (reviews, KPIs, submissions). The historical data stays attached to the correct human, since the auth/email truth says it was always Vivek.
+- **UI/UX:** Manager/HR tiles, reports, and reminders will immediately show the corrected name/code/photo. No screen change beyond data correction.
+- **Scalability:** One-time repair on 23 rows + a unique index. Negligible cost.
+- **Regression risk:** Medium until write-paths are hardened (Phase 3). Mitigation: partial unique index on email + BEFORE-UPDATE audit trigger ship in the same migration as the repair.
 
-## Step-by-step Plan
-1. **Create a paged daily-entry fetch path**
-   - Update `src/hooks/useProductionDailyEntries.ts` to load `production_daily_entries` through `fetchAllPaged` with deterministic ordering.
-   - Keep query scope limited to `(program_id, month, year)`.
-   - Keep `refetchOnWindowFocus: false`.
+## 3. Per-Pair Action Table (derived from the user's list)
 
-2. **Stabilize save/read cache after Save All**
-   - Update `useBulkUpsertDailyEntries` to refresh or patch the exact `['production-daily-entries', programId, month, year]` cache after successful save instead of only broad invalidation.
-   - Preserve the existing success toast and dirty-cell clearing behavior.
-   - Avoid adding backend writes or schema changes.
+Legend: **R** = re-identify existing profile to the "keep" employee, **N** = create new profile for the other employee (no email), **C** = clear email on existing row, **I** = inactivate.
 
-3. **Add regression tests**
-   - Add a focused test for `useProductionDailyEntries.ts` source contract: daily entries must use `fetchAllPaged`, `.range(from, to)`, and must not embed `profiles`.
-   - Add a pure helper/test if needed to simulate 2,412 rows and assert SK130-like records beyond the first 1,000 are retained.
-   - Ensure tests cover success and failure guardrails for the large-dataset scenario.
+| Email | Keep (code → name) | Action on existing profile row | Action on missing employee |
+|---|---|---|---|
+| anilkumar528989@gmail.com | 200304 Anil Kumar | keep as-is (already correct) | **N** 200321 Manoj Kumar Singh (no email) |
+| baleshwarbedia9@gmail.com | 200552 Baleshwar Bedia | **R** existing 200512 → 200552 Baleshwar (keep email) | **N** 200512 Satya Narayan Singh (no email) |
+| dashrathmahli598@gmail.com | 100816 Dashrath Mahli | keep as-is | **N** 100819 Usha Devi (no email) |
+| dummy@gmail.com | none (all remove) | **C** existing 101898 Basant Prasad → email NULL | **N** 100000 Hari Krishna Budhia (no email); **N** 101711 Dhiraj Kumar Chaturbedi (no email) |
+| hasinuhasinu166@gmail.com | 102025 Mohiuddin Ansari | keep as-is | **I**+ensure-no-profile for 100599 Mohiuddin Ansari (mark inactive if auth-only row gets materialised) |
+| mahendramahto0406@gmail.com | 100344 Mahendra Mahto | **R** existing 100501 Pankaj → 100344 Mahendra (keep email) | **N** 100501 Pankaj Kumar (no email) |
+| ramigope@gmail.com | 100788 Pavan Gope | keep as-is | **N** 200652 Shayam Kishor (no email) |
+| sanjaykumarshrivastav927@gmail.com | 200073 Sanjay Kumar Shrivastava | **R** existing 200075 Santosh → 200073 Sanjay (keep email) | **N** 200075 Santosh Baitha (no email) |
+| sukhdevsinghsardar62@gmail.com | 101993 Sukdev Singh Sardar | keep as-is | **I** 100247 Sukdev Singh Sardar (duplicate person, inactivate) |
+| umesh.singh@bfclalloys.com | 100600 Umesh Kumar Singh | **R** existing 101697 Sudesh → 100600 Umesh (keep email) | **N** 101697 Sudesh Kannah Mohan (no email) |
+| vivek.dansena@bfclalloys.com | 101784 Vivek Kumar Dansena | **R** existing 101814 HEMA → 101784 Vivek (keep email, keep avatar) | **N** 101814 HEMA KUMARI (no email, no avatar) |
 
-4. **Update SSOT documentation**
-   - Update `DOCUMENTATION.md` version history with the RCA, five whys, CAPA, rollback, and test coverage.
-   - Update `POLICY.md` under incentive paging rules to explicitly forbid unranged reads for editable `production_daily_entries` hydration, not only exports.
+Net counts: 6 re-identifications (R), 10 new profiles created without email (N), 1 email-clear (C), 2 inactivations (I).
 
-5. **Validate**
-   - Run the targeted test file(s).
-   - Re-check the DB read evidence for SK130 and confirm the code path no longer uses an unranged daily-entry query.
+## 4. Step-by-Step Plan
 
-## UI Changes
-- **Visual changes:** Not Applicable.
-- **Location:** `/admin/incentive-data-entry`, Production Data tab remains unchanged.
-- **Interaction impact:** After refresh, saved entries beyond the first 1,000 rows should display correctly.
-- **Responsiveness:** Not Applicable; no layout change.
+### Phase A — Pre-flight (read-only)
 
-## Implementation
-Pending approval. No code changes will be made until this plan is approved.
+1. Snapshot the 13 existing profile rows + their downstream FK counts (reviews, KPIs, submissions, assignments) and save as `/mnt/documents/profile-identity-repair-preflight.csv`. → **Verify:** counts logged in `system_audit_logs` as `profile.repair_preflight`.
 
-## Tests
-- Add/extend Vitest coverage for daily-entry paged loading and no-profile-embed safety.
-- Validate the >1,000-row SK130-like hydration case.
+### Phase B — Migration: hardening only (no data change)
 
-## DOCUMENTATION.md updates
-- Add a new version-history entry documenting RCA/CAPA for SK130 daily entry disappearing after refresh.
+2. Add partial unique index `ux_profiles_email_ci ON profiles(lower(email)) WHERE email IS NOT NULL`.
+3. Add partial unique index `ux_profiles_employee_code ON profiles(employee_code) WHERE employee_code IS NOT NULL` (already drift-free per the 23-row plan).
+4. Add `BEFORE UPDATE` trigger `trg_profiles_identity_audit` on `profiles` that, when `email`, `employee_code`, or `full_name` changes, writes a row to `system_audit_logs` (`action='profile.identity_changed'`, `metadata={old, new, by}`).
+5. Add SECURITY DEFINER RPC `repair_profile_identity(p_target_id uuid, p_new_employee_code text, p_new_full_name text, p_new_email text, p_reason text)` — validates uniqueness, performs the update, returns the audit row id. Admin-only via `has_role`.
+6. Add SECURITY DEFINER RPC `create_repair_profile(p_employee_code, p_full_name, p_reason)` — creates a profile with `id = gen_random_uuid()`, `email = NULL`, `has_real_email = false`, `is_active = true`, `is_dummy_employee = false`. Admin-only.
 
-## POLICY.md updates
-- Extend `§INCENTIVE-MAPPING-PAGING` with editable daily-entry hydration rules: all list reads of `production_daily_entries` for grids must be paged, ordered, and profile-free.
+→ **Verify:** migration applies; `\d profiles` shows both indexes; RPCs exist; trigger fires (covered by Phase E tests).
 
-## Post-implementation notes
-- Existing SK130 data is not lost; it is present in the database.
-- The corrective action is to fix the read/hydration path so saved data remains visible after refresh.
+### Phase C — Data repair (one batched insert call)
+
+7. For each pair in section 3:
+   - **R** rows → call `repair_profile_identity(...)` with the corrected `employee_code`, `full_name`, and email retained.
+   - **C** rows → call `repair_profile_identity(...)` with `p_new_email = NULL` and `has_real_email = false` (extend RPC to accept this flag).
+   - **N** rows → call `create_repair_profile(...)`.
+   - **I** rows → call `repair_profile_identity(...)` with `is_active=false` (extend RPC to accept this flag) and `p_new_email = NULL`. If no profile exists yet, create one via `create_repair_profile` with `is_active=false`.
+8. Each call writes one immutable row to `system_audit_logs` with `{ action: 'profile.identity_repaired', before, after, reason, performed_by }`.
+
+→ **Verify:** the diagnostic view `v_profile_identity_drift` returns 0 rows; the duplicate-email view `v_profile_email_duplicates` returns 0 rows; spot-check Vivek's tile shows "Vivek Kumar Dansena (101784)" with his photo, and a new tile for "HEMA KUMARI (101814)" exists with no email.
+
+### Phase D — Write-path hardening (prevent recurrence)
+
+9. **User Management edit form**: on submit, re-fetch the selected profile by id, render a `ConfirmDestructiveDialog` showing `old → new` whenever `full_name`, `employee_code`, or `email` changes; route the actual write through `repair_profile_identity`.
+10. **Bulk user import**: switch the row-matching key from `email` to `employee_code`; reject any row whose matched `id` currently holds a different `employee_code`/`full_name` unless the admin opts in with `allowRename: true`.
+11. Nightly drift sweep (edge function) compares `auth.users.raw_user_meta_data` vs `profiles` and emails admins when drift > 0.
+
+### Phase E — Tests, docs, policy
+
+12. Vitest cases:
+    - `repair_profile_identity` rejects on duplicate `employee_code`.
+    - `repair_profile_identity` rejects on duplicate email (case-insensitive).
+    - `create_repair_profile` always produces `email=NULL, has_real_email=false`.
+    - Trigger writes one `system_audit_logs` row per identity change.
+    - Bulk-import matcher rejects mismatched name/code without `allowRename`.
+13. Update `DOCUMENTATION.md` → new "Profile Identity Integrity" section (RCA, indexes, trigger, RPCs, drift view) + Version History entry dated 2026-06-25.
+14. Update `POLICY.md` → "`profiles.email` is unique (case-insensitive). `profiles.employee_code` is unique. Identity changes (`full_name`, `employee_code`, `email`) must go through `repair_profile_identity` and are always audit-logged. Bulk import matches by `employee_code`, never by `email`."
+15. Update memory: extend `mem://features/admin/data-repair-engine` with the new "Profile Identity" repair card.
+
+## 5. UI Changes
+
+- **Admin → Data Repair**: new "Profile Identity Drift" card listing the 23 rows from this plan, each with the chosen action pre-selected; admin clicks **Apply** to execute Phase C in one batch.
+- **Admin → User Management → Edit User dialog**: gains a confirm step showing `old → new` for name/code/email; identical look-and-feel to the existing `ConfirmDestructiveDialog`.
+- **No other screens change**; corrected names/codes/photos propagate automatically because every consumer reads live from `profiles`.
+
+## 6. Rollback
+
+- Phase B is additive (indexes, trigger, RPCs) — drop them to revert.
+- Phase C is reversed by reading the `system_audit_logs` `before` payload and re-applying via the same RPCs.
+
+## 7. Out of Scope
+
+- Cleaning up orphaned `auth.users` rows whose corresponding profile is now inactivated or re-identified (handled in a separate auth-cleanup pass).
+- Re-labelling historical snapshot tables (annual review instances, exports) — most consumers read live from `profiles`, so the repair is visible immediately; snapshot tables get a follow-up review pass.
