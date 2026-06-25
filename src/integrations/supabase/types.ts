@@ -38,11 +38,25 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "access_profile_assignments_assigned_by_fkey"
+            columns: ["assigned_by"]
+            isOneToOne: false
+            referencedRelation: "v_profile_identity_drift"
+            referencedColumns: ["profile_id"]
+          },
+          {
             foreignKeyName: "access_profile_assignments_profile_id_fkey"
             columns: ["profile_id"]
             isOneToOne: false
             referencedRelation: "access_profiles"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "access_profile_assignments_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "v_profile_identity_drift"
+            referencedColumns: ["profile_id"]
           },
         ]
       }
@@ -184,7 +198,15 @@ export type Database = {
           is_active?: boolean
           name?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "access_profiles_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "v_profile_identity_drift"
+            referencedColumns: ["profile_id"]
+          },
+        ]
       }
       action_registry: {
         Row: {
@@ -325,11 +347,25 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "annual_review_assignment_overrides_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "v_profile_identity_drift"
+            referencedColumns: ["profile_id"]
+          },
+          {
             foreignKeyName: "annual_review_assignment_overrides_instance_id_fkey"
             columns: ["instance_id"]
             isOneToOne: false
             referencedRelation: "annual_review_instances"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "annual_review_assignment_overrides_new_reviewer_id_fkey"
+            columns: ["new_reviewer_id"]
+            isOneToOne: false
+            referencedRelation: "v_profile_identity_drift"
+            referencedColumns: ["profile_id"]
           },
         ]
       }
@@ -371,6 +407,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "annual_review_assignment_rules_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "v_profile_identity_drift"
+            referencedColumns: ["profile_id"]
+          },
           {
             foreignKeyName: "annual_review_assignment_rules_cycle_id_fkey"
             columns: ["cycle_id"]
@@ -463,7 +506,22 @@ export type Database = {
           status?: string
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "annual_review_cycles_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "v_profile_identity_drift"
+            referencedColumns: ["profile_id"]
+          },
+          {
+            foreignKeyName: "annual_review_cycles_reopened_by_fkey"
+            columns: ["reopened_by"]
+            isOneToOne: false
+            referencedRelation: "v_profile_identity_drift"
+            referencedColumns: ["profile_id"]
+          },
+        ]
       }
       annual_review_instances: {
         Row: {
@@ -624,6 +682,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "annual_review_instances_finalized_by_fkey"
+            columns: ["finalized_by"]
+            isOneToOne: false
+            referencedRelation: "v_profile_identity_drift"
+            referencedColumns: ["profile_id"]
           },
           {
             foreignKeyName: "annual_review_instances_hr_id_fkey"
@@ -916,7 +981,15 @@ export type Database = {
           sort_order?: number
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "annual_review_self_review_library_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "v_profile_identity_drift"
+            referencedColumns: ["profile_id"]
+          },
+        ]
       }
       annual_review_settings: {
         Row: {
@@ -943,7 +1016,15 @@ export type Database = {
           updated_by?: string | null
           value?: Json
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "annual_review_settings_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "v_profile_identity_drift"
+            referencedColumns: ["profile_id"]
+          },
+        ]
       }
       annual_review_templates: {
         Row: {
@@ -983,6 +1064,13 @@ export type Database = {
           version?: number
         }
         Relationships: [
+          {
+            foreignKeyName: "annual_review_templates_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "v_profile_identity_drift"
+            referencedColumns: ["profile_id"]
+          },
           {
             foreignKeyName: "annual_review_templates_parent_template_id_fkey"
             columns: ["parent_template_id"]
@@ -2677,7 +2765,15 @@ export type Database = {
           title?: string
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "dev_report_entries_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "v_profile_identity_drift"
+            referencedColumns: ["profile_id"]
+          },
+        ]
       }
       dev_report_entries_archive_seed: {
         Row: {
@@ -3826,11 +3922,25 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "iac_user_role_assignments_assigned_by_fkey"
+            columns: ["assigned_by"]
+            isOneToOne: false
+            referencedRelation: "v_profile_identity_drift"
+            referencedColumns: ["profile_id"]
+          },
+          {
             foreignKeyName: "iac_user_role_assignments_role_id_fkey"
             columns: ["role_id"]
             isOneToOne: false
             referencedRelation: "iac_roles"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "iac_user_role_assignments_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "v_profile_identity_drift"
+            referencedColumns: ["profile_id"]
           },
         ]
       }
@@ -4589,6 +4699,13 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "incentive_vessel_rates_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "v_profile_identity_drift"
+            referencedColumns: ["profile_id"]
+          },
+          {
             foreignKeyName: "incentive_vessel_rates_program_id_fkey"
             columns: ["program_id"]
             isOneToOne: false
@@ -5091,6 +5208,13 @@ export type Database = {
           transition_source?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "increment_run_items_edited_by_fkey"
+            columns: ["edited_by"]
+            isOneToOne: false
+            referencedRelation: "v_profile_identity_drift"
+            referencedColumns: ["profile_id"]
+          },
           {
             foreignKeyName: "increment_run_items_employee_id_fkey"
             columns: ["employee_id"]
@@ -6027,6 +6151,13 @@ export type Database = {
             referencedRelation: "kra_categories"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "kpi_templates_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "v_profile_identity_drift"
+            referencedColumns: ["profile_id"]
+          },
         ]
       }
       kpis: {
@@ -6444,7 +6575,22 @@ export type Database = {
           menu_key?: string
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "menu_access_user_overrides_granted_by_fkey"
+            columns: ["granted_by"]
+            isOneToOne: false
+            referencedRelation: "v_profile_identity_drift"
+            referencedColumns: ["profile_id"]
+          },
+          {
+            foreignKeyName: "menu_access_user_overrides_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "v_profile_identity_drift"
+            referencedColumns: ["profile_id"]
+          },
+        ]
       }
       menu_override_audit: {
         Row: {
@@ -6786,6 +6932,20 @@ export type Database = {
             referencedRelation: "kpis"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "notifications_related_user_id_fkey"
+            columns: ["related_user_id"]
+            isOneToOne: false
+            referencedRelation: "v_profile_identity_drift"
+            referencedColumns: ["profile_id"]
+          },
+          {
+            foreignKeyName: "notifications_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "v_profile_identity_drift"
+            referencedColumns: ["profile_id"]
+          },
         ]
       }
       okv_migration_history: {
@@ -6974,6 +7134,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "org_kpi_values"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "org_kpi_data_entry_logs_performed_by_fkey"
+            columns: ["performed_by"]
+            isOneToOne: false
+            referencedRelation: "v_profile_identity_drift"
+            referencedColumns: ["profile_id"]
           },
         ]
       }
@@ -8948,6 +9115,13 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "review_period_audit_log_performed_by_fkey"
+            columns: ["performed_by"]
+            isOneToOne: false
+            referencedRelation: "v_profile_identity_drift"
+            referencedColumns: ["profile_id"]
+          },
+          {
             foreignKeyName: "review_period_audit_log_review_period_id_fkey"
             columns: ["review_period_id"]
             isOneToOne: false
@@ -8991,6 +9165,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "review_period_auto_rules_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "v_profile_identity_drift"
+            referencedColumns: ["profile_id"]
+          },
           {
             foreignKeyName: "review_period_auto_rules_review_period_id_fkey"
             columns: ["review_period_id"]
@@ -9045,6 +9226,13 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "review_period_locks_locked_by_fkey"
+            columns: ["locked_by"]
+            isOneToOne: false
+            referencedRelation: "v_profile_identity_drift"
+            referencedColumns: ["profile_id"]
+          },
+          {
             foreignKeyName: "review_period_locks_review_period_id_fkey"
             columns: ["review_period_id"]
             isOneToOne: false
@@ -9088,6 +9276,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "review_periods"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "review_period_stages_started_by_fkey"
+            columns: ["started_by"]
+            isOneToOne: false
+            referencedRelation: "v_profile_identity_drift"
+            referencedColumns: ["profile_id"]
           },
         ]
       }
@@ -11028,7 +11223,22 @@ export type Database = {
           updated_at?: string
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "safety_module_access_granted_by_fkey"
+            columns: ["granted_by"]
+            isOneToOne: false
+            referencedRelation: "v_profile_identity_drift"
+            referencedColumns: ["profile_id"]
+          },
+          {
+            foreignKeyName: "safety_module_access_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "v_profile_identity_drift"
+            referencedColumns: ["profile_id"]
+          },
+        ]
       }
       safety_notifications: {
         Row: {
@@ -11431,6 +11641,13 @@ export type Database = {
             referencedRelation: "safety_permission_keys"
             referencedColumns: ["key"]
           },
+          {
+            foreignKeyName: "safety_role_permissions_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "v_profile_identity_drift"
+            referencedColumns: ["profile_id"]
+          },
         ]
       }
       safety_settings: {
@@ -11455,7 +11672,15 @@ export type Database = {
           updated_by?: string | null
           value?: Json
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "safety_settings_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "v_profile_identity_drift"
+            referencedColumns: ["profile_id"]
+          },
+        ]
       }
       safety_severity_sla: {
         Row: {
@@ -11547,11 +11772,25 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "safety_user_permission_overrides_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "v_profile_identity_drift"
+            referencedColumns: ["profile_id"]
+          },
+          {
             foreignKeyName: "safety_user_permission_overrides_permission_key_fkey"
             columns: ["permission_key"]
             isOneToOne: false
             referencedRelation: "safety_permission_keys"
             referencedColumns: ["key"]
+          },
+          {
+            foreignKeyName: "safety_user_permission_overrides_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "v_profile_identity_drift"
+            referencedColumns: ["profile_id"]
           },
         ]
       }
@@ -11583,7 +11822,15 @@ export type Database = {
           role?: Database["public"]["Enums"]["safety_app_role"]
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "safety_user_roles_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "v_profile_identity_drift"
+            referencedColumns: ["profile_id"]
+          },
+        ]
       }
       sensitive_fields: {
         Row: {
@@ -11849,7 +12096,15 @@ export type Database = {
           metadata?: Json | null
           performed_by?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "system_audit_logs_performed_by_fkey"
+            columns: ["performed_by"]
+            isOneToOne: false
+            referencedRelation: "v_profile_identity_drift"
+            referencedColumns: ["profile_id"]
+          },
+        ]
       }
       system_settings: {
         Row: {
@@ -11952,6 +12207,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "template_bundles_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "v_profile_identity_drift"
+            referencedColumns: ["profile_id"]
+          },
           {
             foreignKeyName: "template_bundles_department_id_fkey"
             columns: ["department_id"]
@@ -12122,6 +12384,13 @@ export type Database = {
           user_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "user_roles_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "v_profile_identity_drift"
+            referencedColumns: ["profile_id"]
+          },
           {
             foreignKeyName: "user_roles_user_id_profiles_fkey"
             columns: ["user_id"]
@@ -12925,6 +13194,27 @@ export type Database = {
           },
         ]
       }
+      v_profile_email_duplicates: {
+        Row: {
+          email_lc: string | null
+          employee_codes: string[] | null
+          full_names: string[] | null
+          profile_count: number | null
+        }
+        Relationships: []
+      }
+      v_profile_identity_drift: {
+        Row: {
+          auth_email: string | null
+          auth_employee_code: string | null
+          auth_full_name: string | null
+          profile_email: string | null
+          profile_employee_code: string | null
+          profile_full_name: string | null
+          profile_id: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       _filter_files_for_employee: {
@@ -13225,6 +13515,15 @@ export type Database = {
           instance_id: string
           was_created: boolean
         }[]
+      }
+      create_repair_profile: {
+        Args: {
+          p_employee_code: string
+          p_full_name: string
+          p_reason?: string
+          p_set_inactive?: boolean
+        }
+        Returns: string
       }
       decide_permit_level: {
         Args: { p_decision: string; p_notes?: string; p_permit_id: string }
@@ -14225,6 +14524,18 @@ export type Database = {
           p_review_year: number
         }
         Returns: Json
+      }
+      repair_profile_identity: {
+        Args: {
+          p_clear_email?: boolean
+          p_new_email: string
+          p_new_employee_code: string
+          p_new_full_name: string
+          p_reason?: string
+          p_set_inactive?: boolean
+          p_target_id: string
+        }
+        Returns: string
       }
       repair_sibling_frequency_drift_v5: {
         Args: { p_apply?: boolean; p_kpi_id?: string }
