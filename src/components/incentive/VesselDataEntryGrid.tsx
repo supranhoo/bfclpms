@@ -208,13 +208,16 @@ export function VesselDataEntryGrid({ programs, onMonthYearChange, filterByCompa
                           className="w-[100px] ml-auto text-right"
                           value={vessels}
                           onChange={e =>
-                            setLocalData(prev => ({
-                              ...prev,
-                              [r.employee_id]: {
-                                ...prev[r.employee_id],
-                                vessels: parseInt(e.target.value) || 0,
-                              },
-                            }))
+                            {
+                              dirtyCellsRef.current.add(dKey(r.employee_id, 'v'));
+                              setLocalData(prev => ({
+                                ...prev,
+                                [r.employee_id]: {
+                                  ...prev[r.employee_id],
+                                  vessels: parseInt(e.target.value) || 0,
+                                },
+                              }));
+                            }
                           }
                         />
                       </TableCell>
@@ -227,13 +230,16 @@ export function VesselDataEntryGrid({ programs, onMonthYearChange, filterByCompa
                           placeholder="Optional"
                           value={localData[r.employee_id]?.remarks ?? ''}
                           onChange={e =>
-                            setLocalData(prev => ({
-                              ...prev,
-                              [r.employee_id]: {
-                                ...prev[r.employee_id],
-                                remarks: e.target.value,
-                              },
-                            }))
+                            {
+                              dirtyCellsRef.current.add(dKey(r.employee_id, 'r'));
+                              setLocalData(prev => ({
+                                ...prev,
+                                [r.employee_id]: {
+                                  ...prev[r.employee_id],
+                                  remarks: e.target.value,
+                                },
+                              }));
+                            }
                           }
                         />
                       </TableCell>
