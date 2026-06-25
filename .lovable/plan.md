@@ -1,85 +1,77 @@
-## Investigation: "Incentive data entry disappears after refresh"
+## Assumptions
+- The reported case is Metal Sizing, June 2026, employee code `SK130`, day `11`, value `2`.
+- The user-visible issue is real because the grid’s load query is capped by the backend default row limit and can omit SK130 even though the database row exists.
+- No destructive data repair is needed for SK130: database verification shows `daily_values = {"11": 2}` for SK130 in Metal Sizing / June 2026.
 
-### Verification — is the issue real?
+## Clarifications
+Not Applicable.
 
-**Yes — partially.** Database evidence:
-- `production_daily_entries`: 3,151 rows, **most recent write `2026-06-19`** (6 days ago).
-- `vessel_monthly_entries`: 6 rows, most recent `2026-05-19`.
-- `production_targets`: **0 rows**.
-- `employee_incentive_eligibility`: 2 rows, most recent `2026-05-19`.
+## Risk & Impact Report
+- **Data Impact:** No schema deletion or historical data rewrite. A read-path fix is needed so all June 2026 Metal Sizing rows are loaded, not just the first 1,000.
+- **Workflow Impact:** Administrators and incentive data-entry users will see persisted entries correctly after refresh; save behavior remains explicit through **Save All**.
+- **UI/UX Impact:** No layout redesign. Only persistence/feedback safeguards may change if needed.
+- **Regression Risk:** Medium. Incentive grids deal with large row counts, filters, totals, and save batching; changing fetch behavior must not slow the page or break totals.
+- **Scalability Impact:** High relevance. Current Metal Sizing June 2026 has 2,412 daily-entry rows; unranged reads cap at 1,000. Reads must be paged and ordered.
+- **Mitigation Plan:** Add targeted tests that fail on unranged `production_daily_entries` reads and verify paged reads preserve SK130-like rows beyond index 1,000.
+- **Rollback Strategy:** Revert the daily-entry hook/service changes and documentation entries; no data rollback required.
 
-Sandeep Kumar (`200291`) and Upendra Singh (`201091`) **do** have the `admin-incentive-data` menu override, so RLS allows their writes. There is no DB-level block — yet nothing they have entered this week has landed. That confirms the user complaint: the UI is silently losing typed values before Save reaches the server.
+## RCA Summary
+- **Database check:** SK130 exists and is active. The Metal Sizing program exists. The SK130 row exists in `production_daily_entries` with day 11 value `2`.
+- **Observed failure mode:** The browser GET request for `production_daily_entries` requests all June 2026 rows without pagination/range. Backend responses are capped at 1,000 rows by default.
+- **Proof:** A limited first-1,000 query for Metal Sizing / June 2026 does **not** contain SK130, while the full database query by employee does contain `{"11": 2}`.
+- **Root cause:** `useProductionDailyEntries()` performs an unranged `.select('*')` against a table that now exceeds 1,000 matching rows. The grid seeds local state from that incomplete snapshot, so SK130 appears blank after refresh even though the value was saved.
+- **Contributing cause:** The existing dirty-cell fix protects unsaved input during re-renders, but it does not solve post-refresh hydration when the saved row is outside the first 1,000 rows.
 
-### Root cause (RCA)
+## Five Whys
+1. **Why did SK130’s day-11 value disappear after refresh?** The refreshed grid did not hydrate SK130’s saved row into local state.
+2. **Why was the row not hydrated?** The daily entries query returned only the first 1,000 rows for Metal Sizing / June 2026.
+3. **Why only 1,000 rows?** The query used an unranged `.select('*')`, and the backend applies a default 1,000-row cap.
+4. **Why did the code assume this was safe?** Earlier datasets were smaller, and pagination rules were already enforced for mappings/exports but not for the editable daily-entry load path.
+5. **Why was this not caught earlier?** Tests covered mapping pagination and dirty-state preservation, but not daily-entry hydration for >1,000 saved rows.
 
-`src/components/incentive/ProductionDailyGrid.tsx` (and `VesselDataEntryGrid.tsx`, same pattern) seeds editable state from DB inside a `useEffect` that re-runs far too often:
+## Step-by-step Plan
+1. **Create a paged daily-entry fetch path**
+   - Update `src/hooks/useProductionDailyEntries.ts` to load `production_daily_entries` through `fetchAllPaged` with deterministic ordering.
+   - Keep query scope limited to `(program_id, month, year)`.
+   - Keep `refetchOnWindowFocus: false`.
 
-```ts
-// ProductionDailyGrid.tsx lines 212–220
-useEffect(() => {
-  const entryMap = new Map(entries.map(e => [e.employee_id, e.daily_values || {}]));
-  const init = {};
-  gridEmployees.forEach(emp => { init[emp.id] = entryMap.get(emp.id) || {}; });
-  setLocalData(init);                       // ← overwrites in-progress typing
-}, [gridEmployees, entries]);
-```
+2. **Stabilize save/read cache after Save All**
+   - Update `useBulkUpsertDailyEntries` to refresh or patch the exact `['production-daily-entries', programId, month, year]` cache after successful save instead of only broad invalidation.
+   - Preserve the existing success toast and dirty-cell clearing behavior.
+   - Avoid adding backend writes or schema changes.
 
-Two reference-instability sources cause this effect to fire on **every render**, wiping unsaved cells:
+3. **Add regression tests**
+   - Add a focused test for `useProductionDailyEntries.ts` source contract: daily entries must use `fetchAllPaged`, `.range(from, to)`, and must not embed `profiles`.
+   - Add a pure helper/test if needed to simulate 2,412 rows and assert SK130-like records beyond the first 1,000 are retained.
+   - Ensure tests cover success and failure guardrails for the large-dataset scenario.
 
-1. **`filterByCompany` from `useCompanyFilter` is recreated each render** (plain arrow function, not memoised) and `companies: companies ?? []` returns a new array literal each render too (`src/hooks/useCompanyFilter.ts` lines 92, 118). The parent `UnifiedProductionDataTab` passes this fresh `filterByCompany` down on every render → `gridEmployees` `useMemo` invalidates → new array reference → seed effect fires → `localData` reset.
-2. **React Query default `refetchOnWindowFocus: true`** on `production-daily-entries`, `mapped-employees-for-grid`, and `incentive-production-rates`. Any tab/window switch triggers a refetch; when `entries` returns a new reference the same seed effect fires and overwrites unsaved typing with the stale DB snapshot.
+4. **Update SSOT documentation**
+   - Update `DOCUMENTATION.md` version history with the RCA, five whys, CAPA, rollback, and test coverage.
+   - Update `POLICY.md` under incentive paging rules to explicitly forbid unranged reads for editable `production_daily_entries` hydration, not only exports.
 
-Net effect: user types into a cell → clicks anywhere that triggers a parent re-render (search box, company dropdown, page-size, tab focus) → seed effect fires → typed value vanishes. The user perceives this as "data disappears after refresh" because to a non-technical user, the screen "refreshing" itself looks identical to a manual reload.
+5. **Validate**
+   - Run the targeted test file(s).
+   - Re-check the DB read evidence for SK130 and confirm the code path no longer uses an unranged daily-entry query.
 
-The Save handler itself is correct — but it only saves what is currently in `localData`. If the seed effect wiped cells before Save was clicked, Save will faithfully persist zeros / empty maps. This also explains the database evidence (no writes despite reported activity).
+## UI Changes
+- **Visual changes:** Not Applicable.
+- **Location:** `/admin/incentive-data-entry`, Production Data tab remains unchanged.
+- **Interaction impact:** After refresh, saved entries beyond the first 1,000 rows should display correctly.
+- **Responsiveness:** Not Applicable; no layout change.
 
-### Risk & Impact Report
+## Implementation
+Pending approval. No code changes will be made until this plan is approved.
 
-| Dimension | Assessment |
-|---|---|
-| Data | No data corruption; no historic rows altered. Risk: existing rows could be over-written with empty `daily_values` if a user clicks Save while `localData` is mid-reset. |
-| Workflow | Affects every Incentive Data Entry user on the Production Daily, Vessel, and (by inspection) Eligibility/Target tabs. |
-| UI/UX | Pure state-management fix; no visual change. |
-| Regression | Low — change is scoped to the seed effect + memoising the company hook. Existing Save flow and RLS untouched. |
-| Scalability | Improves render performance (fewer wasted effect runs across 1,000+ employee rows). |
-| Rollback | Trivial — revert the two files. |
+## Tests
+- Add/extend Vitest coverage for daily-entry paged loading and no-profile-embed safety.
+- Validate the >1,000-row SK130-like hydration case.
 
-### Corrective Actions
+## DOCUMENTATION.md updates
+- Add a new version-history entry documenting RCA/CAPA for SK130 daily entry disappearing after refresh.
 
-1. **`src/hooks/useCompanyFilter.ts`** — stabilise the public surface:
-   - Wrap `filterByCompany`, `getCompanyName`, `getCompanyCode`, `getCompanyCodeByEmpCode` in `useCallback`.
-   - Memoise the `companies ?? []` fallback so the array reference is stable when data is unchanged.
+## POLICY.md updates
+- Extend `§INCENTIVE-MAPPING-PAGING` with editable daily-entry hydration rules: all list reads of `production_daily_entries` for grids must be paged, ordered, and profile-free.
 
-2. **`src/components/incentive/ProductionDailyGrid.tsx`** — make the seed effect idempotent and dirty-aware:
-   - Replace the `[gridEmployees, entries]` dep list with a **content key** (`programId|month|year|entries.length|entries-updated-at-max`) so the effect only re-seeds when the *server snapshot* actually changes, not when `gridEmployees` gets a new reference.
-   - Track a `dirtyCells: Set<string>` (key = `empId:day`). When seeding from DB, preserve any cell present in `dirtyCells`. Clear `dirtyCells` on successful Save.
-   - Disable `refetchOnWindowFocus` on the `production-daily-entries`, `mapped-employees-for-grid`, and local `incentive-production-rates` queries used by the grid (or guard the refetch with `if (dirtyCells.size === 0)`).
-   - Add a `beforeunload` warning when `dirtyCells.size > 0` so a real page refresh prompts "You have unsaved entries" instead of silently losing them.
-
-3. **`src/components/incentive/VesselDataEntryGrid.tsx`** — same three changes (content-keyed seed, dirty-cell preservation, unsaved-changes guard).
-
-4. **`useBulkUpsertDailyEntries` / vessel equivalent** — on success, do **not** blanket-invalidate; instead `setQueryData` with the just-saved rows so the seed effect sees identical content and skips the reset. Keeps Save fast and removes the "everything blinks after Save" feeling.
-
-5. **Tests** (Vitest + RTL):
-   - `ProductionDailyGrid.test.tsx`: typing into a cell then triggering a parent re-render (company filter change, window focus) **must preserve** the typed value.
-   - `useCompanyFilter.test.ts`: assert returned `filterByCompany` keeps stable reference across renders when inputs don't change.
-   - `useBulkUpsertDailyEntries.test.ts`: assert success path writes through `setQueryData` and that subsequent refetch returns identical content (no reset).
-   - Regression mock: Sandeep-like profile with `admin-incentive-data` override saves a 30-day row end-to-end.
-
-6. **SSOT updates** (mandatory, same commit):
-   - `DOCUMENTATION.md` → "Incentive → Data Entry Grids" section: document the dirty-cell preservation contract and the `refetchOnWindowFocus: false` rule for editable grids.
-   - `POLICY.md` → "Operational Resilience" section: new rule — *editable grids must never overwrite user input with a server refetch; reseed only when the server snapshot's content key changes*.
-
-7. **Operational note for Sandeep / Upendra** (post-deploy): ask them to re-enter the days that were "lost" between `2026-06-19` and today; nothing was silently committed in the interim — DB is empty for that window — so there is no clean-up migration needed.
-
-### Out of scope
-
-- No schema, RLS, or backup changes.
-- No edit to the Eligibility tab unless QA repros the same symptom there; current evidence (only 2 rows ever) suggests low activity rather than active loss, so it stays untouched in this fix.
-
-### Verification checklist after build
-
-- [ ] Vitest suite green (new + existing).
-- [ ] Manual: type values, switch company filter, switch tab, blur/focus window → cells retain values.
-- [ ] Manual: Save → DB row appears with correct `daily_values`; subsequent reload shows the same numbers.
-- [ ] Manual: reload page with unsaved cells → browser shows "unsaved changes" prompt.
+## Post-implementation notes
+- Existing SK130 data is not lost; it is present in the database.
+- The corrective action is to fix the read/hydration path so saved data remains visible after refresh.

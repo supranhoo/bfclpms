@@ -102,6 +102,19 @@ these screens MUST come from the SECURITY DEFINER RPCs
 `public.get_profile_directory_entries(_ids)`. Rationale: BUG-`metal-sizing-200291`
 (v2.66.49).
 
+### Extension (codified 2026-06-25) — Editable daily-entry hydration MUST be paged
+
+Editable Incentive grids that hydrate from `production_daily_entries`
+(currently `ProductionDailyGrid` via `useProductionDailyEntries`) MUST load
+their server snapshot through `fetchAllPaged` with a deterministic
+`.order(...)` + `.range(from, to)`. Unranged `.select(...)` is FORBIDDEN —
+a single program/month routinely exceeds the 1,000-row PostgREST cap
+(Metal Sizing June 2026 = 2,412 rows) and silently drops every employee
+past index 1,000 from the grid, which the user experiences as "saved data
+disappeared after refresh" (RCA SK130, v2.66.53). The hook MUST also keep
+`refetchOnWindowFocus: false` so a focus refetch cannot wipe in-progress
+typing via the seed effect. Regression: `src/test/productionDailyEntriesPaging.test.ts`.
+
 **Rule (reads).** Every client read of `incentive_program_mappings` that returns a list MUST go through `fetchProgramMappingsPaged()` or `fetchAllProgramMappingsPaged()` in `src/services/incentiveProgramMappings.ts`. Direct `supabase.from('incentive_program_mappings').select(...)` for list reads is forbidden. The `compute-monthly-incentives` edge function MUST also page this read via `.range(...)`. `head: true` count queries are exempt.
 
 **Rule (writes).** Bulk add/remove MUST use `bulkAddProgramMappingsBatched()` / `bulkRemoveProgramMappingsBatched()` with a 500-row batch size to avoid request-size/URL-length failures on large draft applies.

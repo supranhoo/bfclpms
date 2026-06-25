@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { fetchAllPaged } from '@/lib/fetchAll';
 
 // ── Production Rates ──
 
@@ -128,14 +129,24 @@ export function useProductionDailyEntries(programId: string, month: string, year
     enabled: !!programId && !!month && !!year,
     refetchOnWindowFocus: false,
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('production_daily_entries')
-        .select('*')
-        .eq('program_id', programId)
-        .eq('month', month)
-        .eq('year', year);
-      if (error) throw error;
-      return data || [];
+      // POLICY §INCENTIVE-MAPPING-PAGING (editable hydration extension,
+      // 2026-06-25). `production_daily_entries` regularly exceeds the
+      // 1000-row PostgREST default cap for an active program/month
+      // (Metal Sizing June 2026 = 2,412 rows). An unranged read silently
+      // dropped employees whose saved rows sat past index 1,000 (e.g.
+      // SK130 day 11 = 2), so the grid rendered them blank after
+      // refresh and operators reported the data as "disappeared".
+      const rows = await fetchAllPaged<any>((from, to) =>
+        supabase
+          .from('production_daily_entries')
+          .select('*')
+          .eq('program_id', programId)
+          .eq('month', month)
+          .eq('year', year)
+          .order('employee_id', { ascending: true })
+          .range(from, to),
+      );
+      return rows;
     },
   });
 }
