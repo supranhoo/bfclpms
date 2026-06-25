@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { fetchAllPaged } from '@/lib/fetchAll';
@@ -16,7 +16,7 @@ export function useCompanyFilter() {
   const profilesVersion = useProfilesVersion();
 
   // Fetch companies
-  const { data: companies } = useQuery({
+  const { data: companiesData } = useQuery({
     queryKey: ['companies-for-filter'],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -28,6 +28,11 @@ export function useCompanyFilter() {
     },
     staleTime: 10 * 60 * 1000,
   });
+
+  // Stable reference for the fallback empty array so consumers that depend on
+  // `companies` don't see a new reference on every render. See RCA in
+  // POLICY → Operational Resilience (editable grids preserving user input).
+  const companies = useMemo(() => companiesData ?? [], [companiesData]);
 
   // Build employee → company mapping via direct company_id OR department → BU → division → company chain
   const { data: mapData } = useQuery({
@@ -88,34 +93,50 @@ export function useCompanyFilter() {
     return ids;
   }, [selectedCompanyId, employeeCompanyMap]);
 
-  const filterByCompany = (employeeId: string | undefined | null): boolean => {
-    if (selectedCompanyId === 'all' || !companyEmployeeIds) return true;
-    if (!employeeId) return false;
-    return companyEmployeeIds.has(employeeId);
-  };
+  // All public helpers below are wrapped in useCallback so consumers can use
+  // them in useEffect / useMemo dependency arrays without triggering a reseed
+  // on every render. Removing the useCallback wrappers caused unsaved cells in
+  // Incentive data-entry grids to be wiped (RCA 2026-06-25).
+  const filterByCompany = useCallback(
+    (employeeId: string | undefined | null): boolean => {
+      if (selectedCompanyId === 'all' || !companyEmployeeIds) return true;
+      if (!employeeId) return false;
+      return companyEmployeeIds.has(employeeId);
+    },
+    [selectedCompanyId, companyEmployeeIds],
+  );
 
-  const getCompanyName = (employeeId: string): string => {
-    if (!companies) return '';
-    const companyId = employeeCompanyMap.get(employeeId);
-    if (!companyId) return '';
-    return companies.find(c => c.id === companyId)?.name ?? '';
-  };
+  const getCompanyName = useCallback(
+    (employeeId: string): string => {
+      const companyId = employeeCompanyMap.get(employeeId);
+      if (!companyId) return '';
+      return companies.find(c => c.id === companyId)?.name ?? '';
+    },
+    [companies, employeeCompanyMap],
+  );
 
-  const getCompanyCode = (employeeId: string): string => {
-    if (!companies) return '';
-    const companyId = employeeCompanyMap.get(employeeId);
-    if (!companyId) return '';
-    return companies.find(c => c.id === companyId)?.code ?? '';
-  };
+  const getCompanyCode = useCallback(
+    (employeeId: string): string => {
+      const companyId = employeeCompanyMap.get(employeeId);
+      if (!companyId) return '';
+      return companies.find(c => c.id === companyId)?.code ?? '';
+    },
+    [companies, employeeCompanyMap],
+  );
 
-  const getCompanyCodeByEmpCode = (empCode: string): string => {
-    const empId = codeToIdMap.get(empCode);
-    if (!empId) return '';
-    return getCompanyCode(empId);
-  };
+  const getCompanyCodeByEmpCode = useCallback(
+    (empCode: string): string => {
+      const empId = codeToIdMap.get(empCode);
+      if (!empId) return '';
+      const companyId = employeeCompanyMap.get(empId);
+      if (!companyId) return '';
+      return companies.find(c => c.id === companyId)?.code ?? '';
+    },
+    [codeToIdMap, companies, employeeCompanyMap],
+  );
 
   return {
-    companies: companies ?? [],
+    companies,
     selectedCompanyId,
     setSelectedCompanyId,
     companyEmployeeIds,
