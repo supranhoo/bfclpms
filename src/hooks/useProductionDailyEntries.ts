@@ -8,6 +8,9 @@ export function useProductionRates(programId: string) {
   return useQuery({
     queryKey: ['incentive-production-rates', programId],
     enabled: !!programId,
+    // Editable Incentive grids consume this — silent refocus refetches must
+    // not wipe unsaved input via the grid's seed effect (RCA 2026-06-25).
+    refetchOnWindowFocus: false,
     queryFn: async () => {
       const { data, error } = await supabase
         .from('incentive_production_rates')
@@ -123,6 +126,7 @@ export function useProductionDailyEntries(programId: string, month: string, year
   return useQuery({
     queryKey: ['production-daily-entries', programId, month, year],
     enabled: !!programId && !!month && !!year,
+    refetchOnWindowFocus: false,
     queryFn: async () => {
       const { data, error } = await supabase
         .from('production_daily_entries')
