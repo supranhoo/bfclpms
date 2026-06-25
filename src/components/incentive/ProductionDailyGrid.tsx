@@ -83,6 +83,9 @@ export function ProductionDailyGrid({ programId, programName, onMonthYearChange,
   const { data: mappedEmployees = [], isLoading: mappedLoading } = useQuery({
     queryKey: ['mapped-employees-for-grid', programId],
     enabled: !!programId,
+    // Editable grid — never refetch silently while the user is typing
+    // (would otherwise wipe unsaved input via the seed effect).
+    refetchOnWindowFocus: false,
     queryFn: async () => {
       // Single round trip — RPC resolves every mapping_type server-side and
       // returns only non-PII identification + organisational scope fields.
