@@ -45,6 +45,7 @@ describe("Profile Identity Integrity — DB contract", () => {
 
   it("declares the admin-only list_profile_identity_drift function (replaces auth.users-exposing view)", () => {
     expect(sql).toMatch(/FUNCTION public\.list_profile_identity_drift/);
-    expect(sql).not.toMatch(/CREATE OR REPLACE VIEW public\.v_profile_identity_drift/);
+    // The earlier view that exposed auth.users must be dropped in a later migration.
+    expect(sql).toMatch(/DROP VIEW IF EXISTS public\.v_profile_identity_drift/);
   });
 });
