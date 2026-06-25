@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -105,6 +105,11 @@ export function ProductionDailyGrid({ programId, programName, onMonthYearChange,
 
   // daily_values keyed by employee_id
   const [localData, setLocalData] = useState<Record<string, Record<string, number>>>({});
+  // Tracks cells the user has typed into but not yet saved. The seed effect
+  // preserves these on re-runs so background refetches / re-renders never wipe
+  // unsaved input. RCA 2026-06-25 (Sandeep & Upendra losing daily entries).
+  const dirtyCellsRef = useRef<Set<string>>(new Set());
+  const dirtyKey = (empId: string, day: string | number) => `${empId}:${day}`;
 
   const daysInMonth = useMemo(() => {
     const monthIdx = MONTHS.indexOf(month);
@@ -208,19 +213,50 @@ export function ProductionDailyGrid({ programId, programName, onMonthYearChange,
   const totalPages = pageCount(filteredEmployees.length, pageSize);
   const filtersActive = hasActiveFilters(filters);
 
-  // Initialize from DB
+  // Content key of the server snapshot — re-seeding only happens when the
+  // *server data* actually changes, not when `gridEmployees` gets a new
+  // reference because `filterByCompany` was recreated upstream.
+  const entriesSnapshotKey = useMemo(() => {
+    const rows = (entries as any[]) ?? [];
+    if (rows.length === 0) return `${programId}|${month}|${year}|0|none`;
+    let maxUpdated = '';
+    for (const r of rows) {
+      const u = (r as any).updated_at ?? '';
+      if (u > maxUpdated) maxUpdated = u;
+    }
+    return `${programId}|${month}|${year}|${rows.length}|${maxUpdated}`;
+  }, [entries, programId, month, year]);
+
+  // Initialize / re-seed from DB while preserving dirty (unsaved) cells.
   useEffect(() => {
-    const entryMap = new Map((entries as any[]).map((e: any) => [e.employee_id, e.daily_values || {}]));
-    const init: Record<string, Record<string, number>> = {};
-    gridEmployees.forEach((emp: any) => {
-      const existing = entryMap.get(emp.id) || {};
-      init[emp.id] = existing;
+    const entryMap = new Map(
+      (entries as any[]).map((e: any) => [e.employee_id, e.daily_values || {}]),
+    );
+    setLocalData(prev => {
+      const next: Record<string, Record<string, number>> = {};
+      gridEmployees.forEach((emp: any) => {
+        const dbVals = (entryMap.get(emp.id) as Record<string, number>) || {};
+        const prevVals = prev[emp.id] || {};
+        // Start from DB snapshot, then overlay any cell the user has touched
+        // locally so background refetches never destroy unsaved typing.
+        const merged: Record<string, number> = { ...dbVals };
+        for (const day of Object.keys(prevVals)) {
+          if (dirtyCellsRef.current.has(dirtyKey(emp.id, day))) {
+            merged[day] = prevVals[day];
+          }
+        }
+        next[emp.id] = merged;
+      });
+      return next;
     });
-    setLocalData(init);
-  }, [gridEmployees, entries]);
+    // Intentionally keyed on the server snapshot, NOT on `gridEmployees` —
+    // gridEmployees changes reference on every render via the company filter.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [entriesSnapshotKey, mappedEmployees.length]);
 
   const handleCellChange = (empId: string, day: number, value: string) => {
     const numVal = value === '' ? 0 : parseFloat(value) || 0;
+    dirtyCellsRef.current.add(dirtyKey(empId, day));
     setLocalData(prev => ({
       ...prev,
       [empId]: {
@@ -229,6 +265,19 @@ export function ProductionDailyGrid({ programId, programName, onMonthYearChange,
       },
     }));
   };
+
+  // Warn before unloading the page if there are unsaved edits — protects
+  // against accidental refresh / tab close losing work.
+  useEffect(() => {
+    const handler = (e: BeforeUnloadEvent) => {
+      if (dirtyCellsRef.current.size > 0) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, []);
 
   const getTotal = (empId: string, days: number[]): number => {
     const vals = localData[empId] || {};
@@ -265,7 +314,13 @@ export function ProductionDailyGrid({ programId, programName, onMonthYearChange,
       daily_values: localData[emp.id] || {},
       updated_by: user?.id,
     }));
-    bulkUpsert.mutate(payload);
+    bulkUpsert.mutate(payload, {
+      onSuccess: () => {
+        // Saved successfully — clear the dirty marker so the next snapshot
+        // refresh can adopt the server's canonical view.
+        dirtyCellsRef.current.clear();
+      },
+    });
   };
 
   const isLoading = ratesLoading || entriesLoading || mappedLoading;
