@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -41,20 +41,62 @@ export function VesselDataEntryGrid({ programs, onMonthYearChange, filterByCompa
 
   // Local editable state keyed by employee_id
   const [localData, setLocalData] = useState<Record<string, { vessels: number; remarks: string }>>({});
+  // Per-cell dirty flag: 'v' = vessels touched, 'r' = remarks touched.
+  // Prevents background refetches from wiping unsaved input
+  // (RCA 2026-06-25 — Sandeep & Upendra reported losing entries on refresh).
+  const dirtyCellsRef = useRef<Set<string>>(new Set());
+  const dKey = (empId: string, field: 'v' | 'r') => `${empId}:${field}`;
 
-  // Initialize local data when rates or entries change
+  // Content key of the server snapshot so reseed only happens when *server*
+  // data actually changes (not on every render via vesselRates reference).
+  const entriesSnapshotKey = useMemo(() => {
+    const rows = (existingEntries as any[]) ?? [];
+    if (rows.length === 0) return `${selectedProgram}|${month}|${year}|0|none`;
+    let maxUpdated = '';
+    for (const r of rows) {
+      const u = (r as any).updated_at ?? '';
+      if (u > maxUpdated) maxUpdated = u;
+    }
+    return `${selectedProgram}|${month}|${year}|${rows.length}|${maxUpdated}`;
+  }, [existingEntries, selectedProgram, month, year]);
+
+  // Initialize / re-seed local data while preserving any dirty user input.
   useEffect(() => {
-    const entryMap = new Map((existingEntries as any[]).map((e: any) => [e.employee_id, e]));
-    const init: Record<string, { vessels: number; remarks: string }> = {};
-    (vesselRates as any[]).forEach((r: any) => {
-      const existing = entryMap.get(r.employee_id);
-      init[r.employee_id] = {
-        vessels: existing?.vessels_handled ?? 0,
-        remarks: existing?.remarks ?? '',
-      };
+    const entryMap = new Map(
+      (existingEntries as any[]).map((e: any) => [e.employee_id, e]),
+    );
+    setLocalData(prev => {
+      const next: Record<string, { vessels: number; remarks: string }> = {};
+      (vesselRates as any[]).forEach((r: any) => {
+        const existing = entryMap.get(r.employee_id);
+        const dbV = existing?.vessels_handled ?? 0;
+        const dbR = existing?.remarks ?? '';
+        const prevRow = prev[r.employee_id];
+        next[r.employee_id] = {
+          vessels: dirtyCellsRef.current.has(dKey(r.employee_id, 'v')) && prevRow
+            ? prevRow.vessels
+            : dbV,
+          remarks: dirtyCellsRef.current.has(dKey(r.employee_id, 'r')) && prevRow
+            ? prevRow.remarks
+            : dbR,
+        };
+      });
+      return next;
     });
-    setLocalData(init);
-  }, [vesselRates, existingEntries]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [entriesSnapshotKey, (vesselRates as any[]).length]);
+
+  // Warn before unloading if there are unsaved edits.
+  useEffect(() => {
+    const handler = (e: BeforeUnloadEvent) => {
+      if (dirtyCellsRef.current.size > 0) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, []);
 
   useEffect(() => {
     onMonthYearChange?.(month, year);
@@ -70,7 +112,11 @@ export function VesselDataEntryGrid({ programs, onMonthYearChange, filterByCompa
       remarks: val.remarks || undefined,
       updated_by: user?.id,
     }));
-    upsert.mutate(entries as any);
+    upsert.mutate(entries as any, {
+      onSuccess: () => {
+        dirtyCellsRef.current.clear();
+      },
+    });
   };
 
   const totalAmount = useMemo(() => {
@@ -162,13 +208,16 @@ export function VesselDataEntryGrid({ programs, onMonthYearChange, filterByCompa
                           className="w-[100px] ml-auto text-right"
                           value={vessels}
                           onChange={e =>
-                            setLocalData(prev => ({
-                              ...prev,
-                              [r.employee_id]: {
-                                ...prev[r.employee_id],
-                                vessels: parseInt(e.target.value) || 0,
-                              },
-                            }))
+                            {
+                              dirtyCellsRef.current.add(dKey(r.employee_id, 'v'));
+                              setLocalData(prev => ({
+                                ...prev,
+                                [r.employee_id]: {
+                                  ...prev[r.employee_id],
+                                  vessels: parseInt(e.target.value) || 0,
+                                },
+                              }));
+                            }
                           }
                         />
                       </TableCell>
@@ -181,13 +230,16 @@ export function VesselDataEntryGrid({ programs, onMonthYearChange, filterByCompa
                           placeholder="Optional"
                           value={localData[r.employee_id]?.remarks ?? ''}
                           onChange={e =>
-                            setLocalData(prev => ({
-                              ...prev,
-                              [r.employee_id]: {
-                                ...prev[r.employee_id],
-                                remarks: e.target.value,
-                              },
-                            }))
+                            {
+                              dirtyCellsRef.current.add(dKey(r.employee_id, 'r'));
+                              setLocalData(prev => ({
+                                ...prev,
+                                [r.employee_id]: {
+                                  ...prev[r.employee_id],
+                                  remarks: e.target.value,
+                                },
+                              }));
+                            }
                           }
                         />
                       </TableCell>

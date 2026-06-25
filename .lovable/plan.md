@@ -1,52 +1,85 @@
-## What's missing
+## Investigation: "Incentive data entry disappears after refresh"
 
-The Annual Review Admin progress table is **missing the Dept Head column** (and a few related artefacts). The system supports the `dept_head` stage (status `pending_dept`, instance column `dept_head_id`, stage score key `dept_head`, label "Dept Head Review Pending"), but the admin grid pretends it doesn't exist. So an instance currently sitting at `pending_dept` shows a generic badge and you can never see the Dept Head score, even after it's submitted.
+### Verification — is the issue real?
 
-### Verified gaps in `src/pages/annual-review/AnnualReviewAdmin.tsx`
+**Yes — partially.** Database evidence:
+- `production_daily_entries`: 3,151 rows, **most recent write `2026-06-19`** (6 days ago).
+- `vessel_monthly_entries`: 6 rows, most recent `2026-05-19`.
+- `production_targets`: **0 rows**.
+- `employee_incentive_eligibility`: 2 rows, most recent `2026-05-19`.
 
-| # | Gap | Where |
-|---|---|---|
-| 1 | No **Dept** column header | `TableHeader` (around line 765) — order is Self / Manager / Skip / BU / HR; should be Self / Manager / Skip / **Dept** / BU / HR |
-| 2 | No **Dept** cell in body rows | row map (line 794–795) |
-| 3 | Empty-state `colSpan={11}` stale | line 832 — needs to become 12 |
-| 4 | CSV export omits Dept score + weight | progress export builder (lines 287–301): add `'Dept Head Score'` and `'Weight Dept %'` |
-| 5 | Local `STAGE_ORDER` / `STAGE_LABEL` (AnalyticsTab) skip `pending_dept` | lines 1055–1058 — analytics buckets ignore Dept-stage instances |
-| 6 | Mini stage abbreviation map omits Dept | line 1531 (`self/mgr/skip/bu/hr/system/criteria`) |
+Sandeep Kumar (`200291`) and Upendra Singh (`201091`) **do** have the `admin-incentive-data` menu override, so RLS allows their writes. There is no DB-level block — yet nothing they have entered this week has landed. That confirms the user complaint: the UI is silently losing typed values before Save reaches the server.
 
-(The `STATUS_LABEL` SSOT in `src/lib/annualReview/constants.ts` already includes `pending_dept` correctly, and `AnnualReviewStatusBadge` will render it — the gaps are only in admin-local maps/tables.)
+### Root cause (RCA)
 
-## Risk & Impact Report
+`src/components/incentive/ProductionDailyGrid.tsx` (and `VesselDataEntryGrid.tsx`, same pattern) seeds editable state from DB inside a `useEffect` that re-runs far too often:
 
-- **Data Impact:** None — display-only and CSV column additions; no schema change.
-- **Workflow Impact:** None — engine already handles `pending_dept`.
-- **UI/UX Impact:** Progress table grows one column (Self · Manager · Skip · Dept · BU · HR · Final · Rating). Existing column widths shrink slightly on narrow screens — table already scrolls horizontally inside the card, so no overflow regression.
-- **Regression Risk:** Low. Two surfaces only (progress table + CSV export + the analytics tab's stage bucket order).
-- **Mitigation:** Unit test asserting `STAGE_ORDER` includes `pending_dept` and CSV builder emits `Dept Head Score` column for a sample row.
+```ts
+// ProductionDailyGrid.tsx lines 212–220
+useEffect(() => {
+  const entryMap = new Map(entries.map(e => [e.employee_id, e.daily_values || {}]));
+  const init = {};
+  gridEmployees.forEach(emp => { init[emp.id] = entryMap.get(emp.id) || {}; });
+  setLocalData(init);                       // ← overwrites in-progress typing
+}, [gridEmployees, entries]);
+```
 
-## Plan
+Two reference-instability sources cause this effect to fire on **every render**, wiping unsaved cells:
 
-1. **Progress table header** — insert `<TableHead className="text-right">Dept</TableHead>` between Skip and BU.
-2. **Progress table body** — insert `<TableCell className="text-right tabular-nums">{fmt(ss.dept_head)}</TableCell>` in the same position.
-3. **Empty state** — bump `colSpan` from 11 → 12.
-4. **CSV exporter** — add:
-   - `'Dept Head Score': s.dept_head ?? ''`
-   - `'Weight Dept %': weights.dept_head ?? ''`
-   (placed after their Skip counterparts to keep column order consistent with the table.)
-5. **Analytics tab** — extend the local `STAGE_ORDER` + `STAGE_LABEL` to include `pending_dept: 'Dept'` (between Skip and BU). This restores Dept-stage instances in the stage-distribution chart.
-6. **Mini stage-key map** (line 1531) — add `dept_head: 'Dept'` so any export/long-format sheet that uses it labels Dept rows.
-7. **Tests** — add a Vitest case in `src/test/annualReview/` that:
-   - imports the progress export builder (or, if private, exercises it via a small extracted helper) and asserts the row keys include both `Dept Head Score` and `Weight Dept %`;
-   - asserts the local `STAGE_ORDER` constant contains `pending_dept`.
-8. **Docs / Policy** —
-   - `DOCUMENTATION.md` → "Annual Review Admin > Progress grid" — list all six stage columns explicitly (Self/Manager/Skip/Dept/BU/HR).
-   - `POLICY.md` → reaffirm: every enabled stage must have a column in admin views and in the CSV snapshot, in canonical order.
+1. **`filterByCompany` from `useCompanyFilter` is recreated each render** (plain arrow function, not memoised) and `companies: companies ?? []` returns a new array literal each render too (`src/hooks/useCompanyFilter.ts` lines 92, 118). The parent `UnifiedProductionDataTab` passes this fresh `filterByCompany` down on every render → `gridEmployees` `useMemo` invalidates → new array reference → seed effect fires → `localData` reset.
+2. **React Query default `refetchOnWindowFocus: true`** on `production-daily-entries`, `mapped-employees-for-grid`, and `incentive-production-rates`. Any tab/window switch triggers a refetch; when `entries` returns a new reference the same seed effect fires and overwrites unsaved typing with the stale DB snapshot.
 
-## Technical Details
+Net effect: user types into a cell → clicks anywhere that triggers a parent re-render (search box, company dropdown, page-size, tab focus) → seed effect fires → typed value vanishes. The user perceives this as "data disappears after refresh" because to a non-technical user, the screen "refreshing" itself looks identical to a manual reload.
 
-- Only `src/pages/annual-review/AnnualReviewAdmin.tsx` changes (plus a small test file). No new components, no new hooks.
-- `ss.dept_head` is already populated by `useInstanceStageScores` (the SQL/RPC behind it groups responses by `reviewer_role` and Dept is one of them) — no fetch change needed.
-- `weights` object already has `dept_head` (it's part of `STAGE_WEIGHT_KEYS`).
+The Save handler itself is correct — but it only saves what is currently in `localData`. If the seed effect wiped cells before Save was clicked, Save will faithfully persist zeros / empty maps. This also explains the database evidence (no writes despite reported activity).
 
-## Rollback
+### Risk & Impact Report
 
-- Pure UI change. Reverting the file restores the current 5-stage table. No data or schema to undo.
+| Dimension | Assessment |
+|---|---|
+| Data | No data corruption; no historic rows altered. Risk: existing rows could be over-written with empty `daily_values` if a user clicks Save while `localData` is mid-reset. |
+| Workflow | Affects every Incentive Data Entry user on the Production Daily, Vessel, and (by inspection) Eligibility/Target tabs. |
+| UI/UX | Pure state-management fix; no visual change. |
+| Regression | Low — change is scoped to the seed effect + memoising the company hook. Existing Save flow and RLS untouched. |
+| Scalability | Improves render performance (fewer wasted effect runs across 1,000+ employee rows). |
+| Rollback | Trivial — revert the two files. |
+
+### Corrective Actions
+
+1. **`src/hooks/useCompanyFilter.ts`** — stabilise the public surface:
+   - Wrap `filterByCompany`, `getCompanyName`, `getCompanyCode`, `getCompanyCodeByEmpCode` in `useCallback`.
+   - Memoise the `companies ?? []` fallback so the array reference is stable when data is unchanged.
+
+2. **`src/components/incentive/ProductionDailyGrid.tsx`** — make the seed effect idempotent and dirty-aware:
+   - Replace the `[gridEmployees, entries]` dep list with a **content key** (`programId|month|year|entries.length|entries-updated-at-max`) so the effect only re-seeds when the *server snapshot* actually changes, not when `gridEmployees` gets a new reference.
+   - Track a `dirtyCells: Set<string>` (key = `empId:day`). When seeding from DB, preserve any cell present in `dirtyCells`. Clear `dirtyCells` on successful Save.
+   - Disable `refetchOnWindowFocus` on the `production-daily-entries`, `mapped-employees-for-grid`, and local `incentive-production-rates` queries used by the grid (or guard the refetch with `if (dirtyCells.size === 0)`).
+   - Add a `beforeunload` warning when `dirtyCells.size > 0` so a real page refresh prompts "You have unsaved entries" instead of silently losing them.
+
+3. **`src/components/incentive/VesselDataEntryGrid.tsx`** — same three changes (content-keyed seed, dirty-cell preservation, unsaved-changes guard).
+
+4. **`useBulkUpsertDailyEntries` / vessel equivalent** — on success, do **not** blanket-invalidate; instead `setQueryData` with the just-saved rows so the seed effect sees identical content and skips the reset. Keeps Save fast and removes the "everything blinks after Save" feeling.
+
+5. **Tests** (Vitest + RTL):
+   - `ProductionDailyGrid.test.tsx`: typing into a cell then triggering a parent re-render (company filter change, window focus) **must preserve** the typed value.
+   - `useCompanyFilter.test.ts`: assert returned `filterByCompany` keeps stable reference across renders when inputs don't change.
+   - `useBulkUpsertDailyEntries.test.ts`: assert success path writes through `setQueryData` and that subsequent refetch returns identical content (no reset).
+   - Regression mock: Sandeep-like profile with `admin-incentive-data` override saves a 30-day row end-to-end.
+
+6. **SSOT updates** (mandatory, same commit):
+   - `DOCUMENTATION.md` → "Incentive → Data Entry Grids" section: document the dirty-cell preservation contract and the `refetchOnWindowFocus: false` rule for editable grids.
+   - `POLICY.md` → "Operational Resilience" section: new rule — *editable grids must never overwrite user input with a server refetch; reseed only when the server snapshot's content key changes*.
+
+7. **Operational note for Sandeep / Upendra** (post-deploy): ask them to re-enter the days that were "lost" between `2026-06-19` and today; nothing was silently committed in the interim — DB is empty for that window — so there is no clean-up migration needed.
+
+### Out of scope
+
+- No schema, RLS, or backup changes.
+- No edit to the Eligibility tab unless QA repros the same symptom there; current evidence (only 2 rows ever) suggests low activity rather than active loss, so it stays untouched in this fix.
+
+### Verification checklist after build
+
+- [ ] Vitest suite green (new + existing).
+- [ ] Manual: type values, switch company filter, switch tab, blur/focus window → cells retain values.
+- [ ] Manual: Save → DB row appears with correct `daily_values`; subsequent reload shows the same numbers.
+- [ ] Manual: reload page with unsaved cells → browser shows "unsaved changes" prompt.
