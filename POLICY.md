@@ -4189,3 +4189,6 @@ The setting affects display only — workflow advancement, RLS, and stage chain 
 - Admin-driven identity repair must go through the SECURITY DEFINER RPCs `repair_profile_identity(...)` (rename / re-identify / clear email / inactivate) or `create_repair_profile(...)` (mint a fresh no-email profile). Both gate on `has_role(auth.uid(), 'admin')` and write a `profile.identity_repaired` or `profile.repair_created` audit row.
 - The diagnostic surface for admins is the function `list_profile_identity_drift()` (auth-vs-profile mismatches) and the view `v_profile_email_duplicates` (any residual shared emails). Both should always return zero rows in steady state.
 - Forward-looking rule for bulk user imports: match on `employee_code`, never on `email`. An import row whose matched profile id already holds a different `employee_code` or `full_name` must be rejected unless the admin explicitly opts in to "rename" — preventing the original class of identity-swap regressions.
+
+### EMBED-FK-HINT (scope)
+The rule that every `departments(` embed reached through `profiles` MUST use `departments!profiles_department_fk(...)` now applies to `src/hooks`, `src/pages`, `src/components`, `src/services` AND `src/lib`. Enforced by `src/test/profilesDepartmentsEmbedDisambiguation.test.ts`.
