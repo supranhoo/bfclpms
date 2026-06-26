@@ -57,21 +57,36 @@ function chunk<T>(arr: T[], size: number): T[][] {
   return out;
 }
 
-/** Paged profile fetch for an id list, batched to avoid URL length limits. */
+/**
+ * Paged profile fetch for an id list, batched to avoid URL length limits.
+ *
+ * PII-hardening (mem://architecture/profiles-query-policy): direct `.from('profiles')`
+ * SELECTs are RLS-scoped, so non-admin users (e.g. managers) get an empty
+ * result and the Excel export renders blank rows. We resolve via the
+ * SECURITY DEFINER RPC `get_profile_directory_entries_v2` instead, which
+ * returns the same shape required by `ExportProfile`.
+ */
 export async function fetchProfilesByIdsPaged(ids: string[]): Promise<ExportProfile[]> {
   const unique = Array.from(new Set(ids.filter(Boolean)));
   if (!unique.length) return [];
   const out: ExportProfile[] = [];
   for (const batch of chunk(unique, 500)) {
-    const rows = await fetchAllPaged<ExportProfile>((from, to) =>
-      supabase
-        .from('profiles')
-        .select('id, full_name, employee_code, designation, department_id, pms_grade, departments!profiles_department_fk(name)')
-        .in('id', batch)
-        .order('employee_code')
-        .range(from, to) as any,
+    const { data, error } = await supabase.rpc(
+      'get_profile_directory_entries_v2',
+      { _ids: batch },
     );
-    out.push(...rows);
+    if (error) throw error;
+    for (const r of (data || []) as any[]) {
+      out.push({
+        id: r.id,
+        full_name: r.full_name,
+        employee_code: r.employee_code,
+        designation: r.designation,
+        department_id: r.department_id,
+        pms_grade: r.pms_grade,
+        departments: r.department_name ? { name: r.department_name } : null,
+      });
+    }
   }
   return out;
 }
@@ -162,14 +177,22 @@ export async function resolveDailyExportData(
   ]);
 
   // 3. Active profile universe (paged)
-  const allProfiles = await fetchAllPaged<ExportProfile>((from, to) =>
-    supabase
-      .from('profiles')
-      .select('id, full_name, employee_code, designation, department_id, pms_grade, departments!profiles_department_fk(name)')
-      .eq('is_active', true)
-      .order('employee_code')
-      .range(from, to) as any,
+  // PII-hardening: resolve via SECURITY DEFINER RPC so the cascade roster
+  // includes employees outside the caller's RLS scope (otherwise non-admin
+  // exports collapse to an empty grid).
+  const { data: activeData, error: activeErr } = await supabase.rpc(
+    'get_active_profile_directory_entries',
   );
+  if (activeErr) throw activeErr;
+  const allProfiles: ExportProfile[] = ((activeData || []) as any[]).map((r) => ({
+    id: r.id,
+    full_name: r.full_name,
+    employee_code: r.employee_code,
+    designation: r.designation,
+    department_id: r.department_id,
+    pms_grade: r.pms_grade,
+    departments: r.department_name ? { name: r.department_name } : null,
+  }));
 
   // 4. Resolve mapping cascade → matched employee ids
   const matchedIds = resolveMappedEmployeeIds(
