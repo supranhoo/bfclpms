@@ -166,6 +166,7 @@ export async function resolveDailyExportData(
   programId: string,
   month: string,
   year: number,
+  opts: { filterByCompany?: (employeeId: string) => boolean } = {},
 ): Promise<ResolvedDailyExport> {
   // 1. Mappings (paged)
   const mappings = await fetchProgramMappingsPaged(programId);
@@ -220,11 +221,15 @@ export async function resolveDailyExportData(
       .range(from, to) as any,
   );
 
-  // 6. Build roster: matched mapped employees ∪ employees that have a saved
-  //    entry (covers historical entries whose employee may have changed
-  //    mapping). Profiles for entry-only ids are fetched in batch.
+  // 6. Build roster: matched mapped employees only. Entry-only employees
+  //    (saved daily entries whose employee is no longer mapped, or who were
+  //    never mapped to begin with) are intentionally excluded so the export
+  //    mirrors what the on-screen grid (ProductionDailyGrid) shows. Prior
+  //    behavior unioned in every employee with a stored entry which, when a
+  //    program had zero mappings (e.g. Metal Sizing for a fresh company),
+  //    leaked unrelated employees across companies into the workbook.
+  //    RCA 2026-06-26 (Upendra / Bihar Foundry & Casting).
   const allIds = new Set<string>(matchedIds);
-  for (const e of entries) if (e.employee_id) allIds.add(e.employee_id);
 
   const profileMap = new Map<string, ExportProfile>();
   for (const p of allProfiles) if (allIds.has(p.id)) profileMap.set(p.id, p);
@@ -235,7 +240,12 @@ export async function resolveDailyExportData(
     for (const p of extra) profileMap.set(p.id, p);
   }
 
-  const employees = Array.from(profileMap.values()).sort((a, b) =>
+  // 7. Apply the same company filter the grid applies, so the export is a
+  //    strict subset of the visible roster instead of a cross-company dump.
+  const companyFilter = opts.filterByCompany;
+  const employees = Array.from(profileMap.values())
+    .filter((p) => (companyFilter ? companyFilter(p.id) : true))
+    .sort((a, b) =>
     (a.employee_code || '').localeCompare(b.employee_code || ''),
   );
 
