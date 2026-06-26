@@ -128,7 +128,9 @@ export function MonthlyIncentiveTable() {
     [mappedRoster]
   );
   const rosterCompanyMap = useMemo(
-    () => new Map(mappedRoster.map((e) => [e.id, e.company_id] as const)),
+    () => new Map<string, string | null>(
+      mappedRoster.map((e) => [e.id, e.company_id ?? null] as const),
+    ),
     [mappedRoster]
   );
   const selectedProgramName = useMemo(
@@ -143,9 +145,9 @@ export function MonthlyIncentiveTable() {
     if (!mappedEmployeeIds.length) return [] as string[];
     if (selectedCompanyIds.length === 0) return mappedEmployeeIds;
     const companySet = new Set(selectedCompanyIds);
-    return mappedEmployeeIds.filter(id => {
+    return mappedEmployeeIds.filter((id) => {
       const c = rosterCompanyMap.get(id);
-      return c && companySet.has(c);
+      return !!c && companySet.has(c);
     });
   }, [mappedEmployeeIds, selectedCompanyIds, rosterCompanyMap]);
 
