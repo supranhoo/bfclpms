@@ -115,6 +115,37 @@ disappeared after refresh" (RCA SK130, v2.66.53). The hook MUST also keep
 `refetchOnWindowFocus: false` so a focus refetch cannot wipe in-progress
 typing via the seed effect. Regression: `src/test/productionDailyEntriesPaging.test.ts`.
 
+### Extension (codified 2026-06-26) — Export company-scope + rate-cascade parity
+
+Daily Incentive exports (`src/lib/incentiveExportData.ts` →
+`IncentiveDataExport.exportDailyData`) MUST mirror the on-screen
+`ProductionDailyGrid` along TWO axes:
+
+1. **Roster + company filter.** The mapped roster MUST come from the
+   `get_incentive_program_employees(_program_id)` SECURITY DEFINER RPC
+   (single round trip; server-resolved `company_id`). When a company is
+   selected, the roster MUST be filtered against the RPC-provided
+   `company_id`. Using `filterByCompany` from `useCompanyFilter` as the
+   primary company filter is FORBIDDEN for the daily export path — that
+   helper reads `public.profiles` directly and is RLS-restricted for
+   non-admin Incentive Data Entry users, producing blank workbooks
+   (RCA Upendra / Metal Sizing × Bihar Foundry & Casting, v2.66.54).
+   It is retained ONLY as a fallback when no company is selected.
+2. **Rate resolution.** Per-employee rate MUST be resolved via the
+   canonical 5-tier cascade in `src/lib/incentiveRateResolver.ts`
+   (`resolveEmployeeRate`: employee → department → BU → company →
+   common) with `effective_from` date-aware selection. The export's
+   prior `empRates.get(id) ?? commonRate` shortcut is FORBIDDEN because
+   it silently returns ₹0 for `company`-tier and `bu`-tier programs
+   (Metal Sizing is company-tier). The rate read MUST include
+   `effective_from` so the cascade is date-aware.
+
+Regression: `src/test/incentiveExportData.test.ts` (RPC roster sourcing,
+`selectedCompanyId` filter wiring, canonical-cascade contract, end-to-end
+prop wiring through `UnifiedProductionDataTab`, Metal Sizing
+company-rate scenario). Rollback: revert the three files + test
+extension; no schema, RPC, or RLS change.
+
 **Rule (reads).** Every client read of `incentive_program_mappings` that returns a list MUST go through `fetchProgramMappingsPaged()` or `fetchAllProgramMappingsPaged()` in `src/services/incentiveProgramMappings.ts`. Direct `supabase.from('incentive_program_mappings').select(...)` for list reads is forbidden. The `compute-monthly-incentives` edge function MUST also page this read via `.range(...)`. `head: true` count queries are exempt.
 
 **Rule (writes).** Bulk add/remove MUST use `bulkAddProgramMappingsBatched()` / `bulkRemoveProgramMappingsBatched()` with a 500-row batch size to avoid request-size/URL-length failures on large draft applies.
