@@ -13556,9 +13556,15 @@ export type Database = {
       get_profile_directory_entries_v2: {
         Args: { _ids: string[] }
         Returns: {
+          business_unit_id: string
+          business_unit_name: string
+          company_id: string
+          company_name: string
           department_id: string
           department_name: string
           designation: string
+          division_id: string
+          division_name: string
           employee_code: string
           full_name: string
           id: string
