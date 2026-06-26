@@ -13,9 +13,16 @@ interface ExportProps {
   programType: 'vessel' | 'daily' | 'target';
   month: string;
   year: number;
+  /**
+   * Same company filter the grid uses. When supplied, the export is
+   * constrained to employees in the selected company — matching the
+   * on-screen roster instead of dumping every employee with stored data.
+   * RCA 2026-06-26 (Upendra / Bihar Foundry & Casting Metal Sizing).
+   */
+  filterByCompany?: (employeeId: string | undefined | null) => boolean;
 }
 
-export function IncentiveDataExport({ programId, programName, programType, month, year }: ExportProps) {
+export function IncentiveDataExport({ programId, programName, programType, month, year, filterByCompany }: ExportProps) {
   const [exporting, setExporting] = useState(false);
   const { toast } = useToast();
 
@@ -26,9 +33,9 @@ export function IncentiveDataExport({ programId, programName, programType, month
       const fileName = `${programName.replace(/\s+/g, '_')}_${month}_${year}.xlsx`;
 
       if (programType === 'vessel') {
-        ws = await exportVesselData(programId, month, year);
+        ws = await exportVesselData(programId, month, year, filterByCompany);
       } else if (programType === 'daily') {
-        ws = await exportDailyData(programId, month, year);
+        ws = await exportDailyData(programId, month, year, filterByCompany);
       } else {
         ws = await exportTargetData(programId, month, year);
       }
@@ -53,7 +60,12 @@ export function IncentiveDataExport({ programId, programName, programType, month
   );
 }
 
-async function exportVesselData(programId: string, month: string, year: number): Promise<XLSX.WorkSheet> {
+async function exportVesselData(
+  programId: string,
+  month: string,
+  year: number,
+  filterByCompany?: (employeeId: string | undefined | null) => boolean,
+): Promise<XLSX.WorkSheet> {
   // Paged reads — bypass the 1,000-row PostgREST cap.
   const rates = await fetchAllPaged<any>((from, to) =>
     supabase
@@ -65,6 +77,9 @@ async function exportVesselData(programId: string, month: string, year: number):
       .eq('program_id', programId)
       .range(from, to) as any,
   );
+  const filteredRates = filterByCompany
+    ? (rates || []).filter((r: any) => filterByCompany(r.employee_id))
+    : (rates || []);
   const entries = await fetchAllPaged<any>((from, to) =>
     supabase
       .from('vessel_monthly_entries')
@@ -76,7 +91,7 @@ async function exportVesselData(programId: string, month: string, year: number):
   );
 
   const ids = Array.from(
-    new Set((rates || []).map((r: any) => r.employee_id).filter(Boolean)),
+    new Set(filteredRates.map((r: any) => r.employee_id).filter(Boolean)),
   ) as string[];
   const profileMap = new Map<string, { full_name: string | null; employee_code: string | null }>();
   if (ids.length) {
@@ -91,7 +106,7 @@ async function exportVesselData(programId: string, month: string, year: number):
   }
 
   const entryMap = new Map((entries || []).map((e: any) => [e.employee_id, e]));
-  const rows = (rates || []).map((r: any) => {
+  const rows = filteredRates.map((r: any) => {
     const entry = entryMap.get(r.employee_id) || {};
     const vessels = (entry as any).vessels_handled ?? 0;
     const rate = r.rate_per_vessel || 0;
@@ -109,12 +124,21 @@ async function exportVesselData(programId: string, month: string, year: number):
   return XLSX.utils.json_to_sheet(rows.length ? rows : [{ 'Employee': 'No data' }]);
 }
 
-async function exportDailyData(programId: string, month: string, year: number): Promise<XLSX.WorkSheet> {
+async function exportDailyData(
+  programId: string,
+  month: string,
+  year: number,
+  filterByCompany?: (employeeId: string | undefined | null) => boolean,
+): Promise<XLSX.WorkSheet> {
   // Roster + rates + entries all sourced via the shared resolver, which
   // mirrors the on-screen grid (mappings → cascade), pages every read past
   // the 1k cap, and batches profile lookups. Fixes empty/dash export rows.
   const { employees, entries, daysInMonth, empRates, commonRate } =
-    await resolveDailyExportData(programId, month, year);
+    await resolveDailyExportData(programId, month, year, {
+      filterByCompany: filterByCompany
+        ? (id) => filterByCompany(id)
+        : undefined,
+    });
 
   const entryMap = new Map(entries.map((e) => [e.employee_id, e.daily_values || {}]));
 
