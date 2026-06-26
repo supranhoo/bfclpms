@@ -23,6 +23,7 @@ const HOOKS = [
   '../hooks/useIncentiveVesselRates.ts',
   '../hooks/useVesselMonthlyEntries.ts',
   '../hooks/useSentBackOrgKpiEmployees.ts',
+  '../hooks/useIncentiveRecords.ts',
 ];
 
 describe('PII-hardened profile lookups via directory RPC', () => {
