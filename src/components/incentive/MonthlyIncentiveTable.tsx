@@ -419,10 +419,13 @@ export function MonthlyIncentiveTable() {
       setShowPreview(true);
       const ids = (result as any)?.records?.map((r: any) => r.employee_id) || [];
       if (ids.length > 0) {
-        const { data: profiles } = await supabase
-          .from('profiles')
-          .select('id, full_name, employee_code')
-          .in('id', ids);
+        // PROFILE-DIRECTORY-RPC: direct profiles SELECT is RLS-scoped and returns
+        // empty for non-admin viewers (e.g. managers), leaving the preview showing
+        // raw UUIDs. Use the SECURITY DEFINER directory RPC instead.
+        const { data: profiles } = await supabase.rpc(
+          'get_profile_directory_entries_v2',
+          { _ids: ids },
+        );
         const nameMap = new Map<string, { name: string; code: string }>(
           (profiles || []).map((p: any) => [p.id, { name: p.full_name || 'Unknown', code: p.employee_code || '' }])
         );
