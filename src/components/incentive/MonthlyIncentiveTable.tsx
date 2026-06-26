@@ -12,7 +12,8 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Download, CheckCircle2, DollarSign, Calculator, Loader2, Users, ShieldAlert, Clock, IndianRupee, Search, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useIncentiveRecords, useConfirmIncentiveRecords, useMarkIncentivePaid, useComputeIncentives, useIncentiveReportData, useEmployeeKpiStatusForPeriod } from '@/hooks/useIncentiveRecords';
 import { useIncentivePrograms } from '@/hooks/useIncentivePrograms';
-import { useIncentiveProgramMappingCount, useIncentiveProgramMappedEmployeeIds } from '@/hooks/useIncentiveProgramMappingCount';
+import { useIncentiveProgramMappingCount } from '@/hooks/useIncentiveProgramMappingCount';
+import { useIncentiveProgramRoster } from '@/hooks/useIncentiveProgramRoster';
 import { useCompanyFilter } from '@/hooks/useCompanyFilter';
 import { MultiSelectFilter } from '@/components/ui/multi-select-filter';
 import { useAuth } from '@/contexts/AuthContext';
@@ -80,7 +81,7 @@ export function MonthlyIncentiveTable() {
   const [pageSize, setPageSize] = useState(50);
   const [selectedCompanyIds, setSelectedCompanyIds] = useState<string[]>([]);
 
-  const { companies, employeeCompanyMap } = useCompanyFilter();
+  const { companies } = useCompanyFilter();
   const companyNameToId = useMemo(() => new Map(companies.map(c => [c.name, c.id])), [companies]);
   const companyIdToName = useMemo(() => new Map(companies.map(c => [c.id, c.name])), [companies]);
   const selectedCompanyNames = useMemo(
@@ -116,24 +117,39 @@ export function MonthlyIncentiveTable() {
   const { data: mappedEmployeeCount = 0 } = useIncentiveProgramMappingCount(
     selectedProgram !== 'all' ? selectedProgram : undefined
   );
-  const { data: mappedEmployeeIds = [] } = useIncentiveProgramMappedEmployeeIds(
+  // Server-authoritative roster via SECURITY DEFINER RPC — pre-resolves
+  // company_id per employee so company-scoped compute works for non-admin
+  // users (Upendra/Sandeep) whose direct `profiles` reads are RLS-restricted.
+  const { data: mappedRoster = [] } = useIncentiveProgramRoster(
     selectedProgram !== 'all' ? selectedProgram : undefined
+  );
+  const mappedEmployeeIds = useMemo(
+    () => mappedRoster.map((e) => e.id),
+    [mappedRoster]
+  );
+  const rosterCompanyMap = useMemo(
+    () => new Map<string, string | null>(
+      mappedRoster.map((e) => [e.id, e.company_id ?? null] as const),
+    ),
+    [mappedRoster]
   );
   const selectedProgramName = useMemo(
     () => (activePrograms.find((p: any) => p.id === selectedProgram)?.name) || 'this programme',
     [activePrograms, selectedProgram]
   );
 
-  // Filter-aware scope: mapped employees ∩ selected companies
+  // Filter-aware scope: mapped employees ∩ selected companies, using the
+  // RPC-resolved `company_id` (RLS-agnostic). Replaces the previous
+  // `employeeCompanyMap` path which was empty for non-admin viewers.
   const scopedEmployeeIds = useMemo(() => {
     if (!mappedEmployeeIds.length) return [] as string[];
     if (selectedCompanyIds.length === 0) return mappedEmployeeIds;
     const companySet = new Set(selectedCompanyIds);
-    return mappedEmployeeIds.filter(id => {
-      const c = employeeCompanyMap.get(id);
-      return c && companySet.has(c);
+    return mappedEmployeeIds.filter((id) => {
+      const c = rosterCompanyMap.get(id);
+      return !!c && companySet.has(c);
     });
-  }, [mappedEmployeeIds, selectedCompanyIds, employeeCompanyMap]);
+  }, [mappedEmployeeIds, selectedCompanyIds, rosterCompanyMap]);
 
   const filteredMappedCount = scopedEmployeeIds.length;
   const scopeText = useMemo(() => {
@@ -184,7 +200,11 @@ export function MonthlyIncentiveTable() {
         }
       }
       if (companyIdSet) {
-        const empCompanyId = employeeCompanyMap.get(r.employee_id);
+        // Company is resolved server-side in `profiles.company_id` via the
+        // SECURITY DEFINER RPC enrichment in `useIncentiveRecords` /
+        // `useIncentiveReportData`. Fall back to the roster map for records
+        // whose directory lookup did not include them.
+        const empCompanyId = r.profiles?.company_id || rosterCompanyMap.get(r.employee_id);
         if (!empCompanyId || !companyIdSet.has(empCompanyId)) return false;
       }
       if (searchTerm) {
@@ -197,7 +217,7 @@ export function MonthlyIncentiveTable() {
       }
       return true;
     });
-  }, [records, statusFilter, incentiveStatusFilter, eligibilityFilter, periodFilter, searchTerm, selectedCompanyIds, employeeCompanyMap]);
+  }, [records, statusFilter, incentiveStatusFilter, eligibilityFilter, periodFilter, searchTerm, selectedCompanyIds, rosterCompanyMap]);
 
   // Aggregate to one row per employee for the UI table.
   // Bulk actions still target the underlying record IDs (recordIds).

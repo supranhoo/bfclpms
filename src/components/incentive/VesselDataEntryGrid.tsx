@@ -20,9 +20,15 @@ interface VesselDataEntryGridProps {
   programs: Array<{ id: string; name: string; min_kra_score: number }>;
   onMonthYearChange?: (month: string, year: number) => void;
   filterByCompany?: (employeeId: string | undefined | null) => boolean;
+  /**
+   * RLS-safe company filter. When supplied (and not 'all'), the grid uses
+   * the RPC-resolved `profile.company_id` from `useVesselRates` rather than
+   * the RLS-fragile `filterByCompany` prop sourced from `useCompanyFilter`.
+   */
+  selectedCompanyId?: string;
 }
 
-export function VesselDataEntryGrid({ programs, onMonthYearChange, filterByCompany }: VesselDataEntryGridProps) {
+export function VesselDataEntryGrid({ programs, onMonthYearChange, filterByCompany, selectedCompanyId }: VesselDataEntryGridProps) {
   const now = new Date();
   const [selectedProgram, setSelectedProgram] = useState(programs[0]?.id || '');
   const [month, setMonth] = useState(MONTHS[now.getMonth()]);
@@ -30,12 +36,17 @@ export function VesselDataEntryGrid({ programs, onMonthYearChange, filterByCompa
   const { user } = useAuth();
 
   const { data: vesselRatesRaw = [], isLoading: ratesLoading } = useVesselRates(selectedProgram);
-  const vesselRates = useMemo(
-    () => filterByCompany
-      ? (vesselRatesRaw as any[]).filter((r: any) => filterByCompany(r.employee_id))
-      : vesselRatesRaw,
-    [vesselRatesRaw, filterByCompany]
-  );
+  const vesselRates = useMemo(() => {
+    const rows = vesselRatesRaw as any[];
+    const useRpcCompanyId = !!selectedCompanyId && selectedCompanyId !== 'all';
+    if (useRpcCompanyId) {
+      return rows.filter((r: any) => r.profile?.company_id === selectedCompanyId);
+    }
+    if (filterByCompany) {
+      return rows.filter((r: any) => filterByCompany(r.employee_id));
+    }
+    return rows;
+  }, [vesselRatesRaw, filterByCompany, selectedCompanyId]);
   const { data: existingEntries = [], isLoading: entriesLoading } = useVesselMonthlyEntries(selectedProgram, month, year);
   const upsert = useUpsertVesselEntries();
 

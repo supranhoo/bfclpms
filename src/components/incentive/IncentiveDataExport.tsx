@@ -47,7 +47,7 @@ export function IncentiveDataExport({
       const fileName = `${programName.replace(/\s+/g, '_')}_${month}_${year}.xlsx`;
 
       if (programType === 'vessel') {
-        ws = await exportVesselData(programId, month, year, filterByCompany);
+        ws = await exportVesselData(programId, month, year, selectedCompanyId, filterByCompany);
       } else if (programType === 'daily') {
         ws = await exportDailyData(programId, month, year, selectedCompanyId, filterByCompany);
       } else {
@@ -78,6 +78,7 @@ async function exportVesselData(
   programId: string,
   month: string,
   year: number,
+  selectedCompanyId?: string,
   filterByCompany?: (employeeId: string | undefined | null) => boolean,
 ): Promise<XLSX.WorkSheet> {
   // Paged reads — bypass the 1,000-row PostgREST cap.
@@ -91,9 +92,22 @@ async function exportVesselData(
       .eq('program_id', programId)
       .range(from, to) as any,
   );
-  const filteredRates = filterByCompany
-    ? (rates || []).filter((r: any) => filterByCompany(r.employee_id))
-    : (rates || []);
+  // Company filter (RLS-safe via RPC roster) — mirrors VesselDataEntryGrid.
+  let filteredRates: any[] = rates || [];
+  const useRpcCompanyId = !!selectedCompanyId && selectedCompanyId !== 'all';
+  if (useRpcCompanyId) {
+    const { data: roster, error: rosterErr } = await supabase.rpc(
+      'get_incentive_program_employees',
+      { _program_id: programId },
+    );
+    if (rosterErr) throw rosterErr;
+    const companyOf = new Map<string, string | null>(
+      ((roster ?? []) as any[]).map((r) => [r.id as string, (r.company_id ?? null) as string | null]),
+    );
+    filteredRates = filteredRates.filter((r: any) => companyOf.get(r.employee_id) === selectedCompanyId);
+  } else if (filterByCompany) {
+    filteredRates = filteredRates.filter((r: any) => filterByCompany(r.employee_id));
+  }
   const entries = await fetchAllPaged<any>((from, to) =>
     supabase
       .from('vessel_monthly_entries')

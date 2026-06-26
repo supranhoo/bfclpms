@@ -124,6 +124,7 @@ export function UnifiedProductionDataTab({ programs }: { programs: Program[] }) 
           }]}
           onMonthYearChange={handleMonthYearChange}
           filterByCompany={filterByCompany}
+          selectedCompanyId={selectedCompanyId}
         />
       ) : isProductionRateProgram ? (
         <ProductionDailyGrid

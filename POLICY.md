@@ -59,6 +59,23 @@ profiles!kpis_employee_id_fkey ( ..., departments!profiles_department_fk ( name 
 
 ## §INCENTIVE-MAPPING-PAGING Incentive Program Mappings — paged reads + staged-save UX (codified 2026-06-18)
 
+## §INCENTIVE-COMPANY-FILTER-SSOT Incentive Company Filter — single source of truth (codified 2026-06-26)
+
+**Why.** Multiple incentive paths (report, data entry grid, vessel grid, exports, compute) independently resolved an employee's company. Some used the SECURITY DEFINER RPCs (`get_incentive_program_employees`, `get_profile_directory_entries_v2`), others used the RLS-fragile `employeeCompanyMap` from `useCompanyFilter` (built from a direct `from('profiles').select(...)` read). After PII hardening (2026-06-22) non-admin operational users (Upendra, Sandeep) only see a partial `profiles` slice, so the second path silently filtered every record out — producing a blank Incentive Report when Programme + Company are selected.
+
+**Rules — non-negotiable.**
+
+1. Company filtering for incentive features MUST resolve `company_id` from either:
+   - `get_incentive_program_employees(_program_id)` (mapped roster), or
+   - `get_profile_directory_entries_v2(_ids)` (per-employee directory).
+2. `useCompanyFilter.employeeCompanyMap` MUST NOT be consulted for incentive record/roster/export company filtering. The `companies` list (label/code lookup) is still allowed.
+3. The Incentive Report records-table read MUST NOT embed `profiles:employee_id(...)`; profile shape is enriched via `get_profile_directory_entries_v2`.
+4. The vessel data-entry grid and vessel Excel export MUST accept `selectedCompanyId` and filter via the RPC-resolved `profile.company_id` (or roster RPC) when a company is selected.
+5. The compute edge function (`compute-monthly-incentives`) MUST treat **zero mappings as zero employees** and return an explicit "no mappings" diagnostic — never fall through to "all active employees".
+6. Any new incentive surface must follow rules 1–5. Regression test `src/test/incentiveReportCompanyFilterSsot.test.ts` locks the contract.
+
+**Rollback.** Reverting the v2.66.55 diff restores the previous behaviour without data loss.
+
 **Why.** `incentive_program_mappings` regularly holds thousands of rows per program (Metal Sizing: 2,560). Unranged PostgREST reads silently cap at 1,000 rows and have historically hidden mapped employees from Incentive Data Entry, eligibility resolution, custom-tab grids, and the compute edge function while still showing them in Incentive Configuration. This is identical in shape to the §94 profiles-cap class of bug.
 
 ### Extension (codified 2026-06-19) — Excel / CSV exports
