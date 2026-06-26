@@ -13540,6 +13540,18 @@ export type Database = {
           is_active: boolean
         }[]
       }
+      get_profile_directory_entries_v2: {
+        Args: { _ids: string[] }
+        Returns: {
+          department_id: string
+          department_name: string
+          designation: string
+          employee_code: string
+          full_name: string
+          id: string
+          is_active: boolean
+        }[]
+      }
       get_profiles_for_audit_display: {
         Args: { p_user_ids: string[] }
         Returns: {
