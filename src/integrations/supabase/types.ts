@@ -13373,6 +13373,19 @@ export type Database = {
         Returns: Json
       }
       generate_bundles_from_kpis: { Args: never; Returns: Json }
+      get_active_profile_directory_entries: {
+        Args: never
+        Returns: {
+          department_id: string
+          department_name: string
+          designation: string
+          employee_code: string
+          full_name: string
+          id: string
+          is_active: boolean
+          pms_grade: string
+        }[]
+      }
       get_active_send_back_markers: {
         Args: { p_kpi_ids: string[] }
         Returns: {
@@ -13550,6 +13563,7 @@ export type Database = {
           full_name: string
           id: string
           is_active: boolean
+          pms_grade: string
         }[]
       }
       get_profiles_for_audit_display: {

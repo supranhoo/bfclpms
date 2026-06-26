@@ -4194,4 +4194,9 @@ The setting affects display only — workflow advancement, RLS, and stage chain 
 The rule that every `departments(` embed reached through `profiles` MUST use `departments!profiles_department_fk(...)` now applies to `src/hooks`, `src/pages`, `src/components`, `src/services` AND `src/lib`. Enforced by `src/test/profilesDepartmentsEmbedDisambiguation.test.ts`.
 
 ### PROFILE-DIRECTORY-RPC (scope)
-Hooks that need to display employee `full_name` / `employee_code` / `designation` / `department` alongside rows from another RLS-scoped table MUST resolve those fields via the SECURITY DEFINER RPCs `get_profile_directory_entries(_ids)` (name + code) or `get_profile_directory_entries_v2(_ids)` (name + code + designation + department). Direct PostgREST `.from('profiles')` embeds are forbidden because `public.profiles` RLS will silently null them out for non-admin viewers and produce blank cells. Covered hooks: `useIncentiveVesselRates`, `useVesselMonthlyEntries`, `useSentBackOrgKpiEmployees`, `useMentionSearch`, `useIncentiveRecords`. Enforced by `src/test/profileDirectoryRpcUsage.test.ts`.
+Hooks, services, and components that need to display employee `full_name` / `employee_code` / `designation` / `department` / `pms_grade` alongside rows from another RLS-scoped table MUST resolve those fields via the SECURITY DEFINER RPCs:
+- `get_profile_directory_entries(_ids)` — name + code only.
+- `get_profile_directory_entries_v2(_ids)` — name + code + designation + department + grade.
+- `get_active_profile_directory_entries()` — full active employee universe (used for export cascade resolution where the caller doesn't yet know the ID set).
+
+Direct PostgREST `.from('profiles')` reads or embeds are forbidden because `public.profiles` RLS silently nulls them out for non-admin viewers (managers, auditors, etc.) and produces blank cells or empty exports. Covered units: `useIncentiveVesselRates`, `useVesselMonthlyEntries`, `useSentBackOrgKpiEmployees`, `useMentionSearch`, `useIncentiveRecords`, `src/lib/incentiveExportData.ts`, `src/components/incentive/IncentiveDataExport.tsx`. Enforced by `src/test/profileDirectoryRpcUsage.test.ts`.
