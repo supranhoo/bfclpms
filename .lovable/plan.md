@@ -1,51 +1,71 @@
+## 1. Assumptions
+- Upendra is a non-admin Incentive Data Entry user, so direct profile/company lookups can be RLS-restricted.
+- The reported blank Excel is from **Incentive Data Entry → Download Excel** after selecting a daily production program such as **Metal Sizing** and company **Bihar Foundry & Casting Limited**.
+- The on-screen grid has the correct employees/data, but the Excel export is not using the same company-filter and rate-resolution source as the grid.
 
-## Root Cause
+## 2. Clarifications
+Not Applicable — the issue is narrow and reproducible from the current export path.
 
-The Incentive Report (`useIncentiveRecords` in `src/hooks/useIncentiveRecords.ts`) loads rows from `employee_incentive_records` with a **direct PostgREST embed of `profiles`**:
+## 3. Risk & Impact Report
+- **Data Impact:** No historical data will be changed. Likely one additive/replace RPC migration only if needed to expose non-sensitive `company_id/business_unit_id/division_id/pms_grade` fields for export parity.
+- **Workflow Impact:** Export output will match the selected program/company grid instead of relying on the RLS-sensitive `filterByCompany` helper.
+- **UI/UX Impact:** No visual UI change; the same **Download Excel** button remains.
+- **Regression Risk:** Medium because Incentive exports have several prior fixes around RLS, pagination, and roster filtering. Mitigation is targeted tests around blank export, company filter, and company-rate handling.
+- **Scalability Impact:** Keep paged reads for large tables and avoid unbounded direct profile reads. The mapped roster is resolved server-side via RPC, consistent with the grid.
+- **Backup/Data Integrity:** No new public table; automatic backup coverage unchanged.
+- **Rollback:** Revert the export code/test/doc/policy changes and, if added, drop/revert the RPC replacement migration.
 
-```ts
-.select('*, profiles:employee_id(full_name, employee_code, department_id, designation, departments!profiles_department_fk(name)), ...')
-```
+## 4. Step-by-step Plan
+1. **Root cause confirmation**
+   - Confirm `IncentiveDataExport` daily export still filters via `filterByCompany` from `useCompanyFilter`.
+   - Confirm `ProductionDailyGrid` already avoids this for selected company and instead filters by RPC-provided `company_id`.
+   - Confirm Metal Sizing has company-level rates, while export currently only supports employee/common rates.
 
-`public.profiles` is governed by RLS that only lets a user read profiles they're authorised to see (self, direct reports, admins/platform-owners, HR-PMS, etc.). When the embed is denied, PostgREST silently returns `profiles: null` for those rows — the incentive row still loads (it lives in `employee_incentive_records`, which a manager can read for their scope), but the **Employee / Code / Department / Designation cells render blank**.
+2. **Correct the daily Excel export roster**
+   - Update the export resolver to use the same server-authoritative mapped roster source as `ProductionDailyGrid` (`get_incentive_program_employees`) or extend the existing directory RPC shape only with non-sensitive org-scope fields.
+   - Pass `selectedCompanyId` into the export component and filter by the resolved employee `company_id`, not the RLS-sensitive `filterByCompany` map.
+   - Preserve the zero-mapping invariant: if the program has no mappings, export must return `No data` rather than unrelated employees.
 
-Verified against the DB:
-- **Ankit Choudhary** → roles `admin, platform_owner` → reads every profile → sees all names.
-- **Upendra Singh** → role `manager` → embed returns null for everyone outside his direct-report tree → blank employee column.
+3. **Correct the daily Excel export rate resolution**
+   - Replace the export-only `employee/common` rate lookup with the canonical `resolveEmployeeRate` cascade: employee → department → BU → company → common.
+   - Include `effective_from` in export rate reads so date-aware rates match the grid.
+   - This prevents company-rate programs like Metal Sizing from exporting rows with zero/blank rate amounts.
 
-This is exactly the pattern `mem://architecture/profiles-query-policy` and `src/test/profileDirectoryRpcUsage.test.ts` already forbid for other hooks (`useIncentiveVesselRates`, `useVesselMonthlyEntries`, `useSentBackOrgKpiEmployees`, `useMentionSearch`). `useIncentiveRecords` was missed.
+4. **Keep vessel/target behavior stable**
+   - Leave target export unchanged.
+   - For vessel export, keep current company filtering unless evidence shows the same RLS issue there; do not broaden scope unnecessarily.
 
-## Risk & Impact
+5. **Regression tests and mock data**
+   - Extend `src/test/incentiveExportData.test.ts` with helper-level coverage for:
+     - selected-company filtering using RPC-provided `company_id` even when `filterByCompany` would reject everyone;
+     - company-level rate resolution for Metal Sizing-style rates;
+     - zero mappings still produce an empty roster.
+   - Extend source-contract tests if RPC/direct-profile rules change.
 
-- **Data:** No schema/RLS change to `profiles`. One PL/pgSQL function is widened (additive columns) — `get_profile_directory_entries` already runs as `SECURITY DEFINER` and is the SSOT for directory lookups, so this preserves the policy that non-admins can resolve names/codes/dept/designation for IDs they're allowed to see in a business context (here: incentive records their RLS already returned).
-- **Workflow:** None. Read-only display fix.
-- **UI/UX:** Employee, Code, Department, Designation columns populate for all roles. No layout/visual change.
-- **Regression:** Search/sort by name/code/dept/designation continues to work because the same fields are merged onto each row. Add a regression test extending `profileDirectoryRpcUsage.test.ts` to cover `useIncentiveRecords`.
-- **Scalability:** Single batched RPC call with the row's employee IDs (≤ a few hundred per period). Same volume as the current embed.
-- **Rollback:** Revert the hook + migration; the embed still compiles. Additive RPC change is safe to drop.
+6. **Documentation and policy sync**
+   - Add a new `DOCUMENTATION.md` Version History entry with RCA / 5-Why / CAPA.
+   - Update `POLICY.md` under Incentive Mapping/Exports to state: Data Entry exports must use RPC-resolved company scope and canonical rate resolver; `filterByCompany` alone is forbidden for selected-company daily exports.
 
-## Plan
+## 5. UI Changes
+Not Applicable — no visual layout or interaction changes. The existing button will produce the corrected workbook.
 
-1. **Extend the directory RPC** (`supabase/migrations/...`):
-   - Add a new `SECURITY DEFINER` function `public.get_profile_directory_entries_v2(_ids uuid[])` returning `(id, full_name, employee_code, designation, department_id, department_name, is_active)`.
-   - Grant `EXECUTE` to `authenticated`. Existing v1 stays untouched so other callers don't churn.
-   - Internally joins `profiles` → `departments` with the same definer privileges already used by v1; no new PII exposed (designation/department are already shown in every other report a non-admin can see).
+## 6. Implementation
+After approval, I will make the smallest code changes in:
+- `src/lib/incentiveExportData.ts`
+- `src/components/incentive/IncentiveDataExport.tsx`
+- `src/components/incentive/UnifiedProductionDataTab.tsx`
+- tests, `DOCUMENTATION.md`, and `POLICY.md`
+- optional migration only if the existing RPC must be extended for parity.
 
-2. **Refactor `src/hooks/useIncentiveRecords.ts`:**
-   - Drop the `profiles:employee_id(...)` embed; select only `employee_incentive_records.*` (+ the existing `incentive_slabs` embed).
-   - Collect distinct `employee_id`s and call `supabase.rpc('get_profile_directory_entries_v2', { _ids })` in a single batched call.
-   - Merge results onto each record as `r.profiles = { full_name, employee_code, designation, department_id, departments: { name } }` so the existing UI/filter/sort/export code in `MonthlyIncentiveTable.tsx` keeps working with **zero component changes**.
+## 7. Tests
+- Run targeted Vitest for `incentiveExportData.test.ts` and existing profile/RPC contract tests.
+- Verify the Metal Sizing/Bihar path no longer returns an empty workbook and uses company rates.
 
-3. **Tests / guardrails:**
-   - Extend `src/test/profileDirectoryRpcUsage.test.ts` to assert `useIncentiveRecords` uses `get_profile_directory_entries` (any version) and contains no direct `profiles` select.
-   - Add a unit test for the merge helper using mock RPC output (happy path + missing-id falls back to `'Unknown'`).
+## 8. DOCUMENTATION.md updates
+Planned: add RCA 5-Why and CAPA entry for Upendra’s blank Incentive Data Entry Excel export.
 
-4. **Docs / Policy:**
-   - `DOCUMENTATION.md` — Version History entry: "Incentive Report names now resolved via directory RPC (fixes blank Employee column for non-admin roles)."
-   - `POLICY.md` — add `useIncentiveRecords` to the list of hooks covered by the profile-directory-only rule.
+## 9. POLICY.md updates
+Planned: codify grid/export parity for selected-company daily exports and canonical rate cascade usage.
 
-## What stays untouched
-
-- `MonthlyIncentiveTable.tsx` rendering, search, sort, export — same `r.profiles.*` shape.
-- `employee_incentive_records` RLS, computation, confirm/mark-paid mutations.
-- `profiles` table RLS, the v1 RPC, and every other consumer.
+## 10. Post-implementation notes
+Expected result: Upendra’s Excel download for Metal Sizing + Bihar Foundry & Casting Limited exports the relevant mapped Bihar employees with daily values and correct company-level rates, not a blank sheet.

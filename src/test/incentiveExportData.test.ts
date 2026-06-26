@@ -1,10 +1,13 @@
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import {
   resolveMappedEmployeeIds,
   buildRateLookup,
   daysIn,
   __internal,
 } from '@/lib/incentiveExportData';
+import { resolveEmployeeRate } from '@/lib/incentiveRateResolver';
 
 const { chunk } = __internal;
 
@@ -97,5 +100,68 @@ describe('incentiveExportData helpers', () => {
       [],
     );
     expect(ids.size).toBe(0);
+  });
+});
+
+describe('Incentive Data Entry export — RCA 2026-06-26 (Upendra / Metal Sizing)', () => {
+  const exportSrc = readFileSync(
+    resolve(__dirname, '../lib/incentiveExportData.ts'),
+    'utf8',
+  );
+  const componentSrc = readFileSync(
+    resolve(__dirname, '../components/incentive/IncentiveDataExport.tsx'),
+    'utf8',
+  );
+
+  it('export resolver sources mapped roster from get_incentive_program_employees RPC', () => {
+    // Server-authoritative roster mirrors ProductionDailyGrid — RLS-agnostic.
+    expect(exportSrc).toMatch(/supabase\.rpc\(\s*['"]get_incentive_program_employees['"]/);
+  });
+
+  it('export resolver does not rely on filterByCompany when selectedCompanyId is provided', () => {
+    expect(exportSrc).toMatch(/selectedCompanyId\?:\s*string/);
+    expect(exportSrc).toMatch(/e\.company_id === selectedCompanyId/);
+  });
+
+  it('export resolver uses canonical resolveEmployeeRate cascade (employee → dept → BU → company → common)', () => {
+    expect(exportSrc).toMatch(/resolveEmployeeRate\s*\(/);
+    // effective_from must be selected so the cascade is date-aware.
+    expect(exportSrc).toMatch(/effective_from/);
+  });
+
+  it('Download button wiring passes selectedCompanyId to the export', () => {
+    expect(componentSrc).toMatch(/selectedCompanyId\?:\s*string/);
+    expect(componentSrc).toMatch(/selectedCompanyId,\s*\n?\s*filterByCompany/);
+    const unifiedSrc = readFileSync(
+      resolve(__dirname, '../components/incentive/UnifiedProductionDataTab.tsx'),
+      'utf8',
+    );
+    expect(unifiedSrc).toMatch(/selectedCompanyId=\{selectedCompanyId\}/);
+  });
+
+  it('canonical cascade resolves Metal Sizing-style company-only rates for Bihar employees', () => {
+    // Reproduces Upendra's scenario at the helper level: program has a
+    // single company-level rate (no employee/dept/BU rate). Before the fix
+    // the export used `empRates.get(id) ?? commonRate` and produced rate=0;
+    // the canonical cascade returns the configured company rate.
+    const BIHAR = 'company-bihar';
+    const rates = [
+      {
+        rate_type: 'company' as const,
+        entity_id: BIHAR,
+        employee_id: null,
+        rate_per_ton: 490.62,
+        effective_from: '2026-05-11',
+      },
+    ];
+    const r = resolveEmployeeRate('emp-1', 'dept-1', 'bu-1', rates, BIHAR, '2026-06-01');
+    expect(r.source).toBe('company');
+    expect(r.rate).toBe(490.62);
+
+    // Sanity: legacy `buildRateLookup` would have returned 0 here (no
+    // 'employee' or 'common' rows), proving the regression class.
+    const { empRates, commonRate } = buildRateLookup(rates as any);
+    expect(empRates.get('emp-1')).toBeUndefined();
+    expect(commonRate).toBe(0);
   });
 });
