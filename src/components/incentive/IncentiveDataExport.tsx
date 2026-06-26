@@ -14,15 +14,29 @@ interface ExportProps {
   month: string;
   year: number;
   /**
-   * Same company filter the grid uses. When supplied, the export is
-   * constrained to employees in the selected company — matching the
-   * on-screen roster instead of dumping every employee with stored data.
-   * RCA 2026-06-26 (Upendra / Bihar Foundry & Casting Metal Sizing).
+   * RLS-safe company filter. Primary source of company scoping for the
+   * daily export — the resolver uses the RPC-provided company_id, not
+   * the RLS-restricted profiles map. RCA 2026-06-26 (Upendra / Bihar
+   * Foundry & Casting Metal Sizing blank export).
+   */
+  selectedCompanyId?: string;
+  /**
+   * Legacy fallback — used only when `selectedCompanyId` is absent.
+   * Sourced from `useCompanyFilter` which reads `profiles` directly and
+   * is RLS-restricted for non-admin Incentive Data Entry users.
    */
   filterByCompany?: (employeeId: string | undefined | null) => boolean;
 }
 
-export function IncentiveDataExport({ programId, programName, programType, month, year, filterByCompany }: ExportProps) {
+export function IncentiveDataExport({
+  programId,
+  programName,
+  programType,
+  month,
+  year,
+  selectedCompanyId,
+  filterByCompany,
+}: ExportProps) {
   const [exporting, setExporting] = useState(false);
   const { toast } = useToast();
 
@@ -35,7 +49,7 @@ export function IncentiveDataExport({ programId, programName, programType, month
       if (programType === 'vessel') {
         ws = await exportVesselData(programId, month, year, filterByCompany);
       } else if (programType === 'daily') {
-        ws = await exportDailyData(programId, month, year, filterByCompany);
+        ws = await exportDailyData(programId, month, year, selectedCompanyId, filterByCompany);
       } else {
         ws = await exportTargetData(programId, month, year);
       }
@@ -128,13 +142,16 @@ async function exportDailyData(
   programId: string,
   month: string,
   year: number,
+  selectedCompanyId?: string,
   filterByCompany?: (employeeId: string | undefined | null) => boolean,
 ): Promise<XLSX.WorkSheet> {
   // Roster + rates + entries all sourced via the shared resolver, which
-  // mirrors the on-screen grid (mappings → cascade), pages every read past
-  // the 1k cap, and batches profile lookups. Fixes empty/dash export rows.
-  const { employees, entries, daysInMonth, empRates, commonRate } =
+  // mirrors the on-screen grid: RPC-resolved mapped roster, RPC-resolved
+  // company_id filter, canonical 5-tier rate cascade. Fixes blank exports
+  // for non-admin users on company-rate programs (Upendra / Metal Sizing).
+  const { employees, entries, daysInMonth, effectiveRates } =
     await resolveDailyExportData(programId, month, year, {
+      selectedCompanyId,
       filterByCompany: filterByCompany
         ? (id) => filterByCompany(id)
         : undefined,
@@ -144,7 +161,8 @@ async function exportDailyData(
 
   const rows = employees.map((p) => {
     const dailyVals: Record<string, any> = entryMap.get(p.id) || {};
-    const rate = empRates.get(p.id) ?? commonRate;
+    // Canonical cascade: employee → department → BU → company → common.
+    const rate = effectiveRates.get(p.id) ?? 0;
     let total = 0;
     const row: Record<string, any> = {
       'Employee': p.full_name || '—',
