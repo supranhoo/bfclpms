@@ -220,9 +220,12 @@ async function fetchAllIncentiveRecords(filters: IncentiveReportFilters) {
   while (hasMore) {
     let query = supabase
       .from('employee_incentive_records')
+      // PII-hardening: do NOT embed `profiles` directly — RLS on profiles
+      // would silently return null for non-admin users (Upendra/Sandeep),
+      // producing blank Employee/Code/Department/BU/Division columns and
+      // wiping the company filter. Enriched via SECURITY DEFINER RPC below.
       .select(`
         *,
-        profiles:employee_id(full_name, employee_code, designation, department_id, departments!profiles_department_fk(name, business_units(name, divisions(name)))),
         incentive_slabs:matched_slab_id(min_value, max_value, incentive_percent, rating_label),
         incentive_programs:program_id(name, incentive_base)
       `)
@@ -239,7 +242,56 @@ async function fetchAllIncentiveRecords(filters: IncentiveReportFilters) {
     hasMore = (data?.length || 0) === PAGE_SIZE;
     offset += PAGE_SIZE;
   }
-  return allData;
+
+  // Enrich profile shape via SECURITY DEFINER directory RPC (RLS-safe).
+  const empIds = Array.from(
+    new Set(allData.map((r: any) => r.employee_id).filter(Boolean)),
+  ) as string[];
+  if (empIds.length === 0) return allData;
+
+  const dirMap = new Map<string, any>();
+  const BATCH = 500;
+  for (let i = 0; i < empIds.length; i += BATCH) {
+    const batch = empIds.slice(i, i + BATCH);
+    const { data: dir, error: dirErr } = await supabase.rpc(
+      'get_profile_directory_entries_v2',
+      { _ids: batch },
+    );
+    if (dirErr) {
+      console.error('Profile directory lookup failed:', dirErr);
+      continue;
+    }
+    for (const d of (dir || []) as any[]) dirMap.set(d.id, d);
+  }
+
+  return allData.map((r: any) => {
+    const d = dirMap.get(r.employee_id);
+    return {
+      ...r,
+      profiles: d
+        ? {
+            full_name: d.full_name,
+            employee_code: d.employee_code,
+            designation: d.designation,
+            department_id: d.department_id,
+            business_unit_id: d.business_unit_id ?? null,
+            division_id: d.division_id ?? null,
+            company_id: d.company_id ?? null,
+            departments: d.department_name
+              ? {
+                  name: d.department_name,
+                  business_units: d.business_unit_name
+                    ? {
+                        name: d.business_unit_name,
+                        divisions: d.division_name ? { name: d.division_name } : null,
+                      }
+                    : null,
+                }
+              : null,
+          }
+        : null,
+    };
+  });
 }
 
 export function useIncentiveReportData(filters: IncentiveReportFilters) {
