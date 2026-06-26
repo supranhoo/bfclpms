@@ -94,6 +94,7 @@ export function UnifiedProductionDataTab({ programs }: { programs: Program[] }) 
                 programType={programType}
                 month={currentMonth}
                 year={currentYear}
+                filterByCompany={filterByCompany}
               />
             )}
           </div>
