@@ -26,6 +26,7 @@ const HOOKS = [
   '../hooks/useIncentiveRecords.ts',
   '../lib/incentiveExportData.ts',
   '../components/incentive/IncentiveDataExport.tsx',
+  '../components/incentive/MonthlyIncentiveTable.tsx',
 ];
 
 describe('PII-hardened profile lookups via directory RPC', () => {
