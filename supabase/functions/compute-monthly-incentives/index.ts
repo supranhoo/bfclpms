@@ -74,6 +74,18 @@ serve(async (req) => {
 
     let employeeFilter: string[] | null = null; // null = no mappings = all employees
 
+    // Preventive guard (RCA 2026-06-26): a program with ZERO mappings must
+    // compute zero employees, not the entire active workforce. The legacy
+    // behaviour (`null = all`) silently leaked unmapped employees into the
+    // report (e.g. Saibal Kunar entries showing up under Metal Sizing).
+    if (!mappings || mappings.length === 0) {
+      return new Response(JSON.stringify({
+        computed: 0,
+        message: 'This programme has no employee mappings. Add mappings in the programme settings before computing.',
+        diagnostics: { employees_in_scope: 0, employees_processed: 0, records_pre_scope: 0, records_post_scope: 0 },
+      }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
     if (mappings && mappings.length > 0) {
       const eligibleIds = new Set<string>();
       const divIds: string[] = [];
