@@ -6835,3 +6835,9 @@ See: `docs/adr/ADR-078.md`, `src/test/reviewNotes/sidebarVisibility.test.ts`.
 ## 2026-06-26 — Incentive Excel export embed fix
 - Disambiguated `departments(name)` embeds in `src/lib/incentiveExportData.ts` with the explicit `!profiles_department_fk` hint (three FKs exist between profiles and departments).
 - Extended `profilesDepartmentsEmbedDisambiguation` regression test to also scan `src/lib/**`.
+
+## 2026-06-26 — Incentive Report: blank Employee column for non-admin roles
+- RCA: `useIncentiveRecords` embedded `profiles:employee_id(...)` directly. `public.profiles` RLS allows admins / platform-owners full read but restricts managers to their reportees, so PostgREST silently returned `profiles: null` for every other row → Employee, Code, Department, Designation cells rendered blank for users like Upendra while Ankit (admin) saw everything.
+- Fix: added SECURITY DEFINER RPC `public.get_profile_directory_entries_v2(_ids uuid[])` returning `id, full_name, employee_code, designation, department_id, department_name, is_active`. `useIncentiveRecords` now selects only `employee_incentive_records.*` (+ slabs embed) and merges directory entries into the same `r.profiles.{full_name, employee_code, designation, department_id, departments.name}` shape so `MonthlyIncentiveTable` (rendering, search, sort, export) is unchanged.
+- Guardrail: `src/test/profileDirectoryRpcUsage.test.ts` now also locks `useIncentiveRecords` to the directory RPC.
+- Rollback: revert the hook + drop `get_profile_directory_entries_v2`. v1 RPC and `profiles` RLS untouched.
