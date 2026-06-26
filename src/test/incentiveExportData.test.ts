@@ -82,4 +82,20 @@ describe('incentiveExportData helpers', () => {
     expect(ids.has('e1')).toBe(true);
     expect(ids.has('e2')).toBe(false);
   });
+
+  it('resolveMappedEmployeeIds returns empty when there are zero mappings', () => {
+    // Regression: Metal Sizing program for Bihar Foundry & Casting had no
+    // mappings, but the export previously surfaced every employee with a
+    // saved daily entry. The roster must be empty when the program has no
+    // mappings, so the export mirrors the on-screen grid.
+    const ids = resolveMappedEmployeeIds(
+      [],
+      [
+        { id: 'e1', full_name: 'X', employee_code: '1', designation: null, department_id: 'd1' },
+      ],
+      [{ id: 'd1', business_unit_id: null }],
+      [],
+    );
+    expect(ids.size).toBe(0);
+  });
 });
