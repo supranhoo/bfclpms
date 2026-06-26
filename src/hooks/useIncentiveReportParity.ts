@@ -16,9 +16,17 @@ export function useIncentiveReportParity(args: {
   month: string;
   year: number;
   companyId?: string; // 'all' or undefined = no company filter
+  /**
+   * @deprecated The RLS-fragile `employeeCompanyMap` from `useCompanyFilter`
+   * is no longer consulted. Company membership is resolved via the
+   * SECURITY DEFINER RPC `get_incentive_program_employees` (RPC-resolved
+   * `company_id`), which is RLS-agnostic for non-admin viewers
+   * (Upendra/Sandeep). Argument is accepted for backward compatibility
+   * but ignored.
+   */
   employeeCompanyMap?: Map<string, string>;
 }) {
-  const { programId, month, year, companyId, employeeCompanyMap } = args;
+  const { programId, month, year, companyId } = args;
   const scoped = companyId && companyId !== 'all';
 
   return useQuery({
@@ -36,9 +44,20 @@ export function useIncentiveReportParity(args: {
             .eq('review_year', year)
             .range(from, to),
       );
-      const filtered = scoped && employeeCompanyMap
-        ? rows.filter(r => employeeCompanyMap.get(r.employee_id) === companyId)
-        : rows;
+      let filtered = rows;
+      if (scoped) {
+        // RLS-safe: resolve company per employee via the program roster RPC
+        // (pre-resolves `company_id` server-side).
+        const { data: roster, error: rosterErr } = await supabase.rpc(
+          'get_incentive_program_employees',
+          { _program_id: programId },
+        );
+        if (rosterErr) throw rosterErr;
+        const companyOf = new Map<string, string | null>(
+          ((roster ?? []) as any[]).map((r) => [r.id as string, (r.company_id ?? null) as string | null]),
+        );
+        filtered = rows.filter((r) => companyOf.get(r.employee_id) === companyId);
+      }
       const total = filtered.reduce((s, r) => s + Number(r.incentive_amount || 0), 0);
       return { recordsTotal: Math.round(total), hasRecords: filtered.length > 0, count: filtered.length };
     },
