@@ -66,7 +66,7 @@ export async function fetchProfilesByIdsPaged(ids: string[]): Promise<ExportProf
     const rows = await fetchAllPaged<ExportProfile>((from, to) =>
       supabase
         .from('profiles')
-        .select('id, full_name, employee_code, designation, department_id, pms_grade, departments(name)')
+        .select('id, full_name, employee_code, designation, department_id, pms_grade, departments!profiles_department_fk(name)')
         .in('id', batch)
         .order('employee_code')
         .range(from, to) as any,
@@ -165,7 +165,7 @@ export async function resolveDailyExportData(
   const allProfiles = await fetchAllPaged<ExportProfile>((from, to) =>
     supabase
       .from('profiles')
-      .select('id, full_name, employee_code, designation, department_id, pms_grade, departments(name)')
+      .select('id, full_name, employee_code, designation, department_id, pms_grade, departments!profiles_department_fk(name)')
       .eq('is_active', true)
       .order('employee_code')
       .range(from, to) as any,
