@@ -52,7 +52,20 @@ export function useIncentiveRecords(reviewPeriod?: string, reviewYear?: number, 
                 employee_code: d.employee_code,
                 designation: d.designation,
                 department_id: d.department_id,
-                departments: d.department_name ? { name: d.department_name } : null,
+                business_unit_id: d.business_unit_id ?? null,
+                division_id: d.division_id ?? null,
+                company_id: d.company_id ?? null,
+                departments: d.department_name
+                  ? {
+                      name: d.department_name,
+                      business_units: d.business_unit_name
+                        ? {
+                            name: d.business_unit_name,
+                            divisions: d.division_name ? { name: d.division_name } : null,
+                          }
+                        : null,
+                    }
+                  : null,
               }
             : null,
         };
