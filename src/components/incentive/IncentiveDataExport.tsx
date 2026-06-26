@@ -58,7 +58,10 @@ async function exportVesselData(programId: string, month: string, year: number):
   const rates = await fetchAllPaged<any>((from, to) =>
     supabase
       .from('incentive_vessel_rates')
-      .select('employee_id, rate_per_vessel, profiles:employee_id(full_name, employee_code)')
+      // PII-hardening: name/code resolved via SECURITY DEFINER directory RPC
+      // below — direct `profiles` embed would return null for non-admin
+      // exporters (e.g. managers) and produce blank Employee/Code columns.
+      .select('employee_id, rate_per_vessel')
       .eq('program_id', programId)
       .range(from, to) as any,
   );
@@ -72,14 +75,30 @@ async function exportVesselData(programId: string, month: string, year: number):
       .range(from, to) as any,
   );
 
+  const ids = Array.from(
+    new Set((rates || []).map((r: any) => r.employee_id).filter(Boolean)),
+  ) as string[];
+  const profileMap = new Map<string, { full_name: string | null; employee_code: string | null }>();
+  if (ids.length) {
+    const { data: dir, error: dirErr } = await supabase.rpc(
+      'get_profile_directory_entries_v2',
+      { _ids: ids },
+    );
+    if (dirErr) throw dirErr;
+    for (const d of (dir || []) as any[]) {
+      profileMap.set(d.id, { full_name: d.full_name, employee_code: d.employee_code });
+    }
+  }
+
   const entryMap = new Map((entries || []).map((e: any) => [e.employee_id, e]));
   const rows = (rates || []).map((r: any) => {
     const entry = entryMap.get(r.employee_id) || {};
     const vessels = (entry as any).vessels_handled ?? 0;
     const rate = r.rate_per_vessel || 0;
+    const prof = profileMap.get(r.employee_id);
     return {
-      'Employee': r.profiles?.full_name || '—',
-      'Code': r.profiles?.employee_code || '—',
+      'Employee': prof?.full_name || '—',
+      'Code': prof?.employee_code || '—',
       'Rate/Vessel (₹)': rate,
       'Vessels Handled': vessels,
       'Total (₹)': vessels * rate,
