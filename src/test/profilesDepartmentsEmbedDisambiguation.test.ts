@@ -19,7 +19,7 @@ import { join } from 'path';
  * incentive_programs).
  */
 
-const ROOTS = ['src/hooks', 'src/pages', 'src/components', 'src/services'];
+const ROOTS = ['src/hooks', 'src/pages', 'src/components', 'src/services', 'src/lib'];
 const ALLOWED_PARENTS = [
   'sub_branches',
   'template_bundles',
