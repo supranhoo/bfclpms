@@ -19,17 +19,17 @@ export function useVesselRates(programId: string) {
       const employeeIds = (data || []).map((r: any) => r.employee_id);
       if (employeeIds.length === 0) return [];
 
-      // PII hardening (2026-06-22): the broad "Incentive data entry users can
-      // view active profiles" SELECT policy was dropped. Direct profile reads
-      // from this hook return zero rows for non-admin incentive-data-entry
-      // users (menuKey access), making the vessel grid render "Unknown" for
-      // every employee. Route through the SECURITY DEFINER directory RPC.
+      // PII hardening (2026-06-22): direct profile reads return zero rows
+      // for non-admin incentive-data-entry users. Route through the v2
+      // SECURITY DEFINER directory RPC which also returns `company_id`
+      // (RLS-agnostic) so the vessel grid can do company-scoped filtering
+      // without falling back to the broken `useCompanyFilter` map.
       const { data: profiles } = await supabase.rpc(
-        'get_profile_directory_entries',
+        'get_profile_directory_entries_v2',
         { _ids: employeeIds }
       );
 
-      const profileMap = new Map((profiles || []).map(p => [p.id, p]));
+      const profileMap = new Map((profiles || []).map((p: any) => [p.id, p]));
       return (data || []).map((r: any) => ({
         ...r,
         profile: profileMap.get(r.employee_id) || null,
