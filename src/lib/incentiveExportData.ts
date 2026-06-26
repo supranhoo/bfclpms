@@ -14,6 +14,7 @@
 import { supabase } from '@/integrations/supabase/client';
 import { fetchAllPaged } from '@/lib/fetchAll';
 import { fetchProgramMappingsPaged, type ProgramMappingRow } from '@/services/incentiveProgramMappings';
+import { resolveEmployeeRate, type RateRow } from '@/lib/incentiveRateResolver';
 
 export interface ExportProfile {
   id: string;
@@ -21,6 +22,9 @@ export interface ExportProfile {
   employee_code: string | null;
   designation: string | null;
   department_id: string | null;
+  business_unit_id?: string | null;
+  division_id?: string | null;
+  company_id?: string | null;
   pms_grade?: string | null;
   departments?: { name: string | null } | null;
 }
@@ -30,6 +34,7 @@ export interface ExportRate {
   entity_id: string | null;
   rate_per_ton: number;
   rate_type: 'employee' | 'common' | string;
+  effective_from?: string | null;
 }
 
 export interface ExportDailyEntry {
@@ -44,6 +49,13 @@ export interface ResolvedDailyExport {
   daysInMonth: number;
   empRates: Map<string, number>;
   commonRate: number;
+  /**
+   * Per-employee effective rate resolved via the canonical 5-tier cascade
+   * (employee → department → BU → company → common). Mirrors the grid.
+   */
+  effectiveRates: Map<string, number>;
+  /** Day-1 of the export month, used for date-aware rate resolution. */
+  targetDate: string;
 }
 
 const MONTHS = [
@@ -166,51 +178,69 @@ export async function resolveDailyExportData(
   programId: string,
   month: string,
   year: number,
-  opts: { filterByCompany?: (employeeId: string) => boolean } = {},
+  opts: {
+    /**
+     * RLS-safe primary filter. When provided (and not 'all'), the roster is
+     * constrained to employees whose RPC-resolved company_id matches.
+     */
+    selectedCompanyId?: string;
+    /**
+     * Legacy fallback used only when `selectedCompanyId` is absent.
+     * NOTE: this helper sources its employee→company map from a direct
+     * `profiles` read which is RLS-restricted for non-admin Incentive Data
+     * Entry users — using it as the primary filter is forbidden by POLICY
+     * §INCENTIVE-MAPPING-PAGING (export parity extension, 2026-06-26).
+     */
+    filterByCompany?: (employeeId: string) => boolean;
+  } = {},
 ): Promise<ResolvedDailyExport> {
-  // 1. Mappings (paged)
-  const mappings = await fetchProgramMappingsPaged(programId);
-
-  // 2. Supporting tables for cascade
-  const [{ data: departments }, { data: businessUnits }] = await Promise.all([
-    supabase.from('departments').select('id, business_unit_id'),
-    supabase.from('business_units').select('id, division_id'),
-  ]);
-
-  // 3. Active profile universe (paged)
-  // PII-hardening: resolve via SECURITY DEFINER RPC so the cascade roster
-  // includes employees outside the caller's RLS scope (otherwise non-admin
-  // exports collapse to an empty grid).
-  const { data: activeData, error: activeErr } = await supabase.rpc(
-    'get_active_profile_directory_entries',
+  // 1. Mapped roster — server-authoritative via SECURITY DEFINER RPC.
+  //    Mirrors `ProductionDailyGrid` which already uses
+  //    `get_incentive_program_employees`. Pre-resolves company_id
+  //    (profiles.company_id → division.company_id fallback) and returns
+  //    only non-PII identification fields. RLS-agnostic, so non-admin
+  //    Incentive Data Entry users get the same roster as admins.
+  const { data: rpcRoster, error: rpcErr } = await supabase.rpc(
+    'get_incentive_program_employees',
+    { _program_id: programId },
   );
-  if (activeErr) throw activeErr;
-  const allProfiles: ExportProfile[] = ((activeData || []) as any[]).map((r) => ({
+  if (rpcErr) throw rpcErr;
+
+  let employees: ExportProfile[] = ((rpcRoster || []) as any[]).map((r) => ({
     id: r.id,
     full_name: r.full_name,
     employee_code: r.employee_code,
     designation: r.designation,
     department_id: r.department_id,
-    pms_grade: r.pms_grade,
+    business_unit_id: r.business_unit_id ?? null,
+    division_id: r.division_id ?? null,
+    company_id: r.company_id ?? null,
     departments: r.department_name ? { name: r.department_name } : null,
   }));
 
-  // 4. Resolve mapping cascade → matched employee ids
-  const matchedIds = resolveMappedEmployeeIds(
-    mappings,
-    allProfiles,
-    (departments || []) as any,
-    (businessUnits || []) as any,
-  );
+  // 2. Company filter — RPC-provided company_id is the primary path.
+  //    `filterByCompany` is retained ONLY as a fallback when no company is
+  //    selected (it relies on an RLS-restricted profiles read and silently
+  //    drops everyone for non-admin exporters; see POLICY).
+  const selectedCompanyId = opts.selectedCompanyId && opts.selectedCompanyId !== 'all'
+    ? opts.selectedCompanyId
+    : null;
+  if (selectedCompanyId) {
+    employees = employees.filter((e) => e.company_id === selectedCompanyId);
+  } else if (opts.filterByCompany) {
+    employees = employees.filter((e) => opts.filterByCompany!(e.id));
+  }
 
-  // 5. Rates + entries (paged)
+  // 3. Rates (paged) — include effective_from for date-aware cascade.
   const rates = await fetchAllPaged<ExportRate>((from, to) =>
     supabase
       .from('incentive_production_rates')
-      .select('employee_id, entity_id, rate_per_ton, rate_type')
+      .select('employee_id, entity_id, rate_per_ton, rate_type, effective_from')
       .eq('program_id', programId)
       .range(from, to) as any,
   );
+
+  // 4. Daily entries (paged) for the requested period.
   const entries = await fetchAllPaged<ExportDailyEntry>((from, to) =>
     supabase
       .from('production_daily_entries')
@@ -221,37 +251,41 @@ export async function resolveDailyExportData(
       .range(from, to) as any,
   );
 
-  // 6. Build roster: matched mapped employees only. Entry-only employees
-  //    (saved daily entries whose employee is no longer mapped, or who were
-  //    never mapped to begin with) are intentionally excluded so the export
-  //    mirrors what the on-screen grid (ProductionDailyGrid) shows. Prior
-  //    behavior unioned in every employee with a stored entry which, when a
-  //    program had zero mappings (e.g. Metal Sizing for a fresh company),
-  //    leaked unrelated employees across companies into the workbook.
-  //    RCA 2026-06-26 (Upendra / Bihar Foundry & Casting).
-  const allIds = new Set<string>(matchedIds);
+  employees.sort((a, b) => (a.employee_code || '').localeCompare(b.employee_code || ''));
 
-  const profileMap = new Map<string, ExportProfile>();
-  for (const p of allProfiles) if (allIds.has(p.id)) profileMap.set(p.id, p);
-
-  const missing = Array.from(allIds).filter((id) => !profileMap.has(id));
-  if (missing.length) {
-    const extra = await fetchProfilesByIdsPaged(missing);
-    for (const p of extra) profileMap.set(p.id, p);
+  // 5. Resolve per-employee effective rate via the canonical 5-tier cascade
+  //    (employee → department → BU → company → common) so company-rate
+  //    programs like Metal Sizing export the same rate the grid uses.
+  //    targetDate = first day of the export month (date-aware).
+  const monthIdx = MONTHS.indexOf(month);
+  const targetDate = new Date(year, monthIdx >= 0 ? monthIdx : 0, 1)
+    .toISOString()
+    .slice(0, 10);
+  const effectiveRates = new Map<string, number>();
+  for (const e of employees) {
+    const resolved = resolveEmployeeRate(
+      e.id,
+      e.department_id ?? null,
+      e.business_unit_id ?? null,
+      rates as RateRow[],
+      e.company_id ?? null,
+      targetDate,
+    );
+    if (resolved.source !== 'none') effectiveRates.set(e.id, resolved.rate);
   }
-
-  // 7. Apply the same company filter the grid applies, so the export is a
-  //    strict subset of the visible roster instead of a cross-company dump.
-  const companyFilter = opts.filterByCompany;
-  const employees = Array.from(profileMap.values())
-    .filter((p) => (companyFilter ? companyFilter(p.id) : true))
-    .sort((a, b) =>
-    (a.employee_code || '').localeCompare(b.employee_code || ''),
-  );
 
   const { empRates, commonRate } = buildRateLookup(rates);
 
-  return { employees, rates, entries, daysInMonth: daysIn(month, year), empRates, commonRate };
+  return {
+    employees,
+    rates,
+    entries,
+    daysInMonth: daysIn(month, year),
+    empRates,
+    commonRate,
+    effectiveRates,
+    targetDate,
+  };
 }
 
 export const __internal = { chunk };
