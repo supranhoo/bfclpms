@@ -4192,3 +4192,6 @@ The setting affects display only — workflow advancement, RLS, and stage chain 
 
 ### EMBED-FK-HINT (scope)
 The rule that every `departments(` embed reached through `profiles` MUST use `departments!profiles_department_fk(...)` now applies to `src/hooks`, `src/pages`, `src/components`, `src/services` AND `src/lib`. Enforced by `src/test/profilesDepartmentsEmbedDisambiguation.test.ts`.
+
+### PROFILE-DIRECTORY-RPC (scope)
+Hooks that need to display employee `full_name` / `employee_code` / `designation` / `department` alongside rows from another RLS-scoped table MUST resolve those fields via the SECURITY DEFINER RPCs `get_profile_directory_entries(_ids)` (name + code) or `get_profile_directory_entries_v2(_ids)` (name + code + designation + department). Direct PostgREST `.from('profiles')` embeds are forbidden because `public.profiles` RLS will silently null them out for non-admin viewers and produce blank cells. Covered hooks: `useIncentiveVesselRates`, `useVesselMonthlyEntries`, `useSentBackOrgKpiEmployees`, `useMentionSearch`, `useIncentiveRecords`. Enforced by `src/test/profileDirectoryRpcUsage.test.ts`.

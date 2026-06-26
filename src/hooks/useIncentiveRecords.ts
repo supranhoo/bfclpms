@@ -9,7 +9,13 @@ export function useIncentiveRecords(reviewPeriod?: string, reviewYear?: number, 
     queryFn: async () => {
       let query = supabase
         .from('employee_incentive_records')
-        .select('*, profiles:employee_id(full_name, employee_code, department_id, designation, departments!profiles_department_fk(name)), incentive_slabs:matched_slab_id(min_value, max_value, incentive_percent, rating_label)')
+        // PII-hardening: do NOT embed `profiles` directly — RLS on profiles
+        // would silently null out names for non-admin roles (e.g. managers),
+        // causing blank Employee/Code/Department columns. Resolve names via
+        // the SECURITY DEFINER `get_profile_directory_entries_v2` RPC and
+        // merge into the same `r.profiles.*` shape the UI already consumes.
+        // See mem://architecture/profiles-query-policy.
+        .select('*, incentive_slabs:matched_slab_id(min_value, max_value, incentive_percent, rating_label)')
         .eq('review_period', reviewPeriod!)
         .eq('review_year', reviewYear!)
         .order('final_incentive_percent', { ascending: false });
@@ -21,7 +27,36 @@ export function useIncentiveRecords(reviewPeriod?: string, reviewYear?: number, 
         console.error('Incentive records fetch error:', error);
         throw error;
       }
-      return data;
+      const rows = (data || []) as any[];
+      const ids = Array.from(
+        new Set(rows.map((r) => r.employee_id).filter(Boolean)),
+      ) as string[];
+      if (ids.length === 0) return rows;
+      const { data: dir, error: dirErr } = await supabase.rpc(
+        'get_profile_directory_entries_v2',
+        { _ids: ids },
+      );
+      if (dirErr) {
+        console.error('Profile directory lookup failed:', dirErr);
+      }
+      const dirMap = new Map<string, any>(
+        ((dir || []) as any[]).map((d) => [d.id, d]),
+      );
+      return rows.map((r) => {
+        const d = dirMap.get(r.employee_id);
+        return {
+          ...r,
+          profiles: d
+            ? {
+                full_name: d.full_name,
+                employee_code: d.employee_code,
+                designation: d.designation,
+                department_id: d.department_id,
+                departments: d.department_name ? { name: d.department_name } : null,
+              }
+            : null,
+        };
+      });
     },
   });
 }
