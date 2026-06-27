@@ -4,6 +4,11 @@ import { useDepartments } from '@/hooks/useOrganization';
 import { fetchAllPaged } from '@/lib/fetchAll';
 import { useProfilesVersion } from '@/hooks/useProfilesVersion';
 import { useAuth } from '@/contexts/AuthContext';
+import {
+  FILTER_OPTIONS_STALE_MS,
+  FILTER_OPTIONS_GC_MS,
+  PERF_REFETCH_ON_FOCUS,
+} from '@/lib/perfCacheDefaults';
 
 interface UseEmployeeFilterOptionsArgs {
   enabledGrades?: boolean;
@@ -27,8 +32,9 @@ export function useEmployeeFilterOptions(args: UseEmployeeFilterOptionsArgs = {}
   // idx_profiles_active_designation index added in Wave 1.
   const { data: designations } = useQuery({
     queryKey: ['distinct-designations', profilesVersion, user?.id],
-    staleTime: 5 * 60_000,
-    gcTime: 15 * 60_000,
+    staleTime: FILTER_OPTIONS_STALE_MS,
+    gcTime: FILTER_OPTIONS_GC_MS,
+    refetchOnWindowFocus: PERF_REFETCH_ON_FOCUS,
     queryFn: async () => {
       const { data, error } = await (supabase as any)
         .rpc('get_distinct_active_designations');
@@ -41,8 +47,9 @@ export function useEmployeeFilterOptions(args: UseEmployeeFilterOptionsArgs = {}
   // Fetch distinct PMS grades from profiles (same RPC pattern).
   const { data: grades } = useQuery({
     queryKey: ['distinct-grades', profilesVersion, user?.id],
-    staleTime: 5 * 60_000,
-    gcTime: 15 * 60_000,
+    staleTime: FILTER_OPTIONS_STALE_MS,
+    gcTime: FILTER_OPTIONS_GC_MS,
+    refetchOnWindowFocus: PERF_REFETCH_ON_FOCUS,
     queryFn: async () => {
       const { data, error } = await (supabase as any)
         .rpc('get_distinct_active_pms_grades');
@@ -55,8 +62,9 @@ export function useEmployeeFilterOptions(args: UseEmployeeFilterOptionsArgs = {}
   // Fetch managers (profiles who have direct reports)
   const { data: managers } = useQuery({
     queryKey: ['managers-list', profilesVersion, user?.id],
-    staleTime: 5 * 60_000,
-    gcTime: 15 * 60_000,
+    staleTime: FILTER_OPTIONS_STALE_MS,
+    gcTime: FILTER_OPTIONS_GC_MS,
+    refetchOnWindowFocus: PERF_REFETCH_ON_FOCUS,
     queryFn: async () => {
       // Paged fetch to bypass PostgREST's 1000-row default cap.
       const data = await fetchAllPaged<any>((from, to) =>
@@ -84,8 +92,9 @@ export function useEmployeeFilterOptions(args: UseEmployeeFilterOptionsArgs = {}
   // pattern can reuse it (Custom Report builder, Reports filters).
   const { data: functionalManagers } = useQuery({
     queryKey: ['functional-managers-list', profilesVersion, user?.id],
-    staleTime: 5 * 60_000,
-    gcTime: 15 * 60_000,
+    staleTime: FILTER_OPTIONS_STALE_MS,
+    gcTime: FILTER_OPTIONS_GC_MS,
+    refetchOnWindowFocus: PERF_REFETCH_ON_FOCUS,
     queryFn: async () => {
       const data = await fetchAllPaged<any>((from, to) =>
         supabase
