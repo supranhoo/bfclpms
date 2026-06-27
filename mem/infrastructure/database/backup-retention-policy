@@ -1,0 +1,32 @@
+---
+name: Backup Retention Policy
+description: Admin-configurable auto-pruning of old/failed/partial backups via daily cron and Run Now button
+type: feature
+---
+Backup retention policy is stored as JSON in `system_settings.backup_retention_policy`
+(disabled by default). Daily cron (`backup-retention-sweep-daily`, 03:30 UTC) calls the
+`backup-retention-sweep` edge function; admins can also "Run Now (Preview)" from
+Admin → Backups → Retention Policy.
+
+Selection rules (single source of truth: `src/lib/backup/retentionSelection.ts`,
+mirrored byte-for-byte inside the edge function because Deno cannot import from `src/`):
+- `completed`: age cutoff applies ONLY after the `keep_completed_min_count` floor of
+  most-recent completed rows is satisfied. Floor wins.
+- `completed_with_errors`: eligible when older than `keep_partial_days`.
+- `failed`: eligible when older than `keep_failed_days`.
+- `running` rows: never touched (owned by `reap-stuck-backups`).
+- `backup_type = 'retention_sweep'` audit rows: never touched.
+
+Every sweep writes a summary row into `backup_logs` with `backup_type='retention_sweep'`
+and a JSON `error_message` containing the policy snapshot, candidate count, deleted
+rows/files, freed bytes, and any errors. Preview calls (`{"preview": true}`) bypass
+the disabled gate and do NOT write the audit row.
+
+Storage cleanup: for each candidate, the function lists the parent folder of
+`file_path` (paginated, 1000/page), removes objects in chunks of 100, then deletes
+the `backup_logs` row. Both single-file and chunked (manifest.json + parts) backups
+share a parent folder so the same logic handles both.
+
+UI lives in `src/components/admin/RetentionPolicyCard.tsx`; hooks in
+`src/hooks/useBackups.ts` (`useBackupRetentionPolicy`, `useUpdateBackupRetentionPolicy`,
+`useRunRetentionSweep`).
