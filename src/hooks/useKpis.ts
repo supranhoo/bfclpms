@@ -6,6 +6,13 @@ import { MONTH_NAMES } from '@/hooks/useAdminReports';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { isDuplicateKpiError, getDuplicateKpiMessage, formatKpiInsertError } from '@/lib/kpiErrorUtils';
+import {
+  KPI_LIST_STALE_MS,
+  KPI_LIST_GC_MS,
+  REVIEW_SUBMISSIONS_STALE_MS,
+  REVIEW_SUBMISSIONS_GC_MS,
+  PERF_REFETCH_ON_FOCUS,
+} from '@/lib/perfCacheDefaults';
 
 export type ReviewStatus = 'kra_set' | 'self_review' | 'manager_check' | 'skip_level_check' | 'hr_pms_review' | 'audit' | 'management_review' | 'approved';
 export type RatingLevel = 'red' | 'yellow' | 'green' | 'blue';
@@ -232,7 +239,9 @@ export function useAllKpis(options?: { enabled?: boolean }) {
     queryKey: ['all-kpis', user?.id],
     placeholderData: keepPreviousData,
     enabled: isReady && !!user?.id && options?.enabled !== false,
-    staleTime: 5 * 60_000,
+    staleTime: KPI_LIST_STALE_MS,
+    gcTime: KPI_LIST_GC_MS,
+    refetchOnWindowFocus: PERF_REFETCH_ON_FOCUS,
     queryFn: async () => {
       // Fetch all KPIs by paginating through results (Supabase default limit is 1000)
       const allKpis: any[] = [];
@@ -272,7 +281,9 @@ export function useKpisByPeriod(selectedPeriod: string | undefined, selectedYear
     queryKey: ['kpis-by-period', selectedPeriod, selectedYear, user?.id],
     enabled: isReady && !!user?.id && !!selectedPeriod && !!selectedYear,
     placeholderData: keepPreviousData,
-    staleTime: 5 * 60_000,
+    staleTime: KPI_LIST_STALE_MS,
+    gcTime: KPI_LIST_GC_MS,
+    refetchOnWindowFocus: PERF_REFETCH_ON_FOCUS,
     queryFn: async () => {
       const pageSize = 1000;
       const isMonthPeriod = MONTH_NAMES.includes(selectedPeriod as any);
