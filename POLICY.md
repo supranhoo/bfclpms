@@ -1,5 +1,17 @@
 ### §AR-DIALOG-SCROLL — Long dialogs use native overflow, not Radix ScrollArea (v2.66.58, 2026-06-24)
 
+### §PERF-AUDIT-PANEL-PAGINATION — Reviewer dashboards must page roster + stats server-side (v2.66.57, 2026-06-27)
+
+**Rule.** The reviewer dashboard grid (Audit, HR PMS, Management, Skip-Level — `/dashboard?view={audit|hr_pms|management|skip_level}`) MUST source its visible cards from a single server-side paginated RPC that returns (a) the profile slice, (b) precomputed per-employee badge counts for the selected period, and (c) the window-total count. Client-side org-wide KPI scans (`useKpisByPeriodRanges`, `useReviewSubmissionScoresByKpiIds`) MUST NOT be used to compute visible-card stats.
+
+**Canonical implementation.** `public.get_reviewer_dashboard_page(...)` + `src/hooks/useReviewerDashboardPage.ts`. Pending/reviewed status sets are derived from the canonical 8-stage default pipeline per view level — see DOCUMENTATION.md §2.66.57.
+
+**Adoption.** Wiring into `EmployeeSelectorGrid` is gated behind `VITE_AUDIT_PANEL_PAGED_RPC` and rolls out per view level so legacy filter/sort/sub-grid semantics are preserved during parity soak. Explorer Mode (cross_check) and `team` view stay on their existing dedicated paths until covered separately.
+
+**Rollback.** `DROP FUNCTION IF EXISTS public.get_reviewer_dashboard_page(...);` then disable the flag. Additive only — no data or schema change.
+
+**Guard.** `src/test/auditPanel/pagedRpcContract.test.ts` pins the RPC name, paged params, and `total_count` mapping. Removing the RPC or changing its name without updating the hook fails CI.
+
 ### §PERF-HOTSPOT-INDEXES — Additive indexes pinned to top pg_stat_statements offenders (v2.66.56, 2026-06-27)
 - The following indexes MUST exist on the production database. Pinned by `src/test/perfHotspotIndexes.test.ts` against the canonical migration `supabase/migrations/20260627083730_*.sql`:
   - `public.kpis` → `idx_kpis_period_year_created (review_period, review_year, created_at DESC)`, `idx_kpis_created_at_desc (created_at DESC)`, `idx_kpis_dup_check (category_id, kra_name, kpi_name, review_period, review_year, is_org_level)`
