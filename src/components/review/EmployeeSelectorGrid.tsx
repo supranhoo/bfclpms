@@ -2244,7 +2244,7 @@ export function EmployeeSelectorGrid({
       )}
 
 
-      {isFullAccess && viewLevel !== 'audit' && (
+      {isFullAccess && !(viewLevel === 'audit' && (auditorWorkloadStats.length > 0 || unassignedStats)) && (
         <div className="flex items-center justify-end">
           <EmployeeStatusFilter
             syncToUrl={false}
