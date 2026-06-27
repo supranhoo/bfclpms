@@ -1,4 +1,15 @@
 ### §AR-DIALOG-SCROLL — Long dialogs use native overflow, not Radix ScrollArea (v2.66.58, 2026-06-24)
+
+### §PERF-HOTSPOT-INDEXES — Additive indexes pinned to top pg_stat_statements offenders (v2.66.56, 2026-06-27)
+- The following indexes MUST exist on the production database. Pinned by `src/test/perfHotspotIndexes.test.ts` against the canonical migration `supabase/migrations/20260627083730_*.sql`:
+  - `public.kpis` → `idx_kpis_period_year_created (review_period, review_year, created_at DESC)`, `idx_kpis_created_at_desc (created_at DESC)`, `idx_kpis_dup_check (category_id, kra_name, kpi_name, review_period, review_year, is_org_level)`
+  - `public.org_kpi_data_entry_logs` → `idx_org_kpi_logs_lookup (category_id, kra_name, kpi_name, review_period, review_year, created_at DESC)`
+  - `public.profiles` → `idx_profiles_active_fullname (full_name) WHERE is_active`, `idx_profiles_active_designation (designation) WHERE is_active AND designation IS NOT NULL`
+  - `public.review_submissions` → `idx_review_submissions_kpi_id (kpi_id)`
+  - `public.kpi_observations` → `idx_kpi_observations_kpi_created (kpi_id, created_at DESC)`
+- Before adding a new client paginator over `public.kpis`, confirm a supporting index covers the `ORDER BY` predicate. An unfiltered `ORDER BY created_at DESC` on `kpis` was the single most expensive query in the project (66,881 s cumulative); never reintroduce it without an index.
+- Removing any pinned index requires (a) a follow-up `pg_stat_statements` snapshot proving the query path is gone or replaced, and (b) updating both this section and the test file in the same migration. Do not DROP silently.
+
 - Any dialog whose body can grow taller than the viewport MUST scroll the body via a native `<div className="flex-1 min-h-0 overflow-y-auto overscroll-contain">` inside a `max-h-[90vh] flex flex-col` `<DialogContent>`. Do not use shadcn `<ScrollArea>` for the dialog body — Radix's internal viewport collapses to zero height inside a `flex-1 min-h-0` parent, leaving the dialog unscrollable and the footer unreachable (RCA: SelfReviewSummaryDialog, June 2026). Header and footer remain outside the scroll container so action buttons stay pinned.
 - The Dept Head cycle window pair is optional (NULL = no enforced window); stage participation remains governed by `default_enabled_stages` / per-instance `enabled_stages`, never by the date columns.
 
