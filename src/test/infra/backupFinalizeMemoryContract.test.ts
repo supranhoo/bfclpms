@@ -10,10 +10,16 @@ import { resolve } from 'node:path';
 // even before edge-function tests execute. Mirrors the Phase-9 I6–I15
 // contract-test convention.
 
-const SRC = readFileSync(
+const RAW = readFileSync(
   resolve(__dirname, '../../../supabase/functions/create-backup/index.ts'),
   'utf8',
 );
+
+// Strip comments so doc-comment mentions of the forbidden tokens don't
+// trip the contract test (the policy applies to executable code only).
+const SRC = RAW
+  .replace(/\/\*[\s\S]*?\*\//g, '')
+  .replace(/(^|\n)\s*\/\/[^\n]*/g, '$1');
 
 function sliceFunction(src: string, name: string): string {
   const startMarker = `function ${name}(`;
