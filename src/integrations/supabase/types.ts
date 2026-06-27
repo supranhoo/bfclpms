@@ -13602,6 +13602,38 @@ export type Database = {
       }
       get_registry_coverage_stats: { Args: never; Returns: Json }
       get_registry_pending_suggestion_count: { Args: never; Returns: Json }
+      get_reviewer_dashboard_page: {
+        Args: {
+          p_department_id?: string
+          p_designation_id?: string
+          p_emp_status?: string
+          p_grade_id?: string
+          p_limit?: number
+          p_manager_id?: string
+          p_offset?: number
+          p_period: string
+          p_search?: string
+          p_sort?: string
+          p_view_level: string
+          p_year: number
+        }
+        Returns: {
+          avatar_url: string
+          cleared_kra_set: number
+          department: string
+          designation: string
+          email: string
+          full_name: string
+          grade: string
+          id: string
+          is_active: boolean
+          pending_count: number
+          reporting_manager_id: string
+          reviewed_count: number
+          total_count: number
+          total_kpis: number
+        }[]
+      }
       get_reviewer_kpis_for_period: {
         Args: { p_period: string; p_year: number }
         Returns: {
