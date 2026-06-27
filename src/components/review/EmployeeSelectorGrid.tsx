@@ -2139,14 +2139,26 @@ export function EmployeeSelectorGrid({
       {/* Auditor Workload Summary (audit view only) */}
       {viewLevel === 'audit' && (auditorWorkloadStats.length > 0 || unassignedStats) && (
         <div className="space-y-2">
-          <button
-            onClick={() => setAuditorWorkloadExpanded(prev => !prev)}
-            className="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+          <div
+            data-testid="audit-workload-header-row"
+            className="flex flex-wrap items-center justify-between gap-2"
           >
-            <Users className="h-4 w-4" />
-            Auditor Workload ({auditorWorkloadStats.length}{unassignedStats ? ' + unassigned' : ''})
-            {auditorWorkloadExpanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
-          </button>
+            <button
+              onClick={() => setAuditorWorkloadExpanded(prev => !prev)}
+              className="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <Users className="h-4 w-4" />
+              Auditor Workload ({auditorWorkloadStats.length}{unassignedStats ? ' + unassigned' : ''})
+              {auditorWorkloadExpanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+            </button>
+            {isFullAccess && (
+              <EmployeeStatusFilter
+                syncToUrl={false}
+                value={empStatus}
+                onChange={(mode) => setEmpStatusRaw(mode)}
+              />
+            )}
+          </div>
           {auditorWorkloadExpanded && (
             <div className="flex items-stretch gap-2 overflow-x-auto pb-2">
               <button
@@ -2232,7 +2244,7 @@ export function EmployeeSelectorGrid({
       )}
 
 
-      {isFullAccess && (
+      {isFullAccess && viewLevel !== 'audit' && (
         <div className="flex items-center justify-end">
           <EmployeeStatusFilter
             syncToUrl={false}
