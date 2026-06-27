@@ -2124,15 +2124,26 @@ export function EmployeeSelectorGrid({
       )}
 
       {/* v2.64.9 — Roster resolution diagnostic (admin / full-access only) */}
-      {isFullAccess && requiredStage && rosterMeta && (
-        <div className="text-xs text-muted-foreground flex items-center gap-2 -mt-2">
-          <Info className="h-3 w-3" />
-          <span>
-            {(stageFilteredProfiles?.length ?? 0).toLocaleString()} eligible
-            {' '}of {rosterMeta.totalEligiblePool.toLocaleString()} active employees
-            {rosterMeta.seededFromKpis > 0 && ` · ${rosterMeta.seededFromKpis} seeded from KPI presence`}
-            {rosterMeta.fallbackUsed && ' · using fallback resolution'}
-          </span>
+      {(isFullAccess && ((requiredStage && rosterMeta) || true)) && (
+        <div className="-mt-2 flex flex-wrap items-center justify-between gap-2">
+          {requiredStage && rosterMeta ? (
+            <div className="text-xs text-muted-foreground flex items-center gap-2">
+              <Info className="h-3 w-3" />
+              <span>
+                {(stageFilteredProfiles?.length ?? 0).toLocaleString()} eligible
+                {' '}of {rosterMeta.totalEligiblePool.toLocaleString()} active employees
+                {rosterMeta.seededFromKpis > 0 && ` · ${rosterMeta.seededFromKpis} seeded from KPI presence`}
+                {rosterMeta.fallbackUsed && ' · using fallback resolution'}
+              </span>
+            </div>
+          ) : <span />}
+          {!(viewLevel === 'audit' && (auditorWorkloadStats.length > 0 || unassignedStats)) && (
+            <EmployeeStatusFilter
+              syncToUrl={false}
+              value={empStatus}
+              onChange={(mode) => setEmpStatusRaw(mode)}
+            />
+          )}
         </div>
       )}
 
@@ -2243,16 +2254,6 @@ export function EmployeeSelectorGrid({
         </div>
       )}
 
-
-      {isFullAccess && !(viewLevel === 'audit' && (auditorWorkloadStats.length > 0 || unassignedStats)) && (
-        <div className="flex items-center justify-end">
-          <EmployeeStatusFilter
-            syncToUrl={false}
-            value={empStatus}
-            onChange={(mode) => setEmpStatusRaw(mode)}
-          />
-        </div>
-      )}
 
       <EmployeeFilters
         searchQuery={searchInput}
