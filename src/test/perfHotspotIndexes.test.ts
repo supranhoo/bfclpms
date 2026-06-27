@@ -38,6 +38,11 @@ describe('Performance hotspot index migration', () => {
   });
 
   it('uses additive-only DDL (CREATE INDEX IF NOT EXISTS — no DROP)', () => {
-    expect(/\bDROP\s+INDEX\b/i.test(sql)).toBe(false);
+    // Strip comments so the rollback note in the file header doesn't trip the guard.
+    const stripped = sql
+      .split('\n')
+      .map((line) => line.replace(/--.*$/, ''))
+      .join('\n');
+    expect(/\bDROP\s+INDEX\b/i.test(stripped)).toBe(false);
   });
 });
