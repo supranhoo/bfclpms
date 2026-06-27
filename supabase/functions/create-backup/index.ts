@@ -298,81 +298,88 @@ export type IntegrityReport = {
   row_mismatch: Array<{ table: string; expected: number; actual: number }>
 }
 
-async function verifyBackupIntegrity(
+export async function verifyBackupIntegrity(
   supabase: ReturnType<typeof createClient>,
   folderPath: string,
   tableManifest: Array<{ table: string; rows: number; file: string; files?: string[] }>
 ): Promise<IntegrityReport> {
   const issues: IntegrityIssues = { missing: [], unreadable: [], row_mismatch: [] }
 
-  // Pre-list folder once so existence checks don't hammer the API.
+  // WP-9.2.d (HTTP 546 finalize-OOM fix): integrity verification MUST stay
+  // memory-flat. The previous implementation downloaded every per-table JSON
+  // file and JSON.parse'd it just to read `parsed.length`, which blew past
+  // the 256 MB Deno Deploy worker cap once the snapshot crossed ~200 tables /
+  // ~240 MB and caused every scheduled run to be marked `failed` with
+  // "Finalize failed: HTTP 546" — even though all batches had succeeded.
+  //
+  // New contract:
+  //   • Presence + size come from `storage.list` (paginated to cover snapshots
+  //     with >1000 part files).
+  //   • Row count is trusted from the batch worker (`entry.rows`) — the same
+  //     value the manifest, `backup_logs.total_rows`, and the hard-fail
+  //     predicate already trust. Re-parsing the file we just wrote adds no
+  //     independent guarantee.
+  //   • NEVER call `supabase.storage.from(...).download(...)` here. The Deno
+  //     test `verify_integrity_memory_test.ts` and the static contract test
+  //     `src/test/infra/backupFinalizeMemoryContract.test.ts` enforce this.
   const presentSizes = new Map<string, number>()
   try {
-    const { data: listed } = await supabase.storage
-      .from('database-backups')
-      .list(folderPath, { limit: 1000 })
-    if (listed) {
+    const PAGE = 1000
+    for (let offset = 0; ; offset += PAGE) {
+      const { data: listed, error } = await supabase.storage
+        .from('database-backups')
+        .list(folderPath, { limit: PAGE, offset })
+      if (error) {
+        console.warn('Integrity: folder list page failed:', error.message)
+        break
+      }
+      if (!listed || listed.length === 0) break
       for (const item of listed) {
         const size = item.metadata?.size as number | undefined
         if (typeof size === 'number') presentSizes.set(item.name, size)
       }
+      if (listed.length < PAGE) break
     }
   } catch (err) {
-    console.warn('Integrity: folder list failed, falling back to per-file checks:', err)
+    console.warn('Integrity: folder list failed, skipping presence check:', err)
   }
 
-  const CONCURRENCY = 4
-  for (let i = 0; i < tableManifest.length; i += CONCURRENCY) {
-    const slice = tableManifest.slice(i, i + CONCURRENCY)
-    await Promise.all(
-      slice.map(async (entry) => {
-        // ADR-082: each table may be stored across multiple part files.
-        // entry.files is authoritative; entry.file is the first part for
-        // backward compatibility with legacy single-file backups.
-        const partPaths = entry.files && entry.files.length > 0
-          ? entry.files
-          : [entry.file]
+  // If the list returned nothing at all, we can't make a presence claim — fall
+  // back to trusting the manifest and surface a single soft warning.
+  if (presentSizes.size === 0) {
+    issues.unreadable.push({
+      table: '__listing__',
+      reason: `storage.list(${folderPath}) returned no entries; skipped presence check`,
+    })
+  }
 
-        let actualRows = 0
-        let anyMissing = false
-        for (const partPath of partPaths) {
-          const fileName = partPath.split('/').pop() || partPath
-          const sizeFromList = presentSizes.get(fileName)
-          if (presentSizes.size > 0 && (sizeFromList === undefined)) {
-            issues.missing.push(`${entry.table}:${fileName}`)
-            anyMissing = true
-            continue
-          }
-          try {
-            const { data: blob, error } = await supabase.storage
-              .from('database-backups')
-              .download(partPath)
-            if (error || !blob) {
-              issues.unreadable.push({ table: entry.table, reason: `${fileName}: ${error?.message || 'empty blob'}` })
-              continue
-            }
-            const text = await blob.text()
-            let parsed: unknown
-            try {
-              parsed = JSON.parse(text)
-            } catch (e) {
-              issues.unreadable.push({ table: entry.table, reason: `${fileName} parse error: ${e}` })
-              continue
-            }
-            if (!Array.isArray(parsed)) {
-              issues.unreadable.push({ table: entry.table, reason: `${fileName} payload is not an array` })
-              continue
-            }
-            actualRows += parsed.length
-          } catch (err) {
-            issues.unreadable.push({ table: entry.table, reason: `${fileName}: ${String(err)}` })
-          }
-        }
-        if (!anyMissing && actualRows !== entry.rows) {
-          issues.row_mismatch.push({ table: entry.table, expected: entry.rows, actual: actualRows })
-        }
-      })
-    )
+  for (const entry of tableManifest) {
+    // ADR-082: each table may be stored across multiple part files.
+    // entry.files is authoritative; entry.file is the first part for
+    // backward compatibility with legacy single-file backups.
+    const partPaths = entry.files && entry.files.length > 0
+      ? entry.files
+      : [entry.file]
+
+    if (presentSizes.size === 0) continue // listing failed; nothing more to check
+
+    for (const partPath of partPaths) {
+      const fileName = partPath.split('/').pop() || partPath
+      const sizeFromList = presentSizes.get(fileName)
+      if (sizeFromList === undefined) {
+        issues.missing.push(`${entry.table}:${fileName}`)
+        continue
+      }
+      if (sizeFromList <= 0) {
+        issues.unreadable.push({
+          table: entry.table,
+          reason: `${fileName}: zero-byte file`,
+        })
+      }
+    }
+    // Row-count parity: the batch worker counted rows at write time. We trust
+    // that value here; the row_mismatch branch is preserved for any future
+    // caller that supplies an out-of-band count.
   }
 
   const ok =
