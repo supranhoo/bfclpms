@@ -555,6 +555,9 @@ export function useKpisByEmployee(employeeId: string | undefined) {
 export function useReviewSubmissions(kpiIds: string[]) {
   return useQuery({
     queryKey: ['review-submissions', kpiIds],
+    staleTime: REVIEW_SUBMISSIONS_STALE_MS,
+    gcTime: REVIEW_SUBMISSIONS_GC_MS,
+    refetchOnWindowFocus: PERF_REFETCH_ON_FOCUS,
     queryFn: async () => {
       if (kpiIds.length === 0) return [];
       
