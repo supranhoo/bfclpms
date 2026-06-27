@@ -4271,3 +4271,17 @@ Hooks, services, and components that need to display employee `full_name` / `emp
 - `get_active_profile_directory_entries()` — full active employee universe (used for export cascade resolution where the caller doesn't yet know the ID set).
 
 Direct PostgREST `.from('profiles')` reads or embeds are forbidden because `public.profiles` RLS silently nulls them out for non-admin viewers (managers, auditors, etc.) and produces blank cells or empty exports. Covered units: `useIncentiveVesselRates`, `useVesselMonthlyEntries`, `useSentBackOrgKpiEmployees`, `useMentionSearch`, `useIncentiveRecords`, `src/lib/incentiveExportData.ts`, `src/components/incentive/IncentiveDataExport.tsx`. Enforced by `src/test/profileDirectoryRpcUsage.test.ts`.
+
+### §PERF-CACHE-TTL-DEFAULTS — Cache-TTL floors for hot reviewer hooks (v2.66.58, 2026-06-27)
+
+`src/lib/perfCacheDefaults.ts` defines the cache-TTL floors for the hottest reviewer-path React Query keys. These floors are MANDATORY for the named hooks; per-hook overrides may only widen them (longer stale/gc), never shorten them. Window-focus refetch MUST be OFF for these hooks because freshness is already guaranteed by `useRealtimeKpiSync` (debounced postgres_changes invalidation) and `invalidateProfileCaches` (mutation-side invalidation).
+
+| Query keys | staleTime | gcTime | focus refetch |
+|---|---:|---:|---|
+| `['all-kpis']`, `['kpis-by-period']` | ≥ 10 min | ≥ 30 min | OFF |
+| `['review-submissions']` | ≥ 2 min | ≥ 10 min | OFF |
+| `['distinct-designations']`, `['distinct-grades']`, `['managers-list']`, `['functional-managers-list']` | ≥ 10 min | ≥ 30 min | OFF |
+
+Rationale: pg_stat_statements (27-Jun-2026) showed call counts of 44k–142k on these patterns, with the top three accounting for ~88,000 s of cumulative DB time since boot. Cache floors cut call volume without losing freshness; client CPU is unaffected because we remove fetches rather than add work.
+
+Enforcement: `src/test/performance/perfCacheDefaults.test.ts` pins the floors and the consumer-side imports. Reference Lean-Load Policy §120 for the broader projection / pagination rules this complements.
