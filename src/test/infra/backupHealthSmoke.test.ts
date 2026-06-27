@@ -18,9 +18,11 @@ const enabled = Boolean(url && key);
 const d = enabled ? describe : describe.skip;
 
 d('backup_logs health (production smoke)', () => {
-  const supabase = createClient(url!, key!, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
+  const supabase = enabled
+    ? createClient(url!, key!, {
+        auth: { persistSession: false, autoRefreshToken: false },
+      })
+    : (null as never);
 
   it('no HTTP 546 finalize failures in the last 24h', async () => {
     const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
