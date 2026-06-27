@@ -3,6 +3,12 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useUpdateSystemSetting } from './useSystemSettings';
 import { useState, useCallback } from 'react';
+import {
+  DEFAULT_RETENTION_POLICY,
+  type RetentionPolicy,
+} from '@/lib/backup/retentionSelection';
+
+export type { RetentionPolicy } from '@/lib/backup/retentionSelection';
 
 export interface BackupSchedule {
   frequency: 'daily' | 'weekly' | 'monthly';
@@ -686,6 +692,110 @@ export function useRetryFinalize() {
     },
     onError: (error: Error) => {
       toast.error(`Finalize retry failed: ${error.message}`);
+    },
+  });
+}
+
+/* ───────────────────── Backup Retention Policy ──────────────────────────
+ * Admin-configurable auto-pruning of old / failed / partial snapshots.
+ * Policy is stored as JSON under system_settings.backup_retention_policy
+ * and executed by the `backup-retention-sweep` edge function (daily cron
+ * + admin "Run Now"). See mem/infrastructure/database/backup-retention-policy.
+ * ─────────────────────────────────────────────────────────────────────── */
+
+export function useBackupRetentionPolicy() {
+  return useQuery({
+    queryKey: ['system-settings', 'backup_retention_policy'],
+    queryFn: async (): Promise<RetentionPolicy> => {
+      const { data, error } = await supabase
+        .from('system_settings')
+        .select('setting_value')
+        .eq('setting_key', 'backup_retention_policy')
+        .maybeSingle();
+      if (error) throw error;
+      if (!data?.setting_value) return DEFAULT_RETENTION_POLICY;
+      try {
+        return { ...DEFAULT_RETENTION_POLICY, ...JSON.parse(data.setting_value as string) };
+      } catch {
+        return DEFAULT_RETENTION_POLICY;
+      }
+    },
+  });
+}
+
+export function useUpdateBackupRetentionPolicy() {
+  const queryClient = useQueryClient();
+  const updateSetting = useUpdateSystemSetting();
+  return useMutation({
+    mutationFn: async (policy: RetentionPolicy) => {
+      await updateSetting.mutateAsync({
+        key: 'backup_retention_policy',
+        value: JSON.stringify(policy),
+      });
+      return policy;
+    },
+    onSuccess: () => {
+      toast.success('Retention policy saved');
+      queryClient.invalidateQueries({ queryKey: ['system-settings', 'backup_retention_policy'] });
+    },
+    onError: (error: Error) => {
+      toast.error(`Failed to save retention policy: ${error.message}`);
+    },
+  });
+}
+
+export interface RetentionSweepResult {
+  success: boolean;
+  preview?: boolean;
+  dry_run?: boolean;
+  skipped?: boolean;
+  reason?: string;
+  candidate_count: number;
+  deleted_rows: number;
+  deleted_files: number;
+  freed_bytes: number;
+  candidates: Array<{
+    id: string;
+    status: string;
+    created_at: string;
+    reason: 'age_completed' | 'age_partial' | 'age_failed';
+    file_size_bytes: number | null;
+  }>;
+  errors: string[];
+}
+
+export function useRunRetentionSweep() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (opts: { preview?: boolean } = {}): Promise<RetentionSweepResult> => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error('Not authenticated');
+      const response = await supabase.functions.invoke('backup-retention-sweep', {
+        body: opts.preview ? { preview: true } : {},
+      });
+      if (response.error) throw response.error;
+      return response.data as RetentionSweepResult;
+    },
+    onSuccess: (data, vars) => {
+      if (data.skipped) {
+        toast.info('Retention sweep skipped: policy is disabled');
+        return;
+      }
+      if (vars?.preview) {
+        toast.info(`Preview: ${data.candidate_count} backups would be deleted`);
+        return;
+      }
+      if (data.dry_run) {
+        toast.info(`Dry run: ${data.candidate_count} candidates identified, nothing deleted`);
+      } else {
+        toast.success(
+          `Pruned ${data.deleted_rows} backups (${(data.freed_bytes / (1024 * 1024)).toFixed(1)} MB freed)`,
+        );
+      }
+      queryClient.invalidateQueries({ queryKey: ['backup-logs'] });
+    },
+    onError: (error: Error) => {
+      toast.error(`Retention sweep failed: ${error.message}`);
     },
   });
 }

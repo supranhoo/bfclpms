@@ -49,6 +49,7 @@ import {
   useRetryFinalize,
   type BackupSchedule,
 } from '@/hooks/useBackups';
+import { RetentionPolicyCard } from '@/components/admin/RetentionPolicyCard';
 
 function formatBytes(bytes: number | null): string {
   if (!bytes) return '—';
@@ -265,6 +266,9 @@ export function BackupRestoreTab() {
 
         </CardContent>
       </Card>
+
+      {/* Retention Policy Card */}
+      <RetentionPolicyCard />
 
       {/* Manual Backup & Restore Card */}
       <Card>
