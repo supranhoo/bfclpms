@@ -6855,3 +6855,16 @@ See: `docs/adr/ADR-078.md`, `src/test/reviewNotes/sidebarVisibility.test.ts`.
 - Fix: extended `get_profile_directory_entries_v2` to include `pms_grade`, added `get_active_profile_directory_entries()` SECURITY DEFINER RPC returning the full active employee directory (id, full_name, employee_code, designation, department_id, department_name, pms_grade, is_active). Both export paths now resolve names/codes/designation/department/grade via these RPCs and merge into the existing `ExportProfile` shape — no consumer-side changes.
 - Guardrail: extended `src/test/profileDirectoryRpcUsage.test.ts` to also lock `src/lib/incentiveExportData.ts` and `src/components/incentive/IncentiveDataExport.tsx` to the directory RPC.
 - Rollback: revert the two source files and drop `get_active_profile_directory_entries` + the `pms_grade` column from `get_profile_directory_entries_v2`.
+
+## 2026-06-27 — v2.66.58 — Cache-TTL hardening on hot reviewer hooks
+- Diagnosis: `pg_stat_statements` (snapshot 2026-06-27) showed the eight slowest user-schema queries dominated by repeat calls (44k–142k each) for data that only changes on explicit user actions already wired through `useRealtimeKpiSync` (1.5s debounced invalidation) and `invalidateProfileCaches`. DB health is fine (memory 14%, disk 13%, connections 31/240) — bottleneck is round-trip volume + payload width, not compute.
+- Fix: introduced `src/lib/perfCacheDefaults.ts` and wired the floors into the four hottest hook families:
+  - `useAllKpis`, `useKpisByPeriod`  → `staleTime` 5min → **10min**, `gcTime` **30min**, `refetchOnWindowFocus: false`.
+  - `useReviewSubmissions`            → previously no caching (default 0) → **2min stale / 10min gc**, focus-refetch off. Largest expected drop in call volume (52,680 calls/window).
+  - `useEmployeeFilterOptions` (designations, grades, managers, functional managers) → **10min stale / 30min gc**, focus-refetch off.
+- Why no projection narrowing on `review_submissions` this round: the `select('*')` call site (`useReviewSubmissions`) returns the typed `ReviewSubmission[]` consumed by 6 scorecard components. Narrowing changes the type contract — deferred to a follow-up with a slim hook variant. Cache TTL alone reclaims the bulk of the cost by collapsing duplicate calls.
+- Why no `EmployeeSelectorGrid` paged-RPC wiring this round: consumer is 2,619 lines with downstream branches that expect the full client array (filters, manager lookup, sub-grid renders, parity badges). Per-view rollout behind `VITE_AUDIT_PANEL_PAGED_RPC` remains the next staged step.
+- Indexes: the v2.66.56 migration `20260627083730_*.sql` already ships covering indexes for hotspots #1, #3, #5, #6, #7 — no new indexes needed this round.
+- Regression test: `src/test/performance/perfCacheDefaults.test.ts` (6 tests) pins the TTL floors AND verifies the two consumer modules import them. Lowering any floor (or removing focus-off) fails CI.
+- Rollback: revert `src/lib/perfCacheDefaults.ts` to the previous numbers; per-hook overrides remain in their own modules.
+- Expected impact: removing redundant calls on hotspots #1, #2, #4, #6, #7 alone reclaims a projected ~80% of cumulative DB time on those query patterns. Client CPU unchanged — we removed fetches, not added work.

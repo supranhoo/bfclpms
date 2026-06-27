@@ -1,0 +1,21 @@
+---
+name: cache-ttl-defaults
+description: POLICY §PERF-CACHE-TTL-DEFAULTS — perfCacheDefaults.ts floors for ['all-kpis']/['kpis-by-period']/['review-submissions']/filter-options; focus-refetch off
+type: constraint
+---
+POLICY §PERF-CACHE-TTL-DEFAULTS (v2.66.58, 2026-06-27).
+
+`src/lib/perfCacheDefaults.ts` is the single source of cache-TTL floors for the hottest reviewer-path React Query keys. Per-hook overrides may only widen, never shorten. Window-focus refetch MUST be OFF for these hooks — freshness is guaranteed by `useRealtimeKpiSync` (debounced postgres_changes) and `invalidateProfileCaches` (mutation-side).
+
+Floors:
+- `['all-kpis']`, `['kpis-by-period']` → 10 min stale / 30 min gc / focus OFF (`useAllKpis`, `useKpisByPeriod`).
+- `['review-submissions']` → 2 min stale / 10 min gc / focus OFF (`useReviewSubmissions`).
+- `['distinct-designations']`, `['distinct-grades']`, `['managers-list']`, `['functional-managers-list']` → 10 min stale / 30 min gc / focus OFF (`useEmployeeFilterOptions`).
+
+Why: pg_stat_statements (27-Jun-2026) ranked these query keys at 44k–142k repeat calls per boot window. Cache floors collapse redundant fetches; client CPU is unaffected because we remove round-trips rather than add work. Reduces server-side cost without compute upgrade.
+
+Regression test: `src/test/performance/perfCacheDefaults.test.ts` (6 tests) pins floors AND verifies consumer imports.
+
+Do NOT narrow `useReviewSubmissions` projection ad-hoc — returned shape is the typed `ReviewSubmission[]` consumed by 6 scorecard components. A slim variant must be a NEW hook.
+
+Do NOT wire `useReviewerDashboardPage` into `EmployeeSelectorGrid` without the staged per-view rollout behind `VITE_AUDIT_PANEL_PAGED_RPC` — consumer is 2,619 lines with full-array assumptions in filters, manager lookup, sub-grid renders, parity badges.
