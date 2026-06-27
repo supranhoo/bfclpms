@@ -2148,10 +2148,10 @@ export function EmployeeSelectorGrid({
             {auditorWorkloadExpanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
           </button>
           {auditorWorkloadExpanded && (
-            <div className="flex gap-2 overflow-x-auto pb-2">
+            <div className="flex items-stretch gap-2 overflow-x-auto pb-2">
               <button
                 onClick={() => setAuditorFilter(null)}
-                className={`shrink-0 rounded-lg border px-3 py-2 text-xs transition-all ${
+                className={`shrink-0 rounded-lg border px-3 py-2 text-xs transition-all flex items-center justify-center min-w-[110px] ${
                   !auditorFilter
                     ? 'border-primary bg-primary/10 text-primary ring-1 ring-primary/30'
                     : 'border-border bg-card text-foreground hover:border-primary/50'
