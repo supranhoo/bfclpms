@@ -1,0 +1,15 @@
+---
+name: Backup finalize memory contract (WP-9.2.d)
+description: verifyBackupIntegrity must verify via storage.list + trusted manifest row counts; never download/parse per-table files (HTTP 546 finalize-OOM regression guard)
+type: constraint
+---
+`supabase/functions/create-backup/index.ts` — `verifyBackupIntegrity()` MUST NOT call `supabase.storage.from(...).download(...)`, `blob.text()`, or `JSON.parse(text)` on per-table payloads. Presence + size come from a paginated `storage.list(folderPath)`; row count is taken from `tableManifest[i].rows` (the batch worker is the single source of truth — same value the manifest, `backup_logs.total_rows`, and WP-9.2.a hard-fail predicate already use).
+
+**Why:** 2026-06-22 → 2026-06-26 scheduled runs all marked `failed` with `"Finalize failed: HTTP 546"` despite every batch succeeding. The verifier downloaded + JSON-parsed every per-table file just to read `parsed.length`; at 218 tables × ~1.1 MB on disk (≈ 3–5× expanded in JS) the finalize worker exceeded the 256 MB Deno Deploy cap. Data was safe on storage; the verifier killed its own worker.
+
+**Locked by:**
+- Deno test `supabase/functions/create-backup/verify_integrity_memory_test.ts` — three behavioral cases (happy path, missing part, zero-byte part) spy `download` and assert call count === 0.
+- Static contract test `src/test/infra/backupFinalizeMemoryContract.test.ts` — strips comments from `index.ts` and asserts the `verifyBackupIntegrity` body contains no `.download(`, `JSON.parse(text)`, or `blob.text()`; also asserts `BATCH_SIZE = 4` and `loadHardFailOnPartial(` still present (pairs with the WP-9.2.a/b contracts).
+- Production smoke test `src/test/infra/backupHealthSmoke.test.ts` — when CI exposes `TEST_SUPABASE_URL` + `TEST_SUPABASE_SERVICE_ROLE_KEY`, fails if any `backup_logs` row in the last 24 h has `error_message ILIKE '%HTTP 546%'` or if fewer than 5/7 recent scheduled runs are healthy.
+
+Any PR re-introducing per-file `download` / `JSON.parse` inside the verifier — or removing the listed test files — must cite an explicit Phase 9.x amendment.
