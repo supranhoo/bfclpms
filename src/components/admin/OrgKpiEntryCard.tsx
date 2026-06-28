@@ -1170,8 +1170,8 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
                 </AlertDialogContent>
               </AlertDialog>
             )}
-            {/* Bulk Rollback — only for scoped KPIs with multiple propagated entries */}
-            {isPropagated && isAdmin && onBulkRollback && data.scope !== 'organization' && (
+            {/* Bulk Rollback — only when OKV-truth has at least one propagated/approved scope (ADR-091) */}
+            {canBulkRollback && isAdmin && onBulkRollback && data.scope !== 'organization' && (
               <AlertDialog>
                 <AlertDialogTrigger asChild>
                   <Button
