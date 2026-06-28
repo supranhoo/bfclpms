@@ -1,5 +1,19 @@
 ### §AR-DIALOG-SCROLL — Long dialogs use native overflow, not Radix ScrollArea (v2.66.58, 2026-06-24)
 
+### §OKV-SNAPSHOT-FALLBACK-COALESCE — Org KPI submission fallback coalesces over snapshot columns (v2.66.59, 2026-06-28)
+
+**Rule.** `useOrgKpiSubmissionFallback` MUST resolve each fallback entry by coalescing `review_submissions.achieved_value → manager_achieved_value → self_achieved_value` in that priority order, and MUST surface a `valueSource: 'owner' | 'manager' | 'self' | 'none'` field on every `SubmissionFallbackEntry`. The OKV row's own `achieved_value` continues to win whenever non-NULL — this rule applies only when OKV is empty.
+
+**Why.** Post-rollback (`rollback_to_data_entry`) the OKV row is cleared, but per POLICY §88 the child `review_submissions` snapshots remain frozen. When the children are past `kra_set`, re-propagation cannot write the owner column. Reading only `achieved_value` therefore produces `—` rows on `/admin/org-kpi-data` while the employee scorecard still shows the snapshot value the manager and self stages recorded — a visible discrepancy that triggered the Biswajit / Y R V S Murthy / May 2026 report.
+
+**Scope.** Strictly read-only display. POLICY §88 (Submission Snapshot Immutability) is unchanged. No propagation path may write `self_achieved_value` / `manager_achieved_value` on a child past `kra_set`; the deferred forced-resync RPC (ADR-092 follow-up 3) is the only sanctioned override and must always emit an `OKV_FORCED_RESYNC` audit row.
+
+**UI obligation.** When `valueSource !== 'owner'`, surfaces that present the fallback value MUST disambiguate the source (e.g. "from snapshot" hint) so admins do not mistake a frozen reviewer-stage value for an owner-authoritative OKV value.
+
+**Guard.** `src/test/orgKpiSnapshotFallbackCoalesce.test.ts` pins the priority, NULL behaviour, NA semantics, and the Y R V S Murthy regression scenario. The owner-wins precedence is independently pinned by `src/test/orgKpiPostPropagationHydration.test.ts`.
+
+**Rollback.** Revert `src/hooks/useOrgKpiSubmissionFallback.ts` and delete the new test file. No schema, RLS, RPC, or data change.
+
 ### §PERF-AUDIT-PANEL-PAGINATION — Reviewer dashboards must page roster + stats server-side (v2.66.57, 2026-06-27)
 
 **Rule.** The reviewer dashboard grid (Audit, HR PMS, Management, Skip-Level — `/dashboard?view={audit|hr_pms|management|skip_level}`) MUST source its visible cards from a single server-side paginated RPC that returns (a) the profile slice, (b) precomputed per-employee badge counts for the selected period, and (c) the window-total count. Client-side org-wide KPI scans (`useKpisByPeriodRanges`, `useReviewSubmissionScoresByKpiIds`) MUST NOT be used to compute visible-card stats.
