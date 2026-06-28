@@ -13261,6 +13261,17 @@ export type Database = {
           variant_kra_names: string[]
         }[]
       }
+      detect_intra_year_cycle_anchor_drift: {
+        Args: never
+        Returns: {
+          affected_row_count: number
+          anchors: string[]
+          employee_id: string
+          frequency: string
+          kpi_name: string
+          review_year: number
+        }[]
+      }
       detect_org_kpi_cycle_anchor_drift: {
         Args: never
         Returns: {
@@ -14290,6 +14301,10 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      repair_intra_year_cycle_anchor_drift: {
+        Args: { p_dry_run?: boolean; p_safety_ceiling?: number }
+        Returns: Json
       }
       repair_multimonth_workflow_drift_v5: {
         Args: { p_apply?: boolean }
