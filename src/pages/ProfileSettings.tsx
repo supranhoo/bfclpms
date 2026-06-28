@@ -118,7 +118,7 @@ export default function ProfileSettings() {
     employeeCategory: (profile as any)?.employee_category || null,
     employmentStatus: (profile as any)?.employment_status || null,
     employeeCode: profile?.employee_code || null,
-    joiningDate: profile?.created_at || null,
+    joiningDate: (profile as any)?.doj || null,
   }), [division, businessUnit, department, subBranch, profile]);
 
   if (loading) {
