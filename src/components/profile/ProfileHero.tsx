@@ -132,9 +132,9 @@ export default function ProfileHero({ user, profile, departmentName, divisionNam
                 <UserCheck className="h-3 w-3" /> {managerName}
               </Badge>
             )}
-            {profile?.created_at && (
+            {(profile as any)?.doj && (
               <Badge variant="outline" className="gap-1 text-xs">
-                <Calendar className="h-3 w-3" /> Joined {format(new Date(profile.created_at), 'MMM yyyy')}
+                <Calendar className="h-3 w-3" /> Joined {format(new Date((profile as any).doj), 'MMM yyyy')}
               </Badge>
             )}
           </div>
