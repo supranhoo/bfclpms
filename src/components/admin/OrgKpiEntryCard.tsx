@@ -24,6 +24,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
 import { useSentBackOrgKpiEmployees, type SentBackInfo } from '@/hooks/useSentBackOrgKpiEmployees';
 import { isComplianceKpi, useBulkEmployeeSubmissionDates } from '@/hooks/useComplianceSubFactors';
 import { scopedRowsSignature } from '@/lib/orgKpiCounts';
+import { hasBulkRollbackTarget } from '@/lib/orgKpiStatus';
 import { useDiagnoseOrgKpiGap, useRepairOrgKpiGap, type DiagnoseGapRow } from '@/hooks/useRepairOrgKpiPropagationGap';
 import { useEnsureOrgKpiScopeRows } from '@/hooks/useEnsureOrgKpiScopeRows';
 import { Wrench, Paperclip } from 'lucide-react';
@@ -125,6 +126,9 @@ const scopeIcons = {
 export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, governanceLocked, employeeKpiIds, sentBackMap, onSave, onSaveAndPropagate, onUnlock, onRollback, onBulkRollback, onOpenImpact, onRemoveFromOrg, onClearEntry }: OrgKpiEntryCardProps) {
   const isLocked = (data.status === 'propagated' && !isAdmin) || (governanceLocked === true);
   const isPropagated = data.status === 'propagated';
+  // ADR-091 — Bulk Rollback visibility uses OKV-truth (per-scope status),
+  // not the fact-based card status. See src/lib/orgKpiStatus.ts.
+  const canBulkRollback = hasBulkRollbackTarget(data.scopedRows);
   const [isUnlocking, setIsUnlocking] = useState(false);
   const [isRollingBack, setIsRollingBack] = useState(false);
   const [isBulkRollingBack, setIsBulkRollingBack] = useState(false);
@@ -1166,8 +1170,8 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
                 </AlertDialogContent>
               </AlertDialog>
             )}
-            {/* Bulk Rollback — only for scoped KPIs with multiple propagated entries */}
-            {isPropagated && isAdmin && onBulkRollback && data.scope !== 'organization' && (
+            {/* Bulk Rollback — only when OKV-truth has at least one propagated/approved scope (ADR-091) */}
+            {canBulkRollback && isAdmin && onBulkRollback && data.scope !== 'organization' && (
               <AlertDialog>
                 <AlertDialogTrigger asChild>
                   <Button

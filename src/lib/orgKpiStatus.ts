@@ -196,3 +196,24 @@ export function deriveScopedRowStatus(input: DeriveScopedRowStatusInput): Scoped
   if (input.okvHasValue) return 'entered';
   return 'pending';
 }
+
+// =============================================================================
+// Bulk Rollback gate (ADR-091)
+// =============================================================================
+
+/**
+ * The "Rollback All Scopes" button must only show when there is at least one
+ * `org_kpi_values` row in `propagated` or `approved` status for the current
+ * period — that's the only state `useBulkRollbackOrgKpiPropagation` can act on.
+ *
+ * The card-level `data.status` uses ADR-055 fact-based inference (child
+ * scorecards advanced past `kra_set` → "propagated" even when no OKV snapshot
+ * exists), which is intentionally more permissive than what bulk rollback can
+ * target. Gating the button on card status produces a guaranteed-fail UX.
+ */
+export function hasBulkRollbackTarget(
+  scopedRows: ReadonlyArray<{ status?: string | null }> | undefined | null,
+): boolean {
+  if (!scopedRows || scopedRows.length === 0) return false;
+  return scopedRows.some((r) => r.status === 'propagated' || r.status === 'approved');
+}
