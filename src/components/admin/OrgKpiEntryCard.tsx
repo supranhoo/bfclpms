@@ -126,6 +126,9 @@ const scopeIcons = {
 export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, governanceLocked, employeeKpiIds, sentBackMap, onSave, onSaveAndPropagate, onUnlock, onRollback, onBulkRollback, onOpenImpact, onRemoveFromOrg, onClearEntry }: OrgKpiEntryCardProps) {
   const isLocked = (data.status === 'propagated' && !isAdmin) || (governanceLocked === true);
   const isPropagated = data.status === 'propagated';
+  // ADR-091 — Bulk Rollback visibility uses OKV-truth (per-scope status),
+  // not the fact-based card status. See src/lib/orgKpiStatus.ts.
+  const canBulkRollback = hasBulkRollbackTarget(data.scopedRows);
   const [isUnlocking, setIsUnlocking] = useState(false);
   const [isRollingBack, setIsRollingBack] = useState(false);
   const [isBulkRollingBack, setIsBulkRollingBack] = useState(false);
