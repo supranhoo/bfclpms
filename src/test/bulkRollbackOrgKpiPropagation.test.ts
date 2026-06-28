@@ -18,6 +18,7 @@
  * hook and do NOT depend on the live Supabase client.
  */
 import { describe, it, expect } from 'vitest';
+import { hasBulkRollbackTarget } from '@/lib/orgKpiStatus';
 
 type Row = { id: string; status: string; achieved_value: number | null; category_id: string };
 
@@ -85,5 +86,42 @@ describe('Bulk rollback — stale-cache recovery contract', () => {
     const result = await runBulkRollbackContract(rows, (key) => calls.push(key));
     expect(result.ok).toBe(true);
     expect(calls).toHaveLength(0);
+  });
+});
+
+/**
+ * ADR-091 — Bulk Rollback button visibility must follow OKV-truth
+ * (per-scope status) and not the fact-based card-tile status. Repro for
+ * "Handle all breakdowns…" May 2026: card shows Propagated because every
+ * child KPI advanced past kra_set (manager_check/approved/self_review),
+ * but OKV has 1 pending row. The bulk hook can't act on that — so the
+ * button MUST be hidden, not just throw on click.
+ */
+describe('Bulk Rollback gate — OKV-truth (ADR-091)', () => {
+  it('hides the button when every scoped row is pending/entered (fact-based propagated card)', () => {
+    const scopedRows = [
+      { status: 'pending' as const },
+      { status: 'pending' as const },
+      { status: 'entered' as const },
+    ];
+    expect(hasBulkRollbackTarget(scopedRows)).toBe(false);
+  });
+
+  it('shows the button when at least one scope is propagated', () => {
+    const scopedRows = [
+      { status: 'pending' as const },
+      { status: 'propagated' as const },
+    ];
+    expect(hasBulkRollbackTarget(scopedRows)).toBe(true);
+  });
+
+  it('shows the button when at least one scope is approved', () => {
+    expect(hasBulkRollbackTarget([{ status: 'approved' }])).toBe(true);
+  });
+
+  it('hides the button for empty/undefined scoped rows', () => {
+    expect(hasBulkRollbackTarget([])).toBe(false);
+    expect(hasBulkRollbackTarget(undefined)).toBe(false);
+    expect(hasBulkRollbackTarget(null)).toBe(false);
   });
 });
