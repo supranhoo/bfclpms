@@ -10,6 +10,15 @@ export interface SubmissionFallbackEntry {
   selfRemarks?: string | null;
   /** Self-review evidence URLs (plural preferred, else singular). Empty when none. */
   selfEvidenceUrls?: string[];
+  /**
+   * ADR-092 — Source of the resolved `achievedValue`, so UI can disambiguate
+   * "OKV authoritative" reads from "frozen reviewer-stage snapshot" reads.
+   *   - 'owner'   → `review_submissions.achieved_value` (data-owner column)
+   *   - 'manager' → `review_submissions.manager_achieved_value`
+   *   - 'self'   → `review_submissions.self_achieved_value`
+   *   - 'none'   → no value resolved
+   */
+  valueSource?: 'owner' | 'manager' | 'self' | 'none';
 }
 
 /**
@@ -69,13 +78,15 @@ export function useOrgKpiSubmissionFallback(
         self_remarks: string | null;
         self_evidence_url: string | null;
         self_evidence_urls: string[] | null;
+        self_achieved_value: number | null;
+        manager_achieved_value: number | null;
       }> = [];
       const chunk = 500;
       for (let i = 0; i < kpiIds.length; i += chunk) {
         const slice = kpiIds.slice(i, i + chunk);
         const { data, error } = await supabase
           .from('review_submissions')
-          .select('kpi_id, achieved_value, is_na, self_remarks, self_evidence_url, self_evidence_urls')
+          .select('kpi_id, achieved_value, is_na, self_remarks, self_evidence_url, self_evidence_urls, self_achieved_value, manager_achieved_value')
           .in('kpi_id', slice);
         if (error) throw error;
         if (data) submissions.push(...data as any);
@@ -85,16 +96,25 @@ export function useOrgKpiSubmissionFallback(
 
       // 3) Per-employee entries (used by the employee-scope branch) +
       //    grouped buckets used to derive department / organization aggregates.
-      type Bucket = { values: number[]; naCount: number; total: number };
+      type Bucket = { values: number[]; naCount: number; total: number; sources: Array<'owner'|'manager'|'self'> };
       const deptBuckets = new Map<string, Bucket>(); // key: `${defKey}||dept||${deptId}`
       const orgBuckets = new Map<string, Bucket>();  // key: `${defKey}||org`
 
-      const pushBucket = (m: Map<string, Bucket>, key: string, val: number | null, isNa: boolean) => {
+      const pushBucket = (
+        m: Map<string, Bucket>,
+        key: string,
+        val: number | null,
+        isNa: boolean,
+        source: 'owner' | 'manager' | 'self' | 'none',
+      ) => {
         let b = m.get(key);
-        if (!b) { b = { values: [], naCount: 0, total: 0 }; m.set(key, b); }
+        if (!b) { b = { values: [], naCount: 0, total: 0, sources: [] }; m.set(key, b); }
         b.total += 1;
         if (isNa) b.naCount += 1;
-        else if (val !== null) b.values.push(val);
+        else if (val !== null) {
+          b.values.push(val);
+          if (source !== 'none') b.sources.push(source);
+        }
       };
 
       (kpiRows ?? []).forEach(k => {
@@ -104,7 +124,26 @@ export function useOrgKpiSubmissionFallback(
           ? sub.self_evidence_urls.filter((u): u is string => typeof u === 'string' && !!u)
           : (sub.self_evidence_url ? [sub.self_evidence_url] : []);
         const selfRemarks = sub.self_remarks ?? null;
-        const hasValue = sub.achieved_value !== null
+        // ADR-092 — Coalesce the displayed value across the three "achieved"
+        // columns so the admin Org KPI Data Entry row stops rendering "—"
+        // while the employee scorecard shows the post-self-review snapshot.
+        // POLICY §88 (snapshot immutability) is unchanged: this is a
+        // READ-ONLY display fallback. `valueSource` lets the UI badge
+        // which column actually answered.
+        const ownerVal = sub.achieved_value;
+        const managerVal = (sub as any).manager_achieved_value ?? null;
+        const selfVal = (sub as any).self_achieved_value ?? null;
+        const coalescedValue = ownerVal !== null
+          ? ownerVal
+          : managerVal !== null
+            ? managerVal
+            : selfVal;
+        const valueSource: 'owner' | 'manager' | 'self' | 'none' =
+          ownerVal !== null ? 'owner'
+            : managerVal !== null ? 'manager'
+              : selfVal !== null ? 'self'
+                : 'none';
+        const hasValue = coalescedValue !== null
           || !!sub.is_na
           || !!(selfRemarks && selfRemarks.trim())
           || selfUrls.length > 0;
@@ -116,38 +155,44 @@ export function useOrgKpiSubmissionFallback(
         // the employee branch).
         if (k.employee_id) {
           map.set(`${defKey}||${k.employee_id}`, {
-            achievedValue: sub.achieved_value,
+            achievedValue: coalescedValue,
             isNa: !!sub.is_na,
             selfRemarks,
             selfEvidenceUrls: selfUrls,
+            valueSource,
           });
         }
 
         const deptId = (k as any).profiles?.department_id as string | null | undefined;
         if (deptId) {
-          pushBucket(deptBuckets, `${defKey}||dept||${deptId}`, sub.achieved_value, !!sub.is_na);
+          pushBucket(deptBuckets, `${defKey}||dept||${deptId}`, coalescedValue, !!sub.is_na, valueSource);
         }
-        pushBucket(orgBuckets, `${defKey}||org`, sub.achieved_value, !!sub.is_na);
+        pushBucket(orgBuckets, `${defKey}||org`, coalescedValue, !!sub.is_na, valueSource);
       });
 
       const resolveBucket = (b: Bucket): SubmissionFallbackEntry => {
         // All-NA wins
         if (b.naCount > 0 && b.naCount === b.total) {
-          return { achievedValue: null, isNa: true };
+          return { achievedValue: null, isNa: true, valueSource: 'none' };
         }
         if (b.values.length === 0) {
-          return { achievedValue: null, isNa: false };
+          return { achievedValue: null, isNa: false, valueSource: 'none' };
         }
         // Mode (most common) — ties broken by first occurrence.
         const counts = new Map<number, number>();
         let bestVal = b.values[0];
         let bestCount = 0;
+        let bestIdx = 0;
         for (const v of b.values) {
           const c = (counts.get(v) ?? 0) + 1;
           counts.set(v, c);
-          if (c > bestCount) { bestCount = c; bestVal = v; }
+          if (c > bestCount) { bestCount = c; bestVal = v; bestIdx = b.values.indexOf(v); }
         }
-        return { achievedValue: bestVal, isNa: false };
+        // Mirror the chosen value's source if we tracked one for it; fall
+        // back to the first non-none source we saw for this bucket so the
+        // badge stays informative even when modes split.
+        const sourceForBest = b.sources[bestIdx] ?? b.sources[0] ?? 'owner';
+        return { achievedValue: bestVal, isNa: false, valueSource: sourceForBest };
       };
 
       deptBuckets.forEach((b, key) => map.set(key, resolveBucket(b)));
