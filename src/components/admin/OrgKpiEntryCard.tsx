@@ -24,6 +24,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
 import { useSentBackOrgKpiEmployees, type SentBackInfo } from '@/hooks/useSentBackOrgKpiEmployees';
 import { isComplianceKpi, useBulkEmployeeSubmissionDates } from '@/hooks/useComplianceSubFactors';
 import { scopedRowsSignature } from '@/lib/orgKpiCounts';
+import { hasBulkRollbackTarget } from '@/lib/orgKpiStatus';
 import { useDiagnoseOrgKpiGap, useRepairOrgKpiGap, type DiagnoseGapRow } from '@/hooks/useRepairOrgKpiPropagationGap';
 import { useEnsureOrgKpiScopeRows } from '@/hooks/useEnsureOrgKpiScopeRows';
 import { Wrench, Paperclip } from 'lucide-react';
