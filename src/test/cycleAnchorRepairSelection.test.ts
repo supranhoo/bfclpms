@@ -15,7 +15,7 @@ const row = (over: Partial<KpiAnchorRow>): KpiAnchorRow => ({
 describe('planAnchorRepairs — ADR-090 oldest-row-wins', () => {
   it('returns no actions when tuple has a single shared anchor', () => {
     const out = planAnchorRepairs([
-      row({ id: 'a', review_period: undefined as never }),
+      row({ id: 'a' }),
       row({ id: 'b', created_at: '2026-03-01T00:00:00Z' }),
     ]);
     expect(out).toEqual([]);
