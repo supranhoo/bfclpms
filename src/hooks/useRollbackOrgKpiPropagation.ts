@@ -200,7 +200,7 @@ export function useBulkRollbackOrgKpiPropagation() {
         // the current truth (e.g. all scopes already rolled back individually).
         queryClient.invalidateQueries({ queryKey: ['org-kpi-values'] });
         throw new Error(
-          'All scopes for this KPI have already been rolled back or are not in a propagated/approved state. The view has been refreshed.'
+          'No propagated scopes to bulk-roll-back for this period. If child scorecards have advanced through a non-propagation path, roll each scope back individually from the per-row table. The view has been refreshed.'
         );
       }
 
