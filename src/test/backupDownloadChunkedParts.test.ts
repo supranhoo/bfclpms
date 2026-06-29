@@ -51,6 +51,9 @@ function wrapper({ children }: { children: React.ReactNode }) {
 
 beforeEach(() => {
   downloadMock.mockReset();
+  // jsdom doesn't implement these — stub for onSuccess side effects.
+  (URL as unknown as { createObjectURL: () => string }).createObjectURL = () => 'blob:test';
+  (URL as unknown as { revokeObjectURL: () => void }).revokeObjectURL = () => {};
 });
 
 describe('useDownloadBackup — chunked manifest with multiple parts', () => {
