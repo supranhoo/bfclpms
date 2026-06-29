@@ -56,6 +56,27 @@ beforeEach(() => {
   (URL as unknown as { revokeObjectURL: () => void }).revokeObjectURL = () => {};
 });
 
+// Capture the JSON payload by spying on Blob construction so we don't depend
+// on jsdom's Blob.text() implementation.
+function captureBlobText(): { text: () => string } {
+  const orig = globalThis.Blob;
+  let captured = '';
+  class CapturingBlob {
+    constructor(parts: BlobPart[]) {
+      captured = parts.map((p) => (typeof p === 'string' ? p : '')).join('');
+    }
+    get size() { return captured.length; }
+    type = 'application/json';
+  }
+  (globalThis as unknown as { Blob: unknown }).Blob = CapturingBlob;
+  return {
+    text: () => {
+      (globalThis as unknown as { Blob: unknown }).Blob = orig;
+      return captured;
+    },
+  };
+}
+
 describe('useDownloadBackup — chunked manifest with multiple parts', () => {
   it('downloads every part listed in entry.files and concatenates rows', async () => {
     const manifestPath = 'auto/2026-06-29/manifest.json';
