@@ -1172,6 +1172,7 @@ export function ManagementScorecard({
                 onReviewerScoreChange={setManagementScore}
                 submissionMap={submissionMap}
                 reviewLevel="management"
+                workflowStages={effectiveStages}
               />
             )}
 
@@ -1420,6 +1421,7 @@ function DailySubmissionWithOverrideWrapper({
   onReviewerScoreChange,
   submissionMap,
   reviewLevel,
+  workflowStages,
 }: { 
   kpi: KPI; 
   selectedPeriod: string; 
@@ -1435,6 +1437,7 @@ function DailySubmissionWithOverrideWrapper({
   onReviewerScoreChange: (score: number | null) => void;
   submissionMap: Map<string, any>;
   reviewLevel: 'manager' | 'auditor' | 'management';
+  workflowStages?: string[] | null;
 }) {
   const { data: submissions } = useSubPeriodSubmissions(
     kpi.frequency === 'Daily' ? kpi.id : undefined, 
@@ -1485,6 +1488,7 @@ function DailySubmissionWithOverrideWrapper({
         qualitativeOptions={kpi.qualitative_options as QualitativeOption[] | null}
         kpiStatus={kpi.status}
         managerOverrides={dailyOverrides.size > 0 ? dailyOverrides : undefined}
+        workflowStages={workflowStages}
       />
       
       {isDailyBinary && (
