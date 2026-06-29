@@ -19,7 +19,9 @@ vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn(), warning: v
 import { useDownloadBackup } from '@/hooks/useBackups';
 
 function jsonBlob(value: unknown): Blob {
-  return new Blob([JSON.stringify(value)], { type: 'application/json' });
+  const str = JSON.stringify(value);
+  // jsdom's Blob may lack .text() — provide a shim that the hook can await.
+  return { text: async () => str } as unknown as Blob;
 }
 
 async function runMutation(filePath: string) {
