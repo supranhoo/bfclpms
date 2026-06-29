@@ -51,7 +51,7 @@ describe('openStorageFile previewable dispatch', () => {
     window.addEventListener('evidence-preview', handler);
     vi.spyOn(window, 'open').mockImplementation(() => null);
 
-    await openStorageFile('https://x.example.com/file.docx', 'file.docx');
+    await openStorageFile('https://x.example.com/file.zip', 'file.zip');
 
     expect(handler).not.toHaveBeenCalled();
     window.removeEventListener('evidence-preview', handler);
