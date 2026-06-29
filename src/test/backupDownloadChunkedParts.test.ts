@@ -15,7 +15,6 @@ vi.mock('@/integrations/supabase/client', () => ({
 }));
 
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn() } }));
-vi.mock('./useSystemSettings', () => ({ useUpdateSystemSetting: () => ({}) }), { virtual: true });
 
 import { useDownloadBackup } from '@/hooks/useBackups';
 
