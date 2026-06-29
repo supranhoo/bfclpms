@@ -4311,3 +4311,18 @@ Enforcement: `src/test/performance/perfCacheDefaults.test.ts` pins the floors an
 **Rule.** Any export (Excel/CSV) of money derived from a grid-backed total MUST mirror the grid's SSOT rounding strategy: **sum first, round once**. Per-row `Math.round(total × rate)` followed by spreadsheet `SUM` is FORBIDDEN — it accumulates half-up bias and diverges from the on-screen PMS Grand Total. Exports MUST: (a) write per-row amounts as raw `total × rate` (number, unrounded), and (b) append a trailing `Grand Total` row computed with the exact grid expression `Math.round(Σ total × rate)`. Pinned by `src/test/incentiveExportData.test.ts`.
 
 **Why.** RCA 2026-06-29 (Upendra, Metal Sizing June 2026): Excel SUM read ₹3,98,139 vs PMS ₹3,98,134 — ₹5 drift across 280 employees from per-row rounding. Same defect class as ADR-094: display layer re-implementing math instead of mirroring the SSOT.
+
+### §EVIDENCE-ONBEHALF-UPLOAD (ADR-096, 2026-06-29)
+
+**Rule.** The `review-evidence` storage bucket MUST keep three additive
+permissive policies on `storage.objects` allowing **admin** and **hr_pms**
+roles to INSERT / UPDATE / DELETE objects in any folder, scoped to
+`bucket_id = 'review-evidence'`. The existing per-user and Org-KPI policies
+remain in force. Auditors stay read-only.
+
+**Why.** `EvidenceUpload.tsx` writes objects under `${employeeId}/${kpiId}/...`
+so the employee and their reporting chain can read via the existing SELECT
+policy. Without admin/HR-PMS on-behalf write policies, Admin Data Entry
+uploads fail with "new row violates row-level security policy" (RCA
+2026-06-29, admin 101785 → Sajid Raza 100264). Pinned by
+`src/test/reviewEvidenceOnBehalfPolicy.test.ts`.
