@@ -35,6 +35,13 @@ interface ReviewStageCardProps {
    * the misleading "N/A" pill so loading is not confused with "no data".
    */
   isLoading?: boolean;
+  /**
+   * §88.5 — when true, render an italic hint under the Self card that the
+   * value will be refreshed from the Org KPI on the next propagation.
+   * Only used for the Self stage when the row was system auto-advanced
+   * and no employee evidence exists yet.
+   */
+  autoAdvancedResyncHint?: boolean;
 }
 
 const iconColorClasses = {
@@ -80,6 +87,7 @@ export function ReviewStageCard({
   kpiName,
   employeeCode,
   isLoading = false,
+  autoAdvancedResyncHint = false,
 }: ReviewStageCardProps) {
   const isPending = status === 'pending';
   const isCurrent = status === 'current';
@@ -205,6 +213,11 @@ export function ReviewStageCard({
             </button>
           ))}
         </div>
+      )}
+      {autoAdvancedResyncHint && (
+        <p className="text-[10px] italic text-muted-foreground/80 mt-1">
+          Will re-sync from Org KPI on next propagation
+        </p>
       )}
     </div>
   );
