@@ -135,11 +135,14 @@ export async function openStorageFile(publicUrl: string, fileName?: string): Pro
  * Detects whether an evidence file is previewable in-browser.
  * Returns 'pdf', 'image', or null based on file extension.
  */
-export function isPreviewableEvidence(urlOrName: string | null | undefined): 'pdf' | 'image' | null {
+export function isPreviewableEvidence(
+  urlOrName: string | null | undefined,
+): 'pdf' | 'image' | 'office' | null {
   if (!urlOrName) return null;
   const cleaned = urlOrName.split('?')[0].split('#')[0];
   const ext = (cleaned.split('.').pop() || '').toLowerCase();
   if (ext === 'pdf') return 'pdf';
   if (['png', 'jpg', 'jpeg', 'webp', 'gif', 'svg'].includes(ext)) return 'image';
+  if (['xlsx', 'xls', 'xlsm', 'csv', 'doc', 'docx', 'ppt', 'pptx'].includes(ext)) return 'office';
   return null;
 }
