@@ -56,7 +56,23 @@ export function EvidencePreviewProvider() {
     (async () => {
       try {
         const match = detail.url.match(/\/storage\/v1\/object\/public\/([^/]+)\/(.+)$/);
-        if (match) {
+        const kindNow = isPreviewableEvidence(detail.fileName ?? detail.url);
+        if (kindNow === 'office') {
+          // Office files render via Microsoft's public Office viewer, which
+          // needs an externally reachable URL — blob URLs won't work. Use a
+          // short-lived signed URL when the source is a private bucket,
+          // otherwise pass the public URL through unchanged.
+          if (match) {
+            const [, bucket, path] = match;
+            const { data, error: sErr } = await supabase.storage
+              .from(bucket)
+              .createSignedUrl(decodeURIComponent(path), 600);
+            if (sErr || !data?.signedUrl) throw new Error(sErr?.message || 'Could not sign URL');
+            createdUrl = data.signedUrl;
+          } else {
+            createdUrl = detail.url;
+          }
+        } else if (match) {
           const [, bucket, path] = match;
           const { data, error: dlErr } = await supabase.storage
             .from(bucket)
@@ -140,6 +156,13 @@ export function EvidencePreviewProvider() {
             src={blobUrl}
             alt={displayName}
             className="max-w-full max-h-[80vh] object-contain"
+          />
+        )}
+        {!loading && !error && blobUrl && kind === 'office' && (
+          <iframe
+            src={`https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(blobUrl)}`}
+            title={displayName}
+            className="w-full h-full min-h-[65vh] border-0 bg-white"
           />
         )}
       </div>
