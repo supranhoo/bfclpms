@@ -1,69 +1,51 @@
-## RCA — Why the auditor's xlsx download fails
-
-The URL in the screenshot is:
-
-```
-https://<ref>.supabase.co/storage/v1/object/public/review-evidence/...
-```
-
-…and Storage replies `404 Bucket not found`. Confirmed against `storage.buckets`:
-
-| bucket | public |
-| --- | --- |
-| `review-evidence` | **false** (private) |
-
-A private bucket has no `/object/public/...` endpoint, so any public URL on it 404s. PDFs/images currently work for auditors because `openStorageFile()` (in `src/lib/storageDownload.ts`) silently re-downloads them via `supabase.storage.from(bucket).download(path)` (SDK uses an authenticated path) and serves a blob.
-
-For **Office files** (xlsx/docx/…), the flow is different — handled by `src/components/review/EvidencePreviewDialog.tsx`:
-
-1. Preview iframe: correctly creates a 10-min **signed URL** for the Office Online viewer. ✅
-2. **Download button** (`handleDownload`): uses `blobUrl` only when it starts with `blob:`; for office the signed URL starts with `https://`, so it falls back to `downloadDirect(detail.url, …)` — i.e. the broken `/object/public/...` URL. ❌ → produces the 404 page in the screenshot.
-3. **Open in new tab** (`handleOpenNewTab`): `blobUrl || detail.url` — works for office once the signed URL is fetched, but if the user clicks before the preview load completes, it falls back to the broken public URL. ⚠️
-
-So the auditor sees the Office preview render (signed URL works), then clicking **Download** opens the unsigned public URL and Supabase returns "Bucket not found".
-
-## Scope of fix (surgical, presentation-only)
-
-Only `src/components/review/EvidencePreviewDialog.tsx`. No DB, no RLS, no policy change. Bucket stays private (correct per POLICY §evidence access).
-
-### Changes
-
-1. **`handleDownload`**
-   - If `blobUrl` is set, download from it (works for both `blob:` and signed `https:` URLs).
-   - Else, if `detail.url` is a `/storage/v1/object/public/<bucket>/<path>` URL on a private bucket, fetch a fresh signed URL on the fly (`createSignedUrl(path, 300)`) and download via that.
-   - Else, download `detail.url` directly (non-storage URL).
-   - For `blob:` office downloads, set `a.download = displayName` (current behaviour). For signed URLs, browsers honour `Content-Disposition` from Storage, which already includes the filename — keep `a.download` as a hint.
-
-2. **`handleOpenNewTab`**
-   - Same guard: if `detail.url` is a private-bucket public URL and we don't yet have `blobUrl`, fetch a signed URL first, then `window.open(...)`.
-   - Disable the button while `loading` is true so the user can't click before we have a usable URL.
-
-3. **Error UX**
-   - Wrap both handlers in try/catch and `toast.error("Could not prepare file for download")` on failure (matches existing pattern; toast already imported elsewhere — add `sonner` import here).
-
-### What we are NOT changing
-
-- The Safety `EvidencePreviewDialog` (`src/components/safety/EvidencePreviewDialog.tsx`) — already uses signed URLs end-to-end; no bug there.
-- Bucket visibility, RLS, or upload paths.
-- `storageDownload.ts` blob-fallback path for non-office files (already correct).
+## Goal
+Make the **Daily Submission Summary** table in the review sheet workflow-aware so reviewer columns (Manager / Skip-Lvl / HR PMS / Auditor / Mgmt) appear **only if that stage exists in the employee's resolved workflow template** AND the KPI has progressed to/past that stage. Today it shows all 6 columns regardless of template (e.g. a `self_l1_audit` employee currently sees Skip-Lvl, HR PMS, Mgmt as `—` once status advances).
 
 ## Risk & Impact
+- **UI only.** No DB, RLS, RPC, or scoring changes.
+- **Regression risk:** low — column gating becomes stricter (subset of today's columns). Existing data still renders correctly under the same stage-reached rule.
+- **Affected callers:** `UnifiedScorecard`, `EmployeeScorecard`, `AuditScorecard`, `ManagementScorecard`, `SelfReviewSheet`, `InlineDailySubmissionRow`. All except `InlineDailySubmissionRow` already resolve `effectiveStages` via `useEmployeeWorkflowStages`; that one will need to resolve it from props (employeeId + period + year).
+- **Pagination/perf:** unaffected.
+- **Mitigation:** prop is optional with safe fallback to current STATUS_ORDER behavior so any caller missing the prop keeps working.
 
-- **Data**: none. Read-only signed URLs, 5-min TTL.
-- **Workflow**: none. Auditors regain ability to download xlsx evidence; other roles unaffected.
-- **UI/UX**: Download/Open-new-tab buttons get a brief disabled state while a signed URL is fetched; toast on failure.
-- **Regression risk**: Low. Behaviour for PDF/image (blob path) is unchanged because `blobUrl` already starts with `blob:` for those.
-- **Mitigation**: Add unit test in `src/test/review/evidencePreview.test.ts` covering: (a) office download uses signed URL (not public URL); (b) `handleDownload` calls `createSignedUrl` when invoked before preview load resolves; (c) toast fires on signing failure.
+## Plan
 
-## Deliverables
+### 1. `src/components/review/DailySubmissionSummary.tsx`
+- Add optional prop `workflowStages?: string[]` (the resolved template stages, e.g. `['kra_set','self_review','manager_check','audit','approved']`).
+- In `visibleColumns` useMemo:
+  - Keep current "status has reached stage" gate.
+  - Add second gate: only push a reviewer column when the corresponding workflow stage is present in `workflowStages` (when provided). Mapping:
+    - Manager → `manager_check`
+    - Skip-Lvl → `skip_level_check`
+    - HR PMS → `hr_pms_review`
+    - Auditor → `audit`
+    - Mgmt → `management_review`
+  - When `workflowStages` is undefined, fall back to today's behavior (back-compat).
+- Header chip "N review levels" already derives from `visibleColumns.length` — will automatically reflect the trimmed set (e.g. "3 review levels" for `self_l1_audit`).
 
-1. Patch `src/components/review/EvidencePreviewDialog.tsx` (handlers + signed-URL helper).
-2. Extend `src/test/review/evidencePreview.test.ts` with the three cases above.
-3. Update `DOCUMENTATION.md` (new release entry, e.g. v2.66.68 — "Fix: Office evidence download on private bucket via signed URL").
-4. Update `POLICY.md` §evidence-access: clarify "all client downloads from the private `review-evidence` bucket MUST use SDK download or signed URLs; never public-URL navigation."
-5. ADR-099 documenting the public-URL-vs-private-bucket pitfall and the SSOT rule that all evidence access goes through `openStorageFile()` / signed URLs.
-6. Update `mem://features/review/office-evidence-preview` with the download path fix.
+### 2. Wire `workflowStages` through callers
+Pass the already-resolved `effectiveStages` (or equivalent) into `<DailySubmissionSummary>`:
+- `UnifiedScorecard.tsx` → `DailySubmissionSummaryWithOverride` → `DailySubmissionSummary` (thread prop through).
+- `EmployeeScorecard.tsx` → same pattern (already has `effectiveStages` from `useEmployeeWorkflowStages`).
+- `AuditScorecard.tsx`, `ManagementScorecard.tsx`, `SelfReviewSheet.tsx` → use existing `useEmployeeWorkflowStages(employee.id, period, year)`.
+- `InlineDailySubmissionRow.tsx` → add the same hook call (employeeId/period/year already available on the row) and pass through.
 
-## Rollback
+### 3. Tests
+- New `src/test/dailySubmissionSummaryWorkflowAware.test.tsx`:
+  - `self_l1_audit` template + status=`approved` → renders Self + Manager + Auditor columns only (no Skip-Lvl / HR PMS / Mgmt).
+  - `self_hr_pms` template + status=`hr_pms_review` → Self + Manager + HR PMS.
+  - Full template + status=`approved` → all 6 columns (regression).
+  - `workflowStages` omitted → behaves like today (back-compat).
 
-Revert the single component patch — no schema or data changes.
+### 4. Docs / Policy / Memory
+- `DOCUMENTATION.md`: log **v2.66.69 — Daily Submission Summary is workflow-template aware**.
+- `POLICY.md`: extend §dynamic-workflow-columns (or add §DAILY-SUBMISSION-WORKFLOW-AWARENESS) to mandate that any per-day/sub-period grid must gate reviewer columns on the resolved workflow template + status-reached, never on the maximal 6-stage chain.
+- `docs/adr/ADR-100.md`: short ADR — root cause (linear STATUS_ORDER ignored template), fix, and the rule that all reviewer grids must consume `useEmployeeWorkflowStages`.
+- `mem/features/review/dynamic-workflow-columns.md`: append a "Daily Submission Summary" section noting the same contract applies and reference the new test.
+
+### Rollback
+Single-file revert of `DailySubmissionSummary.tsx` restores the old behavior; caller prop is optional.
+
+## Out of scope
+- Score calculation, RLS, scoring fallback chain (untouched).
+- Non-daily/sub-period scorecards.
