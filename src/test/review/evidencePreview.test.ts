@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { isPreviewableEvidence, openStorageFile } from '@/lib/storageDownload';
+import { resolveDownloadableUrl } from '@/components/review/EvidencePreviewDialog';
+import { supabase } from '@/integrations/supabase/client';
 
 describe('isPreviewableEvidence', () => {
   it('detects PDFs', () => {
@@ -55,5 +57,44 @@ describe('openStorageFile previewable dispatch', () => {
 
     expect(handler).not.toHaveBeenCalled();
     window.removeEventListener('evidence-preview', handler);
+  });
+});
+
+describe('resolveDownloadableUrl (private-bucket download fix)', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('signs a /object/public URL on a private bucket instead of returning it as-is', async () => {
+    const createSignedUrl = vi.fn().mockResolvedValue({
+      data: { signedUrl: 'https://x.supabase.co/storage/v1/object/sign/review-evidence/p/f.xlsx?token=t' },
+      error: null,
+    });
+    vi.spyOn(supabase.storage, 'from').mockReturnValue({ createSignedUrl } as never);
+
+    const out = await resolveDownloadableUrl(
+      'https://x.supabase.co/storage/v1/object/public/review-evidence/p/f.xlsx',
+    );
+
+    expect(createSignedUrl).toHaveBeenCalledWith('p/f.xlsx', 300);
+    expect(out).toContain('/object/sign/');
+    expect(out).not.toContain('/object/public/');
+  });
+
+  it('returns non-storage URLs unchanged', async () => {
+    const out = await resolveDownloadableUrl('https://example.com/x.xlsx');
+    expect(out).toBe('https://example.com/x.xlsx');
+  });
+
+  it('throws when signing fails so the caller can toast', async () => {
+    const createSignedUrl = vi.fn().mockResolvedValue({
+      data: null,
+      error: { message: 'denied' },
+    });
+    vi.spyOn(supabase.storage, 'from').mockReturnValue({ createSignedUrl } as never);
+
+    await expect(
+      resolveDownloadableUrl('https://x.supabase.co/storage/v1/object/public/review-evidence/p/f.xlsx'),
+    ).rejects.toThrow(/denied/);
   });
 });
