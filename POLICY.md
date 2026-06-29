@@ -1,4 +1,12 @@
 ### §EVIDENCE-DOWNLOAD-PRIVATE-BUCKET — All client downloads from the `review-evidence` bucket use signed URLs (v2.66.68, 2026-06-29)
+### §BACKUP-DOWNLOAD-COMPLETENESS — Chunked backup download must iterate every part file (v2.66.70, 2026-06-29 / ADR-101)
+
+**Rule.** Any client-side merger of a chunked backup manifest (ADR-082) MUST iterate `entry.files: string[]` and concatenate the rows from every part. `entry.file` is the back-compat first-part pointer and MUST NOT be used as the sole source. Fallback ordering: `entry.files?.length ? entry.files : (entry.file ? [entry.file] : [])`. For each table, the merged row count MUST equal `entry.rows`; mismatches MUST log a console warning so QA can detect silent part-fetch failures.
+
+**Why.** ADR-082 streams large tables (>5000 rows) into multiple `<table>.part-NNNNNN.json` chunks. A merger that only reads `entry.file` silently drops every part after the first, producing a truncated artifact (~60 MB observed vs ~250 MB on storage) that would re-import as fractional data via `useUploadAndRestore`. `restore-backup` already complies; this policy keeps the client download path mirrored.
+
+**Implementation.** `useDownloadBackup` in `src/hooks/useBackups.ts`. Regression guard: `src/test/backupDownloadChunkedParts.test.ts`.
+
 
 **Rule.** The `review-evidence` Storage bucket is **private**. Any client surface that lets a user download or open an evidence file MUST route the URL through either (a) `supabase.storage.from(bucket).download(path)` to obtain a `blob:` URL, or (b) `supabase.storage.from(bucket).createSignedUrl(path, ≤600)` to obtain a short-lived signed URL. Direct navigation to `/storage/v1/object/public/<bucket>/<path>` is forbidden — a private bucket returns `404 Bucket not found` for that path, which is what the auditor saw on 2026-06-29 when downloading an `.xlsx`.
 
