@@ -20,3 +20,5 @@ ADR-082 — applies to `supabase/functions/create-backup/index.ts` and `supabase
 - I17: restore-backup manifest type accepts `files?: string[]` and the insert path iterates `entry.files` when present.
 
 **Forbidden:** Re-introducing whole-table buffering (`allRows.concat`, single `JSON.stringify(allRows)`) in the backup export path. Restoring from a single `<table>.json` for new backups created under ADR-082 (manifest now lists multiple parts).
+
+**Client download mirror (ADR-101, v2.66.70):** `useDownloadBackup` in `src/hooks/useBackups.ts` MUST iterate `entry.files` (fallback `[entry.file]`) just like `restore-backup`. Reading only `entry.file` truncates the merged download to the first 5000 rows per table (the original symptom: ~60 MB downloaded vs ~250 MB on storage). Pinned by `src/test/backupDownloadChunkedParts.test.ts` and POLICY §BACKUP-DOWNLOAD-COMPLETENESS.
