@@ -50,6 +50,7 @@ interface DryRunResult {
     final_incentive_percent: number;
     production_value: number | null;
     incentive_amount?: number;
+    payment_period?: string | null;
   }>;
 }
 
@@ -67,6 +68,12 @@ export function IncentiveDryRunDialog({ open, onOpenChange, result, onConfirm, i
   if (!result) return null;
   const summary = result.summary || { total: 0, eligible: 0, disqualified: 0, avg_incentive_percent: 0, total_amount: 0 };
   const records = result.records || [];
+  // Programme-type aware rendering: production programmes never carry a PMS
+  // score (compute-monthly-incentives writes pms_score: null for production
+  // rows — see edge fn index.ts:708). Rendering the PMS-centric layout for
+  // those rows produced a wall of N/A and misled reviewers (Upendra, 2026-06-29).
+  // For production we show tons / rate / amount instead. ADR-093.
+  const isProductionProgramme = result.diagnostics?.detected_program_type === 'production';
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -129,6 +136,75 @@ export function IncentiveDryRunDialog({ open, onOpenChange, result, onConfirm, i
           <div className="h-[200px] rounded-md border flex items-center justify-center text-sm text-muted-foreground">
             No records to compute (filters returned 0 employees).
           </div>
+        ) : isProductionProgramme ? (
+          <>
+            <ScrollArea className="h-[400px] rounded-md border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Employee</TableHead>
+                    <TableHead>Period</TableHead>
+                    <TableHead>Production (tons)</TableHead>
+                    <TableHead>
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="inline-flex items-center gap-1 cursor-help">
+                              Rate (₹/ton) <Info className="h-3 w-3 text-muted-foreground" />
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent className="max-w-xs">
+                            Derived per row as Amount ÷ Production. Shown as "—" when production is zero.
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </TableHead>
+                    <TableHead>DQ Reason</TableHead>
+                    <TableHead>LTI Penalty</TableHead>
+                    <TableHead>Pro-rata</TableHead>
+                    <TableHead>Amount (₹)</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {records.map((r, i) => {
+                    const emp = employeeNames?.get(r.employee_id);
+                    const tons = toNum(r.production_value);
+                    const amount = toNum(r.incentive_amount);
+                    const rate = tons > 0 && amount > 0 ? amount / tons : null;
+                    const lti = toNum(r.lti_penalty_percent);
+                    const prorata = toNum(r.pro_rata_factor);
+                    const dqReason = r.disqualification_reasons?.[0];
+                    return (
+                      <TableRow key={i}>
+                        <TableCell>
+                          <div>
+                            <div className="text-sm font-medium">{emp?.name || r.employee_id.slice(0, 8)}</div>
+                            {emp?.code && <div className="text-xs text-muted-foreground">{emp.code}</div>}
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-sm">{r.payment_period || '—'}</TableCell>
+                        <TableCell>{tons > 0 ? tons.toLocaleString('en-IN', { maximumFractionDigits: 3 }) : '—'}</TableCell>
+                        <TableCell>{rate !== null ? `₹${rate.toLocaleString('en-IN', { maximumFractionDigits: 2 })}` : '—'}</TableCell>
+                        <TableCell>
+                          {r.is_disqualified && dqReason ? (
+                            <Badge variant="destructive" className="text-xs">{dqReason}</Badge>
+                          ) : '—'}
+                        </TableCell>
+                        <TableCell>{lti > 0 ? `${lti}%` : '—'}</TableCell>
+                        <TableCell>{prorata > 0 && prorata < 1 ? prorata.toFixed(2) : '—'}</TableCell>
+                        <TableCell className="font-medium">
+                          {amount > 0 ? `₹${Math.round(amount).toLocaleString('en-IN')}` : '—'}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </ScrollArea>
+            <p className="text-xs text-muted-foreground italic" data-testid="production-footnote">
+              PMS Score and Base/Final % do not apply to production-based programmes. Incentive = tons × rate.
+            </p>
+          </>
         ) : (
           <ScrollArea className="h-[400px] rounded-md border">
             <Table>
@@ -144,7 +220,7 @@ export function IncentiveDryRunDialog({ open, onOpenChange, result, onConfirm, i
                           </span>
                         </TooltipTrigger>
                         <TooltipContent className="max-w-xs">
-                          Employees without assigned KRAs will show N/A here.
+                          Support-programme employees without assigned KRAs will show N/A here. Production programmes don't use PMS at all and render a separate tons/rate layout.
                         </TooltipContent>
                       </Tooltip>
                     </TooltipProvider>
