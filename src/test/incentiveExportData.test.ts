@@ -11,6 +11,46 @@ import { resolveEmployeeRate } from '@/lib/incentiveRateResolver';
 
 const { chunk } = __internal;
 
+describe('Incentive export grand total parity (ADR-095)', () => {
+  // Mirrors filteredGrandTotal in ProductionDailyGrid.tsx:295.
+  const gridSSOT = (rows: Array<{ total: number; rate: number }>) =>
+    Math.round(rows.reduce((s, r) => s + r.total * r.rate, 0));
+
+  it('sum-then-round (grid SSOT) differs from per-row round-then-sum on fractional amounts', () => {
+    const rows = [
+      { total: 12.4, rate: 1 },
+      { total: 7.6, rate: 1 },
+      { total: 0.5, rate: 1 },
+    ];
+    const ssot = gridSSOT(rows); // round(20.5) = 21 (banker's tie → half-up in JS Math.round = 21)
+    const perRowRoundSum = rows.reduce((s, r) => s + Math.round(r.total * r.rate), 0); // 12+8+1 = 21
+    // For this trio the values happen to align; use a divergent set:
+    const rows2 = [
+      { total: 1, rate: 0.4 },
+      { total: 1, rate: 0.4 },
+      { total: 1, rate: 0.4 },
+      { total: 1, rate: 0.4 },
+      { total: 1, rate: 0.4 },
+    ];
+    const ssot2 = gridSSOT(rows2); // round(2.0) = 2
+    const perRow2 = rows2.reduce((s, r) => s + Math.round(r.total * r.rate), 0); // 5 * round(0.4) = 0
+    expect(ssot2).not.toBe(perRow2);
+    expect(ssot).toBe(perRowRoundSum); // sanity: trio matches
+  });
+
+  it('exporter source writes raw amount per row and appends Grand Total = Math.round(Σ total*rate)', () => {
+    const src = readFileSync(
+      resolve(__dirname, '../components/incentive/IncentiveDataExport.tsx'),
+      'utf8',
+    );
+    // Per-row Amount must be the raw product (no Math.round wrapper).
+    expect(src).toMatch(/const amount = total \* rate;\s*\n\s*row\['Amount \(₹\)'\] = amount;/);
+    // Grand Total row uses sum-then-round, matching grid SSOT.
+    expect(src).toMatch(/'Employee': 'Grand Total'/);
+    expect(src).toMatch(/'Amount \(₹\)': Math\.round\(sumAmount\)/);
+  });
+});
+
 describe('incentiveExportData helpers', () => {
   it('chunk batches large id lists', () => {
     const ids = Array.from({ length: 2600 }, (_, i) => `id-${i}`);
