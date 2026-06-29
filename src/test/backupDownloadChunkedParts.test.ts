@@ -104,9 +104,10 @@ describe('useDownloadBackup — chunked manifest with multiple parts', () => {
       return { data: null, error: new Error(`unexpected path ${path}`) };
     });
 
+    const cap = captureBlobText();
     const { result } = renderHook(() => useDownloadBackup(), { wrapper });
-    const out = await result.current.mutateAsync(manifestPath);
-    const merged = JSON.parse(await new Response(out.blob).text()) as { data: Record<string, unknown[]> };
+    await result.current.mutateAsync(manifestPath);
+    const merged = JSON.parse(cap.text()) as { data: Record<string, unknown[]> };
 
     expect(merged.data.t1).toHaveLength(8000);
     expect(downloadMock).toHaveBeenCalledWith(manifest.tables[0].files![0]);
@@ -126,9 +127,10 @@ describe('useDownloadBackup — chunked manifest with multiple parts', () => {
       return { data: null, error: new Error(`unexpected path ${path}`) };
     });
 
+    const cap = captureBlobText();
     const { result } = renderHook(() => useDownloadBackup(), { wrapper });
-    const out = await result.current.mutateAsync(manifestPath);
-    const merged = JSON.parse(await new Response(out.blob).text()) as { data: Record<string, unknown[]> };
+    await result.current.mutateAsync(manifestPath);
+    const merged = JSON.parse(cap.text()) as { data: Record<string, unknown[]> };
 
     expect(merged.data.t1).toEqual(rows);
   });
