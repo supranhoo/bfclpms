@@ -842,6 +842,7 @@ export function KpiJourneySection({
                 kpiName={kpi.kpi_name}
                 employeeCode={resolvedEmployeeCode !== '-' ? resolvedEmployeeCode : null}
                 isLoading={isLoading && !submission}
+                autoAdvancedResyncHint={stage === 'self' && !!(data as any).autoAdvancedResyncHint}
               />
             );
           })}
