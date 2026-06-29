@@ -305,15 +305,34 @@ serve(async (req) => {
     let prodDailyMap = new Map<string, Record<string, any>>(); // employee_id -> daily_values
     let prodEntryMap = new Map<string, number>(); // employee_id -> totalTons (for slab matching)
     let prodRates: any[] = [];
+    let dailyEntryRowsLoaded = 0;
+    let prodRateRowsLoaded = 0;
     if (program.program_type === 'production') {
-      const { data: dailyEntries } = await supabase
-        .from('production_daily_entries')
-        .select('employee_id, daily_values')
-        .eq('program_id', program_id)
-        .eq('month', review_period)
-        .eq('year', review_year);
+      // Paginated read — PostgREST silently caps at 1,000 rows.
+      // RCA 2026-06-29 (ADR-094): Metal Sizing / June 2026 had >1,000 daily
+      // rows; the cap dropped ~91 employees (incl. Pavan Gope, 1050 TPD) and
+      // produced ₹87,151 less than the Data Entry Grand Total.
+      const dailyEntries: { employee_id: string; daily_values: Record<string, any> }[] = [];
+      {
+        const PAGE = 1000;
+        for (let from = 0; from < 1_000_000; from += PAGE) {
+          const { data, error } = await supabase
+            .from('production_daily_entries')
+            .select('employee_id, daily_values')
+            .eq('program_id', program_id)
+            .eq('month', review_period)
+            .eq('year', review_year)
+            .order('employee_id', { ascending: true })
+            .range(from, from + PAGE - 1);
+          if (error) throw error;
+          const rows = (data as any[]) ?? [];
+          dailyEntries.push(...rows);
+          if (rows.length < PAGE) break;
+        }
+      }
+      dailyEntryRowsLoaded = dailyEntries.length;
 
-      if (dailyEntries) {
+      if (dailyEntries.length > 0) {
         for (const entry of dailyEntries) {
           const vals = entry.daily_values as Record<string, any> || {};
           prodDailyMap.set(entry.employee_id, vals);
@@ -326,11 +345,23 @@ serve(async (req) => {
         }
       }
 
-      const { data: rates } = await supabase
-        .from('incentive_production_rates')
-        .select('employee_id, entity_id, rate_per_ton, rate_type, effective_from')
-        .eq('program_id', program_id);
-      prodRates = rates || [];
+      // Paginated read — same PostgREST cap class (ADR-094).
+      {
+        const PAGE = 1000;
+        for (let from = 0; from < 1_000_000; from += PAGE) {
+          const { data, error } = await supabase
+            .from('incentive_production_rates')
+            .select('employee_id, entity_id, rate_per_ton, rate_type, effective_from')
+            .eq('program_id', program_id)
+            .order('id', { ascending: true })
+            .range(from, from + PAGE - 1);
+          if (error) throw error;
+          const rows = (data as any[]) ?? [];
+          prodRates.push(...rows);
+          if (rows.length < PAGE) break;
+        }
+      }
+      prodRateRowsLoaded = prodRates.length;
     }
 
     // Build dept -> BU and BU -> company resolution chain (used by both rate cascade and slab scope match)
@@ -364,12 +395,25 @@ serve(async (req) => {
     }
 
     // 5. Fetch existing records to check for manual overrides
-    const { data: existingRecords } = await supabase
-      .from('employee_incentive_records')
-      .select('employee_id, incentive_status, status_overridden_by')
-      .eq('review_period', review_period)
-      .eq('review_year', review_year)
-      .eq('program_id', program_id);
+    // Paginated read — overrides can exceed 1,000 rows for large programmes (ADR-094).
+    const existingRecords: { employee_id: string; incentive_status: string | null; status_overridden_by: string | null }[] = [];
+    {
+      const PAGE = 1000;
+      for (let from = 0; from < 1_000_000; from += PAGE) {
+        const { data, error } = await supabase
+          .from('employee_incentive_records')
+          .select('employee_id, incentive_status, status_overridden_by')
+          .eq('review_period', review_period)
+          .eq('review_year', review_year)
+          .eq('program_id', program_id)
+          .order('employee_id', { ascending: true })
+          .range(from, from + PAGE - 1);
+        if (error) throw error;
+        const rows = (data as any[]) ?? [];
+        existingRecords.push(...rows);
+        if (rows.length < PAGE) break;
+      }
+    }
 
     // 6. Compute incentive for each employee
     const records: any[] = [];
@@ -821,6 +865,8 @@ serve(async (req) => {
       records_pre_scope: recordsPreScope,
       records_post_scope: recordsPostScope,
       legacy_rows_deleted: 0,
+      daily_entries_rows_loaded: dailyEntryRowsLoaded,
+      production_rate_rows_loaded: prodRateRowsLoaded,
     };
 
     // In dry_run mode, return preview without writing
