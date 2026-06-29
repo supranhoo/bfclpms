@@ -12,6 +12,8 @@ serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
 
   try {
+    // Build stamp — ADR-094 redeploy (2026-06-29). Confirms paginated build is live.
+    console.log('[compute-monthly-incentives] build=adr094-redeploy-2026-06-29');
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, serviceKey);
