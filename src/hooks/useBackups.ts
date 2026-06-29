@@ -441,18 +441,34 @@ export function useDownloadBackup() {
         if (manifestError || !manifestBlob) throw manifestError || new Error('Failed to download manifest');
 
         const manifest = JSON.parse(await manifestBlob.text());
-        const tables = manifest.tables as Array<{ table: string; rows: number; file: string }>;
+        const tables = manifest.tables as Array<{ table: string; rows: number; file: string; files?: string[] }>;
 
         const combinedData: Record<string, unknown[]> = {};
         for (const entry of tables) {
-          try {
-            const { data: tableBlob, error: tableError } = await supabase.storage
-              .from('database-backups')
-              .download(entry.file);
-            if (tableError || !tableBlob) continue;
-            combinedData[entry.table] = JSON.parse(await tableBlob.text());
-          } catch {
-            console.warn(`Skipping table ${entry.table} during download`);
+          const parts: string[] = Array.isArray(entry.files) && entry.files.length > 0
+            ? entry.files
+            : (entry.file ? [entry.file] : []);
+          const rows: unknown[] = [];
+          for (const partPath of parts) {
+            try {
+              const { data: partBlob, error: partError } = await supabase.storage
+                .from('database-backups')
+                .download(partPath);
+              if (partError || !partBlob) {
+                console.warn(`Skipping part ${partPath} for table ${entry.table}`);
+                continue;
+              }
+              const parsed = JSON.parse(await partBlob.text());
+              if (Array.isArray(parsed)) rows.push(...parsed);
+            } catch {
+              console.warn(`Failed to read part ${partPath} for table ${entry.table}`);
+            }
+          }
+          combinedData[entry.table] = rows;
+          if (typeof entry.rows === 'number' && rows.length !== entry.rows) {
+            console.warn(
+              `Backup download row-count mismatch for ${entry.table}: expected ${entry.rows}, got ${rows.length}`,
+            );
           }
         }
 
