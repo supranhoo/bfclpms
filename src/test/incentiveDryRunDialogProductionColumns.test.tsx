@@ -50,7 +50,8 @@ describe('IncentiveDryRunDialog — production programme layout (ADR-093)', () =
     expect(screen.getByText('24.53')).toBeInTheDocument();
     // 2453 / 24.53 = 100
     expect(screen.getByText(/₹100/)).toBeInTheDocument();
-    expect(screen.getByText('₹2,453')).toBeInTheDocument();
+    // ₹2,453 appears in both the Total Amount tile and the row Amount cell.
+    expect(screen.getAllByText('₹2,453').length).toBeGreaterThanOrEqual(1);
     expect(screen.getByTestId('production-footnote')).toBeInTheDocument();
     // PMS-centric columns must not be rendered for production
     expect(screen.queryByText('PMS Score')).not.toBeInTheDocument();
