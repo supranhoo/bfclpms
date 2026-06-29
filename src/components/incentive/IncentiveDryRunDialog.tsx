@@ -31,6 +31,8 @@ interface DryRunResult {
     employees_with_vessel_entries?: number;
     records_pre_scope?: number;
     records_post_scope?: number;
+    daily_entries_rows_loaded?: number;
+    production_rate_rows_loaded?: number;
   };
   summary: {
     total: number;
@@ -122,9 +124,12 @@ export function IncentiveDryRunDialog({ open, onOpenChange, result, onConfirm, i
                   </>
                 ) : (
                   <>
-                    With daily data: <span className="font-medium">{result.diagnostics.employees_with_daily_entries ?? '—'}</span> ·
+                    Employees with daily data: <span className="font-medium">{result.diagnostics.employees_with_daily_entries ?? '—'}</span> ·
                     With rate: <span className="font-medium">{result.diagnostics.employees_with_resolved_rate ?? '—'}</span> ·
                     Skipped (no rate): <span className="font-medium">{result.diagnostics.employees_skipped_no_rate ?? 0}</span>
+                    {typeof result.diagnostics.daily_entries_rows_loaded === 'number' && (
+                      <> · Daily rows loaded: <span className="font-medium">{result.diagnostics.daily_entries_rows_loaded}</span></>
+                    )}
                   </>
                 )}
               </p>

@@ -138,3 +138,4 @@ Cache-TTL floors: `src/lib/perfCacheDefaults.ts` defines mandatory floors for ['
 - [Annual Review Self Review Library](mem://features/annual-review/self-review-library) — Curated + org-saved bilingual Self Review fields/bundles, RLS by admin/hr_pms, plugged into Template Editor
 - [Assisted Annual Review Submission](mem://features/annual-review/assisted-submission) — Proxy self-stage submit for non-login employees with live selfie verification, immutable audit, feature-flag gated
 - [Bulk Rollback OKV-truth gate](mem://features/admin/bulk-rollback-okv-gate) — ADR-091: Rollback All Scopes button visibility uses OKV per-scope status, not fact-based card status
+- [Incentive Compute Pagination](mem://features/incentive/compute-pagination-fix) — ADR-094: compute-monthly-incentives MUST paginate production_daily_entries, incentive_production_rates and override-probe via .range(); diagnostics expose rows_loaded counters
