@@ -1,3 +1,13 @@
+### §EVIDENCE-DOWNLOAD-PRIVATE-BUCKET — All client downloads from the `review-evidence` bucket use signed URLs (v2.66.68, 2026-06-29)
+
+**Rule.** The `review-evidence` Storage bucket is **private**. Any client surface that lets a user download or open an evidence file MUST route the URL through either (a) `supabase.storage.from(bucket).download(path)` to obtain a `blob:` URL, or (b) `supabase.storage.from(bucket).createSignedUrl(path, ≤600)` to obtain a short-lived signed URL. Direct navigation to `/storage/v1/object/public/<bucket>/<path>` is forbidden — a private bucket returns `404 Bucket not found` for that path, which is what the auditor saw on 2026-06-29 when downloading an `.xlsx`.
+
+**Implementation.** `src/components/review/EvidencePreviewDialog.tsx` exports `resolveDownloadableUrl(url)` and BOTH the **Download** and **Open in new tab** handlers MUST resolve through it before navigating. `openStorageFile()` in `src/lib/storageDownload.ts` continues to handle PDF/image via SDK `.download()` (already compliant).
+
+**Guard.** `src/test/review/evidencePreview.test.ts` pins three invariants on `resolveDownloadableUrl`: signs private-bucket public URLs, passes non-storage URLs through, and throws on sign failure (surfaced as a `sonner` toast).
+
+**Rollback.** Revert `src/components/review/EvidencePreviewDialog.tsx` and the appended test block — bucket visibility, RLS, schema, and RPCs are unchanged.
+
 ### §OFFICE-EVIDENCE-PREVIEW — Office files render in-app via Microsoft Office Online Viewer (v2.66.65, 2026-06-29)
 
 **Rule.** Evidence files with extensions `xlsx`, `xls`, `xlsm`, `csv`, `doc`, `docx`, `ppt`, `pptx` are previewable in-app and MUST render inside the existing evidence preview dialog using `https://view.officeapps.live.com/op/embed.aspx?src=<URL>`. For private buckets the source URL MUST be a short-lived signed URL (`createSignedUrl(path, 600)`); for public buckets the public URL is acceptable.

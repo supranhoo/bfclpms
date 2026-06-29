@@ -21,3 +21,7 @@ Surfaces wired today:
 - `src/components/safety/EvidencePreviewDialog.tsx` — Safety incident evidence
 
 POLICY: §OFFICE-EVIDENCE-PREVIEW. Tests: `src/test/review/evidencePreview.test.ts`.
+
+## Download / Open-in-new-tab on private buckets (v2.66.68)
+
+The `review-evidence` bucket is private. The review-side dialog's **Download** and **Open in new tab** buttons MUST route through the exported helper `resolveDownloadableUrl(url)` (in the same file): it mints a fresh 5-min signed URL when the URL is `/storage/v1/object/public/<bucket>/<path>`, and passes other URLs through unchanged. Existing `blobUrl` (blob: for pdf/image, signed https: for office) wins when present. Failures surface as a `sonner` toast — never let the user navigate to a 404 page. POLICY: §EVIDENCE-DOWNLOAD-PRIVATE-BUCKET. ADR-099.
