@@ -902,6 +902,7 @@ export function EmployeeScorecard({
                   managerScore={managerScore}
                   onManagerScoreChange={setManagerScore}
                   submissionMap={submissionMap}
+                  workflowStages={effectiveStages}
                 />
               )}
 
@@ -1174,6 +1175,7 @@ function DailySubmissionSummaryWithOverride({
   managerScore,
   onManagerScoreChange,
   submissionMap,
+  workflowStages,
 }: { 
   kpi: KPI; 
   selectedPeriod: string; 
@@ -1188,6 +1190,7 @@ function DailySubmissionSummaryWithOverride({
   managerScore: number | null;
   onManagerScoreChange: (score: number | null) => void;
   submissionMap: Map<string, any>;
+  workflowStages?: string[] | null;
 }) {
   const { data: submissions } = useSubPeriodSubmissions(
     kpi.frequency === 'Daily' ? kpi.id : undefined, 
@@ -1234,6 +1237,7 @@ function DailySubmissionSummaryWithOverride({
         uomType={kpi.uom_type}
         qualitativeOptions={kpi.qualitative_options as QualitativeOption[] | null}
         kpiStatus={kpi.status}
+        workflowStages={workflowStages}
       />
       
       {/* Manager Agreement Toggle - Only for Daily Binary in Review Mode */}
