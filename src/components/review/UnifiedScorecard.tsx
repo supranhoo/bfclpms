@@ -1635,16 +1635,26 @@ export function UnifiedScorecard({
           <CardHeader className="pb-2">
             <CardTitle className="text-sm flex items-center gap-2 flex-wrap">
               <span>Performance by Category</span>
-              <span
-                title="Total weightage of all KPIs mapped this period (all frequencies, including N/A). Should equal 100%."
-                className={`text-xs font-medium px-1.5 py-0.5 rounded ${
-                  Math.round(fullAssignedWeight) === 100
-                    ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300'
-                    : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300'
-                }`}
-              >
-                ({Math.round(fullAssignedWeight)}%)
-              </span>
+              {(() => {
+                // Preserve decimals so mapping drift like 102.5% or 99.75% is visible.
+                // Tolerance of 0.05 keeps trivial float noise green without hiding real drift.
+                const isExact = Math.abs(fullAssignedWeight - 100) < 0.05;
+                const display = Number.isInteger(fullAssignedWeight)
+                  ? fullAssignedWeight.toFixed(0)
+                  : parseFloat(fullAssignedWeight.toFixed(2)).toString();
+                return (
+                  <span
+                    title={`Total weightage of all KPIs mapped this period (all frequencies, including N/A). Should equal 100%. Actual: ${fullAssignedWeight}%`}
+                    className={`text-xs font-medium px-1.5 py-0.5 rounded tabular-nums ${
+                      isExact
+                        ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300'
+                        : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300'
+                    }`}
+                  >
+                    ({display}%)
+                  </span>
+                );
+              })()}
             </CardTitle>
             <CardDescription className="text-xs">Score breakdown across KRA categories</CardDescription>
           </CardHeader>
