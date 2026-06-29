@@ -526,6 +526,15 @@ export function KpiJourneySection({
       (stage as any).achievedValueUnknownReason = resolved.source === 'unknown'
         ? 'Original self-entered value is not stored separately and was overwritten by a later reviewer edit. See the audit log for the original value.'
         : null;
+      // §88.5 — surface that this auto-advanced stub will refresh from OKV
+      // on the next propagation, so Admins know what to expect.
+      {
+        const sub: any = submission;
+        const hasEvidence = !!(sub?.self_evidence_url) ||
+          (Array.isArray(sub?.self_evidence_urls) && sub.self_evidence_urls.length > 0);
+        (stage as any).autoAdvancedResyncHint =
+          !!sub?.auto_advance_reason && sub?.final_score == null && !hasEvidence;
+      }
       return stage;
     })(),
     manager: buildStage(
@@ -833,6 +842,7 @@ export function KpiJourneySection({
                 kpiName={kpi.kpi_name}
                 employeeCode={resolvedEmployeeCode !== '-' ? resolvedEmployeeCode : null}
                 isLoading={isLoading && !submission}
+                autoAdvancedResyncHint={stage === 'self' && !!(data as any).autoAdvancedResyncHint}
               />
             );
           })}

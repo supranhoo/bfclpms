@@ -1,58 +1,73 @@
+
 ## Goal
-Extend the in-app evidence preview (currently PDF + images) to also preview Office files — Excel (`.xlsx`, `.xls`, `.xlsm`), Word (`.doc`, `.docx`), PowerPoint (`.ppt`, `.pptx`), and `.csv` — inside the existing preview dialog, so users don't have to download to view.
+When an Admin re-propagates a new Org KPI Value (OKV), update the displayed `Value` / `Rating` on child KPIs **only where the Self stage was a system stub** (auto-advanced by Admin on behalf of self). Real employee submissions and approved final scores remain frozen.
 
-## Approach: Microsoft Office Online Viewer
-Render via Microsoft's free public embed:
-
-```
-https://view.officeapps.live.com/op/embed.aspx?src=<SIGNED_URL>
-```
-
-- The `src` URL must be reachable by Microsoft's servers, so we generate a short-lived **signed URL** (10 min TTL) from the storage bucket via `supabase.storage.from(bucket).createSignedUrl(path, 600)`. Blob URLs won't work.
-- Read-only render; no MS account required for the viewer.
-- Fallback: if iframe doesn't fire `onLoad` within 8s, show "Preview unavailable — download instead" with the existing Download button.
-
-Alternative rejected: SheetJS in-browser render — loses formatting, heavy on large files, no Word/PPT support.
+## Why this is the right scope (push-back on a blanket overwrite)
+A blanket "always overwrite" path would violate POLICY §88 (Submission Snapshot Immutability) and break HR audit law for real employee submissions. The screenshot you shared has the `auto_advance_reason = 'Scored by Admin on behalf of self'` banner — meaning **no employee ever typed 98.04**; it was a placeholder written by the system so the workflow could advance. Overwriting a placeholder with the corrected OKV is safe and is exactly the gap ADR-092 flagged as a deferred follow-up. Approved / employee-submitted rows stay protected.
 
 ## Risk & Impact Report
-- **Data Impact**: None. No schema/RLS change. Signed URLs already used elsewhere (`getEvidenceSignedUrl`).
-- **Security**: File bytes transit Microsoft's viewer servers during render. Acceptable for KPI/Safety evidence (already user-uploaded business artifacts), but flagged in `POLICY.md` with admin opt-out flag `office_preview_enabled` (default ON).
-- **Workflow Impact**: None — read-side only.
-- **UI/UX**: Same dialog/drawer; new file types open in the same iframe area. No new buttons.
-- **Regression Risk**: Low. `isPreviewableEvidence()` return type widens from `'pdf' | 'image' | null` → `'pdf' | 'image' | 'office' | null`. Existing call sites (`EvidencePreviewProvider`, both `EvidencePreviewDialog`s, `openStorageFile`, tests) use switch/truthy checks. Verified — no `=== 'pdf'` exclusion logic anywhere blocks the new value.
-- **Scalability**: Zero server load (external viewer). One extra `createSignedUrl` call per preview.
-- **Mitigation**: Feature flag, load-timeout fallback, existing Download path always available.
+- **Data Impact:** New write path on `review_submissions` columns `achieved_value`, `self_achieved_value`, `self_score`, `self_rating` — gated to rows where `auto_advance_reason IS NOT NULL` AND `final_score IS NULL` AND the row was not employee-submitted (`self_evidence_url(s) IS NULL` AND `self_remarks` matches the system-generated pattern, or `submitted_by = NULL` / system attribution).
+- **Workflow Impact:** None — status, stages, and downstream scores untouched.
+- **UI Impact:** Self card now shows 99.61 / Rating 4 after the next Admin propagation on the affected KPI. Existing "System Auto-Advanced" banner stays as the provenance hint.
+- **Regression Risk:** Low. We change only one branch inside `propagate_org_kpi_value`; the §88 immutability branch stays the default for all non-auto-advanced rows.
+- **Scalability Impact:** Same row count as today; one extra WHERE clause per child row.
+- **Mitigation:** New PL/pgSQL unit cases + TS resolver tests for the four matrix combinations (auto-advanced / real-self × approved / not-approved).
+- **Rollback:** Single migration; revert the function body to the prior version and the system reverts to today's snapshot-frozen behavior.
 
-## Plan
-1. **`src/lib/storageDownload.ts`**
-   - Extend `isPreviewableEvidence()`: return `'office'` for `xlsx | xls | xlsm | csv | doc | docx | ppt | pptx`. Widen return type.
-   - `openStorageFile()` already dispatches `evidence-preview` for any truthy `isPreviewableEvidence` result — no change needed.
-2. **`src/components/review/EvidencePreviewDialog.tsx`** and **`src/components/safety/EvidencePreviewDialog.tsx`**
-   - When `kind === 'office'`: skip the `download → blob` path; call `createSignedUrl(path, 600)` and set iframe `src` to `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(signedUrl)}`.
-   - Add `onLoad` handler + 8s timeout → if not loaded, render "Preview unavailable" message with Download button.
-   - "Open in new tab" for Office files opens the signed URL directly (browser will download or render natively).
-3. **Feature flag** (zero-hardcoding rule): add `office_preview_enabled` boolean to existing admin settings table; read via existing settings hook. Default `true`. When `false`, `isPreviewableEvidence` returns `null` for office extensions → falls back to download.
-4. **Tests** — extend `src/test/review/evidencePreview.test.ts`:
-   - `isPreviewableEvidence('Report.xlsx') === 'office'`
-   - `isPreviewableEvidence('Deck.pptx') === 'office'`
-   - `isPreviewableEvidence('Memo.docx') === 'office'`
-   - `isPreviewableEvidence('data.csv') === 'office'`
-   - Existing PDF/image cases still pass.
-   - Dispatch test: `.xlsx` triggers `evidence-preview` event.
-5. **Docs / Policy / Memory**
-   - `DOCUMENTATION.md` → new "Office Evidence Preview" subsection; bump version log.
-   - `POLICY.md` → external render dependency (Microsoft) + admin opt-out flag.
-   - `docs/adr/ADR-097.md` → record MS-viewer-over-SheetJS decision.
-   - `mem/features/review/office-evidence-preview.md` → contract summary.
+## Implementation Plan
 
-## UI Changes
-- **Location**: Same evidence preview dialog (KPI evidence chips, Safety incident evidence list, Annual Review attachments — any caller of `openStorageFile`).
-- **Visual**: Clicking an `.xlsx`/`.docx`/`.pptx`/`.csv` filename opens the existing preview dialog with the Microsoft-rendered document inside the iframe area used today for PDFs. Header (file name, Download, Open in new tab) unchanged. Mobile uses the existing Drawer.
-- **Interaction**: Read-only render; Download button still produces the original file.
-- **Responsiveness**: Iframe inherits `min-h-[65vh]` (desktop) / `min-h-[70vh]` (mobile).
+### 1. DB — `propagate_org_kpi_value` RPC (single migration)
+Inside the per-child loop, after the existing §88 `not_in_kra_set` skip branch, add a **second, narrower branch**:
 
-## Rollback
-Flip `office_preview_enabled = false` to revert Office files to download-only. PDF/image paths untouched.
+```text
+IF child_row.auto_advance_reason IS NOT NULL
+   AND child_row.final_score IS NULL
+   AND child_row.submitted_by IS NULL          -- not employee-typed
+THEN
+   UPDATE review_submissions
+      SET achieved_value      = p_new_value,
+          self_achieved_value = p_new_value,
+          self_score          = <recomputed via calculate_rating()>,
+          self_rating         = <recomputed level>,
+          updated_at          = now()
+    WHERE id = child_row.id;
 
-## Post-implementation
-Verify with one `.xlsx`, one `.docx`, one `.pptx`, one `.csv` from `review-evidence` and from a Safety incident attachment.
+   INSERT INTO kpi_audit_logs(action, kpi_id, performed_by, old_value, new_value, metadata)
+   VALUES ('OKV_AUTO_ADVANCED_RESYNC', ..., NULL,         -- performer NULL = system per memory
+           jsonb_build_object('old_value', child_row.achieved_value),
+           jsonb_build_object('new_value', p_new_value, 'reason', 'auto_advanced_stub_refreshed'),
+           jsonb_build_object('source','propagate_org_kpi_value','okv_id', p_okv_id));
+END IF;
+```
+
+Downstream reviewer columns (`manager_*`, `auditor_*`, …) are **not** touched — if a manager already scored, their snapshot stays frozen and they can re-score against the corrected value if they want.
+
+### 2. Resolver — `src/lib/review/resolveSelfAchievedValue.ts`
+No change required. The resolver already prefers `self_achieved_value`; the new RPC branch will populate it correctly.
+
+### 3. Audit + Timeline
+`kpi_audit_logs` action `OKV_AUTO_ADVANCED_RESYNC` is rendered by `KpiTimeline.tsx` / `formatAuditDetails` — add a config entry: `{ icon: RefreshCw, color: 'bg-amber-500', label: 'Auto-Advanced Snapshot Re-synced from OKV' }`.
+
+### 4. Tests
+- **PL/pgSQL** (`supabase/tests/propagate_org_kpi_value_resync.sql`): 4 cases — auto-advanced+not-approved (overwrites), auto-advanced+approved (skips), employee-submitted+not-approved (skips per §88), employee-submitted+approved (skips per §88).
+- **TS** (`src/test/review/resolveSelfAchievedValue.autoAdvancedRefresh.test.ts`): asserts the Self card reads the refreshed `self_achieved_value` after a simulated RPC response.
+- Regression: existing `orgKpiPostPropagationHydration.test.ts` and `orgKpiSnapshotFallbackCoalesce.test.ts` must still pass.
+
+### 5. Docs & Policy
+- **POLICY.md** — add `§88.5 Auto-Advanced Stub Refresh Exception (v2.66.66)`: re-propagation MAY overwrite Self snapshot iff the row was system auto-advanced, never employee-submitted, and not final-score-approved; mandatory `OKV_AUTO_ADVANCED_RESYNC` audit row.
+- **DOCUMENTATION.md** — v2.66.66 changelog entry; cross-link to ADR-092.
+- **docs/adr/ADR-097.md** — new ADR documenting the carve-out and the alternatives rejected (blanket overwrite, manual force-resync RPC).
+- **mem/features/review/self-snapshot-display.md** — append "Part 3" note describing the §88.5 carve-out and that the resolver does not need to change.
+
+### 6. UI hint (minor)
+On the Self card, when `auto_advance_reason` is set, append a small italic line `Re-syncs from OKV on next propagation` so Admins know what will happen the next time the OKV is corrected. Pure presentation in `ReviewStageCard.tsx`, gated by a new prop populated from `submission.auto_advance_reason`.
+
+## What this will look like for the May-2026 row in your screenshot
+1. Admin opens `/admin/org-kpi-data` and re-saves the OKV (or runs Propagate).
+2. RPC sees the child has `auto_advance_reason = 'Scored by Admin on behalf of self'`, `submitted_by = NULL`, and `final_score = NULL` → updates Self snapshot to 99.61 / Rating 4 (which is still 4 because 99.61 falls in 99.5%–99.99%, rating 4; if you intended Rating 5 the OKV needs to be ≥ 100%).
+3. Audit timeline shows `Auto-Advanced Snapshot Re-synced from OKV` with system performer.
+4. Manager Review screen now shows `Value: 99.61 · Rating: 4`.
+
+## Out of scope (deliberately)
+- Overwriting Manager / Auditor / Management snapshots — those represent real reviewer work; if they need refresh the existing Bulk Sign-off Override (§88.3) is the sanctioned path.
+- Bulk back-fill of past months — this only affects future Admin propagations. A separate one-off repair script can be planned if you want historical auto-advanced rows refreshed.

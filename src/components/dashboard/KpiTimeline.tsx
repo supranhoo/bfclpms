@@ -27,6 +27,7 @@ import { supabase } from '@/integrations/supabase/client';
 import type { KPI } from '@/hooks/useKpis';
 import { groupTimelineEvents, type TimelineLog } from '@/lib/timelineGrouping';
 import { Sliders } from 'lucide-react';
+import { RefreshCw } from 'lucide-react';
 import {
   classifyAdminOverride,
   ADMIN_OVERRIDE_LABELS,
@@ -231,6 +232,9 @@ actionConfig['BULK_OVERRIDE_VALUE_APPLIED'] = { icon: UserCog, color: 'bg-rose-5
 actionConfig['BULK_OVERRIDE_STAGE_RESTAMPED'] = { icon: Edit, color: 'bg-teal-500', label: 'Bulk Override Restamped' };
 actionConfig['TOP_LEVEL_VALUE_OVERWRITTEN'] = { icon: UserCog, color: 'bg-rose-500', label: 'Top-Level Value Overwritten' };
 actionConfig['STAGE_VALUES_REVERTED'] = { icon: Undo2, color: 'bg-amber-500', label: 'Stage Values Reverted' };
+
+// §88.5 — Auto-advanced stub refresh on Org KPI re-propagation.
+actionConfig['OKV_AUTO_ADVANCED_RESYNC'] = { icon: RefreshCw, color: 'bg-amber-500', label: 'Auto-Advanced Snapshot Re-synced from OKV' };
 
 // Backfilled stage rows (POLICY §<next>): historical-import gap repair.
 // Same icon/colour as the canonical counterpart, label suffixed " (backfilled)".

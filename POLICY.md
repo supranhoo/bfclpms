@@ -2326,6 +2326,21 @@ Regression: `src/test/bulkWriteStageScoresContract.test.ts` (force-approve actio
 
 ---
 
+### §88.5 — Auto-Advanced Stub Refresh Exception (v2.66.66)
+
+The §88 immutability rule MAY be deliberately bypassed by the **system** during Org KPI re-propagation, **only** for child rows that are *auto-advanced stubs* — placeholders written by ADR-048 auto-advance and never touched by an employee.
+
+a. **Eligibility (all must hold).** (1) `review_submissions.auto_advance_reason IS NOT NULL`; (2) `review_submissions.final_score IS NULL`; (3) `review_submissions.self_evidence_url IS NULL` AND (`self_evidence_urls IS NULL` OR empty array) — i.e. no employee-uploaded evidence; (4) caller is authorised to propagate (Admin, or org-KPI data owner per the existing `propagate_org_kpi_value` predicate).
+b. **Effect.** On re-propagation the function overwrites `achieved_value`, `self_achieved_value`, `self_score`, and `self_rating` on the child row with the freshly recomputed values from the OKV. `kpis.status` is **preserved** — there is no step-back and no reviewer columns (`manager_*`, `auditor_*`, `skip_level_*`, `hr_pms_*`, `management_*`) are touched. Managers / auditors who already scored against the stale stub retain their scores and may re-score at their discretion using the existing Bulk Sign-off / per-stage flows.
+c. **Real submissions stay frozen.** When `self_evidence_url(s)` is non-empty, or `final_score` is set, the row continues to follow §88 / §88.1 — re-propagation is skipped (`reason: 'not_in_kra_set'` / `'reviewer_locked'`) and no snapshot column is written.
+d. **Mandatory audit trail.** Every refresh inserts a `kpi_audit_logs` row with `action = 'OKV_AUTO_ADVANCED_RESYNC'` and `performed_by = NULL` (system attribution per `mem/architecture/system-performer-attribution`). Metadata MUST carry `old_achieved_value`, `new_achieved_value`, `old_self_score`, `new_self_score`, `old_self_rating`, `new_self_rating`, `auto_advance_reason`, `current_status`, `source = 'propagate_org_kpi_value'`, `reason = 'auto_advanced_stub_refreshed'`, and `admin_initiated_by = <caller uuid>` so the human who triggered the propagation remains traceable even though the performer is the system.
+e. **UI hint.** The Self card (`ReviewStageCard.tsx`) MUST render an italic note *"Will re-sync from Org KPI on next propagation"* whenever the row qualifies, so admins know what the next propagation will do.
+f. **Out of scope.** This carve-out does NOT apply to Manager / Auditor / Skip-Level / HR PMS / Management stages. Refreshing those stages is governed by the existing Bulk Sign-off Override path (§88.3 / §88.4).
+
+Regression: `src/test/review/propagateAutoAdvancedResync.test.ts` (gating predicate matrix, snapshot resolver consumes refreshed `self_achieved_value`).
+
+---
+
 ## §89 — Per-KPI Audit Granularity for Org KPI Propagation (v2.66.7.3)
 
 Every Org KPI propagation event must produce **one `ORG_KPI_PROPAGATED` row in `kpi_audit_logs` per affected KPI**, individually addressable by `kpi_id`. This granularity is required because:
