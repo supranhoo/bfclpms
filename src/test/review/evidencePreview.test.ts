@@ -13,10 +13,16 @@ describe('isPreviewableEvidence', () => {
     }
   });
   it('returns null for unsupported types', () => {
-    expect(isPreviewableEvidence('doc.docx')).toBeNull();
-    expect(isPreviewableEvidence('sheet.xlsx')).toBeNull();
     expect(isPreviewableEvidence(null)).toBeNull();
     expect(isPreviewableEvidence('')).toBeNull();
+    expect(isPreviewableEvidence('archive.zip')).toBeNull();
+    expect(isPreviewableEvidence('notes.txt')).toBeNull();
+  });
+  it('detects Office files (Excel/Word/PPT/CSV)', () => {
+    for (const ext of ['xlsx', 'xls', 'xlsm', 'csv', 'doc', 'docx', 'ppt', 'pptx']) {
+      expect(isPreviewableEvidence(`evidence.${ext}`)).toBe('office');
+    }
+    expect(isPreviewableEvidence('Report.XLSX?token=abc')).toBe('office');
   });
 });
 
