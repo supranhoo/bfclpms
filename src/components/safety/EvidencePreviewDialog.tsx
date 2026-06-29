@@ -339,7 +339,15 @@ export function EvidencePreviewDialog({
                   </video>
                 )}
 
-                {(kind === 'office' || kind === 'other') && (
+                {kind === 'office' && (
+                  <iframe
+                    src={`https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(signedUrl)}`}
+                    title={current.file_name}
+                    className="h-full w-full border-0 bg-background"
+                  />
+                )}
+
+                {kind === 'other' && (
                   <div className="flex flex-col items-center gap-3 text-center p-6 max-w-md">
                     <FileText className="h-12 w-12 text-muted-foreground" />
                     <p className="text-sm text-muted-foreground">

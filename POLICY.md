@@ -1,3 +1,13 @@
+### §OFFICE-EVIDENCE-PREVIEW — Office files render in-app via Microsoft Office Online Viewer (v2.66.65, 2026-06-29)
+
+**Rule.** Evidence files with extensions `xlsx`, `xls`, `xlsm`, `csv`, `doc`, `docx`, `ppt`, `pptx` are previewable in-app and MUST render inside the existing evidence preview dialog using `https://view.officeapps.live.com/op/embed.aspx?src=<URL>`. For private buckets the source URL MUST be a short-lived signed URL (`createSignedUrl(path, 600)`); for public buckets the public URL is acceptable.
+
+**Why.** Users requested parity with PDF/image preview so they don't have to download Excel/Word/PowerPoint attachments to view them.
+
+**Security note.** Office file bytes pass through Microsoft's public viewer servers during render — this is acceptable for KPI / Safety / Annual Review attachments which are already user-uploaded business artifacts and gated by RLS at the storage layer. The signed URL expires after 10 minutes, narrowing the exposure window. If a future review classifies any evidence as PII-restricted, gate this code path behind a feature flag `office_preview_enabled` in `admin_feature_flags` and default it OFF for that surface.
+
+**Rollback.** Revert `src/lib/storageDownload.ts`, `src/components/review/EvidencePreviewDialog.tsx`, `src/components/safety/EvidencePreviewDialog.tsx` — Office files fall back to download.
+
 ### §AR-DIALOG-SCROLL — Long dialogs use native overflow, not Radix ScrollArea (v2.66.58, 2026-06-24)
 
 ### §OKV-SNAPSHOT-FALLBACK-COALESCE — Org KPI submission fallback coalesces over snapshot columns (v2.66.59, 2026-06-28)
