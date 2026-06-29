@@ -4305,3 +4305,9 @@ Enforcement: `src/test/performance/perfCacheDefaults.test.ts` pins the floors an
 **Rule.** Every multi-row Supabase read inside `supabase/functions/compute-monthly-incentives/index.ts` MUST page via the `.range(from, from + PAGE - 1)` loop pattern (`PAGE = 1000`, break on short page). The three named reads — `production_daily_entries`, `incentive_production_rates`, and the `employee_incentive_records` override probe — are pinned by `src/test/computeMonthlyIncentivesPagination.test.ts`. Diagnostics MUST expose `daily_entries_rows_loaded` and `production_rate_rows_loaded` so the PostgREST 1,000-row cap class of bug surfaces in the dry-run dialog rather than silently dropping employees from the Incentive Report.
 
 **Why.** RCA 2026-06-29 (Metal Sizing, June 2026): unpaginated `production_daily_entries` fetch returned exactly 1,000 rows; ~91 in-scope employees (incl. Pavan Gope, 1050 TPD) were dropped from compute, understating the Incentive Report by ₹87,151 vs the Data Entry Grand Total. Same defect class as the 2026-05-29 profiles cap fix.
+
+### §INC-EXPORT-PARITY (ADR-095, 2026-06-29)
+
+**Rule.** Any export (Excel/CSV) of money derived from a grid-backed total MUST mirror the grid's SSOT rounding strategy: **sum first, round once**. Per-row `Math.round(total × rate)` followed by spreadsheet `SUM` is FORBIDDEN — it accumulates half-up bias and diverges from the on-screen PMS Grand Total. Exports MUST: (a) write per-row amounts as raw `total × rate` (number, unrounded), and (b) append a trailing `Grand Total` row computed with the exact grid expression `Math.round(Σ total × rate)`. Pinned by `src/test/incentiveExportData.test.ts`.
+
+**Why.** RCA 2026-06-29 (Upendra, Metal Sizing June 2026): Excel SUM read ₹3,98,139 vs PMS ₹3,98,134 — ₹5 drift across 280 employees from per-row rounding. Same defect class as ADR-094: display layer re-implementing math instead of mirroring the SSOT.
