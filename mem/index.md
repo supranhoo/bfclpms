@@ -25,6 +25,7 @@ Cache-TTL floors: `src/lib/perfCacheDefaults.ts` defines mandatory floors for ['
 - [Profile Identity Integrity](mem://architecture/security/profile-identity-integrity) — profiles email/code uniqueness, audit trigger, admin repair RPCs, drift diagnostics, bulk-import match-by-code rule
 - [Profile DOJ Display Source](mem://features/user/profile-doj-display-source) — Overview/Hero must bind Date of Joining to profiles.doj, never profiles.created_at
 - [OKV Snapshot Fallback Coalesce (ADR-092)](mem://features/admin/okv-snapshot-fallback-coalesce) — useOrgKpiSubmissionFallback coalesces achieved_value → manager_achieved_value → self_achieved_value with valueSource provenance; prevents post-rollback "—" rows on /admin/org-kpi-data
+- [review-evidence on-behalf upload (ADR-096)](mem://architecture/security/review-evidence-onbehalf-upload) — admin + hr_pms permissive INSERT/UPDATE/DELETE on storage.objects scoped to `review-evidence`; fixes Admin Data Entry "row-level security" upload failures while keeping employee-folder paths so the reporting chain can read what was uploaded
 
 ## Memories
 - [Annual Review System](mem://features/annual-review/overview) — Phase 1 module: 5 tables, snapshot reviewer chain, advance RPC, multilingual + XLSX, feature-flag gated
