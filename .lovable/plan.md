@@ -1,60 +1,28 @@
-## RCA — why admin 101785 sees "new row violates row-level security policy"
-
-The Admin Data Entry dialog's evidence picker (`src/components/ui/EvidenceUpload.tsx`, lines 96 & 171) builds the storage object path as:
-
-```
-${userId}/${kpiId}/<timestamp>_<file>
-```
-
-`userId` is the **employee being acted upon** (Sajid Raza, `100264`), not the signed-in admin.
-
-The `review-evidence` bucket has only these INSERT policies:
-- **"Users can upload their own evidence files"** — `with_check: auth.uid()::text = foldername(name)[1]` → fails because folder = Sajid's id, not admin's id.
-- **"Org KPI evidence insert"** — only allows the `org-kpi-evidence/...` prefix.
-
-There is **no admin / hr_pms on-behalf INSERT policy** for the per-employee folder layout, so storage rejects the upload. (The SELECT policy already grants admin/auditor/hr_pms/manager/skip-level read access — only the write side is missing, which is why View works but Upload doesn't.)
-
-This affects every admin-on-behalf evidence upload via `EvidenceUpload` (Org KPI, employee KPI, Annual Review proxy submissions — anywhere the dialog is used), not just KPI 101785's screen.
-
----
+## Assumption
+Source code at `supabase/functions/compute-monthly-incentives/index.ts` is correct (paginated, ADR-094 confirmed in repo at lines 317, 350, 401). The preview still shows `Employees with daily data: 1000` (exact cap) and `Total ₹3,10,983 / 201 records`, which is the pre-ADR-094 fingerprint — the deployed edge function build is stale.
 
 ## Risk & Impact Report
-
-- **Data Impact:** No schema change. Adds 3 storage RLS policies. Existing files & policies untouched. Fully additive.
-- **Workflow Impact:** Restores admin-on-behalf upload parity with the read side. Non-admin behaviour unchanged.
-- **UI/UX Impact:** None — same dialog, the upload simply succeeds.
-- **Regression Risk:** Low. Policies are scoped to `bucket_id = 'review-evidence'` AND `has_role(admin|hr_pms)`. They cannot widen access to other buckets or to non-privileged users.
-- **Scalability Impact:** None — policies are O(1) role checks.
-- **Mitigation:** Mirror the existing SELECT policy's role gate (admin + hr_pms only). Auditors stay read-only by design. Rollback = drop the 3 new policies.
-
-Rejected alternatives:
-1. *Change the upload path to use `admin.uid()` as folder* — breaks the read policy for the employee themselves, and orphans files from the employee's folder grouping. Higher blast radius.
-2. *Grant the upload via an edge function with service role* — heavier change, loses optimistic UX, and isn't needed once RLS reflects the existing privilege model.
-
----
+- **Data Impact:** None on schema. `Confirm & Compute` performs delete-then-upsert on `employee_incentive_records` for (program, month) — already idempotent.
+- **Workflow Impact:** None. Confirm flow unchanged.
+- **UI Impact:** None. Diagnostics strip will read `~2412 / ₹3,98,134 / 280 records` after redeploy + re-open.
+- **Regression Risk:** Low. Redeploy ships code already pinned by `computeMonthlyIncentivesPagination.test.ts`.
+- **Mitigation:** Verify the diagnostics number changes from `1000` to the true count before Upendra clicks Confirm.
 
 ## Plan
+1. **Redeploy** `compute-monthly-incentives` edge function (no code change — source is already correct).
+2. **Verify** via Upendra: hard-refresh `/reports/incentive`, re-open the Metal Sizing / June 2026 preview. Expected: `Employees with daily data: ~2412`, `Total Amount ₹3,98,134`, `201 → 280 records`.
+3. **If still 1000 after redeploy** → fall through to RCA-2: probable cause is a second non-paginated read path (e.g. the production-period grouping or override probe), or a wrapper service caching results. Add a `console.log('build-stamp', new Date().toISOString())` at function top so we can confirm in `edge_function_logs` which build is serving.
+4. **No documentation change** — ADR-094 already captures the fix. Add a one-line note to `DOCUMENTATION.md` v2.66.64 release log: "Redeployed compute-monthly-incentives — production preview was serving stale pre-ADR-094 build."
+5. **Mark Paid / Confirm & Compute** only after step 2 verification.
 
-1. **Migration** — add three storage.objects policies for `review-evidence`:
-   - `Admins and HR PMS can upload evidence on behalf` (INSERT, with_check)
-   - `Admins and HR PMS can update evidence on behalf` (UPDATE, qual)
-   - `Admins and HR PMS can delete evidence on behalf` (DELETE, qual)
+## UI Changes
+None.
 
-   Each gated by: `bucket_id = 'review-evidence' AND (has_role(auth.uid(),'admin') OR has_role(auth.uid(),'hr_pms'))`. The existing per-user and Org-KPI policies remain — these are additive permissive policies.
+## Tests
+Existing `src/test/computeMonthlyIncentivesPagination.test.ts` already pins the contract. No new tests needed for a redeploy.
 
-2. **No code change** — `EvidenceUpload.tsx` already passes the correct (employee) folder, which is what we want so the employee and their reporting chain can read what the admin uploaded.
+## Rollback
+Redeploy is a no-op rollback target — previous build is the currently-serving one. If the new build misbehaves, redeploy from the prior git SHA.
 
-3. **Docs / Policy / Memory:**
-   - `docs/adr/ADR-096.md` — record RCA, decision, rollback SQL.
-   - `POLICY.md` — append §EVIDENCE-ONBEHALF-UPLOAD.
-   - `DOCUMENTATION.md` — v2.66.63 release note.
-   - `mem/architecture/security/review-evidence-onbehalf-upload.md` — codify the rule so future scanners/agents don't strip it.
-   - `mem/index.md` — add the entry.
-
-4. **Test** — `src/test/reviewEvidenceOnBehalfPolicy.test.ts`: assert the migration text contains the three policies with bucket + role guards (source-level regression guard, matching the pattern in `incentiveExportData.test.ts`).
-
-## Out of scope
-
-- No change to `OrgKpiFileUpload.tsx` (already covered by the Org-KPI policy).
-- No change to the file-size / 5-file cap or the dialog UI.
-- No change to bucket grants, public/private flag, or non-`review-evidence` buckets.
+## Post-implementation
+After confirmed match (₹3,98,134), close the loop with Upendra and instruct him to re-run Confirm & Compute to replace the 201 stale `employee_incentive_records` with the corrected 280.
