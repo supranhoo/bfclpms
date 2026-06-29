@@ -26,7 +26,7 @@ function downloadDirect(url: string, fileName?: string | null) {
  * lived signed URL (private buckets have no public endpoint). Returns the
  * original URL when it is not a storage URL.
  */
-async function resolveDownloadableUrl(url: string): Promise<string> {
+export async function resolveDownloadableUrl(url: string): Promise<string> {
   const match = url.match(/\/storage\/v1\/object\/public\/([^/]+)\/(.+)$/);
   if (!match) return url;
   const [, bucket, path] = match;
