@@ -173,6 +173,8 @@ async function exportDailyData(
 
   const entryMap = new Map(entries.map((e) => [e.employee_id, e.daily_values || {}]));
 
+  let sumTotal = 0;
+  let sumAmount = 0;
   const rows = employees.map((p) => {
     const dailyVals: Record<string, any> = entryMap.get(p.id) || {};
     // Canonical cascade: employee → department → BU → company → common.
@@ -191,9 +193,31 @@ async function exportDailyData(
       total += val;
     }
     row['Total'] = total;
-    row['Amount (₹)'] = Math.round(total * rate);
+    // Write the raw amount (no per-row Math.round). The grid SSOT
+    // (ProductionDailyGrid.tsx → filteredGrandTotal) is sum-then-round;
+    // per-row rounding here would diverge from the PMS Grand Total by a
+    // few rupees over hundreds of rows (RCA: ADR-095). Excel cell format
+    // still displays the integer rupee to the user.
+    const amount = total * rate;
+    row['Amount (₹)'] = amount;
+    sumTotal += total;
+    sumAmount += amount;
     return row;
   });
+
+  // Append a Grand Total row using the EXACT same expression the grid uses,
+  // guaranteeing the spreadsheet's bottom line equals the PMS Grand Total.
+  if (rows.length) {
+    rows.push({
+      'Employee': 'Grand Total',
+      'Code': '',
+      'Designation': '',
+      'Department': '',
+      'Rate/Ton (₹)': '',
+      'Total': sumTotal,
+      'Amount (₹)': Math.round(sumAmount),
+    });
+  }
 
   return XLSX.utils.json_to_sheet(rows.length ? rows : [{ 'Employee': 'No data' }]);
 }

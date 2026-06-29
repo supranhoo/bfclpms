@@ -1,77 +1,55 @@
+## Issue
+Excel export of Incentive Data Entry shows ₹3,98,139, but the PMS Data Entry Grand Total shows ₹3,98,134 — a ₹5 discrepancy for the same program/month/employees.
 
-## Assumptions
-- Programme "Metal Sizing" is production-type for June 2026.
-- Data Entry Grid shows **Grand Total ₹3,98,134** across **280 employees** (filtered roster).
-- Incentive Report Preview shows **201 records / ₹3,10,983**, with diagnostics: *In scope 292 · With daily 1000 · With rate 175 · Skipped (no rate) 0*.
-- The "1000" in *With daily data* is the smoking gun — PostgREST silently capped the daily-entries fetch.
+## Root cause (RCA)
+Two different rounding strategies for the same total:
 
-## Risk & Impact Report
-- **Data Impact**: Silent truncation has been mis-computing production incentives for any programme whose `production_daily_entries` for a month exceed 1000 rows. Stored `employee_incentive_records` for those months are incomplete and have been since the function was written. Existing rows are correct in value but missing for affected employees.
-- **Workflow Impact**: Finalise / Mark Paid currently understates payouts for production programmes — payroll risk.
-- **UI Impact**: Dialog and Report counts/totals change after fix (will increase to match Data Entry).
-- **Regression Risk**: Low — adds pagination, no logic change. Same pattern already used at lines 67 and 258 of the same file for other tables (RCA 2026-05-29 for `profiles`).
-- **Scalability Impact**: Switches three currently-capped reads to paginated loops; bounded by employees-in-scope.
-- **Mitigation**: Unit test that simulates >1000 daily-entry rows and asserts all are loaded; diagnostic counter renamed/clarified.
+- **Grid (SSOT)** — `ProductionDailyGrid.tsx:295` sums first, rounds once:
+  `Math.round(Σ (total_e × rate_e))` → ₹3,98,134
+- **Excel export** — `IncentiveDataExport.tsx:194` rounds every row, then Excel `SUM` aggregates the already-rounded values:
+  `Σ Math.round(total_e × rate_e)` → ₹3,98,139
 
-## Root Cause Analysis
+Across 280 employees the per-row `Math.round` half-up bias accumulates to ~₹5. Both numbers are arithmetically defensible, but the grid is the SSOT the Incentive Report also uses, so the export must match the grid — not the other way around.
 
-### Five Whys
-1. **Why does the Incentive Report total (₹3,10,983 / 201) differ from the Data Entry Grid (₹3,98,134 / 280)?**
-   The compute function processed only a subset of employees who actually had daily production data.
-2. **Why was that subset smaller than the data-entry view?**
-   The dialog diagnostic shows `employees_with_daily_entries = 1000` against `employees_in_scope = 292`, but more importantly the loaded `prodDailyMap` is built from a fetch that returned exactly the PostgREST default cap.
-3. **Why did the fetch return only a capped slice?**
-   `supabase/functions/compute-monthly-incentives/index.ts:309-314` reads `production_daily_entries` for a programme/month with **no `.range()` pagination**. PostgREST silently truncates at 1000 rows, so any employee whose row lands beyond that limit is invisible to compute — hence Pavan Gope (1050 TPD) and the missing 79 employees / ₹87,151 delta.
-4. **Why was pagination missed here when other reads in the same file already paginate?**
-   Lines 67 (employees) and 258 (org KPI values) were patched during the 2026-05-29 BFCL RCA, but `production_daily_entries`, `incentive_production_rates` (line 329) and the existing-records read (line 367) were not audited at that time.
-5. **Why did this slip past tests and review?**
-   No test exercises a programme/month with >1000 daily-entry rows; the project does not yet have a lint/grep rule for unpaginated PostgREST reads inside edge functions.
+This is the same class of defect as ADR-094 (grid vs report parity) — display layer doing its own math instead of mirroring the SSOT.
 
-### Cause class
-Recurrence of the documented "PostgREST 1000-row silent truncation" class (see comment in same file, line 358–360). Same defect, different table.
+## Risk & Impact
+- **Data:** None — daily values, rates and the underlying compute are unchanged.
+- **Workflow:** None — payroll already uses the PMS Grand Total / Incentive Report, not the spreadsheet SUM.
+- **UI/UX:** Excel sheet gains one extra row ("Grand Total") at the bottom mirroring the grid; no PMS UI changes.
+- **Regression:** Low. Change is confined to `exportDailyData` in `IncentiveDataExport.tsx`.
+- **Scalability:** O(N) sum once at export time — negligible.
 
-## Plan
+## Fix (surgical)
+`src/components/incentive/IncentiveDataExport.tsx` — `exportDailyData`:
 
-1. **Fix the unpaginated reads in `supabase/functions/compute-monthly-incentives/index.ts`**
-   - Wrap the `production_daily_entries` fetch (line 309) in a `.range()` loop until the page is short.
-   - Same for `incentive_production_rates` (line 329) and `existingRecords` (line 367).
-   - Use the existing pagination helper pattern at line 67 (PAGE_SIZE = 1000) — no new abstraction.
-   - Keep all downstream logic identical.
+1. Stop pre-rounding per row. Write `Amount (₹)` as the raw `total * rate` (number). Excel cell formatting still renders it as an integer for the user but preserves precision for `SUM`.
+2. Append one trailing row `{ Employee: 'Grand Total', Total: Σtotal, 'Amount (₹)': Math.round(Σ(total*rate)) }` computed with the **exact same expression** the grid uses (`filteredGrandTotal` formula). This guarantees the spreadsheet's bottom line equals the PMS Grand Total regardless of how the user re-sums the column.
 
-2. **Tighten diagnostics so this class of bug surfaces loudly**
-   - Add `daily_entries_rows_loaded` to `diagnostics` and a warning in `diagnosticMessage` when `daily_entries_rows_loaded === PAGE_SIZE` and no further page was attempted (defensive belt-and-braces).
-   - Rename label in `IncentiveDryRunDialog.tsx` from "With daily data" → "Employees with daily data" so the count is unambiguous.
+No changes to:
+- `incentiveExportData.ts` (resolver SSOT is correct)
+- `ProductionDailyGrid.tsx` (SSOT)
+- Edge function / DB / RLS
+- Incentive Report
 
-3. **Regression test** — `src/test/computeMonthlyIncentivesPagination.test.ts`
-   - Mock a Supabase client that returns 1000 rows on first call, 250 on second; assert the function consumes both pages and `prodDailyMap.size === 1250`.
-   - Negative test: single page <1000 rows stops after first call (no infinite loop).
+## Tests
+Extend `src/test/incentiveExportData.test.ts` with one case:
 
-4. **Operational repair (Confirm & Compute re-run, no code)**
-   - After deploy, the user re-runs **Confirm & Compute** for Metal Sizing / June 2026. The compute function already deletes-then-upserts in the affected period, so the missing 79 records will be created on the next run; existing correct records are overwritten with the same values.
-   - No migration, no manual SQL.
+- **`exportDailyData totals match grid SSOT (sum-then-round)`** — feeds 3 mock employees with rates that produce fractional amounts (e.g. 12.4, 7.6, 0.5) and asserts:
+  - The exported `Amount (₹)` column contains unrounded numbers.
+  - The trailing Grand Total row equals `Math.round(Σ total × rate)`, matching the grid formula at `ProductionDailyGrid.tsx:295`.
+  - Sum of rounded per-row amounts would have differed — proving the regression is guarded.
 
-5. **Documentation & policy sync**
-   - **ADR-094** — "Edge function reads must paginate; PostgREST 1000-row cap class".
-   - **`mem/architecture/safety/manual-fetch-and-pagination.md`** — append `compute-monthly-incentives` to the audited list.
-   - **`POLICY.md`** — add a one-line rule: *Every Supabase read in an edge function that can exceed 1000 rows MUST paginate via the `.range()` loop helper.*
-   - **`DOCUMENTATION.md`** — Version History entry referencing ADR-094 and this RCA.
-
-## CAPA
-
-### Corrective
-- C1. Paginate the three reads in `compute-monthly-incentives` (step 1).
-- C2. Re-run Confirm & Compute for Metal Sizing / June 2026 (step 4) — restores the missing 79 records and brings the Report total to ₹3,98,134.
-- C3. Clarify diagnostic label (step 2) so the symptom is unambiguous next time.
-
-### Preventive
-- P1. Add a repo grep test under `src/test/` that fails the build when any file under `supabase/functions/**` calls `.select(` without a downstream `.range(` or comment marker — pattern lifted from existing SSOT lock tests (`incentiveReportCompanyFilterSsot.test.ts`).
-- P2. Audit and patch any sibling edge functions (`compute-increment`, `bulk-review-auto-revert`, etc.) flagged by P1 — captured as follow-up tickets, not in this change.
-- P3. Memory rule pinned in `mem/architecture/safety/manual-fetch-and-pagination.md` so future generations apply the rule automatically.
-
-## Files
-- **Edit**: `supabase/functions/compute-monthly-incentives/index.ts`, `src/components/incentive/IncentiveDryRunDialog.tsx`, `POLICY.md`, `DOCUMENTATION.md`, `mem/architecture/safety/manual-fetch-and-pagination.md`, `mem/index.md`.
-- **Add**: `docs/adr/ADR-094.md`, `src/test/computeMonthlyIncentivesPagination.test.ts`, `mem/features/incentive/compute-pagination-fix.md`.
-- **No DB migration. No schema or RLS change. No UI redesign.**
+## Docs & policy
+- **ADR-095** (`docs/adr/ADR-095.md`) — "Excel export must mirror grid SSOT for grand totals (sum-then-round, not round-then-sum)."
+- **POLICY.md** — append §INC-EXPORT-PARITY: any export of grid-backed money must reuse the grid's sum-then-round formula and append a Grand Total row computed that way.
+- **DOCUMENTATION.md** — v2.66.62 release note.
+- **mem/features/incentive/** — new memory `export-grid-parity.md` referencing ADR-095, linked from `mem/index.md`.
 
 ## Rollback
-Revert the edge-function file to the previous version and redeploy; the only behavioural change is read-pagination. No data is destroyed by the fix (compute is delete-then-upsert within the period being recomputed).
+Revert the single component file; documentation is additive.
+
+## Out of scope
+- Changing the grid's rounding strategy.
+- Touching the Incentive Report (already paginated and aligned with the grid per ADR-094).
+- Re-running compute — totals are unaffected.
