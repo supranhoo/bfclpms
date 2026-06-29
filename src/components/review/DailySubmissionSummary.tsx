@@ -23,6 +23,15 @@ interface DailySubmissionSummaryProps {
   compact?: boolean;
   managerOverrides?: Map<string, number>;
   kpiStatus?: string | null;
+  /**
+   * Resolved workflow template stages for this employee/period (e.g.
+   * `['kra_set','self_review','manager_check','audit','approved']`).
+   * When provided, reviewer columns are additionally gated to stages that
+   * exist in the template — so a `self_l1_audit` employee does NOT see
+   * Skip-Lvl / HR PMS / Mgmt columns even after status advances.
+   * When omitted, falls back to status-only gating (legacy behavior).
+   */
+  workflowStages?: string[] | null;
 }
 
 // Reviewer column configuration
@@ -37,6 +46,15 @@ interface ReviewerColumn {
 // Full 8-stage status progression order for determining visible columns
 const STATUS_ORDER = ['kra_set', 'self_review', 'manager_check', 'skip_level_check', 'hr_pms_review', 'audit', 'management_review', 'approved'];
 
+// Reviewer column key -> the workflow stage it represents in the template.
+const COLUMN_TO_TEMPLATE_STAGE: Record<string, string> = {
+  manager_achieved_value: 'manager_check',
+  skip_level_achieved_value: 'skip_level_check',
+  hr_pms_achieved_value: 'hr_pms_review',
+  auditor_achieved_value: 'audit',
+  management_achieved_value: 'management_review',
+};
+
 export function DailySubmissionSummary({
   kpiId,
   kpiName,
@@ -49,6 +67,7 @@ export function DailySubmissionSummary({
   compact = false,
   managerOverrides,
   kpiStatus,
+  workflowStages,
 }: DailySubmissionSummaryProps) {
   // Calculate stats
   const stats = useMemo(() => {
@@ -78,9 +97,18 @@ export function DailySubmissionSummary({
     ];
     
     const statusIndex = STATUS_ORDER.indexOf(kpiStatus || 'kra_set');
-    
+    const templateSet = workflowStages && workflowStages.length > 0
+      ? new Set(workflowStages)
+      : null;
+    const inTemplate = (col: ReviewerColumn['key']) => {
+      // No template provided → legacy behavior (do not gate by template).
+      if (!templateSet) return true;
+      const stage = COLUMN_TO_TEMPLATE_STAGE[col];
+      return stage ? templateSet.has(stage) : true;
+    };
+
     // Show Manager column if KPI has passed manager_check or later
-    if (statusIndex >= STATUS_ORDER.indexOf('manager_check')) {
+    if (statusIndex >= STATUS_ORDER.indexOf('manager_check') && inTemplate('manager_achieved_value')) {
       cols.push({ 
         key: 'manager_achieved_value', 
         label: 'Manager Approved', 
@@ -91,7 +119,7 @@ export function DailySubmissionSummary({
     }
 
     // Show Skip-Level column if KPI has passed skip_level_check or later
-    if (statusIndex >= STATUS_ORDER.indexOf('skip_level_check')) {
+    if (statusIndex >= STATUS_ORDER.indexOf('skip_level_check') && inTemplate('skip_level_achieved_value' as any)) {
       cols.push({ 
         key: 'skip_level_achieved_value' as any, 
         label: 'Skip-Level Approved', 
@@ -102,7 +130,7 @@ export function DailySubmissionSummary({
     }
 
     // Show HR PMS column if KPI has passed hr_pms_review or later
-    if (statusIndex >= STATUS_ORDER.indexOf('hr_pms_review')) {
+    if (statusIndex >= STATUS_ORDER.indexOf('hr_pms_review') && inTemplate('hr_pms_achieved_value' as any)) {
       cols.push({ 
         key: 'hr_pms_achieved_value' as any, 
         label: 'HR PMS Approved', 
@@ -113,7 +141,7 @@ export function DailySubmissionSummary({
     }
     
     // Show Auditor column if KPI has passed audit or later
-    if (statusIndex >= STATUS_ORDER.indexOf('audit')) {
+    if (statusIndex >= STATUS_ORDER.indexOf('audit') && inTemplate('auditor_achieved_value')) {
       cols.push({ 
         key: 'auditor_achieved_value', 
         label: 'Auditor Approved', 
@@ -124,7 +152,7 @@ export function DailySubmissionSummary({
     }
     
     // Show Management column if KPI has passed management_review or approved
-    if (statusIndex >= STATUS_ORDER.indexOf('management_review')) {
+    if (statusIndex >= STATUS_ORDER.indexOf('management_review') && inTemplate('management_achieved_value')) {
       cols.push({ 
         key: 'management_achieved_value', 
         label: 'Management Approved', 
@@ -135,7 +163,7 @@ export function DailySubmissionSummary({
     }
     
     return cols;
-  }, [kpiStatus]);
+  }, [kpiStatus, workflowStages]);
 
   // Format achieved value for display
   const formatAchievedValue = (value: number | null): string => {

@@ -1948,6 +1948,7 @@ export function UnifiedScorecard({
                   onReviewerScoreChange={setReviewerScore}
                   submissionMap={submissionMap}
                   config={config}
+                  workflowStages={effectiveStages}
                 />
               )}
 
@@ -2321,6 +2322,7 @@ function DailySubmissionSummaryWithOverride({
   onReviewerScoreChange,
   submissionMap,
   config,
+  workflowStages,
 }: { 
   kpi: KPI; 
   selectedPeriod: string; 
@@ -2337,6 +2339,7 @@ function DailySubmissionSummaryWithOverride({
   onReviewerScoreChange: (score: number | null) => void;
   submissionMap: Map<string, any>;
   config: { scoreFieldPrefix: string; previousScoreField: string };
+  workflowStages?: string[] | null;
 }) {
   const { data: submissions } = useSubPeriodSubmissions(
     kpi.frequency === 'Daily' ? kpi.id : undefined, 
@@ -2380,6 +2383,7 @@ function DailySubmissionSummaryWithOverride({
         uomType={kpi.uom_type}
         qualitativeOptions={kpi.qualitative_options as QualitativeOption[] | null}
         kpiStatus={kpi.status}
+        workflowStages={workflowStages}
       />
       
       {isDailyBinary && isReviewMode && (

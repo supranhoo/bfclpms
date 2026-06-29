@@ -2,6 +2,7 @@ import React from 'react';
 import { TableRow, TableCell } from '@/components/ui/table';
 import { DailySubmissionSummary } from '@/components/review/DailySubmissionSummary';
 import { useSubPeriodSubmissions } from '@/hooks/useSubPeriodSubmissions';
+import { useEmployeeWorkflowStages } from '@/hooks/useWorkflowConfig';
 import { KPI } from '@/hooks/useKpis';
 import { QualitativeOption } from '@/lib/qualitativeUom';
 
@@ -23,6 +24,15 @@ export function InlineDailySubmissionRow({
     kpi.id,
     selectedPeriod,
     selectedYear
+  );
+
+  // Resolve the employee's workflow template so reviewer columns only render
+  // for stages that actually exist in this employee's workflow (POLICY §DAILY-
+  // SUBMISSION-WORKFLOW-AWARENESS). Falls back gracefully when unresolved.
+  const { data: workflowStages } = useEmployeeWorkflowStages(
+    kpi.employee_id,
+    selectedPeriod,
+    selectedYear,
   );
 
   // Don't show if no submissions
@@ -51,6 +61,7 @@ export function InlineDailySubmissionRow({
           uomType={kpi.uom_type}
           qualitativeOptions={kpi.qualitative_options as QualitativeOption[] | null}
           kpiStatus={kpi.status}
+          workflowStages={workflowStages}
           compact
         />
       </TableCell>

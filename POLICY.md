@@ -4379,3 +4379,28 @@ policy. Without admin/HR-PMS on-behalf write policies, Admin Data Entry
 uploads fail with "new row violates row-level security policy" (RCA
 2026-06-29, admin 101785 → Sajid Raza 100264). Pinned by
 `src/test/reviewEvidenceOnBehalfPolicy.test.ts`.
+
+## §DAILY-SUBMISSION-WORKFLOW-AWARENESS (v2.66.69, ADR-100)
+
+Any per-day / sub-period reviewer grid (today: `DailySubmissionSummary`)
+MUST gate reviewer columns on BOTH:
+
+1. The KPI's `status` has reached or passed the reviewer's stage (today's
+   linear-`STATUS_ORDER` check), AND
+2. The corresponding workflow stage is present in the employee's resolved
+   workflow template (via `useEmployeeWorkflowStages` /
+   `get_employee_workflow`).
+
+It is FORBIDDEN to render reviewer columns from the maximal 8-stage chain
+when the employee's template does not include that stage — the resulting
+empty cells falsely imply "not yet reviewed". Same SSOT contract as
+`mem/architecture/database/per-employee-workflow-resolution` and POLICY
+§105 (per-employee workflow resolution for reports).
+
+Component contract: `DailySubmissionSummary` accepts an optional
+`workflowStages` prop. Callers MUST pass it whenever the resolved
+template is available (every scorecard already computes `effectiveStages`).
+Omitting the prop falls back to status-only gating for back-compat only —
+new call sites must pass it.
+
+Regression: `src/test/dailySubmissionSummaryWorkflowAware.test.tsx`.
