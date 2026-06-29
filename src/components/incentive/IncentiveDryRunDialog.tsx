@@ -31,6 +31,8 @@ interface DryRunResult {
     employees_with_vessel_entries?: number;
     records_pre_scope?: number;
     records_post_scope?: number;
+    daily_entries_rows_loaded?: number;
+    production_rate_rows_loaded?: number;
   };
   summary: {
     total: number;
