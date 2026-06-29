@@ -57,3 +57,23 @@ up to date for stubs. Real employee submissions stay frozen exactly as
 before. The Self card (`ReviewStageCard.tsx`) shows an italic *"Will
 re-sync from Org KPI on next propagation"* hint whenever the row
 qualifies, so admins know what the next propagation will do.
+
+**Part 4 (shipped 2026-06-29, v2.66.67 / ADR-098 / POLICY §88.1.d):**
+The same "per-stage column is the source of truth, never the shared
+`achieved_value`" rule that protects the Self card also applies to every
+reviewer card (Manager / Functional Manager / Skip-Level / HR PMS /
+Auditor). All five cards already read `<stage>_achieved_value`.
+
+The gap was on the write side: `public.bulk_write_stage_scores` stamped
+`<stage>_score` / `<stage>_rating` / `<stage>_remarks` but never wrote
+`<stage>_achieved_value`, so a bulk Auditor override that changed
+achievement from 2.5 to 5 produced score 2 against `auditor_achieved_value
+= 2.5`. The RPC now mirrors `<stage>_achieved_value =
+COALESCE(v_achieved_num, v_cur.achieved_value)` in every reviewer-stage
+UPDATE. N/A branches null the per-stage column for parity. Audit log
+entries carry `mirrored_achieved_value` + `policy = '§88.1.d / ADR-098'`.
+
+Future RPCs that bulk-stamp reviewer scores MUST observe the mirror.
+The source-level guard `src/test/bulkWriteStageScoresAchievedMirror.test.ts`
+pins this for `bulk_write_stage_scores`. `bulk_management_approve` already
+mirrors correctly (ADR-067).

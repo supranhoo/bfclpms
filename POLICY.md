@@ -2341,6 +2341,24 @@ Regression: `src/test/review/propagateAutoAdvancedResync.test.ts` (gating predic
 
 ---
 
+### §88.1.d — Reviewer Bulk Sign-off MUST Mirror Achievement onto Per-Stage Column (v2.66.67 / ADR-098)
+
+The Review Journey card for each reviewer stage (Manager / Functional Manager / Skip-Level / HR PMS / Auditor) is the **frozen per-stage snapshot** of what that reviewer scored against — it reads `<stage>_achieved_value`, never the shared mutable `achieved_value`. Per §88, downstream reviewers can overwrite `achieved_value`, so the per-stage column is the only column the card may trust.
+
+It is therefore mandatory that **every RPC that stamps `<stage>_score`/`<stage>_rating` in bulk also writes `<stage>_achieved_value` in the SAME UPDATE**, set to whatever achievement the score was computed against:
+
+- Achievement supplied this turn (`p_achieved_values[submission_id]`) → mirror that number.
+- Manual-score-only path with no achievement input → mirror the row's existing `achieved_value` (the value the manual score is being applied against).
+- N/A branch → set `<stage>_achieved_value = NULL` for parity (so the card renders the cleared state instead of a stale carry-over).
+
+`public.bulk_write_stage_scores` and `public.bulk_management_approve` are the two RPCs governed by this rule. Single-cell, per-stage save paths (`useSubmitManagerReview`, `useSubmitAuditorReview`, etc.) are already correct because they write the per-stage column directly from the form. Any future RPC that bulk-stamps reviewer scores MUST observe this rule before merge.
+
+Audit log: each bulk-stamp entry (`BULK_STAGE_SIGNOFF_<STAGE>` / `BULK_OVERRIDE_VALUE_APPLIED`) MUST include `mirrored_achieved_value` in `new_value` and `policy = '§88.1.d / ADR-098'` in `metadata`, so future RCAs can confirm the mirror happened without re-reading the function body.
+
+Regression: `src/test/bulkWriteStageScoresAchievedMirror.test.ts` introspects `pg_get_functiondef('public.bulk_write_stage_scores')` and asserts that each of the five reviewer-stage UPDATE blocks contains `<stage>_achieved_value =`. A future migration that drops the mirror fails CI.
+
+---
+
 ## §89 — Per-KPI Audit Granularity for Org KPI Propagation (v2.66.7.3)
 
 Every Org KPI propagation event must produce **one `ORG_KPI_PROPAGATED` row in `kpi_audit_logs` per affected KPI**, individually addressable by `kpi_id`. This granularity is required because:
