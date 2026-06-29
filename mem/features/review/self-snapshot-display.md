@@ -40,3 +40,20 @@ for the Self card (it no longer reads `achieved_value`), but if other
 UIs ever start treating `achieved_value` as "self value" they will
 regress this fix. Anchor new UIs to `self_achieved_value` (preferred)
 or `resolveSelfAchievedValue`.
+
+**Part 3 (shipped 2026-06-29, v2.66.66 / ADR-097 / POLICY §88.5):**
+`propagate_org_kpi_value` now refreshes `self_achieved_value`,
+`achieved_value`, `self_score`, and `self_rating` on *auto-advanced
+stubs* — rows with `auto_advance_reason IS NOT NULL` AND
+`final_score IS NULL` AND no `self_evidence_url(s)`. Status is
+preserved (no step-back, no reviewer columns touched). Every refresh
+writes a `kpi_audit_logs` row with `action = 'OKV_AUTO_ADVANCED_RESYNC'`
+and `performed_by = NULL` (system); `metadata.admin_initiated_by`
+carries the human who triggered the propagation.
+
+The resolver does NOT need to change — it already prefers
+`self_achieved_value`, and the new code path simply keeps that column
+up to date for stubs. Real employee submissions stay frozen exactly as
+before. The Self card (`ReviewStageCard.tsx`) shows an italic *"Will
+re-sync from Org KPI on next propagation"* hint whenever the row
+qualifies, so admins know what the next propagation will do.
