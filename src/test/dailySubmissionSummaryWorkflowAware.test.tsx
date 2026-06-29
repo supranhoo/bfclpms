@@ -23,8 +23,10 @@ function sub(date: string, partial: Partial<SubPeriodSubmission> = {}): SubPerio
     submitted_at: `${date}T06:00:00Z`,
     evidence_urls: [],
     manager_achieved_value: 5,
+    skip_level_achieved_value: 5,
+    hr_pms_achieved_value: 5,
     auditor_achieved_value: 5,
-    management_achieved_value: null,
+    management_achieved_value: 5,
     admin_achieved_value: null,
     ...partial,
   } as unknown as SubPeriodSubmission;
