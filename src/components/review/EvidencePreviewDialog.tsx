@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Download, ExternalLink, Loader2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { isPreviewableEvidence } from '@/lib/storageDownload';
+import { toast } from 'sonner';
 
 type EvidencePreviewDetail = { url: string; fileName: string | null };
 
@@ -18,6 +19,24 @@ function downloadDirect(url: string, fileName?: string | null) {
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
+}
+
+/**
+ * If `url` points to /storage/v1/object/public/<bucket>/<path>, mint a short-
+ * lived signed URL (private buckets have no public endpoint). Returns the
+ * original URL when it is not a storage URL.
+ */
+async function resolveDownloadableUrl(url: string): Promise<string> {
+  const match = url.match(/\/storage\/v1\/object\/public\/([^/]+)\/(.+)$/);
+  if (!match) return url;
+  const [, bucket, path] = match;
+  const { data, error } = await supabase.storage
+    .from(bucket)
+    .createSignedUrl(decodeURIComponent(path), 300);
+  if (error || !data?.signedUrl) {
+    throw new Error(error?.message || 'Could not prepare file URL');
+  }
+  return data.signedUrl;
 }
 
 /**
@@ -102,18 +121,31 @@ export function EvidencePreviewProvider() {
   const kind = detail ? isPreviewableEvidence(detail.fileName ?? detail.url) : null;
   const displayName = detail?.fileName || detail?.url.split('/').pop()?.split('?')[0] || 'Evidence';
 
-  const handleDownload = () => {
+  const handleDownload = async () => {
     if (!detail) return;
-    if (blobUrl && blobUrl.startsWith('blob:')) {
-      downloadDirect(blobUrl, displayName);
-    } else {
-      downloadDirect(detail.url, displayName);
+    try {
+      // Prefer the URL we already resolved for preview (blob: for pdf/image,
+      // signed https: for office). Falls back to signing detail.url when the
+      // user clicks before the preview finishes loading.
+      if (blobUrl) {
+        downloadDirect(blobUrl, displayName);
+        return;
+      }
+      const url = await resolveDownloadableUrl(detail.url);
+      downloadDirect(url, displayName);
+    } catch (err) {
+      toast.error((err as Error).message || 'Could not prepare file for download');
     }
   };
 
-  const handleOpenNewTab = () => {
+  const handleOpenNewTab = async () => {
     if (!detail) return;
-    window.open(blobUrl || detail.url, '_blank', 'noopener,noreferrer');
+    try {
+      const url = blobUrl || (await resolveDownloadableUrl(detail.url));
+      window.open(url, '_blank', 'noopener,noreferrer');
+    } catch (err) {
+      toast.error((err as Error).message || 'Could not open file');
+    }
   };
 
   const body = (
