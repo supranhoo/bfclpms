@@ -1948,6 +1948,7 @@ export function UnifiedScorecard({
                   onReviewerScoreChange={setReviewerScore}
                   submissionMap={submissionMap}
                   config={config}
+                  workflowStages={effectiveStages}
                 />
               )}
 
