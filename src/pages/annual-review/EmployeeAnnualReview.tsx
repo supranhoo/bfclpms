@@ -244,7 +244,10 @@ export default function EmployeeAnnualReview() {
           <CardContent className="space-y-4">
             {template!.sections.self_review_fields!.map((f) => (
               <div key={f.id} className="space-y-1">
-                <Label>{tField(f.id, 'label', f.label)}{f.required && <span className="text-destructive"> *</span>}</Label>
+                <div className="flex items-center gap-2">
+                  <Label>{tField(f.id, 'label', f.label)}{f.required && <span className="text-destructive"> *</span>}</Label>
+                  <SpeakButton text={tField(f.id, 'label', f.label)} size="sm" />
+                </div>
                 <Textarea
                   rows={3}
                   placeholder={tField(f.id, 'placeholder', f.placeholder ?? '')}
