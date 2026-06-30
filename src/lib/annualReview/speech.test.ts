@@ -23,8 +23,8 @@ function installSynthMock(voices: Array<{ lang: string; name: string }>) {
   };
   // @ts-expect-error test injection
   globalThis.window = { speechSynthesis: synth, SpeechSynthesisUtterance: function (text: string) { this.text = text; } } as unknown as Window;
-  // @ts-expect-error test injection
-  globalThis.SpeechSynthesisUtterance = (globalThis.window as Window).SpeechSynthesisUtterance;
+  (globalThis as unknown as { SpeechSynthesisUtterance: unknown }).SpeechSynthesisUtterance =
+    (globalThis.window as unknown as { SpeechSynthesisUtterance: unknown }).SpeechSynthesisUtterance;
   return { synth };
 }
 
