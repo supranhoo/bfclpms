@@ -160,6 +160,14 @@ export interface TemplateSettings {
   enable_multilingual?: boolean;
   available_languages?: string[];
   default_language?: string;
+  /**
+   * Phase-1 read-aloud (TTS) toggle. When `true` and a non-default language
+   * is active, a speaker icon appears beside translated criterion/option/
+   * field text and plays it through the browser's native Web Speech API
+   * (`window.speechSynthesis`). Zero server cost; falls back silently to
+   * text-only when the OS has no voice for the active language. See ADR-103.
+   */
+  enable_audio?: boolean;
 }
 
 /**

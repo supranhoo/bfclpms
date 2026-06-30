@@ -12,6 +12,11 @@ interface I18nCtx {
   /** Reviewer-facing display mode for template labels. */
   displayMode: TemplateDisplayMode;
   /**
+   * Per-template read-aloud flag. Drives whether `<SpeakButton>` renders.
+   * Defaults to `false`. See ADR-103.
+   */
+  enableAudio: boolean;
+  /**
    * Lookup a template-authored translation for a section item.
    * Key shape: `<kind>.<id>.<field>` — e.g. `criterion.attendance.name`.
    * Falls back to the English value baked into the template if no
@@ -33,6 +38,7 @@ const defaultCtx: I18nCtx = {
   currentLanguage: 'en',
   defaultLanguage: 'en',
   displayMode: 'bilingual',
+  enableAudio: false,
   tTemplate: (_k, _i, _f, fb) => fb,
   tTemplateBilingual: (_k, _i, _f, fb) => fb,
 };
@@ -44,12 +50,14 @@ export function AnnualReviewI18nProvider({
   defaultLanguage,
   templateTranslations,
   displayMode,
+  enableAudio,
   children,
 }: {
   currentLanguage?: string | null;
   defaultLanguage?: string | null;
   templateTranslations?: TemplateSections['translations'];
   displayMode?: TemplateDisplayMode | null;
+  enableAudio?: boolean | null;
   children: ReactNode;
 }) {
   const { t, currentLanguage: cur, defaultLanguage: def } = useAnnualReviewTranslation({
@@ -58,6 +66,7 @@ export function AnnualReviewI18nProvider({
     templateTranslations,
   });
   const mode: TemplateDisplayMode = displayMode ?? 'bilingual';
+  const audio: boolean = enableAudio === true;
 
   const value = useMemo<I18nCtx>(() => ({
     t,
@@ -65,6 +74,7 @@ export function AnnualReviewI18nProvider({
     defaultLanguage: def,
     templateTranslations,
     displayMode: mode,
+    enableAudio: audio,
     tTemplate: (kind, id, field, fb) => {
       if (cur === def) return fb;
       if (mode === 'english_only') return fb;
@@ -82,7 +92,7 @@ export function AnnualReviewI18nProvider({
       if (!translated || translated === fb) return fb;
       return `${fb} / ${translated}`;
     },
-  }), [t, cur, def, templateTranslations, mode]);
+  }), [t, cur, def, templateTranslations, mode, audio]);
 
   return (
     <AnnualReviewI18nContext.Provider value={value}>{children}</AnnualReviewI18nContext.Provider>

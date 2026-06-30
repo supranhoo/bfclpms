@@ -4425,3 +4425,11 @@ Omitting the prop falls back to status-only gating for back-compat only —
 new call sites must pass it.
 
 Regression: `src/test/dailySubmissionSummaryWorkflowAware.test.tsx`.
+
+## §89 — Annual Review Read-Aloud (TTS) — ADR-103
+1. Read-aloud is a **presentation aid only**. The written translation remains the source of truth.
+2. Absence of audio (unsupported browser, missing OS voice pack) **does not invalidate** the form; the form must still be fillable and submittable.
+3. Read-aloud is opt-in per template via `template.settings.enable_audio` (default `false`) and is meaningful only when `enable_multilingual=true`.
+4. Audio is rendered for the **translated** text in the currently-selected non-default language only. The English source is never read aloud (default language is assumed readable).
+5. No PII, free-text remarks, or auditor notes are read aloud in Phase 1 — only authored template labels (criterion name/description, option labels, qualitative field labels).
+6. No server round-trips, no key material, no analytics events fire on play/stop.
