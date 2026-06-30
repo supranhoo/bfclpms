@@ -1,35 +1,49 @@
 ---
 name: cycle-anchor-drift-monitor
-description: Multi-month KPI cycle anchor invariants — intra-year uniqueness, oldest-row-wins repair, and prevention trigger (ADR-090)
+description: Multi-month KPI cycle anchor invariants — per-cycle-window uniqueness, oldest-row-wins repair, and prevention trigger (ADR-091, supersedes ADR-090)
 type: constraint
 ---
-`kpis.frequency_cycle_start` is an INTRA-YEAR invariant: all rows in a
-`(employee_id, kpi_name, review_year, frequency)` tuple MUST share the same
-anchor. Enforced by trigger `trg_enforce_intra_year_cycle_anchor_consistency`
+`kpis.frequency_cycle_start` is a PER-CYCLE-WINDOW invariant (ADR-091):
+two rows in the same `(employee_id, kpi_name, review_year, frequency)` tuple
+whose `review_period` falls inside the SAME canonical cycle window MUST
+share the same anchor. Different cycle windows in the same year (e.g.
+Quarterly Apr-Jun coexisting with Jul-Sep) are explicitly allowed —
+`frequency_cycle_start` is a per-row window label, not a yearly series tag.
+Enforced by trigger `trg_enforce_intra_year_cycle_anchor_consistency`
 (BEFORE INSERT). UPDATEs are intentionally exempt so the repair RPC and admin
 propagation paths can converge anchors.
 
-**Repair contract.** When divergence is found (existing pre-ADR-090 drift),
+**Repair contract.** When divergence is found within the same canonical
+cycle window, call
 use `public.repair_intra_year_cycle_anchor_drift(p_dry_run, p_safety_ceiling)`.
-Strategy: oldest-row-wins (smallest `created_at`, ties by id ASC). Only
+Strategy: oldest-row-wins **per canonical window** (smallest `created_at`,
+ties by id ASC). Only
 `frequency_cycle_start` is mutated. Every change writes
 `kpi_audit_logs.action='KPI_CYCLE_ANCHOR_REPAIRED'` with
-`metadata.policy='ADR-090'`, `metadata.strategy='oldest_row_wins'`. Safety
+`metadata.policy='ADR-091'`,
+`metadata.strategy='oldest_row_wins_per_window'`,
+`metadata.cycle_window=<window>`. Safety
 ceiling defaults to 500 rows. Repair is reversible from the audit log.
 
 **Detector.** `public.detect_intra_year_cycle_anchor_drift()` returns one row
-per drifted tuple (anchors[] + affected_row_count). Cheap GROUP BY HAVING;
-safe to call from a daily monitor.
+per drifted `(employee, kpi_name, year, frequency, cycle_window)` tuple
+(anchors[] + affected_row_count). Cheap GROUP BY HAVING; safe to call from
+a daily monitor. **Schema change (ADR-091):** the result set now carries a
+`cycle_window` column; the function was dropped and re-created.
 
-**Pure-helper SSOT.** `src/lib/cycleAnchorRepair.ts::planAnchorRepairs`
-mirrors the RPC selection rule and is the only place to evolve the strategy
-— tests in `src/test/cycleAnchorRepairSelection.test.ts` lock it down (Sajid
-Bi-Monthly Feb-Mar + Abhas Half-Yearly Apr-Sep regression cases).
+**Pure-helper SSOT.**
+- `src/lib/cycleAnchorRepair.ts::planAnchorRepairs` — repair selection.
+- `src/lib/cycleAnchorWindowConsistency.ts::checkCycleAnchorConflict` —
+  mirrors the trigger predicate (ADR-091). Regression locked by
+  `src/test/cycleAnchorWindowConsistency.test.ts` (V.A.V.S.S. Ganapathi
+  Varma May→June cross-cycle scenario + Sajid same-window drift).
 
 **Anti-pattern.** Do NOT call `public.resolve_cycle_anchor(frequency, month_idx)`
 (2-arg) on rows that already have an anchor — it returns Jan-anchored
 windows and overwrites legitimate offset cycles. Always use the 3-arg
 sticky overload `(frequency, month_idx, existing_anchor)` per ADR-088.
 
-**Backfill executed 2026-06-28.** 89 rows across 42 tuples repaired. Post-
-repair `detect_intra_year_cycle_anchor_drift()` returns 0.
+**Backfill executed 2026-06-28.** 89 rows across 42 tuples repaired under
+the ADR-090 (year-scoped) invariant. Under the ADR-091 (window-scoped)
+invariant, `detect_intra_year_cycle_anchor_drift()` still returns 0
+because every repaired tuple converges within each canonical window.
