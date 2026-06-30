@@ -2344,6 +2344,19 @@ Regression: `src/test/bulkWriteStageScoresContract.test.ts` (force-approve actio
 
 ---
 
+### §88.4-bis — ADR-102: definition of `self_not_submitted` in Bulk Review (v2.66.13.19)
+
+The Bulk Review skip reason `self_not_submitted` (POLICY §111.6 BENIGN) was previously triggered when `review_submissions.self_score IS NULL`. That definition incorrectly skipped Org-KPI rows (per ADR-067 the Data Owner propagates `self_achieved_value` without computing a numeric `self_score`) and qualitative-KPI rows (Self enters a label/remark; rating is derived later), even when a downstream reviewer had already scored the cell.
+
+a. **Canonical definition.** `bulk_write_stage_scores` marks a non-override cell as `self_not_submitted` **only if ALL** of the following are NULL/blank on the row: `self_score`, `self_achieved_value`, `self_remarks` (trimmed), `submitted_at`, `manager_score`, `functional_manager_score`, `skip_level_score`, `hr_pms_score`. Any one signal proves Self submitted (downstream scores prove it transitively — the workflow could not have advanced past Self otherwise).
+b. **Override path unchanged.** Admin-only `p_is_override = true` continues to bypass this guard entirely (§88.4).
+c. **Single-cell writes unaffected.** The per-cell auditor / manager submit paths do not use this guard and are not modified.
+d. **No new skip reasons.** The taxonomy in §111.6 is unchanged; only the predicate behind `self_not_submitted` widens.
+
+Regression: `src/test/bulkWriteStageScoresSelfSubmittedGuard.test.ts` (all eight signals + V.A.V.S.S./Jyoti row reproduction). ADR: `docs/adr/ADR-102.md`.
+
+---
+
 ### §88.5 — Auto-Advanced Stub Refresh Exception (v2.66.66)
 
 The §88 immutability rule MAY be deliberately bypassed by the **system** during Org KPI re-propagation, **only** for child rows that are *auto-advanced stubs* — placeholders written by ADR-048 auto-advance and never touched by an employee.
