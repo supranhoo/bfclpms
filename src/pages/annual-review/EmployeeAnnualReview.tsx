@@ -11,6 +11,7 @@ import {
 } from '@/hooks/useAnnualReview';
 import { AnnualReviewStageTracker } from '@/components/annual-review/AnnualReviewStageTracker';
 import { useShowReviewerNamesInStepper } from '@/hooks/useAnnualReviewSettings';
+import { SpeakButton } from '@/components/annual-review/SpeakButton';
 import { useActiveProfilesLite } from '@/hooks/useSafetyOrg';
 import { buildReviewerNamesByStage } from '@/lib/annualReview/reviewerNames';
 import { computeVisibleStages, computeStageResolutions } from '@/lib/annualReview/visibleStages';
