@@ -31,8 +31,7 @@ function installSynthMock(voices: Array<{ lang: string; name: string }>) {
 describe('annualReview/speech', () => {
   beforeEach(() => {
     __resetForTests();
-    // @ts-expect-error reset
-    delete globalThis.window;
+    delete (globalThis as { window?: unknown }).window;
   });
 
   it('isSpeechSupported = false when window missing', () => {
