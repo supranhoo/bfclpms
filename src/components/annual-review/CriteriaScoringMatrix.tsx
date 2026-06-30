@@ -7,6 +7,7 @@ import { Loader2, Upload, X } from 'lucide-react';
 import { SCORE_COLOR, SCORE_LABEL } from '@/lib/annualReview/constants';
 import type { TemplateCriterion, EvidenceItem } from '@/types/annualReview';
 import { useAnnualReviewI18n } from '@/components/annual-review/AnnualReviewI18nContext';
+import { SpeakButton } from '@/components/annual-review/SpeakButton';
 
 const COACHING_NOTES: Record<number, string> = {
   5: 'Reserve "Outstanding" for documented, repeated excellence — avoid leniency bias.',
@@ -58,6 +59,10 @@ function CriterionRow({
 }: CriteriaScoringMatrixProps & { criterion: TemplateCriterion }) {
   const [uploading, setUploading] = useState(false);
   const { t, tTemplate, tTemplateBilingual } = useAnnualReviewI18n();
+  const criterionName = tTemplate('criterion', criterion.id, 'name', criterion.name);
+  const criterionDesc = criterion.description
+    ? tTemplate('criterion', criterion.id, 'description', criterion.description)
+    : '';
   const score = values[criterion.id];
   const w = Number(criterion.weight) || 0;
   const total = typeof score === 'number' ? w * score : null;
@@ -70,11 +75,15 @@ function CriterionRow({
       <CardContent className="p-4 md:p-6 space-y-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
-            <h4 className="font-semibold text-base">{tTemplate('criterion', criterion.id, 'name', criterion.name)}</h4>
+            <div className="flex items-start gap-2">
+              <h4 className="font-semibold text-base">{criterionName}</h4>
+              <SpeakButton text={criterionName} size="sm" />
+            </div>
             {criterion.description && (
-              <p className="text-sm text-muted-foreground mt-0.5">
-                {tTemplate('criterion', criterion.id, 'description', criterion.description)}
-              </p>
+              <div className="mt-0.5 flex items-start gap-2">
+                <p className="text-sm text-muted-foreground">{criterionDesc}</p>
+                <SpeakButton text={criterionDesc} size="sm" />
+              </div>
             )}
           </div>
           <div className="flex items-center gap-2 text-sm font-mono">
@@ -106,15 +115,15 @@ function CriterionRow({
                 const c = SCORE_COLOR[opt.score] ?? SCORE_COLOR[0];
                 const label = tTemplateBilingual('option', opt.id, 'label', opt.label);
                 return (
+                  <div key={opt.id} className="relative">
                   <button
                     type="button"
-                    key={opt.id}
                     disabled={readOnly}
                     onClick={() => onChangeScore?.(criterion.id, opt.score)}
                     aria-pressed={active}
                     aria-label={`${opt.label} — Score ${opt.score}`}
                     className={[
-                      'group text-left rounded-lg border p-3 min-h-[88px] transition-all',
+                      'group w-full text-left rounded-lg border p-3 min-h-[88px] transition-all',
                       'flex items-start gap-3',
                       active
                         ? `border-amber-500 bg-amber-500/5 ring-2 ring-amber-500/40 ${c.text}`
@@ -132,7 +141,7 @@ function CriterionRow({
                       {active && <span className="h-2 w-2 rounded-full bg-amber-500" />}
                     </span>
                     <span className="min-w-0 flex-1">
-                      <span className={['block text-sm leading-snug', active ? 'font-semibold' : 'font-medium text-foreground'].join(' ')}>
+                      <span className={['block text-sm leading-snug pr-8', active ? 'font-semibold' : 'font-medium text-foreground'].join(' ')}>
                         {label}
                       </span>
                       <span className="mt-1 block text-xs text-muted-foreground">
@@ -140,6 +149,10 @@ function CriterionRow({
                       </span>
                     </span>
                   </button>
+                  <div className="absolute top-2 right-2">
+                    <SpeakButton text={label} size="sm" />
+                  </div>
+                  </div>
                 );
               })}
             </div>
