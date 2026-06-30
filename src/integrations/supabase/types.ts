@@ -13266,6 +13266,7 @@ export type Database = {
         Returns: {
           affected_row_count: number
           anchors: string[]
+          cycle_window: string
           employee_id: string
           frequency: string
           kpi_name: string
@@ -13355,6 +13356,10 @@ export type Database = {
           p_review_year: number
         }
         Returns: Json
+      }
+      expand_cycle_window_months: {
+        Args: { p_anchor: string; p_frequency: string }
+        Returns: string[]
       }
       expire_overdue_permits: { Args: never; Returns: Json }
       find_ongoing_workflow: {
