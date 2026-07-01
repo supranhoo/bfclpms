@@ -5,7 +5,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Calendar, Check, X, AlertTriangle, Edit2, Paperclip } from 'lucide-react';
-import { openStorageFile, openStorageFileGroup, buildEvidenceFileName } from '@/lib/storageDownload';
+import { openStorageFileGroup, buildEvidenceFileName } from '@/lib/storageDownload';
 import { SubPeriodSubmission } from '@/hooks/useSubPeriodSubmissions';
 import { QualitativeOption, BINARY_OPTIONS } from '@/lib/qualitativeUom';
 import { getMonthNumber } from '@/lib/frequencyUtils';
