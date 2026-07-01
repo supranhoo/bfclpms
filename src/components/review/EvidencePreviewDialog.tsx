@@ -3,12 +3,18 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from '@/components/ui/drawer';
 import { Button } from '@/components/ui/button';
-import { Download, ExternalLink, Loader2, Maximize2, Minimize2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Download, ExternalLink, Loader2, Maximize2, Minimize2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { isPreviewableEvidence } from '@/lib/storageDownload';
 import { toast } from 'sonner';
 
-type EvidencePreviewDetail = { url: string; fileName: string | null };
+type EvidenceGroupItem = { url: string; fileName?: string | null };
+type EvidencePreviewDetail = {
+  url: string;
+  fileName: string | null;
+  group?: EvidenceGroupItem[];
+  index?: number;
+};
 
 function downloadDirect(url: string, fileName?: string | null) {
   const a = document.createElement('a');
@@ -52,13 +58,23 @@ export function EvidencePreviewProvider() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [group, setGroup] = useState<EvidenceGroupItem[] | null>(null);
+  const [groupIndex, setGroupIndex] = useState(0);
 
   useEffect(() => {
     const handler = (e: Event) => {
       const ce = e as CustomEvent<EvidencePreviewDetail>;
       if (!ce.detail?.url) return;
       ce.preventDefault();
-      setDetail(ce.detail);
+      const g = ce.detail.group && ce.detail.group.length > 1 ? ce.detail.group : null;
+      const idx = g ? Math.max(0, Math.min(g.length - 1, ce.detail.index ?? 0)) : 0;
+      setGroup(g);
+      setGroupIndex(idx);
+      setDetail(
+        g
+          ? { url: g[idx].url, fileName: g[idx].fileName ?? null }
+          : { url: ce.detail.url, fileName: ce.detail.fileName ?? null },
+      );
       setOpen(true);
     };
     window.addEventListener('evidence-preview', handler as EventListener);
@@ -122,6 +138,28 @@ export function EvidencePreviewProvider() {
   const kind = detail ? isPreviewableEvidence(detail.fileName ?? detail.url) : null;
   const displayName = detail?.fileName || detail?.url.split('/').pop()?.split('?')[0] || 'Evidence';
 
+  const hasGroup = !!group && group.length > 1;
+  const canPrev = hasGroup && groupIndex > 0;
+  const canNext = hasGroup && groupIndex < (group?.length ?? 0) - 1;
+  const goTo = (nextIdx: number) => {
+    if (!group) return;
+    const clamped = Math.max(0, Math.min(group.length - 1, nextIdx));
+    if (clamped === groupIndex) return;
+    setGroupIndex(clamped);
+    const item = group[clamped];
+    setDetail({ url: item.url, fileName: item.fileName ?? null });
+  };
+
+  useEffect(() => {
+    if (!open || !hasGroup) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowLeft' && canPrev) goTo(groupIndex - 1);
+      else if (e.key === 'ArrowRight' && canNext) goTo(groupIndex + 1);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [open, hasGroup, canPrev, canNext, groupIndex]);
+
   const handleDownload = async () => {
     if (!detail) return;
     try {
@@ -152,6 +190,31 @@ export function EvidencePreviewProvider() {
   const body = (
     <div className="flex flex-col h-full gap-3 min-h-0">
       <div className="flex items-center justify-end gap-2 shrink-0">
+        {hasGroup && (
+          <div className="flex items-center gap-1 mr-1">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => goTo(groupIndex - 1)}
+              disabled={!canPrev}
+              aria-label="Previous evidence"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <span className="text-xs text-muted-foreground tabular-nums px-1">
+              {groupIndex + 1} / {group!.length}
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => goTo(groupIndex + 1)}
+              disabled={!canNext}
+              aria-label="Next evidence"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+        )}
         {!isMobile && (
           <Button
             variant="outline"
