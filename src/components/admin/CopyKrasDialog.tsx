@@ -108,6 +108,9 @@ export function CopyKrasDialog({ isOpen, onClose }: CopyKrasDialogProps) {
       return (data || []) as SourceKpi[];
     },
     enabled: !!sourceEmployeeId,
+    staleTime: 0,
+    refetchOnMount: 'always',
+    refetchOnWindowFocus: true,
   });
 
   // Auto-select all when source KPIs load
@@ -131,6 +134,9 @@ export function CopyKrasDialog({ isOpen, onClose }: CopyKrasDialogProps) {
       return data || [];
     },
     enabled: targetEmployeeIds.length > 0,
+    staleTime: 0,
+    refetchOnMount: 'always',
+    refetchOnWindowFocus: true,
   });
 
   // Build duplicate map: employee_id -> Set of "kra_name|||kpi_name"
