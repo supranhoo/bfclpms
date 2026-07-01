@@ -5,7 +5,7 @@ import { Label } from '@/components/ui/label';
 import { Progress } from '@/components/ui/progress';
 import { useToast } from '@/hooks/use-toast';
 import { Upload, X, FileText, Image, FileSpreadsheet, Loader2, Plus } from 'lucide-react';
-import { openStorageFile, openStorageFileGroup } from '@/lib/storageDownload';
+import { openStorageFileGroup } from '@/lib/storageDownload';
 import { cn } from '@/lib/utils';
 import { useUploadLimits } from '@/hooks/useUploadLimits';
 
