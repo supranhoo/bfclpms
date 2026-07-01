@@ -1,101 +1,52 @@
+## Issue
+Employees see **"Preview failed: Object not found"** when opening the supporting file attached to an Organization KPI (e.g. `org-kpi-evidence/…_Self_Evidence.xlsx`). Admins/HR PMS/Auditors can still open it — only ordinary employees (and managers/skip-managers of ordinary employees) are blocked.
 
-## Root cause (verified against DB)
+## Root Cause
+The `review-evidence` bucket is private, so every read goes through storage RLS. The current SELECT policy `Users can view authorized evidence` (migration `20260622103745`) matches only when `storage.foldername(name)[1]` is either the caller's own `auth.uid()` **or** the UUID of a profile they manage. Org-KPI files are stored under a fixed prefix — `org-kpi-evidence/<file>` — so `foldername[1] = 'org-kpi-evidence'`, which never matches a profile id. There is INSERT/UPDATE/DELETE coverage for that prefix (migration `20260626112752`), but **no SELECT policy was added for it**. Result: Supabase returns 404 "Object not found" to non-privileged roles, which the preview dialog surfaces verbatim.
 
-For employee `100735` (Manoj Kumar Mahato) in **June 2026**, the `kpis` table currently holds **0 rows**. So the Copy KRAs duplicate check should find 0 duplicates and the copy should succeed. Instead the UI toasts:
+## 5-Why
+1. Why does the employee see "Object not found"? → Storage returns 404 because RLS hides the object from them.
+2. Why does RLS hide it? → The only SELECT policy on `review-evidence` requires the first folder segment to be a profile UUID, and admin/auditor/hr_pms roles.
+3. Why doesn't that match Org-KPI files? → Org-KPI evidence is stored under the shared prefix `org-kpi-evidence/…`, not under a per-employee UUID folder.
+4. Why is there no matching SELECT policy? → The 2026-06-26 hardening migration added INSERT/UPDATE/DELETE for the `org-kpi-evidence/` prefix but omitted a SELECT counterpart, assuming the general employee-folder SELECT policy would cover it.
+5. Why did the omission ship? → No regression test asserted "authenticated employee can SELECT an `org-kpi-evidence/*` object", and the security-tightening review focused on write paths (ADR-096) and download URL signing (ADR-099), not read visibility of the shared org prefix.
 
-> Copy Failed — No KPIs to copy (all duplicates).
+## Risk & Impact Report
+- **Data Impact:** additive SELECT policy only; no data mutation, no schema change.
+- **Workflow Impact:** restores employee ability to view Org-KPI supporting evidence during self-review. No new privilege for external roles.
+- **Security Impact:** Org KPI evidence is a company-wide artifact already surfaced to every reviewer through the Org-KPI cards; granting authenticated SELECT on the `org-kpi-evidence/` prefix matches its intended visibility and does not widen access to per-employee folders.
+- **Regression Risk:** low. Change is scoped to `bucket_id = 'review-evidence' AND foldername[1] = 'org-kpi-evidence'`. Existing "Users can view authorized evidence" policy is untouched.
+- **Rollback:** `DROP POLICY "Org KPI evidence select" ON storage.objects;`.
 
-That message is thrown at `src/components/admin/CopyKrasDialog.tsx:207` only when `kpisToInsert.length === 0`, which means `duplicateMap` reported all 24 selected KPIs as duplicates at click time — a state that does not exist in the database.
+## CAPA
+### Corrective
+1. **DB migration** — add SELECT policy:
+   ```sql
+   CREATE POLICY "Org KPI evidence select"
+   ON storage.objects FOR SELECT TO authenticated
+   USING (
+     bucket_id = 'review-evidence'
+     AND (storage.foldername(name))[1] = 'org-kpi-evidence'
+   );
+   ```
+   Scoped strictly to the shared Org-KPI prefix — mirrors the existing INSERT/UPDATE/DELETE policy shape from migration `20260626112752`.
 
-Why the dialog sees phantom duplicates:
+### Preventive
+2. **Regression guard** — `src/test/orgKpiEvidenceSelectPolicy.test.ts`: source-reading test (same style as `reviewEvidenceOnBehalfPolicy.test.ts`) that fails if any future migration drops the SELECT policy or removes the `org-kpi-evidence` prefix guard.
+3. **Policy invariant** — add POLICY.md rule: *"Every storage prefix in `review-evidence` MUST have matching SELECT + INSERT + UPDATE + DELETE policies. Write-only or read-only prefixes are prohibited."*
+4. **ADR-104** documenting the incident, root cause, fix, and the new invariant. Cross-link ADR-096 and ADR-099.
+5. **DOCUMENTATION.md** — update Storage / RLS section to list the four Org-KPI evidence policies as a set.
 
-1. `<CopyKrasDialog>` is rendered **unconditionally** in `src/pages/admin/AllKpis.tsx` (only `open={isOpen}` is toggled). The component never unmounts, so its React Query cache — including `['copy-kras-target-existing', targetEmployeeIds, targetPeriod, targetYear]` — survives across open/close cycles.
-2. When the admin deletes the target employee's KRAs elsewhere (KPI Editor, Bulk delete, etc.), those flows do **not** invalidate `copy-kras-target-existing`. On reopening the dialog, React Query returns the cached 24-row snapshot instantly.
-3. There is also a race: even after adding invalidation, if the user clicks **Copy** before the background refetch completes, the mutation still uses the stale in-memory `duplicateMap`. There is no server-side re-check inside `mutationFn`.
+## Verification Steps
+- Run migration; confirm `storage.policies` lists the new SELECT policy.
+- Sign in as an ordinary employee (e.g. 100735) → open an Org KPI that has an `.xlsx` evidence file → preview loads and Download works.
+- Re-run `src/test/review/evidencePreview.test.ts` and new `orgKpiEvidenceSelectPolicy.test.ts` — all green.
+- Confirm employee cannot still SELECT arbitrary `<other-employee-uuid>/…` paths (existing policy unchanged).
 
-The Copy button label showing "Copy 24 KRAs" while the toast reports "all duplicates" is possible when the fresh 0-row refetch lands between render and click; the safer fix must therefore also re-verify on submit.
+## Files Touched
+- `supabase/migrations/<new>_org_kpi_evidence_select_policy.sql` (new)
+- `src/test/orgKpiEvidenceSelectPolicy.test.ts` (new)
+- `docs/adr/ADR-104.md` (new)
+- `POLICY.md`, `DOCUMENTATION.md` (updated)
 
-## Fix (surgical, 3 files)
-
-### 1. `src/pages/admin/AllKpis.tsx`
-Conditionally mount the dialog so it fully resets on every open (state + query cache lifecycle):
-
-```
-{isCopyKrasOpen && (
-  <CopyKrasDialog isOpen onClose={() => setIsCopyKrasOpen(false)} />
-)}
-```
-
-### 2. `src/components/admin/CopyKrasDialog.tsx`
-
-a. Harden the target-existing query so it always fetches fresh when the dialog opens:
-
-```
-useQuery({
-  queryKey: ['copy-kras-target-existing', targetEmployeeIds, targetPeriod, targetYear],
-  queryFn: ...,
-  enabled: targetEmployeeIds.length > 0,
-  staleTime: 0,
-  refetchOnMount: 'always',
-  refetchOnWindowFocus: true,
-});
-```
-Apply the same to the source KPI query for symmetry.
-
-b. **Re-verify duplicates inside `mutationFn` right before insert** (authoritative server read, ignores any React state race):
-
-```
-const { data: fresh } = await supabase
-  .from('kpis')
-  .select('employee_id, kra_name, kpi_name')
-  .in('employee_id', targetEmployeeIds)
-  .eq('review_period', targetPeriod)
-  .eq('review_year', targetYear);
-
-const freshDupes = new Map<string, Set<string>>();
-(fresh ?? []).forEach(k => { /* build map */ });
-
-// Rebuild kpisToInsert using freshDupes instead of the closured duplicateMap.
-```
-Only throw "all duplicates" when the fresh server read agrees.
-
-c. On successful copy, also invalidate `['copy-kras-target-existing']` (so opening the dialog again reflects the just-inserted rows without needing a full remount).
-
-### 3. Delete/bulk-delete call sites that already invalidate `['kpis']` / `['all-kpis']`
-
-Add one more line: `queryClient.invalidateQueries({ queryKey: ['copy-kras-target-existing'] })` in the mutation success handlers for:
-- `AdminKpiEditorForm.tsx` delete path
-- `AllKpis.tsx` bulk-delete handler (search for existing `invalidateQueries(['all-kpis'])` calls)
-
-This makes the cache correct even without the remount fallback in step 1.
-
-## Tests (regression protection)
-
-New unit test `src/components/admin/CopyKrasDialog.duplicateRefresh.test.tsx`:
-
-- **Case A** — stale cache, DB empty: seed React Query cache with 24 fake duplicate rows for the target/period, mock `supabase.from('kpis').select(...)` inside `mutationFn` to return `[]`; assert insert is called with 24 rows and no "all duplicates" toast fires.
-- **Case B** — genuine duplicates: mock the in-mutation fetch to return the same 24 kra_name/kpi_name pairs the source has; assert the throw fires and insert is never called.
-- **Case C** — partial overlap (12 of 24 exist): assert exactly 12 rows are inserted.
-
-Existing `useActiveEmployeesForCopy` and `formatKpiInsertError` tests are unaffected.
-
-## Risk & impact
-
-| Area | Impact |
-|------|--------|
-| Data | None — new logic only widens the pre-insert safety net; unique index `idx_kpis_no_duplicates` is still the DB backstop. |
-| Workflow | None — behaviour only changes for the false-negative case that was blocking the admin. |
-| UI/UX | No visible changes; dialog behaves the same on the happy path. |
-| Regression | Low. All changes are additive query options / one extra pre-insert SELECT. |
-| Performance | One extra ≤targetCount×1 SELECT on submit; negligible. |
-| Rollback | Revert the three files. |
-
-## Documentation updates (per project SSOT rule)
-
-- `DOCUMENTATION.md` — add a note under Copy KRAs describing the pre-insert re-verification and dialog remount policy.
-- `POLICY.md` — extend §94 (or the Copy KRAs section) with: *"Duplicate detection for Copy KRAs must be re-verified against the database inside the mutation; UI-cached duplicate maps are advisory only."*
-- Append entry to `mem://features/admin/copy-kras-org-kpi-integrity` — v2.66.7.10: stale-cache false-duplicate fix.
-
-## Immediate workaround for the user (no code change needed)
-
-Hard-refresh the page (Ctrl+F5) and reopen Copy KRAs — the target-existing query will refetch and the 24 KRAs will copy successfully. The plan above prevents the situation from recurring.
+No frontend / component changes required — `EvidencePreviewDialog` and `OrgKpiFileUpload` already do the right thing once RLS permits the read.
