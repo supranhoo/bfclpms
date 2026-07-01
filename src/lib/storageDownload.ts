@@ -72,13 +72,24 @@ export function buildEvidenceFileName(
  * @param publicUrl - The public URL of the storage file
  * @param fileName - Optional descriptive filename for the download
  */
-export async function openStorageFile(publicUrl: string, fileName?: string): Promise<void> {
+export type EvidenceGroupItem = { url: string; fileName?: string | null };
+
+export async function openStorageFile(
+  publicUrl: string,
+  fileName?: string,
+  options?: { group?: EvidenceGroupItem[]; index?: number },
+): Promise<void> {
   // Route previewable evidence (PDF / image) through the in-app preview dialog
   // via a global custom event. The EvidencePreviewProvider mounted in App.tsx
   // listens for `evidence-preview` and opens a modal. Falls back to direct
   // download when no listener is present (e.g. in tests).
   if (typeof window !== 'undefined' && isPreviewableEvidence(fileName ?? publicUrl)) {
-    const detail = { url: publicUrl, fileName: fileName ?? null };
+    const detail = {
+      url: publicUrl,
+      fileName: fileName ?? null,
+      group: options?.group,
+      index: options?.index,
+    };
     const ev = new CustomEvent('evidence-preview', { detail, cancelable: true });
     const dispatched = window.dispatchEvent(ev);
     // If a listener handled it (called preventDefault), stop here.
