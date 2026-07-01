@@ -73,6 +73,31 @@ export function KpiMetricsSection({ kpi }: KpiMetricsSectionProps) {
     { key: 'r1', label: 'R1', value: kpi.r1, colorClass: 'text-red-600' },
   ].filter(r => r.value);
 
+  const isQualitative = kpi.uom_type === 'binary' || kpi.uom_type === 'tiered';
+  const ratingColorFor = (rating: number): string => {
+    const r = Math.round(rating);
+    if (r >= 5) return 'text-blue-600';
+    if (r === 4) return 'text-green-600';
+    if (r === 3) return 'text-yellow-600';
+    if (r === 2) return 'text-orange-600';
+    return 'text-red-600';
+  };
+  const qualitativeRows =
+    isQualitative && Array.isArray(kpi.qualitative_options) && kpi.qualitative_options.length > 0
+      ? [...kpi.qualitative_options]
+          .sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0))
+          .map((opt, idx) => ({
+            key: `q-${idx}-${opt.label}`,
+            label: opt.label,
+            value: `Rating ${opt.rating}`,
+            colorClass: ratingColorFor(opt.rating ?? 0),
+            tooltipContent: opt.definition?.trim()
+              ? opt.definition
+              : `${opt.label} → Score ${opt.rating}`,
+          }))
+      : [];
+  const showQualitative = qualitativeRows.length > 0;
+
   return (
     <Card>
       <CardHeader className="pb-2 px-3 sm:px-6 pt-3 sm:pt-6">
@@ -109,22 +134,32 @@ export function KpiMetricsSection({ kpi }: KpiMetricsSectionProps) {
         </div>
 
         {/* Rating Scale */}
-        {ratings.length > 0 && (
+        {(showQualitative || ratings.length > 0) && (
           <div className="pt-2 sm:pt-3 border-t">
             <Label className="text-[10px] sm:text-xs font-medium text-muted-foreground flex items-center gap-1 mb-1.5 sm:mb-2">
               <Info className="h-3 w-3" />
-              Rating Scale
+              {showQualitative ? 'Option Mapping' : 'Rating Scale'}
             </Label>
             <div className="flex flex-wrap gap-x-3 gap-y-1">
-              {ratings.map(r => (
-                <RatingRow
-                  key={r.key}
-                  label={r.label}
-                  value={r.value!}
-                  colorClass={r.colorClass}
-                  tooltipContent={getCalculationLogic(kpi, r.label, r.value!)}
-                />
-              ))}
+              {showQualitative
+                ? qualitativeRows.map(r => (
+                    <RatingRow
+                      key={r.key}
+                      label={r.label}
+                      value={r.value}
+                      colorClass={r.colorClass}
+                      tooltipContent={r.tooltipContent}
+                    />
+                  ))
+                : ratings.map(r => (
+                    <RatingRow
+                      key={r.key}
+                      label={r.label}
+                      value={r.value!}
+                      colorClass={r.colorClass}
+                      tooltipContent={getCalculationLogic(kpi, r.label, r.value!)}
+                    />
+                  ))}
             </div>
           </div>
         )}
