@@ -1,32 +1,29 @@
-## Assumptions
-- Manoj Kumar Mahato (100735) currently has **0 KPIs** for June 2026 (verified in DB).
-- Akbar (100763) has **24 KPIs** for June 2026 totalling **100% weightage** (verified in DB).
-- The red "No KPIs to copy (all duplicates)" toast in the screenshot was produced against a stale in-flight state (either before the deletion completed, or the dialog was still mounted with its earlier cache when the button was clicked). A fresh open of the dialog would re-fetch and succeed.
+## Goal
+In the KPI details "Rating Scale" section, when a KPI is Binary or Tiered (qualitative), show the mapped option labels (e.g. Yes/No, or tier names) with their rating scores instead of the generic R5–R1 percentage thresholds.
 
-## Risk & Impact Report
-- **Data Impact:** Inserts 24 new rows into `public.kpis` for Manoj, June 2026, `status = kra_set`. No update or delete of existing data. No Org-KPI rows are affected (Akbar's June set contains no `is_org_level=employee` KPIs that need an `org_kpi_values` placeholder — will re-verify in the copy step and only insert if present).
-- **Workflow Impact:** Manoj's June review starts at `kra_set` — matches normal issuance state.
-- **UI/UX Impact:** None; user simply sees KPIs appear on Team Reviews / My KPIs.
-- **Regression Risk:** Low — direct data copy scoped to one employee + one period.
-- **Mitigation:** Wrap in a single transaction with a pre-check that Manoj has 0 June-2026 KPIs; abort if any exist. Emit `KRA_COPIED` audit rows into `kpi_audit_logs` for traceability.
+## Current behavior
+`src/components/review/KpiMetricsSection.tsx` always renders R5/R4/R3/R2/R1 rows pulled from `kpi.r5…r1` (percentage thresholds). For binary/tiered KPIs those columns are usually empty or meaningless — the real mapping lives in `kpi.qualitative_options` (`[{ label, rating, definition }]`) with `kpi.uom_type ∈ 'binary' | 'tiered'`.
 
-## Plan
-1. **Re-verify** immediately before insert: `SELECT count(*) FROM kpis WHERE employee_id = Manoj AND review_period='June' AND review_year=2026` — must return 0. Abort otherwise.
-2. **Insert** all 24 Akbar June-2026 KPI rows into `kpis` for Manoj, copying every configuration column (category, kra_name, kpi_name, target_value, uom, uom_type, weightage, frequency, sub_frequency, criteria, source_of_data, r0–r5, threshold_mode, qualitative_options, is_org_level, org_level_scope, ref_code, day_count_type, frequency_cycle_start, require_resubmit_reason). Set `status='kra_set'`, `review_period='June'`, `review_year=2026`, fresh `id`, `created_at=now()`.
-3. **Org-KPI placeholder:** for any inserted row where `is_org_level=true AND org_level_scope='employee'`, upsert an `org_kpi_values` placeholder mirroring the existing Copy KRAs behaviour.
-4. **Audit:** insert a `kpi_audit_logs` row per copied KPI (`event_type='KRA_COPIED'`, `source=admin_manual_copy_akbar_to_manoj_june_2026`).
-5. **Verify post-copy:** count Manoj's June-2026 KPIs = 24 and total weightage = 100.
+## Change (single file: `KpiMetricsSection.tsx`)
 
-## UI Changes
-Not Applicable — data-only operation.
+1. Detect qualitative KPI: `isQualitative = kpi.uom_type === 'binary' || kpi.uom_type === 'tiered'`.
+2. When `isQualitative` and `kpi.qualitative_options` has entries:
+   - Sort options by `rating` descending.
+   - Render one `RatingRow` per option:
+     - `label` = option `label` (e.g. "Yes", "No", tier name)
+     - `value` = `Rating: {rating}` (or just the rating number)
+     - `colorClass` = mapped from rating using existing severity palette (5→blue, 4→green, 3→yellow, 2→orange, 1/0→red) — same colors already used for R5–R1 so visual consistency is preserved.
+     - `tooltipContent` = the option's `definition` if present, else `"Score: {rating}"`.
+   - Section title stays "Rating Scale"; sub-label switches to "Option Mapping" for qualitative KPIs so users know what they're looking at.
+3. Otherwise (numeric): keep the existing R5–R1 rendering untouched.
+4. Binary inverted safety case (Yes=0 / No=5) works automatically because we sort by `rating` and read labels from `qualitative_options` — no special-casing needed.
 
-## Tests / Verification
-- Pre-insert SELECT (Manoj = 0).
-- Post-insert SELECT (Manoj count=24, sum weightage=100).
-- Manager reload of `/annual-review/team/…` should list all 24 KRAs at `kra_set`.
+## Not changing
+- No data model, hook, or DB changes.
+- No changes to scoring, hydration, or any reviewer flow.
+- Numeric KPI display is unchanged.
 
-## Documentation / Policy Updates
-Not Applicable — no new policy or code path; existing Copy KRAs semantics are preserved. If the stale-toast pattern recurs, we will file a follow-up to force `queryClient.removeQueries` on dialog close (currently only `invalidateQueries` runs on success).
-
-## Rollback
-Single DELETE scoped to `employee_id = Manoj AND review_period='June' AND review_year=2026 AND created_at >= <insert timestamp>` reverses the entire operation.
+## Risk & regression
+- Scope: display-only, one file. No logic touched.
+- Fallback: if `uom_type` is qualitative but `qualitative_options` is null/empty, fall back to existing R5–R1 rendering so nothing disappears.
+- Manual verification: open a Binary KPI (Yes/No) and a Tiered KPI in the review sheet; confirm labels + colors render. Open a numeric KPI and confirm unchanged.
