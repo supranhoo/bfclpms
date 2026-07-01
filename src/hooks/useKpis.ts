@@ -741,7 +741,7 @@ export function useAdminUpdateKpi() {
       // Get old values for audit
       const { data: oldKpi, error: fetchError } = await supabase
         .from('kpis')
-        .select('id, kpi_name, kra_name, status, employee_id, profiles:employee_id(id, full_name, email, employee_code, reporting_manager_id)')
+        .select('*, profiles:employee_id(id, full_name, email, employee_code, reporting_manager_id)')
         .eq('id', id)
         .maybeSingle();
 
@@ -749,6 +749,20 @@ export function useAdminUpdateKpi() {
       if (!oldKpi) throw new Error('KPI not found');
 
       const statusChanged = updates.status && updates.status !== oldKpi.status;
+
+      // Compute which fields actually changed (deep-equal, ignoring meta keys).
+      const norm = (v: any) => (v === undefined ? null : v);
+      const equal = (a: any, b: any) => {
+        const na = norm(a);
+        const nb = norm(b);
+        if (na === nb) return true;
+        if (na === null || nb === null) return false;
+        if (typeof na !== 'object' && typeof nb !== 'object') return na === nb;
+        try { return JSON.stringify(na) === JSON.stringify(nb); } catch { return false; }
+      };
+      const actualChanged = Object.keys(updates)
+        .filter(k => k !== 'id' && k !== 'reason')
+        .filter(k => !equal((oldKpi as any)[k], (updates as any)[k]));
 
       // Update KPI
       const { data, error } = await supabase
@@ -771,7 +785,7 @@ export function useAdminUpdateKpi() {
         metadata: { 
           reason: reason || null, 
           source: 'admin_edit_dialog',
-          changed_fields: Object.keys(updates).filter(k => k !== 'id' && k !== 'reason'),
+          changed_fields: actualChanged,
           status_changed: statusChanged || false,
           old_status: oldKpi.status,
           new_status: updates.status || oldKpi.status,
