@@ -170,8 +170,27 @@ export function CopyKrasDialog({ isOpen, onClose }: CopyKrasDialogProps) {
       const selectedKpis = sourceKpis.filter(k => selectedKraIds.has(k.id));
       const kpisToInsert: any[] = [];
 
+      // Authoritative pre-insert re-verify: rebuild duplicate map from a fresh
+      // server read to defeat any stale React Query cache (e.g. KPIs were
+      // deleted elsewhere after this dialog was first opened).
+      const freshDupes = new Map<string, Set<string>>();
+      if (targetEmployeeIds.length > 0) {
+        const { data: freshRows, error: freshErr } = await supabase
+          .from('kpis')
+          .select('employee_id, kra_name, kpi_name')
+          .in('employee_id', targetEmployeeIds)
+          .eq('review_period', targetPeriod)
+          .eq('review_year', targetYear);
+        if (freshErr) throw freshErr;
+        (freshRows || []).forEach((k: any) => {
+          const key = `${k.kra_name}|||${k.kpi_name}`;
+          if (!freshDupes.has(k.employee_id)) freshDupes.set(k.employee_id, new Set());
+          freshDupes.get(k.employee_id)!.add(key);
+        });
+      }
+
       targetEmployeeIds.forEach(empId => {
-        const existing = duplicateMap.get(empId) || new Set();
+        const existing = freshDupes.get(empId) || new Set();
         selectedKpis.forEach(kpi => {
           const compositeKey = `${kpi.kra_name}|||${kpi.kpi_name}`;
           if (existing.has(compositeKey)) return; // skip duplicate
