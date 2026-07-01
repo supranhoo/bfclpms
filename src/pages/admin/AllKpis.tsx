@@ -988,10 +988,12 @@ export default function AllKpis() {
         employeeCode={dailyEntryEmployee?.code}
       />
 
-      <CopyKrasDialog
-        isOpen={isCopyKrasOpen}
-        onClose={() => setIsCopyKrasOpen(false)}
-      />
+      {isCopyKrasOpen && (
+        <CopyKrasDialog
+          isOpen
+          onClose={() => setIsCopyKrasOpen(false)}
+        />
+      )}
 
       {/* Admin Status Step Back Dialog */}
       {stepBackKpi && stepBackEmployee && (

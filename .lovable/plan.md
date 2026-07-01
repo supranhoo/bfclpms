@@ -1,41 +1,101 @@
-## Problem
 
-On `/annual-review/team/:id` (Team / Auditor / Manager / Skip / BU view) the read-aloud speaker icons never appear next to the Hindi criterion names, option labels, or qualitative field labels — even when the template has `settings.enable_audio = true` and a Hindi voice is installed on the device. The Employee self-review route shows them correctly.
+## Root cause (verified against DB)
 
-## Root cause
+For employee `100735` (Manoj Kumar Mahato) in **June 2026**, the `kpis` table currently holds **0 rows**. So the Copy KRAs duplicate check should find 0 duplicates and the copy should succeed. Instead the UI toasts:
 
-`SpeakButton` returns `null` whenever `enableAudio` from `AnnualReviewI18nContext` is not `true`. The context defaults `enableAudio` to `false`.
+> Copy Failed — No KPIs to copy (all duplicates).
 
-`src/pages/annual-review/EmployeeAnnualReview.tsx` correctly passes `enableAudio={template?.sections.settings?.enable_audio === true}` into both of its `AnnualReviewI18nProvider` instances.
+That message is thrown at `src/components/admin/CopyKrasDialog.tsx:207` only when `kpisToInsert.length === 0`, which means `duplicateMap` reported all 24 selected KPIs as duplicates at click time — a state that does not exist in the database.
 
-`src/components/annual-review/TeamReviewDetailContent.tsx` (lines 181–186) wraps the whole team-detail page in `AnnualReviewI18nProvider` but **omits the `enableAudio` prop**, so it falls back to `false` and every `SpeakButton` rendered inside `CriteriaScoringMatrix` returns `null`.
+Why the dialog sees phantom duplicates:
 
-In addition, the team detail page renders a "self review" qualitative-comments textarea (visible in the screenshot) without a `SpeakButton` next to the field label — the Employee page mounts one there, the Team page does not. Same root cause once the provider is fixed, plus a missing mount.
+1. `<CopyKrasDialog>` is rendered **unconditionally** in `src/pages/admin/AllKpis.tsx` (only `open={isOpen}` is toggled). The component never unmounts, so its React Query cache — including `['copy-kras-target-existing', targetEmployeeIds, targetPeriod, targetYear]` — survives across open/close cycles.
+2. When the admin deletes the target employee's KRAs elsewhere (KPI Editor, Bulk delete, etc.), those flows do **not** invalidate `copy-kras-target-existing`. On reopening the dialog, React Query returns the cached 24-row snapshot instantly.
+3. There is also a race: even after adding invalidation, if the user clicks **Copy** before the background refetch completes, the mutation still uses the stale in-memory `duplicateMap`. There is no server-side re-check inside `mutationFn`.
 
-## Risk & Impact
+The Copy button label showing "Copy 24 KRAs" while the toast reports "all duplicates" is possible when the fresh 0-row refetch lands between render and click; the safer fix must therefore also re-verify on submit.
 
-- **Data impact:** none — UI-only.
-- **Workflow impact:** none — purely additive presentation aid.
-- **UI/UX:** speaker icon (32px) appears next to translated criterion name/description, each option label, and qualitative field labels for managers / auditors / skip / BU when the template flag is on and a matching voice exists. Falls back silently if not.
-- **Regression risk:** very low — `enableAudio === true` gate keeps every existing template (flag unset) unchanged.
-- **Mitigation:** unit test asserts the provider forwards `enableAudio`, and a render test on the team detail wrapper confirms the prop is wired.
+## Fix (surgical, 3 files)
 
-## Plan
+### 1. `src/pages/admin/AllKpis.tsx`
+Conditionally mount the dialog so it fully resets on every open (state + query cache lifecycle):
 
-1. **`src/components/annual-review/TeamReviewDetailContent.tsx`** — add `enableAudio={template?.sections.settings?.enable_audio === true}` to the existing `<AnnualReviewI18nProvider>` (line 181). One-line surgical change.
+```
+{isCopyKrasOpen && (
+  <CopyKrasDialog isOpen onClose={() => setIsCopyKrasOpen(false)} />
+)}
+```
 
-2. **Mount `<SpeakButton>` beside the qualitative-comments field label on the team detail page** (the "टिप्पणियाँ / औचित्य" textarea visible in the screenshot). Reuse the same pattern from `EmployeeAnnualReview.tsx` line 250: `<SpeakButton text={translatedLabel} size="sm" />`. If the team page does not render qualitative field labels itself (they come from `CriteriaScoringMatrix`), step 1 alone is sufficient and this step becomes a no-op — to be confirmed during build by reading lines 260–329 of `TeamReviewDetailContent.tsx`.
+### 2. `src/components/admin/CopyKrasDialog.tsx`
 
-3. **Test:** add `src/test/annualReview/teamDetailSpeakButton.test.tsx` — render `TeamReviewDetailContent` with a stub template `{ settings: { enable_audio: true } }` and Hindi as current language; assert at least one `aria-label="Listen"` button is in the DOM. Add a negative case with `enable_audio: false` asserting none.
+a. Harden the target-existing query so it always fetches fresh when the dialog opens:
 
-4. **Docs:** append a one-line entry to `docs/adr/ADR-103.md` under "Known gaps fixed" — "v1.0.1: TTS button now also renders on team / auditor / manager / skip / BU detail routes (was previously self-review only due to a missing provider prop)." No POLICY.md change (no policy shift).
+```
+useQuery({
+  queryKey: ['copy-kras-target-existing', targetEmployeeIds, targetPeriod, targetYear],
+  queryFn: ...,
+  enabled: targetEmployeeIds.length > 0,
+  staleTime: 0,
+  refetchOnMount: 'always',
+  refetchOnWindowFocus: true,
+});
+```
+Apply the same to the source KPI query for symmetry.
 
-## Out of scope
+b. **Re-verify duplicates inside `mutationFn` right before insert** (authoritative server read, ignores any React state race):
 
-- No change to speech engine, voice loading, or button visuals.
-- No new template flag, no migration.
-- Spanish / other-language voice testing remains v2.
+```
+const { data: fresh } = await supabase
+  .from('kpis')
+  .select('employee_id, kra_name, kpi_name')
+  .in('employee_id', targetEmployeeIds)
+  .eq('review_period', targetPeriod)
+  .eq('review_year', targetYear);
 
-## Rollback
+const freshDupes = new Map<string, Set<string>>();
+(fresh ?? []).forEach(k => { /* build map */ });
 
-Revert the one-line prop change; behaviour returns to today's (icons hidden on team detail).
+// Rebuild kpisToInsert using freshDupes instead of the closured duplicateMap.
+```
+Only throw "all duplicates" when the fresh server read agrees.
+
+c. On successful copy, also invalidate `['copy-kras-target-existing']` (so opening the dialog again reflects the just-inserted rows without needing a full remount).
+
+### 3. Delete/bulk-delete call sites that already invalidate `['kpis']` / `['all-kpis']`
+
+Add one more line: `queryClient.invalidateQueries({ queryKey: ['copy-kras-target-existing'] })` in the mutation success handlers for:
+- `AdminKpiEditorForm.tsx` delete path
+- `AllKpis.tsx` bulk-delete handler (search for existing `invalidateQueries(['all-kpis'])` calls)
+
+This makes the cache correct even without the remount fallback in step 1.
+
+## Tests (regression protection)
+
+New unit test `src/components/admin/CopyKrasDialog.duplicateRefresh.test.tsx`:
+
+- **Case A** — stale cache, DB empty: seed React Query cache with 24 fake duplicate rows for the target/period, mock `supabase.from('kpis').select(...)` inside `mutationFn` to return `[]`; assert insert is called with 24 rows and no "all duplicates" toast fires.
+- **Case B** — genuine duplicates: mock the in-mutation fetch to return the same 24 kra_name/kpi_name pairs the source has; assert the throw fires and insert is never called.
+- **Case C** — partial overlap (12 of 24 exist): assert exactly 12 rows are inserted.
+
+Existing `useActiveEmployeesForCopy` and `formatKpiInsertError` tests are unaffected.
+
+## Risk & impact
+
+| Area | Impact |
+|------|--------|
+| Data | None — new logic only widens the pre-insert safety net; unique index `idx_kpis_no_duplicates` is still the DB backstop. |
+| Workflow | None — behaviour only changes for the false-negative case that was blocking the admin. |
+| UI/UX | No visible changes; dialog behaves the same on the happy path. |
+| Regression | Low. All changes are additive query options / one extra pre-insert SELECT. |
+| Performance | One extra ≤targetCount×1 SELECT on submit; negligible. |
+| Rollback | Revert the three files. |
+
+## Documentation updates (per project SSOT rule)
+
+- `DOCUMENTATION.md` — add a note under Copy KRAs describing the pre-insert re-verification and dialog remount policy.
+- `POLICY.md` — extend §94 (or the Copy KRAs section) with: *"Duplicate detection for Copy KRAs must be re-verified against the database inside the mutation; UI-cached duplicate maps are advisory only."*
+- Append entry to `mem://features/admin/copy-kras-org-kpi-integrity` — v2.66.7.10: stale-cache false-duplicate fix.
+
+## Immediate workaround for the user (no code change needed)
+
+Hard-refresh the page (Ctrl+F5) and reopen Copy KRAs — the target-existing query will refetch and the 24 KRAs will copy successfully. The plan above prevents the situation from recurring.
