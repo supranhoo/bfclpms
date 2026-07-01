@@ -300,7 +300,11 @@ export function EvidencePreviewProvider() {
       open={open}
       onOpenChange={(o) => {
         setOpen(o);
-        if (!o) setIsFullscreen(false);
+        if (!o) {
+          setIsFullscreen(false);
+          setGroup(null);
+          setGroupIndex(0);
+        }
       }}
     >
       <DialogContent
