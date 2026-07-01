@@ -3,7 +3,7 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from '@/components/ui/drawer';
 import { Button } from '@/components/ui/button';
-import { Download, ExternalLink, Loader2 } from 'lucide-react';
+import { Download, ExternalLink, Loader2, Maximize2, Minimize2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { isPreviewableEvidence } from '@/lib/storageDownload';
 import { toast } from 'sonner';
@@ -51,6 +51,7 @@ export function EvidencePreviewProvider() {
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
   useEffect(() => {
     const handler = (e: Event) => {
@@ -151,6 +152,21 @@ export function EvidencePreviewProvider() {
   const body = (
     <div className="flex flex-col h-full gap-3 min-h-0">
       <div className="flex items-center justify-end gap-2 shrink-0">
+        {!isMobile && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setIsFullscreen((v) => !v)}
+            aria-label={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
+          >
+            {isFullscreen ? (
+              <Minimize2 className="h-4 w-4 mr-1" />
+            ) : (
+              <Maximize2 className="h-4 w-4 mr-1" />
+            )}
+            {isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
+          </Button>
+        )}
         <Button variant="outline" size="sm" onClick={handleOpenNewTab} disabled={!blobUrl && !detail?.url}>
           <ExternalLink className="h-4 w-4 mr-1" />
           Open in new tab
@@ -180,7 +196,7 @@ export function EvidencePreviewProvider() {
           <iframe
             src={blobUrl}
             title={displayName}
-            className="w-full h-full min-h-[65vh] border-0 bg-white"
+            className={`w-full h-full ${isFullscreen ? 'min-h-[85vh]' : 'min-h-[65vh]'} border-0 bg-white`}
           />
         )}
         {!loading && !error && blobUrl && kind === 'image' && (
@@ -194,7 +210,7 @@ export function EvidencePreviewProvider() {
           <iframe
             src={`https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(blobUrl)}`}
             title={displayName}
-            className="w-full h-full min-h-[65vh] border-0 bg-white"
+            className={`w-full h-full ${isFullscreen ? 'min-h-[85vh]' : 'min-h-[65vh]'} border-0 bg-white`}
           />
         )}
       </div>
@@ -217,8 +233,20 @@ export function EvidencePreviewProvider() {
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogContent className="max-w-5xl h-[85vh] flex flex-col">
+    <Dialog
+      open={open}
+      onOpenChange={(o) => {
+        setOpen(o);
+        if (!o) setIsFullscreen(false);
+      }}
+    >
+      <DialogContent
+        className={
+          isFullscreen
+            ? 'max-w-[100vw] w-screen h-screen sm:rounded-none p-4 flex flex-col'
+            : 'max-w-5xl h-[85vh] flex flex-col'
+        }
+      >
         <DialogHeader>
           <DialogTitle className="truncate pr-8">{displayName}</DialogTitle>
         </DialogHeader>
