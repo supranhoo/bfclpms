@@ -1,45 +1,33 @@
 ## Problem
 
-The "Updated fields" line on the Review Timeline lists every field submitted by the Admin KPI Editor, even when the value is unchanged. The form posts its full state, so `changed_fields` currently equals "everything on the form".
+In Edit User → Access & Login → **Workflow mapping**, assigning a workflow saves it only for the exact selected month (e.g. July 2026). August, September, and the next Jan-onward periods still fall back to the department / PMS-grade / global default instead of the workflow the admin just picked.
 
-## Root cause
+## Good news — the DB already supports "effective from"
 
-In `src/hooks/useKpis.ts` → `useAdminUpdateKpi`:
+`workflow_config.is_ongoing` (migration `20260316103740`) exists exactly for this purpose. The resolver `find_ongoing_workflow` / `get_employee_workflow_info` already checks: for the queried period, pick the most recent ongoing anchor at or before that period. So a single row with `is_ongoing = true` at July 2026 automatically applies to July, August, September, … forward.
 
-- `oldKpi` selects only 5 columns (`id, kpi_name, kra_name, status, employee_id`), so a real before/after diff isn't possible.
-- `changed_fields` is computed as `Object.keys(updates).filter(...)` — the payload's keys, not actually-changed keys.
+Exact-month overrides still win (priority 1 in the resolver), so a future one-off change for a specific month remains possible.
 
-Result: the audit row's `metadata.changed_fields` is inflated, and `describeChangedFields` (`src/lib/auditLabels.ts`) faithfully renders all of them.
+## Fix (surgical, UI-only, one file)
 
-## Fix (surgical, one file)
+`src/pages/admin/UserManagement.tsx` → `InlineWorkflowMappingCard`:
 
-In `useAdminUpdateKpi`:
+1. In `onChange`, pass `isOngoing: true` to `useUpsertWorkflowConfig` so the saved row becomes the "effective from {period} {year}" anchor.
+2. Update the two helper lines so admins understand the new semantics:
+   - Header sub-copy → "Applies from the selected month onward until a newer mapping is set."
+   - Empty-state text → "No mapping effective for {period} {year} — currently inheriting the period default."
+   - Success toast → "Workflow effective from {period} {year} onward."
+3. "Reset this period" copy → "Clears the mapping starting at {period} {year}. Earlier months keep their previous mapping."
 
-1. Change the pre-update fetch to `select('*')` so we have the full old row.
-2. After computing `updates`, build `actualChanged` by comparing each key's old vs new value with a deep-equality check (handles scalars, `null`, arrays like `qualitative_options`, and JSON objects). Skip `id` and `reason`.
-3. Write `metadata.changed_fields = actualChanged` (fallback to `[]` when nothing changed — `describeChangedFields([])` already returns `""`, and `classifyAdminOverride` already treats empty as `kpi_updated`; the Timeline row simply won't show an "Updated fields:" line).
-4. Keep `old_value` shape backward compatible: continue to pass the fetched row (now full) as `old_value` — timeline/PDF consumers already tolerate extra columns.
-
-No changes to:
-- `auditLabels.ts` (its `describeChangedFields` already handles fewer / zero fields).
-- `KpiTimeline` renderer.
-- DB schema, RLS, or existing audit rows (historical rows stay as-is — they are immutable per POLICY §104).
+No changes to hook signature, DB schema, resolver, or other callers (the create-user path in the same file explicitly passes `is_ongoing: false` at line 798 and stays as-is — that's a different, global row).
 
 ## Risk & impact
 
-- Data: additive — same audit row, more accurate `changed_fields`. Old rows untouched.
-- Workflow / UI: Timeline row now shows only truly-changed fields; if nothing changed, no "Updated fields" line appears (matches user expectation).
-- Regression: minimal. Deep-equality uses `JSON.stringify` on both sides after normalizing `undefined → null` for parity with the DB row.
-- Rollback: revert the single hook change.
+- Data: additive — new rows saved with `is_ongoing = true`. No existing rows mutated.
+- Workflow: exactly what the user asked for. Exact-month overrides still take precedence.
+- Regression: none. Resolver logic is already in production and used by `WorkflowConfig.tsx` (bulk view already renders `is_ongoing` correctly).
+- Rollback: revert the one file.
 
 ## Tests
 
-Add a unit test for the diff helper (extract as `diffKpiUpdates(oldRow, updates)` in the hook file or a small util) covering:
-- scalar unchanged / changed
-- `null` ↔ `null`, `null` ↔ value
-- array equality (`qualitative_options`)
-- ignores `id` and `reason`
-
-## Docs
-
-Append a note in `DOCUMENTATION.md` version history and `POLICY.md` §104 clarification: "Admin edit dialog logs only fields whose value actually changed."
+Add a unit test asserting `InlineWorkflowMappingCard` calls `upsert.mutate` with `isOngoing: true` on select change.

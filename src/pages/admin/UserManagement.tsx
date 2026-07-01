@@ -97,9 +97,9 @@ function InlineWorkflowMappingCard({ employeeId }: { employeeId: string }) {
       return;
     }
     upsert.mutate(
-      { configType: 'employee', configValue: employeeId, workflowTemplateId: value, reviewPeriod: period, reviewYear: year },
+      { configType: 'employee', configValue: employeeId, workflowTemplateId: value, reviewPeriod: period, reviewYear: year, isOngoing: true },
       {
-        onSuccess: () => toast({ title: 'Workflow assigned', description: `Saved for ${period} ${year}.` }),
+        onSuccess: () => toast({ title: 'Workflow assigned', description: `Effective from ${period} ${year} onward.` }),
         onError: (e: any) => toast({ title: 'Failed to assign workflow', description: e?.message ?? 'Try again.', variant: 'destructive' }),
       }
     );
@@ -108,7 +108,7 @@ function InlineWorkflowMappingCard({ employeeId }: { employeeId: string }) {
   const onReset = () => {
     if (!existing) return;
     remove.mutate(existing.id, {
-      onSuccess: () => toast({ title: 'Reset for this period', description: `Cleared mapping for ${period} ${year}. Other periods unchanged.` }),
+      onSuccess: () => toast({ title: 'Reset', description: `Cleared mapping starting at ${period} ${year}. Earlier months keep their previous mapping.` }),
       onError: (e: any) => toast({ title: 'Failed to reset', description: e?.message ?? 'Try again.', variant: 'destructive' }),
     });
   };
@@ -134,7 +134,7 @@ function InlineWorkflowMappingCard({ employeeId }: { employeeId: string }) {
         )}
       </div>
       <p className="text-xs text-muted-foreground mb-2">
-        Workflow mapping is period-specific. Select a review period before assigning workflow.
+        Applies from the selected month onward until a newer mapping is set for a later month.
       </p>
       <div className="grid grid-cols-2 gap-2 mb-3">
         <div>
@@ -181,7 +181,7 @@ function InlineWorkflowMappingCard({ employeeId }: { employeeId: string }) {
         </div>
       )}
       {!existing && !loading && (
-        <p className="mt-2 text-xs text-muted-foreground">No mapping for {period} {year} — currently inheriting the period default.</p>
+        <p className="mt-2 text-xs text-muted-foreground">No mapping effective for {period} {year} — currently inheriting the period default.</p>
       )}
     </div>
   );
