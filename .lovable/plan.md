@@ -1,52 +1,32 @@
-## Issue
-Employees see **"Preview failed: Object not found"** when opening the supporting file attached to an Organization KPI (e.g. `org-kpi-evidence/…_Self_Evidence.xlsx`). Admins/HR PMS/Auditors can still open it — only ordinary employees (and managers/skip-managers of ordinary employees) are blocked.
-
-## Root Cause
-The `review-evidence` bucket is private, so every read goes through storage RLS. The current SELECT policy `Users can view authorized evidence` (migration `20260622103745`) matches only when `storage.foldername(name)[1]` is either the caller's own `auth.uid()` **or** the UUID of a profile they manage. Org-KPI files are stored under a fixed prefix — `org-kpi-evidence/<file>` — so `foldername[1] = 'org-kpi-evidence'`, which never matches a profile id. There is INSERT/UPDATE/DELETE coverage for that prefix (migration `20260626112752`), but **no SELECT policy was added for it**. Result: Supabase returns 404 "Object not found" to non-privileged roles, which the preview dialog surfaces verbatim.
-
-## 5-Why
-1. Why does the employee see "Object not found"? → Storage returns 404 because RLS hides the object from them.
-2. Why does RLS hide it? → The only SELECT policy on `review-evidence` requires the first folder segment to be a profile UUID, and admin/auditor/hr_pms roles.
-3. Why doesn't that match Org-KPI files? → Org-KPI evidence is stored under the shared prefix `org-kpi-evidence/…`, not under a per-employee UUID folder.
-4. Why is there no matching SELECT policy? → The 2026-06-26 hardening migration added INSERT/UPDATE/DELETE for the `org-kpi-evidence/` prefix but omitted a SELECT counterpart, assuming the general employee-folder SELECT policy would cover it.
-5. Why did the omission ship? → No regression test asserted "authenticated employee can SELECT an `org-kpi-evidence/*` object", and the security-tightening review focused on write paths (ADR-096) and download URL signing (ADR-099), not read visibility of the shared org prefix.
+## Assumptions
+- Manoj Kumar Mahato (100735) currently has **0 KPIs** for June 2026 (verified in DB).
+- Akbar (100763) has **24 KPIs** for June 2026 totalling **100% weightage** (verified in DB).
+- The red "No KPIs to copy (all duplicates)" toast in the screenshot was produced against a stale in-flight state (either before the deletion completed, or the dialog was still mounted with its earlier cache when the button was clicked). A fresh open of the dialog would re-fetch and succeed.
 
 ## Risk & Impact Report
-- **Data Impact:** additive SELECT policy only; no data mutation, no schema change.
-- **Workflow Impact:** restores employee ability to view Org-KPI supporting evidence during self-review. No new privilege for external roles.
-- **Security Impact:** Org KPI evidence is a company-wide artifact already surfaced to every reviewer through the Org-KPI cards; granting authenticated SELECT on the `org-kpi-evidence/` prefix matches its intended visibility and does not widen access to per-employee folders.
-- **Regression Risk:** low. Change is scoped to `bucket_id = 'review-evidence' AND foldername[1] = 'org-kpi-evidence'`. Existing "Users can view authorized evidence" policy is untouched.
-- **Rollback:** `DROP POLICY "Org KPI evidence select" ON storage.objects;`.
+- **Data Impact:** Inserts 24 new rows into `public.kpis` for Manoj, June 2026, `status = kra_set`. No update or delete of existing data. No Org-KPI rows are affected (Akbar's June set contains no `is_org_level=employee` KPIs that need an `org_kpi_values` placeholder — will re-verify in the copy step and only insert if present).
+- **Workflow Impact:** Manoj's June review starts at `kra_set` — matches normal issuance state.
+- **UI/UX Impact:** None; user simply sees KPIs appear on Team Reviews / My KPIs.
+- **Regression Risk:** Low — direct data copy scoped to one employee + one period.
+- **Mitigation:** Wrap in a single transaction with a pre-check that Manoj has 0 June-2026 KPIs; abort if any exist. Emit `KRA_COPIED` audit rows into `kpi_audit_logs` for traceability.
 
-## CAPA
-### Corrective
-1. **DB migration** — add SELECT policy:
-   ```sql
-   CREATE POLICY "Org KPI evidence select"
-   ON storage.objects FOR SELECT TO authenticated
-   USING (
-     bucket_id = 'review-evidence'
-     AND (storage.foldername(name))[1] = 'org-kpi-evidence'
-   );
-   ```
-   Scoped strictly to the shared Org-KPI prefix — mirrors the existing INSERT/UPDATE/DELETE policy shape from migration `20260626112752`.
+## Plan
+1. **Re-verify** immediately before insert: `SELECT count(*) FROM kpis WHERE employee_id = Manoj AND review_period='June' AND review_year=2026` — must return 0. Abort otherwise.
+2. **Insert** all 24 Akbar June-2026 KPI rows into `kpis` for Manoj, copying every configuration column (category, kra_name, kpi_name, target_value, uom, uom_type, weightage, frequency, sub_frequency, criteria, source_of_data, r0–r5, threshold_mode, qualitative_options, is_org_level, org_level_scope, ref_code, day_count_type, frequency_cycle_start, require_resubmit_reason). Set `status='kra_set'`, `review_period='June'`, `review_year=2026`, fresh `id`, `created_at=now()`.
+3. **Org-KPI placeholder:** for any inserted row where `is_org_level=true AND org_level_scope='employee'`, upsert an `org_kpi_values` placeholder mirroring the existing Copy KRAs behaviour.
+4. **Audit:** insert a `kpi_audit_logs` row per copied KPI (`event_type='KRA_COPIED'`, `source=admin_manual_copy_akbar_to_manoj_june_2026`).
+5. **Verify post-copy:** count Manoj's June-2026 KPIs = 24 and total weightage = 100.
 
-### Preventive
-2. **Regression guard** — `src/test/orgKpiEvidenceSelectPolicy.test.ts`: source-reading test (same style as `reviewEvidenceOnBehalfPolicy.test.ts`) that fails if any future migration drops the SELECT policy or removes the `org-kpi-evidence` prefix guard.
-3. **Policy invariant** — add POLICY.md rule: *"Every storage prefix in `review-evidence` MUST have matching SELECT + INSERT + UPDATE + DELETE policies. Write-only or read-only prefixes are prohibited."*
-4. **ADR-104** documenting the incident, root cause, fix, and the new invariant. Cross-link ADR-096 and ADR-099.
-5. **DOCUMENTATION.md** — update Storage / RLS section to list the four Org-KPI evidence policies as a set.
+## UI Changes
+Not Applicable — data-only operation.
 
-## Verification Steps
-- Run migration; confirm `storage.policies` lists the new SELECT policy.
-- Sign in as an ordinary employee (e.g. 100735) → open an Org KPI that has an `.xlsx` evidence file → preview loads and Download works.
-- Re-run `src/test/review/evidencePreview.test.ts` and new `orgKpiEvidenceSelectPolicy.test.ts` — all green.
-- Confirm employee cannot still SELECT arbitrary `<other-employee-uuid>/…` paths (existing policy unchanged).
+## Tests / Verification
+- Pre-insert SELECT (Manoj = 0).
+- Post-insert SELECT (Manoj count=24, sum weightage=100).
+- Manager reload of `/annual-review/team/…` should list all 24 KRAs at `kra_set`.
 
-## Files Touched
-- `supabase/migrations/<new>_org_kpi_evidence_select_policy.sql` (new)
-- `src/test/orgKpiEvidenceSelectPolicy.test.ts` (new)
-- `docs/adr/ADR-104.md` (new)
-- `POLICY.md`, `DOCUMENTATION.md` (updated)
+## Documentation / Policy Updates
+Not Applicable — no new policy or code path; existing Copy KRAs semantics are preserved. If the stale-toast pattern recurs, we will file a follow-up to force `queryClient.removeQueries` on dialog close (currently only `invalidateQueries` runs on success).
 
-No frontend / component changes required — `EvidencePreviewDialog` and `OrgKpiFileUpload` already do the right thing once RLS permits the read.
+## Rollback
+Single DELETE scoped to `employee_id = Manoj AND review_period='June' AND review_year=2026 AND created_at >= <insert timestamp>` reverses the entire operation.
