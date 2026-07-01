@@ -10,7 +10,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useUploadLimits } from '@/hooks/useUploadLimits';
 import { useAuth } from '@/contexts/AuthContext';
-import { openStorageFile, buildEvidenceFileName } from '@/lib/storageDownload';
+import { openStorageFileGroup, buildEvidenceFileName } from '@/lib/storageDownload';
 import { ConfirmDestructiveDialog } from '@/components/ui/ConfirmDestructiveDialog';
 import {
   useOrgKpiEvidenceFiles,
@@ -190,7 +190,11 @@ export function OrgKpiEvidenceManagerSheet({ open, onOpenChange, okvId, okvScope
                         size="sm"
                         variant="ghost"
                         className="h-7 px-2 text-xs"
-                        onClick={() => openStorageFile(f.url, buildEvidenceFileName(f.url, f.label, 'Org_KPI'))}
+                        onClick={() => openStorageFileGroup(
+                          files.map((x) => x.url),
+                          (u, i) => buildEvidenceFileName(u, files[i]?.label ?? null, 'Org_KPI'),
+                          idx,
+                        )}
                       >
                         View <ExternalLink className="h-3 w-3 ml-1" />
                       </Button>

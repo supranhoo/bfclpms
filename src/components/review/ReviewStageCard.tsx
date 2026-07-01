@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { LucideIcon, FileText, ExternalLink } from 'lucide-react';
-import { openStorageFile, buildEvidenceFileName } from '@/lib/storageDownload';
+import { openStorageFileGroup, buildEvidenceFileName } from '@/lib/storageDownload';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -204,7 +204,7 @@ export function ReviewStageCard({
             <button
               key={idx}
               type="button"
-              onClick={() => openStorageFile(url, buildEvidenceFileName(url, employeeCode, kpiName, title, idx, evidenceUrls.length))}
+              onClick={() => openStorageFileGroup(evidenceUrls, (u, i) => buildEvidenceFileName(u, employeeCode, kpiName, title, i, evidenceUrls.length), idx)}
               className="inline-flex items-center gap-1 text-xs text-primary hover:underline cursor-pointer bg-transparent border-none p-0"
             >
               <FileText className="h-3 w-3" />

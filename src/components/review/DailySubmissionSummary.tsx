@@ -5,7 +5,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Calendar, Check, X, AlertTriangle, Edit2, Paperclip } from 'lucide-react';
-import { openStorageFile, buildEvidenceFileName } from '@/lib/storageDownload';
+import { openStorageFileGroup, buildEvidenceFileName } from '@/lib/storageDownload';
 import { SubPeriodSubmission } from '@/hooks/useSubPeriodSubmissions';
 import { QualitativeOption, BINARY_OPTIONS } from '@/lib/qualitativeUom';
 import { getMonthNumber } from '@/lib/frequencyUtils';
@@ -372,7 +372,13 @@ export function DailySubmissionSummary({
                       return (
                         <button
                           type="button"
-                          onClick={() => urls.forEach((url, i) => openStorageFile(url, buildEvidenceFileName(url, null, kpiName, `Day_${submission.sub_period_value}`, i, urls.length)))}
+                          onClick={() =>
+                            openStorageFileGroup(
+                              urls,
+                              (url, i) =>
+                                buildEvidenceFileName(url, null, kpiName, `Day_${submission.sub_period_value}`, i, urls.length),
+                            )
+                          }
                           className="inline-flex items-center gap-0.5 text-primary hover:underline mx-auto"
                           title={`${urls.length} file(s) attached`}
                         >

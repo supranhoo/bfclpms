@@ -1,7 +1,7 @@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { User, Shield, Briefcase, FileText, ExternalLink, AlertCircle } from 'lucide-react';
-import { openStorageFile, buildEvidenceFileName } from '@/lib/storageDownload';
+import { openStorageFileGroup, buildEvidenceFileName } from '@/lib/storageDownload';
 import { RatingLevel, ReviewSubmission, KpiQuery } from '@/hooks/useKpis';
 
 import { getRatingLevelColor, ratingLevelToLabel } from '@/lib/reviewConstants';
@@ -97,7 +97,7 @@ export function ReviewTrailCardCompact({
               <button 
                 key={idx}
                 type="button"
-                onClick={() => openStorageFile(url, buildEvidenceFileName(url, employeeCode, kpiName, title, idx, urls.length))}
+                onClick={() => openStorageFileGroup(urls, (u, i) => buildEvidenceFileName(u, employeeCode, kpiName, title, i, urls.length), idx)}
                 className="inline-flex items-center gap-1 text-xs text-primary hover:underline cursor-pointer bg-transparent border-none p-0"
               >
                 <FileText className="h-3 w-3" />

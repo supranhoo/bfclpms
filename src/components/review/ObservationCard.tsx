@@ -19,7 +19,7 @@ import { KpiObservation, ObservationType, ObserverRole, ObservationVisibility } 
 import { ObservationReplyThread } from './ObservationReplyThread';
 import { cn } from '@/lib/utils';
 import { isWithinEditWindow } from '@/lib/editWindow';
-import { openStorageFile, buildEvidenceFileName } from '@/lib/storageDownload';
+import { openStorageFile, buildEvidenceFileName, openStorageFileGroup } from '@/lib/storageDownload';
 
 export type ObservationStatus = 'open' | 'acknowledged' | 'resolved';
 
@@ -184,9 +184,10 @@ export function ObservationCard({
                 key={i}
                 type="button"
                 onClick={() =>
-                  openStorageFile(
-                    url,
-                    buildEvidenceFileName(url, null, null, 'Observation', i, evidenceUrls.length),
+                  openStorageFileGroup(
+                    evidenceUrls,
+                    (u, idx) => buildEvidenceFileName(u, null, null, 'Observation', idx, evidenceUrls.length),
+                    i,
                   )
                 }
                 className="text-xs text-primary hover:underline flex items-center gap-1"

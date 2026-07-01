@@ -72,13 +72,39 @@ export function buildEvidenceFileName(
  * @param publicUrl - The public URL of the storage file
  * @param fileName - Optional descriptive filename for the download
  */
-export async function openStorageFile(publicUrl: string, fileName?: string): Promise<void> {
+export type EvidenceGroupItem = { url: string; fileName?: string | null };
+
+/**
+ * Open a group of evidence URLs in the preview dialog, starting at `startIndex`.
+ * Enables Previous / Next navigation between siblings.
+ */
+export function openStorageFileGroup(
+  urls: string[],
+  buildName: (url: string, i: number) => string,
+  startIndex = 0,
+): Promise<void> {
+  if (urls.length === 0) return Promise.resolve();
+  const group: EvidenceGroupItem[] = urls.map((url, i) => ({ url, fileName: buildName(url, i) }));
+  const i = Math.max(0, Math.min(urls.length - 1, startIndex));
+  return openStorageFile(group[i].url, group[i].fileName ?? undefined, { group, index: i });
+}
+
+export async function openStorageFile(
+  publicUrl: string,
+  fileName?: string,
+  options?: { group?: EvidenceGroupItem[]; index?: number },
+): Promise<void> {
   // Route previewable evidence (PDF / image) through the in-app preview dialog
   // via a global custom event. The EvidencePreviewProvider mounted in App.tsx
   // listens for `evidence-preview` and opens a modal. Falls back to direct
   // download when no listener is present (e.g. in tests).
   if (typeof window !== 'undefined' && isPreviewableEvidence(fileName ?? publicUrl)) {
-    const detail = { url: publicUrl, fileName: fileName ?? null };
+    const detail = {
+      url: publicUrl,
+      fileName: fileName ?? null,
+      group: options?.group,
+      index: options?.index,
+    };
     const ev = new CustomEvent('evidence-preview', { detail, cancelable: true });
     const dispatched = window.dispatchEvent(ev);
     // If a listener handled it (called preventDefault), stop here.
