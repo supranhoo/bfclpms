@@ -183,7 +183,6 @@ export function TeamReviewDetailContent({
       defaultLanguage={defLang}
       templateTranslations={template?.sections.translations}
       displayMode={template?.sections.display_mode}
-      enableAudio={template?.sections.settings?.enable_audio === true}
     >
     <div className="space-y-4">
       <Card>
