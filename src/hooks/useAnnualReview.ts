@@ -275,7 +275,6 @@ export function useDebouncedResponseDraft(opts: {
   delayMs?: number;
   enabled?: boolean;
 }) {
-  const delay = opts.delayMs ?? 2000;
   const qc = useQueryClient();
   const [draft, setDraftState] = useState<DraftPayload>({
     criteria_scores: opts.initial?.criteria_scores ?? {},
@@ -309,12 +308,19 @@ export function useDebouncedResponseDraft(opts: {
   const setDraft = (next: DraftPayload | ((prev: DraftPayload) => DraftPayload)) => {
     setDraftState((prev) => (typeof next === 'function' ? (next as (p: DraftPayload) => DraftPayload)(prev) : next));
     setStatus('pending');
-    if (timerRef.current) clearTimeout(timerRef.current);
-    timerRef.current = setTimeout(persist, delay);
   };
 
-  // Flush on unmount / route-away.
-  useEffect(() => () => { if (timerRef.current) clearTimeout(timerRef.current); }, []);
+  // Flush on unmount / route-away: persist any pending edits so a scroll-away
+  // or navigation doesn't drop the user's last change (ADR-105).
+  const statusRef = useRef(status);
+  statusRef.current = status;
+  useEffect(() => () => {
+    if (timerRef.current) { clearTimeout(timerRef.current); timerRef.current = null; }
+    if (statusRef.current === 'pending') { void persist(); }
+  }, [persist]);
+
+  // beforeunload guard while there are unsaved edits (ADR-105).
+  useUnsavedChanges(status === 'pending');
 
   const flush = async () => {
     if (timerRef.current) { clearTimeout(timerRef.current); timerRef.current = null; }
