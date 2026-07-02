@@ -263,7 +263,13 @@ export function TeamReviewDetailContent({
 
       {role && !locked && (
         <div className="sticky bottom-0 bg-background/80 backdrop-blur border-t py-3 flex items-center justify-between gap-3">
-          <span className="text-xs text-muted-foreground">{status === 'saving' ? 'Saving…' : status === 'saved' ? 'Draft saved' : status === 'error' ? 'Save error' : ''}</span>
+          <span className={`text-xs ${status === 'pending' ? 'text-amber-600' : status === 'error' ? 'text-destructive' : 'text-muted-foreground'}`}>
+            {status === 'saving' ? 'Saving…'
+              : status === 'saved' ? 'Draft saved'
+              : status === 'error' ? 'Save error'
+              : status === 'pending' ? 'Unsaved changes'
+              : ''}
+          </span>
           <div className="flex gap-2">
             {canSendBack && (
               <Button variant="outline" onClick={() => setSendBackOpen(true)} disabled={sendBack.isPending}>

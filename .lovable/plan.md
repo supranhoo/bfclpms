@@ -1,50 +1,60 @@
-## Goal
-Add **Previous / Next** navigation buttons in `EvidencePreviewDialog` so users can flip through sibling evidences (e.g. a KPI's multi-file self-evidence, all Day_1..Day_31 evidences) without closing the preview and clicking each thumbnail.
 
-## UX
-- New icon buttons (`ChevronLeft`, `ChevronRight`, `variant="outline" size="sm"`) placed to the left of the "Fullscreen" button.
-- Small "2 / 5" counter between them.
-- Hidden entirely when the current preview is a single, standalone evidence (no siblings).
-- Disabled at the ends (no wrap-around).
-- Keyboard: `←` / `→` while the dialog is open.
-- Header title updates to the newly selected file. Loading spinner shows while the next file resolves.
-- Closing + reopening a different group resets navigation.
+## Cause — Team Annual Review (blue-collar) score reverts 4 → 5
 
-## Data flow — group-aware dispatch
-`openStorageFile()` currently dispatches one file at a time. Extend the payload so callers that have a list can pass siblings:
+The sheet has TWO writers fighting for the same row:
 
-```ts
-type EvidenceGroupItem = { url: string; fileName?: string | null };
-openStorageFile(url, fileName, { group?: EvidenceGroupItem[], index?: number })
+1. **Debounced autosave** — `useDebouncedResponseDraft` in `src/hooks/useAnnualReview.ts` schedules `setTimeout(persist, 2000)` after every `setDraft` and, on success, invalidates `annualReviewKeys.responses(instanceId)` which refetches `useInstanceResponses`.
+2. **Explicit "Save draft" button** — `TeamReviewDetailContent.tsx:273` calls the same hook's `flush()`, which cancels the timer and persists immediately.
+
+The reproducible race:
+
+```text
+t=0     click 5             → local draft = 5, autosave T1 armed for t=2000
+t=~600  click "Save draft"  → flush() persists 5, invalidates `responses`
+t=~900  click 4             → local draft = 4, autosave T2 armed for t=~2900
+t=~1200 refetch of `responses` returns {X:5} (the value we just saved)
 ```
 
-- `evidence-preview` CustomEvent `detail` becomes `{ url, fileName, group?, index? }`.
-- Backward compatible: single-file callers keep working unchanged (no Prev/Next shown).
-- `EvidencePreviewProvider` stores `group` + `index` in state; Prev/Next mutate `index` and re-set `detail` to `group[index]`, which re-runs the existing resolve effect.
+Two things then collide:
 
-## Call-site updates (all existing multi-file loops)
-Replace the per-URL `forEach(openStorageFile)` pattern with a single call that passes the whole group, opening the first item:
+- The hook seeds its local `draft` from `opts.initial` **only on first mount** (`useState({ criteria_scores: opts.initial?.criteria_scores ?? {} ... })`). It never re-syncs. Good for the happy path — but this also means the moment ANYTHING remounts the sheet (parent switching between `isLoading`/`instance` during the refetch, a re-key on `instance`, the scroll-triggered re-render of `CriteriaScoringMatrix` when a parent memo boundary is crossed), the local `draft` is re-initialised from the freshly-refetched `myResponse`, which still says **5**.
+- Meanwhile T2's `persist(4)` may not yet have fired, so the server never received the 4. Result: after a scroll, the visible score snaps back to the last server value, **5**.
 
-- `src/components/review/WeeklySubmissionTable.tsx` (weekly evidences per week)
-- `src/components/review/DailySubmissionSummary.tsx` (day evidences)
-- `src/components/review/DailySubmissionGrid.tsx` (day evidences)
-- `src/components/review/SelfReviewSheet.tsx` (self evidence chips — each button opens one file; pass the full `selfEvidenceUrls` array as group with the clicked index)
-- `src/components/review/ReviewTrailCard.tsx` (Self / Manager / Auditor / Management chip rows — pass that stage's `urls` array + `idx`)
-- `src/components/review/ReviewTrailCardCompact.tsx` (same pattern)
-- `src/components/review/ReviewStageCard.tsx` (stage's `evidenceUrls` + `idx`)
-- `src/components/review/ObservationCard.tsx`, `ObservationReplyThread.tsx` (per-message evidence arrays)
-- `src/components/admin/OrgKpiAuditCard.tsx`, `OrgKpiEvidenceManagerSheet.tsx` (KPI's evidence list)
-- `src/components/ui/MultiFileUpload.tsx` (uploaded files list)
+This is exactly the pattern ADR-075 removed from `/admin/org-kpi-data`: whenever an explicit Save button exists on the same surface as a 2s debounce, the two paths race and the user loses edits.
 
-Single-file sites left untouched: `QueryHistoryDialog`, `QueryInbox`, `PreviousLevelRemarks`, `InboxDetailSheet`, `EvidenceUpload`, `OrgKpiFileUpload`.
+## Fix — remove autosave here; keep only the explicit button
 
-## Scope guard
-- Pure UI + event-payload change. No DB, no RLS, no policies, no hooks/logic changes.
-- `openStorageFile` signature stays backward-compatible (third arg optional).
-- Test `src/test/review/evidencePreview.test.ts` continues to pass — the dispatch shape is a superset.
+Scope is deliberately narrow: this is a UI/coordination bug, no DB / RLS / schema / service change.
 
-## Risk
-Low. Isolated to evidence preview UX. Rollback = revert the touched files.
+1. **`src/hooks/useAnnualReview.ts` — `useDebouncedResponseDraft`**
+   - Delete the `setTimeout(persist, delay)` scheduling inside `setDraft`. `setDraft` still marks `status='pending'` so the amber "Unsaved changes" pill lights up.
+   - `flush()` stays as-is (persists immediately, sets `saved`).
+   - Remove the `delayMs` option (now unused) — leave the signature otherwise untouched so no other caller breaks.
+   - Add unsaved-guard: import `useUnsavedChanges` and call it with `status === 'pending'` so users get a `beforeunload` warning if they navigate away with dirty edits (same guard ADR-075 uses).
 
-## Not Applicable
-DB migration, RLS, POLICY.md, backup — none affected.
+2. **`src/components/annual-review/TeamReviewDetailContent.tsx`**
+   - Status pill text: extend the existing indicator (`'Saving…' | 'Draft saved' | 'Save error'`) with `pending → "Unsaved changes"` in amber, matching Org KPI Data Entry.
+   - `handleSubmit` and `handleSendBack` already call `await flush()` first — no change needed; they will now be the only auto-flush points (submit/send-back/unmount cleanup).
+   - Keep the unmount cleanup effect but change it to `await persist()` on cleanup so an unmount doesn't silently drop dirty edits. (Fire-and-forget — same pattern the hook already uses; failures surface on next mount as stale server data, and the beforeunload guard covers the tab-close case.)
+
+3. **`src/pages/annual-review/EmployeeAnnualReview.tsx`** (only other caller of `useDebouncedResponseDraft`)
+   - No code change required — it already renders a "Save draft" button and relies on `flush()`. Behaviour becomes: no more background autosave; save is explicit. Verify pill wording matches the team page.
+
+4. **Tests**
+   - New `src/test/annualReview/useDebouncedResponseDraft.noAutosave.test.ts`: assert `setDraft` does NOT schedule a `setTimeout` and does NOT call `svc.upsertResponseDraft`; `flush()` still persists and invalidates.
+   - New `src/test/annualReview/teamReviewDetailNoRevert.test.tsx`: mount `TeamReviewDetailContent`, seed a response of `{X:5}`, click 4, force a refetch of `useInstanceResponses` returning `{X:5}`, assert the picker still shows **4** (not 5) — this pins the regression.
+
+5. **Docs / policy**
+   - Add `docs/adr/ADR-105.md` (short): "Annual Review team detail — remove 2s autosave, mirror ADR-075".
+   - Update `mem://features/annual-review/overview` with a one-liner: "Team & self detail sheets use explicit Save-draft only; no debounced autosave."
+
+## Not in scope
+
+- No change to `annual_review_responses` schema, RLS, or `upsertResponseDraft` service.
+- No change to the score picker component itself.
+- No change to Self / Manager / Skip / HR / Auditor / Management PMS scorecards — those already follow the reviewer-draft hydration SSOT (POLICY §107) and don't have this race.
+
+## Risk & rollback
+
+- Risk: users who relied on "just close the tab and it saves" lose that behaviour. Mitigated by (a) the amber "Unsaved changes" pill, (b) the `beforeunload` warning, (c) the on-unmount `persist()` cleanup.
+- Rollback: revert the two hook edits — `setDraft` re-schedules the timer, status pill reverts. Fully additive, no data migration.
