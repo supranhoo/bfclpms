@@ -264,12 +264,13 @@ export default function EmployeeAnnualReview() {
 
       <footer className="flex flex-wrap items-center justify-between gap-3 sticky bottom-0 bg-background/80 backdrop-blur border-t py-3">
         <div className="flex flex-col gap-1">
-          <div className="text-xs text-muted-foreground">
+          <div className={`text-xs ${saveStatus === 'pending' ? 'text-amber-600' : saveStatus === 'error' ? 'text-destructive' : 'text-muted-foreground'}`}>
             {locked
               ? t('note.locked', 'Your review is locked.')
               : saveStatus === 'saving' ? t('note.saving', 'Saving draft…')
               : saveStatus === 'saved'   ? t('note.saved', 'Draft saved')
               : saveStatus === 'error'   ? t('note.save_error', 'Could not save — retry your last edit.')
+              : saveStatus === 'pending' ? t('note.unsaved', 'Unsaved changes')
               : t('note.draft', 'Draft')}
           </div>
           <AppraisalCompositionCard composition={composition} variant="inline" />
