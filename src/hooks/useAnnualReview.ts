@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as svc from '@/services/annualReview/annualReviewService';
 import { supabase } from '@/integrations/supabase/client';
+import { useUnsavedChanges } from '@/hooks/useUnsavedChanges';
 import type {
   AnnualReviewerRole,
   AnnualReviewInstance,
