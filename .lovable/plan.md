@@ -1,55 +1,70 @@
 ## Problem
 
-Ankit Choudhary's July rollover notification says **"13 KPI(s) … Total weightage: 126%"**, but his July KRA sheet actually has **9 KPIs summing to 100%** — matching the June roster.
+When an assisted-review page is switched to Hindi (or Spanish), several UI strings remain in English:
 
-## Root cause
+- "← Back to queue" (page header)
+- "Assisted self-review mode" banner and its body copy
+- "Submitted with assistance" badge
+- "Contributes X / Y points to your appraisal" (System Score cards)
+- Eligibility table headers: "Criterion", "Policy Description", "Actual"
+- Eligibility remark label: "Remark from HR"
+- Carry-KRA labels: "Achieved", "Out of", "Rating"
+- Carry-KRA table headers: "Total Score", "Out Of", "%", "Rating (/5)"
+- Carry-KRA helper line ("Employee context unavailable…")
+- No-criteria placeholder in stage card
 
-`supabase/functions/auto-rollover-kpis/index.ts` handles multi-month KPI frequencies (Quarterly / Half-yearly / Annual) by inserting rows for every remaining month in the cycle when it rolls into the target month. For Ankit, the July rollover correctly inserted:
+Two independent causes:
 
-- 9 rows into July (100%)
-- 2 rows into August (13%) — quarterly KPI (`On-time Completion … Director's Reportees`, 13%, cycle Jul→Sep… actually the pattern shows one quarterly KPI producing Aug + Sep records too)
-- 2 rows into September (13%)
+1. **Hardcoded English strings** in `TeamAnnualReviewDetail.tsx` and `TeamReviewDetailContent.tsx` — they never route through the translator.
+2. **Missing keys in the Hindi/Spanish UI dictionary** (`src/lib/annualReview/i18n.ts`). Components already call `t('system_scores.contribution', …)`, `t('eligibility.col.criterion', …)`, `t('carry.achieved', …)`, etc., but those keys don't exist under `hi` / `es`, so the resolver returns the English fallback.
 
-Total = 13 rows / 126%. That matches the notification exactly.
+Template-authored content (KPI names, scoring notes, criterion names/descriptions coming from `system_score`/`eligibility` template records) is out of scope — those are populated per-template via HR-authored `templateTranslations` and require content work, not a code fix. This plan will call that out but not change data.
 
-The bug is in the notification builder around lines 673–680 of `auto-rollover-kpis/index.ts`:
+## Fix (surgical, UI/i18n only)
 
-```ts
-const copiedKpis = kpisToInsert.filter((k) => k.employee_id === empId);
-const totalWeightage = copiedKpis.reduce((s, k) => s + (k.weightage || 0), 0);
-const notifMessage = `${result.kpis_copied} KPI(s) have been rolled over from … Total weightage: ${totalWeightage}%.`;
-```
+### 1. Extend `src/lib/annualReview/i18n.ts` (Hindi + Spanish)
 
-`result.kpis_copied` and `copiedKpis` include every future-month row created for multi-month cycles, so a Quarterly KPI worth 13% is counted 3× (Jul + Aug + Sep). The actual "rolled over from June to July" set is only the target-month subset (should sum to 100%).
+Add the missing keys already referenced in code:
 
-## Fix (surgical)
+- `nav.back_to_queue`
+- `assisted.mode_title`, `assisted.mode_body` (uses `{name}` placeholder)
+- `badge.submitted_with_assistance`
+- `system_scores.contribution` (uses `{actual}` / `{max}` placeholders)
+- `eligibility.col.criterion`, `eligibility.col.policy_description`, `eligibility.col.actual`
+- `eligibility.remark_label`
+- `carry.achieved`, `carry.out_of`, `carry.rating`
+- `col.total_score`, `col.out_of`, `col.percent`, `col.rating_5`
+- `carry.employee_context_missing`
+- `stage.no_criteria` (uses `{stage}` placeholder)
 
-In `supabase/functions/auto-rollover-kpis/index.ts`, in the notification/email loop (~line 673–740), restrict counting to the target month only:
+### 2. Route hardcoded strings through `t()`
 
-1. Compute `targetMonthCopied = copiedKpis.filter(k => k.review_period === targetMonth && k.review_year === targetYear)`.
-2. Use `targetMonthCopied.length` for the message KPI count and `notifications.metadata.kpi_count`.
-3. Sum weightage from `targetMonthCopied` for `Total weightage` in message and `total_weightage` in the email payload.
-4. Use `targetMonthCopied` (not `copiedKpis`) to build `kraList` for the email so the table shows only what actually landed in the target month.
-5. Leave `result.kpis_copied` (used by the RPC response / UI summary) untouched — it truthfully reports the total rows inserted, which is what admins running the rollover want to see.
+- `src/pages/annual-review/TeamAnnualReviewDetail.tsx` — wrap "Back to queue" in `t('nav.back_to_queue', 'Back to queue')`. Needs `useAnnualReviewI18n` (already provided by the outer `AnnualReviewI18nProvider`).
+- `src/components/annual-review/TeamReviewDetailContent.tsx`:
+  - Assisted-review banner title + body via `t()` with a `{name}` placeholder replaced in JSX.
+  - "Submitted with assistance" badge via `t()`.
+  - "No criteria to score for the {stage} stage…" via `t()`.
+- `src/components/annual-review/SystemScoresPanel.tsx` — the `t()` calls are already in place; adding dictionary entries (step 1) is what activates them. Also add the missing Carry-KRA helper text `t()` wrap.
 
-No schema change, no policy change, no UI change. Existing notifications already stored in the DB are historical and remain as-is.
+No template-schema changes, no DB migration, no policy change.
 
 ## Verification
 
-1. Type-check the edge function.
-2. Simulate: for Ankit's data, `targetMonthCopied.length === 9` and weightage sum === `100`.
-3. Add / update unit test in `src/test/` (or a dedicated pure helper extracted from the loop) covering: single-month KPI → count matches; quarterly KPI targeting July → notification shows 1 KPI / X%, not 3× duplication.
-4. Manually re-run the next monthly rollover in a lower env (or a dry-run branch) and confirm the message reads `9 KPI(s) … Total weightage: 100%`.
+1. Build/typecheck.
+2. Load the assisted-review page from the screenshot in Hindi — confirm all listed strings render in Devanagari.
+3. Switch to Spanish — parity check.
+4. Switch back to English — strings unchanged (no double-translation).
+5. Existing unit tests under `src/test/annualReview/` still pass; add a small test asserting that every new dictionary key exists for both `hi` and `es`.
 
 ## Risk & impact
 
-- **Data:** none — only in-app notification text and outbound email body change. Inserted KPI rows are unchanged.
-- **Workflow:** none.
-- **UI:** notification message wording changes for future rollovers only.
-- **Regression:** low — the change is scoped to the notification block; the RPC response and admin summary still reflect full multi-month inserts.
-- **Rollback:** trivial — revert the edge-function edit.
+- **Data:** none.
+- **Workflow / policy:** none.
+- **UI/UX:** only rendered text changes for `hi`/`es`. English is untouched (fallback path returns English when `current === default`).
+- **Regression:** low. All changes are additive dictionary entries + `t()` wrappers around existing literals.
+- **Scalability:** none (static dictionary; no query impact).
+- **Rollback:** trivial (revert file edits).
 
 ## Docs
 
-- Add a note to `POLICY.md` (Rollover section) clarifying that the rollover notification reports the **target-month** KPI count/weightage, while multi-month cycles still insert forward-dated rows.
-- Add a short ADR (next ADR-###) capturing the incorrect-weightage RCA.
+Add a short bullet to `src/modules/annual-review/POLICY.md` (i18n section) noting the fixed keys and reminding template authors that KPI names and scoring notes are template-authored translations, not UI-dictionary translations.
