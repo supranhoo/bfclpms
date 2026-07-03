@@ -53,6 +53,8 @@ import { AnnualReviewExportMenu } from '@/components/annual-review/AnnualReviewE
 import { ChangeWorkflowDialog } from '@/components/annual-review/ChangeWorkflowDialog';
 import { InstanceStageWeightsDialog } from '@/components/annual-review/InstanceStageWeightsDialog';
 import { TemplateEditorDialog } from '@/components/annual-review/TemplateEditorDialog';
+import { TemplateUploadDialog } from '@/components/annual-review/TemplateUploadDialog';
+import { downloadTemplateFormatWorkbook, downloadFilledTemplateWorkbook } from '@/lib/annualReview/templateWorkbook';
 import {
   useShowReviewerNamesInStepper,
   useSetShowReviewerNamesInStepper,
