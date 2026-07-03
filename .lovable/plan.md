@@ -1,28 +1,25 @@
-## Goal
-Add one sequential Play button per criterion block that reads the criterion name → description → all 6 option labels aloud in order, using the existing browser Web Speech API. Keep the individual speaker icons intact for one-off replays.
+## Where the "Eligibility Criteria (HR Inputs)" editor lives
 
-## Risk & Impact
-- **Data / RLS / schema:** none — pure client-side UI/audio.
-- **Workflow:** none — same `enable_audio` template flag governs visibility.
-- **Regression:** low. New component reuses `speech.ts`; existing `<SpeakButton>` remains untouched.
-- **Scope:** `CriteriaScoringMatrix.tsx` only (the block shown in the screenshot). Employee, team, auditor, manager, skip, BU annual-review routes already render this component, so they inherit the change automatically.
+The per-employee HR inputs used by the Annual Review eligibility evaluator are edited from the **Admin → Annual Review** page, inside the HR Finalization side sheet.
 
-## Changes
+### Navigation path
+1. Sign in as an Admin / HR PMS user.
+2. Left nav → **Annual Review → Admin** (`AnnualReviewAdmin` page).
+3. Select the active **cycle** and locate the employee row in the progress table.
+4. Click the employee's **Finalize / HR Review** action — this opens the `HrFinalizationSheet` on the right.
+5. Inside the sheet, scroll to the **"Eligibility Inputs"** card. Each criterion defined on the template renders one field (number / boolean / text) plus an **Eligibility Remark** textarea (required when any criterion fails).
+6. Click **Save** — writes to `annual_review_instances.eligibility_inputs` via `updateEligibilityInputs()` and re-runs `evaluateEligibility()`.
 
-1. **`src/lib/annualReview/speech.ts`** — add `speakSequence(texts: string[], lang, { onIndex, onDone })` that queues utterances via `speechSynthesis` back-to-back using `utter.onend`, plus `stopSpeaking()` reused for cancel. No behavior change for `speak()`.
+### Where the values come from / go to
+- Component: `src/components/annual-review/EligibilityInputsEditor.tsx`
+- Rendered by: `src/components/annual-review/HrFinalizationSheet.tsx` (line ~138)
+- Opened from: `src/pages/annual-review/AnnualReviewAdmin.tsx` (line ~921)
+- Criteria list source: the active **Annual Review Template** (`annual_review_templates.eligibility_criteria`). To change *which* criteria appear, edit them in **Admin → Annual Review → Templates** (template editor), not in the HR sheet.
+- Persisted to: `annual_review_instances.eligibility_inputs` (jsonb) + `eligibility_remark`.
 
-2. **New `src/components/annual-review/ReadAllButton.tsx`** — accepts `texts: string[]`. Same visibility gating as `SpeakButton` (`enableAudio`, non-default lang, `speechSynthesis` present, voice available, non-empty list). States: idle → playing (shows Pause/Stop icon + current index e.g. "3/8"). Click while playing = stop. Uses `speakSequence`. Cleans up on unmount.
+### Related but separate surfaces (do not confuse)
+- **General Eligibility Configs** (`general_eligibility_configs`) — org-wide eligibility for increments, edited on the Increment Admin page. Not the same as Annual Review HR Inputs.
+- **Increment Ineligibility Criteria** — increment module (ADR-069).
 
-3. **`src/components/annual-review/CriteriaScoringMatrix.tsx`** — render `<ReadAllButton>` once at the criterion header row (next to the existing name-level `<SpeakButton>`), passing `[criterionName, criterionDesc, ...optionLabels]` (empty strings filtered). Individual `<SpeakButton>`s stay as-is.
-
-## Verification
-- Build/typecheck.
-- Unit test `speakSequence` with a mocked `speechSynthesis` (sequential dispatch, cancel mid-queue, empty input no-op).
-- Manual: switch to Hindi on a blue-collar template with `enable_audio` on → single Play reads all 8 items in order; Stop halts immediately; hidden when audio disabled or on default language.
-
-## Docs
-- Update `docs/adr/ADR-103.md` with a "v1.1 (2026-07-03)" note: sequential Read-All button added per criterion; per-item icons retained.
-- No POLICY.md change (behavior still governed by `enable_audio`).
-
-## Not Applicable
-Backend, RLS, migrations, pagination, backup coverage.
+### Deliverable
+Read-only answer — no code changes proposed. If you'd like, I can follow up with a plan to (a) surface a direct "Edit Eligibility Inputs" shortcut from the employee row, or (b) allow bulk-editing HR inputs across employees.
