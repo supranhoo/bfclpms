@@ -414,6 +414,8 @@ function ProgressTab() {
   const [changeTplFor, setChangeTplFor] = useState<InstanceWithEmployee | null>(null);
   const [changeWfFor, setChangeWfFor] = useState<InstanceWithEmployee | null>(null);
   const [weightsFor, setWeightsFor] = useState<InstanceWithEmployee | null>(null);
+  const [stepBackFor, setStepBackFor] = useState<InstanceWithEmployee | null>(null);
+  const [stepBackReason, setStepBackReason] = useState('');
   const { data: allTemplates = [] } = useTemplates();
   const sendBack = useSendBackStatus();
   const qc = useQueryClient();
