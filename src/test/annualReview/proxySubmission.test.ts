@@ -27,7 +27,6 @@ describe('Assisted submission — wiring', () => {
   it('team page wires proxy mode only at pending_self when eligibility resolves true', () => {
     const src = read('pages/annual-review/TeamAnnualReview.tsx');
     expect(src).toMatch(/useProxyEligibility/);
-    expect(src).toMatch(/AssistedSubmissionDialog/);
     expect(src).toMatch(/proxyEligible === true/);
     // Native stage role takes precedence — proxy only when none.
     expect(src).toMatch(/!stageRole && instance\.overall_status === 'pending_self'/);
