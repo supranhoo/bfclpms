@@ -1001,6 +1001,58 @@ function ProgressTab() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <AlertDialog open={!!stepBackFor} onOpenChange={(o) => !o && setStepBackFor(null)}>
+        <AlertDialogContent>
+          {(() => {
+            if (!stepBackFor) return null;
+            const roleMap: Record<string, AnnualReviewerRole> = {
+              pending_manager: 'manager', pending_skip: 'skip_manager', pending_dept: 'dept_head', pending_bu: 'bu_head', pending_hr: 'hr',
+            };
+            const role = roleMap[stepBackFor.overall_status];
+            let prevLabel = 'previous stage';
+            try {
+              if (role) prevLabel = prevStatus(role, stepBackFor.enabled_stages ?? null).replace(/^pending_/, '');
+            } catch { /* no previous stage */ }
+            const name = stepBackFor.employee?.full_name ?? stepBackFor.employee_id;
+            return (
+              <>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Step back to previous stage?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    {name} — current stage will revert to <strong>{prevLabel}</strong> so that reviewer can revise and resubmit.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <div className="space-y-1">
+                  <Label>Reason (optional)</Label>
+                  <Textarea rows={3} value={stepBackReason} onChange={(e) => setStepBackReason(e.target.value)} placeholder="What needs to be revised?" />
+                </div>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={async (e) => {
+                      e.preventDefault();
+                      if (!role) return;
+                      try {
+                        await sendBack.mutateAsync({ instanceId: stepBackFor.id, role, reason: stepBackReason.trim() || null });
+                        toast.success('Review stepped back to previous stage.');
+                        setStepBackFor(null);
+                        setStepBackReason('');
+                        qc.invalidateQueries();
+                      } catch (err) {
+                        toast.error(err instanceof Error ? err.message : 'Failed to step back');
+                      }
+                    }}
+                    disabled={sendBack.isPending || !role}
+                  >
+                    {sendBack.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />} Step back
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </>
+            );
+          })()}
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
