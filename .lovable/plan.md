@@ -1,80 +1,84 @@
-# Plan — Excel-based Template Upload on Annual Review Admin → Templates
+# RCA — April Org KPIs re-appearing on Auditor dashboard
 
-## Goal
-Add two buttons beside **+ New Template**:
-1. **Download Format** — emits an .xlsx workbook that documents every field and its acceptable values.
-2. **Upload Template** — accepts a filled-in workbook of that same shape and creates a full `AnnualReviewTemplate` in one shot.
+Read-only investigation. No code change proposed yet; end of the report lists options for you to choose from.
 
-The workbook itself is the contract. If the format changes, the download and the parser change together.
+## 1. Scope of what Shekhar Sharad is seeing
 
-## Why Excel (per your instruction)
-- Admins are already comfortable with the existing System Scores / Workflow / Stage Weights uploaders (`src/lib/annualReview/bulkTemplates.ts`), which are all `.xlsx`.
-- The format file doubles as documentation — no separate PDF/README needed.
-- A single workbook with multiple sheets handles the nested shape (criteria → options, translations, settings).
+The four KPIs behind the complaint (all Org KPI "Closure of Audit Observations / Compliance to CLC norm", review_period = April 2026) are:
 
-## Workbook layout (locked contract)
-File name on download: `annual-review-template-format.xlsx`
+| Employee | KPI id | Current status | self / mgr / audit / mgmt |
+|---|---|---|---|
+| Jitendra Kumar Dwivedi | 6a1ba417… | `audit` | 5 / — / 5 / — |
+| Sajid Raza | 6175ad7f… | `audit` | 5 / — / 5 / — |
+| V.A.V.S.S. Ganapathi Varma | 9a83b12f… | `audit` | 5 / 5 / 5 / — |
+| Parshu Ram Shukla | 4abc79e0… | `audit` | 5 / — / 5 / — |
 
-| Sheet | Purpose | Columns |
-|---|---|---|
-| **README** | Instructions, version tag (`schema_version = 1`), do-not-rename warning, colour legend (yellow = required, blue = optional, grey = system) | Free text |
-| **Template** | One row per template (usually 1) | `Name*`, `Description`, `Is Active (Y/N)`, `Display Mode` (`numeric` \| `qualitative` \| `both`) |
-| **Settings** | Key/value grid | `Setting`, `Value`. Rows: `default_language`, `additional_languages` (comma-sep), `enable_audio (Y/N)`, `enable_multilingual (Y/N)`, `hide_scores_from_employee (Y/N)`, `require_evidence (Y/N)`, plus any future flags in `TemplateSettings` |
-| **Criteria** | One row per performance criterion | `Criterion ID*` (author-supplied stable key), `Name*`, `Description`, `Weight (%)*`, `Category`, `Display Order` |
-| **Criterion Options** | Options for each criterion | `Criterion ID*` (matches Criteria sheet), `Option Label*`, `Score (0–5)*`, `Description`, `Display Order` |
-| **System Scores** | System-driven score inputs | `System Score ID*`, `Name*`, `Weight (%)*`, `Max Value`, `Description` |
-| **Eligibility Criteria** | Yes/No or numeric gates | `Eligibility ID*`, `Name*`, `Type` (`boolean` \| `number` \| `text`), `Required (Y/N)`, `Description` |
-| **Self Review Fields** | Free-form questions to the employee | `Field ID*`, `Label*`, `Type` (`textarea` \| `text` \| `number`), `Required (Y/N)`, `Placeholder` |
-| **Stage Weights** | Blend for final score | `Stage`, `Weight (%)`. Rows for `self`, `manager`, `skip_manager`, `dept_head`, `bu_head`, `hr`, `system`, `criteria` (matches `STAGE_WEIGHT_KEYS`) |
-| **Translations** | i18n strings | `Language Code*` (e.g. `hi`, `mr`), `Target Type*` (`criterion_name` \| `criterion_desc` \| `option_label` \| `self_field_label` \| `eligibility_name` \| `system_score_name`), `Target ID*` (matches ID from the relevant sheet), `Translated Text*` |
+`status = audit` means the auditor stage is **already marked complete** (convention: status = last completed stage). Next expected owner is Management. Manager / Skip‑Level stages were **skipped** (no manager_score on 3 of 4).
 
-Columns marked `*` are required. Everything else is optional. All IDs are **author-supplied stable strings**; on import the parser regenerates internal UUIDs and rewires translations by the same author IDs.
+The other 28 April CLC-norm rows are already `approved` — those went through the normal path in April/May and are fine.
 
-## UI Changes (only place we touch)
-File: `src/pages/annual-review/AnnualReviewAdmin.tsx` — `TemplatesTabImpl` toolbar (line ~1598).
+## 2. What the audit trail actually shows
+
+Full `kpi_audit_logs` for Parshu Ram Shukla's row (identical shape for the other three):
 
 ```
-[ 4 total templates ]     [ Download Format ] [ Upload Template ] [ + New Template ]
+2026-04-01 12:17  row created, status = kra_set        (system)
+   … 86 days of nothing …
+2026-06-26 08:51  ORG_KPI_VALUE_OVERWRITTEN
+                   overwrite_policy = overwrite_and_stepback
+                   achieved=5, new_self_score=5, new_status=self_review
+                   prior_status=kra_set                (Vivek Kumar Dansena, 101784)
+2026-06-26 08:51  ORG_KPI_PROPAGATED                  (Vivek)
+2026-06-26 09:13  ADMIN_DATA_ENTRY_SELF
+                   reason = "KPI is being forwarded to the Audit Team,
+                             as the KRA was not reviewed within the defined timeline."
+                   fields = achieved_value, self_rating, self_score,
+                            self_remarks, self_evidence_urls, is_na  (Vivek)
+2026-07-02 13:26  SUBMISSION_SCORE_CHANGED (safety_net_trigger)   (Ayush Bansal)
+2026-07-02 13:26  BULK_STAGE_SIGNOFF_AUDITOR
+                   batch_reason = "okay as per audit review policy:
+                                   §88.1.d / ADR-098"              (Ayush)
+2026-07-02 13:40  STATUS_TRANSITION → audit                        (Ayush)
+2026-07-02 13:40  AUDITOR_REVIEWED                                 (Ayush)
 ```
 
-- **Download Format**: outline button, `Download` icon, calls `downloadTemplateFormatWorkbook()`. Also visible as "Download filled" on each existing template's action row so admins can export a real template and edit it.
-- **Upload Template**: outline button, `Upload` icon, opens a new `TemplateUploadDialog`:
-  1. File picker (`.xlsx`, `.xls` only, ≤ 512 KB)
-  2. Parse preview: template name, counts (criteria / options / system scores / eligibility / self-review fields / languages), plus a validation panel showing any errors with sheet + row references
-  3. Duplicate-name handling: if a template with the same name exists → radio **Import as new template** (rename) / **Import as new version** (uses existing `useCloneTemplate`) / **Cancel**
-  4. Footer: **Cancel** / **Import**
-- No other buttons or flows change.
+Two facts from this log:
 
-## Files to add / modify
-1. `src/lib/annualReview/templateWorkbook.ts` **(new)**
-   - `buildTemplateFormatWorkbook(): XLSX.WorkBook` — empty format with README + headers only.
-   - `buildFilledTemplateWorkbook(t: AnnualReviewTemplate): XLSX.WorkBook` — populated export of an existing template.
-   - `downloadTemplateFormatWorkbook()` / `downloadFilledTemplateWorkbook(t)` — save helpers, mirroring `bulkTemplates.ts`.
-   - `parseTemplateWorkbook(file: File): Promise<{ template: Omit<AnnualReviewTemplate,'id'|'created_at'|'updated_at'|'created_by'>; errors: ImportIssue[]; warnings: string[] }>` — reads the workbook, validates every sheet against a Zod schema, regenerates UUIDs, remaps translations by author IDs, and returns a ready-to-upsert payload.
-2. `src/components/annual-review/TemplateUploadDialog.tsx` **(new)** — dialog described above; on confirm calls `svc.upsertTemplate` or the clone hook.
-3. `src/pages/annual-review/AnnualReviewAdmin.tsx` — add the two toolbar buttons, add `Download filled` menu item per template card, mount the dialog. Reuse existing `Button` + `Upload`/`Download` icons for visual parity with the other bulk uploaders.
-4. **Tests** — `src/test/annualReview/templateWorkbookIO.test.ts`
-   - Round-trip: build filled workbook from a fixture template → parse → deep-equal (ignoring regenerated UUIDs).
-   - Rejects: missing `Name`, criterion weight sum ≠ 100 (warn, not block), option score out of 0–5, unknown `Target Type`, translation `Target ID` not found in the referenced sheet, wrong `schema_version`, > 512 KB, wrong sheet names.
-   - Duplicate-name path calls the clone service, not `upsertTemplate`.
+- **Shekhar's observation "no history before 26 Jun" is literally true.** These four rows were dormant in `kra_set` for 86 days — nobody self-reviewed in April, no manager acted, no auditor acted. There is nothing to display before 26 Jun because nothing happened.
+- **The auditor stage was signed off by Ayush Bansal (Auditor003), not by Shekhar.** Level assignment (`audit_kpi_level_assignments`) confirms three of the four rows are assigned to Ayush; none are assigned to Shekhar. So "already reviewed and completed" from Shekhar's perspective is a misread — his team never reviewed them. Ayush bulk‑closed them on 2 Jul under the §88.1.d safety-net policy.
 
-## Data / DB Impact
-- **None.** Uses the existing `svc.upsertTemplate` and `useCloneTemplate` paths. No schema change, no migration, no RLS change.
-- Import is admin-only (same gating as the current Templates tab).
+## 3. Root cause chain
 
-## Response-contract sections
-- **Assumptions**
-  - One template per workbook.
-  - Author-supplied IDs are strings unique within their sheet (parser fails otherwise).
-  - Assignment rules / cycle-scoped mappings are out of scope — they stay in the existing bulk assignment dialog.
-- **Risk & Impact**: UI-only addition; no existing behaviour changes. Rollback = delete the two new files and revert the toolbar hunk.
-- **Scalability**: Parse happens in-browser; size-capped ≤ 512 KB; single insert on submit.
-- **Security**: Zod validation before hitting the service; author IDs are discarded after remap so cross-tenant collisions are impossible; file size and MIME checked.
-- **Documentation**: append a "Template Excel Import/Export" section to `DOCUMENTATION.md` and record the workbook schema version in `POLICY.md`.
+Two admin escalation levers fired one after the other on already-lapsed April rows:
 
-## Out of scope (explicit)
-- JSON import path (Excel is the only supported format per your instruction).
-- Bulk multi-template upload.
-- Copying cycle assignments / assignment rules with the template.
+1. **ADR‑053 `overwrite_and_stepback` propagation** (Data Owner Vivek, 26 Jun 14:21 IST): allowed the Org-KPI master value entered 86 days late to be pushed into rows still in `kra_set`, materialising a synthetic self-review (score = 5) without the employee touching the form.
+2. **Admin Data Entry (self) forward-to-audit** (Vivek, 26 Jun 14:43 IST): the "not reviewed within timeline" dialog jumped the KPI directly from `self_review` to the auditor queue, bypassing Manager and Skip-Level entirely. That is why manager_score is null.
+3. **ADR‑098 §88.1.d Bulk Auditor Sign-off** (Ayush, 2 Jul 18:54–19:10 IST): bulk-closed the auditor stage on the four rows the same day they surfaced in Ayush's queue.
 
-Approve to build, or tell me what to trim/expand — for example, if any field in `TemplateSettings` should be omitted from or promoted on the **Settings** sheet.
+Net effect on Shekhar's dashboard: rows appear under "My Assignments" because the auditor role sees any auditor-linked KPI still short of Management approval; and because Manager/Skip-Level were skipped, the workflow tile lights the Audit node even though `status = audit` already. That looks like a fresh, unreviewed KPI to a human reader — hence the complaint.
+
+## 4. What is genuinely wrong vs. working as designed
+
+Working as designed:
+- `overwrite_and_stepback` back-fill and the ADR-098 bulk auditor sign-off both did exactly what their policies allow. Every step is audit-logged with performer + reason.
+- Empty timeline before 26 Jun is correct — no earlier events existed.
+
+Genuinely problematic:
+- **Manager & Skip-Level were silently skipped.** The `ADMIN_DATA_ENTRY_SELF` path advanced status past `manager_check`/`skip_check` without ever creating a manager review; `manager_score` is NULL on 3 of 4 rows. This is invisible on the mobile workflow strip because the strip only reads `status`, not per-stage scores, so all prior nodes render green.
+- **Cross-auditor visibility.** Rows level-assigned to Ayush surface in Shekhar's "My Assignments" list. Either the assignment routing is missing a filter, or Shekhar is the fallback auditor for the affected employees. This is what makes the complaint sound like a regression.
+- **No stale-period guard.** A 3-month-old April review can still be back-filled and force-forwarded end-to-June/July without any explicit reopen action or override note visible in the reviewer UI.
+
+## 5. Regression? — No
+
+There is no code change on those rows outside the two documented admin actions. The system did not resurrect approved data. The rows were never approved in the first place; they were force-advanced from `kra_set` to `audit` in one day via legitimate admin tools.
+
+## 6. Options (choose one or more, I'll follow up with a build plan)
+
+- **A. Communicate only.** Reply to Shekhar with the timeline above; no code change.
+- **B. UX guard.** Render an amber banner on any KPI whose `manager_score` / `skip_score` is NULL but `status ≥ audit`, labelled "Stages skipped via Admin Data Entry — see timeline". Purely visual; no data change.
+- **C. Assignment scope fix.** Restrict "My Assignments" for auditors to KPIs where they appear in `audit_kpi_level_assignments` / `audit_kpi_assignments`. Needs a rule confirmation from you (should Shekhar see Ayush's rows at all?).
+- **D. Policy tightening.** Require an explicit "reopen past period" confirmation in the Org KPI Data Entry dialog when `review_period` is older than the current review window, and force `overwrite_and_stepback` to log a reason string.
+
+## 7. Not applicable in this pass
+
+Code edits, migrations, tests. This is a diagnostic report only, per plan mode.
