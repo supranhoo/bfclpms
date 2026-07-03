@@ -48,6 +48,7 @@ import {
 import { AnnualReviewStatusBadge } from '@/components/annual-review/AnnualReviewStatusBadge';
 import { HrFinalizationSheet } from '@/components/annual-review/HrFinalizationSheet';
 import { fyStartFromCycle } from '@/lib/annualReview/fiscalYear';
+import { prevStatus } from '@/lib/annualReview/stageChain';
 import { UnifiedBulkDialog } from '@/components/annual-review/UnifiedBulkDialog';
 import { AnnualReviewExportMenu } from '@/components/annual-review/AnnualReviewExportMenu';
 import { ChangeWorkflowDialog } from '@/components/annual-review/ChangeWorkflowDialog';
