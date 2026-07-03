@@ -1,48 +1,50 @@
-# Discontinue Speaker (Read-Aloud) Feature
+# Restore Speaker (Read-Aloud) Feature
 
-Per your request, drop both the built Phase 1 Web Speech feature and the not-yet-built Phase 2 AI TTS plan. Only speaker-related code is touched — translations, bilingual display, template settings for language, and the annual-review draft/autosave work all stay as-is.
+Bring back the Phase 1 Web Speech API read-aloud that was removed on 2026-07-02. This is a straight revert of that removal — no new work, no Phase 2 AI TTS fallback.
 
-## What gets removed
+## What comes back
 
-**Components / lib**
-- `src/components/annual-review/SpeakButton.tsx` — delete
-- `src/lib/annualReview/speech.ts` — delete
-- `src/lib/annualReview/speech.test.ts` — delete
-- `src/test/annualReview/teamDetailEnableAudioWiring.test.tsx` — delete
+**Recreate deleted files** (from ADR-103 v1.0.1 spec):
+- `src/lib/annualReview/speech.ts` — `hasVoiceFor(lang)` + `speak(text, lang)` helpers over `window.speechSynthesis`
+- `src/lib/annualReview/speech.test.ts` — unit tests for the helpers
+- `src/components/annual-review/SpeakButton.tsx` — icon button; returns `null` when gate fails (audio off, lang == default, no `speechSynthesis`, or no voice for lang)
+- `src/test/annualReview/teamDetailEnableAudioWiring.test.tsx` — regression pinning `enableAudio` prop flows through the team-detail provider (the exact bug fixed in v1.0.1)
 
-**Call sites (remove `SpeakButton` usage + import only; leave surrounding markup)**
-- `src/pages/annual-review/EmployeeAnnualReview.tsx` — drop import, remove `<SpeakButton …>` at line 250
-- `src/components/annual-review/CriteriaScoringMatrix.tsx` — drop import, remove three `<SpeakButton …>` usages (lines 80, 85, 153)
+**Restore context/type wiring**:
+- `src/types/annualReview.ts` — re-add `enable_audio?: boolean` on template settings
+- `src/components/annual-review/AnnualReviewI18nContext.tsx` — re-add `enableAudio` to context type, provider props, default (`false`), and memo value
+- `src/pages/annual-review/EmployeeAnnualReview.tsx` — pass `enableAudio={settings.enable_audio === true}` on both `AnnualReviewI18nProvider` usages; re-add `<SpeakButton>` next to the translated field label
+- `src/components/annual-review/TeamReviewDetailContent.tsx` — pass `enableAudio` on the provider (the fix that made it visible on team/auditor/manager/skip/BU routes)
+- `src/components/annual-review/CriteriaScoringMatrix.tsx` — re-add `<SpeakButton>` beside the three translated targets (criterion name, criterion description, option label)
 
-**Context / types (drop the `enableAudio` prop + field)**
-- `src/components/annual-review/AnnualReviewI18nContext.tsx` — remove `enableAudio` from the context type, provider props, default value, and memo
-- `src/types/annualReview.ts` — remove `enable_audio?: boolean` from the settings type
-- `src/pages/annual-review/EmployeeAnnualReview.tsx` — drop the two `enableAudio={…}` props on `AnnualReviewI18nProvider` (lines 136, 193)
-- `src/components/annual-review/TeamReviewDetailContent.tsx` — drop the `enableAudio={…}` prop (line 186)
+**Restore admin toggle**:
+- `src/components/annual-review/TemplateEditorDialog.tsx` — re-add the "Enable read-aloud (speaker icon)" Switch inside the Multilingual card, bound to `sections.settings.enable_audio`
 
-**Template editor UI**
-- `src/components/annual-review/TemplateEditorDialog.tsx` — remove the "Enable read-aloud (speaker icon)" Switch block (lines 221–237)
+**Docs**:
+- `docs/adr/ADR-103.md` — flip Status back to **Accepted**, add a note "Re-instated on user request on 2026-07-03 after brief removal on 2026-07-02". Keep the graceful-fallback contract and browser matrix unchanged.
+- `POLICY.md` + `DOCUMENTATION.md` — one-line entries recording restore.
+- `mem/index.md` — re-add the speaker feature line if it was pruned.
 
-**Docs**
-- `docs/adr/ADR-103.md` — mark **Status: Superseded — feature removed on request** with a one-line note; keep the file so history is preserved (do not delete)
-- `.lovable/memory/features/annual-review/operations.md` — remove any read-aloud entry if present
+## What stays out (scope guard)
+
+- **No AI Gateway TTS fallback** (Phase 2). Linux desktops without an OS voice pack still see nothing — same behavior as before removal.
+- No changes to translations, bilingual display, language switcher, autosave/draft work, or any other Annual Review logic.
 
 ## Data / DB impact
 
-None. `enable_audio` lives inside the JSON `sections.settings` blob on templates — no column, no migration. Existing templates that have the flag set are simply ignored after the type is removed; no cleanup required. Zero RLS, backup, or policy changes.
+None. `enable_audio` is a boolean inside the JSON `sections.settings` blob — no column, no migration, no RLS. Existing templates default to `false` (feature off) until an admin toggles it on.
 
-## Risk & regression
+## Response-contract sections
 
-- No functional loss beyond the speaker icon itself.
-- Bilingual rendering, language switcher, translations, and autosave/draft fixes from the previous turn are untouched.
-- Build risk is limited to leftover imports — verified by grepping `SpeakButton`, `enable_audio`, `enableAudio`, `speech.ts` after edits; must return zero hits outside the ADR-103 file.
-
-## Rollback
-
-`git revert` the removal commit — files come back exactly as they were (Phase 1 was self-contained).
+- **Assumptions:** you want the exact Phase 1 behavior back (Web Speech only, per-template flag, silent fallback). If you want the AI Gateway fallback too, say so and I'll re-plan with billing controls.
+- **Risk & Impact:** UI-only. Speaker icon appears beside translated content when (a) admin enables the flag on the template and (b) the device has an OS voice for the active language. Zero regression risk to any other module — the same code shipped and ran cleanly before.
+- **Scalability:** Zero server cost; audio synthesized on-device.
+- **Rollback:** re-delete the same files listed above; single revert commit.
 
 ## Verification
 
-- `tsgo` clean (no dangling imports / props)
-- Vitest suite green (the deleted `speech.test.ts` and `teamDetailEnableAudioWiring.test.tsx` are removed from the run)
-- Manual: open a blue-collar Team Review detail in Hindi → no speaker icon anywhere, page otherwise identical.
+- `tsgo` clean.
+- Vitest: 2 restored test files pass (`speech.test.ts`, `teamDetailEnableAudioWiring.test.tsx`).
+- Manual: enable "Enable read-aloud" on a blue-collar template → open Team Review detail in Hindi → speaker icons render beside translated criteria/options → click plays audio.
+
+Approve and I'll restore the files exactly as they were, or tell me if you also want the AI Gateway fallback layered on top.
