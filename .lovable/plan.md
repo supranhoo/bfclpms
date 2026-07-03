@@ -1,34 +1,20 @@
-## Goal
-Make **Step back** functional per-row from the three-dot menu on the Annual Review Admin → Progress table (image), reusing the existing send-back-to-previous-stage service used by "Bulk send back".
+## Root cause
+Step-back RPC succeeds server-side, but the `overall_status` change fires trigger `notify_annual_review_stage_change`, which inserts a row in `public.notifications` with `kpi_id = NULL`. That inserts trigger `trigger_send_email_on_notification` → function `public.send_email_on_notification()`, which unconditionally references `kpi_record.kpi_name / kra_name / review_period / review_year` even when the `SELECT INTO kpi_record` was skipped (kpi_id is NULL). Postgres raises `55000 record "kpi_record" is not assigned yet`. There is no `EXCEPTION WHEN OTHERS` in the current version, so the error bubbles up and aborts the whole RPC. Any non-KPI notification (annual review stage change, etc.) hits this same bug.
 
-## Scope
-- File: `src/pages/annual-review/AnnualReviewAdmin.tsx` only (UI + wiring).
-- Backend: no changes. Uses `useSendBackStatus` → `svc.sendBackStatus(instanceId, role, reason)` already in place.
+## Fix (single migration, additive)
+Replace `public.send_email_on_notification()` body so it:
+1. Declares local variables `v_kra_name text`, `v_review_period text`, `v_review_year int` initialized to NULL.
+2. Assigns them from `kpi_record` **only when `NEW.kpi_id IS NOT NULL` and the SELECT INTO found a row** (guard with `IF FOUND`).
+3. Uses these locals — not `kpi_record.*` — in the `jsonb_build_object(...)` payload.
+4. Wraps the outbound `net.http_post` in `BEGIN ... EXCEPTION WHEN OTHERS THEN RAISE WARNING ...; END;` so a downstream failure never breaks the originating write.
 
-## Behavior
-1. In the row `DropdownMenu` (line ~840), add a new item **"Step back to previous stage"** (icon `Undo2`) shown only when the instance is on a stage that has a previous stage in the configured chain — i.e. `overall_status` is one of `pending_manager | pending_skip | pending_dept | pending_bu | pending_hr` (excludes `not_started`, `pending_self`, `completed`).
-2. Clicking opens a small confirmation `AlertDialog` (row-scoped state `stepBackFor: instance | null`) with:
-   - Title showing employee name + current stage → previous stage (derived via `prevStatus(role, instance.enabled_stages)` from `@/lib/annualReview/stageChain`).
-   - Optional reason textarea.
-   - Confirm button "Step back" (disabled while pending).
-3. Confirm calls the existing `useSendBackStatus().mutateAsync({ instanceId, role, reason })`; on success show toast, close dialog, invalidate queries (same pattern as bulk send back).
-4. Fix latent bug in `bulkSendBack` roleMap: add `pending_dept: 'dept_head'` (currently missing, so dept-head stage rows are silently skipped from bulk send back too).
-
-## Technical
-- Reuse imports: `Undo2` already imported; `AlertDialog*` already imported (used by bulk).
-- Add local state:
-  ```ts
-  const [stepBackFor, setStepBackFor] = useState<AnnualReviewInstance | null>(null);
-  const [stepBackReason, setStepBackReason] = useState('');
-  ```
-- Compute `role` and previous-stage label in the dialog via existing `roleMap` and `prevStatus` helper (import `prevStatus` from `@/lib/annualReview/stageChain`; already imported for `describeChain`? verify — if not, add).
-- Menu item rendered inside existing `DropdownMenuContent` after "Finalize / View", gated by `canStepBack = role != null` where `role = roleMap[i.overall_status]`.
+No signature change, no trigger change, no policy change. Behaviour for KPI-linked notifications is identical.
 
 ## Verification
-- Typecheck clean.
-- Manual: on `test003` row (currently `Dept Head Review Pending`) → three-dots → "Step back to previous stage" → confirm → stage returns to `pending_skip` (or the previous enabled stage per chain), toast shown, table refreshes.
-- Bulk send back now also handles dept-head-pending rows.
+- Re-invoke `send_back_annual_review_status` for `test003` (currently `pending_dept`) as admin → RPC returns `pending_self` (or the correct prev stage), `annual_review_instances.overall_status` updates, notification row appears, no 55000 error.
+- Existing KPI notifications still carry `kpi_name / kra_name / review_period / review_year`.
+- Toast in the UI now shows the success message instead of "Failed to step back".
 
 ## Out of scope
-- Full ADR-049 "select any prior stage" chooser and "Clear all review data" reset — not requested here; can be a follow-up.
-- No policy/schema changes.
+- No changes to `notify_annual_review_stage_change`.
+- No UI changes (already wired in the previous turn).
