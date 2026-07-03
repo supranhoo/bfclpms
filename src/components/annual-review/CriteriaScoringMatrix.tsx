@@ -8,6 +8,7 @@ import { SCORE_COLOR, SCORE_LABEL } from '@/lib/annualReview/constants';
 import type { TemplateCriterion, EvidenceItem } from '@/types/annualReview';
 import { useAnnualReviewI18n } from '@/components/annual-review/AnnualReviewI18nContext';
 import { SpeakButton } from '@/components/annual-review/SpeakButton';
+import { ReadAllButton } from '@/components/annual-review/ReadAllButton';
 
 const COACHING_NOTES: Record<number, string> = {
   5: 'Reserve "Outstanding" for documented, repeated excellence — avoid leniency bias.',
@@ -69,6 +70,10 @@ function CriterionRow({
   const enableRemarks = criterion.enable_remarks !== false;
   const enableEvidence = !!criterion.enable_evidence;
   const hasOptions = Array.isArray(criterion.options) && criterion.options.length > 0;
+  const optionLabels = hasOptions
+    ? criterion.options!.map((opt) => tTemplateBilingual('option', opt.id, 'label', opt.label))
+    : [];
+  const readAllTexts = [criterionName, criterionDesc, ...optionLabels];
 
   return (
     <Card>
@@ -78,6 +83,7 @@ function CriterionRow({
             <div className="flex items-start gap-2">
               <h4 className="font-semibold text-base">{criterionName}</h4>
               <SpeakButton text={criterionName} className="mt-0.5" />
+              <ReadAllButton texts={readAllTexts} className="ml-1" />
             </div>
             {criterion.description && (
               <div className="mt-0.5 flex items-start gap-2">

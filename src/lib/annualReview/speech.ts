@@ -52,3 +52,58 @@ export function stopSpeaking(): void {
   if (typeof window === 'undefined') return;
   try { window.speechSynthesis?.cancel(); } catch { /* noop */ }
 }
+
+/**
+ * Speak an ordered list of strings back-to-back. Returns a `cancel()`
+ * function that halts playback immediately. Empty / whitespace-only entries
+ * are skipped. No-op when speech synthesis is unavailable.
+ */
+export function speakSequence(
+  texts: string[],
+  lang: string,
+  opts?: { onIndex?: (index: number, total: number) => void; onDone?: () => void },
+): () => void {
+  const clean = (texts || []).map((t) => (t || '').trim()).filter(Boolean);
+  if (typeof window === 'undefined' || clean.length === 0) {
+    opts?.onDone?.();
+    return () => { /* noop */ };
+  }
+  const synth = window.speechSynthesis;
+  if (!synth) {
+    opts?.onDone?.();
+    return () => { /* noop */ };
+  }
+  let cancelled = false;
+  const voices = synth.getVoices?.() ?? [];
+  const target = normalizeLang(lang);
+  const voice = voices.find((v) => {
+    const vl = normalizeLang(v.lang);
+    return vl === target || vl.startsWith(`${target}-`) || target.startsWith(`${vl}-`);
+  });
+  try { synth.cancel(); } catch { /* noop */ }
+
+  const speakAt = (i: number) => {
+    if (cancelled) return;
+    if (i >= clean.length) {
+      opts?.onDone?.();
+      return;
+    }
+    opts?.onIndex?.(i, clean.length);
+    try {
+      const utter = new SpeechSynthesisUtterance(clean[i]);
+      utter.lang = lang;
+      if (voice) utter.voice = voice;
+      utter.onend = () => speakAt(i + 1);
+      utter.onerror = () => speakAt(i + 1);
+      synth.speak(utter);
+    } catch {
+      speakAt(i + 1);
+    }
+  };
+  speakAt(0);
+
+  return () => {
+    cancelled = true;
+    try { synth.cancel(); } catch { /* noop */ }
+  };
+}
