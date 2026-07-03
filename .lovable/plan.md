@@ -1,25 +1,25 @@
-## Where the "Eligibility Criteria (HR Inputs)" editor lives
+## Add "Save System Scores" action to HR Finalization sheet
 
-The per-employee HR inputs used by the Annual Review eligibility evaluator are edited from the **Admin → Annual Review** page, inside the HR Finalization side sheet.
+Today the HR Finalization sheet only persists system-score overrides as part of the full **Finalize** submit. HR can't save the scores incrementally, and finalize is blocked until every reviewer stage is locked — so mid-cycle score entry has no save path.
 
-### Navigation path
-1. Sign in as an Admin / HR PMS user.
-2. Left nav → **Annual Review → Admin** (`AnnualReviewAdmin` page).
-3. Select the active **cycle** and locate the employee row in the progress table.
-4. Click the employee's **Finalize / HR Review** action — this opens the `HrFinalizationSheet` on the right.
-5. Inside the sheet, scroll to the **"Eligibility Inputs"** card. Each criterion defined on the template renders one field (number / boolean / text) plus an **Eligibility Remark** textarea (required when any criterion fails).
-6. Click **Save** — writes to `annual_review_instances.eligibility_inputs` via `updateEligibilityInputs()` and re-runs `evaluateEligibility()`.
+### Change
+Add a dedicated **Save system scores** button that persists only `annual_review_instances.system_scores` (merged with existing values), independent of finalization.
 
-### Where the values come from / go to
-- Component: `src/components/annual-review/EligibilityInputsEditor.tsx`
-- Rendered by: `src/components/annual-review/HrFinalizationSheet.tsx` (line ~138)
-- Opened from: `src/pages/annual-review/AnnualReviewAdmin.tsx` (line ~921)
-- Criteria list source: the active **Annual Review Template** (`annual_review_templates.eligibility_criteria`). To change *which* criteria appear, edit them in **Admin → Annual Review → Templates** (template editor), not in the HR sheet.
-- Persisted to: `annual_review_instances.eligibility_inputs` (jsonb) + `eligibility_remark`.
+### Files
+1. **`src/services/annualReview/annualReviewService.ts`** — Add `updateSystemScores(instanceId, systemScores)` that updates only the `system_scores` jsonb column and `updated_at`. Does not change `status`, `final_rating`, or `hr_remarks`.
+2. **`src/hooks/useAnnualReview.ts`** — Add `useUpdateSystemScores()` mutation hook wrapping the service call, invalidating `annualReviewKeys.all` on success.
+3. **`src/components/annual-review/HrFinalizationSheet.tsx`** — Inside the `SystemScoresPanel` card area, add a small **Save system scores** button (with spinner). Enabled whenever there are unsaved overrides OR an instance exists; disabled while pending. Calls the new hook with the `merged` map. Toast on success/error. Clears `systemOverrides` local state on success so the panel reflects the persisted values.
+4. **`src/test/annualReview/hrFinalizationSaveSystemScores.test.ts`** — New test: mocks the service, renders the sheet with a non-finalizable instance (missing stages), simulates a score change, clicks Save system scores, asserts the service is called with the merged map and that finalize is NOT invoked.
+5. **`src/modules/annual-review/DOCUMENTATION.md`** — Version-history entry describing the new incremental save path.
+6. **`src/modules/annual-review/POLICY.md`** — Note: system scores may be saved by HR at any time before finalization; finalization still requires all reviewer stages locked.
 
-### Related but separate surfaces (do not confuse)
-- **General Eligibility Configs** (`general_eligibility_configs`) — org-wide eligibility for increments, edited on the Increment Admin page. Not the same as Annual Review HR Inputs.
-- **Increment Ineligibility Criteria** — increment module (ADR-069).
+### Risk & impact
+- **Data**: Additive UPDATE on an existing jsonb column. No schema change. RLS unchanged (existing HR/admin update policy on `annual_review_instances` already covers this column).
+- **Workflow**: Non-destructive — does not advance stage or set `final_rating`. Finalize button behavior unchanged.
+- **UI**: One new button inside the System Scores card; layout otherwise unchanged.
+- **Regression**: Low. The Finalize path continues to send `systemScores: merged`; if HR pre-saved, `merged` still equals persisted + overrides so the finalize payload is unchanged.
+- **Rollback**: Revert the six files; no migration.
 
-### Deliverable
-Read-only answer — no code changes proposed. If you'd like, I can follow up with a plan to (a) surface a direct "Edit Eligibility Inputs" shortcut from the employee row, or (b) allow bulk-editing HR inputs across employees.
+### Verification
+- Unit test above passes.
+- Manual: open sheet on an instance missing reviewer locks → confirm Save system scores works and reloading shows persisted values; Finalize remains disabled with the same missing-stages alert.
