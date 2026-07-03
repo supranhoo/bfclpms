@@ -10,7 +10,7 @@ import { toast } from 'sonner';
 import { FINAL_RATINGS } from '@/lib/annualReview/constants';
 import { computeCriteriaScore, computeOverallScore } from '@/lib/annualReview/scoring';
 import { resolveStageWeights, computeFinalScore, responsesToRoleMap } from '@/lib/annualReview/finalScore';
-import { useFinalizeInstance, useInstanceResponses, useReassignReviewer } from '@/hooks/useAnnualReview';
+import { useFinalizeInstance, useInstanceResponses, useReassignReviewer, useUpdateSystemScores } from '@/hooks/useAnnualReview';
 import { SystemScoresPanel } from './SystemScoresPanel';
 import { EligibilityInputsEditor } from './EligibilityInputsEditor';
 import { InstanceTimeline } from './InstanceTimeline';
@@ -32,6 +32,7 @@ export function HrFinalizationSheet({
   fiscalYear?: number | null;
 }) {
   const finalize = useFinalizeInstance();
+  const saveSystemScores = useUpdateSystemScores();
   const { data: responses = [] } = useInstanceResponses(instance?.id);
   const [rating, setRating] = useState<string>('Average');
   const [remarks, setRemarks] = useState('');
@@ -83,6 +84,17 @@ export function HrFinalizationSheet({
 
   const canFinalize = missingStages.length === 0;
 
+  const onSaveSystemScores = async () => {
+    if (!instance) return;
+    try {
+      await saveSystemScores.mutateAsync({ instanceId: instance.id, systemScores: merged });
+      setSystemOverrides({});
+      toast.success('System scores saved.');
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+  };
+
   const submit = async () => {
     if (!instance) return;
     try {
@@ -133,6 +145,20 @@ export function HrFinalizationSheet({
             employeeId={instance?.employee_id}
             fiscalYear={fiscalYear ?? undefined}
           />
+
+          {instance && sysCfg.length > 0 && (
+            <div className="flex justify-end">
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={onSaveSystemScores}
+                disabled={saveSystemScores.isPending}
+              >
+                {saveSystemScores.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                Save system scores
+              </Button>
+            </div>
+          )}
 
           {instance && (template?.sections.eligibility_criteria?.length ?? 0) > 0 && (
             <EligibilityInputsEditor

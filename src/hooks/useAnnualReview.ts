@@ -186,6 +186,15 @@ export function useFinalizeInstance() {
   });
 }
 
+export function useUpdateSystemScores() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (args: { instanceId: string; systemScores: Record<string, number> }) =>
+      svc.updateSystemScores(args.instanceId, args.systemScores),
+    onSuccess: () => qc.invalidateQueries({ queryKey: annualReviewKeys.all }),
+  });
+}
+
 export function useInstanceTimeline(instanceId: string | undefined) {
   return useQuery({
     queryKey: [...annualReviewKeys.all, 'timeline', instanceId ?? ''],

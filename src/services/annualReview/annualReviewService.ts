@@ -1160,6 +1160,19 @@ export async function finalizeInstance(args: { id: string; finalRating: string; 
   return advanceStatus(args.id, 'hr');
 }
 
+/**
+ * Persist only the `system_scores` map on an instance. Used by HR to save
+ * scores incrementally before all reviewer stages are locked (i.e. before
+ * `finalizeInstance` is callable). Does NOT change status or final rating.
+ */
+export async function updateSystemScores(instanceId: string, systemScores: Record<string, number>) {
+  const { error } = await db
+    .from('annual_review_instances')
+    .update({ system_scores: systemScores })
+    .eq('id', instanceId);
+  if (error) throw error;
+}
+
 /** Bulk-apply the same final rating + remark to many `pending_hr` instances. */
 export async function bulkFinalize(args: { instanceIds: string[]; finalRating: string; hrRemarks?: string | null }) {
   const { data, error } = await db.rpc('bulk_finalize_annual_reviews', {
