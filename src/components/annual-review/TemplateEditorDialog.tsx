@@ -218,6 +218,23 @@ export function TemplateEditorDialog({
                 </p>
               </div>
             )}
+            {multilingual && (
+              <div className="flex items-start justify-between gap-3 border-t pt-3">
+                <div>
+                  <div className="font-semibold text-sm">Enable read-aloud (speaker)</div>
+                  <p className="text-xs text-muted-foreground">
+                    Shows a speaker icon next to translated text so blue-collar reviewers can hear it. Uses the device's built-in voice (free, offline). The icon is hidden automatically when no voice is installed for the selected language.
+                  </p>
+                </div>
+                <Switch
+                  checked={settings.enable_audio === true}
+                  onCheckedChange={(v) => setSections((s) => ({
+                    ...s,
+                    settings: { ...(s.settings ?? {}), enable_audio: v },
+                  }))}
+                />
+              </div>
+            )}
           </Card>
 
           {/* Final score weight blend (Phase 2) */}
