@@ -446,7 +446,7 @@ function ProgressTab() {
         const inst = instances.find((i) => i.id === id);
         if (!inst || inst.overall_status === 'pending_self' || inst.overall_status === 'not_started' || inst.overall_status === 'completed') continue;
         const roleMap: Record<string, AnnualReviewerRole> = {
-          pending_manager: 'manager', pending_skip: 'skip_manager', pending_bu: 'bu_head', pending_hr: 'hr',
+          pending_manager: 'manager', pending_skip: 'skip_manager', pending_dept: 'dept_head', pending_bu: 'bu_head', pending_hr: 'hr',
         };
         const role = roleMap[inst.overall_status];
         if (!role) continue;
