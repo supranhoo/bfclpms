@@ -1,80 +1,34 @@
-
-# Move Assisted-Submission Verification to End of Form
-
 ## Goal
-Proxy users (Manager / HR PMS / Admin submitting on behalf of a non-login employee) should be able to **fill the annual review form first** and only be prompted for the **live selfie + signed declaration at final submission time**, instead of being blocked by the selfie dialog the moment the form opens.
+Make **Step back** functional per-row from the three-dot menu on the Annual Review Admin → Progress table (image), reusing the existing send-back-to-previous-stage service used by "Bulk send back".
 
-## Assumptions
-- Current behavior: opening a non-login employee from the directory sets `?assisted=1`, which causes `TeamReviewDetailContent` to auto-open `AssistedSubmissionDialog` immediately. The dialog currently owns the entire proxy flow (selfie → declaration → RPC `submit_annual_review_self_as_proxy`).
-- The self-stage form itself already exists and is rendered by the standard review UI; today in proxy mode it is hidden behind the dialog.
-- The eligibility RPC (`can_proxy_submit_annual_review`) and the audit table remain the source of truth — no schema or RPC changes.
-- Selfie storage bucket `proxy-selfies`, audit table `annual_review_proxy_submissions`, and the "no file picker" rule remain untouched.
+## Scope
+- File: `src/pages/annual-review/AnnualReviewAdmin.tsx` only (UI + wiring).
+- Backend: no changes. Uses `useSendBackStatus` → `svc.sendBackStatus(instanceId, role, reason)` already in place.
 
-## Risk & Impact Report
+## Behavior
+1. In the row `DropdownMenu` (line ~840), add a new item **"Step back to previous stage"** (icon `Undo2`) shown only when the instance is on a stage that has a previous stage in the configured chain — i.e. `overall_status` is one of `pending_manager | pending_skip | pending_dept | pending_bu | pending_hr` (excludes `not_started`, `pending_self`, `completed`).
+2. Clicking opens a small confirmation `AlertDialog` (row-scoped state `stepBackFor: instance | null`) with:
+   - Title showing employee name + current stage → previous stage (derived via `prevStatus(role, instance.enabled_stages)` from `@/lib/annualReview/stageChain`).
+   - Optional reason textarea.
+   - Confirm button "Step back" (disabled while pending).
+3. Confirm calls the existing `useSendBackStatus().mutateAsync({ instanceId, role, reason })`; on success show toast, close dialog, invalidate queries (same pattern as bulk send back).
+4. Fix latent bug in `bulkSendBack` roleMap: add `pending_dept: 'dept_head'` (currently missing, so dept-head stage rows are silently skipped from bulk send back too).
 
-**Data Impact:** None. Same tables, same RPC, same bucket, same audit row shape.
+## Technical
+- Reuse imports: `Undo2` already imported; `AlertDialog*` already imported (used by bulk).
+- Add local state:
+  ```ts
+  const [stepBackFor, setStepBackFor] = useState<AnnualReviewInstance | null>(null);
+  const [stepBackReason, setStepBackReason] = useState('');
+  ```
+- Compute `role` and previous-stage label in the dialog via existing `roleMap` and `prevStatus` helper (import `prevStatus` from `@/lib/annualReview/stageChain`; already imported for `describeChain`? verify — if not, add).
+- Menu item rendered inside existing `DropdownMenuContent` after "Finalize / View", gated by `canStepBack = role != null` where `role = roleMap[i.overall_status]`.
 
-**Workflow Impact:** Proxy user now edits the self-review scorecard/inputs *before* attestation. Attestation is still mandatory before the stage advances — the RPC call order is unchanged (audit insert → `submit_annual_review_self_as_proxy`). The stage cannot transition without a valid selfie + declaration.
+## Verification
+- Typecheck clean.
+- Manual: on `test003` row (currently `Dept Head Review Pending`) → three-dots → "Step back to previous stage" → confirm → stage returns to `pending_skip` (or the previous enabled stage per chain), toast shown, table refreshes.
+- Bulk send back now also handles dept-head-pending rows.
 
-**UI/UX Impact:**
-- Directory → employee opens the standard self-review form (not the selfie dialog).
-- A persistent **"Submitted with assistance"** banner appears at the top of the form indicating proxy mode is active, who the proxy is, and that a selfie + declaration will be required at submit.
-- The normal "Submit" button is replaced (in proxy mode only) with **"Verify & Submit with assistance"**, which opens the existing `AssistedSubmissionDialog`.
-- Dialog contents unchanged (webcam capture, declaration checkbox, submit button gated on both).
-
-**Regression Risk:**
-- Native self-submitters (employees with login) must be unaffected — proxy mode only activates when `useProxyEligibility` returns true AND no native stage role applies (existing guard).
-- Auto-open param `?assisted=1` currently used by the directory must be neutralized so old links don't force the dialog open on mount.
-- The proxy submit button must be disabled if the form has unsaved required fields, matching the native submit gating.
-
-**Mitigation Plan:**
-- Keep the eligibility gate and RPC path exactly as-is; only the *trigger point* of the dialog moves.
-- Add unit tests asserting: (a) dialog does NOT auto-open on mount in proxy mode, (b) proxy submit button is visible only when eligible, (c) native path is untouched.
-- Preserve backward compatibility of the `?assisted=1` query param by ignoring it (no redirect needed) — it becomes a no-op.
-
-## Scope of Changes
-
-### 1. `src/pages/annual-review/TeamAnnualReview.tsx`
-- Stop appending `?assisted=1` when navigating from the directory. Just navigate to the detail page; proxy mode will be inferred from eligibility inside the detail view.
-
-### 2. `src/pages/annual-review/TeamAnnualReviewDetail.tsx`
-- Stop reading `?assisted=1` and stop passing `autoOpenAssisted` to `TeamReviewDetailContent`. (Keep the prop for now defaulting to `false` to avoid a wider refactor, or remove it if unused elsewhere — will confirm during build.)
-
-### 3. `src/components/annual-review/TeamReviewDetailContent.tsx` (proxy branch)
-- Remove the `useEffect` that opens `AssistedSubmissionDialog` on mount when `autoOpenAssisted` is true.
-- When `proxyEligible === true` and `!stageRole` and `instance.overall_status === 'pending_self'`:
-  - Render the **standard self-review form** (same component the employee would see).
-  - Render a top **proxy banner** ("You are submitting on behalf of {employee}. A live selfie and signed declaration will be required to submit.").
-  - Replace the native submit affordance with a **"Verify & Submit with assistance"** button that opens `AssistedSubmissionDialog`.
-- Everything the form captures (scores, remarks, evidence) is saved via the existing draft/save path exactly like native self-review — no new persistence layer.
-
-### 4. `src/components/annual-review/AssistedSubmissionDialog.tsx`
-- No behavior change to selfie capture, declaration checkbox, or the submit RPC call.
-- Continue to call `submitWithAssistance(...)` which advances the stage. The form data is already persisted before the dialog opens, so the RPC just needs to flip the stage — same contract as today.
-- Minor copy tweak: "Capture selfie to complete submission" instead of "…to begin".
-
-### 5. Tests (`src/test/annualReview/proxySubmission.test.ts` + new cases)
-- Update the existing assertion that expects `AssistedSubmissionDialog` to auto-open — replace with an assertion that it does NOT auto-open.
-- Add: "proxy banner + Verify & Submit button render when eligible at pending_self".
-- Add: "clicking Verify & Submit opens the dialog"; "dialog still gates on snapshot + accepted + submitting" (existing check retained).
-- Add: "native self-submitter path unaffected — no proxy banner, no Verify & Submit button".
-
-## Out of Scope
-- No changes to `can_proxy_submit_annual_review`, `submit_annual_review_self_as_proxy`, `annual_review_proxy_submissions` schema/policies, or the selfie bucket.
-- No changes to who can proxy (Manager / Skip / HR PMS / Admin / designated proxy) or eligibility rules.
-- No changes to the audit trail shape or visibility badges.
-- No changes to native (login) self-review UX.
-
-## Rollback
-Pure frontend change. Revert the four files listed above to restore the entry-gate behavior. No data migration.
-
-## Documentation & Policy Updates
-- Update `mem/features/annual-review/assisted-submission` "Verification" section: selfie is captured at **final submit**, not at form entry; form data persists via the standard self-review draft path.
-- Add a note under "Code map" reflecting the new submit-time trigger in `TeamReviewDetailContent` (instead of auto-open in the detail page).
-- Add an ADR entry (next available ADR-106) noting the UX change and the reason (proxy users need to complete the form before attesting).
-
-## Verification Steps
-1. Open Manager → Annual Review Team → All Employees → search a non-login employee → open form → **selfie dialog must NOT appear**; form is editable; proxy banner visible.
-2. Fill the form → click **Verify & Submit with assistance** → dialog opens → capture selfie → check declaration → submit → stage advances to next; audit row written with the captured selfie path.
-3. Open a login-capable employee via native path → no proxy banner, standard submit button, no behavior change.
-4. Unit tests pass (updated + new).
+## Out of scope
+- Full ADR-049 "select any prior stage" chooser and "Clear all review data" reset — not requested here; can be a follow-up.
+- No policy/schema changes.
