@@ -53,6 +53,8 @@ import { AnnualReviewExportMenu } from '@/components/annual-review/AnnualReviewE
 import { ChangeWorkflowDialog } from '@/components/annual-review/ChangeWorkflowDialog';
 import { InstanceStageWeightsDialog } from '@/components/annual-review/InstanceStageWeightsDialog';
 import { TemplateEditorDialog } from '@/components/annual-review/TemplateEditorDialog';
+import { TemplateUploadDialog } from '@/components/annual-review/TemplateUploadDialog';
+import { downloadTemplateFormatWorkbook, downloadFilledTemplateWorkbook } from '@/lib/annualReview/templateWorkbook';
 import {
   useShowReviewerNamesInStepper,
   useSetShowReviewerNamesInStepper,
@@ -1581,6 +1583,7 @@ function TemplatesTabImpl() {
   const { data: templates = [], refetch } = useTemplates();
   const [editorOpen, setEditorOpen] = useState(false);
   const [editing, setEditing] = useState<AnnualReviewTemplate | null>(null);
+  const [uploadOpen, setUploadOpen] = useState(false);
 
   const toggleActive = useMutation({
     mutationFn: (t: AnnualReviewTemplate) =>
@@ -1597,7 +1600,15 @@ function TemplatesTabImpl() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <p className="text-sm text-muted-foreground">{templates.length} total template{templates.length === 1 ? '' : 's'}</p>
-        <Button onClick={openNew} className="gap-1.5"><Plus className="h-4 w-4" /> New Template</Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" className="gap-1.5" onClick={() => downloadTemplateFormatWorkbook()}>
+            <Download className="h-4 w-4" /> Download Format
+          </Button>
+          <Button variant="outline" className="gap-1.5" onClick={() => setUploadOpen(true)}>
+            <Upload className="h-4 w-4" /> Upload Template
+          </Button>
+          <Button onClick={openNew} className="gap-1.5"><Plus className="h-4 w-4" /> New Template</Button>
+        </div>
       </div>
 
       {templates.length === 0 ? (
@@ -1632,6 +1643,13 @@ function TemplatesTabImpl() {
                     </Button>
                     <Button
                       variant="outline" size="sm" className="gap-1.5"
+                      onClick={() => downloadFilledTemplateWorkbook(t)}
+                      title="Export this template as an editable .xlsx"
+                    >
+                      <Download className="h-4 w-4" /> Export
+                    </Button>
+                    <Button
+                      variant="outline" size="sm" className="gap-1.5"
                       disabled={clone.isPending}
                       onClick={async () => {
                         try {
@@ -1663,6 +1681,12 @@ function TemplatesTabImpl() {
         onOpenChange={setEditorOpen}
         template={editing}
         onSaved={refetch}
+      />
+      <TemplateUploadDialog
+        open={uploadOpen}
+        onOpenChange={setUploadOpen}
+        existingTemplates={templates}
+        onImported={() => refetch()}
       />
     </div>
   );
