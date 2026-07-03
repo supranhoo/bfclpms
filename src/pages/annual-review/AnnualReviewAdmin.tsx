@@ -362,6 +362,7 @@ function exportProgress(
 // ------------------------------------------------------------------
 function ProgressTab() {
   const { data: activeCycle } = useActiveCycle();
+  const { user } = useAuth();
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const [search, setSearch] = useState('');
@@ -454,6 +455,24 @@ function ProgressTab() {
     onSuccess: (n) => {
       toast.success(`Sent back ${n} review${n === 1 ? '' : 's'}.`);
       setBulkOpen(null); setSelectedIds(new Set()); setBulkReason('');
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const seedMissing = useMutation({
+    mutationFn: async () => {
+      if (!activeCycle) throw new Error('No active cycle');
+      return svc.seedInstancesByRules({ cycleId: activeCycle.id, hrUserId: user?.id ?? null });
+    },
+    onSuccess: (r) => {
+      toast.success(
+        r.seeded > 0
+          ? `Seeded ${r.seeded} new instance${r.seeded === 1 ? '' : 's'}` +
+              (r.skipped ? ` · ${r.skipped} skipped (no matching rule)` : '')
+          : 'No new employees to seed — everyone eligible already has an instance.',
+      );
+      qc.invalidateQueries();
+      refetch();
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -636,6 +655,15 @@ function ProgressTab() {
           )}
         </div>
         <div className="flex items-center gap-2">
+          <Button
+            variant="outline" className="gap-2"
+            disabled={seedMissing.isPending || !activeCycle}
+            onClick={() => seedMissing.mutate()}
+            title="Create annual review instances for newly added active employees using the current assignment rules"
+          >
+            {seedMissing.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+            Seed missing employees
+          </Button>
           <Button
             variant="outline" className="gap-2"
             onClick={async () => {
