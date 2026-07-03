@@ -35,6 +35,7 @@ import { fyStartFromCycle } from '@/lib/annualReview/fiscalYear';
 import { useResolvedSystemScores } from '@/hooks/useResolvedSystemScores';
 import type { EvidenceItem } from '@/types/annualReview';
 import { EmployeeResultsView } from '@/components/annual-review/EmployeeResultsView';
+import { SpeakButton } from '@/components/annual-review/SpeakButton';
 
 export default function EmployeeAnnualReview() {
   const { user, profile } = useAuth();
@@ -132,6 +133,7 @@ export default function EmployeeAnnualReview() {
         defaultLanguage={template?.sections.settings?.default_language ?? 'en'}
         templateTranslations={template?.sections.translations}
         displayMode={template?.sections.display_mode}
+        enableAudio={template?.sections.settings?.enable_audio === true}
       >
         <div className="p-4 md:p-6 space-y-6 max-w-5xl mx-auto">
           <header className="flex flex-wrap items-start justify-between gap-3">
@@ -188,6 +190,7 @@ export default function EmployeeAnnualReview() {
       defaultLanguage={template?.sections.settings?.default_language ?? 'en'}
       templateTranslations={template?.sections.translations}
       displayMode={template?.sections.display_mode}
+      enableAudio={template?.sections.settings?.enable_audio === true}
     >
     <div className="p-4 md:p-6 space-y-6 max-w-5xl mx-auto">
       <header className="flex flex-wrap items-start justify-between gap-3">
@@ -244,6 +247,7 @@ export default function EmployeeAnnualReview() {
               <div key={f.id} className="space-y-1">
                 <div className="flex items-center gap-2">
                   <Label>{tField(f.id, 'label', f.label)}{f.required && <span className="text-destructive"> *</span>}</Label>
+                  <SpeakButton text={tField(f.id, 'label', f.label)} />
                 </div>
                 <Textarea
                   rows={3}
