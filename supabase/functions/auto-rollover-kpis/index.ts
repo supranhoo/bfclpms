@@ -674,10 +674,18 @@ Deno.serve(async (req) => {
       const empId = result.employee_id;
       const empKpis = employeeKpis[empId] || [];
       const copiedKpis = kpisToInsert.filter((k: any) => k.employee_id === empId);
-      const uniqueKras = [...new Set(copiedKpis.map((k: any) => k.kra_name))];
-      const totalWeightage = copiedKpis.reduce((s: number, k: any) => s + (k.weightage || 0), 0);
+      // Restrict notification/email counts to the TARGET month only.
+      // Multi-month cycles (Quarterly/Half-yearly/Annual) also insert rows into
+      // future months of the same cycle; those must not inflate the "rolled
+      // over from X to Y" figures shown to the employee.
+      const targetMonthCopied = copiedKpis.filter(
+        (k: any) => k.review_period === targetMonth && k.review_year === targetYear,
+      );
+      const uniqueKras = [...new Set(targetMonthCopied.map((k: any) => k.kra_name))];
+      const totalWeightage = targetMonthCopied.reduce((s: number, k: any) => s + (k.weightage || 0), 0);
+      const targetKpiCount = targetMonthCopied.length;
 
-      const notifMessage = `${result.kpis_copied} KPI(s) have been rolled over from ${sourceMonth} ${sourceYear} to ${targetMonth} ${targetYear}. Total weightage: ${totalWeightage}%.`;
+      const notifMessage = `${targetKpiCount} KPI(s) have been rolled over from ${sourceMonth} ${sourceYear} to ${targetMonth} ${targetYear}. Total weightage: ${totalWeightage}%.`;
 
       // Check if employee has an auth.users row before inserting notification
       const { data: authCheck } = await supabase
@@ -699,7 +707,7 @@ Deno.serve(async (req) => {
               source_year: sourceYear,
               target_period: targetMonth,
               target_year: targetYear,
-              kpi_count: result.kpis_copied,
+              kpi_count: targetKpiCount,
               kra_names: uniqueKras,
             },
           });
@@ -709,7 +717,7 @@ Deno.serve(async (req) => {
 
         // Send consolidated email (fire-and-forget)
         if (authCheck.email) {
-          const kraList = copiedKpis.map((k: any) => ({
+          const kraList = targetMonthCopied.map((k: any) => ({
             kra_name: k.kra_name,
             kpi_name: String(k.kpi_name).split('\n')[0].substring(0, 100),
             target_value: k.target_value != null ? String(k.target_value) : '-',
@@ -733,7 +741,7 @@ Deno.serve(async (req) => {
                 review_year: targetYear,
                 source_period: sourceMonth,
                 source_year: sourceYear,
-                kra_count: result.kpis_copied,
+                kra_count: targetKpiCount,
                 total_weightage: `${totalWeightage}%`,
                 kra_list: kraList,
               }),
