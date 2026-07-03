@@ -61,13 +61,9 @@ const STAGE_FOR_REVIEWER = (inst: InstanceWithEmployee, uid: string): AnnualRevi
 export function TeamReviewDetailContent({
   instance,
   fiscalYear,
-  autoOpenAssisted = false,
-  onAutoAssistedConsumed,
 }: {
   instance: InstanceWithEmployee;
   fiscalYear?: number;
-  autoOpenAssisted?: boolean;
-  onAutoAssistedConsumed?: () => void;
 }) {
   const { user, profile } = useAuth();
   const queryClient = useQueryClient();
@@ -114,13 +110,6 @@ export function TeamReviewDetailContent({
     : ['en'];
   const [lang, setLang] = useState<string>(defLang);
   useEffect(() => { setLang(defLang); }, [template?.id, defLang]);
-
-  useEffect(() => {
-    if (autoOpenAssisted && proxyMode) {
-      setAssistedOpen(true);
-      onAutoAssistedConsumed?.();
-    }
-  }, [autoOpenAssisted, proxyMode, onAutoAssistedConsumed]);
 
   const { draft, setDraft, flush, status } = useDebouncedResponseDraft({
     instanceId: instance.id,

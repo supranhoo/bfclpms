@@ -24,7 +24,10 @@ export default function TeamAnnualReviewDetail() {
   const { data: cycle } = useActiveCycle();
   const { data: instance, isLoading, error } = useReviewInstance(instanceId);
 
-  const autoAssisted = params.get('assisted') === '1';
+  // `?assisted=1` is no longer honored — proxy verification happens at submit
+  // time (see AssistedSubmissionDialog trigger in TeamReviewDetailContent).
+  // Kept as a read to preserve deep-links without redirecting.
+  void params.get('assisted');
   const returnTo = state?.returnTo ?? '/annual-review/team';
   const siblings = state?.siblings ?? [];
   const idx = instanceId ? siblings.indexOf(instanceId) : -1;
@@ -32,7 +35,7 @@ export default function TeamAnnualReviewDetail() {
   const nextId = idx >= 0 && idx < siblings.length - 1 ? siblings[idx + 1] : null;
 
   const goSibling = (id: string) =>
-    navigate(`/annual-review/team/${id}${autoAssisted ? '?assisted=1' : ''}`, {
+    navigate(`/annual-review/team/${id}`, {
       state: { siblings, returnTo },
       replace: true,
     });
@@ -99,7 +102,6 @@ export default function TeamAnnualReviewDetail() {
       <TeamReviewDetailContent
         instance={instance}
         fiscalYear={fyStartFromCycle(cycle)}
-        autoOpenAssisted={autoAssisted}
       />
     </div>
   );

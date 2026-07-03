@@ -122,16 +122,19 @@ export default function TeamAnnualReview() {
     return s ? `/annual-review/team?${s}` : '/annual-review/team';
   }, [debouncedSearch, statusFilter, page]);
 
-  const goToDetail = (instanceId: string, opts: { autoOpenAssisted?: boolean } = {}) => {
-    const url = `/annual-review/team/${instanceId}${opts.autoOpenAssisted ? '?assisted=1' : ''}`;
-    navigate(url, { state: { siblings: rows.map((r) => r.id), returnTo } });
+  const goToDetail = (instanceId: string) => {
+    navigate(`/annual-review/team/${instanceId}`, {
+      state: { siblings: rows.map((r) => r.id), returnTo },
+    });
   };
 
-  const handleDirectoryPick = (instanceId: string, opts: { autoOpenAssisted: boolean }) => {
-    // Refresh caches so the freshly-created instance is visible on return.
+  const handleDirectoryPick = (instanceId: string, _opts: { autoOpenAssisted: boolean }) => {
+    // Proxy verification (selfie + declaration) is now triggered at submit time,
+    // not on entry. We ignore `autoOpenAssisted` here so the proxy can fill the
+    // form first and only attest at final submission.
     void queryClient.invalidateQueries({ queryKey: ['annual-review'] });
     void queryClient.invalidateQueries({ queryKey: ['annualReview'] });
-    goToDetail(instanceId, { autoOpenAssisted: opts.autoOpenAssisted });
+    goToDetail(instanceId);
   };
 
   if (!cycle) return <div className="p-6">No active annual review cycle.</div>;
