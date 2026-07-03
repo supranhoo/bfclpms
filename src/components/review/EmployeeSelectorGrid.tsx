@@ -2041,9 +2041,15 @@ export function EmployeeSelectorGrid({
             </Button>
           </CanAction>
           {viewLevel === 'audit' && (
-            <Button variant="outline" size="sm" onClick={() => setAssignmentDialogOpen(true)}>
-              <Settings2 className="h-4 w-4 mr-1.5" />
-              Manage Assignments
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setAssignmentDialogOpen(true)}
+              className="gap-1.5"
+              aria-label="Manage Assignments"
+            >
+              <Settings2 className="h-4 w-4" />
+              <span className="hidden sm:inline">Manage Assignments</span>
             </Button>
           )}
           {isExplorerCapable && (
