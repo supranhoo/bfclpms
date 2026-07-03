@@ -1991,7 +1991,7 @@ export function EmployeeSelectorGrid({
           </div>
         </div>
         
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-2">
           <TooltipProvider delayDuration={200}>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -2070,7 +2070,7 @@ export function EmployeeSelectorGrid({
             </TooltipProvider>
           )}
           {/* Compact Period Selector */}
-          <div className="p-2 sm:p-3 rounded-lg bg-muted/30 border border-border/50">
+          <div className="order-last w-full md:w-auto md:order-none p-2 sm:p-3 rounded-lg bg-muted/30 border border-border/50">
             <ReviewPeriodSelectorEnhanced
               value={periodSelection}
               onChange={onPeriodSelectionChange}
