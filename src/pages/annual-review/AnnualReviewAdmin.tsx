@@ -846,6 +846,18 @@ function ProgressTab() {
                         <DropdownMenuItem onClick={() => setSelected(i)}>
                           <CheckCheck className="h-4 w-4 mr-2" /> Finalize / View
                         </DropdownMenuItem>
+                        {(() => {
+                          const roleMap: Record<string, AnnualReviewerRole> = {
+                            pending_manager: 'manager', pending_skip: 'skip_manager', pending_dept: 'dept_head', pending_bu: 'bu_head', pending_hr: 'hr',
+                          };
+                          const stepBackRole = roleMap[i.overall_status];
+                          if (!stepBackRole) return null;
+                          return (
+                            <DropdownMenuItem onClick={() => { setStepBackReason(''); setStepBackFor(i); }}>
+                              <Undo2 className="h-4 w-4 mr-2" /> Step back to previous stage
+                            </DropdownMenuItem>
+                          );
+                        })()}
                         {canChange && (
                           <>
                             <DropdownMenuItem onClick={() => setChangeTplFor(i)}>
