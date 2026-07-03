@@ -12,7 +12,7 @@ class MockUtterance {
 
 describe('speakSequence', () => {
   let spoken: MockUtterance[];
-  let synth: { speak: (u: MockUtterance) => void; cancel: () => void; getVoices: () => never[] };
+  let synth: { speak: (u: MockUtterance) => void; cancel: () => void; getVoices: () => unknown[] };
 
   beforeEach(() => {
     spoken = [];
