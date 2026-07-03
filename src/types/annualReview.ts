@@ -160,6 +160,8 @@ export interface TemplateSettings {
   enable_multilingual?: boolean;
   available_languages?: string[];
   default_language?: string;
+  /** When true, render a speaker icon next to translated text for read-aloud (Web Speech API). */
+  enable_audio?: boolean;
 }
 
 /**

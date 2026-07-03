@@ -7,6 +7,7 @@ import { Loader2, Upload, X } from 'lucide-react';
 import { SCORE_COLOR, SCORE_LABEL } from '@/lib/annualReview/constants';
 import type { TemplateCriterion, EvidenceItem } from '@/types/annualReview';
 import { useAnnualReviewI18n } from '@/components/annual-review/AnnualReviewI18nContext';
+import { SpeakButton } from '@/components/annual-review/SpeakButton';
 
 const COACHING_NOTES: Record<number, string> = {
   5: 'Reserve "Outstanding" for documented, repeated excellence — avoid leniency bias.',
@@ -76,10 +77,12 @@ function CriterionRow({
           <div className="min-w-0 flex-1">
             <div className="flex items-start gap-2">
               <h4 className="font-semibold text-base">{criterionName}</h4>
+              <SpeakButton text={criterionName} className="mt-0.5" />
             </div>
             {criterion.description && (
               <div className="mt-0.5 flex items-start gap-2">
                 <p className="text-sm text-muted-foreground">{criterionDesc}</p>
+                <SpeakButton text={criterionDesc} className="mt-0.5" />
               </div>
             )}
           </div>
@@ -146,6 +149,9 @@ function CriterionRow({
                       </span>
                     </span>
                   </button>
+                  <div className="absolute top-2 right-2">
+                    <SpeakButton text={label} />
+                  </div>
                   </div>
                 );
               })}
