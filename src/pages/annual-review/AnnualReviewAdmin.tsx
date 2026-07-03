@@ -48,6 +48,7 @@ import {
 import { AnnualReviewStatusBadge } from '@/components/annual-review/AnnualReviewStatusBadge';
 import { HrFinalizationSheet } from '@/components/annual-review/HrFinalizationSheet';
 import { fyStartFromCycle } from '@/lib/annualReview/fiscalYear';
+import { prevStatus } from '@/lib/annualReview/stageChain';
 import { UnifiedBulkDialog } from '@/components/annual-review/UnifiedBulkDialog';
 import { AnnualReviewExportMenu } from '@/components/annual-review/AnnualReviewExportMenu';
 import { ChangeWorkflowDialog } from '@/components/annual-review/ChangeWorkflowDialog';
@@ -413,6 +414,8 @@ function ProgressTab() {
   const [changeTplFor, setChangeTplFor] = useState<InstanceWithEmployee | null>(null);
   const [changeWfFor, setChangeWfFor] = useState<InstanceWithEmployee | null>(null);
   const [weightsFor, setWeightsFor] = useState<InstanceWithEmployee | null>(null);
+  const [stepBackFor, setStepBackFor] = useState<InstanceWithEmployee | null>(null);
+  const [stepBackReason, setStepBackReason] = useState('');
   const { data: allTemplates = [] } = useTemplates();
   const sendBack = useSendBackStatus();
   const qc = useQueryClient();
@@ -443,7 +446,7 @@ function ProgressTab() {
         const inst = instances.find((i) => i.id === id);
         if (!inst || inst.overall_status === 'pending_self' || inst.overall_status === 'not_started' || inst.overall_status === 'completed') continue;
         const roleMap: Record<string, AnnualReviewerRole> = {
-          pending_manager: 'manager', pending_skip: 'skip_manager', pending_bu: 'bu_head', pending_hr: 'hr',
+          pending_manager: 'manager', pending_skip: 'skip_manager', pending_dept: 'dept_head', pending_bu: 'bu_head', pending_hr: 'hr',
         };
         const role = roleMap[inst.overall_status];
         if (!role) continue;
@@ -843,6 +846,18 @@ function ProgressTab() {
                         <DropdownMenuItem onClick={() => setSelected(i)}>
                           <CheckCheck className="h-4 w-4 mr-2" /> Finalize / View
                         </DropdownMenuItem>
+                        {(() => {
+                          const roleMap: Record<string, AnnualReviewerRole> = {
+                            pending_manager: 'manager', pending_skip: 'skip_manager', pending_dept: 'dept_head', pending_bu: 'bu_head', pending_hr: 'hr',
+                          };
+                          const stepBackRole = roleMap[i.overall_status];
+                          if (!stepBackRole) return null;
+                          return (
+                            <DropdownMenuItem onClick={() => { setStepBackReason(''); setStepBackFor(i); }}>
+                              <Undo2 className="h-4 w-4 mr-2" /> Step back to previous stage
+                            </DropdownMenuItem>
+                          );
+                        })()}
                         {canChange && (
                           <>
                             <DropdownMenuItem onClick={() => setChangeTplFor(i)}>
@@ -984,6 +999,58 @@ function ProgressTab() {
               {bulkSendBack.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />} Send back
             </AlertDialogAction>
           </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={!!stepBackFor} onOpenChange={(o) => !o && setStepBackFor(null)}>
+        <AlertDialogContent>
+          {(() => {
+            if (!stepBackFor) return null;
+            const roleMap: Record<string, AnnualReviewerRole> = {
+              pending_manager: 'manager', pending_skip: 'skip_manager', pending_dept: 'dept_head', pending_bu: 'bu_head', pending_hr: 'hr',
+            };
+            const role = roleMap[stepBackFor.overall_status];
+            let prevLabel = 'previous stage';
+            try {
+              if (role) prevLabel = prevStatus(role, stepBackFor.enabled_stages ?? null).replace(/^pending_/, '');
+            } catch { /* no previous stage */ }
+            const name = stepBackFor.employee?.full_name ?? stepBackFor.employee_id;
+            return (
+              <>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Step back to previous stage?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    {name} — current stage will revert to <strong>{prevLabel}</strong> so that reviewer can revise and resubmit.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <div className="space-y-1">
+                  <Label>Reason (optional)</Label>
+                  <Textarea rows={3} value={stepBackReason} onChange={(e) => setStepBackReason(e.target.value)} placeholder="What needs to be revised?" />
+                </div>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={async (e) => {
+                      e.preventDefault();
+                      if (!role) return;
+                      try {
+                        await sendBack.mutateAsync({ instanceId: stepBackFor.id, role, reason: stepBackReason.trim() || null });
+                        toast.success('Review stepped back to previous stage.');
+                        setStepBackFor(null);
+                        setStepBackReason('');
+                        qc.invalidateQueries();
+                      } catch (err) {
+                        toast.error(err instanceof Error ? err.message : 'Failed to step back');
+                      }
+                    }}
+                    disabled={sendBack.isPending || !role}
+                  >
+                    {sendBack.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />} Step back
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </>
+            );
+          })()}
         </AlertDialogContent>
       </AlertDialog>
     </div>
