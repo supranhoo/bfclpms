@@ -35,7 +35,7 @@ import { AssistedSubmissionDialog } from '@/components/annual-review/AssistedSub
 import { Badge } from '@/components/ui/badge';
 import { useQueryClient } from '@tanstack/react-query';
 import { LanguageSwitcher } from '@/components/annual-review/LanguageSwitcher';
-import { AnnualReviewI18nProvider } from '@/components/annual-review/AnnualReviewI18nContext';
+import { AnnualReviewI18nProvider, useAnnualReviewI18n } from '@/components/annual-review/AnnualReviewI18nContext';
 import { computeScoreComposition } from '@/lib/annualReview/scoringComposition';
 import { AppraisalCompositionCard } from '@/components/annual-review/AppraisalCompositionCard';
 import { useResolvedSystemScores } from '@/hooks/useResolvedSystemScores';
@@ -174,6 +174,58 @@ export function TeamReviewDetailContent({
       displayMode={template?.sections.display_mode}
       enableAudio={template?.sections.settings?.enable_audio === true}
     >
+    <TeamReviewDetailInner
+      instance={instance}
+      template={template}
+      role={role}
+      locked={locked}
+      proxyMode={proxyMode}
+      availLangs={availLangs}
+      lang={lang}
+      setLang={setLang}
+      visibleStages={visibleStages}
+      skippedStages={skippedStages}
+      reviewerNamesByStage={reviewerNamesByStage}
+      fiscalYear={fiscalYear}
+      draft={draft}
+      setDraft={setDraft}
+      status={status}
+      flush={flush}
+      composition={composition}
+      comparison={comparison}
+      onUpload={onUpload}
+      handleSubmit={handleSubmit}
+      handleSendBack={handleSendBack}
+      canSendBack={canSendBack}
+      sendBackOpen={sendBackOpen}
+      setSendBackOpen={setSendBackOpen}
+      sendBackReason={sendBackReason}
+      setSendBackReason={setSendBackReason}
+      sendBackPending={sendBack.isPending}
+      advancePending={advance.isPending}
+      assistedOpen={assistedOpen}
+      setAssistedOpen={setAssistedOpen}
+      user={user}
+      profile={profile}
+      queryClient={queryClient}
+    />
+    </AnnualReviewI18nProvider>
+  );
+}
+
+/* eslint-disable @typescript-eslint/no-explicit-any */
+function TeamReviewDetailInner(props: any) {
+  const {
+    instance, template, role, locked, proxyMode, availLangs, lang, setLang,
+    visibleStages, skippedStages, reviewerNamesByStage, fiscalYear,
+    draft, setDraft, status, flush, composition, comparison, onUpload,
+    handleSubmit, handleSendBack, canSendBack,
+    sendBackOpen, setSendBackOpen, sendBackReason, setSendBackReason,
+    sendBackPending, advancePending, assistedOpen, setAssistedOpen,
+    user, profile, queryClient,
+  } = props;
+  const { t } = useAnnualReviewI18n();
+  return (
     <div className="space-y-4">
       <Card>
         <CardHeader>
@@ -188,7 +240,9 @@ export function TeamReviewDetailContent({
               )}
               <AnnualReviewStatusBadge status={instance.overall_status} />
               {instance.submitted_via_proxy && (
-                <Badge variant="secondary" className="text-xs">Submitted with assistance</Badge>
+                <Badge variant="secondary" className="text-xs">
+                  {t('badge.submitted_with_assistance', 'Submitted with assistance')}
+                </Badge>
               )}
             </div>
           </div>
@@ -199,10 +253,23 @@ export function TeamReviewDetailContent({
       {proxyMode && (
         <Card className="border-amber-500/40 bg-amber-50/40 dark:bg-amber-950/20">
           <CardContent className="p-4 text-sm">
-            <p className="font-medium">Assisted self-review mode</p>
+            <p className="font-medium">{t('assisted.mode_title', 'Assisted self-review mode')}</p>
             <p className="text-muted-foreground mt-1">
-              You are filling the self-stage on behalf of <strong>{instance.employee?.full_name ?? 'this employee'}</strong>.
-              A live selfie of the employee is required before submission.
+              {(() => {
+                const name = instance.employee?.full_name ?? 'this employee';
+                const tmpl = t(
+                  'assisted.mode_body',
+                  'You are filling the self-stage on behalf of {name}. A live selfie of the employee is required before submission.',
+                );
+                const parts = tmpl.split('{name}');
+                return (
+                  <>
+                    {parts[0]}
+                    <strong>{name}</strong>
+                    {parts.slice(1).join('{name}')}
+                  </>
+                );
+              })()}
             </p>
           </CardContent>
         </Card>
@@ -224,7 +291,10 @@ export function TeamReviewDetailContent({
       {role && shouldHideCriteriaCard(template, role) ? (
         <Card>
           <CardContent className="p-4 text-sm text-muted-foreground">
-            No criteria to score for the {role.replace('_', ' ')} stage on this template. Review the system scores above and click Submit to advance.
+            {t(
+              'stage.no_criteria',
+              'No criteria to score for the {stage} stage on this template. Review the system scores above and click Submit to advance.',
+            ).replace('{stage}', role.replace('_', ' '))}
           </CardContent>
         </Card>
       ) : (
@@ -242,8 +312,8 @@ export function TeamReviewDetailContent({
               readOnly={!!locked}
               reviewerLabel={role ?? undefined}
               comparison={comparison}
-              onChangeScore={(id, v) => setDraft((p) => ({ ...p, criteria_scores: { ...(p.criteria_scores ?? {}), [id]: v } }))}
-              onChangeRemark={(id, t) => setDraft((p) => ({ ...p, qualitative_responses: { ...(p.qualitative_responses ?? {}), [id]: t } }))}
+              onChangeScore={(id: string, v: number) => setDraft((p: any) => ({ ...p, criteria_scores: { ...(p.criteria_scores ?? {}), [id]: v } }))}
+              onChangeRemark={(id: string, txt: string) => setDraft((p: any) => ({ ...p, qualitative_responses: { ...(p.qualitative_responses ?? {}), [id]: txt } }))}
               onUploadEvidence={onUpload}
             />
           </CardContent>
@@ -261,13 +331,13 @@ export function TeamReviewDetailContent({
           </span>
           <div className="flex gap-2">
             {canSendBack && (
-              <Button variant="outline" onClick={() => setSendBackOpen(true)} disabled={sendBack.isPending}>
+              <Button variant="outline" onClick={() => setSendBackOpen(true)} disabled={sendBackPending}>
                 Send back
               </Button>
             )}
             <Button variant="outline" onClick={flush}>Save draft</Button>
-            <Button onClick={handleSubmit} disabled={advance.isPending}>
-              {advance.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+            <Button onClick={handleSubmit} disabled={advancePending}>
+              {advancePending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
               {proxyMode ? 'Verify & Submit on behalf' : 'Submit & forward'}
             </Button>
           </div>
@@ -295,8 +365,8 @@ export function TeamReviewDetailContent({
           </div>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleSendBack} disabled={sendBack.isPending}>
-              {sendBack.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />} Send back
+            <AlertDialogAction onClick={handleSendBack} disabled={sendBackPending}>
+              {sendBackPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />} Send back
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -322,6 +392,5 @@ export function TeamReviewDetailContent({
         />
       )}
     </div>
-    </AnnualReviewI18nProvider>
   );
 }

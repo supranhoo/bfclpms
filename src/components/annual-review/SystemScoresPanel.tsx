@@ -224,7 +224,9 @@ function CarryKraScoreCard({
       <Progress value={pct} className="h-2" />
 
       {!enabled && (
-        <p className="text-xs text-muted-foreground">Employee context unavailable — cannot fetch carry score.</p>
+        <p className="text-xs text-muted-foreground">
+          {t('carry.employee_context_missing', 'Employee context unavailable — cannot fetch carry score.')}
+        </p>
       )}
       {error && (
         <Alert variant="destructive" className="py-2">
