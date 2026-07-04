@@ -181,7 +181,29 @@ export function getWeeklySubPeriods(
   const currentYear = currentDate.getFullYear();
   
   const options: SubPeriodOption[] = [];
-  
+
+  // Carry-over window: after the review month ends, Weeks 1–4 remain enterable
+  // during the next month so employees can back-fill any missed weeks before
+  // submitting the month (POLICY: "Once the month is over, weekly data is
+  // submitted effective from the 1st of the next month"). Uses the tenant's
+  // configured `week_carryover` window if present; otherwise defaults to
+  // 1 → end-of `week_5` window (or day 14 if `week_5` is not configured).
+  const carryoverWindow: WeeklyReviewWindow =
+    windows['week_carryover'] ?? {
+      start: 1,
+      end: windows['week_5']?.end ?? 14,
+      nextMonth: true,
+    };
+  const nextMonthName = getMonthNumber(reviewMonth) === 12
+    ? 'January'
+    : getMonthName(getMonthNumber(reviewMonth) + 1);
+  const nextMonthYear = getMonthNumber(reviewMonth) === 12 ? reviewYear + 1 : reviewYear;
+  const isInCarryover =
+    currentMonth === nextMonthName &&
+    currentYear === nextMonthYear &&
+    dayOfMonth >= carryoverWindow.start &&
+    dayOfMonth <= carryoverWindow.end;
+
   // Week 1-4 for the review month
   for (let week = 1; week <= 4; week++) {
     const windowKey = `week_${week}`;
@@ -198,7 +220,7 @@ export function getWeeklySubPeriods(
     options.push({
       value: week.toString(),
       label: `Week ${week} (${getWeekDateRange(week, reviewMonth, reviewYear)})`,
-      isEnabled: isInWindow,
+      isEnabled: isInWindow || isInCarryover,
     });
   }
   
