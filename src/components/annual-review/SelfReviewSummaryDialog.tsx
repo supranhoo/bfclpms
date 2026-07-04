@@ -10,6 +10,7 @@ import type {
   AnnualReviewTemplate, EvidenceItem, TemplateCriterion,
 } from '@/types/annualReview';
 import type { CriteriaScoreSummary } from '@/lib/annualReview/scoring';
+import { computeCriteriaRatingOutOf5 } from '@/lib/annualReview/scoring';
 import type { ScoreComposition } from '@/lib/annualReview/scoringComposition';
 import { AppraisalCompositionCard } from '@/components/annual-review/AppraisalCompositionCard';
 import { shouldHideCriteriaCard, criteriaForStage, systemScoresFullyAllocated } from '@/lib/annualReview/templateVisibility';
@@ -50,6 +51,7 @@ export function SelfReviewSummaryDialog({
   const hideCriteria = shouldHideCriteriaCard(template, 'self');
   const criteria: TemplateCriterion[] = criteriaForStage(template, 'self');
   const systemFull = systemScoresFullyAllocated(template);
+  const ratingOutOf5 = computeCriteriaRatingOutOf5(criteria, summary.totalCriteriaScore, 'self');
   const fields = template?.sections.self_review_fields ?? [];
   const responses = draft.qualitative_responses ?? {};
   const scores = draft.criteria_scores ?? {};
@@ -80,6 +82,23 @@ export function SelfReviewSummaryDialog({
           <div className="px-6 py-5 space-y-6">
             {/* Score composition — always shows System + Criteria → Overall */}
             <AppraisalCompositionCard composition={composition} variant="full" />
+
+            {ratingOutOf5 != null && (
+              <div className="rounded-lg border bg-primary/5 border-primary/30 px-4 py-3 flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-sm font-medium">
+                    {t('rating.your_rating', 'Your rating')}
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    {t('rating.your_rating.hint', 'Template-independent rating based on the criteria you scored.')}
+                  </div>
+                </div>
+                <div className="text-2xl font-semibold tabular-nums">
+                  {ratingOutOf5.toFixed(1)}
+                  <span className="text-base font-normal text-muted-foreground"> / 5</span>
+                </div>
+              </div>
+            )}
 
             {/* No-criteria explainer */}
             {hideCriteria && (
