@@ -40,6 +40,7 @@ import { AnnualReviewI18nProvider, useAnnualReviewI18n } from '@/components/annu
 import { computeScoreComposition } from '@/lib/annualReview/scoringComposition';
 import { AppraisalCompositionCard } from '@/components/annual-review/AppraisalCompositionCard';
 import { useResolvedSystemScores } from '@/hooks/useResolvedSystemScores';
+import { SelfReviewFieldsCard } from '@/components/annual-review/SelfReviewFieldsCard';
 
 // Reviewer resolution moved to `@/lib/annualReview/stageForReviewer` so all
 // pending_* statuses (including `pending_dept`) are covered in one place.
