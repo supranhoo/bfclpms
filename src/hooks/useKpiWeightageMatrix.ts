@@ -33,6 +33,17 @@ export interface EmployeeMatrix {
 // Fiscal year order: July to June
 const MONTH_ORDER = ['July', 'August', 'September', 'October', 'November', 'December', 'January', 'February', 'March', 'April', 'May', 'June'];
 
+// Fiscal-window predicate (see POLICY §KPI Weightage Governance).
+// For a fiscal window whose start year is Y:
+//   - Rows with review_year = Y     are in-scope ONLY for Jul–Dec.
+//   - Rows with review_year = Y + 1 are in-scope ONLY for Jan–Jun.
+// Filtering by review_year alone leaks the sibling halves of adjacent
+// fiscal years (Jan–Jun of Y belongs to FY Y-1→Y; Jul–Dec of Y+1 belongs to
+// FY Y+1→Y+2). Because the matrix keys by month name only, unfiltered rows
+// silently overwrite the correct month for the current fiscal.
+const FIRST_HALF_MONTHS = ['July', 'August', 'September', 'October', 'November', 'December'] as const;
+const SECOND_HALF_MONTHS = ['January', 'February', 'March', 'April', 'May', 'June'] as const;
+
 export interface WeightageMatrixFilters {
   employeeSearch?: string;
   departmentId?: string;
@@ -133,7 +144,7 @@ export function useKpiWeightageMatrix(
 
       // ── Step 2: fetch KPIs only for this page's employees ──────────────
       const PAGE_SIZE = 1000;
-      const fetchYear = async (reviewYear: number) => {
+      const fetchYear = async (reviewYear: number, monthNames: readonly string[]) => {
         if (pageIds.length === 0) return [];
         let allKpis: any[] = [];
         let pg = 0;
@@ -153,6 +164,7 @@ export function useKpiWeightageMatrix(
               kra_categories(name)
             `)
             .eq('review_year', reviewYear)
+            .in('review_period', monthNames as unknown as string[])
             .in('employee_id', pageIds)
             .order('employee_id')
             .order('id')
@@ -170,8 +182,8 @@ export function useKpiWeightageMatrix(
       };
 
       const [kpisFirstHalf, kpisSecondHalf] = await Promise.all([
-        fetchYear(fiscalStartYear),
-        fetchYear(fiscalStartYear + 1),
+        fetchYear(fiscalStartYear, FIRST_HALF_MONTHS),
+        fetchYear(fiscalStartYear + 1, SECOND_HALF_MONTHS),
       ]);
       const allKpis = [...kpisFirstHalf, ...kpisSecondHalf];
 
