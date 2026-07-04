@@ -419,6 +419,11 @@ function ProgressTab() {
   const [stepBackReason, setStepBackReason] = useState('');
   const { data: allTemplates = [] } = useTemplates();
   const sendBack = useSendBackStatus();
+  const templatesByIdMap = useMemo(() => {
+    const m: Record<string, AnnualReviewTemplate> = {};
+    for (const t of allTemplates) m[t.id] = t;
+    return m;
+  }, [allTemplates]);
   const qc = useQueryClient();
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkOpen, setBulkOpen] = useState<null | 'finalize' | 'sendBack'>(null);
