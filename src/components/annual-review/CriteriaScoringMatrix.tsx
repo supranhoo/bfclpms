@@ -31,6 +31,8 @@ export interface CriteriaScoringMatrixProps {
   onUploadEvidence?: (criterionId: string, file: File) => Promise<EvidenceItem | void>;
   onRemoveEvidence?: (criterionId: string, path: string) => void;
   comparison?: { label: string; values: Record<string, number | undefined> }[];
+  /** Show reviewer coaching note under the selected score. Never enable for self-review. */
+  showCoachingNote?: boolean;
 }
 
 export function CriteriaScoringMatrix(props: CriteriaScoringMatrixProps) {
@@ -53,6 +55,7 @@ function CriterionRow({
   readOnly,
   reviewerLabel,
   comparison,
+  showCoachingNote,
   onChangeScore,
   onChangeRemark,
   onUploadEvidence,
@@ -199,7 +202,7 @@ function CriterionRow({
               })}
             </div>
           )}
-          {typeof score === 'number' && reviewerLabel && reviewerLabel !== 'Self' && (
+          {typeof score === 'number' && showCoachingNote && reviewerLabel !== 'Self' && (
             <div className="rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-1.5 text-xs text-amber-400 max-w-md">
               <span className="font-semibold">Coaching note:</span> {COACHING_NOTES[score]}
             </div>

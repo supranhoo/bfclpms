@@ -311,6 +311,7 @@ function TeamReviewDetailInner(props: any) {
               remarks={(draft.qualitative_responses ?? {}) as Record<string, string>}
               readOnly={!!locked}
               reviewerLabel={role ?? undefined}
+              showCoachingNote={!!role && role !== 'self'}
               comparison={comparison}
               onChangeScore={(id: string, v: number) => setDraft((p: any) => ({ ...p, criteria_scores: { ...(p.criteria_scores ?? {}), [id]: v } }))}
               onChangeRemark={(id: string, txt: string) => setDraft((p: any) => ({ ...p, qualitative_responses: { ...(p.qualitative_responses ?? {}), [id]: txt } }))}
