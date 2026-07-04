@@ -35,7 +35,12 @@ export function CriterionOptionsDialog({
     extraLangs.forEach((lang) => {
       seed[lang] = {};
       (criterion.options ?? []).forEach((o) => {
-        seed[lang][o.id] = getTr?.(lang, `option:${o.id}:label`) ?? '';
+        // Prefer the namespaced key `option:<criterionId>:<optionId>:label`.
+        // Fall back to the legacy `option:<optionId>:label` so translations
+        // saved before the per-criterion namespacing fix still render.
+        const ns = getTr?.(lang, `option:${criterion.id}:${o.id}:label`) ?? '';
+        const legacy = ns ? '' : (getTr?.(lang, `option:${o.id}:label`) ?? '');
+        seed[lang][o.id] = ns || legacy;
       });
     });
     return seed;
@@ -99,7 +104,7 @@ export function CriterionOptionsDialog({
     if (multilingual && setTr) {
       extraLangs.forEach((lang) => {
         Object.entries(trBuf[lang] ?? {}).forEach(([optId, val]) => {
-          setTr(lang, `option:${optId}:label`, val);
+          setTr(lang, `option:${criterion.id}:${optId}:label`, val);
         });
       });
     }
