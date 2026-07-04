@@ -750,6 +750,7 @@ Daily-frequency KPIs require continuous data entry throughout the month. When go
 - "Submit Month" aggregates sub-period entries into `review_submissions`
 - Status transitions from `kra_set` → `self_review`
 - **Month-end gate:** Submit Month button is disabled while the review month is still active; unlocks on the 1st of the following month
+- **Weekly carry-over (v2.66.37):** For Weekly KPIs, Weeks 1–4 of the review month remain enterable in the SubPeriodSelector during a carry-over window in the following month (default day 1 → end of the `week_5` window, i.e. days 1–14 with defaults). This lets employees back-fill missed weeks *from the 1st of the next month* onward and then use Submit Month. Admins may override the window by adding `week_carryover` to `frequency_config.review_window_rules`. Week 5 behaviour is unchanged. Submit Month remains gated by ≥1 saved weekly entry.
 
 ### 4.2 Submission Window
 

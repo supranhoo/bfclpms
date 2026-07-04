@@ -54,6 +54,59 @@ describe('Weekly review windows — no dead zones with default widened windows',
   });
 });
 
+/**
+ * POLICY §Weekly Carry-Over — After the review month ends, Weeks 1–4 remain
+ * enterable during the next month so employees can back-fill any missed weeks
+ * before submitting. Default carry-over window: day 1 → end of week_5 window.
+ */
+describe('Weekly review windows — carry-over into next month', () => {
+  it('June viewed on July 2 → Weeks 1–4 are enabled (back-fill window open)', () => {
+    const date = new Date(2026, 6, 2); // July 2, 2026
+    const options = getWeeklySubPeriods(date, 'June', 2026);
+    for (const w of ['1', '2', '3', '4'] as const) {
+      expect(options.find((o) => o.value === w)?.isEnabled, `Week ${w}`).toBe(true);
+    }
+  });
+
+  it('canSubmitForSubPeriod allows Weeks 1–4 on July 2 for June', () => {
+    const date = new Date(2026, 6, 2);
+    expect(canSubmitForSubPeriod('Weekly', '1', date, 'June', 2026)).toBe(true);
+    expect(canSubmitForSubPeriod('Weekly', '4', date, 'June', 2026)).toBe(true);
+  });
+
+  it('June viewed on July 20 → carry-over expired, Weeks 1–4 disabled', () => {
+    const date = new Date(2026, 6, 20);
+    const options = getWeeklySubPeriods(date, 'June', 2026);
+    for (const w of ['1', '2', '3', '4'] as const) {
+      expect(options.find((o) => o.value === w)?.isEnabled, `Week ${w}`).toBe(false);
+    }
+  });
+
+  it('June viewed on June 15 → only the in-month current week is enabled (regression guard)', () => {
+    const date = new Date(2026, 5, 15);
+    const options = getWeeklySubPeriods(date, 'June', 2026);
+    // day 15 falls in week_2 window (15-21) with default constants
+    expect(options.find((o) => o.value === '2')?.isEnabled).toBe(true);
+    expect(options.find((o) => o.value === '1')?.isEnabled).toBe(false);
+    expect(options.find((o) => o.value === '3')?.isEnabled).toBe(false);
+  });
+
+  it('honors admin week_carryover override', () => {
+    const custom: Record<string, WeeklyReviewWindow> = {
+      week_1: { start: 8, end: 14 },
+      week_2: { start: 15, end: 21 },
+      week_3: { start: 22, end: 28 },
+      week_4: { start: 29, end: 31 },
+      week_5: { start: 5, end: 14, nextMonth: true },
+      week_carryover: { start: 1, end: 3, nextMonth: true },
+    };
+    const inWindow = new Date(2026, 6, 2); // July 2
+    const outOfWindow = new Date(2026, 6, 5); // July 5
+    expect(canSubmitForSubPeriod('Weekly', '1', inWindow, 'June', 2026, custom)).toBe(true);
+    expect(canSubmitForSubPeriod('Weekly', '1', outOfWindow, 'June', 2026, custom)).toBe(false);
+  });
+});
+
 describe('Weekly review windows — admin override is honored', () => {
   const customWindows: Record<string, WeeklyReviewWindow> = {
     week_1: { start: 1, end: 7 },
