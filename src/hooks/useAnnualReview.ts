@@ -167,7 +167,13 @@ export function useSendBackStatus() {
   return useMutation({
     mutationFn: (args: { instanceId: string; role: AnnualReviewerRole; reason: string | null }) =>
       svc.sendBackStatus(args.instanceId, args.role, args.reason),
-    onSuccess: () => qc.invalidateQueries({ queryKey: annualReviewKeys.all }),
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: annualReviewKeys.all });
+      // Force an immediate refetch so any list using `keepPreviousData`
+      // (e.g. the paginated reviewer queue) reflects the send-back without
+      // waiting for its next mount / focus event.
+      await qc.refetchQueries({ queryKey: annualReviewKeys.all, type: 'active' });
+    },
   });
 }
 
