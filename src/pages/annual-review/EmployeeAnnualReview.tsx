@@ -36,6 +36,7 @@ import { useResolvedSystemScores } from '@/hooks/useResolvedSystemScores';
 import type { EvidenceItem } from '@/types/annualReview';
 import { EmployeeResultsView } from '@/components/annual-review/EmployeeResultsView';
 import { SpeakButton } from '@/components/annual-review/SpeakButton';
+import { SelfReviewFieldsCard } from '@/components/annual-review/SelfReviewFieldsCard';
 
 export default function EmployeeAnnualReview() {
   const { user, profile } = useAuth();
@@ -239,28 +240,18 @@ export default function EmployeeAnnualReview() {
         </Card>
       )}
 
-      {(template?.sections.self_review_fields ?? []).length > 0 && (
-        <Card>
-          <CardHeader><CardTitle>{t('section.qualitative', 'Qualitative Responses')}</CardTitle></CardHeader>
-          <CardContent className="space-y-4">
-            {template!.sections.self_review_fields!.map((f) => (
-              <div key={f.id} className="space-y-1">
-                <div className="flex items-center gap-2">
-                  <Label>{tField(f.id, 'label', f.label)}{f.required && <span className="text-destructive"> *</span>}</Label>
-                  <SpeakButton text={tField(f.id, 'label', f.label)} />
-                </div>
-                <Textarea
-                  rows={3}
-                  placeholder={tField(f.id, 'placeholder', f.placeholder ?? '')}
-                  value={(draft.qualitative_responses ?? {})[f.id] ?? ''}
-                  disabled={!!locked}
-                  onChange={(e) => setDraft((p) => ({ ...p, qualitative_responses: { ...(p.qualitative_responses ?? {}), [f.id]: e.target.value } }))}
-                />
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-      )}
+      <SelfReviewFieldsCard
+        fields={template?.sections.self_review_fields ?? []}
+        values={(draft.qualitative_responses ?? {}) as Record<string, string>}
+        readOnly={!!locked}
+        onChange={(id, txt) =>
+          setDraft((p) => ({
+            ...p,
+            qualitative_responses: { ...(p.qualitative_responses ?? {}), [id]: txt },
+          }))
+        }
+        title={t('section.qualitative', 'Qualitative Responses')}
+      />
 
       <footer className="flex flex-wrap items-center justify-between gap-3 sticky bottom-0 bg-background/80 backdrop-blur border-t py-3">
         <div className="flex flex-col gap-1">
