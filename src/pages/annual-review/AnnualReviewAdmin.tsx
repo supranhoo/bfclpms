@@ -37,7 +37,6 @@ import {
 } from '@/components/ui/table';
 import { toast } from 'sonner';
 import { Loader2, Upload, Settings2, ListChecks, Calendar, Layers, Pencil, Plus, Download, BarChart3, CheckCheck, Undo2, Lock, Bell, Scale, Copy, Unlock, MoreHorizontal, Trash2 } from 'lucide-react';
-import { ConfirmDestructiveDialog } from '@/components/ui/ConfirmDestructiveDialog';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
   DropdownMenuSeparator, DropdownMenuTrigger,
