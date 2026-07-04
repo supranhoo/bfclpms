@@ -30,7 +30,13 @@ export interface CriteriaScoringMatrixProps {
   onChangeRemark?: (criterionId: string, text: string) => void;
   onUploadEvidence?: (criterionId: string, file: File) => Promise<EvidenceItem | void>;
   onRemoveEvidence?: (criterionId: string, path: string) => void;
-  comparison?: { label: string; values: Record<string, number | undefined> }[];
+  comparison?: {
+    label: string;
+    /** Reviewer role, used to identify the "Self" entry for variance detection. */
+    role?: 'self' | 'manager' | 'skip_manager' | 'dept_head' | 'bu_head' | 'hr';
+    values: Record<string, number | undefined>;
+    remarks?: Record<string, string>;
+  }[];
   /** Show reviewer coaching note under the selected score. Never enable for self-review. */
   showCoachingNote?: boolean;
 }
