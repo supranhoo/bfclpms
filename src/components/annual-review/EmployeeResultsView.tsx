@@ -14,6 +14,7 @@ import { useAcknowledgeInstance } from '@/hooks/useAnnualReview';
 import type {
   AnnualReviewInstance, AnnualReviewResponse, AnnualReviewTemplate,
 } from '@/types/annualReview';
+import { collectRecommendations } from './OverallRecommendationCard';
 
 /**
  * Read-only finalized view for the employee: HR rating + remarks, criteria-by-criteria
@@ -32,6 +33,11 @@ export function EmployeeResultsView({
 
   const criteria = template?.sections.criteria ?? [];
   const byRole = new Map(responses.map((r) => [r.reviewer_role, r] as const));
+  const recommendations = collectRecommendations(responses);
+  const stageLabel: Record<string, string> = {
+    self: 'Self', manager: 'Manager', skip_manager: 'Skip Manager',
+    dept_head: 'Department Head', bu_head: 'BU Head', hr: 'HR',
+  };
 
   const onAck = async () => {
     try {
@@ -137,6 +143,22 @@ export function EmployeeResultsView({
                 ))}
               </tbody>
             </table>
+          </CardContent>
+        </Card>
+      )}
+
+      {recommendations.length > 0 && (
+        <Card>
+          <CardHeader><CardTitle className="text-base">Recommendations</CardTitle></CardHeader>
+          <CardContent className="space-y-2">
+            {recommendations.map((rec) => (
+              <div key={rec.role} className="rounded-md border p-3 bg-muted/30">
+                <p className="text-xs font-medium text-muted-foreground">
+                  {stageLabel[rec.role] ?? rec.role}
+                </p>
+                <p className="text-sm whitespace-pre-wrap mt-1">{rec.text}</p>
+              </div>
+            ))}
           </CardContent>
         </Card>
       )}
