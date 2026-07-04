@@ -23,8 +23,6 @@ import { useAnnualReviewTranslation } from '@/hooks/useAnnualReviewTranslation';
 import { AnnualReviewI18nProvider } from '@/components/annual-review/AnnualReviewI18nContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Textarea } from '@/components/ui/textarea';
-import { Label } from '@/components/ui/label';
 import { Loader2 } from 'lucide-react';
 import { SelfReviewSummaryDialog } from '@/components/annual-review/SelfReviewSummaryDialog';
 import { toast } from 'sonner';
@@ -35,7 +33,6 @@ import { fyStartFromCycle } from '@/lib/annualReview/fiscalYear';
 import { useResolvedSystemScores } from '@/hooks/useResolvedSystemScores';
 import type { EvidenceItem } from '@/types/annualReview';
 import { EmployeeResultsView } from '@/components/annual-review/EmployeeResultsView';
-import { SpeakButton } from '@/components/annual-review/SpeakButton';
 import { SelfReviewFieldsCard } from '@/components/annual-review/SelfReviewFieldsCard';
 
 export default function EmployeeAnnualReview() {
