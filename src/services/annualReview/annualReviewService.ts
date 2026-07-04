@@ -259,6 +259,38 @@ export async function upsertTemplate(t: Partial<AnnualReviewTemplate>): Promise<
   return data;
 }
 
+/**
+ * Delete a template — blocked when any assignment rule, per-employee
+ * override, or live instance still references it. Callers should surface
+ * the returned Error message to the user; toast severity is `error`.
+ */
+export async function deleteTemplate(id: string): Promise<{ ok: true }> {
+  const [rules, overrides, instTpl, instOverride] = await Promise.all([
+    db.from('annual_review_assignment_rules')
+      .select('id', { count: 'exact', head: true }).eq('template_id', id),
+    db.from('annual_review_assignment_overrides')
+      .select('id', { count: 'exact', head: true }).eq('template_id', id),
+    db.from('annual_review_instances')
+      .select('id', { count: 'exact', head: true }).eq('template_id', id),
+    db.from('annual_review_instances')
+      .select('id', { count: 'exact', head: true }).eq('template_override_id', id),
+  ]);
+  for (const r of [rules, overrides, instTpl, instOverride]) {
+    if (r.error) throw r.error;
+  }
+  const ruleCount = rules.count ?? 0;
+  const overrideCount = overrides.count ?? 0;
+  const instanceCount = (instTpl.count ?? 0) + (instOverride.count ?? 0);
+  if (ruleCount + overrideCount + instanceCount > 0) {
+    throw new Error(
+      `Cannot delete — template is assigned to ${ruleCount} rule(s), ${overrideCount} employee override(s), ${instanceCount} live instance(s). Deactivate it instead.`,
+    );
+  }
+  const { error } = await db.from('annual_review_templates').delete().eq('id', id);
+  if (error) throw error;
+  return { ok: true };
+}
+
 // ---------- Rules ----------
 export async function listRules(cycleId?: string): Promise<AnnualReviewAssignmentRule[]> {
   let q = db.from('annual_review_assignment_rules').select('*').order('priority', { ascending: true });
