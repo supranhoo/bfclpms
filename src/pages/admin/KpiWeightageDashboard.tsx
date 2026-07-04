@@ -573,6 +573,9 @@ function EmployeeSection({ employee, months, isOpen, onToggle, onWeightageUpdate
                                   month={m}
                                   currentWeightage={w}
                                   kpiIds={kpi.kpiIds}
+                                  kpiMonthYears={Object.fromEntries(
+                                    Object.keys(kpi.kpiIds).map((mm) => [mm, getReviewYearForMonth(mm, fiscalYear)])
+                                  )}
                                   onSuccess={onWeightageUpdate}
                                 >
                                   <button
