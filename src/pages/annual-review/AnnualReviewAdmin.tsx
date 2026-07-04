@@ -76,6 +76,7 @@ import {
   resolveStageWeights, computeFinalScore, STAGE_WEIGHT_KEYS,
   type StageWeightKey, type StageWeights,
 } from '@/lib/annualReview/finalScore';
+import { computeCriteriaRatingOutOf5 } from '@/lib/annualReview/scoring';
 
 export default function AnnualReviewAdmin() {
   return (
