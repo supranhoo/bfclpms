@@ -27,6 +27,14 @@ interface I18nCtx {
    * shown side-by-side per BFCL annual-review UX policy.
    */
   tTemplateBilingual: (kind: string, id: string, field: string, fallback: string) => string;
+  /**
+   * Option-scoped bilingual lookup — namespaced by criterion id so two
+   * criteria that share option ids (e.g. `o5`) can carry independent
+   * translations. Falls back to the legacy `option:<optId>:<field>` key
+   * when the namespaced entry is absent, for back-compat with templates
+   * saved before the fix.
+   */
+  tTemplateOptionBilingual: (criterionId: string, optionId: string, field: string, fallback: string) => string;
 }
 
 /** Default no-op translator: always returns the english fallback. */
@@ -38,6 +46,7 @@ const defaultCtx: I18nCtx = {
   enableAudio: false,
   tTemplate: (_k, _i, _f, fb) => fb,
   tTemplateBilingual: (_k, _i, _f, fb) => fb,
+  tTemplateOptionBilingual: (_c, _o, _f, fb) => fb,
 };
 
 const AnnualReviewI18nContext = createContext<I18nCtx>(defaultCtx);
@@ -84,6 +93,17 @@ export function AnnualReviewI18nProvider({
       if (mode === 'english_only') return fb;
       const key = `${kind}:${id}:${field}`;
       const translated = templateTranslations?.[cur]?.[key];
+      if (mode === 'translated_only') return translated || fb;
+      if (!translated || translated === fb) return fb;
+      return `${fb} / ${translated}`;
+    },
+    tTemplateOptionBilingual: (criterionId, optionId, field, fb) => {
+      if (cur === def) return fb;
+      if (mode === 'english_only') return fb;
+      const nsKey = `option:${criterionId}:${optionId}:${field}`;
+      const legacyKey = `option:${optionId}:${field}`;
+      const bag = templateTranslations?.[cur];
+      const translated = bag?.[nsKey] ?? bag?.[legacyKey];
       if (mode === 'translated_only') return translated || fb;
       if (!translated || translated === fb) return fb;
       return `${fb} / ${translated}`;

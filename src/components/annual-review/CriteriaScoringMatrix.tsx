@@ -62,7 +62,7 @@ function CriterionRow({
   onRemoveEvidence,
 }: CriteriaScoringMatrixProps & { criterion: TemplateCriterion }) {
   const [uploading, setUploading] = useState(false);
-  const { t, tTemplate, tTemplateBilingual } = useAnnualReviewI18n();
+  const { t, tTemplate, tTemplateOptionBilingual } = useAnnualReviewI18n();
   const criterionName = tTemplate('criterion', criterion.id, 'name', criterion.name);
   const criterionDesc = criterion.description
     ? tTemplate('criterion', criterion.id, 'description', criterion.description)
@@ -74,7 +74,7 @@ function CriterionRow({
   const enableEvidence = !!criterion.enable_evidence;
   const hasOptions = Array.isArray(criterion.options) && criterion.options.length > 0;
   const optionLabels = hasOptions
-    ? criterion.options!.map((opt) => tTemplateBilingual('option', opt.id, 'label', opt.label))
+    ? criterion.options!.map((opt) => tTemplateOptionBilingual(criterion.id, opt.id, 'label', opt.label))
     : [];
   const readAllTexts = [criterionName, criterionDesc, ...optionLabels];
 
@@ -122,7 +122,7 @@ function CriterionRow({
               {criterion.options!.map((opt) => {
                 const active = score === opt.score;
                 const c = SCORE_COLOR[opt.score] ?? SCORE_COLOR[0];
-                const label = tTemplateBilingual('option', opt.id, 'label', opt.label);
+                const label = tTemplateOptionBilingual(criterion.id, opt.id, 'label', opt.label);
                 return (
                   <div key={opt.id} className="relative">
                   <button

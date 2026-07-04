@@ -26,8 +26,8 @@ const hiTranslations = {
   hi: {
     'criterion:attendance:name': 'उपस्थिति और समय-पालन',
     'criterion:attendance:description': 'मैं समय पर काम पर आता हूँ, बिना बताए छुट्टी नहीं लेता।',
-    'option:o5:label': 'हमेशा समय पर, कोई बिना बताए छुट्टी नहीं',
-    'option:o3:label': 'आमतौर पर समय पर, कभी-कभार ही छुट्टी',
+    'option:attendance:o5:label': 'हमेशा समय पर, कोई बिना बताए छुट्टी नहीं',
+    'option:attendance:o3:label': 'आमतौर पर समय पर, कभी-कभार ही छुट्टी',
   },
 };
 
@@ -109,5 +109,43 @@ describe('CriteriaScoringMatrix — option cards', () => {
     fireEvent.click(card);
     expect(onChangeScore).not.toHaveBeenCalled();
     expect(screen.getByRole('button', { name: /Rarely late/ })).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('renders independent Hindi labels for two criteria that share option ids (namespaced keys)', () => {
+    const safety: TemplateCriterion = {
+      ...baseCriterion,
+      id: 'safety',
+      name: 'Safety & Rules',
+      description: 'PPE and safety rules.',
+      options: baseCriterion.options!.map((o) => ({ ...o })),
+    };
+    const translations = {
+      hi: {
+        'option:attendance:o5:label': 'हमेशा समय पर',
+        'option:safety:o5:label': 'हमेशा PPE पहनते हैं',
+      },
+    };
+    wrap(
+      <CriteriaScoringMatrix criteria={[baseCriterion, safety]} values={{}} remarks={{}} />,
+      'hi',
+      translations,
+    );
+    // Each criterion's o5 renders its OWN Hindi label — no cross-contamination.
+    expect(screen.getByText(/Always on time, zero unexcused absences \/ हमेशा समय पर$/)).toBeInTheDocument();
+    expect(screen.getByText(/Always on time, zero unexcused absences \/ हमेशा PPE पहनते हैं/)).toBeInTheDocument();
+  });
+
+  it('falls back to legacy `option:<optId>:label` when the namespaced key is absent', () => {
+    const translations = {
+      hi: {
+        'option:o5:label': 'लीगेसी अनुवाद',
+      },
+    };
+    wrap(
+      <CriteriaScoringMatrix criteria={[baseCriterion]} values={{}} remarks={{}} />,
+      'hi',
+      translations,
+    );
+    expect(screen.getByText(/Always on time, zero unexcused absences \/ लीगेसी अनुवाद/)).toBeInTheDocument();
   });
 });
