@@ -1,55 +1,78 @@
-# Fix: Weekly KPI Submit Month is unreachable after month-end
+# Fix: KPI Weightage Dashboard cross-fiscal overlap (Jul/Aug pulling next-FY data, Sep silently overwritten)
 
-## Assumptions
-- Policy (per your answer): the moment the review month ends, all weeks of that month are considered "over with the month" and their data must remain enterable during the next month, effective from the 1st.
-- Current behavior we're changing lives entirely in the frontend period generator; DB schema, RLS, and mutations remain untouched.
-- Week 5 (for 29/30/31) already uses a next-month window (`week_5` in `frequency_config.review_window_rules`). We reuse that window as the "carry-over" period for Weeks 1–4.
+## Confirmation
+Confirmed — the overlap you're seeing is a bug, not correct behaviour. Verified in the DB for Piyush Bansal (AY 2025-26, KRA "Balance Sheet finalization"):
+
+| Column shown | Real source row | Correct fiscal? |
+|---|---|---|
+| JUL 16% | `review_year=2026, review_period=July` | ❌ belongs to FY 2026-27 |
+| AUG 16% | `review_year=2026, review_period=August` | ❌ belongs to FY 2026-27 |
+| SEP 16% | `review_year=2026, review_period=September` **overwrote** `review_year=2025, review_period=September = 20%` | ❌ wrong row wins |
+| OCT–DEC 20% | `review_year=2025, review_period=Oct/Nov/Dec` | ✅ |
+| JAN–MAR 20% | `review_year=2026, review_period=Jan/Feb/Mar` | ✅ |
+| APR–JUN 16% | `review_year=2026, review_period=Apr/May/Jun` | ✅ (real variance) |
+
+So the *legitimate* variance in AY 2025-26 is only Apr–Jun. Jul/Aug are phantom rows from the next fiscal year, and Sep is a silent overwrite of the correct value.
 
 ## Root Cause (verified)
-`src/lib/frequencyUtils.ts → getWeeklySubPeriods`:
-```
-isInWindow = currentMonth === reviewMonth && currentYear === reviewYear && day in window
-```
-For June 2026 viewed on 04-Jul-2026: `currentMonth = 'July' ≠ 'June'` → Weeks 1–4 are all `isEnabled=false`.
-Downstream:
-- `SubPeriodSelector` renders "No weeks are currently open for review" → user cannot pick a week → **Save Entry stays disabled**.
-- With `selectedKpiSubPeriods.length === 0` in `SelfReviewSheet.tsx`, **Submit Month** shows the tooltip *"Enter at least one weekly value first"* and remains disabled — even though the month has ended.
+`src/hooks/useKpiWeightageMatrix.ts → fetchYear` and `public.rpc_weightage_variance_summary` / `rpc_weightage_eligible_employees` both fetch KPIs by `review_year IN (fiscalStartYear, fiscalStartYear+1)` with **no month filter**. Aggregation keys by month name only, so:
+- Jan–Jun of `fiscalStartYear` (belongs to the *previous* fiscal year) leaks in.
+- Jul–Dec of `fiscalStartYear+1` (belongs to the *next* fiscal year) leaks in.
+- Whichever half happens to be inserted last silently overwrites the correct month for the current fiscal.
 
-Confirmed against DB for KPI `0d698b37-cafa-46dc-9502-8c19f06ae830` (Vivek Kumar Tripathi, June-26, Weekly): `sub_period_submissions` → 0 rows.
+The fiscal cycle is Jul→Jun (per `mem://architecture/pms/fiscal-year-cycle`), but the eligibility/summary contract does not encode "first half = year N (Jul–Dec), second half = year N+1 (Jan–Jun)".
+
+## Fixed Requirement (to be enforced)
+For a fiscal window whose start year is **Y**:
+- Row is in-scope **iff** `(review_year = Y AND review_period IN ('July'..'December'))` OR `(review_year = Y+1 AND review_period IN ('January'..'June'))`.
+- Any other `(review_year, review_period)` combination is out of scope and MUST NOT appear in the matrix, in the variance count, or in the eligibility set.
 
 ## Risk & Impact Report
-- **Data**: none. No schema/RLS change. Uses existing `week_5` window already stored in `frequency_config.review_window_rules`.
-- **Workflow**: identical — user must still Save at least one week before Submit Month; only the *when* changes.
-- **UI/UX**: Weeks 1–4 for a completed month become selectable during the next-month window (default Week 5 window, e.g. 1st–5th). No visual redesign.
-- **Regression risk**: Low. Change is limited to the enabled/disabled predicate in one function; existing daily behavior and locked-month gating are untouched. Existing tests in `src/lib/weeklyWindowsResolution.test.ts` and `frequencyUtils.test.ts` guard current behavior — we'll extend them.
-- **Scalability**: no query change; purely date arithmetic in the browser.
-- **Mitigation**: new unit tests cover (a) June viewed in July 1–5 → Weeks 1–4 enabled; (b) June viewed in July 6+ → Weeks 1–4 disabled again; (c) June viewed in June → unchanged; (d) Week 5 unchanged; (e) custom window overrides honored.
+- **Data impact:** none. Read-only fixes. No historical rows changed. Baseline/variance calculations already look at whatever rows are returned, so once the wrong rows are excluded, "Variances" count drops naturally (correctly) for anyone whose only "mismatch" was a phantom next-FY row.
+- **Workflow impact:** none — no writes, no RLS change.
+- **UI/UX:** Piyush's row will show Jul/Aug empty (or `—`), Sep = 20%, and only Apr/May/Jun 16% will remain flagged red. The employee-level pill count and the global "N Variances" badge will decrease accordingly.
+- **Regression risk:** low. Only two call sites: `useKpiWeightageMatrix` and `useWeightageVarianceSummary` (both DB-side RPCs). Both changes are additive predicates. Existing tests in `src/test/kpiWeightageDashboardPagination.test.ts` still pass because the eligibility contract narrows, not widens.
+- **Scalability:** predicate is index-friendly (`review_year`, `review_period` are on `kpis`). Reduces rows fetched — small perf win.
+- **Rollback:** revert the hook edit + drop the new migration (functions are `CREATE OR REPLACE`, safe).
 
 ## Plan (surgical)
 
-1. **`src/lib/frequencyUtils.ts` → `getWeeklySubPeriods`**
-   - For Weeks 1–4, compute a second window in the *next* month using `windows.week_5` (or `windows.week_carryover` if present as a future override). Enable a week when *either* the in-month window (existing) OR the next-month carry-over window is active.
-   - Week 5 logic is unchanged.
-   - No new hardcoded values — reuses configured windows.
+1. **`src/hooks/useKpiWeightageMatrix.ts`**
+   - Define `FIRST_HALF_MONTHS = ['July'..'December']` and `SECOND_HALF_MONTHS = ['January'..'June']`.
+   - `fetchYear(fiscalStartYear, FIRST_HALF_MONTHS)` → adds `.in('review_period', FIRST_HALF_MONTHS)`.
+   - `fetchYear(fiscalStartYear + 1, SECOND_HALF_MONTHS)` → adds `.in('review_period', SECOND_HALF_MONTHS)`.
+   - No other changes; month-key aggregation is now safe because no month name can arrive from two calendar years.
 
-2. **`src/lib/frequencyUtils.test.ts` / `src/lib/weeklyWindowsResolution.test.ts`**
-   - Add cases:
-     - `getWeeklySubPeriods(new Date('2026-07-02'), 'June', 2026)` → Weeks 1–4 `isEnabled: true`.
-     - `getWeeklySubPeriods(new Date('2026-07-10'), 'June', 2026)` → Weeks 1–4 `isEnabled: false` (grace elapsed).
-     - `getWeeklySubPeriods(new Date('2026-06-15'), 'June', 2026)` → only current week enabled (regression guard).
+2. **New migration** — redefine both RPCs (`CREATE OR REPLACE`, keeps signatures/grants):
+   ```sql
+   AND (
+     (k.review_year = p_fiscal_start_year
+        AND k.review_period IN ('July','August','September','October','November','December'))
+     OR (k.review_year = p_fiscal_start_year + 1
+        AND k.review_period IN ('January','February','March','April','May','June'))
+   )
+   ```
+   Applied to `rpc_weightage_eligible_employees` and to the `raw` CTE in `rpc_weightage_variance_summary`. Grants unchanged (already granted to `authenticated`, `admin`-gated inside).
 
-3. **`src/modules/annual-review/…` DOCUMENTATION.md / POLICY.md** *(Not Applicable — this is the monthly PMS module.)* Instead:
-   - **`src/modules/pms/DOCUMENTATION.md`** (or the closest existing PMS doc; will confirm on the first read) — add a "Weekly carry-over window" section under Sub-Period Submissions.
-   - **`src/modules/pms/POLICY.md`** — add the rule: *"When the review month ends, all Weeks 1–5 of that month remain enterable during the configured carry-over window in the following month (default: `week_5` window). Submit Month remains gated by ≥1 saved weekly entry."*
+3. **Tests**
+   - New `src/test/kpiWeightageFiscalWindow.test.ts` — mocks Supabase and asserts:
+     - `fetchYear(2025)` request carries `review_period IN (Jul..Dec)`.
+     - `fetchYear(2026)` request carries `review_period IN (Jan..Jun)`.
+     - Rows from disallowed `(year, month)` pairs are never merged into `emp.months`.
+   - Extend `src/test/kpiWeightageDashboardPagination.test.ts` with a scenario mirroring Piyush's data (2025-Sep=20 + 2026-Sep=16 + 2026-Jul=16) → matrix shows Sep=20 and Jul empty; variance count = 0 for that KPI (Apr–Jun rows omitted here).
 
-4. **No change** to `SelfReviewSheet.tsx` gating, `isMonthStillActive`, `isCycleComplete`, RLS, or mutations. The Submit Month button naturally lights up once the user Saves the first back-filled week.
+4. **`POLICY.md`** — add the requirement above under §4 (KPI Weightage Governance) and reference `mem://architecture/pms/fiscal-year-cycle`.
+
+5. **`DOCUMENTATION.md`** — add a `v2.66.73 (2026-07-04 — KPI Weightage Dashboard cross-fiscal overlap fix / ADR)` changelog entry with RCA + fix + regression guards, matching the format already used at the bottom of the file.
+
+6. **`mem://architecture/pms/fiscal-year-cycle`** — append a one-liner: *"For any fiscal-year-scoped query over `public.kpis`, filter both `review_year` and `review_period` in tandem: (Y, Jul–Dec) ∪ (Y+1, Jan–Jun). Filtering by `review_year` alone leaks the sibling halves of the adjacent fiscal years."*
 
 ## UI Changes
-- **Where**: Self Review sheet → "Weekly KPI – Submit data for each week" purple panel → week picker.
-- **What visually**: for a completed month viewed within the carry-over window, Weeks 1–4 no longer show the "Closed" badge; they become selectable with the normal week label (`Week N (1-7 Jun)` etc.). The green ✓ still marks weeks already submitted.
-- **Interaction impact**: user can now select and Save weekly values for the just-ended month during the first days of the next month; Submit Month enables as soon as one week is saved.
-- **Responsiveness**: unchanged (same component).
+- **Where:** Admin → KPI Weightage Dashboard, employee rows.
+- **What visually:** for AY 2025-26, JUL and AUG columns for KPIs mapped only from Sep 2025 onward will now render `—` (empty) instead of the wrong 16%. SEP will show the correct value from `review_year=2025` (e.g. Piyush BS finalization = 20%). The red "Variance" pill and the global `N Variances` badge will decrease as phantom variances disappear.
+- **Interaction impact:** none — filters, edits, acknowledgements, export continue to work.
+- **Responsiveness:** unchanged.
 
 ## Post-implementation notes
-- If the grace window needs to differ from Week 5's window, admins can add a `week_carryover` entry in `frequency_config.review_window_rules` — code will pick it up without a redeploy.
-- Rollback: revert the one function; no data written.
+- The "employees with no KPI in the current fiscal window" list will shrink (correctly): anyone whose only mappings are Jan–Jun of Y or Jul–Dec of Y+1 will drop out — they belong to a different AY.
+- If existing Excel exports were shared with stakeholders showing the phantom Jul/Aug values, they were incorrect; the fix produces the authoritative view.
