@@ -1679,6 +1679,7 @@ function TemplatesTabImpl() {
   const [editorOpen, setEditorOpen] = useState(false);
   const [editing, setEditing] = useState<AnnualReviewTemplate | null>(null);
   const [uploadOpen, setUploadOpen] = useState(false);
+  const [toDelete, setToDelete] = useState<AnnualReviewTemplate | null>(null);
 
   const toggleActive = useMutation({
     mutationFn: (t: AnnualReviewTemplate) =>
@@ -1687,6 +1688,11 @@ function TemplatesTabImpl() {
     onError: (e: Error) => toast.error(e.message),
   });
   const clone = useCloneTemplate();
+  const del = useMutation({
+    mutationFn: (id: string) => svc.deleteTemplate(id),
+    onSuccess: () => { toast.success('Template deleted'); setToDelete(null); refetch(); },
+    onError: (e: Error) => toast.error(e.message),
+  });
 
   const openNew = () => { setEditing(null); setEditorOpen(true); };
   const openEdit = (t: AnnualReviewTemplate) => { setEditing(t); setEditorOpen(true); };
@@ -1763,6 +1769,15 @@ function TemplatesTabImpl() {
                     >
                       {t.is_active ? 'Deactivate' : 'Activate'}
                     </Button>
+                    <Button
+                      variant="outline" size="sm"
+                      className="gap-1.5 text-destructive hover:text-destructive"
+                      onClick={() => setToDelete(t)}
+                      disabled={del.isPending}
+                      title="Delete this template (blocked if it is still referenced)"
+                    >
+                      <Trash2 className="h-4 w-4" /> Delete
+                    </Button>
                   </div>
                 </CardContent>
               </Card>
@@ -1782,6 +1797,19 @@ function TemplatesTabImpl() {
         onOpenChange={setUploadOpen}
         existingTemplates={templates}
         onImported={() => refetch()}
+      />
+      <ConfirmDestructiveDialog
+        open={!!toDelete}
+        onCancel={() => (del.isPending ? undefined : setToDelete(null))}
+        onConfirm={() => toDelete && del.mutate(toDelete.id)}
+        title="Delete template?"
+        description={
+          toDelete
+            ? `This will permanently remove "${toDelete.name}"${typeof toDelete.version === 'number' ? ` (v${toDelete.version})` : ''}. This action cannot be undone. If the template is still assigned to any rule, employee override, or live instance, deletion will be blocked — deactivate it instead.`
+            : ''
+        }
+        confirmLabel="Delete template"
+        isLoading={del.isPending}
       />
     </div>
   );
