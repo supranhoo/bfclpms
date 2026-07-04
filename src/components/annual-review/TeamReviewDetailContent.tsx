@@ -47,6 +47,7 @@ import {
   RECOMMENDATION_KEY,
 } from '@/components/annual-review/OverallRecommendationCard';
 import { computeRunningFinalScore } from '@/lib/annualReview/runningFinalScore';
+import { computeCriteriaScore, computeCriteriaRatingOutOf5 } from '@/lib/annualReview/scoring';
 
 // Reviewer resolution moved to `@/lib/annualReview/stageForReviewer` so all
 // pending_* statuses (including `pending_dept`) are covered in one place.
@@ -185,6 +186,16 @@ export function TeamReviewDetailContent({
     [instance, template, responses, resolvedSystemScores],
   );
 
+  // Live template-independent /5 rating for THIS reviewer's stage — the same
+  // value that will surface in Admin > Progress and exports after submission.
+  // See POLICY §AR-STAGE-RATING-DISPLAY.
+  const stageRatingOutOf5 = useMemo(() => {
+    if (!role) return null;
+    const stageCriteria = criteriaForStage(template, role);
+    const { totalCriteriaScore } = computeCriteriaScore(stageCriteria, draft.criteria_scores ?? {});
+    return computeCriteriaRatingOutOf5(stageCriteria, totalCriteriaScore, role);
+  }, [template, role, draft.criteria_scores]);
+
   return (
     <AnnualReviewI18nProvider
       currentLanguage={lang}
@@ -218,6 +229,7 @@ export function TeamReviewDetailContent({
       handleSubmit={handleSubmit}
       handleSendBack={handleSendBack}
       canSendBack={canSendBack}
+      stageRatingOutOf5={stageRatingOutOf5}
       sendBackOpen={sendBackOpen}
       setSendBackOpen={setSendBackOpen}
       sendBackReason={sendBackReason}
@@ -241,6 +253,7 @@ function TeamReviewDetailInner(props: any) {
     visibleStages, skippedStages, reviewerNamesByStage, fiscalYear,
     draft, setDraft, status, flush, composition, running, comparison, onUpload,
     responses, handleSubmit, handleSendBack, canSendBack,
+    stageRatingOutOf5,
     sendBackOpen, setSendBackOpen, sendBackReason, setSendBackReason,
     sendBackPending, advancePending, assistedOpen, setAssistedOpen,
     user, profile, queryClient,
@@ -393,13 +406,22 @@ function TeamReviewDetailInner(props: any) {
 
       {role && !locked && (
         <div className="sticky bottom-0 bg-background/80 backdrop-blur border-t py-3 flex items-center justify-between gap-3">
-          <span className={`text-xs ${status === 'pending' ? 'text-amber-600' : status === 'error' ? 'text-destructive' : 'text-muted-foreground'}`}>
-            {status === 'saving' ? 'Saving…'
-              : status === 'saved' ? 'Draft saved'
-              : status === 'error' ? 'Save error'
-              : status === 'pending' ? 'Unsaved changes'
-              : ''}
-          </span>
+          <div className="flex flex-col gap-1">
+            <span className={`text-xs ${status === 'pending' ? 'text-amber-600' : status === 'error' ? 'text-destructive' : 'text-muted-foreground'}`}>
+              {status === 'saving' ? 'Saving…'
+                : status === 'saved' ? 'Draft saved'
+                : status === 'error' ? 'Save error'
+                : status === 'pending' ? 'Unsaved changes'
+                : ''}
+            </span>
+            {stageRatingOutOf5 != null && (
+              <div className="text-xs font-medium text-foreground">
+                {t('rating.your_rating', 'Your rating')}:{' '}
+                <span className="tabular-nums">{stageRatingOutOf5.toFixed(1)}</span>
+                <span className="text-muted-foreground"> / 5</span>
+              </div>
+            )}
+          </div>
           <div className="flex gap-2">
             {canSendBack && (
               <Button variant="outline" onClick={() => setSendBackOpen(true)} disabled={sendBackPending}>

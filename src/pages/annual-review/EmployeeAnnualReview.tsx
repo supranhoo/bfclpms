@@ -26,7 +26,7 @@ import { Button } from '@/components/ui/button';
 import { Loader2 } from 'lucide-react';
 import { SelfReviewSummaryDialog } from '@/components/annual-review/SelfReviewSummaryDialog';
 import { toast } from 'sonner';
-import { computeCriteriaScore } from '@/lib/annualReview/scoring';
+import { computeCriteriaScore, computeCriteriaRatingOutOf5 } from '@/lib/annualReview/scoring';
 import { computeScoreComposition } from '@/lib/annualReview/scoringComposition';
 import { AppraisalCompositionCard } from '@/components/annual-review/AppraisalCompositionCard';
 import { fyStartFromCycle } from '@/lib/annualReview/fiscalYear';
@@ -90,6 +90,19 @@ export default function EmployeeAnnualReview() {
   const summary = useMemo(
     () => computeCriteriaScore(template?.sections.criteria ?? [], draft.criteria_scores ?? {}),
     [template, draft.criteria_scores],
+  );
+
+  // Live template-independent /5 rating for the criteria the SELF stage is
+  // scoring. Mirrors the SSOT display standard used across Admin / Exports /
+  // Results (POLICY §AR-STAGE-RATING-DISPLAY) so the employee sees, in real
+  // time, the same rating the manager will see after submission.
+  const selfRatingOutOf5 = useMemo(
+    () => computeCriteriaRatingOutOf5(
+      criteriaForStage(template, 'self'),
+      summary.totalCriteriaScore,
+      'self',
+    ),
+    [template, summary.totalCriteriaScore],
   );
 
   const { values: resolvedSystemScores } = useResolvedSystemScores(
@@ -251,6 +264,13 @@ export default function EmployeeAnnualReview() {
               : t('note.draft', 'Draft')}
           </div>
           <AppraisalCompositionCard composition={composition} variant="inline" />
+          {selfRatingOutOf5 != null && (
+            <div className="text-xs font-medium text-foreground">
+              {t('rating.your_rating', 'Your rating')}:{' '}
+              <span className="tabular-nums">{selfRatingOutOf5.toFixed(1)}</span>
+              <span className="text-muted-foreground"> / 5</span>
+            </div>
+          )}
         </div>
         {!locked && (
           <div className="flex gap-2">
