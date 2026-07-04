@@ -186,6 +186,16 @@ export function TeamReviewDetailContent({
     [instance, template, responses, resolvedSystemScores],
   );
 
+  // Live template-independent /5 rating for THIS reviewer's stage — the same
+  // value that will surface in Admin > Progress and exports after submission.
+  // See POLICY §AR-STAGE-RATING-DISPLAY.
+  const stageRatingOutOf5 = useMemo(() => {
+    if (!role) return null;
+    const stageCriteria = criteriaForStage(template, role);
+    const { totalCriteriaScore } = computeCriteriaScore(stageCriteria, draft.criteria_scores ?? {});
+    return computeCriteriaRatingOutOf5(stageCriteria, totalCriteriaScore, role);
+  }, [template, role, draft.criteria_scores]);
+
   return (
     <AnnualReviewI18nProvider
       currentLanguage={lang}
@@ -219,6 +229,7 @@ export function TeamReviewDetailContent({
       handleSubmit={handleSubmit}
       handleSendBack={handleSendBack}
       canSendBack={canSendBack}
+      stageRatingOutOf5={stageRatingOutOf5}
       sendBackOpen={sendBackOpen}
       setSendBackOpen={setSendBackOpen}
       sendBackReason={sendBackReason}
