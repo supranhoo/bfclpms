@@ -1,74 +1,84 @@
-## Root cause analysis
+# Fix: Weightage bulk-edit scopes ("forward" and "all") regress into past calendar months
 
-**Instance queried (TEST003 → `e35bbe35…`).** The DB truth is `overall_status = 'pending_self'`. Timeline reconstructed from `system_audit_logs`:
+## What the user reported
+On the KPI Weightage matrix, editing a weightage with **"This & all following months"** — and also with **"All months"** — silently updates months that are in the **past calendar-wise**.
 
-| UTC | Event | Effect |
-|---|---|---|
-| 07-03 13:05 | Template override + `enabled_stages_set` → `[self, dept_head, bu_head, hr]` | status retargeted to `pending_self` |
-| 07-03 14:05 | `annual_review.send_back` (dept_head → self, by manager `535d…`) | status → `pending_self` |
-| 07-04 14:13 | Proxy submit (`submit_annual_review_self_as_proxy`) | status → `pending_dept`, `submitted_via_proxy=true`, `proxy_submission_id` stamped |
-| 07-04 14:59:18 | `annual_review.send_back` (dept_head → self, again) | status → `pending_self`, self-response `is_locked=false`, `submitted_at=NULL` |
-| 07-04 14:59:41 / 14:59:49 | template override toggles | only allowed while status = `pending_self` (proves the send-back landed) |
+Reproduction — Anil Kumar Pathak (`200301`), today = 2026-07-04:
+Two `forward` edits with `metadata.from_month = "July"`:
 
-So the employee view is correct. The manager view is wrong because of **two independent defects** in the send-back RPC and the badge logic. The stepper/badge you saw (`Dept Head Review Pending` + `Submitted with assistance`) is being derived from stale proxy-state fields that send-back never resets.
+| Edit (audit ts)    | affected_count | Rows actually updated                        |
+| ------------------ | -------------- | -------------------------------------------- |
+| 15:13:37 (STI KPI) | 7              | Jan / Feb / Mar / Apr / May / Jun / **Jul** 2026 |
+| 15:13:27 (other)   | 5              | Mar / Apr / May / Jun / **Jul** 2026             |
 
-### Defect 1 — send-back does not clear proxy flags (DB layer)
+All of Jan–Jun 2026 are calendar-past. `all` scope has the same defect and additionally sweeps every earlier fiscal month in one click.
 
-`public.send_back_annual_review_status` (migration `20260621064230…`, lines 275-331) updates `overall_status`, unlocks the previous-role response, but leaves `submitted_via_proxy` and `proxy_submission_id` untouched. After a send-back to `self` the instance carries `overall_status='pending_self'` **with `submitted_via_proxy=true`** — an impossible state that misleads every downstream reader.
+## Root cause
+`src/components/admin/WeightageCellEditor.tsx`:
 
-### Defect 2 — badge is derived from the stale flag, not the current response (UI layer)
+```ts
+const MONTH_ORDER = ['July','August',…,'June']; // fiscal Jul→Jun
+```
 
-`TeamReviewDetailContent.tsx` (~L245-249) shows the "Submitted with assistance" badge whenever `instance.submitted_via_proxy` is true, regardless of whether the self-response is currently locked/submitted. Combined with defect 1 the badge outlives the actual proxy submission.
+- `forward` iterates `MONTH_ORDER` starting at the clicked month's fiscal index. Clicking July (fiscal idx 0) selects **every** entry in `kpiIds`.
+- `all` selects `Object.values(kpiIds)` unconditionally — every fetched month, past or future.
+- `kpiIds` is keyed by month name only (`Record<string,string>`); it cannot distinguish Jul 2025 from Jul 2026, so calendar-time is invisible to the editor.
 
-### Defect 3 — reviewer-queue detail hydration path can serve a pre-send-back snapshot
+Result: both `forward` and `all` can rewrite months that are already in the past (and, per POLICY, often already reviewed / scored).
 
-`useReviewInstance` invalidates on `annualReviewKeys.all`, so a plain refetch works; however the paginated queue (`useInstancesPaginated`, key `[...all, 'instancesPaginated', args]`) caches the row and `keepPreviousData` shows the pre-send-back status until the next fetch cycle completes. That's the "manager sees `pending_dept`" symptom on the queue list even though the detail page refetches. This is a UX layer only — the DB is already correct.
+## Fix (surgical, UI-layer only)
 
-## Fix plan (surgical, no schema change)
+1. **Thread `(month → review_year)` into the editor.** Add a new prop `kpiMonthYears: Record<string, number>` on `WeightageCellEditor`, populated from the dashboard's existing `getReviewYearForMonth(month, fiscalStartYear)` at the callsite in `KpiWeightageDashboard.tsx` (line ~575).
 
-1. **DB — `send_back_annual_review_status` (new migration)**
-   Add `submitted_via_proxy = false, proxy_submission_id = NULL` to the UPDATE **only when `v_prev_role = 'self'`** (i.e., send-back is dropping the review back into self-review). All other send-back targets are unaffected. The proxy audit row in `annual_review_proxy_submissions` is **not** deleted — history stays intact; the instance-level flag reflects the *current* state only.
+2. **Introduce a `notInPast(m)` predicate** based on `(kpiMonthYears[m], calendarIndex(m))` vs today's year/month. Any month strictly before the current calendar month is filtered out.
 
-2. **DB — one-time repair for instances currently in this bad state**
-   ```sql
-   UPDATE public.annual_review_instances
-      SET submitted_via_proxy = false, proxy_submission_id = NULL
-    WHERE overall_status = 'pending_self'
-      AND submitted_via_proxy = true;
-   ```
-   Included in the same migration. Non-destructive: only clears flags whose invariant is already violated.
+3. **`forward` scope** — becomes "clicked month or today, whichever is later, going forward in calendar time":
+   - `anchorYM = max(clickedYM, todayYM)`
+   - select `kpiIds[m]` where `(kpiMonthYears[m], calIdx(m)) >= anchorYM`.
 
-3. **UI — badge & assisted-mode gating (`TeamReviewDetailContent.tsx`)**
-   Compute `isCurrentlyProxySubmitted = instance.submitted_via_proxy && selfResponse?.is_locked === true && !!selfResponse?.submitted_at`. Use that (not the raw flag) for:
-   * "Submitted with assistance" badge visibility.
-   * Any downstream gating that assumes the self-stage was actually completed via proxy.
+4. **`all` scope** — becomes "all future-or-current months in the fetched window":
+   - select `kpiIds[m]` where `notInPast(m)`.
+   - Rename the radio label to **"All current & future months"** so the semantics match. Add a small `<Info>` tooltip: *"Past months are protected from bulk edits; edit them individually."*
+   - If the user genuinely needs to edit a past month, the per-cell edit (`this` scope) still works — that path is unchanged.
 
-4. **Queue refresh — `useSendBackStatus` (`src/hooks/useAnnualReview.ts`)**
-   Keep the `annualReviewKeys.all` invalidation and additionally call `qc.refetchQueries({ queryKey: annualReviewKeys.all, type: 'active' })` so the visible queue (using `keepPreviousData`) refetches immediately instead of on next mount.
+5. **`this` scope — unchanged.** Single-month edits are always allowed; that is the escape hatch for corrections to past months.
 
-5. **Tests (mandatory)**
-   * `src/test/annualReview/sendBackClearsProxyFlags.test.ts` — unit test around a fake instance to assert the new send-back branch clears both fields only when target=self.
-   * Update `src/test/annualReview/proxySubmission.test.ts` — add case "after send-back to self, badge/mode do not treat instance as proxy-submitted".
-   * SQL regression: extend an existing PL/pgSQL test (or add a small `.sql` test invoked from CI) exercising proxy-submit → send-back → assert `submitted_via_proxy=false, proxy_submission_id IS NULL, overall_status='pending_self'`.
+6. **Empty-selection UX.** If a scope resolves to zero eligible months, disable Save and show inline text "No editable future months for this scope" instead of throwing a toast on click.
 
-6. **Docs & policy**
-   * `DOCUMENTATION.md` — new subsection under Annual Review > Send-Back: "Send-back to self also clears proxy flags."
-   * `POLICY.md` §AR-SELF-QUALITATIVE (or new §AR-PROXY-STATE) — invariant: `submitted_via_proxy=true` requires the current self-response to be locked & submitted. Any transition that reopens the self-response MUST clear the flag.
+7. **Audit metadata upgrade.** Include `today: YYYY-MM` in `kpi_audit_logs.metadata` for `weightage_matrix_edit` so future incidents are traceable without reconstructing session time.
+
+8. **One-time data repair for Anil Pathak.** For the two edits today with `from_month='July'` / `scope='forward'`, restore the pre-edit weightage on Jan–Jun 2026 rows for the 12 affected KPIs. Source of truth is `kpi_audit_logs.old_value.weightage`. One-shot `insert`-tool UPDATE keyed on `(kpi_id)` from the audit rows. Idempotent.
+
+## Tests (`src/components/admin/WeightageCellEditor.test.tsx`, new)
+
+Freeze `Date.now()` to 2026-07-04.
+
+- **forward, FY 2026-27, click July** → selects Jul-Dec 2026 (6 rows). Does NOT include any 2027 row if fetch didn't return them.
+- **forward, FY 2026-27, click September** → Sep-Dec 2026 only.
+- **forward, FY 2025-26, click July** (kpiIds has Sep-Dec 2025 + Jan-Jun 2026) → **zero** rows selected; Save disabled with helper text.
+- **all, FY 2025-26** (same kpiIds) → **zero** rows; Save disabled.
+- **all, FY 2026-27** with kpiIds Jul-Dec 2026 → 6 rows selected.
+- **this scope** — always selects exactly the clicked month, including a past month (regression guard for the escape hatch).
+- **Audit metadata** contains `today` field.
+
+## SSOT sync
+
+- `DOCUMENTATION.md` — new entry: "Weightage matrix — `forward` and `all` scopes are calendar-forward; past months are protected."
+- `POLICY.md` §KPI Weightage Governance — new invariant:
+  > Bulk weightage edits (`forward`, `all`) MUST NOT modify months whose calendar date is strictly before the current month. Single-month (`this`) edits remain the only path for correcting historical months and are already governed by the existing lock/variance-ack rules.
 
 ## Risk & Impact
 
-* **Data:** Additive fix; no schema change, no destructive deletes. Repair UPDATE only touches rows already violating the invariant.
-* **Workflow:** Unchanged — send-back semantics preserved for every non-self target.
-* **UI/UX:** Badge disappears once a review is legitimately back in `pending_self`; queue refresh becomes eager on send-back.
-* **Regression risk:** Low. Behavior for the "self was truly submitted via proxy" happy path is unchanged.
-* **Rollback:** Revert the new migration (re-`CREATE OR REPLACE` the previous body); revert the small UI/hook diff. The one-time repair is idempotent and does not require rollback.
+- **Data:** Only one write path affected; no schema change. One-time repair reverses only rows in the two identified audit events.
+- **Workflow:** Bulk semantics tightened — past months become read-only for `forward`/`all`. Historical corrections still possible via `this`.
+- **UI/UX:** Label change on the `all` radio; disabled Save with helper text when scope resolves to zero; tooltip on `all`. No layout change.
+- **Regression risk:** Low. `this` scope untouched; existing hook + fetch untouched.
+- **Rollback:** Revert the editor + dashboard diff; the one-time repair is idempotent.
 
-## Files to touch
+## Files touched
 
-* `supabase/migrations/<new>_send_back_clears_proxy_state.sql` — RPC re-definition + one-time repair
-* `src/components/annual-review/TeamReviewDetailContent.tsx` — badge gating
-* `src/hooks/useAnnualReview.ts` — eager refetch on send-back
-* `src/test/annualReview/sendBackClearsProxyFlags.test.ts` (new) + updates to `proxySubmission.test.ts`
-* `DOCUMENTATION.md`, `POLICY.md`
-
-No changes to `EmployeeAnnualReview.tsx`, `stageChain.ts`, or the proxy-submit RPC.
+- `src/components/admin/WeightageCellEditor.tsx` — new prop, `notInPast` predicate, rewritten `forward`/`all` branches, disabled-Save UX, audit metadata
+- `src/pages/admin/KpiWeightageDashboard.tsx` — pass `kpiMonthYears` to editor
+- `src/components/admin/WeightageCellEditor.test.tsx` — new
+- `DOCUMENTATION.md`, `POLICY.md` — sync
+- One-time data repair via `insert` tool (Anil Pathak, 12 rows)
