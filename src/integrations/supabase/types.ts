@@ -13208,6 +13208,13 @@ export type Database = {
         }
         Returns: Json
       }
+      compute_annual_review_weighted_score: {
+        Args: {
+          p_instance_id: string
+          p_reviewer_role: Database["public"]["Enums"]["annual_reviewer_role"]
+        }
+        Returns: number
+      }
       compute_org_kpi_score_for_kpi: {
         Args: { p_achieved: number; p_kpi_id: string }
         Returns: {
