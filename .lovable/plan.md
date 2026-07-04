@@ -1,80 +1,67 @@
-## Root cause
+## How the annual review is gated today
 
-The department head **Rupesh** cannot see the submitted review because the Postgres RLS policies on `annual_review_instances` were never taught about the `dept_head_id` slot. The app-layer query (`annualReviewService.ts:554`) already `.or(...)`s across manager/skip/**dept_head**/bu/hr, but PostgREST enforces RLS *first*, so the row is filtered out before the app sees it. Everything else is correct:
+Good news: the plumbing already exists. There is a feature flag `annual_review_enabled` in the `admin_feature_flags` table with a polished admin UI at **Admin → System Settings → Feature Flags**. You can pick specific employees by name or employee code and only they will see the module in the sidebar.
 
-- Instance `e35bbe35-…` is at `overall_status = 'pending_dept'` with `dept_head_id` set to Rupesh and `enabled_stages = [self, dept_head, bu_head, hr]`.
-- `STATUS_FILTERS` / "Dept Head" tab wiring, `stageForReviewer`, and `stageChain.nextStatus` all handle `pending_dept` correctly (from last turn's fix).
+**Gap:** the sidebar hides correctly, but the routes themselves (`/annual-review`, `/annual-review/team`, `/annual-review/team/:id`, `/annual-review/calibrate`, `/annual-review/admin`) do NOT enforce the flag. Any employee who knows the URL and has the right role can still deep-link into the page. This must be closed before the pilot goes to real testers.
 
-The gap is server-side:
+## Step 1 — Restrict to your pilot users today (no code, ~2 minutes)
 
-```sql
--- instances_select_visible (current)
-employee_id = auth.uid() OR manager_id = auth.uid() OR skip_id = auth.uid()
-  OR bu_head_id = auth.uid() OR hr_id = auth.uid()
-  OR has_role(auth.uid(),'admin') OR has_role(auth.uid(),'hr_pms')
--- ❌ dept_head_id missing
+1. Open **Admin → System Settings** and switch to the **Feature Flags** tab.
+2. Find the `annual_review_enabled` card.
+3. Turn the master switch **ON**.
+4. Leave the **role** list empty.
+5. In **Add user**, search each tester by name or employee code and add them. They appear as removable badges.
+6. Click **Save changes**.
+
+Result: only those users (plus admins, who always bypass) will see "My Annual Review" and "Team Annual Review" in the sidebar. Everyone else's sidebar is unchanged.
+
+**To open to everyone later:** clear the user list and clear the role list, keep the switch ON → the flag resolves to "Enabled for everyone".
+
+## Step 2 — Close the deep-link loophole (small code change)
+
+Because `ProtectedRoute` only checks role, not the flag, we need a thin gate around the annual-review routes. Two edits, no schema change:
+
+### 2a. New component `src/components/annual-review/AnnualReviewGate.tsx`
+- Calls `useAnnualReviewFlag()`.
+- While loading: renders the existing page loading skeleton (matches `mem://design/page-loading-overlay-pattern`).
+- If `false`: `<Navigate to="/dashboard" replace />` and shows a one-off toast "Annual Review is in limited pilot".
+- If `true`: renders `children`.
+- Admins bypass automatically because `is_feature_flag_enabled_for_me` returns `true` for admins.
+
+### 2b. `src/App.tsx` — wrap every `/annual-review*` `ProtectedRoute` child
+Wrap the page element (not the guard) so role checks still run first:
+
+```tsx
+<ProtectedRoute allowedRoles={[...]}>
+  <AnnualReviewGate>
+    <MyAnnualReview />
+  </AnnualReviewGate>
+</ProtectedRoute>
 ```
 
-`instances_stage_update` has the same gap — even after the SELECT fix, Rupesh could not submit/send-back without the UPDATE arm.
+Applied to all 5 annual-review routes (`/annual-review`, `/annual-review/team`, `/annual-review/team/:instanceId`, `/annual-review/calibrate`, `/annual-review/admin`). No route additions or removals.
 
-## Fix scope
+### 2c. Sidebar unchanged
+`AppSidebar.tsx:190,411-437` already hides via `useAnnualReviewFlag()` — no change needed.
 
-### 1. Migration — restore Dept Head RLS (the only real change)
-New migration adds `dept_head_id` to both policies on `annual_review_instances`. Uses `DROP POLICY IF EXISTS … / CREATE POLICY …` (safe re-run, additive semantics).
+## Step 3 — Tests
+`src/components/annual-review/AnnualReviewGate.test.tsx` (new):
+- Renders children when the flag hook returns `true`.
+- Redirects to `/dashboard` when the flag returns `false`.
+- Renders a loading state (not children, no redirect) while the flag query is pending — prevents a flash-redirect on refresh.
 
-```sql
--- SELECT: add dept_head_id arm
-DROP POLICY IF EXISTS instances_select_visible ON public.annual_review_instances;
-CREATE POLICY instances_select_visible ON public.annual_review_instances
-FOR SELECT TO authenticated
-USING (
-  employee_id  = auth.uid()
-  OR manager_id   = auth.uid()
-  OR skip_id      = auth.uid()
-  OR dept_head_id = auth.uid()   -- ← added
-  OR bu_head_id   = auth.uid()
-  OR hr_id        = auth.uid()
-  OR public.has_role(auth.uid(),'admin')
-  OR public.has_role(auth.uid(),'hr_pms')
-);
-
--- UPDATE: allow dept_head to advance/send back only while pending_dept
-DROP POLICY IF EXISTS instances_stage_update ON public.annual_review_instances;
-CREATE POLICY instances_stage_update ON public.annual_review_instances
-FOR UPDATE TO authenticated
-USING (
-  (manager_id   = auth.uid() AND overall_status = 'pending_manager')
-  OR (skip_id      = auth.uid() AND overall_status = 'pending_skip')
-  OR (dept_head_id = auth.uid() AND overall_status = 'pending_dept')   -- ← added
-  OR (bu_head_id   = auth.uid() AND overall_status = 'pending_bu')
-  OR (hr_id        = auth.uid() AND overall_status = 'pending_hr')
-  OR public.has_role(auth.uid(),'admin')
-  OR public.has_role(auth.uid(),'hr_pms')
-)
-WITH CHECK (/* same predicate */);
-```
-
-Exact `USING`/`WITH CHECK` bodies will be read from the live policy first and preserved verbatim except for the added arm, so we don't drop any pre-existing carve-outs (proxy submissions, admin bypasses, etc.). No `GRANT` change — grants already exist.
-
-### 2. No client changes
-Service query, hook, tab wiring, and reviewer role SSOT already handle dept_head. Confirmed at `src/services/annualReview/annualReviewService.ts:515,554`, `src/pages/annual-review/TeamAnnualReview.tsx:27–36`, `src/lib/annualReview/stageForReviewer.ts:28`.
-
-### 3. Tests
-- `supabase/tests/rls/annual_review_instances_dept_head.sql` (new, or pgTAP-style seed script under existing test folder) — asserts a dept_head user can SELECT and UPDATE only their own `pending_dept` row, and cannot touch other stages.
-- Extend `src/lib/annualReview/stageForReviewer.test.ts` with a "queue predicate" contract test that spells out all 5 reviewer id slots the RLS policy must cover — so the next time someone adds a slot (e.g. a new stage) the test forces them to update RLS too.
-
-### 4. Docs & policy
-- `DOCUMENTATION.md` — `v2.66.75` entry: "Dept Head RLS parity on annual_review_instances (SELECT + UPDATE)." RCA: Rupesh Vithal Dalvi, instance `e35bbe35-…`.
-- `POLICY.md` — under Annual Review Governance: reviewer visibility SSOT — RLS on `annual_review_instances` must include every reviewer id in `stageChain.ALL_STAGES`.
-- `mem://features/annual-review/overview.md` — one-liner: RLS SELECT/UPDATE on `annual_review_instances` must cover all five `*_id` reviewer slots; regression-guarded by the new pgTAP test.
+## Step 4 — Docs
+- `DOCUMENTATION.md` v2.66.76 — "Annual Review pilot allowlist enforced at the route level."
+- `POLICY.md` new clause §AR-PILOT-ALLOWLIST — routes under `/annual-review/*` MUST be wrapped in `AnnualReviewGate`, which delegates to `is_feature_flag_enabled_for_me('annual_review_enabled')`. Sidebar hiding alone is not sufficient. When the flag has any `target_user_ids` or `target_roles`, only that union (plus admins) may access the module.
+- `mem://features/annual-review/overview.md` — one-liner referencing the gate + flag key + admin surface.
 
 ## Risk & impact
 
-- **Data:** additive. No column change, no data rewrite. Existing rows unchanged.
-- **Workflow:** Rupesh (and every other Dept Head sitting on a `pending_dept` instance today) immediately sees and can act on their queue. Matches the intent already reflected in the app query.
-- **Regression risk:** low. Policy change is strictly a widening for the `dept_head_id` slot; other arms preserved verbatim. UPDATE is scoped to `overall_status = 'pending_dept'` so a dept_head cannot mutate rows outside their stage.
-- **Security:** no new roles/grants; auth.uid() equality only. Admin/HR bypasses unchanged.
-- **Rollback:** re-run the previous `CREATE POLICY` bodies (kept in the migration comment header) — pure DDL, instantaneous.
+- **Data:** none. No schema, RLS, or RPC change. The `is_feature_flag_enabled_for_me` RPC and `admin_feature_flags` table are already in use by the sidebar.
+- **Workflow:** during the pilot only allowlisted employees can enter the module — matches your requirement. Existing sidebar behaviour unchanged.
+- **UI:** one extra loading skeleton frame on route entry (~1 tick). No layout change.
+- **Regression risk:** low. Additive wrapper; role checks unchanged. If the flag hook errors, the gate treats it as disabled and redirects — safest default.
+- **Rollback:** remove the `<AnnualReviewGate>` wrappers in `App.tsx` and delete the component/tests. Flag data in the DB is unaffected.
 
 ## Not applicable
-Backup coverage, pagination, offline resilience, UI layout — unchanged.
+Backup coverage, pagination, offline resilience — unchanged.
