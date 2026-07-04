@@ -406,13 +406,22 @@ function TeamReviewDetailInner(props: any) {
 
       {role && !locked && (
         <div className="sticky bottom-0 bg-background/80 backdrop-blur border-t py-3 flex items-center justify-between gap-3">
-          <span className={`text-xs ${status === 'pending' ? 'text-amber-600' : status === 'error' ? 'text-destructive' : 'text-muted-foreground'}`}>
-            {status === 'saving' ? 'Saving…'
-              : status === 'saved' ? 'Draft saved'
-              : status === 'error' ? 'Save error'
-              : status === 'pending' ? 'Unsaved changes'
-              : ''}
-          </span>
+          <div className="flex flex-col gap-1">
+            <span className={`text-xs ${status === 'pending' ? 'text-amber-600' : status === 'error' ? 'text-destructive' : 'text-muted-foreground'}`}>
+              {status === 'saving' ? 'Saving…'
+                : status === 'saved' ? 'Draft saved'
+                : status === 'error' ? 'Save error'
+                : status === 'pending' ? 'Unsaved changes'
+                : ''}
+            </span>
+            {stageRatingOutOf5 != null && (
+              <div className="text-xs font-medium text-foreground">
+                {t('rating.your_rating', 'Your rating')}:{' '}
+                <span className="tabular-nums">{stageRatingOutOf5.toFixed(1)}</span>
+                <span className="text-muted-foreground"> / 5</span>
+              </div>
+            )}
+          </div>
           <div className="flex gap-2">
             {canSendBack && (
               <Button variant="outline" onClick={() => setSendBackOpen(true)} disabled={sendBackPending}>
