@@ -7,7 +7,13 @@ import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 
+// Fiscal-order month list (Jul→Jun) used for iterating cells in the row.
 const MONTH_ORDER = ['July', 'August', 'September', 'October', 'November', 'December', 'January', 'February', 'March', 'April', 'May', 'June'];
+// Calendar-order index used for calendar-time comparisons (past vs future).
+const CAL_MONTH_INDEX: Record<string, number> = {
+  January: 0, February: 1, March: 2, April: 3, May: 4, June: 5,
+  July: 6, August: 7, September: 8, October: 9, November: 10, December: 11,
+};
 
 type Scope = 'this' | 'forward' | 'all';
 
@@ -19,7 +25,74 @@ interface WeightageCellEditorProps {
   month: string;
   currentWeightage: number | null;
   kpiIds: Record<string, string>; // month -> kpi id
+  kpiMonthYears: Record<string, number>; // month -> review_year for calendar-time gating
   onSuccess: () => void;
+}
+
+/**
+ * POLICY §KPI Weightage Governance — bulk-edit scope semantics.
+ *
+ * `forward` and `all` are CALENDAR-forward: they must never modify a month
+ * whose (year, monthIdx) is strictly before today's (year, monthIdx). The
+ * escape hatch for historical corrections is the single-month `this` scope
+ * (governed elsewhere by lock / variance-ack rules).
+ */
+export function computeTargetKpiIds(
+  scope: Scope,
+  clickedMonth: string,
+  kpiIds: Record<string, string>,
+  kpiMonthYears: Record<string, number>,
+  now: Date,
+): string[] {
+  if (scope === 'this') {
+    return kpiIds[clickedMonth] ? [kpiIds[clickedMonth]] : [];
+  }
+
+  const todayYear = now.getFullYear();
+  const todayMonthIdx = now.getMonth(); // 0..11 calendar
+
+  const isNotPast = (m: string): boolean => {
+    const y = kpiMonthYears[m];
+    const mIdx = CAL_MONTH_INDEX[m];
+    if (y == null || mIdx == null) return false;
+    if (y > todayYear) return true;
+    if (y < todayYear) return false;
+    return mIdx >= todayMonthIdx;
+  };
+
+  if (scope === 'all') {
+    const ids: string[] = [];
+    for (const m of MONTH_ORDER) {
+      if (kpiIds[m] && isNotPast(m)) ids.push(kpiIds[m]);
+    }
+    return ids;
+  }
+
+  // forward: anchor = max(clickedMonth, today)
+  const clickedYear = kpiMonthYears[clickedMonth];
+  const clickedIdx = CAL_MONTH_INDEX[clickedMonth];
+  let anchorYear = todayYear;
+  let anchorIdx = todayMonthIdx;
+  if (
+    clickedYear != null &&
+    clickedIdx != null &&
+    (clickedYear > todayYear || (clickedYear === todayYear && clickedIdx > todayMonthIdx))
+  ) {
+    anchorYear = clickedYear;
+    anchorIdx = clickedIdx;
+  }
+
+  const ids: string[] = [];
+  for (const m of MONTH_ORDER) {
+    if (!kpiIds[m]) continue;
+    const y = kpiMonthYears[m];
+    const mIdx = CAL_MONTH_INDEX[m];
+    if (y == null || mIdx == null) continue;
+    const geAnchor =
+      y > anchorYear || (y === anchorYear && mIdx >= anchorIdx);
+    if (geAnchor) ids.push(kpiIds[m]);
+  }
+  return ids;
 }
 
 export function WeightageCellEditor({
@@ -30,6 +103,7 @@ export function WeightageCellEditor({
   month,
   currentWeightage,
   kpiIds,
+  kpiMonthYears,
   onSuccess,
 }: WeightageCellEditorProps) {
   const [open, setOpen] = useState(false);
@@ -42,26 +116,8 @@ export function WeightageCellEditor({
     setOpen(isOpen);
   };
 
-  const getTargetKpiIds = (): string[] => {
-    const currentIdx = MONTH_ORDER.indexOf(month);
-    if (currentIdx === -1) return [kpiIds[month]].filter(Boolean);
-
-    if (scope === 'this') {
-      return kpiIds[month] ? [kpiIds[month]] : [];
-    }
-
-    if (scope === 'all') {
-      return Object.values(kpiIds).filter(Boolean);
-    }
-
-    // forward: this month + all following months in fiscal year order
-    const ids: string[] = [];
-    for (let i = currentIdx; i < MONTH_ORDER.length; i++) {
-      const m = MONTH_ORDER[i];
-      if (kpiIds[m]) ids.push(kpiIds[m]);
-    }
-    return ids;
-  };
+  const getTargetKpiIds = (): string[] =>
+    computeTargetKpiIds(scope, month, kpiIds, kpiMonthYears, new Date());
 
   const handleSave = async () => {
     const newWeightage = value === '' ? null : Number(value);
@@ -72,7 +128,7 @@ export function WeightageCellEditor({
 
     const ids = getTargetKpiIds();
     if (ids.length === 0) {
-      toast.error('No KPI records found for the selected scope');
+      toast.error('No editable current/future months for this scope');
       return;
     }
 
@@ -99,13 +155,15 @@ export function WeightageCellEditor({
       // Log audit entries
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
+        const now = new Date();
+        const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
         const auditRows = ids.map(kpiId => ({
           kpi_id: kpiId,
           performed_by: user.id,
           action: 'weightage_matrix_edit',
           old_value: { weightage: currentWeightage } as any,
           new_value: { weightage: newWeightage } as any,
-          metadata: { scope, from_month: month, affected_count: ids.length } as any,
+          metadata: { scope, from_month: month, affected_count: ids.length, today } as any,
         }));
         await supabase.from('kpi_audit_logs').insert(auditRows);
       }
@@ -119,6 +177,9 @@ export function WeightageCellEditor({
       setSaving(false);
     }
   };
+
+  const targetCount = getTargetKpiIds().length;
+  const disableSave = saving || targetCount === 0;
 
   return (
     <Popover open={open} onOpenChange={handleOpen} modal={false}>
@@ -146,19 +207,25 @@ export function WeightageCellEditor({
             </div>
             <div className="flex items-center gap-2">
               <RadioGroupItem value="forward" id="scope-forward" />
-              <Label htmlFor="scope-forward" className="text-xs cursor-pointer">This & all following months</Label>
+              <Label htmlFor="scope-forward" className="text-xs cursor-pointer">This & all following months (future only)</Label>
             </div>
             <div className="flex items-center gap-2">
               <RadioGroupItem value="all" id="scope-all" />
-              <Label htmlFor="scope-all" className="text-xs cursor-pointer">All months</Label>
+              <Label htmlFor="scope-all" className="text-xs cursor-pointer">All current & future months</Label>
             </div>
           </RadioGroup>
+          <p className="text-[10px] text-muted-foreground leading-tight pt-1">
+            Past months are protected from bulk edits. Use “This month only” to edit a historical month.
+          </p>
         </div>
         <p className="text-[11px] text-muted-foreground">
-          Will update <strong>{getTargetKpiIds().length}</strong> month(s)
+          Will update <strong>{targetCount}</strong> month(s)
+          {targetCount === 0 && scope !== 'this' && (
+            <span className="block text-destructive/80">No editable current/future months for this scope.</span>
+          )}
         </p>
         <div className="flex gap-2">
-          <Button size="sm" className="flex-1" onClick={handleSave} disabled={saving}>
+          <Button size="sm" className="flex-1" onClick={handleSave} disabled={disableSave}>
             {saving ? 'Saving...' : 'Save'}
           </Button>
           {currentWeightage != null && (
