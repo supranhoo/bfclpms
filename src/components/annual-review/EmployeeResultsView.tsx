@@ -87,6 +87,20 @@ export function EmployeeResultsView({
               <p className="text-2xl font-semibold tabular-nums">
                 {instance.criteria_weighted_score != null ? instance.criteria_weighted_score.toFixed(2) : '—'}
               </p>
+              {(() => {
+                const maxCriteria = (criteria ?? []).reduce(
+                  (acc, c) => acc + (Number(c.weight) || 0) * 5,
+                  0,
+                );
+                const raw = instance.criteria_weighted_score;
+                if (raw == null || maxCriteria <= 0) return null;
+                const rating = (raw / maxCriteria) * 5;
+                return (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    ≈ {rating.toFixed(1)} / 5
+                  </p>
+                );
+              })()}
             </div>
           </div>
 

@@ -12,6 +12,7 @@ import type {
   AnnualReviewerRole,
 } from '@/types/annualReview';
 import type { InstanceWithEmployee } from './annualReviewService';
+import { computeCriteriaRatingOutOf5 } from '@/lib/annualReview/scoring';
 
 const STAGE_ORDER: AnnualReviewerRole[] = ['self', 'manager', 'skip_manager', 'dept_head', 'bu_head', 'hr'];
 const STAGE_LABEL: Record<AnnualReviewerRole, string> = {
@@ -72,7 +73,7 @@ export interface BulkResultsWorkbookOpts {
 
 /** Option C — bulk results export (Excel). All instances expanded with per-stage scores. */
 export function buildBulkResultsWorkbook(opts: BulkResultsWorkbookOpts): XLSX.WorkBook {
-  const { cycle, instances, stageScores, visibleColumns } = opts;
+  const { cycle, instances, stageScores, templatesById, visibleColumns } = opts;
   const colSet = new Set(visibleColumns);
 
   const headers: string[] = [];
@@ -85,11 +86,11 @@ export function buildBulkResultsWorkbook(opts: BulkResultsWorkbookOpts): XLSX.Wo
   push('manager', 'Manager');
   push('overall_status', 'Stage');
   push('enabled_stages', 'Enabled Stages');
-  push('score_self', 'Self Score');
-  push('score_manager', 'Manager Score');
-  push('score_skip', 'Skip Score');
-  push('score_bu', 'BU Score');
-  push('score_hr', 'HR Score');
+  push('score_self', 'Self Rating (/5)');
+  push('score_manager', 'Manager Rating (/5)');
+  push('score_skip', 'Skip Rating (/5)');
+  push('score_bu', 'BU Rating (/5)');
+  push('score_hr', 'HR Rating (/5)');
   push('criteria_weighted_score', 'Criteria Weighted Score');
   push('total_score', 'Total Score');
   push('final_rating', 'Final Rating');
@@ -101,6 +102,12 @@ export function buildBulkResultsWorkbook(opts: BulkResultsWorkbookOpts): XLSX.Wo
 
   const data = instances.map((inst) => {
     const scores = stageScores[inst.id] ?? {};
+    const tpl = templatesById[inst.template_id] ?? null;
+    const criteria = tpl?.sections?.criteria ?? [];
+    const rate = (v: number | null | undefined, role: AnnualReviewerRole) => {
+      const r = computeCriteriaRatingOutOf5(criteria, v ?? null, role);
+      return r == null ? '' : Number(r.toFixed(2));
+    };
     const row: Record<string, unknown> = {};
     if (colSet.has('employee_code')) row['Employee Code'] = inst.employee?.employee_code ?? '';
     if (colSet.has('full_name')) row['Full Name'] = inst.employee?.full_name ?? '';
@@ -110,11 +117,11 @@ export function buildBulkResultsWorkbook(opts: BulkResultsWorkbookOpts): XLSX.Wo
     if (colSet.has('manager')) row['Manager'] = '';
     if (colSet.has('overall_status')) row['Stage'] = inst.overall_status;
     if (colSet.has('enabled_stages')) row['Enabled Stages'] = (inst.enabled_stages ?? []).join(', ');
-    if (colSet.has('score_self')) row['Self Score'] = scores.self ?? '';
-    if (colSet.has('score_manager')) row['Manager Score'] = scores.manager ?? '';
-    if (colSet.has('score_skip')) row['Skip Score'] = scores.skip_manager ?? '';
-    if (colSet.has('score_bu')) row['BU Score'] = scores.bu_head ?? '';
-    if (colSet.has('score_hr')) row['HR Score'] = scores.hr ?? '';
+    if (colSet.has('score_self')) row['Self Rating (/5)'] = rate(scores.self, 'self');
+    if (colSet.has('score_manager')) row['Manager Rating (/5)'] = rate(scores.manager, 'manager');
+    if (colSet.has('score_skip')) row['Skip Rating (/5)'] = rate(scores.skip_manager, 'skip_manager');
+    if (colSet.has('score_bu')) row['BU Rating (/5)'] = rate(scores.bu_head, 'bu_head');
+    if (colSet.has('score_hr')) row['HR Rating (/5)'] = rate(scores.hr, 'hr');
     if (colSet.has('criteria_weighted_score')) row['Criteria Weighted Score'] = inst.criteria_weighted_score ?? '';
     if (colSet.has('total_score')) row['Total Score'] = inst.total_score ?? '';
     if (colSet.has('final_rating')) row['Final Rating'] = inst.final_rating ?? '';

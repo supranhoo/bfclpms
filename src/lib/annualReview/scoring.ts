@@ -1,5 +1,6 @@
 import type {
   AnnualReviewResponse,
+  AnnualReviewerRole,
   TemplateCriterion,
   TemplateSystemScore,
 } from '@/types/annualReview';
@@ -58,4 +59,41 @@ export function computeResponseWeightedScore(
   response: Pick<AnnualReviewResponse, 'criteria_scores'>,
 ): number {
   return computeCriteriaScore(criteria, response.criteria_scores ?? {}).totalCriteriaScore;
+}
+
+/**
+ * Normalise a stored `weighted_score` (Σ weight × selected_score) into a
+ * template-independent 0–5 rating for display.
+ *
+ *   max     = Σ (weight_i × 5)   for criteria that include `reviewerRole`
+ *             in their `reviewer_stages`.
+ *   rating  = weighted_score / max × 5
+ *           = weighted_score / Σ weight_i   (algebraic simplification)
+ *
+ * The `reviewer_stages` filter mirrors the PL/pgSQL SSOT
+ * `public.compute_annual_review_weighted_score(instance_id, reviewer_role)`
+ * so client and server denominators cannot drift.
+ *
+ * Returns `null` when the score is missing, non-finite, or the applicable
+ * weight sum is 0 (nothing to normalise against).
+ *
+ * See POLICY §AR-STAGE-RATING-DISPLAY.
+ */
+export function computeCriteriaRatingOutOf5(
+  criteria: TemplateCriterion[] | null | undefined,
+  weightedScore: number | null | undefined,
+  reviewerRole: AnnualReviewerRole,
+): number | null {
+  if (typeof weightedScore !== 'number' || !Number.isFinite(weightedScore)) return null;
+  if (!criteria || criteria.length === 0) return null;
+  let weightSum = 0;
+  for (const c of criteria) {
+    const stages = c.reviewer_stages ?? [];
+    if (!stages.includes(reviewerRole)) continue;
+    const w = Number(c.weight) || 0;
+    if (w > 0) weightSum += w;
+  }
+  if (weightSum <= 0) return null;
+  // weighted_score / (weightSum * 5) * 5  ==  weighted_score / weightSum
+  return weightedScore / weightSum;
 }

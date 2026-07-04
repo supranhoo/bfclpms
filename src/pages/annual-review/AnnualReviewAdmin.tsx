@@ -76,6 +76,7 @@ import {
   resolveStageWeights, computeFinalScore, STAGE_WEIGHT_KEYS,
   type StageWeightKey, type StageWeights,
 } from '@/lib/annualReview/finalScore';
+import { computeCriteriaRatingOutOf5 } from '@/lib/annualReview/scoring';
 
 export default function AnnualReviewAdmin() {
   return (
@@ -265,6 +266,11 @@ function exportProgress(
   const data = rows.map((i) => {
     const s = stageScores[i.id] ?? {};
     const tpl = templatesById[svc.resolveTemplateId(i) ?? ''] ?? null;
+    const criteriaForRow = tpl?.sections?.criteria ?? [];
+    const rate = (v: number | null | undefined, role: AnnualReviewerRole) => {
+      const r = computeCriteriaRatingOutOf5(criteriaForRow, v ?? null, role);
+      return r == null ? '' : Number(r.toFixed(2));
+    };
     const weights = resolveStageWeights(i, tpl);
     const sysTotal = Object.values(i.system_scores ?? {})
       .reduce<number>((acc, v) => acc + (typeof v === 'number' ? v : 0), 0) || null;
@@ -287,12 +293,18 @@ function exportProgress(
     'Employee Name': i.employee?.full_name ?? '',
     'Designation': i.employee?.designation ?? '',
     'Stage': i.overall_status,
-      'Self Score': s.self ?? '',
-      'Manager Score': s.manager ?? '',
-      'Skip Score': s.skip_manager ?? '',
-      'Dept Head Score': s.dept_head ?? '',
-      'BU Head Score': s.bu_head ?? '',
-      'HR Score': s.hr ?? '',
+      'Self Rating (/5)': rate(s.self, 'self'),
+      'Manager Rating (/5)': rate(s.manager, 'manager'),
+      'Skip Rating (/5)': rate(s.skip_manager, 'skip_manager'),
+      'Dept Head Rating (/5)': rate(s.dept_head, 'dept_head'),
+      'BU Head Rating (/5)': rate(s.bu_head, 'bu_head'),
+      'HR Rating (/5)': rate(s.hr, 'hr'),
+      'Self Weighted (raw)': s.self ?? '',
+      'Manager Weighted (raw)': s.manager ?? '',
+      'Skip Weighted (raw)': s.skip_manager ?? '',
+      'Dept Head Weighted (raw)': s.dept_head ?? '',
+      'BU Head Weighted (raw)': s.bu_head ?? '',
+      'HR Weighted (raw)': s.hr ?? '',
     'Total Score': i.total_score ?? '',
     'Criteria Weighted Score': i.criteria_weighted_score ?? '',
     'Weights Source': weightsSource,
@@ -314,13 +326,17 @@ function exportProgress(
   const detail: Array<Record<string, string | number>> = [];
   for (const i of rows) {
     const s = stageScores[i.id] ?? {};
+    const tpl = templatesById[svc.resolveTemplateId(i) ?? ''] ?? null;
+    const criteriaForRow = tpl?.sections?.criteria ?? [];
     (['self', 'manager', 'skip_manager', 'bu_head', 'hr'] as const).forEach((role) => {
       if (s[role] == null) return;
+      const r = computeCriteriaRatingOutOf5(criteriaForRow, s[role], role);
       detail.push({
         'Employee Code': i.employee?.employee_code ?? '',
         'Employee Name': i.employee?.full_name ?? '',
         'Stage': role,
         'Weighted Score': s[role] as number,
+        'Rating (/5)': r == null ? '' : Number(r.toFixed(2)),
       });
     });
   }
@@ -418,6 +434,11 @@ function ProgressTab() {
   const [stepBackReason, setStepBackReason] = useState('');
   const { data: allTemplates = [] } = useTemplates();
   const sendBack = useSendBackStatus();
+  const templatesByIdMap = useMemo(() => {
+    const m: Record<string, AnnualReviewTemplate> = {};
+    for (const t of allTemplates) m[t.id] = t;
+    return m;
+  }, [allTemplates]);
   const qc = useQueryClient();
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkOpen, setBulkOpen] = useState<null | 'finalize' | 'sendBack'>(null);
@@ -794,12 +815,12 @@ function ProgressTab() {
                 </TableHead>
                 <TableHead>Employee</TableHead>
                 <TableHead>Stage</TableHead>
-                <TableHead className="text-right">Self</TableHead>
-                <TableHead className="text-right">Manager</TableHead>
-                <TableHead className="text-right">Skip</TableHead>
-                <TableHead className="text-right">Dept</TableHead>
-                <TableHead className="text-right">BU</TableHead>
-                <TableHead className="text-right">HR</TableHead>
+                <TableHead className="text-right" title="Self reviewer rating on a 0–5 scale (normalised from stored weighted score).">Self /5</TableHead>
+                <TableHead className="text-right" title="Manager rating on a 0–5 scale.">Manager /5</TableHead>
+                <TableHead className="text-right" title="Skip manager rating on a 0–5 scale.">Skip /5</TableHead>
+                <TableHead className="text-right" title="Department head rating on a 0–5 scale.">Dept /5</TableHead>
+                <TableHead className="text-right" title="BU head rating on a 0–5 scale.">BU /5</TableHead>
+                <TableHead className="text-right" title="HR rating on a 0–5 scale.">HR /5</TableHead>
                 <TableHead className="text-right">Final</TableHead>
                 <TableHead className="text-right">Rating</TableHead>
                 <TableHead className="w-12"></TableHead>
@@ -808,8 +829,14 @@ function ProgressTab() {
             <TableBody>
               {filtered.map((i) => {
                 const ss = stageScoresMap[i.id] ?? {};
-                const fmt = (v: number | null | undefined) =>
-                  v == null ? <span className="text-muted-foreground/50">—</span> : v.toFixed(1);
+                const tplForRow = templatesByIdMap[svc.resolveTemplateId(i) ?? ''] ?? null;
+                const criteriaForRow = tplForRow?.sections?.criteria ?? [];
+                const fmt = (v: number | null | undefined, role: AnnualReviewerRole) => {
+                  const rating = computeCriteriaRatingOutOf5(criteriaForRow, v, role);
+                  return rating == null
+                    ? <span className="text-muted-foreground/50">—</span>
+                    : rating.toFixed(1);
+                };
                 const canChange = i.overall_status === 'not_started' || i.overall_status === 'pending_self';
                 return (
                 <TableRow key={i.id} className="min-h-10">
@@ -825,12 +852,12 @@ function ProgressTab() {
                     <div className="text-xs text-muted-foreground">{i.employee?.employee_code}</div>
                   </TableCell>
                   <TableCell><AnnualReviewStatusBadge status={i.overall_status} /></TableCell>
-                  <TableCell className="text-right tabular-nums">{fmt(ss.self)}</TableCell>
-                  <TableCell className="text-right tabular-nums">{fmt(ss.manager)}</TableCell>
-                  <TableCell className="text-right tabular-nums">{fmt(ss.skip_manager)}</TableCell>
-                  <TableCell className="text-right tabular-nums">{fmt(ss.dept_head)}</TableCell>
-                  <TableCell className="text-right tabular-nums">{fmt(ss.bu_head)}</TableCell>
-                  <TableCell className="text-right tabular-nums">{fmt(ss.hr)}</TableCell>
+                  <TableCell className="text-right tabular-nums">{fmt(ss.self, 'self')}</TableCell>
+                  <TableCell className="text-right tabular-nums">{fmt(ss.manager, 'manager')}</TableCell>
+                  <TableCell className="text-right tabular-nums">{fmt(ss.skip_manager, 'skip_manager')}</TableCell>
+                  <TableCell className="text-right tabular-nums">{fmt(ss.dept_head, 'dept_head')}</TableCell>
+                  <TableCell className="text-right tabular-nums">{fmt(ss.bu_head, 'bu_head')}</TableCell>
+                  <TableCell className="text-right tabular-nums">{fmt(ss.hr, 'hr')}</TableCell>
                   <TableCell className="text-right tabular-nums font-medium">{i.total_score?.toFixed(2) ?? <span className="text-muted-foreground/50">—</span>}</TableCell>
                   <TableCell className="text-right">{i.final_rating ?? <span className="text-muted-foreground/50">—</span>}</TableCell>
                   <TableCell className="text-right">
