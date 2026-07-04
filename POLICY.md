@@ -1,4 +1,12 @@
 ### §EVIDENCE-DOWNLOAD-PRIVATE-BUCKET — All client downloads from the `review-evidence` bucket use signed URLs (v2.66.68, 2026-06-29)
+### §AR-STAGE-REVIEWER-RESOLUTION — Every `pending_*` annual-review status must map to a reviewer role (v2.66.74, 2026-07-04)
+
+**Rule.** UI reviewer resolution MUST use `stageForReviewer` (`src/lib/annualReview/stageForReviewer.ts`) as the SSOT. Any `pending_*` status listed in `stageChain.ts` (`self`, `manager`, `skip_manager`, `dept_head`, `bu_head`, `hr`) that is not mapped will lock the assigned reviewer out of the detail page (score buttons disabled, no Submit / Send Back bar). Adding a new pending stage requires adding both the enum value in `stageChain.ts` AND the branch in `stageForReviewer`; regression is guarded by `src/lib/annualReview/stageForReviewer.test.ts`.
+
+### §AR-VARIANCE-JUSTIFICATION — Reviewer justification for score divergence from Self is optional (v2.66.74, 2026-07-04)
+
+**Rule.** When a reviewer's score differs from the employee's self-score on a criterion, the UI MAY prompt for a justification. This note is stored under the criterion's `qualitative_responses` map with the derived key `${criterionId}__variance`. It is **never mandatory**, never blocks Submit / Send Back, and is hidden entirely when scores match or when the employee has not yet self-scored the criterion.
+
 ### §BACKUP-DOWNLOAD-COMPLETENESS — Chunked backup download must iterate every part file (v2.66.70, 2026-06-29 / ADR-101)
 
 **Rule.** Any client-side merger of a chunked backup manifest (ADR-082) MUST iterate `entry.files: string[]` and concatenate the rows from every part. `entry.file` is the back-compat first-part pointer and MUST NOT be used as the sole source. Fallback ordering: `entry.files?.length ? entry.files : (entry.file ? [entry.file] : [])`. For each table, the merged row count MUST equal `entry.rows`; mismatches MUST log a console warning so QA can detect silent part-fetch failures.
