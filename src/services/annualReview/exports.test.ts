@@ -59,14 +59,14 @@ describe('annual review exports', () => {
     expect(headers).toContain('HR Comments');
   });
 
-  it('bulk results workbook respects visibleColumns', () => {
+  it('bulk results workbook respects visibleColumns and emits /5 rating headers', () => {
     const wb = buildBulkResultsWorkbook({
       cycle, instances: rows, stageScores: { i1: { self: 4.5, manager: 4 } },
       templatesById: { t1: template },
       visibleColumns: ['employee_code', 'full_name', 'score_self', 'total_score'],
     });
     const headers = sheetHeaders(wb, 'Results');
-    expect(headers).toEqual(['Employee Code', 'Full Name', 'Self Score', 'Total Score']);
+    expect(headers).toEqual(['Employee Code', 'Full Name', 'Self Rating (/5)', 'Total Score']);
   });
 
   it('seeding workbook emits one row per (employee × criterion)', () => {
