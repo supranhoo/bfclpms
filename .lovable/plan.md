@@ -1,54 +1,47 @@
-# Fix: Hindi option label edits leak across criteria
+## Goal
 
-## Root cause
+Add a **Delete** (Remove) action on each Annual Review template in the admin Templates tab, with safety checks so a template that is still in use cannot be removed.
 
-`CriterionOptionsDialog` writes option translations using the key
-`option:<optionId>:label` (see `src/components/annual-review/CriterionOptionsDialog.tsx` lines 38 & 102). `CriteriaScoringMatrix` reads the same key (line 125).
+## UI change
 
-The seeded Blue-Collar preset (and any template built by duplicating options) reuses the same option IDs (`o5`, `o4`, `o3`, `o2`, `o1`, `o0`) across **every** criterion. Because the translation key is not namespaced by criterion, editing the Hindi label for one criterion's `o5` overwrites the shared `option:o5:label` entry — so every other criterion whose `o5` option renders the same Hindi text.
+`src/pages/annual-review/AnnualReviewAdmin.tsx` → `TemplatesTabImpl` template card row:
 
-This is a real application bug, not a data-entry mistake.
+- Add a new red-outlined **Delete** button (Trash2 icon) after "Deactivate", visible for every template.
+- Clicking opens a `ConfirmDestructiveDialog` (existing pattern) titled "Delete template?" summarising the template name/version and warning the action is irreversible.
+- On confirm → call `svc.deleteTemplate(t.id)`, toast success, refetch list. On error → surface the server message via toast (e.g. "Cannot delete — template is assigned to N rule(s) / M employee override(s) / K live instance(s). Deactivate instead.").
 
-## Fix
+No other UI touched.
 
-Namespace option translation keys by criterion ID:
+## Service / logic
 
-- New key shape: `option:<criterionId>:<optionId>:label`
-- Legacy key `option:<optionId>:label` remains readable as a **fallback only** so previously-saved translations still render until re-edited.
+`src/services/annualReview/annualReviewService.ts` — add `deleteTemplate(id: string)`:
 
-### Writer — `CriterionOptionsDialog.tsx`
-- Seed `trBuf` from `option:<criterion.id>:<opt.id>:label`, falling back to legacy `option:<opt.id>:label` when the new key is empty (one-time migration on first open).
-- On save, write to the new namespaced key only. Do not touch legacy keys (harmless; ignored once the new key exists).
+1. Count references in parallel (`head:true, count:'exact'`):
+   - `annual_review_assignment_rules.template_id = id`
+   - `annual_review_assignment_overrides.template_id = id`
+   - `annual_review_instances.template_id = id` OR `template_override_id = id`
+2. If any count > 0 → throw a single formatted Error with the counts (drives the toast message above). No deletion happens.
+3. Otherwise → `db.from('annual_review_templates').delete().eq('id', id)`. Return `{ ok: true }`.
 
-### Reader — `CriteriaScoringMatrix.tsx`
-- Change both call sites (lines 77 and 125) to try the namespaced key first, then fall back to the legacy key. Since `tTemplateBilingual` accepts `(kind, id, field, fallback)`, extend `AnnualReviewI18nContext` with a small helper `tTemplateOptionBilingual(criterionId, optionId, fallback)` that internally checks `option:<criterionId>:<optionId>:label` then `option:<optionId>:label`. Keep the existing generic helpers unchanged to avoid touching other callers.
-
-### Context — `AnnualReviewI18nContext.tsx`
-- Add `tTemplateOption(criterionId, optionId, field, fallback)` and `tTemplateOptionBilingual(...)` with the same display-mode semantics (`bilingual` / `english_only` / `translated_only`) as the existing bilingual resolver, plus legacy-key fallback.
-
-### Types
-- No schema change. Translation payload (`TemplateSections.translations`) is untyped `Record<lang, Record<key, string>>` — new keys coexist with old.
+Rationale: additive, non-destructive by default. Matches the workflow-template lifecycle policy (assignments block deletion, deactivate/archive instead).
 
 ## Files touched
 
-- `src/components/annual-review/CriterionOptionsDialog.tsx` — read/write use namespaced key + legacy fallback on seed.
-- `src/components/annual-review/AnnualReviewI18nContext.tsx` — add `tTemplateOption` / `tTemplateOptionBilingual` with legacy fallback.
-- `src/components/annual-review/CriteriaScoringMatrix.tsx` — use the new option-aware helper at both call sites.
-- `src/test/annualReview/criteriaScoringMatrixOptions.test.tsx` — extend existing test with a case proving two criteria that share option ID `o5` render **different** Hindi labels when translations use the new namespaced key, and legacy key still resolves when the new key is missing.
-- `src/modules/annual-review/DOCUMENTATION.md` — Version-history entry.
-- `src/modules/annual-review/POLICY.md` — Note the canonical translation key shape for options.
-- `mem/design/annual-review-bilingual-options.md` — update the "Translation key shape" section to document the new option namespacing + legacy fallback.
+- `src/pages/annual-review/AnnualReviewAdmin.tsx` — add Delete button + confirm dialog wiring in `TemplatesTabImpl` only.
+- `src/services/annualReview/annualReviewService.ts` — add `deleteTemplate`.
+- `src/test/annualReview/deleteTemplate.test.ts` (new) — unit tests: (a) blocks when rules/overrides/instances reference it, (b) succeeds when unreferenced, (c) error message includes counts.
+- `src/modules/annual-review/DOCUMENTATION.md` — Version-history entry ("v1.2 — Templates tab: Delete action with reference-count guard").
+- `src/modules/annual-review/POLICY.md` — note: a template may only be deleted when it has zero rule/override/instance references; otherwise deactivate.
 
-## Risk & impact
+## Risk & Impact
 
-- **Data:** Additive. No migration needed. Existing `option:<optId>:label` entries continue to render via fallback until a user re-edits the criterion, which persists a new namespaced entry.
-- **Workflow / RLS:** None.
-- **UI/UX:** No visible change unless the bug reproduces; after the fix, per-criterion Hindi option labels are independent.
-- **Regression risk:** Low. The generic `tTemplateBilingual` API is untouched; only the option-label call sites move to the new helper.
-- **Rollback:** Revert the four source files; legacy keys were never removed.
+- **Data:** Hard delete of one row in `annual_review_templates` only when zero references exist. No cascade. Rollback = restore from backup (template is included in backup by default).
+- **Workflow:** None — blocked when any live rule/override/instance still uses it.
+- **UI/UX:** One new destructive button, gated by confirm dialog.
+- **RLS:** Uses existing admin-only mutation policies already in place for template writes; no policy change.
+- **Regression risk:** Low — no changes to seed/resolve/rule paths.
+- **Rollback:** Revert the three edited files; the new test file can stay or be removed.
 
-## Tests
+## Not applicable
 
-- Unit test: two criteria with shared `o5`, different Hindi labels written under namespaced keys → each criterion renders its own Hindi label.
-- Unit test: only legacy key present → both criteria still render the legacy label (backward compat).
-- Existing `criteriaScoringMatrixOptions.test.tsx` scenarios continue to pass.
+- No schema migration, no RLS change, no new backend function.
