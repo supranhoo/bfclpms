@@ -26,7 +26,7 @@ import { Button } from '@/components/ui/button';
 import { Loader2 } from 'lucide-react';
 import { SelfReviewSummaryDialog } from '@/components/annual-review/SelfReviewSummaryDialog';
 import { toast } from 'sonner';
-import { computeCriteriaScore, computeCriteriaRatingOutOf5 } from '@/lib/annualReview/scoring';
+import { computeCriteriaScore } from '@/lib/annualReview/scoring';
 import { computeScoreComposition } from '@/lib/annualReview/scoringComposition';
 import { AppraisalCompositionCard } from '@/components/annual-review/AppraisalCompositionCard';
 import { fyStartFromCycle } from '@/lib/annualReview/fiscalYear';
