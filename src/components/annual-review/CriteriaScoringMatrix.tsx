@@ -216,17 +216,67 @@ function CriterionRow({
         </div>
 
         {comparison && comparison.length > 0 && (
-          <div className="flex flex-wrap gap-2 text-xs text-muted-foreground border-t border-border/50 pt-3">
-            {comparison.map((c) => {
-              const v = c.values[criterion.id];
+          <div className="space-y-2 border-t border-border/50 pt-3">
+            <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+              {comparison.map((c) => {
+                const v = c.values[criterion.id];
+                return (
+                  <span key={c.label} className="rounded-md border px-2 py-1">
+                    {c.label}: <span className="font-semibold text-foreground">{typeof v === 'number' ? v : '–'}</span>
+                  </span>
+                );
+              })}
+            </div>
+            {(() => {
+              const selfEntry = comparison.find((c) => c.role === 'self');
+              const selfRemark = selfEntry?.remarks?.[criterion.id];
+              if (!selfRemark) return null;
               return (
-                <span key={c.label} className="rounded-md border px-2 py-1">
-                  {c.label}: <span className="font-semibold text-foreground">{typeof v === 'number' ? v : '–'}</span>
-                </span>
+                <div className="rounded-md border border-border/60 bg-muted/30 px-3 py-2 text-xs">
+                  <div className="font-semibold text-muted-foreground mb-0.5">
+                    {t('comparison.employee_remark', "Employee's remark")}
+                  </div>
+                  <div className="whitespace-pre-wrap text-foreground/90">{selfRemark}</div>
+                </div>
               );
-            })}
+            })()}
           </div>
         )}
+
+        {(() => {
+          // Optional justification when reviewer score differs from the employee's self score.
+          if (!reviewerLabel || reviewerLabel === 'Self' || reviewerLabel === 'self') return null;
+          const selfEntry = comparison?.find((c) => c.role === 'self');
+          if (!selfEntry) return null;
+          const selfScore = selfEntry.values[criterion.id];
+          if (typeof selfScore !== 'number' || typeof score !== 'number') return null;
+          if (selfScore === score) return null;
+          const varianceKey = `${criterion.id}__variance`;
+          return (
+            <div className="border-t border-border/50 pt-3 space-y-1.5">
+              <div className="text-xs font-medium text-muted-foreground">
+                {t(
+                  'variance.justification_label',
+                  'Justification for score difference (optional)',
+                )}
+                <span className="ml-1 text-[10px] uppercase tracking-wide text-muted-foreground/70">
+                  {t('variance.optional', 'optional')}
+                </span>
+              </div>
+              <Textarea
+                aria-label="Justification for score difference"
+                placeholder={t(
+                  'variance.justification_placeholder',
+                  `Why does your rating (${score}) differ from the employee's (${selfScore})? This note is optional.`,
+                )}
+                value={remarks[varianceKey] ?? ''}
+                onChange={(e) => onChangeRemark?.(varianceKey, e.target.value)}
+                disabled={readOnly}
+                rows={2}
+              />
+            </div>
+          );
+        })()}
 
         {(enableRemarks || enableEvidence) && (
           <div className="grid gap-3 md:grid-cols-2 border-t border-border/50 pt-4">
