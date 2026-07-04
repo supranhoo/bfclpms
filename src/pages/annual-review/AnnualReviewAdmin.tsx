@@ -800,12 +800,12 @@ function ProgressTab() {
                 </TableHead>
                 <TableHead>Employee</TableHead>
                 <TableHead>Stage</TableHead>
-                <TableHead className="text-right">Self</TableHead>
-                <TableHead className="text-right">Manager</TableHead>
-                <TableHead className="text-right">Skip</TableHead>
-                <TableHead className="text-right">Dept</TableHead>
-                <TableHead className="text-right">BU</TableHead>
-                <TableHead className="text-right">HR</TableHead>
+                <TableHead className="text-right" title="Self reviewer rating on a 0–5 scale (normalised from stored weighted score).">Self /5</TableHead>
+                <TableHead className="text-right" title="Manager rating on a 0–5 scale.">Manager /5</TableHead>
+                <TableHead className="text-right" title="Skip manager rating on a 0–5 scale.">Skip /5</TableHead>
+                <TableHead className="text-right" title="Department head rating on a 0–5 scale.">Dept /5</TableHead>
+                <TableHead className="text-right" title="BU head rating on a 0–5 scale.">BU /5</TableHead>
+                <TableHead className="text-right" title="HR rating on a 0–5 scale.">HR /5</TableHead>
                 <TableHead className="text-right">Final</TableHead>
                 <TableHead className="text-right">Rating</TableHead>
                 <TableHead className="w-12"></TableHead>
@@ -814,8 +814,14 @@ function ProgressTab() {
             <TableBody>
               {filtered.map((i) => {
                 const ss = stageScoresMap[i.id] ?? {};
-                const fmt = (v: number | null | undefined) =>
-                  v == null ? <span className="text-muted-foreground/50">—</span> : v.toFixed(1);
+                const tplForRow = templatesByIdMap[svc.resolveTemplateId(i) ?? ''] ?? null;
+                const criteriaForRow = tplForRow?.sections?.criteria ?? [];
+                const fmt = (v: number | null | undefined, role: AnnualReviewerRole) => {
+                  const rating = computeCriteriaRatingOutOf5(criteriaForRow, v, role);
+                  return rating == null
+                    ? <span className="text-muted-foreground/50">—</span>
+                    : rating.toFixed(1);
+                };
                 const canChange = i.overall_status === 'not_started' || i.overall_status === 'pending_self';
                 return (
                 <TableRow key={i.id} className="min-h-10">
@@ -831,12 +837,12 @@ function ProgressTab() {
                     <div className="text-xs text-muted-foreground">{i.employee?.employee_code}</div>
                   </TableCell>
                   <TableCell><AnnualReviewStatusBadge status={i.overall_status} /></TableCell>
-                  <TableCell className="text-right tabular-nums">{fmt(ss.self)}</TableCell>
-                  <TableCell className="text-right tabular-nums">{fmt(ss.manager)}</TableCell>
-                  <TableCell className="text-right tabular-nums">{fmt(ss.skip_manager)}</TableCell>
-                  <TableCell className="text-right tabular-nums">{fmt(ss.dept_head)}</TableCell>
-                  <TableCell className="text-right tabular-nums">{fmt(ss.bu_head)}</TableCell>
-                  <TableCell className="text-right tabular-nums">{fmt(ss.hr)}</TableCell>
+                  <TableCell className="text-right tabular-nums">{fmt(ss.self, 'self')}</TableCell>
+                  <TableCell className="text-right tabular-nums">{fmt(ss.manager, 'manager')}</TableCell>
+                  <TableCell className="text-right tabular-nums">{fmt(ss.skip_manager, 'skip_manager')}</TableCell>
+                  <TableCell className="text-right tabular-nums">{fmt(ss.dept_head, 'dept_head')}</TableCell>
+                  <TableCell className="text-right tabular-nums">{fmt(ss.bu_head, 'bu_head')}</TableCell>
+                  <TableCell className="text-right tabular-nums">{fmt(ss.hr, 'hr')}</TableCell>
                   <TableCell className="text-right tabular-nums font-medium">{i.total_score?.toFixed(2) ?? <span className="text-muted-foreground/50">—</span>}</TableCell>
                   <TableCell className="text-right">{i.final_rating ?? <span className="text-muted-foreground/50">—</span>}</TableCell>
                   <TableCell className="text-right">
