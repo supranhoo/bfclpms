@@ -47,8 +47,6 @@ import {
   RECOMMENDATION_KEY,
 } from '@/components/annual-review/OverallRecommendationCard';
 import { computeRunningFinalScore } from '@/lib/annualReview/runningFinalScore';
-import { computeCriteriaScore } from '@/lib/annualReview/scoring';
-import * as arSvc from '@/services/annualReview/annualReviewService';
 
 // Reviewer resolution moved to `@/lib/annualReview/stageForReviewer` so all
 // pending_* statuses (including `pending_dept`) are covered in one place.
@@ -150,18 +148,9 @@ export function TeamReviewDetailContent({
     }
     try {
       await flush();
-      // Persist weighted_score so the admin Progress grid can render the
-      // per-stage number; the advance RPC only sets submitted_at/is_locked.
-      if (user) {
-        const criteria = template?.sections.criteria ?? [];
-        const ws = computeCriteriaScore(criteria, draft.criteria_scores ?? {}).totalCriteriaScore;
-        await arSvc.upsertResponseDraft({
-          instance_id: instance.id,
-          reviewer_id: user.id,
-          reviewer_role: role,
-          weighted_score: ws,
-        });
-      }
+      // weighted_score is derived server-side by advance_annual_review_status
+      // (SSOT) so the admin Progress grid and running-score card read the
+      // authoritative value regardless of caller (self, reviewer, proxy, admin).
       await advance.mutateAsync({ instanceId: instance.id, role });
       toast.success('Submitted.');
     } catch (e) { toast.error((e as Error).message); }
