@@ -1,67 +1,125 @@
-## How the annual review is gated today
 
-Good news: the plumbing already exists. There is a feature flag `annual_review_enabled` in the `admin_feature_flags` table with a polished admin UI at **Admin → System Settings → Feature Flags**. You can pick specific employees by name or employee code and only they will see the module in the sidebar.
+## Root cause
 
-**Gap:** the sidebar hides correctly, but the routes themselves (`/annual-review`, `/annual-review/team`, `/annual-review/team/:id`, `/annual-review/calibrate`, `/annual-review/admin`) do NOT enforce the flag. Any employee who knows the URL and has the right role can still deep-link into the page. This must be closed before the pilot goes to real testers.
+TEST003's template (`af2a2c7c…`) has 5 required `self_review_fields`
+("best work", "daily problems", "needs", "shop floor", "new skill"). Two
+surfaces render the self-stage form:
 
-## Step 1 — Restrict to your pilot users today (no code, ~2 minutes)
+- `src/pages/annual-review/EmployeeAnnualReview.tsx` — renders the
+  "Qualitative Responses" card (lines 242-263). ✅
+- `src/components/annual-review/TeamReviewDetailContent.tsx` — the
+  page mounted at `/annual-review/team/:id` (the URL you're on).
+  It renders SystemScores + Criteria only. It **never renders
+  `template.sections.self_review_fields`**. ❌
 
-1. Open **Admin → System Settings** and switch to the **Feature Flags** tab.
-2. Find the `annual_review_enabled` card.
-3. Turn the master switch **ON**.
-4. Leave the **role** list empty.
-5. In **Add user**, search each tester by name or employee code and add them. They appear as removable badges.
-6. Click **Save changes**.
+Because you're submitting TEST003's self review as a proxy from
+`/annual-review/team/e35bbe35-…`, the last segment of the template is
+invisible — the code path simply doesn't include it. It's not an RLS
+issue, not template data, and not the pilot gate.
 
-Result: only those users (plus admins, who always bypass) will see "My Annual Review" and "Team Annual Review" in the sidebar. Everyone else's sidebar is unchanged.
+Same gap also affects **downstream reviewers** (manager / skip / dept /
+BU / HR): they never get to read the employee's qualitative answers on
+the review detail page — a visibility loss that partially explains
+earlier "why can't Rupesh see…" reports.
 
-**To open to everyone later:** clear the user list and clear the role list, keep the switch ON → the flag resolves to "Enabled for everyone".
+## Risk & Impact Report
 
-## Step 2 — Close the deep-link loophole (small code change)
+- **Data**: no schema / RLS / RPC change. Purely UI — writes into the
+  existing `qualitative_responses` jsonb column on
+  `annual_review_responses` that `EmployeeAnnualReview` already uses.
+- **Workflow**: proxy self-submission via `AssistedSubmissionDialog`
+  now includes the required qualitative answers before "Verify &
+  Submit on behalf" advances the stage. Prevents empty submissions on
+  required fields.
+- **UI/UX**: adds one card ("Qualitative Responses") between
+  Criteria and the footer on `/annual-review/team/:id`. Editable in
+  proxy self mode; read-only for every downstream reviewer role so they
+  can read the employee's answers.
+- **Regression risk**: low — additive card, gated on
+  `self_review_fields.length > 0`, reuses the exact draft/persist
+  plumbing already wired for `qualitative_responses`.
+- **Scalability**: 5 short textareas, no queries added.
+- **Rollback**: revert the single component change; no data migration.
 
-Because `ProtectedRoute` only checks role, not the flag, we need a thin gate around the annual-review routes. Two edits, no schema change:
+## Plan (surgical)
 
-### 2a. New component `src/components/annual-review/AnnualReviewGate.tsx`
-- Calls `useAnnualReviewFlag()`.
-- While loading: renders the existing page loading skeleton (matches `mem://design/page-loading-overlay-pattern`).
-- If `false`: `<Navigate to="/dashboard" replace />` and shows a one-off toast "Annual Review is in limited pilot".
-- If `true`: renders `children`.
-- Admins bypass automatically because `is_feature_flag_enabled_for_me` returns `true` for admins.
+1. **Extract SSOT** —
+   `src/components/annual-review/SelfReviewFieldsCard.tsx`:
+   - Props: `fields`, `values`, `readOnly`, `onChange(id, txt)`,
+     `translations`, `lang`, `defLang`, `displayMode`, `enableAudio`.
+   - Renders the same "Qualitative Responses" card currently inlined
+     in `EmployeeAnnualReview` (label + SpeakButton + Textarea,
+     required-asterisk, `tField` translation fallback). Zero visual
+     change on the employee page.
 
-### 2b. `src/App.tsx` — wrap every `/annual-review*` `ProtectedRoute` child
-Wrap the page element (not the guard) so role checks still run first:
+2. **EmployeeAnnualReview.tsx** — replace the inline block
+   (lines 242-263) with `<SelfReviewFieldsCard …>`. Identical output.
 
-```tsx
-<ProtectedRoute allowedRoles={[...]}>
-  <AnnualReviewGate>
-    <MyAnnualReview />
-  </AnnualReviewGate>
-</ProtectedRoute>
-```
+3. **TeamReviewDetailContent.tsx** — after the criteria card, render
+   `<SelfReviewFieldsCard>` when
+   `(template?.sections.self_review_fields ?? []).length > 0`, with:
+   - `readOnly = role !== 'self' || !!locked` — editable only in
+     proxy-self mode, otherwise a read-only view of the employee's
+     answers so every downstream reviewer can read them.
+   - `values` bound to `draft.qualitative_responses` when
+     `role === 'self'` (writes flow through the same
+     `useDebouncedResponseDraft` already in place); otherwise bound to
+     the self responder's saved `qualitative_responses` from
+     `responses.find(r => r.reviewer_role === 'self')`.
+   - `onChange` wired only when editable; otherwise `undefined`.
 
-Applied to all 5 annual-review routes (`/annual-review`, `/annual-review/team`, `/annual-review/team/:instanceId`, `/annual-review/calibrate`, `/annual-review/admin`). No route additions or removals.
+4. **SelfReviewSummaryDialog** already surfaces these fields on
+   submit — no change needed.
 
-### 2c. Sidebar unchanged
-`AppSidebar.tsx:190,411-437` already hides via `useAnnualReviewFlag()` — no change needed.
+5. **Docs & policy sync** (SSOT rule):
+   - `DOCUMENTATION.md` → new version-history entry: "Self-review
+     qualitative fields now render on `/annual-review/team/:id` in
+     proxy-self mode (editable) and downstream stages (read-only).
+     Fixes missing last segment for TEST003 template."
+   - `POLICY.md` → under §AR-SELF-QUALITATIVE add: "Any surface that
+     accepts self-stage input MUST render every
+     `template.sections.self_review_fields`. Downstream reviewer
+     surfaces MUST render them read-only so context is preserved."
 
-## Step 3 — Tests
-`src/components/annual-review/AnnualReviewGate.test.tsx` (new):
-- Renders children when the flag hook returns `true`.
-- Redirects to `/dashboard` when the flag returns `false`.
-- Renders a loading state (not children, no redirect) while the flag query is pending — prevents a flash-redirect on refresh.
+6. **Tests** (Vitest, additive):
+   - `SelfReviewFieldsCard.test.tsx` — renders each field, shows
+     required asterisk, respects `readOnly`, calls `onChange` with
+     `(id, value)`, hides when list is empty.
+   - Extend `TeamReviewDetailContent`-adjacent test (or add a new
+     integration-style test with a mock template + `role='self'` +
+     `proxyMode=true`) to assert the card is present and editable.
+   - Regression test to assert the card is **read-only** when
+     `role='manager'` and a self response exists.
 
-## Step 4 — Docs
-- `DOCUMENTATION.md` v2.66.76 — "Annual Review pilot allowlist enforced at the route level."
-- `POLICY.md` new clause §AR-PILOT-ALLOWLIST — routes under `/annual-review/*` MUST be wrapped in `AnnualReviewGate`, which delegates to `is_feature_flag_enabled_for_me('annual_review_enabled')`. Sidebar hiding alone is not sufficient. When the flag has any `target_user_ids` or `target_roles`, only that union (plus admins) may access the module.
-- `mem://features/annual-review/overview.md` — one-liner referencing the gate + flag key + admin surface.
+## Technical notes
 
-## Risk & impact
+- Reuse existing `useDebouncedResponseDraft` — no new persistence.
+- `SpeakButton` + `tField` behaviour is preserved by moving the exact
+  function into the new component (or accepting a prebuilt
+  translator prop).
+- No change to `advance_annual_review_status`, RLS, or the pilot
+  `AnnualReviewGate`.
+- Zero-hardcoding respected — everything driven by
+  `template.sections.self_review_fields`.
 
-- **Data:** none. No schema, RLS, or RPC change. The `is_feature_flag_enabled_for_me` RPC and `admin_feature_flags` table are already in use by the sidebar.
-- **Workflow:** during the pilot only allowlisted employees can enter the module — matches your requirement. Existing sidebar behaviour unchanged.
-- **UI:** one extra loading skeleton frame on route entry (~1 tick). No layout change.
-- **Regression risk:** low. Additive wrapper; role checks unchanged. If the flag hook errors, the gate treats it as disabled and redirects — safest default.
-- **Rollback:** remove the `<AnnualReviewGate>` wrappers in `App.tsx` and delete the component/tests. Flag data in the DB is unaffected.
+## Files touched
 
-## Not applicable
-Backup coverage, pagination, offline resilience — unchanged.
+- **new** `src/components/annual-review/SelfReviewFieldsCard.tsx`
+- **new** `src/components/annual-review/SelfReviewFieldsCard.test.tsx`
+- **edit** `src/pages/annual-review/EmployeeAnnualReview.tsx`
+  (swap inline block for the new component)
+- **edit** `src/components/annual-review/TeamReviewDetailContent.tsx`
+  (render the card; editable in proxy-self, read-only elsewhere)
+- **edit** `DOCUMENTATION.md`, `POLICY.md`
+
+## Verification
+
+- Reload `/annual-review/team/e35bbe35-…` as the proxy submitter →
+  see the new "Qualitative Responses" card with the 5 questions,
+  editable, required asterisks visible. Fill in, Save draft, then
+  "Verify & Submit on behalf" → the answers land in
+  `annual_review_responses.qualitative_responses` for the self row.
+- Reload as Rupesh (Dept Head) once the review is at `pending_dept`
+  → same card visible but read-only, showing the employee's answers.
+- `bun test` → new tests green; existing self-review tests still
+  green.
