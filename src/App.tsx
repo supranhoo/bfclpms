@@ -75,6 +75,7 @@ const TeamAnnualReviewDetail = lazy(() => import("./pages/annual-review/TeamAnnu
 const AnnualReviewAdmin = lazy(() => import("./pages/annual-review/AnnualReviewAdmin"));
 const ManagerCalibration = lazy(() => import("./pages/annual-review/ManagerCalibration"));
 const AnnualReviewReport = lazy(() => import("./pages/reports/AnnualReviewReport"));
+import { AnnualReviewGate } from "@/components/annual-review/AnnualReviewGate";
 const PlatformSettings = lazy(() => import("./pages/platform/PlatformSettings"));
 const ImplementationConsole = lazy(() => import("./pages/platform/ImplementationConsole"));
 
@@ -577,27 +578,27 @@ const App = () => (
                 {/* Annual Review module (Phase 1, feature-flag gated in UI) */}
                 <Route path="/annual-review" element={
                   <ProtectedRoute allowedRoles={['admin','manager','employee','auditor','management','hr_pms','skip_level']}>
-                    <Suspense fallback={<PageFallback />}><EmployeeAnnualReview /></Suspense>
+                    <AnnualReviewGate><Suspense fallback={<PageFallback />}><EmployeeAnnualReview /></Suspense></AnnualReviewGate>
                   </ProtectedRoute>
                 } />
                 <Route path="/annual-review/team" element={
                   <ProtectedRoute allowedRoles={['admin','manager','hr_pms','skip_level','management']}>
-                    <Suspense fallback={<PageFallback />}><TeamAnnualReview /></Suspense>
+                    <AnnualReviewGate><Suspense fallback={<PageFallback />}><TeamAnnualReview /></Suspense></AnnualReviewGate>
                   </ProtectedRoute>
                 } />
                 <Route path="/annual-review/team/:instanceId" element={
                   <ProtectedRoute allowedRoles={['admin','manager','hr_pms','skip_level','management']}>
-                    <Suspense fallback={<PageFallback />}><TeamAnnualReviewDetail /></Suspense>
+                    <AnnualReviewGate><Suspense fallback={<PageFallback />}><TeamAnnualReviewDetail /></Suspense></AnnualReviewGate>
                   </ProtectedRoute>
                 } />
                 <Route path="/annual-review/calibrate" element={
                   <ProtectedRoute allowedRoles={['admin','manager','hr_pms','skip_level','management']}>
-                    <Suspense fallback={<PageFallback />}><ManagerCalibration /></Suspense>
+                    <AnnualReviewGate><Suspense fallback={<PageFallback />}><ManagerCalibration /></Suspense></AnnualReviewGate>
                   </ProtectedRoute>
                 } />
                 <Route path="/annual-review/admin" element={
                   <ProtectedRoute allowedRoles={['admin','hr_pms']}>
-                    <Suspense fallback={<PageFallback />}><AnnualReviewAdmin /></Suspense>
+                    <AnnualReviewGate><Suspense fallback={<PageFallback />}><AnnualReviewAdmin /></Suspense></AnnualReviewGate>
                   </ProtectedRoute>
                 } />
                 <Route path="/reports/annual-review" element={
