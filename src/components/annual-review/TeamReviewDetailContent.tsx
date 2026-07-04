@@ -191,6 +191,7 @@ export function TeamReviewDetailContent({
       composition={composition}
       comparison={comparison}
       onUpload={onUpload}
+      responses={responses}
       handleSubmit={handleSubmit}
       handleSendBack={handleSendBack}
       canSendBack={canSendBack}
