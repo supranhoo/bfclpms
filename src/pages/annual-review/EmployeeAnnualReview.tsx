@@ -28,7 +28,6 @@ import { SelfReviewSummaryDialog } from '@/components/annual-review/SelfReviewSu
 import { toast } from 'sonner';
 import { computeCriteriaScore } from '@/lib/annualReview/scoring';
 import { computeScoreComposition } from '@/lib/annualReview/scoringComposition';
-import * as arSvc from '@/services/annualReview/annualReviewService';
 import { AppraisalCompositionCard } from '@/components/annual-review/AppraisalCompositionCard';
 import { fyStartFromCycle } from '@/lib/annualReview/fiscalYear';
 import { useResolvedSystemScores } from '@/hooks/useResolvedSystemScores';
@@ -153,20 +152,8 @@ export default function EmployeeAnnualReview() {
     setConfirmOpen(false);
     try {
       await flush();
-      // Persist the reviewer's weighted criteria score so the admin Progress
-      // grid and downstream final-score math have a value to read. Without
-      // this, `weighted_score` stays NULL and the SELF/MGR/etc. columns show
-      // "—" even after submit.
-      if (user && instance) {
-        const criteria = template?.sections.criteria ?? [];
-        const ws = computeCriteriaScore(criteria, draft.criteria_scores ?? {}).totalCriteriaScore;
-        await arSvc.upsertResponseDraft({
-          instance_id: instance.id,
-          reviewer_id: user.id,
-          reviewer_role: 'self',
-          weighted_score: ws,
-        });
-      }
+      // weighted_score is computed server-side inside advance_annual_review_status
+      // (SSOT) — no client-side compute needed here.
       await advance.mutateAsync({ instanceId: instance.id, role: 'self' });
       toast.success(t('note.locked', 'Your review has been submitted and forwarded.'));
     } catch (e) { toast.error((e as Error).message); }
