@@ -253,6 +253,7 @@ function TeamReviewDetailInner(props: any) {
     visibleStages, skippedStages, reviewerNamesByStage, fiscalYear,
     draft, setDraft, status, flush, composition, running, comparison, onUpload,
     responses, handleSubmit, handleSendBack, canSendBack,
+    stageRatingOutOf5,
     sendBackOpen, setSendBackOpen, sendBackReason, setSendBackReason,
     sendBackPending, advancePending, assistedOpen, setAssistedOpen,
     user, profile, queryClient,
