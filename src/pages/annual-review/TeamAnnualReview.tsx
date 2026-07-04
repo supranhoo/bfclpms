@@ -205,7 +205,7 @@ export default function TeamAnnualReview() {
           {/* Grid of employees */}
           <ul className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-2.5">
             {rows.map((i) => {
-              const stage = user ? STAGE_FOR_REVIEWER(i, user.id) : null;
+              const stage = stageForReviewer(i, user?.id);
               const initials = (i.employee?.full_name ?? '?')
                 .trim().split(/\s+/).slice(0, 2)
                 .map((p) => p[0]?.toUpperCase() ?? '').join('') || '?';
