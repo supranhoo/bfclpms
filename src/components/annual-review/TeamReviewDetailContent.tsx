@@ -47,6 +47,7 @@ import {
   RECOMMENDATION_KEY,
 } from '@/components/annual-review/OverallRecommendationCard';
 import { computeRunningFinalScore } from '@/lib/annualReview/runningFinalScore';
+import { computeCriteriaScore, computeCriteriaRatingOutOf5 } from '@/lib/annualReview/scoring';
 
 // Reviewer resolution moved to `@/lib/annualReview/stageForReviewer` so all
 // pending_* statuses (including `pending_dept`) are covered in one place.
