@@ -75,7 +75,7 @@ export default function TeamAnnualReviewDetail() {
 
   if (isLoading && !instance) {
     return (
-      <div className="p-4 md:p-6 max-w-5xl mx-auto">
+      <div className="p-4 md:p-6 max-w-7xl mx-auto">
         {header}
         <div className="flex items-center gap-2 text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Loading review…</div>
       </div>
@@ -84,7 +84,7 @@ export default function TeamAnnualReviewDetail() {
 
   if (error || !instance) {
     return (
-      <div className="p-4 md:p-6 max-w-5xl mx-auto">
+      <div className="p-4 md:p-6 max-w-7xl mx-auto">
         {header}
         <Card>
           <CardContent className="p-6 text-sm text-muted-foreground">
@@ -97,7 +97,7 @@ export default function TeamAnnualReviewDetail() {
   }
 
   return (
-    <div className="p-4 md:p-6 max-w-5xl mx-auto">
+    <div className="p-4 md:p-6 max-w-7xl mx-auto">
       {header}
       <TeamReviewDetailContent
         instance={instance}
