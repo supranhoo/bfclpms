@@ -326,13 +326,17 @@ function exportProgress(
   const detail: Array<Record<string, string | number>> = [];
   for (const i of rows) {
     const s = stageScores[i.id] ?? {};
+    const tpl = templatesById[svc.resolveTemplateId(i) ?? ''] ?? null;
+    const criteriaForRow = tpl?.sections?.criteria ?? [];
     (['self', 'manager', 'skip_manager', 'bu_head', 'hr'] as const).forEach((role) => {
       if (s[role] == null) return;
+      const r = computeCriteriaRatingOutOf5(criteriaForRow, s[role], role);
       detail.push({
         'Employee Code': i.employee?.employee_code ?? '',
         'Employee Name': i.employee?.full_name ?? '',
         'Stage': role,
         'Weighted Score': s[role] as number,
+        'Rating (/5)': r == null ? '' : Number(r.toFixed(2)),
       });
     });
   }
