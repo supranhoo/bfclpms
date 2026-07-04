@@ -92,19 +92,6 @@ export default function EmployeeAnnualReview() {
     [template, draft.criteria_scores],
   );
 
-  // Live template-independent /5 rating for the criteria the SELF stage is
-  // scoring. Mirrors the SSOT display standard used across Admin / Exports /
-  // Results (POLICY §AR-STAGE-RATING-DISPLAY) so the employee sees, in real
-  // time, the same rating the manager will see after submission.
-  const selfRatingOutOf5 = useMemo(
-    () => computeCriteriaRatingOutOf5(
-      criteriaForStage(template, 'self'),
-      summary.totalCriteriaScore,
-      'self',
-    ),
-    [template, summary.totalCriteriaScore],
-  );
-
   const { values: resolvedSystemScores } = useResolvedSystemScores(
     template,
     instance,
@@ -115,6 +102,12 @@ export default function EmployeeAnnualReview() {
     () => computeScoreComposition(template, resolvedSystemScores, draft.criteria_scores ?? {}),
     [template, resolvedSystemScores, draft.criteria_scores],
   );
+
+  // Composite /5 rating (System + Criteria) — kept in sync with the Final /100
+  // math via composition.overallActual. POLICY §AR-STAGE-RATING-DISPLAY.
+  const selfRatingOutOf5 = composition.overallMax > 0
+    ? (composition.overallActual / composition.overallMax) * 5
+    : null;
 
   const evidenceByCriterion = useMemo(() => {
     const map: Record<string, EvidenceItem[]> = {};
