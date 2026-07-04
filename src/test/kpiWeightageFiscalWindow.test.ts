@@ -62,7 +62,7 @@ describe('KPI Weightage — fiscal-window predicate (Jul→Jun)', () => {
     // fiscal-window predicate.
     const { execSync } = require('node:child_process') as typeof import('node:child_process');
     const files = execSync(
-      "grep -l 'rpc_weightage_variance_summary' supabase/migrations 2>/dev/null || true",
+      "grep -rl 'rpc_weightage_variance_summary' supabase/migrations 2>/dev/null || true",
       { encoding: 'utf8' },
     )
       .trim()
