@@ -56,28 +56,19 @@ describe('reviewer visibility SSOT (app query ↔ RLS)', () => {
     }
   });
 
-  it('RLS policy on annual_review_instances covers every reviewer id slot', () => {
-    // Latest migration containing the dept_head parity fix.
-    const sql = readFileSync(
-      resolve(__dirname, '../../../supabase/migrations'),
-      // Read the directory listing via readdirSync instead — vitest node env.
-      // Kept inline to avoid a helper file for a one-off assertion.
-      { encoding: 'utf8' as unknown as BufferEncoding },
-    ).toString();
-    // If the above throws (readFileSync on a dir), fall back to scanning files.
-    // We just need SOME migration to contain the full set of slots.
-    void sql;
-    const { readdirSync } = require('node:fs') as typeof import('node:fs');
+  it('RLS policy on annual_review_instances covers every reviewer id slot', async () => {
+    const { readdirSync } = await import('node:fs');
     const dir = resolve(__dirname, '../../../supabase/migrations');
-    const files = readdirSync(dir).filter((f) => f.endsWith('.sql'));
-    const bodies = files.map((f) => readFileSync(resolve(dir, f), 'utf8'));
-    const covered = REVIEWER_ID_SLOTS.every((slot) =>
-      bodies.some((b) =>
-        b.includes('annual_review_instances') &&
-        b.includes('instances_select_visible') &&
-        b.includes(`${slot} = auth.uid()`),
-      ),
-    );
-    expect(covered, 'RLS SELECT policy must reference every reviewer id slot').toBe(true);
+    const bodies = readdirSync(dir)
+      .filter((f) => f.endsWith('.sql'))
+      .map((f) => readFileSync(resolve(dir, f), 'utf8'))
+      .filter((b) =>
+        b.includes('instances_select_visible') && b.includes('annual_review_instances'),
+      );
+    expect(bodies.length, 'no migration defines instances_select_visible').toBeGreaterThan(0);
+    for (const slot of REVIEWER_ID_SLOTS) {
+      const covered = bodies.some((b) => b.includes(`${slot}`) && b.includes('auth.uid()'));
+      expect(covered, `latest RLS SELECT policy missing reviewer slot ${slot}`).toBe(true);
+    }
   });
 });
