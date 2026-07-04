@@ -264,6 +264,13 @@ export default function EmployeeAnnualReview() {
               : t('note.draft', 'Draft')}
           </div>
           <AppraisalCompositionCard composition={composition} variant="inline" />
+          {selfRatingOutOf5 != null && (
+            <div className="text-xs font-medium text-foreground">
+              {t('rating.your_rating', 'Your rating')}:{' '}
+              <span className="tabular-nums">{selfRatingOutOf5.toFixed(1)}</span>
+              <span className="text-muted-foreground"> / 5</span>
+            </div>
+          )}
         </div>
         {!locked && (
           <div className="flex gap-2">
