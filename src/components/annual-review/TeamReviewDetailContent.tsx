@@ -217,12 +217,18 @@ function TeamReviewDetailInner(props: any) {
     instance, template, role, locked, proxyMode, availLangs, lang, setLang,
     visibleStages, skippedStages, reviewerNamesByStage, fiscalYear,
     draft, setDraft, status, flush, composition, comparison, onUpload,
-    handleSubmit, handleSendBack, canSendBack,
+    responses, handleSubmit, handleSendBack, canSendBack,
     sendBackOpen, setSendBackOpen, sendBackReason, setSendBackReason,
     sendBackPending, advancePending, assistedOpen, setAssistedOpen,
     user, profile, queryClient,
   } = props;
   const { t } = useAnnualReviewI18n();
+  const selfReviewFields = template?.sections?.self_review_fields ?? [];
+  const selfEditable = role === 'self' && !locked;
+  const selfResponse = (responses ?? []).find((r: any) => r.reviewer_role === 'self') ?? null;
+  const selfValues: Record<string, string> = selfEditable
+    ? ((draft.qualitative_responses ?? {}) as Record<string, string>)
+    : ((selfResponse?.qualitative_responses ?? {}) as Record<string, string>);
   return (
     <div className="space-y-4">
       <Card>
