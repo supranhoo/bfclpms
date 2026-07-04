@@ -30,6 +30,7 @@ import { toast } from 'sonner';
 import type { AnnualReviewerRole, EvidenceItem } from '@/types/annualReview';
 import type { InstanceWithEmployee } from '@/services/annualReview/annualReviewService';
 import { enabledChain } from '@/lib/annualReview/stageChain';
+import { stageForReviewer } from '@/lib/annualReview/stageForReviewer';
 import { useProxyEligibility } from '@/hooks/useProxyEligibility';
 import { AssistedSubmissionDialog } from '@/components/annual-review/AssistedSubmissionDialog';
 import { Badge } from '@/components/ui/badge';
@@ -40,18 +41,8 @@ import { computeScoreComposition } from '@/lib/annualReview/scoringComposition';
 import { AppraisalCompositionCard } from '@/components/annual-review/AppraisalCompositionCard';
 import { useResolvedSystemScores } from '@/hooks/useResolvedSystemScores';
 
-/**
- * Maps an instance + viewer to the role they're currently expected to fill.
- * Returns `null` when the viewer has no active role (read-only / proxy paths
- * handled separately).
- */
-const STAGE_FOR_REVIEWER = (inst: InstanceWithEmployee, uid: string): AnnualReviewerRole | null => {
-  if (inst.overall_status === 'pending_manager' && inst.manager_id === uid) return 'manager';
-  if (inst.overall_status === 'pending_skip' && inst.skip_id === uid) return 'skip_manager';
-  if (inst.overall_status === 'pending_bu' && inst.bu_head_id === uid) return 'bu_head';
-  if (inst.overall_status === 'pending_hr' && inst.hr_id === uid) return 'hr';
-  return null;
-};
+// Reviewer resolution moved to `@/lib/annualReview/stageForReviewer` so all
+// pending_* statuses (including `pending_dept`) are covered in one place.
 
 /**
  * Reviewer-side review body, shared by the dedicated detail page
@@ -74,7 +65,7 @@ export function TeamReviewDetailContent({
   const advance = useAdvanceStatus();
   const sendBack = useSendBackStatus();
   const upload = useUploadEvidence();
-  const stageRole = user ? STAGE_FOR_REVIEWER(instance, user.id) : null;
+  const stageRole = stageForReviewer(instance, user?.id);
   const { data: showReviewerNames = false } = useShowReviewerNamesInStepper();
   const { data: profilesLite } = useActiveProfilesLite();
   const reviewerNamesByStage = useMemo(
@@ -121,9 +112,14 @@ export function TeamReviewDetailContent({
 
   const comparison = useMemo(() => {
     const labels: Record<AnnualReviewerRole, string> = { self: 'Self', manager: 'Manager', skip_manager: 'Skip', dept_head: 'Dept', bu_head: 'BU', hr: 'HR' };
-    const previous: { label: string; values: Record<string, number | undefined> }[] = [];
+    const previous: { label: string; role: AnnualReviewerRole; values: Record<string, number | undefined>; remarks: Record<string, string> }[] = [];
     for (const r of responses) {
-      if (r.reviewer_role !== role) previous.push({ label: labels[r.reviewer_role], values: r.criteria_scores });
+      if (r.reviewer_role !== role) previous.push({
+        label: labels[r.reviewer_role],
+        role: r.reviewer_role,
+        values: r.criteria_scores,
+        remarks: (r.qualitative_responses ?? {}) as Record<string, string>,
+      });
     }
     return previous;
   }, [responses, role]);
