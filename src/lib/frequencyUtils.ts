@@ -630,16 +630,34 @@ export function canSubmitForSubPeriod(
       const dayOfMonth = currentDate.getDate();
       const currentMonth = format(currentDate, 'MMMM');
       const currentYear = currentDate.getFullYear();
-      
+
+      // Carry-over window (see getWeeklySubPeriods): Weeks 1–4 remain enterable
+      // during the next month so employees can back-fill missed weeks.
+      const carryoverWindow: WeeklyReviewWindow =
+        windows['week_carryover'] ?? {
+          start: 1,
+          end: windows['week_5']?.end ?? 14,
+          nextMonth: true,
+        };
+      const carryNextMonth = getMonthNumber(reviewMonth) === 12
+        ? 'January'
+        : getMonthName(getMonthNumber(reviewMonth) + 1);
+      const carryNextYear = getMonthNumber(reviewMonth) === 12 ? reviewYear + 1 : reviewYear;
+      const isInCarryover =
+        currentMonth === carryNextMonth &&
+        currentYear === carryNextYear &&
+        dayOfMonth >= carryoverWindow.start &&
+        dayOfMonth <= carryoverWindow.end;
+
       if (weekNum <= 4) {
         const window = windows[`week_${weekNum}`];
         if (!window) return false;
-        return (
+        const inPrimary =
           currentMonth === reviewMonth &&
           currentYear === reviewYear &&
           dayOfMonth >= window.start &&
-          dayOfMonth <= window.end
-        );
+          dayOfMonth <= window.end;
+        return inPrimary || isInCarryover;
       } else {
         // Week 5 - reviewed in next month
         const week5Window = windows['week_5'];
