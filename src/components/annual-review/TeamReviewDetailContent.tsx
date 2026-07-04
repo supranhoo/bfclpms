@@ -41,6 +41,12 @@ import { computeScoreComposition } from '@/lib/annualReview/scoringComposition';
 import { AppraisalCompositionCard } from '@/components/annual-review/AppraisalCompositionCard';
 import { useResolvedSystemScores } from '@/hooks/useResolvedSystemScores';
 import { SelfReviewFieldsCard } from '@/components/annual-review/SelfReviewFieldsCard';
+import { RunningFinalScoreCard } from '@/components/annual-review/RunningFinalScoreCard';
+import {
+  OverallRecommendationCard,
+  RECOMMENDATION_KEY,
+} from '@/components/annual-review/OverallRecommendationCard';
+import { computeRunningFinalScore } from '@/lib/annualReview/runningFinalScore';
 
 // Reviewer resolution moved to `@/lib/annualReview/stageForReviewer` so all
 // pending_* statuses (including `pending_dept`) are covered in one place.
@@ -163,6 +169,16 @@ export function TeamReviewDetailContent({
     [template, resolvedSystemScores, draft.criteria_scores],
   );
 
+  const running = useMemo(
+    () => computeRunningFinalScore({
+      instance,
+      template,
+      responses,
+      resolvedSystemScores,
+    }),
+    [instance, template, responses, resolvedSystemScores],
+  );
+
   return (
     <AnnualReviewI18nProvider
       currentLanguage={lang}
@@ -189,6 +205,7 @@ export function TeamReviewDetailContent({
       status={status}
       flush={flush}
       composition={composition}
+      running={running}
       comparison={comparison}
       onUpload={onUpload}
       responses={responses}
@@ -216,7 +233,7 @@ function TeamReviewDetailInner(props: any) {
   const {
     instance, template, role, locked, proxyMode, availLangs, lang, setLang,
     visibleStages, skippedStages, reviewerNamesByStage, fiscalYear,
-    draft, setDraft, status, flush, composition, comparison, onUpload,
+    draft, setDraft, status, flush, composition, running, comparison, onUpload,
     responses, handleSubmit, handleSendBack, canSendBack,
     sendBackOpen, setSendBackOpen, sendBackReason, setSendBackReason,
     sendBackPending, advancePending, assistedOpen, setAssistedOpen,
@@ -229,6 +246,8 @@ function TeamReviewDetailInner(props: any) {
   const selfValues: Record<string, string> = selfEditable
     ? ((draft.qualitative_responses ?? {}) as Record<string, string>)
     : ((selfResponse?.qualitative_responses ?? {}) as Record<string, string>);
+  const recommendationDraft: string =
+    ((draft.qualitative_responses ?? {}) as Record<string, string>)[RECOMMENDATION_KEY] ?? '';
   return (
     <div className="space-y-4">
       <Card>
@@ -294,6 +313,10 @@ function TeamReviewDetailInner(props: any) {
 
       <AppraisalCompositionCard composition={composition} variant="full" />
 
+      {(role === 'dept_head' || role === 'bu_head') && (
+        <RunningFinalScoreCard running={running} />
+      )}
+
       {role && shouldHideCriteriaCard(template, role) ? (
         <Card>
           <CardContent className="p-4 text-sm text-muted-foreground">
@@ -343,6 +366,23 @@ function TeamReviewDetailInner(props: any) {
                 }))
             : undefined
         }
+      />
+
+      <OverallRecommendationCard
+        role={role}
+        locked={!!locked}
+        draftValue={recommendationDraft}
+        onChangeDraft={(v) =>
+          setDraft((p: any) => ({
+            ...p,
+            qualitative_responses: {
+              ...(p.qualitative_responses ?? {}),
+              [RECOMMENDATION_KEY]: v,
+            },
+          }))
+        }
+        responses={responses ?? []}
+        reviewerNames={reviewerNamesByStage}
       />
 
       {role && !locked && (
