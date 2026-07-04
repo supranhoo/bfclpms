@@ -47,7 +47,8 @@ import {
   RECOMMENDATION_KEY,
 } from '@/components/annual-review/OverallRecommendationCard';
 import { computeRunningFinalScore } from '@/lib/annualReview/runningFinalScore';
-import { computeCriteriaScore, computeCriteriaRatingOutOf5 } from '@/lib/annualReview/scoring';
+// computeCriteriaRatingOutOf5 no longer used — the /5 shown to reviewers is
+// now the composite (System + Criteria) via composition.overallActual.
 
 // Reviewer resolution moved to `@/lib/annualReview/stageForReviewer` so all
 // pending_* statuses (including `pending_dept`) are covered in one place.
@@ -186,15 +187,14 @@ export function TeamReviewDetailContent({
     [instance, template, responses, resolvedSystemScores],
   );
 
-  // Live template-independent /5 rating for THIS reviewer's stage — the same
-  // value that will surface in Admin > Progress and exports after submission.
-  // See POLICY §AR-STAGE-RATING-DISPLAY.
+  // Composite /5 rating (System + this stage's criteria). Mirrors the Final
+  // /100 math via composition.overallActual. POLICY §AR-STAGE-RATING-DISPLAY.
   const stageRatingOutOf5 = useMemo(() => {
     if (!role) return null;
-    const stageCriteria = criteriaForStage(template, role);
-    const { totalCriteriaScore } = computeCriteriaScore(stageCriteria, draft.criteria_scores ?? {});
-    return computeCriteriaRatingOutOf5(stageCriteria, totalCriteriaScore, role);
-  }, [template, role, draft.criteria_scores]);
+    return composition.overallMax > 0
+      ? (composition.overallActual / composition.overallMax) * 5
+      : null;
+  }, [role, composition.overallActual, composition.overallMax]);
 
   return (
     <AnnualReviewI18nProvider

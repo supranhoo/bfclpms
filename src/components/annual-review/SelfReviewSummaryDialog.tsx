@@ -10,7 +10,6 @@ import type {
   AnnualReviewTemplate, EvidenceItem, TemplateCriterion,
 } from '@/types/annualReview';
 import type { CriteriaScoreSummary } from '@/lib/annualReview/scoring';
-import { computeCriteriaRatingOutOf5 } from '@/lib/annualReview/scoring';
 import type { ScoreComposition } from '@/lib/annualReview/scoringComposition';
 import { AppraisalCompositionCard } from '@/components/annual-review/AppraisalCompositionCard';
 import { shouldHideCriteriaCard, criteriaForStage, systemScoresFullyAllocated } from '@/lib/annualReview/templateVisibility';
@@ -51,7 +50,12 @@ export function SelfReviewSummaryDialog({
   const hideCriteria = shouldHideCriteriaCard(template, 'self');
   const criteria: TemplateCriterion[] = criteriaForStage(template, 'self');
   const systemFull = systemScoresFullyAllocated(template);
-  const ratingOutOf5 = computeCriteriaRatingOutOf5(criteria, summary.totalCriteriaScore, 'self');
+  // Composite /5 rating — blends System (KRA carry etc.) with the criteria
+  // this stage scored. Mirrors the Final /100 math via composition.overallActual.
+  // See POLICY §AR-STAGE-RATING-DISPLAY (composite variant).
+  const ratingOutOf5 = composition.overallMax > 0
+    ? (composition.overallActual / composition.overallMax) * 5
+    : null;
   const fields = template?.sections.self_review_fields ?? [];
   const responses = draft.qualitative_responses ?? {};
   const scores = draft.criteria_scores ?? {};
@@ -90,7 +94,7 @@ export function SelfReviewSummaryDialog({
                     {t('rating.your_rating', 'Your rating')}
                   </div>
                   <div className="text-xs text-muted-foreground">
-                    {t('rating.your_rating.hint', 'Template-independent rating based on the criteria you scored.')}
+                    {t('rating.your_rating.hint.composite', 'Composite rating — System score + the criteria you scored.')}
                   </div>
                 </div>
                 <div className="text-2xl font-semibold tabular-nums">
