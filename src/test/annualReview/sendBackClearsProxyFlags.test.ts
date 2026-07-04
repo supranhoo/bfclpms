@@ -40,6 +40,6 @@ describe('send-back to self clears proxy state', () => {
 
   it('useSendBackStatus refetches active queries so the queue reflects the new stage', () => {
     const src = read('hooks/useAnnualReview.ts');
-    expect(src).toMatch(/useSendBackStatus[\s\S]{0,400}refetchQueries\(\{ queryKey: annualReviewKeys\.all, type: 'active' \}\)/);
+    expect(src).toMatch(/useSendBackStatus[\s\S]{0,600}refetchQueries\(\{\s*queryKey:\s*annualReviewKeys\.all,\s*type:\s*'active'\s*\}\)/);
   });
 });
