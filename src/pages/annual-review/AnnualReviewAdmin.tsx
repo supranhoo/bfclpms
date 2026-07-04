@@ -266,6 +266,11 @@ function exportProgress(
   const data = rows.map((i) => {
     const s = stageScores[i.id] ?? {};
     const tpl = templatesById[svc.resolveTemplateId(i) ?? ''] ?? null;
+    const criteriaForRow = tpl?.sections?.criteria ?? [];
+    const rate = (v: number | null | undefined, role: AnnualReviewerRole) => {
+      const r = computeCriteriaRatingOutOf5(criteriaForRow, v ?? null, role);
+      return r == null ? '' : Number(r.toFixed(2));
+    };
     const weights = resolveStageWeights(i, tpl);
     const sysTotal = Object.values(i.system_scores ?? {})
       .reduce<number>((acc, v) => acc + (typeof v === 'number' ? v : 0), 0) || null;
@@ -288,12 +293,18 @@ function exportProgress(
     'Employee Name': i.employee?.full_name ?? '',
     'Designation': i.employee?.designation ?? '',
     'Stage': i.overall_status,
-      'Self Score': s.self ?? '',
-      'Manager Score': s.manager ?? '',
-      'Skip Score': s.skip_manager ?? '',
-      'Dept Head Score': s.dept_head ?? '',
-      'BU Head Score': s.bu_head ?? '',
-      'HR Score': s.hr ?? '',
+      'Self Rating (/5)': rate(s.self, 'self'),
+      'Manager Rating (/5)': rate(s.manager, 'manager'),
+      'Skip Rating (/5)': rate(s.skip_manager, 'skip_manager'),
+      'Dept Head Rating (/5)': rate(s.dept_head, 'dept_head'),
+      'BU Head Rating (/5)': rate(s.bu_head, 'bu_head'),
+      'HR Rating (/5)': rate(s.hr, 'hr'),
+      'Self Weighted (raw)': s.self ?? '',
+      'Manager Weighted (raw)': s.manager ?? '',
+      'Skip Weighted (raw)': s.skip_manager ?? '',
+      'Dept Head Weighted (raw)': s.dept_head ?? '',
+      'BU Head Weighted (raw)': s.bu_head ?? '',
+      'HR Weighted (raw)': s.hr ?? '',
     'Total Score': i.total_score ?? '',
     'Criteria Weighted Score': i.criteria_weighted_score ?? '',
     'Weights Source': weightsSource,
