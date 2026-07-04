@@ -11,6 +11,7 @@ import { Loader2, ChevronRight, Scale, Search, Users, UserPlus, ChevronLeft } fr
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import type { AnnualReviewerRole, AnnualReviewStatus } from '@/types/annualReview';
 import type { InstanceWithEmployee } from '@/services/annualReview/annualReviewService';
+import { stageForReviewer } from '@/lib/annualReview/stageForReviewer';
 import { Badge } from '@/components/ui/badge';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { EmployeeDirectoryDialog } from '@/components/annual-review/EmployeeDirectoryDialog';
@@ -28,18 +29,13 @@ const STATUS_FILTERS: { value: AnnualReviewStatus | 'all'; label: string }[] = [
   { value: 'pending_self', label: 'Self' },
   { value: 'pending_manager', label: 'Manager' },
   { value: 'pending_skip', label: 'Skip' },
+  { value: 'pending_dept', label: 'Dept Head' },
   { value: 'pending_bu', label: 'BU' },
   { value: 'pending_hr', label: 'HR' },
   { value: 'completed', label: 'Done' },
 ];
 
-const STAGE_FOR_REVIEWER = (inst: InstanceWithEmployee, uid: string): AnnualReviewerRole | null => {
-  if (inst.overall_status === 'pending_manager' && inst.manager_id === uid) return 'manager';
-  if (inst.overall_status === 'pending_skip' && inst.skip_id === uid) return 'skip_manager';
-  if (inst.overall_status === 'pending_bu' && inst.bu_head_id === uid) return 'bu_head';
-  if (inst.overall_status === 'pending_hr' && inst.hr_id === uid) return 'hr';
-  return null;
-};
+// Reviewer resolution — see `@/lib/annualReview/stageForReviewer`.
 
 export default function TeamAnnualReview() {
   const { user, isAdmin, hasRole } = useAuth();
