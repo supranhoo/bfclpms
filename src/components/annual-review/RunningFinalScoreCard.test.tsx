@@ -32,7 +32,7 @@ describe('RunningFinalScoreCard', () => {
     );
     expect(screen.getByText(/74\.3/)).toBeInTheDocument();
     expect(screen.getByText(/3\.71/)).toBeInTheDocument();
-    expect(screen.getByText(/4/)).toBeInTheDocument(); // contributing count
+    expect(screen.getByText(/stages submitted so far/)).toBeInTheDocument();
     expect(screen.getByText(/BU Head/)).toBeInTheDocument();
     expect(screen.getByText(/HR/)).toBeInTheDocument();
   });
