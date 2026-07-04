@@ -40,6 +40,7 @@ import { AnnualReviewI18nProvider, useAnnualReviewI18n } from '@/components/annu
 import { computeScoreComposition } from '@/lib/annualReview/scoringComposition';
 import { AppraisalCompositionCard } from '@/components/annual-review/AppraisalCompositionCard';
 import { useResolvedSystemScores } from '@/hooks/useResolvedSystemScores';
+import { SelfReviewFieldsCard } from '@/components/annual-review/SelfReviewFieldsCard';
 
 // Reviewer resolution moved to `@/lib/annualReview/stageForReviewer` so all
 // pending_* statuses (including `pending_dept`) are covered in one place.
@@ -190,6 +191,7 @@ export function TeamReviewDetailContent({
       composition={composition}
       comparison={comparison}
       onUpload={onUpload}
+      responses={responses}
       handleSubmit={handleSubmit}
       handleSendBack={handleSendBack}
       canSendBack={canSendBack}
@@ -215,12 +217,18 @@ function TeamReviewDetailInner(props: any) {
     instance, template, role, locked, proxyMode, availLangs, lang, setLang,
     visibleStages, skippedStages, reviewerNamesByStage, fiscalYear,
     draft, setDraft, status, flush, composition, comparison, onUpload,
-    handleSubmit, handleSendBack, canSendBack,
+    responses, handleSubmit, handleSendBack, canSendBack,
     sendBackOpen, setSendBackOpen, sendBackReason, setSendBackReason,
     sendBackPending, advancePending, assistedOpen, setAssistedOpen,
     user, profile, queryClient,
   } = props;
   const { t } = useAnnualReviewI18n();
+  const selfReviewFields = template?.sections?.self_review_fields ?? [];
+  const selfEditable = role === 'self' && !locked;
+  const selfResponse = (responses ?? []).find((r: any) => r.reviewer_role === 'self') ?? null;
+  const selfValues: Record<string, string> = selfEditable
+    ? ((draft.qualitative_responses ?? {}) as Record<string, string>)
+    : ((selfResponse?.qualitative_responses ?? {}) as Record<string, string>);
   return (
     <div className="space-y-4">
       <Card>
@@ -316,6 +324,24 @@ function TeamReviewDetailInner(props: any) {
           </CardContent>
         </Card>
       )}
+
+      <SelfReviewFieldsCard
+        fields={selfReviewFields}
+        values={selfValues}
+        readOnly={!selfEditable}
+        onChange={
+          selfEditable
+            ? (id, txt) =>
+                setDraft((p: any) => ({
+                  ...p,
+                  qualitative_responses: {
+                    ...(p.qualitative_responses ?? {}),
+                    [id]: txt,
+                  },
+                }))
+            : undefined
+        }
+      />
 
       {role && !locked && (
         <div className="sticky bottom-0 bg-background/80 backdrop-blur border-t py-3 flex items-center justify-between gap-3">

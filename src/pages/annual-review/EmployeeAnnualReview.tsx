@@ -23,8 +23,6 @@ import { useAnnualReviewTranslation } from '@/hooks/useAnnualReviewTranslation';
 import { AnnualReviewI18nProvider } from '@/components/annual-review/AnnualReviewI18nContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Textarea } from '@/components/ui/textarea';
-import { Label } from '@/components/ui/label';
 import { Loader2 } from 'lucide-react';
 import { SelfReviewSummaryDialog } from '@/components/annual-review/SelfReviewSummaryDialog';
 import { toast } from 'sonner';
@@ -35,7 +33,7 @@ import { fyStartFromCycle } from '@/lib/annualReview/fiscalYear';
 import { useResolvedSystemScores } from '@/hooks/useResolvedSystemScores';
 import type { EvidenceItem } from '@/types/annualReview';
 import { EmployeeResultsView } from '@/components/annual-review/EmployeeResultsView';
-import { SpeakButton } from '@/components/annual-review/SpeakButton';
+import { SelfReviewFieldsCard } from '@/components/annual-review/SelfReviewFieldsCard';
 
 export default function EmployeeAnnualReview() {
   const { user, profile } = useAuth();
@@ -171,19 +169,6 @@ export default function EmployeeAnnualReview() {
     ? template.sections.settings.available_languages ?? ['en']
     : ['en'];
 
-  // Template-authored translations for qualitative fields. Uses the canonical
-  // colon-key shape (`field:<id>:label` / `field:<id>:placeholder`) and respects
-  // the per-template `display_mode` (bilingual / english_only / translated_only).
-  const defLang = template?.sections.settings?.default_language ?? 'en';
-  const displayMode = template?.sections.display_mode ?? 'bilingual';
-  const translations = template?.sections.translations;
-  const tField = (id: string, field: 'label' | 'placeholder', fb: string) => {
-    if (!fb && field === 'placeholder') return '';
-    if (lang === defLang || displayMode === 'english_only') return fb;
-    const v = translations?.[lang]?.[`field:${id}:${field}`];
-    return v || fb;
-  };
-
   return (
     <AnnualReviewI18nProvider
       currentLanguage={lang}
@@ -239,28 +224,18 @@ export default function EmployeeAnnualReview() {
         </Card>
       )}
 
-      {(template?.sections.self_review_fields ?? []).length > 0 && (
-        <Card>
-          <CardHeader><CardTitle>{t('section.qualitative', 'Qualitative Responses')}</CardTitle></CardHeader>
-          <CardContent className="space-y-4">
-            {template!.sections.self_review_fields!.map((f) => (
-              <div key={f.id} className="space-y-1">
-                <div className="flex items-center gap-2">
-                  <Label>{tField(f.id, 'label', f.label)}{f.required && <span className="text-destructive"> *</span>}</Label>
-                  <SpeakButton text={tField(f.id, 'label', f.label)} />
-                </div>
-                <Textarea
-                  rows={3}
-                  placeholder={tField(f.id, 'placeholder', f.placeholder ?? '')}
-                  value={(draft.qualitative_responses ?? {})[f.id] ?? ''}
-                  disabled={!!locked}
-                  onChange={(e) => setDraft((p) => ({ ...p, qualitative_responses: { ...(p.qualitative_responses ?? {}), [f.id]: e.target.value } }))}
-                />
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-      )}
+      <SelfReviewFieldsCard
+        fields={template?.sections.self_review_fields ?? []}
+        values={(draft.qualitative_responses ?? {}) as Record<string, string>}
+        readOnly={!!locked}
+        onChange={(id, txt) =>
+          setDraft((p) => ({
+            ...p,
+            qualitative_responses: { ...(p.qualitative_responses ?? {}), [id]: txt },
+          }))
+        }
+        title={t('section.qualitative', 'Qualitative Responses')}
+      />
 
       <footer className="flex flex-wrap items-center justify-between gap-3 sticky bottom-0 bg-background/80 backdrop-blur border-t py-3">
         <div className="flex flex-col gap-1">
