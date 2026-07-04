@@ -75,6 +75,7 @@ const TeamAnnualReviewDetail = lazy(() => import("./pages/annual-review/TeamAnnu
 const AnnualReviewAdmin = lazy(() => import("./pages/annual-review/AnnualReviewAdmin"));
 const ManagerCalibration = lazy(() => import("./pages/annual-review/ManagerCalibration"));
 const AnnualReviewReport = lazy(() => import("./pages/reports/AnnualReviewReport"));
+import { AnnualReviewGate } from "@/components/annual-review/AnnualReviewGate";
 const PlatformSettings = lazy(() => import("./pages/platform/PlatformSettings"));
 const ImplementationConsole = lazy(() => import("./pages/platform/ImplementationConsole"));
 
