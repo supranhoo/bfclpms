@@ -325,6 +325,24 @@ function TeamReviewDetailInner(props: any) {
         </Card>
       )}
 
+      <SelfReviewFieldsCard
+        fields={selfReviewFields}
+        values={selfValues}
+        readOnly={!selfEditable}
+        onChange={
+          selfEditable
+            ? (id, txt) =>
+                setDraft((p: any) => ({
+                  ...p,
+                  qualitative_responses: {
+                    ...(p.qualitative_responses ?? {}),
+                    [id]: txt,
+                  },
+                }))
+            : undefined
+        }
+      />
+
       {role && !locked && (
         <div className="sticky bottom-0 bg-background/80 backdrop-blur border-t py-3 flex items-center justify-between gap-3">
           <span className={`text-xs ${status === 'pending' ? 'text-amber-600' : status === 'error' ? 'text-destructive' : 'text-muted-foreground'}`}>
