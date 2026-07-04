@@ -1,125 +1,74 @@
+## Root cause analysis
 
-## Root cause
+**Instance queried (TEST003 → `e35bbe35…`).** The DB truth is `overall_status = 'pending_self'`. Timeline reconstructed from `system_audit_logs`:
 
-TEST003's template (`af2a2c7c…`) has 5 required `self_review_fields`
-("best work", "daily problems", "needs", "shop floor", "new skill"). Two
-surfaces render the self-stage form:
+| UTC | Event | Effect |
+|---|---|---|
+| 07-03 13:05 | Template override + `enabled_stages_set` → `[self, dept_head, bu_head, hr]` | status retargeted to `pending_self` |
+| 07-03 14:05 | `annual_review.send_back` (dept_head → self, by manager `535d…`) | status → `pending_self` |
+| 07-04 14:13 | Proxy submit (`submit_annual_review_self_as_proxy`) | status → `pending_dept`, `submitted_via_proxy=true`, `proxy_submission_id` stamped |
+| 07-04 14:59:18 | `annual_review.send_back` (dept_head → self, again) | status → `pending_self`, self-response `is_locked=false`, `submitted_at=NULL` |
+| 07-04 14:59:41 / 14:59:49 | template override toggles | only allowed while status = `pending_self` (proves the send-back landed) |
 
-- `src/pages/annual-review/EmployeeAnnualReview.tsx` — renders the
-  "Qualitative Responses" card (lines 242-263). ✅
-- `src/components/annual-review/TeamReviewDetailContent.tsx` — the
-  page mounted at `/annual-review/team/:id` (the URL you're on).
-  It renders SystemScores + Criteria only. It **never renders
-  `template.sections.self_review_fields`**. ❌
+So the employee view is correct. The manager view is wrong because of **two independent defects** in the send-back RPC and the badge logic. The stepper/badge you saw (`Dept Head Review Pending` + `Submitted with assistance`) is being derived from stale proxy-state fields that send-back never resets.
 
-Because you're submitting TEST003's self review as a proxy from
-`/annual-review/team/e35bbe35-…`, the last segment of the template is
-invisible — the code path simply doesn't include it. It's not an RLS
-issue, not template data, and not the pilot gate.
+### Defect 1 — send-back does not clear proxy flags (DB layer)
 
-Same gap also affects **downstream reviewers** (manager / skip / dept /
-BU / HR): they never get to read the employee's qualitative answers on
-the review detail page — a visibility loss that partially explains
-earlier "why can't Rupesh see…" reports.
+`public.send_back_annual_review_status` (migration `20260621064230…`, lines 275-331) updates `overall_status`, unlocks the previous-role response, but leaves `submitted_via_proxy` and `proxy_submission_id` untouched. After a send-back to `self` the instance carries `overall_status='pending_self'` **with `submitted_via_proxy=true`** — an impossible state that misleads every downstream reader.
 
-## Risk & Impact Report
+### Defect 2 — badge is derived from the stale flag, not the current response (UI layer)
 
-- **Data**: no schema / RLS / RPC change. Purely UI — writes into the
-  existing `qualitative_responses` jsonb column on
-  `annual_review_responses` that `EmployeeAnnualReview` already uses.
-- **Workflow**: proxy self-submission via `AssistedSubmissionDialog`
-  now includes the required qualitative answers before "Verify &
-  Submit on behalf" advances the stage. Prevents empty submissions on
-  required fields.
-- **UI/UX**: adds one card ("Qualitative Responses") between
-  Criteria and the footer on `/annual-review/team/:id`. Editable in
-  proxy self mode; read-only for every downstream reviewer role so they
-  can read the employee's answers.
-- **Regression risk**: low — additive card, gated on
-  `self_review_fields.length > 0`, reuses the exact draft/persist
-  plumbing already wired for `qualitative_responses`.
-- **Scalability**: 5 short textareas, no queries added.
-- **Rollback**: revert the single component change; no data migration.
+`TeamReviewDetailContent.tsx` (~L245-249) shows the "Submitted with assistance" badge whenever `instance.submitted_via_proxy` is true, regardless of whether the self-response is currently locked/submitted. Combined with defect 1 the badge outlives the actual proxy submission.
 
-## Plan (surgical)
+### Defect 3 — reviewer-queue detail hydration path can serve a pre-send-back snapshot
 
-1. **Extract SSOT** —
-   `src/components/annual-review/SelfReviewFieldsCard.tsx`:
-   - Props: `fields`, `values`, `readOnly`, `onChange(id, txt)`,
-     `translations`, `lang`, `defLang`, `displayMode`, `enableAudio`.
-   - Renders the same "Qualitative Responses" card currently inlined
-     in `EmployeeAnnualReview` (label + SpeakButton + Textarea,
-     required-asterisk, `tField` translation fallback). Zero visual
-     change on the employee page.
+`useReviewInstance` invalidates on `annualReviewKeys.all`, so a plain refetch works; however the paginated queue (`useInstancesPaginated`, key `[...all, 'instancesPaginated', args]`) caches the row and `keepPreviousData` shows the pre-send-back status until the next fetch cycle completes. That's the "manager sees `pending_dept`" symptom on the queue list even though the detail page refetches. This is a UX layer only — the DB is already correct.
 
-2. **EmployeeAnnualReview.tsx** — replace the inline block
-   (lines 242-263) with `<SelfReviewFieldsCard …>`. Identical output.
+## Fix plan (surgical, no schema change)
 
-3. **TeamReviewDetailContent.tsx** — after the criteria card, render
-   `<SelfReviewFieldsCard>` when
-   `(template?.sections.self_review_fields ?? []).length > 0`, with:
-   - `readOnly = role !== 'self' || !!locked` — editable only in
-     proxy-self mode, otherwise a read-only view of the employee's
-     answers so every downstream reviewer can read them.
-   - `values` bound to `draft.qualitative_responses` when
-     `role === 'self'` (writes flow through the same
-     `useDebouncedResponseDraft` already in place); otherwise bound to
-     the self responder's saved `qualitative_responses` from
-     `responses.find(r => r.reviewer_role === 'self')`.
-   - `onChange` wired only when editable; otherwise `undefined`.
+1. **DB — `send_back_annual_review_status` (new migration)**
+   Add `submitted_via_proxy = false, proxy_submission_id = NULL` to the UPDATE **only when `v_prev_role = 'self'`** (i.e., send-back is dropping the review back into self-review). All other send-back targets are unaffected. The proxy audit row in `annual_review_proxy_submissions` is **not** deleted — history stays intact; the instance-level flag reflects the *current* state only.
 
-4. **SelfReviewSummaryDialog** already surfaces these fields on
-   submit — no change needed.
+2. **DB — one-time repair for instances currently in this bad state**
+   ```sql
+   UPDATE public.annual_review_instances
+      SET submitted_via_proxy = false, proxy_submission_id = NULL
+    WHERE overall_status = 'pending_self'
+      AND submitted_via_proxy = true;
+   ```
+   Included in the same migration. Non-destructive: only clears flags whose invariant is already violated.
 
-5. **Docs & policy sync** (SSOT rule):
-   - `DOCUMENTATION.md` → new version-history entry: "Self-review
-     qualitative fields now render on `/annual-review/team/:id` in
-     proxy-self mode (editable) and downstream stages (read-only).
-     Fixes missing last segment for TEST003 template."
-   - `POLICY.md` → under §AR-SELF-QUALITATIVE add: "Any surface that
-     accepts self-stage input MUST render every
-     `template.sections.self_review_fields`. Downstream reviewer
-     surfaces MUST render them read-only so context is preserved."
+3. **UI — badge & assisted-mode gating (`TeamReviewDetailContent.tsx`)**
+   Compute `isCurrentlyProxySubmitted = instance.submitted_via_proxy && selfResponse?.is_locked === true && !!selfResponse?.submitted_at`. Use that (not the raw flag) for:
+   * "Submitted with assistance" badge visibility.
+   * Any downstream gating that assumes the self-stage was actually completed via proxy.
 
-6. **Tests** (Vitest, additive):
-   - `SelfReviewFieldsCard.test.tsx` — renders each field, shows
-     required asterisk, respects `readOnly`, calls `onChange` with
-     `(id, value)`, hides when list is empty.
-   - Extend `TeamReviewDetailContent`-adjacent test (or add a new
-     integration-style test with a mock template + `role='self'` +
-     `proxyMode=true`) to assert the card is present and editable.
-   - Regression test to assert the card is **read-only** when
-     `role='manager'` and a self response exists.
+4. **Queue refresh — `useSendBackStatus` (`src/hooks/useAnnualReview.ts`)**
+   Keep the `annualReviewKeys.all` invalidation and additionally call `qc.refetchQueries({ queryKey: annualReviewKeys.all, type: 'active' })` so the visible queue (using `keepPreviousData`) refetches immediately instead of on next mount.
 
-## Technical notes
+5. **Tests (mandatory)**
+   * `src/test/annualReview/sendBackClearsProxyFlags.test.ts` — unit test around a fake instance to assert the new send-back branch clears both fields only when target=self.
+   * Update `src/test/annualReview/proxySubmission.test.ts` — add case "after send-back to self, badge/mode do not treat instance as proxy-submitted".
+   * SQL regression: extend an existing PL/pgSQL test (or add a small `.sql` test invoked from CI) exercising proxy-submit → send-back → assert `submitted_via_proxy=false, proxy_submission_id IS NULL, overall_status='pending_self'`.
 
-- Reuse existing `useDebouncedResponseDraft` — no new persistence.
-- `SpeakButton` + `tField` behaviour is preserved by moving the exact
-  function into the new component (or accepting a prebuilt
-  translator prop).
-- No change to `advance_annual_review_status`, RLS, or the pilot
-  `AnnualReviewGate`.
-- Zero-hardcoding respected — everything driven by
-  `template.sections.self_review_fields`.
+6. **Docs & policy**
+   * `DOCUMENTATION.md` — new subsection under Annual Review > Send-Back: "Send-back to self also clears proxy flags."
+   * `POLICY.md` §AR-SELF-QUALITATIVE (or new §AR-PROXY-STATE) — invariant: `submitted_via_proxy=true` requires the current self-response to be locked & submitted. Any transition that reopens the self-response MUST clear the flag.
 
-## Files touched
+## Risk & Impact
 
-- **new** `src/components/annual-review/SelfReviewFieldsCard.tsx`
-- **new** `src/components/annual-review/SelfReviewFieldsCard.test.tsx`
-- **edit** `src/pages/annual-review/EmployeeAnnualReview.tsx`
-  (swap inline block for the new component)
-- **edit** `src/components/annual-review/TeamReviewDetailContent.tsx`
-  (render the card; editable in proxy-self, read-only elsewhere)
-- **edit** `DOCUMENTATION.md`, `POLICY.md`
+* **Data:** Additive fix; no schema change, no destructive deletes. Repair UPDATE only touches rows already violating the invariant.
+* **Workflow:** Unchanged — send-back semantics preserved for every non-self target.
+* **UI/UX:** Badge disappears once a review is legitimately back in `pending_self`; queue refresh becomes eager on send-back.
+* **Regression risk:** Low. Behavior for the "self was truly submitted via proxy" happy path is unchanged.
+* **Rollback:** Revert the new migration (re-`CREATE OR REPLACE` the previous body); revert the small UI/hook diff. The one-time repair is idempotent and does not require rollback.
 
-## Verification
+## Files to touch
 
-- Reload `/annual-review/team/e35bbe35-…` as the proxy submitter →
-  see the new "Qualitative Responses" card with the 5 questions,
-  editable, required asterisks visible. Fill in, Save draft, then
-  "Verify & Submit on behalf" → the answers land in
-  `annual_review_responses.qualitative_responses` for the self row.
-- Reload as Rupesh (Dept Head) once the review is at `pending_dept`
-  → same card visible but read-only, showing the employee's answers.
-- `bun test` → new tests green; existing self-review tests still
-  green.
+* `supabase/migrations/<new>_send_back_clears_proxy_state.sql` — RPC re-definition + one-time repair
+* `src/components/annual-review/TeamReviewDetailContent.tsx` — badge gating
+* `src/hooks/useAnnualReview.ts` — eager refetch on send-back
+* `src/test/annualReview/sendBackClearsProxyFlags.test.ts` (new) + updates to `proxySubmission.test.ts`
+* `DOCUMENTATION.md`, `POLICY.md`
+
+No changes to `EmployeeAnnualReview.tsx`, `stageChain.ts`, or the proxy-submit RPC.

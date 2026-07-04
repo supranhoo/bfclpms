@@ -243,7 +243,9 @@ function TeamReviewDetailInner(props: any) {
                 <LanguageSwitcher value={lang} onChange={setLang} available={availLangs} />
               )}
               <AnnualReviewStatusBadge status={instance.overall_status} />
-              {instance.submitted_via_proxy && (
+              {instance.submitted_via_proxy
+                && selfResponse?.is_locked === true
+                && !!selfResponse?.submitted_at && (
                 <Badge variant="secondary" className="text-xs">
                   {t('badge.submitted_with_assistance', 'Submitted with assistance')}
                 </Badge>
