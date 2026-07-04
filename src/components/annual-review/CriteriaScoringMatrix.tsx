@@ -244,7 +244,9 @@ function CriterionRow({
         )}
 
         {(() => {
-          // Optional justification when reviewer score differs from the employee's self score.
+          // Justification prompt when reviewer score differs from the employee's self score.
+          // Per POLICY §AR-VARIANCE-JUSTIFICATION the field is not mandatory, but we do NOT
+          // label it "optional" in the UI — that discourages submissions.
           if (!reviewerLabel || reviewerLabel === 'Self' || reviewerLabel === 'self') return null;
           const selfEntry = comparison?.find((c) => c.role === 'self');
           if (!selfEntry) return null;
@@ -257,17 +259,14 @@ function CriterionRow({
               <div className="text-xs font-medium text-muted-foreground">
                 {t(
                   'variance.justification_label',
-                  'Justification for score difference (optional)',
+                  'Justification for score difference',
                 )}
-                <span className="ml-1 text-[10px] uppercase tracking-wide text-muted-foreground/70">
-                  {t('variance.optional', 'optional')}
-                </span>
               </div>
               <Textarea
                 aria-label="Justification for score difference"
                 placeholder={t(
                   'variance.justification_placeholder',
-                  `Why does your rating (${score}) differ from the employee's (${selfScore})? This note is optional.`,
+                  `Why does your rating (${score}) differ from the employee's (${selfScore})?`,
                 )}
                 value={remarks[varianceKey] ?? ''}
                 onChange={(e) => onChangeRemark?.(varianceKey, e.target.value)}
