@@ -1,90 +1,113 @@
-## Goal
+# Fix: honor `template_override_id` end-to-end in Annual Review scoring
 
-Every place that today shows a raw stage `weighted_score` on the template's own scale (e.g. `255.0` for `test003 / Self` because criteria weights sum to 85) will instead show a **rating on a 1–5 scale** derived from the template, formatted as **`3.0`** (single decimal).
+## Root cause (verified against DB)
 
-Storage in `annual_review_responses.weighted_score` does NOT change — this is a pure presentation layer normalisation. Auditability of the raw number is preserved.
+`public.compute_annual_review_weighted_score(instance_id, reviewer_role)` — the SSOT that stamps `annual_review_responses.weighted_score` on every submit — joins:
 
-## Validation recap (done in previous turn)
-
-- Template `test003` criteria weights sum to **85** (attendance 15 + safety 20 + quality 20 + teamwork 20 + tools 10); system scores sum to 15 → template grand total = 100.
-- SSOT scoring formula in `src/lib/annualReview/scoring.ts::computeCriteriaScore`:
-  `weighted_score = Σ(weight × selected_score)`; `max = Σ(weight × 5)`.
-- Self response `{attendance:5, safety:5, quality:4}` → `15·5 + 20·5 + 20·4 = 255`. ✓ Matches DB, matches PL/pgSQL `compute_annual_review_weighted_score`. Nothing is broken in the calc or the server↔client parity.
-- The confusion is purely display: `255` is on a 0–425 scale that shifts per template. A `/5` rating is template-independent.
-
-## Rating formula (new SSOT helper)
-
-```
-rating_0_5 = weighted_score / (Σ criteria weights × 5) × 5
-           = weighted_score / Σ criteria weights          // algebraic simplification
+```sql
+JOIN annual_review_templates t ON t.id = i.template_id   -- ❌ ignores override
 ```
 
-Restricted to criteria whose `reviewer_stages` include the row's `reviewer_role` (same filter the SQL helper uses). Returns `null` when the weight sum is 0 or the score is null. Verified example: `255 / 85 = 3.0`.
+Every other layer (UI form, criteria card, stage_weights_v2 → stage_weights map, `resolveStageWeights`, `computeFinalScore`, exports, progress grid) reads the **effective** template = `COALESCE(template_override_id, template_id)`. This drift silently mis-scores every instance that has an override.
 
-## Risk & Impact Report
+Concrete evidence — test003 (`e35bbe35…`):
 
-- **Data:** none. No schema, no RLS, no RPC, no migration. `weighted_score` stays canonical in `annual_review_responses`.
-- **Workflow:** none. Advance / send-back / final-score composition unchanged (`computeFinalScore` continues to consume the raw `weighted_score`).
-- **UI/UX:** column values change from e.g. `255.0` → `3.0`. Column headers get a `/5` suffix so intent is unambiguous. Layout unchanged.
-- **Regression risk:** low, contained to read-only presentation. `finalScore.ts`, `runningFinalScore.ts`, `advance_annual_review_status`, and every write path are untouched. Only 4 read sites are edited; each already has null/`—` handling.
-- **Scalability:** O(1) per row; template lookup already batched via `templatesById` in Admin, hydrated from `template` join on the response elsewhere.
-- **Mitigation:** unit tests around the new helper (parity with existing `computeCriteriaScore`), snapshot expectations updated in `exports.test.ts`, no changes to migration or RPC layer.
-- **Rollback:** revert the presentation edits — the raw `weighted_score` is still there.
-
-## Implementation plan
-
-### 1. Add SSOT helper (single source of truth)
-
-`src/lib/annualReview/scoring.ts`:
-
-```ts
-export function computeCriteriaRatingOutOf5(
-  criteria: TemplateCriterion[],
-  weightedScore: number | null | undefined,
-  reviewerRole: AnnualReviewerRole,
-): number | null;
-```
-
-- Sums the weights of criteria whose `reviewer_stages` include `reviewerRole` (matches SQL filter, matches `computeCriteriaScore`).
-- Returns `weightedScore / weightSum` (equivalent to `weightedScore / (weightSum·5) · 5`).
-- Returns `null` for empty inputs, weightSum ≤ 0, or non-finite score.
-
-### 2. Update read-only presentation sites (only these four)
-
-| File | Line region | Change |
+| Field | Value | Effect |
 |---|---|---|
-| `src/pages/annual-review/AnnualReviewAdmin.tsx` | ~800–835 (main grid) and ~1186 (blended composition section) | For each of `Self / Manager / Skip / Dept / BU / HR` cells, format via `computeCriteriaRatingOutOf5(template.criteria, ss.<role>, <role>)`. Headers become `Self /5`, `Manager /5`, `Skip /5`, `Dept /5`, `BU /5`, `HR /5`. `fmt(v)` becomes `v.toFixed(1)` for rating values. Final and Rating columns unchanged (already /5-aware). |
-| `src/components/annual-review/EmployeeResultsView.tsx` | 88, 138 | Per-stage cell (line 138) shows `/5` rating. Criteria-weighted summary (line 88) is annotated `(raw · /Σw = X.X /5)` to preserve auditability without confusion. |
-| `src/services/annualReview/exports.ts` | 67, 93, 118 + per-role columns emitted around AnnualReviewAdmin lines 291–296 | Rename export columns `Self Score` → `Self Score (/5)` (same for manager/skip/dept/bu/hr) and emit the rating value. Add a companion `Self Weighted (raw)` column (optional, grouped after ratings) so the auditor's raw number is not lost. `Criteria Weighted Score` column is preserved. |
-| `src/components/annual-review/TeamReviewDetailContent.tsx` | Any inline weighted_score display, if surfaced | Route through the same helper. `RunningFinalScoreCard` already uses `scaled_0_5.toFixed(2)` — no change. |
+| `template_id` | Blue-Collar Comprehensive Review | criteria `reviewer_stages` = self/manager/skip/bu/hr (**no dept_head**) |
+| `template_override_id` | Generic W with env | criteria include dept_head; `stage_weights_v2 = {system:35, criteria:65}`, `criteria_mix = {dept_head:70, bu_head:30}` |
+| Dept Head submission | all 10 criteria = 5 | RPC scores against Blue-Collar → dept_head not listed → **`weighted_score = 0`** |
+| Self / BU Head | scored, but against Blue-Collar weights (10/5/10/…) not Generic W env's weights (15/20/20/…) | numbers are wrong even where non-zero |
 
-### 3. Tests + docs
+Blast radius: any instance where `template_override_id IS NOT NULL`. Rating, `Final /100`, Excel/PDF exports, `EmployeeResultsView`, running-final-score card — all downstream numbers are wrong for these users.
 
-- `src/test/annualReview/scoring.test.ts` — add cases:
-  - Empty criteria → null.
-  - `test003` fixture (weights 15/20/20/20/10, scores {a:5,s:5,q:4}) → `weighted 255`, `rating 3.0`.
-  - Reviewer-role filter — criterion not visible to that role does not count in the denominator.
-- `src/services/annualReview/exports.test.ts` — snapshot updated headers + values.
-- `DOCUMENTATION.md` §Annual Review — document display convention (`/5 rating derived; raw weighted_score is canonical storage`).
-- `POLICY.md` — new subsection §AR-STAGE-RATING-DISPLAY: reviewer stage scores are shown to users on a normalised 0–5 scale; raw weighted_score remains the immutable stored value and the sole input to `computeFinalScore`.
-- `mem/features/annual-review/overview.md` — one-line note under scoring bullet.
+## Fix strategy
 
-### 4. Version log
+Change the SSOT — do NOT paper over in UI. Then rescore existing bad rows.
 
-Bump `DOCUMENTATION.md` version, add changelog entry: “Admin Progress + exports show per-stage rating as X.X / 5 instead of raw weighted sum; storage unchanged.”
+### 1. Migration: patch the SSOT
 
-## Verification checklist (post-implementation)
+Rewrite `public.compute_annual_review_weighted_score` so it uses the effective template:
 
-1. `test003 / Self` in `/annual-review/admin` shows `3.0` (was `255.0`).
-2. Sort order on that column now sorts by rating (equivalent to raw for a fixed template, but consistent across mixed templates).
-3. Export workbook: `Self Score (/5)` column contains `3.0`; raw column, if included, contains `255`.
-4. `RunningFinalScoreCard` and `EmployeeResultsView` show consistent `/5` ratings for every stage present.
-5. `computeFinalScore` outputs (Final, Rating columns) numerically unchanged before/after.
-6. `pnpm vitest run` green, including new cases and `exports.test.ts` snapshot.
+```sql
+JOIN annual_review_templates t
+  ON t.id = COALESCE(i.template_override_id, i.template_id)
+```
+
+Nothing else in the function changes. Search-path, `STABLE`, and signature preserved.
+
+Audit the other three functions that also touch `i.template_id`:
+
+- `create_or_get_annual_review_instance` — must keep using `template_id` for the *initial* seed (override is applied afterwards); leave as-is.
+- `set_annual_review_template_override` — writes the override column; correct.
+- `block_when_annual_cycle_closed` — only reads cycle metadata; irrelevant.
+
+No other function needs changing (verified by full `pg_proc` scan).
+
+### 2. Migration: rescore existing responses affected by override
+
+For every `annual_review_responses` row whose instance has a non-null `template_override_id`:
+
+```sql
+UPDATE annual_review_responses r
+   SET weighted_score = public.compute_annual_review_weighted_score(r.instance_id, r.reviewer_role)
+  FROM annual_review_instances i
+ WHERE i.id = r.instance_id
+   AND i.template_override_id IS NOT NULL;
+```
+
+Same call as the on-submit trigger, so results are identical to what a fresh submission would stamp. Log the row count in the migration description for audit.
+
+### 3. Client-side parity check (defensive, tiny)
+
+`src/lib/annualReview/finalScore.ts` (and any other TS reader) already prefers the override; grep confirms this in the four call sites. No functional change needed there. Add one unit test asserting that when `template_override_id` is set, `resolveEffectiveTemplateId(instance)` returns the override — locks the invariant so it can't regress.
+
+### 4. Server-side parity contract
+
+Add a SQL comment on `compute_annual_review_weighted_score` documenting the invariant:
+
+> Resolves criteria against `COALESCE(template_override_id, template_id)`. Any new SQL that needs the effective template MUST use `public.annual_review_effective_template_id(instance_id)` (new helper) or the same COALESCE inline. Do NOT re-introduce a bare `i.template_id` join for scoring paths.
+
+Create the tiny helper:
+
+```sql
+CREATE OR REPLACE FUNCTION public.annual_review_effective_template_id(p_instance_id uuid)
+RETURNS uuid LANGUAGE sql STABLE SET search_path=public AS $$
+  SELECT COALESCE(template_override_id, template_id)
+    FROM public.annual_review_instances WHERE id = p_instance_id
+$$;
+```
+
+Not used inside `compute_annual_review_weighted_score` (kept inline for perf), but callable from future functions and from ad-hoc admin queries so the pattern is discoverable.
+
+## Verification (post-migration)
+
+Run in this exact order:
+
+1. `SELECT public.compute_annual_review_weighted_score('e35bbe35…','dept_head');` → expect **325** (10·5 + 5·5 + 10·5 + 10·5 + 5·5 + 5·5 + 5·5 + 5·5 + 5·5 + 5·5 = 5 × 65 weights = 325), not 0.
+2. Same for `self` → expect **325** (all 5s under Generic W env's 65-weight criteria set), replacing the stored 255 (which came from Blue-Collar weights).
+3. Same for `bu_head` → expect **325**, replacing 275.
+4. Reload `/annual-review/admin`: test003 row shows Self 5.0, Dept 5.0, BU 5.0 (rating = 325 / 65 = 5.0). Final /100 blends via 35% system + 45.5% dept + 19.5% bu.
+5. Advance the workflow — dept_head stage submit / send-back paths already go through `enabledChain` SSOT and are unaffected.
+6. `pnpm vitest run` green including the new `resolveEffectiveTemplateId` test.
+
+## Risk & Impact
+
+- **Data:** rewrites `weighted_score` for every response on override instances. Numbers change from wrong to correct. Store `previous_weighted_score` snapshot in a one-shot audit table (`annual_review_rescore_audit_2026_07`) so the change is reversible.
+- **Workflow:** none — status transitions, `enabled_stages`, and RPC signatures unchanged.
+- **UI/UX:** admin grid, exports, employee results and running-final-score card show corrected numbers automatically (they already read `weighted_score`).
+- **Regression:** low. Fix is one JOIN and a set-based UPDATE. No API surface change.
+- **Rollback:** revert the SSOT to the previous body + `UPDATE r SET weighted_score = a.previous_weighted_score FROM annual_review_rescore_audit_2026_07 a WHERE a.response_id = r.id`.
 
 ## Not in scope
 
-- Any change to the SQL `compute_annual_review_weighted_score` or `advance_annual_review_status` RPC.
-- Any change to `computeFinalScore` / `runningFinalScore` math.
-- HR final rating column (already `/5`).
-- Historical data backfill — not needed, presentation-only.
+- Any UI presentation change (already handled by prior `/5` rating work).
+- Changing `enabled_stages`, template assignment, or org-head resolution.
+- Backfilling instances that have `template_override_id IS NULL` — they were always computed correctly.
+
+## Documentation & policy sync (mandatory)
+
+- `POLICY.md` — new subsection §AR-EFFECTIVE-TEMPLATE-SSOT: "Every read that maps a response to criteria/weights (SQL or TS) MUST use the effective template = `COALESCE(template_override_id, template_id)`. Bare `template_id` reads are reserved for provenance/audit only."
+- `DOCUMENTATION.md` — Annual Review scoring diagram updated; add version-log entry: "Fixed template_id vs template_override_id drift in compute_annual_review_weighted_score; rescored existing override instances."
+- `mem/features/annual-review/overview.md` — one-line note under scoring bullet.
+- New ADR: `docs/adr/ADR-106.md` capturing the drift, fix, and rescore migration.

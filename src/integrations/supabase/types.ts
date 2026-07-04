@@ -761,6 +761,42 @@ export type Database = {
           },
         ]
       }
+      annual_review_rescore_audit_2026_07: {
+        Row: {
+          created_at: string
+          id: string
+          instance_id: string
+          new_weighted_score: number | null
+          previous_weighted_score: number | null
+          response_id: string
+          reviewer_role: Database["public"]["Enums"]["annual_reviewer_role"]
+          template_id: string | null
+          template_override_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          instance_id: string
+          new_weighted_score?: number | null
+          previous_weighted_score?: number | null
+          response_id: string
+          reviewer_role: Database["public"]["Enums"]["annual_reviewer_role"]
+          template_id?: string | null
+          template_override_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          instance_id?: string
+          new_weighted_score?: number | null
+          previous_weighted_score?: number | null
+          response_id?: string
+          reviewer_role?: Database["public"]["Enums"]["annual_reviewer_role"]
+          template_id?: string | null
+          template_override_id?: string | null
+        }
+        Relationships: []
+      }
       annual_review_responses: {
         Row: {
           created_at: string
@@ -12992,6 +13028,10 @@ export type Database = {
           skipped: boolean
           stage: Database["public"]["Enums"]["annual_reviewer_role"]
         }[]
+      }
+      annual_review_effective_template_id: {
+        Args: { p_instance_id: string }
+        Returns: string
       }
       annual_review_first_pending_status: {
         Args: { p_enabled: Json }
