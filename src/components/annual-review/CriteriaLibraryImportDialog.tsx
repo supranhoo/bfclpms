@@ -19,6 +19,12 @@ import { useDepartments, useBusinessUnits } from '@/hooks/useSafetyOrg';
 import { upsertCriterion, saveCriteriaAssignment } from '@/services/annualReview/criteriaLibrary';
 import { parseBandsBlock } from '@/lib/annualReview/bfclFormsWorkbook';
 import { optionsToBands } from '@/lib/annualReview/criteriaBands';
+import { useCycles } from '@/hooks/useAnnualReview';
+import {
+  upsertWorkbookTemplate,
+  upsertWorkbookAssignmentRule,
+} from '@/services/annualReview/criteriaWorkbookTemplates';
+import { Input } from '@/components/ui/input';
 
 const ARCHETYPES = ['A', 'B', 'C', 'D'] as const;
 const GRADE_BUCKETS = ['M', 'W', 'T', 'other'] as const;
@@ -30,6 +36,10 @@ interface SheetMapping {
   departmentIds: string[]; // empty = wildcard (dept = null)
   isCommon: boolean;
   skip: boolean;
+  // Template creation (one sheet = one template).
+  template_name: string;
+  cycle_id: string;
+  create_rule: boolean;
 }
 
 /**
@@ -57,6 +67,11 @@ export function CriteriaLibraryImportDialog({
   const { data: businessUnits = [] } = useBusinessUnits();
   const [buId, setBuId] = useState<string>('');
   const { data: departments = [] } = useDepartments(buId || null);
+  const { data: cycles = [] } = useCycles();
+  const defaultCycleId = useMemo(() => {
+    const active = cycles.find((c) => c.status === 'active');
+    return active?.id ?? cycles[0]?.id ?? '';
+  }, [cycles]);
 
   const [mappings, setMappings] = useState<Record<string, SheetMapping>>(() => {
     const init: Record<string, SheetMapping> = {};
@@ -69,10 +84,26 @@ export function CriteriaLibraryImportDialog({
       init[s.name] = {
         archetype: arch, grade_bucket: bucket, grade_code: '',
         departmentIds: [], isCommon: lower.startsWith('generic'), skip: false,
+        template_name: s.name,
+        cycle_id: '',
+        create_rule: true,
       };
     });
     return init;
   });
+
+  // Fill in default cycle once cycles are loaded (without clobbering user edits).
+  useMemo(() => {
+    if (!defaultCycleId) return;
+    setMappings((prev) => {
+      const next = { ...prev };
+      let changed = false;
+      for (const k of Object.keys(next)) {
+        if (!next[k].cycle_id) { next[k] = { ...next[k], cycle_id: defaultCycleId }; changed = true; }
+      }
+      return changed ? next : prev;
+    });
+  }, [defaultCycleId]);
 
   const totalPlannedRows = useMemo(() => sheets.reduce((n, s) => {
     const m = mappings[s.name];
@@ -90,10 +121,12 @@ export function CriteriaLibraryImportDialog({
       const byKey = new Map(existingLib?.map((r) => [r.key, r]) ?? []);
 
       let insertedCrit = 0, updatedCrit = 0, insertedAsg = 0, skippedNoBands = 0, skippedIncompleteBands = 0;
+      let createdTemplates = 0, updatedTemplates = 0, createdRules = 0, updatedRules = 0;
       const incompleteLabels: string[] = [];
       for (const sheet of sheets) {
         const m = mappings[sheet.name];
         if (!m || m.skip) continue;
+        if (!m.cycle_id) throw new Error(`Pick a cycle for sheet "${sheet.name}".`);
         for (const row of sheet.rows) {
           if (!row.label_en) continue;
           const key = slugifyCriterionKey(row.label_en);
@@ -143,12 +176,50 @@ export function CriteriaLibraryImportDialog({
             insertedAsg += 1;
           }
         }
+        // 2) Sheet → Template + assignment rule.
+        const tpl = await upsertWorkbookTemplate(
+          {
+            template_name: m.template_name || sheet.name,
+            cycle_id: m.cycle_id,
+            sheet_name: sheet.name,
+            target: {
+              department_ids: m.departmentIds,
+              sub_unit_ids: [],
+              archetype: m.archetype || null,
+              grade_bucket: m.grade_bucket || null,
+              grade_code: m.grade_code || null,
+            },
+            create_rule: m.create_rule,
+          },
+          sheet,
+        );
+        if (tpl.created) createdTemplates += 1; else updatedTemplates += 1;
+        if (m.create_rule) {
+          const rule = await upsertWorkbookAssignmentRule(tpl.id, {
+            template_name: m.template_name || sheet.name,
+            cycle_id: m.cycle_id,
+            sheet_name: sheet.name,
+            target: {
+              department_ids: m.departmentIds,
+              sub_unit_ids: [],
+              archetype: m.archetype || null,
+              grade_bucket: m.grade_bucket || null,
+              grade_code: m.grade_code || null,
+            },
+            create_rule: true,
+          });
+          if (rule.created) createdRules += 1; else updatedRules += 1;
+        }
       }
-      return { insertedCrit, updatedCrit, insertedAsg, skippedNoBands, skippedIncompleteBands, incompleteLabels };
+      return { insertedCrit, updatedCrit, insertedAsg, skippedNoBands, skippedIncompleteBands, incompleteLabels,
+        createdTemplates, updatedTemplates, createdRules, updatedRules };
     },
     onSuccess: (res) => {
       toast.success(
         `Import complete: ${res.insertedCrit} new + ${res.updatedCrit} updated criteria, ${res.insertedAsg} assignment rows.`,
+      );
+      toast.success(
+        `Templates: ${res.createdTemplates} created, ${res.updatedTemplates} updated. Rules: ${res.createdRules} created, ${res.updatedRules} updated.`,
       );
       if (res.skippedNoBands > 0) {
         toast.warning(
@@ -163,6 +234,7 @@ export function CriteriaLibraryImportDialog({
       }
       qc.invalidateQueries({ queryKey: ['annual-review-criteria-library'] });
       qc.invalidateQueries({ queryKey: ['annual-review-criteria-assignments'] });
+      qc.invalidateQueries({ queryKey: ['annual-review'] });
       onOpenChange(false);
     },
     onError: (e: Error) => toast.error(e.message),
@@ -252,6 +324,37 @@ export function CriteriaLibraryImportDialog({
                             id={`${s.name}-common`}
                           />
                           <Label htmlFor={`${s.name}-common`}>Mark as common</Label>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 border-t pt-3">
+                        <div className="md:col-span-1">
+                          <Label>Template name</Label>
+                          <Input
+                            value={m.template_name}
+                            onChange={(e) => patch(s.name, { template_name: e.target.value })}
+                            placeholder={s.name}
+                          />
+                        </div>
+                        <div>
+                          <Label>Cycle</Label>
+                          <Select value={m.cycle_id || ''} onValueChange={(v) => patch(s.name, { cycle_id: v })}>
+                            <SelectTrigger><SelectValue placeholder="Pick cycle…" /></SelectTrigger>
+                            <SelectContent>
+                              {cycles.map((c) => (
+                                <SelectItem key={c.id} value={c.id}>
+                                  {c.name || `AY ${c.review_year ?? ''}`}{c.status === 'active' ? ' · active' : ''}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="flex items-end gap-2">
+                          <Checkbox
+                            checked={m.create_rule}
+                            onCheckedChange={(v) => patch(s.name, { create_rule: Boolean(v) })}
+                            id={`${s.name}-rule`}
+                          />
+                          <Label htmlFor={`${s.name}-rule`}>Create/refresh assignment rule</Label>
                         </div>
                       </div>
                       <div>

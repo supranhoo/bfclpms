@@ -4484,3 +4484,10 @@ Regression: `src/test/dailySubmissionSummaryWorkflowAware.test.tsx`.
 4. Audio is rendered for the **translated** text in the currently-selected non-default language only. The English source is never read aloud (default language is assumed readable).
 5. No PII, free-text remarks, or auditor notes are read aloud in Phase 1 — only authored template labels (criterion name/description, option labels, qualitative field labels).
 6. No server round-trips, no key material, no analytics events fire on play/stop.
+---
+
+## Workbook-sourced templates (v2.66.85)
+- One workbook sheet = one `annual_review_templates` row, identified by `sections.sheet_key.{sheet_name,cycle_id}`. Reruns of the import UPDATE the same row (idempotent); they never duplicate templates.
+- The workbook is the SSOT for that template's `sections.criteria` and each criterion's `weight_pct`. Manual edits to those fields will be overwritten on the next re-import of the same sheet.
+- The assignment rule created per workbook sheet routes employees to the template via `filters.department_ids` (+ optional archetype / grade_bucket / grade_code). One rule per (template × cycle); rerunning the import refreshes its filters in place.
+- The Criteria Library still stages the individual criteria for reuse in hand-built templates via "Add from Library"; the workbook flow does not require going through it manually.

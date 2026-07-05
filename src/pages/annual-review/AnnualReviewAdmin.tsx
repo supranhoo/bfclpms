@@ -1841,6 +1841,8 @@ function TemplatesTabImpl() {
         <div className="space-y-2">
           {templates.map((t) => {
             const critCount = t.sections?.criteria?.length ?? 0;
+            const sheetKey = (t.sections as unknown as { sheet_key?: { source?: string; sheet_name?: string } } | undefined)?.sheet_key;
+            const workbookBadge = sheetKey?.source === 'criteria_workbook' ? sheetKey.sheet_name : null;
             return (
               <Card key={t.id} className="hover:border-primary/40 transition">
                 <CardContent className="p-4 flex flex-wrap items-center justify-between gap-3">
@@ -1854,6 +1856,11 @@ function TemplatesTabImpl() {
                       <span className="text-xs text-muted-foreground">{critCount} criteria</span>
                     {typeof t.version === 'number' && t.version > 1 && (
                       <Badge variant="outline" className="text-xs">v{t.version}</Badge>
+                    )}
+                    {workbookBadge && (
+                      <Badge variant="outline" className="text-xs border-primary/40 text-primary">
+                        Workbook · {workbookBadge}
+                      </Badge>
                     )}
                     </div>
                     {t.description && <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{t.description}</p>}
