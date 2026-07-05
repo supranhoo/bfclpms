@@ -17,13 +17,14 @@ import {
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
-import { Loader2, Pencil, Plus, Trash2 } from 'lucide-react';
+import { Loader2, Pencil, Plus, Trash2, Download } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   listArchetypes, updateArchetype, parseCriteria, parseStringArray, parseStageWeights,
   GRADE_BUCKETS, STAGE_KEYS,
   type ArchetypeRow, type ArchetypeCriterion, type GradeBucket, type StageKey,
 } from '@/services/annualReview/templateArchetypes';
+import { downloadArchetypesWorkbook } from '@/lib/annualReview/factoryWorkbook';
 import type { Json } from '@/integrations/supabase/types';
 
 /**
@@ -59,6 +60,14 @@ export function TemplateArchetypesPanel() {
               The 4 canonical templates the Factory generates from. A = KRA-based; B/C/D = no-KRA by grade family (share qualitative criteria).
             </p>
           </div>
+          <Button
+            variant="outline"
+            className="gap-2"
+            disabled={rows.length === 0}
+            onClick={() => downloadArchetypesWorkbook(rows)}
+          >
+            <Download className="h-4 w-4" /> Export XLSX
+          </Button>
         </div>
       </CardHeader>
       <CardContent>
