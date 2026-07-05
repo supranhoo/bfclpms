@@ -93,10 +93,16 @@ export default function AnnualReviewAdmin() {
           <h1 className="text-2xl font-bold">Annual Review Admin</h1>
           <p className="text-sm text-muted-foreground">Manage cycles, templates, rules, and finalize reviews.</p>
         </div>
-        <Button variant="outline" onClick={() => nav('/annual-review/admin/factory')}>
-          <Layers className="h-4 w-4 mr-2" />
-          Template Factory
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="default" onClick={() => nav('/annual-review/admin/mapping')}>
+            <ListChecks className="h-4 w-4 mr-2" />
+            Form Mapping
+          </Button>
+          <Button variant="outline" onClick={() => nav('/annual-review/admin/factory')}>
+            <Layers className="h-4 w-4 mr-2" />
+            Template Factory
+          </Button>
+        </div>
       </header>
       <Tabs defaultValue="progress" className="w-full">
         <TabsList className="flex flex-wrap md:flex-nowrap w-full h-auto gap-1 p-1 overflow-x-auto justify-start">
