@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -225,8 +225,23 @@ function CriterionEditorDialog({
     });
   };
 
-  // Reset when the dialog re-opens for a different row.
-  useState(() => { /* noop, react state above initializes from existing */ });
+  // Reset when the dialog opens for a different row. The dialog component stays
+  // mounted, so `useState(existing...)` alone would show the previous/default
+  // ladder when editing an imported criterion.
+  useEffect(() => {
+    if (!open) return;
+    setKey(existing?.key ?? '');
+    setLabelEn(existing?.label_en ?? '');
+    setLabelHi(existing?.label_hi ?? '');
+    const nextMax = Number(existing?.max_score ?? 5);
+    setMaxScore(nextMax);
+    setIsCommon(existing?.is_common ?? false);
+    setIsActive(existing?.is_active ?? true);
+    setSortOrder(existing?.sort_order ?? 0);
+    const parsed = parseScoringBands((existing?.scoring_bands ?? null) as never);
+    setBands(parsed.length ? parsed : defaultLadder(nextMax));
+    setShowJson(false);
+  }, [existing, open]);
 
   const upsertMut = useMutation({
     mutationFn: async () => {

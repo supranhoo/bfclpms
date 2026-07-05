@@ -65,6 +65,23 @@ describe('bandsToBilingualOptions', () => {
     );
     expect(opts[0].label_hi).toBe('शीर्ष');
   });
+
+  it('does not replace complete imported Excel labels with generic default labels', () => {
+    const opts = bandsToBilingualOptions(
+      [
+        { score: 5, label_en: 'Always on time; zero unexcused absence; supports reliable shift continuity.', label_hi: 'हमेशा समय पर; कोई अनधिकृत अनुपस्थिति नहीं; शिफ्ट निरंतरता में सहयोग करता है।' },
+        { score: 4, label_en: 'Consistently punctual; informs supervisor in advance for leave or delay.', label_hi: 'लगातार समय पर; छुट्टी या देरी की सूचना पहले से सुपरवाइजर को देता है।' },
+        { score: 3, label_en: 'Generally punctual; occasional valid absence or delay with proper intimation.', label_hi: 'सामान्यतः समय पर; उचित सूचना के साथ कभी-कभार वैध अनुपस्थिति या देरी।' },
+        { score: 2, label_en: 'Irregular attendance; needs repeated reminders to report on time or plan leave.', label_hi: 'अनियमित उपस्थिति; समय पर आने या छुट्टी की योजना के लिए बार-बार याद दिलाना पड़ता है।' },
+        { score: 1, label_en: 'Very poor attendance; frequent late coming or absence disrupts shift planning.', label_hi: 'बहुत खराब उपस्थिति; बार-बार देर से आना या अनुपस्थिति से शिफ्ट योजना प्रभावित होती है।' },
+        { score: 0, label_en: 'Unacceptable attendance pattern; repeated unauthorized absence or habitual late reporting.', label_hi: 'अस्वीकार्य उपस्थिति; बार-बार अनधिकृत अनुपस्थिति या आदतन देर से रिपोर्टिंग।' },
+      ] as never,
+      5,
+    );
+    expect(opts.map((o) => o.label)).not.toContain('Outstanding');
+    expect(opts[0].label).toMatch(/Always on time/);
+    expect(opts[5].label_hi).toMatch(/अस्वीकार्य उपस्थिति/);
+  });
 });
 
 describe('optionsToBands / defaultLadder round-trip', () => {

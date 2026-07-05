@@ -1,66 +1,92 @@
-## Assumptions
-- The pasted sample is the actual Excel format: one cell contains all lines from `5 - ...` through `0 - ...`.
-- The expected result is six scoring bands, each storing English and Hindi labels separately, and the UI should show those labels instead of the generic `Outstanding / Above target / ...` ladder.
-- No schema change is needed; this is an import/parser and data-cleanup issue.
+## 1. Assumptions
+- The required Excel format is exactly like your screenshot: column A = `Criteria`, column B = `Rating - Discription`, and the full 5-to-0 explanation is inside one multiline cell.
+- The app must use the Excel cell content as the reviewer-facing labels, not the generic `Outstanding / Above target / ...` ladder.
+- Existing generic rows in the Criteria Library should be overwritten when the Excel row has valid 5-to-0 descriptions.
 
-## Clarifications
-Not Applicable.
+## 2. Clarifications
+Not Applicable — the requirement is clear. This mapping is possible and should not need manual entry if the Excel cell contains the score lines.
 
-## Risk & Impact Report
-- **Data Impact:** Existing criteria rows may already have empty or generic `scoring_bands`; the fix should repair only Annual Review criteria whose labels match imported rows or whose bands are empty/generic.
-- **Workflow Impact:** Import flow remains the same; admins still upload and map sheets. The change only improves parsing and prevents bad imported scoring bands.
-- **UI/UX Impact:** No layout redesign. Import warnings should become clearer when a row cannot be parsed.
-- **Regression Risk:** Medium, because the parser is shared by criteria import paths. Mitigation is targeted tests using the exact pasted multiline format.
-- **Scalability Impact:** Low. Parsing happens client-side per uploaded workbook; no large dataset load is introduced.
-- **Rollback Strategy:** Revert parser changes and restore criteria rows from backup if needed; no destructive schema migration.
+## 3. Risk & Impact Report
+- **Data Impact:** Updates existing Criteria Library `scoring_bands` values where Excel provides valid score descriptions. No schema change needed.
+- **Workflow Impact:** Import flow remains the same, but it will stop silently accepting generic/default ladders when Excel contains real labels.
+- **UI/UX Impact:** Edit dialog and reviewer scoring buttons will show the actual long English/Hindi descriptions per score.
+- **Regression Risk:** Medium, because importer currently handles more than one BFCL workbook shape. I will preserve existing section-aware behavior while adding support for the simple two-column sheet shape shown in your screenshot.
+- **Scalability Impact:** Low. Parsing is local to the uploaded workbook; no large dataset query changes. Existing list pagination patterns remain unchanged.
+- **Mitigation Plan:** Add parser tests for the exact screenshot layout, conversion tests for label propagation, and a targeted data-repair step for rows currently stuck on default/generic ladders.
 
-## Step-by-step Plan
-1. **Fix root parser**
-   - Update the rating-band parser so it handles the exact pasted block:
-     - multiline Excel string
-     - semicolons inside labels
-     - Hindi text after ` / `
-     - all scores `5,4,3,2,1,0`
-   - Keep numeric score as `0..5`; store labels in `label_en` and `label_hi`.
+## 4. Step-by-step Plan
+1. **Fix the workbook parser mapping**
+   - Detect both workbook shapes:
+     - Sectioned BFCL form: `Type → Criteria → Rating - Discription → Wt%`
+     - Simple criteria pack: `Criteria → Rating - Discription`
+   - For every row, map:
+     ```text
+     Criteria cell
+       -> label_en / label_hi
 
-2. **Use one parser everywhere**
-   - Make the criteria-pack importer validate using the same parser instead of a loose regex-only check.
-   - This prevents rows from being accepted when bands cannot actually be converted.
+     Rating - Discription cell
+       -> scoring_bands[]
+          5 -> label_en + label_hi
+          4 -> label_en + label_hi
+          3 -> label_en + label_hi
+          2 -> label_en + label_hi
+          1 -> label_en + label_hi
+          0 -> label_en + label_hi
+     ```
+   - Treat line breaks, carriage returns, `_x000D_`, and wrapped Excel text as equivalent.
 
-3. **Protect existing imported rows**
-   - When an existing criterion key is re-imported, always overwrite `scoring_bands` with the newly parsed workbook bands.
-   - Do not preserve old empty/generic bands when the workbook provides valid labels.
+2. **Make rating extraction stricter and safer**
+   - Parse by score markers (`5 -`, `4 -`, `3 -`, `2 -`, `1 -`, `0 -`) instead of relying only on line splitting.
+   - This handles cases where Excel stores the full description as one wrapped string.
+   - Preserve semicolons inside labels; do not split on semicolons.
+   - Split English/Hindi only on the bilingual separator ` / `.
 
-4. **Add regression tests**
-   - Add a test for the exact `Attendance & Punctuality / उपस्थिति और समय की पाबंदी` sample.
-   - Assert six bands are parsed and that score `5` and score `0` preserve both English and Hindi text.
-   - Add/adjust criteria workbook tests so this format is accepted.
+3. **Prevent default ladder from hiding import failures**
+   - In the import flow, require valid parsed bands before saving `scoring_bands`.
+   - If the workbook row has a rating cell but fewer than expected score bands, show a warning with the criterion name.
+   - Do not overwrite a valid Excel ladder with defaults.
 
-5. **Data repair check**
-   - Query the backend for criteria with empty or default-looking scoring bands.
-   - If rows are already polluted, prepare a safe one-time repair using re-imported workbook values or a guarded update for the affected criteria only.
+4. **Repair existing generic data**
+   - After parser fix, re-import should overwrite existing generic/default bands.
+   - Add a targeted cleanup/repair path for criteria whose key already exists but still has default labels like `Outstanding`, `Above target`, etc.
+   - This will repair rows like `attendance_punctuality` without requiring manual recreation.
 
-## UI Changes
-- **Location:** Annual Review Admin → Criteria import dialog.
-- **Visual change:** Only clearer warning copy if a row lacks parseable scoring bands.
-- **Interaction impact:** Same upload/import flow; fewer silent bad imports.
-- **Responsiveness:** Not Applicable.
+5. **Verify template propagation**
+   - Ensure Criteria Library `scoring_bands` flows into generated templates through `bandsToBilingualOptions`.
+   - Confirm reviewer screen buttons display the Excel labels, not generic labels.
 
-## Implementation
-- Modify only annual-review criteria import/parsing files and tests.
-- No database schema changes.
-- Backend data repair only if inspection confirms polluted rows remain.
+## 5. UI Changes
+- **Criteria Library edit dialog:** The Rating labels table should show the Excel descriptions per score.
+  - Example score 5 EN: `Always on time; zero unexcused absence; supports reliable shift continuity.`
+  - Example score 5 HI: `हमेशा समय पर; कोई अनधिकृत अनुपस्थिति नहीं; शिफ्ट निरंतरता में सहयोग करता है।`
+- **Reviewer criteria scoring cards:** Score buttons should show these same imported labels.
+- **Import feedback:** Add a clearer warning if any row cannot be parsed into rating bands.
+- **Responsiveness:** Long labels remain in existing table/card layouts with wrapping; no new wide layout required.
 
-## Tests
-- Unit test for exact pasted multiline rating block.
-- Unit test for criteria workbook import preserving bilingual rating descriptions.
-- Run targeted annual-review parser tests after implementation.
+## 6. Implementation
+- Update `parseBandsBlock` to segment the rating description by score markers, not just by line breaks.
+- Update `parseCriteriaPackWorkbook` to support the two-column layout from your screenshot and the existing sectioned BFCL layout.
+- Update import commit logic to overwrite generic/default `scoring_bands` when valid Excel bands are present.
+- Keep changes surgical: no schema refactor, no new workflow, no manual template system rollback.
 
-## DOCUMENTATION.md updates
-- Add/update Annual Review import note: scoring bands must be parsed from workbook rating descriptions and must not fall back to generic labels when workbook labels exist.
+## 7. Tests
+- Add/adjust unit tests for:
+  - Exact screenshot-style row: `Criteria` + `Rating - Discription` with all six scores in one cell.
+  - Multiline CR/LF/_x000D_ variants.
+  - Semicolon-heavy English/Hindi descriptions.
+  - Existing generic ladder replaced by parsed Excel labels.
+  - Template option conversion carries `label_hi` into reviewer UI.
 
-## POLICY.md updates
-- Add/update policy: imported criteria scoring labels are authoritative; generic 0–5 labels are only allowed for manually created criteria without imported bands.
+## 8. DOCUMENTATION.md updates
+- Document the Criteria Library Excel import contract:
+  - Criteria column maps to criterion name.
+  - Rating description column maps to 0-to-5 scoring bands.
+  - Generic ladder is fallback only when no imported bands exist.
 
-## Post-implementation notes
-- After approval, I will implement the parser fix first, then verify with tests and inspect existing backend rows for any remaining polluted scoring bands.
+## 9. POLICY.md updates
+- Add/clarify annual-review policy: imported qualitative criteria must preserve reviewer-facing score definitions from the approved Excel pack; generic 0-to-5 labels are not acceptable when Excel definitions exist.
+
+## 10. Post-implementation notes
+- Rollback strategy: revert parser/import changes; no destructive schema migration is planned.
+- Data repair will be targeted and reversible by re-importing the approved Excel pack again.
+- Expected outcome: you should not have to manually enter the 0-to-5 labels if the Excel sheet contains them in the shown format.

@@ -1,6 +1,6 @@
 import * as XLSX from 'xlsx';
 import type { CriterionRow } from '@/services/annualReview/criteriaLibrary';
-import { parseBandsBlock } from './bfclFormsWorkbook';
+import { parseBandsBlock, splitBilingual } from './bfclFormsWorkbook';
 
 /** Slugify an English label into a stable library key. */
 export function slugifyCriterionKey(labelEn: string): string {
@@ -56,25 +56,32 @@ export function parseCriteriaPackWorkbook(file: ArrayBuffer): ParsedCriteriaShee
     // criteria — the earlier blocks are System KPIs / eligibility gates and
     // must not land in the criteria library. Additionally, `Self Review
     // Fields` sub-blocks are free-text prompts, not scored criteria.
+    // Simple criteria packs, however, contain only:
+    //   Criteria | Rating - Discription
+    // In that shape every data row after the header is a scored criterion.
+    const hasSectionMarkers = grid.slice(headerIdx + 1).some((r) => {
+      const v = String(r[0] ?? '').trim().toLowerCase();
+      return v === 'eligibility' || v === 'system' || v === 'type';
+    });
     let section: 'none' | 'elig' | 'system' | 'crit' = 'none';
     let critBlockLabel = '';
     for (let i = headerIdx + 1; i < grid.length; i++) {
       const raw = grid[i];
       const aCell = String(raw[0] ?? '').trim();
       const aLower = aCell.toLowerCase();
-      if (aLower === 'eligibility') { section = 'elig'; continue; }
-      if (aLower === 'system') { section = 'system'; continue; }
-      if (aLower === 'type') { section = 'crit'; critBlockLabel = ''; continue; }
+      if (hasSectionMarkers && aLower === 'eligibility') { section = 'elig'; continue; }
+      if (hasSectionMarkers && aLower === 'system') { section = 'system'; continue; }
+      if (hasSectionMarkers && aLower === 'type') { section = 'crit'; critBlockLabel = ''; continue; }
       // Sub-block label inside the Type section (e.g. "Standard Questions",
       // "Self Review Fields", "Generic Blue-Collar Questions").
-      if (section === 'crit' && aCell) critBlockLabel = aCell;
-      if (section !== 'crit') continue;
+      if (hasSectionMarkers && section === 'crit' && aCell) critBlockLabel = aCell;
+      if (hasSectionMarkers && section !== 'crit') continue;
       if (critBlockLabel === 'Self Review Fields') continue;
       const critCell = String(raw[critCol] ?? '').trim();
       if (!critCell) continue;
       // Defensive: never write the header row itself as a criterion.
       if (critCell.toLowerCase() === 'criteria') continue;
-      const [enPart, hiPart] = critCell.split(/\s*\/\s*/, 2);
+      const { en: enPart, hi: hiPart } = splitBilingual(critCell);
       const desc = descCol >= 0 ? String(raw[descCol] ?? '').trim() : '';
       // Real criteria have a bilingual rating ladder ("5 - EN / HI\n4 - …").
       // Without parseable "<digit> - " lines we cannot render bands, and
@@ -83,7 +90,7 @@ export function parseCriteriaPackWorkbook(file: ArrayBuffer): ParsedCriteriaShee
       const wtVal = wtCol >= 0 ? Number(raw[wtCol]) : 0;
       rows.push({
         label_en: enPart.trim(),
-        label_hi: hiPart ? hiPart.trim() : null,
+        label_hi: hiPart,
         rating_desc: desc,
         weight_pct: Number.isFinite(wtVal) ? wtVal : 0,
       });
