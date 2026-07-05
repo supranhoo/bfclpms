@@ -44,6 +44,7 @@ type: feature
 - Never bypass the eligibility RPC client-side. Proxy mode flips on only when `useProxyEligibility` resolves `true` AND no native stage role applies.
 - Do not relax the "no file picker" rule. Gallery uploads defeat the verification.
 - Audit table must stay append-only. Do not add UPDATE/DELETE policies.
+- All dialog copy is i18n-routed through `useAnnualReviewI18n` (keys under `assisted.*`). Audit-persisted strings (`proxyRoleLabel`, `declaration_text`) stay canonical English regardless of UI language.
 ## Directory entry point (June 2026)
 - Admin / HR PMS get a **Find employee** button on Team Annual Review when `app_settings.annual_review_directory_search_enabled = true`.
 - Server search: `public.search_active_employees_for_review(p_query, p_cycle_id, p_limit, p_offset)` — restricted to admin/hr_pms, returns `has_email`, `has_signed_in`, existing `instance_id`, and whether caller is `in_my_queue`.
