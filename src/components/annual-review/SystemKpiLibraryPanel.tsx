@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { Fragment, useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -310,10 +310,9 @@ function KpiEditorDialog({
               <div className="text-xs font-semibold text-muted-foreground">Score</div>
               <div className="text-xs font-semibold text-muted-foreground">Threshold</div>
               {rules.bands.map((b, idx) => (
-                <>
-                  <div key={`s-${b.score}`} className="text-sm font-mono">{b.score}</div>
+                <Fragment key={b.score}>
+                  <div className="text-sm font-mono">{b.score}</div>
                   <Input
-                    key={`t-${b.score}`}
                     type="number"
                     value={b.threshold}
                     onChange={(e) => {
@@ -322,7 +321,7 @@ function KpiEditorDialog({
                       setRules({ ...rules, bands: next });
                     }}
                   />
-                </>
+                </Fragment>
               ))}
             </div>
           </div>
