@@ -14,6 +14,7 @@ import {
   validateResolvedWeights,
   type CriterionRow, type CriterionAssignmentRow, type ResolvedCriterion,
 } from './criteriaLibrary';
+import { bandsToBilingualOptions } from '@/lib/annualReview/criteriaBands';
 
 export type TemplateRow = Database['public']['Tables']['annual_review_templates']['Row'];
 export type ArchetypeCode = 'A' | 'B' | 'C' | 'D';
