@@ -101,7 +101,7 @@ export function parseBandsBlock(text: string): ScoringBand[] {
   const normalized = text
     .replace(/_x000D_/gi, '\n')
     .replace(/\r\n|\r/g, '\n');
-  const marker = /(?:^|\s)(\d{1,2})\s*[-–]\s*/g;
+  const marker = /(?:^|\s)(10|[0-9])\s*[-–]\s*/g;
   const matches = Array.from(normalized.matchAll(marker));
   for (let i = 0; i < matches.length; i++) {
     const m = matches[i];
