@@ -4,7 +4,7 @@ import {
   useCycles, useTemplates, useRules, useCycleInstances, useActiveCycle, useTemplate,
   useSendBackStatus, useCloseCycle, useOverrideRating, useCloneTemplate, useCloneCycle,
   useAnnualReviewInstancesPaginated, useCycleStatusCounts, useReopenCycle,
-  useInstanceStageScores,
+  useInstanceStageScores, useRollbackFinalizedInstance,
 } from '@/hooks/useAnnualReview';
 import * as svc from '@/services/annualReview/annualReviewService';
 import { useAuth } from '@/contexts/AuthContext';
@@ -455,8 +455,11 @@ function ProgressTab() {
   const [weightsFor, setWeightsFor] = useState<InstanceWithEmployee | null>(null);
   const [stepBackFor, setStepBackFor] = useState<InstanceWithEmployee | null>(null);
   const [stepBackReason, setStepBackReason] = useState('');
+  const [rollbackFor, setRollbackFor] = useState<InstanceWithEmployee | null>(null);
+  const [rollbackReason, setRollbackReason] = useState('');
   const { data: allTemplates = [] } = useTemplates();
   const sendBack = useSendBackStatus();
+  const rollbackFinalized = useRollbackFinalizedInstance();
   const templatesByIdMap = useMemo(() => {
     const m: Record<string, AnnualReviewTemplate> = {};
     for (const t of allTemplates) m[t.id] = t;
@@ -908,6 +911,14 @@ function ProgressTab() {
                             </DropdownMenuItem>
                           );
                         })()}
+                        {i.overall_status === 'completed' && (
+                          <DropdownMenuItem
+                            onClick={() => { setRollbackReason(''); setRollbackFor(i); }}
+                            className="text-destructive focus:text-destructive"
+                          >
+                            <Undo2 className="h-4 w-4 mr-2" /> Roll back finalized review
+                          </DropdownMenuItem>
+                        )}
                         {canChange && (
                           <>
                             <DropdownMenuItem onClick={() => setChangeTplFor(i)}>
@@ -1101,6 +1112,58 @@ function ProgressTab() {
               </>
             );
           })()}
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={!!rollbackFor} onOpenChange={(o) => !o && setRollbackFor(null)}>
+        <AlertDialogContent>
+          {rollbackFor && (
+            <>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Roll back finalized review?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  {rollbackFor.employee?.full_name ?? rollbackFor.employee_id} — this will clear the
+                  {' '}<strong>final rating</strong>, HR remarks and finalized timestamp, unlock the
+                  {' '}HR stage response, and return the instance to <strong>pending HR</strong> so
+                  {' '}it can be revised. Historical audit trail is preserved.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <div className="space-y-1">
+                <Label>Reason (required, min 3 chars)</Label>
+                <Textarea
+                  rows={3}
+                  value={rollbackReason}
+                  onChange={(e) => setRollbackReason(e.target.value)}
+                  placeholder="Why is this finalized review being rolled back?"
+                />
+              </div>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={async (e) => {
+                    e.preventDefault();
+                    if (!rollbackFor) return;
+                    try {
+                      await rollbackFinalized.mutateAsync({
+                        instanceId: rollbackFor.id,
+                        reason: rollbackReason.trim(),
+                      });
+                      toast.success('Finalized review rolled back to pending HR.');
+                      setRollbackFor(null);
+                      setRollbackReason('');
+                      qc.invalidateQueries();
+                    } catch (err) {
+                      toast.error(err instanceof Error ? err.message : 'Failed to roll back');
+                    }
+                  }}
+                  disabled={rollbackReason.trim().length < 3 || rollbackFinalized.isPending}
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                >
+                  {rollbackFinalized.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />} Roll back
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </>
+          )}
         </AlertDialogContent>
       </AlertDialog>
     </div>

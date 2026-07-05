@@ -14867,6 +14867,10 @@ export type Database = {
         Args: { p_assigned_to: string; p_incident_id: string; p_notes?: string }
         Returns: Json
       }
+      rollback_annual_review_completed: {
+        Args: { p_instance_id: string; p_reason: string }
+        Returns: Database["public"]["Enums"]["annual_review_status"]
+      }
       rpc_bulk_employee_attrs: {
         Args: { p_employee_ids: string[] }
         Returns: {
