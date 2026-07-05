@@ -1,71 +1,122 @@
-## Root cause
 
-The instance `test003` has:
-- `overall_status = 'pending_hr'`
-- `enabled_stages = ['self','dept_head','bu_head']`  ← **`hr` is missing**
+# Form Mapping for Tomorrow's Launch
 
-The admin "Step back" dialog maps `pending_hr → role='hr'` and calls `send_back_annual_review_status(instance, 'hr', reason)`. The RPC's second guard rejects it:
+## The real problem
 
-```sql
-IF NOT (v_inst.enabled_stages ? p_reviewer_role::text) THEN
-  RAISE EXCEPTION 'stage % is not enabled for this instance', p_reviewer_role;
-END IF;
+We now have **three overlapping ways** to put a form in front of an employee, and it's not obvious which one is the source of truth:
+
+```text
+                     ┌─────────────────────────────────────┐
+                     │  What the employee actually sees    │
+                     │  = annual_review_instances.template │
+                     └─────────────────────────────────────┘
+                                     ▲
+              ┌──────────────────────┼──────────────────────┐
+              │                      │                      │
+   (1) Assignment Rules     (2) Per-employee Override   (3) Manual template_id
+       dept + sub-unit +        annual_review_             set at seed time
+       archetype + grade        assignment_overrides
+       → template_id
+              ▲
+              │
+   ┌──────────┴───────────┐
+   │  Template Factory    │  ← generates templates from
+   │  (dept × archetype × │     KPI weight matrix +
+   │   grade bucket)      │     criteria matrix +
+   └──────────┬───────────┘     archetype defaults
+              ▲
+              │
+   ┌──────────┴───────────┐
+   │  BFCL Forms Import   │  ← the new workbook importer
+   │  (criteria library + │     just populates matrices
+   │   assignments +      │     — it does NOT create
+   │   KPI weights)       │     templates directly
+   └──────────────────────┘
 ```
 
-So the RPC raises, but the client catch block does `err instanceof Error ? err.message : 'Failed to step back'`. Supabase `PostgrestError` is a plain object, not an `Error` instance, so the user only sees the generic fallback and cannot tell why it failed.
+**Nothing here is truly duplicated** — each layer feeds the next. But for tomorrow's go-live, running the full chain (import → factory → rules → seed) is too many moving parts to verify in one night.
 
-DB scan confirms this is not isolated: **1 of 2,653** instances currently has `overall_status` pointing at a stage that isn't in its `enabled_stages` (the row you just tried). Any admin action that keys off `overall_status` will trip on rows like this.
+## Recommendation
+
+**Use path (1) + (2) only tonight.** Templates already exist and are tested. Park the factory/import chain as an upstream authoring tool we can adopt later without rework.
+
+## What to build tonight — one "Form Mapping" screen
+
+New admin page: **Annual Review → Admin → Form Mapping** (`/annual-review/admin/mapping`).
+
+Single screen, three panels:
+
+1. **Templates panel (left)** — list all `annual_review_templates` for the active cycle. Show name, criteria count, weight total, "used by N employees" badge. This is our source of truth for "what forms exist."
+
+2. **Mapping builder (center)** — pick a template, then define the audience via any combination of:
+   - Department (multi-select)
+   - Sub-unit (multi-select, filtered by dept)
+   - Grade bucket (M / W / T / other) OR specific grade codes
+   - Archetype (A / B / C / D)
+   - Level / Designation (new — plain multi-select, no schema change; filters resolve at seed time)
+
+   Live preview: **"This will assign the form to X employees"** (query `profiles` with the filters, active in cycle).
+
+   Commit writes one `annual_review_assignment_rules` row per (dept, sub_unit, archetype, grade_bucket) combination pointing to the chosen `template_id`. Idempotent upsert.
+
+3. **Employee override panel (right)** — search any employee, see their **currently resolved template** (override → rule → default), and pin a specific template via `annual_review_assignment_overrides`. Shows the reason field.
+
+## Seeding flow (unchanged, already works)
+
+When admin clicks "Seed cycle" the existing seeder:
+1. Resolves archetype for each employee (`resolveArchetypeForEmployee`)
+2. Looks up matching `annual_review_assignment_rules`
+3. Applies any `annual_review_assignment_overrides`
+4. Writes `annual_review_instances.template_id`
+
+We only need to make sure step 2 actually finds a rule for every active employee — the new mapping screen makes that trivial to verify.
+
+## Coverage gate (safety net)
+
+Before "Start cycle" is allowed, run **`checkMappingCoverage(cycleId)`**:
+- Count active employees in the cycle
+- For each, resolve template via (override → rule → grade/archetype match)
+- Return `{ mapped: N, unmapped: [{ employee, reason }] }`
+- Block start if `unmapped.length > 0`; show the list with one-click "assign to template…" per row
+
+This is the single check that answers "will every employee see a form tomorrow?"
+
+## What we explicitly park (not tonight)
+
+- BFCL Forms Import — leave the dialog, but label it **"Upstream authoring (optional)"**. It stays useful for regenerating templates in future cycles.
+- Template Factory bulk rebuild — same. Available in admin, not on the launch critical path.
+- Level / Designation columns in `criteria_assignments` matrix — not needed; level/designation filtering lives in the mapping screen's audience builder and is evaluated at seed time against `profiles`, not stored in the matrix.
+
+## Files to touch
+
+- **New** `src/pages/annual-review/AnnualReviewFormMapping.tsx` — the screen above
+- **New** `src/services/annualReview/formMapping.ts` — `upsertAssignmentRules`, `previewAudience`, `checkMappingCoverage`, `resolveTemplateForEmployee` (single SSOT reused by seeder + preview)
+- **Edit** `src/services/annualReview/annualReviewService.ts` — seeder calls `resolveTemplateForEmployee` from the new service (removes any duplicate resolution logic)
+- **Edit** `src/pages/annual-review/AnnualReviewAdmin.tsx` — add "Form Mapping" tab, add coverage gate on "Start cycle"
+- **New** `src/services/annualReview/formMapping.test.ts` — resolver precedence (override > rule > null), audience preview, coverage gate
+- **Docs** `docs/specs/annual-review-form-mapping.md` + update `mem://features/annual-review/overview` with the mapping SSOT
 
 ## Risk & impact
 
-- Data: no schema change; one PL/pgSQL function replaced (`send_back_annual_review_status`) and a one-shot repair `UPDATE` for mismatched instances (scoped to the tiny set found above).
-- Workflow: step-back becomes tolerant of drift — it always lands on the previous **enabled** stage per `annual_review_effective_chain`, matching what `prevStatus()` already does on the client.
-- UI/UX: reason dialog unchanged; only error toast text improves.
-- Regression risk: low — RPC still enforces caller-is-active-reviewer / admin, still audit-logs, still clears proxy state on step-back to self.
-- Rollback: revert the migration file and the frontend patch.
+| Area | Impact |
+|---|---|
+| Data | No schema change. Writes only to existing `annual_review_assignment_rules` and `annual_review_assignment_overrides`. Reversible by deleting rows. |
+| Workflow | Adds one admin screen + one coverage gate. Existing seed / instance / review flows unchanged. |
+| UI | New tab under Admin. No changes to employee-facing screens. |
+| Regression | Low — resolver is centralized so seeder and preview cannot drift. Existing templates keep working as-is. |
+| Rollback | Delete the new rules rows; assignments fall back to prior state. Screen can be hidden with a feature flag. |
 
-## Plan
+## Timeline (tonight)
 
-### 1. Frontend — surface the real error (`src/pages/annual-review/AnnualReviewAdmin.tsx`)
-Replace the `instanceof Error` fallback in the step-back handler (~L1103) with a helper that unpacks Supabase's PostgrestError shape:
+1. Service + tests (60–90 min)
+2. Mapping screen + audience preview (90 min)
+3. Coverage gate + seeder wiring (30–45 min)
+4. Manual dry-run against the real cycle: import employees → map 3–4 templates → verify coverage = 100% → seed a test cycle → open one employee's form (30 min)
 
-```ts
-const msg =
-  (err as any)?.message ??
-  (err as any)?.error_description ??
-  (err as any)?.hint ??
-  'Failed to step back';
-toast.error(msg);
-```
+Total: ~4 hours with buffer.
 
-Do the same for the row-level "Step back" trigger and for `rollbackFinalizedInstance` so future RPC failures surface cleanly.
+## Decision to confirm before I build
 
-### 2. Backend — tolerant step-back (new migration)
-Rewrite `public.send_back_annual_review_status` so it:
-1. Derives the *effective current reviewer role* from `overall_status` mapped through `annual_review_effective_chain(instance)`. If `overall_status = 'pending_hr'` but `hr` isn't enabled, treat the last enabled stage in the chain as the current reviewer and step back from there.
-2. Keeps the admin/hr_pms override.
-3. Keeps the caller-is-active-reviewer guard for non-admins (unchanged semantics — non-admins still can't step back a stage that isn't theirs).
-4. Removes the hard `enabled_stages ? role` rejection when called by admin/hr_pms; instead re-anchors to the effective chain.
-5. Continues to audit-log the actual `from_stage`/`to_stage` pair used.
-
-### 3. Data reconciliation (same migration, guarded)
-For every instance where `overall_status LIKE 'pending_%'` AND that stage isn't in `enabled_stages`, snap `overall_status` to `pending_<last-enabled-role>` and audit-log each correction with reason `'reconcile: overall_status pointed at disabled stage'`. Scope confirmed: 1 row today.
-
-### 4. Tests
-- Unit: `src/test/annualReviewStepBackDialog.test.tsx` — mock a rejected mutation returning `{ message: 'stage hr is not enabled' }` and assert the toast shows that message, not the generic fallback.
-- SQL: add a pgTAP-style scenario doc under `docs/adr/ADR-106.md` describing the drift case + RPC contract.
-
-### 5. Docs & memory
-- Update `docs/specs/annual-review-template-factory.md` §Step-back with the new behaviour.
-- Add memory `mem/features/annual-review/stepback-drift-tolerance` capturing the invariant "step-back re-anchors to enabled_stages chain".
-- Append version-history entry to `DOCUMENTATION.md`.
-
-## Technical details
-
-Files touched
-- `src/pages/annual-review/AnnualReviewAdmin.tsx` — error message unpacking (2 handlers)
-- `supabase/migrations/<new>.sql` — replace RPC + one-shot repair
-- `src/test/annualReviewStepBackDialog.test.tsx` — regression test
-- `docs/adr/ADR-106.md`, `docs/specs/annual-review-template-factory.md`, `mem/features/annual-review/stepback-drift-tolerance`
-
-Approve and I'll implement in one pass (migration first so types regenerate before the frontend patch).
+- **Yes, build the mapping screen as above** — I'll implement it now.
+- **No, I want to go the full factory route instead** — riskier for tomorrow; I'll re-plan.
+- **Different scope** — tell me what to change.
