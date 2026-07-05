@@ -399,6 +399,109 @@ export type Database = {
           },
         ]
       }
+      annual_review_criteria_assignments: {
+        Row: {
+          archetype_code: string | null
+          created_at: string
+          criterion_id: string
+          department_id: string | null
+          grade_bucket: string | null
+          id: string
+          is_enabled: boolean
+          sub_unit_id: string | null
+          updated_at: string
+          weight_pct: number
+        }
+        Insert: {
+          archetype_code?: string | null
+          created_at?: string
+          criterion_id: string
+          department_id?: string | null
+          grade_bucket?: string | null
+          id?: string
+          is_enabled?: boolean
+          sub_unit_id?: string | null
+          updated_at?: string
+          weight_pct?: number
+        }
+        Update: {
+          archetype_code?: string | null
+          created_at?: string
+          criterion_id?: string
+          department_id?: string | null
+          grade_bucket?: string | null
+          id?: string
+          is_enabled?: boolean
+          sub_unit_id?: string | null
+          updated_at?: string
+          weight_pct?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "annual_review_criteria_assignments_criterion_id_fkey"
+            columns: ["criterion_id"]
+            isOneToOne: false
+            referencedRelation: "annual_review_criteria_library"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "annual_review_criteria_assignments_department_id_fkey"
+            columns: ["department_id"]
+            isOneToOne: false
+            referencedRelation: "departments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "annual_review_criteria_assignments_sub_unit_id_fkey"
+            columns: ["sub_unit_id"]
+            isOneToOne: false
+            referencedRelation: "business_unit_sub_units"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      annual_review_criteria_library: {
+        Row: {
+          created_at: string
+          id: string
+          is_active: boolean
+          is_common: boolean
+          key: string
+          label_en: string
+          label_hi: string | null
+          max_score: number
+          scoring_bands: Json
+          sort_order: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          is_common?: boolean
+          key: string
+          label_en: string
+          label_hi?: string | null
+          max_score?: number
+          scoring_bands?: Json
+          sort_order?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          is_common?: boolean
+          key?: string
+          label_en?: string
+          label_hi?: string | null
+          max_score?: number
+          scoring_bands?: Json
+          sort_order?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       annual_review_cycles: {
         Row: {
           bu_review_end: string | null
