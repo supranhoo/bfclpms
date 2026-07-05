@@ -5,6 +5,7 @@ import {
   type FactoryKey, type TemplateRow, type ArchetypeCode, type GradeBucket,
 } from './templateFactory';
 import { listArchetypes, parseCriteria, parseStageWeights } from './templateArchetypes';
+import { bandsToBilingualOptions } from '@/lib/annualReview/criteriaBands';
 import { listSystemKpis, listSystemKpiWeights, resolveWeight, parseScoringRules } from './systemKpiLibrary';
 import {
   listCriteriaLibrary, listCriteriaAssignments, resolveCriteria, validateResolvedWeights,
