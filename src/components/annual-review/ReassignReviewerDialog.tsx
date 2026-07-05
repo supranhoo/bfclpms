@@ -62,6 +62,29 @@ export function ReassignReviewerDialog({
     staleTime: 30_000,
   });
 
+  const { data: currentReviewer, isLoading: currentLoading } = useQuery({
+    queryKey: ['annual-review-reassign-current', currentReviewerId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, full_name, employee_code')
+        .eq('id', currentReviewerId!)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+    enabled: open && !!currentReviewerId,
+    staleTime: 5 * 60_000,
+  });
+
+  const currentLabel = !currentReviewerId
+    ? '— none —'
+    : currentLoading
+      ? 'Loading…'
+      : currentReviewer
+        ? `${currentReviewer.full_name ?? 'Unknown'}${currentReviewer.employee_code ? ` (${currentReviewer.employee_code})` : ''}`
+        : '— unknown —';
+
   const filtered = useMemo(
     () => people.filter((p) => p.id !== instance.employee_id),
     [people, instance.employee_id],
@@ -109,7 +132,7 @@ export function ReassignReviewerDialog({
               </SelectContent>
             </Select>
             <p className="text-xs text-muted-foreground">
-              Current: <span className="font-mono">{currentReviewerId ?? '— none —'}</span>
+              Current: <span className="font-medium text-foreground">{currentLabel}</span>
             </p>
           </div>
 
