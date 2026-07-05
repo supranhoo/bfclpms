@@ -981,6 +981,118 @@ export type Database = {
         }
         Relationships: []
       }
+      annual_review_system_kpi_weights: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          department_id: string | null
+          grade_bucket: string | null
+          id: string
+          sub_unit_id: string | null
+          system_kpi_id: string
+          updated_at: string
+          updated_by: string | null
+          weight_pct: number
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          department_id?: string | null
+          grade_bucket?: string | null
+          id?: string
+          sub_unit_id?: string | null
+          system_kpi_id: string
+          updated_at?: string
+          updated_by?: string | null
+          weight_pct: number
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          department_id?: string | null
+          grade_bucket?: string | null
+          id?: string
+          sub_unit_id?: string | null
+          system_kpi_id?: string
+          updated_at?: string
+          updated_by?: string | null
+          weight_pct?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "annual_review_system_kpi_weights_department_id_fkey"
+            columns: ["department_id"]
+            isOneToOne: false
+            referencedRelation: "departments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "annual_review_system_kpi_weights_sub_unit_id_fkey"
+            columns: ["sub_unit_id"]
+            isOneToOne: false
+            referencedRelation: "business_unit_sub_units"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "annual_review_system_kpi_weights_system_kpi_id_fkey"
+            columns: ["system_kpi_id"]
+            isOneToOne: false
+            referencedRelation: "annual_review_system_kpis"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      annual_review_system_kpis: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          description_en: string | null
+          description_hi: string | null
+          id: string
+          is_active: boolean
+          key: string
+          name_en: string
+          name_hi: string | null
+          scoring_rules: Json
+          sort_order: number
+          uom_type: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          description_en?: string | null
+          description_hi?: string | null
+          id?: string
+          is_active?: boolean
+          key: string
+          name_en: string
+          name_hi?: string | null
+          scoring_rules: Json
+          sort_order?: number
+          uom_type?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          description_en?: string | null
+          description_hi?: string | null
+          id?: string
+          is_active?: boolean
+          key?: string
+          name_en?: string
+          name_hi?: string | null
+          scoring_rules?: Json
+          sort_order?: number
+          uom_type?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
       annual_review_templates: {
         Row: {
           created_at: string
@@ -8009,6 +8121,7 @@ export type Database = {
           company_id: string | null
           created_at: string
           description: string | null
+          family_bucket: string | null
           id: string
           level: string | null
           name: string
@@ -8018,6 +8131,7 @@ export type Database = {
           company_id?: string | null
           created_at?: string
           description?: string | null
+          family_bucket?: string | null
           id?: string
           level?: string | null
           name: string
@@ -8027,6 +8141,7 @@ export type Database = {
           company_id?: string | null
           created_at?: string
           description?: string | null
+          family_bucket?: string | null
           id?: string
           level?: string | null
           name?: string
