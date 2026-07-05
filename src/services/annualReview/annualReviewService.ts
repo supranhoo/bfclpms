@@ -12,6 +12,7 @@ import type {
 } from '@/types/annualReview';
 import { enabledChain } from '@/lib/annualReview/stageChain';
 import { getHrHeadUserId } from '@/services/orgHeads/hrHeadResolver';
+import { bucketFromGradeCode } from './archetypeResolver';
 
 /**
  * Service layer for the Annual Review module — wraps every DB / RPC / storage call
@@ -1056,6 +1057,7 @@ export async function seedInstancesByRules(args: { cycleId: string; hrUserId: st
     const list = (k: string): string[] => Array.isArray(f[k]) ? f[k] : [];
     if (list('roles').length && !list('roles').includes(p.designation)) return false;
     if (list('grades').length && !list('grades').includes(p.pms_grade)) return false;
+    if (typeof f.grade_bucket === 'string' && f.grade_bucket && bucketFromGradeCode(p.pms_grade) !== f.grade_bucket) return false;
     if (list('levels').length && !list('levels').includes(p.level)) return false;
     if (list('department_ids').length && !list('department_ids').includes(p.department_id)) return false;
     if (list('bu_ids').length && !list('bu_ids').includes(deptToBu[p.department_id])) return false;
