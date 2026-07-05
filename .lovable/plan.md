@@ -1,82 +1,74 @@
+## What you're seeing
 
-# Admin KPI Editor — "This + future months" behaviour
+Today the Template Factory only reads **one** criteria list per archetype: `annual_review_template_archetypes.default_criteria`. That's why every generated template for A/B/C/D shows the same qualitative questions regardless of Department, Sub-unit or Grade — there is no override layer for questions (there is one for KPI weights, but not for criteria).
 
-## 1. Is the field you edited supposed to propagate?
+Your uploaded workbook already proves the real requirement: 5 sheets — generic Blue-Collar (W), generic Managerial (M), M-no-Env, and two department-specific Workmen sets (HK/Pol/Dust/Hort, and Admin/Temple/Travel/WB/Sec). So you need **common questions + variant sets per Dept / Sub-unit / Grade bucket**, exactly like the system-KPI weight cascade.
 
-Yes — with one important caveat.
+## Proposed model — mirror the System KPI pattern for questions
 
-When you save with **"This + future months"** selected, `AdminKpiEditorForm` does two things:
+Introduce a two-table "Criteria Library + Criteria Matrix", so a template's final criteria list is *composed* at factory time from the most-specific match, exactly like `resolveWeight()` does today.
 
-1. Updates the current month's KPI row with **all** editable fields (structural + status + achieved).
-2. Runs a **sibling bulk-apply** against every other `kpis` row that matches the same employee + KRA name + KPI name, within the current fiscal year window, and (for "future months") whose calendar position is strictly after the current month. On each match it writes an `admin_bulk_apply` audit log.
+```text
+annual_review_criteria_library         (the "questions" catalog)
+  id, key, label_en, label_hi, max_score, scoring_bands_json,
+  is_common (bool), is_active, sort_order
 
-The sibling pass only copies **structural fields**. Everything workflow-related is intentionally left alone so approved/in-progress months aren't corrupted.
-
-### Structural fields that DO propagate to future months
-- `kpi_description`
-- `uom`, `uom_type`
-- `weightage`
-- `frequency`, `frequency_cycle_start`
-- `criteria` (this is the free-text "CLMS implementation as per plan / Formula / Target / Last completion month …" block visible under the KPI name — only propagated when `uom_type = 'numeric'`)
-- `source_of_data`
-- Scoring bands `r5, r4, r3, r2, r1, r0` (numeric UOM only)
-- `is_org_level`, `org_level_scope`
-- `qualitative_options` (tiered/binary UOM only)
-- `require_resubmit_reason`
-- `day_count_type` (Daily frequency only)
-- `threshold_mode` (numeric UOM only)
-
-### Fields that DO NOT propagate to siblings
-- `status` (workflow stage)
-- `review_period`, `review_year`
-- `achieved_value`, remarks, evidence, sub-factor values
-- `final_score` and any per-stage score snapshot on `review_submissions`
-- KRA name / KPI name (used as the JOIN key, so a rename on the current month leaves siblings orphaned)
-- Employee, category, reporting manager
-
-This matches the on-screen note: *"Structural fields applied to sibling KPIs. Status & achieved values unchanged."*
-
-## 2. So what should have flown into July 2026 in your case?
-
-The change you made — adding the line **"Last completion month: 5 for 100%"** to the description text under the KPI name — lives in the `criteria` column. That column IS in the propagation list, so July 2026 (status `KRA Set`, same KRA/KPI) is expected to receive it.
-
-The fact that July still shows the old text means one of a small number of things is true. In priority order:
-
-### A. Name-key drift between June and July rows (most likely)
-The sibling lookup is:
+annual_review_criteria_assignments     (the "who gets this question" matrix)
+  id, criterion_id,
+  archetype_code   NULL = any,
+  grade_bucket     NULL = any (M/W/T/other),
+  department_id    NULL = any,
+  sub_unit_id      NULL = any,
+  weight_pct       (per-criterion weight in that context),
+  is_enabled       (bool — lets you *remove* a common question for one dept)
 ```
-employee_id = <same>
-AND kra_name  = <June row's kra_name>   -- exact match
-AND kpi_name  = <June row's kpi_name>   -- exact match
-AND review_year IN (fiscalStart, fiscalStart+1)
-AND id <> <June row id>
-```
-This is a raw equality match — no trimming, no case-folding, no whitespace collapse. ADR-054 documented that historical rows drifted on exactly this kind of key (stray `\r`, doubled spaces, case). If July 2026 was created by monthly rollover before the drift was normalised, its `kra_name` / `kpi_name` can differ from June by an invisible character and the sibling query will silently return zero rows — meaning the June save succeeds, no "+ N sibling month(s) updated" toast appears, and July is left on the old text.
 
-### B. July row wasn't a sibling — it's a fresh KPI
-If July 2026 was created via a different path (Copy KRAs, Smart KRA assignment, manual add) with even a one-character name difference, same outcome as (A).
+Resolution rule (same specificity score you already use):
+`sub_unit (4) + dept (2) + grade (1) + archetype (0.5)` — most specific row wins; `NULL` = wildcard. A row with `is_enabled=false` at higher specificity **suppresses** an inherited common question — that's how "Env" is dropped from "M no Env".
 
-### C. `uom_type` on July isn't `numeric`
-`criteria` (and the R-bands) are only written into the update payload when the FORM's `uom_type` is `numeric`. This gates the payload, not the match, so it applies uniformly — but worth confirming the KPI is indeed numeric on both months.
+`is_common = true` rows in the library are the baseline pool; they only appear on a template if at least one assignment row (even a full-wildcard one) enables them for that context.
 
-### D. `review_period` on July is stored as something other than a full month name (`"Jul"` vs `"July"`)
-The client filter drops any sibling whose `review_period` isn't in the calendar-month array. A short-form value would be silently filtered out.
+## Factory changes
 
-## Diagnostic plan (read-only — no code changes yet)
+1. `templateFactoryBulk.rebuildFactoryTemplatesForCycle` and the preview builder stop reading `archetype.default_criteria` as the final list. Instead they call a new `resolveCriteria(assignments, library, {archetype, grade, dept, subUnit})` — same shape as `resolveWeight`.
+2. `sections.criteria` on the generated template is the resolved, ordered, deduped list with per-context weights.
+3. Preview table gets two extra columns: **Criteria count** (already there) + **Missing common?** flag when a required-common question was suppressed everywhere for that cell.
+4. `archetype.default_criteria` becomes a *seed only* — used the first time you populate the library, then locked read-only in the Archetypes editor with a "Managed in Criteria Library" note.
 
-I want to confirm which of A–D is true before proposing a fix, so the fix targets the actual root cause.
+## Admin surfaces
 
-1. Pull the two rows from `kpis` for this employee + this KPI, June 2026 and July 2026, and compare:
-   - `kra_name`, `kpi_name` byte-for-byte (length, hex dump of trailing chars)
-   - `review_period`, `review_year`, `uom_type`, `criteria`
-2. Pull the most recent `kpi_audit_logs` entry for the June row where `action = 'admin_bulk_apply'` (source row) and any `admin_bulk_apply` rows keyed to July (target row). Absence of a July target row proves the sibling matcher didn't see July.
-3. If (A) is confirmed, the fix is to switch the sibling lookup in `AdminKpiEditorForm.tsx` to the canonical `normalizeText` comparison already used for Org KPI joins (ADR-054), rather than raw `.eq()`.
+- **Admin → Criteria Library** (new): CRUD list, bilingual EN/HI, scoring bands editor, `is_common` toggle. Bulk XLSX import that accepts the exact sheet layout of your uploaded workbook (Criteria / Rating description / Wt%). Bilingual XLSX export for review.
+- **Admin → Criteria Matrix** (new): sparse-cell editor identical in feel to the Weight Matrix — pick criterion, then set enabled + weight for any (Archetype × Grade × Dept × Sub-unit) cell. `NULL` columns render as wildcards.
+- **Admin → Template Factory** preview: for any (Dept × Sub-unit × Archetype × Grade) cell, "Preview criteria" popover shows the resolved question list with which row won each cell, so admins can debug why a question did/didn't appear.
 
-## Risk & Impact (of the diagnostic step only)
-- Data Impact: none — SELECT only.
-- Workflow Impact: none.
-- UI Impact: none.
-- Regression Risk: none.
+## Import mapping for the uploaded file
 
-## Next step
-On approval I will run the two read-only queries above, report exactly which row broke the match, and then come back with a scoped fix plan (either name normalisation in the sibling matcher, or a one-shot data repair for the drifted row — whichever the evidence points to). No code changes will happen in this turn.
+- Sheet **Generic - M** → library rows tagged `is_common=true`, assigned at `(archetype=B, grade=M, dept=*, sub_unit=*)`.
+- Sheet **Generic - M no Env** → same library rows minus "Environment"; achieved by keeping the common rows and adding an override row `(grade=M, dept=<no-env depts>, criterion=Environment, is_enabled=false)`.
+- Sheet **Generic - Blue Collar** → common set at `(archetype=C, grade=W, *, *)`.
+- Sheet **HK/Pol/Dust/Hort - W** → dept-specific overrides at `(grade=W, department_id IN (…), sub_unit=*)`, adds dept-only questions and can suppress inapplicable common ones.
+- Sheet **Admin/Temple/TO/Travel/WB/Sec - W** → same pattern for the second dept cluster.
+
+## Risk & Impact
+
+- **Data**: two new tables + one seed migration; no destructive change to `annual_review_template_archetypes`. Existing generated templates keep working until you run "Re-apply to existing templates".
+- **Workflow**: `rebuildFactoryTemplatesForCycle` becomes the single re-application path — already idempotent.
+- **UI**: two new admin pages under Annual Review Admin. Factory page gains one column and one preview popover.
+- **Backward compat**: if `criteria_library` is empty, resolver falls back to `archetype.default_criteria` so nothing breaks day-1.
+- **Rollback**: drop the two new tables + revert the resolver call; archetype seed is untouched.
+
+## Deliverables (in this order)
+
+1. Migration: `annual_review_criteria_library`, `annual_review_criteria_assignments` with GRANTs, RLS, `updated_at` triggers.
+2. `src/services/annualReview/criteriaLibrary.ts` — CRUD + `resolveCriteria` + specificity scorer + unit tests (mirrors `templateFactory.test.ts`).
+3. Factory integration: `templateFactory.buildPlan` and `templateFactoryBulk.rebuildFactoryTemplatesForCycle` use `resolveCriteria`; keep archetype fallback.
+4. Admin pages: `CriteriaLibraryPanel`, `CriteriaMatrixPanel`, routed under `/annual-review/admin/factory`.
+5. XLSX import matching your uploaded workbook layout (bilingual, per-sheet grade/dept mapping form) + bilingual export.
+6. Docs: update `docs/specs/annual-review-template-factory.md` "Data model" and add a "Criteria resolver" section; add "Criteria Library" bullet to `mem://features/annual-review/overview` index.
+
+## Open questions before I start
+
+1. **Weight semantics** — should per-criterion `weight_pct` sum to 100 per template (validated at commit), or is it a raw multiplier the reviewer sees?
+2. **Grade granularity** — is the current `M / W / T / other` bucket enough, or do you need actual `pms_grades.code` targeting (e.g. `M4` vs `M1`)?
+3. **Suppression UI** — do you want an explicit "Remove this common question for this cell" toggle in the matrix, or should setting `weight_pct = 0` mean "hide"?
+4. **Department clusters** — the two W-sheets group depts (HK/Pol/Dust/Hort; Admin/Temple/…). Should I introduce a lightweight `department_group` table, or just repeat the assignment row per department during import?
