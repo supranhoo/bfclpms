@@ -13,7 +13,7 @@ import {
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
-import { Loader2, ArrowLeft, PlayCircle, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { Loader2, ArrowLeft, PlayCircle, CheckCircle2, AlertTriangle, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import { useCycles } from '@/hooks/useAnnualReview';
 import { useBusinessUnits, useDepartments } from '@/hooks/useSafetyOrg';
@@ -22,6 +22,7 @@ import {
   previewFactoryRun, commitFactoryRun,
   type PlannedRow, type FactoryRunInput, type ArchetypeCode, type GradeBucket,
 } from '@/services/annualReview/templateFactory';
+import { rebuildFactoryTemplatesForCycle } from '@/services/annualReview/templateFactoryBulk';
 import { listArchetypes } from '@/services/annualReview/templateArchetypes';
 import { STAGE_KEYS, type StageKey } from '@/services/annualReview/templateArchetypes';
 
@@ -102,6 +103,20 @@ export default function TemplateFactory() {
       }
       // Re-run preview to refresh existing IDs.
       previewMut.mutate();
+    },
+    onError: (e) => toast.error((e as Error).message),
+  });
+
+  const rebuildMut = useMutation({
+    mutationFn: async () => {
+      if (!cycleId) throw new Error('Pick a cycle first.');
+      return rebuildFactoryTemplatesForCycle(cycleId);
+    },
+    onSuccess: (res) => {
+      const errorText = res.errors.length ? `, ${res.errors.length} error(s)` : '';
+      toast.success(
+        `Rebuilt ${res.updated} template${res.updated === 1 ? '' : 's'} (scanned ${res.scanned}, skipped ${res.skipped}${errorText}).`,
+      );
     },
     onError: (e) => toast.error((e as Error).message),
   });
@@ -299,6 +314,17 @@ export default function TemplateFactory() {
               {commitMut.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
               <CheckCircle2 className="h-4 w-4 mr-2" />
               Commit {plans ? `(${plans.length})` : ''}
+            </Button>
+            <Button
+              variant="outline"
+              className="ml-auto"
+              onClick={() => rebuildMut.mutate()}
+              disabled={rebuildMut.isPending || !cycleId}
+              title="Refresh system_scores, criteria, and display_mode on every factory-generated template in this cycle. Idempotent."
+            >
+              {rebuildMut.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Re-apply to existing templates
             </Button>
           </div>
 
