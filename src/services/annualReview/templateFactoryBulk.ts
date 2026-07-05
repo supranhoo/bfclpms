@@ -6,6 +6,7 @@ import {
 } from './templateFactory';
 import { listArchetypes, parseCriteria, parseStageWeights } from './templateArchetypes';
 import { listSystemKpis, listSystemKpiWeights, resolveWeight, parseScoringRules } from './systemKpiLibrary';
+import { listCriteriaLibrary, listCriteriaAssignments, resolveCriteria } from './criteriaLibrary';
 
 function readFactoryKey(row: TemplateRow): FactoryKey | null {
   const s = (row.sections ?? {}) as Record<string, unknown>;
@@ -38,11 +39,13 @@ export interface RebuildResult {
  */
 export async function rebuildFactoryTemplatesForCycle(cycleId: string): Promise<RebuildResult> {
   const res: RebuildResult = { scanned: 0, updated: 0, skipped: 0, errors: [] };
-  const [templates, archetypes, kpis, weights] = await Promise.all([
+  const [templates, archetypes, kpis, weights, critLib, critAsg] = await Promise.all([
     listFactoryTemplates(cycleId),
     listArchetypes(),
     listSystemKpis(),
     listSystemKpiWeights(),
+    listCriteriaLibrary(),
+    listCriteriaAssignments(),
   ]);
   const archetypeByCode = new Map(archetypes.map((a) => [a.code, a]));
 
@@ -71,10 +74,21 @@ export async function rebuildFactoryTemplatesForCycle(cycleId: string): Promise<
     }
 
     const prev = (t.sections ?? {}) as Record<string, unknown>;
+    const resolved = resolveCriteria(critLib, critAsg, {
+      archetype: key.archetype_code, grade: key.grade_bucket,
+      dept: key.department_id, subUnit: key.sub_unit_id,
+    });
+    const criteria = resolved.length > 0
+      ? resolved.map((r) => ({
+          key: r.key, label_en: r.label_en, label_hi: r.label_hi,
+          max_score: r.max_score, scoring_bands: r.scoring_bands, weight_pct: r.weight_pct,
+        }))
+      : parseCriteria(archetype.default_criteria);
     const merged: Record<string, unknown> = {
       ...prev,
       display_mode: archetype.display_mode,
-      criteria: parseCriteria(archetype.default_criteria) as unknown as Json,
+      criteria: criteria as unknown as Json,
+      criteria_source: resolved.length > 0 ? 'library' : 'archetype',
       // stage_weights: keep manual per-template override if it was set outside
       // the archetype default; otherwise refresh from archetype.
       stage_weights: prev.stage_weights ?? parseStageWeights(archetype.default_stage_weights),
