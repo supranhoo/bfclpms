@@ -4,7 +4,7 @@ import {
   useCycles, useTemplates, useRules, useCycleInstances, useActiveCycle, useTemplate,
   useSendBackStatus, useCloseCycle, useOverrideRating, useCloneTemplate, useCloneCycle,
   useAnnualReviewInstancesPaginated, useCycleStatusCounts, useReopenCycle,
-  useInstanceStageScores,
+  useInstanceStageScores, useRollbackFinalizedInstance,
 } from '@/hooks/useAnnualReview';
 import * as svc from '@/services/annualReview/annualReviewService';
 import { useAuth } from '@/contexts/AuthContext';
@@ -455,8 +455,11 @@ function ProgressTab() {
   const [weightsFor, setWeightsFor] = useState<InstanceWithEmployee | null>(null);
   const [stepBackFor, setStepBackFor] = useState<InstanceWithEmployee | null>(null);
   const [stepBackReason, setStepBackReason] = useState('');
+  const [rollbackFor, setRollbackFor] = useState<InstanceWithEmployee | null>(null);
+  const [rollbackReason, setRollbackReason] = useState('');
   const { data: allTemplates = [] } = useTemplates();
   const sendBack = useSendBackStatus();
+  const rollbackFinalized = useRollbackFinalizedInstance();
   const templatesByIdMap = useMemo(() => {
     const m: Record<string, AnnualReviewTemplate> = {};
     for (const t of allTemplates) m[t.id] = t;
