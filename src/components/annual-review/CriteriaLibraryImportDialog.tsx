@@ -175,6 +175,7 @@ export function CriteriaLibraryImportDialog({
           <div className="space-y-4">
             {sheets.map((s) => {
               const m = mappings[s.name];
+              if (!m) return null;
               return (
                 <div key={s.name} className="border rounded-md p-3 space-y-3">
                   <div className="flex items-center justify-between gap-4">
