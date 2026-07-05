@@ -177,6 +177,18 @@ export function useSendBackStatus() {
   });
 }
 
+export function useRollbackFinalizedInstance() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (args: { instanceId: string; reason: string }) =>
+      svc.rollbackFinalizedInstance(args.instanceId, args.reason),
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: annualReviewKeys.all });
+      await qc.refetchQueries({ queryKey: annualReviewKeys.all, type: 'active' });
+    },
+  });
+}
+
 export function useUploadEvidence() {
   return useMutation({
     mutationFn: (args: { instanceId: string; reviewerId: string; role: AnnualReviewerRole; file: File }) =>
