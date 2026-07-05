@@ -83,19 +83,18 @@ export function bandsToOptions(
 }
 
 /**
- * Bilingual variant: also returns `label_hi` per option so the i18n context
- * can register both languages. Kept separate from `bandsToOptions` because
- * `CriterionOption` in `types/annualReview.ts` does not carry `label_hi` yet.
+ * Bilingual variant: also returns `label_hi` per option so imported workbook
+ * labels can render without needing a separate template translation entry.
  */
 export function bandsToBilingualOptions(
   bandsRaw: Json | null | undefined,
   maxScore: number,
-): Array<CriterionOption & { label_hi?: string | null }> {
+): CriterionOption[] {
   const max = Number.isFinite(maxScore) && maxScore > 0 ? Math.floor(maxScore) : 5;
   const bands = parseScoringBands(bandsRaw).filter((b) => b.score >= 0 && b.score <= max);
   const byScore = new Map<number, ScoringBand>();
   for (const b of bands) byScore.set(b.score, b);
-  const out: Array<CriterionOption & { label_hi?: string | null }> = [];
+  const out: CriterionOption[] = [];
   for (let s = max; s >= 0; s--) {
     const band = byScore.get(s);
     const labelEn = band?.label_en ?? DEFAULT_LADDER[s] ?? `Score ${s}`;

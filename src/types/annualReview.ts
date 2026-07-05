@@ -49,6 +49,8 @@ export interface AnnualReviewCycle {
 export interface CriterionOption {
   id: string;
   label: string;
+  /** Optional imported Hindi/local-language label from criteria_library.scoring_bands. */
+  label_hi?: string | null;
   score: number; // 0..5
 }
 
