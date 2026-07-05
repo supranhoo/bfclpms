@@ -294,7 +294,7 @@ function CriterionEditorDialog({
             <div>
               <Label>Max score</Label>
               <Input type="number" min={1} max={10} value={maxScore}
-                     onChange={(e) => setMaxScore(Number(e.target.value) || 5)} />
+                     onChange={(e) => syncBandsToMax(Number(e.target.value) || 5)} />
             </div>
             <div className="flex items-end gap-2">
               <Switch checked={isCommon} onCheckedChange={setIsCommon} id="is_common" />
@@ -305,10 +305,64 @@ function CriterionEditorDialog({
               <Label htmlFor="is_active">Active</Label>
             </div>
           </div>
-          <div>
-            <Label>Scoring bands (JSON)</Label>
-            <Textarea rows={5} value={bandsText} onChange={(e) => setBandsText(e.target.value)}
-                      className="font-mono text-xs" />
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label>Rating labels (score → what the reviewer sees)</Label>
+              <div className="flex gap-2">
+                <Button type="button" variant="ghost" size="sm"
+                        onClick={() => setBands(defaultLadder(maxScore))}>
+                  Reset to default ladder
+                </Button>
+                <Button type="button" variant="ghost" size="sm"
+                        onClick={() => setShowJson((v) => !v)}>
+                  {showJson ? 'Hide JSON' : 'Show JSON'}
+                </Button>
+              </div>
+            </div>
+            <div className="rounded-md border overflow-hidden">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-16 text-center">Score</TableHead>
+                    <TableHead>Label (EN)</TableHead>
+                    <TableHead>Label (HI)</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {bands.map((b, i) => (
+                    <TableRow key={b.score}>
+                      <TableCell className="text-center font-mono">{b.score}</TableCell>
+                      <TableCell>
+                        <Input
+                          value={b.label_en}
+                          onChange={(e) => setBands((prev) => prev.map((x, j) => j === i ? { ...x, label_en: e.target.value } : x))}
+                          placeholder="e.g. Outstanding"
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Input
+                          value={b.label_hi ?? ''}
+                          dir="auto"
+                          onChange={(e) => setBands((prev) => prev.map((x, j) => j === i ? { ...x, label_hi: e.target.value } : x))}
+                          placeholder="वैकल्पिक हिंदी लेबल"
+                        />
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+            {showJson && (
+              <Textarea
+                rows={5}
+                readOnly
+                value={JSON.stringify(optionsToBands(bands), null, 2)}
+                className="font-mono text-xs"
+              />
+            )}
+            <p className="text-xs text-muted-foreground">
+              These labels populate the 0-{maxScore} buttons the reviewer clicks. Same criterion can be reused across departments — assign it in the Criteria Matrix.
+            </p>
           </div>
         </div>
         <DialogFooter>
