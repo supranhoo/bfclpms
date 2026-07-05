@@ -305,11 +305,18 @@ export function AdminKpiEditorForm({ kpi, onSaved, onCancel }: AdminKpiEditorFor
 
         if (filteredSiblings.length > 0) {
           const { data: { user } } = await supabase.auth.getUser();
-          
+          const renamePayload: Record<string, string> = {};
+          if (alsoRenameSiblings && kpi.kra_name !== formData.kra_name) {
+            renamePayload.kra_name = formData.kra_name;
+          }
+          if (alsoRenameSiblings && kpi.kpi_name !== formData.kpi_name) {
+            renamePayload.kpi_name = formData.kpi_name;
+          }
+
           for (const sibling of filteredSiblings) {
             const { error: updateError } = await supabase
               .from('kpis')
-              .update({ ...(structuralFields as any), updated_at: new Date().toISOString() })
+              .update({ ...(structuralFields as any), ...renamePayload, updated_at: new Date().toISOString() })
               .eq('id', sibling.id);
 
             if (updateError) {
@@ -322,11 +329,13 @@ export function AdminKpiEditorForm({ kpi, onSaved, onCancel }: AdminKpiEditorFor
                 kpi_id: sibling.id,
                 performed_by: user.id,
                 action: 'admin_bulk_apply',
-                new_value: structuralFields as any,
+                new_value: { ...(structuralFields as any), ...renamePayload },
                 metadata: {
                   source: 'admin_bulk_apply',
                   source_kpi_id: kpi.id,
                   source_month: kpi.review_period,
+                  renamed_kra: !!renamePayload.kra_name,
+                  renamed_kpi: !!renamePayload.kpi_name,
                   reason: reason || 'Bulk applied from admin editor',
                 },
               });
