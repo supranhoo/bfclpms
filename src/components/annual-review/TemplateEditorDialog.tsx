@@ -32,6 +32,7 @@ import { StageWeightsBlendEditor } from './StageWeightsBlendEditor';
 import { SelfReviewLibraryPicker } from './SelfReviewLibraryPicker';
 import { SelfReviewLibraryManager } from './SelfReviewLibraryManager';
 import { SelfReviewLabelCombobox } from './SelfReviewLabelCombobox';
+import { CriteriaLibraryPickerDialog } from './CriteriaLibraryPickerDialog';
 import { applyEntriesToSections, mapEntryToTemplateField } from '@/services/annualReview/selfReviewLibrary';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -62,6 +63,7 @@ export function TemplateEditorDialog({
   const [sections, setSections] = useState<TemplateSections>(emptySections());
   const [libPickerOpen, setLibPickerOpen] = useState(false);
   const [libManagerOpen, setLibManagerOpen] = useState(false);
+  const [criteriaLibOpen, setCriteriaLibOpen] = useState(false);
   const { effectiveRole } = useAuth();
   const canManageLibrary = effectiveRole === 'admin' || effectiveRole === 'hr_pms';
 
@@ -468,9 +470,14 @@ export function TemplateEditorDialog({
               </div>
             }
             extraActions={
-              <Button variant="outline" size="sm" onClick={applyPreset} className="gap-1.5">
-                <Sparkles className="h-4 w-4" /> Auto-Populate Blue-Collar Template
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button variant="outline" size="sm" onClick={() => setCriteriaLibOpen(true)} className="gap-1.5">
+                  <Library className="h-4 w-4" /> Add from Library
+                </Button>
+                <Button variant="outline" size="sm" onClick={applyPreset} className="gap-1.5">
+                  <Sparkles className="h-4 w-4" /> Auto-Populate Blue-Collar Template
+                </Button>
+              </div>
             }
             onAdd={() => setSections((s) => ({
               ...s, criteria: [...criteria, {
