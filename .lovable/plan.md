@@ -1,60 +1,29 @@
-## Goal
-When the Annual Review form language is Hindi (or Spanish), the "Assisted Submission Verification" dialog — title, description, camera button labels, declaration, and action buttons — must render in the same language. English remains the default when language is `en`.
+## HR Finalization — required-stage guard should follow the employee's actual workflow
 
-## Risk & Impact
-- UI-only change scoped to `AssistedSubmissionDialog`. No policy, schema, RLS, or backend logic touched.
-- Zero-hardcoding rule honored: strings routed through the existing `useAnnualReviewI18n()` translator + `UI_I18N` dictionary (SSOT for AR static strings).
-- No regression risk to English users — falls back to current English strings when `currentLanguage === defaultLanguage` or key missing.
+**Problem.** `HrFinalizationSheet` hardcodes the required locked responses as `self, manager, skip_manager, bu_head`. For an employee whose annual-review chain is `self → dept_head → bu_head → hr` (no manager, no skip-level), the guard falsely reports "Missing locked responses for: manager, skip_manager" and blocks finalization.
 
-## Changes
+**Root cause.** The component ignores `instance.enabled_stages` (already resolved per-employee by the workflow engine) and uses a hardcoded stage list.
 
-### 1. `src/lib/annualReview/i18n.ts`
-Add new keys under `hi` and `es` (English fallbacks passed inline in the component, per existing pattern):
+### Fix (UI-only, surgical)
 
-```
-assisted.dialog.title
-assisted.dialog.desc                  // supports {employee}, {proxy}, {role}
-assisted.btn.capture
-assisted.btn.retake
-assisted.btn.cancel
-assisted.btn.submit
-assisted.declaration
-assisted.camera.unavailable
-assisted.toast.recorded
-assisted.toast.failed
-assisted.role.reporting_manager
-assisted.role.skip_level
-assisted.role.authorized_proxy
-```
+`src/components/annual-review/HrFinalizationSheet.tsx`
+1. Derive an `effectiveChain` from `instance.enabled_stages`, pruning stages whose reviewer slot on the instance is unmapped (mirrors `effectiveStages` auto-skip). Never hardcode the chain.
+2. `missingStages` = `effectiveChain` minus `hr` (HR is the finalizer), filtered by `is_locked`.
+3. Align the `sumCriteria` cascade to iterate only stages present in `effectiveChain` (high → low).
 
-Hindi values (samples):
-- title → "सहायक जमा सत्यापन"
-- desc → "{employee} की ओर से {proxy} ({role}) के रूप में जमा किया जा रहा है। कर्मचारी की एक लाइव तस्वीर आवश्यक है और ऑडिट साक्ष्य के रूप में रखी जाएगी।"
-- capture → "सेल्फी लें", retake → "फिर से लें"
-- declaration → "मैं पुष्टि करता/करती हूँ कि दर्ज की गई प्रतिक्रियाएँ कर्मचारी की अपनी हैं। कर्मचारी शारीरिक रूप से उपस्थित है और सत्यापन के रूप में एक लाइव तस्वीर ली गई है।"
-- submit → "सत्यापित करें और जमा करें"
-- Role labels: प्रबंधक / स्किप-स्तर प्रबंधक / अधिकृत प्रतिनिधि
-- Spanish equivalents added in parallel.
+Nothing else changes: template config, DB schema, RLS, `enabled_stages` population, finalize RPC, and workflow engine stay intact. Alert copy stays the same — only the required-stage set becomes dynamic.
 
-### 2. `src/components/annual-review/AssistedSubmissionDialog.tsx`
-- Import `useAnnualReviewI18n`.
-- Replace every user-visible literal (title, description JSX, capture/retake/cancel/submit button text, checkbox declaration, camera error, toast messages) with `t('assisted.xxx', '<English fallback>')`.
-- Description keeps `<strong>` around employee/proxy — build with a template that includes `{employee}` and `{proxy}` placeholders resolved via string replace after translation.
-- Translate the `proxyRoleLabel` prop through `t('assisted.role.<label>', '<English fallback>')` for display only. The raw `proxyRoleLabel` value still passes to `submitWithAssistance` unchanged, so the audit row stores the canonical English role string (no data migration).
-- `DECLARATION` sent to `submitWithAssistance` remains the canonical English text so audit evidence is stable across languages.
+### Tests
+Add `src/test/hrFinalizationRequiredStages.test.ts`:
+- Full 5-stage chain → requires self/manager/skip/bu locked.
+- Chain `self, dept_head, bu_head, hr` with `manager_id`/`skip_id` null → requires only self/dept_head/bu_head (regression case).
+- Chain including `bu_head` but `bu_head_id` null → bu_head auto-dropped.
 
-### 3. Tests — `src/test/annualReview/proxySubmission.test.ts` (extend, do not replace)
-- Existing test that greps for `AssistedSubmissionDialog` stays.
-- Add a snapshot-style assertion that the component source references `useAnnualReviewI18n` and calls `t('assisted.dialog.title', ...)` — locks the SSOT wiring.
-- Add a small render test that wraps the dialog in `AnnualReviewI18nProvider` with `currentLanguage="hi"` and asserts the Hindi title/button text render.
+### Risk & impact
+- Data: none.
+- Workflow: none — corrects the UI gate to match already-resolved stages.
+- Regression: low. Existing full-chain templates keep the same required set because their `enabled_stages` still contain self/manager/skip/bu.
+- Rollback: revert the single component file.
 
-### 4. Docs / Memory
-- Append a line to `mem/features/annual-review/assisted-submission` under Constraints: "All dialog copy is i18n-routed through `useAnnualReviewI18n`; audit-persisted strings (proxyRoleLabel, declaration_text) stay canonical English."
-
-## Verification
-- Manual: open a Hindi template review → click "Assisted self-review" → dialog renders in Hindi.
-- English template → dialog unchanged.
-- Vitest suite green (existing proxy tests + new i18n test).
-
-## Rollback
-Pure additive: revert the two source files; dictionary keys are unused elsewhere so orphaned entries are harmless.
+### Docs
+Append a one-liner to the annual-review overview mem noting: HR Finalization required-stage set is derived from `instance.enabled_stages` minus `hr` and minus unmapped reviewers — never hardcoded.
