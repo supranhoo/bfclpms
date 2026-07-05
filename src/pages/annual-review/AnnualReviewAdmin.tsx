@@ -911,6 +911,14 @@ function ProgressTab() {
                             </DropdownMenuItem>
                           );
                         })()}
+                        {i.overall_status === 'completed' && (
+                          <DropdownMenuItem
+                            onClick={() => { setRollbackReason(''); setRollbackFor(i); }}
+                            className="text-destructive focus:text-destructive"
+                          >
+                            <Undo2 className="h-4 w-4 mr-2" /> Roll back finalized review
+                          </DropdownMenuItem>
+                        )}
                         {canChange && (
                           <>
                             <DropdownMenuItem onClick={() => setChangeTplFor(i)}>
