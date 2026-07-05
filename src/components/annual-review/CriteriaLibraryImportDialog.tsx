@@ -89,7 +89,7 @@ export function CriteriaLibraryImportDialog({
       if (libErr) throw libErr;
       const byKey = new Map(existingLib?.map((r) => [r.key, r]) ?? []);
 
-      let insertedCrit = 0, updatedCrit = 0, insertedAsg = 0;
+      let insertedCrit = 0, updatedCrit = 0, insertedAsg = 0, skippedNoBands = 0;
       for (const sheet of sheets) {
         const m = mappings[sheet.name];
         if (!m || m.skip) continue;
@@ -99,11 +99,15 @@ export function CriteriaLibraryImportDialog({
           const existing = byKey.get(key);
           // Parse the bilingual "5 - EN / HI\n4 - …" block into scoring bands
           // so the reviewer sees the workbook's rating labels (not the default
-          // English ladder). Falls back silently when the cell is blank.
+          // English ladder).
           const parsedBands = parseBandsBlock(row.rating_desc ?? '');
+          // Guard: never write a criterion without a bilingual rating ladder
+          // — the editor would fall back to the generic English ladder and
+          // hide the workbook labels. Surface these to the admin instead.
+          if (parsedBands.length === 0) { skippedNoBands += 1; continue; }
           const maxFromBands = parsedBands.reduce((m2, b) => Math.max(m2, b.score), 0);
           const maxScore = Math.max(5, maxFromBands);
-          const bandsJson = parsedBands.length ? optionsToBands(parsedBands) : undefined;
+          const bandsJson = optionsToBands(parsedBands);
           const upserted = await upsertCriterion({
             ...(existing ? { id: existing.id } : {}),
             key,
@@ -111,7 +115,7 @@ export function CriteriaLibraryImportDialog({
             label_hi: existing?.label_hi || row.label_hi || null,
             max_score: maxScore,
             is_common: m.isCommon,
-            ...(bandsJson !== undefined ? { scoring_bands: bandsJson } : {}),
+            scoring_bands: bandsJson,
           } as never);
           byKey.set(key, { id: upserted.id, key: upserted.key, label_hi: upserted.label_hi });
           if (existing) updatedCrit += 1; else insertedCrit += 1;
@@ -132,12 +136,17 @@ export function CriteriaLibraryImportDialog({
           }
         }
       }
-      return { insertedCrit, updatedCrit, insertedAsg };
+      return { insertedCrit, updatedCrit, insertedAsg, skippedNoBands };
     },
     onSuccess: (res) => {
       toast.success(
         `Import complete: ${res.insertedCrit} new + ${res.updatedCrit} updated criteria, ${res.insertedAsg} assignment rows.`,
       );
+      if (res.skippedNoBands > 0) {
+        toast.warning(
+          `Skipped ${res.skippedNoBands} row(s) without a bilingual rating ladder — check the workbook's "5 - EN / HI" format.`,
+        );
+      }
       qc.invalidateQueries({ queryKey: ['annual-review-criteria-library'] });
       qc.invalidateQueries({ queryKey: ['annual-review-criteria-assignments'] });
       onOpenChange(false);

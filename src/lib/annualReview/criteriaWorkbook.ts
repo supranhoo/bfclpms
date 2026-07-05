@@ -50,14 +50,36 @@ export function parseCriteriaPackWorkbook(file: ArrayBuffer): ParsedCriteriaShee
     if (critCol < 0) continue;
 
     const rows: ParsedCriteriaSheetRow[] = [];
+    // Section-awareness: BFCL workbooks stack `Eligibility` / `System` / `Type`
+    // blocks in col A. Only rows in the `Type` (criteria) block are real
+    // criteria — the earlier blocks are System KPIs / eligibility gates and
+    // must not land in the criteria library. Additionally, `Self Review
+    // Fields` sub-blocks are free-text prompts, not scored criteria.
+    let section: 'none' | 'elig' | 'system' | 'crit' = 'none';
+    let critBlockLabel = '';
+    const BAND_LINE = /^\s*\d+\s*[-–]\s*/m;
     for (let i = headerIdx + 1; i < grid.length; i++) {
       const raw = grid[i];
+      const aCell = String(raw[0] ?? '').trim();
+      const aLower = aCell.toLowerCase();
+      if (aLower === 'eligibility') { section = 'elig'; continue; }
+      if (aLower === 'system') { section = 'system'; continue; }
+      if (aLower === 'type') { section = 'crit'; critBlockLabel = ''; continue; }
+      // Sub-block label inside the Type section (e.g. "Standard Questions",
+      // "Self Review Fields", "Generic Blue-Collar Questions").
+      if (section === 'crit' && aCell) critBlockLabel = aCell;
+      if (section !== 'crit') continue;
+      if (critBlockLabel === 'Self Review Fields') continue;
       const critCell = String(raw[critCol] ?? '').trim();
       if (!critCell) continue;
-      // Skip section labels like "Eligibility"
-      if (critCell.toLowerCase() === 'eligibility') continue;
+      // Defensive: never write the header row itself as a criterion.
+      if (critCell.toLowerCase() === 'criteria') continue;
       const [enPart, hiPart] = critCell.split(/\s*\/\s*/, 2);
       const desc = descCol >= 0 ? String(raw[descCol] ?? '').trim() : '';
+      // Real criteria have a bilingual rating ladder ("5 - EN / HI\n4 - …").
+      // Without at least one "<digit> - " line we cannot render bands, and
+      // silently defaulting to the English ladder is the bug we're fixing.
+      if (!BAND_LINE.test(desc)) continue;
       const wtVal = wtCol >= 0 ? Number(raw[wtCol]) : 0;
       rows.push({
         label_en: enPart.trim(),
