@@ -11,6 +11,7 @@ import {
 } from './systemKpiLibrary';
 import {
   listCriteriaLibrary, listCriteriaAssignments, resolveCriteria,
+  validateResolvedWeights,
   type CriterionRow, type CriterionAssignmentRow, type ResolvedCriterion,
 } from './criteriaLibrary';
 
@@ -46,6 +47,8 @@ export interface PlannedRow {
   systemWeightTotal: number;
   criteriaCount: number;
   criteriaSource: 'library' | 'archetype';
+  criteriaWeightTotal: number;
+  criteriaWeightOk: boolean;
   existingId: string | null;
   payload: {
     name: string;
@@ -231,6 +234,7 @@ export async function previewFactoryRun(input: FactoryRunInput): Promise<Planned
           const resolvedCriteria = resolveCriteria(critLib, critAsg, {
             archetype: code, grade: bucket, dept: deptId, subUnit: subId,
           });
+          const critWeights = validateResolvedWeights(resolvedCriteria);
           const deptName = org.departments[deptId] ?? deptId.slice(0, 8);
           const subName = subId ? (org.subUnits[subId] ?? subId.slice(0, 8)) : null;
           const payload = payloadFor(
@@ -257,6 +261,8 @@ export async function previewFactoryRun(input: FactoryRunInput): Promise<Planned
               ? resolvedCriteria.length
               : parseCriteria(archetype.default_criteria).length,
             criteriaSource: resolvedCriteria.length > 0 ? 'library' : 'archetype',
+            criteriaWeightTotal: resolvedCriteria.length > 0 ? critWeights.sum : 0,
+            criteriaWeightOk: resolvedCriteria.length > 0 ? critWeights.ok : true,
             existingId: existingRow?.id ?? null,
             payload,
           });
@@ -278,6 +284,14 @@ export async function commitFactoryRun(plans: PlannedRow[]): Promise<CommitResul
   const result: CommitResult = { created: 0, updated: 0, errors: [] };
   for (const p of plans) {
     try {
+      // Hard-block library-sourced templates whose criterion weights don't sum to 100.
+      // Archetype-fallback templates carry no weights and are exempt.
+      if (p.criteriaSource === 'library' && !p.criteriaWeightOk) {
+        throw new Error(
+          `Criteria weights sum to ${p.criteriaWeightTotal}, must be 100. ` +
+          `Fix in Criteria Matrix.`,
+        );
+      }
       if (p.existingId) {
         const { error } = await supabase
           .from('annual_review_templates')
