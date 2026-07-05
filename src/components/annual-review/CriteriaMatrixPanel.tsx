@@ -12,7 +12,7 @@ import {
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
-import { Loader2, Trash2, Plus } from 'lucide-react';
+import { Loader2, Trash2, Plus, ChevronRight, ChevronDown, Search } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   listCriteriaLibrary, listCriteriaAssignments,
@@ -49,6 +49,8 @@ export function CriteriaMatrixPanel() {
   const [filterArch, setFilterArch] = useState('');
   const [filterBucket, setFilterBucket] = useState('');
   const [filterDept, setFilterDept] = useState('');
+  const [search, setSearch] = useState('');
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
   const critById = useMemo(
     () => new Map(library.map((c) => [c.id, c])),
@@ -61,8 +63,49 @@ export function CriteriaMatrixPanel() {
     if (filterArch && a.archetype_code !== filterArch) return false;
     if (filterBucket && a.grade_bucket !== filterBucket) return false;
     if (filterDept && a.department_id !== filterDept) return false;
+    if (search.trim()) {
+      const q = search.trim().toLowerCase();
+      const label = (critById.get(a.criterion_id)?.label_en ?? '').toLowerCase();
+      const hi = (critById.get(a.criterion_id)?.label_hi ?? '').toLowerCase();
+      const scope = [a.archetype_code, a.grade_bucket, a.grade_code, deptName(a.department_id), subName(a.sub_unit_id)]
+        .filter(Boolean).join(' ').toLowerCase();
+      if (!label.includes(q) && !hi.includes(q) && !scope.includes(q)) return false;
+    }
     return true;
   });
+
+  // Group visible assignments by criterion so admins see one row per criterion
+  // with a count chip, and can expand to see / edit each scope. Prevents the
+  // "everything looks duplicated" effect after a large import.
+  const grouped = useMemo(() => {
+    const map = new Map<string, CriterionAssignmentRow[]>();
+    for (const r of visible) {
+      const arr = map.get(r.criterion_id) ?? [];
+      arr.push(r);
+      map.set(r.criterion_id, arr);
+    }
+    return [...map.entries()]
+      .map(([cid, rows]) => ({
+        criterionId: cid,
+        label: critById.get(cid)?.label_en ?? cid.slice(0, 8),
+        labelHi: critById.get(cid)?.label_hi ?? null,
+        rows: rows.sort((a, b) =>
+          (a.archetype_code ?? '').localeCompare(b.archetype_code ?? '') ||
+          (a.grade_bucket ?? '').localeCompare(b.grade_bucket ?? '') ||
+          (a.grade_code ?? '').localeCompare(b.grade_code ?? '')
+        ),
+      }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }, [visible, critById]);
+
+  const toggle = (id: string) =>
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  const expandAll = () => setExpanded(new Set(grouped.map((g) => g.criterionId)));
+  const collapseAll = () => setExpanded(new Set());
 
   const saveMut = useMutation({
     mutationFn: async (input: {
@@ -105,7 +148,14 @@ export function CriteriaMatrixPanel() {
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-6 gap-3">
+          <div className="md:col-span-2">
+            <Label className="text-xs">Search criterion / scope</Label>
+            <div className="relative">
+              <Search className="h-3.5 w-3.5 absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <Input value={search} onChange={(e) => setSearch(e.target.value)} className="h-9 pl-7" placeholder="e.g. LTI, PPE, M4, dept name…" />
+            </div>
+          </div>
           <div>
             <Label className="text-xs">Archetype</Label>
             <Select value={filterArch || 'any'} onValueChange={(v) => setFilterArch(v === 'any' ? '' : v)}>
@@ -146,9 +196,15 @@ export function CriteriaMatrixPanel() {
               </SelectContent>
             </Select>
           </div>
-          <div className="flex items-end">
-            <Badge variant="outline">{visible.length} rows</Badge>
+          <div className="flex items-end gap-2">
+            <Badge variant="outline">{grouped.length} criteria</Badge>
+            <Badge variant="outline">{visible.length} scopes</Badge>
           </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <Button size="sm" variant="ghost" onClick={expandAll} disabled={grouped.length === 0}>Expand all</Button>
+          <Button size="sm" variant="ghost" onClick={collapseAll} disabled={expanded.size === 0}>Collapse all</Button>
         </div>
 
         <AddAssignmentForm
@@ -171,7 +227,8 @@ export function CriteriaMatrixPanel() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Criterion</TableHead>
+                  <TableHead className="w-8"></TableHead>
+                  <TableHead>Criterion / Scope</TableHead>
                   <TableHead className="w-20">Arch</TableHead>
                   <TableHead className="w-20">Grade</TableHead>
                   <TableHead className="w-24">Code</TableHead>
@@ -183,17 +240,44 @@ export function CriteriaMatrixPanel() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {visible.map((r) => (
-                  <AssignmentRow
-                    key={r.id}
-                    row={r}
-                    criterionLabel={critById.get(r.criterion_id)?.label_en ?? r.criterion_id.slice(0, 8)}
-                    deptName={deptName(r.department_id)}
-                    subName={subName(r.sub_unit_id)}
-                    onSave={(weight, enabled) => saveMut.mutate({ row: r, weight, enabled })}
-                    onDelete={() => delMut.mutate(r.id)}
-                  />
-                ))}
+                {grouped.map((g) => {
+                  const isOpen = expanded.has(g.criterionId);
+                  const enabledCount = g.rows.filter((r) => r.is_enabled).length;
+                  return (
+                    <>
+                      <TableRow
+                        key={`grp-${g.criterionId}`}
+                        className="bg-muted/40 cursor-pointer hover:bg-muted/60"
+                        onClick={() => toggle(g.criterionId)}
+                      >
+                        <TableCell className="text-center">
+                          {isOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                        </TableCell>
+                        <TableCell colSpan={8}>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-medium text-sm">{g.label}</span>
+                            {g.labelHi && <span className="text-xs text-muted-foreground" dir="auto">· {g.labelHi}</span>}
+                            <Badge variant="secondary" className="ml-1">{g.rows.length} scope{g.rows.length === 1 ? '' : 's'}</Badge>
+                            {enabledCount < g.rows.length && (
+                              <Badge variant="outline">{enabledCount}/{g.rows.length} enabled</Badge>
+                            )}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                      {isOpen && g.rows.map((r) => (
+                        <AssignmentRow
+                          key={r.id}
+                          row={r}
+                          criterionLabel={''}
+                          deptName={deptName(r.department_id)}
+                          subName={subName(r.sub_unit_id)}
+                          onSave={(weight, enabled) => saveMut.mutate({ row: r, weight, enabled })}
+                          onDelete={() => delMut.mutate(r.id)}
+                        />
+                      ))}
+                    </>
+                  );
+                })}
               </TableBody>
             </Table>
           </div>
@@ -229,7 +313,8 @@ function AssignmentRow({
 
   return (
     <TableRow>
-      <TableCell className="text-sm font-medium">{criterionLabel}</TableCell>
+      <TableCell></TableCell>
+      <TableCell className="text-sm text-muted-foreground pl-6">{criterionLabel || '↳ scope'}</TableCell>
       <TableCell className="font-mono text-xs">{row.archetype_code ?? 'any'}</TableCell>
       <TableCell className="font-mono text-xs">{row.grade_bucket ?? 'any'}</TableCell>
       <TableCell className="font-mono text-xs">{row.grade_code ?? '—'}</TableCell>
