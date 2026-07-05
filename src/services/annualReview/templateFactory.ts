@@ -9,6 +9,10 @@ import {
   parseScoringRules,
   type SystemKpiRow, type SystemKpiWeightRow,
 } from './systemKpiLibrary';
+import {
+  listCriteriaLibrary, listCriteriaAssignments, resolveCriteria,
+  type CriterionRow, type CriterionAssignmentRow, type ResolvedCriterion,
+} from './criteriaLibrary';
 
 export type TemplateRow = Database['public']['Tables']['annual_review_templates']['Row'];
 export type ArchetypeCode = 'A' | 'B' | 'C' | 'D';
@@ -41,6 +45,7 @@ export interface PlannedRow {
   archetype: ArchetypeRow;
   systemWeightTotal: number;
   criteriaCount: number;
+  criteriaSource: 'library' | 'archetype';
   existingId: string | null;
   payload: {
     name: string;
@@ -139,9 +144,23 @@ function payloadFor(
   subUnitName: string | null,
   bucket: GradeBucket,
   systemRows: Json[],
+  resolvedCriteria: ResolvedCriterion[] | null,
 ): { name: string; sections: Json; is_active: true } {
   const stageWeights = input.overrideStageWeights ?? parseStageWeights(archetype.default_stage_weights);
-  const criteria = parseCriteria(archetype.default_criteria) as unknown as Json;
+  // Prefer the Criteria Library resolver output. Fall back to the archetype
+  // seed only when no library rows cover this cell (backward compat).
+  const criteria = (
+    resolvedCriteria && resolvedCriteria.length > 0
+      ? resolvedCriteria.map((r) => ({
+          key: r.key,
+          label_en: r.label_en,
+          label_hi: r.label_hi,
+          max_score: r.max_score,
+          scoring_bands: r.scoring_bands,
+          weight_pct: r.weight_pct,
+        }))
+      : parseCriteria(archetype.default_criteria)
+  ) as unknown as Json;
   const enabledStages = parseStringArray(archetype.default_enabled_stages);
   const factoryKey: FactoryKey = {
     cycle_id: input.cycle.id,
@@ -158,6 +177,7 @@ function payloadFor(
     enabled_stages: enabledStages,
     stage_weights: stageWeights,
     criteria,
+    criteria_source: resolvedCriteria && resolvedCriteria.length > 0 ? 'library' : 'archetype',
     system_scores: systemRows,
     translations: {
       name_en: templateName(input.cycle, deptName, subUnitName, archetype, bucket),
@@ -180,10 +200,12 @@ export async function previewFactoryRun(input: FactoryRunInput): Promise<Planned
   if (!input.gradeBuckets.length) throw new Error('Pick at least one grade bucket.');
   const subUnitIds = input.subUnitIds.length ? input.subUnitIds : [null];
 
-  const [archetypes, kpis, weights, existing, org] = await Promise.all([
+  const [archetypes, kpis, weights, critLib, critAsg, existing, org] = await Promise.all([
     listArchetypes(),
     listSystemKpis(),
     listSystemKpiWeights(),
+    listCriteriaLibrary(),
+    listCriteriaAssignments(),
     listFactoryTemplates(input.cycle.id),
     loadOrgLookup(
       input.departmentIds,
@@ -206,10 +228,13 @@ export async function previewFactoryRun(input: FactoryRunInput): Promise<Planned
           const { rows, total } = buildSystemScoresSection(
             kpis, weights, deptId, subId, bucket,
           );
+          const resolvedCriteria = resolveCriteria(critLib, critAsg, {
+            archetype: code, grade: bucket, dept: deptId, subUnit: subId,
+          });
           const deptName = org.departments[deptId] ?? deptId.slice(0, 8);
           const subName = subId ? (org.subUnits[subId] ?? subId.slice(0, 8)) : null;
           const payload = payloadFor(
-            input, archetype, deptId, deptName, subId, subName, bucket, rows,
+            input, archetype, deptId, deptName, subId, subName, bucket, rows, resolvedCriteria,
           );
           const key: FactoryKey = {
             cycle_id: input.cycle.id,
@@ -228,7 +253,10 @@ export async function previewFactoryRun(input: FactoryRunInput): Promise<Planned
             subUnitName: subName,
             archetype,
             systemWeightTotal: total,
-            criteriaCount: parseCriteria(archetype.default_criteria).length,
+            criteriaCount: resolvedCriteria.length > 0
+              ? resolvedCriteria.length
+              : parseCriteria(archetype.default_criteria).length,
+            criteriaSource: resolvedCriteria.length > 0 ? 'library' : 'archetype',
             existingId: existingRow?.id ?? null,
             payload,
           });
