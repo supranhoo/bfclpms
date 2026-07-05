@@ -68,6 +68,8 @@ import { previewHrFinalSync, applyHrFinalSync } from '@/services/annualReview/hr
 import { RefreshCw } from 'lucide-react';
 import { RecentStageWeightOverridesPanel } from '@/components/annual-review/RecentStageWeightOverridesPanel';
 import { RuleFiltersEditor, RuleFiltersSummary, EMPTY_FILTERS } from '@/components/annual-review/RuleFiltersEditor';
+import { SystemKpiLibraryPanel } from '@/components/annual-review/SystemKpiLibraryPanel';
+import { SystemKpiWeightMatrix } from '@/components/annual-review/SystemKpiWeightMatrix';
 import type {
   AnnualReviewCycle, AnnualReviewTemplate, AssignmentFilters, AnnualReviewerRole,
 } from '@/types/annualReview';
@@ -86,13 +88,14 @@ export default function AnnualReviewAdmin() {
         <p className="text-sm text-muted-foreground">Manage cycles, templates, rules, and finalize reviews.</p>
       </header>
       <Tabs defaultValue="progress" className="w-full">
-        <TabsList className="grid w-full grid-cols-3 md:grid-cols-7">
+        <TabsList className="grid w-full grid-cols-3 md:grid-cols-8">
           <TabsTrigger value="progress" className="gap-1.5"><ListChecks className="h-4 w-4" />Progress</TabsTrigger>
           <TabsTrigger value="analytics" className="gap-1.5"><BarChart3 className="h-4 w-4" />Analytics</TabsTrigger>
           <TabsTrigger value="calibration" className="gap-1.5"><Scale className="h-4 w-4" />Calibration</TabsTrigger>
           <TabsTrigger value="cycles" className="gap-1.5"><Calendar className="h-4 w-4" />Cycles</TabsTrigger>
           <TabsTrigger value="templates" className="gap-1.5"><Settings2 className="h-4 w-4" />Templates</TabsTrigger>
           <TabsTrigger value="rules" className="gap-1.5"><Layers className="h-4 w-4" />Rules</TabsTrigger>
+          <TabsTrigger value="system-kpis" className="gap-1.5"><Scale className="h-4 w-4" />System KPIs</TabsTrigger>
           <TabsTrigger value="settings" className="gap-1.5"><Settings2 className="h-4 w-4" />Settings</TabsTrigger>
         </TabsList>
         <TabsContent value="progress" className="mt-4"><ProgressTab /></TabsContent>
@@ -101,6 +104,12 @@ export default function AnnualReviewAdmin() {
         <TabsContent value="cycles" className="mt-4"><CyclesTab /></TabsContent>
         <TabsContent value="templates" className="mt-4"><TemplatesTab /></TabsContent>
         <TabsContent value="rules" className="mt-4"><RulesTab /></TabsContent>
+        <TabsContent value="system-kpis" className="mt-4">
+          <div className="space-y-6">
+            <SystemKpiLibraryPanel />
+            <SystemKpiWeightMatrix />
+          </div>
+        </TabsContent>
         <TabsContent value="settings" className="mt-4"><SettingsTab /></TabsContent>
       </Tabs>
     </div>
