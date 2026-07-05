@@ -124,6 +124,9 @@ export default function TemplateFactory() {
   const createCount = plans?.filter((p) => p.action === 'create').length ?? 0;
   const updateCount = plans?.filter((p) => p.action === 'update').length ?? 0;
   const zeroWeightCount = plans?.filter((p) => p.systemWeightTotal === 0 && p.criteriaCount === 0).length ?? 0;
+  const badCriteriaWeightCount = plans?.filter(
+    (p) => p.criteriaSource === 'library' && !p.criteriaWeightOk,
+  ).length ?? 0;
 
   return (
     <div className="p-4 md:p-6 max-w-[1600px] mx-auto space-y-6">
@@ -339,6 +342,12 @@ export default function TemplateFactory() {
                     {zeroWeightCount} with no system weights & no criteria
                   </Badge>
                 )}
+                {badCriteriaWeightCount > 0 && (
+                  <Badge className="bg-red-100 text-red-800 hover:bg-red-100">
+                    <AlertTriangle className="h-3 w-3 mr-1" />
+                    {badCriteriaWeightCount} with criteria weights ≠ 100
+                  </Badge>
+                )}
               </div>
               <div className="border rounded max-h-[500px] overflow-auto">
                 <Table>
@@ -349,6 +358,7 @@ export default function TemplateFactory() {
                       <TableHead className="w-24">Bucket</TableHead>
                       <TableHead className="w-24 text-right">Sys Wt %</TableHead>
                       <TableHead className="w-24 text-right">Criteria</TableHead>
+                      <TableHead className="w-28 text-right">Crit Wt %</TableHead>
                       <TableHead className="w-24">Action</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -361,7 +371,16 @@ export default function TemplateFactory() {
                         <TableCell className={`text-right font-mono ${p.systemWeightTotal === 0 ? 'text-red-600' : p.systemWeightTotal > 100 ? 'text-amber-600' : ''}`}>
                           {p.systemWeightTotal}
                         </TableCell>
-                        <TableCell className="text-right">{p.criteriaCount}</TableCell>
+                        <TableCell className="text-right">
+                          {p.criteriaCount}
+                          <span className="ml-1 text-[10px] text-muted-foreground">({p.criteriaSource === 'library' ? 'lib' : 'archetype'})</span>
+                        </TableCell>
+                        <TableCell className={`text-right font-mono ${
+                          p.criteriaSource !== 'library' ? 'text-muted-foreground' :
+                          p.criteriaWeightOk ? 'text-emerald-600' : 'text-red-600'
+                        }`}>
+                          {p.criteriaSource === 'library' ? p.criteriaWeightTotal : '—'}
+                        </TableCell>
                         <TableCell>
                           {p.action === 'create'
                             ? <Badge className="bg-blue-100 text-blue-800 hover:bg-blue-100">create</Badge>

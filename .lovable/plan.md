@@ -1,74 +1,63 @@
-## What you're seeing
+## Remaining scope for the Criteria Library feature
 
-Today the Template Factory only reads **one** criteria list per archetype: `annual_review_template_archetypes.default_criteria`. That's why every generated template for A/B/C/D shows the same qualitative questions regardless of Department, Sub-unit or Grade — there is no override layer for questions (there is one for KPI weights, but not for criteria).
+Locked-in decisions from your answers:
+- **Weights must sum to 100** per resolved template; commit is blocked if any cell fails.
+- **Exact-grade targeting** in addition to grade bucket — add `grade_code TEXT NULL` referencing `pms_grades.code`. Resolver specificity becomes: sub_unit (16) > dept (8) > grade_code (4) > grade_bucket (2) > archetype (1).
+- Suppression stays as the explicit `is_enabled=false` checkbox.
+- Import expands per-department rows (no `department_group` table).
 
-Your uploaded workbook already proves the real requirement: 5 sheets — generic Blue-Collar (W), generic Managerial (M), M-no-Env, and two department-specific Workmen sets (HK/Pol/Dust/Hort, and Admin/Temple/Travel/WB/Sec). So you need **common questions + variant sets per Dept / Sub-unit / Grade bucket**, exactly like the system-KPI weight cascade.
+## Deliverables
 
-## Proposed model — mirror the System KPI pattern for questions
+### 1. Migration
+- `ALTER TABLE annual_review_criteria_assignments ADD COLUMN grade_code TEXT NULL` + extend the unique index and the `(archetype, grade_bucket, grade_code, dept, sub_unit)` lookup index.
+- No FK to `pms_grades.code` (that table's PK is `id`); store the code as text with a `CHECK (grade_code IS NULL OR length(grade_code) BETWEEN 1 AND 32)` guard. Resolver validates it against the loaded grade list at UI time.
 
-Introduce a two-table "Criteria Library + Criteria Matrix", so a template's final criteria list is *composed* at factory time from the most-specific match, exactly like `resolveWeight()` does today.
+### 2. Resolver + service updates
+- `criteriaLibrary.ts`: add `grade_code` to `AssignmentUpsertInput`, resolver signature, upsert-select COALESCE chain, and the new specificity scores.
+- New helper `validateResolvedWeights(resolved): { ok, sum, delta }` — sum of `weight_pct` must equal 100 (±0.01). Non-numeric bands remain untouched.
+- Update `criteriaLibrary.test.ts`: add cases for `grade_code` beating `grade_bucket`, and for the weight-sum validator (100 ok, 95 fails, 100.5 fails).
 
-```text
-annual_review_criteria_library         (the "questions" catalog)
-  id, key, label_en, label_hi, max_score, scoring_bands_json,
-  is_common (bool), is_active, sort_order
+### 3. Factory integration
+- `PlannedRow` gains `criteriaWeightTotal: number` and `criteriaWeightOk: boolean`.
+- `previewFactoryRun` computes both from the resolved list.
+- `commitFactoryRun` **rejects** any plan where `criteriaSource === 'library'` and `criteriaWeightOk === false` — error message: `"Criteria weights sum to X, must be 100. Fix in Criteria Matrix."` Rows that fall back to the archetype seed are exempt (they carry no weights).
+- `templateFactoryBulk.rebuildFactoryTemplatesForCycle` applies the same guard and reports failing templates in its `RebuildResult.errors`.
 
-annual_review_criteria_assignments     (the "who gets this question" matrix)
-  id, criterion_id,
-  archetype_code   NULL = any,
-  grade_bucket     NULL = any (M/W/T/other),
-  department_id    NULL = any,
-  sub_unit_id      NULL = any,
-  weight_pct       (per-criterion weight in that context),
-  is_enabled       (bool — lets you *remove* a common question for one dept)
-```
+### 4. Admin UI (three panels under `/annual-review/admin/factory`)
+- **CriteriaLibraryPanel** — bilingual CRUD table: key, label EN/HI, max_score, is_common, is_active, sort_order, JSON scoring bands. XLSX import parsing your 5-sheet workbook layout: for each sheet, extract `Criteria` + rating description → creates library rows (dedup on key = normalized label), plus assignment rows per (archetype, grade bucket, department set). XLSX export mirrors the input.
+- **CriteriaMatrixPanel** — sparse cell editor. Row = criterion (from library); columns are (Archetype, Grade bucket, Grade code, Department, Sub-unit, Weight%, Enabled). Add-cell form uses combo pickers with NULL = "Any". Delete = row action. Real-time weight-sum badge per (Archetype × Grade × Dept × Sub-unit) preview cell that lights amber when ≠ 100.
+- **Factory preview popover** — new column "Criteria" already exists; add a small "Preview" link that opens a Dialog listing the resolved criteria with winning assignment provenance ("won by: grade_code=M4 + dept=Admin", weight, is_common flag).
 
-Resolution rule (same specificity score you already use):
-`sub_unit (4) + dept (2) + grade (1) + archetype (0.5)` — most specific row wins; `NULL` = wildcard. A row with `is_enabled=false` at higher specificity **suppresses** an inherited common question — that's how "Env" is dropped from "M no Env".
+### 5. XLSX importer
+- Located at `src/lib/annualReview/criteriaWorkbook.ts` (mirrors `factoryWorkbook.ts`).
+- Sheet-header mapping form: for each sheet the admin picks archetype code, grade bucket, optional grade code, and multiple departments/sub-units. Import creates:
+  - Library rows keyed by slugified label_en (existing keys are re-used, updates label_hi if missing).
+  - One assignment row per selected department, with `weight_pct` from the sheet's `Wt%` column and `is_enabled=true`.
+- "M no Env" flow: importer offers a "suppress these criteria for the selected depts" multi-select which inserts `is_enabled=false` rows.
+- Dry-run preview before commit; errors listed inline; commit is transactional per sheet.
 
-`is_common = true` rows in the library are the baseline pool; they only appear on a template if at least one assignment row (even a full-wildcard one) enables them for that context.
+### 6. Seed job (one-off)
+- Small utility page/button in CriteriaLibraryPanel: "Load bundled BFCL bilingual pack" that reads a copy of the workbook stored at `src/lib/annualReview/data/bfcl-generic-questions.xlsx` (checked into the repo from your upload) and runs the importer for the standard mappings. Idempotent — reruns just update.
 
-## Factory changes
-
-1. `templateFactoryBulk.rebuildFactoryTemplatesForCycle` and the preview builder stop reading `archetype.default_criteria` as the final list. Instead they call a new `resolveCriteria(assignments, library, {archetype, grade, dept, subUnit})` — same shape as `resolveWeight`.
-2. `sections.criteria` on the generated template is the resolved, ordered, deduped list with per-context weights.
-3. Preview table gets two extra columns: **Criteria count** (already there) + **Missing common?** flag when a required-common question was suppressed everywhere for that cell.
-4. `archetype.default_criteria` becomes a *seed only* — used the first time you populate the library, then locked read-only in the Archetypes editor with a "Managed in Criteria Library" note.
-
-## Admin surfaces
-
-- **Admin → Criteria Library** (new): CRUD list, bilingual EN/HI, scoring bands editor, `is_common` toggle. Bulk XLSX import that accepts the exact sheet layout of your uploaded workbook (Criteria / Rating description / Wt%). Bilingual XLSX export for review.
-- **Admin → Criteria Matrix** (new): sparse-cell editor identical in feel to the Weight Matrix — pick criterion, then set enabled + weight for any (Archetype × Grade × Dept × Sub-unit) cell. `NULL` columns render as wildcards.
-- **Admin → Template Factory** preview: for any (Dept × Sub-unit × Archetype × Grade) cell, "Preview criteria" popover shows the resolved question list with which row won each cell, so admins can debug why a question did/didn't appear.
-
-## Import mapping for the uploaded file
-
-- Sheet **Generic - M** → library rows tagged `is_common=true`, assigned at `(archetype=B, grade=M, dept=*, sub_unit=*)`.
-- Sheet **Generic - M no Env** → same library rows minus "Environment"; achieved by keeping the common rows and adding an override row `(grade=M, dept=<no-env depts>, criterion=Environment, is_enabled=false)`.
-- Sheet **Generic - Blue Collar** → common set at `(archetype=C, grade=W, *, *)`.
-- Sheet **HK/Pol/Dust/Hort - W** → dept-specific overrides at `(grade=W, department_id IN (…), sub_unit=*)`, adds dept-only questions and can suppress inapplicable common ones.
-- Sheet **Admin/Temple/TO/Travel/WB/Sec - W** → same pattern for the second dept cluster.
+### 7. Docs
+- `docs/specs/annual-review-template-factory.md`: new "Criteria resolver" section documenting specificity ladder, suppression semantics, and the 100% weight rule; update "Data model" table; add a "Version history" bullet.
+- `mem://features/annual-review/overview` index: add "Criteria Library" bullet.
 
 ## Risk & Impact
 
-- **Data**: two new tables + one seed migration; no destructive change to `annual_review_template_archetypes`. Existing generated templates keep working until you run "Re-apply to existing templates".
-- **Workflow**: `rebuildFactoryTemplatesForCycle` becomes the single re-application path — already idempotent.
-- **UI**: two new admin pages under Annual Review Admin. Factory page gains one column and one preview popover.
-- **Backward compat**: if `criteria_library` is empty, resolver falls back to `archetype.default_criteria` so nothing breaks day-1.
-- **Rollback**: drop the two new tables + revert the resolver call; archetype seed is untouched.
+- **Data**: additive `grade_code` column + one new admin-only import path. No touch to `annual_review_template_archetypes`.
+- **Workflow**: commit now hard-fails when weights ≠ 100 for library-sourced templates. Existing factory templates still using archetype fallback are unaffected until you populate the library.
+- **UI**: three new admin panels; existing factory page gains one preview link and a weight badge.
+- **Regression**: `criteriaSource: 'archetype'` fallback keeps every currently-generated template working.
+- **Rollback**: drop the new tables + `grade_code` column and revert the resolver call site; archetype seed path is untouched.
 
-## Deliverables (in this order)
+## Order of build
 
-1. Migration: `annual_review_criteria_library`, `annual_review_criteria_assignments` with GRANTs, RLS, `updated_at` triggers.
-2. `src/services/annualReview/criteriaLibrary.ts` — CRUD + `resolveCriteria` + specificity scorer + unit tests (mirrors `templateFactory.test.ts`).
-3. Factory integration: `templateFactory.buildPlan` and `templateFactoryBulk.rebuildFactoryTemplatesForCycle` use `resolveCriteria`; keep archetype fallback.
-4. Admin pages: `CriteriaLibraryPanel`, `CriteriaMatrixPanel`, routed under `/annual-review/admin/factory`.
-5. XLSX import matching your uploaded workbook layout (bilingual, per-sheet grade/dept mapping form) + bilingual export.
-6. Docs: update `docs/specs/annual-review-template-factory.md` "Data model" and add a "Criteria resolver" section; add "Criteria Library" bullet to `mem://features/annual-review/overview` index.
-
-## Open questions before I start
-
-1. **Weight semantics** — should per-criterion `weight_pct` sum to 100 per template (validated at commit), or is it a raw multiplier the reviewer sees?
-2. **Grade granularity** — is the current `M / W / T / other` bucket enough, or do you need actual `pms_grades.code` targeting (e.g. `M4` vs `M1`)?
-3. **Suppression UI** — do you want an explicit "Remove this common question for this cell" toggle in the matrix, or should setting `weight_pct = 0` mean "hide"?
-4. **Department clusters** — the two W-sheets group depts (HK/Pol/Dust/Hort; Admin/Temple/…). Should I introduce a lightweight `department_group` table, or just repeat the assignment row per department during import?
+1. Migration (`grade_code` column + index).
+2. Resolver + tests (`grade_code`, weight-sum validator).
+3. Factory + bulk commit guards.
+4. `CriteriaLibraryPanel` with CRUD.
+5. `CriteriaMatrixPanel` with sparse-cell editor + weight-sum badge.
+6. XLSX importer + bundled BFCL seed.
+7. Preview popover on the Factory page.
+8. Docs + memory index.
