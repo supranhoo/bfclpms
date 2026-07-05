@@ -57,6 +57,23 @@ describe('parseCriteriaPackWorkbook — section awareness', () => {
     expect(joined).not.toMatch(/LTI|5S/i);
   });
 
+  it('preserves System-block rows separately for workbook templates', () => {
+    expect(sheets[0].systemRows).toEqual([
+      {
+        label_en: 'LTI (Lost Time Injury) Rate',
+        label_hi: null,
+        description: 'Any departmental LTI (5=0, 4=1)',
+        weight_pct: 3,
+      },
+      {
+        label_en: '5S',
+        label_hi: null,
+        description: 'Departmental Status of 5S (5=5, 4=4)',
+        weight_pct: 5,
+      },
+    ]);
+  });
+
   it('excludes Self Review free-text prompts', () => {
     const joined = sheets[0].rows.map((r) => r.label_en).join('|');
     expect(joined).not.toMatch(/skill|shop/i);
