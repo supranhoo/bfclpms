@@ -66,6 +66,7 @@ export interface AssignmentUpsertInput {
   criterion_id: string;
   archetype_code: string | null;
   grade_bucket: string | null;
+  grade_code: string | null;
   department_id: string | null;
   sub_unit_id: string | null;
   weight_pct: number;
@@ -85,6 +86,7 @@ export async function saveCriteriaAssignment(input: AssignmentUpsertInput): Prom
     .eq('criterion_id', input.criterion_id);
   q = input.archetype_code ? q.eq('archetype_code', input.archetype_code) : q.is('archetype_code', null);
   q = input.grade_bucket ? q.eq('grade_bucket', input.grade_bucket) : q.is('grade_bucket', null);
+  q = input.grade_code ? q.eq('grade_code', input.grade_code) : q.is('grade_code', null);
   q = input.department_id ? q.eq('department_id', input.department_id) : q.is('department_id', null);
   q = input.sub_unit_id ? q.eq('sub_unit_id', input.sub_unit_id) : q.is('sub_unit_id', null);
   const { data: existing, error: selErr } = await q.maybeSingle();
@@ -112,6 +114,7 @@ export async function saveCriteriaAssignment(input: AssignmentUpsertInput): Prom
       criterion_id: input.criterion_id,
       archetype_code: input.archetype_code,
       grade_bucket: input.grade_bucket,
+      grade_code: input.grade_code,
       department_id: input.department_id,
       sub_unit_id: input.sub_unit_id,
       weight_pct: input.weight_pct,
@@ -130,18 +133,31 @@ export async function deleteCriteriaAssignment(id: string): Promise<void> {
 
 /**
  * Score an assignment row's specificity for a target context.
- * Sub-unit=8, Dept=4, Grade=2, Archetype=1. NULL = wildcard.
+ * Sub-unit=16, Dept=8, GradeCode=4, GradeBucket=2, Archetype=1. NULL = wildcard.
  * Returns -1 if the row does not match the target at all.
  */
 function scoreAssignment(
   a: CriterionAssignmentRow,
-  target: { archetype: string | null; grade: string | null; dept: string | null; subUnit: string | null },
+  target: {
+    archetype: string | null;
+    grade: string | null;       // grade bucket (M/W/T/other)
+    gradeCode: string | null;   // exact grade code (e.g. 'M4')
+    dept: string | null;
+    subUnit: string | null;
+  },
 ): number {
   if (a.archetype_code && a.archetype_code !== target.archetype) return -1;
   if (a.grade_bucket && a.grade_bucket !== target.grade) return -1;
+  if (a.grade_code && a.grade_code !== target.gradeCode) return -1;
   if (a.department_id && a.department_id !== target.dept) return -1;
   if (a.sub_unit_id && a.sub_unit_id !== target.subUnit) return -1;
-  return (a.sub_unit_id ? 8 : 0) + (a.department_id ? 4 : 0) + (a.grade_bucket ? 2 : 0) + (a.archetype_code ? 1 : 0);
+  return (
+    (a.sub_unit_id ? 16 : 0) +
+    (a.department_id ? 8 : 0) +
+    (a.grade_code ? 4 : 0) +
+    (a.grade_bucket ? 2 : 0) +
+    (a.archetype_code ? 1 : 0)
+  );
 }
 
 /**
@@ -158,7 +174,13 @@ function scoreAssignment(
 export function resolveCriteria(
   library: CriterionRow[],
   assignments: CriterionAssignmentRow[],
-  target: { archetype: string | null; grade: string | null; dept: string | null; subUnit: string | null },
+  target: {
+    archetype: string | null;
+    grade: string | null;
+    gradeCode?: string | null;
+    dept: string | null;
+    subUnit: string | null;
+  },
 ): ResolvedCriterion[] {
   const byCrit = new Map<string, CriterionAssignmentRow[]>();
   for (const a of assignments) {
@@ -167,6 +189,13 @@ export function resolveCriteria(
     byCrit.set(a.criterion_id, arr);
   }
 
+  const t = {
+    archetype: target.archetype,
+    grade: target.grade,
+    gradeCode: target.gradeCode ?? null,
+    dept: target.dept,
+    subUnit: target.subUnit,
+  };
   const out: ResolvedCriterion[] = [];
   for (const c of library) {
     if (!c.is_active) continue;
@@ -174,7 +203,7 @@ export function resolveCriteria(
     let best: CriterionAssignmentRow | null = null;
     let bestScore = -1;
     for (const a of rows) {
-      const s = scoreAssignment(a, target);
+      const s = scoreAssignment(a, t);
       if (s > bestScore) { best = a; bestScore = s; }
     }
     if (!best) continue;              // no assignment covers this cell
@@ -192,4 +221,16 @@ export function resolveCriteria(
   }
   out.sort((a, b) => (a.sort_order - b.sort_order) || a.label_en.localeCompare(b.label_en));
   return out;
+}
+
+/**
+ * Validate that resolved criterion weights sum to 100 (±0.01).
+ * Used by the factory commit path to block bad matrix configurations.
+ */
+export function validateResolvedWeights(
+  resolved: ResolvedCriterion[],
+): { ok: boolean; sum: number; delta: number } {
+  const sum = resolved.reduce((acc, r) => acc + Number(r.weight_pct || 0), 0);
+  const delta = Math.abs(sum - 100);
+  return { ok: delta <= 0.01, sum: Number(sum.toFixed(4)), delta: Number(delta.toFixed(4)) };
 }
