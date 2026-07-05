@@ -68,7 +68,7 @@ function CriterionRow({
   onRemoveEvidence,
 }: CriteriaScoringMatrixProps & { criterion: TemplateCriterion }) {
   const [uploading, setUploading] = useState(false);
-  const { t, tTemplate, tTemplateOptionBilingual } = useAnnualReviewI18n();
+  const { t, tTemplate, tTemplateOptionBilingual, currentLanguage, defaultLanguage } = useAnnualReviewI18n();
   const criterionName = tTemplate('criterion', criterion.id, 'name', criterion.name);
   const criterionDesc = criterion.description
     ? tTemplate('criterion', criterion.id, 'description', criterion.description)
