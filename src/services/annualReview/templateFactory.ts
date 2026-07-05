@@ -81,13 +81,13 @@ async function loadOrgLookup(deptIds: string[], subUnitIds: string[]): Promise<O
   const [{ data: deps }, { data: subs }] = await Promise.all([
     supabase.from('departments').select('id, name').in('id', deptIds),
     subUnitIds.length
-      ? supabase.from('business_unit_sub_units').select('id, name').in('id', subUnitIds)
-      : Promise.resolve({ data: [] as { id: string; name: string }[] }),
+      ? supabase.from('business_unit_sub_units').select('id, label').in('id', subUnitIds)
+      : Promise.resolve({ data: [] as { id: string; label: string }[] }),
   ]);
   const departments: Record<string, string> = {};
   (deps ?? []).forEach((d) => { departments[d.id] = d.name; });
   const subUnits: Record<string, string> = {};
-  (subs ?? []).forEach((s) => { subUnits[s.id] = s.name; });
+  (subs ?? []).forEach((s) => { subUnits[s.id] = s.label; });
   return { departments, subUnits };
 }
 
