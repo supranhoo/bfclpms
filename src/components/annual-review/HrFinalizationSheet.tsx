@@ -16,6 +16,7 @@ import { EligibilityInputsEditor } from './EligibilityInputsEditor';
 import { InstanceTimeline } from './InstanceTimeline';
 import { ReassignReviewerDialog } from './ReassignReviewerDialog';
 import type { AnnualReviewInstance, AnnualReviewTemplate } from '@/types/annualReview';
+import type { AnnualReviewerRole } from '@/types/annualReview';
 import type { InstanceWithEmployee } from '@/services/annualReview/annualReviewService';
 
 export function HrFinalizationSheet({
@@ -47,15 +48,35 @@ export function HrFinalizationSheet({
     [instance, systemOverrides],
   );
 
+  /**
+   * Effective reviewer stages for THIS instance (per-employee workflow).
+   * Derived from `enabled_stages` and pruned to stages whose reviewer slot
+   * on the instance is actually mapped — mirrors the workflow engine's
+   * auto-skip behaviour (see `effectiveStages`). Never hardcode the chain.
+   */
+  const effectiveChain = useMemo<AnnualReviewerRole[]>(() => {
+    const enabled = (instance?.enabled_stages ?? []) as AnnualReviewerRole[];
+    const reviewerId: Record<AnnualReviewerRole, string | null | undefined> = {
+      self: instance?.employee_id ?? null,
+      manager: (instance as any)?.manager_id ?? null,
+      skip_manager: (instance as any)?.skip_id ?? null,
+      dept_head: (instance as any)?.dept_head_id ?? null,
+      bu_head: (instance as any)?.bu_head_id ?? null,
+      hr: (instance as any)?.hr_id ?? null,
+    };
+    return enabled.filter((s) => s === 'self' || !!reviewerId[s]);
+  }, [instance]);
+
   const sumCriteria = useMemo(() => {
-    // Use HR's response if present, else cascade to the highest reviewer.
-    const order = ['hr', 'bu_head', 'skip_manager', 'manager', 'self'] as const;
-    for (const role of order) {
+    // Cascade from highest → lowest across the effective chain only.
+    const HIGH_TO_LOW: AnnualReviewerRole[] = ['hr', 'bu_head', 'dept_head', 'skip_manager', 'manager', 'self'];
+    for (const role of HIGH_TO_LOW) {
+      if (!effectiveChain.includes(role)) continue;
       const r = responses.find((x) => x.reviewer_role === role);
       if (r) return computeCriteriaScore(criteria, r.criteria_scores ?? {});
     }
     return computeCriteriaScore(criteria, {});
-  }, [criteria, responses]);
+  }, [criteria, responses, effectiveChain]);
 
   const overall = computeOverallScore(sysCfg, merged, sumCriteria);
 
@@ -78,9 +99,10 @@ export function HrFinalizationSheet({
     !(stageWeights.criteria === 100 && Object.keys(stageWeights).length === 1);
 
   const missingStages = useMemo(() => {
-    const need = ['self', 'manager', 'skip_manager', 'bu_head'] as const;
+    // Required = every effective stage EXCEPT `hr` (HR is the finalizer).
+    const need = effectiveChain.filter((s) => s !== 'hr');
     return need.filter((r) => !responses.find((x) => x.reviewer_role === r && x.is_locked));
-  }, [responses]);
+  }, [responses, effectiveChain]);
 
   const canFinalize = missingStages.length === 0;
 
