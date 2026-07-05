@@ -18,6 +18,7 @@ import { Loader2 } from 'lucide-react';
 // Lazy-loaded page components
 const Auth = lazy(() => import("./pages/Auth"));
 const ResetPassword = lazy(() => import("./pages/ResetPassword"));
+const OAuthConsent = lazy(() => import("./pages/OAuthConsent"));
 const ProfileSettings = lazy(() => import("./pages/ProfileSettings"));
 const ModuleHub = lazy(() => import("./pages/ModuleHub"));
 const Dashboard = lazy(() => import("./pages/Dashboard"));
@@ -178,6 +179,7 @@ const App = () => (
               <Routes>
               <Route path="/auth" element={<Suspense fallback={<PageFallback />}><Auth /></Suspense>} />
               <Route path="/reset-password" element={<Suspense fallback={<PageFallback />}><ResetPassword /></Suspense>} />
+              <Route path="/.lovable/oauth/consent" element={<Suspense fallback={<PageFallback />}><OAuthConsent /></Suspense>} />
               <Route path="/home" element={<Suspense fallback={<PageFallback />}><ModuleHub /></Suspense>} />
               <Route path="/" element={<Navigate to="/home" replace />} />
               <Route path="/access-denied" element={<Suspense fallback={<PageFallback />}><AccessDenied /></Suspense>} />
