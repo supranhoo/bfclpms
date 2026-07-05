@@ -5,6 +5,7 @@ import {
   type FactoryKey, type TemplateRow, type ArchetypeCode, type GradeBucket,
 } from './templateFactory';
 import { listArchetypes, parseCriteria, parseStageWeights } from './templateArchetypes';
+import { bandsToBilingualOptions } from '@/lib/annualReview/criteriaBands';
 import { listSystemKpis, listSystemKpiWeights, resolveWeight, parseScoringRules } from './systemKpiLibrary';
 import {
   listCriteriaLibrary, listCriteriaAssignments, resolveCriteria, validateResolvedWeights,
@@ -92,6 +93,11 @@ export async function rebuildFactoryTemplatesForCycle(cycleId: string): Promise<
     }
     const criteria = resolved.length > 0
       ? resolved.map((r) => ({
+          id: r.key,
+          name: r.label_en,
+          weight: r.weight_pct,
+          enable_remarks: true,
+          options: bandsToBilingualOptions(r.scoring_bands, r.max_score),
           key: r.key, label_en: r.label_en, label_hi: r.label_hi,
           max_score: r.max_score, scoring_bands: r.scoring_bands, weight_pct: r.weight_pct,
         }))

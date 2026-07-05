@@ -1,73 +1,86 @@
-## Why you can't roll it back today
+## Reading the uploaded BFCL workbook
 
-Looking at the row you screenshotted (stage = **Completed**, Final = 100.00), the row-actions menu in `AnnualReviewAdmin.tsx` only exposes:
+Structure per sheet (40 sheets, one per **BU × Grade-bucket × Dept**):
 
-- **Finalize / View** — always shown
-- **Step back to previous stage** — only when `overall_status ∈ {pending_manager, pending_skip, pending_dept, pending_bu, pending_hr}`
-- **Change template / workflow / weights** — only when status is `not_started` or `pending_self`
+| Block | Example | Varies by |
+|---|---|---|
+| **Eligibility** (4 gates) | Absent Days, LWP, Disciplinary, 6-Month | Constant across all forms |
+| **System KPIs** (9 items) | LTI, STI, UA UC NM, 5S, Training, Fugitive, Annual Production, Annual Maintenance | **Weight varies** per sheet (e.g. Annual Production = 25 in CLU-W-E&I, 20 in SMS-W-Ops, 30 in CLU-M-E&I) |
+| **Standard Questions** (W-grade only, 5 items) | Attendance, Safety, Quality, Teamwork, Care of Tools — bilingual with 6 rating bands each | Same criteria + labels for every W sheet; only weights change |
+| **Dept-specific technical** (W-grade, 5 items) | E&I: Thermocouple / Load-cell / Bag Filter / Pull-Chord / VFD | **Question text AND 0-5 labels differ per dept** |
+| **M-Grade Metrics** (M-grade, 5 items) | "CLU - E&I KPI & Target Achievement" etc. | Question text differs per (BU, Dept); labels share a leadership rubric |
+| **Self-Review Fields** (5 open text) | "Best achievement…" etc. | Constant across all forms |
 
-Your instance is `completed` (all stages done, awaiting HR finalize) or already `finalized`. Neither state is in the step-back map and neither is in the "canChange" set, so **no rollback action is rendered** — that's the whole reason nothing happens.
-
-Separately, the KPI-style `kpi_rollback_requests` flow (the banner + approve/reject you saw in monthly PMS) was **never wired to annual review instances** — it targets `kpis.id`, not `annual_review_instances.id`.
-
-So the gap is a missing feature, not a bug.
+Total unique criterion rows to load: ~5 shared + 5×5 depts (W) + 5×5×5 (M dept variants) ≈ ~55 library rows; ~40 assignment matrix cells; 40 × 9 = **360 system KPI weight rows**.
 
 ---
 
-## Plan — add rollback for Completed & Finalized instances
+## Plan — map this workbook to the existing model in one importer
 
-### 1. Row action (admin-only)
-In the row dropdown, add a new item **"Roll back stage"** visible when:
+The schema already supports every dimension you need (criteria library × assignment matrix × per-cell system KPI weights × self-review bundle × eligibility). The missing pieces are: **(a) the workbook importer** that lands your Excel exactly as authored, **(b) the bands→options mapper** so reviewers see the labelled 0-5 buttons, and **(c) a friendly bands editor** for post-import tweaks.
 
-- `overall_status = 'completed'` → target = last non-HR stage that actually has a score (bu_head → dept_head → skip_manager → manager → self)
-- `overall_status = 'finalized'` → target = `completed` (un-finalize), then admin can step further back
+### 1. New "BFCL Forms Workbook" importer (`src/lib/annualReview/bfclFormsWorkbook.ts`)
 
-Existing "Step back to previous stage" stays untouched for pending_* states.
+Parses the exact sheet layout above and returns a preview plan:
 
-### 2. Confirmation dialog
-Reuse `ConfirmDestructiveDialog`. Require a **reason** (min 3 chars). Show the resolved target stage and warn that:
+```
+{
+  criteria: CriterionUpsert[],           // library rows (dedup by canonical key)
+  assignments: AssignmentUpsert[],       // criterion × (archetype, grade_bucket, dept, sub_unit)
+  systemKpiWeights: SystemKpiWeightRow[],// (dept, grade_bucket) → {kpi, weight_pct}
+  eligibility: EligibilityGate[],        // written once to archetype default
+  selfReviewFields: SelfReviewItem[],    // bundle items
+  warnings: string[],                    // sheets with weight ≠ 100, missing bands, etc.
+}
+```
 
-- Downstream scores for stages after the target will be **cleared** (kept in audit log, not deleted from history table).
-- `finalized_at`, `final_rating`, `total_score` are nulled when un-finalizing.
+Parsing rules:
+- Sheet name pattern `^(BU) - (M|W) - (Dept)$` → drives assignment context. `Form Index` sheet skipped.
+- Row where col A = `Eligibility` / `System` / `Type` marks the block boundary.
+- Description cell like `5 - Always on time / हमेशा समय पर\n4 - … \n0 - …` → parsed into `scoring_bands: [{score, label_en, label_hi}]` (Hindi split on ` / `). Empty bands fall back to shared 0-5 ladder.
+- Weight column → `weight_pct` on the assignment (not on the library row — same criterion can have different weights per dept).
+- Canonical key = slug(label_en without `/hindi`). Duplicates upsert.
 
-### 3. Service layer
-Add `svc.rollbackInstance({ instanceId, targetStage, reason })` in `src/services/annualReview` that:
+New admin panel button: **"Import BFCL Forms Workbook"** (dry-run preview showing all 40 cells with green/amber diffs, then Commit).
 
-1. Reads current instance + response rows.
-2. Clears stage responses **after** target (via existing `annual_review_responses` writer).
-3. Sets `overall_status` = the pending stage that logically follows the target (e.g. rollback to `bu_head` → `pending_hr` becomes `pending_hr`... actually rollback to manager → `pending_skip`, etc.).
-4. If un-finalizing: nulls `finalized_at`, `final_rating`, `total_score`, `rating_override_*`.
-5. Writes an immutable row into `annual_review_audit_log` (existing table) with `action='rollback'`, actor, reason, from-status, to-status.
+### 2. Library → template criterion mapper (from prior plan)
 
-All in a single Supabase RPC to stay atomic — new SECURITY DEFINER function `annual_review_rollback_instance(p_instance_id, p_target_stage, p_reason)`.
+`bandsToOptions(scoring_bands, max_score)` produces the `options[]` array the reviewer form (`CriteriaScoringMatrix`) already renders. Wired into `templateFactory.ts` + `templateFactoryBulk.ts`. Without this the imported bilingual labels never appear as buttons.
 
-### 4. RLS / permissions
-Only `admin` and `hr_pms` roles may invoke the RPC (checked via `has_role`). Non-admins keep seeing no rollback option.
+### 3. Friendly bands editor in `CriteriaLibraryPanel`
 
-### 5. UI feedback
-- Optimistic invalidation of the instances query + stage-scores map.
-- Toast: "Rolled back to Manager stage. Reason logged."
-- The row's Stage badge updates to the new `pending_*` state, and step-back becomes available again.
+Replace the raw JSON textarea with a per-score row editor (Score / Label EN / Label HI) and a "Reset to default ladder" action. Advanced disclosure keeps raw JSON for power users.
 
-### 6. Tests & docs
-- Unit test for the target-stage resolver (10 stage combinations, incl. finalized → completed).
-- SQL test that the RPC refuses without admin/HR role.
-- Update `docs/specs/annual-review-template-factory.md` § Rollback and `mem://features/annual-review/operations.md`.
+### 4. Per-cell system KPI weights
 
-### Risk & impact
+Importer writes `annual_review_system_kpi_weights` rows keyed by `(department_id, grade_bucket, kpi_code)` so Annual Production = 25 for CLU-W-E&I and 30 for CLU-M-E&I stay independently editable. `TemplateFactory` already resolves via this table; add a small "System KPI Weights matrix" viewer to Admin to confirm post-import.
 
-| Area | Risk | Mitigation |
-|---|---|---|
-| Data | Clearing downstream stage scores | Kept in `annual_review_audit_log`; not hard-deleted from response history |
-| Workflow | Employee could re-open a finalized packet mid-appraisal cycle | Admin/HR-only, reason mandatory, audit-logged |
-| UI | Confusion with existing "Step back" | New item labelled **"Roll back to earlier stage"** with sub-menu; step-back item unchanged |
-| Regression | Might affect monthly KPI rollback path | Totally separate table + RPC namespace |
+### 5. Rollout Readiness page (40-cell coverage matrix)
+
+Grid of BU × Grade × Dept. Each cell shows:
+- Criteria weight sum (must = 100)
+- System KPI weight sum
+- # of missing bilingual labels
+- Green / amber / red badge
+
+Blocks factory commit until all 40 cells are green.
+
+### 6. Tests + docs
+
+- Unit: parse a golden sheet, assert criteria/assignments/weights match fixture.
+- Unit: `bandsToOptions` on real BFCL band strings (`5 - X / हिंदी\n4 - Y / हिंदी`).
+- Snapshot: reviewer render for `CLU-W-E&I` vs `SMS-W-Ops` differs only in dept-specific 5 criteria + weights.
+- Update `docs/specs/annual-review-template-factory.md` + memory `mem://features/annual-review/bfcl-forms-import.md`.
 
 ### Out of scope
-- No change to monthly KPI rollback.
-- No bulk rollback (single row only, matches the screenshot pattern).
-- No employee-initiated rollback request flow — admin/HR action only.
+
+- No schema changes — all target tables already exist.
+- No change to reviewer/manager UI beyond it finally receiving populated `options[]`.
+- No historical form migration; only forward cycles use the imported masters.
 
 ---
 
-**Approve to implement**, or tell me if you'd rather (a) keep it admin-only vs. also allow HR PMS, (b) support bulk rollback across selected rows, or (c) require a two-person approval like the KPI rollback request flow.
+**Approve to implement all six sections**, or tell me to:
+(a) do only the importer + bands mapper first and skip the readiness matrix,
+(b) split the M-grade criteria across BUs vs a single leadership rubric with per-BU weight overrides,
+(c) treat the "Standard Questions" block as a hardcoded preset instead of library rows (I'd advise against — you lose per-cycle editability).

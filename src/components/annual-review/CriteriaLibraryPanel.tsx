@@ -24,6 +24,10 @@ import {
   downloadCriteriaLibraryWorkbook, parseCriteriaPackWorkbook, slugifyCriterionKey,
 } from '@/lib/annualReview/criteriaWorkbook';
 import { CriteriaLibraryImportDialog } from './CriteriaLibraryImportDialog';
+import { BfclFormsImportButton } from './BfclFormsImportDialog';
+import {
+  parseScoringBands, optionsToBands, defaultLadder, type ScoringBand,
+} from '@/lib/annualReview/criteriaBands';
 
 /**
  * Criteria Library editor. Holds bilingual qualitative questions used by the
@@ -103,6 +107,7 @@ export function CriteriaLibraryPanel() {
           <Button onClick={() => setCreating(true)} className="gap-2">
             <Plus className="h-4 w-4" /> New criterion
           </Button>
+          <BfclFormsImportButton />
         </div>
       </CardHeader>
       <CardContent>
@@ -200,9 +205,25 @@ function CriterionEditorDialog({
   const [isCommon, setIsCommon] = useState(existing?.is_common ?? false);
   const [isActive, setIsActive] = useState(existing?.is_active ?? true);
   const [sortOrder, setSortOrder] = useState(existing?.sort_order ?? 0);
-  const [bandsText, setBandsText] = useState(
-    existing?.scoring_bands ? JSON.stringify(existing.scoring_bands, null, 2) : '[]',
-  );
+  const [bands, setBands] = useState<ScoringBand[]>(() => {
+    const parsed = parseScoringBands((existing?.scoring_bands ?? null) as never);
+    if (parsed.length) return parsed;
+    return defaultLadder(Number(existing?.max_score ?? 5));
+  });
+  const [showJson, setShowJson] = useState(false);
+
+  // When max_score changes, resize the bands ladder in place, preserving edits.
+  const syncBandsToMax = (nextMax: number) => {
+    setMaxScore(nextMax);
+    setBands((prev) => {
+      const byScore = new Map(prev.map((b) => [b.score, b]));
+      const next: ScoringBand[] = [];
+      for (let s = nextMax; s >= 0; s--) {
+        next.push(byScore.get(s) ?? { score: s, label_en: '', label_hi: null });
+      }
+      return next;
+    });
+  };
 
   // Reset when the dialog re-opens for a different row.
   useState(() => { /* noop, react state above initializes from existing */ });
@@ -211,9 +232,7 @@ function CriterionEditorDialog({
     mutationFn: async () => {
       if (!labelEn.trim()) throw new Error('English label is required.');
       const finalKey = key.trim() || slugifyCriterionKey(labelEn);
-      let bands: unknown = [];
-      try { bands = JSON.parse(bandsText || '[]'); }
-      catch { throw new Error('Scoring bands must be valid JSON.'); }
+      const bandsJson = optionsToBands(bands);
       return upsertCriterion({
         ...(existing ? { id: existing.id } : {}),
         key: finalKey,
@@ -223,7 +242,7 @@ function CriterionEditorDialog({
         is_common: isCommon,
         is_active: isActive,
         sort_order: sortOrder,
-        scoring_bands: bands as never,
+        scoring_bands: bandsJson as never,
       });
     },
     onSuccess: () => {
@@ -275,7 +294,7 @@ function CriterionEditorDialog({
             <div>
               <Label>Max score</Label>
               <Input type="number" min={1} max={10} value={maxScore}
-                     onChange={(e) => setMaxScore(Number(e.target.value) || 5)} />
+                     onChange={(e) => syncBandsToMax(Number(e.target.value) || 5)} />
             </div>
             <div className="flex items-end gap-2">
               <Switch checked={isCommon} onCheckedChange={setIsCommon} id="is_common" />
@@ -286,10 +305,64 @@ function CriterionEditorDialog({
               <Label htmlFor="is_active">Active</Label>
             </div>
           </div>
-          <div>
-            <Label>Scoring bands (JSON)</Label>
-            <Textarea rows={5} value={bandsText} onChange={(e) => setBandsText(e.target.value)}
-                      className="font-mono text-xs" />
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label>Rating labels (score → what the reviewer sees)</Label>
+              <div className="flex gap-2">
+                <Button type="button" variant="ghost" size="sm"
+                        onClick={() => setBands(defaultLadder(maxScore))}>
+                  Reset to default ladder
+                </Button>
+                <Button type="button" variant="ghost" size="sm"
+                        onClick={() => setShowJson((v) => !v)}>
+                  {showJson ? 'Hide JSON' : 'Show JSON'}
+                </Button>
+              </div>
+            </div>
+            <div className="rounded-md border overflow-hidden">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-16 text-center">Score</TableHead>
+                    <TableHead>Label (EN)</TableHead>
+                    <TableHead>Label (HI)</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {bands.map((b, i) => (
+                    <TableRow key={b.score}>
+                      <TableCell className="text-center font-mono">{b.score}</TableCell>
+                      <TableCell>
+                        <Input
+                          value={b.label_en}
+                          onChange={(e) => setBands((prev) => prev.map((x, j) => j === i ? { ...x, label_en: e.target.value } : x))}
+                          placeholder="e.g. Outstanding"
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Input
+                          value={b.label_hi ?? ''}
+                          dir="auto"
+                          onChange={(e) => setBands((prev) => prev.map((x, j) => j === i ? { ...x, label_hi: e.target.value } : x))}
+                          placeholder="वैकल्पिक हिंदी लेबल"
+                        />
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+            {showJson && (
+              <Textarea
+                rows={5}
+                readOnly
+                value={JSON.stringify(optionsToBands(bands), null, 2)}
+                className="font-mono text-xs"
+              />
+            )}
+            <p className="text-xs text-muted-foreground">
+              These labels populate the 0-{maxScore} buttons the reviewer clicks. Same criterion can be reused across departments — assign it in the Criteria Matrix.
+            </p>
           </div>
         </div>
         <DialogFooter>

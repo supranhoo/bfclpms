@@ -14,6 +14,7 @@ import {
   validateResolvedWeights,
   type CriterionRow, type CriterionAssignmentRow, type ResolvedCriterion,
 } from './criteriaLibrary';
+import { bandsToBilingualOptions } from '@/lib/annualReview/criteriaBands';
 
 export type TemplateRow = Database['public']['Tables']['annual_review_templates']['Row'];
 export type ArchetypeCode = 'A' | 'B' | 'C' | 'D';
@@ -155,6 +156,13 @@ function payloadFor(
   const criteria = (
     resolvedCriteria && resolvedCriteria.length > 0
       ? resolvedCriteria.map((r) => ({
+          // Reviewer form (`CriteriaScoringMatrix`) shape:
+          id: r.key,
+          name: r.label_en,
+          weight: r.weight_pct,
+          enable_remarks: true,
+          options: bandsToBilingualOptions(r.scoring_bands, r.max_score),
+          // Preserve original library payload for exports / debugging.
           key: r.key,
           label_en: r.label_en,
           label_hi: r.label_hi,
