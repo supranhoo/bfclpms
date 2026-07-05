@@ -43,7 +43,7 @@ function canonicalWorkflowSections(systemWeightTotal: number) {
     enabled_stages: ['self', 'dept_head', 'bu_head'],
     stage_weights: {
       ...(systemWeightTotal > 0 ? { system: systemWeightTotal } : {}),
-      ...(criteriaPool > 0 ? { self: criteriaPool * 0.3, dept_head: criteriaPool * 0.7 } : {}),
+      ...(criteriaPool > 0 ? { dept_head: criteriaPool * 0.7, bu_head: criteriaPool * 0.3 } : {}),
     },
   };
 }
