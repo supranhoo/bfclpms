@@ -74,6 +74,7 @@ const TeamAnnualReview = lazy(() => import("./pages/annual-review/TeamAnnualRevi
 const TeamAnnualReviewDetail = lazy(() => import("./pages/annual-review/TeamAnnualReviewDetail"));
 const AnnualReviewAdmin = lazy(() => import("./pages/annual-review/AnnualReviewAdmin"));
 const TemplateFactory = lazy(() => import("./pages/annual-review/TemplateFactory"));
+const AnnualReviewFormMapping = lazy(() => import("./pages/annual-review/AnnualReviewFormMapping"));
 const ManagerCalibration = lazy(() => import("./pages/annual-review/ManagerCalibration"));
 const AnnualReviewReport = lazy(() => import("./pages/reports/AnnualReviewReport"));
 import { AnnualReviewGate } from "@/components/annual-review/AnnualReviewGate";
@@ -605,6 +606,11 @@ const App = () => (
                 <Route path="/annual-review/admin/factory" element={
                   <ProtectedRoute allowedRoles={['admin','hr_pms']}>
                     <AnnualReviewGate><Suspense fallback={<PageFallback />}><TemplateFactory /></Suspense></AnnualReviewGate>
+                  </ProtectedRoute>
+                } />
+                <Route path="/annual-review/admin/mapping" element={
+                  <ProtectedRoute allowedRoles={['admin','hr_pms']}>
+                    <AnnualReviewGate><Suspense fallback={<PageFallback />}><AnnualReviewFormMapping /></Suspense></AnnualReviewGate>
                   </ProtectedRoute>
                 } />
                 <Route path="/reports/annual-review" element={
