@@ -75,6 +75,18 @@ A pre-existing template (authored before the factory) can be brought under facto
 
 - 2026-07-05 — Shipped P1–P7 (system KPI library, weight matrix, archetypes, assignment-rule extension, factory UI, XLSX export, bulk re-apply, docs + tests).
 - 2026-07-05 — Shipped Criteria Library + Matrix. Templates now compose qualitative questions per cell via `resolveCriteria`, with `is_enabled=false` suppression and a commit-time rule that per-template criterion weights must sum to 100 (±0.01). Archetype `default_criteria` remains the day-0 fallback when no library rows cover a cell.
+- 2026-07-05 — Workbook-sourced templates now preserve BFCL `System` block rows as `sections.system_scores`, stamp AY 2025–26 workflow stages (`self`, `dept_head`, `bu_head`), derive the final-score blend from the workbook system pool, and store workbook rule `archetype_code` / `grade_bucket` in canonical rule columns as well as JSON filters.
+
+## Workbook-sourced template import
+
+`parseCriteriaPackWorkbook` treats BFCL `Eligibility`, `System`, and `Type` blocks differently:
+
+- `Eligibility` rows are skipped by the template builder.
+- `System` rows are preserved as `systemRows` and saved into `sections.system_scores` with workbook weights.
+- `Type` rows with parseable 5→0 rating bands become bilingual qualitative criteria.
+- `Self Review Fields` rows remain free-text prompts and are not imported as scored criteria.
+
+Workbook-created assignment rules must carry `archetype_code` and `grade_bucket` in the table columns and inside `filters`; the mapping preview and actual seeding both enforce `filters.grade_bucket` by grade prefix so Workman workbook forms do not route to managerial grades.
 
 ## Criteria resolver
 
