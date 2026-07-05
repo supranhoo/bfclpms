@@ -1144,6 +1144,23 @@ export async function sendBackStatus(
   return data as string;
 }
 
+/**
+ * Roll a completed / finalized annual review back to pending_hr.
+ * Admin / HR PMS only. Nulls final rating, HR remarks and finalized_at/by,
+ * unlocks the HR stage response, and audit-logs the reason.
+ */
+export async function rollbackFinalizedInstance(
+  instanceId: string,
+  reason: string,
+) {
+  const { data, error } = await db.rpc('rollback_annual_review_completed', {
+    p_instance_id: instanceId,
+    p_reason: reason,
+  });
+  if (error) throw error;
+  return data as string;
+}
+
 /** Patch eligibility-input values on the instance (used by HR pre-finalization). */
 export async function updateEligibilityInputs(
   instanceId: string,
