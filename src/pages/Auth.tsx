@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Navigate } from 'react-router-dom';
+import { Navigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useAppSettings } from '@/hooks/useAppSettings';
@@ -21,6 +21,10 @@ export default function Auth() {
   const { user, loading, signIn } = useAuth();
   const { data: appSettings, isLoading: isLoadingSettings } = useAppSettings();
   const { toast } = useToast();
+  const [searchParams] = useSearchParams();
+  const nextParam = searchParams.get('next');
+  // Only honor same-origin relative paths to prevent open-redirects.
+  const safeNext = nextParam && nextParam.startsWith('/') && !nextParam.startsWith('//') ? nextParam : null;
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [rememberMe, setRememberMe] = useState(() => localStorage.getItem('pms_remember_me') !== 'false');
   
@@ -80,7 +84,7 @@ export default function Auth() {
   }
 
   if (user) {
-    return <Navigate to="/home" replace />;
+    return <Navigate to={safeNext ?? "/home"} replace />;
   }
 
   const handleLogin = async (e: React.FormEvent) => {
