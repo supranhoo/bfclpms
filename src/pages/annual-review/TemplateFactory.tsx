@@ -196,7 +196,7 @@ export default function TemplateFactory() {
                       checked={subUnitIds.includes(s.id)}
                       onCheckedChange={() => setSubUnitIds((prev) => toggle(prev, s.id))}
                     />
-                    <span className="truncate">{s.name}</span>
+                    <span className="truncate">{s.label}</span>
                   </label>
                 ))}
               </div>
