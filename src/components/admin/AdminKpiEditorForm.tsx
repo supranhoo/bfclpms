@@ -1063,6 +1063,27 @@ export function AdminKpiEditorForm({ kpi, onSaved, onCancel }: AdminKpiEditorFor
             Structural fields applied to sibling KPIs. Status & achieved values unchanged.
           </p>
         )}
+        {applyScope !== 'this_month' &&
+          kpi &&
+          (kpi.kra_name !== formData.kra_name || kpi.kpi_name !== formData.kpi_name) && (
+            <div className="mt-2 flex items-start gap-2 p-2 rounded border border-amber-300 bg-amber-50 dark:bg-amber-950/30">
+              <Checkbox
+                id="also_rename_siblings"
+                checked={alsoRenameSiblings}
+                onCheckedChange={(v) => setAlsoRenameSiblings(v === true)}
+                className="mt-0.5"
+              />
+              <label htmlFor="also_rename_siblings" className="text-[11px] leading-snug cursor-pointer">
+                <span className="font-medium">Also rename siblings:</span> apply the new{' '}
+                {kpi.kra_name !== formData.kra_name && kpi.kpi_name !== formData.kpi_name
+                  ? 'KRA name and KPI name/description'
+                  : kpi.kra_name !== formData.kra_name
+                    ? 'KRA name'
+                    : 'KPI name/description'}{' '}
+                to sibling months too. Leave unchecked to only rename this month (siblings keep their existing names).
+              </label>
+            </div>
+          )}
       </div>
 
       {/* Copy to Other Months — collapsible */}
