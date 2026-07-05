@@ -1,92 +1,98 @@
 ## 1. Assumptions
-- The required Excel format is exactly like your screenshot: column A = `Criteria`, column B = `Rating - Discription`, and the full 5-to-0 explanation is inside one multiline cell.
-- The app must use the Excel cell content as the reviewer-facing labels, not the generic `Outstanding / Above target / ...` ladder.
-- Existing generic rows in the Criteria Library should be overwritten when the Excel row has valid 5-to-0 descriptions.
+- One uploaded workbook = **one template**. Every sheet in that workbook = **one template variant** (its own criteria list + weights) that should become a real, assignable `annual_review_templates` row.
+- Each sheet targets **one or many departments** (and optionally sub-units / grades / archetype). You pick these once at import time, per sheet.
+- You do NOT want to hand-build a template from the library after import. The library upsert stays as the staging layer (so criteria are reusable), but the same import step must also **create the templates and the assignment rules** that route employees to them.
+- Existing Factory / Archetype / Weight-Matrix machinery stays. Sheet-based templates live alongside factory-generated ones and are keyed so re-import updates them in place.
 
 ## 2. Clarifications
-Not Applicable — the requirement is clear. This mapping is possible and should not need manual entry if the Excel cell contains the score lines.
+Not Applicable — earlier questions covered scope, mapping source, library role, and sheet semantics.
 
 ## 3. Risk & Impact Report
-- **Data Impact:** Updates existing Criteria Library `scoring_bands` values where Excel provides valid score descriptions. No schema change needed.
-- **Workflow Impact:** Import flow remains the same, but it will stop silently accepting generic/default ladders when Excel contains real labels.
-- **UI/UX Impact:** Edit dialog and reviewer scoring buttons will show the actual long English/Hindi descriptions per score.
-- **Regression Risk:** Medium, because importer currently handles more than one BFCL workbook shape. I will preserve existing section-aware behavior while adding support for the simple two-column sheet shape shown in your screenshot.
-- **Scalability Impact:** Low. Parsing is local to the uploaded workbook; no large dataset query changes. Existing list pagination patterns remain unchanged.
-- **Mitigation Plan:** Add parser tests for the exact screenshot layout, conversion tests for label propagation, and a targeted data-repair step for rows currently stuck on default/generic ladders.
+- **Data Impact:** Adds N template rows and N assignment-rule rows per import (N = active sheets). Reruns update in place via a new `sheet_key` inside `sections` (no schema change). Criteria Library rows continue to upsert as today.
+- **Workflow Impact:** Employees are auto-routed via existing `annual_review_assignment_rules` → resolver. No new resolver logic; we just seed the rules the resolver already reads.
+- **UI/UX Impact:** Import dialog gets one extra section per sheet: "Create template as" (name, active cycle) + per-sheet Sub-unit picker + "Also create assignment rule" toggle. Templates page shows imported templates with a "From workbook: <sheet>" badge.
+- **Regression Risk:** Medium. Mitigated by keeping factory templates untouched (different `sections.source`), unique idempotency key per sheet, and unit tests around the commit path.
+- **Scalability Impact:** Low. Small N per workbook; all writes batched sheet-by-sheet inside the existing mutation. No new queries on hot paths.
+- **Mitigation Plan:** Dry-run preview shows exactly which templates + rules will be created/updated before commit; commit is idempotent; rollback = delete rows tagged with the sheet's `sheet_key`.
 
 ## 4. Step-by-step Plan
-1. **Fix the workbook parser mapping**
-   - Detect both workbook shapes:
-     - Sectioned BFCL form: `Type → Criteria → Rating - Discription → Wt%`
-     - Simple criteria pack: `Criteria → Rating - Discription`
-   - For every row, map:
-     ```text
-     Criteria cell
-       -> label_en / label_hi
 
-     Rating - Discription cell
-       -> scoring_bands[]
-          5 -> label_en + label_hi
-          4 -> label_en + label_hi
-          3 -> label_en + label_hi
-          2 -> label_en + label_hi
-          1 -> label_en + label_hi
-          0 -> label_en + label_hi
-     ```
-   - Treat line breaks, carriage returns, `_x000D_`, and wrapped Excel text as equivalent.
+### Step 1 — Extend importer commit to also emit templates
+For each non-skipped sheet, in one transaction-like sequence:
+1. Upsert criteria into library (existing behaviour — unchanged).
+2. Build a `TemplateCriterion[]` payload from the sheet rows using `bandsToBilingualOptions`, preserving each row's `weight_pct` (workbook is the source of truth for weights).
+3. Upsert one row into `annual_review_templates` keyed by:
+   ```json
+   sections.sheet_key = {
+     source: "criteria_workbook",
+     workbook_hash: "<optional stable id>",
+     sheet_name: "<sheet>",
+     cycle_id: "<chosen cycle>"
+   }
+   ```
+   with `sections.criteria`, `sections.display_mode`, `sections.stage_weights` (default 100 self+manager or archetype default if archetype chosen), and `sections.system_scores = []` unless the sheet includes system KPIs.
+4. For each selected (department × sub-unit) target, upsert one `annual_review_assignment_rules` row: `template_id`, `cycle_id`, `department_id`, `sub_unit_id`, `archetype_code` (nullable), `grade_bucket` (nullable), `grade_code` (nullable). Idempotent on the natural key.
 
-2. **Make rating extraction stricter and safer**
-   - Parse by score markers (`5 -`, `4 -`, `3 -`, `2 -`, `1 -`, `0 -`) instead of relying only on line splitting.
-   - This handles cases where Excel stores the full description as one wrapped string.
-   - Preserve semicolons inside labels; do not split on semicolons.
-   - Split English/Hindi only on the bilingual separator ` / `.
+### Step 2 — Add per-sheet template metadata to the import dialog
+Small additive UI per sheet:
+- **Template name** (default: sheet name).
+- **Active cycle** picker (defaults to current).
+- **Sub-units** multi-select (already have departments).
+- **Create/refresh assignment rule** checkbox (default ON).
+- Existing archetype / grade bucket / grade code stay and flow into both the assignment rule and (optionally) `sections.factory_key`-style metadata.
 
-3. **Prevent default ladder from hiding import failures**
-   - In the import flow, require valid parsed bands before saving `scoring_bands`.
-   - If the workbook row has a rating cell but fewer than expected score bands, show a warning with the criterion name.
-   - Do not overwrite a valid Excel ladder with defaults.
+### Step 3 — Preview panel before commit
+Replace the single "Planned rows to write: N" badge with a compact table:
+```text
+Sheet                Template action   Criteria   Assignment rules
+Workmen-Production   CREATE            12         3 (Dept×SubUnit)
+Managers-M4          UPDATE            9          1
+Generic-Common       SKIPPED           —          —
+```
+Commit button is disabled until every non-skipped sheet has a target cycle + at least one department (or explicit "wildcard" opt-in).
 
-4. **Repair existing generic data**
-   - After parser fix, re-import should overwrite existing generic/default bands.
-   - Add a targeted cleanup/repair path for criteria whose key already exists but still has default labels like `Outstanding`, `Above target`, etc.
-   - This will repair rows like `attendance_punctuality` without requiring manual recreation.
+### Step 4 — Templates page: surface workbook-sourced rows
+Add a small badge on `annual_review_templates` list where `sections.sheet_key.source === 'criteria_workbook'` showing `Workbook · <sheet_name>` and a "Re-import from workbook" hint. No new page.
 
-5. **Verify template propagation**
-   - Ensure Criteria Library `scoring_bands` flows into generated templates through `bandsToBilingualOptions`.
-   - Confirm reviewer screen buttons display the Excel labels, not generic labels.
+### Step 5 — Keep library + picker (staging), no rework
+`CriteriaLibraryPickerDialog` and "Add from Library" stay for **manual** template authoring / one-offs. Sheet-based flow bypasses the picker end-to-end.
 
 ## 5. UI Changes
-- **Criteria Library edit dialog:** The Rating labels table should show the Excel descriptions per score.
-  - Example score 5 EN: `Always on time; zero unexcused absence; supports reliable shift continuity.`
-  - Example score 5 HI: `हमेशा समय पर; कोई अनधिकृत अनुपस्थिति नहीं; शिफ्ट निरंतरता में सहयोग करता है।`
-- **Reviewer criteria scoring cards:** Score buttons should show these same imported labels.
-- **Import feedback:** Add a clearer warning if any row cannot be parsed into rating bands.
-- **Responsiveness:** Long labels remain in existing table/card layouts with wrapping; no new wide layout required.
+- **Criteria Library Import dialog (existing):**
+  - New "Template" sub-block per sheet: `Template name`, `Cycle`, `Sub-units` multi-select, `Create assignment rule` toggle.
+  - New preview table replacing the single planned-rows badge.
+  - Commit button gated by validation described above.
+- **Templates list (existing):**
+  - `Workbook · <sheet>` badge on imported rows, right of the template name. Responsive: wraps under the name on mobile.
+- No new pages, no new routes.
 
 ## 6. Implementation
-- Update `parseBandsBlock` to segment the rating description by score markers, not just by line breaks.
-- Update `parseCriteriaPackWorkbook` to support the two-column layout from your screenshot and the existing sectioned BFCL layout.
-- Update import commit logic to overwrite generic/default `scoring_bands` when valid Excel bands are present.
-- Keep changes surgical: no schema refactor, no new workflow, no manual template system rollback.
+- `src/components/annual-review/CriteriaLibraryImportDialog.tsx` — extend `SheetMapping` (`template_name`, `cycle_id`, `sub_unit_ids`, `create_rule`), extend commit mutation with steps 2–4 above, add preview table.
+- `src/services/annualReview/criteriaWorkbookTemplates.ts` (new, small) — pure helpers:
+  - `buildTemplateSectionsFromSheet(sheet, meta)` → `sections` JSON.
+  - `upsertWorkbookTemplate(sheetKey, payload)` → template row.
+  - `upsertWorkbookAssignmentRules(templateId, targets)` → rules.
+  - All idempotent, keyed on `sheet_key` / natural rule key.
+- `src/pages/annual-review/admin/Templates*.tsx` (or existing templates list component) — add the workbook badge.
+- No schema migration. Uses existing `annual_review_templates.sections` (JSONB) and `annual_review_assignment_rules`.
 
 ## 7. Tests
-- Add/adjust unit tests for:
-  - Exact screenshot-style row: `Criteria` + `Rating - Discription` with all six scores in one cell.
-  - Multiline CR/LF/_x000D_ variants.
-  - Semicolon-heavy English/Hindi descriptions.
-  - Existing generic ladder replaced by parsed Excel labels.
-  - Template option conversion carries `label_hi` into reviewer UI.
+- `criteriaWorkbookTemplates.test.ts`:
+  - `buildTemplateSectionsFromSheet` produces bilingual options and correct weights.
+  - Rerunning `upsertWorkbookTemplate` with same `sheet_key` UPDATES, never duplicates.
+  - `upsertWorkbookAssignmentRules` is idempotent on `(template_id, cycle_id, dept, sub_unit, archetype, grade_bucket, grade_code)`.
+- Integration-style test on the commit mutation: 2 sheets × 2 departments produces 2 templates + 4 rules; second run produces 0 new templates and 0 new rules.
 
 ## 8. DOCUMENTATION.md updates
-- Document the Criteria Library Excel import contract:
-  - Criteria column maps to criterion name.
-  - Rating description column maps to 0-to-5 scoring bands.
-  - Generic ladder is fallback only when no imported bands exist.
+- Add "Criteria workbook → Templates" section:
+  - Contract: one sheet = one template.
+  - Explains `sections.sheet_key`, idempotency, and how assignment rules are created.
+  - Notes that the Criteria Library remains the staging layer for reuse.
 
 ## 9. POLICY.md updates
-- Add/clarify annual-review policy: imported qualitative criteria must preserve reviewer-facing score definitions from the approved Excel pack; generic 0-to-5 labels are not acceptable when Excel definitions exist.
+- Clarify that imported workbook templates are the SSOT for reviewer-facing criteria + weights on the departments/employees they are mapped to, and that manual edits to those templates persist across re-imports **only** for fields outside `sections.criteria` / `sections.stage_weights` (matching factory rebuild policy).
 
 ## 10. Post-implementation notes
-- Rollback strategy: revert parser/import changes; no destructive schema migration is planned.
-- Data repair will be targeted and reversible by re-importing the approved Excel pack again.
-- Expected outcome: you should not have to manually enter the 0-to-5 labels if the Excel sheet contains them in the shown format.
+- Rollback: templates and rules created by a workbook are all tagged with `sections.sheet_key.workbook_hash`; a single delete-by-key removes them cleanly. No destructive migration.
+- Answers the frustration directly: **one Excel upload = N ready-to-use templates auto-mapped to the chosen departments**, no manual template building, no per-employee mapping.
+- Future enhancement (not in this plan): auto-derive department/sub-unit/grade from explicit columns inside the sheet, so the dialog picker becomes optional.
