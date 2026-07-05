@@ -1,78 +1,66 @@
-## What's actually broken
+## Assumptions
+- The pasted sample is the actual Excel format: one cell contains all lines from `5 - ...` through `0 - ...`.
+- The expected result is six scoring bands, each storing English and Hindi labels separately, and the UI should show those labels instead of the generic `Outstanding / Above target / ...` ladder.
+- No schema change is needed; this is an import/parser and data-cleanup issue.
 
-The editor shows the generic English ladder ("Outstanding / Above target / …") for a specific set of criteria because those rows were saved to `annual_review_criteria_library` with an empty `scoring_bands` JSON. When bands are empty, `CriteriaLibraryPanel` falls back to `defaultLadder(maxScore)` — which is exactly the "0-5 default" you're seeing. Nothing is wrong with the reader.
+## Clarifications
+Not Applicable.
 
-DB confirms it. Out of 26 criteria:
-- **20 rows are correct** — 6 bilingual bands each, full EN + HI labels (Attendance, PPE, Teamwork, 5S Housekeeping, etc.). These came from `BFCL_Annual_Review_All_Forms` via the `parseBfclFormsWorkbook` importer.
-- **9 rows are polluted** with `bands_len = 0`:
-  - System KPIs mis-imported as criteria: `5s`, `lti_lost_time_injury_rate`, `sti_short_time_injury_rate`, `ua_uc_nm_reported_by_self`, `training_attended`, `fugitive_pm10`
-  - Self-review free-text prompts mis-imported as criteria: `do_you_need_any_new_tools…`, `how_can_we_make_our_shop_floor…`, `what_new_skill_or_machine…`
-  - One bogus row `criteria` (parsed header)
+## Risk & Impact Report
+- **Data Impact:** Existing criteria rows may already have empty or generic `scoring_bands`; the fix should repair only Annual Review criteria whose labels match imported rows or whose bands are empty/generic.
+- **Workflow Impact:** Import flow remains the same; admins still upload and map sheets. The change only improves parsing and prevents bad imported scoring bands.
+- **UI/UX Impact:** No layout redesign. Import warnings should become clearer when a row cannot be parsed.
+- **Regression Risk:** Medium, because the parser is shared by criteria import paths. Mitigation is targeted tests using the exact pasted multiline format.
+- **Scalability Impact:** Low. Parsing happens client-side per uploaded workbook; no large dataset load is introduced.
+- **Rollback Strategy:** Revert parser changes and restore criteria rows from backup if needed; no destructive schema migration.
 
-### Root cause (single bug, two symptoms)
+## Step-by-step Plan
+1. **Fix root parser**
+   - Update the rating-band parser so it handles the exact pasted block:
+     - multiline Excel string
+     - semicolons inside labels
+     - Hindi text after ` / `
+     - all scores `5,4,3,2,1,0`
+   - Keep numeric score as `0..5`; store labels in `label_en` and `label_hi`.
 
-`CriteriaLibraryImportDialog` uses `parseCriteriaPackWorkbook` (in `src/lib/annualReview/criteriaWorkbook.ts`), which is **section-blind**. It anchors on the first row containing a "Criteria" cell and then imports every following row as a criterion — including the `Eligibility`, `System`, and `Self Review Fields` blocks. For those rows the rating description isn't the `"5 - EN / HI\n4 - …"` bilingual ladder (it's things like `"Any departmental LTI in AY 25-26 (5=0, 4=1, …)"`), so `parseBandsBlock` returns `[]`, `scoring_bands` is written as `[]`, and the editor renders the default ladder.
+2. **Use one parser everywhere**
+   - Make the criteria-pack importer validate using the same parser instead of a loose regex-only check.
+   - This prevents rows from being accepted when bands cannot actually be converted.
 
-We already have a correct parser — `parseBfclFormsWorkbook` — that separates `Eligibility` / `System` / `Type` blocks and only routes real criteria rows into the library. The generic BFCL workbook has the same three-section shape, so the same parser handles it.
+3. **Protect existing imported rows**
+   - When an existing criterion key is re-imported, always overwrite `scoring_bands` with the newly parsed workbook bands.
+   - Do not preserve old empty/generic bands when the workbook provides valid labels.
 
-## Fix (tight scope, no template rework)
+4. **Add regression tests**
+   - Add a test for the exact `Attendance & Punctuality / उपस्थिति और समय की पाबंदी` sample.
+   - Assert six bands are parsed and that score `5` and score `0` preserve both English and Hindi text.
+   - Add/adjust criteria workbook tests so this format is accepted.
 
-Two surgical changes + one cleanup migration. No changes to templates, assignments, mapping, or the reviewer form path.
+5. **Data repair check**
+   - Query the backend for criteria with empty or default-looking scoring bands.
+   - If rows are already polluted, prepare a safe one-time repair using re-imported workbook values or a guarded update for the affected criteria only.
 
-### 1. Section-aware import (frontend)
+## UI Changes
+- **Location:** Annual Review Admin → Criteria import dialog.
+- **Visual change:** Only clearer warning copy if a row lacks parseable scoring bands.
+- **Interaction impact:** Same upload/import flow; fewer silent bad imports.
+- **Responsiveness:** Not Applicable.
 
-`src/lib/annualReview/criteriaWorkbook.ts` → `parseCriteriaPackWorkbook`:
-- Track a section marker on column A (`Eligibility` / `System` / `Type`). Only rows in the `Type` block are criteria.
-- Additionally skip any row whose column-A block label is `Self Review Fields` (those go elsewhere, not into the criteria library).
-- Skip rows whose "rating description" cell doesn't contain a `^\d+\s*[-–]\s*` line (guarantees we never write a criterion with an unparseable ladder — such rows are surfaced as a warning instead of silently defaulted).
+## Implementation
+- Modify only annual-review criteria import/parsing files and tests.
+- No database schema changes.
+- Backend data repair only if inspection confirms polluted rows remain.
 
-### 2. Import dialog: stop silently defaulting
+## Tests
+- Unit test for exact pasted multiline rating block.
+- Unit test for criteria workbook import preserving bilingual rating descriptions.
+- Run targeted annual-review parser tests after implementation.
 
-`src/components/annual-review/CriteriaLibraryImportDialog.tsx`:
-- If `parseBandsBlock(row.rating_desc)` returns `[]`, do NOT upsert the criterion. Collect these into a warnings list shown in the dialog footer (`Skipped N rows without a bilingual rating ladder — please review the workbook`).
-- Unchanged: rows with a real ladder continue to write `scoring_bands` via `optionsToBands(parsed)`, exactly as today.
+## DOCUMENTATION.md updates
+- Add/update Annual Review import note: scoring bands must be parsed from workbook rating descriptions and must not fall back to generic labels when workbook labels exist.
 
-### 3. One-time DB cleanup migration
+## POLICY.md updates
+- Add/update policy: imported criteria scoring labels are authoritative; generic 0–5 labels are only allowed for manually created criteria without imported bands.
 
-Delete the 9 polluted library rows AND their assignments so tomorrow's launch reads only clean data:
-
-```
-DELETE FROM annual_review_criteria_assignments
- WHERE criterion_id IN (
-   SELECT id FROM annual_review_criteria_library
-    WHERE key IN ('5s','lti_lost_time_injury_rate','sti_short_time_injury_rate',
-                  'ua_uc_nm_reported_by_self','training_attended','fugitive_pm10',
-                  'do_you_need_any_new_tools_safety_gear_or_training_to_do_your',
-                  'how_can_we_make_our_shop_floor_safer_and_better',
-                  'what_new_skill_or_machine_do_you_want_to_learn_next_year',
-                  'criteria')
-      AND coalesce(jsonb_array_length(scoring_bands), 0) = 0
- );
-DELETE FROM annual_review_criteria_library
- WHERE key IN (...same list...)
-   AND coalesce(jsonb_array_length(scoring_bands), 0) = 0;
-```
-
-Guard rails: the `WHERE coalesce(jsonb_array_length(scoring_bands),0) = 0` clause guarantees we never touch a row that has real bilingual bands, so this is safe to re-run and can't wipe legitimate data.
-
-System KPIs (`LTI Rate`, `STI Rate`, `5S`, `Training attended`, `UA UC NM`, `Fugitive PM10`) already exist correctly in `annual_review_system_kpis` (8 rows verified last turn) — they belong there, not in the criteria library.
-
-### 4. Test coverage
-
-- `src/lib/annualReview/criteriaWorkbook.test.ts` (new): given the actual BFCL Generic workbook layout, only the 5 Type-block rows are returned; System, Eligibility, Self Review rows are excluded.
-- `src/lib/annualReview/bfclFormsWorkbook.test.ts` already covers `parseBandsBlock` bilingual splits — no change needed.
-
-## Why not "go back to manual templates"
-
-The template feature isn't the problem. The template/assignment path is producing correct forms for 20/26 criteria today (verified: bilingual EN+HI bands, 6 rating labels each). Only the import path let 9 junk rows through. A 2-file frontend patch + a one-line safety-guarded migration removes the visible symptom in one iteration — cheaper and safer than reverting to manual template management for tomorrow's launch.
-
-## Rollback
-
-- Frontend: revert the two files.
-- DB: the cleanup only deletes rows with `scoring_bands = []`, so restoring them would just mean re-running the (fixed) importer against the source workbook.
-
-## Not applicable
-
-Docs/policy updates: this is a bug fix, not a policy change. No RLS, workflow, or scoring-engine changes.
-
-Confirm and I'll ship all three (frontend patch, migration, test) in one turn so it's live tonight.
+## Post-implementation notes
+- After approval, I will implement the parser fix first, then verify with tests and inspect existing backend rows for any remaining polluted scoring bands.
