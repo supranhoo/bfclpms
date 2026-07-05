@@ -17,7 +17,7 @@ import { toast } from 'sonner';
 import {
   listCriteriaLibrary, listCriteriaAssignments,
   saveCriteriaAssignment, deleteCriteriaAssignment,
-  type CriterionAssignmentRow,
+  type CriterionAssignmentRow, type CriterionRow,
 } from '@/services/annualReview/criteriaLibrary';
 import { useBusinessUnits, useDepartments } from '@/hooks/useSafetyOrg';
 import { useBusinessUnitSubUnits } from '@/hooks/useProductionTargets';
@@ -263,9 +263,9 @@ function AssignmentRow({
 function AddAssignmentForm({
   library, departments, subUnits, onCreated,
 }: {
-  library: ReturnType<typeof useQuery>['data'] extends infer T ? T : never;
+  library: CriterionRow[];
   departments: { id: string; name: string }[];
-  subUnits: { id: string; label: string }[];
+  subUnits: { id: string; label: string | null }[];
   onCreated: () => void;
 }) {
   const [critId, setCritId] = useState('');
@@ -301,8 +301,6 @@ function AddAssignmentForm({
     onError: (e: Error) => toast.error(e.message),
   });
 
-  const lib = (library as ReturnType<typeof listCriteriaLibrary> extends Promise<infer U> ? U : never) ?? [];
-
   return (
     <div className="border rounded p-3 grid grid-cols-1 md:grid-cols-9 gap-2 items-end bg-muted/20">
       <div className="md:col-span-2">
@@ -310,7 +308,7 @@ function AddAssignmentForm({
         <Select value={critId} onValueChange={setCritId}>
           <SelectTrigger><SelectValue placeholder="Pick…" /></SelectTrigger>
           <SelectContent>
-            {lib.map((c) => <SelectItem key={c.id} value={c.id}>{c.label_en}</SelectItem>)}
+            {library.map((c) => <SelectItem key={c.id} value={c.id}>{c.label_en}</SelectItem>)}
           </SelectContent>
         </Select>
       </div>
