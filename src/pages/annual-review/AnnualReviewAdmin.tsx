@@ -1101,7 +1101,8 @@ function ProgressTab() {
                         setStepBackReason('');
                         qc.invalidateQueries();
                       } catch (err) {
-                        toast.error(err instanceof Error ? err.message : 'Failed to step back');
+                        const e = err as { message?: string; hint?: string; details?: string };
+                        toast.error(e?.message || e?.hint || e?.details || 'Failed to step back');
                       }
                     }}
                     disabled={sendBack.isPending || !role}
@@ -1153,7 +1154,8 @@ function ProgressTab() {
                       setRollbackReason('');
                       qc.invalidateQueries();
                     } catch (err) {
-                      toast.error(err instanceof Error ? err.message : 'Failed to roll back');
+                      const e = err as { message?: string; hint?: string; details?: string };
+                      toast.error(e?.message || e?.hint || e?.details || 'Failed to roll back');
                     }
                   }}
                   disabled={rollbackReason.trim().length < 3 || rollbackFinalized.isPending}
