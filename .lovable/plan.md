@@ -1,63 +1,73 @@
-## Remaining scope for the Criteria Library feature
+## Why you can't roll it back today
 
-Locked-in decisions from your answers:
-- **Weights must sum to 100** per resolved template; commit is blocked if any cell fails.
-- **Exact-grade targeting** in addition to grade bucket — add `grade_code TEXT NULL` referencing `pms_grades.code`. Resolver specificity becomes: sub_unit (16) > dept (8) > grade_code (4) > grade_bucket (2) > archetype (1).
-- Suppression stays as the explicit `is_enabled=false` checkbox.
-- Import expands per-department rows (no `department_group` table).
+Looking at the row you screenshotted (stage = **Completed**, Final = 100.00), the row-actions menu in `AnnualReviewAdmin.tsx` only exposes:
 
-## Deliverables
+- **Finalize / View** — always shown
+- **Step back to previous stage** — only when `overall_status ∈ {pending_manager, pending_skip, pending_dept, pending_bu, pending_hr}`
+- **Change template / workflow / weights** — only when status is `not_started` or `pending_self`
 
-### 1. Migration
-- `ALTER TABLE annual_review_criteria_assignments ADD COLUMN grade_code TEXT NULL` + extend the unique index and the `(archetype, grade_bucket, grade_code, dept, sub_unit)` lookup index.
-- No FK to `pms_grades.code` (that table's PK is `id`); store the code as text with a `CHECK (grade_code IS NULL OR length(grade_code) BETWEEN 1 AND 32)` guard. Resolver validates it against the loaded grade list at UI time.
+Your instance is `completed` (all stages done, awaiting HR finalize) or already `finalized`. Neither state is in the step-back map and neither is in the "canChange" set, so **no rollback action is rendered** — that's the whole reason nothing happens.
 
-### 2. Resolver + service updates
-- `criteriaLibrary.ts`: add `grade_code` to `AssignmentUpsertInput`, resolver signature, upsert-select COALESCE chain, and the new specificity scores.
-- New helper `validateResolvedWeights(resolved): { ok, sum, delta }` — sum of `weight_pct` must equal 100 (±0.01). Non-numeric bands remain untouched.
-- Update `criteriaLibrary.test.ts`: add cases for `grade_code` beating `grade_bucket`, and for the weight-sum validator (100 ok, 95 fails, 100.5 fails).
+Separately, the KPI-style `kpi_rollback_requests` flow (the banner + approve/reject you saw in monthly PMS) was **never wired to annual review instances** — it targets `kpis.id`, not `annual_review_instances.id`.
 
-### 3. Factory integration
-- `PlannedRow` gains `criteriaWeightTotal: number` and `criteriaWeightOk: boolean`.
-- `previewFactoryRun` computes both from the resolved list.
-- `commitFactoryRun` **rejects** any plan where `criteriaSource === 'library'` and `criteriaWeightOk === false` — error message: `"Criteria weights sum to X, must be 100. Fix in Criteria Matrix."` Rows that fall back to the archetype seed are exempt (they carry no weights).
-- `templateFactoryBulk.rebuildFactoryTemplatesForCycle` applies the same guard and reports failing templates in its `RebuildResult.errors`.
+So the gap is a missing feature, not a bug.
 
-### 4. Admin UI (three panels under `/annual-review/admin/factory`)
-- **CriteriaLibraryPanel** — bilingual CRUD table: key, label EN/HI, max_score, is_common, is_active, sort_order, JSON scoring bands. XLSX import parsing your 5-sheet workbook layout: for each sheet, extract `Criteria` + rating description → creates library rows (dedup on key = normalized label), plus assignment rows per (archetype, grade bucket, department set). XLSX export mirrors the input.
-- **CriteriaMatrixPanel** — sparse cell editor. Row = criterion (from library); columns are (Archetype, Grade bucket, Grade code, Department, Sub-unit, Weight%, Enabled). Add-cell form uses combo pickers with NULL = "Any". Delete = row action. Real-time weight-sum badge per (Archetype × Grade × Dept × Sub-unit) preview cell that lights amber when ≠ 100.
-- **Factory preview popover** — new column "Criteria" already exists; add a small "Preview" link that opens a Dialog listing the resolved criteria with winning assignment provenance ("won by: grade_code=M4 + dept=Admin", weight, is_common flag).
+---
 
-### 5. XLSX importer
-- Located at `src/lib/annualReview/criteriaWorkbook.ts` (mirrors `factoryWorkbook.ts`).
-- Sheet-header mapping form: for each sheet the admin picks archetype code, grade bucket, optional grade code, and multiple departments/sub-units. Import creates:
-  - Library rows keyed by slugified label_en (existing keys are re-used, updates label_hi if missing).
-  - One assignment row per selected department, with `weight_pct` from the sheet's `Wt%` column and `is_enabled=true`.
-- "M no Env" flow: importer offers a "suppress these criteria for the selected depts" multi-select which inserts `is_enabled=false` rows.
-- Dry-run preview before commit; errors listed inline; commit is transactional per sheet.
+## Plan — add rollback for Completed & Finalized instances
 
-### 6. Seed job (one-off)
-- Small utility page/button in CriteriaLibraryPanel: "Load bundled BFCL bilingual pack" that reads a copy of the workbook stored at `src/lib/annualReview/data/bfcl-generic-questions.xlsx` (checked into the repo from your upload) and runs the importer for the standard mappings. Idempotent — reruns just update.
+### 1. Row action (admin-only)
+In the row dropdown, add a new item **"Roll back stage"** visible when:
 
-### 7. Docs
-- `docs/specs/annual-review-template-factory.md`: new "Criteria resolver" section documenting specificity ladder, suppression semantics, and the 100% weight rule; update "Data model" table; add a "Version history" bullet.
-- `mem://features/annual-review/overview` index: add "Criteria Library" bullet.
+- `overall_status = 'completed'` → target = last non-HR stage that actually has a score (bu_head → dept_head → skip_manager → manager → self)
+- `overall_status = 'finalized'` → target = `completed` (un-finalize), then admin can step further back
 
-## Risk & Impact
+Existing "Step back to previous stage" stays untouched for pending_* states.
 
-- **Data**: additive `grade_code` column + one new admin-only import path. No touch to `annual_review_template_archetypes`.
-- **Workflow**: commit now hard-fails when weights ≠ 100 for library-sourced templates. Existing factory templates still using archetype fallback are unaffected until you populate the library.
-- **UI**: three new admin panels; existing factory page gains one preview link and a weight badge.
-- **Regression**: `criteriaSource: 'archetype'` fallback keeps every currently-generated template working.
-- **Rollback**: drop the new tables + `grade_code` column and revert the resolver call site; archetype seed path is untouched.
+### 2. Confirmation dialog
+Reuse `ConfirmDestructiveDialog`. Require a **reason** (min 3 chars). Show the resolved target stage and warn that:
 
-## Order of build
+- Downstream scores for stages after the target will be **cleared** (kept in audit log, not deleted from history table).
+- `finalized_at`, `final_rating`, `total_score` are nulled when un-finalizing.
 
-1. Migration (`grade_code` column + index).
-2. Resolver + tests (`grade_code`, weight-sum validator).
-3. Factory + bulk commit guards.
-4. `CriteriaLibraryPanel` with CRUD.
-5. `CriteriaMatrixPanel` with sparse-cell editor + weight-sum badge.
-6. XLSX importer + bundled BFCL seed.
-7. Preview popover on the Factory page.
-8. Docs + memory index.
+### 3. Service layer
+Add `svc.rollbackInstance({ instanceId, targetStage, reason })` in `src/services/annualReview` that:
+
+1. Reads current instance + response rows.
+2. Clears stage responses **after** target (via existing `annual_review_responses` writer).
+3. Sets `overall_status` = the pending stage that logically follows the target (e.g. rollback to `bu_head` → `pending_hr` becomes `pending_hr`... actually rollback to manager → `pending_skip`, etc.).
+4. If un-finalizing: nulls `finalized_at`, `final_rating`, `total_score`, `rating_override_*`.
+5. Writes an immutable row into `annual_review_audit_log` (existing table) with `action='rollback'`, actor, reason, from-status, to-status.
+
+All in a single Supabase RPC to stay atomic — new SECURITY DEFINER function `annual_review_rollback_instance(p_instance_id, p_target_stage, p_reason)`.
+
+### 4. RLS / permissions
+Only `admin` and `hr_pms` roles may invoke the RPC (checked via `has_role`). Non-admins keep seeing no rollback option.
+
+### 5. UI feedback
+- Optimistic invalidation of the instances query + stage-scores map.
+- Toast: "Rolled back to Manager stage. Reason logged."
+- The row's Stage badge updates to the new `pending_*` state, and step-back becomes available again.
+
+### 6. Tests & docs
+- Unit test for the target-stage resolver (10 stage combinations, incl. finalized → completed).
+- SQL test that the RPC refuses without admin/HR role.
+- Update `docs/specs/annual-review-template-factory.md` § Rollback and `mem://features/annual-review/operations.md`.
+
+### Risk & impact
+
+| Area | Risk | Mitigation |
+|---|---|---|
+| Data | Clearing downstream stage scores | Kept in `annual_review_audit_log`; not hard-deleted from response history |
+| Workflow | Employee could re-open a finalized packet mid-appraisal cycle | Admin/HR-only, reason mandatory, audit-logged |
+| UI | Confusion with existing "Step back" | New item labelled **"Roll back to earlier stage"** with sub-menu; step-back item unchanged |
+| Regression | Might affect monthly KPI rollback path | Totally separate table + RPC namespace |
+
+### Out of scope
+- No change to monthly KPI rollback.
+- No bulk rollback (single row only, matches the screenshot pattern).
+- No employee-initiated rollback request flow — admin/HR action only.
+
+---
+
+**Approve to implement**, or tell me if you'd rather (a) keep it admin-only vs. also allow HR PMS, (b) support bulk rollback across selected rows, or (c) require a two-person approval like the KPI rollback request flow.
