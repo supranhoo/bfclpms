@@ -1093,6 +1093,66 @@ export type Database = {
         }
         Relationships: []
       }
+      annual_review_template_archetypes: {
+        Row: {
+          applies_to_grade_buckets: Json
+          code: string
+          created_at: string
+          created_by: string | null
+          default_criteria: Json
+          default_enabled_stages: Json
+          default_stage_weights: Json
+          description_en: string | null
+          description_hi: string | null
+          display_mode: string
+          id: string
+          is_active: boolean
+          name_en: string
+          name_hi: string | null
+          sort_order: number
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          applies_to_grade_buckets?: Json
+          code: string
+          created_at?: string
+          created_by?: string | null
+          default_criteria?: Json
+          default_enabled_stages?: Json
+          default_stage_weights?: Json
+          description_en?: string | null
+          description_hi?: string | null
+          display_mode?: string
+          id?: string
+          is_active?: boolean
+          name_en: string
+          name_hi?: string | null
+          sort_order?: number
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          applies_to_grade_buckets?: Json
+          code?: string
+          created_at?: string
+          created_by?: string | null
+          default_criteria?: Json
+          default_enabled_stages?: Json
+          default_stage_weights?: Json
+          description_en?: string | null
+          description_hi?: string | null
+          display_mode?: string
+          id?: string
+          is_active?: boolean
+          name_en?: string
+          name_hi?: string | null
+          sort_order?: number
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
       annual_review_templates: {
         Row: {
           created_at: string
