@@ -24,6 +24,10 @@ import {
   downloadCriteriaLibraryWorkbook, parseCriteriaPackWorkbook, slugifyCriterionKey,
 } from '@/lib/annualReview/criteriaWorkbook';
 import { CriteriaLibraryImportDialog } from './CriteriaLibraryImportDialog';
+import { BfclFormsImportButton } from './BfclFormsImportDialog';
+import {
+  parseScoringBands, optionsToBands, defaultLadder, type ScoringBand,
+} from '@/lib/annualReview/criteriaBands';
 
 /**
  * Criteria Library editor. Holds bilingual qualitative questions used by the
@@ -103,6 +107,7 @@ export function CriteriaLibraryPanel() {
           <Button onClick={() => setCreating(true)} className="gap-2">
             <Plus className="h-4 w-4" /> New criterion
           </Button>
+          <BfclFormsImportButton />
         </div>
       </CardHeader>
       <CardContent>
