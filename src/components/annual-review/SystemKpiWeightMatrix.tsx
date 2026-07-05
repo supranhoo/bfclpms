@@ -1,6 +1,5 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -213,10 +212,7 @@ function WeightCell({
   initial, onSave,
 }: { initial: number; onSave: (w: number) => void }) {
   const [val, setVal] = useState<string>(initial ? String(initial) : '');
-
-  // Keep local state in sync when the row is re-rendered with a different value.
-  const [seed, setSeed] = useState(initial);
-  if (seed !== initial) { setSeed(initial); setVal(initial ? String(initial) : ''); }
+  useEffect(() => { setVal(initial ? String(initial) : ''); }, [initial]);
 
   const commit = () => {
     const n = val === '' ? 0 : Number(val);
@@ -243,6 +239,3 @@ function WeightCell({
     </TableCell>
   );
 }
-
-// Preserve `supabase` import (keeps tree-shake sane if we later add a direct call).
-void supabase;
