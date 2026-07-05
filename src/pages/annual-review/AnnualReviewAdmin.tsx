@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   useCycles, useTemplates, useRules, useCycleInstances, useActiveCycle, useTemplate,
   useSendBackStatus, useCloseCycle, useOverrideRating, useCloneTemplate, useCloneCycle,
