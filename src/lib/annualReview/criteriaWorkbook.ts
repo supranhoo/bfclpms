@@ -20,9 +20,18 @@ export interface ParsedCriteriaSheetRow {
   weight_pct: number;      // "Wt%" column
 }
 
+/** Parsed System-block row from one sheet of the bilingual pack. */
+export interface ParsedSystemSheetRow {
+  label_en: string;
+  label_hi: string | null;
+  description: string;
+  weight_pct: number;
+}
+
 export interface ParsedCriteriaSheet {
   name: string;
   rows: ParsedCriteriaSheetRow[];
+  systemRows?: ParsedSystemSheetRow[];
 }
 
 /**
@@ -51,6 +60,7 @@ export function parseCriteriaPackWorkbook(file: ArrayBuffer): ParsedCriteriaShee
     if (critCol < 0) continue;
 
     const rows: ParsedCriteriaSheetRow[] = [];
+    const systemRows: ParsedSystemSheetRow[] = [];
     // Section-awareness: BFCL workbooks stack `Eligibility` / `System` / `Type`
     // blocks in col A. Only rows in the `Type` (criteria) block are real
     // criteria — the earlier blocks are System KPIs / eligibility gates and
@@ -72,6 +82,20 @@ export function parseCriteriaPackWorkbook(file: ArrayBuffer): ParsedCriteriaShee
       if (hasSectionMarkers && aLower === 'eligibility') { section = 'elig'; continue; }
       if (hasSectionMarkers && aLower === 'system') { section = 'system'; continue; }
       if (hasSectionMarkers && aLower === 'type') { section = 'crit'; critBlockLabel = ''; continue; }
+      if (hasSectionMarkers && section === 'system') {
+        const sysCell = String(raw[critCol] ?? '').trim();
+        if (!sysCell || sysCell.toLowerCase() === 'criteria') continue;
+        const { en: enPart, hi: hiPart } = splitBilingual(sysCell);
+        const desc = descCol >= 0 ? String(raw[descCol] ?? '').trim() : '';
+        const wtVal = wtCol >= 0 ? Number(raw[wtCol]) : 0;
+        systemRows.push({
+          label_en: enPart.trim(),
+          label_hi: hiPart,
+          description: desc,
+          weight_pct: Number.isFinite(wtVal) ? wtVal : 0,
+        });
+        continue;
+      }
       // Sub-block label inside the Type section (e.g. "Standard Questions",
       // "Self Review Fields", "Generic Blue-Collar Questions").
       if (hasSectionMarkers && section === 'crit' && aCell) critBlockLabel = aCell;
@@ -95,7 +119,7 @@ export function parseCriteriaPackWorkbook(file: ArrayBuffer): ParsedCriteriaShee
         weight_pct: Number.isFinite(wtVal) ? wtVal : 0,
       });
     }
-    if (rows.length > 0) out.push({ name, rows });
+    if (rows.length > 0 || systemRows.length > 0) out.push({ name, rows, systemRows });
   }
   return out;
 }
