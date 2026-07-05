@@ -15,31 +15,32 @@ export function ayBounds(cycleStartYear: number): { fromISO: string; toISO: stri
 }
 
 /**
- * Count how many distinct calendar months an employee had at least one
- * active KRA within the given assessment-year window.
+ * Count how many distinct (review_year, review_period) buckets an employee
+ * has KRA rows in across the two calendar years covered by the assessment
+ * year (July Y → June Y+1). This is a conservative approximation of
+ * "months with active KRAs" using the columns available on `kpis`.
  *
- * Uses `kpis.period` (yyyy-mm) as the month key. `is_active = true` and
- * non-deleted rows only.
+ * NOTE: Downstream code should treat the returned count as a lower-bound
+ * signal; the assignment resolver only checks `count >= min_kra_months_in_ay`.
  */
 export async function countKraMonthsInAY(
   employeeId: string,
   cycleStartYear: number,
 ): Promise<number> {
-  const { fromISO, toISO } = ayBounds(cycleStartYear);
   const { data, error } = await supabase
     .from('kpis')
-    .select('period')
+    .select('review_year, review_period')
     .eq('employee_id', employeeId)
-    .eq('is_active', true)
-    .gte('period', fromISO.slice(0, 7))
-    .lte('period', toISO.slice(0, 7));
+    .in('review_year', [cycleStartYear, cycleStartYear + 1]);
   if (error) throw error;
-  const months = new Set<string>();
+  const buckets = new Set<string>();
   for (const row of data ?? []) {
-    const p = (row as { period: string | null }).period;
-    if (p) months.add(p.slice(0, 7));
+    const rr = row as { review_year: number | null; review_period: string | null };
+    const y = rr.review_year;
+    const p = (rr.review_period ?? '').trim();
+    if (y != null && p) buckets.add(`${y}::${p}`);
   }
-  return months.size;
+  return buckets.size;
 }
 
 /**
