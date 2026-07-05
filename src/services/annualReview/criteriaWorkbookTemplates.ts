@@ -166,7 +166,7 @@ export async function upsertWorkbookAssignmentRule(
       template_id: templateId,
       cycle_id: meta.cycle_id,
       name: `Workbook · ${meta.sheet_name}`,
-      priority: 100,
+      priority: 5,
       filters,
       is_active: true,
     })
