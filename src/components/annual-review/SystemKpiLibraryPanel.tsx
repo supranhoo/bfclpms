@@ -17,12 +17,13 @@ import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
 import { ConfirmDestructiveDialog } from '@/components/ui/ConfirmDestructiveDialog';
-import { Loader2, Plus, Pencil, Trash2 } from 'lucide-react';
+import { Loader2, Plus, Pencil, Trash2, Download } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   listSystemKpis, upsertSystemKpi, deleteSystemKpi, parseScoringRules,
   UOM_TYPES, type SystemKpiRow, type ScoringRules, type ScoringBand,
 } from '@/services/annualReview/systemKpiLibrary';
+import { downloadSystemKpiLibraryWorkbook } from '@/lib/annualReview/factoryWorkbook';
 import type { Json } from '@/integrations/supabase/types';
 
 /**
@@ -60,9 +61,19 @@ export function SystemKpiLibraryPanel() {
             department template. Edits here propagate the next time the Template Factory runs.
           </p>
         </div>
-        <Button onClick={() => setCreating(true)} className="gap-2">
-          <Plus className="h-4 w-4" /> New KPI
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            className="gap-2"
+            disabled={rows.length === 0}
+            onClick={() => downloadSystemKpiLibraryWorkbook(rows)}
+          >
+            <Download className="h-4 w-4" /> Export XLSX
+          </Button>
+          <Button onClick={() => setCreating(true)} className="gap-2">
+            <Plus className="h-4 w-4" /> New KPI
+          </Button>
+        </div>
       </CardHeader>
       <CardContent>
         {isLoading ? (
