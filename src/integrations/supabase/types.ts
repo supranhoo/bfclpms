@@ -335,38 +335,50 @@ export type Database = {
       }
       annual_review_assignment_rules: {
         Row: {
+          archetype_code: string | null
           created_at: string
           created_by: string | null
           cycle_id: string
           filters: Json
+          grade_bucket: string | null
           id: string
           is_active: boolean
+          min_kra_months_in_ay: number
           name: string | null
           priority: number
+          requires_kra_in_ay: boolean
           template_id: string
           updated_at: string
         }
         Insert: {
+          archetype_code?: string | null
           created_at?: string
           created_by?: string | null
           cycle_id: string
           filters?: Json
+          grade_bucket?: string | null
           id?: string
           is_active?: boolean
+          min_kra_months_in_ay?: number
           name?: string | null
           priority?: number
+          requires_kra_in_ay?: boolean
           template_id: string
           updated_at?: string
         }
         Update: {
+          archetype_code?: string | null
           created_at?: string
           created_by?: string | null
           cycle_id?: string
           filters?: Json
+          grade_bucket?: string | null
           id?: string
           is_active?: boolean
+          min_kra_months_in_ay?: number
           name?: string | null
           priority?: number
+          requires_kra_in_ay?: boolean
           template_id?: string
           updated_at?: string
         }
