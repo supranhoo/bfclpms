@@ -125,6 +125,7 @@ export function AdminKpiEditorForm({ kpi, onSaved, onCancel }: AdminKpiEditorFor
   });
   const [reason, setReason] = useState('');
   const [applyScope, setApplyScope] = useState<ApplyScope>('this_month');
+  const [alsoRenameSiblings, setAlsoRenameSiblings] = useState(false);
   const originalStatus = kpi?.status;
 
   useEffect(() => {
@@ -160,6 +161,7 @@ export function AdminKpiEditorForm({ kpi, onSaved, onCancel }: AdminKpiEditorFor
       });
       setReason('');
       setApplyScope('this_month');
+      setAlsoRenameSiblings(false);
       setCopyToMonthsOpen(false);
       setSelectedCopyMonths(new Set());
       setExistingSiblingKeys(new Set());
