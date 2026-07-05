@@ -72,6 +72,8 @@ import { RuleFiltersEditor, RuleFiltersSummary, EMPTY_FILTERS } from '@/componen
 import { SystemKpiLibraryPanel } from '@/components/annual-review/SystemKpiLibraryPanel';
 import { SystemKpiWeightMatrix } from '@/components/annual-review/SystemKpiWeightMatrix';
 import { TemplateArchetypesPanel } from '@/components/annual-review/TemplateArchetypesPanel';
+import { CriteriaLibraryPanel } from '@/components/annual-review/CriteriaLibraryPanel';
+import { CriteriaMatrixPanel } from '@/components/annual-review/CriteriaMatrixPanel';
 import type {
   AnnualReviewCycle, AnnualReviewTemplate, AssignmentFilters, AnnualReviewerRole,
 } from '@/types/annualReview';
@@ -118,6 +120,8 @@ export default function AnnualReviewAdmin() {
             <TemplateArchetypesPanel />
             <SystemKpiLibraryPanel />
             <SystemKpiWeightMatrix />
+            <CriteriaLibraryPanel />
+            <CriteriaMatrixPanel />
           </div>
         </TabsContent>
         <TabsContent value="settings" className="mt-4"><SettingsTab /></TabsContent>
