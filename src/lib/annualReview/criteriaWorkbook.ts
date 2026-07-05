@@ -80,7 +80,7 @@ export function parseCriteriaPackWorkbook(file: ArrayBuffer): ParsedCriteriaShee
       const aCell = String(raw[0] ?? '').trim();
       const aLower = aCell.toLowerCase();
       if (hasSectionMarkers && aLower === 'eligibility') { section = 'elig'; continue; }
-      if (hasSectionMarkers && aLower === 'system') { section = 'system'; continue; }
+      if (hasSectionMarkers && aLower === 'system') { section = 'system'; }
       if (hasSectionMarkers && aLower === 'type') { section = 'crit'; critBlockLabel = ''; continue; }
       if (hasSectionMarkers && section === 'system') {
         const sysCell = String(raw[critCol] ?? '').trim();
