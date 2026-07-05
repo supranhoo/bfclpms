@@ -406,6 +406,7 @@ export type Database = {
           criterion_id: string
           department_id: string | null
           grade_bucket: string | null
+          grade_code: string | null
           id: string
           is_enabled: boolean
           sub_unit_id: string | null
@@ -418,6 +419,7 @@ export type Database = {
           criterion_id: string
           department_id?: string | null
           grade_bucket?: string | null
+          grade_code?: string | null
           id?: string
           is_enabled?: boolean
           sub_unit_id?: string | null
@@ -430,6 +432,7 @@ export type Database = {
           criterion_id?: string
           department_id?: string | null
           grade_bucket?: string | null
+          grade_code?: string | null
           id?: string
           is_enabled?: boolean
           sub_unit_id?: string | null
