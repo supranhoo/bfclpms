@@ -326,6 +326,37 @@ export function CriteriaLibraryImportDialog({
                           <Label htmlFor={`${s.name}-common`}>Mark as common</Label>
                         </div>
                       </div>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 border-t pt-3">
+                        <div className="md:col-span-1">
+                          <Label>Template name</Label>
+                          <Input
+                            value={m.template_name}
+                            onChange={(e) => patch(s.name, { template_name: e.target.value })}
+                            placeholder={s.name}
+                          />
+                        </div>
+                        <div>
+                          <Label>Cycle</Label>
+                          <Select value={m.cycle_id || ''} onValueChange={(v) => patch(s.name, { cycle_id: v })}>
+                            <SelectTrigger><SelectValue placeholder="Pick cycle…" /></SelectTrigger>
+                            <SelectContent>
+                              {cycles.map((c) => (
+                                <SelectItem key={c.id} value={c.id}>
+                                  {c.name || `AY ${c.review_year ?? ''}`}{c.status === 'active' ? ' · active' : ''}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="flex items-end gap-2">
+                          <Checkbox
+                            checked={m.create_rule}
+                            onCheckedChange={(v) => patch(s.name, { create_rule: Boolean(v) })}
+                            id={`${s.name}-rule`}
+                          />
+                          <Label htmlFor={`${s.name}-rule`}>Create/refresh assignment rule</Label>
+                        </div>
+                      </div>
                       <div>
                         <div className="flex items-center justify-between">
                           <Label>Departments {m.departmentIds.length > 0
