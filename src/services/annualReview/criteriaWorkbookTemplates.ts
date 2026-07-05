@@ -64,7 +64,7 @@ export function buildTemplateSectionsFromSheet(
         name: r.label_en,
         description: '',
         weight: Number(r.weight_pct) || 0,
-        reviewer_stages: ['self', 'dept_head'],
+        reviewer_stages: ['self', 'dept_head', 'bu_head'],
         enable_remarks: true,
         enable_evidence: false,
         options: bandsToBilingualOptions(bandsJson, max),
