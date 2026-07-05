@@ -68,3 +68,26 @@ describe('parseCriteriaPackWorkbook — section awareness', () => {
     expect(sheets[0].rows[0].rating_desc).toContain('0 - Unacceptable attendance pattern');
   });
 });
+
+describe('parseCriteriaPackWorkbook — simple Criteria + Rating Description layout', () => {
+  it('maps the Criteria cell to the criterion and the Rating cell to all six scoring labels', () => {
+    const rating = '5 - Always on time; zero unexcused absence; supports reliable shift continuity. / हमेशा समय पर; कोई अनधिकृत अनुपस्थिति नहीं; शिफ्ट निरंतरता में सहयोग करता है। 4 - Consistently punctual; informs supervisor in advance for leave or delay. / लगातार समय पर; छुट्टी या देरी की सूचना पहले से सुपरवाइजर को देता है। 3 - Generally punctual; occasional valid absence or delay with proper intimation. / सामान्यतः समय पर; उचित सूचना के साथ कभी-कभार वैध अनुपस्थिति या देरी। 2 - Irregular attendance; needs repeated reminders to report on time or plan leave. / अनियमित उपस्थिति; समय पर आने या छुट्टी की योजना के लिए बार-बार याद दिलाना पड़ता है। 1 - Very poor attendance; frequent late coming or absence disrupts shift planning. / बहुत खराब उपस्थिति; बार-बार देर से आना या अनुपस्थिति से शिफ्ट योजना प्रभावित होती है। 0 - Unacceptable attendance pattern; repeated unauthorized absence or habitual late reporting. / अस्वीकार्य उपस्थिति; बार-बार अनधिकृत अनुपस्थिति या आदतन देर से रिपोर्टिंग।';
+    const ws = XLSX.utils.aoa_to_sheet([
+      ['Criteria', 'Rating - Discription'],
+      ['Attendance & Punctuality / उपस्थिति और समय की पाबंदी', rating],
+    ]);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Simple Criteria');
+    const sheets = parseCriteriaPackWorkbook(XLSX.write(wb, { type: 'array', bookType: 'xlsx' }) as ArrayBuffer);
+
+    expect(sheets).toHaveLength(1);
+    expect(sheets[0].rows).toHaveLength(1);
+    expect(sheets[0].rows[0]).toMatchObject({
+      label_en: 'Attendance & Punctuality',
+      label_hi: 'उपस्थिति और समय की पाबंदी',
+      weight_pct: 0,
+    });
+    expect(sheets[0].rows[0].rating_desc).toContain('5 - Always on time');
+    expect(sheets[0].rows[0].rating_desc).toContain('0 - Unacceptable attendance pattern');
+  });
+});
