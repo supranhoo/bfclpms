@@ -37,6 +37,17 @@ function uid(p: string) {
   return `${p}_${Math.random().toString(36).slice(2, 9)}`;
 }
 
+function canonicalWorkflowSections(systemWeightTotal: number) {
+  const criteriaPool = Math.max(0, 100 - systemWeightTotal);
+  return {
+    enabled_stages: ['self', 'dept_head', 'bu_head'],
+    stage_weights: {
+      ...(systemWeightTotal > 0 ? { system: systemWeightTotal } : {}),
+      ...(criteriaPool > 0 ? { self: criteriaPool * 0.3, dept_head: criteriaPool * 0.7 } : {}),
+    },
+  };
+}
+
 /** Build the `sections` JSON payload for a workbook sheet. */
 export function buildTemplateSectionsFromSheet(
   sheet: ParsedCriteriaSheet,
@@ -53,7 +64,7 @@ export function buildTemplateSectionsFromSheet(
         name: r.label_en,
         description: '',
         weight: Number(r.weight_pct) || 0,
-        reviewer_stages: ['self', 'manager', 'skip_manager', 'bu_head', 'hr'],
+        reviewer_stages: ['self', 'dept_head'],
         enable_remarks: true,
         enable_evidence: false,
         options: bandsToBilingualOptions(bandsJson, max),
@@ -65,12 +76,27 @@ export function buildTemplateSectionsFromSheet(
         weight_pct: Number(r.weight_pct) || 0,
       };
     });
+  const system_scores = (sheet.systemRows ?? [])
+    .filter((r) => r.label_en)
+    .map((r) => ({
+      id: uid('sys'),
+      name: r.label_en,
+      description: r.description || undefined,
+      weight: Number(r.weight_pct) || 0,
+      source: 'workbook',
+      label_en: r.label_en,
+      label_hi: r.label_hi,
+      weight_pct: Number(r.weight_pct) || 0,
+    }));
+  const systemWeightTotal = system_scores.reduce((sum, r) => sum + (Number(r.weight) || 0), 0);
+  const workflow = canonicalWorkflowSections(systemWeightTotal);
 
   return {
     display_mode: 'bilingual',
     criteria,
-    system_scores: [],
-    stage_weights: { self: 30, manager: 40, skip_manager: 15, bu_head: 10, hr: 5 },
+    system_scores,
+    enabled_stages: workflow.enabled_stages,
+    stage_weights: workflow.stage_weights,
     sheet_key: meta.sheet_key,
   };
 }
@@ -153,6 +179,9 @@ export async function upsertWorkbookAssignmentRule(
       .update({
         name: `Workbook · ${meta.sheet_name}`,
         filters,
+        archetype_code: meta.target.archetype || null,
+        grade_bucket: meta.target.grade_bucket || null,
+        requires_kra_in_ay: meta.target.archetype === 'A',
         is_active: true,
       })
       .eq('id', existing.id);
@@ -168,6 +197,9 @@ export async function upsertWorkbookAssignmentRule(
       name: `Workbook · ${meta.sheet_name}`,
       priority: 5,
       filters,
+      archetype_code: meta.target.archetype || null,
+      grade_bucket: meta.target.grade_bucket || null,
+      requires_kra_in_ay: meta.target.archetype === 'A',
       is_active: true,
     })
     .select('id')
