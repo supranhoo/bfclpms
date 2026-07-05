@@ -70,6 +70,7 @@ import { RecentStageWeightOverridesPanel } from '@/components/annual-review/Rece
 import { RuleFiltersEditor, RuleFiltersSummary, EMPTY_FILTERS } from '@/components/annual-review/RuleFiltersEditor';
 import { SystemKpiLibraryPanel } from '@/components/annual-review/SystemKpiLibraryPanel';
 import { SystemKpiWeightMatrix } from '@/components/annual-review/SystemKpiWeightMatrix';
+import { TemplateArchetypesPanel } from '@/components/annual-review/TemplateArchetypesPanel';
 import type {
   AnnualReviewCycle, AnnualReviewTemplate, AssignmentFilters, AnnualReviewerRole,
 } from '@/types/annualReview';
@@ -106,6 +107,7 @@ export default function AnnualReviewAdmin() {
         <TabsContent value="rules" className="mt-4"><RulesTab /></TabsContent>
         <TabsContent value="system-kpis" className="mt-4">
           <div className="space-y-6">
+            <TemplateArchetypesPanel />
             <SystemKpiLibraryPanel />
             <SystemKpiWeightMatrix />
           </div>
