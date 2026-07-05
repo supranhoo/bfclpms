@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -168,28 +168,28 @@ function KpiEditorDialog({
   const [sortOrder, setSortOrder] = useState(0);
   const [rules, setRules] = useState<ScoringRules>({ direction: 'higher_better', bands: emptyBands() });
 
-  // Re-seed on open.
-  useState(() => 0); // no-op to satisfy linter shape
-  if (open && existing && key !== existing.key) {
-    setKey(existing.key);
-    setNameEn(existing.name_en);
-    setNameHi(existing.name_hi ?? '');
-    setDescEn(existing.description_en ?? '');
-    setDescHi(existing.description_hi ?? '');
-    setUom(existing.uom_type ?? 'count');
-    setIsActive(existing.is_active);
-    setSortOrder(existing.sort_order ?? 0);
-    const parsed = parseScoringRules(existing.scoring_rules);
-    setRules({
-      direction: parsed.direction,
-      bands: parsed.bands.length ? parsed.bands : emptyBands(),
-    });
-  } else if (open && !existing && key !== '') {
-    // reset on switch to create-mode
-    setKey(''); setNameEn(''); setNameHi(''); setDescEn(''); setDescHi('');
-    setUom('count'); setIsActive(true); setSortOrder(0);
-    setRules({ direction: 'higher_better', bands: emptyBands() });
-  }
+  useEffect(() => {
+    if (!open) return;
+    if (existing) {
+      setKey(existing.key);
+      setNameEn(existing.name_en);
+      setNameHi(existing.name_hi ?? '');
+      setDescEn(existing.description_en ?? '');
+      setDescHi(existing.description_hi ?? '');
+      setUom(existing.uom_type ?? 'count');
+      setIsActive(existing.is_active);
+      setSortOrder(existing.sort_order ?? 0);
+      const parsed = parseScoringRules(existing.scoring_rules);
+      setRules({
+        direction: parsed.direction,
+        bands: parsed.bands.length ? parsed.bands : emptyBands(),
+      });
+    } else {
+      setKey(''); setNameEn(''); setNameHi(''); setDescEn(''); setDescHi('');
+      setUom('count'); setIsActive(true); setSortOrder(0);
+      setRules({ direction: 'higher_better', bands: emptyBands() });
+    }
+  }, [open, existing]);
 
   const upsertMut = useMutation({
     mutationFn: async () => {
