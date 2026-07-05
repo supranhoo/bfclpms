@@ -89,7 +89,8 @@ export function CriteriaLibraryImportDialog({
       if (libErr) throw libErr;
       const byKey = new Map(existingLib?.map((r) => [r.key, r]) ?? []);
 
-      let insertedCrit = 0, updatedCrit = 0, insertedAsg = 0, skippedNoBands = 0;
+      let insertedCrit = 0, updatedCrit = 0, insertedAsg = 0, skippedNoBands = 0, skippedIncompleteBands = 0;
+      const incompleteLabels: string[] = [];
       for (const sheet of sheets) {
         const m = mappings[sheet.name];
         if (!m || m.skip) continue;
@@ -105,6 +106,13 @@ export function CriteriaLibraryImportDialog({
           // — the editor would fall back to the generic English ladder and
           // hide the workbook labels. Surface these to the admin instead.
           if (parsedBands.length === 0) { skippedNoBands += 1; continue; }
+          const bandScores = new Set(parsedBands.map((b) => b.score));
+          const hasCompleteZeroToFive = [0, 1, 2, 3, 4, 5].every((s) => bandScores.has(s));
+          if (!hasCompleteZeroToFive) {
+            skippedIncompleteBands += 1;
+            if (incompleteLabels.length < 5) incompleteLabels.push(row.label_en);
+            continue;
+          }
           const maxFromBands = parsedBands.reduce((m2, b) => Math.max(m2, b.score), 0);
           const maxScore = Math.max(5, maxFromBands);
           const bandsJson = optionsToBands(parsedBands);
@@ -136,7 +144,7 @@ export function CriteriaLibraryImportDialog({
           }
         }
       }
-      return { insertedCrit, updatedCrit, insertedAsg, skippedNoBands };
+      return { insertedCrit, updatedCrit, insertedAsg, skippedNoBands, skippedIncompleteBands, incompleteLabels };
     },
     onSuccess: (res) => {
       toast.success(
@@ -145,6 +153,12 @@ export function CriteriaLibraryImportDialog({
       if (res.skippedNoBands > 0) {
         toast.warning(
           `Skipped ${res.skippedNoBands} row(s) without a bilingual rating ladder — check the workbook's "5 - EN / HI" format.`,
+        );
+      }
+      if (res.skippedIncompleteBands > 0) {
+        const sample = res.incompleteLabels.length ? ` (${res.incompleteLabels.join(', ')}${res.skippedIncompleteBands > res.incompleteLabels.length ? '…' : ''})` : '';
+        toast.warning(
+          `Skipped ${res.skippedIncompleteBands} row(s) because the Excel rating cell did not contain all scores 5, 4, 3, 2, 1, 0${sample}.`,
         );
       }
       qc.invalidateQueries({ queryKey: ['annual-review-criteria-library'] });

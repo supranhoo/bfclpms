@@ -95,18 +95,21 @@ export function parseBandsBlock(text: string): ScoringBand[] {
   if (!text) return [];
   const bands: ScoringBand[] = [];
   // Excel often stores in-cell line breaks as LF, CRLF, CR-only, or the
-  // escaped `_x000D_` marker. Split on any of those, then parse lines starting
-  // with digit + hyphen/en-dash. Semicolons inside labels are normal text.
-  const lines = text
+  // escaped `_x000D_` marker. Some exports also keep the whole wrapped cell as
+  // one string, so segment by score markers (`5 -`, `4 -`, ...), not only by
+  // line boundaries. Semicolons inside labels are normal text.
+  const normalized = text
     .replace(/_x000D_/gi, '\n')
-    .split(/\r\n|\n|\r/g)
-    .map((l) => l.trim())
-    .filter(Boolean);
-  for (const line of lines) {
-    const m = line.match(/^(\d+)\s*[-–]\s*(.*)$/);
-    if (!m) continue;
+    .replace(/\r\n|\r/g, '\n');
+  const marker = /(?:^|\s)(\d{1,2})\s*[-–]\s*/g;
+  const matches = Array.from(normalized.matchAll(marker));
+  for (let i = 0; i < matches.length; i++) {
+    const m = matches[i];
     const score = Number(m[1]);
-    const { en, hi } = splitBilingual(m[2]);
+    const start = (m.index ?? 0) + m[0].length;
+    const end = i + 1 < matches.length ? (matches[i + 1].index ?? normalized.length) : normalized.length;
+    const rawLabel = normalized.slice(start, end).trim();
+    const { en, hi } = splitBilingual(rawLabel);
     bands.push({ score, label_en: en, label_hi: hi });
   }
   return bands
