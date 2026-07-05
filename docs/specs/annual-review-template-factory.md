@@ -15,6 +15,8 @@ Generate and maintain the AY 2025–26 review templates at scale (per Department
 | Archetypes | `annual_review_template_archetypes` | A/B/C/D families with default stage weights, qualitative criteria, enabled stages, display mode. |
 | Assignment rules | `annual_review_assignment_rules` | Adds `archetype_code`, `grade_bucket`, `requires_kra_in_ay`, `min_kra_months_in_ay`. |
 | Templates | `annual_review_templates` | Generated rows carry `sections.factory_key` for idempotency. |
+| Criteria library | `annual_review_criteria_library` | Reusable bilingual qualitative questions with scoring bands and `is_common` flag. |
+| Criteria matrix | `annual_review_criteria_assignments` | (Criterion × Archetype × Grade-bucket × Grade-code × Dept × Sub-unit) rows that decide which questions land on which template and with what weight. `is_enabled=false` explicitly suppresses a common question for the cell. |
 
 ## Archetype policy
 
@@ -72,3 +74,22 @@ A pre-existing template (authored before the factory) can be brought under facto
 ## Version history
 
 - 2026-07-05 — Shipped P1–P7 (system KPI library, weight matrix, archetypes, assignment-rule extension, factory UI, XLSX export, bulk re-apply, docs + tests).
+- 2026-07-05 — Shipped Criteria Library + Matrix. Templates now compose qualitative questions per cell via `resolveCriteria`, with `is_enabled=false` suppression and a commit-time rule that per-template criterion weights must sum to 100 (±0.01). Archetype `default_criteria` remains the day-0 fallback when no library rows cover a cell.
+
+## Criteria resolver
+
+`resolveCriteria(library, assignments, target)` in `src/services/annualReview/criteriaLibrary.ts` picks, for each active library row, the single most-specific matching assignment cell using this ladder:
+
+```
+sub_unit  = 16
+dept      =  8
+grade_code =  4   (exact code, e.g. "M4")
+grade_bucket =  2 (family bucket M/W/T/other)
+archetype =  1
+```
+
+`NULL` in a column = wildcard. A criterion is included only if at least one row matches; if the winning row has `is_enabled = false`, the criterion is suppressed for that cell (used to drop e.g. "Environment" from a "M no Env" department).
+
+`validateResolvedWeights(resolved)` enforces `sum(weight_pct) === 100` (±0.01) at factory commit time. `commitFactoryRun` and `rebuildFactoryTemplatesForCycle` block any template where `criteriaSource === 'library'` and the sum fails, surfacing the error in the preview table's "Crit Wt %" column.
+
+Templates that fall back to the archetype seed (`criteriaSource === 'archetype'`) are exempt from the 100% rule — the seed carries no weights.
