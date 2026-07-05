@@ -690,6 +690,15 @@ export function TemplateEditorDialog({
       {canManageLibrary && (
         <SelfReviewLibraryManager open={libManagerOpen} onOpenChange={setLibManagerOpen} />
       )}
+      <CriteriaLibraryPickerDialog
+        open={criteriaLibOpen}
+        onOpenChange={setCriteriaLibOpen}
+        existingKeys={criteria.map((c: any) => c.key).filter(Boolean)}
+        onAdd={(items) => {
+          setSections((s) => ({ ...s, criteria: [...(s.criteria ?? []), ...items] }));
+          toast.success(`Added ${items.length} criter${items.length === 1 ? 'ion' : 'ia'} from library`);
+        }}
+      />
     </Dialog>
   );
 }
