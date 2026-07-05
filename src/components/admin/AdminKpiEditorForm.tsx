@@ -125,6 +125,7 @@ export function AdminKpiEditorForm({ kpi, onSaved, onCancel }: AdminKpiEditorFor
   });
   const [reason, setReason] = useState('');
   const [applyScope, setApplyScope] = useState<ApplyScope>('this_month');
+  const [alsoRenameSiblings, setAlsoRenameSiblings] = useState(false);
   const originalStatus = kpi?.status;
 
   useEffect(() => {
@@ -160,6 +161,7 @@ export function AdminKpiEditorForm({ kpi, onSaved, onCancel }: AdminKpiEditorFor
       });
       setReason('');
       setApplyScope('this_month');
+      setAlsoRenameSiblings(false);
       setCopyToMonthsOpen(false);
       setSelectedCopyMonths(new Set());
       setExistingSiblingKeys(new Set());
@@ -303,11 +305,18 @@ export function AdminKpiEditorForm({ kpi, onSaved, onCancel }: AdminKpiEditorFor
 
         if (filteredSiblings.length > 0) {
           const { data: { user } } = await supabase.auth.getUser();
-          
+          const renamePayload: Record<string, string> = {};
+          if (alsoRenameSiblings && kpi.kra_name !== formData.kra_name) {
+            renamePayload.kra_name = formData.kra_name;
+          }
+          if (alsoRenameSiblings && kpi.kpi_name !== formData.kpi_name) {
+            renamePayload.kpi_name = formData.kpi_name;
+          }
+
           for (const sibling of filteredSiblings) {
             const { error: updateError } = await supabase
               .from('kpis')
-              .update({ ...(structuralFields as any), updated_at: new Date().toISOString() })
+              .update({ ...(structuralFields as any), ...renamePayload, updated_at: new Date().toISOString() })
               .eq('id', sibling.id);
 
             if (updateError) {
@@ -320,11 +329,13 @@ export function AdminKpiEditorForm({ kpi, onSaved, onCancel }: AdminKpiEditorFor
                 kpi_id: sibling.id,
                 performed_by: user.id,
                 action: 'admin_bulk_apply',
-                new_value: structuralFields as any,
+                new_value: { ...(structuralFields as any), ...renamePayload },
                 metadata: {
                   source: 'admin_bulk_apply',
                   source_kpi_id: kpi.id,
                   source_month: kpi.review_period,
+                  renamed_kra: !!renamePayload.kra_name,
+                  renamed_kpi: !!renamePayload.kpi_name,
                   reason: reason || 'Bulk applied from admin editor',
                 },
               });
@@ -1052,6 +1063,27 @@ export function AdminKpiEditorForm({ kpi, onSaved, onCancel }: AdminKpiEditorFor
             Structural fields applied to sibling KPIs. Status & achieved values unchanged.
           </p>
         )}
+        {applyScope !== 'this_month' &&
+          kpi &&
+          (kpi.kra_name !== formData.kra_name || kpi.kpi_name !== formData.kpi_name) && (
+            <div className="mt-2 flex items-start gap-2 p-2 rounded border border-amber-300 bg-amber-50 dark:bg-amber-950/30">
+              <Checkbox
+                id="also_rename_siblings"
+                checked={alsoRenameSiblings}
+                onCheckedChange={(v) => setAlsoRenameSiblings(v === true)}
+                className="mt-0.5"
+              />
+              <label htmlFor="also_rename_siblings" className="text-[11px] leading-snug cursor-pointer">
+                <span className="font-medium">Also rename siblings:</span> apply the new{' '}
+                {kpi.kra_name !== formData.kra_name && kpi.kpi_name !== formData.kpi_name
+                  ? 'KRA name and KPI name/description'
+                  : kpi.kra_name !== formData.kra_name
+                    ? 'KRA name'
+                    : 'KPI name/description'}{' '}
+                to sibling months too. Leave unchecked to only rename this month (siblings keep their existing names).
+              </label>
+            </div>
+          )}
       </div>
 
       {/* Copy to Other Months — collapsible */}
