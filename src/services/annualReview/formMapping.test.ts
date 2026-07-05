@@ -33,6 +33,11 @@ describe('matchesFilters', () => {
     expect(matchesFilters({ department_ids: ['d1'] }, p(), deptToBu)).toBe(true);
     expect(matchesFilters({ department_ids: ['d2'] }, p(), deptToBu)).toBe(false);
   });
+  it('matches grade_bucket by PMS grade prefix', () => {
+    expect(matchesFilters({ grade_bucket: 'M' }, p({ pms_grade: 'M4' }), deptToBu)).toBe(true);
+    expect(matchesFilters({ grade_bucket: 'W' }, p({ pms_grade: 'M4' }), deptToBu)).toBe(false);
+    expect(matchesFilters({ grade_bucket: 'W' }, p({ pms_grade: 'Workman' }), deptToBu)).toBe(true);
+  });
   it('BU filter joins via department → business_unit_id', () => {
     expect(matchesFilters({ bu_ids: ['bu1'] }, p(), deptToBu)).toBe(true);
     expect(matchesFilters({ bu_ids: ['bu2'] }, p(), deptToBu)).toBe(false);
@@ -89,5 +94,13 @@ describe('resolveTemplateForProfile', () => {
     const miss = rule({ id: 'm', template_id: 'x', priority: 1, filters: { ...rule({}).filters, roles: ['Manager'] } });
     const hit  = rule({ id: 'h', template_id: 'y', priority: 5, filters: { ...rule({}).filters, roles: ['Executive'] } });
     expect(resolveTemplateForProfile([miss, hit], p(), deptToBu).templateId).toBe('y');
+  });
+  it('uses workbook grade_bucket filters during rule resolution', () => {
+    const workbook = rule({
+      id: 'workbook', template_id: 'workbook-w', priority: 1,
+      filters: { ...rule({}).filters, grade_bucket: 'W' },
+    });
+    expect(resolveTemplateForProfile([workbook], p({ pms_grade: 'M4' }), deptToBu).templateId).toBeNull();
+    expect(resolveTemplateForProfile([workbook], p({ pms_grade: 'Workman' }), deptToBu).templateId).toBe('workbook-w');
   });
 });

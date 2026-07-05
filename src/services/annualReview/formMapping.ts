@@ -1,5 +1,6 @@
 import { supabase } from '@/integrations/supabase/client';
 import type { AssignmentFilters, AnnualReviewAssignmentRule } from '@/types/annualReview';
+import { bucketFromGradeCode } from './archetypeResolver';
 
 /**
  * Form Mapping SSOT — one place that decides which template an employee
@@ -44,6 +45,8 @@ export function matchesFilters(
       : [];
   if (list('roles').length && !list('roles').includes(profile.designation ?? '')) return false;
   if (list('grades').length && !list('grades').includes(profile.pms_grade ?? '')) return false;
+  const gradeBucket = (f as Record<string, unknown>).grade_bucket;
+  if (typeof gradeBucket === 'string' && gradeBucket && bucketFromGradeCode(profile.pms_grade) !== gradeBucket) return false;
   if (list('levels').length && !list('levels').includes(profile.level ?? '')) return false;
   if (list('department_ids').length && !list('department_ids').includes(profile.department_id ?? '')) return false;
   if (list('bu_ids').length) {

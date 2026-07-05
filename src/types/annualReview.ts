@@ -229,6 +229,9 @@ export interface AssignmentFilters {
   levels: string[];
   bu_ids: string[];
   department_ids: string[];
+  sub_unit_ids?: string[];
+  archetype_code?: string | null;
+  grade_bucket?: string | null;
 }
 
 export interface AnnualReviewAssignmentRule {
