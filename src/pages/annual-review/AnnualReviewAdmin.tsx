@@ -82,11 +82,18 @@ import {
 import { computeCriteriaRatingOutOf5 } from '@/lib/annualReview/scoring';
 
 export default function AnnualReviewAdmin() {
+  const nav = useNavigate();
   return (
     <div className="p-4 md:p-6 max-w-[1600px] mx-auto space-y-6">
-      <header>
-        <h1 className="text-2xl font-bold">Annual Review Admin</h1>
-        <p className="text-sm text-muted-foreground">Manage cycles, templates, rules, and finalize reviews.</p>
+      <header className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold">Annual Review Admin</h1>
+          <p className="text-sm text-muted-foreground">Manage cycles, templates, rules, and finalize reviews.</p>
+        </div>
+        <Button variant="outline" onClick={() => nav('/annual-review/admin/factory')}>
+          <Layers className="h-4 w-4 mr-2" />
+          Template Factory
+        </Button>
       </header>
       <Tabs defaultValue="progress" className="w-full">
         <TabsList className="flex flex-wrap md:flex-nowrap w-full h-auto gap-1 p-1 overflow-x-auto justify-start">
