@@ -6,7 +6,9 @@ import {
 } from './templateFactory';
 import { listArchetypes, parseCriteria, parseStageWeights } from './templateArchetypes';
 import { listSystemKpis, listSystemKpiWeights, resolveWeight, parseScoringRules } from './systemKpiLibrary';
-import { listCriteriaLibrary, listCriteriaAssignments, resolveCriteria } from './criteriaLibrary';
+import {
+  listCriteriaLibrary, listCriteriaAssignments, resolveCriteria, validateResolvedWeights,
+} from './criteriaLibrary';
 
 function readFactoryKey(row: TemplateRow): FactoryKey | null {
   const s = (row.sections ?? {}) as Record<string, unknown>;
@@ -78,6 +80,16 @@ export async function rebuildFactoryTemplatesForCycle(cycleId: string): Promise<
       archetype: key.archetype_code, grade: key.grade_bucket,
       dept: key.department_id, subUnit: key.sub_unit_id,
     });
+    if (resolved.length > 0) {
+      const v = validateResolvedWeights(resolved);
+      if (!v.ok) {
+        res.errors.push({
+          name: t.name,
+          message: `Criteria weights sum to ${v.sum}, must be 100. Fix in Criteria Matrix.`,
+        });
+        continue;
+      }
+    }
     const criteria = resolved.length > 0
       ? resolved.map((r) => ({
           key: r.key, label_en: r.label_en, label_hi: r.label_hi,
