@@ -68,7 +68,7 @@ function CriterionRow({
   onRemoveEvidence,
 }: CriteriaScoringMatrixProps & { criterion: TemplateCriterion }) {
   const [uploading, setUploading] = useState(false);
-  const { t, tTemplate, tTemplateOptionBilingual } = useAnnualReviewI18n();
+  const { t, tTemplate, tTemplateOptionBilingual, currentLanguage, defaultLanguage } = useAnnualReviewI18n();
   const criterionName = tTemplate('criterion', criterion.id, 'name', criterion.name);
   const criterionDesc = criterion.description
     ? tTemplate('criterion', criterion.id, 'description', criterion.description)
@@ -79,8 +79,16 @@ function CriterionRow({
   const enableRemarks = criterion.enable_remarks !== false;
   const enableEvidence = !!criterion.enable_evidence;
   const hasOptions = Array.isArray(criterion.options) && criterion.options.length > 0;
+  const optionLabel = (opt: NonNullable<TemplateCriterion['options']>[number]) => {
+    const translated = opt.label_hi?.trim();
+    const fallback = opt.label;
+    const fromTranslations = tTemplateOptionBilingual(criterion.id, opt.id, 'label', fallback);
+    if (fromTranslations !== fallback) return fromTranslations;
+    if (currentLanguage !== defaultLanguage && translated) return `${fallback} / ${translated}`;
+    return fallback;
+  };
   const optionLabels = hasOptions
-    ? criterion.options!.map((opt) => tTemplateOptionBilingual(criterion.id, opt.id, 'label', opt.label))
+    ? criterion.options!.map(optionLabel)
     : [];
   const readAllTexts = [criterionName, criterionDesc, ...optionLabels];
 
@@ -128,7 +136,7 @@ function CriterionRow({
               {criterion.options!.map((opt) => {
                 const active = score === opt.score;
                 const c = SCORE_COLOR[opt.score] ?? SCORE_COLOR[0];
-                const label = tTemplateOptionBilingual(criterion.id, opt.id, 'label', opt.label);
+                const label = optionLabel(opt);
                 return (
                   <div key={opt.id} className="relative">
                   <button
@@ -136,7 +144,7 @@ function CriterionRow({
                     disabled={readOnly}
                     onClick={() => onChangeScore?.(criterion.id, opt.score)}
                     aria-pressed={active}
-                    aria-label={`${opt.label} — Score ${opt.score}`}
+                    aria-label={`${label} — Score ${opt.score}`}
                     className={[
                       'group w-full text-left rounded-lg border p-3 min-h-[88px] transition-all',
                       'flex items-start gap-3',

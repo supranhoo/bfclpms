@@ -82,17 +82,26 @@ export function slugKey(input: string): string {
 /** "Attendance & Punctuality / उपस्थिति और समय की पाबंदी" → {en, hi}. */
 export function splitBilingual(raw: string): { en: string; hi: string | null } {
   if (!raw) return { en: '', hi: null };
-  const idx = raw.indexOf(' / ');
-  if (idx === -1) return { en: raw.trim(), hi: null };
-  return { en: raw.slice(0, idx).trim(), hi: raw.slice(idx + 3).trim() || null };
+  const m = raw.match(/\s\/\s/u);
+  if (!m || m.index === undefined) return { en: raw.trim(), hi: null };
+  return {
+    en: raw.slice(0, m.index).trim(),
+    hi: raw.slice(m.index + m[0].length).trim() || null,
+  };
 }
 
 /** Parse a full band description block into ScoringBand[]. */
 export function parseBandsBlock(text: string): ScoringBand[] {
   if (!text) return [];
   const bands: ScoringBand[] = [];
-  // Split on newlines, then on lines starting with digit + " - " / " – "
-  const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  // Excel often stores in-cell line breaks as LF, CRLF, CR-only, or the
+  // escaped `_x000D_` marker. Split on any of those, then parse lines starting
+  // with digit + hyphen/en-dash. Semicolons inside labels are normal text.
+  const lines = text
+    .replace(/_x000D_/gi, '\n')
+    .split(/\r\n|\n|\r/g)
+    .map((l) => l.trim())
+    .filter(Boolean);
   for (const line of lines) {
     const m = line.match(/^(\d+)\s*[-–]\s*(.*)$/);
     if (!m) continue;
@@ -100,7 +109,9 @@ export function parseBandsBlock(text: string): ScoringBand[] {
     const { en, hi } = splitBilingual(m[2]);
     bands.push({ score, label_en: en, label_hi: hi });
   }
-  return bands.sort((a, b) => b.score - a.score);
+  return bands
+    .filter((b) => b.label_en.length > 0)
+    .sort((a, b) => b.score - a.score);
 }
 
 function sheetNameMatch(name: string): { buCode: string; gradeBucket: GradeBucket; deptName: string } | null {

@@ -10,6 +10,7 @@ import { parseCriteriaPackWorkbook } from './criteriaWorkbook';
  * rating ladder are valid criteria.
  */
 function buildBfclGenericSheet(): ArrayBuffer {
+  const attendanceRating = '5 - Always on time; zero unexcused absence; supports reliable shift continuity. / हमेशा समय पर; कोई अनधिकृत अनुपस्थिति नहीं; शिफ्ट निरंतरता में सहयोग करता है।\r4 - Consistently punctual; informs supervisor in advance for leave or delay. / लगातार समय पर; छुट्टी या देरी की सूचना पहले से सुपरवाइजर को देता है।\r3 - Generally punctual; occasional valid absence or delay with proper intimation. / सामान्यतः समय पर; उचित सूचना के साथ कभी-कभार वैध अनुपस्थिति या देरी।\r2 - Irregular attendance; needs repeated reminders to report on time or plan leave. / अनियमित उपस्थिति; समय पर आने या छुट्टी की योजना के लिए बार-बार याद दिलाना पड़ता है।\r1 - Very poor attendance; frequent late coming or absence disrupts shift planning. / बहुत खराब उपस्थिति; बार-बार देर से आना या अनुपस्थिति से शिफ्ट योजना प्रभावित होती है।\r0 - Unacceptable attendance pattern; repeated unauthorized absence or habitual late reporting. / अस्वीकार्य उपस्थिति; बार-बार अनधिकृत अनुपस्थिति या आदतन देर से रिपोर्टिंग।';
   const rows: (string | number | null)[][] = [
     ['Generic - Blue Collar', null, null, null],
     [null, 'Criteria', 'Discription', 'Wt%'],
@@ -20,8 +21,8 @@ function buildBfclGenericSheet(): ArrayBuffer {
     ['Type', 'Criteria', 'Rating - Discription', 'Wt%'],
     [
       'Generic Blue-Collar Questions',
-      'Attendance & Punctuality / उपस्थिति',
-      '5 - Always on time. / हमेशा समय पर।\n4 - Consistently punctual. / लगातार समय पर।\n0 - Unacceptable. / अस्वीकार्य।',
+      'Attendance & Punctuality / उपस्थिति और समय की पाबंदी',
+      attendanceRating,
       5,
     ],
     [
@@ -64,5 +65,6 @@ describe('parseCriteriaPackWorkbook — section awareness', () => {
   it('preserves the bilingual rating ladder in rating_desc', () => {
     expect(sheets[0].rows[0].rating_desc).toMatch(/^5 - Always on time/);
     expect(sheets[0].rows[0].rating_desc).toContain('हमेशा समय पर');
+    expect(sheets[0].rows[0].rating_desc).toContain('0 - Unacceptable attendance pattern');
   });
 });

@@ -1,5 +1,6 @@
 import * as XLSX from 'xlsx';
 import type { CriterionRow } from '@/services/annualReview/criteriaLibrary';
+import { parseBandsBlock } from './bfclFormsWorkbook';
 
 /** Slugify an English label into a stable library key. */
 export function slugifyCriterionKey(labelEn: string): string {
@@ -57,7 +58,6 @@ export function parseCriteriaPackWorkbook(file: ArrayBuffer): ParsedCriteriaShee
     // Fields` sub-blocks are free-text prompts, not scored criteria.
     let section: 'none' | 'elig' | 'system' | 'crit' = 'none';
     let critBlockLabel = '';
-    const BAND_LINE = /^\s*\d+\s*[-–]\s*/m;
     for (let i = headerIdx + 1; i < grid.length; i++) {
       const raw = grid[i];
       const aCell = String(raw[0] ?? '').trim();
@@ -77,9 +77,9 @@ export function parseCriteriaPackWorkbook(file: ArrayBuffer): ParsedCriteriaShee
       const [enPart, hiPart] = critCell.split(/\s*\/\s*/, 2);
       const desc = descCol >= 0 ? String(raw[descCol] ?? '').trim() : '';
       // Real criteria have a bilingual rating ladder ("5 - EN / HI\n4 - …").
-      // Without at least one "<digit> - " line we cannot render bands, and
+      // Without parseable "<digit> - " lines we cannot render bands, and
       // silently defaulting to the English ladder is the bug we're fixing.
-      if (!BAND_LINE.test(desc)) continue;
+      if (parseBandsBlock(desc).length === 0) continue;
       const wtVal = wtCol >= 0 ? Number(raw[wtCol]) : 0;
       rows.push({
         label_en: enPart.trim(),
