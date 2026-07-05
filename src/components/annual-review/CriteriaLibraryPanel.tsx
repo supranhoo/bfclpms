@@ -205,9 +205,25 @@ function CriterionEditorDialog({
   const [isCommon, setIsCommon] = useState(existing?.is_common ?? false);
   const [isActive, setIsActive] = useState(existing?.is_active ?? true);
   const [sortOrder, setSortOrder] = useState(existing?.sort_order ?? 0);
-  const [bandsText, setBandsText] = useState(
-    existing?.scoring_bands ? JSON.stringify(existing.scoring_bands, null, 2) : '[]',
-  );
+  const [bands, setBands] = useState<ScoringBand[]>(() => {
+    const parsed = parseScoringBands((existing?.scoring_bands ?? null) as never);
+    if (parsed.length) return parsed;
+    return defaultLadder(Number(existing?.max_score ?? 5));
+  });
+  const [showJson, setShowJson] = useState(false);
+
+  // When max_score changes, resize the bands ladder in place, preserving edits.
+  const syncBandsToMax = (nextMax: number) => {
+    setMaxScore(nextMax);
+    setBands((prev) => {
+      const byScore = new Map(prev.map((b) => [b.score, b]));
+      const next: ScoringBand[] = [];
+      for (let s = nextMax; s >= 0; s--) {
+        next.push(byScore.get(s) ?? { score: s, label_en: '', label_hi: null });
+      }
+      return next;
+    });
+  };
 
   // Reset when the dialog re-opens for a different row.
   useState(() => { /* noop, react state above initializes from existing */ });
@@ -216,9 +232,7 @@ function CriterionEditorDialog({
     mutationFn: async () => {
       if (!labelEn.trim()) throw new Error('English label is required.');
       const finalKey = key.trim() || slugifyCriterionKey(labelEn);
-      let bands: unknown = [];
-      try { bands = JSON.parse(bandsText || '[]'); }
-      catch { throw new Error('Scoring bands must be valid JSON.'); }
+      const bandsJson = optionsToBands(bands);
       return upsertCriterion({
         ...(existing ? { id: existing.id } : {}),
         key: finalKey,
@@ -228,7 +242,7 @@ function CriterionEditorDialog({
         is_common: isCommon,
         is_active: isActive,
         sort_order: sortOrder,
-        scoring_bands: bands as never,
+        scoring_bands: bandsJson as never,
       });
     },
     onSuccess: () => {
