@@ -17,6 +17,8 @@ import type { ParsedCriteriaSheet } from '@/lib/annualReview/criteriaWorkbook';
 import { slugifyCriterionKey } from '@/lib/annualReview/criteriaWorkbook';
 import { useDepartments, useBusinessUnits } from '@/hooks/useSafetyOrg';
 import { upsertCriterion, saveCriteriaAssignment } from '@/services/annualReview/criteriaLibrary';
+import { parseBandsBlock } from '@/lib/annualReview/bfclFormsWorkbook';
+import { optionsToBands } from '@/lib/annualReview/criteriaBands';
 
 const ARCHETYPES = ['A', 'B', 'C', 'D'] as const;
 const GRADE_BUCKETS = ['M', 'W', 'T', 'other'] as const;
@@ -95,13 +97,21 @@ export function CriteriaLibraryImportDialog({
           if (!row.label_en) continue;
           const key = slugifyCriterionKey(row.label_en);
           const existing = byKey.get(key);
+          // Parse the bilingual "5 - EN / HI\n4 - …" block into scoring bands
+          // so the reviewer sees the workbook's rating labels (not the default
+          // English ladder). Falls back silently when the cell is blank.
+          const parsedBands = parseBandsBlock(row.rating_desc ?? '');
+          const maxFromBands = parsedBands.reduce((m2, b) => Math.max(m2, b.score), 0);
+          const maxScore = Math.max(5, maxFromBands);
+          const bandsJson = parsedBands.length ? optionsToBands(parsedBands) : undefined;
           const upserted = await upsertCriterion({
             ...(existing ? { id: existing.id } : {}),
             key,
             label_en: row.label_en,
             label_hi: existing?.label_hi || row.label_hi || null,
-            max_score: 5,
+            max_score: maxScore,
             is_common: m.isCommon,
+            ...(bandsJson !== undefined ? { scoring_bands: bandsJson } : {}),
           } as never);
           byKey.set(key, { id: upserted.id, key: upserted.key, label_hi: upserted.label_hi });
           if (existing) updatedCrit += 1; else insertedCrit += 1;
