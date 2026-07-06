@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-type Counts = { rules: number; overrides: number; instTpl: number; instOverride: number };
+type Counts = { rules: number; instTpl: number; instOverride: number };
 
-let counts: Counts = { rules: 0, overrides: 0, instTpl: 0, instOverride: 0 };
+let counts: Counts = { rules: 0, instTpl: 0, instOverride: 0 };
 const deleteEqSpy = vi.fn();
 
 vi.mock('@/integrations/supabase/client', () => {
@@ -11,9 +11,6 @@ vi.mock('@/integrations/supabase/client', () => {
       eq: (col: string, _val: string) => {
         if (table === 'annual_review_assignment_rules') {
           return Promise.resolve({ count: counts.rules, error: null });
-        }
-        if (table === 'annual_review_assignment_overrides') {
-          return Promise.resolve({ count: counts.overrides, error: null });
         }
         if (table === 'annual_review_instances') {
           return Promise.resolve({
@@ -41,7 +38,7 @@ import { deleteTemplate } from '@/services/annualReview/annualReviewService';
 
 describe('deleteTemplate', () => {
   beforeEach(() => {
-    counts = { rules: 0, overrides: 0, instTpl: 0, instOverride: 0 };
+    counts = { rules: 0, instTpl: 0, instOverride: 0 };
     deleteEqSpy.mockClear();
   });
 
@@ -52,15 +49,15 @@ describe('deleteTemplate', () => {
   });
 
   it('blocks with a message that includes reference counts', async () => {
-    counts = { rules: 2, overrides: 1, instTpl: 3, instOverride: 4 };
+    counts = { rules: 2, instTpl: 3, instOverride: 4 };
     await expect(deleteTemplate('t1')).rejects.toThrow(
-      /2 rule\(s\), 1 employee override\(s\), 7 live instance\(s\)/,
+      /2 rule\(s\), 7 live instance\(s\)/,
     );
     expect(deleteEqSpy).not.toHaveBeenCalled();
   });
 
   it('blocks even when only one reference type is non-zero', async () => {
-    counts = { rules: 0, overrides: 0, instTpl: 0, instOverride: 1 };
+    counts = { rules: 0, instTpl: 0, instOverride: 1 };
     await expect(deleteTemplate('t1')).rejects.toThrow(/1 live instance/);
     expect(deleteEqSpy).not.toHaveBeenCalled();
   });
