@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { Input } from '@/components/ui/input';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/popover';
 import { Badge } from '@/components/ui/badge';
 import { useSelfReviewLibrary } from '@/hooks/useSelfReviewLibrary';
 import type { SelfReviewLibraryEntry } from '@/types/annualReview';
@@ -21,19 +21,22 @@ export function SelfReviewLabelCombobox({ value, onChange, onPickLibraryEntry, p
 
   return (
     <Popover open={showPanel} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
+      <PopoverAnchor asChild>
         <Input
           className="h-9"
           value={value}
           placeholder={placeholder}
           onChange={(e) => { onChange(e.target.value); setOpen(true); }}
           onFocus={() => setOpen(true)}
+          onBlur={() => setOpen(false)}
         />
-      </PopoverTrigger>
+      </PopoverAnchor>
       <PopoverContent
         className="p-0 w-[--radix-popover-trigger-width]"
         align="start"
         onOpenAutoFocus={(e) => e.preventDefault()}
+        onCloseAutoFocus={(e) => e.preventDefault()}
+        onInteractOutside={(e) => e.preventDefault()}
       >
         <ul className="max-h-60 overflow-y-auto">
           {matches.map((m) => (
