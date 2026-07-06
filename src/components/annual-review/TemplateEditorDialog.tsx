@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -14,7 +14,7 @@ import {
 } from '@/components/ui/popover';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Plus, Trash2, Settings2, Sparkles, Loader2, Languages, ListOrdered, Library } from 'lucide-react';
+import { Plus, Trash2, Settings2, Sparkles, Loader2, Languages, ListOrdered, Library, BookmarkPlus } from 'lucide-react';
 import { CriterionOptionsDialog } from './CriterionOptionsDialog';
 import { toast } from 'sonner';
 import * as svc from '@/services/annualReview/annualReviewService';
@@ -33,6 +33,8 @@ import { SelfReviewLibraryPicker } from './SelfReviewLibraryPicker';
 import { SelfReviewLibraryManager } from './SelfReviewLibraryManager';
 import { SelfReviewLabelCombobox } from './SelfReviewLabelCombobox';
 import { CriteriaLibraryPickerDialog } from './CriteriaLibraryPickerDialog';
+import { upsertCriterion } from '@/services/annualReview/criteriaLibrary';
+import { optionsToBands } from '@/lib/annualReview/criteriaBands';
 import { applyEntriesToSections, mapEntryToTemplateField } from '@/services/annualReview/selfReviewLibrary';
 import { useAuth } from '@/contexts/AuthContext';
 
