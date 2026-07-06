@@ -708,8 +708,18 @@ export function TemplateEditorDialog({
         open={criteriaLibOpen}
         onOpenChange={setCriteriaLibOpen}
         existingKeys={criteria.map((c: any) => c.key).filter(Boolean)}
-        onAdd={(items) => {
-          setSections((s) => ({ ...s, criteria: [...(s.criteria ?? []), ...items] }));
+        onAdd={(items, hiTranslations) => {
+          setSections((s) => {
+            const nextTranslations = { ...(s.translations ?? {}) };
+            if (hiTranslations && Object.keys(hiTranslations).length > 0) {
+              nextTranslations.hi = { ...(nextTranslations.hi ?? {}), ...hiTranslations };
+            }
+            return {
+              ...s,
+              criteria: [...(s.criteria ?? []), ...items],
+              translations: nextTranslations,
+            };
+          });
           const newIds = items.map((it: any) => it.id).filter(Boolean);
           setHighlightCriteriaIds(newIds);
           toast.success(
