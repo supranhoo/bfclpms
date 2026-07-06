@@ -115,12 +115,16 @@ export function TemplateEditorDialog({
 
   const rowsValid = [...systemScores, ...criteria].every((r) => isWeightInRange(Number(r.weight)));
   const criteriaHaveWeight = criteria.length > 0 && criteria.every((c) => Number(c.weight) > 0);
+  const systemFullyAllocated = Math.abs(systemWeight - 100) < 0.01;
 
   const activeBlockers: string[] = [];
   if (!weightOk) activeBlockers.push(`Combined weight is ${combined}% (must be exactly 100%).`);
   if (!rowsValid) activeBlockers.push('One or more weights are outside the 0–100 range.');
-  if (criteria.length === 0) activeBlockers.push('Add at least one criterion before publishing.');
-  else if (!criteriaHaveWeight) activeBlockers.push('Every criterion must have a weight greater than 0.');
+  // Criteria are only required when System Scores don't already cover the full 100%.
+  if (!systemFullyAllocated) {
+    if (criteria.length === 0) activeBlockers.push('Add at least one criterion, or set System Scores to 100%.');
+    else if (!criteriaHaveWeight) activeBlockers.push('Every criterion must have a weight greater than 0.');
+  }
 
   const canSave = !!name.trim() && rowsValid && (!isActive || activeBlockers.length === 0);
   const saveAsDraft = () => {
