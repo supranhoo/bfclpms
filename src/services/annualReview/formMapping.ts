@@ -226,20 +226,31 @@ export async function checkMappingCoverage(cycleId: string): Promise<CoverageRep
   // Bust the KRAs memo so Refresh always recomputes (bug: toggling has_kras
   // filter + Refresh coverage kept showing stale membership).
   _resetKrasCache();
-  const [profiles, deptToBu, rulesRes, instRes] = await Promise.all([
+  const [profiles, deptToBu, rulesRes, instRows] = await Promise.all([
     fetchActiveProfiles(),
     fetchDeptToBu(),
     supabase
       .from('annual_review_assignment_rules')
       .select('id, template_id, cycle_id, filters, is_active, priority')
       .eq('cycle_id', cycleId),
-    supabase
-      .from('annual_review_instances')
-      .select('id, employee_id, template_id, template_override_id')
-      .eq('cycle_id', cycleId),
+    // POLICY §94 — paged read to bypass PostgREST's 1000-row cap.
+    // Previously an unpaged .select() capped Seeded at 1000 and
+    // misclassified every extra employee as "will_seed".
+    fetchAllPaged<{
+      id: string;
+      employee_id: string;
+      template_id: string | null;
+      template_override_id: string | null;
+    }>((from, to) =>
+      supabase
+        .from('annual_review_instances')
+        .select('id, employee_id, template_id, template_override_id')
+        .eq('cycle_id', cycleId)
+        .order('id')
+        .range(from, to) as unknown as PromiseLike<{ data: any; error: unknown }>,
+    ),
   ]);
   if (rulesRes.error) throw rulesRes.error;
-  if (instRes.error) throw instRes.error;
 
   const rules = (rulesRes.data ?? []) as unknown as AnnualReviewAssignmentRule[];
 
@@ -259,8 +270,7 @@ export async function checkMappingCoverage(cycleId: string): Promise<CoverageRep
   );
 
   const byEmp = new Map<string, { template_id: string | null; override: string | null }>();
-  for (const i of instRes.data ?? []) {
-    const r = i as { employee_id: string; template_id: string | null; template_override_id: string | null };
+  for (const r of instRows) {
     byEmp.set(r.employee_id, { template_id: r.template_id, override: r.template_override_id });
   }
 
