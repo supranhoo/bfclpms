@@ -554,9 +554,16 @@ export function TemplateEditorDialog({
                         />
                       </TableCell>
                       <TableCell className="align-top">
-                        <Button size="icon" variant="ghost" onClick={() => removeAt(setSections, 'criteria', i)} aria-label="Delete">
-                          <Trash2 className="h-4 w-4 text-destructive" />
-                        </Button>
+                        <div className="flex items-center gap-0.5">
+                          <SaveCriterionToLibraryButton
+                            criterion={c}
+                            hiName={tr['hi']?.[`criterion:${c.id}:name`] ?? ''}
+                            onLinked={(patch) => updateAt(setSections, 'criteria', i, patch)}
+                          />
+                          <Button size="icon" variant="ghost" onClick={() => removeAt(setSections, 'criteria', i)} aria-label="Delete">
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
