@@ -4,6 +4,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { X } from 'lucide-react';
 import {
   useBusinessUnits,
@@ -16,6 +17,7 @@ import type { AssignmentFilters } from '@/types/annualReview';
 
 export const EMPTY_FILTERS: AssignmentFilters = {
   roles: [], grades: [], levels: [], bu_ids: [], department_ids: [],
+  has_kras: 'any', kras_window_months: 12,
 };
 
 type PickerKey = keyof AssignmentFilters;
@@ -99,6 +101,62 @@ export function RuleFiltersEditor({
       <Picker title="Departments" selected={value.department_ids ?? []}
         items={depts.map((d: { id: string; name: string }) => ({ value: d.id, label: d.name }))}
         onChange={(v) => set('department_ids', v)} />
+      <HasKrasFilter value={value} onChange={onChange} />
+    </div>
+  );
+}
+
+function HasKrasFilter({
+  value, onChange,
+}: {
+  value: AssignmentFilters;
+  onChange: (next: AssignmentFilters) => void;
+}) {
+  const mode = (value.has_kras ?? 'any') as 'any' | 'yes' | 'no';
+  const months = Math.min(Math.max(Math.round(Number(value.kras_window_months ?? 12) || 12), 1), 36);
+  return (
+    <div className="space-y-2 rounded-md border p-3">
+      <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        Has KRAs
+      </Label>
+      <div className="flex flex-wrap items-center gap-2">
+        <Select
+          value={mode}
+          onValueChange={(v) =>
+            onChange({ ...value, has_kras: v as 'any' | 'yes' | 'no' })
+          }
+        >
+          <SelectTrigger className="h-8 w-[140px]">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="any">Any</SelectItem>
+            <SelectItem value="yes">With KRAs</SelectItem>
+            <SelectItem value="no">Without KRAs</SelectItem>
+          </SelectContent>
+        </Select>
+        {mode !== 'any' && (
+          <div className="flex items-center gap-1 text-xs text-muted-foreground">
+            <span>in last</span>
+            <Input
+              type="number"
+              min={1}
+              max={36}
+              value={months}
+              onChange={(e) => {
+                const n = Math.min(Math.max(Math.round(Number(e.target.value) || 12), 1), 36);
+                onChange({ ...value, kras_window_months: n });
+              }}
+              className="h-8 w-16"
+              aria-label="Months window for Has KRAs filter"
+            />
+            <span>months</span>
+          </div>
+        )}
+      </div>
+      <p className="text-[11px] text-muted-foreground leading-snug">
+        Restrict the audience to employees who do/don&apos;t have KRAs recorded in the window.
+      </p>
     </div>
   );
 }
@@ -110,6 +168,10 @@ export function RuleFiltersSummary({ filters }: { filters: AssignmentFilters }) 
   if (filters.levels?.length) parts.push(`${filters.levels.length} level${filters.levels.length === 1 ? '' : 's'}`);
   if (filters.bu_ids?.length) parts.push(`${filters.bu_ids.length} BU${filters.bu_ids.length === 1 ? '' : 's'}`);
   if (filters.department_ids?.length) parts.push(`${filters.department_ids.length} dept${filters.department_ids.length === 1 ? '' : 's'}`);
+  if (filters.has_kras === 'yes' || filters.has_kras === 'no') {
+    const w = Math.min(Math.max(Math.round(Number(filters.kras_window_months ?? 12) || 12), 1), 36);
+    parts.push(`KRAs: ${filters.has_kras} (${w}m)`);
+  }
   if (parts.length === 0) return <Badge variant="outline" className="text-xs">All employees</Badge>;
   return <span className="text-xs text-muted-foreground">{parts.join(' · ')}</span>;
 }
