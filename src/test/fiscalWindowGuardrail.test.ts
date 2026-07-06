@@ -20,9 +20,17 @@ import { join, relative } from 'node:path';
 const ROOT = join(process.cwd(), 'src');
 const REVIEW_YEAR_IN = /\.in\(['"]review_year['"]/;
 const GUARD_TOKENS = /(isKpiMonthInFiscalCycle|fiscalYearForMonth|isFiscalTuple|filterToFiscalWindow|calendarYearForMonth)/;
-// Tuple-style paired post-filter: same file must show `review_period` and
-// `review_year` on the same line joined by `===` or `==` or `!==` or `&&`.
-const TUPLE_PAIR = /review_period[^\n]*(===|==|!==)[^\n]*review_year|review_year[^\n]*(===|==|!==)[^\n]*review_period/;
+// Tuple-style paired post-filter — accept any of:
+//   • same-line equality between review_period and review_year
+//   • template-string composite key mixing a *period* token with a *year* token
+//     (e.g. `${row.period_name}|${row.review_year}`)
+//   • a `.in('period_name'|'review_period', ...)` call in the same file as the
+//     `.in('review_year', ...)` call, indicating both dimensions are constrained.
+const TUPLE_PAIR =
+  /review_period[^\n]*(===|==|!==)[^\n]*review_year|review_year[^\n]*(===|==|!==)[^\n]*review_period/;
+const COMPOSITE_KEY =
+  /\$\{[^}]*(period|month)[^}]*\}[|\-:_/][^`]*\$\{[^}]*year[^}]*\}|\$\{[^}]*year[^}]*\}[|\-:_/][^`]*\$\{[^}]*(period|month)[^}]*\}/i;
+const PAIRED_IN = /\.in\(['"](period_name|review_period)['"]/;
 
 const EXEMPTIONS = new Set<string>([
   // Add here ONLY with an ADR reference explaining why the file is safe.
