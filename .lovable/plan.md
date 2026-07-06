@@ -1,46 +1,39 @@
-## Goal
-Allow a template to allocate the full 100% weight to **System Scores** alone, making **Criteria** optional.
+## Problem
 
-Today the editor forces two blockers:
-- "Add at least one criterion before publishing."
-- "Every criterion must have a weight greater than 0."
+In the Template Editor → **Self Review Fields**, the "Field Label" input rejects all keystrokes — the user cannot type anything. The Placeholder input (a plain `<Input>`) works fine.
 
-So even when System Scores already sum to 100, the user is forced to keep a dummy 1% Criteria row (as shown in the screenshot: "System 99% + Criteria 1% = 100%").
+## Root Cause
 
-Runtime already supports this: `systemScoresFullyAllocated` in `src/lib/annualReview/templateVisibility.ts` hides the Criteria card when system weights sum to ≥100, and `shouldHideCriteriaCard` skips the criteria block on every reviewer stage.
+`src/components/annual-review/SelfReviewLabelCombobox.tsx` wraps the `<Input>` inside a Radix `<PopoverTrigger asChild>`. `PopoverTrigger` injects its own click/keyboard/focus behavior and, combined with the controlled `open` state being recomputed on every keystroke (`showPanel = open && value.length >= 2 && matches.length > 0`), Radix's focus management steals focus from the input as the popover opens/closes on each character — so keystrokes never register in the underlying `<input>`.
 
-## Change (single file)
+This is the wrong Radix primitive for an inline suggestion dropdown attached to a free-text input. The correct primitive is `<PopoverAnchor>` (positions the popover without hijacking the input) — or a plain absolute-positioned suggestion panel.
 
-**`src/components/annual-review/TemplateEditorDialog.tsx`** — relax activation blockers:
+## Fix (surgical, UI-only)
 
-```ts
-const systemFullyAllocated = Math.abs(systemWeight - 100) < 0.01;
+Rewrite `SelfReviewLabelCombobox.tsx` to:
 
-if (!weightOk) activeBlockers.push(`Combined weight is ${combined}% (must be exactly 100%).`);
-if (!rowsValid) activeBlockers.push('One or more weights are outside the 0–100 range.');
-// Criteria only required when System Scores don't already cover 100%.
-if (!systemFullyAllocated) {
-  if (criteria.length === 0) activeBlockers.push('Add at least one criterion, or set System Scores to 100%.');
-  else if (!criteriaHaveWeight) activeBlockers.push('Every criterion must have a weight greater than 0.');
-}
-```
+1. Render the `<Input>` directly (no `PopoverTrigger` wrapping it).
+2. Use `<PopoverAnchor asChild>` around a positioning `<div>` that contains the `<Input>`, so the suggestion popover anchors to the input without intercepting focus or key events.
+3. Keep the same public props (`value`, `onChange`, `onPickLibraryEntry`, `placeholder`) — no changes required in `TemplateEditorDialog.tsx`.
+4. Preserve existing behaviour: suggestions appear when `value.length >= 2` and library matches exist; picking a suggestion calls `onPickLibraryEntry`; free-text entry remains allowed.
+5. Add `onOpenAutoFocus` + `onCloseAutoFocus` `preventDefault` on `PopoverContent` so focus stays in the input while the panel opens/closes.
 
-Also update the weight-summary caption so a 100/0 split reads as valid: show `System 100% = 100% ✓ (Criteria optional)` when `systemFullyAllocated && criteria.length === 0`.
+No changes to services, hooks, types, DB, RLS, or the library-picker flow.
 
-## UI impact
-- With Carry KRA = 100 and no Criteria rows, "Activate" becomes enabled.
-- Summary chip reflects the new valid state.
-- Criteria card at runtime already hidden by `shouldHideCriteriaCard` — no reviewer-side change needed.
+## Files touched
 
-## Not changed
-- Scoring engine, RLS, DB schema, services — untouched.
-- Behaviour when System < 100 is identical to today (at least one weighted criterion still required).
+- `src/components/annual-review/SelfReviewLabelCombobox.tsx` — rewrite internals only; same exported API.
 
-## Tests
-Add `src/test/annualReview/templateEditorSystem100.test.tsx`:
-1. With one System Score at 100 and zero criteria → Activate button enabled, no "Add at least one criterion" blocker.
-2. With System at 60 and zero criteria → blocker still present.
-3. With System at 100 and a criterion at weight 0 → blocker still fires (combined ≠ 100 rule remains).
+## Verification
 
-## Risk
-Minimal — purely relaxes an editor-side gate; runtime already handles system-only templates.
+1. Type-check: `tsgo --noEmit`.
+2. Manual (Playwright): open Template Editor → Self Review Fields → **Add Field** → focus "Field Label" → type "abc"; assert the input `value === "abc"` and the suggestion popover renders below without stealing focus. Screenshot for evidence.
+3. Regression: confirm clicking a library suggestion still populates label/placeholder/required via `onPickLibraryEntry`.
+
+## Risk & Impact
+
+- **Data**: none.
+- **Workflow**: none.
+- **UI/UX**: identical visual layout; suggestion panel still anchored to the input.
+- **Regression risk**: low — change is isolated to one presentational component with an unchanged prop contract.
+- **Rollback**: revert the single file.
