@@ -13,6 +13,10 @@ import type {
 import { enabledChain } from '@/lib/annualReview/stageChain';
 import { getHrHeadUserId } from '@/services/orgHeads/hrHeadResolver';
 import { bucketFromGradeCode } from './archetypeResolver';
+import {
+  fetchEmployeesWithKrasSince,
+  windowMonthsFromFilters,
+} from './formMapping';
 
 /**
  * Service layer for the Annual Review module — wraps every DB / RPC / storage call
@@ -1048,6 +1052,21 @@ export async function seedInstancesByRules(args: { cycleId: string; hrUserId: st
     if (resolved) hrHead = resolved;
   }
 
+  // Pre-fetch one KRA set per distinct window used by any rule that opts into
+  // the `has_kras` filter. Rules that don't use it get `null` and behave as
+  // before (POLICY §AR-MAPPING-HAS-KRAS).
+  const krasWindows = new Set<number>();
+  for (const r of rules as Array<{ filters: any }>) {
+    const f = r.filters ?? {};
+    if (f.has_kras === 'yes' || f.has_kras === 'no') {
+      krasWindows.add(windowMonthsFromFilters(f));
+    }
+  }
+  const krasSets = new Map<number, Set<string>>();
+  await Promise.all(
+    [...krasWindows].map(async (w) => { krasSets.set(w, await fetchEmployeesWithKrasSince(w)); }),
+  );
+
   const mgrMap = new Map<string, string | null>();
   for (const p of people ?? []) mgrMap.set(p.id, p.reporting_manager_id);
 
@@ -1060,6 +1079,12 @@ export async function seedInstancesByRules(args: { cycleId: string; hrUserId: st
     if (list('levels').length && !list('levels').includes(p.level)) return false;
     if (list('department_ids').length && !list('department_ids').includes(p.department_id)) return false;
     if (list('bu_ids').length && !list('bu_ids').includes(deptToBu[p.department_id])) return false;
+    if (f.has_kras === 'yes' || f.has_kras === 'no') {
+      const set = krasSets.get(windowMonthsFromFilters(f));
+      const present = !!(set && set.has(p.id));
+      if (f.has_kras === 'yes' && !present) return false;
+      if (f.has_kras === 'no' && present) return false;
+    }
     return true;
   };
 
