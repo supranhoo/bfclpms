@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -14,7 +14,7 @@ import {
 } from '@/components/ui/popover';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Plus, Trash2, Settings2, Sparkles, Loader2, Languages, ListOrdered, Library } from 'lucide-react';
+import { Plus, Trash2, Settings2, Sparkles, Loader2, Languages, ListOrdered, Library, BookmarkPlus } from 'lucide-react';
 import { CriterionOptionsDialog } from './CriterionOptionsDialog';
 import { toast } from 'sonner';
 import * as svc from '@/services/annualReview/annualReviewService';
@@ -33,6 +33,8 @@ import { SelfReviewLibraryPicker } from './SelfReviewLibraryPicker';
 import { SelfReviewLibraryManager } from './SelfReviewLibraryManager';
 import { SelfReviewLabelCombobox } from './SelfReviewLabelCombobox';
 import { CriteriaLibraryPickerDialog } from './CriteriaLibraryPickerDialog';
+import { upsertCriterion } from '@/services/annualReview/criteriaLibrary';
+import { optionsToBands } from '@/lib/annualReview/criteriaBands';
 import { applyEntriesToSections, mapEntryToTemplateField } from '@/services/annualReview/selfReviewLibrary';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -552,9 +554,16 @@ export function TemplateEditorDialog({
                         />
                       </TableCell>
                       <TableCell className="align-top">
-                        <Button size="icon" variant="ghost" onClick={() => removeAt(setSections, 'criteria', i)} aria-label="Delete">
-                          <Trash2 className="h-4 w-4 text-destructive" />
-                        </Button>
+                        <div className="flex items-center gap-0.5">
+                          <SaveCriterionToLibraryButton
+                            criterion={c}
+                            hiName={tr['hi']?.[`criterion:${c.id}:name`] ?? ''}
+                            onLinked={(patch) => updateAt(setSections, 'criteria', i, patch)}
+                          />
+                          <Button size="icon" variant="ghost" onClick={() => removeAt(setSections, 'criteria', i)} aria-label="Delete">
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -917,5 +926,139 @@ function CarryKraConfigEditor({
       </p>
       <CarryKraMappingPreview cfg={cfg} weight={weight} />
     </div>
+  );
+}
+
+function slugifyKey(s: string): string {
+  return (s || '')
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/[^\w\s]/g, '')
+    .trim()
+    .replace(/\s+/g, '_')
+    .slice(0, 64);
+}
+
+function SaveCriterionToLibraryButton({
+  criterion, hiName, onLinked,
+}: {
+  criterion: TemplateCriterion;
+  hiName: string;
+  onLinked: (patch: Partial<TemplateCriterion>) => void;
+}) {
+  const qc = useQueryClient();
+  const alreadyLinked = !!criterion.key;
+  const hasName = (criterion.name ?? '').trim().length > 0;
+  const [open, setOpen] = useState(false);
+  const [key, setKey] = useState('');
+  const [labelEn, setLabelEn] = useState('');
+  const [labelHi, setLabelHi] = useState('');
+  const [maxScore, setMaxScore] = useState<number>(5);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (open) {
+      setKey(slugifyKey(criterion.name));
+      setLabelEn(criterion.name ?? '');
+      setLabelHi(hiName ?? '');
+      setMaxScore(Number(criterion.max_score) || 5);
+      setErr(null);
+    }
+  }, [open, criterion.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const optionCount = (criterion.options ?? []).length;
+
+  const save = useMutation({
+    mutationFn: async () => {
+      const cleanKey = slugifyKey(key);
+      if (!cleanKey) throw new Error('Key is required.');
+      if (!labelEn.trim()) throw new Error('English label is required.');
+      const bandsRows = (criterion.options ?? []).map((o) => ({
+        score: Number(o.score),
+        label_en: o.label ?? '',
+        label_hi: o.label_hi ?? null,
+      }));
+      const scoring_bands = optionsToBands(bandsRows);
+      return upsertCriterion({
+        key: cleanKey,
+        label_en: labelEn.trim(),
+        label_hi: labelHi.trim() || null,
+        max_score: Number(maxScore) || 5,
+        scoring_bands,
+        is_common: false,
+        is_active: true,
+        sort_order: 0,
+      } as any);
+    },
+    onSuccess: (row) => {
+      onLinked({
+        key: row.key,
+        label_en: row.label_en,
+        label_hi: row.label_hi,
+        max_score: row.max_score ?? 5,
+        scoring_bands: row.scoring_bands,
+      });
+      qc.invalidateQueries({ queryKey: ['criteria-library-picker'] });
+      toast.success(`Saved "${row.label_en}" to the Criteria Library`);
+      setOpen(false);
+    },
+    onError: (e: any) => {
+      const msg = String(e?.message ?? e ?? '');
+      if (/duplicate|unique/i.test(msg)) {
+        setErr('Key already used — pick a different key or import from library.');
+      } else {
+        setErr(msg || 'Failed to save criterion to library.');
+      }
+    },
+  });
+
+  if (!hasName && !alreadyLinked) return null;
+
+  if (alreadyLinked) {
+    return (
+      <Button size="icon" variant="ghost" disabled aria-label="Already in library" title="Already in library">
+        <BookmarkPlus className="h-4 w-4 text-muted-foreground" />
+      </Button>
+    );
+  }
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button size="icon" variant="ghost" aria-label="Save to Library" title="Save to Library">
+          <BookmarkPlus className="h-4 w-4" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-80 space-y-3">
+        <div className="text-sm font-medium">Save to Criteria Library</div>
+        <div className="space-y-1">
+          <Label className="text-xs">Key *</Label>
+          <Input className="h-9" value={key} onChange={(e) => setKey(slugifyKey(e.target.value))} placeholder="e.g. attendance_punctuality" />
+          {err && <p className="text-xs text-destructive">{err}</p>}
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs">Label (EN) *</Label>
+          <Input className="h-9" value={labelEn} onChange={(e) => setLabelEn(e.target.value)} />
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs">Label (HI)</Label>
+          <Input className="h-9" dir="auto" value={labelHi} onChange={(e) => setLabelHi(e.target.value)} />
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs">Max score</Label>
+          <Input className="h-9" type="number" min={1} max={10} value={maxScore} onChange={(e) => setMaxScore(Number(e.target.value))} />
+        </div>
+        <p className="text-[11px] text-muted-foreground">
+          Scoring bands will be copied from the current options (N = {optionCount}).
+        </p>
+        <div className="flex justify-end gap-2 pt-1">
+          <Button size="sm" variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
+          <Button size="sm" onClick={() => save.mutate()} disabled={save.isPending}>
+            {save.isPending && <Loader2 className="h-3 w-3 animate-spin mr-1" />}
+            Save to Library
+          </Button>
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }

@@ -1,52 +1,58 @@
-## Problem
-
-In Edit User → Access & Login, the "Workflow mapping" card only inspects `workflow_config` rows that match the *exact* selected period+year for that employee. If the effective mapping comes from an earlier month's row, a department/grade rule, or the period default, the card falsely shows "Inherit period default" with no indication of what will actually apply. It also does not refresh cleanly after saves, so admins cannot trust the displayed state.
-
 ## Goal
+Let template authors save a newly-created criterion into the shared Criteria Library from the Criteria table, so it becomes reusable via "Add from Library" across all templates.
 
-Make the Workflow mapping card in `InlineWorkflowMappingCard` (`src/pages/admin/UserManagement.tsx`) show the true resolved mapping for the selected (employee, month, year), label its source, and stay in sync with every save/reset.
+## Where the change lives
+`src/components/annual-review/TemplateEditorDialog.tsx` — the Criteria section table (screenshot). No other surfaces change.
 
-## Risk & Impact Report
+## UX
 
-- **Data**: Read-only additions — uses the existing `get_employee_workflow_info` RPC (SSOT per `mem://architecture/per-employee-workflow-resolution`). No schema, RLS, or trigger changes.
-- **Workflow**: No change to seeding, reconciliation, or resolver behavior. Only the display and one cache invalidation call.
-- **UI/UX**: Same card layout; adds a status line + subtle badge for the resolved template and its source (Employee override / Department / PMS Grade / Global default). Preserves the existing Select for overrides and the "Reset this period" button.
-- **Regression**: Low. The Select's `value` still binds to the exact-period employee override, so save/reset semantics are unchanged. `useEmployeeWorkflow` is already used elsewhere and its query key is invalidated by `useUpsertWorkflowConfig` / `useDeleteWorkflowConfig`.
-- **Scalability**: One extra RPC per open card (cached by React Query key `['employee-workflow', id, period, year]`).
-- **Mitigation**: Add a unit test that asserts the resolution/label logic and a smoke test for the "no override, inherits from grade" case.
+Add a small **"Save to Library"** icon-button (Library icon) in each criterion row's actions cell, immediately to the left of the Trash icon.
 
-## Plan
+Visibility & state per row:
+- **Shown & enabled** — criterion has a `name` and is NOT already linked to a library entry (no `key` on the object, i.e. it was created via "Add Criterion" and not imported via "Add from Library").
+- **Shown & disabled with tooltip "Already in library"** — criterion has a `key` (came from the library or was previously saved).
+- **Hidden** — criterion has no name yet (nothing meaningful to save).
 
-1. **UI accuracy (`src/pages/admin/UserManagement.tsx` → `InlineWorkflowMappingCard`)**
-   - Call `useEmployeeWorkflow(employeeId, period, year)` alongside the existing `useWorkflowConfigs` lookup.
-   - Compute a `resolved` view-model:
-     - `template` = `useEmployeeWorkflow` result (name, stages)
-     - `source` = one of `employee_exact`, `employee_earlier_month`, `department`, `pms_grade`, `default`
-     - `effectiveFrom` = for `employee_earlier_month`, the month/year of the most recent employee-typed row at or before (period, year), read from the existing `configs` list.
-   - Render, above the Select:
-     - "Effective for {Month YYYY}: **{template.display_name}**"
-     - Source chip: "Set for this month" / "Carried from {Month YYYY}" / "Department default" / "PMS grade default" / "Global default".
-     - Stage chips derived from `template.stages` (replaces the current stage-chip block so they always match what is effective, not just the exact-period override).
-   - Replace the misleading "No mapping effective for {period} {year} — currently inheriting the period default." line with the resolved source description above.
-   - Keep the Select bound to the exact-period `existing?.workflow_template_id`; placeholder becomes "Add override for {Month YYYY}" when no exact-period row exists.
-   - Keep "Reset this period" button behavior unchanged (only clears the exact-period override).
+Click flow:
+1. Opens a small confirm Popover anchored to the button with:
+   - **Key** (auto-derived from EN name via `slugify(name)`; editable, lowercase/underscore-only, required, must be unique).
+   - **Label EN** (prefilled from `c.name`, required).
+   - **Label HI** (prefilled from the HI translation for that criterion, optional).
+   - **Max score** (prefilled from `c.max_score ?? 5`).
+   - Read-only note: "Scoring bands will be copied from the current options (N = X)."
+   - Buttons: **Cancel** / **Save to Library**.
+2. On save, call `upsertCriterion({ key, label_en, label_hi, max_score, scoring_bands, is_common: false, is_active: true, sort_order: 0 })` from `src/services/annualReview/criteriaLibrary.ts`.
+3. On success:
+   - Stamp the row's criterion in local editor state with `key`, `label_en`, `label_hi`, `max_score`, `scoring_bands` (so the button flips to "Already in library" without needing a save of the template).
+   - Invalidate `['criteria-library-picker']` so the "Add from Library" dialog reflects it immediately.
+   - Toast: `Saved "<label_en>" to the Criteria Library`.
+4. On duplicate-key error: inline error under the Key field ("Key already used — pick a different key or import from library").
 
-2. **Freshness on save/reset**
-   - After `upsert.mutate` / `remove.mutate` succeed, additionally invalidate `['employee-workflow', employeeId]` and `['employee-workflow-stages', employeeId]` at the card level to guarantee immediate re-render (the hook already invalidates globally; this is a belt-and-braces call scoped to the open dialog).
+Because `scoring_bands` on the library row drives the picker's option regeneration, we serialize the current row's `options` back into a bands array (`[{ score, label_en, label_hi }, ...]`) using the existing bilingual options ↔ bands helpers already used by the picker (`bandsToBilingualOptions` inverse — add `bilingualOptionsToBands` in `src/lib/annualReview/criteriaBands.ts` if it doesn't exist).
 
-3. **Tests (`src/test/inlineWorkflowMappingCard.test.ts` — new)**
-   - Pure helper `resolveInlineMapping({ configs, resolved, period, year, employeeId })` extracted from the component; assert:
-     - exact-period employee row → `source: 'employee_exact'`
-     - only an earlier employee row exists → `source: 'employee_earlier_month'` with correct `effectiveFrom`
-     - no employee rows, RPC returns `config_source: 'department'` → source chip = "Department default"
-     - same for `'pms_grade'` and `'default'`
+## Technical details
+- New small subcomponent `SaveCriterionToLibraryButton` inside `TemplateEditorDialog.tsx` (kept local; the file already hosts row subcomponents like `CriterionConfigPopover`, `CriterionOptionsButton`).
+- New helper `bilingualOptionsToBands(options, max_score)` in `src/lib/annualReview/criteriaBands.ts` — pure, unit-tested; round-trips with the existing `bandsToBilingualOptions`.
+- Uses existing service `upsertCriterion` (already exports from `criteriaLibrary.ts`, already has `onConflict: 'key'`).
+- Reuses existing React Query key `['criteria-library-picker']` from `CriteriaLibraryPickerDialog.tsx` for invalidation.
+- No DB migration, no RLS change, no schema change — the `annual_review_criteria_library` table is already writable by the same admin roles that reach this editor.
 
-4. **Docs & policy**
-   - `DOCUMENTATION.md` — append version entry: "Edit User → Workflow mapping card now resolves via `get_employee_workflow_info` and labels the effective source."
-   - `POLICY.md` — under the workflow-mapping section, add: "Any admin surface that shows an employee's workflow mapping MUST display the resolved template and source (employee/department/grade/default), never just the exact-period override."
+## Risk & Impact
+- **Data**: Insert-only into an existing, already-editable admin table; unique constraint on `key` blocks duplicates.
+- **Workflow**: Additive UI, no change to existing template save/publish logic.
+- **UI**: One icon per row in an existing action cell; no layout reflow.
+- **Regression risk**: Very low. Isolated to Criteria row actions and one pure helper.
+- **Mitigation**: Unit tests for `bilingualOptionsToBands` round-trip; component test that the button is hidden when name is empty, disabled when `key` present, and calls `upsertCriterion` with the derived payload.
 
-## Technical Notes
+## Tests
+- `src/lib/annualReview/criteriaBands.test.ts` — round-trip `bandsToBilingualOptions ↔ bilingualOptionsToBands`.
+- Extend `CriteriaLibraryPickerDialog`/editor tests with a case that a criterion saved via this new button appears in the picker (mock service + query invalidation).
 
-- No changes to `useWorkflowConfig.ts`, RPCs, or `workflow_config` schema.
-- The helper is exported for test coverage; the card renders it as pure props.
-- Wording stays neutral and matches existing card typography; icons reused from `lucide-react` (`GitBranch`, `Info`).
+## Docs
+- `DOCUMENTATION.md` — new version entry describing the "Save to Library" affordance.
+- `POLICY.md` — extend §AR-CRITERIA-LIBRARY (or add new subsection) stating that criteria authored inline in a template MAY be promoted to the shared library by admins, keyed by a unique `key`, and that library rows remain the SSOT for reuse.
+
+## Out of scope
+- No bulk "Save all new criteria" action.
+- No editing of existing library entries from this row (that stays in the Library admin surface).
+- No assignment-matrix changes.
