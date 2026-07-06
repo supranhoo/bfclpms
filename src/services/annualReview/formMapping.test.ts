@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest';
 import {
   matchesFilters,
   resolveTemplateForProfile,
+  windowMonthsFromFilters,
+  DEFAULT_KRAS_WINDOW_MONTHS,
   type MappingProfile,
 } from './formMapping';
 import type { AnnualReviewAssignmentRule } from '@/types/annualReview';
@@ -62,6 +64,44 @@ describe('matchesFilters', () => {
     expect(
       matchesFilters({ roles: [''] }, p({ designation: null }), deptToBu),
     ).toBe(true);
+  });
+
+  describe('has_kras filter', () => {
+    const krasSet = new Set<string>(['p1']);
+
+    it('undefined has_kras is backward-compatible (no restriction)', () => {
+      expect(matchesFilters({}, p({ id: 'p1' }), deptToBu, krasSet)).toBe(true);
+      expect(matchesFilters({}, p({ id: 'other' }), deptToBu, krasSet)).toBe(true);
+    });
+    it("has_kras='any' behaves like undefined", () => {
+      expect(matchesFilters({ has_kras: 'any' }, p({ id: 'other' }), deptToBu, krasSet)).toBe(true);
+    });
+    it("has_kras='yes' keeps only employees in the KRA set", () => {
+      expect(matchesFilters({ has_kras: 'yes' }, p({ id: 'p1' }), deptToBu, krasSet)).toBe(true);
+      expect(matchesFilters({ has_kras: 'yes' }, p({ id: 'other' }), deptToBu, krasSet)).toBe(false);
+    });
+    it("has_kras='no' inverts the membership check", () => {
+      expect(matchesFilters({ has_kras: 'no' }, p({ id: 'p1' }), deptToBu, krasSet)).toBe(false);
+      expect(matchesFilters({ has_kras: 'no' }, p({ id: 'other' }), deptToBu, krasSet)).toBe(true);
+    });
+    it('has_kras is treated as satisfied if caller omits the set (preview short-circuit)', () => {
+      expect(matchesFilters({ has_kras: 'yes' }, p({ id: 'other' }), deptToBu)).toBe(true);
+    });
+  });
+});
+
+describe('windowMonthsFromFilters', () => {
+  it('defaults to 12 when unset / invalid', () => {
+    expect(windowMonthsFromFilters(undefined)).toBe(DEFAULT_KRAS_WINDOW_MONTHS);
+    expect(windowMonthsFromFilters({})).toBe(12);
+    expect(windowMonthsFromFilters({ kras_window_months: 0 })).toBe(12);
+    expect(windowMonthsFromFilters({ kras_window_months: -3 })).toBe(12);
+    expect(windowMonthsFromFilters({ kras_window_months: NaN as unknown as number })).toBe(12);
+  });
+  it('clamps to 1..36 and rounds', () => {
+    expect(windowMonthsFromFilters({ kras_window_months: 3 })).toBe(3);
+    expect(windowMonthsFromFilters({ kras_window_months: 6.7 })).toBe(7);
+    expect(windowMonthsFromFilters({ kras_window_months: 99 })).toBe(36);
   });
 });
 
