@@ -18,6 +18,26 @@ type MonthKey = typeof FISCAL_MONTH_KEYS[number];
 // Map calendar month index (0-based Jan=0) → fiscal index (Jul=0)
 const calendarToFiscalIdx = (calIdx: number) => (calIdx + 6) % 12;
 
+/**
+ * Fiscal-window guard for the KPI Mapping Matrix.
+ * Fiscal cycle `fiscalStartYear` spans Jul <fiscalStartYear> .. Jun <fiscalStartYear+1>.
+ *   - Calendar months Jul–Dec (calIdx 6..11) belong to fiscalStartYear.
+ *   - Calendar months Jan–Jun (calIdx 0..5)  belong to fiscalStartYear + 1.
+ * A KPI row (identified by its `review_year`) contributes to a given calendar month
+ * ONLY when it satisfies this rule — prevents rows from adjacent fiscal cycles
+ * bleeding across the Jul boundary.
+ */
+export function isKpiMonthInFiscalCycle(
+  calMonthIdx: number,
+  reviewYear: number | null | undefined,
+  fiscalStartYear: number,
+): boolean {
+  if (reviewYear == null) return false;
+  return calMonthIdx >= 6
+    ? reviewYear === fiscalStartYear
+    : reviewYear === fiscalStartYear + 1;
+}
+
 export interface EmployeeMatrixRow {
   employeeId: string;
   name: string;
@@ -197,21 +217,10 @@ export function useKpiMappingMatrix(filters: KpiMappingFilters, page: number, so
     for (const kpi of kpis) {
       if (!kpi.review_period || !kpi.employee_id) continue;
 
-      // Fiscal-window guard: fiscal <year> spans Jul <year> .. Jun <year+1>.
-      // A calendar month belongs to this fiscal cycle only when:
-      //   Jul–Dec  → review_year === filters.year
-      //   Jan–Jun  → review_year === filters.year + 1
-      const isInFiscalWindow = (calMonthIdx: number, ky: number | null | undefined) => {
-        if (ky == null) return false;
-        return calMonthIdx >= 6
-          ? ky === filters.year
-          : ky === filters.year + 1;
-      };
-
       // Try direct month name match first (Monthly / null frequency)
       const calIdx = MONTH_NAMES.indexOf(kpi.review_period as any);
       if (calIdx !== -1) {
-        if (isInFiscalWindow(calIdx, (kpi as any).review_year)) {
+        if (isKpiMonthInFiscalCycle(calIdx, (kpi as any).review_year, filters.year)) {
           addMonthForEmployee(kpi.employee_id, calIdx);
         }
         continue;
@@ -220,7 +229,7 @@ export function useKpiMappingMatrix(filters: KpiMappingFilters, page: number, so
       // Non-monthly KPI: resolve covered months from cycle options
       const coveredMonths = getCalendarMonthsForPeriod(kpi.review_period, kpi.frequency, kpi.frequency_cycle_start);
       for (const cm of coveredMonths) {
-        if (isInFiscalWindow(cm, (kpi as any).review_year)) {
+        if (isKpiMonthInFiscalCycle(cm, (kpi as any).review_year, filters.year)) {
           addMonthForEmployee(kpi.employee_id, cm);
         }
       }
