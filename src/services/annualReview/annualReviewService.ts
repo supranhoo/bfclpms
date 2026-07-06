@@ -266,29 +266,28 @@ export async function upsertTemplate(t: Partial<AnnualReviewTemplate>): Promise<
  * the returned Error message to the user; toast severity is `error`.
  */
 export async function deleteTemplate(id: string): Promise<{ ok: true }> {
-  const [rules, overrides, instTpl, instOverride] = await Promise.all([
+  const [rules, instTpl, instOverride] = await Promise.all([
     db.from('annual_review_assignment_rules')
-      .select('id', { count: 'exact', head: true }).eq('template_id', id),
-    db.from('annual_review_assignment_overrides')
       .select('id', { count: 'exact', head: true }).eq('template_id', id),
     db.from('annual_review_instances')
       .select('id', { count: 'exact', head: true }).eq('template_id', id),
     db.from('annual_review_instances')
       .select('id', { count: 'exact', head: true }).eq('template_override_id', id),
   ]);
-  for (const r of [rules, overrides, instTpl, instOverride]) {
-    if (r.error) throw r.error;
+  for (const r of [rules, instTpl, instOverride]) {
+    if (r.error) {
+      throw new Error(r.error.message || 'Failed to check template references');
+    }
   }
   const ruleCount = rules.count ?? 0;
-  const overrideCount = overrides.count ?? 0;
   const instanceCount = (instTpl.count ?? 0) + (instOverride.count ?? 0);
-  if (ruleCount + overrideCount + instanceCount > 0) {
+  if (ruleCount + instanceCount > 0) {
     throw new Error(
-      `Cannot delete — template is assigned to ${ruleCount} rule(s), ${overrideCount} employee override(s), ${instanceCount} live instance(s). Deactivate it instead.`,
+      `Cannot delete — template is assigned to ${ruleCount} rule(s), ${instanceCount} live instance(s) (including per-employee overrides). Deactivate it instead.`,
     );
   }
   const { error } = await db.from('annual_review_templates').delete().eq('id', id);
-  if (error) throw error;
+  if (error) throw new Error(error.message || 'Failed to delete template');
   return { ok: true };
 }
 
