@@ -1,47 +1,47 @@
-## Goal
-Unassign the **Blue-Collar Comprehensive Review** template from all 2,403 mapped employees in the current active cycle (**Annual Review – 2025-2026**), keeping the template itself intact for future use.
+# Fix: Observation emails show "N/A" for Observation / Type / Description / Reply
 
-## Current state (verified via DB)
-- Cycle: `Annual Review - 2025-2026` (active)
-- Template: `Blue-Collar Comprehensive Review`
-- Assignment rules pointing to it: **1**
-- Instances with `template_id` = this template: **2,403**
-- Instances with `template_override_id` = this template: **0**
-- Locked instances (status ≠ `not_started` / `pending_self`): **0** ✅ safe to clear
+## Root cause (verified against DB + edge fn)
 
-The UI count shows ~2,326 (active-only filter); DB has 2,403 total instances including inactive/exited employees. Both are handled below.
+- The `notify_on_observation_reply` (and sibling `notify_on_observation_change`) triggers correctly write `observation_title`, `observation_type`, `observation_description`, and `reply_content` into `notifications.metadata` (confirmed on 3 most recent rows — values are populated, not null).
+- The edge function `send-email-notification` template `observation_reply` (and `observation_raised` / `observation_mention` / `observation_resolved`) expects these values as **top-level** fields in the request body (`observation_title`, `observation_type`, `observation_description`, `reply_content`) — see index.ts line 1258 destructure.
+- The DB dispatcher `public.send_email_on_notification` builds the HTTP body and **never lifts these keys out of `metadata`**. It sends them only nested inside `metadata`, so the top-level destructure resolves to `undefined`, the `{{...}}` placeholders render as empty, and the template renderer's empty-value fallback prints **"N/A"** for every observation field.
 
-## Actions (single migration)
+Net effect: every observation email — Raised, Reply, Mention, Resolved — shows "N/A" for Observation title, Type, Description and Reply.
 
-1. **Delete the assignment rule** for this template in the active cycle so re-seed cannot re-attach it.
-   ```sql
-   DELETE FROM annual_review_assignment_rules
-   WHERE template_id = '<blue-collar-id>' AND cycle_id = '<active-cycle-id>';
-   ```
+## Fix (surgical, single migration)
 
-2. **Delete the 2,403 instances** in the active cycle where `template_id` = Blue-Collar. All are in `not_started` / `pending_self`, so no in-flight review data is lost. This also clears any `template_override_id` on those rows.
-   ```sql
-   DELETE FROM annual_review_instances
-   WHERE cycle_id = '<active-cycle-id>'
-     AND template_id = '<blue-collar-id>'
-     AND overall_status IN ('not_started','pending_self');
-   ```
-   Safety guard on `overall_status` prevents accidental deletion if anyone starts a self-review between now and migration execution.
+Update `public.send_email_on_notification` to include the four observation fields at the top level of the outbound JSON body, extracted from `NEW.metadata`:
 
-3. **Audit log** entry in `system_audit_logs` recording action `annual_review.template_mapping_cleared` with counts.
+- `observation_title` → `NEW.metadata->>'observation_title'`
+- `observation_type` → `NEW.metadata->>'observation_type'`
+- `observation_description` → `NEW.metadata->>'observation_description'`
+- `reply_content` → `NEW.metadata->>'reply_content'`
 
-## What is NOT touched
-- `annual_review_templates` row (kept, ready for re-use).
-- Any other cycle's rules/instances.
-- Any responses (none exist since no instance is past `pending_self`).
-- Other templates and their mappings.
+No trigger logic change, no schema change, no edge-function change (the edge fn already handles these correctly, including `stripMentionSyntax` for description/reply).
 
-## After migration runs
-You can go to **Annual Review Admin → Rules** and add your new template's assignment rule, then click **Seed Instances** to map the new form to employees.
+## Risk & Impact
 
-## Risk & rollback
-- **Regression risk**: none — no submitted responses exist for these instances.
-- **Rollback**: Re-add the rule and re-run `seedInstancesForCycle` — it rebuilds instances deterministically from rules + reviewer chain.
+- **Data**: none — trigger already writes the metadata; we're only lifting keys into the HTTP payload. No table/RLS/schema change.
+- **Workflow**: none — same events fire, only email body content changes.
+- **UI/UX**: none in-app; email content now shows actual observation title/type/description/reply.
+- **Regression**: minimal. The added keys are additive; unrelated event types ignore them. Rollback = re-run prior definition of the function.
+- **Scalability**: neutral (four extra JSON keys per notification dispatch).
 
-## Not applicable
-- Code changes, UI changes, unit tests — this is a one-off data operation, not a feature change. `DOCUMENTATION.md` gets a one-line entry under Version History noting the mapping reset.
+## Tests / verification
+
+1. Unit test `src/test/emailPayload/observationReplyPayload.test.ts` — reads the migration file and asserts all four keys are present in the `send_email_on_notification` body builder.
+2. Manual verification query: after migration, re-trigger an observation reply on a sandbox KPI and confirm the resulting `email_logs.metadata` shows populated `observation_title` / `reply_content`.
+
+## Documentation
+
+- Append entry to `DOCUMENTATION.md` "Version History".
+- Add a note to `mem/architecture/notification-and-dispatch-engine` clarifying that any new metadata field consumed by an email template must ALSO be lifted to a top-level body key inside `send_email_on_notification`, otherwise the template renders "N/A".
+
+## Files touched
+
+- `supabase/migrations/<new>.sql` — replace `public.send_email_on_notification` body-builder JSON to include the four observation fields.
+- `src/test/emailPayload/observationReplyPayload.test.ts` — new.
+- `DOCUMENTATION.md` — version history line.
+- `mem/architecture/notification-and-dispatch-engine` — one-line rule.
+
+No frontend code changes.
