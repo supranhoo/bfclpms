@@ -232,6 +232,16 @@ export interface AssignmentFilters {
   sub_unit_ids?: string[];
   archetype_code?: string | null;
   grade_bucket?: string | null;
+  /**
+   * Optional "Has KRAs" restriction (POLICY §AR-MAPPING-HAS-KRAS).
+   *   - `undefined` / `'any'` → no restriction (backward-compatible default).
+   *   - `'yes'` → include only employees with ≥1 KPI row inside the window.
+   *   - `'no'`  → include only employees WITHOUT any KPI row inside the window.
+   * Window size in months lives in `kras_window_months` (default 12).
+   */
+  has_kras?: 'any' | 'yes' | 'no';
+  /** Window (months) for `has_kras`. Only meaningful when has_kras is 'yes'|'no'. */
+  kras_window_months?: number;
 }
 
 export interface AnnualReviewAssignmentRule {
