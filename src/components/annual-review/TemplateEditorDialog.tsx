@@ -470,8 +470,9 @@ export function TemplateEditorDialog({
               <div className="flex flex-col items-end gap-1">
                 <Badge variant={weightOk ? 'default' : 'destructive'} className={weightOk ? 'bg-emerald-500/15 text-emerald-500 border-emerald-500/30' : ''}>
                   System {systemWeight}% + Criteria {criteriaWeight}% = {combined}% {weightOk ? '✓' : '— must equal 100%'}
+                  {weightOk && systemFullyAllocated && criteria.length === 0 ? ' (Criteria optional)' : ''}
                 </Badge>
-                {criteria.length > 0 && !criteriaHaveWeight && (
+                {criteria.length > 0 && !criteriaHaveWeight && !systemFullyAllocated && (
                   <span className="text-xs text-destructive">Every criterion must have a weight greater than 0.</span>
                 )}
               </div>
