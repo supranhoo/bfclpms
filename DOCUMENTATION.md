@@ -5497,6 +5497,20 @@ This section records architectural patterns that have been audited and intention
 
 ### v2.66.7.45 — KPI Mapping Matrix Coverage Truncation (BUG-043) (2026-04-28)
 
+### v2.66.7.46 — KPI Mapping Matrix Fiscal-Window Bleed (BUG-044) (2026-07-06)
+
+**Root Cause.** `src/hooks/useAdminReports.ts::useKpiMappingMatrix` fetches KPIs from two calendar years (`filters.year` and `filters.year + 1`) because a single fiscal cycle (Jul..Jun) straddles two calendar years. The aggregator then mapped every row to a fiscal-month cell purely by matching `review_period` to a month name — **without checking whether that (`review_year`, `review_period`) pair actually belonged to the selected fiscal cycle**. Result: a `review_year=2026, review_period='July'` row (which belongs to fiscal 2026‑27) was rendered under Jul of fiscal 2025‑26. Employee `101679` reported "First Mapped = Jul" despite having no Jul/Aug/Sep 2025 KPIs.
+
+**Fix.** Introduced `isKpiMonthInFiscalCycle(calMonthIdx, reviewYear, fiscalStartYear)` guard. Jul–Dec cells only accept rows with `review_year === fiscalStartYear`; Jan–Jun cells only accept rows with `review_year === fiscalStartYear + 1`. Applied to both the direct monthly path and the `getCalendarMonthsForPeriod` (Quarterly/Half‑yearly/Annual) path so cycles that straddle the fiscal boundary contribute only their in‑window months.
+
+**Regression Coverage.** `src/test/kpiMappingMatrixFiscalWindow.test.ts` pins the boundary contract for Jul, Dec, Jan, Apr–Jun and null `review_year`.
+
+**Risk & Impact.**
+- *Data Impact*: None — read-only client aggregation.
+- *Workflow Impact*: `Mapped Employees` and `Coverage %` may drop legitimately once previously-miscounted employees show 0 mapped months in a cycle they never belonged to.
+- *UI/UX*: No layout change; only cell ticks and `First Mapped` labels are corrected.
+- *Regression Risk*: Very low — pure filter tightening in one hook, covered by unit tests.
+
 **Root Cause.** `src/hooks/useAdminReports.ts::useKpiMappingMatrix` issued an unranged `supabase.from('profiles').select(...).order('full_name')` to load the employee roster for `/admin/kpi-mapping`. PostgREST silently caps unranged reads at 1000 rows; the active roster is ~2,533 profiles. The matrix only saw the first ~996 active employees alphabetically, every cascading filter operated on a truncated denominator, and the Coverage % stat was systematically under-reported. The sibling KPI fetch in the same hook was already batched manually — only the profiles query was missed when POLICY §94 was rolled out.
 
 **Fix.** Wrapped the profiles query in `fetchAllPaged()` from `src/lib/fetchAll.ts` (the project-standard helper used by every other §94-compliant picker). Same SELECT shape; same in-memory `is_active !== false` filter; the only behavioural change is that all ~2,533 active rows are now visible to the matrix.

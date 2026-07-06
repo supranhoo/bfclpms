@@ -18,6 +18,26 @@ type MonthKey = typeof FISCAL_MONTH_KEYS[number];
 // Map calendar month index (0-based Jan=0) → fiscal index (Jul=0)
 const calendarToFiscalIdx = (calIdx: number) => (calIdx + 6) % 12;
 
+/**
+ * Fiscal-window guard for the KPI Mapping Matrix.
+ * Fiscal cycle `fiscalStartYear` spans Jul <fiscalStartYear> .. Jun <fiscalStartYear+1>.
+ *   - Calendar months Jul–Dec (calIdx 6..11) belong to fiscalStartYear.
+ *   - Calendar months Jan–Jun (calIdx 0..5)  belong to fiscalStartYear + 1.
+ * A KPI row (identified by its `review_year`) contributes to a given calendar month
+ * ONLY when it satisfies this rule — prevents rows from adjacent fiscal cycles
+ * bleeding across the Jul boundary.
+ */
+export function isKpiMonthInFiscalCycle(
+  calMonthIdx: number,
+  reviewYear: number | null | undefined,
+  fiscalStartYear: number,
+): boolean {
+  if (reviewYear == null) return false;
+  return calMonthIdx >= 6
+    ? reviewYear === fiscalStartYear
+    : reviewYear === fiscalStartYear + 1;
+}
+
 export interface EmployeeMatrixRow {
   employeeId: string;
   name: string;
@@ -151,18 +171,18 @@ export function useKpiMappingMatrix(filters: KpiMappingFilters, page: number, so
     queryKey: ['kpi-mapping-kpis', filters.year],
     queryFn: async () => {
       const fetchBatched = async (year: number) => {
-        let all: { employee_id: string; review_period: string; frequency: string | null; frequency_cycle_start: string | null }[] = [];
+        let all: { employee_id: string; review_period: string; frequency: string | null; frequency_cycle_start: string | null; review_year: number }[] = [];
         let from = 0;
         const batchSize = 1000;
         while (true) {
           const { data, error } = await supabase
             .from('kpis')
-            .select('employee_id, review_period, frequency, frequency_cycle_start')
+            .select('employee_id, review_period, frequency, frequency_cycle_start, review_year')
             .eq('review_year', year)
             .range(from, from + batchSize - 1);
           if (error) throw error;
           if (!data || data.length === 0) break;
-          all = all.concat(data);
+          all = all.concat(data as any);
           if (data.length < batchSize) break;
           from += batchSize;
         }
@@ -200,14 +220,18 @@ export function useKpiMappingMatrix(filters: KpiMappingFilters, page: number, so
       // Try direct month name match first (Monthly / null frequency)
       const calIdx = MONTH_NAMES.indexOf(kpi.review_period as any);
       if (calIdx !== -1) {
-        addMonthForEmployee(kpi.employee_id, calIdx);
+        if (isKpiMonthInFiscalCycle(calIdx, (kpi as any).review_year, filters.year)) {
+          addMonthForEmployee(kpi.employee_id, calIdx);
+        }
         continue;
       }
 
       // Non-monthly KPI: resolve covered months from cycle options
       const coveredMonths = getCalendarMonthsForPeriod(kpi.review_period, kpi.frequency, kpi.frequency_cycle_start);
       for (const cm of coveredMonths) {
-        addMonthForEmployee(kpi.employee_id, cm);
+        if (isKpiMonthInFiscalCycle(cm, (kpi as any).review_year, filters.year)) {
+          addMonthForEmployee(kpi.employee_id, cm);
+        }
       }
     }
 
