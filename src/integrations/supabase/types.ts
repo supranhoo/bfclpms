@@ -13844,19 +13844,34 @@ export type Database = {
         Args: { p_kpi_id: string }
         Returns: string[]
       }
-      get_kpi_journey_report: {
-        Args: {
-          p_department?: string
-          p_limit?: number
-          p_offset?: number
-          p_period: string
-          p_search?: string
-          p_status?: string
-          p_type?: string
-          p_year: number
-        }
-        Returns: Json
-      }
+      get_kpi_journey_report:
+        | {
+            Args: {
+              p_department?: string
+              p_limit?: number
+              p_offset?: number
+              p_period: string
+              p_search?: string
+              p_status?: string
+              p_type?: string
+              p_year: number
+            }
+            Returns: Json
+          }
+        | {
+            Args: {
+              p_department?: string
+              p_employee_status?: string
+              p_limit?: number
+              p_offset?: number
+              p_period: string
+              p_search?: string
+              p_status?: string
+              p_type?: string
+              p_year: number
+            }
+            Returns: Json
+          }
       get_management_dashboard_rows: {
         Args: { p_employee_ids?: string[]; p_months: string[]; p_year: number }
         Returns: {
