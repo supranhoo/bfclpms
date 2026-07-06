@@ -13,7 +13,7 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
-import { ConfirmDestructiveDialog } from '@/components/common/ConfirmDestructiveDialog';
+import { ConfirmDestructiveDialog } from '@/components/ui/ConfirmDestructiveDialog';
 import { Users, Filter, Search, UserPlus, UserMinus, X, ShieldCheck, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 
