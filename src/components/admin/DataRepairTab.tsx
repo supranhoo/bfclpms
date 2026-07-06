@@ -12,6 +12,7 @@ import { BulkZeroScoreSection } from './BulkZeroScoreSection';
 import { LateJoinerBackfillSection } from './LateJoinerBackfillSection';
 import { OrgKpiInheritanceReconciler } from './OrgKpiInheritanceReconciler';
 import { OrgKpiCycleAnchorRepair } from './OrgKpiCycleAnchorRepair';
+import { BiMonthlyReanchorSection } from './BiMonthlyReanchorSection';
 import { RescoreBackfilledSubmissionsDialog } from './RescoreBackfilledSubmissionsDialog';
 import { MultimonthWorkflowDriftCard } from './MultimonthWorkflowDriftCard';
 import { supabase } from '@/integrations/supabase/client';
@@ -761,6 +762,9 @@ export function DataRepairTab() {
 
       {/* v2.66.7.2 — Org KPI Cycle Anchor Repair */}
       <OrgKpiCycleAnchorRepair />
+
+      {/* Bi-Monthly re-anchor utility (CPP/DRI June→Monthly, July→Jul-Aug) */}
+      <BiMonthlyReanchorSection />
 
       {/* v2.66.7.16 — Re-score Phase A1 backfilled submissions */}
       <RescoreBackfilledSubmissionsDialog />
