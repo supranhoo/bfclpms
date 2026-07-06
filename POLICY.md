@@ -2506,6 +2506,33 @@ PostgREST silently caps unranged `select(...)` queries at 1000 rows. With the ac
 
 **Enforcement.** `src/hooks/useAdminReports.ts` exports `isKpiMonthInFiscalCycle` and applies it on both the direct-month and `getCalendarMonthsForPeriod` (non-monthly) paths. Regression coverage: `src/test/kpiMappingMatrixFiscalWindow.test.ts`.
 
+## §90b — Universal Fiscal-Window Guard (v2.66.7.47 — BUG-045 / BUG-046)
+
+**Rule.** Any client hook, edge function, or Postgres routine that reads a time-series table (`kpis`, `review_submissions`, `sub_period_submissions`, `org_kpi_values`, `kra_rollover_logs`, etc.) across two calendar years for a single fiscal cycle MUST pair `review_period` with `review_year` before bucketing / counting / propagating.
+
+**Canonical helpers.**
+- TypeScript: `@/lib/fiscalWindow` — `fiscalYearForMonth`, `isFiscalTuple`, `isKpiMonthInFiscalCycle`, `filterToFiscalWindow`, `fiscalStartYearOfKpi`.
+- SQL: `public.fiscal_year_for_month(text, integer)` IMMUTABLE.
+
+**Registered callsites already compliant.**
+- `src/hooks/useAdminReports.ts` → `useKpiMappingMatrix` (BUG-044).
+- `src/services/annualReview/archetypeResolver.ts` → `countKraMonthsInAY` (BUG-045).
+- `src/components/admin/AdminKpiEditorForm.tsx` → "Copy to Months" sibling fetch.
+- `src/services/annualReview/carryKraScore.ts` → `aggregateMonthly` (uses local `calendarYearForMonth`).
+- `src/hooks/useAdminDataEntry.ts` → sibling propagation guard (paired `(period, year)` post-filter).
+- `src/components/review/KpiJourneySection.tsx` → previous-period fetch (paired `{month, year}` tuples).
+- `src/hooks/useKpis.ts` → multi-month expansion lock-check (paired `${period}|${year}` composite key).
+
+**SQL callsite fixed.** `public.percolate_multimonth_score` now derives each sibling's calendar year from its position within `get_cycle_months(...)` instead of assuming `NEW.review_year`, so cross-January cycles (Half-Yearly Oct–Mar, Yearly Jul–Jun, Quarterly Nov–Jan, etc.) propagate correctly.
+
+**Enforcement.** `src/test/fiscalWindowGuardrail.test.ts` scans `src/**/*.{ts,tsx}` and fails the build for any new `.in('review_year', …)` callsite that does not carry a paired-tuple guard, a composite-key check, or a canonical helper call. Adding a new file that legitimately needs an exemption requires an entry in the file's `EXEMPTIONS` set with an ADR reference.
+
+**Regression coverage.**
+- `src/test/fiscalWindow.test.ts` — helper unit tests.
+- `src/test/kpiMappingMatrixFiscalWindow.test.ts` — matrix path (BUG-044).
+- `src/services/annualReview/archetypeResolver.test.ts` — archetype counter (BUG-045).
+- `src/test/fiscalWindowGuardrail.test.ts` — codebase scanner.
+
 
 ## §90 — Role-String Safety in SQL and Edge Code (v2.66.7.19)
 

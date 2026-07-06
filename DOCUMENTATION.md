@@ -5499,6 +5499,27 @@ This section records architectural patterns that have been audited and intention
 
 ### v2.66.7.46 — KPI Mapping Matrix Fiscal-Window Bleed (BUG-044) (2026-07-06)
 
+### v2.66.7.47 — Universal Fiscal-Window Guard (BUG-045, BUG-046) (2026-07-06)
+
+**Scope.** Systemic cleanup of the "review_year × review_period" boundary defect exposed by BUG-044. A codebase-wide audit found two additional unguarded sites plus several fragile sites that had ad-hoc paired filters but no shared contract.
+
+**Changes.**
+1. New shared helper `src/lib/fiscalWindow.ts` (`fiscalYearForMonth`, `isFiscalTuple`, `isKpiMonthInFiscalCycle`, `filterToFiscalWindow`, `fiscalStartYearOfKpi`) and its SQL twin `public.fiscal_year_for_month(text, integer)`. `useAdminReports.ts` now re-exports the helper for back-compat.
+2. **BUG-045 (CRITICAL — annual review):** `countKraMonthsInAY` in `src/services/annualReview/archetypeResolver.ts` previously counted every `(year, period)` bucket returned by `.in('review_year', [Y, Y+1])`, so an employee whose next-cycle July was already mapped could be miscounted into archetype **A** (KRA-based) instead of B/C/D. Now filters via `fiscalYearForMonth` and rejects out-of-cycle rows.
+3. **BUG-046 (CRITICAL — scoring):** `public.percolate_multimonth_score` filtered siblings with `k.review_year = NEW.review_year`, silently skipping siblings in the adjacent calendar year for cross-January cycles (Half-Yearly Oct–Mar, Yearly Jul–Jun, Quarterly Nov–Jan). Trigger now derives each candidate sibling's year from its position within `get_cycle_months(...)` (months whose calendar index exceeds the terminal's index → `NEW.review_year - 1`). Audit rows tag `policy = 'POLICY_54_v5'`, include `sibling_period` / `sibling_year`.
+4. `src/components/admin/AdminKpiEditorForm.tsx` "Copy to Months" fetch now runs its result through `isFiscalTuple` so the next cycle's July cannot disable the current cycle's July tile.
+5. New codebase guardrail `src/test/fiscalWindowGuardrail.test.ts` fails the build for any future `.in('review_year', …)` callsite that lacks a paired-tuple guard or a helper call.
+
+**Regression coverage.** `src/test/fiscalWindow.test.ts` (helper), `src/services/annualReview/archetypeResolver.test.ts` (archetype counter), `src/test/kpiMappingMatrixFiscalWindow.test.ts` (matrix), `src/test/fiscalWindowGuardrail.test.ts` (scanner).
+
+**Risk & Impact.**
+- *Data Impact*: `percolate_multimonth_score` may now write `SCORE_PERCOLATED` audit rows and mirror `review_submissions` rows for cross-year siblings that were previously left as `kra_set` placeholders — this is the intended repair. No historical `final_score` is overwritten; the trigger continues to only fire on the terminal month transitioning to `approved`.
+- *Workflow Impact*: Annual review archetype resolution becomes stricter — a small number of employees may correctly drop from archetype A to B/C/D if their earlier "A" classification was solely driven by next-cycle rows bleeding in.
+- *UI/UX*: KPI Mapping Matrix, Admin KPI Editor "Copy to Months" grid, and any other bucket-by-month report now show only in-cycle rows.
+- *Regression Risk*: Low — additive filters + one trigger rewrite covered by scanner + unit tests. Migration is a pure function replacement, safely re-runnable.
+
+**Out of scope (tracked separately).** One-shot backfill RPC `backfill_cross_year_percolation()` for historical Half-Yearly / Yearly approvals whose cross-year siblings were previously missed; refactor of `useAllKpis` to be fiscal-year-scoped across Team Review / Audit / Management consumers.
+
 **Root Cause.** `src/hooks/useAdminReports.ts::useKpiMappingMatrix` fetches KPIs from two calendar years (`filters.year` and `filters.year + 1`) because a single fiscal cycle (Jul..Jun) straddles two calendar years. The aggregator then mapped every row to a fiscal-month cell purely by matching `review_period` to a month name — **without checking whether that (`review_year`, `review_period`) pair actually belonged to the selected fiscal cycle**. Result: a `review_year=2026, review_period='July'` row (which belongs to fiscal 2026‑27) was rendered under Jul of fiscal 2025‑26. Employee `101679` reported "First Mapped = Jul" despite having no Jul/Aug/Sep 2025 KPIs.
 
 **Fix.** Introduced `isKpiMonthInFiscalCycle(calMonthIdx, reviewYear, fiscalStartYear)` guard. Jul–Dec cells only accept rows with `review_year === fiscalStartYear`; Jan–Jun cells only accept rows with `review_year === fiscalStartYear + 1`. Applied to both the direct monthly path and the `getCalendarMonthsForPeriod` (Quarterly/Half‑yearly/Annual) path so cycles that straddle the fiscal boundary contribute only their in‑window months.

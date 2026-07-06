@@ -1,5 +1,6 @@
 import { supabase } from '@/integrations/supabase/client';
 import type { Database } from '@/integrations/supabase/types';
+import { fiscalYearForMonth } from '@/lib/fiscalWindow';
 
 export type ArchetypeCode = 'A' | 'B' | 'C' | 'D';
 export type GradeBucket = 'M' | 'W' | 'T' | 'other';
@@ -38,7 +39,15 @@ export async function countKraMonthsInAY(
     const rr = row as { review_year: number | null; review_period: string | null };
     const y = rr.review_year;
     const p = (rr.review_period ?? '').trim();
-    if (y != null && p) buckets.add(`${y}::${p}`);
+    if (y == null || !p) continue;
+    // POLICY §90b — fiscal-window guard. Reject rows whose (period, year)
+    // does not belong to the selected assessment year (Jul cycleStartYear
+    // → Jun cycleStartYear+1). Without this, e.g. review_year=cycleStartYear+1
+    // with review_period='July' (which belongs to the NEXT cycle) inflated
+    // kraMonths and could flip employees into archetype 'A' incorrectly.
+    // Ref: BUG-045.
+    if (fiscalYearForMonth(p, cycleStartYear) !== y) continue;
+    buckets.add(`${y}::${p}`);
   }
   return buckets.size;
 }

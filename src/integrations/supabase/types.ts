@@ -13711,6 +13711,10 @@ export type Database = {
         }
         Returns: string
       }
+      fiscal_year_for_month: {
+        Args: { p_fiscal_start_year: number; p_period: string }
+        Returns: number
+      }
       fn_compute_rating_from_achievement: {
         Args: {
           p_achieved_text?: string
