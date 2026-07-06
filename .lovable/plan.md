@@ -1,47 +1,87 @@
-# Fix: Observation emails show "N/A" for Observation / Type / Description / Reply
+# Add "Has KRAs" filter to Annual Review template-audience mapping
 
-## Root cause (verified against DB + edge fn)
+## Goal
 
-- The `notify_on_observation_reply` (and sibling `notify_on_observation_change`) triggers correctly write `observation_title`, `observation_type`, `observation_description`, and `reply_content` into `notifications.metadata` (confirmed on 3 most recent rows — values are populated, not null).
-- The edge function `send-email-notification` template `observation_reply` (and `observation_raised` / `observation_mention` / `observation_resolved`) expects these values as **top-level** fields in the request body (`observation_title`, `observation_type`, `observation_description`, `reply_content`) — see index.ts line 1258 destructure.
-- The DB dispatcher `public.send_email_on_notification` builds the HTTP body and **never lifts these keys out of `metadata`**. It sends them only nested inside `metadata`, so the top-level destructure resolves to `undefined`, the `{{...}}` placeholders render as empty, and the template renderer's empty-value fallback prints **"N/A"** for every observation field.
+In the "Map a template to an audience" builder (Form Mapping page), add a filter that restricts the audience to employees who have (or do not have) KRAs in the last **N months**. Rules saved with this filter must be honoured by the seeder so the persisted mapping matches the preview.
 
-Net effect: every observation email — Raised, Reply, Mention, Resolved — shows "N/A" for Observation title, Type, Description and Reply.
+## User decisions
 
-## Fix (surgical, single migration)
+- **KRA scope**: employee has ≥1 row in `public.kpis` within the last **N months** (window ends today, starts `now() − N months`).
+- **Filter UI**: tri-state — `Any` (default, no restriction) / `With KRAs` / `Without KRAs`.
+- **N (window size)**: default **12 months**, admin-editable in the filter row (number input, 1–36). Persisted per-rule.
 
-Update `public.send_email_on_notification` to include the four observation fields at the top level of the outbound JSON body, extracted from `NEW.metadata`:
+## UI (Audience Filters panel — one new row)
 
-- `observation_title` → `NEW.metadata->>'observation_title'`
-- `observation_type` → `NEW.metadata->>'observation_type'`
-- `observation_description` → `NEW.metadata->>'observation_description'`
-- `reply_content` → `NEW.metadata->>'reply_content'`
+Rendered inline in `RuleFiltersEditor`, styled to match the existing filter cards:
 
-No trigger logic change, no schema change, no edge-function change (the edge fn already handles these correctly, including `stripMentionSyntax` for description/reply).
+```text
+HAS KRAs                        ← card label
+[ Any ▾ ]   in last [ 12 ] months
+```
 
-## Risk & Impact
+- Select shows `Any` / `With KRAs` / `Without KRAs`.
+- Number input is disabled + hidden when `Any` is selected.
+- Preview line below the panel updates as usual ("This will assign the template to N employees").
+- Rule chip summary (`RuleFiltersSummary`) appends `· KRAs: yes (12m)` / `· KRAs: no (12m)` when set.
 
-- **Data**: none — trigger already writes the metadata; we're only lifting keys into the HTTP payload. No table/RLS/schema change.
-- **Workflow**: none — same events fire, only email body content changes.
-- **UI/UX**: none in-app; email content now shows actual observation title/type/description/reply.
-- **Regression**: minimal. The added keys are additive; unrelated event types ignore them. Rollback = re-run prior definition of the function.
-- **Scalability**: neutral (four extra JSON keys per notification dispatch).
+No new field on the main form beyond that row. No layout changes elsewhere.
 
-## Tests / verification
+## Data model
 
-1. Unit test `src/test/emailPayload/observationReplyPayload.test.ts` — reads the migration file and asserts all four keys are present in the `send_email_on_notification` body builder.
-2. Manual verification query: after migration, re-trigger an observation reply on a sandbox KPI and confirm the resulting `email_logs.metadata` shows populated `observation_title` / `reply_content`.
+- Extend `AssignmentFilters` (TypeScript) with two additive optional fields:
+  - `has_kras?: 'any' | 'yes' | 'no'` (undefined ≡ `any`)
+  - `kras_window_months?: number` (undefined ≡ 12, only meaningful when `has_kras` ∈ `yes|no`)
+- `annual_review_assignment_rules.filters` is already `jsonb` — no migration needed. Existing rules with no `has_kras` key behave exactly as today.
 
-## Documentation
+## Matcher / preview / seeder
 
-- Append entry to `DOCUMENTATION.md` "Version History".
-- Add a note to `mem/architecture/notification-and-dispatch-engine` clarifying that any new metadata field consumed by an email template must ALSO be lifted to a top-level body key inside `send_email_on_notification`, otherwise the template renders "N/A".
+Single new async helper `fetchEmployeesWithKrasSince(months: number): Promise<Set<string>>` in `formMapping.ts`:
+
+- `SELECT DISTINCT employee_id FROM kpis WHERE created_at >= now() − interval 'N months'`.
+- Paged (1000/page) to respect POLICY §94.
+- Memoised per `months` value inside the module (so the preview and coverage report share one fetch).
+
+`matchesFilters(...)` gains a third argument `krasEmpIds?: Set<string> | null`:
+
+- If `has_kras` is unset/`any` → no effect (backward-compatible).
+- Else the caller MUST pass the correct set for the filter's `kras_window_months` and the matcher returns `false` when membership disagrees with `yes`/`no`.
+
+`previewAudience` and `checkMappingCoverage` fetch the set once (using the filter's window; default 12) before iterating profiles.
+
+`seedInstancesByRules` in `annualReviewService.ts` mirrors the same logic: it collects the set of distinct window sizes referenced by active rules, fetches each set once, and passes the correct set into its local `matches()` per rule. This guarantees the persisted mapping matches the UI preview exactly.
 
 ## Files touched
 
-- `supabase/migrations/<new>.sql` — replace `public.send_email_on_notification` body-builder JSON to include the four observation fields.
-- `src/test/emailPayload/observationReplyPayload.test.ts` — new.
-- `DOCUMENTATION.md` — version history line.
-- `mem/architecture/notification-and-dispatch-engine` — one-line rule.
+- `src/types/annualReview.ts` — extend `AssignmentFilters` (additive, optional).
+- `src/services/annualReview/formMapping.ts` — add `fetchEmployeesWithKrasSince`, extend `matchesFilters`, `previewAudience`, `checkMappingCoverage`.
+- `src/services/annualReview/annualReviewService.ts` — extend inline `matches()` in `seedInstancesByRules` to consume the same set(s).
+- `src/components/annual-review/RuleFiltersEditor.tsx` — add the new filter row + summary chip.
+- `src/services/annualReview/formMapping.test.ts` — new cases: filter unset (backward-compat), yes/no with/without membership, window value round-trip.
+- `DOCUMENTATION.md` — version entry.
+- `POLICY.md` — one line under Annual Review mapping: filter semantics + default window.
 
-No frontend code changes.
+No SQL migration. No new tables. No RPC changes.
+
+## Risk & Impact
+
+- **Data**: additive JSONB keys on existing `filters` — old rules unchanged, new field defaults to `any`. No schema/RLS/trigger change.
+- **Workflow**: seeder now respects the new filter — an existing rule left at `any` behaves identically to today. Only rules explicitly saved with `yes`/`no` change coverage.
+- **UI/UX**: one new row inside the existing "Audience filters" grid; no navigation or layout change; preview count updates live.
+- **Performance**: one extra `SELECT DISTINCT employee_id` per unique window size (usually one). Paged; memoised in-module for the render lifetime.
+- **Regression**: matcher changes are additive and pin-guarded by tests; the shared `RuleFiltersSummary` render is a chip append only.
+- **Scalability**: query is indexable on `kpis(employee_id, created_at)`; even at 100k KPI rows this is a single scan aggregated in-DB.
+- **Rollback**: revert the two service files and the editor; JSONB keys become dormant.
+
+## Tests
+
+- `formMapping.test.ts`
+  - Rule with `has_kras: undefined` matches identically to before (locks backward-compat).
+  - Rule with `has_kras: 'yes', kras_window_months: 12` includes only employees in the KRA set; excludes others.
+  - Rule with `has_kras: 'no'` inverts the above.
+  - `previewAudience` and `checkMappingCoverage` respect the filter (mock the KRA-set fetch).
+- Seeder unit already covered by `formMapping.test.ts` matcher parity; add an assertion that the seeder-side `matches()` uses the same helper output.
+
+## Documentation & policy
+
+- `DOCUMENTATION.md` version bump entry naming the new filter, window default, and where it applies (Form Mapping only — does NOT change per-employee overrides or template-level policies).
+- `POLICY.md` — one line: "Annual Review mapping rules MAY restrict audience to employees with/without KRAs in the last N months (default 12). Default is `any`; existing rules are unaffected."
