@@ -115,12 +115,16 @@ export function TemplateEditorDialog({
 
   const rowsValid = [...systemScores, ...criteria].every((r) => isWeightInRange(Number(r.weight)));
   const criteriaHaveWeight = criteria.length > 0 && criteria.every((c) => Number(c.weight) > 0);
+  const systemFullyAllocated = Math.abs(systemWeight - 100) < 0.01;
 
   const activeBlockers: string[] = [];
   if (!weightOk) activeBlockers.push(`Combined weight is ${combined}% (must be exactly 100%).`);
   if (!rowsValid) activeBlockers.push('One or more weights are outside the 0–100 range.');
-  if (criteria.length === 0) activeBlockers.push('Add at least one criterion before publishing.');
-  else if (!criteriaHaveWeight) activeBlockers.push('Every criterion must have a weight greater than 0.');
+  // Criteria are only required when System Scores don't already cover the full 100%.
+  if (!systemFullyAllocated) {
+    if (criteria.length === 0) activeBlockers.push('Add at least one criterion, or set System Scores to 100%.');
+    else if (!criteriaHaveWeight) activeBlockers.push('Every criterion must have a weight greater than 0.');
+  }
 
   const canSave = !!name.trim() && rowsValid && (!isActive || activeBlockers.length === 0);
   const saveAsDraft = () => {
@@ -466,8 +470,9 @@ export function TemplateEditorDialog({
               <div className="flex flex-col items-end gap-1">
                 <Badge variant={weightOk ? 'default' : 'destructive'} className={weightOk ? 'bg-emerald-500/15 text-emerald-500 border-emerald-500/30' : ''}>
                   System {systemWeight}% + Criteria {criteriaWeight}% = {combined}% {weightOk ? '✓' : '— must equal 100%'}
+                  {weightOk && systemFullyAllocated && criteria.length === 0 ? ' (Criteria optional)' : ''}
                 </Badge>
-                {criteria.length > 0 && !criteriaHaveWeight && (
+                {criteria.length > 0 && !criteriaHaveWeight && !systemFullyAllocated && (
                   <span className="text-xs text-destructive">Every criterion must have a weight greater than 0.</span>
                 )}
               </div>
