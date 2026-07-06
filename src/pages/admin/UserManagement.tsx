@@ -54,6 +54,8 @@ import { ALL_APP_ROLES, type AppRole } from '@/lib/roles';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { useMyVisibleEmployeeIds } from '@/hooks/useMyVisibleEmployeeIds';
 import { useWorkflowTemplates, useWorkflowConfigs, useUpsertWorkflowConfig, useDeleteWorkflowConfig, getStageLabel } from '@/hooks/useWorkflowConfig';
+import { useEmployeeWorkflow } from '@/hooks/useWorkflowConfig';
+import { resolveInlineMapping, sourceLabel } from '@/lib/workflowMapping/resolveInlineMapping';
 // v2.67.x — Dummy/System Employee Visibility (admin-side: always shows
 // everyone with a badge + filter; never gated by the global setting).
 import { useDummyEmployees } from '@/hooks/useDummyEmployees';
@@ -62,6 +64,7 @@ import { useDummyEmployees } from '@/hooks/useDummyEmployees';
 // employee's assigned (global) workflow template without leaving the dialog.
 function InlineWorkflowMappingCard({ employeeId }: { employeeId: string }) {
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const { data: templates, isLoading: tLoading } = useWorkflowTemplates(false);
   const { data: configs, isLoading: cLoading } = useWorkflowConfigs();
   const upsert = useUpsertWorkflowConfig();
@@ -84,12 +87,27 @@ function InlineWorkflowMappingCard({ employeeId }: { employeeId: string }) {
       ) ?? null,
     [configs, employeeId, period, year],
   );
-  const selectedTemplate = useMemo(
-    () => templates?.find(t => t.id === existing?.workflow_template_id) ?? null,
-    [templates, existing]
+
+  const { data: resolvedInfo, isLoading: rLoading } = useEmployeeWorkflow(employeeId, period, year);
+
+  const resolved = useMemo(
+    () =>
+      resolveInlineMapping({
+        configs: configs ?? [],
+        resolved: resolvedInfo ?? null,
+        employeeId,
+        period,
+        year,
+      }),
+    [configs, resolvedInfo, employeeId, period, year],
   );
 
-  const loading = tLoading || cLoading;
+  const loading = tLoading || cLoading || rLoading;
+
+  const invalidateResolution = () => {
+    queryClient.invalidateQueries({ queryKey: ['employee-workflow', employeeId] });
+    queryClient.invalidateQueries({ queryKey: ['employee-workflow-stages', employeeId] });
+  };
 
   const onChange = (value: string) => {
     if (!period || !year) {
@@ -99,7 +117,10 @@ function InlineWorkflowMappingCard({ employeeId }: { employeeId: string }) {
     upsert.mutate(
       { configType: 'employee', configValue: employeeId, workflowTemplateId: value, reviewPeriod: period, reviewYear: year, isOngoing: true },
       {
-        onSuccess: () => toast({ title: 'Workflow assigned', description: `Effective from ${period} ${year} onward.` }),
+        onSuccess: () => {
+          invalidateResolution();
+          toast({ title: 'Workflow assigned', description: `Effective from ${period} ${year} onward.` });
+        },
         onError: (e: any) => toast({ title: 'Failed to assign workflow', description: e?.message ?? 'Try again.', variant: 'destructive' }),
       }
     );
@@ -108,7 +129,10 @@ function InlineWorkflowMappingCard({ employeeId }: { employeeId: string }) {
   const onReset = () => {
     if (!existing) return;
     remove.mutate(existing.id, {
-      onSuccess: () => toast({ title: 'Reset', description: `Cleared mapping starting at ${period} ${year}. Earlier months keep their previous mapping.` }),
+      onSuccess: () => {
+        invalidateResolution();
+        toast({ title: 'Reset', description: `Cleared mapping starting at ${period} ${year}. Earlier months keep their previous mapping.` });
+      },
       onError: (e: any) => toast({ title: 'Failed to reset', description: e?.message ?? 'Try again.', variant: 'destructive' }),
     });
   };
@@ -156,14 +180,39 @@ function InlineWorkflowMappingCard({ employeeId }: { employeeId: string }) {
           </Select>
         </div>
       </div>
-      <Label className="text-xs text-muted-foreground">Assigned Workflow</Label>
+      {!loading && (
+        <div className="mb-3 rounded-md border bg-muted/30 p-2">
+          <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+            Effective for {period} {year}
+          </p>
+          <p className="text-sm font-medium mt-0.5">
+            {resolved.displayName ?? 'No workflow resolved'}
+          </p>
+          <span className="mt-1 inline-flex items-center rounded border px-1.5 py-0.5 text-[10px] text-muted-foreground bg-background">
+            {sourceLabel(resolved)}
+          </span>
+          {resolved.stages.length > 0 && (
+            <div className="mt-2 flex flex-wrap gap-1">
+              {resolved.stages.map((s, i) => (
+                <span
+                  key={`${s}-${i}`}
+                  className="inline-flex items-center rounded border px-1.5 py-0.5 text-[10px] text-muted-foreground bg-background"
+                >
+                  {getStageLabel(s)}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+      <Label className="text-xs text-muted-foreground">Assigned Workflow (override)</Label>
       <Select
         value={existing?.workflow_template_id ?? ''}
         onValueChange={onChange}
         disabled={loading || upsert.isPending}
       >
         <SelectTrigger className="mt-1 h-9">
-          <SelectValue placeholder={loading ? 'Loading…' : 'Inherit period default'} />
+          <SelectValue placeholder={loading ? 'Loading…' : `Add override for ${period} ${year}`} />
         </SelectTrigger>
         <SelectContent>
           {templates?.map(t => (
@@ -171,18 +220,6 @@ function InlineWorkflowMappingCard({ employeeId }: { employeeId: string }) {
           ))}
         </SelectContent>
       </Select>
-      {selectedTemplate && (
-        <div className="mt-2 flex flex-wrap gap-1">
-          {selectedTemplate.stages.map((s, i) => (
-            <span key={`${s}-${i}`} className="inline-flex items-center rounded border px-1.5 py-0.5 text-[10px] text-muted-foreground bg-muted/40">
-              {getStageLabel(s)}
-            </span>
-          ))}
-        </div>
-      )}
-      {!existing && !loading && (
-        <p className="mt-2 text-xs text-muted-foreground">No mapping effective for {period} {year} — currently inheriting the period default.</p>
-      )}
     </div>
   );
 }
