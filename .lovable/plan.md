@@ -1,52 +1,34 @@
-## Change
+## Root cause
 
-Currently the Form Mapping page uses a 2-column grid: **Templates in use** (left, short, with an inner `max-h-72` scroll) and **Map a template to an audience** (right, tall). The templates list feels cramped and half of its rows are hidden inside a scroller.
+When criteria are pulled in via **Add from Library**, `CriteriaLibraryPickerDialog.rowToCriterion` only copies `label_en` into `criterion.name` and leaves the description blank. It does **not** write the library row's `label_hi` (or the per-option `label_hi` decoded from `scoring_bands`) into `sections.translations.hi`, which is the map the editor's "HI name / HI description / HI option label" inputs read from. Result: rows appear in the table with empty Hindi fields even though the library carries the Hindi text.
 
-Restructure so Templates in use gets its own full-width row above the mapping/override cards:
+The Blue-Collar preset works because it ships an inline `translations.hi` block keyed to fixed criterion ids; the library path skipped that step.
 
-```text
-┌────────────────────────────────────────────┐
-│ Coverage banner                            │
-├────────────────────────────────────────────┤
-│ Templates in use  (FULL WIDTH, no scroll)  │
-│  - 2-col grid of rows on lg+ screens       │
-│  - each row: name • employees badge        │
-├──────────────────────┬─────────────────────┤
-│ Map a template to   │ (space for future)  │
-│ an audience          │                     │
-├──────────────────────┴─────────────────────┤
-│ Employee override panel                    │
-├────────────────────────────────────────────┤
-│ Unmapped table (if any)                    │
-└────────────────────────────────────────────┘
-```
+## Fix
 
-Concretely in `src/pages/annual-review/AnnualReviewFormMapping.tsx`:
+Seed the translation map alongside the new criteria rows so the Hindi inputs render populated and the reviewer-facing bilingual rendering works out of the box.
 
-1. Move `<TemplatesUsagePanel>` out of the `lg:grid-cols-2` wrapper into its own full-width block above it.
-2. In `TemplatesUsagePanel`:
-   - Drop the `max-h-72 overflow-y-auto` scroll wrapper — render the whole list.
-   - Switch the row list to a responsive grid: `grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-x-6` so long template lists stay readable on wide monitors without becoming an endless single column.
-   - Keep every row at `h-10` touch-target height (BFCL standard), preserve the existing `Badge` + border-b separators within each column.
-   - Add a small header row: total template count + total employees resolved, so the panel reads as a summary at a glance.
-3. Leave `AudienceBuilder` and `EmployeeOverridePanel` untouched aesthetically — `AudienceBuilder` moves into a single-column full-width card (matches the mapping intent per row) but keeps its internal layout, or stays in a `lg:grid-cols-2` shell with only itself on the left so its width matches the previous look. **I'll go with: `AudienceBuilder` sits in a `max-w-3xl` centered card below Templates in use** — it doesn't need to be as wide as the templates summary, and centering keeps the form comfortable on wide screens.
+### `src/components/annual-review/CriteriaLibraryPickerDialog.tsx`
+- Change `rowToCriterion` to return both the `TemplateCriterion` and a `Record<string,string>` of Hindi keys for that row:
+  - `criterion:<new id>:name` → `r.label_hi` (when present)
+  - `option:<new id>:<optId>:label` → each option's `label_hi` (from `bandsToBilingualOptions`, when present)
+- Pass the combined translation delta through `onAdd`, e.g. change the signature to `onAdd(items, hiTranslations)` (English-only rows contribute an empty delta — no behaviour change for them).
 
-## Risk & impact
+### `src/components/annual-review/TemplateEditorDialog.tsx`
+- In the `<CriteriaLibraryPickerDialog onAdd=…>` handler, merge `hiTranslations` into `sections.translations.hi` in the same `setSections` call that appends the criteria. Only touch the `hi` bucket; leave other languages and existing keys untouched (new keys overwrite only their own slot).
+- If `settings.enable_multilingual` is false or `hi` isn't in `available_languages`, still write the translations (harmless) but skip UI churn — the inputs simply won't render until the admin turns Hindi on. No toast change needed.
 
-- **Data**: none.
-- **UI**: only `AnnualReviewFormMapping.tsx` layout changes. No token/color changes, no shadcn variant changes, semantic tokens preserved. Uses the same `Card`, `Badge`, `grid` primitives already in use.
-- **Regression**: minimal — no logic touched (coverage query, priority calc, shadow-warning all preserved from previous change).
-- **Responsiveness**: rows fall back to single column below `md`, so tablet/mobile still work.
+### Tests
+- Extend `src/services/annualReview/criteriaLibrary.test.ts` (or add a small sibling test for the picker mapper) covering:
+  - Library row with `label_hi` + bilingual bands → returned translation delta has `criterion:<id>:name` and one `option:<id>:oN:label` per band with a Hindi label.
+  - Library row without any Hindi text → returned delta is empty; existing English behaviour unchanged.
 
-## Rollback
+## Not touched
 
-Revert the layout diff in `AnnualReviewFormMapping.tsx`.
+- No schema, RLS, service, or export changes.
+- No changes to the Blue-Collar preset, manual-add flow, or self-review library.
+- Reviewer form rendering already handles `option:<critId>:<optId>:label` (see `tTemplateOptionBilingual`), so no downstream edits needed.
 
-## Files touched
+## Risk
 
-- `src/pages/annual-review/AnnualReviewFormMapping.tsx`
-
-## Tests / docs
-
-- No new unit tests (pure layout change; existing coverage-refresh tests still cover behaviour).
-- `.lovable/plan.md`: append changelog entry noting the layout change.
+Low. Purely additive to `translations.hi` on library import; existing templates and the Auto-Populate preset are unaffected.

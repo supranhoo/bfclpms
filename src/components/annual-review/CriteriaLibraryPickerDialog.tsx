@@ -11,16 +11,31 @@ import type { TemplateCriterion } from '@/types/annualReview';
 
 const uid = (p: string) => `${p}_${Math.random().toString(36).slice(2, 9)}`;
 
-function rowToCriterion(r: CriterionRow): TemplateCriterion {
-  return {
-    id: uid('crit'),
+export function rowToCriterion(r: CriterionRow): {
+  criterion: TemplateCriterion;
+  hiTranslations: Record<string, string>;
+} {
+  const id = uid('crit');
+  const options = bandsToBilingualOptions(r.scoring_bands, r.max_score ?? 5);
+  const hi: Record<string, string> = {};
+  if (r.label_hi && r.label_hi.trim()) {
+    hi[`criterion:${id}:name`] = r.label_hi;
+  }
+  for (const o of options) {
+    const lh = (o as { label_hi?: string | null }).label_hi;
+    if (lh && lh.trim()) {
+      hi[`option:${id}:${o.id}:label`] = lh;
+    }
+  }
+  const criterion = {
+    id,
     name: r.label_en,
     description: '',
     weight: 0,
     reviewer_stages: ['self', 'manager', 'skip_manager', 'bu_head', 'hr'],
     enable_remarks: true,
     enable_evidence: false,
-    options: bandsToBilingualOptions(r.scoring_bands, r.max_score ?? 5),
+    options,
     // Preserve payload for exports / bilingual rendering.
     key: r.key,
     label_en: r.label_en,
@@ -28,6 +43,7 @@ function rowToCriterion(r: CriterionRow): TemplateCriterion {
     max_score: r.max_score,
     scoring_bands: r.scoring_bands,
   } as unknown as TemplateCriterion;
+  return { criterion, hiTranslations: hi };
 }
 
 export function CriteriaLibraryPickerDialog({
@@ -36,7 +52,7 @@ export function CriteriaLibraryPickerDialog({
   open: boolean;
   onOpenChange: (o: boolean) => void;
   existingKeys: string[];
-  onAdd: (criteria: TemplateCriterion[]) => void;
+  onAdd: (criteria: TemplateCriterion[], hiTranslations: Record<string, string>) => void;
 }) {
   const { data: rows = [], isLoading } = useQuery({
     queryKey: ['criteria-library-picker'],
@@ -58,8 +74,13 @@ export function CriteriaLibraryPickerDialog({
   }, [rows, q]);
 
   const confirm = () => {
-    const selected = rows.filter((r) => picked[r.id]).map(rowToCriterion);
-    if (selected.length) onAdd(selected);
+    const mapped = rows.filter((r) => picked[r.id]).map(rowToCriterion);
+    const criteria = mapped.map((m) => m.criterion);
+    const hiTranslations = mapped.reduce<Record<string, string>>((acc, m) => {
+      Object.assign(acc, m.hiTranslations);
+      return acc;
+    }, {});
+    if (criteria.length) onAdd(criteria, hiTranslations);
     setPicked({});
     onOpenChange(false);
   };
