@@ -185,7 +185,12 @@ export function AdminKpiEditorForm({ kpi, onSaved, onCancel }: AdminKpiEditorFor
         .eq('kra_name', kpi.kra_name)
         .eq('kpi_name', kpi.kpi_name)
         .in('review_year', fiscalYears);
-      const keys = new Set((data || []).map(d => `${d.review_period}-${d.review_year}`));
+      // POLICY §90b — restrict to the selected fiscal cycle so an adjacent
+      // fiscal year's July cannot disable the current cycle's July tile.
+      const inCycle = (data || []).filter(d =>
+        isFiscalTuple(d.review_period, d.review_year, fiscalStartYear),
+      );
+      const keys = new Set(inCycle.map(d => `${d.review_period}-${d.review_year}`));
       setExistingSiblingKeys(keys);
       setLoadingSiblings(false);
     };
