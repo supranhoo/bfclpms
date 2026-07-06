@@ -57,7 +57,7 @@ export function BiMonthlyReanchorSection() {
     try {
       const { data, error } = await supabase
         .from('kpis')
-        .select('id, employee_id, kpi_name, kra_name, review_period, review_year, frequency, frequency_cycle_start, employee:profiles!kpis_employee_id_fkey(employee_code, full_name, department:departments(name))')
+        .select('id, employee_id, kpi_name, kra_name, review_period, review_year, frequency, frequency_cycle_start, employee:profiles!kpis_employee_id_fkey(employee_code, full_name, department:departments!profiles_department_fk(name))')
         .eq('frequency', 'Bi-Monthly')
         .in('review_period', ['June', 'July'])
         .eq('review_year', 2026)
