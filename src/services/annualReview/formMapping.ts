@@ -37,6 +37,7 @@ export function matchesFilters(
   filters: Partial<AssignmentFilters> | null | undefined,
   profile: MappingProfile,
   deptToBu: Record<string, string | null>,
+  krasEmpIds?: Set<string> | null,
 ): boolean {
   const f = filters ?? {};
   const list = (k: keyof AssignmentFilters): string[] =>
@@ -53,6 +54,15 @@ export function matchesFilters(
     const bu = profile.department_id ? deptToBu[profile.department_id] ?? null : null;
     if (!bu || !list('bu_ids').includes(bu)) return false;
   }
+  // Optional "Has KRAs in last N months" restriction. Caller MUST pass the
+  // matching set when `has_kras` is 'yes'|'no'; if omitted the filter is
+  // treated as satisfied (preview-only helpers use this to short-circuit).
+  const hasKras = (f as Record<string, unknown>).has_kras;
+  if ((hasKras === 'yes' || hasKras === 'no') && krasEmpIds) {
+    const present = krasEmpIds.has(profile.id);
+    if (hasKras === 'yes' && !present) return false;
+    if (hasKras === 'no' && present) return false;
+  }
   return true;
 }
 
@@ -65,14 +75,29 @@ export function resolveTemplateForProfile(
   rules: Pick<AnnualReviewAssignmentRule, 'template_id' | 'filters' | 'is_active' | 'priority'>[],
   profile: MappingProfile,
   deptToBu: Record<string, string | null>,
+  krasSets?: Map<number, Set<string>> | null,
 ): { templateId: string | null; matchedRuleIdx: number | null } {
   const active = rules.filter((r) => r.is_active).slice().sort((a, b) => a.priority - b.priority);
   for (let i = 0; i < active.length; i++) {
-    if (matchesFilters(active[i].filters, profile, deptToBu)) {
+    const w = windowMonthsFromFilters(active[i].filters);
+    const set = krasSets?.get(w) ?? null;
+    if (matchesFilters(active[i].filters, profile, deptToBu, set)) {
       return { templateId: active[i].template_id, matchedRuleIdx: i };
     }
   }
   return { templateId: null, matchedRuleIdx: null };
+}
+
+/** Default window in months for the `has_kras` filter. */
+export const DEFAULT_KRAS_WINDOW_MONTHS = 12;
+
+/** Extract the (validated) window size a rule/filter uses. */
+export function windowMonthsFromFilters(
+  filters: Partial<AssignmentFilters> | null | undefined,
+): number {
+  const raw = Number((filters as { kras_window_months?: unknown } | null | undefined)?.kras_window_months);
+  if (!Number.isFinite(raw) || raw <= 0) return DEFAULT_KRAS_WINDOW_MONTHS;
+  return Math.min(Math.max(Math.round(raw), 1), 36);
 }
 
 // ── DB helpers ────────────────────────────────────────────────────
@@ -105,6 +130,42 @@ async function fetchDeptToBu(): Promise<Record<string, string | null>> {
 }
 
 /**
+ * Distinct employee_ids appearing in `public.kpis` inside the last `months`
+ * window. Paged (1000/page) to respect POLICY §94; memoised per window size
+ * so the preview and coverage report share a single fetch per render.
+ */
+const krasCache = new Map<number, Promise<Set<string>>>();
+export function _resetKrasCacheForTests() { krasCache.clear(); }
+export function fetchEmployeesWithKrasSince(months: number): Promise<Set<string>> {
+  const w = Math.min(Math.max(Math.round(months), 1), 36);
+  const cached = krasCache.get(w);
+  if (cached) return cached;
+  const p = (async () => {
+    const since = new Date();
+    since.setMonth(since.getMonth() - w);
+    const sinceIso = since.toISOString();
+    const out = new Set<string>();
+    const PAGE = 1000;
+    for (let from = 0; ; from += PAGE) {
+      const { data, error } = await supabase
+        .from('kpis')
+        .select('employee_id')
+        .not('employee_id', 'is', null)
+        .gte('created_at', sinceIso)
+        .order('employee_id')
+        .range(from, from + PAGE - 1);
+      if (error) throw error;
+      const batch = (data ?? []) as Array<{ employee_id: string | null }>;
+      for (const r of batch) if (r.employee_id) out.add(r.employee_id);
+      if (batch.length < PAGE) break;
+    }
+    return out;
+  })();
+  krasCache.set(w, p);
+  return p;
+}
+
+/**
  * Dry-run: how many active employees match this filter set right now.
  * Returns the actual list (capped `limit`) so the UI can list examples.
  */
@@ -112,8 +173,14 @@ export async function previewAudience(
   filters: Partial<AssignmentFilters>,
   opts: { limit?: number } = {},
 ): Promise<{ total: number; sample: MappingProfile[] }> {
-  const [profiles, deptToBu] = await Promise.all([fetchActiveProfiles(), fetchDeptToBu()]);
-  const matched = profiles.filter((p) => matchesFilters(filters, p, deptToBu));
+  const needsKras = filters?.has_kras === 'yes' || filters?.has_kras === 'no';
+  const w = windowMonthsFromFilters(filters);
+  const [profiles, deptToBu, krasSet] = await Promise.all([
+    fetchActiveProfiles(),
+    fetchDeptToBu(),
+    needsKras ? fetchEmployeesWithKrasSince(w) : Promise.resolve<Set<string> | null>(null),
+  ]);
+  const matched = profiles.filter((p) => matchesFilters(filters, p, deptToBu, krasSet));
   return { total: matched.length, sample: matched.slice(0, opts.limit ?? 100) };
 }
 
@@ -163,6 +230,22 @@ export async function checkMappingCoverage(cycleId: string): Promise<CoverageRep
   if (instRes.error) throw instRes.error;
 
   const rules = (rulesRes.data ?? []) as unknown as AnnualReviewAssignmentRule[];
+
+  // Fetch one KRA set per distinct window size used by any active rule
+  // that opts into the has_kras filter. Rules that don't use it pass `null`.
+  const windows = new Set<number>();
+  for (const r of rules) {
+    if (!r.is_active) continue;
+    const f = r.filters as Partial<AssignmentFilters> | null | undefined;
+    if (f?.has_kras === 'yes' || f?.has_kras === 'no') {
+      windows.add(windowMonthsFromFilters(f));
+    }
+  }
+  const krasSets = new Map<number, Set<string>>();
+  await Promise.all(
+    [...windows].map(async (w) => { krasSets.set(w, await fetchEmployeesWithKrasSince(w)); }),
+  );
+
   const byEmp = new Map<string, { template_id: string | null; override: string | null }>();
   for (const i of instRes.data ?? []) {
     const r = i as { employee_id: string; template_id: string | null; template_override_id: string | null };
@@ -172,7 +255,7 @@ export async function checkMappingCoverage(cycleId: string): Promise<CoverageRep
   const rows: CoverageRow[] = profiles.map((p) => {
     const inst = byEmp.get(p.id);
     const seeded = inst ? inst.override ?? inst.template_id : null;
-    const pred = resolveTemplateForProfile(rules, p, deptToBu);
+    const pred = resolveTemplateForProfile(rules, p, deptToBu, krasSets);
     const resolved = seeded ?? pred.templateId;
     const status: CoverageRow['status'] = seeded
       ? 'seeded'
