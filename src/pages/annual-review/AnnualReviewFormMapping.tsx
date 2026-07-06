@@ -27,6 +27,7 @@ import {
 } from '@/services/annualReview/formMapping';
 import type { AssignmentFilters } from '@/types/annualReview';
 import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
 
 /**
  * ONE-SCREEN form mapping console.
@@ -239,6 +240,7 @@ function TemplateEmployeesDialog({
   report: CoverageReport;
   onChanged: () => void | Promise<unknown>;
 }) {
+  const { user } = useAuth();
   const [q, setQ] = useState('');
   const [pendingRow, setPendingRow] = useState<CoverageRow | null>(null);
   const [reason, setReason] = useState('');
@@ -292,9 +294,20 @@ function TemplateEmployeesDialog({
   const remove = useMutation({
     mutationFn: async () => {
       if (!pendingRow) throw new Error('No row selected.');
-      const instanceId = instancesQ.data?.get(pendingRow.employee.id);
-      if (!instanceId) throw new Error('This employee has no seeded instance yet.');
       if (reason.trim().length < 3) throw new Error('Reason must be at least 3 characters.');
+      let instanceId = instancesQ.data?.get(pendingRow.employee.id);
+      // Seed-on-demand: the override RPC needs an instance_id. If the cycle
+      // hasn't seeded this employee yet, run the idempotent rule-based seeder
+      // and refetch so this single removal can proceed without sending the
+      // admin to another screen.
+      if (!instanceId) {
+        await svc.seedInstancesByRules({ cycleId, hrUserId: user?.id ?? null });
+        const refreshed = await instancesQ.refetch();
+        instanceId = refreshed.data?.get(pendingRow.employee.id);
+        if (!instanceId) {
+          throw new Error('Could not seed this employee. Check assignment rules for the cycle.');
+        }
+      }
       // Rule-resolved rows: pin to NULL so this cycle explicitly excludes them.
       // Manually pinned rows: passing null clears the override and lets rules
       // re-resolve (may re-map to the same template).
@@ -312,6 +325,26 @@ function TemplateEmployeesDialog({
     },
     onError: (e) => toast.error((e as Error).message),
   });
+
+  const seedMissing = useMutation({
+    mutationFn: async () => {
+      await svc.seedInstancesByRules({ cycleId, hrUserId: user?.id ?? null });
+      await instancesQ.refetch();
+    },
+    onSuccess: async () => {
+      toast.success('Missing instances seeded.');
+      await onChanged();
+    },
+    onError: (e) => toast.error((e as Error).message),
+  });
+
+  const unseededCount = useMemo(() => {
+    if (!instancesQ.data) return 0;
+    return mapped.reduce(
+      (n, r) => (instancesQ.data!.get(r.employee.id) ? n : n + 1),
+      0,
+    );
+  }, [mapped, instancesQ.data]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -334,6 +367,31 @@ function TemplateEmployeesDialog({
           />
         </div>
 
+        {mapped.length > 0 && instancesQ.isFetched && unseededCount > 0 && (
+          <Alert className="border-amber-500/40 bg-amber-500/10">
+            <AlertTriangle className="h-4 w-4 text-amber-600" />
+            <AlertTitle className="text-sm">
+              {unseededCount} of {mapped.length} mapped employee{mapped.length === 1 ? '' : 's'} not seeded yet
+            </AlertTitle>
+            <AlertDescription className="flex items-center justify-between gap-3 flex-wrap">
+              <span className="text-xs">
+                Removal will seed the employee on the fly. You can also seed everyone missing now.
+              </span>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => seedMissing.mutate()}
+                disabled={seedMissing.isPending}
+              >
+                {seedMissing.isPending
+                  ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+                  : <RefreshCw className="h-3.5 w-3.5 mr-1" />}
+                Seed missing now
+              </Button>
+            </AlertDescription>
+          </Alert>
+        )}
+
         {mapped.length === 0 ? (
           <p className="text-sm text-muted-foreground py-8 text-center">
             No employees are currently mapped to this template.
@@ -354,7 +412,7 @@ function TemplateEmployeesDialog({
               <TableBody>
                 {filtered.map((r) => {
                   const instanceId = instancesQ.data?.get(r.employee.id);
-                  const canRemove = !!instanceId;
+                  const isSeeded = !!instanceId;
                   return (
                     <TableRow key={r.employee.id}>
                       <TableCell className="font-mono text-xs">{r.employee.employee_code ?? '—'}</TableCell>
@@ -362,6 +420,14 @@ function TemplateEmployeesDialog({
                         {r.employee.full_name ?? '—'}
                         {r.hasOverride && (
                           <Badge variant="secondary" className="ml-2 text-[10px]">Pinned</Badge>
+                        )}
+                        {!isSeeded && instancesQ.isFetched && (
+                          <Badge
+                            variant="outline"
+                            className="ml-2 text-[10px] border-amber-500/50 text-amber-700"
+                          >
+                            Not seeded
+                          </Badge>
                         )}
                       </TableCell>
                       <TableCell className="text-sm">
@@ -374,9 +440,9 @@ function TemplateEmployeesDialog({
                           size="sm"
                           variant="ghost"
                           className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                          disabled={!canRemove || instancesQ.isLoading}
+                          disabled={instancesQ.isLoading}
                           onClick={() => { setPendingRow(r); setReason(''); }}
-                          title={canRemove ? 'Remove from template' : 'No seeded instance yet — seed the cycle first'}
+                          title={isSeeded ? 'Remove from template' : 'Not seeded — will seed on confirm'}
                         >
                           <X className="h-3.5 w-3.5 mr-1" /> Remove
                         </Button>
@@ -406,6 +472,11 @@ function TemplateEmployeesDialog({
                   ? 'This employee is manually pinned. Removing clears the pin — they will fall back to rule resolution and may re-land on this same template if a rule still matches.'
                   : 'This employee matches a mapping rule. Removing creates a per-employee override that unmaps them for this cycle. Re-map via the audience builder or per-employee panel afterwards.'}
               </p>
+              {!instancesQ.data?.get(pendingRow.employee.id) && (
+                <p className="text-xs">
+                  This employee isn't seeded yet. Confirming will seed their instance for this cycle and then apply the removal.
+                </p>
+              )}
               <Textarea
                 rows={2}
                 value={reason}
