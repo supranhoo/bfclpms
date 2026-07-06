@@ -64,6 +64,12 @@ export interface TemplateCriterion {
   enable_evidence?: boolean;
   evidence_required?: boolean;
   options?: CriterionOption[];
+  /** Set when this criterion is linked to a `annual_review_criteria_library` row. */
+  key?: string;
+  label_en?: string;
+  label_hi?: string | null;
+  max_score?: number;
+  scoring_bands?: unknown;
 }
 
 export interface TemplateSystemScore {
