@@ -81,8 +81,8 @@ export default function AnnualReviewFormMapping() {
       {cycle && (
         <>
           <CoverageBanner report={coverageQ.data} loading={coverageQ.isLoading} />
-          <div className="grid gap-6 lg:grid-cols-2">
-            <TemplatesUsagePanel templates={templates} report={coverageQ.data} />
+          <TemplatesUsagePanel templates={templates} report={coverageQ.data} />
+          <div className="max-w-3xl">
             <AudienceBuilder
               cycleId={cycle.id}
               templates={templates}
