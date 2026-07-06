@@ -14592,6 +14592,10 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      rebatch_bimonthly_reanchor: {
+        Args: { p_dry_run?: boolean; p_employee_ids: string[] }
+        Returns: Json
+      }
       recalculate_bu_head: { Args: { p_bu_id: string }; Returns: string }
       recalculate_department_head: {
         Args: { p_dept_id: string }
@@ -14874,6 +14878,7 @@ export type Database = {
         Args: { p_action_id: string }
         Returns: Json
       }
+      revert_bimonthly_reanchor: { Args: { p_batch_id: string }; Returns: Json }
       review_drill: {
         Args: { p_drill_id: string; p_summary?: string }
         Returns: Json
