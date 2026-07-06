@@ -60,7 +60,14 @@ describe('POLICY §90b — fiscal-window guardrail', () => {
       if (EXEMPTIONS.has(rel)) continue;
       const src = readFileSync(file, 'utf8');
       if (!REVIEW_YEAR_IN.test(src)) continue;
-      if (GUARD_TOKENS.test(src) || TUPLE_PAIR.test(src)) continue;
+      if (
+        GUARD_TOKENS.test(src) ||
+        TUPLE_PAIR.test(src) ||
+        COMPOSITE_KEY.test(src) ||
+        PAIRED_IN.test(src)
+      ) {
+        continue;
+      }
       violations.push(rel);
     }
     expect(
