@@ -10,7 +10,8 @@ import { Input } from '@/components/ui/input';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
-import { Flag, Save, Users, ShieldCheck, X } from 'lucide-react';
+import { Flag, Save, Users, ShieldCheck, X, ExternalLink } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { useState, useEffect, useMemo } from 'react';
 import { toast } from 'sonner';
 import type { Database } from '@/integrations/supabase/types';
@@ -218,6 +219,21 @@ function FlagCard({ flag }: { flag: FeatureFlag }) {
           <Label className="flex items-center gap-2 text-sm">
             <Users className="h-4 w-4" /> Target specific users
           </Label>
+          {flag.key === 'annual_review_enabled' ? (
+            <div className="rounded-md border border-dashed bg-muted/30 p-3 text-xs text-muted-foreground flex items-center justify-between gap-3">
+              <span>
+                Pilot users for Annual Review are managed with filters in the
+                Annual Review admin console.
+              </span>
+              <Button asChild variant="outline" size="sm">
+                <Link to="/annual-review/admin?tab=settings">
+                  Manage in Settings
+                  <ExternalLink className="h-3.5 w-3.5 ml-1.5" />
+                </Link>
+              </Button>
+            </div>
+          ) : (
+          <>
           <div className="flex flex-wrap gap-1.5 min-h-[2rem]">
             {userIds.length === 0 && (
               <span className="text-xs text-muted-foreground italic">No specific users — applies based on roles above.</span>
@@ -286,6 +302,8 @@ function FlagCard({ flag }: { flag: FeatureFlag }) {
               </Command>
             </PopoverContent>
           </Popover>
+          </>
+          )}
         </div>
 
         <div className="flex justify-end pt-2">

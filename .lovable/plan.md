@@ -1,66 +1,63 @@
-# Plan — Re-anchor Bi-Monthly KPIs for CPP / DRI
+## Goal
+Move the `annual_review_enabled` audience targeting into **Annual Review → Settings** as a new **Pilot Access** card, with structured filters (Grade, Level, Business Unit, Department, Has KRA) to preview matching employees and bulk-add them to the pilot allowlist.
 
-## What you asked for
-1. **June 2026** — every "June-July" Bi-Monthly KPI becomes **Monthly / June only**.
-2. **July 2026 onward** — every "June-July" Bi-Monthly KPI is re-anchored to **"Jul-Aug"**.
-3. Applies to **CPP + DRI employees only**, and only to the *June 2026 row* / *anchor field* — existing submissions are preserved.
+## Assumptions
+- The master ON/OFF switch and `admin_feature_flags` row stay as the source of truth (`target_user_ids`, `target_roles`). No schema change.
+- "Has KRA" = the employee has at least one row in `public.kpis` (active). Confirm during build if a stricter filter (e.g. active period only) is needed.
+- Filters combine with **AND**. Preview shows the resolved set; admin clicks **Add all N to pilot** to append to `target_user_ids` (dedup, no removals).
+- Feature Flags tab keeps working for other flags. For `annual_review_enabled`, the tab will show a read-only summary + a "Manage in Annual Review Settings" link so there's one editor.
 
-## Reality check from the database
-The DB does **not** currently contain the shape you described. Findings from `kpis` today:
+## Risk & Impact Report
+- **Data**: No schema change. Writes go to existing `admin_feature_flags.target_user_ids` (uuid[]) via the same RLS-protected update path used today.
+- **Workflow**: Only who sees the Annual Review module during pilot; gate logic (`AnnualReviewGate` / `is_feature_flag_enabled_for_me`) unchanged.
+- **UI/UX**: New card inside existing Settings tab, matches shadcn patterns already used there (Card, Select, MultiSelect via ToggleGroup / Command).
+- **Regression**: Feature Flags tab card for `annual_review_enabled` becomes read-only for target users — role toggling still available there, or move both. Plan keeps role toggling in Feature Flags to minimize churn; only user targeting moves.
+- **Scalability**: Preview query is a single `profiles` select with indexed filters + `id IN (SELECT employee_id FROM kpis)` sub-select, capped at 500 rows with pagination hint. Bulk-add dedupes client-side then writes one row.
 
-| Period | Anchor `frequency_cycle_start` | KPIs | Employees |
-|---|---|---|---|
-| **June 2026** | `NULL` | 35 | 14 |
-| **June 2026** | `Feb-Mar` | 44 | 19 |
-| **July 2026** | `Jul-Aug` | 34 | 14 |
-| **July 2026** | `Feb-Mar` | 44 | 19 |
-| **July 2026** | `May-Jun` | 1 | 1 |
-| **July 2026** | `NULL` | 1 | 1 |
+## Plan
 
-- There is **no** row anywhere with `frequency_cycle_start = 'Jun-Jul'`.
-- The 14 employees with NULL-anchor June rows are all **45 MW** (power plant), not CPP/DRI.
-- The `departments` table *has* rows named "CPP" and "DRI" but **0 profiles are linked to them**, and `kpis.business_unit_id` / `kpis.division_id` are always NULL — so there's no reliable programmatic way to auto-scope to "CPP + DRI" employees.
+1. **New component** `src/components/annual-review/PilotAccessCard.tsx`
+   - Reads `admin_feature_flags` row for `annual_review_enabled`.
+   - Filter row: Grade (from `pms_grades`), Level (from `levels`), Business Unit (from `business_units`), Department (from `departments`, cascades on BU), Has KRA (Yes/No/Any).
+   - "Preview matches" button → runs `profiles` query (active only), joins `pms_grade_id`, `level_id`, `department_id`, `departments.business_unit_id`. Applies Has KRA via `EXISTS (kpis where employee_id=profiles.id)`.
+   - Results table (name, code, grade, level, dept, BU, KRA count) with select-all + individual checkboxes.
+   - Actions: **Add selected to pilot**, **Add all matches to pilot**, **Remove from pilot** (chips of currently targeted users at top).
+   - Uses same update pattern as `FeatureFlagsTab` (`update admin_feature_flags set target_user_ids where key='annual_review_enabled'`).
 
-Because of this, running a blanket UPDATE would either hit the wrong people or hit nobody. The safe path is a **preview → confirm → apply** flow.
+2. **Wire into Settings tab** `src/pages/annual-review/AnnualReviewAdmin.tsx` `SettingsTab()` — add `<PilotAccessCard />` above existing Display Settings.
 
-## Proposed approach — reversible, two-step admin utility
+3. **Feature Flags tab** `src/components/admin/FeatureFlagsTab.tsx`
+   - For `annual_review_enabled` only: hide the user search / chip editor and render a small notice "Manage pilot users in Annual Review → Settings" with a link. Role toggles + master switch stay editable.
 
-### Step A — Preview report (read-only)
-Build a lightweight admin screen (or a downloadable CSV) that lists **every Bi-Monthly KPI for June 2026 and July 2026**, showing:
+4. **Invalidations**: after write, invalidate `['admin_feature_flags']` and `['annual_review_flag']` (gate hook) so the module appears/disappears without reload.
 
-- Employee code, name, department
-- KPI name, KRA, weightage
-- Current `frequency`, `frequency_cycle_start`
-- Whether a submission already exists (self / manager / final) — for information only, no blocking
-- A tickbox column per employee
+### UI Changes
+- Location: Annual Review Admin → Settings tab, new **Pilot Access** card at top.
+- Visual: standard Card with header "Pilot Access — Annual Review", filter grid (5 controls), Preview button, results table with row-select, sticky action bar with counts and Add buttons, current-audience chip strip.
+- Interaction: Filters are optional (empty = no constraint). Preview required before Add. Confirm dialog on "Add all matches" when count > 25.
+- Responsive: filters wrap 2/row on mobile; table becomes horizontal-scroll.
 
-You review the list, tick the CPP + DRI employees, and confirm the selection. This produces an explicit `employee_id[]` — no guesswork.
+### Technical Details
+- Data hooks colocated in `src/components/annual-review/pilotAccess.hooks.ts`: `usePilotAccessFlag`, `usePilotPreview(filters)`, `useUpdatePilotAudience`.
+- Filter shape: `{ grade_ids: string[]; level_ids: string[]; business_unit_ids: string[]; department_ids: string[]; has_kra: 'yes'|'no'|'any' }`.
+- Query pattern (client-side supabase-js), all `.in()` optional:
+  - Base: `profiles.select('id, full_name, employee_code, pms_grade:pms_grades(name), level:levels(name), department:departments!profiles_department_fk(name, business_unit_id, business_unit:business_units(name))').eq('is_active', true).limit(500)`
+  - `has_kra=yes`: filter client-side against a `kpis` presence set fetched as `select employee_id from kpis where employee_id in (candidate_ids)`.
+- Writes: `update admin_feature_flags set target_user_ids = <dedup union/diff> where key='annual_review_enabled'`.
+- No RLS change. No migration.
 
-### Step B — Apply changes (single admin action)
-For the confirmed employee set, run two scoped UPDATEs inside one transaction with a full audit row per KPI written to `kpi_audit_logs`:
+### Tests
+- Unit test for filter → query-args builder (empty filters produce no `.in()` calls; mixed filters chain correctly).
+- Unit test for `mergeAudience(current, add)` and `removeFromAudience(current, remove)` (dedup, order-stable).
+- Mock data covers: employee with grade+level+BU+dept+KRAs, employee missing grade, employee with no KRAs.
 
-1. **June 2026 rows** (`review_period='June' AND review_year=2026 AND frequency='Bi-Monthly'`)
-   → `frequency='Monthly'`, `frequency_cycle_start=NULL`, `sub_frequency=NULL`
-2. **July 2026 rows** (`review_period='July' AND review_year=2026 AND frequency='Bi-Monthly'`)
-   → `frequency_cycle_start='Jul-Aug'` (frequency unchanged)
+### Docs & Policy
+- Update `src/modules/annual-review/DOCUMENTATION.md` — new "Pilot Access UI" section.
+- Update `src/modules/annual-review/POLICY.md` §AR-PILOT-ALLOWLIST — clarify UI location and filter semantics.
+- Append entry to Version History.
 
-Submissions in `review_submissions` are **not touched** (per your answer). Auto-rollover (ADR-088) will then carry the Jul-Aug anchor forward into future months automatically because it preserves the source anchor.
+## Rollback
+- Delete `PilotAccessCard.tsx`, revert Settings-tab and FeatureFlagsTab edits. No DB changes to undo.
 
-### Step C — Rollback
-The audit rows written in Step B record the previous `frequency` and `frequency_cycle_start` per KPI, so a single "Revert last re-anchor batch" action can undo everything if needed.
-
-## Risk & Impact
-- **Data**: Only two columns on `public.kpis` change; every change is audited. No schema change, no submission deletion, no cascade.
-- **Workflow**: June KPIs become month-locked (users can now score/submit in June without the Bi-Monthly cycle lock — POLICY §128). July KPIs stop being "locked in July" because Jul-Aug means July is the active month, matching the intent.
-- **UI/UX**: One new admin screen (Admin → Data Repair → "Re-anchor Bi-Monthly KPIs"). No existing screens change.
-- **Regression**: Low — `isKpiLockedForPeriod` already honors per-KPI `frequency_cycle_start` (see `reportFrequencyCycleOverride.test.ts`). Reports, journeys, and rollover already read the anchor from the KPI row.
-- **Scalability**: Bounded (≤ ~80 KPIs across ~35 employees per the query above); single transaction is fine.
-- **Backup**: `kpis` and `kpi_audit_logs` are in the automatic backup set — nothing to add.
-
-## Tests
-- Unit test: applying the utility to a fixture with a mix of Bi-Monthly/Monthly and different anchors updates only the intended rows and leaves submissions untouched.
-- Unit test: rollback restores prior `frequency` + `frequency_cycle_start`.
-- Regression: existing `reportFrequencyCycleOverride.test.ts` continues to pass — June KPIs post-change render un-locked in June, July KPIs render active in July.
-
-## Question before I build
-The plan above assumes you want a reusable **admin utility with preview + audit + rollback** rather than a one-shot SQL migration. If you'd rather I just prepare a one-off migration against an employee list you paste, say so and I'll swap Step A/B for a single reviewed SQL migration.
+## Not Applicable
+- Migrations, edge functions, cron.
