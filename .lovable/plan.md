@@ -1,45 +1,47 @@
-## Root Cause
+## Goal
+Unassign the **Blue-Collar Comprehensive Review** template from all 2,403 mapped employees in the current active cycle (**Annual Review – 2025-2026**), keeping the template itself intact for future use.
 
-`deleteTemplate` in `src/services/annualReview/annualReviewService.ts` (line 268-293) queries a column that doesn't exist:
+## Current state (verified via DB)
+- Cycle: `Annual Review - 2025-2026` (active)
+- Template: `Blue-Collar Comprehensive Review`
+- Assignment rules pointing to it: **1**
+- Instances with `template_id` = this template: **2,403**
+- Instances with `template_override_id` = this template: **0**
+- Locked instances (status ≠ `not_started` / `pending_self`): **0** ✅ safe to clear
 
-```ts
-db.from('annual_review_assignment_overrides')
-  .select('id', { count: 'exact', head: true }).eq('template_id', id)
-```
+The UI count shows ~2,326 (active-only filter); DB has 2,403 total instances including inactive/exited employees. Both are handled below.
 
-Confirmed against the live schema: `annual_review_assignment_overrides` has only `id, instance_id, role, new_reviewer_id, reason, created_by, created_at` — **no `template_id` column**. That table is for reviewer reassignment overrides (per operations memory), not per-employee template overrides. Per-employee template overrides live on `annual_review_instances.template_override_id` (already counted by the `instOverride` query).
+## Actions (single migration)
 
-The `.eq('template_id', ...)` request returns a PostgREST error (`column ... does not exist`) with a `code`/`hint` but the object thrown isn't an `Error` instance, so `toast.error(e.message)` renders as blank — matching the empty toast in the screenshot. Because the error is thrown before the actual `DELETE` runs, the template is never deleted.
+1. **Delete the assignment rule** for this template in the active cycle so re-seed cannot re-attach it.
+   ```sql
+   DELETE FROM annual_review_assignment_rules
+   WHERE template_id = '<blue-collar-id>' AND cycle_id = '<active-cycle-id>';
+   ```
 
-## Risk & Impact
+2. **Delete the 2,403 instances** in the active cycle where `template_id` = Blue-Collar. All are in `not_started` / `pending_self`, so no in-flight review data is lost. This also clears any `template_override_id` on those rows.
+   ```sql
+   DELETE FROM annual_review_instances
+   WHERE cycle_id = '<active-cycle-id>'
+     AND template_id = '<blue-collar-id>'
+     AND overall_status IN ('not_started','pending_self');
+   ```
+   Safety guard on `overall_status` prevents accidental deletion if anyone starts a self-review between now and migration execution.
 
-- **Data**: none — fixes a broken pre-flight check.
-- **Workflow**: template deletion (previously always failing with blank error) starts working when there are truly no references. Reference-block messaging remains intact.
-- **Regression**: `src/test/annualReview/deleteTemplate.test.ts` currently mocks the phantom `annual_review_assignment_overrides.template_id` query and must be updated to match the corrected surface.
-- **Rollback**: single-file revert.
+3. **Audit log** entry in `system_audit_logs` recording action `annual_review.template_mapping_cleared` with counts.
 
-## Fix Plan
+## What is NOT touched
+- `annual_review_templates` row (kept, ready for re-use).
+- Any other cycle's rules/instances.
+- Any responses (none exist since no instance is past `pending_self`).
+- Other templates and their mappings.
 
-1. **`src/services/annualReview/annualReviewService.ts`** — `deleteTemplate`:
-   - Drop the `annual_review_assignment_overrides` query entirely.
-   - Keep `annual_review_assignment_rules`, `annual_review_instances.template_id`, `annual_review_instances.template_override_id` counts.
-   - Update the blocking message to `Cannot delete — template is assigned to N rule(s), M live instance(s) (including per-employee overrides). Deactivate it instead.`
-   - Harden error propagation: wrap `throw r.error` so a Supabase error object is rethrown as `new Error(r.error.message || 'Failed to check template references')` — prevents future blank toasts if any query breaks.
+## After migration runs
+You can go to **Annual Review Admin → Rules** and add your new template's assignment rule, then click **Seed Instances** to map the new form to employees.
 
-2. **`src/pages/annual-review/AnnualReviewAdmin.tsx`** — `del` mutation `onError`:
-   - `toast.error(e?.message || 'Failed to delete template')` fallback so no toast is ever blank.
+## Risk & rollback
+- **Regression risk**: none — no submitted responses exist for these instances.
+- **Rollback**: Re-add the rule and re-run `seedInstancesForCycle` — it rebuilds instances deterministically from rules + reviewer chain.
 
-3. **`src/test/annualReview/deleteTemplate.test.ts`** — remove the `annual_review_assignment_overrides` branch and its `overrides` count from the fixtures/assertions; add a case asserting the mutation actually issues the final `DELETE` when only instances/rules are zero.
-
-4. **DOCUMENTATION.md** — add BUG-047 entry: “Annual review template delete failed silently with blank toast — queried non-existent column on `annual_review_assignment_overrides`.”
-
-5. **POLICY.md** — no policy change; add a one-liner under the Annual Review Templates section clarifying that per-employee template overrides are tracked via `annual_review_instances.template_override_id`, and `annual_review_assignment_overrides` is reviewer-reassignment only (matches existing operations memory).
-
-## Verification
-
-- `bunx vitest run src/test/annualReview/deleteTemplate.test.ts`
-- Manually delete the `test 04` template shown in the screenshot — should either succeed (toast: “Template deleted”) or fail with a specific reference-count message.
-
-## Not Applicable
-
-UI layout, schema, or RLS changes.
+## Not applicable
+- Code changes, UI changes, unit tests — this is a one-off data operation, not a feature change. `DOCUMENTATION.md` gets a one-line entry under Version History noting the mapping reset.
