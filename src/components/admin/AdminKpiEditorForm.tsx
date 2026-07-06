@@ -23,6 +23,7 @@ import { UomType, QualitativeOption, validateQualitativeOptions, BINARY_OPTIONS,
 import { UOM_OPTIONS } from '@/lib/uomConstants';
 import { getCycleOptionsForFrequency, MULTI_MONTH_FREQUENCIES } from '@/lib/frequencyCycleOptions';
 import { supabase } from '@/integrations/supabase/client';
+import { isFiscalTuple } from '@/lib/fiscalWindow';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
 import { useQueryClient } from '@tanstack/react-query';
