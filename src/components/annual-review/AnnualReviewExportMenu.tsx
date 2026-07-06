@@ -21,12 +21,21 @@ import {
   buildBlankReviewerWorkbook, buildBulkResultsWorkbook, buildSeedingWorkbook,
   buildReviewerPdfBlob,
 } from '@/services/annualReview/exports';
+import { buildOperationalReportWorkbook, type ProfileLite, type DeptLite, type BuLite } from '@/services/annualReview/operationalReport';
+import { supabase } from '@/integrations/supabase/client';
+import { fetchAllPaged } from '@/lib/fetchAll';
+import type { AnnualReviewResponse, AnnualReviewerRole } from '@/types/annualReview';
 import { KraPreviewDialog } from '@/components/review/KraPreviewDialog';
 import type { AnnualReviewCycle } from '@/types/annualReview';
 import type { InstanceWithEmployee } from '@/services/annualReview/annualReviewService';
 
 const EXCEL_CAP = 5000;
 const PDF_CAP = 50;
+const IN_BATCH = 200;
+const RESP_BATCH = 100;
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const db: any = supabase;
 
 interface Props {
   cycle: AnnualReviewCycle | null;
@@ -126,6 +135,114 @@ export function AnnualReviewExportMenu({ cycle, filters, total }: Props) {
     } finally { setBusy(null); }
   }
 
+  async function handleOperationalReport() {
+    if (!cycle) return;
+    setBusy('ops-report');
+    try {
+      const rows = await loadRows();
+      if (rows.length === 0) {
+        toast.error('No employees in scope for the current filters.');
+        return;
+      }
+
+      // Templates (batched via distinct template ids)
+      const tplIds = Array.from(new Set(rows.map((r) => svc.resolveTemplateId(r)).filter((x): x is string => !!x)));
+      const tplList = await Promise.all(tplIds.map((tid) => svc.getTemplate(tid).catch(() => null)));
+      const templatesById: Record<string, any> = {};
+      for (const t of tplList) if (t) templatesById[t.id] = t;
+
+      // Stage scores (already .in() batched inside service)
+      const stageScores = await svc.fetchInstanceStageScores(rows.map((r) => r.id));
+
+      // Collect every profile id we need: employees + all reviewer FKs + finalized_by.
+      const profileIds = new Set<string>();
+      for (const r of rows) {
+        for (const k of ['employee_id', 'manager_id', 'skip_id', 'dept_head_id', 'bu_head_id', 'hr_id', 'finalized_by'] as const) {
+          const v = (r as any)[k];
+          if (v) profileIds.add(v);
+        }
+      }
+      const profilesById: Record<string, ProfileLite> = {};
+      const pids = Array.from(profileIds);
+      for (let i = 0; i < pids.length; i += IN_BATCH) {
+        const slice = pids.slice(i, i + IN_BATCH);
+        const { data, error } = await db
+          .from('profiles')
+          .select('id, full_name, employee_code, designation, department_id, pms_grade, level')
+          .in('id', slice);
+        if (error) throw error;
+        for (const p of (data ?? []) as ProfileLite[]) profilesById[p.id] = p;
+      }
+
+      // Departments + BUs
+      const deptIds = Array.from(new Set(
+        Object.values(profilesById).map((p) => p.department_id).filter((x): x is string => !!x),
+      ));
+      const deptsById: Record<string, DeptLite> = {};
+      for (let i = 0; i < deptIds.length; i += IN_BATCH) {
+        const slice = deptIds.slice(i, i + IN_BATCH);
+        const { data, error } = await db
+          .from('departments')
+          .select('id, name, business_unit_id')
+          .in('id', slice);
+        if (error) throw error;
+        for (const d of (data ?? []) as DeptLite[]) deptsById[d.id] = d;
+      }
+      const buIds = Array.from(new Set(Object.values(deptsById).map((d) => d.business_unit_id).filter((x): x is string => !!x)));
+      const buById: Record<string, BuLite> = {};
+      if (buIds.length > 0) {
+        const { data, error } = await db
+          .from('business_units')
+          .select('id, name')
+          .in('id', buIds);
+        if (error) throw error;
+        for (const b of (data ?? []) as BuLite[]) buById[b.id] = b;
+      }
+
+      // Assignment rules (name lookup)
+      const ruleIds = Array.from(new Set(rows.map((r) => r.assigned_rule_id).filter((x): x is string => !!x)));
+      const rulesById: Record<string, { id: string; name: string | null }> = {};
+      if (ruleIds.length > 0) {
+        const { data, error } = await db
+          .from('annual_review_assignment_rules')
+          .select('id, name')
+          .in('id', ruleIds);
+        if (error) throw error;
+        for (const r of (data ?? []) as { id: string; name: string | null }[]) rulesById[r.id] = r;
+      }
+
+      // Responses — RLS-heavy child table. Walk instance ids in RESP_BATCH batches,
+      // paged via fetchAllPaged inside each batch to defeat the 1000-row PostgREST cap
+      // (POLICY §110 / large-export-pagination-policy). Ordered by (instance_id, id)
+      // so the range walk uses an index seek.
+      const responsesByInstance: Record<string, AnnualReviewResponse[]> = {};
+      const instIds = rows.map((r) => r.id);
+      for (let i = 0; i < instIds.length; i += RESP_BATCH) {
+        const slice = instIds.slice(i, i + RESP_BATCH);
+        const batch = await fetchAllPaged<AnnualReviewResponse>((from, to) =>
+          db.from('annual_review_responses')
+            .select('id, instance_id, reviewer_id, reviewer_role, criteria_scores, qualitative_responses, evidence, weighted_score, submitted_at, is_locked, notes, created_at, updated_at')
+            .in('instance_id', slice)
+            .order('instance_id')
+            .order('id')
+            .range(from, to),
+        );
+        for (const r of batch) {
+          (responsesByInstance[r.instance_id] ??= []).push(r);
+        }
+      }
+
+      const wb = buildOperationalReportWorkbook({
+        cycle, rows, stageScores, templatesById, profilesById, deptsById, buById,
+        rulesById, responsesByInstance,
+      });
+      XLSX.writeFile(wb, `annual-review-operational-status_${cycle.review_year}.xlsx`);
+      toast.success(`Exported operational report for ${rows.length} employee${rows.length === 1 ? '' : 's'}.`);
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally { setBusy(null); }
+  }
+
   function openPdfPicker() {
     if (total > PDF_CAP) {
       toast.error(`PDF export is limited to ${PDF_CAP} rows. Narrow the filters.`);
@@ -191,6 +308,10 @@ export function AnnualReviewExportMenu({ cycle, filters, total }: Props) {
               <DropdownMenuItem onClick={handleSeeding} disabled={!!busy}>
                 <Layers className="h-4 w-4 mr-2" />
                 Cycle seeding template (Excel)
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={handleOperationalReport} disabled={!!busy}>
+                <ClipboardList className="h-4 w-4 mr-2" />
+                Operational status report (Excel)
               </DropdownMenuItem>
             </>
           )}
