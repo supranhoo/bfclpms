@@ -1812,7 +1812,7 @@ function TemplatesTabImpl() {
   const del = useMutation({
     mutationFn: (id: string) => svc.deleteTemplate(id),
     onSuccess: () => { toast.success('Template deleted'); setToDelete(null); refetch(); },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: Error) => toast.error(e?.message || 'Failed to delete template'),
   });
 
   const openNew = () => { setEditing(null); setEditorOpen(true); };
