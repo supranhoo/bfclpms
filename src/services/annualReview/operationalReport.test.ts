@@ -185,10 +185,10 @@ describe('buildOperationalReportWorkbook', () => {
     });
     const sheet = wb.Sheets[STATUS_SHEET_NAME];
     const [headers, row] = XLSX.utils.sheet_to_json(sheet, { header: 1 }) as string[][];
-    expect(headers).toContain('Department Head Recommendation');
+    expect(headers).toContain('Dept Head Recommendation');
     expect(headers).toContain('BU Head Recommendation');
     const idx = (h: string) => headers.indexOf(h);
-    expect(row[idx('Department Head Recommendation')]).toBe('Promote');
+    expect(row[idx('Dept Head Recommendation')]).toBe('Promote');
     expect(row[idx('BU Head Recommendation')]).toBe('Agreed, rotate to Ops');
   });
 
