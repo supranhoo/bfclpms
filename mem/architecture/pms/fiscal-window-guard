@@ -1,0 +1,39 @@
+---
+name: Universal fiscal-window guard for time-series aggregations
+description: How to correctly aggregate KPI/review data across a fiscal cycle that spans two calendar years without leaking adjacent-cycle rows
+type: architecture
+---
+
+A fiscal cycle spans Jul(Y) .. Jun(Y+1). Any code that fetches from time-series tables (`kpis`, `review_submissions`, `sub_period_submissions`, `org_kpi_values`, `kra_rollover_logs`, ...) for a single fiscal cycle MUST fetch across BOTH calendar years (`review_year IN (Y, Y+1)`) AND then pair `review_period` with `review_year` before bucketing.
+
+**Canonical helpers.** Use these instead of hand-rolling comparisons.
+- TypeScript (`@/lib/fiscalWindow`): `fiscalYearForMonth`, `isFiscalTuple`, `isKpiMonthInFiscalCycle`, `filterToFiscalWindow`, `fiscalStartYearOfKpi`.
+- SQL: `public.fiscal_year_for_month(text, integer)` (IMMUTABLE).
+
+**Rule.**
+```
+Jul–Dec review_period → belongs to fiscal cycle Y iff review_year = Y
+Jan–Jun review_period → belongs to fiscal cycle Y iff review_year = Y + 1
+```
+
+**Cross-year cycle propagation.** For multi-month KPIs whose cycle wraps January (Half-Yearly Oct–Mar, Yearly Jul–Jun, Quarterly Nov–Jan, Bi-Monthly Dec–Jan), sibling months live in two calendar years. `percolate_multimonth_score` derives sibling year from position within `get_cycle_months(...)` — see `mem/architecture/pms/multimonth-percolation`.
+
+**Forbidden.**
+- `.in('review_year', [Y, Y+1])` fetch followed by grouping on `review_period` alone. This is the BUG-044/045 pattern.
+- Trigger/RPC filters that use `k.review_year = NEW.review_year` for sibling lookup across a multi-month cycle. This is BUG-046.
+
+**Enforcement.**
+- `src/test/fiscalWindowGuardrail.test.ts` scans `src/**/*.{ts,tsx}` and fails any `.in('review_year', …)` callsite that lacks a helper call, a paired `(period, year)` composite key, or a `.in('period_name', …)` co-constraint.
+- POLICY §90b enumerates compliant callsites and audit anchors.
+
+**Verified callsites (2026-07-06).**
+| Site | Guard type |
+| ---- | ---------- |
+| `src/hooks/useAdminReports.ts` `useKpiMappingMatrix` | `isKpiMonthInFiscalCycle` helper |
+| `src/services/annualReview/archetypeResolver.ts` `countKraMonthsInAY` | `fiscalYearForMonth` helper |
+| `src/services/annualReview/carryKraScore.ts` `aggregateMonthly` | local `calendarYearForMonth` (equivalent) |
+| `src/components/admin/AdminKpiEditorForm.tsx` copy-to-months sibling fetch | `isFiscalTuple` helper |
+| `src/hooks/useAdminDataEntry.ts` sibling propagation | paired `(period, year)` post-filter |
+| `src/components/review/KpiJourneySection.tsx` previous-period fetch | paired `{month, year}` tuples |
+| `src/hooks/useKpis.ts` multi-month lock-check | composite `${period}\|${year}` key |
+| `public.percolate_multimonth_score` | year derived from cycle position |
