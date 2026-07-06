@@ -41,6 +41,7 @@ export interface KpiJourneyFilters {
   status?: string;
   type?: string;
   search?: string;
+  employeeStatus?: 'active' | 'inactive' | 'all';
 }
 
 export interface KpiJourneySummary {
@@ -77,6 +78,7 @@ export function useKpiJourneyReport(
         p_search: filters.search || null,
         p_limit: PAGE_SIZE,
         p_offset: (currentPage - 1) * PAGE_SIZE,
+        p_employee_status: filters.employeeStatus ?? 'active',
       });
 
       if (error) throw error;
@@ -114,6 +116,7 @@ export async function fetchKpiJourneyExportData(
       p_search: filters.search || null,
       p_limit: batchSize,
       p_offset: offset,
+      p_employee_status: filters.employeeStatus ?? 'active',
     });
 
     if (error) throw error;
