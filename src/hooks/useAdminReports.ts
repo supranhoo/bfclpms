@@ -4,6 +4,13 @@ import { useMemo, useState } from 'react';
 import { getCycleOptionsForFrequency } from '@/lib/frequencyCycleOptions';
 import { normalizeFrequency } from '@/lib/frequencyUtils';
 import { fetchAllPaged } from '@/lib/fetchAll';
+import { isKpiMonthInFiscalCycle as _isKpiMonthInFiscalCycle } from '@/lib/fiscalWindow';
+
+/**
+ * @deprecated Prefer importing from `@/lib/fiscalWindow` directly. Re-exported
+ * here for backwards compatibility with existing test imports.
+ */
+export const isKpiMonthInFiscalCycle = _isKpiMonthInFiscalCycle;
 
 // Calendar-order month names (used for DB review_period values)
 export const MONTH_NAMES = [
@@ -18,25 +25,8 @@ type MonthKey = typeof FISCAL_MONTH_KEYS[number];
 // Map calendar month index (0-based Jan=0) → fiscal index (Jul=0)
 const calendarToFiscalIdx = (calIdx: number) => (calIdx + 6) % 12;
 
-/**
- * Fiscal-window guard for the KPI Mapping Matrix.
- * Fiscal cycle `fiscalStartYear` spans Jul <fiscalStartYear> .. Jun <fiscalStartYear+1>.
- *   - Calendar months Jul–Dec (calIdx 6..11) belong to fiscalStartYear.
- *   - Calendar months Jan–Jun (calIdx 0..5)  belong to fiscalStartYear + 1.
- * A KPI row (identified by its `review_year`) contributes to a given calendar month
- * ONLY when it satisfies this rule — prevents rows from adjacent fiscal cycles
- * bleeding across the Jul boundary.
- */
-export function isKpiMonthInFiscalCycle(
-  calMonthIdx: number,
-  reviewYear: number | null | undefined,
-  fiscalStartYear: number,
-): boolean {
-  if (reviewYear == null) return false;
-  return calMonthIdx >= 6
-    ? reviewYear === fiscalStartYear
-    : reviewYear === fiscalStartYear + 1;
-}
+// Fiscal-window guard now lives in @/lib/fiscalWindow (canonical helper).
+// Kept exported above for pre-existing test imports.
 
 export interface EmployeeMatrixRow {
   employeeId: string;
