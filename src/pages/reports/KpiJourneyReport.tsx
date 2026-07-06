@@ -18,6 +18,8 @@ import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useQuery } from '@tanstack/react-query';
 import { useResolvedReportFields } from '@/hooks/useResolvedReportFields';
+import { EmployeeStatusFilter } from '@/components/reports/EmployeeStatusFilter';
+import type { EmployeeStatusMode } from '@/lib/reportEmployeeFilter';
 
 const KJN_DEFAULT_FIELDS = [
   { field_key: 'company',            default_label: 'Company',             default_sort: 10 },
@@ -101,6 +103,7 @@ export default function KpiJourneyReport() {
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [isExporting, setIsExporting] = useState(false);
+  const [employeeStatus, setEmployeeStatus] = useState<EmployeeStatusMode>('active');
   const resolvedFields = useResolvedReportFields('RPT-KJN-001', KJN_DEFAULT_FIELDS);
 
   const years = Array.from({ length: 5 }, (_, i) => currentYear - 2 + i);
@@ -110,7 +113,8 @@ export default function KpiJourneyReport() {
     status: selectedStatus,
     type: selectedType,
     search: searchTerm,
-  }), [selectedDept, selectedStatus, selectedType, searchTerm]);
+    employeeStatus,
+  }), [selectedDept, selectedStatus, selectedType, searchTerm, employeeStatus]);
 
   const { data, isLoading } = useKpiJourneyReport(selectedPeriod, selectedYear, currentPage, filters);
 
@@ -349,11 +353,23 @@ export default function KpiJourneyReport() {
 
       {/* Export */}
       {canExport && totalCount > 0 && (
-        <div className="flex justify-end">
+        <div className="flex justify-end items-center gap-3">
+          <EmployeeStatusFilter
+            value={employeeStatus}
+            onChange={(m) => { setEmployeeStatus(m); resetPage(); }}
+          />
           <Button variant="outline" size="sm" onClick={handleExport} disabled={isExporting}>
             {isExporting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Download className="h-4 w-4 mr-2" />}
             {isExporting ? 'Exporting...' : 'Export Excel'}
           </Button>
+        </div>
+      )}
+      {(!canExport || totalCount === 0) && (
+        <div className="flex justify-end">
+          <EmployeeStatusFilter
+            value={employeeStatus}
+            onChange={(m) => { setEmployeeStatus(m); resetPage(); }}
+          />
         </div>
       )}
 
