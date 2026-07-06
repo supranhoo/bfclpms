@@ -64,6 +64,7 @@ import {
   useSetAutoReassignHrOnBuHeadChange,
 } from '@/hooks/useAnnualReviewSettings';
 import { AssistedSubmissionSettings } from '@/components/admin/AssistedSubmissionSettings';
+import { PilotAccessCard } from '@/components/annual-review/PilotAccessCard';
 import { ConfirmDestructiveDialog } from '@/components/ui/ConfirmDestructiveDialog';
 import { previewHrFinalSync, applyHrFinalSync } from '@/services/annualReview/hrFinalSync';
 import { RefreshCw } from 'lucide-react';
@@ -187,6 +188,7 @@ function SettingsTab() {
 
   return (
     <div className="space-y-6">
+    <PilotAccessCard />
     <Card>
       <CardHeader>
         <CardTitle>Display Settings</CardTitle>
