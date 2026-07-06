@@ -2496,6 +2496,16 @@ PostgREST silently caps unranged `select(...)` queries at 1000 rows. With the ac
 
 **Regression Coverage (BUG-043).** `src/test/bugBountyFixes.test.ts::BUG-043` pins (a) `useAdminReports.ts` imports `fetchAllPaged`, (b) the `kpi-mapping-profiles` queryFn block uses `fetchAllPaged` and `.range(...)`.
 
+## §90a — KPI Mapping Matrix Fiscal-Window Guard (v2.66.7.46 — BUG-044)
+
+**Rule.** The KPI Mapping Matrix counts a KPI in fiscal cycle `Y` (Jul `Y` .. Jun `Y+1`) ONLY when its `(review_year, review_period)` falls inside that window:
+- Jul–Dec cells: `review_year === Y`.
+- Jan–Jun cells: `review_year === Y + 1`.
+
+**Rationale.** The hook fetches KPIs from two calendar years because a fiscal cycle straddles the Jan boundary. Without this guard, a `review_year=2026, review_period='July'` row (which belongs to fiscal 2026‑27) is rendered under Jul of fiscal 2025‑26, inflating `Mapped Employees`, `Coverage %`, and skewing `First Mapped`.
+
+**Enforcement.** `src/hooks/useAdminReports.ts` exports `isKpiMonthInFiscalCycle` and applies it on both the direct-month and `getCalendarMonthsForPeriod` (non-monthly) paths. Regression coverage: `src/test/kpiMappingMatrixFiscalWindow.test.ts`.
+
 
 ## §90 — Role-String Safety in SQL and Edge Code (v2.66.7.19)
 
