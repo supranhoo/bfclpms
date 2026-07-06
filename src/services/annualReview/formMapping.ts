@@ -135,7 +135,15 @@ async function fetchDeptToBu(): Promise<Record<string, string | null>> {
  * so the preview and coverage report share a single fetch per render.
  */
 const krasCache = new Map<number, Promise<Set<string>>>();
-export function _resetKrasCacheForTests() { krasCache.clear(); }
+/**
+ * Clears the in-memory KRAs cache. Called from `checkMappingCoverage` so that
+ * pressing "Refresh coverage" always recomputes against fresh KRA membership
+ * (previously the memoised Promise made toggling `has_kras` a no-op until
+ * page reload). Also used by tests.
+ */
+export function _resetKrasCache() { krasCache.clear(); }
+/** @deprecated Use `_resetKrasCache`. Kept as an alias for older tests. */
+export const _resetKrasCacheForTests = _resetKrasCache;
 export function fetchEmployeesWithKrasSince(months: number): Promise<Set<string>> {
   const w = Math.min(Math.max(Math.round(months), 1), 36);
   const cached = krasCache.get(w);
@@ -214,6 +222,9 @@ export interface CoverageReport {
  * Callers should block "Start cycle" if `unmapped > 0`.
  */
 export async function checkMappingCoverage(cycleId: string): Promise<CoverageReport> {
+  // Bust the KRAs memo so Refresh always recomputes (bug: toggling has_kras
+  // filter + Refresh coverage kept showing stale membership).
+  _resetKrasCache();
   const [profiles, deptToBu, rulesRes, instRes] = await Promise.all([
     fetchActiveProfiles(),
     fetchDeptToBu(),
