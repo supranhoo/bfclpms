@@ -82,7 +82,7 @@ export default function AnnualReviewFormMapping() {
         <>
           <CoverageBanner report={coverageQ.data} loading={coverageQ.isLoading} />
           <TemplatesUsagePanel templates={templates} report={coverageQ.data} />
-          <div className="max-w-3xl">
+          <div className="grid gap-6 xl:grid-cols-2 items-start">
             <AudienceBuilder
               cycleId={cycle.id}
               templates={templates}
@@ -93,13 +93,13 @@ export default function AnnualReviewFormMapping() {
                 toast.success('Coverage updated.');
               }}
             />
+            <EmployeeOverridePanel
+              cycleId={cycle.id}
+              templates={templates}
+              report={coverageQ.data}
+              onChanged={() => coverageQ.refetch()}
+            />
           </div>
-          <EmployeeOverridePanel
-            cycleId={cycle.id}
-            templates={templates}
-            report={coverageQ.data}
-            onChanged={() => coverageQ.refetch()}
-          />
           {coverageQ.data && coverageQ.data.unmapped > 0 && (
             <UnmappedTable report={coverageQ.data} />
           )}
