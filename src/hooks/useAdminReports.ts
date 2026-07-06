@@ -151,18 +151,18 @@ export function useKpiMappingMatrix(filters: KpiMappingFilters, page: number, so
     queryKey: ['kpi-mapping-kpis', filters.year],
     queryFn: async () => {
       const fetchBatched = async (year: number) => {
-        let all: { employee_id: string; review_period: string; frequency: string | null; frequency_cycle_start: string | null }[] = [];
+        let all: { employee_id: string; review_period: string; frequency: string | null; frequency_cycle_start: string | null; review_year: number }[] = [];
         let from = 0;
         const batchSize = 1000;
         while (true) {
           const { data, error } = await supabase
             .from('kpis')
-            .select('employee_id, review_period, frequency, frequency_cycle_start')
+            .select('employee_id, review_period, frequency, frequency_cycle_start, review_year')
             .eq('review_year', year)
             .range(from, from + batchSize - 1);
           if (error) throw error;
           if (!data || data.length === 0) break;
-          all = all.concat(data);
+          all = all.concat(data as any);
           if (data.length < batchSize) break;
           from += batchSize;
         }
@@ -197,17 +197,32 @@ export function useKpiMappingMatrix(filters: KpiMappingFilters, page: number, so
     for (const kpi of kpis) {
       if (!kpi.review_period || !kpi.employee_id) continue;
 
+      // Fiscal-window guard: fiscal <year> spans Jul <year> .. Jun <year+1>.
+      // A calendar month belongs to this fiscal cycle only when:
+      //   Jul–Dec  → review_year === filters.year
+      //   Jan–Jun  → review_year === filters.year + 1
+      const isInFiscalWindow = (calMonthIdx: number, ky: number | null | undefined) => {
+        if (ky == null) return false;
+        return calMonthIdx >= 6
+          ? ky === filters.year
+          : ky === filters.year + 1;
+      };
+
       // Try direct month name match first (Monthly / null frequency)
       const calIdx = MONTH_NAMES.indexOf(kpi.review_period as any);
       if (calIdx !== -1) {
-        addMonthForEmployee(kpi.employee_id, calIdx);
+        if (isInFiscalWindow(calIdx, (kpi as any).review_year)) {
+          addMonthForEmployee(kpi.employee_id, calIdx);
+        }
         continue;
       }
 
       // Non-monthly KPI: resolve covered months from cycle options
       const coveredMonths = getCalendarMonthsForPeriod(kpi.review_period, kpi.frequency, kpi.frequency_cycle_start);
       for (const cm of coveredMonths) {
-        addMonthForEmployee(kpi.employee_id, cm);
+        if (isInFiscalWindow(cm, (kpi as any).review_year)) {
+          addMonthForEmployee(kpi.employee_id, cm);
+        }
       }
     }
 
