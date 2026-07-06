@@ -143,4 +143,21 @@ describe('resolveTemplateForProfile', () => {
     expect(resolveTemplateForProfile([workbook], p({ pms_grade: 'M4' }), deptToBu).templateId).toBeNull();
     expect(resolveTemplateForProfile([workbook], p({ pms_grade: 'Workman' }), deptToBu).templateId).toBe('workbook-w');
   });
+
+  it('newly-added rule with lower priority number wins over older broad rule', () => {
+    // Regression: the Audience Builder used to save new rules at the
+    // HIGHEST priority number (least precedence), so specific new rules
+    // were shadowed by older broad rules and resolved 0 employees.
+    const oldBroad = rule({
+      id: 'old', template_id: 'broad', priority: 100,
+      filters: { ...rule({}).filters },
+    });
+    const newSpecific = rule({
+      id: 'new', template_id: 'specific', priority: 90, // min(existing)-10
+      filters: { ...rule({}).filters, roles: ['Executive'] },
+    });
+    expect(
+      resolveTemplateForProfile([oldBroad, newSpecific], p(), deptToBu).templateId,
+    ).toBe('specific');
+  });
 });

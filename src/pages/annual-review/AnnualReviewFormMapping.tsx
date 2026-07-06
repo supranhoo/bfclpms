@@ -86,8 +86,12 @@ export default function AnnualReviewFormMapping() {
             <AudienceBuilder
               cycleId={cycle.id}
               templates={templates}
-              rulesCount={rules.length}
-              onCommitted={() => { refetchRules(); coverageQ.refetch(); }}
+              rules={rules}
+              report={coverageQ.data}
+              onCommitted={async () => {
+                await Promise.all([refetchRules(), coverageQ.refetch()]);
+                toast.success('Coverage updated.');
+              }}
             />
           </div>
           <EmployeeOverridePanel
@@ -185,16 +189,18 @@ function TemplatesUsagePanel({
 
 // ── Audience builder ──────────────────────────────────────────────
 function AudienceBuilder({
-  cycleId, templates, rulesCount, onCommitted,
+  cycleId, templates, rules, report, onCommitted,
 }: {
   cycleId: string;
   templates: { id: string; name: string; is_active: boolean | null }[];
-  rulesCount: number;
-  onCommitted: () => void;
+  rules: { id: string; template_id: string; name: string | null; priority: number }[];
+  report?: CoverageReport;
+  onCommitted: () => void | Promise<void>;
 }) {
   const [templateId, setTemplateId] = useState<string>('');
   const [filters, setFilters] = useState<AssignmentFilters>(EMPTY_FILTERS);
   const [ruleName, setRuleName] = useState('');
+  const [lastSavedTemplateId, setLastSavedTemplateId] = useState<string | null>(null);
 
   const previewQ = useQuery({
     queryKey: ['annual-review', 'form-mapping', 'preview', filters],
@@ -205,7 +211,15 @@ function AudienceBuilder({
   const commit = useMutation({
     mutationFn: async () => {
       if (!templateId) throw new Error('Pick a template first.');
-      const priority = rulesCount === 0 ? 100 : (rulesCount + 1) * 10;
+      // New rules take the HIGHEST precedence (lowest priority number) so
+      // freshly-created specific rules aren't shadowed by pre-existing
+      // broader rules. Existing rules are untouched — admins can reorder
+      // manually on the Rules tab if needed.
+      const minExisting = rules.reduce(
+        (m, r) => Math.min(m, r.priority ?? 100),
+        100,
+      );
+      const priority = rules.length === 0 ? 100 : Math.max(1, minExisting - 10);
       await svc.upsertRule({
         cycle_id: cycleId,
         template_id: templateId,
@@ -216,7 +230,8 @@ function AudienceBuilder({
       });
     },
     onSuccess: () => {
-      toast.success('Rule saved. Coverage will refresh.');
+      toast.success('Rule saved. Recalculating coverage…');
+      setLastSavedTemplateId(templateId);
       setRuleName('');
       onCommitted();
     },
@@ -224,6 +239,30 @@ function AudienceBuilder({
   });
 
   const activeTpls = templates.filter((t) => t.is_active !== false);
+
+  // After a save, if coverage shows the saved template still has 0 employees
+  // resolved to it, an earlier (lower-priority-number) rule is shadowing it.
+  const shadowingRule = useMemo(() => {
+    if (!lastSavedTemplateId || !report) return null;
+    const covered = report.rows.filter(
+      (r) => r.resolvedTemplateId === lastSavedTemplateId,
+    ).length;
+    if (covered > 0) return null;
+    // Find the top-priority rule that covers at least one employee — likely
+    // the shadowing broad rule.
+    const counts = new Map<string, number>();
+    for (const r of report.rows) {
+      if (!r.resolvedTemplateId) continue;
+      counts.set(r.resolvedTemplateId, (counts.get(r.resolvedTemplateId) ?? 0) + 1);
+    }
+    const sorted = [...rules].sort((a, b) => (a.priority ?? 0) - (b.priority ?? 0));
+    const shadow = sorted.find(
+      (r) => r.template_id !== lastSavedTemplateId && (counts.get(r.template_id) ?? 0) > 0,
+    );
+    if (!shadow) return null;
+    const tpl = templates.find((t) => t.id === shadow.template_id);
+    return shadow.name || tpl?.name || 'another rule';
+  }, [lastSavedTemplateId, report, rules, templates]);
 
   return (
     <Card>
@@ -282,10 +321,21 @@ function AudienceBuilder({
           {commit.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
           Save mapping rule
         </Button>
+        {shadowingRule && (
+          <Alert variant="destructive">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertTitle>Saved, but shadowed by a higher-priority rule</AlertTitle>
+            <AlertDescription>
+              A higher-priority rule (<strong>{shadowingRule}</strong>) already
+              covers these employees, so your new rule resolves to 0 people.
+              Narrow the earlier rule, or lower its priority on the Rules tab.
+            </AlertDescription>
+          </Alert>
+        )}
         <p className="text-xs text-muted-foreground">
-          Rules run in priority order (lowest wins). This creates a new rule at
-          the next-lowest priority so it doesn&apos;t override existing ones.
-          Edit priorities on the <strong>Rules</strong> tab.
+          Rules run in priority order (lowest number wins). New rules are saved
+          with the highest precedence so they take effect immediately. Edit
+          priorities on the <strong>Rules</strong> tab.
         </p>
       </CardContent>
     </Card>
