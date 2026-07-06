@@ -66,6 +66,7 @@ export function TemplateEditorDialog({
   const [libPickerOpen, setLibPickerOpen] = useState(false);
   const [libManagerOpen, setLibManagerOpen] = useState(false);
   const [criteriaLibOpen, setCriteriaLibOpen] = useState(false);
+  const [highlightCriteriaIds, setHighlightCriteriaIds] = useState<string[]>([]);
   const { effectiveRole } = useAuth();
   const canManageLibrary = effectiveRole === 'admin' || effectiveRole === 'hr_pms';
 
@@ -504,7 +505,11 @@ export function TemplateEditorDialog({
                 </TableHeader>
                 <TableBody>
                   {criteria.map((c, i) => (
-                    <TableRow key={c.id}>
+                    <TableRow
+                      key={c.id}
+                      data-criterion-id={c.id}
+                      className={highlightCriteriaIds.includes(c.id) ? 'bg-primary/10 ring-2 ring-primary/40 transition-colors' : ''}
+                    >
                       <TableCell className="align-top space-y-1">
                         <Input className="h-9" value={c.name} onChange={(ev) => updateAt(setSections, 'criteria', i, { name: ev.target.value })} />
                         {multilingual && extraLangs.map((lang) => (
@@ -705,7 +710,20 @@ export function TemplateEditorDialog({
         existingKeys={criteria.map((c: any) => c.key).filter(Boolean)}
         onAdd={(items) => {
           setSections((s) => ({ ...s, criteria: [...(s.criteria ?? []), ...items] }));
-          toast.success(`Added ${items.length} criter${items.length === 1 ? 'ion' : 'ia'} from library`);
+          const newIds = items.map((it: any) => it.id).filter(Boolean);
+          setHighlightCriteriaIds(newIds);
+          toast.success(
+            `Added ${items.length} criter${items.length === 1 ? 'ion' : 'ia'} from library — scroll down to review & set weights`,
+          );
+          // After DOM commit, scroll first newly-added row into view.
+          setTimeout(() => {
+            const first = newIds[0];
+            if (!first) return;
+            const el = document.querySelector(`[data-criterion-id="${first}"]`) as HTMLElement | null;
+            el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }, 60);
+          // Clear the highlight after a few seconds.
+          setTimeout(() => setHighlightCriteriaIds([]), 3500);
         }}
       />
     </Dialog>
