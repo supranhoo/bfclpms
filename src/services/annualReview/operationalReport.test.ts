@@ -155,6 +155,43 @@ describe('buildOperationalReportWorkbook', () => {
     expect(qual['Score / Response']).toBe('Great year');
   });
 
+  it('Sheet 1 includes Dept Head and BU Head overall recommendation columns', () => {
+    const recResponses: AnnualReviewResponse[] = [
+      {
+        id: 'rd', instance_id: 'i1', reviewer_id: 'd1', reviewer_role: 'dept_head',
+        criteria_scores: {}, qualitative_responses: { __overall_recommendation: 'Promote' },
+        evidence: [], weighted_score: null, submitted_at: '2026-05-10T00:00:00Z',
+        is_locked: false, notes: null, created_at: '', updated_at: '',
+      },
+      {
+        id: 'rb', instance_id: 'i1', reviewer_id: 'b1', reviewer_role: 'bu_head',
+        criteria_scores: {}, qualitative_responses: { __overall_recommendation: 'Agreed, rotate to Ops' },
+        evidence: [], weighted_score: null, submitted_at: '2026-05-12T00:00:00Z',
+        is_locked: false, notes: null, created_at: '', updated_at: '',
+      },
+      {
+        id: 'rm', instance_id: 'i1', reviewer_id: 'm1', reviewer_role: 'manager',
+        criteria_scores: {}, qualitative_responses: {},
+        evidence: [], weighted_score: null, submitted_at: null,
+        is_locked: false, notes: null, created_at: '', updated_at: '',
+      },
+    ];
+    const wb = buildOperationalReportWorkbook({
+      cycle, rows: [makeRow()],
+      stageScores: {}, templatesById: { t1: template },
+      profilesById, deptsById, buById, rulesById,
+      responsesByInstance: { i1: recResponses },
+      now: new Date('2026-06-30T00:00:00Z'),
+    });
+    const sheet = wb.Sheets[STATUS_SHEET_NAME];
+    const [headers, row] = XLSX.utils.sheet_to_json(sheet, { header: 1 }) as string[][];
+    expect(headers).toContain('Dept Head Recommendation');
+    expect(headers).toContain('BU Head Recommendation');
+    const idx = (h: string) => headers.indexOf(h);
+    expect(row[idx('Dept Head Recommendation')]).toBe('Promote');
+    expect(row[idx('BU Head Recommendation')]).toBe('Agreed, rotate to Ops');
+  });
+
   it('is safe with no responses and no template', () => {
     const wb = buildOperationalReportWorkbook({
       cycle, rows: [makeRow({ template_id: 'missing' })],

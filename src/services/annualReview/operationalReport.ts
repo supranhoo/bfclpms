@@ -28,6 +28,7 @@ import type { InstanceWithEmployee } from './annualReviewService';
 import { resolveTemplateId } from './annualReviewService';
 import { enabledChain } from '@/lib/annualReview/stageChain';
 import { STAGE_TO_STATUS, STATUS_LABEL, STAGE_LABEL } from '@/lib/annualReview/constants';
+import { RECOMMENDATION_KEY, RECOMMENDATION_ROLES } from '@/components/annual-review/OverallRecommendationCard';
 
 const STAGE_ORDER: AnnualReviewerRole[] = ['self', 'manager', 'skip_manager', 'dept_head', 'bu_head', 'hr'];
 
@@ -148,6 +149,9 @@ function buildStatusSheet(input: OperationalReportInput): XLSX.WorkSheet {
     headers.push(`${STAGE_LABEL[s]} Submitted At`);
     headers.push(`${STAGE_LABEL[s]} Score`);
   }
+  for (const s of RECOMMENDATION_ROLES) {
+    headers.push(`${STAGE_LABEL[s]} Recommendation`);
+  }
   headers.push('Criteria Weighted Score', 'Total Score', 'Final Rating',
     'Finalized At', 'Finalized By', 'Acknowledged At');
 
@@ -197,6 +201,14 @@ function buildStatusSheet(input: OperationalReportInput): XLSX.WorkSheet {
       row[`${STAGE_LABEL[s]} Submitted At`] = inChain ? fmtDate(submittedByStage[s] ?? null) : '';
       const score = scoresByStage[s];
       row[`${STAGE_LABEL[s]} Score`] = inChain && score != null ? Number(score.toFixed(2)) : '';
+    }
+    const recByStage: Partial<Record<AnnualReviewerRole, string>> = {};
+    for (const r of input.responsesByInstance[inst.id] ?? []) {
+      const txt = ((r.qualitative_responses ?? {})[RECOMMENDATION_KEY] ?? '').trim();
+      if (txt) recByStage[r.reviewer_role] = txt;
+    }
+    for (const s of RECOMMENDATION_ROLES) {
+      row[`${STAGE_LABEL[s]} Recommendation`] = recByStage[s] ?? '';
     }
     row['Criteria Weighted Score'] = inst.criteria_weighted_score ?? '';
     row['Total Score'] = inst.total_score ?? '';
