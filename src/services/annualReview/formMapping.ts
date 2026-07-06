@@ -1,6 +1,7 @@
 import { supabase } from '@/integrations/supabase/client';
 import type { AssignmentFilters, AnnualReviewAssignmentRule } from '@/types/annualReview';
 import { bucketFromGradeCode } from './archetypeResolver';
+import { fetchAllPaged } from '@/lib/fetchAll';
 
 /**
  * Form Mapping SSOT — one place that decides which template an employee
@@ -295,4 +296,18 @@ export async function checkMappingCoverage(cycleId: string): Promise<CoverageRep
     willSeed,
     rows,
   };
+}
+
+/**
+ * Paged fetch of every department's id → name mapping. Used by the
+ * form-mapping "Templates in use" dialog to render department names
+ * alongside employee rows without joining per-row.
+ */
+export async function fetchDepartmentNameMap(): Promise<Map<string, string>> {
+  const rows = await fetchAllPaged<{ id: string; name: string | null }>((from, to) =>
+    supabase.from('departments').select('id, name').order('name').range(from, to),
+  );
+  const m = new Map<string, string>();
+  for (const r of rows ?? []) m.set(r.id, r.name ?? '');
+  return m;
 }

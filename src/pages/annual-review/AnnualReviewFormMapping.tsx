@@ -11,14 +11,19 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
+} from '@/components/ui/dialog';
 import { toast } from 'sonner';
-import { ArrowLeft, CheckCircle2, AlertTriangle, Loader2, Search, Save, RefreshCw, Pin } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, AlertTriangle, Loader2, Search, Save, RefreshCw, Pin, Users, X } from 'lucide-react';
 import { useActiveCycle, useTemplates, useRules } from '@/hooks/useAnnualReview';
 import * as svc from '@/services/annualReview/annualReviewService';
 import { RuleFiltersEditor, RuleFiltersSummary, EMPTY_FILTERS } from '@/components/annual-review/RuleFiltersEditor';
 import {
   previewAudience, checkMappingCoverage,
+  fetchDepartmentNameMap,
   type CoverageReport,
+  type CoverageRow,
 } from '@/services/annualReview/formMapping';
 import type { AssignmentFilters } from '@/types/annualReview';
 import { supabase } from '@/integrations/supabase/client';
@@ -81,7 +86,12 @@ export default function AnnualReviewFormMapping() {
       {cycle && (
         <>
           <CoverageBanner report={coverageQ.data} loading={coverageQ.isLoading} />
-          <TemplatesUsagePanel templates={templates} report={coverageQ.data} />
+          <TemplatesUsagePanel
+            templates={templates}
+            report={coverageQ.data}
+            cycleId={cycle.id}
+            onChanged={() => coverageQ.refetch()}
+          />
           <div className="grid gap-6 xl:grid-cols-2 items-start">
             <AudienceBuilder
               cycleId={cycle.id}
@@ -144,11 +154,14 @@ function CoverageBanner({ report, loading }: { report?: CoverageReport; loading:
 
 // ── Templates panel with usage counts ─────────────────────────────
 function TemplatesUsagePanel({
-  templates, report,
+  templates, report, cycleId, onChanged,
 }: {
   templates: { id: string; name: string; is_active: boolean | null }[];
   report?: CoverageReport;
+  cycleId: string;
+  onChanged: () => void | Promise<unknown>;
 }) {
+  const [openTemplate, setOpenTemplate] = useState<{ id: string; name: string } | null>(null);
   const usage = useMemo(() => {
     const m = new Map<string, number>();
     if (report) for (const r of report.rows) {
@@ -180,19 +193,255 @@ function TemplatesUsagePanel({
         )}
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-x-8">
           {rows.map((t) => (
-            <div
+            <button
               key={t.id}
-              className="flex items-center justify-between border-b border-border/60 last:border-0 gap-3 h-10"
+              type="button"
+              onClick={() => t.count > 0 && setOpenTemplate({ id: t.id, name: t.name })}
+              disabled={t.count === 0}
+              className="group flex items-center justify-between border-b border-border/60 last:border-0 gap-3 h-10 text-left transition-colors enabled:hover:bg-muted/40 enabled:cursor-pointer disabled:cursor-default px-1 -mx-1 rounded"
+              title={t.count > 0 ? 'View mapped employees' : 'No employees mapped'}
             >
               <span className="text-sm truncate" title={t.name}>{t.name}</span>
-              <Badge variant={t.count > 0 ? 'default' : 'outline'} className="shrink-0">
-                {t.count} employee{t.count === 1 ? '' : 's'}
-              </Badge>
-            </div>
+              <span className="flex items-center gap-2 shrink-0">
+                {t.count > 0 && (
+                  <Users className="h-3.5 w-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                )}
+                <Badge variant={t.count > 0 ? 'default' : 'outline'}>
+                  {t.count} employee{t.count === 1 ? '' : 's'}
+                </Badge>
+              </span>
+            </button>
           ))}
         </div>
       </CardContent>
+      {openTemplate && report && (
+        <TemplateEmployeesDialog
+          open={!!openTemplate}
+          onOpenChange={(v) => !v && setOpenTemplate(null)}
+          template={openTemplate}
+          cycleId={cycleId}
+          report={report}
+          onChanged={onChanged}
+        />
+      )}
     </Card>
+  );
+}
+
+// ── Template employees dialog ─────────────────────────────────────
+function TemplateEmployeesDialog({
+  open, onOpenChange, template, cycleId, report, onChanged,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  template: { id: string; name: string };
+  cycleId: string;
+  report: CoverageReport;
+  onChanged: () => void | Promise<unknown>;
+}) {
+  const [q, setQ] = useState('');
+  const [pendingRow, setPendingRow] = useState<CoverageRow | null>(null);
+  const [reason, setReason] = useState('');
+
+  const mapped = useMemo(
+    () => report.rows.filter((r) => r.resolvedTemplateId === template.id),
+    [report, template.id],
+  );
+
+  const filtered = useMemo(() => {
+    const needle = q.trim().toLowerCase();
+    if (!needle) return mapped;
+    return mapped.filter((r) =>
+      (r.employee.full_name ?? '').toLowerCase().includes(needle) ||
+      (r.employee.employee_code ?? '').toLowerCase().includes(needle) ||
+      (r.employee.designation ?? '').toLowerCase().includes(needle),
+    );
+  }, [q, mapped]);
+
+  const deptQ = useQuery({
+    queryKey: ['departments', 'id-name-map'],
+    queryFn: fetchDepartmentNameMap,
+    staleTime: 5 * 60_000,
+    enabled: open,
+  });
+
+  const empIds = useMemo(() => mapped.map((r) => r.employee.id), [mapped]);
+
+  const instancesQ = useQuery({
+    queryKey: ['annual-review', 'form-mapping', 'instances', cycleId, template.id],
+    enabled: open && empIds.length > 0,
+    queryFn: async () => {
+      const out = new Map<string, string>();
+      const CHUNK = 300;
+      for (let i = 0; i < empIds.length; i += CHUNK) {
+        const slice = empIds.slice(i, i + CHUNK);
+        const { data, error } = await supabase
+          .from('annual_review_instances')
+          .select('id, employee_id')
+          .eq('cycle_id', cycleId)
+          .in('employee_id', slice);
+        if (error) throw error;
+        for (const row of data ?? []) {
+          out.set((row as { employee_id: string }).employee_id, (row as { id: string }).id);
+        }
+      }
+      return out;
+    },
+  });
+
+  const remove = useMutation({
+    mutationFn: async () => {
+      if (!pendingRow) throw new Error('No row selected.');
+      const instanceId = instancesQ.data?.get(pendingRow.employee.id);
+      if (!instanceId) throw new Error('This employee has no seeded instance yet.');
+      if (reason.trim().length < 3) throw new Error('Reason must be at least 3 characters.');
+      // Rule-resolved rows: pin to NULL so this cycle explicitly excludes them.
+      // Manually pinned rows: passing null clears the override and lets rules
+      // re-resolve (may re-map to the same template).
+      await svc.setTemplateOverride({
+        instanceId,
+        templateId: null,
+        reason: reason.trim(),
+      });
+    },
+    onSuccess: async () => {
+      toast.success('Employee removed from this template.');
+      setPendingRow(null);
+      setReason('');
+      await onChanged();
+    },
+    onError: (e) => toast.error((e as Error).message),
+  });
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-4xl">
+        <DialogHeader>
+          <DialogTitle>{template.name}</DialogTitle>
+          <DialogDescription>
+            {mapped.length} employee{mapped.length === 1 ? '' : 's'} mapped to this template for the active cycle.
+            Removing an employee here creates an audit-logged per-employee override.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="relative">
+          <Search className="h-4 w-4 absolute left-2 top-2.5 text-muted-foreground" />
+          <Input
+            className="pl-8"
+            placeholder="Search by name, code, or designation…"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+          />
+        </div>
+
+        {mapped.length === 0 ? (
+          <p className="text-sm text-muted-foreground py-8 text-center">
+            No employees are currently mapped to this template.
+          </p>
+        ) : (
+          <div className="max-h-[55vh] overflow-auto rounded-md border">
+            <Table>
+              <TableHeader className="sticky top-0 bg-background z-10">
+                <TableRow>
+                  <TableHead>Code</TableHead>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Department</TableHead>
+                  <TableHead>Designation</TableHead>
+                  <TableHead>Grade</TableHead>
+                  <TableHead className="text-right">Action</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filtered.map((r) => {
+                  const instanceId = instancesQ.data?.get(r.employee.id);
+                  const canRemove = !!instanceId;
+                  return (
+                    <TableRow key={r.employee.id}>
+                      <TableCell className="font-mono text-xs">{r.employee.employee_code ?? '—'}</TableCell>
+                      <TableCell className="text-sm">
+                        {r.employee.full_name ?? '—'}
+                        {r.hasOverride && (
+                          <Badge variant="secondary" className="ml-2 text-[10px]">Pinned</Badge>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-sm">
+                        {deptQ.data?.get(r.employee.department_id ?? '') || '—'}
+                      </TableCell>
+                      <TableCell className="text-sm">{r.employee.designation ?? '—'}</TableCell>
+                      <TableCell className="text-sm">{r.employee.pms_grade ?? '—'}</TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                          disabled={!canRemove || instancesQ.isLoading}
+                          onClick={() => { setPendingRow(r); setReason(''); }}
+                          title={canRemove ? 'Remove from template' : 'No seeded instance yet — seed the cycle first'}
+                        >
+                          <X className="h-3.5 w-3.5 mr-1" /> Remove
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+                {filtered.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={6} className="text-center text-sm text-muted-foreground py-6">
+                      No matches.
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        )}
+
+        {pendingRow && (
+          <Alert variant="destructive">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertTitle>Remove {pendingRow.employee.full_name} from {template.name}?</AlertTitle>
+            <AlertDescription className="space-y-2">
+              <p className="text-xs">
+                {pendingRow.hasOverride
+                  ? 'This employee is manually pinned. Removing clears the pin — they will fall back to rule resolution and may re-land on this same template if a rule still matches.'
+                  : 'This employee matches a mapping rule. Removing creates a per-employee override that unmaps them for this cycle. Re-map via the audience builder or per-employee panel afterwards.'}
+              </p>
+              <Textarea
+                rows={2}
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                placeholder="Reason (min 3 characters, audit-logged)"
+              />
+              <div className="flex gap-2 pt-1">
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  onClick={() => remove.mutate()}
+                  disabled={remove.isPending || reason.trim().length < 3}
+                >
+                  {remove.isPending
+                    ? <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                    : <X className="h-4 w-4 mr-1" />}
+                  Confirm remove
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => { setPendingRow(null); setReason(''); }}
+                  disabled={remove.isPending}
+                >
+                  Cancel
+                </Button>
+              </div>
+            </AlertDescription>
+          </Alert>
+        )}
+
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>Close</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
