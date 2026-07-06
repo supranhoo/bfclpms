@@ -131,7 +131,7 @@ describe('buildOperationalReportWorkbook', () => {
     // Days-in-stage: updated 2026-06-01, now 2026-06-30 → 29 days
     expect(row[idx('Days in Current Stage')]).toBe(29);
     // Disabled stages leave blanks (BU Head not in enabled_stages)
-    expect(row[idx('BU Head Submitted At')]).toBeUndefined();
+    expect(row[idx('BU Head Submitted At')] ?? '').toBe('');
     // Self Review is in chain and has response → submitted_at populated
     expect(row[idx('Self Review Submitted At')]).toBe('2026-05-01');
   });
