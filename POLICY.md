@@ -1,4 +1,9 @@
 ### §EVIDENCE-DOWNLOAD-PRIVATE-BUCKET — All client downloads from the `review-evidence` bucket use signed URLs (v2.66.68, 2026-06-29)
+### §AR-WF-MAPPING-VISIBILITY — Admin surfaces showing an employee's workflow mapping MUST display the resolved template and its source (v2.66.89, 2026-07-06)
+- Any UI that displays an employee's workflow mapping (e.g., Edit User → Access & Login → Workflow mapping card) MUST resolve the effective template via `get_employee_workflow_info` (SSOT) for the selected (period, year) and MUST label the source: `employee_exact` ("Set for this month"), `employee_earlier_month` ("Carried from {Month YYYY}"), `department`, `pms_grade`, or `default`.
+- Exact-period employee overrides remain the only rows edited/deleted from that surface; carried, department, grade, and default sources are read-only in the card.
+- Save/reset MUST invalidate `['employee-workflow', employeeId]` so the shown resolution updates without a re-open.
+- Regression guard: `src/test/inlineWorkflowMappingCard.test.ts` covers all five source classifications and the "most recent carried row" selection.
 ### §AR-WORKBOOK-TEMPLATE-SYSTEM-WEIGHTS — Workbook-sourced Annual Review templates preserve System rows, workflow, and grade-bucket routing (v2.66.85, 2026-07-05)
 ### §AR-MAPPING-HAS-KRAS — Annual Review mapping rules MAY restrict audience to employees with/without KRAs in the last N months (v2.66.88, 2026-07-06)
 - Tri-state per rule (`any` / `yes` / `no`); default `any`, which is a no-op and preserves prior behavior for legacy rules.
