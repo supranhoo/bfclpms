@@ -11,14 +11,19 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
+} from '@/components/ui/dialog';
 import { toast } from 'sonner';
-import { ArrowLeft, CheckCircle2, AlertTriangle, Loader2, Search, Save, RefreshCw, Pin } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, AlertTriangle, Loader2, Search, Save, RefreshCw, Pin, Users, X } from 'lucide-react';
 import { useActiveCycle, useTemplates, useRules } from '@/hooks/useAnnualReview';
 import * as svc from '@/services/annualReview/annualReviewService';
 import { RuleFiltersEditor, RuleFiltersSummary, EMPTY_FILTERS } from '@/components/annual-review/RuleFiltersEditor';
 import {
   previewAudience, checkMappingCoverage,
+  fetchDepartmentNameMap,
   type CoverageReport,
+  type CoverageRow,
 } from '@/services/annualReview/formMapping';
 import type { AssignmentFilters } from '@/types/annualReview';
 import { supabase } from '@/integrations/supabase/client';
@@ -81,7 +86,12 @@ export default function AnnualReviewFormMapping() {
       {cycle && (
         <>
           <CoverageBanner report={coverageQ.data} loading={coverageQ.isLoading} />
-          <TemplatesUsagePanel templates={templates} report={coverageQ.data} />
+          <TemplatesUsagePanel
+            templates={templates}
+            report={coverageQ.data}
+            cycleId={cycle.id}
+            onChanged={() => coverageQ.refetch()}
+          />
           <div className="grid gap-6 xl:grid-cols-2 items-start">
             <AudienceBuilder
               cycleId={cycle.id}
