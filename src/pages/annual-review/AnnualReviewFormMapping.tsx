@@ -81,8 +81,8 @@ export default function AnnualReviewFormMapping() {
       {cycle && (
         <>
           <CoverageBanner report={coverageQ.data} loading={coverageQ.isLoading} />
-          <div className="grid gap-6 lg:grid-cols-2">
-            <TemplatesUsagePanel templates={templates} report={coverageQ.data} />
+          <TemplatesUsagePanel templates={templates} report={coverageQ.data} />
+          <div className="max-w-3xl">
             <AudienceBuilder
               cycleId={cycle.id}
               templates={templates}
@@ -163,20 +163,29 @@ function TemplatesUsagePanel({
     .map((t) => ({ ...t, count: usage.get(t.id) ?? 0 }))
     .sort((a, b) => b.count - a.count);
 
+  const totalCovered = rows.reduce((s, r) => s + r.count, 0);
+
   return (
     <Card>
-      <CardHeader>
+      <CardHeader className="flex flex-row items-center justify-between gap-4">
         <CardTitle className="text-base">Templates in use</CardTitle>
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <Badge variant="outline">{rows.length} template{rows.length === 1 ? '' : 's'}</Badge>
+          <Badge variant="secondary">{totalCovered} employee{totalCovered === 1 ? '' : 's'} covered</Badge>
+        </div>
       </CardHeader>
       <CardContent>
         {rows.length === 0 && (
           <p className="text-sm text-muted-foreground">No active templates. Create one under Admin → Templates.</p>
         )}
-        <div className="max-h-72 overflow-y-auto -mx-2 px-2">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-x-8">
           {rows.map((t) => (
-            <div key={t.id} className="flex items-center justify-between py-2 border-b last:border-0 gap-2">
-              <span className="text-sm truncate">{t.name}</span>
-              <Badge variant={t.count > 0 ? 'default' : 'outline'}>
+            <div
+              key={t.id}
+              className="flex items-center justify-between border-b border-border/60 last:border-0 gap-3 h-10"
+            >
+              <span className="text-sm truncate" title={t.name}>{t.name}</span>
+              <Badge variant={t.count > 0 ? 'default' : 'outline'} className="shrink-0">
                 {t.count} employee{t.count === 1 ? '' : 's'}
               </Badge>
             </div>
