@@ -613,6 +613,7 @@ export type Database = {
           stage_weights_override: Json | null
           submitted_via_proxy: boolean
           system_scores: Json
+          system_scores_raw: Json
           template_id: string
           template_override_id: string | null
           total_score: number | null
@@ -647,6 +648,7 @@ export type Database = {
           stage_weights_override?: Json | null
           submitted_via_proxy?: boolean
           system_scores?: Json
+          system_scores_raw?: Json
           template_id: string
           template_override_id?: string | null
           total_score?: number | null
@@ -681,6 +683,7 @@ export type Database = {
           stage_weights_override?: Json | null
           submitted_via_proxy?: boolean
           system_scores?: Json
+          system_scores_raw?: Json
           template_id?: string
           template_override_id?: string | null
           total_score?: number | null
