@@ -65,6 +65,7 @@ import {
 } from '@/hooks/useAnnualReviewSettings';
 import { AssistedSubmissionSettings } from '@/components/admin/AssistedSubmissionSettings';
 import { PilotAccessCard } from '@/components/annual-review/PilotAccessCard';
+import { CycleBulkDataUploadDialog } from '@/components/annual-review/CycleBulkDataUploadDialog';
 import { ConfirmDestructiveDialog } from '@/components/ui/ConfirmDestructiveDialog';
 import { previewHrFinalSync, applyHrFinalSync } from '@/services/annualReview/hrFinalSync';
 import { RefreshCw } from 'lucide-react';
@@ -150,6 +151,7 @@ function SettingsTab() {
   const [syncOpen, setSyncOpen] = useState(false);
   const [syncPreview, setSyncPreview] = useState<number | null>(null);
   const [syncBusy, setSyncBusy] = useState(false);
+  const [bulkUploadOpen, setBulkUploadOpen] = useState(false);
 
   async function openSyncDialog() {
     if (!activeCycle?.id) {
@@ -189,6 +191,32 @@ function SettingsTab() {
   return (
     <div className="space-y-6">
     <PilotAccessCard />
+    <Card>
+      <CardHeader>
+        <CardTitle>Bulk Data Upload</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <p className="text-sm text-muted-foreground max-w-3xl">
+          Upload every employee&apos;s System KPI values and Eligibility inputs (Absent Days,
+          LWP, LTI, STI, UA/UC/Near Miss, 5S, PM10, Production, Preventive Maintenance,
+          Trainings, Disciplinary Action, etc.) from a <b>single spreadsheet</b>.
+          Columns shared across forms (KRA / Management / Workmen / Trainee) collapse to
+          one column — the system routes each value to the correct form automatically.
+          Finalized and acknowledged rows are skipped.
+        </p>
+        <Button variant="outline" onClick={() => setBulkUploadOpen(true)} disabled={!activeCycle}>
+          <Upload className="h-4 w-4 mr-2" /> Open Bulk Upload
+        </Button>
+        {!activeCycle && (
+          <p className="text-xs text-muted-foreground">Start or activate a cycle to enable bulk upload.</p>
+        )}
+      </CardContent>
+    </Card>
+    <CycleBulkDataUploadDialog
+      open={bulkUploadOpen}
+      onOpenChange={setBulkUploadOpen}
+      cycle={activeCycle ?? null}
+    />
     <Card>
       <CardHeader>
         <CardTitle>Display Settings</CardTitle>
