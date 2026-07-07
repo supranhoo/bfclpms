@@ -18,14 +18,18 @@ import { Users, Filter, Search, UserPlus, UserMinus, X, ShieldCheck, Loader2 } f
 import { toast } from 'sonner';
 
 /**
- * Pilot Access — Annual Review.
+ * Phased Rollout — Annual Review.
  *
  * SSOT-preserving UI over `admin_feature_flags.target_user_ids` for the
  * `annual_review_enabled` flag. Filters (Grade / Level / BU / Department /
  * Has KRA) let admins preview matching employees and bulk-add them to the
- * pilot allowlist without touching the underlying gate logic.
+ * current rollout phase without touching the underlying gate logic.
  *
- * Policy: POLICY.md §AR-PILOT-ALLOWLIST.
+ * The Assigned Form column resolves each user's effective template for the
+ * selected cycle via `COALESCE(template_override_id, template_id)` —
+ * read-only mirror of the template resolver, never a writer.
+ *
+ * Policy: POLICY.md §AR-PHASED-ROLLOUT (formerly §AR-PILOT-ALLOWLIST).
  */
 
 const FLAG_KEY = 'annual_review_enabled';
@@ -43,6 +47,8 @@ interface ProfileRow {
   department: { name: string; business_unit_id: string | null; business_unit: { name: string } | null } | null;
 }
 interface PreviewRow extends ProfileRow { hasKra: boolean }
+
+interface AssignedForm { name: string; isOverride: boolean }
 
 interface Filters {
   grade_ids: string[];
@@ -99,6 +105,70 @@ function usePilotFlag() {
     },
     staleTime: 15_000,
   });
+}
+
+/** Cycles eligible to preview the assigned form against. */
+function useRolloutCycles() {
+  return useQuery({
+    queryKey: ['phased-rollout-cycles'],
+    staleTime: 60_000,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('annual_review_cycles')
+        .select('id, name, status, review_year')
+        .in('status', ['active', 'draft', 'in_progress'] as any)
+        .order('review_year', { ascending: false });
+      if (error) throw error;
+      return (data ?? []) as Array<{ id: string; name: string; status: string; review_year: number }>;
+    },
+  });
+}
+
+/** Resolve assigned form (template) per user for a cycle. Read-only. */
+function useAssignedForms(userIds: string[], cycleId: string | null) {
+  const key = userIds.slice().sort().join(',');
+  return useQuery({
+    queryKey: ['phased-rollout-assigned-forms', cycleId ?? 'none', key],
+    enabled: !!cycleId && userIds.length > 0,
+    staleTime: 30_000,
+    queryFn: async (): Promise<Map<string, AssignedForm | null>> => {
+      const out = new Map<string, AssignedForm | null>();
+      if (!cycleId || userIds.length === 0) return out;
+      const { data, error } = await supabase
+        .from('annual_review_instances')
+        .select(
+          'employee_id, template_id, template_override_id, ' +
+          'template:annual_review_templates!annual_review_instances_template_id_fkey(name), ' +
+          'override_template:annual_review_templates!annual_review_instances_template_override_id_fkey(name)'
+        )
+        .eq('cycle_id', cycleId)
+        .in('employee_id', userIds);
+      if (error) throw error;
+      for (const row of (data ?? []) as any[]) {
+        const isOverride = !!row.template_override_id;
+        const name = (isOverride ? row.override_template?.name : row.template?.name) ?? null;
+        out.set(row.employee_id, name ? { name, isOverride } : null);
+      }
+      return out;
+    },
+  });
+}
+
+function AssignedFormCell({ form }: { form: AssignedForm | null | undefined }) {
+  if (form === undefined) {
+    return <span className="text-xs text-muted-foreground">…</span>;
+  }
+  if (form === null) {
+    return <span className="text-xs italic text-muted-foreground">— not seeded</span>;
+  }
+  return (
+    <div className="flex items-center gap-1.5 min-w-0">
+      <span className="text-sm truncate" title={form.name}>{form.name}</span>
+      {form.isOverride && (
+        <Badge variant="outline" className="text-[10px] px-1 py-0 h-4">Override</Badge>
+      )}
+    </div>
+  );
 }
 
 async function runPreview(f: Filters): Promise<PreviewRow[]> {
