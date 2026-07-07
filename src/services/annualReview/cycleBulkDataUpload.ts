@@ -151,7 +151,7 @@ export async function buildCycleBulkPlan(cycleId: string): Promise<CycleBulkPlan
     for (const s of t?.sections.system_scores ?? []) {
       const src = (s as unknown as { source?: string }).source;
       if (src === 'carry_kra') continue;
-      slotByCanonical.set(`system_scores::${norm(s.name)}`, { kind: 'system_scores', id: s.id });
+      slotByCanonical.set(`system_scores::${norm(s.name)}`, { kind: 'system_scores', id: s.id, slot: s });
     }
     for (const c of t?.sections.eligibility_criteria ?? []) {
       slotByCanonical.set(`eligibility_inputs::${norm(c.name)}`, { kind: 'eligibility_inputs', id: c.id });
@@ -176,6 +176,7 @@ export async function buildCycleBulkPlan(cycleId: string): Promise<CycleBulkPlan
       overallStatus: i.overall_status,
       slotByCanonical,
       systemScores: (i.system_scores as Record<string, number>) ?? {},
+      systemScoresRaw: ((i as unknown as { system_scores_raw?: Record<string, number> }).system_scores_raw as Record<string, number>) ?? {},
       eligibilityInputs: (i.eligibility_inputs as Record<string, string | number | boolean>) ?? {},
     };
   });
