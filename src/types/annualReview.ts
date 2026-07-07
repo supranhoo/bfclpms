@@ -296,6 +296,12 @@ export interface AnnualReviewInstance {
   bu_head_id: string | null;
   hr_id: string | null;
   system_scores: Record<string, number>;
+  /**
+   * Raw System KPI values keyed in by HR (bulk upload or inline). Converted to
+   * scaled points in `system_scores` via each template's `scoring_rules` bands.
+   * See POLICY §AR-SYSTEM-KPI-RAW-INPUT.
+   */
+  system_scores_raw?: Record<string, number>;
   eligibility_inputs: Record<string, string | number | boolean>;
   criteria_weighted_score: number | null;
   total_score: number | null;
