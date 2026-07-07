@@ -18,14 +18,18 @@ import { Users, Filter, Search, UserPlus, UserMinus, X, ShieldCheck, Loader2 } f
 import { toast } from 'sonner';
 
 /**
- * Pilot Access — Annual Review.
+ * Phased Rollout — Annual Review.
  *
  * SSOT-preserving UI over `admin_feature_flags.target_user_ids` for the
  * `annual_review_enabled` flag. Filters (Grade / Level / BU / Department /
  * Has KRA) let admins preview matching employees and bulk-add them to the
- * pilot allowlist without touching the underlying gate logic.
+ * current rollout phase without touching the underlying gate logic.
  *
- * Policy: POLICY.md §AR-PILOT-ALLOWLIST.
+ * The Assigned Form column resolves each user's effective template for the
+ * selected cycle via `COALESCE(template_override_id, template_id)` —
+ * read-only mirror of the template resolver, never a writer.
+ *
+ * Policy: POLICY.md §AR-PHASED-ROLLOUT (formerly §AR-PILOT-ALLOWLIST).
  */
 
 const FLAG_KEY = 'annual_review_enabled';
@@ -43,6 +47,8 @@ interface ProfileRow {
   department: { name: string; business_unit_id: string | null; business_unit: { name: string } | null } | null;
 }
 interface PreviewRow extends ProfileRow { hasKra: boolean }
+
+interface AssignedForm { name: string; isOverride: boolean }
 
 interface Filters {
   grade_ids: string[];
@@ -99,6 +105,70 @@ function usePilotFlag() {
     },
     staleTime: 15_000,
   });
+}
+
+/** Cycles eligible to preview the assigned form against. */
+function useRolloutCycles() {
+  return useQuery({
+    queryKey: ['phased-rollout-cycles'],
+    staleTime: 60_000,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('annual_review_cycles')
+        .select('id, name, status, review_year')
+        .in('status', ['active', 'draft', 'in_progress'] as any)
+        .order('review_year', { ascending: false });
+      if (error) throw error;
+      return (data ?? []) as Array<{ id: string; name: string; status: string; review_year: number }>;
+    },
+  });
+}
+
+/** Resolve assigned form (template) per user for a cycle. Read-only. */
+function useAssignedForms(userIds: string[], cycleId: string | null) {
+  const key = userIds.slice().sort().join(',');
+  return useQuery({
+    queryKey: ['phased-rollout-assigned-forms', cycleId ?? 'none', key],
+    enabled: !!cycleId && userIds.length > 0,
+    staleTime: 30_000,
+    queryFn: async (): Promise<Map<string, AssignedForm | null>> => {
+      const out = new Map<string, AssignedForm | null>();
+      if (!cycleId || userIds.length === 0) return out;
+      const { data, error } = await supabase
+        .from('annual_review_instances')
+        .select(
+          'employee_id, template_id, template_override_id, ' +
+          'template:annual_review_templates!annual_review_instances_template_id_fkey(name), ' +
+          'override_template:annual_review_templates!annual_review_instances_template_override_id_fkey(name)'
+        )
+        .eq('cycle_id', cycleId)
+        .in('employee_id', userIds);
+      if (error) throw error;
+      for (const row of (data ?? []) as any[]) {
+        const isOverride = !!row.template_override_id;
+        const name = (isOverride ? row.override_template?.name : row.template?.name) ?? null;
+        out.set(row.employee_id, name ? { name, isOverride } : null);
+      }
+      return out;
+    },
+  });
+}
+
+function AssignedFormCell({ form }: { form: AssignedForm | null | undefined }) {
+  if (form === undefined) {
+    return <span className="text-xs text-muted-foreground">…</span>;
+  }
+  if (form === null) {
+    return <span className="text-xs italic text-muted-foreground">— not seeded</span>;
+  }
+  return (
+    <div className="flex items-center gap-1.5 min-w-0">
+      <span className="text-sm truncate" title={form.name}>{form.name}</span>
+      {form.isOverride && (
+        <Badge variant="outline" className="text-[10px] px-1 py-0 h-4">Override</Badge>
+      )}
+    </div>
+  );
 }
 
 async function runPreview(f: Filters): Promise<PreviewRow[]> {
@@ -208,7 +278,7 @@ function MultiSelectPopover({
   );
 }
 
-export function PilotAccessCard() {
+export function PhasedRolloutCard() {
   const qc = useQueryClient();
   const flagQ = usePilotFlag();
   const grades = useLookup('pms_grades');
@@ -216,6 +286,9 @@ export function PilotAccessCard() {
   const bus = useLookup('business_units');
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
   const depts = useDepartments(filters.business_unit_ids);
+  const cyclesQ = useRolloutCycles();
+  const [cycleId, setCycleId] = useState<string | null>(null);
+  const effectiveCycleId = cycleId ?? cyclesQ.data?.[0]?.id ?? null;
 
   const [preview, setPreview] = useState<PreviewRow[] | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -237,6 +310,15 @@ export function PilotAccessCard() {
       return data ?? [];
     },
   });
+
+  // Assigned forms for the union of audience + preview ids.
+  const previewIds = useMemo(() => (preview ?? []).map((r) => r.id), [preview]);
+  const formLookupIds = useMemo(
+    () => Array.from(new Set([...audienceIds, ...previewIds])),
+    [audienceIds, previewIds],
+  );
+  const assignedFormsQ = useAssignedForms(formLookupIds, effectiveCycleId);
+  const forms = assignedFormsQ.data;
 
   const writeAudience = useMutation({
     mutationFn: async (nextIds: string[]) => {
@@ -289,20 +371,43 @@ export function PilotAccessCard() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <ShieldCheck className="h-5 w-5" /> Pilot Access — Annual Review
-        </CardTitle>
-        <CardDescription>
-          Grant Annual Review module access to specific employees by filtering the roster.
-          Admins always have access. The master switch lives in Admin → Feature Flags.
-        </CardDescription>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <ShieldCheck className="h-5 w-5" /> Phased Rollout — Annual Review
+            </CardTitle>
+            <CardDescription>
+              Roll the Annual Review module out in phases. Pick who sees it now; the rest of the
+              org stays gated. Admins always have access. Master switch: Admin → Feature Flags.
+            </CardDescription>
+          </div>
+          <div className="min-w-[220px] space-y-1">
+            <Label className="text-xs font-medium text-muted-foreground">Cycle (for form preview)</Label>
+            <Select
+              value={effectiveCycleId ?? ''}
+              onValueChange={(v) => setCycleId(v || null)}
+              disabled={cyclesQ.isLoading || (cyclesQ.data ?? []).length === 0}
+            >
+              <SelectTrigger className="h-9">
+                <SelectValue placeholder={cyclesQ.isLoading ? 'Loading…' : 'No cycles'} />
+              </SelectTrigger>
+              <SelectContent>
+                {(cyclesQ.data ?? []).map((c) => (
+                  <SelectItem key={c.id} value={c.id}>
+                    {c.name} <span className="text-muted-foreground">· {c.status}</span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
       </CardHeader>
       <CardContent className="space-y-5">
-        {/* Current audience */}
+        {/* Current phase audience */}
         <div className="rounded-md border bg-muted/30 p-3 space-y-2">
           <div className="flex items-center gap-2 text-sm">
             <Users className="h-4 w-4 text-muted-foreground" />
-            <span className="font-medium">Current pilot users</span>
+            <span className="font-medium">Users in current phase</span>
             <Badge variant="secondary">{audienceIds.length}</Badge>
             {flagQ.data && !flagQ.data.enabled && (
               <Badge variant="outline" className="text-destructive border-destructive/40">
@@ -314,24 +419,43 @@ export function PilotAccessCard() {
             <Skeleton className="h-6 w-full" />
           ) : audienceIds.length === 0 ? (
             <p className="text-xs text-muted-foreground italic">
-              No users yet. Use the filters below to add pilot members.
+              No users in the current phase yet. Use the filters below to add members.
             </p>
           ) : (
-            <div className="flex flex-wrap gap-1.5">
-              {(targetedProfilesQ.data ?? []).map((p: any) => (
-                <Badge key={p.id} variant="secondary" className="gap-1 pr-1">
-                  {p.full_name ?? 'Unnamed'}{p.employee_code ? ` (${p.employee_code})` : ''}
-                  <button
-                    type="button"
-                    onClick={() => mergeAndSave([p.id], 'removed')}
-                    className="rounded hover:bg-muted-foreground/20 p-0.5"
-                    aria-label={`Remove ${p.full_name ?? p.id}`}
-                    disabled={writeAudience.isPending}
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
-                </Badge>
-              ))}
+            <div className="rounded-md border bg-background overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Employee</TableHead>
+                    <TableHead>Assigned Form</TableHead>
+                    <TableHead className="w-16 text-right">Remove</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {(targetedProfilesQ.data ?? []).map((p: any) => (
+                    <TableRow key={p.id}>
+                      <TableCell>
+                        <div className="font-medium text-sm">{p.full_name ?? 'Unnamed'}</div>
+                        <div className="text-xs text-muted-foreground">{p.employee_code ?? '—'}</div>
+                      </TableCell>
+                      <TableCell>
+                        <AssignedFormCell form={forms?.get(p.id)} />
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <button
+                          type="button"
+                          onClick={() => mergeAndSave([p.id], 'removed')}
+                          className="rounded hover:bg-muted-foreground/20 p-1"
+                          aria-label={`Remove ${p.full_name ?? p.id}`}
+                          disabled={writeAudience.isPending}
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
             </div>
           )}
         </div>
@@ -442,13 +566,14 @@ export function PilotAccessCard() {
                   <TableHead>Department</TableHead>
                   <TableHead>Business Unit</TableHead>
                   <TableHead>KRA</TableHead>
+                  <TableHead>Assigned Form</TableHead>
                   <TableHead>Status</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {preview.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={8} className="text-center text-sm text-muted-foreground py-8">
+                    <TableCell colSpan={9} className="text-center text-sm text-muted-foreground py-8">
                       No employees match the current filters.
                     </TableCell>
                   </TableRow>
@@ -484,10 +609,13 @@ export function PilotAccessCard() {
                             <span className="text-xs text-muted-foreground">No</span>
                           )}
                         </TableCell>
+                        <TableCell className="max-w-[200px]">
+                          <AssignedFormCell form={forms?.get(r.id)} />
+                        </TableCell>
                         <TableCell>
                           {inPilot ? (
                             <Badge className="gap-1 text-xs">
-                              In pilot
+                              In phase
                               <button
                                 type="button"
                                 className="ml-1 rounded hover:bg-primary-foreground/20 p-0.5"
@@ -520,15 +648,18 @@ export function PilotAccessCard() {
             setConfirmAdd(null);
           }
         }}
-        title={`Add ${confirmAdd?.ids.length ?? 0} users to Annual Review pilot?`}
+        title={`Add ${confirmAdd?.ids.length ?? 0} users to Annual Review rollout?`}
         description={
           `This will grant Annual Review module access to ${confirmAdd?.ids.length ?? 0} employees ` +
-          `matching your ${confirmAdd?.label ?? ''} filter. Existing pilot members are preserved.`
+          `matching your ${confirmAdd?.label ?? ''} filter. Existing members are preserved.`
         }
-        confirmLabel="Add to pilot"
+        confirmLabel="Add to phase"
       />
     </Card>
   );
 }
 
-export default PilotAccessCard;
+export default PhasedRolloutCard;
+
+/** @deprecated use `PhasedRolloutCard`. Temporary re-export for import parity. */
+export const PilotAccessCard = PhasedRolloutCard;
