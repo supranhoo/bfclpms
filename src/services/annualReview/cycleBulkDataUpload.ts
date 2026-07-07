@@ -2,7 +2,8 @@ import { supabase } from '@/integrations/supabase/client';
 import * as XLSX from 'xlsx';
 import * as svc from '@/services/annualReview/annualReviewService';
 import { resolveTemplateId } from '@/services/annualReview/annualReviewService';
-import type { AnnualReviewTemplate } from '@/types/annualReview';
+import type { AnnualReviewTemplate, TemplateSystemScore } from '@/types/annualReview';
+import { scoreFromRaw, type ScoringRules } from '@/lib/annualReview/systemKpiScoring';
 
 /**
  * Cycle-wide "single sheet" bulk data uploader for Annual Review.
@@ -38,8 +39,9 @@ export interface InstanceCtx {
   templateName: string;
   overallStatus: string;
   /** Per-canonical-name resolution back to the template's slot id. */
-  slotByCanonical: Map<string, { kind: CellKind; id: string }>;
+  slotByCanonical: Map<string, { kind: CellKind; id: string; slot?: TemplateSystemScore }>;
   systemScores: Record<string, number>;
+  systemScoresRaw: Record<string, number>;
   eligibilityInputs: Record<string, string | number | boolean>;
 }
 
@@ -145,11 +147,11 @@ export async function buildCycleBulkPlan(cycleId: string): Promise<CycleBulkPlan
   const instanceCtx: InstanceCtx[] = instances.map((i) => {
     const tId = resolveTemplateId(i);
     const t = tId ? templateById.get(tId) : null;
-    const slotByCanonical = new Map<string, { kind: CellKind; id: string }>();
+    const slotByCanonical = new Map<string, { kind: CellKind; id: string; slot?: TemplateSystemScore }>();
     for (const s of t?.sections.system_scores ?? []) {
       const src = (s as unknown as { source?: string }).source;
       if (src === 'carry_kra') continue;
-      slotByCanonical.set(`system_scores::${norm(s.name)}`, { kind: 'system_scores', id: s.id });
+      slotByCanonical.set(`system_scores::${norm(s.name)}`, { kind: 'system_scores', id: s.id, slot: s });
     }
     for (const c of t?.sections.eligibility_criteria ?? []) {
       slotByCanonical.set(`eligibility_inputs::${norm(c.name)}`, { kind: 'eligibility_inputs', id: c.id });
@@ -174,6 +176,7 @@ export async function buildCycleBulkPlan(cycleId: string): Promise<CycleBulkPlan
       overallStatus: i.overall_status,
       slotByCanonical,
       systemScores: (i.system_scores as Record<string, number>) ?? {},
+      systemScoresRaw: ((i as unknown as { system_scores_raw?: Record<string, number> }).system_scores_raw as Record<string, number>) ?? {},
       eligibilityInputs: (i.eligibility_inputs as Record<string, string | number | boolean>) ?? {},
     };
   });
@@ -203,8 +206,13 @@ export function downloadBulkTemplate(plan: CycleBulkPlan, cycleLabel: string): v
     for (const col of plan.columns) {
       const slot = i.slotByCanonical.get(`${col.kind}::${norm(col.name)}`);
       if (!slot) { base[col.name] = ''; continue; }
-      const bag = col.kind === 'system_scores' ? i.systemScores : i.eligibilityInputs;
-      base[col.name] = bag[slot.id] ?? '';
+      if (col.kind === 'system_scores') {
+        // Prefer the raw HR-entered value; fall back to legacy scaled value if raw is missing.
+        const raw = i.systemScoresRaw[slot.id];
+        base[col.name] = raw !== undefined && raw !== null ? raw : (i.systemScores[slot.id] ?? '');
+      } else {
+        base[col.name] = i.eligibilityInputs[slot.id] ?? '';
+      }
     }
     return base;
   });
@@ -222,7 +230,20 @@ export interface DryRunRow {
   fullName: string;
   verdict: RowVerdict;
   reason?: string;
-  changes: Array<{ column: string; before: unknown; after: unknown }>;
+  changes: Array<{
+    column: string;
+    kind: CellKind;
+    /** Raw HR-entered value (for system_scores) or the eligibility value. */
+    before: unknown;
+    after: unknown;
+    /** Only for system_scores: derived points from bands + weight. */
+    beforePoints?: number;
+    afterPoints?: number;
+    /** Rating on 0..scale (system_scores with bands only). */
+    rating?: number;
+    weight?: number;
+    matched?: boolean;
+  }>;
 }
 
 export interface DryRunReport {
@@ -268,18 +289,38 @@ export async function parseAndDryRun(file: File, plan: CycleBulkPlan): Promise<D
       if (raw === null || raw === undefined || raw === '') continue;
       const slot = inst.slotByCanonical.get(`${col.kind}::${norm(col.name)}`);
       if (!slot) continue; // column not applicable to this employee's template
-      const before = (col.kind === 'system_scores' ? inst.systemScores : inst.eligibilityInputs)[slot.id];
-      const after = col.kind === 'system_scores'
-        ? Number(raw)
-        : (typeof raw === 'string' || typeof raw === 'number' || typeof raw === 'boolean' ? raw : String(raw));
-      if (col.kind === 'system_scores' && !Number.isFinite(after as number)) {
-        rows.push({ employeeCode: code, fullName: inst.fullName, verdict: 'error', reason: `Non-numeric value in "${col.name}"`, changes: [] });
-        err++;
-        rowChanges.length = 0;
-        break;
+      if (col.kind === 'system_scores') {
+        const afterRaw = Number(raw);
+        if (!Number.isFinite(afterRaw)) {
+          rows.push({ employeeCode: code, fullName: inst.fullName, verdict: 'error', reason: `Non-numeric value in "${col.name}"`, changes: [] });
+          err++;
+          rowChanges.length = 0;
+          break;
+        }
+        const beforeRaw = inst.systemScoresRaw[slot.id];
+        const tSlot = slot.slot as TemplateSystemScore | undefined;
+        const rules = (tSlot?.scoring_rules ?? null) as ScoringRules | null;
+        const weight = Number(tSlot?.weight ?? 0);
+        const result = scoreFromRaw(afterRaw, rules, weight);
+        const beforePoints = inst.systemScores[slot.id];
+        if (beforeRaw === afterRaw && Number(beforePoints ?? NaN) === result.points) continue;
+        rowChanges.push({
+          column: col.name,
+          kind: 'system_scores',
+          before: beforeRaw ?? '',
+          after: afterRaw,
+          beforePoints: typeof beforePoints === 'number' ? beforePoints : undefined,
+          afterPoints: result.points,
+          rating: result.rating,
+          weight,
+          matched: result.matched,
+        });
+      } else {
+        const before = inst.eligibilityInputs[slot.id];
+        const after = typeof raw === 'string' || typeof raw === 'number' || typeof raw === 'boolean' ? raw : String(raw);
+        if (before === after) continue;
+        rowChanges.push({ column: col.name, kind: 'eligibility_inputs', before, after });
       }
-      if (before === after) continue;
-      rowChanges.push({ column: col.name, before, after });
     }
     if (rowChanges.length === 0) {
       // Only push a skip if not already error'd
@@ -307,18 +348,24 @@ export async function commitDryRun(report: DryRunReport, plan: CycleBulkPlan): P
     const inst = instByCode.get(row.employeeCode);
     if (!inst) continue;
     const nextSys: Record<string, number> = { ...inst.systemScores };
+    const nextSysRaw: Record<string, number> = { ...inst.systemScoresRaw };
     const nextElig: Record<string, string | number | boolean> = { ...inst.eligibilityInputs };
     for (const ch of row.changes) {
       const col = plan.columns.find((c) => c.name === ch.column);
       if (!col) continue;
       const slot = inst.slotByCanonical.get(`${col.kind}::${norm(col.name)}`);
       if (!slot) continue;
-      if (col.kind === 'system_scores') nextSys[slot.id] = Number(ch.after);
-      else nextElig[slot.id] = ch.after as string | number | boolean;
+      if (col.kind === 'system_scores') {
+        nextSysRaw[slot.id] = Number(ch.after);
+        nextSys[slot.id] = typeof ch.afterPoints === 'number' ? ch.afterPoints : Number(ch.after);
+      } else {
+        nextElig[slot.id] = ch.after as string | number | boolean;
+      }
     }
     try {
       await svc.updateInstance(inst.instanceId, {
         system_scores: nextSys,
+        system_scores_raw: nextSysRaw,
         eligibility_inputs: nextElig,
       });
       out.updated++;

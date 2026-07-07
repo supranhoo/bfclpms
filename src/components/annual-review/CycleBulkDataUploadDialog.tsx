@@ -184,7 +184,16 @@ export function CycleBulkDataUploadDialog({
                             <TableCell className="text-xs">
                               {r.reason ? <span className="text-muted-foreground">{r.reason}</span> :
                                 r.changes.map((c, j) => (
-                                  <div key={j}><b>{c.column}</b>: {String(c.before ?? '—')} → {String(c.after)}</div>
+                                  <div key={j} className="leading-snug">
+                                    <b>{c.column}</b>: {String(c.before ?? '—')} → {String(c.after)}
+                                    {c.kind === 'system_scores' && c.rating !== undefined && (
+                                      <span className="ml-2 text-muted-foreground">
+                                        · rating {c.rating}/5 → {(c.afterPoints ?? 0).toFixed(2)} pts
+                                        {typeof c.weight === 'number' ? ` of ${c.weight}` : ''}
+                                        {c.matched === false ? ' · no band matched' : ''}
+                                      </span>
+                                    )}
+                                  </div>
                                 ))}
                             </TableCell>
                           </TableRow>

@@ -11,26 +11,33 @@ import type { TemplateSystemScore, EligibilityCriterion, CarryKraConfig } from '
 import { evaluateEligibility } from '@/lib/annualReview/eligibility';
 import { buildCarrySnapshot, selectMonths, FY_MONTHS } from '@/services/annualReview/carryKraScore';
 import { KPI_SCALE_MAX, fyLabel } from '@/lib/annualReview/fiscalYear';
+import { scoreFromRaw } from '@/lib/annualReview/systemKpiScoring';
 import { useAnnualReviewI18n } from '@/components/annual-review/AnnualReviewI18nContext';
 
 export function SystemScoresPanel({
   systemScores,
   values,
+  rawValues,
   eligibility,
   eligibilityInputs,
   eligibilityRemark,
   readOnly = false,
   onChangeValue,
+  onChangeRaw,
   employeeId,
   fiscalYear,
 }: {
   systemScores: TemplateSystemScore[];
   values: Record<string, number>;
+  /** Raw HR-entered values (bands mode). When set, band scoring drives `values`. */
+  rawValues?: Record<string, number>;
   eligibility?: EligibilityCriterion[];
   eligibilityInputs?: Record<string, unknown>;
   eligibilityRemark?: string | null;
   readOnly?: boolean;
   onChangeValue?: (id: string, value: number) => void;
+  /** Called when HR edits the raw value; caller must recompute scaled points. */
+  onChangeRaw?: (id: string, raw: number, points: number) => void;
   /** Required for source=carry_kra fetches. */
   employeeId?: string;
   /** Fiscal year start (July of this year), required for source=carry_kra. */
@@ -64,6 +71,8 @@ export function SystemScoresPanel({
             }
             const v = values[s.id] ?? 0;
             const pct = s.weight > 0 ? Math.min(100, (v / s.weight) * 100) : 0;
+            const hasBands = !!s.scoring_rules?.bands?.length;
+            const rawV = rawValues?.[s.id];
             return (
               <div key={s.id} className="space-y-2 rounded-lg border bg-card p-3">
                 <div className="flex items-center justify-between gap-2">
@@ -79,9 +88,31 @@ export function SystemScoresPanel({
                         .replace('{actual}', Number(v).toFixed(2))
                         .replace('{max}', String(s.weight))}
                     </p>
+                    {hasBands && (
+                      <p className="mt-0.5 text-[11px] text-muted-foreground">
+                        {rawV === undefined || rawV === null
+                          ? t('system_scores.raw_hint', 'Enter the raw measurement — points are computed from the KPI Library bands.')
+                          : `${t('system_scores.raw_label', 'Raw')}: ${rawV} · ${t('system_scores.rating_label', 'Rating')} ${scoreFromRaw(Number(rawV), s.scoring_rules!, s.weight).rating}/5`}
+                      </p>
+                    )}
                   </div>
                   {readOnly ? (
                     <p className="text-sm font-semibold tabular-nums">{Number(v).toFixed(2)}</p>
+                  ) : hasBands ? (
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={rawV ?? ''}
+                      placeholder={t('system_scores.raw_placeholder', 'raw')}
+                      onChange={(e) => {
+                        const raw = Number(e.target.value);
+                        if (!Number.isFinite(raw)) return;
+                        const result = scoreFromRaw(raw, s.scoring_rules!, s.weight);
+                        if (onChangeRaw) onChangeRaw(s.id, raw, result.points);
+                        else onChangeValue?.(s.id, result.points);
+                      }}
+                      className="h-9 w-24 rounded border bg-background px-2 text-right text-sm tabular-nums"
+                    />
                   ) : (
                     <input
                       type="number"
