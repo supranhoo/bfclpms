@@ -1,63 +1,70 @@
 ## Goal
-Move the `annual_review_enabled` audience targeting into **Annual Review → Settings** as a new **Pilot Access** card, with structured filters (Grade, Level, Business Unit, Department, Has KRA) to preview matching employees and bulk-add them to the pilot allowlist.
+Reframe the "Pilot Access — Annual Review" card as a **Phased Rollout** control (pilot is just phase 1) and surface **which form (template) each user will see** so admins can verify audience + form together before enabling.
+
+## Answer to the question
+Yes — `admin_feature_flags.annual_review_enabled.target_user_ids` already gates who sees the module, so it works for a phased rollout (Pilot → Phase 2 → GA). The name "Pilot Access" was too narrow. However, the flag itself does **not** decide *which* form a user sees; the form is the template resolved on that user's `annual_review_instance` for the selected cycle (`COALESCE(template_override_id, template_id)` via `resolveTemplateId`). So the new column reads that resolution — it does not add a new assignment mechanism.
 
 ## Assumptions
-- The master ON/OFF switch and `admin_feature_flags` row stay as the source of truth (`target_user_ids`, `target_roles`). No schema change.
-- "Has KRA" = the employee has at least one row in `public.kpis` (active). Confirm during build if a stricter filter (e.g. active period only) is needed.
-- Filters combine with **AND**. Preview shows the resolved set; admin clicks **Add all N to pilot** to append to `target_user_ids` (dedup, no removals).
-- Feature Flags tab keeps working for other flags. For `annual_review_enabled`, the tab will show a read-only summary + a "Manage in Annual Review Settings" link so there's one editor.
+- "Form" = the Annual Review **template** resolved for the user in the currently active cycle.
+- Users without a seeded instance for the cycle show `— (not seeded)` in the form column; users with an override show the override name + a small "Override" badge.
+- No schema change. No new RPC. Template assignment continues to happen via seed rules + `set_annual_review_template_override` (already shipped).
+- Master ON/OFF switch stays in Admin → Feature Flags (unchanged).
 
 ## Risk & Impact Report
-- **Data**: No schema change. Writes go to existing `admin_feature_flags.target_user_ids` (uuid[]) via the same RLS-protected update path used today.
-- **Workflow**: Only who sees the Annual Review module during pilot; gate logic (`AnnualReviewGate` / `is_feature_flag_enabled_for_me`) unchanged.
-- **UI/UX**: New card inside existing Settings tab, matches shadcn patterns already used there (Card, Select, MultiSelect via ToggleGroup / Command).
-- **Regression**: Feature Flags tab card for `annual_review_enabled` becomes read-only for target users — role toggling still available there, or move both. Plan keeps role toggling in Feature Flags to minimize churn; only user targeting moves.
-- **Scalability**: Preview query is a single `profiles` select with indexed filters + `id IN (SELECT employee_id FROM kpis)` sub-select, capped at 500 rows with pagination hint. Bulk-add dedupes client-side then writes one row.
+- **Data**: Read-only additions (join `annual_review_instances` + `annual_review_templates` for the active cycle). No writes beyond the existing `target_user_ids` update.
+- **Workflow**: None. Rollout gate logic (`AnnualReviewGate`, `is_feature_flag_enabled_for_me`) unchanged.
+- **UI/UX**: Card title, description, icon, and current-audience label change from "Pilot" to "Phased Rollout". Preview + audience tables gain an **Assigned Form** column.
+- **Regression**: Low. Existing `PilotAccessCard.tsx` filenames/exports are renamed with a re-export shim for one release to avoid breaking imports in `AnnualReviewAdmin.tsx` if any parallel branch references them.
+- **Scalability**: Template lookup is one query per render scoped to visible ids (≤ 500 preview rows, ≤ audience count) — same envelope as today's `has_kra` probe.
 
 ## Plan
 
-1. **New component** `src/components/annual-review/PilotAccessCard.tsx`
-   - Reads `admin_feature_flags` row for `annual_review_enabled`.
-   - Filter row: Grade (from `pms_grades`), Level (from `levels`), Business Unit (from `business_units`), Department (from `departments`, cascades on BU), Has KRA (Yes/No/Any).
-   - "Preview matches" button → runs `profiles` query (active only), joins `pms_grade_id`, `level_id`, `department_id`, `departments.business_unit_id`. Applies Has KRA via `EXISTS (kpis where employee_id=profiles.id)`.
-   - Results table (name, code, grade, level, dept, BU, KRA count) with select-all + individual checkboxes.
-   - Actions: **Add selected to pilot**, **Add all matches to pilot**, **Remove from pilot** (chips of currently targeted users at top).
-   - Uses same update pattern as `FeatureFlagsTab` (`update admin_feature_flags set target_user_ids where key='annual_review_enabled'`).
+1. **Rename component + copy** in `src/components/annual-review/PilotAccessCard.tsx`
+   - Export `PhasedRolloutCard` (keep `PilotAccessCard` as a thin re-export for one release).
+   - Card title → **"Phased Rollout — Annual Review"**.
+   - Description → *"Roll the Annual Review module out in phases. Pick who sees it now; the rest of the org stays gated. Admins always have access. Master switch: Admin → Feature Flags."*
+   - Current audience label → **"Users in current phase"** (badge count unchanged).
+   - Buttons stay `Add selected` / `Add all`; add secondary label copy "add to current phase".
 
-2. **Wire into Settings tab** `src/pages/annual-review/AnnualReviewAdmin.tsx` `SettingsTab()` — add `<PilotAccessCard />` above existing Display Settings.
+2. **Active cycle selector** (top of card)
+   - Small `Select` bound to `annual_review_cycles` where `status IN ('active','draft')`, default = active cycle.
+   - Drives the form-resolution query below. Persists in component state only.
 
-3. **Feature Flags tab** `src/components/admin/FeatureFlagsTab.tsx`
-   - For `annual_review_enabled` only: hide the user search / chip editor and render a small notice "Manage pilot users in Annual Review → Settings" with a link. Role toggles + master switch stay editable.
+3. **New "Assigned Form" column** in both tables (Preview + Current audience list)
+   - New hook `useAssignedForms(userIds, cycleId)` colocated in the same file:
+     - Query `annual_review_instances` for `(employee_id in userIds, cycle_id = cycleId)` selecting `employee_id, template_id, template_override_id, template:annual_review_templates!template_id(name), override_template:annual_review_templates!template_override_id(name)`.
+     - Returns `Map<userId, { name: string; isOverride: boolean } | null>`.
+   - Preview table: new column between **KRA** and **Status** — shows template name, "Override" badge when applicable, or muted `— not seeded` when no instance exists.
+   - Current audience: switch from Badge chips to a compact table (Name, Code, Assigned Form, Remove) so the form is visible per user. Preserves remove-chip behavior via a row action.
 
-4. **Invalidations**: after write, invalidate `['admin_feature_flags']` and `['annual_review_flag']` (gate hook) so the module appears/disappears without reload.
+4. **Feature Flags tab notice update** in `src/components/admin/FeatureFlagsTab.tsx`
+   - Change the read-only notice text from "Manage pilot users…" to **"Manage phased rollout in Annual Review → Settings"**. Link target unchanged.
+
+5. **Docs & policy**
+   - `src/modules/annual-review/DOCUMENTATION.md` — rename section to "Phased Rollout UI", note the Assigned Form column and its resolver (`COALESCE(template_override_id, template_id)`).
+   - `src/modules/annual-review/POLICY.md` §AR-PILOT-ALLOWLIST → rename anchor to §AR-PHASED-ROLLOUT (keep old anchor as an alias comment for one release). Clarify: flag gates visibility only; form is resolved per instance.
+   - Append Version History entry.
 
 ### UI Changes
-- Location: Annual Review Admin → Settings tab, new **Pilot Access** card at top.
-- Visual: standard Card with header "Pilot Access — Annual Review", filter grid (5 controls), Preview button, results table with row-select, sticky action bar with counts and Add buttons, current-audience chip strip.
-- Interaction: Filters are optional (empty = no constraint). Preview required before Add. Confirm dialog on "Add all matches" when count > 25.
-- Responsive: filters wrap 2/row on mobile; table becomes horizontal-scroll.
+- **Location**: Annual Review → Settings tab, same card position.
+- **Header**: title "Phased Rollout — Annual Review"; description as above; adds a cycle selector on the right of the header row.
+- **Preview table columns**: Select, Employee, Grade, Level, Department, BU, KRA, **Assigned Form** (new), Status.
+- **Current audience**: replaces chip strip with a compact table (Name/Code · Assigned Form · Remove). Empty state copy: "No users in the current phase yet."
+- **Responsive**: Assigned Form column truncates with tooltip on mobile; audience table becomes horizontal-scroll.
 
 ### Technical Details
-- Data hooks colocated in `src/components/annual-review/pilotAccess.hooks.ts`: `usePilotAccessFlag`, `usePilotPreview(filters)`, `useUpdatePilotAudience`.
-- Filter shape: `{ grade_ids: string[]; level_ids: string[]; business_unit_ids: string[]; department_ids: string[]; has_kra: 'yes'|'no'|'any' }`.
-- Query pattern (client-side supabase-js), all `.in()` optional:
-  - Base: `profiles.select('id, full_name, employee_code, pms_grade:pms_grades(name), level:levels(name), department:departments!profiles_department_fk(name, business_unit_id, business_unit:business_units(name))').eq('is_active', true).limit(500)`
-  - `has_kra=yes`: filter client-side against a `kpis` presence set fetched as `select employee_id from kpis where employee_id in (candidate_ids)`.
-- Writes: `update admin_feature_flags set target_user_ids = <dedup union/diff> where key='annual_review_enabled'`.
-- No RLS change. No migration.
+- No schema change, no new RPC, no migration.
+- `useAssignedForms` uses the same `supabase` client and dedupes ids; batched with `.in()` and capped at 500 (matches preview limit).
+- The "Override" badge is derived from `template_override_id != null` — no extra query.
+- No change to gate hook, seeder, or `resolveTemplateId`.
 
 ### Tests
-- Unit test for filter → query-args builder (empty filters produce no `.in()` calls; mixed filters chain correctly).
-- Unit test for `mergeAudience(current, add)` and `removeFromAudience(current, remove)` (dedup, order-stable).
-- Mock data covers: employee with grade+level+BU+dept+KRAs, employee missing grade, employee with no KRAs.
-
-### Docs & Policy
-- Update `src/modules/annual-review/DOCUMENTATION.md` — new "Pilot Access UI" section.
-- Update `src/modules/annual-review/POLICY.md` §AR-PILOT-ALLOWLIST — clarify UI location and filter semantics.
-- Append entry to Version History.
+- Unit test for `resolveAssignedForm(instance)` helper: returns override name when set, base template name otherwise, `null` when instance missing.
+- Existing filter/merge tests unchanged.
+- Mock rows: (a) user with instance + no override, (b) user with instance + override, (c) user with no instance for cycle.
 
 ## Rollback
-- Delete `PilotAccessCard.tsx`, revert Settings-tab and FeatureFlagsTab edits. No DB changes to undo.
+- Revert the two file edits; keep `PilotAccessCard` re-export for one release then remove. No DB changes to undo.
 
 ## Not Applicable
-- Migrations, edge functions, cron.
+- Migrations, edge functions, cron, RLS changes.
