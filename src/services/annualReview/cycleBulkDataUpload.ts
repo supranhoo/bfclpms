@@ -230,7 +230,20 @@ export interface DryRunRow {
   fullName: string;
   verdict: RowVerdict;
   reason?: string;
-  changes: Array<{ column: string; before: unknown; after: unknown }>;
+  changes: Array<{
+    column: string;
+    kind: CellKind;
+    /** Raw HR-entered value (for system_scores) or the eligibility value. */
+    before: unknown;
+    after: unknown;
+    /** Only for system_scores: derived points from bands + weight. */
+    beforePoints?: number;
+    afterPoints?: number;
+    /** Rating on 0..scale (system_scores with bands only). */
+    rating?: number;
+    weight?: number;
+    matched?: boolean;
+  }>;
 }
 
 export interface DryRunReport {
@@ -276,18 +289,38 @@ export async function parseAndDryRun(file: File, plan: CycleBulkPlan): Promise<D
       if (raw === null || raw === undefined || raw === '') continue;
       const slot = inst.slotByCanonical.get(`${col.kind}::${norm(col.name)}`);
       if (!slot) continue; // column not applicable to this employee's template
-      const before = (col.kind === 'system_scores' ? inst.systemScores : inst.eligibilityInputs)[slot.id];
-      const after = col.kind === 'system_scores'
-        ? Number(raw)
-        : (typeof raw === 'string' || typeof raw === 'number' || typeof raw === 'boolean' ? raw : String(raw));
-      if (col.kind === 'system_scores' && !Number.isFinite(after as number)) {
-        rows.push({ employeeCode: code, fullName: inst.fullName, verdict: 'error', reason: `Non-numeric value in "${col.name}"`, changes: [] });
-        err++;
-        rowChanges.length = 0;
-        break;
+      if (col.kind === 'system_scores') {
+        const afterRaw = Number(raw);
+        if (!Number.isFinite(afterRaw)) {
+          rows.push({ employeeCode: code, fullName: inst.fullName, verdict: 'error', reason: `Non-numeric value in "${col.name}"`, changes: [] });
+          err++;
+          rowChanges.length = 0;
+          break;
+        }
+        const beforeRaw = inst.systemScoresRaw[slot.id];
+        const tSlot = slot.slot as TemplateSystemScore | undefined;
+        const rules = (tSlot?.scoring_rules ?? null) as ScoringRules | null;
+        const weight = Number(tSlot?.weight ?? 0);
+        const result = scoreFromRaw(afterRaw, rules, weight);
+        const beforePoints = inst.systemScores[slot.id];
+        if (beforeRaw === afterRaw && Number(beforePoints ?? NaN) === result.points) continue;
+        rowChanges.push({
+          column: col.name,
+          kind: 'system_scores',
+          before: beforeRaw ?? '',
+          after: afterRaw,
+          beforePoints: typeof beforePoints === 'number' ? beforePoints : undefined,
+          afterPoints: result.points,
+          rating: result.rating,
+          weight,
+          matched: result.matched,
+        });
+      } else {
+        const before = inst.eligibilityInputs[slot.id];
+        const after = typeof raw === 'string' || typeof raw === 'number' || typeof raw === 'boolean' ? raw : String(raw);
+        if (before === after) continue;
+        rowChanges.push({ column: col.name, kind: 'eligibility_inputs', before, after });
       }
-      if (before === after) continue;
-      rowChanges.push({ column: col.name, before, after });
     }
     if (rowChanges.length === 0) {
       // Only push a skip if not already error'd
@@ -315,18 +348,24 @@ export async function commitDryRun(report: DryRunReport, plan: CycleBulkPlan): P
     const inst = instByCode.get(row.employeeCode);
     if (!inst) continue;
     const nextSys: Record<string, number> = { ...inst.systemScores };
+    const nextSysRaw: Record<string, number> = { ...inst.systemScoresRaw };
     const nextElig: Record<string, string | number | boolean> = { ...inst.eligibilityInputs };
     for (const ch of row.changes) {
       const col = plan.columns.find((c) => c.name === ch.column);
       if (!col) continue;
       const slot = inst.slotByCanonical.get(`${col.kind}::${norm(col.name)}`);
       if (!slot) continue;
-      if (col.kind === 'system_scores') nextSys[slot.id] = Number(ch.after);
-      else nextElig[slot.id] = ch.after as string | number | boolean;
+      if (col.kind === 'system_scores') {
+        nextSysRaw[slot.id] = Number(ch.after);
+        nextSys[slot.id] = typeof ch.afterPoints === 'number' ? ch.afterPoints : Number(ch.after);
+      } else {
+        nextElig[slot.id] = ch.after as string | number | boolean;
+      }
     }
     try {
       await svc.updateInstance(inst.instanceId, {
         system_scores: nextSys,
+        system_scores_raw: nextSysRaw,
         eligibility_inputs: nextElig,
       });
       out.updated++;
