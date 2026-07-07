@@ -2,7 +2,8 @@ import { supabase } from '@/integrations/supabase/client';
 import * as XLSX from 'xlsx';
 import * as svc from '@/services/annualReview/annualReviewService';
 import { resolveTemplateId } from '@/services/annualReview/annualReviewService';
-import type { AnnualReviewTemplate } from '@/types/annualReview';
+import type { AnnualReviewTemplate, TemplateSystemScore } from '@/types/annualReview';
+import { scoreFromRaw, type ScoringRules } from '@/lib/annualReview/systemKpiScoring';
 
 /**
  * Cycle-wide "single sheet" bulk data uploader for Annual Review.
@@ -38,8 +39,9 @@ export interface InstanceCtx {
   templateName: string;
   overallStatus: string;
   /** Per-canonical-name resolution back to the template's slot id. */
-  slotByCanonical: Map<string, { kind: CellKind; id: string }>;
+  slotByCanonical: Map<string, { kind: CellKind; id: string; slot?: TemplateSystemScore }>;
   systemScores: Record<string, number>;
+  systemScoresRaw: Record<string, number>;
   eligibilityInputs: Record<string, string | number | boolean>;
 }
 
