@@ -206,8 +206,13 @@ export function downloadBulkTemplate(plan: CycleBulkPlan, cycleLabel: string): v
     for (const col of plan.columns) {
       const slot = i.slotByCanonical.get(`${col.kind}::${norm(col.name)}`);
       if (!slot) { base[col.name] = ''; continue; }
-      const bag = col.kind === 'system_scores' ? i.systemScores : i.eligibilityInputs;
-      base[col.name] = bag[slot.id] ?? '';
+      if (col.kind === 'system_scores') {
+        // Prefer the raw HR-entered value; fall back to legacy scaled value if raw is missing.
+        const raw = i.systemScoresRaw[slot.id];
+        base[col.name] = raw !== undefined && raw !== null ? raw : (i.systemScores[slot.id] ?? '');
+      } else {
+        base[col.name] = i.eligibilityInputs[slot.id] ?? '';
+      }
     }
     return base;
   });
