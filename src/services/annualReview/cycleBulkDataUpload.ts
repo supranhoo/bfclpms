@@ -64,7 +64,7 @@ export async function buildCycleBulkPlan(cycleId: string): Promise<CycleBulkPlan
     const { data, error } = await supabase
       .from('annual_review_instances')
       .select(
-        '*, employee:profiles!annual_review_instances_employee_id_fkey(id, full_name, employee_code, doj, department_id, company_id)'
+        '*, employee:profiles!annual_review_instances_employee_id_fkey(id, full_name, employee_code, designation, doj, department_id, company_id)'
       )
       .eq('cycle_id', cycleId)
       .range(from, from + PAGE - 1);
