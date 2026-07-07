@@ -222,7 +222,7 @@ function FlagCard({ flag }: { flag: FeatureFlag }) {
           {flag.key === 'annual_review_enabled' ? (
             <div className="rounded-md border border-dashed bg-muted/30 p-3 text-xs text-muted-foreground flex items-center justify-between gap-3">
               <span>
-                Pilot users for Annual Review are managed with filters in the
+                Phased rollout audience for Annual Review is managed with filters in the
                 Annual Review admin console.
               </span>
               <Button asChild variant="outline" size="sm">
