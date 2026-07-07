@@ -147,7 +147,7 @@ export async function buildCycleBulkPlan(cycleId: string): Promise<CycleBulkPlan
   const instanceCtx: InstanceCtx[] = instances.map((i) => {
     const tId = resolveTemplateId(i);
     const t = tId ? templateById.get(tId) : null;
-    const slotByCanonical = new Map<string, { kind: CellKind; id: string }>();
+    const slotByCanonical = new Map<string, { kind: CellKind; id: string; slot?: TemplateSystemScore }>();
     for (const s of t?.sections.system_scores ?? []) {
       const src = (s as unknown as { source?: string }).source;
       if (src === 'carry_kra') continue;
