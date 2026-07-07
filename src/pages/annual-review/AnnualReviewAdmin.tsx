@@ -65,6 +65,7 @@ import {
 } from '@/hooks/useAnnualReviewSettings';
 import { AssistedSubmissionSettings } from '@/components/admin/AssistedSubmissionSettings';
 import { PilotAccessCard } from '@/components/annual-review/PilotAccessCard';
+import { CycleBulkDataUploadDialog } from '@/components/annual-review/CycleBulkDataUploadDialog';
 import { ConfirmDestructiveDialog } from '@/components/ui/ConfirmDestructiveDialog';
 import { previewHrFinalSync, applyHrFinalSync } from '@/services/annualReview/hrFinalSync';
 import { RefreshCw } from 'lucide-react';
