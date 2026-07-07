@@ -81,6 +81,18 @@ export interface TemplateSystemScore {
   source?: 'manual' | 'safety' | 'hr' | 'env' | 'carry_kra' | string;
   /** Only used when source === 'carry_kra'. */
   carry_config?: CarryKraConfig;
+  /**
+   * Scoring bands copied from the KPI Library (`annual_review_system_kpis.scoring_rules`).
+   * When present, raw values keyed in by HR are converted to scaled points via
+   * `scoreFromRaw` (POLICY §AR-SYSTEM-KPI-RAW-INPUT). When absent, values are
+   * treated as direct scaled points (legacy behavior).
+   */
+  scoring_rules?: {
+    direction: 'higher_better' | 'lower_better';
+    bands: Array<{ score: number; threshold: number }>;
+  };
+  /** Unit-of-measure hint from the KPI Library (count | percent | days | rating). */
+  uom_type?: string;
 }
 
 export type CarryKraAggregation = 'overall_avg' | 'last_n_months' | 'selected_months';
