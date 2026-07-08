@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   useCycles, useTemplates, useRules, useCycleInstances, useActiveCycle, useTemplate,
@@ -1986,6 +1986,9 @@ function RulesTab() {
   const [draft, setDraft] = useState<{
     id?: string; template_id: string; priority: number; name: string; filters: AssignmentFilters;
   }>({ template_id: '', priority: 10, name: '', filters: EMPTY_FILTERS });
+  const [pendingDelete, setPendingDelete] = useState<null | { id: string; name: string }>(null);
+  const editorRef = useRef<HTMLDivElement | null>(null);
+  const [editorFlash, setEditorFlash] = useState(false);
 
   const resetDraft = () => setDraft({ template_id: '', priority: 10, name: '', filters: EMPTY_FILTERS });
 
@@ -1996,8 +1999,25 @@ function RulesTab() {
   });
   const del = useMutation({
     mutationFn: (id: string) => svc.deleteRule(id),
-    onSuccess: () => { toast.success('Rule deleted'); refetch(); },
+    onSuccess: () => { toast.success('Rule deleted'); refetch(); setPendingDelete(null); },
+    onError: (e: Error) => { toast.error(e.message); setPendingDelete(null); },
   });
+
+  const startEdit = (r: (typeof rules)[number]) => {
+    setDraft({
+      id: r.id,
+      template_id: r.template_id,
+      priority: r.priority,
+      name: r.name ?? '',
+      filters: { ...EMPTY_FILTERS, ...((r.filters as Partial<AssignmentFilters>) ?? {}) },
+    });
+    // Defer so the CardTitle re-renders in edit mode before we scroll.
+    setTimeout(() => {
+      editorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      setEditorFlash(true);
+      setTimeout(() => setEditorFlash(false), 1500);
+    }, 0);
+  };
   const seed = useMutation({
     mutationFn: async () => {
       if (!cycleId) throw new Error('Pick a cycle first');
@@ -2027,10 +2047,25 @@ function RulesTab() {
         )}
       </div>
 
+      {!cycleId && (
+        <p className="text-sm text-muted-foreground">
+          Pick a cycle above to load its assignment rules.
+        </p>
+      )}
       {cycleId && (
-        <Card>
+        <Card
+          ref={editorRef}
+          className={cn(
+            'transition-shadow',
+            editorFlash && 'ring-2 ring-primary shadow-lg',
+          )}
+        >
           <CardHeader>
-            <CardTitle>{draft.id ? 'Edit rule' : 'New rule'}</CardTitle>
+            <CardTitle>
+              {draft.id
+                ? `Editing "${draft.name || 'rule'}"`
+                : 'New rule'}
+            </CardTitle>
             <p className="text-xs text-muted-foreground">
               Rules are evaluated in priority order (lower number first). The first rule matching an employee assigns their template.
               Leave all filters empty to match every employee.
@@ -2079,11 +2114,24 @@ function RulesTab() {
                     <TableCell>{templates.find((t) => t.id === r.template_id)?.name ?? r.template_id}</TableCell>
                     <TableCell><RuleFiltersSummary filters={r.filters ?? EMPTY_FILTERS} /></TableCell>
                     <TableCell className="text-right">
-                      <Button variant="ghost" size="sm" onClick={() => setDraft({
-                        id: r.id, template_id: r.template_id, priority: r.priority,
-                        name: r.name ?? '', filters: { ...EMPTY_FILTERS, ...(r.filters ?? {}) },
-                      })}>Edit</Button>
-                      <Button variant="ghost" size="sm" onClick={() => del.mutate(r.id)}>Delete</Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="mr-2"
+                        onClick={() => startEdit(r)}
+                        aria-label={`Edit rule ${r.name ?? ''}`}
+                      >
+                        <Pencil className="h-3.5 w-3.5 mr-1" /> Edit
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-destructive hover:text-destructive"
+                        onClick={() => setPendingDelete({ id: r.id, name: r.name ?? '(unnamed rule)' })}
+                        aria-label={`Delete rule ${r.name ?? ''}`}
+                      >
+                        <Trash2 className="h-3.5 w-3.5 mr-1" /> Delete
+                      </Button>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -2093,6 +2141,37 @@ function RulesTab() {
           </CardContent>
         </Card>
       )}
+
+      <AlertDialog
+        open={!!pendingDelete}
+        onOpenChange={(open) => { if (!open) setPendingDelete(null); }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete rule?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete the rule{' '}
+              <strong>{pendingDelete?.name}</strong>. Employees currently
+              resolved to this rule will fall through to the next matching one
+              on the next seed. This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={del.isPending}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                if (pendingDelete) del.mutate(pendingDelete.id);
+              }}
+              disabled={del.isPending}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {del.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
