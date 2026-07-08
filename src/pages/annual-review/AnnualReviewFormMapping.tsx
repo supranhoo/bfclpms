@@ -530,6 +530,11 @@ function AudienceBuilder({
   const [filters, setFilters] = useState<AssignmentFilters>(EMPTY_FILTERS);
   const [ruleName, setRuleName] = useState('');
   const [lastSavedTemplateId, setLastSavedTemplateId] = useState<string | null>(null);
+  // Employee ids that matched the filters at save time — the source of truth
+  // for shadow-rule detection. Without this, the banner blamed *any* rule
+  // that had coverage anywhere, even when it had zero overlap with the new
+  // audience.
+  const [lastSavedAudienceIds, setLastSavedAudienceIds] = useState<string[] | null>(null);
 
   const previewQ = useQuery({
     queryKey: ['annual-review', 'form-mapping', 'preview', filters],
@@ -540,15 +545,20 @@ function AudienceBuilder({
   const commit = useMutation({
     mutationFn: async () => {
       if (!templateId) throw new Error('Pick a template first.');
-      // New rules take the HIGHEST precedence (lowest priority number) so
-      // freshly-created specific rules aren't shadowed by pre-existing
-      // broader rules. Existing rules are untouched — admins can reorder
-      // manually on the Rules tab if needed.
+      // New rules take the HIGHEST precedence — strictly lower priority
+      // number than every existing rule. The DB column has no CHECK, so
+      // zero / negative priorities are valid and give us headroom without
+      // touching existing rows. Fixes the tie-at-priority-1 shadow bug.
       const minExisting = rules.reduce(
         (m, r) => Math.min(m, r.priority ?? 100),
         100,
       );
-      const priority = rules.length === 0 ? 100 : Math.max(1, minExisting - 10);
+      const priority = rules.length === 0 ? 100 : minExisting - 1;
+      // Snapshot the exact audience before writing so the post-save shadow
+      // check compares against what THIS rule was supposed to cover, not
+      // "any employee currently resolved by any rule".
+      const audience = await previewAudience(filters, { limit: 100_000 });
+      const audienceIds = audience.sample.map((p) => p.id);
       await svc.upsertRule({
         cycle_id: cycleId,
         template_id: templateId,
@@ -557,10 +567,12 @@ function AudienceBuilder({
         filters,
         is_active: true,
       });
+      return { audienceIds };
     },
-    onSuccess: () => {
+    onSuccess: ({ audienceIds }) => {
       toast.success('Rule saved. Recalculating coverage…');
       setLastSavedTemplateId(templateId);
+      setLastSavedAudienceIds(audienceIds);
       setRuleName('');
       onCommitted();
     },
@@ -569,29 +581,47 @@ function AudienceBuilder({
 
   const activeTpls = templates.filter((t) => t.is_active !== false);
 
-  // After a save, if coverage shows the saved template still has 0 employees
-  // resolved to it, an earlier (lower-priority-number) rule is shadowing it.
-  const shadowingRule = useMemo(() => {
-    if (!lastSavedTemplateId || !report) return null;
+  // Post-save diagnostic. Two distinct outcomes require two distinct
+  // messages — the old code always claimed "shadowed" even when the true
+  // reason was "no employees matched at all".
+  const postSaveDiag = useMemo((): null | {
+    kind: 'shadowed'; ruleLabel: string;
+  } | {
+    kind: 'empty_audience';
+  } => {
+    if (!lastSavedTemplateId || !report || !lastSavedAudienceIds) return null;
     const covered = report.rows.filter(
       (r) => r.resolvedTemplateId === lastSavedTemplateId,
     ).length;
     if (covered > 0) return null;
-    // Find the top-priority rule that covers at least one employee — likely
-    // the shadowing broad rule.
-    const counts = new Map<string, number>();
+    if (lastSavedAudienceIds.length === 0) return { kind: 'empty_audience' };
+    // Which templates are actually resolved for THIS rule's audience?
+    const audienceSet = new Set(lastSavedAudienceIds);
+    const tplCountsForAudience = new Map<string, number>();
     for (const r of report.rows) {
+      if (!audienceSet.has(r.employee.id)) continue;
       if (!r.resolvedTemplateId) continue;
-      counts.set(r.resolvedTemplateId, (counts.get(r.resolvedTemplateId) ?? 0) + 1);
+      tplCountsForAudience.set(
+        r.resolvedTemplateId,
+        (tplCountsForAudience.get(r.resolvedTemplateId) ?? 0) + 1,
+      );
     }
-    const sorted = [...rules].sort((a, b) => (a.priority ?? 0) - (b.priority ?? 0));
+    // Nobody in the intended audience received any template — probably the
+    // audience was seeded to unmapped or filtered out server-side. Not a
+    // shadow scenario.
+    if (tplCountsForAudience.size === 0) return { kind: 'empty_audience' };
+    // Pick the highest-priority active rule that resolves at least one
+    // employee in this audience to a *different* template.
+    const sorted = [...rules]
+      .filter((r) => r.template_id !== lastSavedTemplateId)
+      .sort((a, b) => (a.priority ?? 0) - (b.priority ?? 0));
     const shadow = sorted.find(
-      (r) => r.template_id !== lastSavedTemplateId && (counts.get(r.template_id) ?? 0) > 0,
+      (r) => (tplCountsForAudience.get(r.template_id) ?? 0) > 0,
     );
     if (!shadow) return null;
     const tpl = templates.find((t) => t.id === shadow.template_id);
-    return shadow.name || tpl?.name || 'another rule';
-  }, [lastSavedTemplateId, report, rules, templates]);
+    return { kind: 'shadowed', ruleLabel: shadow.name || tpl?.name || 'another rule' };
+  }, [lastSavedTemplateId, lastSavedAudienceIds, report, rules, templates]);
 
   return (
     <Card>
