@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
@@ -247,21 +248,19 @@ function TemplateEmployeesDialog({
   const [q, setQ] = useState('');
   const [pendingRow, setPendingRow] = useState<CoverageRow | null>(null);
   const [reason, setReason] = useState('');
+  const [deptFilter, setDeptFilter] = useState<string>('all');
+  const [gradeFilter, setGradeFilter] = useState<string>('all');
+  const [designationFilter, setDesignationFilter] = useState<string>('all');
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const [bulkReason, setBulkReason] = useState('');
+  const [bulkRunning, setBulkRunning] = useState(false);
+  const [bulkProgress, setBulkProgress] = useState<{ done: number; total: number } | null>(null);
 
   const mapped = useMemo(
     () => report.rows.filter((r) => r.resolvedTemplateId === template.id),
     [report, template.id],
   );
-
-  const filtered = useMemo(() => {
-    const needle = q.trim().toLowerCase();
-    if (!needle) return mapped;
-    return mapped.filter((r) =>
-      (r.employee.full_name ?? '').toLowerCase().includes(needle) ||
-      (r.employee.employee_code ?? '').toLowerCase().includes(needle) ||
-      (r.employee.designation ?? '').toLowerCase().includes(needle),
-    );
-  }, [q, mapped]);
 
   const deptQ = useQuery({
     queryKey: ['departments', 'id-name-map'],
@@ -269,6 +268,70 @@ function TemplateEmployeesDialog({
     staleTime: 5 * 60_000,
     enabled: open,
   });
+
+  const filtered = useMemo(() => {
+    const needle = q.trim().toLowerCase();
+    const deptMap = deptQ.data;
+    return mapped.filter((r) => {
+      if (needle) {
+        const hay =
+          `${r.employee.full_name ?? ''} ${r.employee.employee_code ?? ''} ${r.employee.designation ?? ''}`.toLowerCase();
+        if (!hay.includes(needle)) return false;
+      }
+      if (deptFilter !== 'all') {
+        const dn = deptMap?.get(r.employee.department_id ?? '') ?? '';
+        if (dn !== deptFilter) return false;
+      }
+      if (gradeFilter !== 'all' && (r.employee.pms_grade ?? '') !== gradeFilter) return false;
+      if (designationFilter !== 'all' && (r.employee.designation ?? '') !== designationFilter) return false;
+      return true;
+    });
+  }, [q, mapped, deptFilter, gradeFilter, designationFilter, deptQ.data]);
+
+  const deptOptions = useMemo(() => {
+    const s = new Set<string>();
+    for (const r of mapped) {
+      const dn = deptQ.data?.get(r.employee.department_id ?? '') ?? '';
+      if (dn) s.add(dn);
+    }
+    return Array.from(s).sort();
+  }, [mapped, deptQ.data]);
+  const gradeOptions = useMemo(() => {
+    const s = new Set<string>();
+    for (const r of mapped) if (r.employee.pms_grade) s.add(r.employee.pms_grade);
+    return Array.from(s).sort();
+  }, [mapped]);
+  const designationOptions = useMemo(() => {
+    const s = new Set<string>();
+    for (const r of mapped) if (r.employee.designation) s.add(r.employee.designation);
+    return Array.from(s).sort();
+  }, [mapped]);
+
+  const filteredIds = useMemo(() => filtered.map((r) => r.employee.id), [filtered]);
+  const allFilteredSelected =
+    filteredIds.length > 0 && filteredIds.every((id) => selectedIds.has(id));
+  const toggleAllFiltered = () => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (allFilteredSelected) filteredIds.forEach((id) => next.delete(id));
+      else filteredIds.forEach((id) => next.add(id));
+      return next;
+    });
+  };
+  const toggleOne = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+  const clearFilters = () => {
+    setQ('');
+    setDeptFilter('all');
+    setGradeFilter('all');
+    setDesignationFilter('all');
+  };
 
   const empIds = useMemo(() => mapped.map((r) => r.employee.id), [mapped]);
 
@@ -349,9 +412,56 @@ function TemplateEmployeesDialog({
     );
   }, [mapped, instancesQ.data]);
 
+  const bulkRemove = async () => {
+    if (bulkReason.trim().length < 3) {
+      toast.error('Reason must be at least 3 characters.');
+      return;
+    }
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+    setBulkRunning(true);
+    setBulkProgress({ done: 0, total: ids.length });
+    let ok = 0;
+    let fail = 0;
+    try {
+      // Seed any missing instances up-front (idempotent) so the RPC finds them.
+      const missing = ids.some((id) => !instancesQ.data?.get(id));
+      if (missing) {
+        await svc.seedInstancesByRules({ cycleId, hrUserId: user?.id ?? null });
+        await instancesQ.refetch();
+      }
+      const latest = (await instancesQ.refetch()).data;
+      for (const empId of ids) {
+        const instanceId = latest?.get(empId);
+        if (!instanceId) { fail++; setBulkProgress({ done: ok + fail, total: ids.length }); continue; }
+        try {
+          await svc.setTemplateOverride({
+            instanceId,
+            templateId: null,
+            reason: bulkReason.trim(),
+          });
+          ok++;
+        } catch {
+          fail++;
+        }
+        setBulkProgress({ done: ok + fail, total: ids.length });
+      }
+      toast.success(`Removed ${ok} employee${ok === 1 ? '' : 's'}${fail ? ` (${fail} failed)` : ''}.`);
+      setSelectedIds(new Set());
+      setBulkOpen(false);
+      setBulkReason('');
+      await onChanged();
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setBulkRunning(false);
+      setBulkProgress(null);
+    }
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl">
+      <DialogContent className="max-w-6xl w-[95vw] max-h-[92vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>{template.name}</DialogTitle>
           <DialogDescription>
@@ -360,14 +470,54 @@ function TemplateEmployeesDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="relative">
-          <Search className="h-4 w-4 absolute left-2 top-2.5 text-muted-foreground" />
-          <Input
-            className="pl-8"
-            placeholder="Search by name, code, or designation…"
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-          />
+        <div className="space-y-2">
+          <div className="relative">
+            <Search className="h-4 w-4 absolute left-2 top-2.5 text-muted-foreground" />
+            <Input
+              className="pl-8"
+              placeholder="Search by name, code, or designation…"
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+            />
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Select value={deptFilter} onValueChange={setDeptFilter}>
+              <SelectTrigger className="h-9 w-[220px]"><SelectValue placeholder="Department" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All departments</SelectItem>
+                {deptOptions.map((d) => <SelectItem key={d} value={d}>{d}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Select value={gradeFilter} onValueChange={setGradeFilter}>
+              <SelectTrigger className="h-9 w-[160px]"><SelectValue placeholder="Grade" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All grades</SelectItem>
+                {gradeOptions.map((g) => <SelectItem key={g} value={g}>{g}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Select value={designationFilter} onValueChange={setDesignationFilter}>
+              <SelectTrigger className="h-9 w-[220px]"><SelectValue placeholder="Designation" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All designations</SelectItem>
+                {designationOptions.map((d) => <SelectItem key={d} value={d}>{d}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            {(q || deptFilter !== 'all' || gradeFilter !== 'all' || designationFilter !== 'all') && (
+              <Button size="sm" variant="ghost" onClick={clearFilters}>Clear filters</Button>
+            )}
+            <span className="text-xs text-muted-foreground ml-auto">
+              Showing {filtered.length} of {mapped.length}
+              {selectedIds.size > 0 && <> · <strong>{selectedIds.size}</strong> selected</>}
+            </span>
+            <Button
+              size="sm"
+              variant="destructive"
+              disabled={selectedIds.size === 0}
+              onClick={() => { setBulkReason(''); setBulkOpen(true); }}
+            >
+              <X className="h-3.5 w-3.5 mr-1" /> Remove selected ({selectedIds.size})
+            </Button>
+          </div>
         </div>
 
         {mapped.length > 0 && instancesQ.isFetched && unseededCount > 0 && (
@@ -400,10 +550,17 @@ function TemplateEmployeesDialog({
             No employees are currently mapped to this template.
           </p>
         ) : (
-          <div className="max-h-[55vh] overflow-auto rounded-md border">
+          <div className="flex-1 min-h-0 overflow-auto rounded-md border">
             <Table>
               <TableHeader className="sticky top-0 bg-background z-10">
                 <TableRow>
+                  <TableHead className="w-10">
+                    <Checkbox
+                      checked={allFilteredSelected}
+                      onCheckedChange={toggleAllFiltered}
+                      aria-label="Select all filtered"
+                    />
+                  </TableHead>
                   <TableHead>Code</TableHead>
                   <TableHead>Name</TableHead>
                   <TableHead>Department</TableHead>
@@ -418,6 +575,13 @@ function TemplateEmployeesDialog({
                   const isSeeded = !!instanceId;
                   return (
                     <TableRow key={r.employee.id}>
+                      <TableCell>
+                        <Checkbox
+                          checked={selectedIds.has(r.employee.id)}
+                          onCheckedChange={() => toggleOne(r.employee.id)}
+                          aria-label={`Select ${r.employee.full_name ?? r.employee.id}`}
+                        />
+                      </TableCell>
                       <TableCell className="font-mono text-xs">{r.employee.employee_code ?? '—'}</TableCell>
                       <TableCell className="text-sm">
                         {r.employee.full_name ?? '—'}
@@ -455,7 +619,7 @@ function TemplateEmployeesDialog({
                 })}
                 {filtered.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={6} className="text-center text-sm text-muted-foreground py-6">
+                    <TableCell colSpan={7} className="text-center text-sm text-muted-foreground py-6">
                       No matches.
                     </TableCell>
                   </TableRow>
@@ -514,6 +678,42 @@ function TemplateEmployeesDialog({
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Close</Button>
         </DialogFooter>
+
+        <Dialog open={bulkOpen} onOpenChange={(o) => !bulkRunning && setBulkOpen(o)}>
+          <DialogContent className="max-w-lg">
+            <DialogHeader>
+              <DialogTitle>Remove {selectedIds.size} employee{selectedIds.size === 1 ? '' : 's'} from {template.name}?</DialogTitle>
+              <DialogDescription>
+                Each removal creates an audit-logged per-employee override. Employees not yet seeded will be seeded first.
+              </DialogDescription>
+            </DialogHeader>
+            <Textarea
+              rows={3}
+              value={bulkReason}
+              onChange={(e) => setBulkReason(e.target.value)}
+              placeholder="Reason (min 3 characters, audit-logged)"
+              disabled={bulkRunning}
+            />
+            {bulkProgress && (
+              <p className="text-xs text-muted-foreground">
+                Processed {bulkProgress.done} / {bulkProgress.total}…
+              </p>
+            )}
+            <DialogFooter>
+              <Button variant="ghost" onClick={() => setBulkOpen(false)} disabled={bulkRunning}>Cancel</Button>
+              <Button
+                variant="destructive"
+                onClick={bulkRemove}
+                disabled={bulkRunning || bulkReason.trim().length < 3}
+              >
+                {bulkRunning
+                  ? <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                  : <X className="h-4 w-4 mr-1" />}
+                Confirm remove
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </DialogContent>
     </Dialog>
   );
