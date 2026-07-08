@@ -4,6 +4,59 @@ import { bucketFromGradeCode } from './archetypeResolver';
 import { fetchAllPaged } from '@/lib/fetchAll';
 
 /**
+ * Aggregate template usage for one cycle — one row per template that has at
+ * least one seeded instance. Effective template is
+ * `COALESCE(template_override_id, template_id)`, mirroring the resolver rule
+ * used by the render layer.
+ *
+ * Consumed by:
+ *   • Form Mapping "Templates in use" panel
+ *   • Phased Rollout template multi-select
+ */
+export interface TemplateInUse {
+  template_id: string;
+  name: string;
+  employees_count: number;
+}
+
+export async function listTemplatesInUse(cycleId: string): Promise<TemplateInUse[]> {
+  if (!cycleId) return [];
+  const rows = await fetchAllPaged<{
+    employee_id: string;
+    template_id: string | null;
+    template_override_id: string | null;
+  }>((from, to) =>
+    supabase
+      .from('annual_review_instances')
+      .select('employee_id, template_id, template_override_id')
+      .eq('cycle_id', cycleId)
+      .range(from, to),
+  );
+
+  const counts = new Map<string, number>();
+  for (const r of rows) {
+    const eff = r.template_override_id ?? r.template_id;
+    if (!eff) continue;
+    counts.set(eff, (counts.get(eff) ?? 0) + 1);
+  }
+  if (counts.size === 0) return [];
+
+  const { data: tpls, error } = await supabase
+    .from('annual_review_templates')
+    .select('id, name')
+    .in('id', Array.from(counts.keys()));
+  if (error) throw error;
+
+  return (tpls ?? [])
+    .map((t) => ({
+      template_id: t.id as string,
+      name: (t.name as string) ?? '(unnamed)',
+      employees_count: counts.get(t.id as string) ?? 0,
+    }))
+    .sort((a, b) => b.employees_count - a.employees_count);
+}
+
+/**
  * Form Mapping SSOT — one place that decides which template an employee
  * will see for a cycle. Reused by:
  *   • the mapping-preview UI (dry-run counts, unmapped list)

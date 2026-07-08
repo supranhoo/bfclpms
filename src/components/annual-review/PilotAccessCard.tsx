@@ -16,6 +16,7 @@ import {
 import { ConfirmDestructiveDialog } from '@/components/ui/ConfirmDestructiveDialog';
 import { Users, Filter, Search, UserPlus, UserMinus, X, ShieldCheck, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { listTemplatesInUse, type TemplateInUse } from '@/services/annualReview/formMapping';
 
 /**
  * Phased Rollout — Annual Review.
@@ -56,10 +57,11 @@ interface Filters {
   business_unit_ids: string[];
   department_ids: string[];
   has_kra: 'yes' | 'no' | 'any';
+  template_ids: string[];
 }
 
 const EMPTY_FILTERS: Filters = {
-  grade_ids: [], level_ids: [], business_unit_ids: [], department_ids: [], has_kra: 'any',
+  grade_ids: [], level_ids: [], business_unit_ids: [], department_ids: [], has_kra: 'any', template_ids: [],
 };
 
 function useLookup(table: 'pms_grades' | 'levels' | 'business_units') {
@@ -154,6 +156,46 @@ function useAssignedForms(userIds: string[], cycleId: string | null) {
   });
 }
 
+/** Templates in use for the selected cycle — populates the rollout multi-select. */
+function useTemplatesInUse(cycleId: string | null) {
+  return useQuery({
+    queryKey: ['phased-rollout-templates-in-use', cycleId ?? 'none'],
+    enabled: !!cycleId,
+    staleTime: 60_000,
+    queryFn: async (): Promise<TemplateInUse[]> => {
+      if (!cycleId) return [];
+      return listTemplatesInUse(cycleId);
+    },
+  });
+}
+
+/**
+ * Fetch employee IDs whose effective template (COALESCE(override, template))
+ * matches one of the selected templates, within the given cycle. Used by the
+ * preview to intersect the profile filter results.
+ */
+async function fetchEmployeeIdsForTemplates(
+  cycleId: string,
+  templateIds: string[],
+): Promise<Set<string>> {
+  const out = new Set<string>();
+  if (!cycleId || templateIds.length === 0) return out;
+  const { data, error } = await supabase
+    .from('annual_review_instances')
+    .select('employee_id, template_id, template_override_id')
+    .eq('cycle_id', cycleId)
+    .or(
+      `template_id.in.(${templateIds.join(',')}),template_override_id.in.(${templateIds.join(',')})`,
+    );
+  if (error) throw error;
+  const set = new Set(templateIds);
+  for (const r of (data ?? []) as any[]) {
+    const eff = r.template_override_id ?? r.template_id;
+    if (eff && set.has(eff)) out.add(r.employee_id);
+  }
+  return out;
+}
+
 function AssignedFormCell({ form }: { form: AssignedForm | null | undefined }) {
   if (form === undefined) {
     return <span className="text-xs text-muted-foreground">…</span>;
@@ -211,6 +253,21 @@ async function runPreview(f: Filters): Promise<PreviewRow[]> {
   if (f.has_kra === 'yes') out = out.filter((r) => r.hasKra);
   if (f.has_kra === 'no') out = out.filter((r) => !r.hasKra);
   return out;
+}
+
+/**
+ * Apply the template filter (post-fetch intersection) using the same
+ * effective-template rule as the resolver. Cycle-scoped; if no cycle is
+ * selected the filter is a no-op — caller disables the UI in that case.
+ */
+async function applyTemplateFilter(
+  rows: PreviewRow[],
+  cycleId: string | null,
+  templateIds: string[],
+): Promise<PreviewRow[]> {
+  if (!cycleId || templateIds.length === 0) return rows;
+  const allowed = await fetchEmployeeIdsForTemplates(cycleId, templateIds);
+  return rows.filter((r) => allowed.has(r.id));
 }
 
 function MultiSelectPopover({
@@ -289,6 +346,9 @@ export function PhasedRolloutCard() {
   const cyclesQ = useRolloutCycles();
   const [cycleId, setCycleId] = useState<string | null>(null);
   const effectiveCycleId = cycleId ?? cyclesQ.data?.[0]?.id ?? null;
+  const templatesQ = useTemplatesInUse(effectiveCycleId);
+  const templatesInUse = templatesQ.data ?? [];
+  const templateSelectDisabled = !effectiveCycleId || templatesInUse.length === 0;
 
   const [preview, setPreview] = useState<PreviewRow[] | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -339,7 +399,8 @@ export function PhasedRolloutCard() {
   async function handlePreview() {
     setPreviewing(true);
     try {
-      const rows = await runPreview(filters);
+      const baseRows = await runPreview(filters);
+      const rows = await applyTemplateFilter(baseRows, effectiveCycleId, filters.template_ids);
       setPreview(rows);
       setSelected(new Set());
     } catch (e: any) {
@@ -347,6 +408,22 @@ export function PhasedRolloutCard() {
     } finally {
       setPreviewing(false);
     }
+  }
+
+  /**
+   * Bulk remove-by-template: drop everyone in the current phase whose
+   * effective template matches the current template selection. No-op when
+   * no template is picked.
+   */
+  async function handleRemoveByTemplate() {
+    if (!effectiveCycleId || filters.template_ids.length === 0 || audienceIds.length === 0) return;
+    const allowed = await fetchEmployeeIdsForTemplates(effectiveCycleId, filters.template_ids);
+    const toRemove = audienceIds.filter((id) => allowed.has(id));
+    if (toRemove.length === 0) {
+      toast.info('No current-phase users match the selected templates.');
+      return;
+    }
+    mergeAndSave(toRemove, 'removed');
   }
 
   function mergeAndSave(idsToAdd: string[], verb: 'added' | 'removed') {
@@ -461,7 +538,25 @@ export function PhasedRolloutCard() {
         </div>
 
         {/* Filters */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
+          <div title={templateSelectDisabled ? 'Select a cycle with seeded instances to filter by template' : undefined}>
+            <MultiSelectPopover
+              label="Assigned Template"
+              options={templatesInUse.map((t) => ({
+                id: t.template_id,
+                name: `${t.name} · ${t.employees_count}`,
+              }))}
+              value={filters.template_ids}
+              onChange={(v) => setFilters({ ...filters, template_ids: v })}
+              placeholder={
+                templateSelectDisabled
+                  ? templatesQ.isLoading
+                    ? 'Loading…'
+                    : 'No mapping yet'
+                  : 'Any template'
+              }
+            />
+          </div>
           <MultiSelectPopover
             label="Grade"
             options={grades.data ?? []}
@@ -517,6 +612,18 @@ export function PhasedRolloutCard() {
             )}
             Preview matches
           </Button>
+          {filters.template_ids.length > 0 && audienceIds.length > 0 && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleRemoveByTemplate}
+              disabled={writeAudience.isPending}
+              title="Remove everyone currently in the phase whose assigned template matches the selection"
+            >
+              <UserMinus className="h-4 w-4 mr-1.5" />
+              Remove template's users from phase
+            </Button>
+          )}
           {preview && (
             <>
               <span className="text-xs text-muted-foreground">
