@@ -153,11 +153,39 @@ describe('resolveTemplateForProfile', () => {
       filters: { ...rule({}).filters },
     });
     const newSpecific = rule({
-      id: 'new', template_id: 'specific', priority: 90, // min(existing)-10
+      id: 'new', template_id: 'specific', priority: 99, // min(existing)-1
       filters: { ...rule({}).filters, roles: ['Executive'] },
     });
     expect(
       resolveTemplateForProfile([oldBroad, newSpecific], p(), deptToBu).templateId,
+    ).toBe('specific');
+  });
+
+  it('equal-priority rules resolve deterministically by id (defence in depth)', () => {
+    // Same priority — without a tie-break the winner would depend on DB row
+    // order. The resolver falls back to lexicographic id order, so the same
+    // set of rules always produces the same template.
+    const a = rule({ id: 'aaa', template_id: 't-a', priority: 1 });
+    const b = rule({ id: 'bbb', template_id: 't-b', priority: 1 });
+    expect(resolveTemplateForProfile([b, a], p(), deptToBu).templateId).toBe('t-a');
+    expect(resolveTemplateForProfile([a, b], p(), deptToBu).templateId).toBe('t-a');
+  });
+
+  it('newly-saved rule with priority=0 beats existing rules clamped at 1', () => {
+    // Regression: Math.max(1, min-10) clamped every new rule to priority 1
+    // once any existing rule was already at 1, producing a tie the older
+    // rule won. The fixed formula (minExisting - 1) allows 0 / negative
+    // priorities so new rules always strictly outrank existing ones.
+    const oldAtOne = rule({
+      id: 'old', template_id: 'broad', priority: 1,
+      filters: { ...rule({}).filters },
+    });
+    const fresh = rule({
+      id: 'new', template_id: 'specific', priority: 0, // minExisting(1) - 1
+      filters: { ...rule({}).filters, roles: ['Executive'] },
+    });
+    expect(
+      resolveTemplateForProfile([oldAtOne, fresh], p(), deptToBu).templateId,
     ).toBe('specific');
   });
 });

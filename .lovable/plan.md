@@ -1,88 +1,65 @@
-## Idea in one line
+## Why the shadow warning is misleading here
 
-Add **Template** as a filter dimension inside the existing Phased Rollout card, so an admin can say "roll out to everyone mapped to *Generic W with env (Functional)* and *CPP - W - Operation*" and add all 1,904 matching employees to the current phase in one click — using the mapping we already computed on the Form Mapping page.
+Two real defects in `AudienceBuilder` (`src/pages/annual-review/AnnualReviewFormMapping.tsx`) produce false / misattributed "shadowed by higher-priority rule" alerts:
 
-Today the rollout audience is built from Grade / Level / BU / Department / Has-KRA filters against `profiles`. The mapping between employee ↔ template already lives in `annual_review_instances (cycle_id, employee_id, template_id, template_override_id)`. We're not using it as a rollout selector, even though it's the most business-meaningful axis we have.
+### Defect 1 — New rule can tie with an existing rule and lose
 
----
+In `commit.mutationFn`:
 
-## Brainstorm
-
-### Will this be useful? (Yes — high value)
-- **Real-world rollout language is template-first.** Managers say "let's launch the Functional workers first" or "start with CPP Operations", not "start with grade M4 + BU=CPP + dept=Ops".
-- **Zero re-work.** Form Mapping already did the hard part (2,579 employees mapped to 21 templates). Rollout should ride on top of that SSOT instead of re-deriving cohorts from raw attributes and drifting.
-- **Phased launches match how templates are validated.** QA usually happens template-by-template. If "Generic W with env" is signed off but "CPP - W - QC DMP(v15)" is not, admin can enable the first without touching flag JSON.
-- **Cleaner audit story.** "Phase 2 added: Template = Generic M Support Function (47 users)" is a much better changelog entry than a filter combo.
-
-### Should we build it? (Yes, but small — extend, don't fork)
-The current `PhasedRolloutCard` is already an SSOT-preserving UI over `admin_feature_flags.target_user_ids`. Adding a **Template multi-select** to the existing filter bar is a ~1-file change; no new tables, no new writers, no policy shift. Reuse everything: preview table, Assigned Form column, confirm-before-large-add dialog, remove flow.
-
-We should **not** build a separate "Rollout by Template" page — that would fragment the mental model and duplicate the flag write path.
-
-### Pros
-- Aligns rollout with the way work is planned (per template / per form family).
-- Eliminates manual cohort-building for the common case ("everyone on this form").
-- Composable with existing filters: e.g. Template = Generic W with env **AND** BU = CPP → progressive narrowing for a canary phase.
-- No schema change. No new RLS. No new write path — same `target_user_ids` array.
-- The Assigned Form column already exists in the preview, so the filter is visually self-explanatory (users see the form they filtered by).
-- Naturally handles overrides: filter matches whichever template is currently *effective* (`COALESCE(template_override_id, template_id)`), same rule the resolver uses.
-
-### Cons / risks
-- **Cycle-scoped, not global.** Template mapping only exists once instances are seeded for a cycle. Filter must be disabled (with a hint) when the selected cycle has 0 seeded instances. Mitigation: show `Seeded: N / Total: M` next to the cycle selector; disable the template filter when Seeded = 0.
-- **"Will seed on start: N" gap.** From the screenshot, 249 employees are mapped by a rule but not yet seeded. They *have* a resolvable template but no row in `annual_review_instances` yet. Decision needed (see Q1) — either exclude them or resolve on the fly via the same rules the admin page uses.
-- **Bulk size.** A single template can cover 1,793 employees. The existing >25-item confirm dialog handles this, but we should surface count prominently and keep the "select all shown" scoped to the preview.
-- **Template renames.** If admin renames a template mid-rollout, the label in `target_user_ids` audit trail is stale. Mitigation: we only store user IDs (not template IDs) in the flag, so audience stays correct — only the label in phase notes drifts. Acceptable.
-- **Not a substitute for template-level gating.** If leadership wants "Template X users get the module but only when they open form X", that's a different feature (per-template feature flag). Out of scope here.
-
-### What it will be (definitely in)
-1. **Template multi-select** in the Phased Rollout filter bar, populated from `annual_review_templates` filtered to those actually in use in the selected cycle (matches "Templates in use" list on Form Mapping).
-2. **Preview** shows the same table it does today, with the Assigned Form column already answering "why is this person here".
-3. **"Add all N matched"** primary action + "Add selected" secondary — reuses existing `requestAdd` + confirm dialog.
-4. **Count chips per template** in the multi-select dropdown (e.g. `Generic W with env (Functional) · 1,793`) so admin picks with eyes open.
-5. **Cycle-awareness**: filter is disabled with tooltip when no cycle is selected or the cycle has zero seeded instances.
-6. **Reverse operation**: "Remove all users mapped to Template X from current phase" — same UX symmetry as today's per-row remove, but bulk.
-
-### What it will *not* be (explicit non-goals)
-- No new DB tables, no new flag key, no per-template flag.
-- No writing to `annual_review_instances` (this card stays read-only against the mapping).
-- No cross-cycle rollout (Phase = one cycle at a time; multi-cycle is a different conversation).
-- No auto-progression ("when template X hits 90% approved, add template Y") — future idea, out of scope.
-
----
-
-## How it will be achieved (technical)
-
-**Files touched (1 new query, 1 UI change, 1 test):**
-
-1. `src/components/annual-review/PilotAccessCard.tsx`
-   - Add `template_ids: string[]` to the `Filters` type and `EMPTY_FILTERS`.
-   - New `useCycleTemplatesInUse(cycleId)` query: `SELECT template_id (COALESCE override), COUNT(*), template.name FROM annual_review_instances WHERE cycle_id = ? GROUP BY template_id` — returns `{ id, name, count }[]` for the multi-select.
-   - Extend `runPreview(f)` — after fetching `profiles`, if `f.template_ids.length > 0`, intersect with `annual_review_instances` for the selected cycle where `COALESCE(template_override_id, template_id) IN (template_ids)`. This keeps the preview single-source with the resolver rule.
-   - Render a new `MultiSelectPopover` above (or beside) the existing filters, labelled **Assigned Template (from Form Mapping)**, options = cycle templates in use with count chips, disabled state + tooltip when cycle has no seeded instances.
-   - No changes to `writeAudience` — still writes `target_user_ids`.
-
-2. `src/services/annualReview/formMapping.ts`
-   - Export a small helper `listTemplatesInUse(cycleId): Promise<{ template_id, name, employees_count }[]>` so the same aggregation can be reused by the Form Mapping page's "Templates in use" panel and the rollout dropdown. (Removes duplication.)
-
-3. `src/test/annualReview/pilotAccessCard.templateFilter.test.ts`
-   - Unit tests for the intersection logic (`profiles ∩ instances by template`), override resolution precedence, empty-template-list = no-op behavior, and disabled-when-no-cycle state.
-
-**Data flow**
-```text
-Cycle selector ──► useCycleTemplatesInUse ──► Template multi-select
-                                                    │
-Grade/Level/BU/Dept/HasKra + Template ──► runPreview ──► preview table
-                                                    │
-                              "Add all N matched" ──► requestAdd ──► admin_feature_flags.target_user_ids
+```
+priority = rules.length === 0 ? 100 : Math.max(1, minExisting - 10)
 ```
 
-**Rollback:** revert `PilotAccessCard.tsx`, drop `listTemplatesInUse`, delete the test — flag JSON is unchanged either way, so no data migration risk.
+Once the smallest existing priority is already `1` (or ≤ 10), every new rule is clamped to `1` — the *same* priority as an existing broad rule. The resolver then sorts by `priority` only:
 
----
+```
+rules.filter(r => r.is_active).sort((a, b) => a.priority - b.priority)
+```
 
-## Open questions before build
+There is no deterministic tie‑breaker, so the pre-existing rule (loaded first from the DB) wins, and the new "specific" rule resolves to 0 employees. That is the exact case in the screenshot: the new rule and `CPP - W - QC DMP(v15)` are both priority `1`, and the older one wins by insertion order.
 
-1. **Unseeded but rule-matched employees** (the "Will seed on start: N" bucket). For rollout preview, should the template filter show only *already-seeded* employees (safe, matches on-screen data) or also resolve unseeded ones via the assignment-rules resolver (aggressive, but matches admin intent when they say "everyone on Template X")?
-2. **Composition semantics** — when admin picks Template = A **and** Grade = M4, should the result be `A ∩ M4` (recommended, matches how the current filters compose) or `A ∪ M4`?
-3. Should the Template dropdown show only templates with `count > 0`, or also show empty templates (helpful to notice a template no one's mapped to)?
-4. Do we want a **"Remove template X's users from the current phase"** bulk action in v1, or start read-only-plus-add and add removal in a follow-up?
+### Defect 2 — Wrong rule is named as the shadower
+
+`shadowingRule` doesn't check whether the accused rule actually covers the new rule's audience. It just picks *any* rule (other than the saved template's own) that has at least one resolved employee anywhere in the org:
+
+```
+const shadow = sorted.find(
+  r => r.template_id !== lastSavedTemplateId && (counts.get(r.template_id) ?? 0) > 0
+);
+```
+
+So even when the true reason for `covered === 0` is unrelated (e.g. audience is empty, or a completely different rule is masking one employee), the banner still names the highest-priority rule with any coverage — which is often not the culprit.
+
+### Fix plan (surgical, UI + save-priority only — no schema change)
+
+1. **`AnnualReviewFormMapping.tsx` → `commit.mutationFn`**
+   - Compute `priority = rules.length === 0 ? 100 : minExisting - 1` and *do not* clamp to 1. Allow zero/negative priorities so a new rule strictly outranks every existing one. (DB column is `int`; verify no CHECK constraint before finalizing — if one exists, fall back to reassigning: bump every existing rule's priority by +1 and set the new rule to the previous `minExisting`.)
+   - Add a short comment explaining the strict-precedence invariant.
+
+2. **`AnnualReviewFormMapping.tsx` → `shadowingRule` memo**
+   - Restrict the shadow search to rules that actually cover the *new rule's audience*. Cross-reference `report.rows` with the preview employees returned by `previewAudience(filters)` (already cached in `previewQ.data.sample` + a new `ids` field, or re-query the ids for the saved filter set), and only consider a rule as "shadowing" if it resolved at least one of those employees to a different template.
+   - If no rule in that restricted set matches, show a different, accurate message: "Rule saved, but no employees resolved to it. The audience filters may no longer match anyone — open the Rules tab to review."
+
+3. **Service tweak — `previewAudience`**
+   - Ensure it can return the full matched employee id list (already fetches ids; expose them via the returned shape or add a small `previewAudienceIds(filters)` helper) so the shadow check has an exact audience to compare against without a second full profile scan.
+
+4. **`resolveTemplateForProfile` (defense in depth)**
+   - Add a deterministic tie-breaker to the sort: `(a.priority - b.priority) || a.id.localeCompare(b.id)` (accept `id` in the `Pick<>`), so equal-priority races are stable and testable. Purely defensive — the priority fix above should make ties impossible for newly saved rules.
+
+5. **Tests (`src/services/annualReview/formMapping.test.ts`, plus a new `AudienceBuilder` unit test)**
+   - Resolver: two rules with equal priority resolve deterministically by id.
+   - Priority calc: saving a new rule when `minExisting = 1` produces a strictly smaller priority than every existing rule.
+   - Shadow detection: banner is suppressed when the "other" covering rule has no overlap with the new audience; banner is shown (and names the correct rule) when overlap exists.
+
+### Not in scope
+
+- No changes to the Rules-tab priority editor, DB schema, or the seeder.
+- No behavior change for existing saved rules — only the priority assigned to *new* rules and the accuracy of the post-save banner.
+
+### Risk & rollback
+
+- Data impact: none — only affects the `priority` value written for newly-saved rules.
+- Regression risk: low; the priority change makes new rules more, not less, specific. The banner change is UI-only.
+- Rollback: revert the file changes; no migration.
+
+Confirm you want me to proceed with this fix (especially point 1 — allowing priorities to go below 1) and I'll switch to build mode and implement it with the tests.
