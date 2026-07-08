@@ -462,3 +462,128 @@ export async function listEmployeesForTemplateInCycle(
   out.sort((a, b) => (a.full_name ?? '').localeCompare(b.full_name ?? ''));
   return out;
 }
+
+// ── Filter → explicit id list ─────────────────────────────────────
+
+/**
+ * Resolve the current facet filter set into a concrete list of employee
+ * ids (and display metadata). Reuses `matchesFilters` — the same SSOT the
+ * seeder consults — so the resolved list is identical to what a seed run
+ * would produce today. The result is a *snapshot*: future joiners/leavers
+ * are NOT auto-tracked (that is the entire point of "materialise" the
+ * filter into an explicit list).
+ *
+ * Excludes any `employee_ids` / `employee_ids_mode` fields on the input so
+ * only facet filters drive the resolution — otherwise a `mode = 'only'`
+ * draft would trivially return itself.
+ */
+export async function resolveFilterToEmployeeIds(
+  filters: Partial<AssignmentFilters>,
+): Promise<{ id: string; full_name: string | null; employee_code: string | null }[]> {
+  const {
+    employee_ids: _ids,
+    employee_ids_mode: _mode,
+    ...facetOnly
+  } = (filters ?? {}) as AssignmentFilters & {
+    employee_ids?: string[];
+    employee_ids_mode?: 'only' | 'union';
+  };
+  const { sample } = await previewAudience(facetOnly, { limit: 100_000 });
+  return sample.map((p) => ({
+    id: p.id,
+    full_name: p.full_name,
+    employee_code: p.employee_code,
+  }));
+}
+
+// ── Conflict detection (already-seeded on another template) ───────
+
+export interface SeededConflict {
+  employee_id: string;
+  full_name: string | null;
+  employee_code: string | null;
+  instance_id: string;
+  overall_status: string;
+  current_template_id: string;
+  current_template_name: string;
+  /**
+   * True when the current stage still allows a template swap via
+   * `set_annual_review_template_override` (not_started / pending_self).
+   * The RPC will reject anything past pending_self.
+   */
+  eligible_for_reassign: boolean;
+}
+
+/**
+ * For the given employee ids in a cycle, return the ones that already have
+ * a seeded instance on a template OTHER than `excludeTemplateId`. Used by
+ * the Form Mapping save flow to warn/offer bulk reassignment before rules
+ * silently diverge from reality.
+ */
+export async function findSeededConflicts(
+  cycleId: string,
+  employeeIds: string[],
+  excludeTemplateId: string,
+): Promise<SeededConflict[]> {
+  if (!cycleId || employeeIds.length === 0 || !excludeTemplateId) return [];
+  const idSet = new Set(employeeIds);
+
+  // Read every instance in the cycle once (paged) and filter in-memory —
+  // .in() over >1000 ids would hit the PostgREST cap and lose overlap.
+  const rows = await fetchAllPaged<{
+    id: string;
+    employee_id: string;
+    template_id: string | null;
+    template_override_id: string | null;
+    overall_status: string | null;
+  }>((from, to) =>
+    supabase
+      .from('annual_review_instances')
+      .select('id, employee_id, template_id, template_override_id, overall_status')
+      .eq('cycle_id', cycleId)
+      .range(from, to),
+  );
+
+  const conflicts = rows
+    .filter((r) => idSet.has(r.employee_id))
+    .map((r) => {
+      const eff = r.template_override_id ?? r.template_id;
+      return { row: r, eff };
+    })
+    .filter((x) => x.eff && x.eff !== excludeTemplateId);
+  if (conflicts.length === 0) return [];
+
+  const tplIds = Array.from(new Set(conflicts.map((c) => c.eff!)));
+  const empIds = conflicts.map((c) => c.row.employee_id);
+  const [{ data: tpls }, { data: profs }] = await Promise.all([
+    supabase.from('annual_review_templates').select('id, name').in('id', tplIds),
+    supabase
+      .from('profiles')
+      .select('id, full_name, employee_code')
+      .in('id', empIds),
+  ]);
+  const tplName = new Map<string, string>((tpls ?? []).map((t) => [t.id as string, (t.name as string) ?? '']));
+  const profMap = new Map<string, { full_name: string | null; employee_code: string | null }>(
+    (profs ?? []).map((p) => [
+      p.id as string,
+      {
+        full_name: (p as { full_name: string | null }).full_name ?? null,
+        employee_code: (p as { employee_code: string | null }).employee_code ?? null,
+      },
+    ]),
+  );
+  return conflicts.map(({ row, eff }) => {
+    const p = profMap.get(row.employee_id);
+    const status = row.overall_status ?? 'not_started';
+    return {
+      employee_id: row.employee_id,
+      full_name: p?.full_name ?? null,
+      employee_code: p?.employee_code ?? null,
+      instance_id: row.id,
+      overall_status: status,
+      current_template_id: eff as string,
+      current_template_name: tplName.get(eff as string) ?? '(unknown)',
+      eligible_for_reassign: status === 'not_started' || status === 'pending_self',
+    };
+  });
+}
