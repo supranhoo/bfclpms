@@ -1986,6 +1986,9 @@ function RulesTab() {
   const [draft, setDraft] = useState<{
     id?: string; template_id: string; priority: number; name: string; filters: AssignmentFilters;
   }>({ template_id: '', priority: 10, name: '', filters: EMPTY_FILTERS });
+  const [pendingDelete, setPendingDelete] = useState<null | { id: string; name: string }>(null);
+  const editorRef = useRef<HTMLDivElement | null>(null);
+  const [editorFlash, setEditorFlash] = useState(false);
 
   const resetDraft = () => setDraft({ template_id: '', priority: 10, name: '', filters: EMPTY_FILTERS });
 
@@ -1996,8 +1999,25 @@ function RulesTab() {
   });
   const del = useMutation({
     mutationFn: (id: string) => svc.deleteRule(id),
-    onSuccess: () => { toast.success('Rule deleted'); refetch(); },
+    onSuccess: () => { toast.success('Rule deleted'); refetch(); setPendingDelete(null); },
+    onError: (e: Error) => { toast.error(e.message); setPendingDelete(null); },
   });
+
+  const startEdit = (r: (typeof rules)[number]) => {
+    setDraft({
+      id: r.id,
+      template_id: r.template_id,
+      priority: r.priority,
+      name: r.name ?? '',
+      filters: { ...EMPTY_FILTERS, ...((r.filters as Partial<AssignmentFilters>) ?? {}) },
+    });
+    // Defer so the CardTitle re-renders in edit mode before we scroll.
+    setTimeout(() => {
+      editorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      setEditorFlash(true);
+      setTimeout(() => setEditorFlash(false), 1500);
+    }, 0);
+  };
   const seed = useMutation({
     mutationFn: async () => {
       if (!cycleId) throw new Error('Pick a cycle first');
