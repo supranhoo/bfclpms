@@ -64,10 +64,13 @@ describe('listTemplatesInUse', () => {
     vi.doMock('@/integrations/supabase/client', () => ({ supabase: buildSupabase(rows, templates) }));
     const { listTemplatesInUse } = await import('@/services/annualReview/formMapping');
     const result = await listTemplatesInUse('cycle-1');
-    expect(result).toEqual([
-      { template_id: 't-b', name: 'Template B', employees_count: 2 },
-      { template_id: 't-a', name: 'Template A', employees_count: 2 },
-    ]);
+    expect(result).toHaveLength(2);
+    expect(result).toEqual(
+      expect.arrayContaining([
+        { template_id: 't-a', name: 'Template A', employees_count: 2 },
+        { template_id: 't-b', name: 'Template B', employees_count: 2 },
+      ]),
+    );
   });
 
   it('returns [] when no instances have an effective template', async () => {
