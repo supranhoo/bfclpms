@@ -1072,6 +1072,13 @@ export async function seedInstancesByRules(args: { cycleId: string; hrUserId: st
 
   const matches = (filters: any, p: any): boolean => {
     const f = filters ?? {};
+    // Explicit employee-id list (POLICY §AR-MAPPING-EMPLOYEE-IDS) — mirror
+    // matchesFilters in formMapping.ts. Keep both in sync or preview and
+    // seed will diverge.
+    const idList: string[] = Array.isArray(f.employee_ids) ? f.employee_ids : [];
+    const idMode: 'only' | 'union' | undefined = f.employee_ids_mode;
+    if (idMode === 'only') return idList.includes(p.id);
+    if (idMode === 'union' && idList.includes(p.id)) return true;
     const list = (k: string): string[] => Array.isArray(f[k]) ? f[k] : [];
     if (list('roles').length && !list('roles').includes(p.designation)) return false;
     if (list('grades').length && !list('grades').includes(p.pms_grade)) return false;
