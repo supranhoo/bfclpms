@@ -260,6 +260,23 @@ export interface AssignmentFilters {
   has_kras?: 'any' | 'yes' | 'no';
   /** Window (months) for `has_kras`. Only meaningful when has_kras is 'yes'|'no'. */
   kras_window_months?: number;
+  /**
+   * Optional explicit employee-id list (POLICY §AR-MAPPING-EMPLOYEE-IDS).
+   * Populated by the "Copy from another template" picker and the free-form
+   * employee picker inside the Form Mapping audience builder. Empty / missing
+   * = no restriction (backward-compatible).
+   */
+  employee_ids?: string[];
+  /**
+   * How `employee_ids` combines with the other filter facets:
+   *   • `'only'`   — match iff `employee_ids.includes(profile.id)`; other
+   *                  facets are ignored. Use this to map an exact roster
+   *                  (e.g. "these 5 people from Template A").
+   *   • `'union'`  — match iff filter-match OR `employee_ids.includes(id)`.
+   *                  Use this to say "everyone in Sales PLUS these 5".
+   *   • undefined  — legacy: filter-only behaviour, ids ignored.
+   */
+  employee_ids_mode?: 'only' | 'union';
 }
 
 export interface AnnualReviewAssignmentRule {
