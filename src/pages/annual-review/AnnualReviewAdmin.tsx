@@ -71,6 +71,10 @@ import { previewHrFinalSync, applyHrFinalSync } from '@/services/annualReview/hr
 import { RefreshCw } from 'lucide-react';
 import { RecentStageWeightOverridesPanel } from '@/components/annual-review/RecentStageWeightOverridesPanel';
 import { RuleFiltersEditor, RuleFiltersSummary, EMPTY_FILTERS } from '@/components/annual-review/RuleFiltersEditor';
+import { SyncAssignmentsDialog } from '@/components/annual-review/SyncAssignmentsDialog';
+import {
+  previewAudience, findSeededConflicts, type SeededConflict,
+} from '@/services/annualReview/formMapping';
 import { SystemKpiLibraryPanel } from '@/components/annual-review/SystemKpiLibraryPanel';
 import { SystemKpiWeightMatrix } from '@/components/annual-review/SystemKpiWeightMatrix';
 import { TemplateArchetypesPanel } from '@/components/annual-review/TemplateArchetypesPanel';
