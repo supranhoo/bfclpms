@@ -189,3 +189,68 @@ describe('resolveTemplateForProfile', () => {
     ).toBe('specific');
   });
 });
+
+describe('employee_ids audience (POLICY §AR-MAPPING-EMPLOYEE-IDS)', () => {
+  it("employee_ids_mode='only' matches ONLY listed ids and ignores facet filters", () => {
+    // roles filter would normally reject; 'only' short-circuits it.
+    expect(
+      matchesFilters(
+        { roles: ['Manager'], employee_ids: ['p1'], employee_ids_mode: 'only' },
+        p({ id: 'p1', designation: 'Executive' }),
+        deptToBu,
+      ),
+    ).toBe(true);
+    expect(
+      matchesFilters(
+        { roles: ['Manager'], employee_ids: ['other'], employee_ids_mode: 'only' },
+        p({ id: 'p1', designation: 'Executive' }),
+        deptToBu,
+      ),
+    ).toBe(false);
+  });
+
+  it("employee_ids_mode='union' matches (filter-match) OR (id-in-list)", () => {
+    // Facet mismatch — but id in list → keep.
+    expect(
+      matchesFilters(
+        { roles: ['Manager'], employee_ids: ['p1'], employee_ids_mode: 'union' },
+        p({ id: 'p1', designation: 'Executive' }),
+        deptToBu,
+      ),
+    ).toBe(true);
+    // Facet match + id NOT in list → still keep.
+    expect(
+      matchesFilters(
+        { roles: ['Executive'], employee_ids: ['other'], employee_ids_mode: 'union' },
+        p({ id: 'p1', designation: 'Executive' }),
+        deptToBu,
+      ),
+    ).toBe(true);
+    // Facet mismatch + id NOT in list → reject.
+    expect(
+      matchesFilters(
+        { roles: ['Manager'], employee_ids: ['other'], employee_ids_mode: 'union' },
+        p({ id: 'p1', designation: 'Executive' }),
+        deptToBu,
+      ),
+    ).toBe(false);
+  });
+
+  it('undefined employee_ids_mode = legacy filter-only behaviour (regression guard)', () => {
+    // employee_ids present but mode undefined → ignored entirely.
+    expect(
+      matchesFilters(
+        { roles: ['Executive'], employee_ids: ['other'] },
+        p({ id: 'p1', designation: 'Executive' }),
+        deptToBu,
+      ),
+    ).toBe(true);
+    expect(
+      matchesFilters(
+        { roles: ['Manager'], employee_ids: ['p1'] },
+        p({ id: 'p1', designation: 'Executive' }),
+        deptToBu,
+      ),
+    ).toBe(false);
+  });
+});

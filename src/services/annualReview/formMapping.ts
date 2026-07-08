@@ -94,6 +94,20 @@ export function matchesFilters(
   krasEmpIds?: Set<string> | null,
 ): boolean {
   const f = filters ?? {};
+  // Explicit employee-id list (POLICY §AR-MAPPING-EMPLOYEE-IDS).
+  // `'only'` short-circuits every other facet — the list IS the audience.
+  // `'union'` folds the list into the filter result at the end.
+  const idList = Array.isArray((f as { employee_ids?: unknown }).employee_ids)
+    ? ((f as { employee_ids?: string[] }).employee_ids ?? [])
+    : [];
+  const idMode = (f as { employee_ids_mode?: 'only' | 'union' }).employee_ids_mode;
+  if (idMode === 'only') {
+    return idList.includes(profile.id);
+  }
+  // 'union' — being on the explicit list is enough on its own; skip the
+  // remaining facet checks so the picked employees always come through
+  // regardless of dept/BU/grade.
+  if (idMode === 'union' && idList.includes(profile.id)) return true;
   const list = (k: keyof AssignmentFilters): string[] =>
     Array.isArray((f as Record<string, unknown>)[k])
       ? ((f as Record<string, unknown>)[k] as string[])
@@ -384,4 +398,67 @@ export async function fetchDepartmentNameMap(): Promise<Map<string, string>> {
   const m = new Map<string, string>();
   for (const r of rows ?? []) m.set(r.id, r.name ?? '');
   return m;
+}
+
+/**
+ * Employees currently mapped to a given template inside a cycle. Effective
+ * template honours `template_override_id`, mirroring `listTemplatesInUse`.
+ *
+ * Consumed by the "Copy employees from another template" dialog in the
+ * Form Mapping audience builder — the admin picks a source template and
+ * multi-selects rows to seed the new rule's `employee_ids`.
+ */
+export interface TemplateEmployeeRow {
+  employee_id: string;
+  full_name: string | null;
+  employee_code: string | null;
+  designation: string | null;
+  department_id: string | null;
+  is_active: boolean;
+}
+
+export async function listEmployeesForTemplateInCycle(
+  cycleId: string,
+  templateId: string,
+): Promise<TemplateEmployeeRow[]> {
+  if (!cycleId || !templateId) return [];
+  const rows = await fetchAllPaged<{
+    employee_id: string;
+    template_id: string | null;
+    template_override_id: string | null;
+  }>((from, to) =>
+    supabase
+      .from('annual_review_instances')
+      .select('employee_id, template_id, template_override_id')
+      .eq('cycle_id', cycleId)
+      .range(from, to),
+  );
+  const empIds = rows
+    .filter((r) => (r.template_override_id ?? r.template_id) === templateId)
+    .map((r) => r.employee_id);
+  if (empIds.length === 0) return [];
+
+  // Chunk profile lookup — .in() over >1000 ids hits the PostgREST cap.
+  const out: TemplateEmployeeRow[] = [];
+  const CHUNK = 500;
+  for (let i = 0; i < empIds.length; i += CHUNK) {
+    const slice = empIds.slice(i, i + CHUNK);
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('id, full_name, employee_code, designation, department_id, is_active')
+      .in('id', slice);
+    if (error) throw error;
+    for (const p of data ?? []) {
+      out.push({
+        employee_id: p.id as string,
+        full_name: (p as { full_name: string | null }).full_name ?? null,
+        employee_code: (p as { employee_code: string | null }).employee_code ?? null,
+        designation: (p as { designation: string | null }).designation ?? null,
+        department_id: (p as { department_id: string | null }).department_id ?? null,
+        is_active: !!(p as { is_active: boolean }).is_active,
+      });
+    }
+  }
+  out.sort((a, b) => (a.full_name ?? '').localeCompare(b.full_name ?? ''));
+  return out;
 }
