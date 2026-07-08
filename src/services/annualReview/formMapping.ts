@@ -104,6 +104,10 @@ export function matchesFilters(
   if (idMode === 'only') {
     return idList.includes(profile.id);
   }
+  // 'union' — being on the explicit list is enough on its own; skip the
+  // remaining facet checks so the picked employees always come through
+  // regardless of dept/BU/grade.
+  if (idMode === 'union' && idList.includes(profile.id)) return true;
   const list = (k: keyof AssignmentFilters): string[] =>
     Array.isArray((f as Record<string, unknown>)[k])
       ? ((f as Record<string, unknown>)[k] as string[])
@@ -126,11 +130,6 @@ export function matchesFilters(
     const present = krasEmpIds.has(profile.id);
     if (hasKras === 'yes' && !present) return false;
     if (hasKras === 'no' && present) return false;
-  }
-  if (idMode === 'union') {
-    // Filter matched → keep. Otherwise the id list can rescue the row.
-    // (If we got here every facet matched — union with the list is just true.)
-    return true;
   }
   return true;
 }
