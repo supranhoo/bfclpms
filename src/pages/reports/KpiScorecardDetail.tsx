@@ -55,6 +55,7 @@ import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover
 import { useToast } from '@/hooks/use-toast';
 import { enumeratePeriods, validateRange, MAX_RANGE_MONTHS } from '@/lib/kpiScorecardRange';
 import { fetchFinalApproverMap, NO_APPROVER_LABEL } from '@/lib/finalApproverMap';
+import { ColumnFilterPopover } from '@/components/reports/ColumnFilterPopover';
 
 const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -262,6 +263,12 @@ export default function KpiScorecardDetail() {
   const [sortField, setSortField] = useState<SortField>('employeeName');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
 
+  // Excel-style per-column filters. Empty/absent set ⇒ column is unfiltered.
+  const [freqFilter, setFreqFilter] = useState<Set<string> | null>(null);
+  const [typeFilter, setTypeFilter] = useState<Set<string> | null>(null);
+  const [approverFilter, setApproverFilter] = useState<Set<string> | null>(null);
+  const [statusFilter, setStatusFilter] = useState<Set<string> | null>(null);
+
   // Range export state
   const [rangeFromMonth, setRangeFromMonth] = useState(MONTHS[now.getMonth()]);
   const [rangeFromYear, setRangeFromYear] = useState(now.getFullYear());
@@ -321,6 +328,11 @@ export default function KpiScorecardDetail() {
         r.kraName.toLowerCase().includes(s)
       );
     }
+    // Excel-style column filters
+    if (freqFilter?.size) result = result.filter(r => freqFilter.has(r.frequency || ''));
+    if (typeFilter?.size) result = result.filter(r => typeFilter.has(getOrgTypeLabel(r)));
+    if (approverFilter?.size) result = result.filter(r => approverFilter.has(r.finalApprover || NO_APPROVER_LABEL));
+    if (statusFilter?.size) result = result.filter(r => statusFilter.has(r.status || ''));
     // Sort
     result = [...result].sort((a, b) => {
       const av = a[sortField];
@@ -332,7 +344,42 @@ export default function KpiScorecardDetail() {
       return sortDir === 'asc' ? cmp : -cmp;
     });
     return result;
-  }, [rows, selectedDept, searchTerm, sortField, sortDir, filterByCompany]);
+  }, [rows, selectedDept, searchTerm, sortField, sortDir, filterByCompany, freqFilter, typeFilter, approverFilter, statusFilter]);
+
+  // Distinct values for column filters — derived from company/dept/search-filtered
+  // rows (ignoring column filters themselves, so users can always re-expand).
+  const baseForDistinct = useMemo(() => {
+    if (!rows) return [] as FlatRow[];
+    let result = rows.filter(r => filterByCompany(r.employeeId));
+    if (selectedDept !== 'all') result = result.filter(r => r.department === selectedDept);
+    if (searchTerm) {
+      const s = searchTerm.toLowerCase();
+      result = result.filter(r =>
+        r.employeeName.toLowerCase().includes(s) ||
+        r.employeeCode.toLowerCase().includes(s) ||
+        r.kpiName.toLowerCase().includes(s) ||
+        r.kraName.toLowerCase().includes(s)
+      );
+    }
+    return result;
+  }, [rows, filterByCompany, selectedDept, searchTerm]);
+
+  const freqValues = useMemo(
+    () => [...new Set(baseForDistinct.map(r => r.frequency || ''))].filter(Boolean).sort(),
+    [baseForDistinct],
+  );
+  const typeValues = useMemo(
+    () => [...new Set(baseForDistinct.map(r => getOrgTypeLabel(r)))].sort(),
+    [baseForDistinct],
+  );
+  const approverValues = useMemo(
+    () => [...new Set(baseForDistinct.map(r => r.finalApprover || NO_APPROVER_LABEL))].sort(),
+    [baseForDistinct],
+  );
+  const statusValues = useMemo(
+    () => [...new Set(baseForDistinct.map(r => r.status || ''))].filter(Boolean).sort(),
+    [baseForDistinct],
+  );
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const paged = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
@@ -706,7 +753,14 @@ export default function KpiScorecardDetail() {
                       <TableHead className={thClass} onClick={() => toggleSort('employeeName')}>Name<SortIcon field="employeeName" /></TableHead>
                       <TableHead className={`${thClass} max-w-[200px]`} onClick={() => toggleSort('kpiName')}>KPI<SortIcon field="kpiName" /></TableHead>
                       <TableHead className={thClass} onClick={() => toggleSort('frequency')}>Freq<SortIcon field="frequency" /></TableHead>
-                      <TableHead className={thClass} onClick={() => toggleSort('orgKpiScope')}>Type<SortIcon field="orgKpiScope" /></TableHead>
+                      <TableHead className={thClass}>
+                        <span onClick={() => toggleSort('frequency')} className="inline-flex items-center">Freq<SortIcon field="frequency" /></span>
+                        <ColumnFilterPopover label="Frequency" values={freqValues} selected={freqFilter} onChange={v => { setFreqFilter(v); setCurrentPage(1); }} />
+                      </TableHead>
+                      <TableHead className={thClass}>
+                        <span onClick={() => toggleSort('orgKpiScope')} className="inline-flex items-center">Type<SortIcon field="orgKpiScope" /></span>
+                        <ColumnFilterPopover label="Type" values={typeValues} selected={typeFilter} onChange={v => { setTypeFilter(v); setCurrentPage(1); }} />
+                      </TableHead>
                       <TableHead className={thClass} onClick={() => toggleSort('dataOwnerNames')}>Data Owner<SortIcon field="dataOwnerNames" /></TableHead>
                       <TableHead className={`${thClass} text-right`} onClick={() => toggleSort('selfScore')}>Self<SortIcon field="selfScore" /></TableHead>
                       <TableHead className={`${thClass} text-right`} onClick={() => toggleSort('managerScore')}>Mgr<SortIcon field="managerScore" /></TableHead>
@@ -715,8 +769,20 @@ export default function KpiScorecardDetail() {
                       <TableHead className={`${thClass} text-right`} onClick={() => toggleSort('auditorScore')}>Audit<SortIcon field="auditorScore" /></TableHead>
                       <TableHead className={`${thClass} text-right`} onClick={() => toggleSort('managementScore')}>Mgmt<SortIcon field="managementScore" /></TableHead>
                       <TableHead className={`${thClass} text-right`} onClick={() => toggleSort('finalScore')}>Final<SortIcon field="finalScore" /></TableHead>
-                      <TableHead className={thClass} onClick={() => toggleSort('finalApprover')} title="The last approving role in this employee's resolved workflow for the selected period.">Final Approver<SortIcon field="finalApprover" /></TableHead>
-                      <TableHead className={thClass} onClick={() => toggleSort('status')}>Status<SortIcon field="status" /></TableHead>
+                      <TableHead className={thClass} title="The last approving role in this employee's resolved workflow for the selected period.">
+                        <span onClick={() => toggleSort('finalApprover')} className="inline-flex items-center">Final Approver<SortIcon field="finalApprover" /></span>
+                        <ColumnFilterPopover label="Final Approver" values={approverValues} selected={approverFilter} onChange={v => { setApproverFilter(v); setCurrentPage(1); }} />
+                      </TableHead>
+                      <TableHead className={thClass}>
+                        <span onClick={() => toggleSort('status')} className="inline-flex items-center">Status<SortIcon field="status" /></span>
+                        <ColumnFilterPopover
+                          label="Status"
+                          values={statusValues}
+                          selected={statusFilter}
+                          onChange={v => { setStatusFilter(v); setCurrentPage(1); }}
+                          renderValue={v => statusLabels[v] ?? v}
+                        />
+                      </TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
