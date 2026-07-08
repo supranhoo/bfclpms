@@ -2199,6 +2199,20 @@ function RulesTab() {
                         variant="outline"
                         size="sm"
                         className="mr-2"
+                        onClick={() => openSyncForRule(r)}
+                        disabled={syncResolving === r.id}
+                        title="Move employees who are already seeded on a different template onto this rule's template. Only touches instances still in not_started or pending_self."
+                        aria-label={`Sync assignments for rule ${r.name ?? ''}`}
+                      >
+                        {syncResolving === r.id
+                          ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+                          : <RefreshCw className="h-3.5 w-3.5 mr-1" />}
+                        Sync
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="mr-2"
                         onClick={() => startEdit(r)}
                         aria-label={`Edit rule ${r.name ?? ''}`}
                       >
@@ -2253,6 +2267,18 @@ function RulesTab() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <SyncAssignmentsDialog
+        open={syncOpen}
+        onOpenChange={(o) => {
+          setSyncOpen(o);
+          if (!o) { setSyncConflicts([]); setSyncRule(null); }
+        }}
+        conflicts={syncConflicts}
+        targetTemplateName={syncRule?.templateName ?? ''}
+        onConfirm={runSync}
+        submitting={syncing}
+      />
     </div>
   );
 }
