@@ -48,11 +48,13 @@ const KSD_DEFAULT_FIELDS = [
   { field_key: 'auditor_score',     default_label: 'Auditor Score',      default_sort: 260 },
   { field_key: 'management_score',  default_label: 'Management Score',   default_sort: 270 },
   { field_key: 'final_score',       default_label: 'Final Score',        default_sort: 280 },
+  { field_key: 'final_approver',    default_label: 'Final Approver',     default_sort: 285 },
   { field_key: 'status',            default_label: 'Status',             default_sort: 290 },
 ] as const;
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
 import { useToast } from '@/hooks/use-toast';
 import { enumeratePeriods, validateRange, MAX_RANGE_MONTHS } from '@/lib/kpiScorecardRange';
+import { fetchFinalApproverMap, NO_APPROVER_LABEL } from '@/lib/finalApproverMap';
 
 const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -92,6 +94,7 @@ interface FlatRow {
   finalScore: number | null;
   status: string;
   isNa: boolean;
+  finalApprover: string;
 }
 
 type SortField = keyof FlatRow;
@@ -194,6 +197,8 @@ async function fetchScorecardForPeriod(month: string, year: number): Promise<Fla
 
   const profileMap = new Map((profiles ?? []).map(p => [p.id, p]));
 
+  const approverMap = await fetchFinalApproverMap(month, year);
+
   return allKpis.map((kpi): FlatRow => {
     const profile = profileMap.get(kpi.employee_id);
     const sub = submissionMap.get(kpi.id);
@@ -233,6 +238,7 @@ async function fetchScorecardForPeriod(month: string, year: number): Promise<Fla
       finalScore: isNa ? null : (sub?.final_score ?? null),
       status: kpi.status ?? '',
       isNa,
+      finalApprover: approverMap.get(kpi.employee_id) ?? NO_APPROVER_LABEL,
     };
   });
 }
@@ -407,6 +413,7 @@ export default function KpiScorecardDetail() {
       case 'auditor_score':     return r.isNa ? 'N/A' : (r.auditorScore ?? '');
       case 'management_score':  return r.isNa ? 'N/A' : (r.managementScore ?? '');
       case 'final_score':       return r.isNa ? 'N/A' : (r.finalScore ?? '');
+      case 'final_approver':    return r.finalApprover || NO_APPROVER_LABEL;
       case 'status':            return statusLabels[r.status] ?? r.status;
       default: return '';
     }
@@ -708,13 +715,14 @@ export default function KpiScorecardDetail() {
                       <TableHead className={`${thClass} text-right`} onClick={() => toggleSort('auditorScore')}>Audit<SortIcon field="auditorScore" /></TableHead>
                       <TableHead className={`${thClass} text-right`} onClick={() => toggleSort('managementScore')}>Mgmt<SortIcon field="managementScore" /></TableHead>
                       <TableHead className={`${thClass} text-right`} onClick={() => toggleSort('finalScore')}>Final<SortIcon field="finalScore" /></TableHead>
+                      <TableHead className={thClass} onClick={() => toggleSort('finalApprover')} title="The last approving role in this employee's resolved workflow for the selected period.">Final Approver<SortIcon field="finalApprover" /></TableHead>
                       <TableHead className={thClass} onClick={() => toggleSort('status')}>Status<SortIcon field="status" /></TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {paged.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={14} className="text-center text-muted-foreground py-8">
+                        <TableCell colSpan={15} className="text-center text-muted-foreground py-8">
                           {rows && rows.length > 0
                             ? `No KPIs match the current Company / Department / Search filters (${rows.length} loaded for ${appliedQuery?.month} ${appliedQuery?.year}).`
                             : `No KPI rows exist for ${appliedQuery?.month} ${appliedQuery?.year}.`}
@@ -741,6 +749,13 @@ export default function KpiScorecardDetail() {
                           <TableCell className="text-xs py-1.5 px-2 text-right"><ScoreCell score={r.auditorScore} isNa={r.isNa} /></TableCell>
                           <TableCell className="text-xs py-1.5 px-2 text-right"><ScoreCell score={r.managementScore} isNa={r.isNa} /></TableCell>
                           <TableCell className="text-xs py-1.5 px-2 text-right font-semibold"><ScoreCell score={r.finalScore} isNa={r.isNa} /></TableCell>
+                          <TableCell className="text-xs py-1.5 px-2 whitespace-nowrap">
+                            {r.finalApprover && r.finalApprover !== NO_APPROVER_LABEL ? (
+                              <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-0 bg-muted/50">{r.finalApprover}</Badge>
+                            ) : (
+                              <span className="text-muted-foreground text-xs">—</span>
+                            )}
+                          </TableCell>
                           <TableCell className="text-xs py-1.5 px-2">
                             <Badge variant="outline" className={`text-[10px] px-1.5 py-0 border-0 ${statusColors[r.status] ?? ''}`}>
                               {statusLabels[r.status] ?? r.status}
