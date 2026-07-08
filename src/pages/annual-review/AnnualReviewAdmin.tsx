@@ -2042,6 +2042,75 @@ function RulesTab() {
     onError: (e: Error) => toast.error(e.message),
   });
 
+  // Resolve the rule's audience → find employees already seeded on a
+  // DIFFERENT template → open the shared reassign dialog. Read-only until
+  // the admin confirms.
+  const openSyncForRule = async (r: (typeof rules)[number]) => {
+    if (!cycleId) return;
+    try {
+      setSyncResolving(r.id);
+      const audience = await previewAudience(
+        { ...EMPTY_FILTERS, ...((r.filters as Partial<AssignmentFilters>) ?? {}) },
+        { limit: 100_000 },
+      );
+      const audienceIds = Array.from(new Set([
+        ...audience.sample.map((p) => p.id),
+        ...(((r.filters as Partial<AssignmentFilters>)?.employee_ids ?? []) as string[]),
+      ]));
+      if (audienceIds.length === 0) {
+        toast.info('This rule resolves to zero employees — nothing to sync.');
+        return;
+      }
+      const conflicts = await findSeededConflicts(cycleId, audienceIds, r.template_id);
+      if (conflicts.length === 0) {
+        toast.success('No mismatched instances. Everyone in this audience is already on the mapped template.');
+        return;
+      }
+      const tpl = templates.find((t) => t.id === r.template_id);
+      setSyncRule({
+        templateId: r.template_id,
+        templateName: tpl?.name ?? 'target template',
+        ruleLabel: r.name || tpl?.name || 'rule',
+      });
+      setSyncConflicts(conflicts);
+      setSyncOpen(true);
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setSyncResolving(null);
+    }
+  };
+
+  const runSync = async () => {
+    if (!syncRule) return;
+    const eligible = syncConflicts.filter((c) => c.eligible_for_reassign);
+    if (eligible.length === 0) {
+      toast.error('No conflicts eligible for reassignment (all past pending_self).');
+      return;
+    }
+    setSyncing(true);
+    try {
+      const reason = `Reassigned via Form Mapping rule (${syncRule.ruleLabel})`;
+      const res = await svc.bulkReassignViaOverride(
+        eligible.map((c) => ({ instanceId: c.instance_id, templateId: syncRule.templateId })),
+        reason,
+      );
+      if (res.failed.length === 0) {
+        toast.success(`Reassigned ${res.ok} employee${res.ok === 1 ? '' : 's'} to ${syncRule.templateName}.`);
+      } else {
+        toast.warning(`Reassigned ${res.ok}; ${res.failed.length} failed.`);
+      }
+      setSyncOpen(false);
+      setSyncConflicts([]);
+      setSyncRule(null);
+      qc.invalidateQueries();
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3">
