@@ -2114,11 +2114,24 @@ function RulesTab() {
                     <TableCell>{templates.find((t) => t.id === r.template_id)?.name ?? r.template_id}</TableCell>
                     <TableCell><RuleFiltersSummary filters={r.filters ?? EMPTY_FILTERS} /></TableCell>
                     <TableCell className="text-right">
-                      <Button variant="ghost" size="sm" onClick={() => setDraft({
-                        id: r.id, template_id: r.template_id, priority: r.priority,
-                        name: r.name ?? '', filters: { ...EMPTY_FILTERS, ...(r.filters ?? {}) },
-                      })}>Edit</Button>
-                      <Button variant="ghost" size="sm" onClick={() => del.mutate(r.id)}>Delete</Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="mr-2"
+                        onClick={() => startEdit(r)}
+                        aria-label={`Edit rule ${r.name ?? ''}`}
+                      >
+                        <Pencil className="h-3.5 w-3.5 mr-1" /> Edit
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-destructive hover:text-destructive"
+                        onClick={() => setPendingDelete({ id: r.id, name: r.name ?? '(unnamed rule)' })}
+                        aria-label={`Delete rule ${r.name ?? ''}`}
+                      >
+                        <Trash2 className="h-3.5 w-3.5 mr-1" /> Delete
+                      </Button>
                     </TableCell>
                   </TableRow>
                 ))}
