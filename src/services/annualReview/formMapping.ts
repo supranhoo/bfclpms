@@ -126,12 +126,23 @@ export function matchesFilters(
  * matched (employee would be skipped by the seeder).
  */
 export function resolveTemplateForProfile(
-  rules: Pick<AnnualReviewAssignmentRule, 'template_id' | 'filters' | 'is_active' | 'priority'>[],
+  rules: Pick<AnnualReviewAssignmentRule, 'id' | 'template_id' | 'filters' | 'is_active' | 'priority'>[],
   profile: MappingProfile,
   deptToBu: Record<string, string | null>,
   krasSets?: Map<number, Set<string>> | null,
 ): { templateId: string | null; matchedRuleIdx: number | null } {
-  const active = rules.filter((r) => r.is_active).slice().sort((a, b) => a.priority - b.priority);
+  // Deterministic tie-break: when two rules share the same priority number,
+  // fall back to the rule id so results are stable across DB row order and
+  // predictable in tests. Fixes the "new rule shadowed by older rule with the
+  // same priority" bug observed in Form Mapping.
+  const active = rules
+    .filter((r) => r.is_active)
+    .slice()
+    .sort(
+      (a, b) =>
+        a.priority - b.priority ||
+        String(a.id ?? '').localeCompare(String(b.id ?? '')),
+    );
   for (let i = 0; i < active.length; i++) {
     const w = windowMonthsFromFilters(active[i].filters);
     const set = krasSets?.get(w) ?? null;
