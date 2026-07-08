@@ -2047,10 +2047,25 @@ function RulesTab() {
         )}
       </div>
 
+      {!cycleId && (
+        <p className="text-sm text-muted-foreground">
+          Pick a cycle above to load its assignment rules.
+        </p>
+      )}
       {cycleId && (
-        <Card>
+        <Card
+          ref={editorRef}
+          className={cn(
+            'transition-shadow',
+            editorFlash && 'ring-2 ring-primary shadow-lg',
+          )}
+        >
           <CardHeader>
-            <CardTitle>{draft.id ? 'Edit rule' : 'New rule'}</CardTitle>
+            <CardTitle>
+              {draft.id
+                ? `Editing "${draft.name || 'rule'}"`
+                : 'New rule'}
+            </CardTitle>
             <p className="text-xs text-muted-foreground">
               Rules are evaluated in priority order (lower number first). The first rule matching an employee assigns their template.
               Leave all filters empty to match every employee.
