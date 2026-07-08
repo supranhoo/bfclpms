@@ -1606,11 +1606,12 @@ export function EmployeeSelectorGrid({
       );
     } else if (viewLevel === 'audit') {
       return (
-        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-6 gap-3 sm:gap-4">
           <StatCard icon={Users} label="Total Employees" value={stats.totalEmployees} color="primary" onClick={() => setStatusFilter('all')} active={statusFilter === 'all'} tooltip="Employees with at least one KPI in this period whose workflow includes the Audit stage." />
           <StatCard icon={Clock} label="Pending Audit" value={stats.stat1} color="amber" subtitle="In pipeline for audit" onClick={() => toggleStatusFilter('pending')} active={statusFilter === 'pending'} tooltip="KPIs at the stage immediately before Audit, awaiting your queue." />
           <StatCard icon={FileCheck} label="In Audit" value={stats.stat2} color="purple" subtitle="Currently reviewing" onClick={() => toggleStatusFilter('in_audit')} active={statusFilter === 'in_audit'} tooltip="KPIs currently sitting in the Audit stage." />
           <StatCard icon={CheckCircle2} label="Forwarded" value={stats.stat3} color="green" subtitle="Sent for management" onClick={() => toggleStatusFilter('forwarded')} active={statusFilter === 'forwarded'} tooltip="KPIs that have moved past Audit (Management Review or Approved)." />
+          <StatCard icon={CheckCircle2} label="Auditor Reviewed" value={stats.stat4} denominator={stats.totalKpis} color="green" subtitle="of total KPIs" tooltip="KPIs that have completed the Audit stage for this period — either an auditor score is recorded or the KPI has advanced past the Audit stage." />
           <StatCard icon={Target} label="My KPIs" value={myKpiLevelData?.totalAssignedKpis || 0} color="blue" subtitle="KPIs assigned to you" onClick={() => toggleStatusFilter('my_assigned')} active={statusFilter === 'my_assigned'} tooltip="KPIs explicitly assigned to you for audit." />
         </div>
       );
