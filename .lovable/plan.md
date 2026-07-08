@@ -1,38 +1,49 @@
 ## Goal
-Mirror the HR PMS dashboard's "HR PMS Reviewed X / Total" tile on the Audit Panel so auditors see completion progress at a glance.
+Add a **Final Approver** column to the KPI Scorecard Detail report showing which workflow role is the last approving stage in each employee's resolved workflow for the selected period (e.g., Management, Auditor, HR PMS, Skip-Level, L1 Manager).
+
+## Interpretation
+"Final approver" = the last non-self stage in the employee's period-resolved workflow template (as returned by `get_employee_workflow_info`). Displayed as the role label from `CHAIN_STAGE_LABEL` (e.g., "Management", "Auditor", "HR PMS", "Skip-Level", "L1 Manager"). If the employee has no resolvable workflow, show `—`.
+
+If the user wants the person's full name instead of the role label, this can be a follow-up; role label matches the existing column vocabulary of the report (Self / Mgr / Skip / HR / Audit / Mgmt).
 
 ## Where
-`src/components/review/EmployeeSelectorGrid.tsx` — `renderStatsCards()` → `viewLevel === 'audit'` branch (currently 5 tiles: Total Employees, Pending Audit, In Audit, Forwarded, My KPIs).
+`src/pages/reports/KpiScorecardDetail.tsx` only.
 
-## Why this is a pure UI change
-The underlying counter already exists. In the audit `stats` aggregator (~line 1180) `stat4` is populated with the "audit-signature" count — KPIs where `auditor_score` is recorded OR the KPI has advanced past audit while `is_na=true`. That is exactly the semantic parallel to HR PMS `stat3`. Denominator `stats.totalKpis` is also already computed. No hook, service, or query changes are needed.
+## Data source
+Reuse the existing `useWorkflowResolution(period, year)` hook (already used elsewhere; batches `get_employee_workflow_info`). Build `Map<employeeId, finalApproverLabel>` where `finalApproverLabel` is derived from the last entry of `chain.templateStages` mapped through the internal `STAGE_TO_CHAIN` → `CHAIN_STAGE_LABEL`.
 
-## Change
-Add one `StatCard` in the audit branch of `renderStatsCards()`:
+Because the hook is per-period, it is called with `appliedQuery.month / appliedQuery.year` and gated by `enabled: !!appliedQuery`. Result is cached (staleTime 2 min) so switching filters is cheap.
 
-- Label: **Auditor Reviewed**
-- Icon: `CheckCircle2` (same as HR PMS tile)
-- Value: `stats.stat4`
-- Denominator: `stats.totalKpis`
-- Color: `green`
-- Subtitle: `of total KPIs`
-- Tooltip: "KPIs that have completed the Audit stage for this period — either an auditor score is recorded or the KPI has advanced past the Audit stage."
-- Not clickable (no dedicated `statusFilter` case for it today; "Forwarded" already filters forwarded-past-audit and would double up). Leaving it as a read-only progress indicator matches how the HR PMS "Reviewed" tile behaves visually while its click handler filters `reviewed`. Since audit has no `reviewed` filter branch wired, we keep it non-interactive to avoid dead clicks.
+No DB / RPC / schema changes.
 
-Update the grid class from `lg:grid-cols-5` to `lg:grid-cols-3 xl:grid-cols-6` for parity with the HR PMS grid so 6 tiles wrap cleanly on all breakpoints.
+## Changes in `KpiScorecardDetail.tsx`
+1. Add field descriptor in `KSD_DEFAULT_FIELDS`:
+   `{ field_key: 'final_approver', default_label: 'Final Approver', default_sort: 285 }` — inserted between `final_score` (280) and `status` (290) so the on-screen and exported column order both read `... Final → Final Approver → Status`.
+2. Extend `FlatRow` with `finalApprover: string`.
+3. Thread an `employeeApproverMap: Map<string,string>` param into `fetchScorecardForPeriod` OR (preferred, less invasive) resolve it in the component after fetching using the workflow-resolution hook and merge into the rows via `useMemo`. Chosen approach: compute in a `useMemo` that maps `rows` → `rowsWithApprover` using the resolution map; downstream `filtered` / `paged` / export functions operate on this augmented list.
+4. Add table column between `Final` and `Status` with sort + tooltip.
+5. Extend `ksdValueFor` with a `final_approver` case for exports (single-month + range).
+6. For range export: `handleRangeExport` calls `fetchScorecardForPeriod` per period without the hook. Fix by calling a small local helper `fetchFinalApproverMap(period, year)` that runs the same profile+RPC batching pattern as `useWorkflowResolution` (extract a shared helper `resolveFinalApproverMap` into `src/lib/finalApproverMap.ts` so both surfaces share one implementation).
+7. Update `colSpan={14}` on the "no rows" empty-state row to `15`.
+
+## New helper file
+`src/lib/finalApproverMap.ts`
+- Exports `getFinalApproverLabel(templateStages: string[]): string`
+- Exports `async fetchFinalApproverMap(period, year): Promise<Map<string,string>>` reusing the same RPC pattern; refactor `useWorkflowResolution` to consume the same helper so behavior stays in lock-step (SSOT).
+
+## Test
+Add `src/test/finalApproverMap.test.ts`:
+- Empty stages → `'—'`
+- `['self_review','manager_check']` → `'L1 Manager'`
+- `['self_review','manager_check','skip_level_check','hr_pms_review','management_review']` → `'Management'`
+- Unknown stage suffix → falls back to `'—'`
 
 ## Risk & Impact
-- Data: none — reads existing `stats.stat4` / `stats.totalKpis`.
+- Data: read-only, no schema change.
 - Workflow: none.
-- UI: audit panel becomes 6 tiles; matches HR PMS layout. Verified against uploaded reference screenshots.
-- Regression: nil — `stat4` is already computed and used nowhere in the audit UI today, so surfacing it cannot change other numbers.
-
-## Tests
-Add a small render test `src/test/auditReviewedTile.test.tsx` (or extend existing `hrPmsReviewedTile*` pattern) asserting the tile shows `stat4 / totalKpis` when `viewLevel === 'audit'`.
-
-## Docs
-- POLICY.md: note under Audit dashboard tiles that "Auditor Reviewed" uses the same signature rule as HR PMS Reviewed (score recorded or advanced past stage).
-- DOCUMENTATION.md: add tile to the Audit Panel tile inventory + changelog entry.
+- UI: one extra column; header/rows/export all updated together, `colSpan` bumped.
+- Perf: one extra RPC batch per period (~25/emp batched, cached 2min). Range export runs it per period sequentially — same pattern as the existing per-period fetch, negligible extra latency.
+- Regression: none — additive field with default sort slotted between existing columns; report field registry consumers pick it up via `useResolvedReportFields` and admins can hide it.
 
 ## Rollback
-Revert the single edited component file, the new test, and the doc entries.
+Revert `KpiScorecardDetail.tsx`, delete `src/lib/finalApproverMap.ts` and its test.
