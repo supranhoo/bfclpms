@@ -94,6 +94,16 @@ export function matchesFilters(
   krasEmpIds?: Set<string> | null,
 ): boolean {
   const f = filters ?? {};
+  // Explicit employee-id list (POLICY §AR-MAPPING-EMPLOYEE-IDS).
+  // `'only'` short-circuits every other facet — the list IS the audience.
+  // `'union'` folds the list into the filter result at the end.
+  const idList = Array.isArray((f as { employee_ids?: unknown }).employee_ids)
+    ? ((f as { employee_ids?: string[] }).employee_ids ?? [])
+    : [];
+  const idMode = (f as { employee_ids_mode?: 'only' | 'union' }).employee_ids_mode;
+  if (idMode === 'only') {
+    return idList.includes(profile.id);
+  }
   const list = (k: keyof AssignmentFilters): string[] =>
     Array.isArray((f as Record<string, unknown>)[k])
       ? ((f as Record<string, unknown>)[k] as string[])
@@ -116,6 +126,11 @@ export function matchesFilters(
     const present = krasEmpIds.has(profile.id);
     if (hasKras === 'yes' && !present) return false;
     if (hasKras === 'no' && present) return false;
+  }
+  if (idMode === 'union') {
+    // Filter matched → keep. Otherwise the id list can rescue the row.
+    // (If we got here every facet matched — union with the list is just true.)
+    return true;
   }
   return true;
 }
