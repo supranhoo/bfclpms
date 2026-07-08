@@ -1,85 +1,65 @@
 ## Goal
 
-Make the Form Mapping audience picker able to (a) turn the current filter selection into an explicit employee list with one click, and (b) safely handle employees who are already seeded on an older template so they actually end up on the new template — not just for future seeds.
+Make Form Mapping enforce "the latest rule wins" for an employee already seeded on a different template in the same cycle — without silently breaking in-flight reviews.
 
-Today, filters and the explicit ID list are two independent inputs, and the seeder never re-points an employee once an instance exists. This plan closes both gaps without a schema migration.
-
----
-
-## Part 1 — "Resolve filters → add to list" action
-
-In `AudienceEmployeePickerSection.tsx`, add a secondary button next to "Copy from another template":
-
-**"Add everyone matching current filters"**
-
-Flow:
-1. Take the current draft `AssignmentFilters` from the card (roles, grades, levels, BUs, departments, sub-units, grade bucket, has-KRAs) — **excluding** `employee_ids` / `employee_ids_mode`.
-2. Call a new service `resolveFilterToEmployeeIds(cycleId, filters)`:
-   - Fetches active profiles via `fetchAllPaged` (POLICY §94, mirrors `useActiveEmployeesForCopy`).
-   - Runs each profile through the existing `matchesFilters` SSOT in `src/services/annualReview/formMapping.ts` so preview and seeder stay identical.
-   - Returns `{ id, full_name, employee_code }[]`.
-3. Open a confirm dialog: "This will add N employees to the explicit list. The filter rules will be cleared so the list is the sole source (mode auto-switches to Only these people). Proceed?"
-4. On confirm: merge into `employee_ids` (dedup), set `employee_ids_mode = 'only'`, clear the facet filters on the draft, show a toast with the resolved count and a snapshot timestamp in helper text ("Snapshot taken from filters on <date> — future joiners/leavers will NOT auto-update").
-
-This gives the user the "materialise filter into a frozen list" behaviour they described, without changing how filter-only rules work for people who prefer live rules.
+Today, the seeder (`writeSeedRowsPreservingOverrides`) intentionally never re-points an existing instance to a different template, so a new mapping only affects future seeds. The pieces to move employees over already exist (`set_annual_review_template_override` RPC + `findSeededConflicts` + `bulkReassignViaOverride` helpers per `mem://features/annual-review/per-employee-template-override`), but they aren't wired into the Form Mapping save flow or exposed as a per-rule action. This plan wires them in.
 
 ---
 
-## Part 2 — Handle overlap with an existing template's seeded instances
+## UX flow
 
-Two separate cases, both need to work:
+### A. On Save of a mapping rule
+1. Resolve the rule's audience to a concrete employee ID list (existing preview logic + `resolveFilterToEmployeeIds` for filter-only rules).
+2. Call `findSeededConflicts(cycleId, employeeIds, thisRule.templateId)`.
+3. If conflicts exist, open a blocking **"Reassign existing employees?"** dialog listing:
+   - Employee (code + name)
+   - Current template
+   - Current stage
+   - Eligible? (Yes = `not_started` or `pending_self`; No = past self stage)
+4. Three actions:
+   - **Save mapping and reassign eligible now** (default, recommended) — saves the rule, then loops `set_annual_review_template_override(instance_id, newTemplateId, "Reassigned via Form Mapping rule <name>")` for each eligible row. Ineligible rows are listed in the result toast with a reason ("Already past self stage — reassign manually via Progress tab").
+   - **Save mapping only** — today's behaviour; rule wins for future seeding only.
+   - **Cancel** — nothing is written.
 
-### 2a. Save-time overlap detection (already partly in place)
-When saving a Form Mapping rule whose audience resolves to employees already seeded on a **different** template in the same cycle:
+### B. Per-row "Sync assignments" action on the mapping list
+Same dialog, invoked on demand, so an admin can move eligible employees over any time after the rule was saved.
 
-- Compute overlap via `listEmployeesForTemplateInCycle` across every other rule's template in the cycle (or a single RPC `find_seeded_conflicts(cycle_id, employee_ids[])`).
-- Show a blocking dialog listing: employee, current template, current stage.
-- Offer three choices:
-  1. **Save mapping only** — new rule wins for future seeding; existing instances stay on old template. (Today's behaviour.)
-  2. **Save mapping and reassign eligible instances now** — for each overlapping employee whose current instance is in `not_started` or `pending_self`, call the existing `set_annual_review_template_override` RPC with the new `template_id` and a system-generated reason (`"Reassigned via Form Mapping rule <rule name>"`). Skip and report any instance already past `pending_self`.
-  3. **Cancel** — don't save.
-
-No new RPC required — reuse the per-employee override path documented in `mem/features/annual-review/per-employee-template-override.md`. That's exactly what it was built for and it's already audit-logged (`annual_review.template_override_set`), stage-gated, and RLS-safe.
-
-### 2b. Post-save "sync now" action on the mapping card
-Add a "Sync assignments" button on each mapping row that re-runs the same overlap check on demand, so an admin who saved earlier can still pull eligible employees over after the fact. Same dialog, same RPC, same audit trail.
+### C. Guardrails
+- Reassign is stage-gated at the RPC level — the client cannot bypass it.
+- Every override is audit-logged as `annual_review.template_override_set` with rule name in the reason.
+- Ineligible instances (past `pending_self`) are never touched — admin must use the existing per-employee "Change template" dialog or send-back first.
+- Precedence for future seeds is unchanged (rule priority = `minExisting - 1`).
 
 ---
 
-## Technical details
+## Technical work
 
-**New service functions** (`src/services/annualReview/formMapping.ts`):
-- `resolveFilterToEmployeeIds(cycleId, filters)` — filter-only preview, no writes.
-- `findSeededConflicts(cycleId, employeeIds, excludeTemplateId)` → `Array<{ employee_id, full_name, template_id, template_name, overall_status }>`.
-- `bulkReassignViaOverride(items, reason)` — thin loop over `set_annual_review_template_override`, per-row error isolation (same shape as `bulkSetTemplateOverrides`).
+**Service (`src/services/annualReview/formMapping.ts`, `annualReviewService.ts`)** — helpers already exist per plan.md; verify they are exported and covered:
+- `resolveFilterToEmployeeIds`
+- `findSeededConflicts`
+- `bulkReassignViaOverride` (thin loop over `set_annual_review_template_override`, per-row error isolation)
 
-**UI**:
-- `AudienceEmployeePickerSection.tsx` — add "Add everyone matching current filters" button + confirm dialog.
-- `AnnualReviewFormMapping.tsx` — pre-save overlap check; new `SyncAssignmentsDialog` component; per-row "Sync assignments" button.
+**UI (`src/pages/annual-review/AnnualReviewFormMapping.tsx`)**:
+- New `SyncAssignmentsDialog` component (conflict table + eligible/ineligible split + progress bar).
+- Hook into the existing Save handler: after successful mapping save, run conflict check → if non-empty, open dialog. Reassign runs after the rule row exists.
+- Add a **"Sync assignments"** button on each mapping card.
 
-**No schema changes.** All new behaviour rides on `template_override_id` + existing RPCs.
-
-**Precedence unchanged.** Rule priority (`minExisting - 1`) still governs future seed runs; overrides govern already-seeded rows.
+**No schema changes. No new RPC.** All behaviour rides on `template_override_id` + `set_annual_review_template_override`.
 
 ---
 
 ## Risk & Impact
 
-- **Data**: Only `template_override_id` writes, gated by stage (`not_started` / `pending_self`) and role (admin / hr_pms) at the RPC level. Existing responses, scores, and reviewer chains are untouched.
-- **Workflow**: "Resolve filters" clears facet filters on the draft — surfaced clearly in the confirm dialog. Bulk reassign only touches eligible instances and reports skips.
-- **UI/UX**: Two additive buttons; no layout churn.
-- **Regression**: `matchesFilters` remains SSOT for both preview and seeder — reused, not forked.
-- **Rollback**: Remove the two buttons and the three service helpers; DB state is unaffected.
+- **Data**: Only `template_override_id` writes on eligible instances; responses, scores, reviewer chains untouched.
+- **Workflow**: Admin sees exactly which employees will move and which won't before confirming.
+- **Regression**: Seeder is unchanged; override survives future re-seeds by design.
+- **Rollback**: Remove the dialog + Save-flow hook; DB state unaffected (overrides can be cleared per-row).
 
 ## Tests
-
-- `resolveFilterToEmployeeIds.test.ts` — filter combinations, empty result, inactive-profile exclusion.
-- `findSeededConflicts.test.ts` — no conflicts, same-template ignored, cross-template flagged with status.
-- `bulkReassignViaOverride.test.ts` — mixed eligible/ineligible batch, per-row failure isolation, audit reason present.
-- Extend `formMapping.test.ts` — preview parity between resolver and seeder for the same filter set.
+- `findSeededConflicts.test.ts` (exists) — conflict detection + eligibility.
+- Extend `bulkSetTemplateOverrides.test.ts` — reassign batch with mixed eligibility, audit reason contains rule name.
+- New integration test on the Save handler — conflict present → dialog opens; confirm → RPC called N times with correct template ID.
 
 ## Documentation
-
-- Update `mem/features/annual-review/per-employee-template-override.md` — note Form Mapping now drives bulk overrides.
-- Add short section to `.lovable/plan.md` and `DOCUMENTATION.md` describing the resolve-and-sync flow.
-- `POLICY.md`: "Form Mapping rules affect future seeding by default; moving already-seeded employees requires an explicit Sync action and only applies to instances in `not_started` or `pending_self`."
+- `mem://features/annual-review/per-employee-template-override` — add "Form Mapping Save flow auto-offers reassign for eligible instances".
+- `POLICY.md` — "Latest Form Mapping rule wins for future seeding automatically; already-seeded employees are moved only via the explicit Reassign dialog and only when in `not_started` or `pending_self`."

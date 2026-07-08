@@ -21,6 +21,7 @@ import { useActiveCycle, useTemplates, useRules } from '@/hooks/useAnnualReview'
 import * as svc from '@/services/annualReview/annualReviewService';
 import { RuleFiltersEditor, RuleFiltersSummary, EMPTY_FILTERS } from '@/components/annual-review/RuleFiltersEditor';
 import AudienceEmployeePickerSection from '@/components/annual-review/audience/AudienceEmployeePickerSection';
+import { SyncAssignmentsDialog } from '@/components/annual-review/SyncAssignmentsDialog';
 import {
   previewAudience, checkMappingCoverage,
   fetchDepartmentNameMap,
@@ -991,80 +992,9 @@ function AudienceBuilder({
   );
 }
 
-// ── Sync assignments dialog ───────────────────────────────────────
-function SyncAssignmentsDialog({
-  open, onOpenChange, conflicts, targetTemplateName, onConfirm, submitting,
-}: {
-  open: boolean;
-  onOpenChange: (o: boolean) => void;
-  conflicts: SeededConflict[];
-  targetTemplateName: string;
-  onConfirm: () => void;
-  submitting: boolean;
-}) {
-  const eligible = conflicts.filter((c) => c.eligible_for_reassign);
-  const ineligible = conflicts.filter((c) => !c.eligible_for_reassign);
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl">
-        <DialogHeader>
-          <DialogTitle>Move already-seeded employees to {targetTemplateName || 'the new template'}?</DialogTitle>
-          <DialogDescription>
-            {conflicts.length} employee{conflicts.length === 1 ? '' : 's'} in this
-            audience already have a review instance on a different template. Your
-            new mapping only affects <strong>future</strong> seed runs — moving
-            existing instances requires an explicit per-employee override.
-          </DialogDescription>
-        </DialogHeader>
-        <div className="max-h-[50vh] overflow-auto rounded-md border">
-          <Table>
-            <TableHeader className="sticky top-0 bg-background z-10">
-              <TableRow>
-                <TableHead>Code</TableHead>
-                <TableHead>Name</TableHead>
-                <TableHead>Currently on</TableHead>
-                <TableHead>Stage</TableHead>
-                <TableHead>Action</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {conflicts.map((c) => (
-                <TableRow key={c.instance_id}>
-                  <TableCell className="font-mono text-xs">{c.employee_code ?? '—'}</TableCell>
-                  <TableCell>{c.full_name ?? '—'}</TableCell>
-                  <TableCell>{c.current_template_name}</TableCell>
-                  <TableCell className="text-xs">{c.overall_status}</TableCell>
-                  <TableCell>
-                    {c.eligible_for_reassign
-                      ? <Badge variant="default">Will move</Badge>
-                      : <Badge variant="outline" title="Past pending_self — locked">Skipped</Badge>}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
-        <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
-          <Badge variant="default">{eligible.length} will move</Badge>
-          {ineligible.length > 0 && (
-            <Badge variant="outline">{ineligible.length} locked (past self stage)</Badge>
-          )}
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>
-            Keep as-is (future seeds only)
-          </Button>
-          <Button onClick={onConfirm} disabled={submitting || eligible.length === 0}>
-            {submitting
-              ? <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              : <RefreshCw className="h-4 w-4 mr-2" />}
-            Reassign {eligible.length} now
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
+// SyncAssignmentsDialog now lives in
+// src/components/annual-review/SyncAssignmentsDialog.tsx so the Rules tab in
+// AnnualReviewAdmin can reuse it for the per-rule "Sync assignments" action.
 
 // ── Per-employee override ─────────────────────────────────────────
 function EmployeeOverridePanel({

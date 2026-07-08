@@ -71,6 +71,10 @@ import { previewHrFinalSync, applyHrFinalSync } from '@/services/annualReview/hr
 import { RefreshCw } from 'lucide-react';
 import { RecentStageWeightOverridesPanel } from '@/components/annual-review/RecentStageWeightOverridesPanel';
 import { RuleFiltersEditor, RuleFiltersSummary, EMPTY_FILTERS } from '@/components/annual-review/RuleFiltersEditor';
+import { SyncAssignmentsDialog } from '@/components/annual-review/SyncAssignmentsDialog';
+import {
+  previewAudience, findSeededConflicts, type SeededConflict,
+} from '@/services/annualReview/formMapping';
 import { SystemKpiLibraryPanel } from '@/components/annual-review/SystemKpiLibraryPanel';
 import { SystemKpiWeightMatrix } from '@/components/annual-review/SystemKpiWeightMatrix';
 import { TemplateArchetypesPanel } from '@/components/annual-review/TemplateArchetypesPanel';
@@ -1990,6 +1994,14 @@ function RulesTab() {
   const editorRef = useRef<HTMLDivElement | null>(null);
   const [editorFlash, setEditorFlash] = useState(false);
 
+  // Per-rule "Sync assignments" state — reuses the same dialog and RPC as
+  // the Form Mapping Save flow. See mem://features/annual-review/per-employee-template-override.
+  const [syncOpen, setSyncOpen] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [syncConflicts, setSyncConflicts] = useState<SeededConflict[]>([]);
+  const [syncRule, setSyncRule] = useState<{ templateId: string; templateName: string; ruleLabel: string } | null>(null);
+  const [syncResolving, setSyncResolving] = useState<string | null>(null);
+
   const resetDraft = () => setDraft({ template_id: '', priority: 10, name: '', filters: EMPTY_FILTERS });
 
   const save = useMutation({
@@ -2029,6 +2041,75 @@ function RulesTab() {
     },
     onError: (e: Error) => toast.error(e.message),
   });
+
+  // Resolve the rule's audience → find employees already seeded on a
+  // DIFFERENT template → open the shared reassign dialog. Read-only until
+  // the admin confirms.
+  const openSyncForRule = async (r: (typeof rules)[number]) => {
+    if (!cycleId) return;
+    try {
+      setSyncResolving(r.id);
+      const audience = await previewAudience(
+        { ...EMPTY_FILTERS, ...((r.filters as Partial<AssignmentFilters>) ?? {}) },
+        { limit: 100_000 },
+      );
+      const audienceIds = Array.from(new Set([
+        ...audience.sample.map((p) => p.id),
+        ...(((r.filters as Partial<AssignmentFilters>)?.employee_ids ?? []) as string[]),
+      ]));
+      if (audienceIds.length === 0) {
+        toast.info('This rule resolves to zero employees — nothing to sync.');
+        return;
+      }
+      const conflicts = await findSeededConflicts(cycleId, audienceIds, r.template_id);
+      if (conflicts.length === 0) {
+        toast.success('No mismatched instances. Everyone in this audience is already on the mapped template.');
+        return;
+      }
+      const tpl = templates.find((t) => t.id === r.template_id);
+      setSyncRule({
+        templateId: r.template_id,
+        templateName: tpl?.name ?? 'target template',
+        ruleLabel: r.name || tpl?.name || 'rule',
+      });
+      setSyncConflicts(conflicts);
+      setSyncOpen(true);
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setSyncResolving(null);
+    }
+  };
+
+  const runSync = async () => {
+    if (!syncRule) return;
+    const eligible = syncConflicts.filter((c) => c.eligible_for_reassign);
+    if (eligible.length === 0) {
+      toast.error('No conflicts eligible for reassignment (all past pending_self).');
+      return;
+    }
+    setSyncing(true);
+    try {
+      const reason = `Reassigned via Form Mapping rule (${syncRule.ruleLabel})`;
+      const res = await svc.bulkReassignViaOverride(
+        eligible.map((c) => ({ instanceId: c.instance_id, templateId: syncRule.templateId })),
+        reason,
+      );
+      if (res.failed.length === 0) {
+        toast.success(`Reassigned ${res.ok} employee${res.ok === 1 ? '' : 's'} to ${syncRule.templateName}.`);
+      } else {
+        toast.warning(`Reassigned ${res.ok}; ${res.failed.length} failed.`);
+      }
+      setSyncOpen(false);
+      setSyncConflicts([]);
+      setSyncRule(null);
+      qc.invalidateQueries();
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setSyncing(false);
+    }
+  };
 
   return (
     <div className="space-y-4">
@@ -2118,6 +2199,20 @@ function RulesTab() {
                         variant="outline"
                         size="sm"
                         className="mr-2"
+                        onClick={() => openSyncForRule(r)}
+                        disabled={syncResolving === r.id}
+                        title="Move employees who are already seeded on a different template onto this rule's template. Only touches instances still in not_started or pending_self."
+                        aria-label={`Sync assignments for rule ${r.name ?? ''}`}
+                      >
+                        {syncResolving === r.id
+                          ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+                          : <RefreshCw className="h-3.5 w-3.5 mr-1" />}
+                        Sync
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="mr-2"
                         onClick={() => startEdit(r)}
                         aria-label={`Edit rule ${r.name ?? ''}`}
                       >
@@ -2172,6 +2267,18 @@ function RulesTab() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <SyncAssignmentsDialog
+        open={syncOpen}
+        onOpenChange={(o) => {
+          setSyncOpen(o);
+          if (!o) { setSyncConflicts([]); setSyncRule(null); }
+        }}
+        conflicts={syncConflicts}
+        targetTemplateName={syncRule?.templateName ?? ''}
+        onConfirm={runSync}
+        submitting={syncing}
+      />
     </div>
   );
 }
