@@ -1994,6 +1994,14 @@ function RulesTab() {
   const editorRef = useRef<HTMLDivElement | null>(null);
   const [editorFlash, setEditorFlash] = useState(false);
 
+  // Per-rule "Sync assignments" state — reuses the same dialog and RPC as
+  // the Form Mapping Save flow. See mem://features/annual-review/per-employee-template-override.
+  const [syncOpen, setSyncOpen] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [syncConflicts, setSyncConflicts] = useState<SeededConflict[]>([]);
+  const [syncRule, setSyncRule] = useState<{ templateId: string; templateName: string; ruleLabel: string } | null>(null);
+  const [syncResolving, setSyncResolving] = useState<string | null>(null);
+
   const resetDraft = () => setDraft({ template_id: '', priority: 10, name: '', filters: EMPTY_FILTERS });
 
   const save = useMutation({
