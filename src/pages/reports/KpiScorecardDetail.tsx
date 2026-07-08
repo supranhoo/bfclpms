@@ -48,11 +48,13 @@ const KSD_DEFAULT_FIELDS = [
   { field_key: 'auditor_score',     default_label: 'Auditor Score',      default_sort: 260 },
   { field_key: 'management_score',  default_label: 'Management Score',   default_sort: 270 },
   { field_key: 'final_score',       default_label: 'Final Score',        default_sort: 280 },
+  { field_key: 'final_approver',    default_label: 'Final Approver',     default_sort: 285 },
   { field_key: 'status',            default_label: 'Status',             default_sort: 290 },
 ] as const;
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
 import { useToast } from '@/hooks/use-toast';
 import { enumeratePeriods, validateRange, MAX_RANGE_MONTHS } from '@/lib/kpiScorecardRange';
+import { fetchFinalApproverMap, NO_APPROVER_LABEL } from '@/lib/finalApproverMap';
 
 const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -92,6 +94,7 @@ interface FlatRow {
   finalScore: number | null;
   status: string;
   isNa: boolean;
+  finalApprover: string;
 }
 
 type SortField = keyof FlatRow;
@@ -194,6 +197,8 @@ async function fetchScorecardForPeriod(month: string, year: number): Promise<Fla
 
   const profileMap = new Map((profiles ?? []).map(p => [p.id, p]));
 
+  const approverMap = await fetchFinalApproverMap(month, year);
+
   return allKpis.map((kpi): FlatRow => {
     const profile = profileMap.get(kpi.employee_id);
     const sub = submissionMap.get(kpi.id);
@@ -233,6 +238,7 @@ async function fetchScorecardForPeriod(month: string, year: number): Promise<Fla
       finalScore: isNa ? null : (sub?.final_score ?? null),
       status: kpi.status ?? '',
       isNa,
+      finalApprover: approverMap.get(kpi.employee_id) ?? NO_APPROVER_LABEL,
     };
   });
 }
