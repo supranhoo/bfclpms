@@ -1,49 +1,88 @@
-## Goal
-Add a **Final Approver** column to the KPI Scorecard Detail report showing which workflow role is the last approving stage in each employee's resolved workflow for the selected period (e.g., Management, Auditor, HR PMS, Skip-Level, L1 Manager).
+## Idea in one line
 
-## Interpretation
-"Final approver" = the last non-self stage in the employee's period-resolved workflow template (as returned by `get_employee_workflow_info`). Displayed as the role label from `CHAIN_STAGE_LABEL` (e.g., "Management", "Auditor", "HR PMS", "Skip-Level", "L1 Manager"). If the employee has no resolvable workflow, show `—`.
+Add **Template** as a filter dimension inside the existing Phased Rollout card, so an admin can say "roll out to everyone mapped to *Generic W with env (Functional)* and *CPP - W - Operation*" and add all 1,904 matching employees to the current phase in one click — using the mapping we already computed on the Form Mapping page.
 
-If the user wants the person's full name instead of the role label, this can be a follow-up; role label matches the existing column vocabulary of the report (Self / Mgr / Skip / HR / Audit / Mgmt).
+Today the rollout audience is built from Grade / Level / BU / Department / Has-KRA filters against `profiles`. The mapping between employee ↔ template already lives in `annual_review_instances (cycle_id, employee_id, template_id, template_override_id)`. We're not using it as a rollout selector, even though it's the most business-meaningful axis we have.
 
-## Where
-`src/pages/reports/KpiScorecardDetail.tsx` only.
+---
 
-## Data source
-Reuse the existing `useWorkflowResolution(period, year)` hook (already used elsewhere; batches `get_employee_workflow_info`). Build `Map<employeeId, finalApproverLabel>` where `finalApproverLabel` is derived from the last entry of `chain.templateStages` mapped through the internal `STAGE_TO_CHAIN` → `CHAIN_STAGE_LABEL`.
+## Brainstorm
 
-Because the hook is per-period, it is called with `appliedQuery.month / appliedQuery.year` and gated by `enabled: !!appliedQuery`. Result is cached (staleTime 2 min) so switching filters is cheap.
+### Will this be useful? (Yes — high value)
+- **Real-world rollout language is template-first.** Managers say "let's launch the Functional workers first" or "start with CPP Operations", not "start with grade M4 + BU=CPP + dept=Ops".
+- **Zero re-work.** Form Mapping already did the hard part (2,579 employees mapped to 21 templates). Rollout should ride on top of that SSOT instead of re-deriving cohorts from raw attributes and drifting.
+- **Phased launches match how templates are validated.** QA usually happens template-by-template. If "Generic W with env" is signed off but "CPP - W - QC DMP(v15)" is not, admin can enable the first without touching flag JSON.
+- **Cleaner audit story.** "Phase 2 added: Template = Generic M Support Function (47 users)" is a much better changelog entry than a filter combo.
 
-No DB / RPC / schema changes.
+### Should we build it? (Yes, but small — extend, don't fork)
+The current `PhasedRolloutCard` is already an SSOT-preserving UI over `admin_feature_flags.target_user_ids`. Adding a **Template multi-select** to the existing filter bar is a ~1-file change; no new tables, no new writers, no policy shift. Reuse everything: preview table, Assigned Form column, confirm-before-large-add dialog, remove flow.
 
-## Changes in `KpiScorecardDetail.tsx`
-1. Add field descriptor in `KSD_DEFAULT_FIELDS`:
-   `{ field_key: 'final_approver', default_label: 'Final Approver', default_sort: 285 }` — inserted between `final_score` (280) and `status` (290) so the on-screen and exported column order both read `... Final → Final Approver → Status`.
-2. Extend `FlatRow` with `finalApprover: string`.
-3. Thread an `employeeApproverMap: Map<string,string>` param into `fetchScorecardForPeriod` OR (preferred, less invasive) resolve it in the component after fetching using the workflow-resolution hook and merge into the rows via `useMemo`. Chosen approach: compute in a `useMemo` that maps `rows` → `rowsWithApprover` using the resolution map; downstream `filtered` / `paged` / export functions operate on this augmented list.
-4. Add table column between `Final` and `Status` with sort + tooltip.
-5. Extend `ksdValueFor` with a `final_approver` case for exports (single-month + range).
-6. For range export: `handleRangeExport` calls `fetchScorecardForPeriod` per period without the hook. Fix by calling a small local helper `fetchFinalApproverMap(period, year)` that runs the same profile+RPC batching pattern as `useWorkflowResolution` (extract a shared helper `resolveFinalApproverMap` into `src/lib/finalApproverMap.ts` so both surfaces share one implementation).
-7. Update `colSpan={14}` on the "no rows" empty-state row to `15`.
+We should **not** build a separate "Rollout by Template" page — that would fragment the mental model and duplicate the flag write path.
 
-## New helper file
-`src/lib/finalApproverMap.ts`
-- Exports `getFinalApproverLabel(templateStages: string[]): string`
-- Exports `async fetchFinalApproverMap(period, year): Promise<Map<string,string>>` reusing the same RPC pattern; refactor `useWorkflowResolution` to consume the same helper so behavior stays in lock-step (SSOT).
+### Pros
+- Aligns rollout with the way work is planned (per template / per form family).
+- Eliminates manual cohort-building for the common case ("everyone on this form").
+- Composable with existing filters: e.g. Template = Generic W with env **AND** BU = CPP → progressive narrowing for a canary phase.
+- No schema change. No new RLS. No new write path — same `target_user_ids` array.
+- The Assigned Form column already exists in the preview, so the filter is visually self-explanatory (users see the form they filtered by).
+- Naturally handles overrides: filter matches whichever template is currently *effective* (`COALESCE(template_override_id, template_id)`), same rule the resolver uses.
 
-## Test
-Add `src/test/finalApproverMap.test.ts`:
-- Empty stages → `'—'`
-- `['self_review','manager_check']` → `'L1 Manager'`
-- `['self_review','manager_check','skip_level_check','hr_pms_review','management_review']` → `'Management'`
-- Unknown stage suffix → falls back to `'—'`
+### Cons / risks
+- **Cycle-scoped, not global.** Template mapping only exists once instances are seeded for a cycle. Filter must be disabled (with a hint) when the selected cycle has 0 seeded instances. Mitigation: show `Seeded: N / Total: M` next to the cycle selector; disable the template filter when Seeded = 0.
+- **"Will seed on start: N" gap.** From the screenshot, 249 employees are mapped by a rule but not yet seeded. They *have* a resolvable template but no row in `annual_review_instances` yet. Decision needed (see Q1) — either exclude them or resolve on the fly via the same rules the admin page uses.
+- **Bulk size.** A single template can cover 1,793 employees. The existing >25-item confirm dialog handles this, but we should surface count prominently and keep the "select all shown" scoped to the preview.
+- **Template renames.** If admin renames a template mid-rollout, the label in `target_user_ids` audit trail is stale. Mitigation: we only store user IDs (not template IDs) in the flag, so audience stays correct — only the label in phase notes drifts. Acceptable.
+- **Not a substitute for template-level gating.** If leadership wants "Template X users get the module but only when they open form X", that's a different feature (per-template feature flag). Out of scope here.
 
-## Risk & Impact
-- Data: read-only, no schema change.
-- Workflow: none.
-- UI: one extra column; header/rows/export all updated together, `colSpan` bumped.
-- Perf: one extra RPC batch per period (~25/emp batched, cached 2min). Range export runs it per period sequentially — same pattern as the existing per-period fetch, negligible extra latency.
-- Regression: none — additive field with default sort slotted between existing columns; report field registry consumers pick it up via `useResolvedReportFields` and admins can hide it.
+### What it will be (definitely in)
+1. **Template multi-select** in the Phased Rollout filter bar, populated from `annual_review_templates` filtered to those actually in use in the selected cycle (matches "Templates in use" list on Form Mapping).
+2. **Preview** shows the same table it does today, with the Assigned Form column already answering "why is this person here".
+3. **"Add all N matched"** primary action + "Add selected" secondary — reuses existing `requestAdd` + confirm dialog.
+4. **Count chips per template** in the multi-select dropdown (e.g. `Generic W with env (Functional) · 1,793`) so admin picks with eyes open.
+5. **Cycle-awareness**: filter is disabled with tooltip when no cycle is selected or the cycle has zero seeded instances.
+6. **Reverse operation**: "Remove all users mapped to Template X from current phase" — same UX symmetry as today's per-row remove, but bulk.
 
-## Rollback
-Revert `KpiScorecardDetail.tsx`, delete `src/lib/finalApproverMap.ts` and its test.
+### What it will *not* be (explicit non-goals)
+- No new DB tables, no new flag key, no per-template flag.
+- No writing to `annual_review_instances` (this card stays read-only against the mapping).
+- No cross-cycle rollout (Phase = one cycle at a time; multi-cycle is a different conversation).
+- No auto-progression ("when template X hits 90% approved, add template Y") — future idea, out of scope.
+
+---
+
+## How it will be achieved (technical)
+
+**Files touched (1 new query, 1 UI change, 1 test):**
+
+1. `src/components/annual-review/PilotAccessCard.tsx`
+   - Add `template_ids: string[]` to the `Filters` type and `EMPTY_FILTERS`.
+   - New `useCycleTemplatesInUse(cycleId)` query: `SELECT template_id (COALESCE override), COUNT(*), template.name FROM annual_review_instances WHERE cycle_id = ? GROUP BY template_id` — returns `{ id, name, count }[]` for the multi-select.
+   - Extend `runPreview(f)` — after fetching `profiles`, if `f.template_ids.length > 0`, intersect with `annual_review_instances` for the selected cycle where `COALESCE(template_override_id, template_id) IN (template_ids)`. This keeps the preview single-source with the resolver rule.
+   - Render a new `MultiSelectPopover` above (or beside) the existing filters, labelled **Assigned Template (from Form Mapping)**, options = cycle templates in use with count chips, disabled state + tooltip when cycle has no seeded instances.
+   - No changes to `writeAudience` — still writes `target_user_ids`.
+
+2. `src/services/annualReview/formMapping.ts`
+   - Export a small helper `listTemplatesInUse(cycleId): Promise<{ template_id, name, employees_count }[]>` so the same aggregation can be reused by the Form Mapping page's "Templates in use" panel and the rollout dropdown. (Removes duplication.)
+
+3. `src/test/annualReview/pilotAccessCard.templateFilter.test.ts`
+   - Unit tests for the intersection logic (`profiles ∩ instances by template`), override resolution precedence, empty-template-list = no-op behavior, and disabled-when-no-cycle state.
+
+**Data flow**
+```text
+Cycle selector ──► useCycleTemplatesInUse ──► Template multi-select
+                                                    │
+Grade/Level/BU/Dept/HasKra + Template ──► runPreview ──► preview table
+                                                    │
+                              "Add all N matched" ──► requestAdd ──► admin_feature_flags.target_user_ids
+```
+
+**Rollback:** revert `PilotAccessCard.tsx`, drop `listTemplatesInUse`, delete the test — flag JSON is unchanged either way, so no data migration risk.
+
+---
+
+## Open questions before build
+
+1. **Unseeded but rule-matched employees** (the "Will seed on start: N" bucket). For rollout preview, should the template filter show only *already-seeded* employees (safe, matches on-screen data) or also resolve unseeded ones via the assignment-rules resolver (aggressive, but matches admin intent when they say "everyone on Template X")?
+2. **Composition semantics** — when admin picks Template = A **and** Grade = M4, should the result be `A ∩ M4` (recommended, matches how the current filters compose) or `A ∪ M4`?
+3. Should the Template dropdown show only templates with `count > 0`, or also show empty templates (helpful to notice a template no one's mapped to)?
+4. Do we want a **"Remove template X's users from the current phase"** bulk action in v1, or start read-only-plus-add and add removal in a follow-up?
