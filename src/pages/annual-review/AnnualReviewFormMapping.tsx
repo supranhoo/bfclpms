@@ -680,14 +680,26 @@ function AudienceBuilder({
           {commit.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
           Save mapping rule
         </Button>
-        {shadowingRule && (
+        {postSaveDiag?.kind === 'shadowed' && (
           <Alert variant="destructive">
             <AlertTriangle className="h-4 w-4" />
             <AlertTitle>Saved, but shadowed by a higher-priority rule</AlertTitle>
             <AlertDescription>
-              A higher-priority rule (<strong>{shadowingRule}</strong>) already
-              covers these employees, so your new rule resolves to 0 people.
-              Narrow the earlier rule, or lower its priority on the Rules tab.
+              A higher-priority rule (<strong>{postSaveDiag.ruleLabel}</strong>){' '}
+              already covers these employees, so your new rule resolves to 0
+              people. Narrow the earlier rule, or lower its priority on the
+              Rules tab.
+            </AlertDescription>
+          </Alert>
+        )}
+        {postSaveDiag?.kind === 'empty_audience' && (
+          <Alert>
+            <AlertTriangle className="h-4 w-4" />
+            <AlertTitle>Rule saved, but no employees resolved to it</AlertTitle>
+            <AlertDescription>
+              The audience filters no longer match anyone in this cycle. Adjust
+              the filters or review priorities on the <strong>Rules</strong>{' '}
+              tab.
             </AlertDescription>
           </Alert>
         )}
