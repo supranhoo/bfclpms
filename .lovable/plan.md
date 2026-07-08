@@ -1,65 +1,38 @@
-## Why the shadow warning is misleading here
+## Why Edit / Delete look "non-functional"
 
-Two real defects in `AudienceBuilder` (`src/pages/annual-review/AnnualReviewFormMapping.tsx`) produce false / misattributed "shadowed by higher-priority rule" alerts:
+The buttons in the screenshot belong to `RulesTab` in `src/pages/annual-review/AnnualReviewAdmin.tsx` (lines 1979–2098). They do fire — but their side effects are invisible from where the user is standing:
 
-### Defect 1 — New rule can tie with an existing rule and lose
+### Edit — no visible change
+Clicking Edit calls `setDraft({...r})`, which populates the **"Edit rule" card that lives ABOVE the table** (line 2033). By the time a user is looking at the rules list, that card is scrolled far off screen (past all six Audience Filter blocks). No scroll, no highlight, no dialog — so the click looks like a no-op.
 
-In `commit.mutationFn`:
+### Delete — silent + destructive
+`del.mutate(r.id)` runs `svc.deleteRule` immediately with:
+- No `AlertDialog` confirmation (violates the BFCL UI destructive-actions standard).
+- No `onError` handler on the mutation — a failing RLS / FK constraint (rules can be referenced by seeded instances) is swallowed with zero feedback.
+- No visible optimistic removal — user may not realise the row went away after `refetch()`.
 
-```
-priority = rules.length === 0 ? 100 : Math.max(1, minExisting - 10)
-```
+## Fix plan (surgical, RulesTab only)
 
-Once the smallest existing priority is already `1` (or ≤ 10), every new rule is clamped to `1` — the *same* priority as an existing broad rule. The resolver then sorts by `priority` only:
+1. **`AnnualReviewAdmin.tsx` → `RulesTab`**
+   - **Edit:** after `setDraft(...)`, scroll the "Edit rule" card into view and briefly highlight it (`scrollIntoView({ behavior: 'smooth', block: 'start' })` on a ref attached to the Card). Change the button style to `variant="outline"` with a `Pencil` icon so the affordance reads as active. Rename the CardTitle to `Editing "<rule name>"` when a draft id is present so context is obvious.
+   - **Delete:** wrap the button in `AlertDialog` (shadcn) with a destructive confirm ("Delete rule '<name>'? Employees currently resolved to this rule will fall through to the next matching one."), use `variant="ghost"` trigger with a `Trash2` icon + `text-destructive`, and add `onError: (e) => toast.error(e.message)` to `del`.
+   - Add `aria-label` to icon-only buttons per BFCL a11y standard.
 
-```
-rules.filter(r => r.is_active).sort((a, b) => a.priority - b.priority)
-```
+2. **Empty / no-cycle affordance**
+   - When no cycle is picked, the whole rules card is hidden — leaving the audience filters looking like the whole page. Add a small inline hint ("Pick a cycle above to load its rules.") so users don't think the buttons are what's broken.
 
-There is no deterministic tie‑breaker, so the pre-existing rule (loaded first from the DB) wins, and the new "specific" rule resolves to 0 employees. That is the exact case in the screenshot: the new rule and `CPP - W - QC DMP(v15)` are both priority `1`, and the older one wins by insertion order.
+3. **Tests**
+   - New unit test `src/test/annualReview/rulesTabActions.test.tsx`: renders `RulesTab` with a mocked cycle+rules, clicks Edit → asserts draft form is populated + scrollIntoView called; clicks Delete → asserts confirm dialog appears and `deleteRule` is only called after confirm; asserts toast fires on mutation error.
 
-### Defect 2 — Wrong rule is named as the shadower
+## Not in scope
 
-`shadowingRule` doesn't check whether the accused rule actually covers the new rule's audience. It just picks *any* rule (other than the saved template's own) that has at least one resolved employee anywhere in the org:
+- No changes to the DB, RLS, or the delete/upsert services.
+- No refactor of the rest of `AnnualReviewAdmin.tsx` (large file, out of scope).
 
-```
-const shadow = sorted.find(
-  r => r.template_id !== lastSavedTemplateId && (counts.get(r.template_id) ?? 0) > 0
-);
-```
+## Risk & rollback
 
-So even when the true reason for `covered === 0` is unrelated (e.g. audience is empty, or a completely different rule is masking one employee), the banner still names the highest-priority rule with any coverage — which is often not the culprit.
+- Data impact: none — behaviour of the two mutations is unchanged; only the UX around them is fixed.
+- Regression risk: low; changes are UI-local to `RulesTab`.
+- Rollback: revert the two edited files.
 
-### Fix plan (surgical, UI + save-priority only — no schema change)
-
-1. **`AnnualReviewFormMapping.tsx` → `commit.mutationFn`**
-   - Compute `priority = rules.length === 0 ? 100 : minExisting - 1` and *do not* clamp to 1. Allow zero/negative priorities so a new rule strictly outranks every existing one. (DB column is `int`; verify no CHECK constraint before finalizing — if one exists, fall back to reassigning: bump every existing rule's priority by +1 and set the new rule to the previous `minExisting`.)
-   - Add a short comment explaining the strict-precedence invariant.
-
-2. **`AnnualReviewFormMapping.tsx` → `shadowingRule` memo**
-   - Restrict the shadow search to rules that actually cover the *new rule's audience*. Cross-reference `report.rows` with the preview employees returned by `previewAudience(filters)` (already cached in `previewQ.data.sample` + a new `ids` field, or re-query the ids for the saved filter set), and only consider a rule as "shadowing" if it resolved at least one of those employees to a different template.
-   - If no rule in that restricted set matches, show a different, accurate message: "Rule saved, but no employees resolved to it. The audience filters may no longer match anyone — open the Rules tab to review."
-
-3. **Service tweak — `previewAudience`**
-   - Ensure it can return the full matched employee id list (already fetches ids; expose them via the returned shape or add a small `previewAudienceIds(filters)` helper) so the shadow check has an exact audience to compare against without a second full profile scan.
-
-4. **`resolveTemplateForProfile` (defense in depth)**
-   - Add a deterministic tie-breaker to the sort: `(a.priority - b.priority) || a.id.localeCompare(b.id)` (accept `id` in the `Pick<>`), so equal-priority races are stable and testable. Purely defensive — the priority fix above should make ties impossible for newly saved rules.
-
-5. **Tests (`src/services/annualReview/formMapping.test.ts`, plus a new `AudienceBuilder` unit test)**
-   - Resolver: two rules with equal priority resolve deterministically by id.
-   - Priority calc: saving a new rule when `minExisting = 1` produces a strictly smaller priority than every existing rule.
-   - Shadow detection: banner is suppressed when the "other" covering rule has no overlap with the new audience; banner is shown (and names the correct rule) when overlap exists.
-
-### Not in scope
-
-- No changes to the Rules-tab priority editor, DB schema, or the seeder.
-- No behavior change for existing saved rules — only the priority assigned to *new* rules and the accuracy of the post-save banner.
-
-### Risk & rollback
-
-- Data impact: none — only affects the `priority` value written for newly-saved rules.
-- Regression risk: low; the priority change makes new rules more, not less, specific. The banner change is UI-only.
-- Rollback: revert the file changes; no migration.
-
-Confirm you want me to proceed with this fix (especially point 1 — allowing priorities to go below 1) and I'll switch to build mode and implement it with the tests.
+Approve to proceed.
