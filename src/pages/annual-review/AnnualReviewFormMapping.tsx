@@ -19,6 +19,7 @@ import { ArrowLeft, CheckCircle2, AlertTriangle, Loader2, Search, Save, RefreshC
 import { useActiveCycle, useTemplates, useRules } from '@/hooks/useAnnualReview';
 import * as svc from '@/services/annualReview/annualReviewService';
 import { RuleFiltersEditor, RuleFiltersSummary, EMPTY_FILTERS } from '@/components/annual-review/RuleFiltersEditor';
+import AudienceEmployeePickerSection from '@/components/annual-review/audience/AudienceEmployeePickerSection';
 import {
   previewAudience, checkMappingCoverage,
   fetchDepartmentNameMap,
@@ -647,6 +648,12 @@ function AudienceBuilder({
             <RuleFiltersSummary filters={filters} />
           </div>
         </div>
+        <AudienceEmployeePickerSection
+          cycleId={cycleId}
+          templates={templates}
+          value={filters}
+          onChange={setFilters}
+        />
         <div className="rounded-md border p-3 bg-muted/30">
           {previewQ.isLoading && (
             <p className="text-sm text-muted-foreground flex items-center gap-2">
