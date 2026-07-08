@@ -4,10 +4,18 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { X, Users, Copy, AlertTriangle } from 'lucide-react';
+import { X, Users, Copy, AlertTriangle, Filter, Loader2 } from 'lucide-react';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { toast } from 'sonner';
 import type { AssignmentFilters } from '@/types/annualReview';
 import CopyFromTemplateDialog from './CopyFromTemplateDialog';
-import { listEmployeesForTemplateInCycle } from '@/services/annualReview/formMapping';
+import {
+  listEmployeesForTemplateInCycle,
+  resolveFilterToEmployeeIds,
+} from '@/services/annualReview/formMapping';
 
 /**
  * Audience picker for explicit employee ids. Sits under the filter grid in
@@ -30,6 +38,11 @@ export default function AudienceEmployeePickerSection({
   onChange: (next: AssignmentFilters) => void;
 }) {
   const [copyOpen, setCopyOpen] = useState(false);
+  const [resolveOpen, setResolveOpen] = useState(false);
+  const [resolvePreview, setResolvePreview] = useState<
+    { id: string; full_name: string | null; employee_code: string | null }[] | null
+  >(null);
+  const [resolveLoading, setResolveLoading] = useState(false);
   const ids = value.employee_ids ?? [];
   const mode = value.employee_ids_mode ?? 'off';
 
@@ -102,6 +115,52 @@ export default function AudienceEmployeePickerSection({
     onChange({ ...value, employee_ids: [] });
   };
 
+  const hasFacetFilters = useMemo(() => {
+    const f = value as unknown as Record<string, unknown>;
+    const keys = ['roles', 'grades', 'levels', 'bu_ids', 'department_ids', 'sub_unit_ids'];
+    if (keys.some((k) => Array.isArray(f[k]) && (f[k] as unknown[]).length > 0)) return true;
+    if (typeof f.grade_bucket === 'string' && f.grade_bucket) return true;
+    if (f.has_kras === 'yes' || f.has_kras === 'no') return true;
+    return false;
+  }, [value]);
+
+  const openResolveDialog = async () => {
+    if (!hasFacetFilters) {
+      toast.error('Set at least one audience filter first.');
+      return;
+    }
+    setResolveLoading(true);
+    setResolveOpen(true);
+    try {
+      const resolved = await resolveFilterToEmployeeIds(value);
+      setResolvePreview(resolved);
+    } catch (e) {
+      toast.error((e as Error).message);
+      setResolveOpen(false);
+    } finally {
+      setResolveLoading(false);
+    }
+  };
+
+  const confirmResolve = () => {
+    if (!resolvePreview) return;
+    const addIdsList = resolvePreview.map((r) => r.id);
+    const set = new Set(ids);
+    for (const id of addIdsList) set.add(id);
+    // Materialise into an explicit list, clear facet filters, switch to 'only'.
+    onChange({
+      // Preserve any non-facet fields (e.g. kras_window_months is meaningless
+      // once has_kras is cleared, so drop everything that drove selection).
+      employee_ids: Array.from(set),
+      employee_ids_mode: 'only',
+    } as AssignmentFilters);
+    toast.success(
+      `Added ${addIdsList.length} employee${addIdsList.length === 1 ? '' : 's'} — filters cleared, mode switched to Only these people.`,
+    );
+    setResolveOpen(false);
+    setResolvePreview(null);
+  };
+
   return (
     <div className="rounded-md border p-3 space-y-3">
       <div className="flex items-center gap-2">
@@ -147,6 +206,21 @@ export default function AudienceEmployeePickerSection({
           onClick={() => setCopyOpen(true)}
         >
           <Copy className="h-4 w-4 mr-1" /> Copy from another template
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          onClick={openResolveDialog}
+          disabled={!hasFacetFilters || resolveLoading}
+          title={hasFacetFilters
+            ? 'Snapshot the current filters into an explicit employee list'
+            : 'Set at least one filter above to enable'}
+        >
+          {resolveLoading
+            ? <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+            : <Filter className="h-4 w-4 mr-1" />}
+          Add everyone matching current filters
         </Button>
         <span className="text-xs text-muted-foreground">
           {ids.length} employee{ids.length === 1 ? '' : 's'} selected
@@ -208,6 +282,57 @@ export default function AudienceEmployeePickerSection({
         onAdd={(add) => { addIds(add); setCopyOpen(false); }}
         fetchEmployees={listEmployeesForTemplateInCycle}
       />
+
+      <AlertDialog
+        open={resolveOpen}
+        onOpenChange={(o) => {
+          setResolveOpen(o);
+          if (!o) setResolvePreview(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Snapshot filters into an explicit list?</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2 text-sm">
+                {resolveLoading && (
+                  <p className="flex items-center gap-2 text-muted-foreground">
+                    <Loader2 className="h-4 w-4 animate-spin" /> Resolving filters…
+                  </p>
+                )}
+                {!resolveLoading && resolvePreview && (
+                  <>
+                    <p>
+                      This will add <strong>{resolvePreview.length}</strong> employee
+                      {resolvePreview.length === 1 ? '' : 's'} to the explicit list.
+                    </p>
+                    <p>
+                      The current facet filters (roles, grades, BUs, departments, etc.)
+                      will be <strong>cleared</strong> and the mode will switch to
+                      <em> Only these people</em>. Future joiners or leavers that would
+                      have matched the filters are <strong>not</strong> tracked.
+                    </p>
+                    {resolvePreview.length === 0 && (
+                      <p className="text-destructive">
+                        No employees match — nothing to add.
+                      </p>
+                    )}
+                  </>
+                )}
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={resolveLoading || !resolvePreview || resolvePreview.length === 0}
+              onClick={confirmResolve}
+            >
+              Add {resolvePreview?.length ?? 0} and clear filters
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

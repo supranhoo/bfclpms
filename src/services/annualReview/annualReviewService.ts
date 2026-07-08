@@ -61,6 +61,43 @@ export async function setTemplateOverride(args: {
 }
 
 /**
+ * Bulk-reassign already-seeded instances to a different template using
+ * `setTemplateOverride`. Per-row error isolation — a failed row doesn't
+ * abort the batch. Used by the Form Mapping "Sync assignments" flow when
+ * a new rule overlaps employees already seeded on an older template.
+ */
+export interface BulkReassignInput {
+  instanceId: string;
+  templateId: string;
+}
+export interface BulkReassignResult {
+  ok: number;
+  failed: { instanceId: string; error: string }[];
+}
+export async function bulkReassignViaOverride(
+  items: BulkReassignInput[],
+  reason: string,
+): Promise<BulkReassignResult> {
+  const out: BulkReassignResult = { ok: 0, failed: [] };
+  for (const item of items) {
+    try {
+      await setTemplateOverride({
+        instanceId: item.instanceId,
+        templateId: item.templateId,
+        reason,
+      });
+      out.ok++;
+    } catch (e) {
+      out.failed.push({
+        instanceId: item.instanceId,
+        error: e instanceof Error ? e.message : String(e),
+      });
+    }
+  }
+  return out;
+}
+
+/**
  * Set or clear the per-instance final-score weight override (Phase 2).
  * Pass `weights = null` to clear. Reason is mandatory; admin/hr_pms only —
  * enforced inside the RPC. Audit-logged under

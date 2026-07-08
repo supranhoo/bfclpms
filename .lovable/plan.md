@@ -1,107 +1,85 @@
-# Reuse employees from another template in Form Mapping
+## Goal
 
-## Short answer to your question
+Make the Form Mapping audience picker able to (a) turn the current filter selection into an explicit employee list with one click, and (b) safely handle employees who are already seeded on an older template so they actually end up on the new template — not just for future seeds.
 
-**Today: No.** The Form Mapping "audience" only supports rule‑based filters — Roles, Grades, Levels, BUs, Departments, Sub-units, Grade bucket, and "Has KRAs". There is **no way to pick specific employees** (e.g. "these 5 people from Template A") from the audience builder, and no cross-template picker. The only per-employee lever that exists is the **per‑employee override** on an individual instance after seeding — one at a time, not a bulk "pull from Template A" flow.
+Today, filters and the explicit ID list are two independent inputs, and the seeder never re-points an employee once an instance exists. This plan closes both gaps without a schema migration.
 
-**Yes it can be done cleanly** — the `annual_review_assignment_rules.filters` column is `jsonb`, so we can extend the audience schema without any migration. This is the minimum-surface way to deliver what you asked.
+---
 
-## Assumptions
+## Part 1 — "Resolve filters → add to list" action
 
-- "Map" = create an assignment rule on Template B whose audience includes those 5 employees.
-- "Automatically retrieve" = a picker inside Form Mapping that lists employees currently mapped to another template in the same cycle, and lets you multi-select.
-- The 5 employees should end up on Template B for this cycle. Template A no longer applies to them (higher-priority rule on B wins — matches current resolver behaviour).
-- Scope for now: **future seeding only** — existing seeded instances are not silently re-pointed. A separate "Re-seed selected" action (already exists) is used explicitly if the admin wants to switch already-seeded rows. This avoids clobbering saved responses.
+In `AudienceEmployeePickerSection.tsx`, add a secondary button next to "Copy from another template":
 
-## Risk & impact report
+**"Add everyone matching current filters"**
 
-- **Data impact:** additive only. New optional key `employee_ids: string[]` (and `employee_ids_mode: 'only' | 'union'`) inside `filters` JSONB. No schema migration, no RLS change, no historical rewrite.
-- **Workflow impact:** none for existing rules (missing key = old behaviour). New rules can be built two ways: pure filter, pure employee list, or filter ∪ list.
-- **UI/UX:** one new section in the audience builder ("Include specific employees") + one new dialog ("Copy from another template"). No layout regression on existing surfaces.
-- **Regression risk:** medium — `matchesFilters` and the PL/pgSQL seeder must both learn the new key or Preview and Seed diverge. Locked down by parity tests.
-- **Scalability:** cap explicit list at e.g. 2000 IDs per rule (soft warn at 500). Preview already pages profiles.
-- **Mitigation:** unit tests for matcher + a seeder parity test that runs `resolveTemplateForProfile` against the same input the DB seeder sees.
+Flow:
+1. Take the current draft `AssignmentFilters` from the card (roles, grades, levels, BUs, departments, sub-units, grade bucket, has-KRAs) — **excluding** `employee_ids` / `employee_ids_mode`.
+2. Call a new service `resolveFilterToEmployeeIds(cycleId, filters)`:
+   - Fetches active profiles via `fetchAllPaged` (POLICY §94, mirrors `useActiveEmployeesForCopy`).
+   - Runs each profile through the existing `matchesFilters` SSOT in `src/services/annualReview/formMapping.ts` so preview and seeder stay identical.
+   - Returns `{ id, full_name, employee_code }[]`.
+3. Open a confirm dialog: "This will add N employees to the explicit list. The filter rules will be cleared so the list is the sole source (mode auto-switches to Only these people). Proceed?"
+4. On confirm: merge into `employee_ids` (dedup), set `employee_ids_mode = 'only'`, clear the facet filters on the draft, show a toast with the resolved count and a snapshot timestamp in helper text ("Snapshot taken from filters on <date> — future joiners/leavers will NOT auto-update").
 
-## What will be visible
+This gives the user the "materialise filter into a frozen list" behaviour they described, without changing how filter-only rules work for people who prefer live rules.
 
-Inside Form Mapping → "Map a template to an audience" card, below the existing filter grid:
+---
 
-```text
-┌─ Include specific employees (optional) ──────────────────────────┐
-│  ○ Filter only     ○ Filter + these people     ● Only these people│
-│                                                                   │
-│  [ + Add from another template ]  [ + Pick employees… ]           │
-│                                                                   │
-│  12 employees selected                          [ Clear ] [ View ]│
-└───────────────────────────────────────────────────────────────────┘
-```
+## Part 2 — Handle overlap with an existing template's seeded instances
 
-"Add from another template" opens a dialog:
+Two separate cases, both need to work:
 
-```text
-Copy employees from another template
-┌───────────────────────────────────────────────────────────────────┐
-│ Source template:  [ Template A  ▾ ]     100 employees mapped      │
-│ Search: [_____________]     Dept: [All ▾]                         │
-│ ☐  Select all (page)                                              │
-│ ☑  Alice   (E-101, Sales, Manager)                                │
-│ ☑  Bob     (E-102, Sales, Executive)                              │
-│ ☐  Carol   (E-103, Ops)                                           │
-│ …                                                                 │
-│                                              [ Cancel ] [ Add 5 ] │
-└───────────────────────────────────────────────────────────────────┘
-```
+### 2a. Save-time overlap detection (already partly in place)
+When saving a Form Mapping rule whose audience resolves to employees already seeded on a **different** template in the same cycle:
 
-Source list is the same data `listTemplatesInUse` already returns, drilled into per-employee via a new `listEmployeesForTemplateInCycle(cycleId, templateId)` service.
+- Compute overlap via `listEmployeesForTemplateInCycle` across every other rule's template in the cycle (or a single RPC `find_seeded_conflicts(cycle_id, employee_ids[])`).
+- Show a blocking dialog listing: employee, current template, current stage.
+- Offer three choices:
+  1. **Save mapping only** — new rule wins for future seeding; existing instances stay on old template. (Today's behaviour.)
+  2. **Save mapping and reassign eligible instances now** — for each overlapping employee whose current instance is in `not_started` or `pending_self`, call the existing `set_annual_review_template_override` RPC with the new `template_id` and a system-generated reason (`"Reassigned via Form Mapping rule <rule name>"`). Skip and report any instance already past `pending_self`.
+  3. **Cancel** — don't save.
 
-## Precedence & conflict handling (locked by policy)
+No new RPC required — reuse the per-employee override path documented in `mem/features/annual-review/per-employee-template-override.md`. That's exactly what it was built for and it's already audit-logged (`annual_review.template_override_set`), stage-gated, and RLS-safe.
 
-- Assignment rules are evaluated by priority (lowest number wins), with deterministic tie-break on `id` (already in code). The new Template B rule is saved with `priority = minExisting − 1` (existing behaviour) so it wins over Template A for the 5 overlapping employees.
-- On save, if any employee already has a **seeded instance** on Template A, we show an inline warning:
-  > "3 of these employees are already seeded on Template A. Their forms will only switch to Template B if you re-seed the cycle."
-- No silent instance rewrite. Admin decides via existing "Re-seed" action.
+### 2b. Post-save "sync now" action on the mapping card
+Add a "Sync assignments" button on each mapping row that re-runs the same overlap check on demand, so an admin who saved earlier can still pull eligible employees over after the fact. Same dialog, same RPC, same audit trail.
 
-## Implementation steps (surgical)
+---
 
-1. **Types** — `src/types/annualReview.ts`: add optional `employee_ids?: string[]` and `employee_ids_mode?: 'only' | 'union'` to `AssignmentFilters`.
-2. **Matcher (TS SSOT)** — `src/services/annualReview/formMapping.ts` → `matchesFilters`:
-   - If `employee_ids_mode === 'only'`: match iff `employee_ids.includes(profile.id)`.
-   - If `'union'`: match iff filter-match OR id-in-list.
-   - Default (undefined mode + no ids) = today's behaviour.
-3. **Seeder parity** — mirror the same two lines in the PL/pgSQL function behind `seedInstancesByRules`. Add a migration that re-defines the function.
-4. **Service** — new `listEmployeesForTemplateInCycle(cycleId, templateId)` in `formMapping.ts`, paged via `fetchAllPaged`, joining `annual_review_instances` → `profiles`.
-5. **UI** — new components under `src/components/annual-review/audience/`:
-   - `AudienceEmployeePickerSection.tsx` (mode radios + chips + counter)
-   - `CopyFromTemplateDialog.tsx` (search + multi-select + "Add N")
-   - Wire into `AnnualReviewFormMapping.tsx` inside the existing "Map a template to an audience" card. No changes to the rules table, edit flow, or Rules tab.
-6. **Preview** — `previewAudience` already runs through `matchesFilters`, so it will just work once step 2 lands.
-7. **Save-time warning** — in the same commit mutation, after `previewAudience(...)`, query `annual_review_instances` for rows in `audienceIds` already seeded on a *different* template; render a warning toast + inline notice.
+## Technical details
 
-## Tests (mandatory)
+**New service functions** (`src/services/annualReview/formMapping.ts`):
+- `resolveFilterToEmployeeIds(cycleId, filters)` — filter-only preview, no writes.
+- `findSeededConflicts(cycleId, employeeIds, excludeTemplateId)` → `Array<{ employee_id, full_name, template_id, template_name, overall_status }>`.
+- `bulkReassignViaOverride(items, reason)` — thin loop over `set_annual_review_template_override`, per-row error isolation (same shape as `bulkSetTemplateOverrides`).
 
-- `formMapping.test.ts`:
-  - `employee_ids_mode='only'` matches only listed IDs, ignores other filters.
-  - `'union'` matches filter OR id.
-  - undefined = existing behaviour (regression guard).
-  - deterministic tie-break still holds when the new rule uses `employee_ids`.
-- New `listEmployeesForTemplateInCycle.test.ts` — paged fetch + override precedence (mirrors `listTemplatesInUse.test.ts`).
-- New `seederAudienceParity.test.ts` — feeds a canned profile set + rule to both `resolveTemplateForProfile` and a mocked PL/pgSQL result, asserts identical assignments.
+**UI**:
+- `AudienceEmployeePickerSection.tsx` — add "Add everyone matching current filters" button + confirm dialog.
+- `AnnualReviewFormMapping.tsx` — pre-save overlap check; new `SyncAssignmentsDialog` component; per-row "Sync assignments" button.
 
-## Pros / cons
+**No schema changes.** All new behaviour rides on `template_override_id` + existing RPCs.
 
-**Pros**
-- Solves the exact workflow you described in one click (Copy from Template A → tick 5 → Save).
-- Zero schema migration; existing rules unchanged.
-- Composable: works alongside filter-based audiences (union mode) so admins can say "everyone in Sales **plus** these 5 from Template A".
-- Auditable: audience is on the rule row, not scattered as per-employee overrides.
+**Precedence unchanged.** Rule priority (`minExisting - 1`) still governs future seed runs; overrides govern already-seeded rows.
 
-**Cons / trade-offs**
-- Explicit IDs must be maintained on leaver churn — we should show a `⚠︎ 2 employees inactive` badge in the picker.
-- Two ways to reach the same outcome (rule filter vs. explicit IDs). Solved by the mode radio and clear copy.
-- Cross-template dependency: deleting Template A doesn't affect the copied IDs (they live on Template B's rule) — desired behaviour, but worth calling out.
+---
 
-## Recommendation
+## Risk & Impact
 
-Ship it. It's a small, additive change that removes real friction (currently the admin must build an unrelated filter that happens to catch exactly those 5 people, or hand-edit 5 per-employee overrides after seeding). All existing invariants — priority resolution, coverage report, seeded-vs-will-seed classification — keep working because they route through `matchesFilters`.
+- **Data**: Only `template_override_id` writes, gated by stage (`not_started` / `pending_self`) and role (admin / hr_pms) at the RPC level. Existing responses, scores, and reviewer chains are untouched.
+- **Workflow**: "Resolve filters" clears facet filters on the draft — surfaced clearly in the confirm dialog. Bulk reassign only touches eligible instances and reports skips.
+- **UI/UX**: Two additive buttons; no layout churn.
+- **Regression**: `matchesFilters` remains SSOT for both preview and seeder — reused, not forked.
+- **Rollback**: Remove the two buttons and the three service helpers; DB state is unaffected.
 
-Not Applicable: DOCUMENTATION.md / POLICY.md updates will be added in the same commit (POLICY §AR-MAPPING-EMPLOYEE-IDS).
+## Tests
+
+- `resolveFilterToEmployeeIds.test.ts` — filter combinations, empty result, inactive-profile exclusion.
+- `findSeededConflicts.test.ts` — no conflicts, same-template ignored, cross-template flagged with status.
+- `bulkReassignViaOverride.test.ts` — mixed eligible/ineligible batch, per-row failure isolation, audit reason present.
+- Extend `formMapping.test.ts` — preview parity between resolver and seeder for the same filter set.
+
+## Documentation
+
+- Update `mem/features/annual-review/per-employee-template-override.md` — note Form Mapping now drives bulk overrides.
+- Add short section to `.lovable/plan.md` and `DOCUMENTATION.md` describing the resolve-and-sync flow.
+- `POLICY.md`: "Form Mapping rules affect future seeding by default; moving already-seeded employees requires an explicit Sync action and only applies to instances in `not_started` or `pending_self`."

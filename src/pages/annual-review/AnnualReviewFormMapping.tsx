@@ -23,6 +23,8 @@ import AudienceEmployeePickerSection from '@/components/annual-review/audience/A
 import {
   previewAudience, checkMappingCoverage,
   fetchDepartmentNameMap,
+  findSeededConflicts,
+  type SeededConflict,
   type CoverageReport,
   type CoverageRow,
 } from '@/services/annualReview/formMapping';
@@ -537,6 +539,14 @@ function AudienceBuilder({
   // audience.
   const [lastSavedAudienceIds, setLastSavedAudienceIds] = useState<string[] | null>(null);
 
+  // Post-save sync state — when the just-saved rule overlaps employees
+  // already seeded on a different template, offer bulk reassignment via
+  // the per-instance override RPC.
+  const [syncOpen, setSyncOpen] = useState(false);
+  const [syncConflicts, setSyncConflicts] = useState<SeededConflict[]>([]);
+  const [syncTemplateId, setSyncTemplateId] = useState<string | null>(null);
+  const [syncing, setSyncing] = useState(false);
+
   const previewQ = useQuery({
     queryKey: ['annual-review', 'form-mapping', 'preview', filters],
     queryFn: () => previewAudience(filters, { limit: 25 }),
@@ -559,7 +569,17 @@ function AudienceBuilder({
       // check compares against what THIS rule was supposed to cover, not
       // "any employee currently resolved by any rule".
       const audience = await previewAudience(filters, { limit: 100_000 });
-      const audienceIds = audience.sample.map((p) => p.id);
+      // Fold in explicit ids too — `previewAudience` returns rows that
+      // satisfy the whole matcher (facets + id list per mode), which is
+      // exactly what we want for conflict scope.
+      const audienceIds = Array.from(new Set([
+        ...audience.sample.map((p) => p.id),
+        ...((filters.employee_ids ?? []) as string[]),
+      ]));
+      // Detect employees who already have an instance on a DIFFERENT
+      // template — the seeder won't move them, so surface them for
+      // explicit sync via override.
+      const conflicts = await findSeededConflicts(cycleId, audienceIds, templateId);
       await svc.upsertRule({
         cycle_id: cycleId,
         template_id: templateId,
@@ -568,17 +588,57 @@ function AudienceBuilder({
         filters,
         is_active: true,
       });
-      return { audienceIds };
+      return { audienceIds, conflicts, savedTemplateId: templateId };
     },
-    onSuccess: ({ audienceIds }) => {
+    onSuccess: ({ audienceIds, conflicts, savedTemplateId }) => {
       toast.success('Rule saved. Recalculating coverage…');
       setLastSavedTemplateId(templateId);
       setLastSavedAudienceIds(audienceIds);
       setRuleName('');
       onCommitted();
+      if (conflicts.length > 0) {
+        setSyncConflicts(conflicts);
+        setSyncTemplateId(savedTemplateId);
+        setSyncOpen(true);
+      }
     },
     onError: (e) => toast.error((e as Error).message),
   });
+
+  const savedTemplateName = useMemo(
+    () => templates.find((t) => t.id === (syncTemplateId ?? templateId))?.name ?? '',
+    [templates, syncTemplateId, templateId],
+  );
+
+  const runSync = async () => {
+    if (!syncTemplateId) return;
+    const eligible = syncConflicts.filter((c) => c.eligible_for_reassign);
+    if (eligible.length === 0) {
+      toast.error('No conflicts eligible for reassignment (all past pending_self).');
+      return;
+    }
+    setSyncing(true);
+    try {
+      const reason = `Reassigned via Form Mapping rule (${savedTemplateName || 'new mapping'})`;
+      const res = await svc.bulkReassignViaOverride(
+        eligible.map((c) => ({ instanceId: c.instance_id, templateId: syncTemplateId })),
+        reason,
+      );
+      if (res.failed.length === 0) {
+        toast.success(`Reassigned ${res.ok} employee${res.ok === 1 ? '' : 's'} to ${savedTemplateName}.`);
+      } else {
+        toast.warning(`Reassigned ${res.ok}; ${res.failed.length} failed.`);
+      }
+      setSyncOpen(false);
+      setSyncConflicts([]);
+      setSyncTemplateId(null);
+      await onCommitted();
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setSyncing(false);
+    }
+  };
 
   const activeTpls = templates.filter((t) => t.is_active !== false);
 
@@ -716,7 +776,93 @@ function AudienceBuilder({
           priorities on the <strong>Rules</strong> tab.
         </p>
       </CardContent>
+      <SyncAssignmentsDialog
+        open={syncOpen}
+        onOpenChange={(o) => {
+          setSyncOpen(o);
+          if (!o) { setSyncConflicts([]); setSyncTemplateId(null); }
+        }}
+        conflicts={syncConflicts}
+        targetTemplateName={savedTemplateName}
+        onConfirm={runSync}
+        submitting={syncing}
+      />
     </Card>
+  );
+}
+
+// ── Sync assignments dialog ───────────────────────────────────────
+function SyncAssignmentsDialog({
+  open, onOpenChange, conflicts, targetTemplateName, onConfirm, submitting,
+}: {
+  open: boolean;
+  onOpenChange: (o: boolean) => void;
+  conflicts: SeededConflict[];
+  targetTemplateName: string;
+  onConfirm: () => void;
+  submitting: boolean;
+}) {
+  const eligible = conflicts.filter((c) => c.eligible_for_reassign);
+  const ineligible = conflicts.filter((c) => !c.eligible_for_reassign);
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-3xl">
+        <DialogHeader>
+          <DialogTitle>Move already-seeded employees to {targetTemplateName || 'the new template'}?</DialogTitle>
+          <DialogDescription>
+            {conflicts.length} employee{conflicts.length === 1 ? '' : 's'} in this
+            audience already have a review instance on a different template. Your
+            new mapping only affects <strong>future</strong> seed runs — moving
+            existing instances requires an explicit per-employee override.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="max-h-[50vh] overflow-auto rounded-md border">
+          <Table>
+            <TableHeader className="sticky top-0 bg-background z-10">
+              <TableRow>
+                <TableHead>Code</TableHead>
+                <TableHead>Name</TableHead>
+                <TableHead>Currently on</TableHead>
+                <TableHead>Stage</TableHead>
+                <TableHead>Action</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {conflicts.map((c) => (
+                <TableRow key={c.instance_id}>
+                  <TableCell className="font-mono text-xs">{c.employee_code ?? '—'}</TableCell>
+                  <TableCell>{c.full_name ?? '—'}</TableCell>
+                  <TableCell>{c.current_template_name}</TableCell>
+                  <TableCell className="text-xs">{c.overall_status}</TableCell>
+                  <TableCell>
+                    {c.eligible_for_reassign
+                      ? <Badge variant="default">Will move</Badge>
+                      : <Badge variant="outline" title="Past pending_self — locked">Skipped</Badge>}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+        <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+          <Badge variant="default">{eligible.length} will move</Badge>
+          {ineligible.length > 0 && (
+            <Badge variant="outline">{ineligible.length} locked (past self stage)</Badge>
+          )}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>
+            Keep as-is (future seeds only)
+          </Button>
+          <Button onClick={onConfirm} disabled={submitting || eligible.length === 0}>
+            {submitting
+              ? <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              : <RefreshCw className="h-4 w-4 mr-2" />}
+            Reassign {eligible.length} now
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
