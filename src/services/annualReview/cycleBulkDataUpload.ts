@@ -57,6 +57,47 @@ function norm(s: string): string {
   return s.trim().toLowerCase().replace(/\s+/g, ' ');
 }
 
+/**
+ * Hydrate template `system_scores[]` slots with `scoring_rules` copied from the
+ * KPI Library when the slot itself has none. Historical templates were seeded
+ * before bands were introduced, so the runtime scorer would otherwise fall into
+ * the legacy "raw = pre-scaled points" branch — which INVERTS the score for
+ * lower-is-better KPIs (e.g. LTI = 0 wrongly scored 0/5, LTI = 3 wrongly 5/5).
+ * Match is by normalized `name` against `annual_review_system_kpis.name_en`.
+ * POLICY §AR-SYSTEM-KPI-RAW-INPUT.
+ */
+async function hydrateSystemScoringRules(
+  templates: Iterable<AnnualReviewTemplate>,
+): Promise<void> {
+  const need = new Set<string>();
+  for (const t of templates) {
+    for (const s of t.sections.system_scores ?? []) {
+      const src = (s as unknown as { source?: string }).source;
+      if (src === 'carry_kra') continue;
+      if (!s.scoring_rules || !s.scoring_rules.bands?.length) need.add(norm(s.name));
+    }
+  }
+  if (!need.size) return;
+  const { data, error } = await supabase
+    .from('annual_review_system_kpis')
+    .select('name_en, scoring_rules, uom_type');
+  if (error) throw error;
+  const libByName = new Map<string, { rules: ScoringRules | null; uom?: string | null }>();
+  for (const r of (data ?? []) as Array<{ name_en: string; scoring_rules: unknown; uom_type: string | null }>) {
+    libByName.set(norm(r.name_en), { rules: (r.scoring_rules as ScoringRules) ?? null, uom: r.uom_type });
+  }
+  for (const t of templates) {
+    for (const s of t.sections.system_scores ?? []) {
+      if (s.scoring_rules && s.scoring_rules.bands?.length) continue;
+      const hit = libByName.get(norm(s.name));
+      if (hit?.rules?.bands?.length) {
+        s.scoring_rules = hit.rules;
+        if (!s.uom_type && hit.uom) s.uom_type = hit.uom;
+      }
+    }
+  }
+}
+
 /** Fetches everything needed to build the single sheet for a cycle. */
 export async function buildCycleBulkPlan(cycleId: string): Promise<CycleBulkPlan> {
   // Instances + employee master (paged for safety).
@@ -88,6 +129,7 @@ export async function buildCycleBulkPlan(cycleId: string): Promise<CycleBulkPlan
     if (error) throw error;
     (data ?? []).forEach((t) => templateById.set(t.id, t as unknown as AnnualReviewTemplate));
   }
+  await hydrateSystemScoringRules(templateById.values());
 
   // Master-data lookups.
   const deptIds = Array.from(
