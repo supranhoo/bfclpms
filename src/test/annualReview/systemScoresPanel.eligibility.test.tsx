@@ -26,6 +26,12 @@ describe('SystemScoresPanel — eligibility always visible', () => {
     expect(screen.getByText(/All eligibility criteria met/i)).toBeInTheDocument();
     expect(screen.getByText('Attendance')).toBeInTheDocument();
     expect(screen.getByText('Disciplinary case')).toBeInTheDocument();
+    // Plain-language rendering — never raw operator syntax.
+    expect(screen.getByText('At least 90')).toBeInTheDocument();
+    expect(screen.queryByText(/gte 90/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/equals false/i)).not.toBeInTheDocument();
+    // Boolean actual renders as No, not "false".
+    expect(screen.getAllByText('No').length).toBeGreaterThan(0);
   });
 
   it('marks section as failed when a criterion is not met', () => {

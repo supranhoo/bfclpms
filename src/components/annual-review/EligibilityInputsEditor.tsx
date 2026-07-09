@@ -12,6 +12,7 @@ import * as svc from '@/services/annualReview/annualReviewService';
 import { annualReviewKeys } from '@/hooks/useAnnualReview';
 import type { EligibilityCriterion } from '@/types/annualReview';
 import { evaluateEligibility } from '@/lib/annualReview/eligibility';
+import { formatExpected } from '@/lib/annualReview/eligibilityFormat';
 
 /**
  * HR editor for the per-employee eligibility inputs. Each row corresponds to
@@ -85,7 +86,7 @@ export function EligibilityInputsEditor({
                   <span className="ml-1 text-muted-foreground font-normal">— {c.description}</span>
                 ) : (
                   <span className="ml-1 text-muted-foreground font-normal">
-                    ({c.operator.replace('_', ' ')} {String(c.expected_value)})
+                    ({formatExpected(c)})
                   </span>
                 )}
               </Label>

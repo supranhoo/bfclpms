@@ -13,6 +13,7 @@ import { buildCarrySnapshot, selectMonths, FY_MONTHS } from '@/services/annualRe
 import { KPI_SCALE_MAX, fyLabel } from '@/lib/annualReview/fiscalYear';
 import { scoreFromRaw } from '@/lib/annualReview/systemKpiScoring';
 import { useAnnualReviewI18n } from '@/components/annual-review/AnnualReviewI18nContext';
+import { formatExpected, formatActual } from '@/lib/annualReview/eligibilityFormat';
 
 export function SystemScoresPanel({
   systemScores,
@@ -233,16 +234,16 @@ export function SystemScoresPanel({
                         <TableCell className="py-1.5 text-muted-foreground">
                           {c.description
                             ? tTemplate('eligibility', c.id, 'description', c.description)
-                            : `${c.operator.replace(/_/g, ' ')} ${String(c.expected_value)}`}
+                            : formatExpected(c, t)}
                         </TableCell>
                         <TableCell className="py-1.5 text-right tabular-nums text-muted-foreground">
-                          {`${c.operator.replace(/_/g, ' ')} ${String(c.expected_value)}`}
+                          {formatExpected(c, t)}
                         </TableCell>
                         <TableCell className="py-1.5 text-right tabular-nums">
                           {actual == null || actual === '' ? (
                             <span className="text-muted-foreground">—</span>
                           ) : (
-                            String(actual)
+                            formatActual(actual, c.type, t)
                           )}
                         </TableCell>
                         <TableCell className="py-1.5 text-center">
