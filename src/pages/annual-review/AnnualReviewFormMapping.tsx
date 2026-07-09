@@ -189,8 +189,9 @@ function TemplatesUsagePanel({
     // employees are still bound to it hides them from Form Mapping entirely
     // (BUG: "HK, Pol, Dust, hort - W" — 249 seeded employees invisible).
     .filter((t) => t.is_active !== false || (usage.get(t.id) ?? 0) > 0)
-    .map((t) => ({ ...t, count: usage.get(t.id) ?? 0 }))
-    .sort((a, b) => a.name.localeCompare(b.name));
+    .map((t) => ({ ...t, count: usage.get(t.id) ?? 0 }));
+
+  const rows = sortTemplateUsageRowsByName(unsortedRows);
 
   const totalCovered = rows.reduce((s, r) => s + r.count, 0);
 
