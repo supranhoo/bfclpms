@@ -353,6 +353,12 @@ export interface DryRunRow {
   fullName: string;
   verdict: RowVerdict;
   reason?: string;
+  /**
+   * Per-cell warnings (v2.66.95): columns that were skipped for this row
+   * (unlinked KPI, non-numeric value, etc.) while the rest of the row still
+   * applies. Row-fatal issues stay in `reason`.
+   */
+  warnings?: string[];
   changes: Array<{
     column: string;
     kind: CellKind;
@@ -407,6 +413,7 @@ export async function parseAndDryRun(file: File, plan: CycleBulkPlan): Promise<D
       continue;
     }
     const rowChanges: DryRunRow['changes'] = [];
+    const rowWarnings: string[] = [];
     for (const col of plan.columns) {
       const raw = rec[col.name];
       if (raw === null || raw === undefined || raw === '') continue;
@@ -415,31 +422,22 @@ export async function parseAndDryRun(file: File, plan: CycleBulkPlan): Promise<D
       if (col.kind === 'system_scores') {
         const afterRaw = Number(raw);
         if (!Number.isFinite(afterRaw)) {
-          rows.push({ employeeCode: code, fullName: inst.fullName, verdict: 'error', reason: `Non-numeric value in "${col.name}"`, changes: [] });
-          err++;
-          rowChanges.length = 0;
-          break;
+          // Cell-level skip (v2.66.95): don't torpedo the rest of the row.
+          rowWarnings.push(`"${col.name}" skipped — non-numeric value`);
+          continue;
         }
         const beforeRaw = inst.systemScoresRaw[slot.id];
         const tSlot = slot.slot as TemplateSystemScore | undefined;
         const rules = (tSlot?.scoring_rules ?? null) as ScoringRules | null;
         const weight = Number(tSlot?.weight ?? 0);
-        // Guardrail (v2.66.91): a library-linked KPI slot with no resolvable
-        // bands MUST NOT fall into the legacy "raw = pre-scaled points" branch,
-        // which would silently invert the score for lower-is-better metrics.
-        // Only explicitly `source: 'manual'` slots may skip band scoring.
+        // Guardrail (v2.66.91 → v2.66.95): a non-manual slot with no
+        // resolvable bands MUST NOT fall into the legacy "raw = pre-scaled
+        // points" branch (silently inverts lower-is-better metrics). Skip
+        // ONLY that cell and warn — remaining columns in the row still apply.
         const isManual = (tSlot?.source ?? 'manual') === 'manual';
         if (!isManual && (!rules || !rules.bands?.length)) {
-          rows.push({
-            employeeCode: code,
-            fullName: inst.fullName,
-            verdict: 'error',
-            reason: `Column "${col.name}" is not linked to the KPI Library (no scoring bands). Open the template and link this slot before uploading.`,
-            changes: [],
-          });
-          err++;
-          rowChanges.length = 0;
-          break;
+          rowWarnings.push(`"${col.name}" skipped — not linked to KPI Library`);
+          continue;
         }
         const result = scoreFromRaw(afterRaw, rules, weight);
         const beforePoints = inst.systemScores[slot.id];
@@ -463,14 +461,24 @@ export async function parseAndDryRun(file: File, plan: CycleBulkPlan): Promise<D
       }
     }
     if (rowChanges.length === 0) {
-      // Only push a skip if not already error'd
-      if (rows[rows.length - 1]?.employeeCode !== code || rows[rows.length - 1]?.verdict !== 'error') {
-        rows.push({ employeeCode: code, fullName: inst.fullName, verdict: 'skip', reason: 'No changes', changes: [] });
-        skip++;
-      }
+      rows.push({
+        employeeCode: code,
+        fullName: inst.fullName,
+        verdict: 'skip',
+        reason: rowWarnings.length ? rowWarnings.join('; ') : 'No changes',
+        warnings: rowWarnings.length ? rowWarnings : undefined,
+        changes: [],
+      });
+      skip++;
       continue;
     }
-    rows.push({ employeeCode: code, fullName: inst.fullName, verdict: 'apply', changes: rowChanges });
+    rows.push({
+      employeeCode: code,
+      fullName: inst.fullName,
+      verdict: 'apply',
+      changes: rowChanges,
+      warnings: rowWarnings.length ? rowWarnings : undefined,
+    });
     apply++;
     changes += rowChanges.length;
   }
