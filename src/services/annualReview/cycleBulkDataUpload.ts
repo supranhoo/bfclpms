@@ -396,6 +396,39 @@ export interface DryRunReport {
 
 const MAX_ROWS = 5000;
 
+/**
+ * Normalise a raw cell value for a percent-typed system KPI slot.
+ * Handles two Excel-import traps that both landed as `raw = 0.9`:
+ *   1. Cell formatted as percent → xlsx returns underlying `0.9`.
+ *   2. Text cell like `"90%"` → `Number("90%")` = NaN.
+ * In both cases the scorer would otherwise fall below the min band (80)
+ * and return score 0 — the exact symptom on employee 100870.
+ * Returns the coerced number and an optional warning describing the coercion.
+ */
+function coercePercentRaw(
+  raw: unknown,
+  uomType: string | null | undefined,
+  columnName: string,
+): { value: number; warning?: string } {
+  const isPercent = (uomType ?? '').toLowerCase() === 'percent';
+  // String "90%" — strip the sign regardless of uom, then parse.
+  if (typeof raw === 'string') {
+    const trimmed = raw.trim();
+    if (trimmed.endsWith('%')) {
+      const n = Number(trimmed.slice(0, -1).trim());
+      if (Number.isFinite(n)) {
+        return { value: n, warning: `"${columnName}" interpreted "${trimmed}" as ${n}%` };
+      }
+    }
+  }
+  const n = Number(raw);
+  if (isPercent && Number.isFinite(n) && n > 0 && n <= 1) {
+    const scaled = n * 100;
+    return { value: scaled, warning: `"${columnName}" interpreted ${n} as ${scaled}% (Excel percent cell)` };
+  }
+  return { value: n };
+}
+
 export async function parseAndDryRun(file: File, plan: CycleBulkPlan): Promise<DryRunReport> {
   const buf = await file.arrayBuffer();
   const wb = XLSX.read(buf);
@@ -431,14 +464,16 @@ export async function parseAndDryRun(file: File, plan: CycleBulkPlan): Promise<D
       const slot = inst.slotByCanonical.get(`${col.kind}::${norm(col.name)}`);
       if (!slot) continue; // column not applicable to this employee's template
       if (col.kind === 'system_scores') {
-        const afterRaw = Number(raw);
+        const tSlot = slot.slot as TemplateSystemScore | undefined;
+        const coerced = coercePercentRaw(raw, tSlot?.uom_type, col.name);
+        const afterRaw = coerced.value;
+        if (coerced.warning) rowWarnings.push(coerced.warning);
         if (!Number.isFinite(afterRaw)) {
           // Cell-level skip (v2.66.95): don't torpedo the rest of the row.
           rowWarnings.push(`"${col.name}" skipped — non-numeric value`);
           continue;
         }
         const beforeRaw = inst.systemScoresRaw[slot.id];
-        const tSlot = slot.slot as TemplateSystemScore | undefined;
         const rules = (tSlot?.scoring_rules ?? null) as ScoringRules | null;
         const weight = Number(tSlot?.weight ?? 0);
         // Guardrail (v2.66.91 → v2.66.95): a non-manual slot with no
