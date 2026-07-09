@@ -1,3 +1,8 @@
+### §AR-SYSTEM-KPI-ACHIEVEMENT-DISPLAY — System Score cards must show the source achievement value (v2.66.98, 2026-07-09)
+- Read-only Annual Review System Score cards on reviewer and employee detail pages MUST pass `annual_review_instances.system_scores_raw` into `SystemScoresPanel` whenever available. The card must display the achievement in the KPI Library unit (`percent` as `%`, `binary` as `Yes/No`, `days` with day unit, other numeric units as-is) before the scaled contribution points, so reviewers can understand what was achieved and how it mapped to the score.
+- `system_scores` remains the canonical scaled contribution map for final-score calculations. This policy is display-only and MUST NOT recalculate or mutate `final_score`.
+- Regression guard: `src/components/annual-review/SystemScoresPanel.test.tsx` covers formatted achievement rendering for a percent KPI.
+
 ### §AR-SYSTEM-KPI-LIBRARY-LINK — Every Annual Review System KPI slot MUST resolve to a KPI Library row before Bulk Data Upload will accept it (v2.66.91, 2026-07-09)
 - **Materialised iteration (v2.66.97, 2026-07-09):** `hydrateSystemScoringRules` receives an `Iterable<AnnualReviewTemplate>` that MAY be a single-use iterator (production passes `Map.values()`). Both the `need`-building pass and the hydration pass MUST iterate a materialised array (`templateList = Array.from(templates)`), never the original iterable, or the second traversal silently sees an empty sequence — leaving every non-inline slot un-hydrated while the health strip falsely reports "all linked". The Bulk Upload dialog's "Scoring health" count MUST always reflect the actual outcome of hydration, never a pre-return short-circuit.
 

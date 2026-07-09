@@ -322,6 +322,7 @@ function TeamReviewDetailInner(props: any) {
       <SystemScoresPanel
         systemScores={template?.sections.system_scores ?? []}
         values={instance.system_scores ?? {}}
+        rawValues={instance.system_scores_raw ?? {}}
         eligibility={template?.sections.eligibility_criteria}
         eligibilityInputs={instance.eligibility_inputs}
         eligibilityRemark={instance.eligibility_remark}
