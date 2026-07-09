@@ -17,6 +17,18 @@ import { ConfirmDestructiveDialog } from '@/components/ui/ConfirmDestructiveDial
 import { Users, Filter, Search, UserPlus, UserMinus, X, ShieldCheck, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { listTemplatesInUse, type TemplateInUse } from '@/services/annualReview/formMapping';
+import {
+  fetchActiveProfiles,
+  fetchDeptToBu,
+  fetchEmployeesWithKrasSince,
+  windowMonthsFromFilters,
+} from '@/services/annualReview/formMapping';
+import {
+  resolveEligibleEmployeeIdsForTemplates,
+  type SeededInstance,
+} from '@/lib/annualReviewTemplateAudience';
+import { fetchAllPaged } from '@/lib/fetchAll';
+import type { AnnualReviewAssignmentRule, AssignmentFilters } from '@/types/annualReview';
 import { RegistryPager, pagedSlice } from '@/components/admin/kpi-standardization/RegistryPager';
 
 /**
@@ -137,17 +149,28 @@ function useAssignedForms(userIds: string[], cycleId: string | null) {
     queryFn: async (): Promise<Map<string, AssignedForm | null>> => {
       const out = new Map<string, AssignedForm | null>();
       if (!cycleId || userIds.length === 0) return out;
-      const { data, error } = await supabase
-        .from('annual_review_instances')
-        .select(
-          'employee_id, template_id, template_override_id, ' +
-          'template:annual_review_templates!annual_review_instances_template_id_fkey(name), ' +
-          'override_template:annual_review_templates!annual_review_instances_template_override_id_fkey(name)'
-        )
-        .eq('cycle_id', cycleId)
-        .in('employee_id', userIds);
-      if (error) throw error;
-      for (const row of (data ?? []) as any[]) {
+      // Chunk the id list under PostgREST's URL/`.in()` limit and page each
+      // chunk to bypass the 1000-row cap.
+      const CHUNK = 500;
+      const allRows: any[] = [];
+      for (let i = 0; i < userIds.length; i += CHUNK) {
+        const chunk = userIds.slice(i, i + CHUNK);
+        const rows = await fetchAllPaged<any>((from, to) =>
+          supabase
+            .from('annual_review_instances')
+            .select(
+              'employee_id, template_id, template_override_id, ' +
+                'template:annual_review_templates!annual_review_instances_template_id_fkey(name), ' +
+                'override_template:annual_review_templates!annual_review_instances_template_override_id_fkey(name)'
+            )
+            .eq('cycle_id', cycleId)
+            .in('employee_id', chunk)
+            .order('employee_id')
+            .range(from, to),
+        );
+        allRows.push(...rows);
+      }
+      for (const row of allRows) {
         const isOverride = !!row.template_override_id;
         const name = (isOverride ? row.override_template?.name : row.template?.name) ?? null;
         out.set(row.employee_id, name ? { name, isOverride } : null);
@@ -175,22 +198,39 @@ function useTemplatesInUse(cycleId: string | null) {
  * matches one of the selected templates, within the given cycle. Used by the
  * preview to intersect the profile filter results.
  */
-async function fetchEmployeeIdsForTemplates(
+/**
+ * SEEDED-ONLY intersection: employee ids in this cycle whose effective
+ * seeded template is one of `templateIds`. Used by the
+ * "Remove template's users from phase" bulk action, whose scope is
+ * legitimately the current-audience ∩ seeded-template set.
+ *
+ * NOTE: Do NOT use for the preview filter — that must include employees
+ * who are not yet seeded but would resolve to the template via active
+ * mapping rules. See `resolveEligibleEmployeeIdsForTemplates`.
+ */
+async function fetchSeededEmployeeIdsForTemplates(
   cycleId: string,
   templateIds: string[],
 ): Promise<Set<string>> {
   const out = new Set<string>();
   if (!cycleId || templateIds.length === 0) return out;
-  const { data, error } = await supabase
-    .from('annual_review_instances')
-    .select('employee_id, template_id, template_override_id')
-    .eq('cycle_id', cycleId)
-    .or(
-      `template_id.in.(${templateIds.join(',')}),template_override_id.in.(${templateIds.join(',')})`,
-    );
-  if (error) throw error;
+  // Paged to bypass PostgREST's 1000-row cap (POLICY §94).
+  const data = await fetchAllPaged<{
+    employee_id: string;
+    template_id: string | null;
+    template_override_id: string | null;
+  }>((from, to) =>
+    supabase
+      .from('annual_review_instances')
+      .select('employee_id, template_id, template_override_id')
+      .eq('cycle_id', cycleId)
+      .or(
+        `template_id.in.(${templateIds.join(',')}),template_override_id.in.(${templateIds.join(',')})`,
+      )
+      .range(from, to),
+  );
   const set = new Set(templateIds);
-  for (const r of (data ?? []) as any[]) {
+  for (const r of data) {
     const eff = r.template_override_id ?? r.template_id;
     if (eff && set.has(eff)) out.add(r.employee_id);
   }
@@ -215,24 +255,28 @@ function AssignedFormCell({ form }: { form: AssignedForm | null | undefined }) {
 }
 
 async function runPreview(f: Filters): Promise<PreviewRow[]> {
-  let q = supabase
-    .from('profiles')
-    .select(
-      'id, full_name, employee_code, pms_grade_id, level_id, department_id, ' +
-      'pms_grade:pms_grades(name), level:levels(name), ' +
-      'department:departments!profiles_department_fk(name, business_unit_id, business_unit:business_units(name))'
-    )
-    .eq('is_active', true)
-    .limit(500);
+  // POLICY §94 — page the profiles read; a hard `.limit(500)` (or the
+  // PostgREST 1000-row default cap) silently truncated the audience for
+  // the ~2,533-employee active roster.
+  const data = await fetchAllPaged<ProfileRow>((from, to) => {
+    let q = supabase
+      .from('profiles')
+      .select(
+        'id, full_name, employee_code, pms_grade_id, level_id, department_id, ' +
+          'pms_grade:pms_grades(name), level:levels(name), ' +
+          'department:departments!profiles_department_fk(name, business_unit_id, business_unit:business_units(name))'
+      )
+      .eq('is_active', true);
+    if (f.grade_ids.length) q = q.in('pms_grade_id', f.grade_ids);
+    if (f.level_ids.length) q = q.in('level_id', f.level_ids);
+    if (f.department_ids.length) q = q.in('department_id', f.department_ids);
+    return q.order('full_name').range(from, to) as unknown as PromiseLike<{
+      data: ProfileRow[] | null;
+      error: unknown;
+    }>;
+  });
 
-  if (f.grade_ids.length) q = q.in('pms_grade_id', f.grade_ids);
-  if (f.level_ids.length) q = q.in('level_id', f.level_ids);
-  if (f.department_ids.length) q = q.in('department_id', f.department_ids);
-
-  const { data, error } = await q;
-  if (error) throw error;
-
-  let rows = ((data ?? []) as unknown as ProfileRow[]);
+  let rows = data;
 
   if (f.business_unit_ids.length) {
     const set = new Set(f.business_unit_ids);
@@ -241,14 +285,22 @@ async function runPreview(f: Filters): Promise<PreviewRow[]> {
 
   if (rows.length === 0) return [];
 
-  // Has-KRA presence probe (single query, scoped to candidate ids).
+  // Has-KRA presence probe — chunked+paged to bypass the 1000-row cap.
   const ids = rows.map((r) => r.id);
-  const { data: kpiRows, error: kErr } = await supabase
-    .from('kpis')
-    .select('employee_id')
-    .in('employee_id', ids);
-  if (kErr) throw kErr;
-  const withKra = new Set(((kpiRows ?? []) as any[]).map((r) => r.employee_id));
+  const withKra = new Set<string>();
+  const CHUNK = 500;
+  for (let i = 0; i < ids.length; i += CHUNK) {
+    const chunk = ids.slice(i, i + CHUNK);
+    const kpiRows = await fetchAllPaged<{ employee_id: string }>((from, to) =>
+      supabase
+        .from('kpis')
+        .select('employee_id')
+        .in('employee_id', chunk)
+        .order('employee_id')
+        .range(from, to),
+    );
+    for (const r of kpiRows) if (r.employee_id) withKra.add(r.employee_id);
+  }
 
   let out: PreviewRow[] = rows.map((r) => ({ ...r, hasKra: withKra.has(r.id) }));
   if (f.has_kra === 'yes') out = out.filter((r) => r.hasKra);
@@ -257,9 +309,13 @@ async function runPreview(f: Filters): Promise<PreviewRow[]> {
 }
 
 /**
- * Apply the template filter (post-fetch intersection) using the same
- * effective-template rule as the resolver. Cycle-scoped; if no cycle is
- * selected the filter is a no-op — caller disables the UI in that case.
+ * Apply the Assigned-Template filter. Resolver-aware: an employee passes
+ * the filter iff their EFFECTIVE template for this cycle is one of the
+ * selected templates, where "effective" = seeded template (with override)
+ * if an instance already exists, otherwise the template the active
+ * mapping rules would assign at seed time.
+ *
+ * Cycle-scoped; no-op when no cycle is selected (UI disables the field).
  */
 async function applyTemplateFilter(
   rows: PreviewRow[],
@@ -267,7 +323,62 @@ async function applyTemplateFilter(
   templateIds: string[],
 ): Promise<PreviewRow[]> {
   if (!cycleId || templateIds.length === 0) return rows;
-  const allowed = await fetchEmployeeIdsForTemplates(cycleId, templateIds);
+  const [profiles, deptToBu, rulesRes, instRows] = await Promise.all([
+    fetchActiveProfiles(),
+    fetchDeptToBu(),
+    supabase
+      .from('annual_review_assignment_rules')
+      .select('id, template_id, cycle_id, filters, is_active, priority')
+      .eq('cycle_id', cycleId),
+    fetchAllPaged<{
+      employee_id: string;
+      template_id: string | null;
+      template_override_id: string | null;
+    }>((from, to) =>
+      supabase
+        .from('annual_review_instances')
+        .select('employee_id, template_id, template_override_id')
+        .eq('cycle_id', cycleId)
+        .order('employee_id')
+        .range(from, to),
+    ),
+  ]);
+  if (rulesRes.error) throw rulesRes.error;
+  const rules = (rulesRes.data ?? []) as unknown as AnnualReviewAssignmentRule[];
+
+  // Prefetch one KRA set per distinct window used by rules that opt into
+  // `has_kras`. Rules that don't use it don't force a fetch.
+  const windows = new Set<number>();
+  for (const r of rules) {
+    if (!r.is_active) continue;
+    const filters = r.filters as Partial<AssignmentFilters> | null | undefined;
+    if (filters?.has_kras === 'yes' || filters?.has_kras === 'no') {
+      windows.add(windowMonthsFromFilters(filters));
+    }
+  }
+  const krasSets = new Map<number, Set<string>>();
+  await Promise.all(
+    [...windows].map(async (w) => {
+      krasSets.set(w, await fetchEmployeesWithKrasSince(w));
+    }),
+  );
+
+  const seededByEmp = new Map<string, SeededInstance>();
+  for (const r of instRows) {
+    seededByEmp.set(r.employee_id, {
+      template_id: r.template_id,
+      template_override_id: r.template_override_id,
+    });
+  }
+
+  const allowed = resolveEligibleEmployeeIdsForTemplates({
+    profiles,
+    rules,
+    deptToBu,
+    krasSets,
+    seededByEmp,
+    templateIds,
+  });
   return rows.filter((r) => allowed.has(r.id));
 }
 
@@ -435,7 +546,7 @@ export function PhasedRolloutCard() {
    */
   async function handleRemoveByTemplate() {
     if (!effectiveCycleId || filters.template_ids.length === 0 || audienceIds.length === 0) return;
-    const allowed = await fetchEmployeeIdsForTemplates(effectiveCycleId, filters.template_ids);
+    const allowed = await fetchSeededEmployeeIdsForTemplates(effectiveCycleId, filters.template_ids);
     const toRemove = audienceIds.filter((id) => allowed.has(id));
     if (toRemove.length === 0) {
       toast.info('No current-phase users match the selected templates.');

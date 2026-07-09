@@ -181,7 +181,7 @@ export function windowMonthsFromFilters(
 
 // ── DB helpers ────────────────────────────────────────────────────
 
-async function fetchActiveProfiles(): Promise<MappingProfile[]> {
+export async function fetchActiveProfiles(): Promise<MappingProfile[]> {
   const PAGE = 1000;
   const out: MappingProfile[] = [];
   for (let from = 0; ; from += PAGE) {
@@ -200,7 +200,7 @@ async function fetchActiveProfiles(): Promise<MappingProfile[]> {
   return out;
 }
 
-async function fetchDeptToBu(): Promise<Record<string, string | null>> {
+export async function fetchDeptToBu(): Promise<Record<string, string | null>> {
   const { data, error } = await supabase.from('departments').select('id, business_unit_id');
   if (error) throw error;
   const map: Record<string, string | null> = {};
