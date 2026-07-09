@@ -82,6 +82,12 @@ export interface TemplateSystemScore {
   /** Only used when source === 'carry_kra'. */
   carry_config?: CarryKraConfig;
   /**
+   * Stable link back to `annual_review_system_kpis.key`. When set, hydration
+   * resolves scoring rules through this key (no name matching, no drift).
+   * Introduced v2.66.91 — see POLICY §AR-SYSTEM-KPI-LIBRARY-LINK.
+   */
+  library_key?: string;
+  /**
    * Scoring bands copied from the KPI Library (`annual_review_system_kpis.scoring_rules`).
    * When present, raw values keyed in by HR are converted to scaled points via
    * `scoreFromRaw` (POLICY §AR-SYSTEM-KPI-RAW-INPUT). When absent, values are
