@@ -198,7 +198,6 @@ export function SystemScoresPanel({
                 <TableHeader>
                   <TableRow>
                     <TableHead className="h-8">{t('eligibility.col.criterion', 'Criterion')}</TableHead>
-                    <TableHead className="h-8">{t('eligibility.col.policy_description', 'Policy Description')}</TableHead>
                     <TableHead className="h-8 text-right">{t('eligibility.col.expected', 'Expected')}</TableHead>
                     <TableHead className="h-8 text-right">{t('eligibility.col.actual', 'Actual')}</TableHead>
                     <TableHead className="h-8 text-center w-20">{t('eligibility.col.status', 'Status')}</TableHead>
@@ -230,11 +229,6 @@ export function SystemScoresPanel({
                       >
                         <TableCell className="py-1.5 font-medium">
                           {tTemplate('eligibility', c.id, 'name', c.name)}
-                        </TableCell>
-                        <TableCell className="py-1.5 text-muted-foreground">
-                          {c.description
-                            ? tTemplate('eligibility', c.id, 'description', c.description)
-                            : formatExpected(c, t)}
                         </TableCell>
                         <TableCell className="py-1.5 text-right tabular-nums text-muted-foreground">
                           {formatExpected(c, t)}
