@@ -1,61 +1,37 @@
-# RCA — 100870 "Annual Production Target vs Actual: 90%" scored 0
+## Diagnosis
 
-## Root cause (confirmed)
+Ali Ahmad's `annual_review_instances.system_scores` map has **no key** for `sys_3jsce5p` (the Annual Production slot on his override template `DRI - M - QC`). That's why the card renders `0.00 / 25`. The v2.66.98 percent-coercion fix is code-only — it only takes effect the next time the sheet is parsed and committed.
 
-The KPI Library row for `annual_production` has these bands (higher_better):
+The good news:
+- Library entry `annual_production` has `uom_type = percent` and correct bands (100/95/90/85/80).
+- v2.66.97 iterator fix now hydrates manual slots that carry a `library_key` (source=`manual`, library_key=`annual_production`) — so the slot picks up bands + `uom_type=percent` at plan time.
+- v2.66.98 `coercePercentRaw` will then translate Excel `0.9` → `90` before `scoreFromRaw`.
 
-| score | threshold |
-|-------|-----------|
-| 5     | 100       |
-| 4     | 95        |
-| 3     | 90        |
-| 2     | 85        |
-| 1     | 80        |
-| 0     | < 80      |
+## Plan
 
-Thresholds are expressed as **whole-number percent** (0–100). `uom_type = 'percent'`.
+No code changes. Guided re-upload + verification.
 
-In the uploaded XLSX the "90%" cell is formatted as an Excel **percent number**, so `sheet_to_json` returns the underlying value `0.9`, not `90`. `parseAndDryRun` (`src/services/annualReview/cycleBulkDataUpload.ts:434`) does:
+1. **Re-upload the same cycle bulk-upload sheet** on the Annual Review cycle page.
+2. **In the dry-run panel, confirm** for employee 100870:
+   - Column: `Annual Production Target Vs Actual`
+   - `before = ""`, `after = 90`, `rating = 3`, `afterPoints = 15` (25 × 3/5)
+   - Row `warnings[]` includes an "interpreted 0.9 as 90%" (or "90%") note if the cell is percent-formatted / string.
+3. **Commit** the dry-run.
+4. **Verify on the team review page** the tile now reads `15.00 / 25` with rating 3.
+5. If step 2 shows `after = 0.9` or `rating = 0`, that means the slot's bands/uom didn't hydrate for this template — I'll then investigate the manual + library_key hydration path (no code changes until we see that signal).
 
-```ts
-const afterRaw = Number(raw); // 0.9
-…
-const result = scoreFromRaw(afterRaw, rules, weight);
-```
+## Fallback (only if re-upload is impractical for many rows)
 
-`pickBand` (higher_better) walks bands sorted 5→0 looking for `threshold <= 0.9`. None of 100/95/90/85/80 satisfy that, so it falls through to `bands[bands.length-1]` — the worst band (score 0). Points = 0. That is exactly what HR sees.
+Write a one-shot repair script that, for each instance:
+- Reads `system_scores_raw[slot.id]` for any slot whose library-resolved `uom_type = percent`.
+- Applies `coercePercentRaw` + `scoreFromRaw` with library bands.
+- Writes back `system_scores[slot.id]` (never touches `final_score` — POLICY §88 immutability).
+- Emits an audit log row per repair.
 
-Same trap applies to any percent-typed system slot (Annual Preventive Maintenance, Departmental 5S, Fugitive PM10, etc.) whenever the source cell is percent-formatted.
-
-Secondary symptom: if the cell is text (`"90%"`), `Number("90%") = NaN` → the current cell-skip branch fires with "non-numeric value". Not this employee's case, but same root class.
-
-## Fix
-
-Normalise percent inputs at the parse boundary — the scorer stays untouched (its contract is "raw is in the same unit as thresholds").
-
-1. **`cycleBulkDataUpload.ts`** — thread the slot's `uom_type` through `slotByCanonical` (already fetched by `hydrateSystemScoringRules`) and, before calling `scoreFromRaw`:
-   - if `uom_type === 'percent'` and `Number.isFinite(afterRaw)` and `afterRaw <= 1` and `afterRaw >= 0` → multiply by 100 (Excel percent cell).
-   - if `raw` is a string ending in `%` → strip the sign, then parse; treat the numeric part as whole-percent.
-   - Emit a `warnings[]` entry ("interpreted 0.9 as 90%") so the dry-run row shows the coercion — no silent magic.
-2. **`SystemScoresPanel.tsx`** manual entry — apply the same normalisation on paste/blur so the two entry paths agree.
-3. **Docs / Policy**
-   - `DOCUMENTATION.md` v2.66.98 — RCA entry for BUG "annual production 90% → 0".
-   - `POLICY.md §AR-SYSTEM-KPI-RAW-INPUT` — new sub-clause: "Percent-typed slots: Excel percent-formatted cells (0..1) MUST be normalised to whole-percent (0..100) before scoring; coercion MUST be surfaced in the dry-run warnings."
-
-## Tests
-
-New `src/test/annualReview/cycleBulkDataUploadPercentCoercion.test.ts`:
-
-- Excel percent cell 0.9 on `annual_production` (uom=percent) → rating 3 (T3), points = `3/5 * weight`.
-- Whole-number 90 on the same slot → rating 3 (parity check — no double-scaling).
-- String `"90%"` → rating 3, warnings include coercion note.
-- Non-percent slot (e.g. LTI, uom=number) with raw 0.9 → unchanged behaviour (still falls through band lookup).
-- Row with only percent coercion is still `verdict: 'apply'` when the resulting points differ from `beforePoints`.
+Not started unless the guided re-upload doesn't cover the affected population.
 
 ## Risk & Impact
 
-- **Data:** No schema, no RLS, no historic backfill. Purely a parse-time coercion.
-- **Workflow:** Percent-typed system slots begin scoring correctly for percent-formatted uploads that previously landed 0. Whole-number uploads unchanged (values 0..1 for a percent KPI are ambiguous but overwhelmingly indicate Excel percent formatting — the coercion range is inclusive of 0 and 1 to preserve edge cases; guarded by warning).
-- **UI:** Extra warning chip in the dry-run row when coercion fires.
-- **Regression:** Low — one new branch inside the `system_scores` cell path, covered by tests. Non-percent slots untouched.
-- **Rollback:** Revert the one service file + test.
+- **Data**: Additive write via the existing bulk-upload commit path; stage-safe guard (`pending_self`/`pending_manager`/`not_started`) protects finalized rows.
+- **Regression**: None — no code changes in this step.
+- **Docs**: No new entry needed; v2.66.98 already documents the fix.
