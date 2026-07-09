@@ -128,7 +128,7 @@ export function CycleBulkDataUploadDialog({
                   <AlertTriangle className="mt-0.5 h-4 w-4 text-amber-600" />
                   <div className="space-y-1">
                     <div>
-                      Scoring health: <b>{linked}/{totalSystem}</b> System KPI columns linked. The following are <b>not linked</b> to the KPI Library and will be rejected on upload:
+                      Scoring health: <b>{linked}/{totalSystem}</b> System KPI columns linked. The following are <b>not linked</b> to the KPI Library and will be <b>skipped per cell</b> on upload — other columns in the same row still apply:
                     </div>
                     <ul className="list-disc pl-5">
                       {unresolved.map((u) => (
@@ -221,8 +221,11 @@ export function CycleBulkDataUploadDialog({
                               </Badge>
                             </TableCell>
                             <TableCell className="text-xs">
-                              {r.reason ? <span className="text-muted-foreground">{r.reason}</span> :
-                                r.changes.map((c, j) => (
+                              {r.changes.length === 0 ? (
+                                <span className="text-muted-foreground">{r.reason}</span>
+                              ) : (
+                                <>
+                                  {r.changes.map((c, j) => (
                                   <div key={j} className="leading-snug">
                                     <b>{c.column}</b>: {String(c.before ?? '—')} → {String(c.after)}
                                     {c.kind === 'system_scores' && c.rating !== undefined && (
@@ -233,7 +236,16 @@ export function CycleBulkDataUploadDialog({
                                       </span>
                                     )}
                                   </div>
-                                ))}
+                                  ))}
+                                </>
+                              )}
+                              {r.warnings && r.warnings.length > 0 && (
+                                <div className="mt-1 text-amber-700 dark:text-amber-500">
+                                  {r.warnings.map((w, k) => (
+                                    <div key={k} className="leading-snug">⚠ {w}</div>
+                                  ))}
+                                </div>
+                              )}
                             </TableCell>
                           </TableRow>
                         ))}
