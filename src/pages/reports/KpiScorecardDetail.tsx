@@ -129,6 +129,25 @@ const statusLabels: Record<string, string> = {
   management_review: 'Management',
 };
 
+// Hoisted to module scope so `filtered` / `typeValues` useMemos (which call
+// getOrgTypeLabel during first render) don't hit a TDZ ReferenceError.
+function getOrgTypeLabel(row: FlatRow): string {
+  if (!row.isOrgKpi) return 'Individual';
+  const scopeLabels: Record<string, string> = {
+    organization: 'Org (Organization)',
+    department: 'Org (Department)',
+    employee: 'Org (Employee)',
+  };
+  return scopeLabels[row.orgKpiScope] ?? 'Org';
+}
+
+const orgTypeColors: Record<string, string> = {
+  'Individual': 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300',
+  'Org (Organization)': 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400',
+  'Org (Department)': 'bg-teal-100 text-teal-800 dark:bg-teal-900/30 dark:text-teal-400',
+  'Org (Employee)': 'bg-violet-100 text-violet-800 dark:bg-violet-900/30 dark:text-violet-400',
+};
+
 /**
  * Fetch + flatten KPI scorecard rows for a single (month, year) period.
  * Shared between the on-screen React Query hook and the range exporter
@@ -399,23 +418,6 @@ export default function KpiScorecardDetail() {
     return sortDir === 'asc'
       ? <ArrowUp className="h-3 w-3 ml-1 inline" />
       : <ArrowDown className="h-3 w-3 ml-1 inline" />;
-  };
-
-  const getOrgTypeLabel = (row: FlatRow) => {
-    if (!row.isOrgKpi) return 'Individual';
-    const scopeLabels: Record<string, string> = {
-      organization: 'Org (Organization)',
-      department: 'Org (Department)',
-      employee: 'Org (Employee)',
-    };
-    return scopeLabels[row.orgKpiScope] ?? 'Org';
-  };
-
-  const orgTypeColors: Record<string, string> = {
-    'Individual': 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300',
-    'Org (Organization)': 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400',
-    'Org (Department)': 'bg-teal-100 text-teal-800 dark:bg-teal-900/30 dark:text-teal-400',
-    'Org (Employee)': 'bg-violet-100 text-violet-800 dark:bg-violet-900/30 dark:text-violet-400',
   };
 
   const handleExport = () => {
