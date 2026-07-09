@@ -28,16 +28,19 @@ export function formatAchievement(
   if (raw === null || raw === undefined || raw === '') return '—';
   const n = typeof raw === 'number' ? raw : Number(raw);
   if (!Number.isFinite(n)) return String(raw);
+  const fmt = (x: number) => {
+    const r = Math.round(x * 100) / 100;
+    return Number.isInteger(r) ? String(r) : r.toFixed(2);
+  };
   const t = (uomType ?? '').toLowerCase();
   if (t === 'percent') {
     // Coerce fractional inputs (e.g. 0.9 → 90) to match bulk-upload coercion.
     const pct = Math.abs(n) > 0 && Math.abs(n) <= 1 ? n * 100 : n;
-    const rounded = Math.round(pct * 100) / 100;
-    return `${Number.isInteger(rounded) ? rounded : rounded.toFixed(2)}%`;
+    return `${fmt(pct)}%`;
   }
   if (t === 'binary') return n >= 1 ? 'Yes' : 'No';
-  if (t === 'days') return `${n} ${n === 1 ? 'day' : 'days'}`;
-  return String(n);
+  if (t === 'days') return `${fmt(n)} ${n === 1 ? 'day' : 'days'}`;
+  return fmt(n);
 }
 
 export function SystemScoresPanel({
