@@ -178,7 +178,11 @@ function TemplatesUsagePanel({
   }, [report]);
 
   const rows = templates
-    .filter((t) => t.is_active !== false)
+    // Keep active templates AND inactive templates that still have seeded
+    // instances in this cycle — otherwise archiving a template while
+    // employees are still bound to it hides them from Form Mapping entirely
+    // (BUG: "HK, Pol, Dust, hort - W" — 249 seeded employees invisible).
+    .filter((t) => t.is_active !== false || (usage.get(t.id) ?? 0) > 0)
     .map((t) => ({ ...t, count: usage.get(t.id) ?? 0 }))
     .sort((a, b) => b.count - a.count);
 
@@ -207,7 +211,12 @@ function TemplatesUsagePanel({
               className="group flex items-center justify-between border-b border-border/60 last:border-0 gap-3 h-10 text-left transition-colors enabled:hover:bg-muted/40 enabled:cursor-pointer disabled:cursor-default px-1 -mx-1 rounded"
               title={t.count > 0 ? 'View mapped employees' : 'No employees mapped'}
             >
-              <span className="text-sm truncate" title={t.name}>{t.name}</span>
+              <span className="text-sm truncate flex items-center gap-2" title={t.name}>
+                <span className="truncate">{t.name}</span>
+                {t.is_active === false && (
+                  <Badge variant="outline" className="shrink-0 text-[10px] py-0 h-4">Inactive</Badge>
+                )}
+              </span>
               <span className="flex items-center gap-2 shrink-0">
                 {t.count > 0 && (
                   <Users className="h-3.5 w-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
