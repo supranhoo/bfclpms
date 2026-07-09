@@ -143,6 +143,12 @@ async function hydrateSystemScoringRules(
 }
 
 /**
+ * Test-only export. Exposed so the regression suite can pass a real
+ * `Map.values()` iterator and lock the v2.66.97 fix.
+ */
+export const __hydrateSystemScoringRulesForTests = hydrateSystemScoringRules;
+
+/**
  * Exposed for unit tests — pure helper that runs the same resolution order
  * against an already-fetched library snapshot. Returns unresolved slot names.
  */
