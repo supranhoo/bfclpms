@@ -1,111 +1,55 @@
-# Fix: Observation attachments unreadable by KPI participants
+# Fix: "HK, Pol, Dust, hort - W" missing from Form Mapping
 
-## Root cause (verified)
+## Root cause (confirmed against DB)
 
-The observation attachment preview fails with **"Preview failed: {}"** + toast **"Object not found"** because the storage SELECT RLS policy on the `review-evidence` bucket does not authorize the viewer (Satyam) to read the object.
+- Template `HK, Pol, Dust, hort - W` (id `97e81d9d…`) has **`is_active = false`** in `annual_review_templates`.
+- It still has **249 seeded instances** in `annual_review_instances` for the active cycle `Annual Review - 2025-2026`, which is why the **download template for upload** (reads instances directly) still reports 249 employees on it.
+- `src/pages/annual-review/AnnualReviewFormMapping.tsx` filters templates with `templates.filter((t) => t.is_active !== false)` in **3 places** (lines 181, 844, 1146). Any inactive template is dropped from:
+  - the "Templates in use" panel,
+  - the rule-builder template dropdown,
+  - the copy-from-template picker.
 
-Path shape used by `MultiFileUpload` when called from `AddObservationDialog`:
+Result: an admin has no way to see or reassign the 249 employees still bound to an archived template. This is a category bug — it will recur for any template that gets deactivated while seeded instances exist.
 
-```
-review-evidence / <uploaderUserId> / <kpiId> / observation-evidence / <timestamp>_<name>.<ext>
-```
+## Fix (surgical, additive, UI-only)
 
-Current SELECT policy `"Users can view authorized evidence"` grants read only when the caller is:
-- the uploader (folder[1] = auth.uid()), or
-- admin / auditor / hr_pms, or
-- uploader's direct manager, or
-- uploader's skip-level manager.
+Change the visibility rule from "hide inactive" to "hide inactive **unless the template is still in use for this cycle**". Templates in use come from the existing `listTemplatesInUse(cycleId)` service (already returns any template with ≥1 seeded instance regardless of `is_active`).
 
-For observations, the uploader is typically the **auditor or manager**, and Satyam is the **KPI's employee** (or a mentioned peer). None of the four branches match → Supabase Storage returns 404 (`Object not found`). This is a **category bug**, not a Satyam-specific one — every observation attachment uploaded by a reviewer is unreadable by the KPI owner and by mentioned users unless they happen to be admin/auditor/hr_pms or the uploader's manager.
+### Steps
 
-Same policy is also used by review evidence proper, where the path convention `<kpiOwnerId>/…` accidentally aligns with `folder[1] = kpi owner`, so the existing rules work for that case. Observations broke the convention because the folder root is the *uploader*, not the KPI owner.
+1. **`src/pages/annual-review/AnnualReviewFormMapping.tsx`** — replace the three `t.is_active !== false` filters with a helper `isTemplateVisible(t, inUseIds)` where `inUseIds = new Set(templatesInUse.map(x => x.template_id))`. The Templates-in-use panel already knows this set — plumb it into the two other filter sites (rule builder dropdown + copy-from-template list).
+2. **UI signal** — in the rule-builder `<Select>` and Templates-in-use rows, append an "Inactive" badge (existing `Badge` variant `secondary`) after the template name when `t.is_active === false`, so admins understand the state.
+3. **No service, schema, RLS, or seeder changes.** `listTemplatesInUse` and `checkMappingCoverage` already handle inactive templates correctly; only the page-level filters were dropping them.
 
-## Not Applicable
-- UI changes — none.
-- App logic changes — none.
-- Documentation and policy updates as part of Change Log.
+### What visually changes and where
 
-## Scope of scan (other places affected)
+- **Form Mapping page → "Templates in use" panel**: a new row appears for `HK, Pol, Dust, hort - W` with `249 employees` and an "Inactive" badge next to the name.
+- **Form Mapping page → rule builder → Template dropdown**: inactive-but-in-use templates now appear at the bottom of the list with an "Inactive" badge. Fully-inactive templates (no seeded instances) remain hidden.
+- **Form Mapping page → "Copy employees from another template" dialog**: same treatment — inactive-but-in-use templates become selectable so admins can migrate the 249 employees off the archived template.
+- No change to any other page (Template Editor, Template Archetypes, etc. keep their existing filters).
 
-Checked all `review-evidence` upload sites:
+## Risk & impact
 
-| Upload site | Path root | Non-uploader viewers who need read | Status |
-|---|---|---|---|
-| `AddObservationDialog` (observations) | uploader.id | KPI employee, KPI reviewer chain, mentioned users | **BROKEN — fixing** |
-| Review submission evidence | kpi.owner (employee) | manager/auditor/mgmt/hr_pms | works (role branches + manager chain) |
-| `OrgKpiFileUpload` | `org-kpi-evidence/…` | anyone allowed by dedicated policy | works |
-
-Only observation attachments are affected.
-
-## Fix — extend SELECT policy for observation-evidence sub-tree only
-
-Add an additional predicate to the existing `"Users can view authorized evidence"` policy (or, safer, add a **new** additive SELECT policy scoped to `folder[3] = 'observation-evidence'`) that grants read when the caller is a legitimate participant of the parent KPI.
-
-New policy (additive, non-destructive):
-
-```sql
-create policy "Observation evidence readable by KPI participants"
-  on storage.objects for select
-  using (
-    bucket_id = 'review-evidence'
-    and (storage.foldername(name))[3] = 'observation-evidence'
-    and exists (
-      select 1
-      from public.kpis k
-      left join public.profiles emp   on emp.id = k.employee_id
-      left join public.profiles mgr   on mgr.id = emp.reporting_manager_id
-      where k.id::text = (storage.foldername(objects.name))[2]
-        and (
-          -- KPI owner
-          k.employee_id = auth.uid()
-          -- Direct manager of the KPI owner
-          or emp.reporting_manager_id = auth.uid()
-          -- Skip-level manager
-          or mgr.reporting_manager_id = auth.uid()
-          -- Assigned auditor for this KPI (any active assignment)
-          or exists (
-            select 1 from public.kpi_auditor_assignments a
-            where a.kpi_id = k.id and a.auditor_id = auth.uid()
-          )
-          -- Mentioned in any observation on this KPI
-          or exists (
-            select 1
-            from public.kpi_observations o
-            where o.kpi_id = k.id
-              and auth.uid() = any (coalesce(o.mentioned_user_ids, '{}'::uuid[]))
-          )
-        )
-    )
-  );
-```
-
-Kept as a **separate additive policy** so the existing broad policy is untouched (rollback = drop the new policy). Uses `security definer`-safe joins on tables already reachable in existing storage policies; no new SECURITY DEFINER function required. If the exact column names for auditor assignment / mention arrays differ from the above, resolve during implementation by inspecting `public.kpi_auditor_assignments` and `public.kpi_observations` first and adjusting the predicate — no schema change.
-
-## Risk & Impact Report
-- **Data Impact**: none. Additive RLS policy on `storage.objects` only. No schema change, no data migration.
-- **Workflow Impact**: none for uploaders; adds read for legitimate viewers only.
-- **UI/UX Impact**: previously-broken preview now succeeds. No component change.
-- **Regression Risk**: low — the new policy is additive and gated by `folder[3] = 'observation-evidence'`, so review evidence, org-kpi evidence, and every other sub-tree behave exactly as before.
-- **Scalability Impact**: two indexed lookups (`kpis.id`, join to `profiles`) per download; cached by PostgREST plan. Comparable cost to existing manager-chain subquery already in the current policy.
-- **Rollback**: `drop policy "Observation evidence readable by KPI participants" on storage.objects;`.
+- Data impact: none — read-only surfacing.
+- Workflow impact: admins regain the ability to reassign employees off archived templates, closing the loophole that produced this ticket.
+- Regression risk: low — the filter is only relaxed for templates that already have seeded rows in the current cycle; templates archived and unused stay hidden exactly as today.
+- Scalability: `templatesInUse` is already fetched on this page; the visibility set is O(#templates in use) per cycle (single-digit to low-hundreds).
 
 ## Tests
 
-1. **SQL smoke check** in migration itself — run four `SELECT` probes as different auth contexts (KPI owner, direct manager, unrelated user, mentioned peer) using `set local role` + `request.jwt.claims` and assert visibility matches expectation.
-2. **New Vitest guard** `src/test/review/observationEvidenceAccess.test.ts` that reads the migration SQL file and asserts:
-   - the new policy exists and references `observation-evidence`
-   - it references `kpi_observations` and `kpi_auditor_assignments`
-   - it does NOT drop the existing `"Users can view authorized evidence"` policy.
+- Extend `src/test/annualReview/listTemplatesInUse.test.ts` with an "inactive template still counted" case (service already does this; lock it).
+- New pure-function test for `isTemplateVisible` covering: active → visible; inactive + in use → visible; inactive + not in use → hidden.
 
-## Documentation / Policy sync
+## Docs & policy
 
-- Append to `DOCUMENTATION.md` → *Version History*: new ADR reference + one-liner.
-- New ADR `docs/adr/ADR-106.md` capturing: symptom, root cause (path root = uploader, not KPI owner), decision (additive policy scoped by folder segment), rejected alternatives (move uploads under kpi owner folder — breaks existing observation URLs).
-- Update `mem/architecture/security/review-evidence-onbehalf-upload.md` with a note that observation attachments live under `<uploader>/<kpiId>/observation-evidence/…` and are read-gated by KPI participation, not folder ownership.
+- `DOCUMENTATION.md` — Form Mapping section: note the inactive-but-in-use rendering rule and "Inactive" badge.
+- `POLICY.md` — add a short clause under Annual Review templates: "Deactivating a template does not remove it from Form Mapping while seeded instances reference it; admins must reassign those employees first."
+- Memory: add `mem://features/annual-review/inactive-template-visibility` capturing the rule.
 
-## Steps
-1. Confirm column names on `public.kpi_observations` (mentions array) and `public.kpi_auditor_assignments` via a single `read_query`.
-2. Write migration adding the new SELECT policy exactly as above (adjusted for real column names).
-3. Add the Vitest source-guard file.
-4. Update ADR-106, DOCUMENTATION.md version history, and the memory file.
-5. Verify with a fresh preview render (Playwright) that the same observation attachment now loads for the KPI owner.
+## Rollback
+
+Revert the single page-level filter change — no schema or data migration to undo.
+
+## Not applicable
+
+- No new secrets, no edge function, no cron.
