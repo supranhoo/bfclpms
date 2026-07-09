@@ -23,7 +23,8 @@ function makeFile(rows: Array<Record<string, unknown>>, headers: string[]): File
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
   const buf = XLSX.write(wb, { type: 'array', bookType: 'xlsx' }) as ArrayBuffer;
-  return new File([buf], 'test.xlsx');
+  // jsdom's File may not implement arrayBuffer(); provide a minimal shim.
+  return { arrayBuffer: async () => buf, name: 'test.xlsx' } as unknown as File;
 }
 
 function makePlan(overrides: Partial<CycleBulkPlan['instances'][number]> = {}): CycleBulkPlan {
