@@ -1,6 +1,14 @@
 
 # Are all forms linked to the scoring logic? — Audit + Fix Plan
 
+> **Status:** ✅ Implemented in v2.66.91 (2026-07-09).
+> - 266/266 scorable slots across 40 templates now carry `library_key` (verified in DB).
+> - LTI/STI worst-band threshold normalized to numeric `999`.
+> - Bulk Data Upload dialog shows a green "Scoring health" strip.
+> - Dry-run rejects any non-`manual` slot missing bands with a row-level `error`.
+> - Tests: `systemKpiAliases.test.ts`, `hydrateSystemScoringRules.test.ts`, `cycleBulkDataUploadLtiHydration.test.ts` — all green.
+> - Deferred (not in this cut): Template Editor "Link to library" dropdown UI. Alias map covers today's drift; add the UI when a new library KPI arrives that isn't matched by name.
+
 ## Short answer
 
 **No.** I ran the audit across every Annual Review template and only **2 of 8** distinct System KPI slot names successfully resolve to the KPI Library at runtime. The other 6 silently fall into the legacy "raw = pre-scaled points" branch — the same bug you already saw on LTI, just hiding on other KPIs. **Every W-template is affected.**
