@@ -366,16 +366,6 @@ export function PhasedRolloutCard() {
   const audienceIds = flagQ.data?.userIds ?? [];
   const audienceSet = useMemo(() => new Set(audienceIds), [audienceIds]);
 
-  const audienceRows = (targetedProfilesQ.data ?? []) as Array<{ id: string; full_name: string | null; employee_code: string | null }>;
-  const pagedAudienceRows = useMemo(
-    () => pagedSlice(audienceRows, audiencePage, audiencePageSize),
-    [audienceRows, audiencePage, audiencePageSize],
-  );
-  const pagedPreviewRows = useMemo(
-    () => (preview ? pagedSlice(preview, previewPage, previewPageSize) : []),
-    [preview, previewPage, previewPageSize],
-  );
-
   const targetedProfilesQ = useQuery({
     queryKey: ['pilot-audience-profiles', audienceIds.slice().sort().join(',')],
     enabled: audienceIds.length > 0,
@@ -388,6 +378,16 @@ export function PhasedRolloutCard() {
       return data ?? [];
     },
   });
+
+  const audienceRows = (targetedProfilesQ.data ?? []) as Array<{ id: string; full_name: string | null; employee_code: string | null }>;
+  const pagedAudienceRows = useMemo(
+    () => pagedSlice(audienceRows, audiencePage, audiencePageSize),
+    [audienceRows, audiencePage, audiencePageSize],
+  );
+  const pagedPreviewRows = useMemo(
+    () => (preview ? pagedSlice(preview, previewPage, previewPageSize) : []),
+    [preview, previewPage, previewPageSize],
+  );
 
   // Assigned forms for the union of audience + preview ids.
   const previewIds = useMemo(() => (preview ?? []).map((r) => r.id), [preview]);
