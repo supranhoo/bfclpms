@@ -535,7 +535,7 @@ export function PhasedRolloutCard() {
    */
   async function handleRemoveByTemplate() {
     if (!effectiveCycleId || filters.template_ids.length === 0 || audienceIds.length === 0) return;
-    const allowed = await fetchEmployeeIdsForTemplates(effectiveCycleId, filters.template_ids);
+    const allowed = await fetchSeededEmployeeIdsForTemplates(effectiveCycleId, filters.template_ids);
     const toRemove = audienceIds.filter((id) => allowed.has(id));
     if (toRemove.length === 0) {
       toast.info('No current-phase users match the selected templates.');
