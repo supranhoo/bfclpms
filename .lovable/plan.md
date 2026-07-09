@@ -1,52 +1,40 @@
-## Problem (RCA)
+## Goal
+Two UX improvements to the **Bulk Data Upload** dialog (Annual Review cycle):
+1. Make the dialog significantly wider so the preview table has room to breathe.
+2. Add a **Template** column in the dry-run preview so HR can see which form each employee is assigned to.
 
-In `src/services/annualReview/cycleBulkDataUpload.ts` → `parseAndDryRun`, whenever ONE system-KPI cell in a row can't be processed, the entire row is marked `error`, `rowChanges` is cleared, and the loop `break`s. Two triggers cause this:
+## Risk & Impact Report
+- **Data Impact:** None. Pure UI + a passthrough of a field that already exists on `plan.instances[].templateName`.
+- **Workflow Impact:** None. Parse/commit logic unchanged.
+- **UI/UX Impact:** Dialog width grows from `max-w-4xl` (~896px) to `max-w-[95vw]` with `w-[1400px]` cap so it stays comfortable on wide monitors and still fits smaller screens. Preview table gains one column.
+- **Regression Risk:** Low — additive field on `DryRunRow`, existing tests already assert row shape by property (won't break).
+- **Mitigation:** Extend existing test to assert `templateName` is populated on the row.
 
-1. **Non-numeric value** in a system-score column (line 417–422).
-2. **Library-unlinked KPI slot** — no `scoring_rules.bands` on a non-manual slot, e.g. LTI/STI when the template slot isn't mapped to the KPI Library (line 432–443).
+## Plan
 
-Effect: an employee whose row contains an unmapped LTI/STI column loses ALL their other valid updates (5S, Trainings, Production, Eligibility fields, etc.). That matches the report — only 8–12 rows (the ones without an LTI/STI value in the sheet) update; the rest error out and nothing on them is written.
+### 1. `src/services/annualReview/cycleBulkDataUpload.ts`
+- Add optional `templateName?: string` to `DryRunRow`.
+- Populate it in all 4 `rows.push(...)` sites inside `parseAndDryRun`:
+  - unknown employee → `''` (unknown)
+  - locked stage → `inst.templateName`
+  - no-change skip → `inst.templateName`
+  - apply → `inst.templateName`
 
-Expectation: unmappable / invalid single cells should be **skipped at the cell level**, while every other valid cell in the same row is still applied. Row-level errors (employee not in cycle, locked stage) continue to fail the whole row.
+### 2. `src/components/annual-review/CycleBulkDataUploadDialog.tsx`
+- Change `<DialogContent>` classes from `max-w-4xl max-h-[90vh] overflow-y-auto` to `max-w-[95vw] w-[1400px] max-h-[92vh] overflow-y-auto` so the modal grows on desktop and remains responsive.
+- Bump preview scroll region from `max-h-64` to `max-h-[420px]` to take advantage of the taller dialog.
+- Add a **Template** column between **Name** and **Verdict** in both `<TableHeader>` and `<TableBody>`, rendered as a small muted-text cell (`text-xs text-muted-foreground`).
 
-## Fix
+### 3. Tests — `src/test/annualReview/cycleBulkDataUploadPartialApply.test.ts`
+- Add one assertion in the existing "applies 5S even when LTI…" case: `expect(report.rows[0].templateName).toBeDefined()` and equals the plan's template name (extend the test plan to set `templateName: 'T'` on the instance — already set).
 
-Change `parseAndDryRun` from row-fatal to cell-skip for the two cell-level issues:
-
-- Non-numeric system-score cell → skip that cell only; collect a per-cell warning.
-- Non-manual system-score cell with no library bands → skip that cell only; collect a per-cell warning ("Column X not linked to KPI Library — cell skipped").
-- Continue evaluating remaining columns for the row. If any cell change is valid, verdict = `apply`; the row also carries a `warnings: string[]` list surfaced in the dry-run UI.
-- Only when EVERY cell in the row is skipped/warned and no valid change exists does the row fall through to a `skip` verdict with the aggregated reason.
-
-`commitDryRun` already iterates over `row.changes` only, so partial rows commit correctly with no further edits.
-
-Dialog UI (`SystemScoresBulkUploadDialog` or the current dry-run table) renders the per-row `warnings` as an amber sub-line under the row, so HR can see WHICH columns were skipped and WHY, without blocking the good columns.
-
-Health strip (`unresolvedSlots`) is retained but no longer blocks commit — it becomes advisory.
-
-## Risk & Impact
-
-- **Data**: additive only. Never writes to skipped cells; existing values preserved. Stage guard (`STAGE_SAFE`) unchanged.
-- **Workflow**: no permission/RLS change.
-- **UI**: dry-run table gains a per-row warnings line; error/apply/skip counters recomputed to reflect cell-level skips.
-- **Regression**: low. `commitDryRun` unchanged. Legacy scorer branch still blocked at cell level, so lower-is-better inversion (LTI=0 → 0) cannot happen — the offending cell is dropped, not silently scored.
-- **Backup / retention / RLS**: unaffected.
-
-## Files to change
-
-1. `src/services/annualReview/cycleBulkDataUpload.ts`
-   - `DryRunRow` gains `warnings?: string[]`.
-   - Replace both fatal branches with cell-skip + warning push.
-   - Recompute counters: a row with ≥1 valid change = `apply` (even if some cells warned); a row with 0 valid changes and ≥1 warning = `skip` with combined reason; hard row errors (employee/stage) unchanged.
-2. Dry-run dialog component that renders the report — add warnings sub-line.
-3. `src/test/annualReview/` — new test `cycleBulkDataUploadPartialApply.test.ts` locking:
-   - Row with valid 5S + unmapped LTI applies 5S, warns on LTI, verdict `apply`.
-   - Row with only unmapped LTI → verdict `skip` with warning reason.
-   - Non-numeric single cell → skipped, other cells still apply.
-   - Locked stage / unknown employee still row-fatal.
-4. `DOCUMENTATION.md` — v2.66.95 entry: bulk upload switches from row-fatal to cell-skip for unmappable / non-numeric system-KPI cells.
-5. `POLICY.md` — extend `§AR-SYSTEM-KPI-LIBRARY-LINK` and `§AR-SYSTEM-KPI-RAW-INPUT`: unlinked/invalid cells are skipped with a visible warning; other cells in the same row must still apply.
+### 4. Docs & Policy
+- **DOCUMENTATION.md** — Add v2.66.96 entry: "Bulk Data Upload dialog widened; dry-run preview now shows the assigned template per row."
+- **POLICY.md** — Extend `§AR-BULK-UPLOAD-PREVIEW` (or append a new bullet if the section doesn't call this out): the dry-run preview MUST surface the employee's resolved template so HR can spot template misassignment before commit.
 
 ## Rollback
+Revert the four files. No schema, no data migration.
 
-Pure logic change in one service + one dialog. Revert the two files to restore row-fatal behavior. No schema, no data migration.
+## Not applicable
+- No new RPCs, RLS, storage, or edge functions.
+- No new dependencies.

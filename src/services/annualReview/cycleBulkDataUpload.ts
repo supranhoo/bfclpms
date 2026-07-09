@@ -351,6 +351,8 @@ export type RowVerdict = 'apply' | 'skip' | 'error';
 export interface DryRunRow {
   employeeCode: string;
   fullName: string;
+  /** Assigned template name for this employee (resolved from the cycle plan). */
+  templateName?: string;
   verdict: RowVerdict;
   reason?: string;
   /**
@@ -403,12 +405,12 @@ export async function parseAndDryRun(file: File, plan: CycleBulkPlan): Promise<D
     if (!code) continue;
     const inst = instByCode.get(code);
     if (!inst) {
-      rows.push({ employeeCode: code, fullName: String(rec['Full Name'] ?? ''), verdict: 'error', reason: 'Employee not found in cycle', changes: [] });
+      rows.push({ employeeCode: code, fullName: String(rec['Full Name'] ?? ''), templateName: '', verdict: 'error', reason: 'Employee not found in cycle', changes: [] });
       err++;
       continue;
     }
     if (!STAGE_SAFE.has(inst.overallStatus)) {
-      rows.push({ employeeCode: code, fullName: inst.fullName, verdict: 'skip', reason: `Locked stage: ${inst.overallStatus}`, changes: [] });
+      rows.push({ employeeCode: code, fullName: inst.fullName, templateName: inst.templateName, verdict: 'skip', reason: `Locked stage: ${inst.overallStatus}`, changes: [] });
       skip++;
       continue;
     }
@@ -464,6 +466,7 @@ export async function parseAndDryRun(file: File, plan: CycleBulkPlan): Promise<D
       rows.push({
         employeeCode: code,
         fullName: inst.fullName,
+        templateName: inst.templateName,
         verdict: 'skip',
         reason: rowWarnings.length ? rowWarnings.join('; ') : 'No changes',
         warnings: rowWarnings.length ? rowWarnings : undefined,
@@ -475,6 +478,7 @@ export async function parseAndDryRun(file: File, plan: CycleBulkPlan): Promise<D
     rows.push({
       employeeCode: code,
       fullName: inst.fullName,
+      templateName: inst.templateName,
       verdict: 'apply',
       changes: rowChanges,
       warnings: rowWarnings.length ? rowWarnings : undefined,
