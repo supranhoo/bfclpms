@@ -159,6 +159,12 @@ function CoverageBanner({ report, loading }: { report?: CoverageReport; loading:
 }
 
 // ── Templates panel with usage counts ─────────────────────────────
+export function sortTemplateUsageRowsByName(
+  rows: { id: string; name: string; is_active: boolean | null; count: number }[],
+) {
+  return [...rows].sort((a, b) => a.name.localeCompare(b.name));
+}
+
 function TemplatesUsagePanel({
   templates, report, cycleId, onChanged,
 }: {
@@ -177,14 +183,15 @@ function TemplatesUsagePanel({
     return m;
   }, [report]);
 
-  const rows = templates
+  const unsortedRows = templates
     // Keep active templates AND inactive templates that still have seeded
     // instances in this cycle — otherwise archiving a template while
     // employees are still bound to it hides them from Form Mapping entirely
     // (BUG: "HK, Pol, Dust, hort - W" — 249 seeded employees invisible).
     .filter((t) => t.is_active !== false || (usage.get(t.id) ?? 0) > 0)
-    .map((t) => ({ ...t, count: usage.get(t.id) ?? 0 }))
-    .sort((a, b) => b.count - a.count);
+    .map((t) => ({ ...t, count: usage.get(t.id) ?? 0 }));
+
+  const rows = sortTemplateUsageRowsByName(unsortedRows);
 
   const totalCovered = rows.reduce((s, r) => s + r.count, 0);
 

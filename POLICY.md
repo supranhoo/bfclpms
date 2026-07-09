@@ -1,3 +1,9 @@
+### §AR-MAPPING-TEMPLATE-SORT — Annual Review Form Mapping "Templates in use" MUST list templates alphabetically by name (v2.66.90, 2026-07-09)
+- The `TemplatesUsagePanel` on `/annual-review/admin/form-mapping` MUST sort visible template rows in ascending alphabetical order by `name` (`localeCompare`).
+- Inactive templates that still have seeded instances remain visible and are sorted into the same A–Z order, with the existing "Inactive" badge rendered next to the name.
+- Rule-builder and per-employee pin dropdowns are NOT affected; they continue to show only active templates so admins cannot assign new mappings to archived forms.
+- Regression guard: `src/test/annualReview/formMappingTemplateSort.test.ts`.
+
 ### §EVIDENCE-DOWNLOAD-PRIVATE-BUCKET — All client downloads from the `review-evidence` bucket use signed URLs (v2.66.68, 2026-06-29)
 ### §AR-WF-MAPPING-VISIBILITY — Admin surfaces showing an employee's workflow mapping MUST display the resolved template and its source (v2.66.89, 2026-07-06)
 - Any UI that displays an employee's workflow mapping (e.g., Edit User → Access & Login → Workflow mapping card) MUST resolve the effective template via `get_employee_workflow_info` (SSOT) for the selected (period, year) and MUST label the source: `employee_exact` ("Set for this month"), `employee_earlier_month` ("Carried from {Month YYYY}"), `department`, `pms_grade`, or `default`.
