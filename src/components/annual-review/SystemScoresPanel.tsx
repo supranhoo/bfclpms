@@ -15,6 +15,31 @@ import { scoreFromRaw } from '@/lib/annualReview/systemKpiScoring';
 import { useAnnualReviewI18n } from '@/components/annual-review/AnnualReviewI18nContext';
 import { formatExpected, formatActual } from '@/lib/annualReview/eligibilityFormat';
 
+/**
+ * Format a raw HR-entered achievement value for display based on the KPI
+ * Library `uom_type`. Keeps display parity with the KPI Library units so
+ * reviewers see what was measured (e.g. `90%`, `Yes`, `48 days`) rather
+ * than the opaque scaled-points number.
+ */
+export function formatAchievement(
+  raw: number | string | null | undefined,
+  uomType?: string | null,
+): string {
+  if (raw === null || raw === undefined || raw === '') return '—';
+  const n = typeof raw === 'number' ? raw : Number(raw);
+  if (!Number.isFinite(n)) return String(raw);
+  const t = (uomType ?? '').toLowerCase();
+  if (t === 'percent') {
+    // Coerce fractional inputs (e.g. 0.9 → 90) to match bulk-upload coercion.
+    const pct = Math.abs(n) > 0 && Math.abs(n) <= 1 ? n * 100 : n;
+    const rounded = Math.round(pct * 100) / 100;
+    return `${Number.isInteger(rounded) ? rounded : rounded.toFixed(2)}%`;
+  }
+  if (t === 'binary') return n >= 1 ? 'Yes' : 'No';
+  if (t === 'days') return `${n} ${n === 1 ? 'day' : 'days'}`;
+  return String(n);
+}
+
 export function SystemScoresPanel({
   systemScores,
   values,
@@ -97,6 +122,10 @@ export function SystemScoresPanel({
             const pct = s.weight > 0 ? Math.min(100, (v / s.weight) * 100) : 0;
             const hasBands = !!s.scoring_rules?.bands?.length;
             const rawV = rawValues?.[s.id];
+            const hasRaw = rawV !== undefined && rawV !== null;
+            const ratingOutOf5 = hasBands && hasRaw
+              ? scoreFromRaw(Number(rawV), s.scoring_rules!, s.weight).rating
+              : null;
             return (
               <div key={s.id} className="space-y-2 rounded-lg border bg-card p-3">
                 <div className="flex items-center justify-between gap-2">
@@ -107,16 +136,33 @@ export function SystemScoresPanel({
                         {tTemplate('system_score', s.id, 'description', s.description)}
                       </p>
                     )}
+                    {(hasRaw || hasBands) && (
+                      <p className="mt-1 text-xs">
+                        <span className="text-muted-foreground">
+                          {t('system_scores.achievement_label', 'Achievement')}:
+                        </span>{' '}
+                        <span className="font-semibold tabular-nums">
+                          {hasRaw ? formatAchievement(rawV as number, s.uom_type) : '—'}
+                        </span>
+                        {ratingOutOf5 !== null && (
+                          <>
+                            {' '}
+                            <span className="text-muted-foreground">→</span>{' '}
+                            <span className="font-medium">
+                              {t('system_scores.rating_label', 'Rating')} {ratingOutOf5}/5
+                            </span>
+                          </>
+                        )}
+                      </p>
+                    )}
                     <p className="text-xs text-muted-foreground">
                       {t('system_scores.contribution', 'Contributes {actual} / {max} points to your appraisal')
                         .replace('{actual}', Number(v).toFixed(2))
                         .replace('{max}', String(s.weight))}
                     </p>
-                    {hasBands && (
+                    {hasBands && !hasRaw && (
                       <p className="mt-0.5 text-[11px] text-muted-foreground">
-                        {rawV === undefined || rawV === null
-                          ? t('system_scores.raw_hint', 'Enter the raw measurement — points are computed from the KPI Library bands.')
-                          : `${t('system_scores.raw_label', 'Raw')}: ${rawV} · ${t('system_scores.rating_label', 'Rating')} ${scoreFromRaw(Number(rawV), s.scoring_rules!, s.weight).rating}/5`}
+                        {t('system_scores.raw_hint', 'Enter the raw measurement — points are computed from the KPI Library bands.')}
                       </p>
                     )}
                   </div>
