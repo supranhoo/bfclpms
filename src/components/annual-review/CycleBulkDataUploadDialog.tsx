@@ -77,7 +77,7 @@ export function CycleBulkDataUploadDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-[95vw] w-[1400px] max-h-[92vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Bulk Data Upload — one sheet, every form</DialogTitle>
           <DialogDescription>
@@ -200,12 +200,13 @@ export function CycleBulkDataUploadDialog({
                       {report.totalChanges} cell change{report.totalChanges === 1 ? '' : 's'}
                     </span>
                   </div>
-                  <div className="max-h-64 overflow-y-auto border rounded-md">
+                  <div className="max-h-[420px] overflow-y-auto border rounded-md">
                     <Table>
                       <TableHeader>
                         <TableRow>
                           <TableHead>Emp Code</TableHead>
                           <TableHead>Name</TableHead>
+                          <TableHead>Template</TableHead>
                           <TableHead>Verdict</TableHead>
                           <TableHead>Changes / Reason</TableHead>
                         </TableRow>
@@ -215,6 +216,9 @@ export function CycleBulkDataUploadDialog({
                           <TableRow key={i}>
                             <TableCell className="font-mono text-xs">{r.employeeCode}</TableCell>
                             <TableCell className="text-xs">{r.fullName}</TableCell>
+                            <TableCell className="text-xs text-muted-foreground">
+                              {r.templateName || '—'}
+                            </TableCell>
                             <TableCell>
                               <Badge variant={r.verdict === 'apply' ? 'default' : r.verdict === 'error' ? 'destructive' : 'secondary'} className="text-xs">
                                 {r.verdict}
