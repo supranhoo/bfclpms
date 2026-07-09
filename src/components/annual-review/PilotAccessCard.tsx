@@ -149,17 +149,28 @@ function useAssignedForms(userIds: string[], cycleId: string | null) {
     queryFn: async (): Promise<Map<string, AssignedForm | null>> => {
       const out = new Map<string, AssignedForm | null>();
       if (!cycleId || userIds.length === 0) return out;
-      const { data, error } = await supabase
-        .from('annual_review_instances')
-        .select(
-          'employee_id, template_id, template_override_id, ' +
-          'template:annual_review_templates!annual_review_instances_template_id_fkey(name), ' +
-          'override_template:annual_review_templates!annual_review_instances_template_override_id_fkey(name)'
-        )
-        .eq('cycle_id', cycleId)
-        .in('employee_id', userIds);
-      if (error) throw error;
-      for (const row of (data ?? []) as any[]) {
+      // Chunk the id list under PostgREST's URL/`.in()` limit and page each
+      // chunk to bypass the 1000-row cap.
+      const CHUNK = 500;
+      const allRows: any[] = [];
+      for (let i = 0; i < userIds.length; i += CHUNK) {
+        const chunk = userIds.slice(i, i + CHUNK);
+        const rows = await fetchAllPaged<any>((from, to) =>
+          supabase
+            .from('annual_review_instances')
+            .select(
+              'employee_id, template_id, template_override_id, ' +
+                'template:annual_review_templates!annual_review_instances_template_id_fkey(name), ' +
+                'override_template:annual_review_templates!annual_review_instances_template_override_id_fkey(name)'
+            )
+            .eq('cycle_id', cycleId)
+            .in('employee_id', chunk)
+            .order('employee_id')
+            .range(from, to),
+        );
+        allRows.push(...rows);
+      }
+      for (const row of allRows) {
         const isOverride = !!row.template_override_id;
         const name = (isOverride ? row.override_template?.name : row.template?.name) ?? null;
         out.set(row.employee_id, name ? { name, isOverride } : null);
