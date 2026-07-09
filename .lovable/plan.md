@@ -1,40 +1,44 @@
-## Goal
-Two UX improvements to the **Bulk Data Upload** dialog (Annual Review cycle):
-1. Make the dialog significantly wider so the preview table has room to breathe.
-2. Add a **Template** column in the dry-run preview so HR can see which form each employee is assigned to.
+## Root Cause
+`hydrateSystemScoringRules` in `src/services/annualReview/cycleBulkDataUpload.ts` receives `templateById.values()` (a single-use `MapIterator`). The current code calls `Array.from(templates)` first — which exhausts the iterator — then loops over the now-empty `templates` iterator to build the `need` set. Result: `need` is empty, the function returns `[]` before hydrating anything from the KPI Library.
 
-## Risk & Impact Report
-- **Data Impact:** None. Pure UI + a passthrough of a field that already exists on `plan.instances[].templateName`.
-- **Workflow Impact:** None. Parse/commit logic unchanged.
-- **UI/UX Impact:** Dialog width grows from `max-w-4xl` (~896px) to `max-w-[95vw]` with `w-[1400px]` cap so it stays comfortable on wide monitors and still fits smaller screens. Preview table gains one column.
-- **Regression Risk:** Low — additive field on `DryRunRow`, existing tests already assert row shape by property (won't break).
-- **Mitigation:** Extend existing test to assert `templateName` is populated on the row.
+Consequences observed in the screenshots:
+- Health strip falsely reports **8/8 linked** (unresolved list is empty because we never checked).
+- Every template slot that depends on library hydration (LTI, STI, Unsafe Act, Departmental 5S, Trainings, Fugitive PM10) keeps empty `scoring_rules.bands`, so `parseAndDryRun` hits the per-cell "not linked to KPI Library" branch on every affected row.
 
-## Plan
+## Fix (one line)
+`src/services/annualReview/cycleBulkDataUpload.ts` — iterate the materialized array in both passes:
 
-### 1. `src/services/annualReview/cycleBulkDataUpload.ts`
-- Add optional `templateName?: string` to `DryRunRow`.
-- Populate it in all 4 `rows.push(...)` sites inside `parseAndDryRun`:
-  - unknown employee → `''` (unknown)
-  - locked stage → `inst.templateName`
-  - no-change skip → `inst.templateName`
-  - apply → `inst.templateName`
+```ts
+const templateList = Array.from(templates);
+for (const t of templateList) {          // was: for (const t of templates)
+  for (const s of t.sections.system_scores ?? []) {
+    const src = (s as unknown as { source?: string }).source;
+    if (src === 'carry_kra') continue;
+    if (!s.scoring_rules || !s.scoring_rules.bands?.length) need.add(norm(s.name));
+  }
+}
+```
 
-### 2. `src/components/annual-review/CycleBulkDataUploadDialog.tsx`
-- Change `<DialogContent>` classes from `max-w-4xl max-h-[90vh] overflow-y-auto` to `max-w-[95vw] w-[1400px] max-h-[92vh] overflow-y-auto` so the modal grows on desktop and remains responsive.
-- Bump preview scroll region from `max-h-64` to `max-h-[420px]` to take advantage of the taller dialog.
-- Add a **Template** column between **Name** and **Verdict** in both `<TableHeader>` and `<TableBody>`, rendered as a small muted-text cell (`text-xs text-muted-foreground`).
+## Risk & Impact
+- **Data:** none — in-memory mutation only.
+- **Workflow:** none — restores intended v2.66.91 behaviour.
+- **UI:** health strip becomes truthful; per-cell "not linked" warnings vanish for slots the library actually covers; genuinely-unlinked slots are correctly surfaced.
+- **Scalability:** none.
+- **Regression:** low; guarded by a new iterator-exhaustion test.
 
-### 3. Tests — `src/test/annualReview/cycleBulkDataUploadPartialApply.test.ts`
-- Add one assertion in the existing "applies 5S even when LTI…" case: `expect(report.rows[0].templateName).toBeDefined()` and equals the plan's template name (extend the test plan to set `templateName: 'T'` on the instance — already set).
+## Tests
+`src/test/annualReview/cycleBulkDataUploadHydration.test.ts` (new):
+1. `__resolveScoringRulesForTests` mutates the template slot in place when the library has a matching `library_key`.
+2. Unknown slot → returned in unresolved list with the correct template name.
+3. **Regression lock** — call `hydrateSystemScoringRules` with a `Map.values()` MapIterator (mocking `supabase.from('annual_review_system_kpis')` with `vi.spyOn`) and assert the slot's `scoring_rules.bands` is populated. This would fail against today's code.
 
-### 4. Docs & Policy
-- **DOCUMENTATION.md** — Add v2.66.96 entry: "Bulk Data Upload dialog widened; dry-run preview now shows the assigned template per row."
-- **POLICY.md** — Extend `§AR-BULK-UPLOAD-PREVIEW` (or append a new bullet if the section doesn't call this out): the dry-run preview MUST surface the employee's resolved template so HR can spot template misassignment before commit.
+## Docs & Policy
+- **DOCUMENTATION.md** — v2.66.97 entry: bulk-upload hydration iterator-exhaustion RCA + fix.
+- **POLICY.md** — extend §AR-SYSTEM-KPI-LIBRARY-LINK: hydration MUST run against a materialized template list; the health-strip count MUST reflect actual hydration outcome, not a pre-return short-circuit.
 
 ## Rollback
-Revert the four files. No schema, no data migration.
+Revert the one-line change in `cycleBulkDataUpload.ts` and delete the new test file. No schema, RLS, RPC, or data change.
 
-## Not applicable
-- No new RPCs, RLS, storage, or edge functions.
-- No new dependencies.
+## Not Applicable
+- No UI structural change (existing strip and per-cell warnings simply become accurate).
+- No new dependencies, migrations, edge functions, secrets, or pagination changes.

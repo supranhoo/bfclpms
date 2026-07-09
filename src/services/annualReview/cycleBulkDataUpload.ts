@@ -83,8 +83,11 @@ async function hydrateSystemScoringRules(
 ): Promise<Array<{ name: string; templateNames: string[] }>> {
   const need = new Set<string>();
   // Preserve iteration for the second pass — Iterable<T> can be single-use.
+  // v2.66.97: iterate `templateList`, not `templates`. `Array.from(templates)`
+  // exhausts a MapIterator, so looping the original iterable found nothing,
+  // `need` stayed empty, and the function returned before hydrating any slot.
   const templateList = Array.from(templates);
-  for (const t of templates) {
+  for (const t of templateList) {
     for (const s of t.sections.system_scores ?? []) {
       const src = (s as unknown as { source?: string }).source;
       if (src === 'carry_kra') continue;
@@ -138,6 +141,12 @@ async function hydrateSystemScoringRules(
     templateNames: Array.from(tpls).sort((a, b) => a.localeCompare(b)),
   }));
 }
+
+/**
+ * Test-only export. Exposed so the regression suite can pass a real
+ * `Map.values()` iterator and lock the v2.66.97 fix.
+ */
+export const __hydrateSystemScoringRulesForTests = hydrateSystemScoringRules;
 
 /**
  * Exposed for unit tests — pure helper that runs the same resolution order
