@@ -6,7 +6,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { AlertCircle, ChevronDown, Calendar, Loader2 } from 'lucide-react';
+import { AlertCircle, ChevronDown, Calendar, Loader2, CheckCircle2, MinusCircle } from 'lucide-react';
 import type { TemplateSystemScore, EligibilityCriterion, CarryKraConfig } from '@/types/annualReview';
 import { evaluateEligibility } from '@/lib/annualReview/eligibility';
 import { buildCarrySnapshot, selectMonths, FY_MONTHS } from '@/services/annualReview/carryKraScore';
@@ -45,6 +45,20 @@ export function SystemScoresPanel({
 }) {
   const result = eligibility?.length ? evaluateEligibility(eligibility, eligibilityInputs ?? {}) : null;
   const { t, tTemplate } = useAnnualReviewI18n();
+
+  // Per-criterion status derivation (SSOT: evaluator failures). A criterion
+  // is "pending" when the input is missing/empty, "fail" when it appears in
+  // failures with a provided value, and "met" otherwise. This drives the
+  // always-visible eligibility table (see POLICY §AR-ELIGIBILITY-ALWAYS-VISIBLE).
+  const failureById = new Map(result?.failures.map((f) => [f.criterion.id, f]) ?? []);
+  const inputs = eligibilityInputs ?? {};
+  const hasValue = (c: EligibilityCriterion) => {
+    const raw = (inputs as Record<string, unknown>)[c.id] ?? (inputs as Record<string, unknown>)[c.name];
+    return raw !== undefined && raw !== null && raw !== '';
+  };
+  const anyPending = (eligibility ?? []).some((c) => !hasValue(c));
+  const anyFailure = (result?.failures.length ?? 0) > 0;
+  const overallStatus: 'met' | 'fail' | 'pending' = anyFailure ? 'fail' : anyPending ? 'pending' : 'met';
 
   return (
     <Card>
@@ -131,53 +145,135 @@ export function SystemScoresPanel({
           })}
         </div>
 
-        {result && !result.passed && (
-          <Alert variant="destructive">
-            <AlertCircle className="h-4 w-4" />
-            <AlertTitle>{t('eligibility.title', 'Eligibility criteria not met')}</AlertTitle>
-            <AlertDescription>
-              <div className="mt-2 overflow-hidden rounded-md border border-destructive/30">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="bg-destructive/5 hover:bg-destructive/5">
-                      <TableHead className="h-8 text-destructive">{t('eligibility.col.criterion', 'Criterion')}</TableHead>
-                      <TableHead className="h-8 text-destructive">{t('eligibility.col.policy_description', 'Policy Description')}</TableHead>
-                      <TableHead className="h-8 text-right text-destructive">{t('eligibility.col.actual', 'Actual')}</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {result.failures.map((f) => (
-                      <TableRow key={f.criterion.id}>
+        {eligibility && eligibility.length > 0 && (
+          <div
+            data-testid="eligibility-section"
+            data-status={overallStatus}
+            className={
+              overallStatus === 'fail'
+                ? 'rounded-lg border border-destructive/40 bg-destructive/5 p-3'
+                : overallStatus === 'met'
+                ? 'rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-3'
+                : 'rounded-lg border bg-muted/30 p-3'
+            }
+          >
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                {overallStatus === 'fail' && <AlertCircle className="h-4 w-4 text-destructive" />}
+                {overallStatus === 'met' && <CheckCircle2 className="h-4 w-4 text-emerald-600" />}
+                {overallStatus === 'pending' && <MinusCircle className="h-4 w-4 text-muted-foreground" />}
+                <p
+                  className={
+                    overallStatus === 'fail'
+                      ? 'text-sm font-semibold text-destructive'
+                      : overallStatus === 'met'
+                      ? 'text-sm font-semibold text-emerald-700 dark:text-emerald-400'
+                      : 'text-sm font-semibold'
+                  }
+                >
+                  {overallStatus === 'fail'
+                    ? t('eligibility.title', 'Eligibility criteria not met')
+                    : overallStatus === 'met'
+                    ? t('eligibility.status.met', 'All eligibility criteria met')
+                    : t('eligibility.status.pending', 'Eligibility inputs pending')}
+                </p>
+              </div>
+              <Badge variant="outline" className="text-xs">
+                {eligibility.length}{' '}
+                {t('eligibility.count_label', eligibility.length === 1 ? 'criterion' : 'criteria')}
+              </Badge>
+            </div>
+            <div className="mt-2 overflow-hidden rounded-md border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="h-8">{t('eligibility.col.criterion', 'Criterion')}</TableHead>
+                    <TableHead className="h-8">{t('eligibility.col.policy_description', 'Policy Description')}</TableHead>
+                    <TableHead className="h-8 text-right">{t('eligibility.col.expected', 'Expected')}</TableHead>
+                    <TableHead className="h-8 text-right">{t('eligibility.col.actual', 'Actual')}</TableHead>
+                    <TableHead className="h-8 text-center w-20">{t('eligibility.col.status', 'Status')}</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {eligibility.map((c) => {
+                    const failure = failureById.get(c.id);
+                    const provided = hasValue(c);
+                    const rowStatus: 'met' | 'fail' | 'pending' = !provided
+                      ? 'pending'
+                      : failure
+                      ? 'fail'
+                      : 'met';
+                    const actual = failure
+                      ? failure.actual
+                      : (inputs as Record<string, unknown>)[c.id] ??
+                        (inputs as Record<string, unknown>)[c.name];
+                    return (
+                      <TableRow
+                        key={c.id}
+                        className={
+                          rowStatus === 'fail'
+                            ? 'bg-destructive/5 hover:bg-destructive/10'
+                            : rowStatus === 'met'
+                            ? 'bg-emerald-500/5 hover:bg-emerald-500/10'
+                            : ''
+                        }
+                      >
                         <TableCell className="py-1.5 font-medium">
-                          {tTemplate('eligibility', f.criterion.id, 'name', f.criterion.name)}
+                          {tTemplate('eligibility', c.id, 'name', c.name)}
                         </TableCell>
                         <TableCell className="py-1.5 text-muted-foreground">
-                          {f.criterion.description
-                            ? tTemplate('eligibility', f.criterion.id, 'description', f.criterion.description)
-                            : `${f.criterion.operator.replace(/_/g, ' ')} ${String(f.criterion.expected_value)}`}
+                          {c.description
+                            ? tTemplate('eligibility', c.id, 'description', c.description)
+                            : `${c.operator.replace(/_/g, ' ')} ${String(c.expected_value)}`}
+                        </TableCell>
+                        <TableCell className="py-1.5 text-right tabular-nums text-muted-foreground">
+                          {`${c.operator.replace(/_/g, ' ')} ${String(c.expected_value)}`}
                         </TableCell>
                         <TableCell className="py-1.5 text-right tabular-nums">
-                          {f.actual == null || f.actual === '' ? (
+                          {actual == null || actual === '' ? (
                             <span className="text-muted-foreground">—</span>
                           ) : (
-                            String(f.actual)
+                            String(actual)
+                          )}
+                        </TableCell>
+                        <TableCell className="py-1.5 text-center">
+                          {rowStatus === 'met' && (
+                            <CheckCircle2 className="mx-auto h-4 w-4 text-emerald-600" aria-label="met" />
+                          )}
+                          {rowStatus === 'fail' && (
+                            <AlertCircle className="mx-auto h-4 w-4 text-destructive" aria-label="not met" />
+                          )}
+                          {rowStatus === 'pending' && (
+                            <MinusCircle className="mx-auto h-4 w-4 text-muted-foreground" aria-label="pending" />
                           )}
                         </TableCell>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
+            {eligibilityRemark && eligibilityRemark.trim() && (
+              <div
+                className={
+                  overallStatus === 'fail'
+                    ? 'mt-3 rounded-md border border-destructive/30 bg-destructive/5 p-3'
+                    : 'mt-3 rounded-md border bg-muted/30 p-3'
+                }
+              >
+                <p
+                  className={
+                    overallStatus === 'fail'
+                      ? 'text-xs font-semibold text-destructive uppercase tracking-wide'
+                      : 'text-xs font-semibold uppercase tracking-wide text-muted-foreground'
+                  }
+                >
+                  {t('eligibility.remark_label', 'Remark from HR')}
+                </p>
+                <p className="mt-1 text-sm whitespace-pre-wrap">{eligibilityRemark}</p>
               </div>
-              {eligibilityRemark && eligibilityRemark.trim() && (
-                <div className="mt-3 rounded-md border border-destructive/30 bg-destructive/5 p-3">
-                  <p className="text-xs font-semibold text-destructive uppercase tracking-wide">
-                    {t('eligibility.remark_label', 'Remark from HR')}
-                  </p>
-                  <p className="mt-1 text-sm whitespace-pre-wrap">{eligibilityRemark}</p>
-                </div>
-              )}
-            </AlertDescription>
-          </Alert>
+            )}
+          </div>
         )}
       </CardContent>
     </Card>
