@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Download, Upload, Loader2, FileSpreadsheet } from 'lucide-react';
+import { Download, Upload, Loader2, FileSpreadsheet, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useQuery } from '@tanstack/react-query';
 import {
@@ -106,6 +106,45 @@ export function CycleBulkDataUploadDialog({
                 {plan.columns.filter((c) => c.kind === 'eligibility_inputs').length} Eligibility
               </Badge>
             </div>
+
+            {/* Scoring health strip — v2.66.91, POLICY §AR-SYSTEM-KPI-LIBRARY-LINK */}
+            {(() => {
+              const totalSystem = plan.columns.filter((c) => c.kind === 'system_scores').length;
+              const unresolved = plan.unresolvedSlots ?? [];
+              if (totalSystem === 0) return null;
+              const linked = totalSystem - unresolved.length;
+              if (unresolved.length === 0) {
+                return (
+                  <div className="flex items-start gap-2 rounded-md border border-green-500/40 bg-green-500/10 px-3 py-2 text-sm">
+                    <CheckCircle2 className="mt-0.5 h-4 w-4 text-green-600" />
+                    <span>
+                      Scoring health: <b>{linked}/{totalSystem}</b> System KPI columns linked to the Library. Uploads will score correctly.
+                    </span>
+                  </div>
+                );
+              }
+              return (
+                <div className="flex items-start gap-2 rounded-md border border-amber-500/50 bg-amber-500/10 px-3 py-2 text-sm">
+                  <AlertTriangle className="mt-0.5 h-4 w-4 text-amber-600" />
+                  <div className="space-y-1">
+                    <div>
+                      Scoring health: <b>{linked}/{totalSystem}</b> System KPI columns linked. The following are <b>not linked</b> to the KPI Library and will be rejected on upload:
+                    </div>
+                    <ul className="list-disc pl-5">
+                      {unresolved.map((u) => (
+                        <li key={u.name}>
+                          <span className="font-medium">{u.name}</span>
+                          <span className="text-muted-foreground"> — used by {u.templateNames.length} template{u.templateNames.length === 1 ? '' : 's'}</span>
+                        </li>
+                      ))}
+                    </ul>
+                    <div className="text-xs text-muted-foreground">
+                      Open the Template Editor for the affected forms and link each unlisted slot to a KPI in the System KPI Library, or rename it to match the Library exactly.
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
 
             <div className="flex flex-wrap gap-2">
               <Button variant="outline" onClick={handleDownload} className="gap-2">
