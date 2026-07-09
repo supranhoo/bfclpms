@@ -26,6 +26,8 @@ describe('SystemScoresPanel — eligibility always visible', () => {
     expect(screen.getByText(/All eligibility criteria met/i)).toBeInTheDocument();
     expect(screen.getByText('Attendance')).toBeInTheDocument();
     expect(screen.getByText('Disciplinary case')).toBeInTheDocument();
+    // Policy Description column removed as redundant with Expected.
+    expect(screen.queryByText(/Policy Description/i)).not.toBeInTheDocument();
     // Plain-language rendering — never raw operator syntax.
     expect(screen.getByText('At least 90')).toBeInTheDocument();
     expect(screen.queryByText(/gte 90/i)).not.toBeInTheDocument();
