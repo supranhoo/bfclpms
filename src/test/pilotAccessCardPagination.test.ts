@@ -18,7 +18,13 @@ describe('PilotAccessCard pagination', () => {
   });
 
   it('does not cap the profiles read with .limit(500)', () => {
-    expect(src).not.toMatch(/\.limit\(500\)/);
+    // Strip line comments before scanning so historical mentions in
+    // comments don't trip the guard.
+    const codeOnly = src
+      .split('\n')
+      .filter((l) => !l.trim().startsWith('//'))
+      .join('\n');
+    expect(codeOnly).not.toMatch(/\.limit\(500\)/);
   });
 
   it('pages the kpis presence probe', () => {
