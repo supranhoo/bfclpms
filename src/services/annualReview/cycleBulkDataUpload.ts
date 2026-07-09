@@ -210,7 +210,7 @@ export async function buildCycleBulkPlan(cycleId: string): Promise<CycleBulkPlan
     if (error) throw error;
     (data ?? []).forEach((t) => templateById.set(t.id, t as unknown as AnnualReviewTemplate));
   }
-  await hydrateSystemScoringRules(templateById.values());
+  const unresolvedSlots = await hydrateSystemScoringRules(templateById.values());
 
   // Master-data lookups.
   const deptIds = Array.from(
@@ -304,7 +304,7 @@ export async function buildCycleBulkPlan(cycleId: string): Promise<CycleBulkPlan
     };
   });
 
-  return { cycleId, columns, instances: instanceCtx };
+  return { cycleId, columns, instances: instanceCtx, unresolvedSlots };
 }
 
 /** Serialize the current plan to an XLSX workbook with editable canonical columns. */
