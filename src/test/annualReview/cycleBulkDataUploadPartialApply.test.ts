@@ -66,6 +66,8 @@ describe('parseAndDryRun — partial apply (v2.66.95)', () => {
     expect(r.changes).toHaveLength(1);
     expect(r.changes[0].column).toBe('5S Score');
     expect(r.warnings?.[0]).toMatch(/LTI.*not linked/);
+    // v2.66.96 — dry-run row surfaces the assigned template.
+    expect(r.templateName).toBe('T');
   });
 
   it('applies eligibility even when a system-score cell is non-numeric', async () => {
