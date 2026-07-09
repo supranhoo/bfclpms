@@ -1,3 +1,10 @@
+### §AR-SYSTEM-KPI-LIBRARY-LINK — Every Annual Review System KPI slot MUST resolve to a KPI Library row before Bulk Data Upload will accept it (v2.66.91, 2026-07-09)
+- Each entry in `annual_review_templates.sections.system_scores[]` carries an optional stable `library_key` pointing at `annual_review_system_kpis.key`. The Bulk Data Upload hydrator (`hydrateSystemScoringRules`) resolves scoring rules in this order: (1) `library_key` (preferred), (2) deterministic alias map `src/lib/annualReview/systemKpiAliases.ts`, (3) exact normalized-name match against `annual_review_system_kpis.name_en`.
+- Slots that fail all three steps are **unresolved**: the Bulk Data Upload dialog surfaces an amber "Scoring health" strip listing them, and the dry-run marks every row touching that column as `error` with reason "not linked to the KPI Library". Legacy "raw = pre-scaled points" fallback is FORBIDDEN for any slot whose `source` is not `manual` — it silently inverts lower-is-better KPIs (LTI, STI, Fugitive PM10).
+- Adding a new library KPI whose slot name differs from `name_en` in existing templates requires an entry in `SYSTEM_KPI_ALIASES` AND a repeat of the v2.66.91 backfill migration (idempotent).
+- Library scoring bands MUST use numeric `threshold` values. Non-numeric ("gt:4", `{gt:4}`) thresholds are considered malformed and are rewritten to the numeric sentinel `999` (lower_better) / `-1` (higher_better) by the v2.66.91b migration.
+- Regression guards: `src/test/annualReview/systemKpiAliases.test.ts`, `src/test/annualReview/hydrateSystemScoringRules.test.ts`, `src/test/annualReview/cycleBulkDataUploadLtiHydration.test.ts`.
+
 ### §AR-MAPPING-TEMPLATE-SORT — Annual Review Form Mapping "Templates in use" MUST list templates alphabetically by name (v2.66.90, 2026-07-09)
 - The `TemplatesUsagePanel` on `/annual-review/admin/form-mapping` MUST sort visible template rows in ascending alphabetical order by `name` (`localeCompare`).
 - Inactive templates that still have seeded instances remain visible and are sorted into the same A–Z order, with the existing "Inactive" badge rendered next to the name.

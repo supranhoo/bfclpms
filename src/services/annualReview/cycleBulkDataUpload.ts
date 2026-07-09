@@ -4,6 +4,7 @@ import * as svc from '@/services/annualReview/annualReviewService';
 import { resolveTemplateId } from '@/services/annualReview/annualReviewService';
 import type { AnnualReviewTemplate, TemplateSystemScore } from '@/types/annualReview';
 import { scoreFromRaw, type ScoringRules } from '@/lib/annualReview/systemKpiScoring';
+import { resolveLibraryKeyByName, normalizeSlotName } from '@/lib/annualReview/systemKpiAliases';
 
 /**
  * Cycle-wide "single sheet" bulk data uploader for Annual Review.
@@ -49,6 +50,13 @@ export interface CycleBulkPlan {
   cycleId: string;
   columns: CanonicalColumn[];
   instances: InstanceCtx[];
+  /**
+   * System-KPI slot names that could NOT be resolved to the KPI Library at
+   * plan-build time. When non-empty the Bulk Upload dialog surfaces an amber
+   * "Scoring health" strip and Commit is blocked for the affected column(s).
+   * See POLICY §AR-SYSTEM-KPI-LIBRARY-LINK.
+   */
+  unresolvedSlots: Array<{ name: string; templateNames: string[] }>;
 }
 
 const STAGE_SAFE = new Set(['not_started', 'pending_self', 'pending_manager']);
@@ -59,17 +67,23 @@ function norm(s: string): string {
 
 /**
  * Hydrate template `system_scores[]` slots with `scoring_rules` copied from the
- * KPI Library when the slot itself has none. Historical templates were seeded
- * before bands were introduced, so the runtime scorer would otherwise fall into
- * the legacy "raw = pre-scaled points" branch — which INVERTS the score for
- * lower-is-better KPIs (e.g. LTI = 0 wrongly scored 0/5, LTI = 3 wrongly 5/5).
- * Match is by normalized `name` against `annual_review_system_kpis.name_en`.
- * POLICY §AR-SYSTEM-KPI-RAW-INPUT.
+ * KPI Library when the slot itself has none. Resolution order (v2.66.91):
+ *   1. `slot.library_key` — the stable link written by the Template Editor / backfill.
+ *   2. Alias map (`SYSTEM_KPI_ALIASES`) — deterministic, covers historical drift.
+ *   3. Exact normalized-name match against `annual_review_system_kpis.name_en`.
+ *   4. Unresolved — collected and returned so the dialog can surface it. NEVER
+ *      silently degraded to the legacy "raw = pre-scaled points" branch, which
+ *      inverts the score for lower-is-better KPIs (LTI, STI, Fugitive PM10 …).
+ * POLICY §AR-SYSTEM-KPI-RAW-INPUT, §AR-SYSTEM-KPI-LIBRARY-LINK.
+ * Returns an array of unresolved slot names paired with the templates that
+ * still expose them, so the caller can render a health strip.
  */
 async function hydrateSystemScoringRules(
   templates: Iterable<AnnualReviewTemplate>,
-): Promise<void> {
+): Promise<Array<{ name: string; templateNames: string[] }>> {
   const need = new Set<string>();
+  // Preserve iteration for the second pass — Iterable<T> can be single-use.
+  const templateList = Array.from(templates);
   for (const t of templates) {
     for (const s of t.sections.system_scores ?? []) {
       const src = (s as unknown as { source?: string }).source;
@@ -77,25 +91,92 @@ async function hydrateSystemScoringRules(
       if (!s.scoring_rules || !s.scoring_rules.bands?.length) need.add(norm(s.name));
     }
   }
-  if (!need.size) return;
+  if (!need.size) return [];
   const { data, error } = await supabase
     .from('annual_review_system_kpis')
-    .select('name_en, scoring_rules, uom_type');
+    .select('key, name_en, scoring_rules, uom_type');
   if (error) throw error;
+  const libByKey = new Map<string, { rules: ScoringRules | null; uom?: string | null }>();
   const libByName = new Map<string, { rules: ScoringRules | null; uom?: string | null }>();
-  for (const r of (data ?? []) as Array<{ name_en: string; scoring_rules: unknown; uom_type: string | null }>) {
-    libByName.set(norm(r.name_en), { rules: (r.scoring_rules as ScoringRules) ?? null, uom: r.uom_type });
+  for (const r of (data ?? []) as Array<{ key: string; name_en: string; scoring_rules: unknown; uom_type: string | null }>) {
+    const entry = { rules: (r.scoring_rules as ScoringRules) ?? null, uom: r.uom_type };
+    if (r.key) libByKey.set(r.key, entry);
+    libByName.set(norm(r.name_en), entry);
   }
-  for (const t of templates) {
+
+  const unresolved = new Map<string, Set<string>>(); // slot name → set of template names
+  for (const t of templateList) {
     for (const s of t.sections.system_scores ?? []) {
+      const src = (s as unknown as { source?: string }).source;
+      if (src === 'carry_kra') continue;
       if (s.scoring_rules && s.scoring_rules.bands?.length) continue;
-      const hit = libByName.get(norm(s.name));
+
+      // 1. Prefer explicit library_key link if present.
+      let hit = s.library_key ? libByKey.get(s.library_key) : undefined;
+      // 2. Fall back to the deterministic alias map.
+      if (!hit?.rules?.bands?.length) {
+        const aliasKey = resolveLibraryKeyByName(s.name);
+        if (aliasKey) hit = libByKey.get(aliasKey);
+      }
+      // 3. Last resort — exact normalized-name match.
+      if (!hit?.rules?.bands?.length) {
+        hit = libByName.get(norm(s.name));
+      }
+
       if (hit?.rules?.bands?.length) {
         s.scoring_rules = hit.rules;
         if (!s.uom_type && hit.uom) s.uom_type = hit.uom;
+      } else {
+        const key = s.name.trim();
+        if (!unresolved.has(key)) unresolved.set(key, new Set());
+        unresolved.get(key)!.add(t.name);
       }
     }
   }
+  return Array.from(unresolved.entries()).map(([name, tpls]) => ({
+    name,
+    templateNames: Array.from(tpls).sort((a, b) => a.localeCompare(b)),
+  }));
+}
+
+/**
+ * Exposed for unit tests — pure helper that runs the same resolution order
+ * against an already-fetched library snapshot. Returns unresolved slot names.
+ */
+export function __resolveScoringRulesForTests(
+  templates: AnnualReviewTemplate[],
+  library: Array<{ key: string; name_en: string; scoring_rules: ScoringRules | null; uom_type: string | null }>,
+): Array<{ name: string; templateNames: string[] }> {
+  const libByKey = new Map(library.map((r) => [r.key, { rules: r.scoring_rules, uom: r.uom_type }] as const));
+  const libByName = new Map(library.map((r) => [normalizeSlotName(r.name_en), { rules: r.scoring_rules, uom: r.uom_type }] as const));
+  const unresolved = new Map<string, Set<string>>();
+  for (const t of templates) {
+    for (const s of t.sections.system_scores ?? []) {
+      const src = (s as unknown as { source?: string }).source;
+      if (src === 'carry_kra') continue;
+      if (s.scoring_rules && s.scoring_rules.bands?.length) continue;
+      let hit = s.library_key ? libByKey.get(s.library_key) : undefined;
+      if (!hit?.rules?.bands?.length) {
+        const aliasKey = resolveLibraryKeyByName(s.name);
+        if (aliasKey) hit = libByKey.get(aliasKey);
+      }
+      if (!hit?.rules?.bands?.length) {
+        hit = libByName.get(normalizeSlotName(s.name));
+      }
+      if (hit?.rules?.bands?.length) {
+        s.scoring_rules = hit.rules;
+        if (!s.uom_type && hit.uom) s.uom_type = hit.uom;
+      } else {
+        const key = s.name.trim();
+        if (!unresolved.has(key)) unresolved.set(key, new Set());
+        unresolved.get(key)!.add(t.name);
+      }
+    }
+  }
+  return Array.from(unresolved.entries()).map(([name, tpls]) => ({
+    name,
+    templateNames: Array.from(tpls).sort((a, b) => a.localeCompare(b)),
+  }));
 }
 
 /** Fetches everything needed to build the single sheet for a cycle. */
@@ -129,7 +210,7 @@ export async function buildCycleBulkPlan(cycleId: string): Promise<CycleBulkPlan
     if (error) throw error;
     (data ?? []).forEach((t) => templateById.set(t.id, t as unknown as AnnualReviewTemplate));
   }
-  await hydrateSystemScoringRules(templateById.values());
+  const unresolvedSlots = await hydrateSystemScoringRules(templateById.values());
 
   // Master-data lookups.
   const deptIds = Array.from(
@@ -223,7 +304,7 @@ export async function buildCycleBulkPlan(cycleId: string): Promise<CycleBulkPlan
     };
   });
 
-  return { cycleId, columns, instances: instanceCtx };
+  return { cycleId, columns, instances: instanceCtx, unresolvedSlots };
 }
 
 /** Serialize the current plan to an XLSX workbook with editable canonical columns. */
@@ -343,6 +424,23 @@ export async function parseAndDryRun(file: File, plan: CycleBulkPlan): Promise<D
         const tSlot = slot.slot as TemplateSystemScore | undefined;
         const rules = (tSlot?.scoring_rules ?? null) as ScoringRules | null;
         const weight = Number(tSlot?.weight ?? 0);
+        // Guardrail (v2.66.91): a library-linked KPI slot with no resolvable
+        // bands MUST NOT fall into the legacy "raw = pre-scaled points" branch,
+        // which would silently invert the score for lower-is-better metrics.
+        // Only explicitly `source: 'manual'` slots may skip band scoring.
+        const isManual = (tSlot?.source ?? 'manual') === 'manual';
+        if (!isManual && (!rules || !rules.bands?.length)) {
+          rows.push({
+            employeeCode: code,
+            fullName: inst.fullName,
+            verdict: 'error',
+            reason: `Column "${col.name}" is not linked to the KPI Library (no scoring bands). Open the template and link this slot before uploading.`,
+            changes: [],
+          });
+          err++;
+          rowChanges.length = 0;
+          break;
+        }
         const result = scoreFromRaw(afterRaw, rules, weight);
         const beforePoints = inst.systemScores[slot.id];
         if (beforeRaw === afterRaw && Number(beforePoints ?? NaN) === result.points) continue;
