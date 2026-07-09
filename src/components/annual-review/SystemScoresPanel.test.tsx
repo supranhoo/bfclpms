@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
+import { render, screen } from '@testing-library/react';
 import { formatAchievement } from './SystemScoresPanel';
+import { SystemScoresPanel } from './SystemScoresPanel';
 
 describe('formatAchievement', () => {
   it('formats percent integers as N%', () => {
@@ -25,5 +27,42 @@ describe('formatAchievement', () => {
     expect(formatAchievement(null, 'percent')).toBe('—');
     expect(formatAchievement(undefined, 'binary')).toBe('—');
     expect(formatAchievement('', 'days')).toBe('—');
+  });
+});
+
+describe('SystemScoresPanel achievement display', () => {
+  it('renders raw percent achievement with derived rating before contributed points', () => {
+    render(
+      <SystemScoresPanel
+        systemScores={[
+          {
+            id: 'annual_production',
+            name: 'Annual Production Target Vs Actual',
+            weight: 25,
+            source: 'system',
+            uom_type: 'percent',
+            scoring_rules: {
+              direction: 'higher_better',
+              bands: [
+                { score: 5, threshold: 100 },
+                { score: 4, threshold: 95 },
+                { score: 3, threshold: 90 },
+                { score: 2, threshold: 85 },
+                { score: 1, threshold: 80 },
+                { score: 0, threshold: 0 },
+              ],
+            },
+          } as any,
+        ]}
+        values={{ annual_production: 15 }}
+        rawValues={{ annual_production: 90 }}
+        readOnly
+      />,
+    );
+
+    expect(screen.getByText('Achievement:')).toBeInTheDocument();
+    expect(screen.getByText('90%')).toBeInTheDocument();
+    expect(screen.getByText('Rating 3/5')).toBeInTheDocument();
+    expect(screen.getByText('Contributes 15.00 / 25 points to your appraisal')).toBeInTheDocument();
   });
 });
