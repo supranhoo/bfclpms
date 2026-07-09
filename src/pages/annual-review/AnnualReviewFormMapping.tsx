@@ -183,7 +183,7 @@ function TemplatesUsagePanel({
     return m;
   }, [report]);
 
-  const rows = templates
+  const unsortedRows = templates
     // Keep active templates AND inactive templates that still have seeded
     // instances in this cycle — otherwise archiving a template while
     // employees are still bound to it hides them from Form Mapping entirely
