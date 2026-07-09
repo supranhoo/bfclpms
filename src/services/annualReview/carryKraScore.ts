@@ -127,17 +127,58 @@ export async function fetchMonthlyKraScores(
 ): Promise<CarryKraMonthly[]> {
   // Fiscal year July fyStart → June fyStart+1.
   // KPI rows are stamped with calendar `review_year` per month.
+  //
+  // NOTE: we query `kpis` first (indexed on employee_id, review_year) and
+  // embed `review_submissions`. The previous shape started from
+  // `review_submissions` and filtered via an embedded `kpis!inner` on
+  // employee_id — that forced Postgres to scan a very large table before
+  // filtering and triggered "canceling statement due to statement timeout"
+  // for employees with many historical submissions (BUG-CARRY-TIMEOUT).
   const { data, error } = await supabase
-    .from('review_submissions')
+    .from('kpis')
     .select(`
-      kpi_id, is_na, final_score, manager_score, auditor_score, self_score,
-      kpis!inner ( employee_id, review_period, review_year, weightage )
+      id, employee_id, review_period, review_year, weightage,
+      review_submissions ( is_na, final_score, manager_score, auditor_score, self_score )
     `)
-    .eq('kpis.employee_id', employeeId)
-    .in('kpis.review_year', [fyStart, fyStart + 1]);
+    .eq('employee_id', employeeId)
+    .in('review_year', [fyStart, fyStart + 1]);
 
   if (error) throw error;
-  return aggregateMonthly((data ?? []) as unknown as RawRow[], fyStart, excludeNa);
+
+  // Flatten kpi → 0..1 submission rows into the RawRow shape aggregateMonthly expects.
+  const rows: RawRow[] = [];
+  for (const k of (data ?? []) as any[]) {
+    const subs: any[] = Array.isArray(k.review_submissions)
+      ? k.review_submissions
+      : (k.review_submissions ? [k.review_submissions] : []);
+    const kpiMeta = {
+      employee_id: k.employee_id,
+      review_period: k.review_period,
+      review_year: k.review_year,
+      weightage: k.weightage,
+    };
+    if (subs.length === 0) {
+      // No submission yet → treat as no score; aggregateMonthly will skip it.
+      rows.push({
+        kpi_id: k.id, is_na: null,
+        final_score: null, manager_score: null, auditor_score: null, self_score: null,
+        kpis: kpiMeta,
+      });
+      continue;
+    }
+    for (const s of subs) {
+      rows.push({
+        kpi_id: k.id,
+        is_na: s.is_na ?? null,
+        final_score: s.final_score ?? null,
+        manager_score: s.manager_score ?? null,
+        auditor_score: s.auditor_score ?? null,
+        self_score: s.self_score ?? null,
+        kpis: kpiMeta,
+      });
+    }
+  }
+  return aggregateMonthly(rows, fyStart, excludeNa);
 }
 
 /** Full snapshot: fetch + aggregate + compute. */
