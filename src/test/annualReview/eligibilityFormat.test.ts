@@ -41,11 +41,11 @@ describe('eligibilityFormat.formatActual', () => {
   it('passes numbers/strings through', () => {
     expect(formatActual(9, 'number')).toBe('9');
     expect(formatActual(0, 'number')).toBe('0');
-    expect(formatActual('hello', 'text')).toBe('hello');
+    expect(formatActual('hello', 'string')).toBe('hello');
   });
   it('returns em-dash for missing values', () => {
     expect(formatActual(null, 'number')).toBe('—');
     expect(formatActual(undefined, 'boolean')).toBe('—');
-    expect(formatActual('', 'text')).toBe('—');
+    expect(formatActual('', 'string')).toBe('—');
   });
 });
