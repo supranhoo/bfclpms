@@ -424,6 +424,23 @@ export async function parseAndDryRun(file: File, plan: CycleBulkPlan): Promise<D
         const tSlot = slot.slot as TemplateSystemScore | undefined;
         const rules = (tSlot?.scoring_rules ?? null) as ScoringRules | null;
         const weight = Number(tSlot?.weight ?? 0);
+        // Guardrail (v2.66.91): a library-linked KPI slot with no resolvable
+        // bands MUST NOT fall into the legacy "raw = pre-scaled points" branch,
+        // which would silently invert the score for lower-is-better metrics.
+        // Only explicitly `source: 'manual'` slots may skip band scoring.
+        const isManual = (tSlot?.source ?? 'manual') === 'manual';
+        if (!isManual && (!rules || !rules.bands?.length)) {
+          rows.push({
+            employeeCode: code,
+            fullName: inst.fullName,
+            verdict: 'error',
+            reason: `Column "${col.name}" is not linked to the KPI Library (no scoring bands). Open the template and link this slot before uploading.`,
+            changes: [],
+          });
+          err++;
+          rowChanges.length = 0;
+          break;
+        }
         const result = scoreFromRaw(afterRaw, rules, weight);
         const beforePoints = inst.systemScores[slot.id];
         if (beforeRaw === afterRaw && Number(beforePoints ?? NaN) === result.points) continue;
