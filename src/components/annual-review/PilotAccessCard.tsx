@@ -17,6 +17,7 @@ import { ConfirmDestructiveDialog } from '@/components/ui/ConfirmDestructiveDial
 import { Users, Filter, Search, UserPlus, UserMinus, X, ShieldCheck, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { listTemplatesInUse, type TemplateInUse } from '@/services/annualReview/formMapping';
+import { RegistryPager, pagedSlice } from '@/components/admin/kpi-standardization/RegistryPager';
 
 /**
  * Phased Rollout — Annual Review.
@@ -355,6 +356,13 @@ export function PhasedRolloutCard() {
   const [confirmAdd, setConfirmAdd] = useState<null | { ids: string[]; label: string }>(null);
   const [previewing, setPreviewing] = useState(false);
 
+  // Client-side pagination state (POLICY §13). Both tables render pre-fetched
+  // arrays, so we slice locally rather than re-querying.
+  const [audiencePage, setAudiencePage] = useState(1);
+  const [audiencePageSize, setAudiencePageSize] = useState(10);
+  const [previewPage, setPreviewPage] = useState(1);
+  const [previewPageSize, setPreviewPageSize] = useState(10);
+
   const audienceIds = flagQ.data?.userIds ?? [];
   const audienceSet = useMemo(() => new Set(audienceIds), [audienceIds]);
 
@@ -370,6 +378,16 @@ export function PhasedRolloutCard() {
       return data ?? [];
     },
   });
+
+  const audienceRows = (targetedProfilesQ.data ?? []) as Array<{ id: string; full_name: string | null; employee_code: string | null }>;
+  const pagedAudienceRows = useMemo(
+    () => pagedSlice(audienceRows, audiencePage, audiencePageSize),
+    [audienceRows, audiencePage, audiencePageSize],
+  );
+  const pagedPreviewRows = useMemo(
+    () => (preview ? pagedSlice(preview, previewPage, previewPageSize) : []),
+    [preview, previewPage, previewPageSize],
+  );
 
   // Assigned forms for the union of audience + preview ids.
   const previewIds = useMemo(() => (preview ?? []).map((r) => r.id), [preview]);
@@ -509,7 +527,7 @@ export function PhasedRolloutCard() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {(targetedProfilesQ.data ?? []).map((p: any) => (
+                  {pagedAudienceRows.map((p: any) => (
                     <TableRow key={p.id}>
                       <TableCell>
                         <div className="font-medium text-sm">{p.full_name ?? 'Unnamed'}</div>
@@ -533,6 +551,16 @@ export function PhasedRolloutCard() {
                   ))}
                 </TableBody>
               </Table>
+              <div className="border-t px-3 py-2">
+                <RegistryPager
+                  page={audiencePage}
+                  pageSize={audiencePageSize}
+                  total={audienceRows.length}
+                  onPageChange={setAudiencePage}
+                  onPageSizeChange={(n) => { setAudiencePageSize(n); setAudiencePage(1); }}
+                  resetKey={String(audienceRows.length)}
+                />
+              </div>
             </div>
           )}
         </div>
@@ -685,7 +713,7 @@ export function PhasedRolloutCard() {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  preview.map((r) => {
+                  pagedPreviewRows.map((r) => {
                     const inPilot = audienceSet.has(r.id);
                     return (
                       <TableRow key={r.id} className="hover:bg-muted/50">
@@ -742,6 +770,18 @@ export function PhasedRolloutCard() {
                 )}
               </TableBody>
             </Table>
+            {preview.length > 0 && (
+              <div className="border-t px-3 py-2">
+                <RegistryPager
+                  page={previewPage}
+                  pageSize={previewPageSize}
+                  total={preview.length}
+                  onPageChange={setPreviewPage}
+                  onPageSizeChange={(n) => { setPreviewPageSize(n); setPreviewPage(1); }}
+                  resetKey={String(preview.length)}
+                />
+              </div>
+            )}
           </div>
         )}
       </CardContent>
