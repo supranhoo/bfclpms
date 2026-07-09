@@ -1,4 +1,11 @@
 ### §AR-SYSTEM-KPI-LIBRARY-LINK — Every Annual Review System KPI slot MUST resolve to a KPI Library row before Bulk Data Upload will accept it (v2.66.91, 2026-07-09)
+
+### §AR-BULK-UPLOAD-PREVIEW — Cycle Bulk Data Upload dry-run preview MUST expose enough context for HR to review each row before commit (v2.66.96, 2026-07-09)
+- The Bulk Data Upload dialog (`CycleBulkDataUploadDialog.tsx`) MUST render at a comfortable desktop width — current spec `max-w-[95vw] w-[1400px] max-h-[92vh]` — so the dry-run preview table renders without wrapping. Never revert to `max-w-4xl`.
+- The dry-run preview table MUST include, at minimum, these columns: **Emp Code · Name · Template · Verdict · Changes / Reason**. The Template column shows the employee's resolved template name (KRA / Management / Workmen / Trainee / etc.) so HR can spot template misassignment before committing.
+- `DryRunRow.templateName` is populated by `parseAndDryRun` from the pre-resolved `cycle_instance.templateName` on every row (apply, skip, and locked-stage). It is optional only for the "employee not found in cycle" row where no template is knowable.
+- Presentation-only widening MUST NOT touch parse/commit/scoring logic — those are governed by §AR-SYSTEM-KPI-LIBRARY-LINK, §AR-SYSTEM-KPI-RAW-INPUT, and the v2.66.95 cell-skip sub-clauses.
+
 - Each entry in `annual_review_templates.sections.system_scores[]` carries an optional stable `library_key` pointing at `annual_review_system_kpis.key`. The Bulk Data Upload hydrator (`hydrateSystemScoringRules`) resolves scoring rules in this order: (1) `library_key` (preferred), (2) deterministic alias map `src/lib/annualReview/systemKpiAliases.ts`, (3) exact normalized-name match against `annual_review_system_kpis.name_en`.
 - Slots that fail all three steps are **unresolved**: the Bulk Data Upload dialog surfaces an amber "Scoring health" strip listing them, and the dry-run marks every row touching that column as `error` with reason "not linked to the KPI Library". Legacy "raw = pre-scaled points" fallback is FORBIDDEN for any slot whose `source` is not `manual` — it silently inverts lower-is-better KPIs (LTI, STI, Fugitive PM10).
 - Adding a new library KPI whose slot name differs from `name_en` in existing templates requires an entry in `SYSTEM_KPI_ALIASES` AND a repeat of the v2.66.91 backfill migration (idempotent).
