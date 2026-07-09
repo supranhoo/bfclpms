@@ -159,6 +159,12 @@ function CoverageBanner({ report, loading }: { report?: CoverageReport; loading:
 }
 
 // ── Templates panel with usage counts ─────────────────────────────
+export function sortTemplateUsageRowsByName(
+  rows: { id: string; name: string; is_active: boolean | null; count: number }[],
+) {
+  return [...rows].sort((a, b) => a.name.localeCompare(b.name));
+}
+
 function TemplatesUsagePanel({
   templates, report, cycleId, onChanged,
 }: {
