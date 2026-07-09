@@ -58,7 +58,16 @@ export function SystemScoresPanel({
   };
   const anyPending = (eligibility ?? []).some((c) => !hasValue(c));
   const anyFailure = (result?.failures.length ?? 0) > 0;
-  const overallStatus: 'met' | 'fail' | 'pending' = anyFailure ? 'fail' : anyPending ? 'pending' : 'met';
+  // Pending precedence over fail: a missing input is a "not yet filled" state,
+  // not a policy breach — evaluator counts it as a failure, but users need to
+  // see it as an actionable gap rather than a disqualification.
+  const anyRealFailure = (result?.failures ?? []).some((f) => {
+    const c = f.criterion;
+    const raw = (inputs as Record<string, unknown>)[c.id] ?? (inputs as Record<string, unknown>)[c.name];
+    return raw !== undefined && raw !== null && raw !== '';
+  });
+  void anyFailure;
+  const overallStatus: 'met' | 'fail' | 'pending' = anyRealFailure ? 'fail' : anyPending ? 'pending' : 'met';
 
   return (
     <Card>
