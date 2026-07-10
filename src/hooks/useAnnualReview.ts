@@ -356,6 +356,27 @@ export function useDebouncedResponseDraft(opts: {
   // beforeunload guard while there are unsaved edits (ADR-105).
   useUnsavedChanges(status === 'pending');
 
+  // Late-arriving initial: when the response query resolves AFTER mount (or a
+  // refetch returns a newer row), re-seed the local draft — but ONLY if the
+  // user has no in-flight edits (`pending`/`saving`). Skipping this guard would
+  // revert live edits and resurrect the ADR-105 race.
+  useEffect(() => {
+    const init = opts.initial;
+    if (!init) return;
+    const key = `${init.id}:${init.updated_at ?? ''}`;
+    if (seededKeyRef.current === key) return;
+    if (statusRef.current === 'pending' || statusRef.current === 'saving') return;
+    seededKeyRef.current = key;
+    setDraftState({
+      criteria_scores: init.criteria_scores ?? {},
+      qualitative_responses: init.qualitative_responses ?? {},
+      evidence: init.evidence ?? [],
+      weighted_score: init.weighted_score ?? null,
+      notes: init.notes ?? null,
+    });
+    setStatus('idle');
+  }, [opts.initial?.id, opts.initial?.updated_at]);
+
   const flush = async () => {
     if (timerRef.current) { clearTimeout(timerRef.current); timerRef.current = null; }
     await persist();
