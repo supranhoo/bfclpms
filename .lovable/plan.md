@@ -1,84 +1,101 @@
-## Assumptions
 
-- The user is on **Admin → Annual Review → Phased Rollout** (`PilotAccessCard`). "39 match(es) · 33 not yet in pilot" is the preview counter after selecting Assigned Template = `Generic M – (With KRA)` + `Generic W – (With KRA)`.
-- The intent of the "Assigned Template" filter is: *show every active employee whose effective template for this cycle IS (or would be) one of the selected templates* — not just those already seeded to an instance.
-- Active roster is ~2,533 employees (per `mem/architecture/profiles-query-policy`). The two "Generic (With KRA)" templates should legitimately return hundreds to low thousands, not 39.
+# Expand access to the Annual Review "All employees" directory
+
+## Goal
+
+Widen access to the directory search (`search_active_employees_for_review`) and instance creation (`create_or_get_annual_review_instance`) beyond Admin / HR PMS, so more people can assist with form-filling.
+
+New access matrix (per your answers):
+
+| Actor | Scope | Write (add to phase) |
+| --- | --- | --- |
+| Admin | All employees | Yes |
+| HR PMS role | All employees | Yes |
+| Any active user whose `business_unit_id` = `org_head_config.hr_business_unit_id` ("HR team") | All employees | Yes |
+| BU Head (`business_units.head_user_id`) | Only employees whose `profiles.business_unit_id` = that BU | Yes |
+| HOD (`departments.head_user_id`) | Only employees whose `profiles.department_id` is inside their BU (i.e. any dept sharing the HOD's `business_unit_id`) | Yes |
+
+All other users: no access (unchanged).
+
+The `annual_review_directory_search_enabled` feature flag continues to gate the entire UI entry point.
+
+---
 
 ## Risk & Impact Report
 
-**Data Impact:** Read-only fix. No schema/RLS/data changes. The `admin_feature_flags.target_user_ids` write path (Add all / Add selected) is untouched.
+- **Data Impact:** No schema changes. Two RPCs (`search_active_employees_for_review`, `create_or_get_annual_review_instance`) get a wider `SECURITY DEFINER` authorization branch plus a scope filter on the search. `org_head_config`, `business_units`, `departments` are read via the resolver — no writes.
+- **Workflow Impact:** More roles can seed `annual_review_instances`. Audit log payload (`system_audit_logs.annual_review.instance.auto_created`) gains an `actor_scope` field (`admin` | `hr_pms` | `hr_team` | `bu_head` | `hod`) so reviewers can see who added each employee and under what authority.
+- **UI/UX Impact:** `TeamAnnualReview.tsx` gate `canSearchDirectory` widens from `isAdmin || hasRole('hr_pms')` to a resolver hook `useCanSearchDirectory()` that also returns the scope (`all` | `bu:<id>`). The "All employees" button appears for all four groups. No layout changes.
+- **Regression Risk:** Low. The Admin / HR PMS branch is unchanged; new branches are additive. Directory listing already returns only `is_active = true` rows, and the new scope filter is an additional `AND`.
+- **Scalability Impact:** Scope check is `EXISTS` against `business_units` / `departments` / `org_head_config` (indexed by PK / `head_user_id`); one row per lookup. Search query already has pagination; the scope filter narrows the candidate set, so no new load.
+- **Mitigation:** Unit tests per actor type + a SQL smoke test for cross-BU denial. Feature flag stays as the master kill-switch.
 
-**Workflow Impact:** Phased-rollout preview will now surface the true audience for a template; "Add all (N)" and "Remove template's users from phase" will operate on the correct N. No permission changes.
-
-**UI/UX Impact:** Same layout. Counter and rows update to reflect the corrected list; pagination already in place handles the larger set.
-
-**Regression Risk:** Low. Three narrow behaviour changes on one card:
-1. `applyTemplateFilter` now unions seeded + rule-resolved template matches (was seeded-only).
-2. `runPreview` pages profiles via `fetchAllPaged` (was `.limit(500)`).
-3. `kpis` presence probe + `useAssignedForms` batch their `.in(...)` reads under the 1000-row cap.
-
-**Mitigation:** Unit tests for the two new pure helpers; regression asserts on the source file for the paging pattern (matches existing `useMyVisibleEmployeeIdsPagination.test.ts` style).
-
-## Root Cause
-
-In `src/components/annual-review/PilotAccessCard.tsx`:
-
-1. **`applyTemplateFilter` is seeded-only.** It calls `fetchEmployeeIdsForTemplates`, which reads `annual_review_instances` for the cycle and keeps only employees whose `COALESCE(template_override_id, template_id)` is in the selected set. Any employee who matches the mapping rules but hasn't been seeded yet is silently dropped — this is the direct cause of the "only a few employees" symptom during rollout, when most employees have no instance yet.
-2. **`runPreview` truncates profiles.** `supabase.from('profiles').select(...).limit(500)` violates `mem/architecture/profiles-query-policy` (POLICY §94) — PostgREST also silently caps unranged reads at 1000. With 2,533 active employees, the candidate set is truncated before any filter runs.
-3. **KRA presence probe is unpaged.** `.from('kpis').select('employee_id').in('employee_id', ids)` returns at most 1000 rows; with several KPIs per employee this drops the tail of `withKra`, misclassifying employees as "No KRA".
-4. **`useAssignedForms` is unpaged.** Same 1000-row cap on `annual_review_instances`; large rollouts render `— not seeded` for real overrides.
+---
 
 ## Plan
 
-### 1. Fix template-filter semantics (correctness)
+### 1. New SQL helper (SECURITY DEFINER)
 
-Replace `applyTemplateFilter`'s seeded-only intersection with a **rule-aware** allow-set:
+`public.annual_review_directory_access(v_uid uuid)` returns a JSONB descriptor:
 
-- Fetch active `annual_review_assignment_rules` for the cycle + `deptToBu` map + any `has_kras`-window KRA sets (reuse `fetchEmployeesWithKrasSince`).
-- For each preview candidate, compute `resolvedTemplateId = seededEffectiveTemplate ?? resolveTemplateForProfile(rules, profileForMatcher, deptToBu, krasSets).templateId`.
-- Keep the row iff `resolvedTemplateId` is in the selected `template_ids`.
-- The `runPreview` result needs `designation / pms_grade / level` (already on `profiles` for `MappingProfile`); extend the `select` list and `ProfileRow` interface. UI columns unchanged.
-
-`fetchEmployeeIdsForTemplates` stays (still needed by `handleRemoveByTemplate`, whose scope is legitimately *current audience ∩ seeded template*), but is renamed to `fetchSeededEmployeeIdsForTemplates` for clarity.
-
-### 2. Page every truncated read
-
-- `runPreview`: wrap the `profiles` query in `fetchAllPaged` (drop `.limit(500)`); post-filter BU/dept as today.
-- `runPreview`: chunk the KRA presence probe into ≤500-id batches and union the results (mirrors the pattern in `annualReviewService`).
-- `useAssignedForms`: switch the `annual_review_instances` fetch to `fetchAllPaged` with the cycle filter; do the `employee_id` intersect client-side (avoids `.in()` cap on large audience unions).
-
-### 3. Tests
-
-- `src/test/pilotAccessCardTemplateFilter.test.ts` — pure unit test on the new resolver-aware allow-set helper: seeded-with-matching-template, seeded-with-different-template, unseeded-but-rule-matches, unseeded-and-unmapped. Reuses `resolveTemplateForProfile` mocks patterned on `formMapping.test.ts`.
-- `src/test/pilotAccessCardPagination.test.ts` — source-level regression asserting `PilotAccessCard.tsx` uses `fetchAllPaged` for `profiles` + `annual_review_instances` and does NOT contain `.limit(500)` on `profiles`. Mirrors `useMyVisibleEmployeeIdsPagination.test.ts`.
-
-### 4. Docs & Policy
-
-- `DOCUMENTATION.md` → Phased Rollout section: document that the Assigned Template filter is **resolver-based** (seeded ∪ rule-predicted) and calls out the two 1000-row caps that were previously silently truncating the audience.
-- `POLICY.md` §AR-PHASED-ROLLOUT: add "Preview audience is computed against the active mapping rules, so pre-seed employees are included."
-- Version-history entry.
-
-### Technical details
-
-Files touched:
-
-```
-src/components/annual-review/PilotAccessCard.tsx      (fix + rename helper)
-src/test/pilotAccessCardTemplateFilter.test.ts        (new)
-src/test/pilotAccessCardPagination.test.ts            (new)
-DOCUMENTATION.md                                       (Phased Rollout section)
-POLICY.md                                              (§AR-PHASED-ROLLOUT note + version)
+```json
+{ "can_access": true, "scope": "all" | "bu", "business_unit_id": "<uuid|null>" }
 ```
 
-No SQL, no RPC, no edge-function, no schema, no RLS changes. Rollback = revert the single component file.
+Resolution order (first match wins):
+1. Admin or `hr_pms` role → `scope='all'`.
+2. User is in the HR BU (`profiles.business_unit_id = org_head_config.hr_business_unit_id AND profiles.is_active`) → `scope='all'`.
+3. User is a BU head (`business_units.head_user_id = v_uid`) → `scope='bu', business_unit_id=<that BU>`.
+4. User is an HOD (`departments.head_user_id = v_uid`) → `scope='bu', business_unit_id=<that department's business_unit_id>`.
+5. Otherwise → `can_access=false`.
 
-## UI Changes
+Marked `STABLE SECURITY DEFINER`, grant `EXECUTE` to `authenticated`. Deterministic tiebreak: if a user is both HOD and BU head, BU-head wins (same scope shape, higher rank).
 
-- Same layout, same columns, same buttons.
-- Filter-driven counter `N match(es) · M not yet in pilot` now reflects the resolver-based population; expect it to jump from 39 to the true count (hundreds to low thousands for the "With KRA" templates).
-- `Add all (M)` label updates accordingly. Pagination controls already handle the larger set.
+### 2. Patch `search_active_employees_for_review`
 
-## Post-implementation notes
+- Replace the hard `admin OR hr_pms` check with a call to `annual_review_directory_access(v_uid)`. Deny when `can_access=false`.
+- When `scope='bu'`, add `AND p.business_unit_id = <resolved bu>` to the `WHERE` clause. `scope='all'` behaves exactly as today.
+- Signature and result shape unchanged (idempotent replace, no client change).
 
-- Verification query (read-only) after deploy to confirm the new count matches admin expectations: compare `checkMappingCoverage(cycleId).rows` filtered by `resolvedTemplateId ∈ selected` against the UI counter.
-- Not applicable: mock data changes (no new domain entities), edge-function updates.
+### 3. Patch `create_or_get_annual_review_instance`
+
+- Same authorization swap.
+- When `scope='bu'`, re-fetch the target employee's `business_unit_id` and raise `permission denied: employee outside your business unit` if it doesn't match.
+- Add `"actor_scope"` to the audit log payload.
+
+### 4. Frontend
+
+- New hook `src/hooks/useDirectoryAccess.ts` — calls a lightweight RPC wrapper (`get_annual_review_directory_access`) or reads the same resolver via a `.rpc()`; returns `{ canAccess: boolean, scope: 'all' | 'bu', businessUnitId: string | null }`. Cached with `staleTime: 5 min` on `user.id`.
+- `src/pages/annual-review/TeamAnnualReview.tsx`: replace `const canSearchDirectory = isAdmin || hasRole('hr_pms')` with `useDirectoryAccess()`. Feature flag check unchanged. The button label/tooltip clarifies scope for BU-scoped users: "All employees in <BU name>".
+- `EmployeeDirectoryDialog` needs no change — the server already enforces scope; the dialog just shows fewer results.
+
+### 5. Tests
+
+- `src/test/annualReview/directoryAccess.test.ts` — unit test the resolver behavior via mocked RPC for all five branches (admin / hr_pms / hr-team / bu-head / hod / none).
+- `src/test/annualReview/employeeDirectory.test.ts` — extend with two cases: BU-head sees only same-BU rows; cross-BU add-to-phase throws.
+- Mock data: at least one profile in HR BU, one BU head, one HOD, one out-of-scope employee.
+
+### 6. Docs & Policy (mandatory SSOT sync)
+
+- `DOCUMENTATION.md` → Annual Review › Directory Search: update the access matrix and note the resolver + audit `actor_scope`.
+- `POLICY.md` → add **§AR-DIRECTORY-ACCESS-MATRIX**: authoritative list of who can search / add-to-phase and under what scope, with the tiebreak rule.
+
+---
+
+## Files touched
+
+- New migration: create `annual_review_directory_access` resolver + patched RPCs (idempotent `CREATE OR REPLACE`).
+- `src/hooks/useDirectoryAccess.ts` (new)
+- `src/pages/annual-review/TeamAnnualReview.tsx` (gate swap + tooltip)
+- `src/test/annualReview/directoryAccess.test.ts` (new)
+- `src/test/annualReview/employeeDirectory.test.ts` (extend)
+- `DOCUMENTATION.md`, `POLICY.md`
+
+## Rollback
+
+Revert-safe: the migration re-uses `CREATE OR REPLACE` for both RPCs; a follow-up migration restoring the original `admin OR hr_pms` check and dropping the resolver reverses the change with zero data loss. Feature flag can be turned off immediately as a kill-switch without a code change.
+
+## Out of scope
+
+- No changes to reviewer-chain seeding, phase seeding rules, or the resolver-based audience filter shipped previously.
+- No new user role in `app_role`; HR-team membership is derived from BU assignment, per your answer.
