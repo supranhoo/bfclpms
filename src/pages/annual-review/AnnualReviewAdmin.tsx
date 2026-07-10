@@ -138,6 +138,7 @@ export default function AnnualReviewAdmin() {
             <CriteriaMatrixPanel />
           </div>
         </TabsContent>
+        <TabsContent value="bulk" className="mt-4"><BulkActionsTab /></TabsContent>
         <TabsContent value="settings" className="mt-4"><SettingsTab /></TabsContent>
       </Tabs>
     </div>
