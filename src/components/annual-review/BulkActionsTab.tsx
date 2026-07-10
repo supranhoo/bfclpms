@@ -16,12 +16,12 @@ import {
 import { toast } from 'sonner';
 import { Loader2, Download, Search } from 'lucide-react';
 import {
-  bulkAdd, bulkExclude, bulkRemap, resolveEmployeeCodes, resultsToCsv,
+  bulkAdd, bulkExclude, bulkRemap, bulkRestore, resolveEmployeeCodes, resultsToCsv,
   type ResolvedCode,
 } from '@/services/annualReview/bulkAdmin';
 import { useActiveCycle, useTemplates } from '@/hooks/useAnnualReview';
 
-type Action = 'add' | 'remove' | 'remap';
+type Action = 'add' | 'remove' | 'remap' | 'restore';
 
 export function BulkActionsTab() {
   const { data: cycle } = useActiveCycle();
@@ -62,6 +62,7 @@ export function BulkActionsTab() {
     if (action === 'add') return preview.withoutInstance.length > 0 && !!cycle;
     if (action === 'remove') return preview.eligibleExcludeOrRemap.length > 0 && reason.trim().length >= 3;
     if (action === 'remap') return preview.eligibleExcludeOrRemap.length > 0 && !!templateId && reason.trim().length >= 3;
+    if (action === 'restore') return preview.excluded.length > 0 && reason.trim().length >= 3;
     return false;
   }, [action, preview, reason, templateId, cycle]);
 
@@ -108,7 +109,7 @@ export function BulkActionsTab() {
           message: r.message ?? '',
         })));
         toast.success(`Excluded ${res.filter((r) => r.status === 'excluded').length} employees`);
-      } else {
+      } else if (action === 'remap') {
         const ids = preview.eligibleExcludeOrRemap.map((r) => r.instance_id!);
         const res = await bulkRemap(ids, templateId, reason);
         const byId = new Map(preview.eligibleExcludeOrRemap.map((r) => [r.instance_id!, r]));
@@ -120,6 +121,18 @@ export function BulkActionsTab() {
           message: r.message ?? '',
         })));
         toast.success(`Re-mapped ${res.filter((r) => r.status === 'remapped').length} employees`);
+      } else {
+        const ids = preview.excluded.map((r) => r.instance_id!);
+        const res = await bulkRestore(ids, reason);
+        const byId = new Map(preview.excluded.map((r) => [r.instance_id!, r]));
+        setResults(res.map((r) => ({
+          employee_code: byId.get(r.instance_id)?.code ?? '',
+          name: byId.get(r.instance_id)?.full_name ?? '',
+          action: 'restore',
+          status: r.status,
+          message: r.message ?? '',
+        })));
+        toast.success(`Restored ${res.filter((r) => r.status === 'restored').length} employees`);
       }
       setResolved(null); setCodesText('');
     } catch (e) {
@@ -149,7 +162,8 @@ export function BulkActionsTab() {
           <div className="text-sm text-muted-foreground">
             Add, remove, or re-map a group of employees on the active cycle
             {cycle ? <> (<strong>{cycle.name}</strong>)</> : ''}. Remove and re-map only affect
-            employees still in <code>not_started</code> or <code>pending_self</code>. HR/Admin only.
+            employees still in <code>not_started</code> or <code>pending_self</code>. Restore
+            re-includes previously excluded employees. HR/Admin only.
           </div>
 
           <div className="grid gap-3 md:grid-cols-3">
@@ -160,6 +174,7 @@ export function BulkActionsTab() {
                 <SelectContent>
                   <SelectItem value="add">Add employees to cycle</SelectItem>
                   <SelectItem value="remove">Remove (exclude) from cycle</SelectItem>
+                  <SelectItem value="restore">Restore (re-include) to cycle</SelectItem>
                   <SelectItem value="remap">Re-map to template</SelectItem>
                 </SelectContent>
               </Select>
@@ -191,7 +206,7 @@ export function BulkActionsTab() {
             <div className="text-xs text-muted-foreground mt-1">{codes.length} unique codes</div>
           </div>
 
-          {(action === 'remove' || action === 'remap') && (
+          {(action === 'remove' || action === 'remap' || action === 'restore') && (
             <div>
               <Label>Reason (min 3 chars, saved to audit log)</Label>
               <Input value={reason} onChange={(e) => setReason(e.target.value)} maxLength={500} />
@@ -242,6 +257,10 @@ export function BulkActionsTab() {
                     if (!r.employee_id) willDo = 'skip: not found';
                     else if (action === 'add') {
                       willDo = r.instance_id ? 'skip: already in cycle' : 'add';
+                    } else if (action === 'restore') {
+                      if (!r.instance_id) willDo = 'skip: no instance (use Add)';
+                      else if (r.overall_status === 'excluded') willDo = 'restore';
+                      else willDo = `skip: not excluded (${r.overall_status ?? '—'})`;
                     } else if (r.overall_status === 'excluded') {
                       willDo = 'skip: already excluded';
                     } else if (!r.instance_id) {
