@@ -1,102 +1,58 @@
-## Bug: Self‑review draft appears blank on reopen (Upendra Singh, 201091)
+## Add "Pending With" column to KPI Scorecard Detail
 
-### What the user sees
-- Fill self-review form → click "Save draft" → toast "Saved".
-- Reload / reopen the page → all text boxes and score pickers are empty.
-- Admin looking at the same `annual_review_responses` row sees the saved values — the data is safe in the DB, only the UI fails to hydrate.
+Add a new column between **Status** and existing columns that answers "who is this KPI currently sitting with?" — a person's name when the next actor is a specific user, or a role label when it's a functional queue.
 
-### Assumptions
-- Upendra's row is stage `pending_self` and not locked (so the draft hook is enabled).
-- RLS on `annual_review_responses` is fine for self (admin can read, and the row is present — the fetch is not blocked; the values just aren't shown). We verify this before shipping.
+### Resolution rules (per row)
 
-### 5‑Why
-1. **Why are the text boxes blank on reopen?** The draft state passed to the form is empty (`criteria_scores={}`, `qualitative_responses={}`, `notes=null`) even though the DB row has values.
-2. **Why is the draft state empty?** `useDebouncedResponseDraft` seeds its local state from `opts.initial` via `useState(...)` **only on the very first render**.
-3. **Why does that first render see no data?** On mount, `useResponses(instance.id)` hasn't resolved yet, so `myResponse = responses.find(r => r.reviewer_role === 'self') ?? null` is `null`. The hook seeds with all-empty defaults.
-4. **Why doesn't the hook re-seed when the query resolves?** There is no `useEffect` that syncs `draft` when `opts.initial` transitions from `null` → the fetched row. `useState` initializers only run once.
-5. **Why did this survive review?** ADR‑105 removed the debounced autosave to stop a *revert-to-server* race, but the same code path still has a *seed-once-from-null* bug. Tests cover "no autosave" and "flush persists", but there is no test for "initial arrives late → draft rehydrates". The Team detail sheet remounts on open so it accidentally re-seeds; the standalone Employee page mounts once and exposes the bug.
+Driven by the KPI's current `status` (= last completed stage) plus the employee's resolved workflow chain (`get_employee_workflow`) to know the **next** stage:
 
-### Root cause
-`src/hooks/useAnnualReview.ts` → `useDebouncedResponseDraft`:
+| Current `status` | Next stage / owner | Displayed value |
+|---|---|---|
+| `approved` | none | `—` |
+| `kra_set` + Org KPI | Org KPI Data Owner(s) | Data Owner name(s), comma-joined (already in `dataOwnerNames`) |
+| `kra_set` + Individual KPI | Self review | Employee name (self) |
+| `self_review` | Manager check | Reporting Manager's name |
+| `manager_check` | next per workflow | If next = `skip_level_check` → Skip Manager name; if `hr_pms_review` → "HR PMS"; if `audit` → "Audit"; if `management_review` → "Management" |
+| `skip_level_check` | next per workflow | Same rule as above (person name for skip fallback, role label otherwise) |
+| `hr_pms_review` | next per workflow | "Audit" / "Management" / `—` if terminal |
+| `audit` | next per workflow | "Management" / "HR PMS" / `—` if terminal |
+| `management_review` | next per workflow | Usually terminal → `—` |
 
-```ts
-const [draft, setDraftState] = useState<DraftPayload>({
-  criteria_scores: opts.initial?.criteria_scores ?? {},
-  qualitative_responses: opts.initial?.qualitative_responses ?? {},
-  evidence: opts.initial?.evidence ?? [],
-  weighted_score: opts.initial?.weighted_score ?? null,
-  notes: opts.initial?.notes ?? null,
-});
-```
+Person-name stages: **Self, Manager, Skip-Level**. Queue-label stages: **HR PMS, Audit, Management** (no individual name — those are role-wide queues).
 
-`useState` runs the initializer once. `opts.initial` is `null` at first paint (query still loading) and later becomes the persisted response, but `draft` is never reconciled. Result: pickers render from an empty object; on save/flush the empty object overwrites nothing (nothing changed), but on Submit / next edit the empty state can even wipe fields.
+### Technical details
 
-This is the *inverse* of the risk ADR‑105 called out, and it maps 1‑to‑1 with the "Auth Readiness Query Gate" and Reviewer‑Draft‑Hydration invariants already in project memory (POLICY §107): saved values must render verbatim.
+1. **Data fetch** (`fetchScorecardForPeriod` in `src/pages/reports/KpiScorecardDetail.tsx`):
+   - Extend the `profiles` select to include `reporting_manager_id, functional_manager_id`.
+   - Batch-call `get_bulk_employee_workflows(employee_ids, period, year)` once per fetch to get each employee's resolved stage chain (per POLICY §105 / `per-employee-workflow-resolution` memory — never hardcode).
+   - Build lookup maps: `managerNameByEmpId`, `skipManagerNameByEmpId`, `stageChainByEmpId`.
 
-### Corrective action (CA) — surgical, one hook
+2. **Derivation helper** (new `src/lib/kpiPendingWith.ts` — pure function, testable):
+   ```ts
+   resolvePendingWith({ status, isOrgKpi, dataOwnerNames, employeeName, managerName, skipManagerName, stageChain }): string
+   ```
+   Encapsulates the rules table above. Returns `—` for terminal / unknown, string otherwise.
 
-**File: `src/hooks/useAnnualReview.ts` (`useDebouncedResponseDraft`)**
+3. **UI additions** in `KpiScorecardDetail.tsx`:
+   - Add `pendingWith: string` to the `FlatRow` interface, populated inside `fetchScorecardForPeriod` via the helper.
+   - Add `{ field_key: 'pending_with', default_label: 'Pending With', default_sort: 295 }` after `status` in `KSD_DEFAULT_FIELDS` so it appears in table + Excel export + Report Builder field manager.
+   - Add a matching `TableHead` (sortable) + `TableCell` in the rendered table.
+   - Add a case in `ksdValueFor` returning `r.pendingWith`.
+   - Optional: an Excel-style column filter (`pendingWithFilter`) mirroring the existing status filter pattern.
 
-1. Track the identity of the seed with a ref (`seededResponseIdRef`).
-2. Add a `useEffect` that, when `opts.initial` becomes non-null (or its `id`/`updated_at` changes) AND the local `status` is not `'pending'` (user hasn't started editing), re-seeds `draft` from `opts.initial` and sets `status = 'idle'`.
-3. Never overwrite a `'pending'` draft — that would resurrect the ADR‑105 revert bug. If the user is mid-edit and a refetch lands, keep local edits.
-
-Pseudocode:
-
-```ts
-const seededIdRef = useRef<string | null>(null);
-useEffect(() => {
-  const init = opts.initial;
-  if (!init) return;
-  const key = `${init.id}:${init.updated_at ?? ''}`;
-  if (seededIdRef.current === key) return;
-  if (statusRef.current === 'pending' || statusRef.current === 'saving') return;
-  seededIdRef.current = key;
-  setDraftState({
-    criteria_scores: init.criteria_scores ?? {},
-    qualitative_responses: init.qualitative_responses ?? {},
-    evidence: init.evidence ?? [],
-    weighted_score: init.weighted_score ?? null,
-    notes: init.notes ?? null,
-  });
-  setStatus('idle');
-}, [opts.initial?.id, opts.initial?.updated_at]);
-```
-
-No other files change. `EmployeeAnnualReview.tsx` and `TeamReviewDetailContent.tsx` already pass `initial={myResponse}`.
-
-### Preventive actions (PA)
-
-1. **Regression test** (`src/test/annualReview/useDebouncedResponseDraftLateInitial.test.ts`):
-   - Mount hook with `initial: null`.
-   - Rerender with `initial: { id:'r1', updated_at:'t1', criteria_scores:{X:5}, notes:'hi' }`.
-   - Expect `draft.criteria_scores.X === 5` and `notes === 'hi'`, `status === 'idle'`.
-   - Second scenario: set `draft` locally (status = pending), then rerender with a new `initial` — expect local edits preserved, no re-seed.
-2. **Extend existing test** (`useDebouncedResponseDraftNoAutosave.test.ts`) to assert that a late-arriving `initial` after a `pending` edit does **not** clobber the local draft — locks in the ADR‑105 invariant while fixing this one.
-3. Update `docs/adr/ADR-105.md` with an addendum, and add a memory note under `mem://features/annual-review/operations` about the "seed once + refetch" pitfall so future hooks that mirror this pattern don't repeat it.
+4. **Tests** (`src/test/kpiPendingWith.test.ts` — vitest):
+   - `approved` → `—`
+   - `kra_set` + org KPI with 2 owners → joined names
+   - `kra_set` + individual → employee name
+   - `self_review` → manager name
+   - `manager_check` with next=`skip_level_check` → skip name; next=`audit` → "Audit"; next=`hr_pms_review` → "HR PMS"; next=`management_review` → "Management"
+   - `hr_pms_review` on `self_hr_pms` workflow (terminal) → `—`
+   - Missing manager (null) with next=Manager → `—` fallback
 
 ### Risk & impact
 
-- **Data**: none. Read path only; no schema, RLS, or write changes.
-- **Workflow**: none. No stage transitions altered.
-- **UI/UX**: forms now show saved draft on reopen (the intended behavior).
-- **Regression risk (ADR‑105 revert)**: mitigated by the `status !== 'pending'` guard and the second regression test.
-- **Scalability**: negligible — one shallow effect keyed on `id`+`updated_at`.
-
-### Rollback
-
-Delete the added `useEffect` and ref. Fully additive; no data migration.
-
-### Verification steps
-
-1. Log in as Upendra (or any self-review user with an existing draft), open `/annual-review/self`, confirm previously saved criteria scores, qualitative answers, and notes render immediately.
-2. Edit a field, do NOT save, wait for a background refetch (invalidate) — confirm the edit is preserved (not reverted).
-3. Save draft, reload — confirm values still render.
-4. `bun vitest run useDebouncedResponseDraft` — both tests green.
-
-### Deliverables
-- Edit: `src/hooks/useAnnualReview.ts`
-- Add: `src/test/annualReview/useDebouncedResponseDraftLateInitial.test.ts`
-- Edit: `src/test/annualReview/useDebouncedResponseDraftNoAutosave.test.ts` (one extra case)
-- Edit: `docs/adr/ADR-105.md` (addendum)
-- Memory: append note to `mem://features/annual-review/operations`
+- **Data impact:** Read-only. No schema/RLS/migration.
+- **Workflow impact:** None — purely a display column derived from existing status + workflow chain.
+- **Regression risk:** Low. All logic centralised in a pure helper with tests; existing fields untouched.
+- **Perf:** One extra bulk RPC call per Load (already used by other reports; batched at 25). Payload grows by two profile columns. Negligible on the 2,700-row scale shown.
+- **Zero-hardcoding:** Uses `get_bulk_employee_workflows` — no hardcoded stage arrays.
