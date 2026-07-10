@@ -282,9 +282,17 @@ function TeamReviewDetailInner(props: any) {
     stageRatingOutOf5,
     sendBackOpen, setSendBackOpen, sendBackReason, setSendBackReason,
     sendBackPending, advancePending, assistedOpen, setAssistedOpen,
-    user, profile, queryClient,
+    user, profile, queryClient, effectiveRole,
   } = props;
   const { t } = useAnnualReviewI18n();
+  const [eligDlgOpen, setEligDlgOpen] = useState(false);
+  const canEditEligibility = effectiveRole === 'admin' || effectiveRole === 'hr_pms';
+  const eligibilityCriteria = template?.sections?.eligibility_criteria ?? [];
+  const reviewYear = typeof fiscalYear === 'number' ? fiscalYear + 1 : undefined;
+  const autoEligibilityInputs = useMemo(
+    () => deriveAutoInputs(eligibilityCriteria, instance.employee?.doj ?? null, reviewYear ?? null),
+    [eligibilityCriteria, instance.employee?.doj, reviewYear],
+  );
   const selfReviewFields = template?.sections?.self_review_fields ?? [];
   const selfEditable = role === 'self' && !locked;
   const selfResponse = (responses ?? []).find((r: any) => r.reviewer_role === 'self') ?? null;
