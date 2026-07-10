@@ -140,6 +140,7 @@ const DevelopmentReport = lazy(() => import("./pages/reports/DevelopmentReport")
 
 // Layout components
 import { ReportRoute } from "./components/layout/ReportRoute";
+import { AnnualReviewTeamAccessRoute } from "./components/annual-review/AnnualReviewTeamAccessRoute";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -586,19 +587,19 @@ const App = () => (
                   </ProtectedRoute>
                 } />
                 <Route path="/annual-review/team" element={
-                  <ProtectedRoute allowedRoles={['admin','manager','hr_pms','skip_level','management']}>
+                  <AnnualReviewTeamAccessRoute>
                     <AnnualReviewGate><Suspense fallback={<PageFallback />}><TeamAnnualReview /></Suspense></AnnualReviewGate>
-                  </ProtectedRoute>
+                  </AnnualReviewTeamAccessRoute>
                 } />
                 <Route path="/annual-review/team/:instanceId" element={
-                  <ProtectedRoute allowedRoles={['admin','manager','hr_pms','skip_level','management']}>
+                  <AnnualReviewTeamAccessRoute>
                     <AnnualReviewGate><Suspense fallback={<PageFallback />}><TeamAnnualReviewDetail /></Suspense></AnnualReviewGate>
-                  </ProtectedRoute>
+                  </AnnualReviewTeamAccessRoute>
                 } />
                 <Route path="/annual-review/calibrate" element={
-                  <ProtectedRoute allowedRoles={['admin','manager','hr_pms','skip_level','management']}>
+                  <AnnualReviewTeamAccessRoute>
                     <AnnualReviewGate><Suspense fallback={<PageFallback />}><ManagerCalibration /></Suspense></AnnualReviewGate>
-                  </ProtectedRoute>
+                  </AnnualReviewTeamAccessRoute>
                 } />
                 <Route path="/annual-review/admin" element={
                   <ProtectedRoute allowedRoles={['admin','hr_pms']}>
