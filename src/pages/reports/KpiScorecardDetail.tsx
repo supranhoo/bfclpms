@@ -843,12 +843,15 @@ export default function KpiScorecardDetail() {
                           renderValue={v => statusLabels[v] ?? v}
                         />
                       </TableHead>
+                      <TableHead className={thClass} title="Who this KPI is currently waiting on. Person name for Self/Manager/Skip-Level; role queue for HR PMS/Audit/Management; Data Owner name(s) for org KPIs still at KRA Set.">
+                        <span onClick={() => toggleSort('pendingWith')} className="inline-flex items-center">Pending With<SortIcon field="pendingWith" /></span>
+                      </TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {paged.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={15} className="text-center text-muted-foreground py-8">
+                        <TableCell colSpan={16} className="text-center text-muted-foreground py-8">
                           {rows && rows.length > 0
                             ? `No KPIs match the current Company / Department / Search filters (${rows.length} loaded for ${appliedQuery?.month} ${appliedQuery?.year}).`
                             : `No KPI rows exist for ${appliedQuery?.month} ${appliedQuery?.year}.`}
