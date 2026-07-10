@@ -316,6 +316,12 @@ export function useDebouncedResponseDraft(opts: {
   const draftRef = useRef<DraftPayload>(draft);
   draftRef.current = draft;
 
+  // Track which server response we've already seeded from, so we only re-seed
+  // when a DIFFERENT row (or a newer updated_at) arrives — never on every render.
+  const seededKeyRef = useRef<string | null>(
+    opts.initial ? `${opts.initial.id}:${opts.initial.updated_at ?? ''}` : null,
+  );
+
   const persist = useCallback(async () => {
       if (opts.enabled === false) return;
       setStatus('saving');
