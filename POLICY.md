@@ -1,5 +1,5 @@
-### §AR-DIRECTORY-ACCESS-MATRIX — Annual Review "All employees" directory access (v2.66.100, 2026-07-10)
-- The Annual Review directory search (`search_active_employees_for_review`) and the "Add to phase" write (`create_or_get_annual_review_instance`) are gated server-side by the resolver `public.annual_review_directory_access(uid)`. UI gates (`useDirectoryAccess`) MUST reflect the resolver — never local role checks — and the master feature flag `app_settings.annual_review_directory_search_enabled` remains the kill-switch for the UI entry point.
+### §AR-DIRECTORY-ACCESS-MATRIX — Annual Review "All employees" directory access (v2.66.101, 2026-07-10)
+- The Annual Review directory search (`search_active_employees_for_review`) and the "Add to phase" write (`create_or_get_annual_review_instance`) are gated server-side by the resolver `public.annual_review_directory_access(uid)`. UI gates (`useDirectoryAccess`) MUST reflect the resolver — never local role checks — and the master feature flag `app_settings.annual_review_directory_search_enabled` remains the kill-switch for the UI entry point. The Team Annual Review route/sidebar entry MUST also use the same resolver for HR-Team / BU-scoped access; static role checks alone are forbidden for this entry.
 - Access matrix (first match wins, deterministic tiebreak):
   1. **Admin / HR PMS role** → scope `all` (all active employees).
   2. **HR team** — any active user whose `profiles.business_unit_id` = `org_head_config.hr_business_unit_id` → scope `all`.
@@ -7,7 +7,8 @@
   4. **HOD** — `departments.head_user_id = uid` → scope `bu` limited to that department's `business_unit_id` (covers all departments in the same BU).
   5. Otherwise → denied.
 - Write path MUST re-verify scope: BU-scoped actors CANNOT add employees outside their BU. Each `annual_review.instance.auto_created` audit event MUST record `actor_scope` (`admin` | `hr_pms` | `hr_team` | `bu_head` | `hod`) so the authority for every seeded instance is auditable.
-- Regression guards: `src/test/annualReview/directoryAccess.test.ts` covers all resolver branches; `src/test/annualReview/employeeDirectory.test.ts` covers the RPC contract (fail-closed on error).
+- Assisted self-review submission MUST use the same resolver scope after its existing safeguards pass (`assisted_self_submission_enabled`, `pending_self`, and no employee login). HR-Team all-scope users may assist all eligible employees; BU Head / HOD users may assist only employees in their resolved BU.
+- Regression guards: `src/test/annualReview/directoryAccess.test.ts` covers all resolver branches; `src/test/annualReview/employeeDirectory.test.ts` covers the RPC contract (fail-closed on error); `src/test/annualReview/teamAccess.test.ts` pins route/sidebar access parity for HR-Team users.
 
 ### §AR-PHASED-ROLLOUT-AUDIENCE — Phased Rollout preview is resolver-aware and MUST page every large read (v2.66.99, 2026-07-09)
 - The "Assigned Template" filter on Admin → Annual Review → Phased Rollout (`PilotAccessCard`) MUST include employees whose EFFECTIVE template for the selected cycle is one of the selected templates, where "effective" = seeded template (with override) OR — for employees with no instance yet — the template the active `annual_review_assignment_rules` would assign at seed time. A seeded-only intersection is FORBIDDEN for the preview because most employees have no instance during pre-rollout, silently hiding the true audience.

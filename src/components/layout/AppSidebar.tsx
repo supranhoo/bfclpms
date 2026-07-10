@@ -8,8 +8,10 @@ import { useIsAnyOrgKpiDataOwner } from '@/hooks/useOrgKpiDataOwner';
 import { useMenuAccess } from '@/hooks/useMenuAccess';
 import { useBulkReviewFlag } from '@/hooks/useBulkReview';
 import { useAnnualReviewFlag } from '@/hooks/useAnnualReview';
+import { useDirectoryAccess } from '@/hooks/useDirectoryAccess';
 import { useResolvedMenu, useMenuOverridesEnabled } from '@/hooks/useResolvedMenu';
 import { useReviewNoteAccess } from '@/hooks/useReviewNoteAccess';
+import { annualReviewTeamAccessAllowed, ANNUAL_REVIEW_TEAM_STATIC_ROLES } from '@/lib/annualReview/teamAccess';
 import {
   Sidebar,
   SidebarContent,
@@ -188,12 +190,23 @@ export function AppSidebar() {
   const { canAccess, canPerform, userOverrides } = useMenuAccess();
   const { data: bulkReviewFlagOn } = useBulkReviewFlag();
   const { data: annualReviewFlagOn } = useAnnualReviewFlag();
+  const annualReviewDirectoryAccess = useDirectoryAccess();
   const { data: overridesEnabled } = useMenuOverridesEnabled();
   const { data: resolvedMenu } = useResolvedMenu();
   const reviewNoteAccess = useReviewNoteAccess();
 
   const policyVisibleRoles = appSettings?.pms_policy_visible_roles || ['admin', 'manager', 'employee', 'auditor', 'management', 'hr_pms'];
   const menuItems = getStaticMenuItems(policyVisibleRoles);
+  const canAccessAnnualReviewTeam = annualReviewTeamAccessAllowed(
+    effectiveRole,
+    annualReviewDirectoryAccess.canAccess,
+  );
+  const annualReviewTeamRoles = [
+    ...new Set([
+      ...ANNUAL_REVIEW_TEAM_STATIC_ROLES,
+      ...(canAccessAnnualReviewTeam && effectiveRole ? [effectiveRole] : []),
+    ]),
+  ];
 
   // Parent-aware resolver. menu_key is the stable identity; when overrides
   // exist, label + sort + PARENT come from the resolver. Items can therefore
@@ -425,7 +438,7 @@ export function AppSidebar() {
         title: 'Annual Reviews (Team)',
         icon: ClipboardCheck,
         path: '/annual-review/team',
-        roles: ['admin', 'manager', 'skip_level', 'hr_pms', 'management'],
+        roles: annualReviewTeamRoles,
       } as any,
     ];
     menuItems.admin = [
