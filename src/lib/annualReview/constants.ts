@@ -28,6 +28,7 @@ export const STATUS_LABEL: Record<AnnualReviewStatus, string> = {
   pending_bu:      'BU Head Review Pending',
   pending_hr:      'HR Finalization Pending',
   completed:       'Completed',
+  excluded:        'Excluded',
 };
 
 export const STATUS_BADGE_CLASS: Record<AnnualReviewStatus, string> = {
@@ -39,6 +40,7 @@ export const STATUS_BADGE_CLASS: Record<AnnualReviewStatus, string> = {
   pending_bu:      'bg-indigo-500/15 text-indigo-400 border-indigo-500/30',
   pending_hr:      'bg-yellow-500/15 text-yellow-400 border-yellow-500/30',
   completed:       'bg-emerald-500/15 text-emerald-400 border-emerald-500/30',
+  excluded:        'bg-rose-500/15 text-rose-400 border-rose-500/30',
 };
 
 /** Stages in canonical order for the stepper UI. */
