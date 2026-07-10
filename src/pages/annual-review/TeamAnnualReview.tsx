@@ -16,6 +16,7 @@ import { Badge } from '@/components/ui/badge';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { EmployeeDirectoryDialog } from '@/components/annual-review/EmployeeDirectoryDialog';
 import { supabase } from '@/integrations/supabase/client';
+import { useDirectoryAccess } from '@/hooks/useDirectoryAccess';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
@@ -38,7 +39,7 @@ const STATUS_FILTERS: { value: AnnualReviewStatus | 'all'; label: string }[] = [
 // Reviewer resolution — see `@/lib/annualReview/stageForReviewer`.
 
 export default function TeamAnnualReview() {
-  const { user, isAdmin, hasRole } = useAuth();
+  const { user } = useAuth();
   const { data: cycle } = useActiveCycle();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -60,7 +61,10 @@ export default function TeamAnnualReview() {
   });
   const [directoryOpen, setDirectoryOpen] = useState(false);
 
-  const canSearchDirectory = isAdmin || hasRole('hr_pms');
+  // Access resolved server-side (Admin / HR PMS / HR-team / BU-head / HOD).
+  // See POLICY §AR-DIRECTORY-ACCESS-MATRIX.
+  const directoryAccess = useDirectoryAccess();
+  const canSearchDirectory = directoryAccess.canAccess;
 
   const { data: directoryFlag } = useQuery({
     queryKey: ['app-settings', 'annual_review_directory_search_enabled'],
