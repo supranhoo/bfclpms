@@ -23,7 +23,7 @@ const nonTenure: EligibilityCriterion = {
 describe('eligibilityAutoFill', () => {
   it('monthsBetween counts whole calendar months', () => {
     expect(monthsBetween('2026-01-01', '2026-06-30')).toBe(5);
-    expect(monthsBetween('2025-06-01', '2026-06-30')).toBe(13);
+    expect(monthsBetween('2025-06-01', '2026-06-30')).toBe(12);
     expect(monthsBetween('2026-07-01', '2026-06-30')).toBe(0);
   });
 
