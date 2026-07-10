@@ -13484,6 +13484,10 @@ export type Database = {
         }
         Returns: boolean
       }
+      can_view_profile_for_annual_review_directory: {
+        Args: { p_profile_id: string }
+        Returns: boolean
+      }
       can_view_safety_incident: {
         Args: { _incident_id: string }
         Returns: boolean
