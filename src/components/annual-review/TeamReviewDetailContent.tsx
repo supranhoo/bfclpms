@@ -360,10 +360,34 @@ function TeamReviewDetailInner(props: any) {
         eligibility={template?.sections.eligibility_criteria}
         eligibilityInputs={instance.eligibility_inputs}
         eligibilityRemark={instance.eligibility_remark}
+        autoEligibilityInputs={autoEligibilityInputs}
         employeeId={instance.employee_id}
         fiscalYear={fiscalYear}
         readOnly
       />
+
+      {canEditEligibility && eligibilityCriteria.length > 0 && (
+        <div className="flex justify-end -mt-2">
+          <Button size="sm" variant="outline" onClick={() => setEligDlgOpen(true)} className="gap-1.5">
+            <Pencil className="h-3.5 w-3.5" />
+            Fill eligibility inputs
+          </Button>
+        </div>
+      )}
+
+      <Dialog open={eligDlgOpen} onOpenChange={setEligDlgOpen}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Eligibility Inputs — {instance.employee?.full_name ?? instance.employee?.employee_code ?? 'Employee'}</DialogTitle>
+          </DialogHeader>
+          <EligibilityInputsEditor
+            instanceId={instance.id}
+            criteria={eligibilityCriteria}
+            initial={(instance.eligibility_inputs ?? {}) as Record<string, string | number | boolean>}
+            initialRemark={instance.eligibility_remark ?? ''}
+          />
+        </DialogContent>
+      </Dialog>
 
       <AppraisalCompositionCard composition={composition} variant="full" />
 
