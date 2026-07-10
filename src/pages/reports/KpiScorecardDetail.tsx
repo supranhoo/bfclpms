@@ -890,6 +890,9 @@ export default function KpiScorecardDetail() {
                               {statusLabels[r.status] ?? r.status}
                             </Badge>
                           </TableCell>
+                          <TableCell className="text-xs py-1.5 px-2 max-w-[180px] truncate whitespace-nowrap" title={r.pendingWith}>
+                            {r.pendingWith || '—'}
+                          </TableCell>
                         </TableRow>
                       );
                     })}
