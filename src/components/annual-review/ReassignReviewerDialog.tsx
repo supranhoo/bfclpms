@@ -15,7 +15,7 @@ import { toast } from 'sonner';
 import type { AnnualReviewInstance } from '@/types/annualReview';
 import type { InstanceWithEmployee } from '@/services/annualReview/annualReviewService';
 
-type Role = 'manager' | 'skip_manager' | 'bu_head' | 'hr';
+type Role = 'manager' | 'skip_manager' | 'dept_head' | 'bu_head' | 'hr';
 
 /**
  * Mid-cycle reviewer reassignment. Writes an `annual_review_assignment_overrides`
@@ -40,6 +40,7 @@ export function ReassignReviewerDialog({
   const currentReviewerId = {
     manager: instance.manager_id,
     skip_manager: instance.skip_id,
+    dept_head: (instance as { dept_head_id?: string | null }).dept_head_id ?? null,
     bu_head: instance.bu_head_id,
     hr: instance.hr_id,
   }[role];
@@ -127,6 +128,7 @@ export function ReassignReviewerDialog({
               <SelectContent>
                 <SelectItem value="manager">Manager</SelectItem>
                 <SelectItem value="skip_manager">Skip manager</SelectItem>
+                <SelectItem value="dept_head">Dept head</SelectItem>
                 <SelectItem value="bu_head">BU head</SelectItem>
                 <SelectItem value="hr">HR</SelectItem>
               </SelectContent>
