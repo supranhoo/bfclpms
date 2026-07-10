@@ -67,6 +67,28 @@ export function TeamReviewDetailContent({
 }) {
   const { user, profile } = useAuth();
   const queryClient = useQueryClient();
+  // Excluded instances are non-actionable for any reviewer. Render a read-only
+  // notice and bail out — do NOT mount the draft/submit form. Admin/reports
+  // still see the excluded row via their own screens (with the Excluded badge).
+  if (instance.overall_status === 'excluded') {
+    const excludedReason = (instance as { excluded_reason?: string | null }).excluded_reason ?? null;
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            {instance.employee?.full_name ?? 'Employee'}
+            <Badge variant="destructive">Excluded</Badge>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2 text-sm text-muted-foreground">
+          <p>This employee has been excluded from the current annual review cycle by HR/Admin. No self-review or reviewer action is required.</p>
+          {excludedReason && (
+            <p><span className="font-medium text-foreground">Reason:</span> {excludedReason}</p>
+          )}
+        </CardContent>
+      </Card>
+    );
+  }
   const { data: template } = useTemplate(
     (instance as { template_override_id?: string | null }).template_override_id ?? instance.template_id,
   );

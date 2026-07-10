@@ -1,75 +1,41 @@
-## Current state (what exists today)
+## Problem
 
-Looking at the annual review module, here is what is **already possible** and what is **missing**:
+When HR/Admin excludes an employee via Bulk Actions, the row is marked `overall_status = 'excluded'` on `annual_review_instances`, but the reviewer's **Team Annual Review** queue still fetches and renders it (screenshot: Santosh Bediya SK376 opens as a normal review with an "Excluded" badge but full submit UI). The exclude was implemented only for the admin/reports surface — the reviewer path was never taught about the new status.
 
-| Need | Exists today? |
-|---|---|
-| Add a single employee to a cycle | Yes — Directory search → "Add to phase" (`create_or_get_annual_review_instance`) |
-| Move an employee to a different template | Yes — per-employee override (`set_annual_review_template_override`) |
-| Reassign a reviewer for an employee | Yes — `reassign_annual_review_reviewer` |
-| **Remove an employee from a cycle** (keep them active in the system) | **No dedicated action** — the 37 annual-review RPCs have no delete/exclude endpoint |
-| **Bulk add / remove / re-map a group of employees** | **No bulk UI** — everything is one-at-a-time |
+## Root Cause
 
-So both of the user's asks are real gaps, not existing hidden features.
+`listInstancesForReviewerPaginated` (`src/services/annualReview/annualReviewService.ts`) filters by `cycle_id` + reviewer `.or(...)` only — no status exclusion. The single-instance detail fetch (`getInstanceById`) and the RPC that accepts a reviewer submit (`submit_annual_review_stage` / equivalent) also do not check `excluded`. So the row appears in the queue, opens in the detail page, and (unless the DB RPC happens to reject on status) can be submitted.
 
----
+Prior decision "Excluded rows always visible with a badge" applied to **reports/admin surfaces** (audit view), not to the reviewer's action queue. An excluded employee must not be actionable by any reviewer.
 
-## What I'm proposing to build
+## Risk & Impact
 
-### 1. Remove a single employee from Annual Review (keep them in the system)
+- Data: No schema change. Read-only filter + one RPC guard.
+- Workflow: Reviewers stop seeing excluded rows in queue and cannot submit against them. Admin/reports keep the badge (unchanged).
+- Regression: Two counters (queue total, "pending" tile) shift down by the excluded count — expected. Deep links to an excluded instance render read-only instead of the submit form.
+- Rollback: Purely additive filters; revert the two files + one migration.
 
-Add an **"Exclude from this cycle"** action on the employee row in:
-- Admin → Annual Review → Progress
-- `/reports/annual-review`
-- The employee directory search result (when an instance already exists)
+## Plan
 
-Semantics (safe by design):
-- Soft-exclude, not hard-delete. Add `excluded_at`, `excluded_by`, `excluded_reason` columns to `annual_review_instances` and a new `overall_status = 'excluded'`.
-- Only allowed while the instance is in `not_started` or `pending_self` (same gate the reassignment flow uses). Past that point, we block with a clear message — the review has real data (self-review, manager notes) and deleting would destroy audit trail. For those, HR can only close the cycle or override the rating.
-- Excluded instances are hidden from all reviewer queues, dashboards, reminders, and reports by default. A "Show excluded" toggle keeps them visible for audit.
-- New RPC `exclude_annual_review_instance(instance_id, reason)` — HR/admin only, reason ≥ 3 chars, audit-logged as `annual_review.instance.excluded`.
-- Reverse action: `restore_annual_review_instance(instance_id, reason)` puts it back to `not_started`.
-- The employee's `profiles` row is **not touched** — they remain active everywhere else (KPIs, incentives, safety, etc.).
+1. **Reviewer queue filter** — `listInstancesForReviewerPaginated`: add `.neq('overall_status', 'excluded')`. Also update `listInstancesForReviewer` (used by any legacy caller) for parity.
+2. **Detail page read-only** — `TeamAnnualReviewDetail` / `TeamReviewDetailContent`: when `instance.overall_status === 'excluded'`, render the header + an "Excluded from this cycle" notice (with `excluded_reason` if present) and hide the submit / send-back / save-draft actions. No form editing.
+3. **Server guard (defense in depth)** — Add a status check inside the existing reviewer submit RPC(s): if `overall_status = 'excluded'`, raise `'Instance excluded from cycle'`. Migration only touches the RPC body, no schema change.
+4. **Admin/reports untouched** — `AnnualReviewAdmin` progress tab and `/reports/annual-review` continue to show excluded rows with the rose "Excluded" badge (per earlier decision).
+5. **Tests** —
+   - Unit: `listInstancesForReviewerPaginated` returns 0 rows when the only match is excluded.
+   - Unit: detail page renders the excluded notice and does not mount the submit form.
+   - RPC test: submit against an excluded instance raises the guard error.
+6. **Docs** — POLICY.md: add rule "Excluded instances are hidden from reviewer queues and are non-actionable; they remain visible in admin/reports with an Excluded badge." Add ADR entry linking to the bulk-exclude feature memo.
 
-### 2. Group add / remove / re-map for Annual Review
+## Files touched
 
-Add an **"Annual Review — Bulk actions"** panel under Admin → Annual Review (new tab next to Progress). Employees can be selected three ways:
-- Paste employee codes (one per line)
-- Filter by BU / Department / Designation / Grade / Reporting Manager
-- Upload a CSV with a single `employee_code` column
+- `src/services/annualReview/annualReviewService.ts` — add `.neq('overall_status','excluded')` in both reviewer fetchers.
+- `src/components/annual-review/TeamReviewDetailContent.tsx` (or `TeamAnnualReviewDetail.tsx`) — early-return excluded notice.
+- `supabase/migrations/<new>.sql` — add excluded guard inside the submit RPC(s) used by reviewers.
+- `mem/features/annual-review/*` + `POLICY.md` — record the rule.
+- Tests under `src/test/` and `supabase/tests/` (if present).
 
-Three bulk actions on the selected set:
+## Out of scope
 
-1. **Bulk add to cycle** — creates instances for anyone in the selection who doesn't have one yet. Uses the existing mapping rules to pick the template (same logic the seeder uses).
-2. **Bulk remove from cycle** — calls `exclude_annual_review_instance` for each; skips (with reason) anyone past `pending_self` and shows a downloadable "skipped" report.
-3. **Bulk re-map to a chosen template** — reuses the existing `SyncAssignmentsDialog` flow (`set_annual_review_template_override`), only eligible rows move, others are surfaced as "locked".
-
-Every bulk run:
-- Runs in a preview → confirm → execute pattern (dry-run count before writes)
-- Is capped at 500 rows per submission and processed server-side in batches
-- Writes one audit event per instance PLUS one `annual_review.bulk_action` summary row
-- Produces a downloadable result CSV: `employee_code, action, status, reason`
-
-### Technical section
-
-- **Schema (migration):** add `excluded_at timestamptz`, `excluded_by uuid`, `excluded_reason text` to `annual_review_instances`; extend `overall_status` check to accept `'excluded'`. RLS policies updated so excluded rows are visible only to HR/admin unless "show excluded" is on.
-- **New RPCs:** `exclude_annual_review_instance`, `restore_annual_review_instance`, `bulk_exclude_annual_review_instances(ids[], reason)`, `bulk_create_annual_review_instances(employee_ids[], cycle_id)`, `bulk_set_annual_review_template_override(ids[], template_id, reason)` — all SECURITY DEFINER, gated by `annual_review_directory_access` (HR/admin scope for global, BU-scope for BU heads/HODs, matching the existing directory access matrix).
-- **Client:** new `AnnualReviewBulkActions.tsx` page + `annualReviewBulk.ts` service; row-level "Exclude" button on existing progress/report tables; a "Show excluded" toggle on the filter bar.
-- **Tests:** RPC unit tests for gating (past-self blocked, non-HR blocked, BU-scope respected); service-layer tests for the batch splitter and skip-report shape; UI test for the confirm dialog on destructive bulk actions.
-- **Docs:** update `docs/adr/ADR-annual-review.md` and `mem/features/annual-review/operations.md` with the exclude/restore lifecycle and the bulk-actions surface.
-
-### Risk & impact
-
-- **Data:** additive columns + one new status value; no destructive change; rollback = revert migration and hide the UI.
-- **Workflow:** excluded rows are invisible to reviewers, so reminders and queues shrink correctly; no reviewer sees a broken link.
-- **Regression:** the `pending_self`-only gate re-uses the same guard already used by reassignment and template override, so we don't invent a new safety rule.
-- **Scale:** bulk capped at 500 per call, server-side batching in units of 50; matches existing bulk-review batch pattern.
-
-### Out of scope (explicitly)
-
-- Hard-deleting instances that already have manager/BU/HR responses. If HR truly needs that, they must reopen the cycle and use existing `rollback_annual_review_completed` first.
-- Deactivating the employee's `profiles` row — that's the existing "Deactivate user" flow in Admin → Users and is a separate concern.
-
----
-
-**Question before I build:** should the "Bulk remove" action be available to BU Heads / HODs within their BU scope, or restricted to HR/Admin only? (I'd recommend HR/Admin only for remove, and BU-scoped for add/re-map — safer default.)
+- Changing how admin/reports render excluded rows.
+- Bulk-restore UI (already exists via `restore_annual_review_instance`).
