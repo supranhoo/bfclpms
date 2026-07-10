@@ -145,3 +145,4 @@ Fiscal-window: any code fetching time-series data across two calendar years for 
 - [Bulk Rollback OKV-truth gate](mem://features/admin/bulk-rollback-okv-gate) — ADR-091: Rollback All Scopes button visibility uses OKV per-scope status, not fact-based card status
 - [Incentive Compute Pagination](mem://features/incentive/compute-pagination-fix) — ADR-094: compute-monthly-incentives MUST paginate production_daily_entries, incentive_production_rates and override-probe via .range(); diagnostics expose rows_loaded counters
 - [Incentive Export Grid Parity](mem://features/incentive/export-grid-parity) — ADR-095: Excel export writes raw per-row total*rate and appends Math.round(Σ total*rate) Grand Total row, mirroring grid SSOT (ProductionDailyGrid.tsx:295); per-row Math.round forbidden
+- [Annual Review Directory Access](mem://features/annual-review/directory-access) — Directory + Add-to-phase access matrix: Admin/HR PMS/HR-team = all; BU Head/HOD = own BU only
