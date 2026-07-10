@@ -354,7 +354,7 @@ export async function deleteRule(id: string): Promise<void> {
 
 // ---------- Instances ----------
 export interface InstanceWithEmployee extends AnnualReviewInstance {
-  employee?: { id: string; full_name: string | null; employee_code: string | null; designation: string | null };
+  employee?: { id: string; full_name: string | null; employee_code: string | null; designation: string | null; doj: string | null };
 }
 
 export async function listInstancesForCycle(cycleId: string): Promise<InstanceWithEmployee[]> {
