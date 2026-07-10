@@ -14938,6 +14938,10 @@ export type Database = {
         Args: { p_instance_id: string; p_reason: string }
         Returns: Json
       }
+      resync_annual_review_dept_head: {
+        Args: { p_cycle_id: string; p_dept_id: string }
+        Returns: Json
+      }
       resync_org_kpi_evidence: {
         Args: { p_mode?: string; p_okv_id: string }
         Returns: Json
