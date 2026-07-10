@@ -13392,6 +13392,23 @@ export type Database = {
         Args: { kpis_json: Json }
         Returns: number
       }
+      bulk_create_annual_review_instances: {
+        Args: { p_cycle_id: string; p_employee_ids: string[] }
+        Returns: {
+          employee_id: string
+          instance_id: string
+          message: string
+          status: string
+        }[]
+      }
+      bulk_exclude_annual_review_instances: {
+        Args: { p_instance_ids: string[]; p_reason: string }
+        Returns: {
+          instance_id: string
+          message: string
+          status: string
+        }[]
+      }
       bulk_finalize_annual_reviews: {
         Args: {
           p_final_rating: string
@@ -13441,6 +13458,18 @@ export type Database = {
       bulk_scope_preview: {
         Args: { p_filters?: Json; p_period: string; p_year: number }
         Returns: Json
+      }
+      bulk_set_annual_review_template_override: {
+        Args: {
+          p_instance_ids: string[]
+          p_reason: string
+          p_template_id: string
+        }
+        Returns: {
+          instance_id: string
+          message: string
+          status: string
+        }[]
       }
       bulk_upsert_org_kpi_values: {
         Args: { p_rows: Json }
@@ -13716,6 +13745,10 @@ export type Database = {
           p_review_period: string
           p_review_year: number
         }
+        Returns: Json
+      }
+      exclude_annual_review_instance: {
+        Args: { p_instance_id: string; p_reason: string }
         Returns: Json
       }
       expand_cycle_window_months: {
@@ -14371,6 +14404,7 @@ export type Database = {
         }
         Returns: number
       }
+      is_annual_review_admin: { Args: { _uid: string }; Returns: boolean }
       is_bulk_review_enabled: { Args: never; Returns: boolean }
       is_canonical_enforcement_period: {
         Args: { p_period: string; p_year: number }
@@ -14891,6 +14925,10 @@ export type Database = {
           terminal_period: string
           terminal_year: number
         }[]
+      }
+      restore_annual_review_instance: {
+        Args: { p_instance_id: string; p_reason: string }
+        Returns: Json
       }
       resync_org_kpi_evidence: {
         Args: { p_mode?: string; p_okv_id: string }
