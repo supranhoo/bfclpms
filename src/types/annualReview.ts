@@ -11,7 +11,8 @@ export type AnnualReviewStatus =
   | 'pending_dept'
   | 'pending_bu'
   | 'pending_hr'
-  | 'completed';
+  | 'completed'
+  | 'excluded';
 
 export type AnnualReviewerRole = 'self' | 'manager' | 'skip_manager' | 'dept_head' | 'bu_head' | 'hr';
 
