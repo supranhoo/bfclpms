@@ -599,6 +599,9 @@ export type Database = {
           employee_id: string
           employee_rebuttal: string | null
           enabled_stages: Json
+          excluded_at: string | null
+          excluded_by: string | null
+          excluded_reason: string | null
           final_rating: string | null
           finalized_at: string | null
           finalized_by: string | null
@@ -634,6 +637,9 @@ export type Database = {
           employee_id: string
           employee_rebuttal?: string | null
           enabled_stages?: Json
+          excluded_at?: string | null
+          excluded_by?: string | null
+          excluded_reason?: string | null
           final_rating?: string | null
           finalized_at?: string | null
           finalized_by?: string | null
@@ -669,6 +675,9 @@ export type Database = {
           employee_id?: string
           employee_rebuttal?: string | null
           enabled_stages?: Json
+          excluded_at?: string | null
+          excluded_by?: string | null
+          excluded_reason?: string | null
           final_rating?: string | null
           finalized_at?: string | null
           finalized_by?: string | null
@@ -15249,6 +15258,7 @@ export type Database = {
         | "pending_bu"
         | "pending_hr"
         | "completed"
+        | "excluded"
       annual_reviewer_role:
         | "self"
         | "manager"
@@ -15524,6 +15534,7 @@ export const Constants = {
         "pending_bu",
         "pending_hr",
         "completed",
+        "excluded",
       ],
       annual_reviewer_role: [
         "self",
