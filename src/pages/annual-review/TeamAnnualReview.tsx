@@ -199,9 +199,12 @@ export default function TeamAnnualReview() {
                 size="sm"
                 onClick={() => setDirectoryOpen(true)}
                 className="h-9 gap-1.5 shrink-0"
-                title="Search the full employee directory and start a review for anyone — even outside your team."
+                title={directoryAccess.scope === 'bu'
+                  ? 'Search employees in your business unit and start a review to assist with form filling.'
+                  : 'Search the full employee directory and start a review for anyone — even outside your team.'}
               >
-                <UserPlus className="h-4 w-4" /> All employees
+                <UserPlus className="h-4 w-4" />
+                {directoryAccess.scope === 'bu' ? 'BU employees' : 'All employees'}
               </Button>
             )}
           </div>
