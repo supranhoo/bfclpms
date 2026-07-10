@@ -13465,6 +13465,10 @@ export type Database = {
             }
             Returns: Json
           }
+      can_access_annual_review_instance_for_assistance: {
+        Args: { p_instance_id: string }
+        Returns: boolean
+      }
       can_proxy_submit_annual_review: {
         Args: { _instance_id: string; _proxy_user_id: string }
         Returns: boolean
