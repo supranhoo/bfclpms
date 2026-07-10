@@ -18,7 +18,9 @@ import {
   setDepartmentHead, recalculateDepartmentHead,
   type BuHeadRow,
 } from '@/services/orgHeads/orgHeadsService';
-import { RefreshCw, Pencil, ShieldAlert, Check, ChevronsUpDown } from 'lucide-react';
+import { resyncAnnualReviewDeptHead } from '@/services/annualReview/resyncDeptHead';
+import { useActiveCycle } from '@/hooks/useAnnualReview';
+import { RefreshCw, Pencil, ShieldAlert, Check, ChevronsUpDown, Users } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 /** Profile shape used for the picker. Kept loose so callers can pass
@@ -61,6 +63,8 @@ export function OrgHeadColumn({ scope, entity, head, profiles, deptIndex, buInde
   const scopeLabel = scope === 'bu' ? 'BU' : 'Department';
   const recalcFn = scope === 'bu' ? recalculateBuHead : recalculateDepartmentHead;
   const setFn = scope === 'bu' ? setBuHead : setDepartmentHead;
+  const activeCycle = useActiveCycle();
+  const [resyncOpen, setResyncOpen] = useState(false);
 
   const profileById = useMemo(() => {
     const m = new Map<string, PickerProfile>();
@@ -110,6 +114,22 @@ export function OrgHeadColumn({ scope, entity, head, profiles, deptIndex, buInde
     onError: (e: Error) => toast({ title: 'Update failed', description: e.message, variant: 'destructive' }),
   });
 
+  const resync = useMutation({
+    mutationFn: () => {
+      if (!activeCycle.data?.id) throw new Error('No active Annual Review cycle');
+      return resyncAnnualReviewDeptHead(activeCycle.data.id, entity.id);
+    },
+    onSuccess: (r) => {
+      toast({
+        title: 'Annual reviews re-synced',
+        description: `${r.updated} updated · ${r.skipped} skipped (already past Dept Head stage).`,
+      });
+      qc.invalidateQueries({ queryKey: ['annual-review'] });
+      setResyncOpen(false);
+    },
+    onError: (e: Error) => toast({ title: 'Re-sync failed', description: e.message, variant: 'destructive' }),
+  });
+
   const canSave = !!pickUserId && pickReason.trim().length >= 3;
 
   const contextFor = (p: PickerProfile) => {
@@ -156,6 +176,16 @@ export function OrgHeadColumn({ scope, entity, head, profiles, deptIndex, buInde
         >
           <Pencil className="h-3.5 w-3.5" />
         </Button>
+        {scope === 'department' && (
+          <Button
+            variant="ghost" size="icon" className="h-7 w-7"
+            title="Re-sync open Annual Reviews with this head"
+            disabled={!activeCycle.data?.id || !head?.head_user_id}
+            onClick={() => setResyncOpen(true)}
+          >
+            <Users className="h-3.5 w-3.5" />
+          </Button>
+        )}
       </div>
 
       <AlertDialog open={open} onOpenChange={(o) => !o && setOpen(false)}>
@@ -250,6 +280,32 @@ export function OrgHeadColumn({ scope, entity, head, profiles, deptIndex, buInde
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {scope === 'department' && (
+        <AlertDialog open={resyncOpen} onOpenChange={(o) => !o && setResyncOpen(false)}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Re-sync Annual Reviews for {entity.name}</AlertDialogTitle>
+              <AlertDialogDescription>
+                Push the current Department Head onto all open Annual Review
+                instances in <strong>{activeCycle.data?.name ?? 'the active cycle'}</strong>.
+                Instances already actioned by the previous Dept Head (i.e.
+                past Dept Head stage) or already finalized are left untouched
+                and reported as "skipped".
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                disabled={resync.isPending}
+                onClick={(e) => { e.preventDefault(); resync.mutate(); }}
+              >
+                Re-sync now
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      )}
     </div>
   );
 }
