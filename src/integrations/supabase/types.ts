@@ -13311,6 +13311,7 @@ export type Database = {
         }
         Returns: Json
       }
+      annual_review_directory_access: { Args: { v_uid: string }; Returns: Json }
       annual_review_effective_chain: {
         Args: { p_instance_id: string }
         Returns: Json
@@ -13759,6 +13760,7 @@ export type Database = {
         }[]
       }
       get_admin_dashboard_stats: { Args: never; Returns: Json }
+      get_annual_review_directory_access: { Args: never; Returns: Json }
       get_backup_table_order: {
         Args: never
         Returns: {
