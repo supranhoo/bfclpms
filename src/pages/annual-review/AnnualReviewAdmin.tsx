@@ -48,6 +48,7 @@ import {
 } from 'recharts';
 import { AnnualReviewStatusBadge } from '@/components/annual-review/AnnualReviewStatusBadge';
 import { HrFinalizationSheet } from '@/components/annual-review/HrFinalizationSheet';
+import { BulkActionsTab } from '@/components/annual-review/BulkActionsTab';
 import { fyStartFromCycle } from '@/lib/annualReview/fiscalYear';
 import { prevStatus } from '@/lib/annualReview/stageChain';
 import { UnifiedBulkDialog } from '@/components/annual-review/UnifiedBulkDialog';
@@ -119,6 +120,7 @@ export default function AnnualReviewAdmin() {
           <TabsTrigger value="templates" className="gap-1.5 flex-1 md:flex-none whitespace-nowrap px-3"><Settings2 className="h-4 w-4" />Templates</TabsTrigger>
           <TabsTrigger value="rules" className="gap-1.5 flex-1 md:flex-none whitespace-nowrap px-3"><Layers className="h-4 w-4" />Rules</TabsTrigger>
           <TabsTrigger value="system-kpis" className="gap-1.5 flex-1 md:flex-none whitespace-nowrap px-3"><Scale className="h-4 w-4" />System KPIs</TabsTrigger>
+          <TabsTrigger value="bulk" className="gap-1.5 flex-1 md:flex-none whitespace-nowrap px-3"><Upload className="h-4 w-4" />Bulk Actions</TabsTrigger>
           <TabsTrigger value="settings" className="gap-1.5 flex-1 md:flex-none whitespace-nowrap px-3"><Settings2 className="h-4 w-4" />Settings</TabsTrigger>
         </TabsList>
         <TabsContent value="progress" className="mt-4"><ProgressTab /></TabsContent>
@@ -136,6 +138,7 @@ export default function AnnualReviewAdmin() {
             <CriteriaMatrixPanel />
           </div>
         </TabsContent>
+        <TabsContent value="bulk" className="mt-4"><BulkActionsTab /></TabsContent>
         <TabsContent value="settings" className="mt-4"><SettingsTab /></TabsContent>
       </Tabs>
     </div>
