@@ -3,6 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 export interface BulkExcludeResult { instance_id: string; status: string; message: string | null }
 export interface BulkAddResult { employee_id: string; instance_id: string | null; status: string; message: string | null }
 export interface BulkRemapResult { instance_id: string; status: string; message: string | null }
+export interface BulkRestoreResult { instance_id: string; status: string; message: string | null }
 
 export async function excludeInstance(instanceId: string, reason: string) {
   const { data, error } = await supabase.rpc('exclude_annual_review_instance', {
@@ -44,6 +45,16 @@ export async function bulkRemap(
   });
   if (error) throw new Error(error.message);
   return (data ?? []) as BulkRemapResult[];
+}
+
+export async function bulkRestore(
+  instanceIds: string[], reason: string,
+): Promise<BulkRestoreResult[]> {
+  const { data, error } = await supabase.rpc('bulk_restore_annual_review_instances', {
+    p_instance_ids: instanceIds, p_reason: reason,
+  });
+  if (error) throw new Error(error.message);
+  return (data ?? []) as BulkRestoreResult[];
 }
 
 /**
