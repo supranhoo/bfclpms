@@ -57,6 +57,7 @@ import { useToast } from '@/hooks/use-toast';
 import { enumeratePeriods, validateRange, MAX_RANGE_MONTHS } from '@/lib/kpiScorecardRange';
 import { fetchFinalApproverMap, NO_APPROVER_LABEL } from '@/lib/finalApproverMap';
 import { ColumnFilterPopover } from '@/components/reports/ColumnFilterPopover';
+import { resolvePendingWith, PENDING_WITH_NONE } from '@/lib/kpiPendingWith';
 
 const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -97,6 +98,7 @@ interface FlatRow {
   status: string;
   isNa: boolean;
   finalApprover: string;
+  pendingWith: string;
 }
 
 type SortField = keyof FlatRow;
@@ -196,7 +198,7 @@ async function fetchScorecardForPeriod(month: string, year: number): Promise<Fla
   const profiles = await fetchAllPaged<any>((from, to) =>
     supabase
       .from('profiles')
-      .select('id, employee_code, full_name, designation, departments!profiles_department_fk ( name )')
+      .select('id, employee_code, full_name, designation, reporting_manager_id, departments!profiles_department_fk ( name )')
       .range(from, to)
   );
 
@@ -220,6 +222,44 @@ async function fetchScorecardForPeriod(month: string, year: number): Promise<Fla
 
   const approverMap = await fetchFinalApproverMap(month, year);
 
+  // Resolve per-employee workflow chains (POLICY §105 — never hardcode stages).
+  const empIds = [...new Set(allKpis.map(k => k.employee_id).filter(Boolean))];
+  const stageChainMap = new Map<string, string[]>();
+  const WF_CHUNK = 500;
+  for (let i = 0; i < empIds.length; i += WF_CHUNK) {
+    const batch = empIds.slice(i, i + WF_CHUNK);
+    const { data: wfData, error: wfErr } = await (supabase as any).rpc(
+      'get_bulk_employee_workflows',
+      { employee_ids: batch, p_review_period: month, p_review_year: year },
+    );
+    if (wfErr) throw wfErr;
+    for (const row of ((wfData || []) as { employee_id: string; stages: string[] }[])) {
+      stageChainMap.set(row.employee_id, row.stages || []);
+    }
+  }
+
+  // Skip-level manager = employee's manager's reporting_manager_id.
+  const managerIds = [
+    ...new Set(
+      (profiles ?? [])
+        .map((p: any) => p.reporting_manager_id)
+        .filter(Boolean) as string[],
+    ),
+  ];
+  const managerToSkip = new Map<string, string | null>();
+  if (managerIds.length > 0) {
+    const CHUNK_M = 500;
+    for (let i = 0; i < managerIds.length; i += CHUNK_M) {
+      const batch = managerIds.slice(i, i + CHUNK_M);
+      const { data: mgrs, error: mgrErr } = await supabase
+        .from('profiles')
+        .select('id, reporting_manager_id')
+        .in('id', batch);
+      if (mgrErr) throw mgrErr;
+      (mgrs ?? []).forEach((m: any) => managerToSkip.set(m.id, m.reporting_manager_id ?? null));
+    }
+  }
+
   return allKpis.map((kpi): FlatRow => {
     const profile = profileMap.get(kpi.employee_id);
     const sub = submissionMap.get(kpi.id);
@@ -228,6 +268,21 @@ async function fetchScorecardForPeriod(month: string, year: number): Promise<Fla
     const isOrgKpi = kpi.is_org_level === true;
     const ownerKey = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}`;
     const owners = isOrgKpi ? (ownerMap.get(ownerKey) ?? []) : [];
+    const managerId: string | null = profile?.reporting_manager_id ?? null;
+    const skipId: string | null = managerId ? (managerToSkip.get(managerId) ?? null) : null;
+    const managerName = managerId ? (profileMap.get(managerId)?.full_name ?? null) : null;
+    const skipManagerName = skipId ? (profileMap.get(skipId)?.full_name ?? null) : null;
+    const dataOwnerNames = owners.join(', ');
+    const stageChain = stageChainMap.get(kpi.employee_id) ?? [];
+    const pendingWith = resolvePendingWith({
+      status: kpi.status,
+      isOrgKpi,
+      dataOwnerNames,
+      employeeName: profile?.full_name ?? '',
+      managerName,
+      skipManagerName,
+      stageChain,
+    });
     return {
       employeeId: kpi.employee_id ?? '',
       employeeCode: profile?.employee_code ?? '',
@@ -241,7 +296,7 @@ async function fetchScorecardForPeriod(month: string, year: number): Promise<Fla
       frequency: kpi.frequency ?? 'Monthly',
       isOrgKpi,
       orgKpiScope: isOrgKpi ? (kpi.org_level_scope ?? 'organization') : '',
-      dataOwnerNames: owners.join(', '),
+      dataOwnerNames,
       weightage: kpi.weightage ?? 0,
       targetValue: kpi.target_value ?? null,
       selfActual: sub?.achieved_value ?? null,
@@ -260,6 +315,7 @@ async function fetchScorecardForPeriod(month: string, year: number): Promise<Fla
       status: kpi.status ?? '',
       isNa,
       finalApprover: approverMap.get(kpi.employee_id) ?? NO_APPROVER_LABEL,
+      pendingWith,
     };
   });
 }
@@ -465,6 +521,7 @@ export default function KpiScorecardDetail() {
       case 'final_score':       return r.isNa ? 'N/A' : (r.finalScore ?? '');
       case 'final_approver':    return r.finalApprover || NO_APPROVER_LABEL;
       case 'status':            return statusLabels[r.status] ?? r.status;
+      case 'pending_with':      return r.pendingWith || PENDING_WITH_NONE;
       default: return '';
     }
   }
