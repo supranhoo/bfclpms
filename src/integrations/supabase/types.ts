@@ -13431,6 +13431,14 @@ export type Database = {
         Args: { p_cells: Json; p_reason: string; p_stages_to_unlock: string[] }
         Returns: Json
       }
+      bulk_restore_annual_review_instances: {
+        Args: { p_instance_ids: string[]; p_reason: string }
+        Returns: {
+          instance_id: string
+          message: string
+          status: string
+        }[]
+      }
       bulk_review_snapshot: {
         Args: {
           p_filters?: Json
