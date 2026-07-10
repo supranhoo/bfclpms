@@ -1,46 +1,102 @@
-## Problem
+## Bug: Self‑review draft appears blank on reopen (Upendra Singh, 201091)
 
-Bulk Actions today has no way to bring an **excluded** employee back into the cycle:
+### What the user sees
+- Fill self-review form → click "Save draft" → toast "Saved".
+- Reload / reopen the page → all text boxes and score pickers are empty.
+- Admin looking at the same `annual_review_responses` row sees the saved values — the data is safe in the DB, only the UI fails to hydrate.
 
-- "Add employees to cycle" calls `create_or_get_...` — the row already exists, so it returns `existing` and the status stays `excluded` (that's why your 22 codes all show *"skip: already in cycle"* / *"already excluded: 21"*).
-- "Remove" and "Re-map" both refuse anything that isn't `not_started` / `pending_self`, so an excluded row is untouchable.
-- A single-row `restore_annual_review_instance` RPC exists, but no bulk wrapper and no UI entry point.
+### Assumptions
+- Upendra's row is stage `pending_self` and not locked (so the draft hook is enabled).
+- RLS on `annual_review_responses` is fine for self (admin can read, and the row is present — the fetch is not blocked; the values just aren't shown). We verify this before shipping.
 
-## Fix — add a fourth bulk action: **Restore (re-include) to cycle**
+### 5‑Why
+1. **Why are the text boxes blank on reopen?** The draft state passed to the form is empty (`criteria_scores={}`, `qualitative_responses={}`, `notes=null`) even though the DB row has values.
+2. **Why is the draft state empty?** `useDebouncedResponseDraft` seeds its local state from `opts.initial` via `useState(...)` **only on the very first render**.
+3. **Why does that first render see no data?** On mount, `useResponses(instance.id)` hasn't resolved yet, so `myResponse = responses.find(r => r.reviewer_role === 'self') ?? null` is `null`. The hook seeds with all-empty defaults.
+4. **Why doesn't the hook re-seed when the query resolves?** There is no `useEffect` that syncs `draft` when `opts.initial` transitions from `null` → the fetched row. `useState` initializers only run once.
+5. **Why did this survive review?** ADR‑105 removed the debounced autosave to stop a *revert-to-server* race, but the same code path still has a *seed-once-from-null* bug. Tests cover "no autosave" and "flush persists", but there is no test for "initial arrives late → draft rehydrates". The Team detail sheet remounts on open so it accidentally re-seeds; the standalone Employee page mounts once and exposes the bug.
 
-### 1. New RPC — `bulk_restore_annual_review_instances(p_instance_ids uuid[], p_reason text)`
-Mirrors `bulk_exclude_...`:
-- HR/Admin gate, `auth.uid()` required, min-3-char reason, max 500 IDs, `SECURITY DEFINER`.
-- For each instance: `FOR UPDATE`; skip if `overall_status <> 'excluded'` with message `not excluded: <status>`; otherwise set `overall_status='not_started'`, clear `excluded_at/by/reason`, bump `updated_at`.
-- Per-row audit log `annual_review.instance.restored` + one summary `annual_review.bulk_action` with `kind='restore'`.
-- `REVOKE ... FROM PUBLIC, anon` + `GRANT EXECUTE TO authenticated` (matches sibling RPCs).
+### Root cause
+`src/hooks/useAnnualReview.ts` → `useDebouncedResponseDraft`:
 
-### 2. Service — `src/services/annualReview/bulkAdmin.ts`
-Add `bulkRestore(instanceIds, reason): Promise<BulkRestoreResult[]>` that calls the new RPC. Same shape as `bulkExclude`.
+```ts
+const [draft, setDraftState] = useState<DraftPayload>({
+  criteria_scores: opts.initial?.criteria_scores ?? {},
+  qualitative_responses: opts.initial?.qualitative_responses ?? {},
+  evidence: opts.initial?.evidence ?? [],
+  weighted_score: opts.initial?.weighted_score ?? null,
+  notes: opts.initial?.notes ?? null,
+});
+```
 
-### 3. UI — `src/components/annual-review/BulkActionsTab.tsx`
-- Extend `Action` union to `'add' | 'remove' | 'remap' | 'restore'`.
-- Add `<SelectItem value="restore">Restore (re-include) to cycle</SelectItem>` after *Remove*.
-- Show the **Reason** field for `restore` (min 3 chars, same as remove/remap).
-- Preview "Will do" branch for `restore`:
-  - no `employee_id` → `skip: not found`
-  - no `instance_id` → `skip: no instance` (use *Add* instead)
-  - `overall_status === 'excluded'` → `restore`
-  - anything else → `skip: not excluded (<status>)`
-- `canExecute` for restore: `preview.excluded.length > 0 && reason.trim().length >= 3`.
-- Execute path: `bulkRestore(preview.excluded.map(r => r.instance_id!), reason)` → toast `Restored N employees`.
-- Update the top hint copy: *"Remove and re-map only affect employees still in not_started/pending_self. Restore re-includes previously excluded employees. HR/Admin only."*
+`useState` runs the initializer once. `opts.initial` is `null` at first paint (query still loading) and later becomes the persisted response, but `draft` is never reconciled. Result: pickers render from an empty object; on save/flush the empty object overwrites nothing (nothing changed), but on Submit / next edit the empty state can even wipe fields.
 
-### 4. Optional convenience — Re-map after restore
-Keep re-map's current guard (only `not_started`/`pending_self`). Since restore sets the row back to `not_started`, the same code list can be re-mapped in a second pass. No change needed to the re-map RPC.
+This is the *inverse* of the risk ADR‑105 called out, and it maps 1‑to‑1 with the "Auth Readiness Query Gate" and Reviewer‑Draft‑Hydration invariants already in project memory (POLICY §107): saved values must render verbatim.
 
-### 5. Tests
-- New unit test in `src/test/annualReview/bulkActions.test.ts`: preview classification for the four actions given a mix of statuses (excluded, not_started, pending_manager, missing instance, missing employee).
-- RPC-level SQL smoke: excluded → restored; not-excluded → skipped with reason; non-admin → permission denied; empty array → no rows, no exception.
+### Corrective action (CA) — surgical, one hook
 
-### Out of scope
-- No changes to the resolver, exclusion history table, template overrides, or the single-row `excludeInstance` / `restoreInstance` used by the detail page.
-- No auto-restore when re-mapping — remains an explicit two-step action to keep the audit trail clean.
+**File: `src/hooks/useAnnualReview.ts` (`useDebouncedResponseDraft`)**
 
-### Risk
-Low. Additive RPC + additive UI branch. Existing add/remove/remap paths untouched.
+1. Track the identity of the seed with a ref (`seededResponseIdRef`).
+2. Add a `useEffect` that, when `opts.initial` becomes non-null (or its `id`/`updated_at` changes) AND the local `status` is not `'pending'` (user hasn't started editing), re-seeds `draft` from `opts.initial` and sets `status = 'idle'`.
+3. Never overwrite a `'pending'` draft — that would resurrect the ADR‑105 revert bug. If the user is mid-edit and a refetch lands, keep local edits.
+
+Pseudocode:
+
+```ts
+const seededIdRef = useRef<string | null>(null);
+useEffect(() => {
+  const init = opts.initial;
+  if (!init) return;
+  const key = `${init.id}:${init.updated_at ?? ''}`;
+  if (seededIdRef.current === key) return;
+  if (statusRef.current === 'pending' || statusRef.current === 'saving') return;
+  seededIdRef.current = key;
+  setDraftState({
+    criteria_scores: init.criteria_scores ?? {},
+    qualitative_responses: init.qualitative_responses ?? {},
+    evidence: init.evidence ?? [],
+    weighted_score: init.weighted_score ?? null,
+    notes: init.notes ?? null,
+  });
+  setStatus('idle');
+}, [opts.initial?.id, opts.initial?.updated_at]);
+```
+
+No other files change. `EmployeeAnnualReview.tsx` and `TeamReviewDetailContent.tsx` already pass `initial={myResponse}`.
+
+### Preventive actions (PA)
+
+1. **Regression test** (`src/test/annualReview/useDebouncedResponseDraftLateInitial.test.ts`):
+   - Mount hook with `initial: null`.
+   - Rerender with `initial: { id:'r1', updated_at:'t1', criteria_scores:{X:5}, notes:'hi' }`.
+   - Expect `draft.criteria_scores.X === 5` and `notes === 'hi'`, `status === 'idle'`.
+   - Second scenario: set `draft` locally (status = pending), then rerender with a new `initial` — expect local edits preserved, no re-seed.
+2. **Extend existing test** (`useDebouncedResponseDraftNoAutosave.test.ts`) to assert that a late-arriving `initial` after a `pending` edit does **not** clobber the local draft — locks in the ADR‑105 invariant while fixing this one.
+3. Update `docs/adr/ADR-105.md` with an addendum, and add a memory note under `mem://features/annual-review/operations` about the "seed once + refetch" pitfall so future hooks that mirror this pattern don't repeat it.
+
+### Risk & impact
+
+- **Data**: none. Read path only; no schema, RLS, or write changes.
+- **Workflow**: none. No stage transitions altered.
+- **UI/UX**: forms now show saved draft on reopen (the intended behavior).
+- **Regression risk (ADR‑105 revert)**: mitigated by the `status !== 'pending'` guard and the second regression test.
+- **Scalability**: negligible — one shallow effect keyed on `id`+`updated_at`.
+
+### Rollback
+
+Delete the added `useEffect` and ref. Fully additive; no data migration.
+
+### Verification steps
+
+1. Log in as Upendra (or any self-review user with an existing draft), open `/annual-review/self`, confirm previously saved criteria scores, qualitative answers, and notes render immediately.
+2. Edit a field, do NOT save, wait for a background refetch (invalidate) — confirm the edit is preserved (not reverted).
+3. Save draft, reload — confirm values still render.
+4. `bun vitest run useDebouncedResponseDraft` — both tests green.
+
+### Deliverables
+- Edit: `src/hooks/useAnnualReview.ts`
+- Add: `src/test/annualReview/useDebouncedResponseDraftLateInitial.test.ts`
+- Edit: `src/test/annualReview/useDebouncedResponseDraftNoAutosave.test.ts` (one extra case)
+- Edit: `docs/adr/ADR-105.md` (addendum)
+- Memory: append note to `mem://features/annual-review/operations`
