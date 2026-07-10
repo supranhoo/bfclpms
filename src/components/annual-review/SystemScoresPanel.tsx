@@ -50,6 +50,7 @@ export function SystemScoresPanel({
   eligibility,
   eligibilityInputs,
   eligibilityRemark,
+  autoEligibilityInputs,
   readOnly = false,
   onChangeValue,
   onChangeRaw,
@@ -63,6 +64,8 @@ export function SystemScoresPanel({
   eligibility?: EligibilityCriterion[];
   eligibilityInputs?: Record<string, unknown>;
   eligibilityRemark?: string | null;
+  /** Overrides derived by the system (e.g. tenure from DOJ). Manual inputs win. */
+  autoEligibilityInputs?: Record<string, number>;
   readOnly?: boolean;
   onChangeValue?: (id: string, value: number) => void;
   /** Called when HR edits the raw value; caller must recompute scaled points. */
@@ -72,7 +75,11 @@ export function SystemScoresPanel({
   /** Fiscal year start (July of this year), required for source=carry_kra. */
   fiscalYear?: number;
 }) {
-  const result = eligibility?.length ? evaluateEligibility(eligibility, eligibilityInputs ?? {}) : null;
+  const mergedInputs: Record<string, unknown> = { ...(autoEligibilityInputs ?? {}) };
+  for (const [k, v] of Object.entries(eligibilityInputs ?? {})) {
+    if (v !== undefined && v !== null && v !== '') mergedInputs[k] = v;
+  }
+  const result = eligibility?.length ? evaluateEligibility(eligibility, mergedInputs) : null;
   const { t, tTemplate } = useAnnualReviewI18n();
 
   // Per-criterion status derivation (SSOT: evaluator failures). A criterion
@@ -80,7 +87,7 @@ export function SystemScoresPanel({
   // failures with a provided value, and "met" otherwise. This drives the
   // always-visible eligibility table (see POLICY §AR-ELIGIBILITY-ALWAYS-VISIBLE).
   const failureById = new Map(result?.failures.map((f) => [f.criterion.id, f]) ?? []);
-  const inputs = eligibilityInputs ?? {};
+  const inputs = mergedInputs;
   const hasValue = (c: EligibilityCriterion) => {
     const raw = (inputs as Record<string, unknown>)[c.id] ?? (inputs as Record<string, unknown>)[c.name];
     return raw !== undefined && raw !== null && raw !== '';

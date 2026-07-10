@@ -354,13 +354,13 @@ export async function deleteRule(id: string): Promise<void> {
 
 // ---------- Instances ----------
 export interface InstanceWithEmployee extends AnnualReviewInstance {
-  employee?: { id: string; full_name: string | null; employee_code: string | null; designation: string | null };
+  employee?: { id: string; full_name: string | null; employee_code: string | null; designation: string | null; doj?: string | null };
 }
 
 export async function listInstancesForCycle(cycleId: string): Promise<InstanceWithEmployee[]> {
   const { data, error } = await db
     .from('annual_review_instances')
-    .select('*, employee:profiles!annual_review_instances_employee_id_fkey(id, full_name, employee_code, designation)')
+    .select('*, employee:profiles!annual_review_instances_employee_id_fkey(id, full_name, employee_code, designation, doj)')
     .eq('cycle_id', cycleId);
   if (error) throw error;
   return data ?? [];
@@ -409,7 +409,7 @@ export async function listInstancesPaginated(
   let q = db
     .from('annual_review_instances')
     .select(
-      '*, employee:profiles!annual_review_instances_employee_id_fkey(id, full_name, employee_code, designation)',
+      '*, employee:profiles!annual_review_instances_employee_id_fkey(id, full_name, employee_code, designation, doj)',
       { count: 'exact' },
     )
     .eq('cycle_id', args.cycleId);
@@ -551,7 +551,7 @@ export async function getInstanceForEmployee(employeeId: string, cycleId: string
 export async function listInstancesForReviewer(reviewerId: string, cycleId: string): Promise<InstanceWithEmployee[]> {
   const { data, error } = await db
     .from('annual_review_instances')
-    .select('*, employee:profiles!annual_review_instances_employee_id_fkey(id, full_name, employee_code, designation)')
+    .select('*, employee:profiles!annual_review_instances_employee_id_fkey(id, full_name, employee_code, designation, doj)')
     .eq('cycle_id', cycleId)
     .neq('overall_status', 'excluded')
     .or(`manager_id.eq.${reviewerId},skip_id.eq.${reviewerId},dept_head_id.eq.${reviewerId},bu_head_id.eq.${reviewerId},hr_id.eq.${reviewerId}`);
@@ -589,7 +589,7 @@ export async function listInstancesForReviewerPaginated(
   let q = db
     .from('annual_review_instances')
     .select(
-      '*, employee:profiles!annual_review_instances_employee_id_fkey(id, full_name, employee_code, designation)',
+      '*, employee:profiles!annual_review_instances_employee_id_fkey(id, full_name, employee_code, designation, doj)',
       { count: 'exact' },
     )
     .eq('cycle_id', args.cycleId)
@@ -629,7 +629,7 @@ export async function getInstanceById(id: string): Promise<InstanceWithEmployee 
   const { data, error } = await db
     .from('annual_review_instances')
     .select(
-      '*, employee:profiles!annual_review_instances_employee_id_fkey(id, full_name, employee_code, designation)',
+      '*, employee:profiles!annual_review_instances_employee_id_fkey(id, full_name, employee_code, designation, doj)',
     )
     .eq('id', id)
     .maybeSingle();

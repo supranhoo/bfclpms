@@ -17,9 +17,12 @@ import { AnnualReviewStatusBadge } from '@/components/annual-review/AnnualReview
 import { CriteriaScoringMatrix } from '@/components/annual-review/CriteriaScoringMatrix';
 import { shouldHideCriteriaCard, criteriaForStage } from '@/lib/annualReview/templateVisibility';
 import { SystemScoresPanel } from '@/components/annual-review/SystemScoresPanel';
+import { EligibilityInputsEditor } from '@/components/annual-review/EligibilityInputsEditor';
+import { deriveAutoInputs } from '@/lib/annualReview/eligibilityAutoFill';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Pencil } from 'lucide-react';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -65,7 +68,7 @@ export function TeamReviewDetailContent({
   instance: InstanceWithEmployee;
   fiscalYear?: number;
 }) {
-  const { user, profile } = useAuth();
+  const { user, profile, effectiveRole } = useAuth();
   const queryClient = useQueryClient();
   // Excluded instances are non-actionable for any reviewer. Render a read-only
   // notice and bail out — do NOT mount the draft/submit form. Admin/reports
@@ -263,6 +266,7 @@ export function TeamReviewDetailContent({
       user={user}
       profile={profile}
       queryClient={queryClient}
+    effectiveRole={effectiveRole}
     />
     </AnnualReviewI18nProvider>
   );
@@ -278,9 +282,17 @@ function TeamReviewDetailInner(props: any) {
     stageRatingOutOf5,
     sendBackOpen, setSendBackOpen, sendBackReason, setSendBackReason,
     sendBackPending, advancePending, assistedOpen, setAssistedOpen,
-    user, profile, queryClient,
+    user, profile, queryClient, effectiveRole,
   } = props;
   const { t } = useAnnualReviewI18n();
+  const [eligDlgOpen, setEligDlgOpen] = useState(false);
+  const canEditEligibility = effectiveRole === 'admin' || effectiveRole === 'hr_pms';
+  const eligibilityCriteria = template?.sections?.eligibility_criteria ?? [];
+  const reviewYear = typeof fiscalYear === 'number' ? fiscalYear + 1 : undefined;
+  const autoEligibilityInputs = useMemo(
+    () => deriveAutoInputs(eligibilityCriteria, instance.employee?.doj ?? null, reviewYear ?? null),
+    [eligibilityCriteria, instance.employee?.doj, reviewYear],
+  );
   const selfReviewFields = template?.sections?.self_review_fields ?? [];
   const selfEditable = role === 'self' && !locked;
   const selfResponse = (responses ?? []).find((r: any) => r.reviewer_role === 'self') ?? null;
@@ -348,10 +360,34 @@ function TeamReviewDetailInner(props: any) {
         eligibility={template?.sections.eligibility_criteria}
         eligibilityInputs={instance.eligibility_inputs}
         eligibilityRemark={instance.eligibility_remark}
+        autoEligibilityInputs={autoEligibilityInputs}
         employeeId={instance.employee_id}
         fiscalYear={fiscalYear}
         readOnly
       />
+
+      {canEditEligibility && eligibilityCriteria.length > 0 && (
+        <div className="flex justify-end -mt-2">
+          <Button size="sm" variant="outline" onClick={() => setEligDlgOpen(true)} className="gap-1.5">
+            <Pencil className="h-3.5 w-3.5" />
+            Fill eligibility inputs
+          </Button>
+        </div>
+      )}
+
+      <Dialog open={eligDlgOpen} onOpenChange={setEligDlgOpen}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Eligibility Inputs — {instance.employee?.full_name ?? instance.employee?.employee_code ?? 'Employee'}</DialogTitle>
+          </DialogHeader>
+          <EligibilityInputsEditor
+            instanceId={instance.id}
+            criteria={eligibilityCriteria}
+            initial={(instance.eligibility_inputs ?? {}) as Record<string, string | number | boolean>}
+            initialRemark={instance.eligibility_remark ?? ''}
+          />
+        </DialogContent>
+      </Dialog>
 
       <AppraisalCompositionCard composition={composition} variant="full" />
 
