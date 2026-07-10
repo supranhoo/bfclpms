@@ -17,9 +17,12 @@ import { AnnualReviewStatusBadge } from '@/components/annual-review/AnnualReview
 import { CriteriaScoringMatrix } from '@/components/annual-review/CriteriaScoringMatrix';
 import { shouldHideCriteriaCard, criteriaForStage } from '@/lib/annualReview/templateVisibility';
 import { SystemScoresPanel } from '@/components/annual-review/SystemScoresPanel';
+import { EligibilityInputsEditor } from '@/components/annual-review/EligibilityInputsEditor';
+import { deriveAutoInputs } from '@/lib/annualReview/eligibilityAutoFill';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Pencil } from 'lucide-react';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -65,7 +68,7 @@ export function TeamReviewDetailContent({
   instance: InstanceWithEmployee;
   fiscalYear?: number;
 }) {
-  const { user, profile } = useAuth();
+  const { user, profile, effectiveRole } = useAuth();
   const queryClient = useQueryClient();
   // Excluded instances are non-actionable for any reviewer. Render a read-only
   // notice and bail out — do NOT mount the draft/submit form. Admin/reports
@@ -263,6 +266,7 @@ export function TeamReviewDetailContent({
       user={user}
       profile={profile}
       queryClient={queryClient}
+    effectiveRole={effectiveRole}
     />
     </AnnualReviewI18nProvider>
   );
