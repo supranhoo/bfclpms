@@ -65,9 +65,6 @@ export function AssistedSubmissionDialog({
   const photoUploadRequired = flags?.photoUploadRequired ?? true;
 
   const declarationText = selfieRequired ? DECLARATION : DECLARATION_NO_PHOTO;
-  const declarationDisplay = selfieRequired
-    ? t('assisted.declaration', DECLARATION)
-    : t('assisted.declaration.noPhoto', DECLARATION_NO_PHOTO);
 
   const stopStream = () => {
     streamRef.current?.getTracks().forEach((t) => t.stop());
