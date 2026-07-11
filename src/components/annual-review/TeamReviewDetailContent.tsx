@@ -168,6 +168,26 @@ export function TeamReviewDetailContent({
 
   const handleSubmit = async () => {
     if (!role) return;
+    // Mandatory qualitative fields guard for the self stage (native or
+    // proxy-assisted). Prevents blank submissions from advancing the
+    // instance — see POLICY §AR-SELF-QUALITATIVE.
+    if (role === 'self') {
+      const fields = (template?.sections?.self_review_fields ?? []) as {
+        id: string; label: string; required?: boolean;
+      }[];
+      const q = (draft.qualitative_responses ?? {}) as Record<string, string>;
+      const missing = fields.filter(
+        (f) => f.required && !(q[f.id] ?? '').trim(),
+      );
+      if (missing.length > 0) {
+        toast.error(
+          `Please fill required qualitative field${missing.length > 1 ? 's' : ''}: ${missing
+            .map((f) => f.label)
+            .join(', ')}`,
+        );
+        return;
+      }
+    }
     if (proxyMode) {
       try { await flush(); setAssistedOpen(true); }
       catch (e) { toast.error((e as Error).message); }
