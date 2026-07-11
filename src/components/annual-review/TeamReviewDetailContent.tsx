@@ -168,10 +168,28 @@ export function TeamReviewDetailContent({
 
   const handleSubmit = async () => {
     if (!role) return;
-    // Mandatory qualitative fields guard for the self stage (native or
+    // Mandatory criteria + qualitative guard for the self stage (native or
     // proxy-assisted). Prevents blank submissions from advancing the
     // instance — see POLICY §AR-SELF-QUALITATIVE.
     if (role === 'self') {
+      // 1) Every visible criterion on the self stage must have a numeric score.
+      if (!shouldHideCriteriaCard(template, 'self')) {
+        const criteria = criteriaForStage(template, 'self');
+        const scores = (draft.criteria_scores ?? {}) as Record<string, number | undefined>;
+        const missingCriteria = criteria.filter((c) => {
+          const v = scores[c.id];
+          return v === undefined || v === null || Number.isNaN(Number(v));
+        });
+        if (missingCriteria.length > 0) {
+          toast.error(
+            `Please score all criteria before submitting. Missing: ${missingCriteria
+              .map((c) => c.name ?? c.id)
+              .join(', ')}`,
+          );
+          return;
+        }
+      }
+      // 2) Required qualitative fields must be filled.
       const fields = (template?.sections?.self_review_fields ?? []) as {
         id: string; label: string; required?: boolean;
       }[];
