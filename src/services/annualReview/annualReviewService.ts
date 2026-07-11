@@ -1198,6 +1198,7 @@ export async function seedInstancesByRules(args: { cycleId: string; hrUserId: st
 
   const rows: any[] = [];
   let skipped = 0;
+  const fallbackEvents: Array<{ employee_id: string; role: 'dept_head' | 'bu_head'; configured_id: string | null; resolved_id: string | null; reason: string | undefined }> = [];
   for (const p of people ?? []) {
     const rule = (rules as any[]).find((r) => matches(r.filters, p));
     if (!rule) { skipped++; continue; }
@@ -1206,6 +1207,17 @@ export async function seedInstancesByRules(args: { cycleId: string; hrUserId: st
     const buId = deptToBu[p.department_id];
     const buFromCfg = buId ? buHead[buId] ?? null : null;
     const buFallback = skip ? mgrMap.get(skip) ?? null : null;
+
+    const configuredDept = p.department_id ? deptHead[p.department_id] ?? null : null;
+    const deptResolved = resolveHierarchicalHead({ employeeId: p.id, configuredHeadId: configuredDept, fallbackId: mgr, mgrMap });
+    if (deptResolved.usedFallback && configuredDept) {
+      fallbackEvents.push({ employee_id: p.id, role: 'dept_head', configured_id: configuredDept, resolved_id: deptResolved.headId, reason: deptResolved.reason });
+    }
+    const buResolved = resolveHierarchicalHead({ employeeId: p.id, configuredHeadId: buFromCfg, fallbackId: buFallback, mgrMap });
+    if (buResolved.usedFallback && buFromCfg) {
+      fallbackEvents.push({ employee_id: p.id, role: 'bu_head', configured_id: buFromCfg, resolved_id: buResolved.headId, reason: buResolved.reason });
+    }
+
     rows.push({
       employee_id: p.id,
       template_id: rule.template_id,
@@ -1213,14 +1225,15 @@ export async function seedInstancesByRules(args: { cycleId: string; hrUserId: st
       assigned_rule_id: rule.id,
       manager_id: mgr,
       skip_id: skip,
-      bu_head_id: buFromCfg ?? buFallback,
-      dept_head_id: p.department_id ? deptHead[p.department_id] ?? null : null,
+      bu_head_id: buResolved.headId ?? buFallback,
+      dept_head_id: deptResolved.headId,
       hr_id: hrHead,
       enabled_stages: defaultStages,
     });
   }
 
   await writeSeedRowsPreservingOverrides(args.cycleId, rows);
+  await logHeadFallbacks(args.cycleId, fallbackEvents);
   return { seeded: rows.length, skipped };
 }
 
