@@ -1,6 +1,8 @@
 # Performance Management System (PMS) - Documentation
 
-> **Last Updated:** 2026-07-10 · **Version:** v2.66.101
+> **Last Updated:** 2026-07-11 · **Version:** v2.66.102
+>
+> **Version:** 2.66.102 — **Annual Review reseed now overwrites stale reviewer hierarchy snapshots (2026-07-11).** RCA: the hierarchy guard correctly resolved misconfigured Dept/BU heads during seeding, but the existing-instance update path only wrote `manager_id`, `skip_id`, `bu_head_id`, and `hr_id`; it omitted `dept_head_id` and `enabled_stages`, so employees already seeded before the guard kept stale heads such as 200114 on 200449. CAPA: the seed update patch now writes all seed-controlled hierarchy fields while still preserving `template_override_id`. Pending/self-not-started instance repair is restricted to unsubmitted rows and audit-logged with automated performer. Regression: `src/test/annualReview/seedUpdatePatch.test.ts`. See POLICY §AR-SEED-HIERARCHY-RESNAPSHOT.
 >
 > **Version:** 2.66.101 — **HR-Team can now see and use Annual Review form submission assistance (2026-07-10).** RCA: the backend directory resolver already granted HR-Team / BU-scoped access, but the Team Annual Review route and sidebar were still locked to static reviewer roles, and assisted self-submit eligibility still only admitted manager/skip/designated/admin/HR PMS. CAPA: `AnnualReviewTeamAccessRoute` and the sidebar now use the same `useDirectoryAccess` resolver as the directory button, so HR-Team users with an employee role can reach `/annual-review/team` without opening access to ordinary employees. Backend helper `can_proxy_submit_annual_review` now honors resolver scope after the existing assisted-submission safeguards (`pending_self`, feature flag, no employee login), and narrow RLS policies allow approved helpers to open pending self-review forms/responses in scope. Regression: `src/test/annualReview/teamAccess.test.ts`. See POLICY §AR-DIRECTORY-ACCESS-MATRIX.
 >

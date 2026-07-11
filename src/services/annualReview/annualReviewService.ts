@@ -1020,20 +1020,36 @@ export async function seedInstancesForCycle(args: { cycleId: string; templateId:
  * Strategy: partition rows into "new" (insert) and "existing" (update only
  * the seed-controlled columns — never `template_override_id`).
  */
+type SeedRowForWrite = {
+  employee_id: string;
+  template_id: string;
+  cycle_id: string;
+  manager_id: string | null;
+  skip_id: string | null;
+  bu_head_id: string | null;
+  hr_id: string | null;
+  assigned_rule_id?: string | null;
+  dept_head_id?: string | null;
+  enabled_stages?: AnnualReviewerRole[];
+};
+
+export function buildSeedUpdatePatch(r: SeedRowForWrite): Record<string, unknown> {
+  const patch: Record<string, unknown> = {
+    template_id: r.template_id,
+    manager_id: r.manager_id,
+    skip_id: r.skip_id,
+    bu_head_id: r.bu_head_id,
+    dept_head_id: r.dept_head_id ?? null,
+    hr_id: r.hr_id,
+  };
+  if ('assigned_rule_id' in r) patch.assigned_rule_id = r.assigned_rule_id ?? null;
+  if ('enabled_stages' in r) patch.enabled_stages = r.enabled_stages ?? null;
+  return patch;
+}
+
 async function writeSeedRowsPreservingOverrides(
   cycleId: string,
-  rows: Array<{
-    employee_id: string;
-    template_id: string;
-    cycle_id: string;
-    manager_id: string | null;
-    skip_id: string | null;
-    bu_head_id: string | null;
-    hr_id: string | null;
-    assigned_rule_id?: string | null;
-    dept_head_id?: string | null;
-    enabled_stages?: AnnualReviewerRole[];
-  }>,
+  rows: SeedRowForWrite[],
 ) {
   if (rows.length === 0) return;
 
@@ -1063,14 +1079,7 @@ async function writeSeedRowsPreservingOverrides(
   // which are rare and admin-initiated.
   for (const r of toUpdate) {
     const id = existingByEmp.get(r.employee_id)!;
-    const patch: Record<string, unknown> = {
-      template_id: r.template_id,
-      manager_id: r.manager_id,
-      skip_id: r.skip_id,
-      bu_head_id: r.bu_head_id,
-      hr_id: r.hr_id,
-    };
-    if ('assigned_rule_id' in r) patch.assigned_rule_id = r.assigned_rule_id ?? null;
+    const patch = buildSeedUpdatePatch(r);
     const { error } = await db
       .from('annual_review_instances')
       .update(patch)
