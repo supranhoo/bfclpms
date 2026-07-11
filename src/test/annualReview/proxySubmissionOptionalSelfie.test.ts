@@ -29,4 +29,14 @@ describe('Assisted submission — optional selfie flag', () => {
     expect(src).toMatch(/assisted\.btn\.skip/);
     expect(src).toMatch(/photoSkipped/);
   });
+
+  it('declaration checkbox is always tickable; only submit button gates on media', () => {
+    const src = read('components/annual-review/AssistedSubmissionDialog.tsx');
+    // The Checkbox block must NOT carry a disabled= prop.
+    const checkboxBlock = src.match(/<Checkbox[\s\S]*?\/>/);
+    expect(checkboxBlock).not.toBeNull();
+    expect(checkboxBlock![0]).not.toMatch(/disabled=/);
+    // Submit button still enforces media + accepted.
+    expect(src).toMatch(/\(selfieRequired && !snapshot\) \|\| \(photoUploadRequired && !uploadFile\) \|\| !accepted \|\| submitting/);
+  });
 });
