@@ -15,15 +15,15 @@ describe('Assisted submission — wiring', () => {
     expect(src).toMatch(/\.remove\(\[path\]\)/);
   });
 
-  it('dialog enforces live capture + declaration before submit (when selfie is required)', () => {
+  it('dialog enables submit as soon as any visual evidence is provided (selfie or upload)', () => {
     const src = read('components/annual-review/AssistedSubmissionDialog.tsx');
     // No file picker — webcam-only via getUserMedia
-    expect(src).not.toMatch(/<input[^>]+type=["']file/);
+    // (a photo upload input IS allowed — the fix intentionally accepts either selfie or upload)
     expect(src).toMatch(/getUserMedia/);
-    // Submit gated on (selfieRequired && snapshot) AND accepted declaration.
-    expect(src).toMatch(/\(selfieRequired && !snapshot\) \|\| !accepted \|\| submitting/);
-    // Flag drives the strict path (mandatory) vs the skippable path (optional).
-    expect(src).toMatch(/assisted_selfie_required/);
+    // Submit gated only on presence of at least one media artifact.
+    expect(src).toMatch(/\(!snapshot && !uploadFile\) \|\| submitting/);
+    // No signed-declaration checkbox anymore.
+    expect(src).not.toMatch(/<Checkbox/);
   });
 
   it('detail content wires proxy mode only at pending_self when eligibility resolves true', () => {

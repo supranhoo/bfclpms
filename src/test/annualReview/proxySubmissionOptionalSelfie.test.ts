@@ -23,20 +23,18 @@ describe('Assisted submission — optional selfie flag', () => {
     expect(src).toMatch(/toggleSelfieRequired/);
   });
 
-  it('dialog picks the no-photo declaration + Skip button when the flag is OFF', () => {
+  it('dialog still exposes Skip button + no-photo declaration text when the flag is OFF', () => {
     const src = read('components/annual-review/AssistedSubmissionDialog.tsx');
-    expect(src).toMatch(/assisted\.declaration\.noPhoto/);
+    expect(src).toMatch(/DECLARATION_NO_PHOTO/);
     expect(src).toMatch(/assisted\.btn\.skip/);
     expect(src).toMatch(/photoSkipped/);
   });
 
-  it('declaration checkbox is always tickable; only submit button gates on media', () => {
+  it('no signed-declaration checkbox; submit is gated only by presence of any media artifact', () => {
     const src = read('components/annual-review/AssistedSubmissionDialog.tsx');
-    // The Checkbox block must NOT carry a disabled= prop.
-    const checkboxBlock = src.match(/<Checkbox[\s\S]*?\/>/);
-    expect(checkboxBlock).not.toBeNull();
-    expect(checkboxBlock![0]).not.toMatch(/disabled=/);
-    // Submit button still enforces media + accepted.
-    expect(src).toMatch(/\(selfieRequired && !snapshot\) \|\| \(photoUploadRequired && !uploadFile\) \|\| !accepted \|\| submitting/);
+    // Signed-declaration checkbox has been removed.
+    expect(src).not.toMatch(/<Checkbox/);
+    // Submit is enabled as soon as either a selfie or an uploaded photo is present.
+    expect(src).toMatch(/\(!snapshot && !uploadFile\) \|\| submitting/);
   });
 });

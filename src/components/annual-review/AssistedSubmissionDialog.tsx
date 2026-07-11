@@ -5,7 +5,6 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Checkbox } from '@/components/ui/checkbox';
 import { Loader2, Camera, RefreshCw, ShieldCheck, SkipForward, Upload, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { submitWithAssistance } from '@/services/annualReview/proxySubmission';
@@ -40,7 +39,6 @@ export function AssistedSubmissionDialog({
   const [streamErr, setStreamErr] = useState<string | null>(null);
   const [snapshot, setSnapshot] = useState<Blob | null>(null);
   const [snapshotUrl, setSnapshotUrl] = useState<string | null>(null);
-  const [accepted, setAccepted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [photoSkipped, setPhotoSkipped] = useState(false);
   const [uploadFile, setUploadFile] = useState<File | null>(null);
@@ -67,9 +65,6 @@ export function AssistedSubmissionDialog({
   const photoUploadRequired = flags?.photoUploadRequired ?? true;
 
   const declarationText = selfieRequired ? DECLARATION : DECLARATION_NO_PHOTO;
-  const declarationDisplay = selfieRequired
-    ? t('assisted.declaration', DECLARATION)
-    : t('assisted.declaration.noPhoto', DECLARATION_NO_PHOTO);
 
   const stopStream = () => {
     streamRef.current?.getTracks().forEach((t) => t.stop());
@@ -81,7 +76,7 @@ export function AssistedSubmissionDialog({
       stopStream();
       if (snapshotUrl) URL.revokeObjectURL(snapshotUrl);
       if (uploadPreviewUrl) URL.revokeObjectURL(uploadPreviewUrl);
-      setSnapshot(null); setSnapshotUrl(null); setAccepted(false); setStreamErr(null); setPhotoSkipped(false);
+      setSnapshot(null); setSnapshotUrl(null); setStreamErr(null); setPhotoSkipped(false);
       setUploadFile(null); setUploadPreviewUrl(null);
       return;
     }
@@ -136,9 +131,8 @@ export function AssistedSubmissionDialog({
   };
 
   const submit = async () => {
-    if (!accepted) return;
-    if (selfieRequired && !snapshot) return;
-    if (photoUploadRequired && !uploadFile) return;
+    // At least one form of visual evidence must be provided (selfie OR uploaded photo).
+    if (!snapshot && !uploadFile) return;
     setSubmitting(true);
     try {
       await submitWithAssistance({
@@ -306,32 +300,21 @@ export function AssistedSubmissionDialog({
             )}
           </div>
 
-          <label className="flex items-start gap-2 text-sm leading-snug">
-            <Checkbox
-              checked={accepted}
-              onCheckedChange={(v) => setAccepted(v === true)}
-            />
-            <span>{declarationDisplay}</span>
-          </label>
         </div>
 
         <DialogFooter className="flex-col items-stretch gap-2 sm:flex-row sm:items-center sm:justify-end">
-          {(() => {
-            const reasons: string[] = [];
-            if (selfieRequired && !snapshot) reasons.push(t('assisted.hint.selfie', 'capture a live selfie'));
-            if (photoUploadRequired && !uploadFile) reasons.push(t('assisted.hint.photo', 'upload the required photograph'));
-            if (!accepted) reasons.push(t('assisted.hint.declaration', 'tick the declaration'));
-            if (reasons.length === 0) return null;
-            return (
-              <p className="text-xs text-amber-600 sm:mr-auto">
-                {t('assisted.hint.prefix', 'To enable Verify & Submit, please')} {reasons.join(', ')}.
-              </p>
-            );
-          })()}
+          {!snapshot && !uploadFile && (
+            <p className="text-xs text-amber-600 sm:mr-auto">
+              {t(
+                'assisted.hint.anyMedia',
+                'To enable Verify & Submit, capture a live selfie or upload a photograph.',
+              )}
+            </p>
+          )}
           <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={submitting}>{t('assisted.btn.cancel', 'Cancel')}</Button>
           <Button
             onClick={submit}
-            disabled={(selfieRequired && !snapshot) || (photoUploadRequired && !uploadFile) || !accepted || submitting}
+            disabled={(!snapshot && !uploadFile) || submitting}
           >
             {submitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
             {t('assisted.btn.submit', 'Verify & Submit')}
