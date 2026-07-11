@@ -1,81 +1,53 @@
 import { describe, it, expect } from 'vitest';
-import type { TrendEmployee } from '@/hooks/useMonthlyTrend';
 
-// Mirrors the filter used by MonthlyTrendView — kept here as a pure test
-// to lock the PIP + BU + search combination against regressions.
-function filterEmployees(
-  employees: TrendEmployee[],
-  opts: { buFilter: string; pipOnly: boolean; pipThreshold: number | null; search: string },
-) {
-  const s = opts.search.trim().toLowerCase();
-  return employees.filter((e) => {
-    if (opts.buFilter !== '__all__' && (e.businessUnitId ?? '') !== opts.buFilter) return false;
-    if (opts.pipOnly) {
-      if (opts.pipThreshold == null) return false;
-      if (e.finalOnlyAvg == null || e.finalOnlyAvg >= opts.pipThreshold) return false;
-    }
-    if (!s) return true;
-    return (
-      e.fullName.toLowerCase().includes(s) ||
-      e.employeeCode.toLowerCase().includes(s) ||
-      e.departmentName.toLowerCase().includes(s) ||
-      e.businessUnitName.toLowerCase().includes(s)
-    );
-  });
+// Mirrors MonthlyTrendView's PIP rule: an employee qualifies only when EVERY
+// month in the selected range has a Final Score AND all those scores are
+// strictly below the configured PIP threshold. A missing month disqualifies.
+type Emp = {
+  id: string;
+  businessUnitId: string | null;
+  monthlyFinalScores: Record<string, number | null>;
+};
+
+function isPip(emp: Emp, months: string[], threshold: number | null) {
+  if (threshold == null || months.length === 0) return false;
+  for (const k of months) {
+    const v = emp.monthlyFinalScores[k];
+    if (v == null || !Number.isFinite(v)) return false;
+    if (v >= threshold) return false;
+  }
+  return true;
 }
 
-function make(overrides: Partial<TrendEmployee>): TrendEmployee {
-  return {
-    id: overrides.id ?? 'x',
-    fullName: overrides.fullName ?? 'Person',
-    employeeCode: overrides.employeeCode ?? '000',
-    designation: '',
-    departmentName: '',
-    businessUnitId: overrides.businessUnitId ?? null,
-    businessUnitName: overrides.businessUnitName ?? '',
-    reportingManagerName: null,
-    isActive: true,
-    monthlyScores: {},
-    monthlyFinalScores: {},
-    avg: overrides.avg ?? null,
-    finalOnlyAvg: overrides.finalOnlyAvg ?? null,
-    trend: 'na',
-  };
-}
+const MONTHS = ['2026-01', '2026-02', '2026-03'];
 
-describe('MonthlyTrend PIP + BU filter', () => {
-  const a = make({ id: 'a', businessUnitId: 'bu1', businessUnitName: 'HR', finalOnlyAvg: 2.4 });
-  const b = make({ id: 'b', businessUnitId: 'bu1', businessUnitName: 'HR', finalOnlyAvg: 3.5 });
-  const c = make({ id: 'c', businessUnitId: 'bu2', businessUnitName: 'Ops', finalOnlyAvg: 1.9 });
-  const d = make({ id: 'd', businessUnitId: 'bu2', businessUnitName: 'Ops', finalOnlyAvg: null });
-  const all = [a, b, c, d];
-
-  it('PIP-only flags rows strictly below threshold', () => {
-    const res = filterEmployees(all, { buFilter: '__all__', pipOnly: true, pipThreshold: 3, search: '' });
-    expect(res.map(x => x.id).sort()).toEqual(['a', 'c']);
+describe('MonthlyTrend PIP rule (every-month)', () => {
+  it('qualifies when every month is strictly below threshold', () => {
+    const e: Emp = { id: 'a', businessUnitId: null,
+      monthlyFinalScores: { '2026-01': 1.2, '2026-02': 1.8, '2026-03': 1.9 } };
+    expect(isPip(e, MONTHS, 2)).toBe(true);
   });
 
-  it('excludes rows with null finalOnlyAvg from PIP', () => {
-    const res = filterEmployees([d], { buFilter: '__all__', pipOnly: true, pipThreshold: 3, search: '' });
-    expect(res).toHaveLength(0);
+  it('disqualifies when any month meets or exceeds threshold', () => {
+    const e: Emp = { id: 'b', businessUnitId: null,
+      monthlyFinalScores: { '2026-01': 1.2, '2026-02': 2.0, '2026-03': 1.9 } };
+    expect(isPip(e, MONTHS, 2)).toBe(false);
   });
 
-  it('BU filter narrows both PIP and non-PIP paths', () => {
-    const bu1 = filterEmployees(all, { buFilter: 'bu1', pipOnly: false, pipThreshold: null, search: '' });
-    expect(bu1.map(x => x.id).sort()).toEqual(['a', 'b']);
-
-    const bu1Pip = filterEmployees(all, { buFilter: 'bu1', pipOnly: true, pipThreshold: 3, search: '' });
-    expect(bu1Pip.map(x => x.id)).toEqual(['a']);
+  it('disqualifies when any month is missing', () => {
+    const e: Emp = { id: 'c', businessUnitId: null,
+      monthlyFinalScores: { '2026-01': 1.2, '2026-02': null, '2026-03': 1.9 } };
+    expect(isPip(e, MONTHS, 2)).toBe(false);
   });
 
-  it('boundary: equal to threshold is NOT a PIP candidate', () => {
-    const e = make({ id: 'e', finalOnlyAvg: 3.0 });
-    const res = filterEmployees([e], { buFilter: '__all__', pipOnly: true, pipThreshold: 3, search: '' });
-    expect(res).toHaveLength(0);
+  it('requires a threshold to activate', () => {
+    const e: Emp = { id: 'd', businessUnitId: null,
+      monthlyFinalScores: { '2026-01': 1.0, '2026-02': 1.0, '2026-03': 1.0 } };
+    expect(isPip(e, MONTHS, null)).toBe(false);
   });
 
-  it('pipOnly requires a threshold to activate', () => {
-    const res = filterEmployees(all, { buFilter: '__all__', pipOnly: true, pipThreshold: null, search: '' });
-    expect(res).toHaveLength(0);
+  it('requires at least one month in range', () => {
+    const e: Emp = { id: 'e', businessUnitId: null, monthlyFinalScores: {} };
+    expect(isPip(e, [], 2)).toBe(false);
   });
 });

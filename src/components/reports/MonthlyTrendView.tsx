@@ -117,15 +117,26 @@ export function MonthlyTrendView({ canExport }: Props) {
       .sort((a, b) => a.name.localeCompare(b.name));
   }, [allEmployees]);
 
+  // PIP rule: employee is a PIP candidate when EVERY month in the selected
+  // range has a final score AND all of those scores are strictly below the
+  // configured threshold. A missing month disqualifies the row.
+  const isPipCandidate = (emp: typeof allEmployees[number]): boolean => {
+    if (pipThreshold == null) return false;
+    if (months.length === 0) return false;
+    for (const m of months) {
+      const v = emp.monthlyFinalScores[m.key];
+      if (v == null || !Number.isFinite(v)) return false;
+      if (v >= pipThreshold) return false;
+    }
+    return true;
+  };
+
   // Client-side search + BU + PIP filter (instant, no refetch)
   const filteredEmployees = useMemo(() => {
     const s = search.trim().toLowerCase();
     return allEmployees.filter(e => {
       if (buFilter !== '__all__' && (e.businessUnitId ?? '') !== buFilter) return false;
-      if (pipOnly) {
-        if (pipThreshold == null) return false;
-        if (e.finalOnlyAvg == null || e.finalOnlyAvg >= pipThreshold) return false;
-      }
+      if (pipOnly && !isPipCandidate(e)) return false;
       if (!s) return true;
       return (
         e.fullName.toLowerCase().includes(s) ||
@@ -135,17 +146,16 @@ export function MonthlyTrendView({ canExport }: Props) {
         (e.reportingManagerName ?? '').toLowerCase().includes(s)
       );
     });
-  }, [allEmployees, search, buFilter, pipOnly, pipThreshold]);
+  }, [allEmployees, search, buFilter, pipOnly, pipThreshold, months]);
 
   const pipCandidates = useMemo(() => {
     if (pipThreshold == null) return [] as typeof allEmployees;
     // Base PIP list is BU-filtered but ignores search and pipOnly toggles.
     return allEmployees.filter(e =>
       (buFilter === '__all__' || (e.businessUnitId ?? '') === buFilter)
-      && e.finalOnlyAvg != null
-      && e.finalOnlyAvg < pipThreshold,
+      && isPipCandidate(e),
     );
-  }, [allEmployees, buFilter, pipThreshold]);
+  }, [allEmployees, buFilter, pipThreshold, months]);
 
   const totalPages = Math.max(1, Math.ceil(filteredEmployees.length / pageSize));
   const safePage = Math.min(page, totalPages);
@@ -302,7 +312,7 @@ export function MonthlyTrendView({ canExport }: Props) {
                 <div className="flex items-center gap-2 pb-2">
                   <Switch id="pip-only" checked={pipOnly} onCheckedChange={(v) => { setPipOnly(v); setPage(1); }} />
                   <Label htmlFor="pip-only" className="text-sm cursor-pointer">
-                    Show PIP candidates only (Final Score avg &lt; {pipThreshold.toFixed(2)})
+                    Show PIP candidates only (every month's Final Score &lt; {pipThreshold.toFixed(2)})
                   </Label>
                 </div>
               )}
@@ -342,7 +352,7 @@ export function MonthlyTrendView({ canExport }: Props) {
                 {pipCandidates.length} PIP candidate{pipCandidates.length === 1 ? '' : 's'}
               </span>
               <span className="text-muted-foreground ml-1">
-                — employees with Final-Score average below {pipThreshold.toFixed(2)} in this range
+                — employees whose Final Score is below {pipThreshold.toFixed(2)} in every month of this range
                 {buFilter !== '__all__' ? ' (within selected BU)' : ''}.
               </span>
             </div>
