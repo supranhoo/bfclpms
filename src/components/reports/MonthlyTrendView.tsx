@@ -390,6 +390,14 @@ export function MonthlyTrendView({ canExport }: Props) {
               pipThreshold={pipThreshold ?? null}
             />
 
+            {hasLoaded && pipThreshold != null && (
+              <p className="mt-3 text-xs text-muted-foreground">
+                Colour legend — <span className="text-red-600 dark:text-red-400 font-semibold">Red</span>: below PIP threshold ({pipThreshold.toFixed(2)}) ·{' '}
+                <span className="text-yellow-600 dark:text-yellow-400 font-semibold">Amber</span>: within 0.5 of threshold ·{' '}
+                <span className="text-green-600 dark:text-green-400 font-semibold">Green</span>: safe.
+              </p>
+            )}
+
             {hasLoaded && filteredEmployees.length > 0 && (
               <div className="flex items-center justify-between mt-4 text-sm">
                 <span className="text-muted-foreground">
