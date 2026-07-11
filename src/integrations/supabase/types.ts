@@ -824,7 +824,7 @@ export type Database = {
           ip: string | null
           proxy_role: string
           proxy_user_id: string
-          selfie_path: string
+          selfie_path: string | null
           user_agent: string | null
         }
         Insert: {
@@ -837,7 +837,7 @@ export type Database = {
           ip?: string | null
           proxy_role: string
           proxy_user_id: string
-          selfie_path: string
+          selfie_path?: string | null
           user_agent?: string | null
         }
         Update: {
@@ -850,7 +850,7 @@ export type Database = {
           ip?: string | null
           proxy_role?: string
           proxy_user_id?: string
-          selfie_path?: string
+          selfie_path?: string | null
           user_agent?: string | null
         }
         Relationships: [
@@ -1441,6 +1441,7 @@ export type Database = {
           annual_review_directory_search_enabled: boolean
           app_name: string
           assisted_self_submission_enabled: boolean
+          assisted_selfie_required: boolean
           created_at: string
           enable_org_kpi_auto_inherit: boolean
           enable_org_kpi_autopull: boolean
@@ -1463,6 +1464,7 @@ export type Database = {
           annual_review_directory_search_enabled?: boolean
           app_name?: string
           assisted_self_submission_enabled?: boolean
+          assisted_selfie_required?: boolean
           created_at?: string
           enable_org_kpi_auto_inherit?: boolean
           enable_org_kpi_autopull?: boolean
@@ -1485,6 +1487,7 @@ export type Database = {
           annual_review_directory_search_enabled?: boolean
           app_name?: string
           assisted_self_submission_enabled?: boolean
+          assisted_selfie_required?: boolean
           created_at?: string
           enable_org_kpi_auto_inherit?: boolean
           enable_org_kpi_autopull?: boolean
