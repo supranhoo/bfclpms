@@ -17,7 +17,12 @@ export interface SubmitWithAssistanceArgs {
   instanceId: string;
   employeeUserId: string;
   proxyRoleLabel: string;
-  selfieBlob: Blob;
+  /**
+   * Live selfie of the employee. Optional when the admin has switched the
+   * `assisted_selfie_required` flag off — in that case no upload is attempted
+   * and the audit row is written with `selfie_path = NULL`.
+   */
+  selfieBlob?: Blob | null;
   declarationText: string;
   userAgent?: string;
 }
@@ -31,11 +36,14 @@ export async function submitWithAssistance(args: SubmitWithAssistanceArgs): Prom
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error('Not authenticated');
 
-  const path = `${args.instanceId}/${Date.now()}.jpg`;
-  const { error: upErr } = await supabase.storage
-    .from(PROXY_SELFIE_BUCKET)
-    .upload(path, args.selfieBlob, { contentType: 'image/jpeg', upsert: false });
-  if (upErr) throw new Error(`Selfie upload failed: ${upErr.message}`);
+  let path: string | null = null;
+  if (args.selfieBlob) {
+    path = `${args.instanceId}/${Date.now()}.jpg`;
+    const { error: upErr } = await supabase.storage
+      .from(PROXY_SELFIE_BUCKET)
+      .upload(path, args.selfieBlob, { contentType: 'image/jpeg', upsert: false });
+    if (upErr) throw new Error(`Selfie upload failed: ${upErr.message}`);
+  }
 
   try {
     const { data: audit, error: insErr } = await supabase
@@ -60,8 +68,8 @@ export async function submitWithAssistance(args: SubmitWithAssistanceArgs): Prom
     if (advErr) throw new Error(advErr.message);
     return next as string;
   } catch (e) {
-    // Rollback the orphan selfie.
-    void supabase.storage.from(PROXY_SELFIE_BUCKET).remove([path]);
+    // Rollback the orphan selfie if one was uploaded.
+    if (path) void supabase.storage.from(PROXY_SELFIE_BUCKET).remove([path]);
     throw e;
   }
 }
