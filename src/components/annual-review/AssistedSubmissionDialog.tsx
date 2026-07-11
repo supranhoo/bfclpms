@@ -316,6 +316,19 @@ export function AssistedSubmissionDialog({
         </div>
 
         <DialogFooter>
+        <DialogFooter className="flex-col items-stretch gap-2 sm:flex-row sm:items-center sm:justify-end">
+          {(() => {
+            const reasons: string[] = [];
+            if (selfieRequired && !snapshot) reasons.push(t('assisted.hint.selfie', 'capture a live selfie'));
+            if (photoUploadRequired && !uploadFile) reasons.push(t('assisted.hint.photo', 'upload the required photograph'));
+            if (!accepted) reasons.push(t('assisted.hint.declaration', 'tick the declaration'));
+            if (reasons.length === 0) return null;
+            return (
+              <p className="text-xs text-amber-600 sm:mr-auto">
+                {t('assisted.hint.prefix', 'To enable Verify & Submit, please')} {reasons.join(', ')}.
+              </p>
+            );
+          })()}
           <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={submitting}>{t('assisted.btn.cancel', 'Cancel')}</Button>
           <Button
             onClick={submit}
