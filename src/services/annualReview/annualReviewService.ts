@@ -966,20 +966,47 @@ export async function seedInstancesForCycle(args: { cycleId: string; templateId:
     const bu = deptToBu[p.department_id] ? buHead[deptToBu[p.department_id]] ?? null : null;
     // Legacy fallback when no BU head configured: 2 hops above skip.
     const buFallback = skip ? mgrMap.get(skip) ?? null : null;
+
+    // Hierarchy guards — prevent a misconfigured dept/BU head (peer, self, or
+    // unrelated employee) from being stamped as a reviewer. Falls back to the
+    // reporting chain and records an audit event so admins can fix the source.
+    const configuredDept = p.department_id ? deptHead[p.department_id] ?? null : null;
+    const deptResolved = resolveHierarchicalHead({
+      employeeId: p.id,
+      configuredHeadId: configuredDept,
+      fallbackId: mgr,
+      mgrMap,
+    });
+    if (deptResolved.usedFallback && configuredDept) {
+      fallbackEvents.push({ employee_id: p.id, role: 'dept_head', configured_id: configuredDept, resolved_id: deptResolved.headId, reason: deptResolved.reason });
+    }
+
+    const configuredBu = bu ?? null;
+    const buResolved = resolveHierarchicalHead({
+      employeeId: p.id,
+      configuredHeadId: configuredBu,
+      fallbackId: buFallback,
+      mgrMap,
+    });
+    if (buResolved.usedFallback && configuredBu) {
+      fallbackEvents.push({ employee_id: p.id, role: 'bu_head', configured_id: configuredBu, resolved_id: buResolved.headId, reason: buResolved.reason });
+    }
+
     return {
       employee_id: p.id,
       template_id: args.templateId,
       cycle_id: args.cycleId,
       manager_id: mgr,
       skip_id: skip,
-      bu_head_id: bu ?? buFallback,
-      dept_head_id: p.department_id ? deptHead[p.department_id] ?? null : null,
+      bu_head_id: buResolved.headId ?? buFallback,
+      dept_head_id: deptResolved.headId,
       hr_id: hrHead,
       enabled_stages: defaultStages,
     };
   });
 
   await writeSeedRowsPreservingOverrides(args.cycleId, rows);
+  await logHeadFallbacks(args.cycleId, fallbackEvents);
   return rows.length;
 }
 
