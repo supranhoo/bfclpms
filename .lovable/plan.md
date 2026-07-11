@@ -1,41 +1,58 @@
-## Fixes
+## Problem
 
-### Issue 1 — "Photo upload failed: invalid input syntax for type uuid: photos"
-The storage RLS policy on `proxy-selfies` casts the **first** path segment to UUID:
-`(regexp_split_to_array(name, '/'))[1]::uuid`.
+The PIP threshold in **Admin → Scoring → PIP Threshold** is honoured only in two places on the Monthly Scorecard Trend report:
 
-Our service already builds `${instanceId}/photos/${ts}.${ext}` (instance UUID first). Since the toast still shows `"photos"` as the first segment, the running bundle isn't picking up the fix on the user's browser. To make it bulletproof:
+1. The "Show PIP candidates only" toggle.
+2. The "N PIP candidates" summary card + Excel sheet.
 
-- Add a runtime guard in `submitWithAssistance` that constructs the photo path via a single helper `buildProxyPhotoPath(instanceId, ext)` returning `${instanceId}/photos/${Date.now()}.${ext}`, and asserts the first segment is a UUID before calling `.upload()` (throws a clear developer-facing error otherwise).
-- Add a small unit test `src/test/annualReview/proxyPhotoPath.test.ts` that pins:
-  - first segment equals `instanceId`
-  - second segment equals `"photos"`
-  - path passes a UUID regex on `[0]`
+Everywhere else (monthly cells, AVG cell), scores are coloured with a **hardcoded** rule in `MonthlyTrendTable.tsx`:
 
-No storage policy or migration change is needed — the policy is already correct.
-
-### Issue 2 — Disclaimer checkbox can't be ticked
-In `AssistedSubmissionDialog.tsx` the Checkbox is disabled while the required selfie/photo isn't captured yet:
-
-```tsx
-<Checkbox
-  disabled={(selfieRequired && !snapshot) || (photoUploadRequired && !uploadFile)}
-/>
+```ts
+const pct = (score / 5) * 100;
+if (pct >= 80) green;       // score ≥ 4.0
+else if (pct >= 60) yellow; // score ≥ 3.0
+else red;
 ```
 
-That blocks the user from acknowledging the declaration before finishing the media steps, which is confusing UX (they see a "no-entry" cursor on the checkbox).
+So after the admin sets PIP = 2.00, an employee with 3.17 avg is still painted **amber/red** even though they are clearly above the PIP line. The report visually contradicts the configured threshold — this is what the user is reporting as "not showing data as per threshold".
 
-Fix: **remove the `disabled` prop from the Checkbox** so the user can tick the declaration in any order. The submit button keeps its existing gate (`(selfieRequired && !snapshot) || (photoUploadRequired && !uploadFile) || !accepted || submitting`), so submission still requires all prerequisites.
+The PIP-only filter itself is working correctly: with all employees ≥ 3.17 and threshold = 2, the candidate count is genuinely 0.
 
-Update the existing test `proxySubmissionOptionalSelfie.test.ts` (and add one line in `proxySubmission.test.ts`) to assert the Checkbox no longer carries a `disabled=` gate, while the submit button still does.
+## Fix
 
-### Files touched
-- `src/services/annualReview/proxySubmission.ts` — extract `buildProxyPhotoPath` + UUID assert
-- `src/components/annual-review/AssistedSubmissionDialog.tsx` — drop Checkbox `disabled`
-- `src/test/annualReview/proxyPhotoPath.test.ts` — new
-- `src/test/annualReview/proxySubmissionOptionalSelfie.test.ts` — extend
+Drive the score colouring from the configured PIP threshold instead of hardcoded 3.0 / 4.0 cutoffs.
 
-### Not touched
-- Storage RLS, migrations, admin config, i18n strings, submit-button gating.
+### `src/components/reports/MonthlyTrendTable.tsx`
 
-After deploy the user should hard-refresh once to drop the cached bundle carrying the old `photos/${instanceId}/...` path.
+- Replace `scoreClass(score)` with `scoreClass(score, pipThreshold)`:
+  - `null` → muted
+  - `score < pipThreshold` → red (destructive) — PIP zone
+  - `score < pipThreshold + 0.5` → amber — watch zone (fallback amber band just above threshold, capped at 5)
+  - otherwise → green
+  - When `pipThreshold` is null/undefined, keep the current 4.0 / 3.0 fallback so nothing changes for legacy callers.
+- Pass `pipThreshold` into `scoreClass` for both monthly cells and the AVG cell.
+- Keep the existing row tint (`isPip` background) unchanged.
+
+### `src/components/reports/MonthlyTrendView.tsx`
+
+- Already computes `pipThreshold` and already passes it to `MonthlyTrendTable`. No change required beyond ensuring the prop reaches the table (it already does on line 390).
+- Update the PIP callout copy to make the linkage explicit: colour legend line under the table — "Red = below PIP threshold ({threshold}); Amber = within 0.5 of threshold; Green = safe."
+
+### Tests
+
+Add `src/test/monthlyTrendScoreClass.test.ts`:
+
+- threshold=2 → 1.9 red, 2.0 green (boundary is strict `<`), 2.4 amber, 2.6 green
+- threshold=null → falls back to legacy 3.0 / 4.0 bands
+- null score → muted regardless of threshold
+
+## Not changed
+
+- `useMonthlyTrend` hook, PIP candidate math, Excel export, PIP filter toggle — all already correct.
+- Admin PIP Threshold card and `pmsSettings.ts` — already correct.
+- No DB, RLS, or migration change.
+
+## Risk
+
+- Low. Pure presentational change scoped to one component + one helper. Existing behaviour preserved when `pipThreshold` is unavailable.
+- Regression guard: unit tests for `scoreClass` cover both threshold and legacy branches.
