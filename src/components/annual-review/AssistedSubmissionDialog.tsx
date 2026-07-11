@@ -310,7 +310,6 @@ export function AssistedSubmissionDialog({
             <Checkbox
               checked={accepted}
               onCheckedChange={(v) => setAccepted(v === true)}
-              disabled={(selfieRequired && !snapshot) || (photoUploadRequired && !uploadFile)}
             />
             <span>{declarationDisplay}</span>
           </label>
