@@ -822,6 +822,7 @@ export type Database = {
           id: string
           instance_id: string
           ip: string | null
+          photo_upload_path: string | null
           proxy_role: string
           proxy_user_id: string
           selfie_path: string | null
@@ -835,6 +836,7 @@ export type Database = {
           id?: string
           instance_id: string
           ip?: string | null
+          photo_upload_path?: string | null
           proxy_role: string
           proxy_user_id: string
           selfie_path?: string | null
@@ -848,6 +850,7 @@ export type Database = {
           id?: string
           instance_id?: string
           ip?: string | null
+          photo_upload_path?: string | null
           proxy_role?: string
           proxy_user_id?: string
           selfie_path?: string | null
@@ -1440,6 +1443,7 @@ export type Database = {
         Row: {
           annual_review_directory_search_enabled: boolean
           app_name: string
+          assisted_photo_upload_required: boolean
           assisted_self_submission_enabled: boolean
           assisted_selfie_required: boolean
           created_at: string
@@ -1463,6 +1467,7 @@ export type Database = {
         Insert: {
           annual_review_directory_search_enabled?: boolean
           app_name?: string
+          assisted_photo_upload_required?: boolean
           assisted_self_submission_enabled?: boolean
           assisted_selfie_required?: boolean
           created_at?: string
@@ -1486,6 +1491,7 @@ export type Database = {
         Update: {
           annual_review_directory_search_enabled?: boolean
           app_name?: string
+          assisted_photo_upload_required?: boolean
           assisted_self_submission_enabled?: boolean
           assisted_selfie_required?: boolean
           created_at?: string
