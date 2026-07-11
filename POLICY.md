@@ -1,3 +1,9 @@
+### §AR-SEED-HIERARCHY-RESNAPSHOT — Annual Review reseed must refresh all seed-controlled reviewer snapshots (v2.66.102, 2026-07-11)
+- Annual Review seeding/reseeding MUST treat `manager_id`, `skip_id`, `dept_head_id`, `bu_head_id`, `hr_id`, `assigned_rule_id`, and `enabled_stages` as seed-controlled snapshot fields. Existing instances MUST refresh these fields from Employee Master plus the hierarchy guard; `template_override_id` remains protected and MUST NOT be overwritten by reseed.
+- Configured Dept/BU heads are valid only when they are in the employee's reporting chain. Self, peer, unrelated, or null configured heads MUST fall back to the reporting-chain resolver and emit `annual_review.head_fallback` audit metadata.
+- Backfill/repair of already-created rows MAY update only `not_started` / `pending_self` instances unless a wider, stage-aware repair is explicitly approved. Automated repair audit rows MUST use `performed_by = NULL`.
+- Regression guard: `src/test/annualReview/seedUpdatePatch.test.ts` ensures existing-instance reseed writes `dept_head_id` and `enabled_stages` instead of leaving stale reviewer snapshots.
+
 ### §AR-DIRECTORY-ACCESS-MATRIX — Annual Review "All employees" directory access (v2.66.101, 2026-07-10)
 - The Annual Review directory search (`search_active_employees_for_review`) and the "Add to phase" write (`create_or_get_annual_review_instance`) are gated server-side by the resolver `public.annual_review_directory_access(uid)`. UI gates (`useDirectoryAccess`) MUST reflect the resolver — never local role checks — and the master feature flag `app_settings.annual_review_directory_search_enabled` remains the kill-switch for the UI entry point. The Team Annual Review route/sidebar entry MUST also use the same resolver for HR-Team / BU-scoped access; static role checks alone are forbidden for this entry.
 - Access matrix (first match wins, deterministic tiebreak):
