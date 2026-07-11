@@ -17,9 +17,8 @@ import { AdminKpiEditDialog } from '@/components/admin/AdminKpiEditDialog';
 import { AdminDataEntryDialog } from '@/components/admin/AdminDataEntryDialog';
 import { AdminStatusStepBackDialog } from '@/components/admin/AdminStatusStepBackDialog';
 import { getPreviousStatus } from '@/hooks/useAdminDataEntry';
-import { ConfirmDestructiveDialog } from '@/components/ui/ConfirmDestructiveDialog';
 import { useDashboardKraPermissions } from '@/hooks/useDashboardKraPermissions';
-import { useAdminDeleteKpi } from '@/hooks/useKpis';
+import { KraDeleteScopeDialog } from '@/components/review/KraDeleteScopeDialog';
 import {
   useCanonicalVariantPairs,
   canonicalPair,
@@ -45,7 +44,6 @@ export function KpiHeaderSection({ kpi, selectedPeriod, selectedYear, onOpenTime
   const [stepBackDialogOpen, setStepBackDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const { canDelete: canDeleteKra } = useDashboardKraPermissions();
-  const deleteKpi = useAdminDeleteKpi();
 
   // Phase 5c (POLICY §88I): when this KPI is registered in the canonical
   // registry, prefer the canonical KRA/KPI text over the literal columns on
@@ -324,18 +322,13 @@ export function KpiHeaderSection({ kpi, selectedPeriod, selectedYear, onOpenTime
       </>
     )}
     {(isAdmin || canDeleteKra) && (
-      <ConfirmDestructiveDialog
+      <KraDeleteScopeDialog
         open={deleteDialogOpen}
-        onCancel={() => setDeleteDialogOpen(false)}
-        onConfirm={() => {
-          deleteKpi.mutate(kpi.id, {
-            onSuccess: () => setDeleteDialogOpen(false),
-          });
-        }}
-        title="Delete this KRA?"
-        description={`This will permanently delete "${displayKra} — ${displayKpi}" for ${employeeProfile?.full_name || 'this employee'}, along with its review submissions and history. This cannot be undone.`}
-        confirmLabel="Delete KRA"
-        isLoading={deleteKpi.isPending}
+        onOpenChange={setDeleteDialogOpen}
+        kpi={kpi}
+        employeeName={employeeProfile?.full_name || 'this employee'}
+        displayKra={displayKra}
+        displayKpi={displayKpi}
       />
     )}
     </>
