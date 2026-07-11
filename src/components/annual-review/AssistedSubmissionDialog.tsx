@@ -6,7 +6,7 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Loader2, Camera, RefreshCw, ShieldCheck, SkipForward } from 'lucide-react';
+import { Loader2, Camera, RefreshCw, ShieldCheck, SkipForward, Upload, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { submitWithAssistance } from '@/services/annualReview/proxySubmission';
 import { useAnnualReviewI18n } from '@/components/annual-review/AnnualReviewI18nContext';
@@ -43,20 +43,28 @@ export function AssistedSubmissionDialog({
   const [accepted, setAccepted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [photoSkipped, setPhotoSkipped] = useState(false);
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploadPreviewUrl, setUploadPreviewUrl] = useState<string | null>(null);
+  const uploadInputRef = useRef<HTMLInputElement | null>(null);
 
-  const { data: selfieRequired = true } = useQuery({
-    queryKey: ['assisted-selfie-required'],
+  const { data: flags } = useQuery({
+    queryKey: ['assisted-submission-flags'],
     staleTime: 60_000,
     queryFn: async () => {
       const { data, error } = await supabase
         .from('app_settings')
-        .select('assisted_selfie_required')
+        .select('assisted_selfie_required, assisted_photo_upload_required')
         .eq('id', APP_SETTINGS_ID)
         .maybeSingle();
-      if (error) return true;
-      return data?.assisted_selfie_required !== false;
+      if (error) return { selfieRequired: true, photoUploadRequired: true };
+      return {
+        selfieRequired: data?.assisted_selfie_required !== false,
+        photoUploadRequired: data?.assisted_photo_upload_required !== false,
+      };
     },
   });
+  const selfieRequired = flags?.selfieRequired ?? true;
+  const photoUploadRequired = flags?.photoUploadRequired ?? true;
 
   const declarationText = selfieRequired ? DECLARATION : DECLARATION_NO_PHOTO;
   const declarationDisplay = selfieRequired
@@ -72,7 +80,9 @@ export function AssistedSubmissionDialog({
     if (!open) {
       stopStream();
       if (snapshotUrl) URL.revokeObjectURL(snapshotUrl);
+      if (uploadPreviewUrl) URL.revokeObjectURL(uploadPreviewUrl);
       setSnapshot(null); setSnapshotUrl(null); setAccepted(false); setStreamErr(null); setPhotoSkipped(false);
+      setUploadFile(null); setUploadPreviewUrl(null);
       return;
     }
     let cancelled = false;
@@ -128,6 +138,7 @@ export function AssistedSubmissionDialog({
   const submit = async () => {
     if (!accepted) return;
     if (selfieRequired && !snapshot) return;
+    if (photoUploadRequired && !uploadFile) return;
     setSubmitting(true);
     try {
       await submitWithAssistance({
@@ -135,6 +146,8 @@ export function AssistedSubmissionDialog({
         employeeUserId,
         proxyRoleLabel,
         selfieBlob: snapshot ?? null,
+        photoUploadBlob: uploadFile ?? null,
+        photoUploadContentType: uploadFile?.type ?? null,
         declarationText,
         userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : undefined,
       });
@@ -232,11 +245,72 @@ export function AssistedSubmissionDialog({
             </div>
           )}
 
+          <div className="rounded-md border p-3 space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 text-sm font-medium">
+                <Upload className="h-4 w-4" />
+                {t('assisted.upload.title', 'Upload photograph')}
+                <span className="text-xs font-normal text-muted-foreground">
+                  {photoUploadRequired
+                    ? t('assisted.upload.required', '(required)')
+                    : t('assisted.upload.optional', '(optional)')}
+                </span>
+              </div>
+              {uploadFile && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    if (uploadPreviewUrl) URL.revokeObjectURL(uploadPreviewUrl);
+                    setUploadFile(null);
+                    setUploadPreviewUrl(null);
+                    if (uploadInputRef.current) uploadInputRef.current.value = '';
+                  }}
+                >
+                  <X className="h-4 w-4 mr-1" /> {t('assisted.upload.remove', 'Remove')}
+                </Button>
+              )}
+            </div>
+            <input
+              ref={uploadInputRef}
+              type="file"
+              accept="image/*"
+              className="block w-full text-sm text-muted-foreground file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-secondary file:text-secondary-foreground hover:file:bg-secondary/80"
+              onChange={(e) => {
+                const f = e.target.files?.[0] ?? null;
+                if (uploadPreviewUrl) URL.revokeObjectURL(uploadPreviewUrl);
+                if (!f) { setUploadFile(null); setUploadPreviewUrl(null); return; }
+                if (!f.type.startsWith('image/')) {
+                  toast.error(t('assisted.upload.invalidType', 'Please choose an image file.'));
+                  e.target.value = '';
+                  setUploadFile(null); setUploadPreviewUrl(null);
+                  return;
+                }
+                if (f.size > 10 * 1024 * 1024) {
+                  toast.error(t('assisted.upload.tooLarge', 'Image must be under 10 MB.'));
+                  e.target.value = '';
+                  setUploadFile(null); setUploadPreviewUrl(null);
+                  return;
+                }
+                setUploadFile(f);
+                setUploadPreviewUrl(URL.createObjectURL(f));
+              }}
+            />
+            {uploadPreviewUrl && (
+              <img
+                src={uploadPreviewUrl}
+                alt={t('assisted.upload.previewAlt', 'Uploaded photo preview')}
+                className="max-h-40 rounded-md border object-contain"
+              />
+            )}
+          </div>
+
           <label className="flex items-start gap-2 text-sm leading-snug">
             <Checkbox
               checked={accepted}
               onCheckedChange={(v) => setAccepted(v === true)}
-              disabled={selfieRequired && !snapshot}
+              disabled={(selfieRequired && !snapshot) || (photoUploadRequired && !uploadFile)}
             />
             <span>{declarationDisplay}</span>
           </label>
@@ -244,7 +318,10 @@ export function AssistedSubmissionDialog({
 
         <DialogFooter>
           <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={submitting}>{t('assisted.btn.cancel', 'Cancel')}</Button>
-          <Button onClick={submit} disabled={(selfieRequired && !snapshot) || !accepted || submitting}>
+          <Button
+            onClick={submit}
+            disabled={(selfieRequired && !snapshot) || (photoUploadRequired && !uploadFile) || !accepted || submitting}
+          >
             {submitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
             {t('assisted.btn.submit', 'Verify & Submit')}
           </Button>
