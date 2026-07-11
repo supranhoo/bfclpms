@@ -1,0 +1,2 @@
+ALTER TABLE public.app_settings ADD COLUMN IF NOT EXISTS assisted_selfie_required boolean NOT NULL DEFAULT true;
+ALTER TABLE public.annual_review_proxy_submissions ALTER COLUMN selfie_path DROP NOT NULL;

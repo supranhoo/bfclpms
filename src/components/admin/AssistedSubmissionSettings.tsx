@@ -16,29 +16,36 @@ export function AssistedSubmissionSettings() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('app_settings')
-        .select('assisted_self_submission_enabled, annual_review_directory_search_enabled')
+        .select('assisted_self_submission_enabled, annual_review_directory_search_enabled, assisted_selfie_required')
         .eq('id', APP_SETTINGS_ID)
         .maybeSingle();
       if (error) throw error;
       return data as {
         assisted_self_submission_enabled: boolean;
         annual_review_directory_search_enabled: boolean;
+        assisted_selfie_required: boolean;
       } | null;
     },
   });
   const [enabled, setEnabled] = useState(false);
   const [directoryEnabled, setDirectoryEnabled] = useState(false);
+  const [selfieRequired, setSelfieRequired] = useState(true);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (data) {
       setEnabled(!!data.assisted_self_submission_enabled);
       setDirectoryEnabled(!!data.annual_review_directory_search_enabled);
+      setSelfieRequired(data.assisted_selfie_required !== false);
     }
   }, [data]);
 
   const update = async (
-    patch: Partial<{ assisted_self_submission_enabled: boolean; annual_review_directory_search_enabled: boolean }>,
+    patch: Partial<{
+      assisted_self_submission_enabled: boolean;
+      annual_review_directory_search_enabled: boolean;
+      assisted_selfie_required: boolean;
+    }>,
     rollback: () => void,
     label: string,
   ) => {
@@ -72,6 +79,15 @@ export function AssistedSubmissionSettings() {
       { annual_review_directory_search_enabled: v },
       () => setDirectoryEnabled(prev),
       `Annual Review directory search → ${v ? 'ON' : 'OFF'}`,
+    );
+  };
+
+  const toggleSelfieRequired = (v: boolean) => {
+    const prev = selfieRequired; setSelfieRequired(v);
+    return update(
+      { assisted_selfie_required: v },
+      () => setSelfieRequired(prev),
+      `Assisted-submission live selfie → ${v ? 'MANDATORY' : 'OPTIONAL'}`,
     );
   };
 
@@ -112,6 +128,25 @@ export function AssistedSubmissionSettings() {
             checked={directoryEnabled}
             disabled={isLoading || saving}
             onCheckedChange={toggleDirectory}
+          />
+        </div>
+
+        <div className="flex items-center justify-between p-4 rounded-lg border">
+          <div className="space-y-1 pr-4">
+            <Label htmlFor="selfie-required-flag" className="text-base font-medium flex items-center gap-2">
+              <Camera className="h-4 w-4" /> Require live selfie for assisted submissions
+            </Label>
+            <p className="text-sm text-muted-foreground">
+              When <span className="font-medium">ON</span> (default), submitters must capture a live photo of the
+              employee before the assisted submission can be verified. When <span className="font-medium">OFF</span>,
+              the photo becomes optional — the signed declaration alone is accepted and the audit row stores no image.
+            </p>
+          </div>
+          <Switch
+            id="selfie-required-flag"
+            checked={selfieRequired}
+            disabled={isLoading || saving}
+            onCheckedChange={toggleSelfieRequired}
           />
         </div>
       </CardContent>
