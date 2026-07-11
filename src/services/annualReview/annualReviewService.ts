@@ -17,6 +17,40 @@ import {
   fetchEmployeesWithKrasSince,
   windowMonthsFromFilters,
 } from './formMapping';
+import { resolveHierarchicalHead } from '@/lib/annualReview/hierarchyGuard';
+
+/**
+ * Best-effort audit log for dept/BU-head hierarchy fallbacks during seed.
+ * Batched to avoid per-row round trips; errors are swallowed since a broken
+ * audit trail must never block a re-seed.
+ */
+async function logHeadFallbacks(
+  cycleId: string,
+  events: Array<{ employee_id: string; role: 'dept_head' | 'bu_head'; configured_id: string | null; resolved_id: string | null; reason: string | undefined }>,
+) {
+  if (events.length === 0) return;
+  try {
+    const rows = events.map((e) => ({
+      action: 'annual_review.head_fallback',
+      performed_by: null,
+      metadata: {
+        cycle_id: cycleId,
+        employee_id: e.employee_id,
+        role: e.role,
+        configured_id: e.configured_id,
+        resolved_id: e.resolved_id,
+        reason: e.reason ?? null,
+      },
+    }));
+    const CHUNK = 500;
+    for (let i = 0; i < rows.length; i += CHUNK) {
+      await db.from('system_audit_logs').insert(rows.slice(i, i + CHUNK));
+    }
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn('[annualReview] head-fallback audit log skipped:', err);
+  }
+}
 
 /**
  * Service layer for the Annual Review module — wraps every DB / RPC / storage call
@@ -926,26 +960,54 @@ export async function seedInstancesForCycle(args: { cycleId: string; templateId:
     if (resolved) hrHead = resolved;
   }
 
+  const fallbackEvents: Array<{ employee_id: string; role: 'dept_head' | 'bu_head'; configured_id: string | null; resolved_id: string | null; reason: string | undefined }> = [];
   const rows = (people ?? []).map((p: any) => {
     const mgr = mgrMap.get(p.id) ?? null;
     const skip = mgr ? mgrMap.get(mgr) ?? null : null;
     const bu = deptToBu[p.department_id] ? buHead[deptToBu[p.department_id]] ?? null : null;
     // Legacy fallback when no BU head configured: 2 hops above skip.
     const buFallback = skip ? mgrMap.get(skip) ?? null : null;
+
+    // Hierarchy guards — prevent a misconfigured dept/BU head (peer, self, or
+    // unrelated employee) from being stamped as a reviewer. Falls back to the
+    // reporting chain and records an audit event so admins can fix the source.
+    const configuredDept = p.department_id ? deptHead[p.department_id] ?? null : null;
+    const deptResolved = resolveHierarchicalHead({
+      employeeId: p.id,
+      configuredHeadId: configuredDept,
+      fallbackId: mgr,
+      mgrMap,
+    });
+    if (deptResolved.usedFallback && configuredDept) {
+      fallbackEvents.push({ employee_id: p.id, role: 'dept_head', configured_id: configuredDept, resolved_id: deptResolved.headId, reason: deptResolved.reason });
+    }
+
+    const configuredBu = bu ?? null;
+    const buResolved = resolveHierarchicalHead({
+      employeeId: p.id,
+      configuredHeadId: configuredBu,
+      fallbackId: buFallback,
+      mgrMap,
+    });
+    if (buResolved.usedFallback && configuredBu) {
+      fallbackEvents.push({ employee_id: p.id, role: 'bu_head', configured_id: configuredBu, resolved_id: buResolved.headId, reason: buResolved.reason });
+    }
+
     return {
       employee_id: p.id,
       template_id: args.templateId,
       cycle_id: args.cycleId,
       manager_id: mgr,
       skip_id: skip,
-      bu_head_id: bu ?? buFallback,
-      dept_head_id: p.department_id ? deptHead[p.department_id] ?? null : null,
+      bu_head_id: buResolved.headId ?? buFallback,
+      dept_head_id: deptResolved.headId,
       hr_id: hrHead,
       enabled_stages: defaultStages,
     };
   });
 
   await writeSeedRowsPreservingOverrides(args.cycleId, rows);
+  await logHeadFallbacks(args.cycleId, fallbackEvents);
   return rows.length;
 }
 
@@ -1136,6 +1198,7 @@ export async function seedInstancesByRules(args: { cycleId: string; hrUserId: st
 
   const rows: any[] = [];
   let skipped = 0;
+  const fallbackEvents: Array<{ employee_id: string; role: 'dept_head' | 'bu_head'; configured_id: string | null; resolved_id: string | null; reason: string | undefined }> = [];
   for (const p of people ?? []) {
     const rule = (rules as any[]).find((r) => matches(r.filters, p));
     if (!rule) { skipped++; continue; }
@@ -1144,6 +1207,17 @@ export async function seedInstancesByRules(args: { cycleId: string; hrUserId: st
     const buId = deptToBu[p.department_id];
     const buFromCfg = buId ? buHead[buId] ?? null : null;
     const buFallback = skip ? mgrMap.get(skip) ?? null : null;
+
+    const configuredDept = p.department_id ? deptHead[p.department_id] ?? null : null;
+    const deptResolved = resolveHierarchicalHead({ employeeId: p.id, configuredHeadId: configuredDept, fallbackId: mgr, mgrMap });
+    if (deptResolved.usedFallback && configuredDept) {
+      fallbackEvents.push({ employee_id: p.id, role: 'dept_head', configured_id: configuredDept, resolved_id: deptResolved.headId, reason: deptResolved.reason });
+    }
+    const buResolved = resolveHierarchicalHead({ employeeId: p.id, configuredHeadId: buFromCfg, fallbackId: buFallback, mgrMap });
+    if (buResolved.usedFallback && buFromCfg) {
+      fallbackEvents.push({ employee_id: p.id, role: 'bu_head', configured_id: buFromCfg, resolved_id: buResolved.headId, reason: buResolved.reason });
+    }
+
     rows.push({
       employee_id: p.id,
       template_id: rule.template_id,
@@ -1151,14 +1225,15 @@ export async function seedInstancesByRules(args: { cycleId: string; hrUserId: st
       assigned_rule_id: rule.id,
       manager_id: mgr,
       skip_id: skip,
-      bu_head_id: buFromCfg ?? buFallback,
-      dept_head_id: p.department_id ? deptHead[p.department_id] ?? null : null,
+      bu_head_id: buResolved.headId ?? buFallback,
+      dept_head_id: deptResolved.headId,
       hr_id: hrHead,
       enabled_stages: defaultStages,
     });
   }
 
   await writeSeedRowsPreservingOverrides(args.cycleId, rows);
+  await logHeadFallbacks(args.cycleId, fallbackEvents);
   return { seeded: rows.length, skipped };
 }
 
