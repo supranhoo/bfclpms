@@ -23,6 +23,14 @@ export interface SubmitWithAssistanceArgs {
    * and the audit row is written with `selfie_path = NULL`.
    */
   selfieBlob?: Blob | null;
+  /**
+   * Uploaded photograph (from device gallery / file picker). Optional when
+   * the admin has switched the `assisted_photo_upload_required` flag off.
+   * When present it is stored under the same `proxy-selfies` bucket with a
+   * `photos/` prefix; when absent the audit row records `photo_upload_path = NULL`.
+   */
+  photoUploadBlob?: Blob | null;
+  photoUploadContentType?: string | null;
   declarationText: string;
   userAgent?: string;
 }
@@ -45,6 +53,22 @@ export async function submitWithAssistance(args: SubmitWithAssistanceArgs): Prom
     if (upErr) throw new Error(`Selfie upload failed: ${upErr.message}`);
   }
 
+  let photoPath: string | null = null;
+  if (args.photoUploadBlob) {
+    const ext = (args.photoUploadContentType ?? 'image/jpeg').includes('png') ? 'png' : 'jpg';
+    photoPath = `photos/${args.instanceId}/${Date.now()}.${ext}`;
+    const { error: photoErr } = await supabase.storage
+      .from(PROXY_SELFIE_BUCKET)
+      .upload(photoPath, args.photoUploadBlob, {
+        contentType: args.photoUploadContentType ?? 'image/jpeg',
+        upsert: false,
+      });
+    if (photoErr) {
+      if (path) void supabase.storage.from(PROXY_SELFIE_BUCKET).remove([path]);
+      throw new Error(`Photo upload failed: ${photoErr.message}`);
+    }
+  }
+
   try {
     const { data: audit, error: insErr } = await supabase
       .from('annual_review_proxy_submissions')
@@ -54,6 +78,7 @@ export async function submitWithAssistance(args: SubmitWithAssistanceArgs): Prom
         proxy_user_id: user.id,
         proxy_role: args.proxyRoleLabel,
         selfie_path: path,
+        photo_upload_path: photoPath,
         declaration_text: args.declarationText,
         user_agent: args.userAgent ?? null,
       })
@@ -68,8 +93,9 @@ export async function submitWithAssistance(args: SubmitWithAssistanceArgs): Prom
     if (advErr) throw new Error(advErr.message);
     return next as string;
   } catch (e) {
-    // Rollback the orphan selfie if one was uploaded.
+    // Rollback the orphan uploads if any were made.
     if (path) void supabase.storage.from(PROXY_SELFIE_BUCKET).remove([path]);
+    if (photoPath) void supabase.storage.from(PROXY_SELFIE_BUCKET).remove([photoPath]);
     throw e;
   }
 }

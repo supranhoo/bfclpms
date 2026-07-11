@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
-import { Camera, Search } from 'lucide-react';
+import { Camera, Search, Upload } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -16,7 +16,7 @@ export function AssistedSubmissionSettings() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('app_settings')
-        .select('assisted_self_submission_enabled, annual_review_directory_search_enabled, assisted_selfie_required')
+        .select('assisted_self_submission_enabled, annual_review_directory_search_enabled, assisted_selfie_required, assisted_photo_upload_required')
         .eq('id', APP_SETTINGS_ID)
         .maybeSingle();
       if (error) throw error;
@@ -24,12 +24,14 @@ export function AssistedSubmissionSettings() {
         assisted_self_submission_enabled: boolean;
         annual_review_directory_search_enabled: boolean;
         assisted_selfie_required: boolean;
+        assisted_photo_upload_required: boolean;
       } | null;
     },
   });
   const [enabled, setEnabled] = useState(false);
   const [directoryEnabled, setDirectoryEnabled] = useState(false);
   const [selfieRequired, setSelfieRequired] = useState(true);
+  const [photoUploadRequired, setPhotoUploadRequired] = useState(true);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -37,6 +39,7 @@ export function AssistedSubmissionSettings() {
       setEnabled(!!data.assisted_self_submission_enabled);
       setDirectoryEnabled(!!data.annual_review_directory_search_enabled);
       setSelfieRequired(data.assisted_selfie_required !== false);
+      setPhotoUploadRequired(data.assisted_photo_upload_required !== false);
     }
   }, [data]);
 
@@ -45,6 +48,7 @@ export function AssistedSubmissionSettings() {
       assisted_self_submission_enabled: boolean;
       annual_review_directory_search_enabled: boolean;
       assisted_selfie_required: boolean;
+      assisted_photo_upload_required: boolean;
     }>,
     rollback: () => void,
     label: string,
@@ -88,6 +92,15 @@ export function AssistedSubmissionSettings() {
       { assisted_selfie_required: v },
       () => setSelfieRequired(prev),
       `Assisted-submission live selfie → ${v ? 'MANDATORY' : 'OPTIONAL'}`,
+    );
+  };
+
+  const togglePhotoUploadRequired = (v: boolean) => {
+    const prev = photoUploadRequired; setPhotoUploadRequired(v);
+    return update(
+      { assisted_photo_upload_required: v },
+      () => setPhotoUploadRequired(prev),
+      `Assisted-submission photo upload → ${v ? 'MANDATORY' : 'OPTIONAL'}`,
     );
   };
 
@@ -147,6 +160,25 @@ export function AssistedSubmissionSettings() {
             checked={selfieRequired}
             disabled={isLoading || saving}
             onCheckedChange={toggleSelfieRequired}
+          />
+        </div>
+
+        <div className="flex items-center justify-between p-4 rounded-lg border">
+          <div className="space-y-1 pr-4">
+            <Label htmlFor="photo-upload-required-flag" className="text-base font-medium flex items-center gap-2">
+              <Upload className="h-4 w-4" /> Require photo upload for assisted submissions
+            </Label>
+            <p className="text-sm text-muted-foreground">
+              When <span className="font-medium">ON</span> (default), submitters must upload a photograph (e.g. an
+              ID photo or a device-gallery image) in addition to any live selfie. When <span className="font-medium">OFF</span>,
+              the upload is offered but can be skipped.
+            </p>
+          </div>
+          <Switch
+            id="photo-upload-required-flag"
+            checked={photoUploadRequired}
+            disabled={isLoading || saving}
+            onCheckedChange={togglePhotoUploadRequired}
           />
         </div>
       </CardContent>
