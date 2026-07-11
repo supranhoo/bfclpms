@@ -1,61 +1,143 @@
 
-# Plan — Extend Monthly Scorecard Trend into Summary + PIP Report (Option A)
+# Plan — Scoped KRA Deletion from Review Card (with reconfirmation)
 
-Chosen approach: extend the existing **Reports → Monthly Scorecard → Trend** view rather than build a new page. Adds Business Unit, a PIP shortlist, an admin-configurable PIP threshold, and a Final-Score-only mode for PIP determination.
+Replace the current single-shot "Delete KRA" confirmation with a scope-aware dialog that lets the actor delete the KRA row for the current month only, for every month it exists, or for the current month plus every later month — and require an explicit **reconfirmation step** before any DELETE runs.
 
 ## Risk & Impact Report
 
-- **Data Impact:** New `app_settings` row `pms_pip_threshold` (numeric, default 3.00). No schema changes; additive only. Reads `profiles.business_unit_id` + `business_units.name` (already available).
-- **Workflow Impact:** None. Report is read-only. Existing trend behavior unchanged when PIP toggle is off.
-- **UI Impact:** One new column (BU) in trend table, one BU filter in view, one "PIP threshold" numeric input in Admin → PMS Settings, one "PIP candidates" summary card + "Show PIP only" toggle above the table. Excel export gets the BU column and a second sheet for PIP shortlist.
-- **Regression Risk:** Low. `useMonthlyTrend` currently uses the 8-stage fallback for the displayed average — we keep that for the trend cells (users rely on it) and compute a **separate `finalOnlyAvg`** used *only* for PIP eligibility. The visible Avg column is untouched.
-- **Mitigation:** Feature-flag the PIP section behind presence of the threshold setting; unit tests cover threshold parsing, final-only average, BU grouping, and PIP filter.
+- **Data Impact:** Deletes rows from `public.kpis` for the same employee + KRA + KPI across one or many periods. Cascades already remove `review_submissions` and history per today's behavior. Additive: current path is `scope='month'` and stays byte-identical.
+- **Workflow Impact:** No workflow change. Delete permission still gated by `useDashboardKraPermissions().canDelete || isAdmin`.
+- **UI Impact:** The existing `ConfirmDestructiveDialog` on this KRA card is swapped for a two-step dialog: scope picker → destructive reconfirm.
+- **Regression Risk:** Low. Scope resolution uses `.select('id, review_period, review_year')` filtered on `employee_id + kra_name + kpi_name` (the canonical identity per `mem://.../duplicate-kpi-prevention-constraint`). Batch delete uses `in('id', ids)`.
+- **Scalability:** Bounded by months a KRA exists for one employee (~24). No pagination.
+- **Rollback:** Additive — revert two edited files + delete the new hook/dialog/test files.
 
 ## Scope
 
-### 1. Admin setting
-- Key: `pms_pip_threshold` in `app_settings` (jsonb value = number, e.g. `3.0`).
-- Admin UI: add a small "PIP Threshold" numeric field on the existing PMS settings page (0.00–5.00, step 0.05).
-- SSOT helper: `src/lib/pmsSettings.ts` → `getPipThreshold()` / `setPipThreshold()`.
+### 1. Scope semantics (calendar-ordered)
 
-### 2. Hook: `useMonthlyTrend`
-- Add `businessUnitId` + `businessUnitName` to `TrendEmployee` (batch-fetch BU names like managers are today).
-- Compute per-employee `finalOnlyAvg` from `review_submissions.final_score` only (ignoring the 8-stage fallback used for `avg`).
-- Existing `avg` and monthly cells stay on the 8-stage fallback (no behavior change).
+- **`month`** — delete only the currently opened `kpi.id`.
+- **`all`** — delete every row matching `employee_id + kra_name + kpi_name` (any period/year).
+- **`from`** — delete rows where `(review_year, monthIdx) >= (currentYear, currentMonthIdx)` for the same identity, current row included.
 
-### 3. View: `MonthlyTrendView` + `MonthlyTrendTable`
-- New **BU filter** (multi-select) alongside existing filters.
-- New **"PIP only" toggle** and a **PIP summary card** ("N employees below X.XX") shown when threshold is loaded.
-- Table gets a **Business Unit** column between Department and Reporting Manager.
-- PIP row highlight (subtle red-tinted row) when `finalOnlyAvg < threshold`.
+Past-month rows (already reviewed) are never touched by `from` or `month`.
 
-### 4. Excel export
-- Add BU column to main sheet.
-- Add second sheet **"PIP Candidates"** with: Emp Code, Name, Designation, Department, Business Unit, Reporting Manager, per-month Final Scores, Final-Only Avg, Threshold.
+### 2. Two-step confirmation flow
 
-### 5. Tests
-- `pmsSettings.test.ts` — threshold parse/clamp/default.
-- `monthlyTrendFinalOnlyAvg.test.ts` — final-only average ignores manager/self fallbacks.
-- `monthlyTrendPipFilter.test.ts` — PIP filter + BU filter combination.
+Step 1 — **Scope picker** (chooses what to delete, no side effects):
 
-## Files
+```text
+┌──────────────────────────────────────────────────────────────┐
+│  Delete this KRA?                                        [x] │
+├──────────────────────────────────────────────────────────────┤
+│  Choose which occurrences of                                 │
+│  "Training & Development — Identification & Consolidation…"  │
+│  for Ankit Choudhary you want to delete.                     │
+│                                                              │
+│  ( • ) This month only                     — Jun 2026   (1)  │
+│  (   ) This and following months only      — Jun 2026 →  (4) │
+│  (   ) All months                          —            (11) │
+│                                                              │
+│                        [ Cancel ]   [  Continue  ]           │
+└──────────────────────────────────────────────────────────────┘
+```
+
+Continue is disabled while sibling counts load or when the chosen scope resolves to zero rows.
+
+Step 2 — **Reconfirmation** (explicit destructive gate before DELETE):
+
+```text
+┌──────────────────────────────────────────────────────────────┐
+│  ⚠  Confirm permanent deletion                          [x] │
+├──────────────────────────────────────────────────────────────┤
+│  You are about to permanently delete this KRA and all its    │
+│  review submissions and history for:                         │
+│                                                              │
+│    Employee : Ankit Choudhary (200679)                       │
+│    KRA/KPI  : Training & Development — Identification …      │
+│    Scope    : This and following months only                 │
+│    Months   : Jun 2026, Jul 2026, Aug 2026, Sep 2026         │
+│    Rows     : 4                                              │
+│                                                              │
+│  This cannot be undone.                                      │
+│                                                              │
+│  Type  DELETE  to confirm:                                   │
+│  ┌────────────────────────────────────────────────────────┐  │
+│  │                                                        │  │
+│  └────────────────────────────────────────────────────────┘  │
+│                                                              │
+│                     [ Back ]   [  Delete 4 rows  ]           │
+└──────────────────────────────────────────────────────────────┘
+```
+
+Rules:
+- The destructive button stays **disabled** until the user types `DELETE` (exact, case-sensitive) into the confirm input.
+- **Back** returns to step 1 (scope + counts preserved). **Cancel/close** aborts without side effects.
+- On success: toast `Deleted N rows for "<KRA> — <KPI>"`. Dialog closes.
+- On error: toast destructive; dialog stays open on step 2 so the user can retry or Back out.
+
+### 3. New hook — `useAdminDeleteKpiScoped`
+
+Location: extend `src/hooks/useKpis.ts`.
+
+```ts
+mutate({
+  kpiId: string;
+  employeeId: string;
+  kraName: string;
+  kpiName: string;
+  currentPeriod: string;   // "June"
+  currentYear: number;     // 2026
+  scope: 'month' | 'all' | 'from';
+  ids: string[];           // resolved by dialog from useKraSiblingIds
+})
+```
+
+Flow:
+1. Guard: `ids.length === 0` → throw "Nothing to delete".
+2. `.delete().in('id', ids)`.
+3. Invalidate the same keys as `useAdminDeleteKpi` today (`kpis`, `my-kpis`, `all-kpis`, `kpis-by-period`).
+4. Return `{ deleted: ids.length }` for the toast.
+
+A companion hook `useKraSiblingIds(kpi, currentPeriod, currentYear, enabled)` loads once when step 1 opens and returns `{ all, from, month, monthsByScope }`. Consumed by both the labels in step 1 and the row summary in step 2. Pure helper `resolveKraDeletionIds(siblings, scope, current)` is exported for tests.
+
+### 4. New component — `KraDeleteScopeDialog`
+
+New file `src/components/review/KraDeleteScopeDialog.tsx`. Owns local `step: 1 | 2`, selected `scope`, `confirmText`, mutation state. Keeps `KpiHeaderSection.tsx` lean.
+
+### 5. Wiring — `src/components/review/KpiHeaderSection.tsx`
+
+- Replace the `<ConfirmDestructiveDialog>` block (lines ~326–339) with `<KraDeleteScopeDialog>` passing `kpi`, `employeeName`, `selectedPeriod`, `selectedYear`, `open`, `onOpenChange`.
+- Remove the direct `deleteKpi.mutate(kpi.id, …)` call — the new dialog owns the mutation and closes itself on success.
+
+### 6. Tests
+
+New `src/test/kraDeleteScope.test.ts` — pure unit tests for `resolveKraDeletionIds`:
+- `month` returns `[currentId]` regardless of siblings.
+- `all` returns every id (past + current + future).
+- `from` returns current + strictly-later `(year, monthIdx)`, excludes earlier.
+- Boundary: `(year, month)` equal to current is included in `from`.
+- Cross-year: `Dec 2025` includes `Jan 2026`, excludes `Nov 2025`.
+
+Plus an interaction test `src/test/kraDeleteScopeDialog.test.tsx`:
+- Continue disabled while counts loading.
+- Step 2 delete button disabled until user types `DELETE`.
+- Back returns to step 1 with scope preserved.
+- Cancel on step 2 does not call the mutation.
+
+### 7. Files
 
 **New**
-- `src/lib/pmsSettings.ts`
-- `src/test/pmsSettings.test.ts`
-- `src/test/monthlyTrendFinalOnlyAvg.test.ts`
-- `src/test/monthlyTrendPipFilter.test.ts`
-- `supabase/migrations/<ts>_pms_pip_threshold_seed.sql` — seed default row in `app_settings` if absent.
+- `src/components/review/KraDeleteScopeDialog.tsx`
+- `src/test/kraDeleteScope.test.ts`
+- `src/test/kraDeleteScopeDialog.test.tsx`
 
 **Edited**
-- `src/hooks/useMonthlyTrend.ts` — add BU fields + `finalOnlyAvg`.
-- `src/components/reports/MonthlyTrendTable.tsx` — BU column, PIP row styling.
-- `src/components/reports/MonthlyTrendView.tsx` — BU filter, PIP toggle, PIP summary card, export changes.
-- Admin PMS settings page (existing) — PIP threshold input.
-- `.lovable/plan.md`, `DOCUMENTATION.md`, `POLICY.md` — record the new setting and PIP semantics.
+- `src/hooks/useKpis.ts` — add `resolveKraDeletionIds`, `useKraSiblingIds`, `useAdminDeleteKpiScoped`.
+- `src/components/review/KpiHeaderSection.tsx` — swap in the new dialog.
 
-## Rollback
-Pure additive: revert the code edits and delete the `pms_pip_threshold` app_settings row. No destructive schema change.
+**Docs**
+- `DOCUMENTATION.md` + `.lovable/plan.md` — record scoped-delete semantics and the mandatory two-step DELETE confirmation.
 
 ## Not Applicable
-Offline/optimistic UI, multi-tenant expansion, pagination (existing trend view is already bounded by month range + employee filters).
+Offline / optimistic UI (destructive), pagination (bounded per identity), migration (no schema change).

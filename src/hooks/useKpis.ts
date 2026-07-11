@@ -882,6 +882,111 @@ export function useAdminDeleteKpi() {
   });
 }
 
+// ---------------------------------------------------------------------------
+// Scoped KRA deletion (month | all | from). See .lovable/plan.md.
+// ---------------------------------------------------------------------------
+
+export type KraDeleteScope = 'month' | 'all' | 'from';
+
+export interface KraSiblingRow {
+  id: string;
+  review_period: string | null;
+  review_year: number | null;
+}
+
+/**
+ * Pure resolver — given the sibling rows for an (employee, KRA, KPI) identity,
+ * return the ids that should be deleted for the chosen scope. Exported for tests.
+ */
+export function resolveKraDeletionIds(
+  siblings: KraSiblingRow[],
+  scope: KraDeleteScope,
+  current: { id: string; period: string; year: number },
+): string[] {
+  if (scope === 'month') return [current.id];
+  if (scope === 'all') return siblings.map((r) => r.id);
+
+  // scope === 'from' — current row + strictly-later calendar months.
+  const currIdx = MONTH_NAMES.indexOf(current.period as any);
+  return siblings
+    .filter((r) => {
+      if (r.id === current.id) return true;
+      const y = r.review_year;
+      const m = r.review_period ? MONTH_NAMES.indexOf(r.review_period as any) : -1;
+      if (y == null || m < 0) return false;
+      if (y > current.year) return true;
+      if (y < current.year) return false;
+      return m >= currIdx;
+    })
+    .map((r) => r.id);
+}
+
+/**
+ * Loads every kpi row for the same (employee_id, kra_name, kpi_name) identity so
+ * the delete dialog can show accurate counts and resolve ids per scope.
+ */
+export function useKraSiblingRows(
+  args: { employeeId: string; kraName: string; kpiName: string } | null,
+  enabled: boolean,
+) {
+  return useQuery({
+    queryKey: [
+      'kra-sibling-rows',
+      args?.employeeId,
+      args?.kraName,
+      args?.kpiName,
+    ],
+    enabled: enabled && !!args?.employeeId && !!args?.kraName && !!args?.kpiName,
+    staleTime: 0,
+    queryFn: async (): Promise<KraSiblingRow[]> => {
+      if (!args) return [];
+      const { data, error } = await supabase
+        .from('kpis')
+        .select('id, review_period, review_year')
+        .eq('employee_id', args.employeeId)
+        .eq('kra_name', args.kraName)
+        .eq('kpi_name', args.kpiName);
+      if (error) throw error;
+      return (data ?? []) as KraSiblingRow[];
+    },
+  });
+}
+
+// Admin delete KPI — scoped (month | all | from)
+export function useAdminDeleteKpiScoped() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async ({ ids }: { ids: string[]; scope: KraDeleteScope }) => {
+      if (!ids.length) throw new Error('Nothing to delete');
+      const { error } = await supabase.from('kpis').delete().in('id', ids);
+      if (error) throw error;
+      return { deleted: ids.length };
+    },
+    onSuccess: ({ deleted }) => {
+      queryClient.invalidateQueries({ queryKey: ['kpis'] });
+      queryClient.invalidateQueries({ queryKey: ['my-kpis'] });
+      queryClient.invalidateQueries({ queryKey: ['all-kpis'] });
+      queryClient.invalidateQueries({ queryKey: ['kpis-by-period'] });
+      queryClient.invalidateQueries({ queryKey: ['kra-sibling-rows'] });
+      toast({
+        title:
+          deleted === 1
+            ? 'KRA deleted successfully'
+            : `Deleted ${deleted} KRA rows`,
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: 'Failed to delete KRA',
+        description: error.message,
+        variant: 'destructive',
+      });
+    },
+  });
+}
+
 // Self review submission with optimistic updates
 export function useSubmitSelfReview() {
   const queryClient = useQueryClient();
