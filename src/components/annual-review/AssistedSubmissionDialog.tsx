@@ -315,7 +315,6 @@ export function AssistedSubmissionDialog({
           </label>
         </div>
 
-        <DialogFooter>
         <DialogFooter className="flex-col items-stretch gap-2 sm:flex-row sm:items-center sm:justify-end">
           {(() => {
             const reasons: string[] = [];
