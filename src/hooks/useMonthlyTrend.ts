@@ -20,10 +20,16 @@ export interface TrendEmployee {
   employeeCode: string;
   designation: string;
   departmentName: string;
+  businessUnitId: string | null;
+  businessUnitName: string;
   reportingManagerName: string | null;
   isActive: boolean;
   monthlyScores: Record<string, number | null>;
+  /** Per-month Final-Score-only value (null when no final_score present). */
+  monthlyFinalScores: Record<string, number | null>;
   avg: number | null;
+  /** Simple average of monthlyFinalScores (Final Score only). Used for PIP. */
+  finalOnlyAvg: number | null;
   trend: 'up' | 'down' | 'flat' | 'na';
 }
 
@@ -160,7 +166,7 @@ export function useMonthlyTrend(filters: MonthlyTrendFilters) {
           const batch = empIds.slice(i, i + 500);
           const { data } = await supabase
             .from('profiles')
-            .select('id, full_name, employee_code, designation, department_id, reporting_manager_id, is_active, departments!profiles_department_fk(name)')
+            .select('id, full_name, employee_code, designation, department_id, business_unit_id, reporting_manager_id, is_active, departments!profiles_department_fk(name)')
             .in('id', batch);
           (data ?? []).forEach((p: any) => profileMap.set(p.id, p));
         }
@@ -199,6 +205,32 @@ export function useMonthlyTrend(filters: MonthlyTrendFilters) {
       })();
 
       await Promise.all([profilePromise, subsPromise]);
+
+      // Fetch business unit names for involved BUs (no FK from profiles → business_units,
+      // so we do a separate .in() lookup).
+      const buMap = new Map<string, string>();
+      try {
+        const buIds = Array.from(
+          new Set(
+            Array.from(profileMap.values())
+              .map((p: any) => p.business_unit_id)
+              .filter((id: any): id is string => !!id),
+          ),
+        );
+        if (buIds.length > 0) {
+          for (let i = 0; i < buIds.length; i += 500) {
+            const batch = buIds.slice(i, i + 500);
+            const { data, error } = await supabase
+              .from('business_units')
+              .select('id, name')
+              .in('id', batch);
+            if (error) throw error;
+            (data ?? []).forEach((b: any) => buMap.set(b.id, b.name || ''));
+          }
+        }
+      } catch (e) {
+        console.warn('[useMonthlyTrend] business unit fetch failed:', e);
+      }
 
       // Fetch reporting manager names (formatted as `Name(Code)`).
       // Filtered .in() lookup — exempt from fetchAllPaged per
@@ -242,7 +274,14 @@ export function useMonthlyTrend(filters: MonthlyTrendFilters) {
       }
 
       // 3. Aggregate per employee per month
-      type Bucket = { weighted: number; weight: number; any: boolean };
+      type Bucket = {
+        weighted: number;
+        weight: number;
+        any: boolean;
+        finalWeighted: number;
+        finalWeight: number;
+        anyFinal: boolean;
+      };
       const empAgg = new Map<string, Record<string, Bucket>>();
 
       for (const kpi of allKpis) {
@@ -252,7 +291,12 @@ export function useMonthlyTrend(filters: MonthlyTrendFilters) {
 
         if (!empAgg.has(kpi.employee_id)) {
           const buckets: Record<string, Bucket> = {};
-          months.forEach(m => { buckets[m.key] = { weighted: 0, weight: 0, any: false }; });
+          months.forEach(m => {
+            buckets[m.key] = {
+              weighted: 0, weight: 0, any: false,
+              finalWeighted: 0, finalWeight: 0, anyFinal: false,
+            };
+          });
           empAgg.set(kpi.employee_id, buckets);
         }
 
@@ -262,14 +306,23 @@ export function useMonthlyTrend(filters: MonthlyTrendFilters) {
 
         const sub = subMap.get(kpi.id);
         if (!sub || sub.is_na) continue;
-        const sc = bestScore(sub);
-        if (sc === null) continue;
         const w = Number(kpi.weightage) || 0;
         if (w <= 0) continue;
 
-        bucket.weighted += sc * w;
-        bucket.weight += w;
-        bucket.any = true;
+        const sc = bestScore(sub);
+        if (sc !== null) {
+          bucket.weighted += sc * w;
+          bucket.weight += w;
+          bucket.any = true;
+        }
+
+        // Final-Score-only aggregation for PIP determination.
+        const fs = sub.final_score;
+        if (fs !== null && fs !== undefined && Number.isFinite(Number(fs))) {
+          bucket.finalWeighted += Number(fs) * w;
+          bucket.finalWeight += w;
+          bucket.anyFinal = true;
+        }
       }
 
       // 4. Build employee rows
@@ -279,7 +332,9 @@ export function useMonthlyTrend(filters: MonthlyTrendFilters) {
         if (!profile) continue;
 
         const monthlyScores: Record<string, number | null> = {};
+        const monthlyFinalScores: Record<string, number | null> = {};
         const orderedVals: number[] = [];
+        const orderedFinalVals: number[] = [];
         months.forEach(mk => {
           const b = buckets[mk.key];
           if (b && b.any && b.weight > 0) {
@@ -289,10 +344,21 @@ export function useMonthlyTrend(filters: MonthlyTrendFilters) {
           } else {
             monthlyScores[mk.key] = null;
           }
+          if (b && b.anyFinal && b.finalWeight > 0) {
+            const fv = Math.round((b.finalWeighted / b.finalWeight) * 100) / 100;
+            monthlyFinalScores[mk.key] = fv;
+            orderedFinalVals.push(fv);
+          } else {
+            monthlyFinalScores[mk.key] = null;
+          }
         });
 
         const avg = orderedVals.length > 0
           ? Math.round((orderedVals.reduce((a, b) => a + b, 0) / orderedVals.length) * 100) / 100
+          : null;
+
+        const finalOnlyAvg = orderedFinalVals.length > 0
+          ? Math.round((orderedFinalVals.reduce((a, b) => a + b, 0) / orderedFinalVals.length) * 100) / 100
           : null;
 
         let trend: TrendEmployee['trend'] = 'na';
@@ -310,12 +376,16 @@ export function useMonthlyTrend(filters: MonthlyTrendFilters) {
           employeeCode: profile.employee_code || '',
           designation: profile.designation || '',
           departmentName: profile.departments?.name || '',
+          businessUnitId: profile.business_unit_id ?? null,
+          businessUnitName: profile.business_unit_id ? (buMap.get(profile.business_unit_id) ?? '') : '',
           reportingManagerName: profile.reporting_manager_id
             ? (managerMap.get(profile.reporting_manager_id) ?? null)
             : null,
           isActive: profile.is_active !== false,
           monthlyScores,
+          monthlyFinalScores,
           avg,
+          finalOnlyAvg,
           trend,
         });
       }
