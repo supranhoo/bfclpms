@@ -960,6 +960,7 @@ export async function seedInstancesForCycle(args: { cycleId: string; templateId:
     if (resolved) hrHead = resolved;
   }
 
+  const fallbackEvents: Array<{ employee_id: string; role: 'dept_head' | 'bu_head'; configured_id: string | null; resolved_id: string | null; reason: string | undefined }> = [];
   const rows = (people ?? []).map((p: any) => {
     const mgr = mgrMap.get(p.id) ?? null;
     const skip = mgr ? mgrMap.get(mgr) ?? null : null;
