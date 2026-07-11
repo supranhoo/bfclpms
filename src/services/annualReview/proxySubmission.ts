@@ -56,7 +56,7 @@ export async function submitWithAssistance(args: SubmitWithAssistanceArgs): Prom
   let photoPath: string | null = null;
   if (args.photoUploadBlob) {
     const ext = (args.photoUploadContentType ?? 'image/jpeg').includes('png') ? 'png' : 'jpg';
-    photoPath = `photos/${args.instanceId}/${Date.now()}.${ext}`;
+    photoPath = `${args.instanceId}/photos/${Date.now()}.${ext}`;
     const { error: photoErr } = await supabase.storage
       .from(PROXY_SELFIE_BUCKET)
       .upload(photoPath, args.photoUploadBlob, {
