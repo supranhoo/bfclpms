@@ -2,6 +2,20 @@ import { supabase } from '@/integrations/supabase/client';
 
 export const PROXY_SELFIE_BUCKET = 'proxy-selfies';
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Build the storage path for an uploaded photograph in the proxy-selfies bucket.
+ * The bucket's RLS policy casts the first path segment to uuid, so the instance
+ * id MUST be the first segment — never `photos/`.
+ */
+export function buildProxyPhotoPath(instanceId: string, ext: 'jpg' | 'png'): string {
+  if (!UUID_RE.test(instanceId)) {
+    throw new Error(`buildProxyPhotoPath: instanceId is not a UUID: ${instanceId}`);
+  }
+  return `${instanceId}/photos/${Date.now()}.${ext}`;
+}
+
 export async function checkProxyEligibility(instanceId: string): Promise<boolean> {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user || !instanceId) return false;
@@ -56,7 +70,7 @@ export async function submitWithAssistance(args: SubmitWithAssistanceArgs): Prom
   let photoPath: string | null = null;
   if (args.photoUploadBlob) {
     const ext = (args.photoUploadContentType ?? 'image/jpeg').includes('png') ? 'png' : 'jpg';
-    photoPath = `${args.instanceId}/photos/${Date.now()}.${ext}`;
+    photoPath = buildProxyPhotoPath(args.instanceId, ext);
     const { error: photoErr } = await supabase.storage
       .from(PROXY_SELFIE_BUCKET)
       .upload(photoPath, args.photoUploadBlob, {
