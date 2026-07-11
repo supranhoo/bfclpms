@@ -23,9 +23,11 @@ interface Props {
   months: MonthKey[];
   employees: TrendEmployee[];
   isLoading?: boolean;
+  /** When set, rows whose finalOnlyAvg < pipThreshold get a subtle red tint. */
+  pipThreshold?: number | null;
 }
 
-export function MonthlyTrendTable({ months, employees, isLoading }: Props) {
+export function MonthlyTrendTable({ months, employees, isLoading, pipThreshold }: Props) {
   if (isLoading) {
     return (
       <div className="space-y-2">
@@ -49,6 +51,7 @@ export function MonthlyTrendTable({ months, employees, isLoading }: Props) {
           <TableRow>
             <TableHead className="sticky left-0 bg-background z-10 min-w-[200px]">Employee</TableHead>
             <TableHead className="min-w-[140px]">Department</TableHead>
+            <TableHead className="min-w-[140px]">Business Unit</TableHead>
             <TableHead className="min-w-[180px]">Reporting Manager</TableHead>
             {months.map(m => (
               <TableHead key={m.key} className="text-center whitespace-nowrap">
@@ -60,8 +63,15 @@ export function MonthlyTrendTable({ months, employees, isLoading }: Props) {
           </TableRow>
         </TableHeader>
         <TableBody>
-          {employees.map(emp => (
-            <TableRow key={emp.id}>
+          {employees.map(emp => {
+            const isPip = pipThreshold != null
+              && emp.finalOnlyAvg != null
+              && emp.finalOnlyAvg < pipThreshold;
+            return (
+            <TableRow
+              key={emp.id}
+              className={cn(isPip && 'bg-red-50 dark:bg-red-950/20')}
+            >
               <TableCell className="sticky left-0 bg-background z-10">
                 <div className="font-medium">{emp.fullName}</div>
                 <div className="text-xs text-muted-foreground">
@@ -69,6 +79,7 @@ export function MonthlyTrendTable({ months, employees, isLoading }: Props) {
                 </div>
               </TableCell>
               <TableCell className="text-sm">{emp.departmentName || '-'}</TableCell>
+              <TableCell className="text-sm">{emp.businessUnitName || '-'}</TableCell>
               <TableCell className="text-sm">{emp.reportingManagerName || '—'}</TableCell>
               {months.map(m => {
                 const v = emp.monthlyScores[m.key];
@@ -87,7 +98,8 @@ export function MonthlyTrendTable({ months, employees, isLoading }: Props) {
                 </div>
               </TableCell>
             </TableRow>
-          ))}
+            );
+          })}
         </TableBody>
       </Table>
     </div>
