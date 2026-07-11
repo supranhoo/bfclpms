@@ -1,13 +1,16 @@
 import { useMemo, useState } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Search, FileSpreadsheet, AlertTriangle, Play, Loader2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Search, FileSpreadsheet, AlertTriangle, Play, Loader2, ChevronLeft, ChevronRight, AlertCircle } from 'lucide-react';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
 import * as XLSX from 'xlsx';
 import { useMonthlyTrend, buildMonthRange } from '@/hooks/useMonthlyTrend';
 import { MonthlyTrendTable } from './MonthlyTrendTable';
+import { getPipThreshold } from '@/lib/pmsSettings';
 
 const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -52,6 +55,16 @@ export function MonthlyTrendView({ canExport }: Props) {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(50);
 
+  // BU filter (multi-select via comma). null/empty = all.
+  const [buFilter, setBuFilter] = useState<string>('__all__');
+  const [pipOnly, setPipOnly] = useState(false);
+
+  const { data: pipThreshold } = useQuery({
+    queryKey: ['pms-pip-threshold'],
+    queryFn: getPipThreshold,
+    staleTime: 5 * 60 * 1000,
+  });
+
   const yearOptions = useMemo(() => {
     const y = currentYear;
     return [y - 2, y - 1, y, y + 1];
@@ -94,17 +107,45 @@ export function MonthlyTrendView({ canExport }: Props) {
   const months = data?.months ?? [];
   const allEmployees = data?.employees ?? [];
 
-  // Client-side search filter (instant, no refetch)
+  const buOptions = useMemo(() => {
+    const set = new Map<string, string>();
+    allEmployees.forEach(e => {
+      if (e.businessUnitId && e.businessUnitName) set.set(e.businessUnitId, e.businessUnitName);
+    });
+    return Array.from(set.entries())
+      .map(([id, name]) => ({ id, name }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [allEmployees]);
+
+  // Client-side search + BU + PIP filter (instant, no refetch)
   const filteredEmployees = useMemo(() => {
-    if (!search.trim()) return allEmployees;
-    const s = search.toLowerCase();
+    const s = search.trim().toLowerCase();
+    return allEmployees.filter(e => {
+      if (buFilter !== '__all__' && (e.businessUnitId ?? '') !== buFilter) return false;
+      if (pipOnly) {
+        if (pipThreshold == null) return false;
+        if (e.finalOnlyAvg == null || e.finalOnlyAvg >= pipThreshold) return false;
+      }
+      if (!s) return true;
+      return (
+        e.fullName.toLowerCase().includes(s) ||
+        e.employeeCode.toLowerCase().includes(s) ||
+        e.departmentName.toLowerCase().includes(s) ||
+        e.businessUnitName.toLowerCase().includes(s) ||
+        (e.reportingManagerName ?? '').toLowerCase().includes(s)
+      );
+    });
+  }, [allEmployees, search, buFilter, pipOnly, pipThreshold]);
+
+  const pipCandidates = useMemo(() => {
+    if (pipThreshold == null) return [] as typeof allEmployees;
+    // Base PIP list is BU-filtered but ignores search and pipOnly toggles.
     return allEmployees.filter(e =>
-      e.fullName.toLowerCase().includes(s) ||
-      e.employeeCode.toLowerCase().includes(s) ||
-      e.departmentName.toLowerCase().includes(s) ||
-      (e.reportingManagerName ?? '').toLowerCase().includes(s)
+      (buFilter === '__all__' || (e.businessUnitId ?? '') === buFilter)
+      && e.finalOnlyAvg != null
+      && e.finalOnlyAvg < pipThreshold,
     );
-  }, [allEmployees, search]);
+  }, [allEmployees, buFilter, pipThreshold]);
 
   const totalPages = Math.max(1, Math.ceil(filteredEmployees.length / pageSize));
   const safePage = Math.min(page, totalPages);
@@ -120,6 +161,7 @@ export function MonthlyTrendView({ canExport }: Props) {
         'Employee Name': emp.fullName,
         'Designation': emp.designation,
         'Department': emp.departmentName,
+        'Business Unit': emp.businessUnitName,
         'Reporting Manager': emp.reportingManagerName ?? '',
       };
       months.forEach(m => {
@@ -134,6 +176,29 @@ export function MonthlyTrendView({ canExport }: Props) {
     const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.json_to_sheet(rows);
     XLSX.utils.book_append_sheet(wb, ws, 'Monthly Trend');
+
+    // Second sheet: PIP Candidates (Final-Score-only avg < threshold).
+    if (pipThreshold != null && pipCandidates.length > 0) {
+      const pipRows = pipCandidates.map(emp => {
+        const row: Record<string, any> = {
+          'Employee Code': emp.employeeCode,
+          'Employee Name': emp.fullName,
+          'Designation': emp.designation,
+          'Department': emp.departmentName,
+          'Business Unit': emp.businessUnitName,
+          'Reporting Manager': emp.reportingManagerName ?? '',
+        };
+        months.forEach(m => {
+          row[`${m.label} (Final)`] = emp.monthlyFinalScores[m.key] === null ? '-' : emp.monthlyFinalScores[m.key];
+        });
+        row['Final-Only Avg'] = emp.finalOnlyAvg ?? '-';
+        row['PIP Threshold'] = pipThreshold;
+        return row;
+      });
+      const pipWs = XLSX.utils.json_to_sheet(pipRows);
+      XLSX.utils.book_append_sheet(wb, pipWs, 'PIP Candidates');
+    }
+
     const fname = `Monthly_Trend_${fromMonth.slice(0,3)}${fromYear}-${toMonth.slice(0,3)}${toYear}.xlsx`;
     XLSX.writeFile(wb, fname);
   };
@@ -221,6 +286,29 @@ export function MonthlyTrendView({ canExport }: Props) {
             </Button>
           </div>
 
+          {hasLoaded && (
+            <div className="flex flex-wrap items-end gap-4 pt-2 border-t">
+              <div>
+                <label className="text-xs font-medium text-muted-foreground">Business Unit</label>
+                <Select value={buFilter} onValueChange={(v) => { setBuFilter(v); setPage(1); }}>
+                  <SelectTrigger className="w-[220px] mt-1"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__all__">All Business Units</SelectItem>
+                    {buOptions.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              {pipThreshold != null && (
+                <div className="flex items-center gap-2 pb-2">
+                  <Switch id="pip-only" checked={pipOnly} onCheckedChange={(v) => { setPipOnly(v); setPage(1); }} />
+                  <Label htmlFor="pip-only" className="text-sm cursor-pointer">
+                    Show PIP candidates only (Final Score avg &lt; {pipThreshold.toFixed(2)})
+                  </Label>
+                </div>
+              )}
+            </div>
+          )}
+
           {rangeInvalid && (
             <div className="flex items-center gap-2 text-sm text-destructive">
               <AlertTriangle className="h-4 w-4" />
@@ -244,6 +332,23 @@ export function MonthlyTrendView({ canExport }: Props) {
           )}
         </CardContent>
       </Card>
+
+      {hasLoaded && pipThreshold != null && (
+        <Card className="border-red-200 dark:border-red-900/40 bg-red-50/50 dark:bg-red-950/10">
+          <CardContent className="py-4 flex items-center gap-3">
+            <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-400" />
+            <div className="text-sm">
+              <span className="font-semibold text-red-700 dark:text-red-300">
+                {pipCandidates.length} PIP candidate{pipCandidates.length === 1 ? '' : 's'}
+              </span>
+              <span className="text-muted-foreground ml-1">
+                — employees with Final-Score average below {pipThreshold.toFixed(2)} in this range
+                {buFilter !== '__all__' ? ' (within selected BU)' : ''}.
+              </span>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {!hasLoaded && !isFetching && !error ? (
         <Card>
@@ -282,6 +387,7 @@ export function MonthlyTrendView({ canExport }: Props) {
               months={months}
               employees={pagedEmployees}
               isLoading={isLoading || isFetching}
+              pipThreshold={pipThreshold ?? null}
             />
 
             {hasLoaded && filteredEmployees.length > 0 && (
