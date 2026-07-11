@@ -4,8 +4,29 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Skeleton } from '@/components/ui/skeleton';
 import type { MonthKey, TrendEmployee } from '@/hooks/useMonthlyTrend';
 
-function scoreClass(score: number | null): string {
+/**
+ * Colour a score cell.
+ *
+ * When `pipThreshold` is provided, the bands are driven by the admin-configured
+ * PIP threshold:
+ *   score < threshold           → red (PIP zone)
+ *   score < threshold + 0.5     → amber (watch zone just above threshold)
+ *   otherwise                   → green
+ *
+ * When `pipThreshold` is null/undefined we fall back to the legacy fixed bands
+ * (≥ 4.0 green, ≥ 3.0 amber, else red) so callers without a threshold see the
+ * same behaviour as before.
+ */
+export function scoreClass(
+  score: number | null,
+  pipThreshold?: number | null,
+): string {
   if (score === null) return 'text-muted-foreground';
+  if (pipThreshold != null && Number.isFinite(pipThreshold)) {
+    if (score < pipThreshold) return 'text-red-600 dark:text-red-400 font-semibold';
+    if (score < pipThreshold + 0.5) return 'text-yellow-600 dark:text-yellow-400 font-semibold';
+    return 'text-green-600 dark:text-green-400 font-semibold';
+  }
   const pct = (score / 5) * 100;
   if (pct >= 80) return 'text-green-600 dark:text-green-400 font-semibold';
   if (pct >= 60) return 'text-yellow-600 dark:text-yellow-400 font-semibold';
@@ -84,12 +105,12 @@ export function MonthlyTrendTable({ months, employees, isLoading, pipThreshold }
               {months.map(m => {
                 const v = emp.monthlyScores[m.key];
                 return (
-                  <TableCell key={m.key} className={cn('text-center', scoreClass(v))}>
+                  <TableCell key={m.key} className={cn('text-center', scoreClass(v, pipThreshold))}>
                     {v === null ? '-' : v.toFixed(2)}
                   </TableCell>
                 );
               })}
-              <TableCell className={cn('text-center', scoreClass(emp.avg))}>
+              <TableCell className={cn('text-center', scoreClass(emp.avg, pipThreshold))}>
                 {emp.avg === null ? '-' : emp.avg.toFixed(2)}
               </TableCell>
               <TableCell className="text-center">
