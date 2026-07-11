@@ -17,6 +17,40 @@ import {
   fetchEmployeesWithKrasSince,
   windowMonthsFromFilters,
 } from './formMapping';
+import { resolveHierarchicalHead } from '@/lib/annualReview/hierarchyGuard';
+
+/**
+ * Best-effort audit log for dept/BU-head hierarchy fallbacks during seed.
+ * Batched to avoid per-row round trips; errors are swallowed since a broken
+ * audit trail must never block a re-seed.
+ */
+async function logHeadFallbacks(
+  cycleId: string,
+  events: Array<{ employee_id: string; role: 'dept_head' | 'bu_head'; configured_id: string | null; resolved_id: string | null; reason: string | undefined }>,
+) {
+  if (events.length === 0) return;
+  try {
+    const rows = events.map((e) => ({
+      action: 'annual_review.head_fallback',
+      performed_by: null,
+      metadata: {
+        cycle_id: cycleId,
+        employee_id: e.employee_id,
+        role: e.role,
+        configured_id: e.configured_id,
+        resolved_id: e.resolved_id,
+        reason: e.reason ?? null,
+      },
+    }));
+    const CHUNK = 500;
+    for (let i = 0; i < rows.length; i += CHUNK) {
+      await db.from('system_audit_logs').insert(rows.slice(i, i + CHUNK));
+    }
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn('[annualReview] head-fallback audit log skipped:', err);
+  }
+}
 
 /**
  * Service layer for the Annual Review module — wraps every DB / RPC / storage call
