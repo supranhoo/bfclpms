@@ -118,13 +118,17 @@ export function MonthlyTrendView({ canExport }: Props) {
   }, [allEmployees]);
 
   // PIP rule: employee is a PIP candidate when EVERY month in the selected
-  // range has a final score AND all of those scores are strictly below the
-  // configured threshold. A missing month disqualifies the row.
+  // range has a score (using the same 8-stage fallback cascade shown in the
+  // table and Single-Month Scorecard) AND all those scores are strictly
+  // below the configured threshold. A missing month disqualifies the row.
+  // We deliberately do NOT gate on `final_score` alone — that column is
+  // often still NULL while the workflow is mid-stage, which produced a
+  // false "0 PIP candidates" even when the visible avg was < threshold.
   const isPipCandidate = (emp: typeof allEmployees[number]): boolean => {
     if (pipThreshold == null) return false;
     if (months.length === 0) return false;
     for (const m of months) {
-      const v = emp.monthlyFinalScores[m.key];
+      const v = emp.monthlyScores[m.key];
       if (v == null || !Number.isFinite(v)) return false;
       if (v >= pipThreshold) return false;
     }
@@ -312,7 +316,7 @@ export function MonthlyTrendView({ canExport }: Props) {
                 <div className="flex items-center gap-2 pb-2">
                   <Switch id="pip-only" checked={pipOnly} onCheckedChange={(v) => { setPipOnly(v); setPage(1); }} />
                   <Label htmlFor="pip-only" className="text-sm cursor-pointer">
-                    Show PIP candidates only (every month's Final Score &lt; {pipThreshold.toFixed(2)})
+                    Show PIP candidates only (every month's score &lt; {pipThreshold.toFixed(2)})
                   </Label>
                 </div>
               )}
@@ -352,7 +356,7 @@ export function MonthlyTrendView({ canExport }: Props) {
                 {pipCandidates.length} PIP candidate{pipCandidates.length === 1 ? '' : 's'}
               </span>
               <span className="text-muted-foreground ml-1">
-                — employees whose Final Score is below {pipThreshold.toFixed(2)} in every month of this range
+                — employees whose score is below {pipThreshold.toFixed(2)} in every month of this range
                 {buFilter !== '__all__' ? ' (within selected BU)' : ''}.
               </span>
             </div>
