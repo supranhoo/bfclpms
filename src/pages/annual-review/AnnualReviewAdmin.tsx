@@ -805,6 +805,15 @@ function ProgressTab() {
           </Button>
           <Button
             variant="outline" className="gap-2"
+            disabled={openSelfLate.isPending || !activeCycle}
+            onClick={() => openSelfLate.mutate()}
+            title="Open self-review for any late-seeded instance still stuck at 'not started' after the cycle's self-review start. Idempotent."
+          >
+            {openSelfLate.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+            Open self-review for pending
+          </Button>
+          <Button
+            variant="outline" className="gap-2"
             onClick={async () => {
               try {
                 const r = await svc.runReminderCron();
