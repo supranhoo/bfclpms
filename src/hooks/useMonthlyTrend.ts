@@ -271,6 +271,9 @@ export function useMonthlyTrend(filters: MonthlyTrendFilters) {
           '[useMonthlyTrend] Fetched %d KPIs but 0 submissions — possible batch/URL failure.',
           allKpis.length,
         );
+        throw new Error(
+          `MonthlyTrend: fetched ${allKpis.length} KPIs but 0 submissions — likely submissions batch (URL-length / RLS) failure. Refusing to render an empty report.`,
+        );
       }
 
       // 3. Aggregate per employee per month
