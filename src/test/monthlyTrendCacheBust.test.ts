@@ -23,10 +23,13 @@ function read(rel: string) {
 }
 
 describe('Monthly Scorecard trend cache-bust', () => {
-  it('handleLoad invalidates the monthly-trend query', () => {
+  it('handleLoad hard-evicts the monthly-trend query before refetching', () => {
     const src = read('src/components/reports/MonthlyTrendView.tsx');
     expect(src).toMatch(/useQueryClient/);
-    expect(src).toMatch(/invalidateQueries\(\s*\{\s*queryKey:\s*\['monthly-trend'\]\s*\}\s*\)/);
+    // removeQueries is synchronous — invalidateQueries alone races with the
+    // subsequent setRequestedRange and can hand back the previous empty
+    // payload from cache.
+    expect(src).toMatch(/removeQueries\(\s*\{\s*queryKey:\s*\['monthly-trend'\]\s*\}\s*\)/);
   });
 
   it('useMonthlyTrend keeps staleTime <= 60s and surfaces silent batch failures', () => {
@@ -48,6 +51,17 @@ describe('Monthly Scorecard trend cache-bust', () => {
   it('useMonthlyTrend throws on submission batch errors instead of swallowing them', () => {
     const src = read('src/hooks/useMonthlyTrend.ts');
     expect(src).toMatch(/throw r\.error/);
+  });
+
+  it('useMonthlyTrend throws when KPIs load but 0 submissions matched', () => {
+    const src = read('src/hooks/useMonthlyTrend.ts');
+    expect(src).toMatch(/but 0 submissions/);
+    expect(src).toMatch(/Refusing to render an empty report/);
+  });
+
+  it('useMonthlyTrend throws when KPIs load but 0 employees aggregated', () => {
+    const src = read('src/hooks/useMonthlyTrend.ts');
+    expect(src).toMatch(/0 employees aggregated/);
   });
 
   it('useMonthlyTrend exposes reporting manager formatted as Name(Code)', () => {
