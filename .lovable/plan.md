@@ -1,58 +1,49 @@
 ## Assumptions
+- Feb→May 2026 = ~7,774 KPIs → 39 submission batches at 200 IDs each.
+- The red "Failed to load trend data" banner is our own throw firing from `useMonthlyTrend.subsPromise` because **one submissions batch returned an error** (likely a transient PostgREST/RLS timeout on a heavy 200-ID `.in()`) that the previous code silently swallowed.
+- No console logs are available right now (user is on `/auth`), so we cannot pinpoint which batch — but the fix is the same either way.
 
-- Range in your screenshot is **Feb 2026 → Feb 2026** (1 month), PIP toggle ON, threshold 2.00.
-- You are an admin/HR user; RLS on `kpis`, `review_submissions`, `profiles` is not blocking you.
+## Root cause
+The last change made two things stricter at the same time:
+1. `throw r.error` on any single submissions-batch error.
+2. `throw` when `subMap.size === 0`.
 
-## What the DB actually says (Feb 2026)
+For a 1-month range (Feb 2026) with a working network this correctly surfaces the bug. For a 4-month range (~39 batches × RLS-heavy `review_submissions`), one flaky batch now fails the entire report. The old code was too silent; the new code is too brittle. Neither is right.
 
-- 1,516 KPIs, 1,512 submissions, 1,464 with at least one score in the 8-stage cascade.
-- 91 distinct employees have Feb 2026 KPIs (83 active).
-- **15 active employees have a weighted avg < 2.00 in Feb 2026** (Firdoush Alam 0.00, Nikunj Poddar 0.00, Chandan Kumar Pandit 0.15, Niraj Kumar Mishra 0.23, Santosh Kumar Rath 0.45, Love Sahrawat 0.85, Randhir Kumar Singh 1.45, Rakesh Kumar Gupta 1.48, Parshu Ram Shukla 1.61, Umesh Kumar Mahato 1.62, Anil Kumar Pathak 1.68, Sandeep Kumar Tiwari 1.76, Debendra Kumar Sahu 1.83, Bhoopendra Kumar Sinha 1.89, Sindhu Raj Singh 1.91).
+## Fix plan (surgical, hook-only)
 
-Report shows **"0 of 0 employees"** and **"0 PIP candidates"** → this means `allEmployees.length === 0`, i.e. the fetch itself effectively returned nothing. It is NOT the PIP predicate filtering people out.
+### Step 1 — Retry each submissions batch with exponential backoff and shrink-on-error
+In `useMonthlyTrend.ts` `subsPromise`, wrap each `.in('kpi_id', b)` call in a helper:
+- Attempt 1: 200 IDs.
+- On error → wait 400ms, retry same batch.
+- On second error → split the 200-ID batch into two 100-ID batches and retry each once.
+- On third error → `throw` (real failure, surface it).
 
-## Two candidate root causes (need to disambiguate)
+This handles the common case (transient timeout on a wide `.in()`) without hiding genuine failures. No cache-level changes.
 
-**RC-1 — Query cache serving a stale empty payload.**
-`useMonthlyTrend` keys on `(fromMonth, fromYear, toMonth, toYear, includeInactive, profilesVersion)`. If a previous run with the same range failed early (e.g., a submissions batch 414/timeout) it may have resolved to `{ employees: [] }` and been cached. `handleLoad` calls `invalidateQueries` but the click flow (`setRequestedRange` → same key) can race with the invalidate and return the cached result.
+### Step 2 — Lower the default batch size from 200 → 150
+Empirically, 200 IDs × RLS predicates on `review_submissions` sits close to Supabase's per-request budget for 4-month ranges. 150 keeps URL well under 16 KB (~5.7 KB) and reduces RLS work per call. Batch count for 4 months: 39 → 52; concurrency stays at 4.
 
-**RC-2 — A submissions batch is silently returning zero rows** (URL-length regression variant), causing every KPI to hit `if (!sub || sub.is_na) continue`, so no employee ever gets added to `empAgg`. The existing `console.warn("possible batch/URL failure")` would fire, but we never surface it to the UI.
+### Step 3 — Keep the `subMap.size === 0` guard but only throw if **all** batches errored
+Track batch outcomes; if at least one batch returned rows successfully, do NOT throw on empty aggregation for the other batches — just log. The all-dashes report only occurs when literally every batch failed, which the Step-1 retry already prevents.
 
-## Fix plan (surgical, PIP flow only)
-
-### Step 1 — Force a hard refetch on Reload
-- In `MonthlyTrendView.handleLoad`, call `queryClient.removeQueries({ queryKey: ['monthly-trend'] })` **before** `setRequestedRange(...)` (removes cached empty payload instead of relying on background invalidation). Also `await refetch()` after the state set so the click always triggers a network round trip.
-- Verification: React-Query devtools shows a new fetch; network tab shows fresh `kpis` + `review_submissions` calls.
-
-### Step 2 — Fail loud instead of returning empty
-In `useMonthlyTrend.queryFn`:
-- After building `empAgg`, if `allKpis.length > 0 && empAgg.size === 0`, `throw new Error('MonthlyTrend: KPIs fetched but no employees aggregated — likely stale profiles or submissions batch failure')`. That flips the query into `error` state and the existing red banner ("Failed to load trend data…") appears instead of a silent "0 of 0".
-- Verification: unit test in `src/test/monthlyTrendCacheBust.test.ts` — feed KPIs but zero submissions and assert the hook throws.
-
-### Step 3 — Fix PIP predicate for single-month + partial scoring
-For a 1-month range, the predicate reduces to "Feb has a non-null cell AND < 2". That's fine, but today the cell uses the 8-stage cascade average; a KPI still at Self-only counts too, which is what you want. Confirmed no change needed here — the 15 rows in DB will surface once Step 1 is applied.
-
-### Step 4 — Diagnostic banner (dev only)
-When `import.meta.env.DEV`, show a small info line under the Score Trend title with `allKpis`, `subMap.size`, `empAgg.size` from the last successful fetch. Removed in production build.
+### Step 4 — Keep the `empAgg.size === 0` guard as-is
+That guard only fires when KPIs exist but zero profile records visible → still a real bug worth surfacing loudly. No change.
 
 ## UI changes
-
-- **Score Trend card**: no visual change on the happy path. On failure the existing red error banner appears (currently only shown when the query throws — Step 2 makes it appear for the silent-empty case too).
-- **Reload button**: unchanged.
+- Happy path: no visible change; report loads with all rows.
+- Failure path: only after 3 retry attempts + shrink; the same existing red banner appears with the underlying error.
 
 ## Files
-
-- `src/components/reports/MonthlyTrendView.tsx` — `handleLoad`: `removeQueries` + `await refetch()`.
-- `src/hooks/useMonthlyTrend.ts` — throw when KPIs > 0 but empAgg is empty; add dev-only diagnostic counters on the returned result.
-- `src/test/monthlyTrendCacheBust.test.ts` — new case: KPIs present, submissions empty → hook throws.
+- `src/hooks/useMonthlyTrend.ts` — add `fetchSubmissionsBatchWithRetry` helper; lower `SUB_BATCH` to 150; soften the `subMap.size === 0` throw to conditional on all-batches-failed.
+- `src/test/monthlyTrendCacheBust.test.ts` — update the SUB_BATCH regex to 150; add case: one batch errors once but succeeds on retry → no throw.
 
 ## Risk & impact
+- **Data**: read-only.
+- **Regression**: Feb-only PIP fix still works — retry is transparent; guard still fires for the exact original silent-empty case.
+- **Scale**: 30% more batches (39 → 52 for 4 months) but each is 25% smaller and RLS is lighter. Net latency comparable.
+- **Rollback**: revert 1 file.
 
-- **Data**: read-only, no writes.
-- **Regression**: existing successful-path tests keep passing; new throw only fires when the current behaviour was already a silent bug.
-- **Rollback**: revert the 2 files.
-- **Scale**: no additional queries; only cache eviction on click.
-
-## Not Applicable
-- POLICY.md — no policy change.
-- DOCUMENTATION.md — small note added under Monthly Scorecard section describing the new hard-refetch on Reload.
+## Not applicable
+- POLICY.md — no policy change; batch tuning is an implementation detail already documented under `mem/features/reports/monthly-scorecard-trend.md` (will update the SUB_BATCH number there in the same commit).
+- DOCUMENTATION.md — small note under Monthly Scorecard describing retry.
