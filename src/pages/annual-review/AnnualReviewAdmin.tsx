@@ -570,6 +570,26 @@ function ProgressTab() {
     onError: (e: Error) => toast.error(e.message),
   });
 
+  // POLICY §AR-REVIEWER-RESYNC — repair path that re-snapshots reviewer
+  // routing columns from the current master. Only touches instances whose
+  // status is still ≤ pending_self so no active reviewer is swapped mid-flight.
+  const resyncReviewers = useMutation({
+    mutationFn: async () => {
+      if (!activeCycle) throw new Error('No active cycle');
+      return svc.resyncReviewersFromMaster({ cycleId: activeCycle.id, hrUserId: user?.id ?? null });
+    },
+    onSuccess: (r) => {
+      const parts = [`Resynced ${r.resynced} instance${r.resynced === 1 ? '' : 's'}`];
+      if (r.skippedInFlight) parts.push(`${r.skippedInFlight} skipped (already in progress)`);
+      if (r.skippedNew) parts.push(`${r.skippedNew} skipped (not yet seeded)`);
+      if (r.skippedNoRule) parts.push(`${r.skippedNoRule} skipped (no matching rule)`);
+      toast.success(parts.join(' · '));
+      qc.invalidateQueries();
+      refetch();
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
   const filtered = instances; // server-side filtering already applied
   const inProgressCount = counts.pending_manager + counts.pending_skip + counts.pending_bu + counts.pending_hr;
   const summaryCounts = { total: counts.total, self: counts.pending_self, in_progress: inProgressCount, completed: counts.completed };
@@ -756,6 +776,15 @@ function ProgressTab() {
           >
             {seedMissing.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
             Seed missing employees
+          </Button>
+          <Button
+            variant="outline" className="gap-2"
+            disabled={resyncReviewers.isPending || !activeCycle}
+            onClick={() => resyncReviewers.mutate()}
+            title="Re-snapshot manager / skip / dept-head / BU-head / HR from the current employee master. Only touches instances still at self-review; instances already in progress are skipped."
+          >
+            {resyncReviewers.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+            Resync reviewers from master
           </Button>
           <Button
             variant="outline" className="gap-2"
