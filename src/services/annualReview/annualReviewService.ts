@@ -1101,7 +1101,31 @@ async function writeSeedRowsPreservingOverrides(
  *   - bu_ids           → departments.business_unit_id (joined via department)
  *   - empty filter set → matches all employees
  */
-export async function seedInstancesByRules(args: { cycleId: string; hrUserId: string | null; companyId?: string | null }) {
+/**
+ * Statuses considered "safe to fully re-snapshot the reviewer chain".
+ * Once the review has moved past self-review the manager (and later reviewers)
+ * may have already begun acting on the row, so we must never silently swap
+ * their ids out from under them.
+ *
+ * POLICY §AR-REVIEWER-RESYNC: resync updates reviewer routing columns only
+ * when the instance is still at or before the self-review stage.
+ */
+const RESYNC_SAFE_STATUSES = new Set(['not_started', 'pending_self']);
+
+type ComputedSeedRow = SeedRowForWrite;
+type ComputeSeedResult = {
+  rows: ComputedSeedRow[];
+  skipped: number;
+  fallbackEvents: Array<{ employee_id: string; role: 'dept_head' | 'bu_head'; configured_id: string | null; resolved_id: string | null; reason: string | undefined }>;
+};
+
+/**
+ * Pure computation of the seed rows for a cycle — no writes. Extracted so
+ * that both `seedInstancesByRules` (insert + update) and
+ * `resyncReviewersFromMaster` (update-only, stage-guarded) share the same
+ * hierarchy-resolution path.
+ */
+async function computeSeedRowsForCycle(args: { cycleId: string; hrUserId: string | null; companyId?: string | null }): Promise<ComputeSeedResult & { defaultStages: AnnualReviewerRole[] }> {
   // Cycle-level default workflow chain — stamped on each new instance.
   const { data: cycleRow, error: cycleErr } = await db
     .from('annual_review_cycles')
@@ -1241,9 +1265,56 @@ export async function seedInstancesByRules(args: { cycleId: string; hrUserId: st
     });
   }
 
-  await writeSeedRowsPreservingOverrides(args.cycleId, rows);
-  await logHeadFallbacks(args.cycleId, fallbackEvents);
-  return { seeded: rows.length, skipped };
+  return { rows, skipped, fallbackEvents, defaultStages };
+}
+
+export async function seedInstancesByRules(args: { cycleId: string; hrUserId: string | null; companyId?: string | null }) {
+  const computed = await computeSeedRowsForCycle(args);
+  await writeSeedRowsPreservingOverrides(args.cycleId, computed.rows);
+  await logHeadFallbacks(args.cycleId, computed.fallbackEvents);
+  return { seeded: computed.rows.length, skipped: computed.skipped };
+}
+
+/**
+ * Re-snapshots reviewer routing columns (`manager_id`, `skip_id`,
+ * `dept_head_id`, `bu_head_id`, `hr_id`) on **existing** instances of a cycle
+ * from the current master (`profiles.reporting_manager_id`,
+ * `departments.head_user_id`, `business_units.head_user_id`).
+ *
+ * Guardrails (POLICY §AR-REVIEWER-RESYNC):
+ *  - Never inserts new instances — this is a repair path, not a seed.
+ *  - Skips instances whose `overall_status` is past `pending_self` so an
+ *    active reviewer is never swapped mid-flight.
+ *  - Never touches scores, submissions, evidence, workflow status, or
+ *    template overrides (only the columns in `buildSeedUpdatePatch`).
+ */
+export async function resyncReviewersFromMaster(args: { cycleId: string; hrUserId: string | null; companyId?: string | null }): Promise<{ resynced: number; skippedInFlight: number; skippedNew: number; skippedNoRule: number }> {
+  const computed = await computeSeedRowsForCycle(args);
+
+  const existing = await fetchAllPaged<{ id: string; employee_id: string; overall_status: string }>((from, to) =>
+    db.from('annual_review_instances')
+      .select('id, employee_id, overall_status')
+      .eq('cycle_id', args.cycleId)
+      .order('employee_id')
+      .range(from, to)
+  );
+  const existingByEmp = new Map(existing.map((r) => [r.employee_id, r]));
+
+  let resynced = 0;
+  let skippedInFlight = 0;
+  let skippedNew = 0;
+  for (const r of computed.rows) {
+    const ex = existingByEmp.get(r.employee_id);
+    if (!ex) { skippedNew++; continue; }
+    if (!RESYNC_SAFE_STATUSES.has(ex.overall_status)) { skippedInFlight++; continue; }
+    const patch = buildSeedUpdatePatch(r);
+    const { error } = await db.from('annual_review_instances').update(patch).eq('id', ex.id);
+    if (error) throw error;
+    resynced++;
+  }
+
+  await logHeadFallbacks(args.cycleId, computed.fallbackEvents);
+  return { resynced, skippedInFlight, skippedNew, skippedNoRule: computed.skipped };
 }
 
 // ---------- Responses ----------
