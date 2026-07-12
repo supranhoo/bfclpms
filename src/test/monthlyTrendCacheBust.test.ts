@@ -41,22 +41,27 @@ describe('Monthly Scorecard trend cache-bust', () => {
     expect(src).toMatch(/possible batch\/URL failure/);
   });
 
-  it('useMonthlyTrend caps submission batches at 200 IDs', () => {
+  it('useMonthlyTrend caps submission batches at 150 IDs', () => {
     const src = read('src/hooks/useMonthlyTrend.ts');
-    expect(src).toMatch(/SUB_BATCH\s*=\s*200/);
+    expect(src).toMatch(/SUB_BATCH\s*=\s*150/);
     // The previous 800 ceiling produced ~30KB URLs and 414s.
     expect(src).not.toMatch(/SUB_BATCH\s*=\s*800/);
   });
 
-  it('useMonthlyTrend throws on submission batch errors instead of swallowing them', () => {
+  it('useMonthlyTrend retries submission batch errors before throwing', () => {
     const src = read('src/hooks/useMonthlyTrend.ts');
+    // Retry + shrink-on-error helper before final throw.
+    expect(src).toMatch(/submissions batch failed after retries/);
     expect(src).toMatch(/throw r\.error/);
+    expect(src).toMatch(/b\.slice\(0,\s*mid\)/);
   });
 
-  it('useMonthlyTrend throws when KPIs load but 0 submissions matched', () => {
+  it('useMonthlyTrend throws when KPIs load but ALL submission batches failed', () => {
     const src = read('src/hooks/useMonthlyTrend.ts');
     expect(src).toMatch(/but 0 submissions/);
     expect(src).toMatch(/Refusing to render an empty report/);
+    // Guard must be conditional on zero successes, not just empty map.
+    expect(src).toMatch(/subBatchSuccesses\s*===\s*0/);
   });
 
   it('useMonthlyTrend throws when KPIs load but 0 employees aggregated', () => {
