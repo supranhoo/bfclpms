@@ -271,6 +271,9 @@ export function useMonthlyTrend(filters: MonthlyTrendFilters) {
           '[useMonthlyTrend] Fetched %d KPIs but 0 submissions — possible batch/URL failure.',
           allKpis.length,
         );
+        throw new Error(
+          `MonthlyTrend: fetched ${allKpis.length} KPIs but 0 submissions — likely submissions batch (URL-length / RLS) failure. Refusing to render an empty report.`,
+        );
       }
 
       // 3. Aggregate per employee per month
@@ -327,6 +330,18 @@ export function useMonthlyTrend(filters: MonthlyTrendFilters) {
 
       // 4. Build employee rows
       const employees: TrendEmployee[] = [];
+
+      // Hard-fail if KPIs exist but nothing survived aggregation. This is the
+      // "0 of 0 employees" bug — silently rendering empty is worse than an
+      // error banner because it hides underlying breakage (RLS, profile
+      // fetch, submissions batch). We already threw earlier if subMap was
+      // empty; this covers the profile-side variant.
+      if (allKpis.length > 0 && empAgg.size === 0) {
+        throw new Error(
+          `MonthlyTrend: ${allKpis.length} KPIs matched but 0 employees aggregated — check profile visibility (RLS) or is_active filtering.`,
+        );
+      }
+
       for (const [empId, buckets] of empAgg.entries()) {
         const profile = profileMap.get(empId);
         if (!profile) continue;

@@ -88,12 +88,13 @@ export function MonthlyTrendView({ canExport }: Props) {
 
   const handleLoad = () => {
     if (rangeInvalid) return;
+    // Evict any cached payload for this query family BEFORE flipping state so
+    // the next render can't be served a stale (empty / all-dashes) result.
+    // invalidateQueries alone races with the state update; removeQueries is
+    // synchronous and guarantees a fresh network round trip.
+    queryClient.removeQueries({ queryKey: ['monthly-trend'] });
     setRequestedRange({ fromMonth, fromYear, toMonth, toYear });
     setPage(1);
-    // Force a real refetch even when the range hasn't changed: an earlier
-    // failed run may have cached an empty (all-dashes) payload under the
-    // same query key, so toggling state alone won't re-issue the request.
-    queryClient.invalidateQueries({ queryKey: ['monthly-trend'] });
   };
 
   const { data, isLoading, isFetching, error, refetch } = useMonthlyTrend({
