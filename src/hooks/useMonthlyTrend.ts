@@ -160,6 +160,8 @@ export function useMonthlyTrend(filters: MonthlyTrendFilters) {
       const empIds = Array.from(new Set(allKpis.map(k => k.employee_id)));
       const profileMap = new Map<string, any>();
       const subMap = new Map<string, any>();
+      let subBatchSuccesses = 0;
+      let subBatchAttempts = 0;
 
       const profilePromise = (async () => {
         for (let i = 0; i < empIds.length; i += 500) {
@@ -192,8 +194,6 @@ export function useMonthlyTrend(filters: MonthlyTrendFilters) {
         // Only throw after all three fail. Track successes so the empty-map
         // guard below can distinguish "all batches errored" from
         // "everything succeeded but there really were no submissions".
-        let batchSuccesses = 0;
-        let batchAttempts = 0;
         const fetchIds = async (b: string[]) => {
           return supabase
             .from('review_submissions')
@@ -201,7 +201,7 @@ export function useMonthlyTrend(filters: MonthlyTrendFilters) {
             .in('kpi_id', b);
         };
         const runBatch = async (b: string[]): Promise<void> => {
-          batchAttempts++;
+          subBatchAttempts++;
           let r = await fetchIds(b);
           if (r.error) {
             await new Promise(res => setTimeout(res, 400));
@@ -217,7 +217,7 @@ export function useMonthlyTrend(filters: MonthlyTrendFilters) {
             console.error('[useMonthlyTrend] submissions batch failed after retries:', r.error);
             throw r.error;
           }
-          batchSuccesses++;
+          subBatchSuccesses++;
           (r.data ?? []).forEach((s: any) => subMap.set(s.kpi_id, s));
         };
 
@@ -227,9 +227,6 @@ export function useMonthlyTrend(filters: MonthlyTrendFilters) {
           const slice = batches.slice(i, i + CONC);
           await Promise.all(slice.map(runBatch));
         }
-        // Expose counters for the guard below.
-        (subsPromise as any)._successes = batchSuccesses;
-        (subsPromise as any)._attempts = batchAttempts;
       })();
 
       await Promise.all([profilePromise, subsPromise]);
@@ -295,9 +292,7 @@ export function useMonthlyTrend(filters: MonthlyTrendFilters) {
       // Only throw if NO batch succeeded — that's the "all-dashes report"
       // signature. If some batches succeeded and simply produced no rows
       // (e.g. brand-new period with no submissions yet), render normally.
-      const _successes = (subsPromise as any)._successes ?? 0;
-      const _attempts = (subsPromise as any)._attempts ?? 0;
-      if (allKpis.length > 0 && subMap.size === 0 && _successes === 0 && _attempts > 0) {
+      if (allKpis.length > 0 && subMap.size === 0 && subBatchSuccesses === 0 && subBatchAttempts > 0) {
         console.warn(
           '[useMonthlyTrend] Fetched %d KPIs but 0 submissions — possible batch/URL failure.',
           allKpis.length,
