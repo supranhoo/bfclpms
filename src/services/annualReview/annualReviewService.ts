@@ -1272,7 +1272,24 @@ export async function seedInstancesByRules(args: { cycleId: string; hrUserId: st
   const computed = await computeSeedRowsForCycle(args);
   await writeSeedRowsPreservingOverrides(args.cycleId, computed.rows);
   await logHeadFallbacks(args.cycleId, computed.fallbackEvents);
-  return { seeded: computed.rows.length, skipped: computed.skipped };
+  // §AR-SELF-OPEN-LATE: any late-seeded instance still sitting at
+  // `not_started` after the cycle's `self_review_start` must be auto-opened
+  // so HR proxy submission and self-review UIs unlock immediately.
+  const opened = await openSelfReviewForPending(args.cycleId);
+  return { seeded: computed.rows.length, skipped: computed.skipped, opened };
+}
+
+/**
+ * Flips any `not_started` instances of a cycle to `pending_self` when the
+ * cycle is active and its `self_review_start` window has begun. Idempotent;
+ * returns the number of rows opened. Safe to call after seed / resync.
+ * DB does the work via `open_self_review_for_pending` (SECURITY DEFINER)
+ * so a single audit row is written per invocation.
+ */
+export async function openSelfReviewForPending(cycleId: string): Promise<number> {
+  const { data, error } = await db.rpc('open_self_review_for_pending', { _cycle_id: cycleId });
+  if (error) throw error;
+  return Number(data ?? 0);
 }
 
 /**

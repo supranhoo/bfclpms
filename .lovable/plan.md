@@ -1,67 +1,77 @@
-# RCA — Wrong Dept Head on Akhay Kumar Maity (101796)
+## RCA — HR Sandeep cannot fill assisted self-review for emp 200044 (Rojid Ansari)
 
-## Master data (confirmed correct)
-```
-Akhay Kumar Maity (101796)
-  └─ reporting_manager → Prabhat Kumar Singh (101757)
-                            └─ reporting_manager → Sajid Raza (100264, BU Head)
+### What the DB says
 
-Department: 1050 TPD-Mech
-  └─ head_user_id → Sushanta Ghosh (101883)   ← correct Dept Head
-```
+**Instance `7b962b60-…` (Rojid Ansari, 200044)**
+- `overall_status = not_started`  ← the blocker
+- `template_id`, `enabled_stages`, `manager_id`, `dept_head_id` all populated correctly
+- Employee has email (`rojid1970@gmail.com`) but `auth.users.last_sign_in_at IS NULL` → non-login employee (proxy-eligible in principle)
+- Cycle `Annual Review 2025-2026` is `active`, `self_review_start = 2026-07-07` (5 days ago)
 
-## What the review instance actually stores
-`annual_review_instances` row `f691746e-58a6-435c-bce7-11003050fab0`:
+**Compared to a working case (`1ab610a9`, Sourabh 101790, same cycle)** — identical shape except `overall_status = pending_self`. Sandeep's HR assisted form works there.
 
-| Column | Stored | Expected |
-|---|---|---|
-| manager_id   | Sudhir Kumar (101894) ❌ | Prabhat Kumar Singh (101757) |
-| skip_id      | Prabhat Kumar Singh ❌   | Sajid Raza (100264) |
-| dept_head_id | Sudhir Kumar (101894) ❌ | Sushanta Ghosh (101883) |
-| bu_head_id   | Sajid Raza ✓             | Sajid Raza |
+### Root cause
 
-Row created 2026-07-06, last touched 2026-07-11 — **before** the master hierarchy for Akhay was corrected. The dept-head shown in the UI comes straight from `dept_head_id` on this row.
+Two gates independently require `pending_self`:
 
-## Root cause
-Reviewer routing (`manager_id / skip_id / dept_head_id / bu_head_id / hr_id`) is **snapshotted at seed time** by `annualReviewService.buildSeedUpdatePatch` + `hierarchyGuard.resolveHierarchicalHead`. This is deliberate — it protects an in-flight review from silently swapping reviewers mid-stage.
+1. `stageForReviewer.ts` maps `pending_self` → self role. `not_started` → returns null → **Read-only view** is rendered.
+2. `TeamReviewDetailContent.tsx` line 124: `proxyMode = !stageRole && instance.overall_status === 'pending_self' && proxyEligible === true` → false when status is `not_started`, so "Verify & Submit on behalf" button never renders.
+3. Even if the UI let him through, RPC `can_proxy_submit_annual_review` returns false early: `IF v_status <> 'pending_self' THEN RETURN false`.
 
-Trade-off: when `profiles.reporting_manager_id` or `departments.head_user_id` is corrected **after** an instance is seeded, the instance keeps the stale chain until an admin re-runs the seeder for that cycle. Akhay's instance has not been resnapshotted since the master was corrected, so it still points at Sudhir.
+So the assisted flow is correctly locked — but the *pre-condition* (open self-review stage) never fired for this instance.
 
-`hierarchyGuard` itself is behaving correctly — given the current master it would resolve Dept Head = Sushanta Ghosh. Sudhir only appears because he was the manager stamped when the row was first written.
+**Why the status is stuck:** 21 instances in this cycle are still `not_started` while 1,916 peers correctly moved to `pending_self`. These 21 were seeded (or re-seeded) **after** the cycle's initial "release for self-review" bulk transition ran on `self_review_start = 2026-07-07`. There is no automatic transition that catches instances born *after* that date, and no admin UI action to open self-review for a specific cohort — so late seeds sit at `not_started` indefinitely.
 
-## Fix — two parts
+Affected employees (21) — all in the same cohort, e.g.
+Rojid Ansari (200044), Ankit Kumar (200713), Shashi Karmali (200770), Sandeep Kumar Verma (200755), Rakesh Kumar (200091), Vinod Tiwari (200090), Mukesh Kumar (200089), … (full list in the query result).
 
-### Part A — one-off data repair for the affected cycle
-Re-run the existing update-only seeder path (`writeSeedRowsPreservingOverrides`) for Akhay's cycle. This routes every instance through `buildSeedUpdatePatch`, which resolves each reviewer column against the current master.
+### Risk & impact report
 
-- Scope: reviewer routing columns only. Scores, submissions, evidence, workflow status untouched. POLICY §88 (submission snapshot immutability) covers *scores*, not reviewer identity.
-- Safety: skip instances already past the `dept_head` stage so we never move a reviewer out from under an open action.
-- Verification: re-run the RCA SELECT and confirm `manager_id → Prabhat`, `skip_id → Sajid`, `dept_head_id → Sushanta`.
-- Rollback: snapshot the affected rows into a temp table before update; restore from it if anything looks off.
+| Dimension | Assessment |
+|---|---|
+| Data | Only `annual_review_instances.overall_status` flips `not_started` → `pending_self`. No scores touched. Reversible. |
+| Workflow | Unlocks self / assisted-self stage for the 21 employees. Downstream reviewer chain already correct. |
+| RLS / security | No policy changes. Existing self / proxy checks continue to gate writes. |
+| Regression | Low — the update is scoped by `cycle_id`, `overall_status='not_started'`, and the cycle already being past `self_review_start`. |
+| Rollback | `UPDATE ... SET overall_status='not_started' WHERE id = ANY(:ids)` if needed. IDs will be captured in an audit row before the flip. |
+| Backup | No table added/removed. Existing coverage unaffected. |
 
-### Part B — prevent recurrence
-Add an admin-visible **"Resync reviewers from master"** action on the Annual Review cycle admin screen. It calls the same `writeSeedRowsPreservingOverrides` path for the current cycle, scoped to instances not yet past the affected stage. No schema change, no new table.
+### Fix plan
 
-Optional follow-up (not in this plan unless you ask): nightly scheduled resync of pre-stage instances.
+**Part A — one-off data repair (data migration, `insert` tool)**
+1. Snapshot the 21 target IDs into `system_audit_logs` (action `AR_OPEN_SELF_LATE_SEED`, metadata = { cycle_id, instance_ids[], performed_by = NULL }) so the change is auditable and rollback-able.
+2. `UPDATE annual_review_instances SET overall_status='pending_self', updated_at=now() WHERE cycle_id='b82a935f-…' AND overall_status='not_started'`.
+3. Verify: expect 0 rows remaining in `(cycle, not_started)` and 1,937 rows in `(cycle, pending_self)`.
 
-## Risk & impact
-- **Data:** touches reviewer routing columns on annual review instances only. No score, workflow, or evidence mutation.
-- **Workflow:** an instance that has already advanced past a given stage is skipped for that stage's column, so no reviewer swap mid-flight.
-- **UI/UX:** one new admin button. No layout, responsiveness, or navigation change.
-- **Regression:** low — reuses the existing seeder code path already covered by `seedUpdatePatch.test.ts` and `hierarchyGuard.test.ts`.
-- **Scalability:** update is per-cycle, per-instance (existing chunked loop, ~few hundred ms per 100 rows). Fine for BFCL cycle sizes.
+After this, Sandeep's HR assisted form will render for Rojid and the other 20.
 
-## Tests
-- Extend `src/test/annualReview/seedUpdatePatch.test.ts` with Akhay's exact shape: previously-snapshotted wrong dept head + peer configured as head → patch must resolve to `departments.head_user_id` (Sushanta), not the stale manager.
-- Extend `src/test/annualReview/hierarchyGuard.test.ts`: when a valid `departments.head_user_id` exists, it must win over a stale manager fallback.
-- Guard the "skip past-stage instances" rule with a new unit test on the resync helper.
+**Part B — prevent recurrence (schema migration)**
+Add DB function `public.open_self_review_for_pending(_cycle_id uuid) RETURNS int` (SECURITY DEFINER) that:
+- Flips any `annual_review_instances` for the given cycle from `not_started` → `pending_self` **only when** `annual_review_cycles.self_review_start <= now()` and the cycle `status='active'`.
+- Writes an audit row per flipped instance.
 
-## Docs
-- `DOCUMENTATION.md` → Annual Review › Reviewer Snapshotting: document the "snapshot at seed, resync via admin action" contract.
-- `POLICY.md` → new clause `§AR-REVIEWER-RESYNC`: resync is allowed only for instances not yet past the affected stage; scores are never touched.
-- Add ADR entry summarising this decision (short — one page).
+Wire it in two places:
+1. **Automatic:** call it at the end of `seedInstancesByRules` / `writeSeedRowsPreservingOverrides` in `annualReviewService.ts` so any late-seed batch is auto-opened.
+2. **Admin UI:** new button "Open self-review for pending" on the same Admin → Annual Review → Progress screen (next to "Resync reviewers from master"). Calls the same RPC. Idempotent and safe to press repeatedly.
 
-## Not applicable
-- Backup / retention (no new tables).
-- RLS (no new tables or policies).
-- Pagination (existing chunked seeder already handles this).
+### Tests
+
+- `src/test/annualReview/openSelfLateSeed.test.ts` — new
+  - Late-seeded instance with cycle already past `self_review_start` → status flips to `pending_self`.
+  - Cycle not yet started → status stays `not_started`.
+  - Cycle `closed` → no-op.
+  - Instance already `pending_manager` → untouched.
+- Extend `resyncReviewers.test.ts` to assert combined flow: resync + open-self are order-independent.
+- Regression asserting `can_proxy_submit_annual_review` returns `true` for HR user + `pending_self` employee-with-no-signin, `false` for `not_started`.
+
+### Documentation updates
+- `DOCUMENTATION.md`: new "Late-seed self-review opener" section under Annual Review.
+- `POLICY.md`: new clause **§AR-SELF-OPEN-LATE** — instances seeded after cycle `self_review_start` must be auto-opened; admin has an idempotent manual opener; scores/reviewer routing untouched by this transition.
+- ADR entry appended to `docs/adr/ADR-annual-review.md` under Consequences.
+
+### Clarifying question before I execute
+Do you want me to:
+- **(a)** run only Part A (immediate fix for the 21 employees so HR can start filling today) and defer Part B to a follow-up, or
+- **(b)** run Part A + Part B together in this turn?
+
+Recommendation: **(b)** — Part B is small, prevents this exact ticket from re-opening every time HR seeds a late joiner, and shares the audit trail with Part A.

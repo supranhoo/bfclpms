@@ -590,6 +590,23 @@ function ProgressTab() {
     onError: (e: Error) => toast.error(e.message),
   });
 
+  // §AR-SELF-OPEN-LATE — opens the self-review stage for any instance still
+  // stuck at `not_started` after the cycle's `self_review_start`. Idempotent.
+  const openSelfLate = useMutation({
+    mutationFn: async () => {
+      if (!activeCycle) throw new Error('No active cycle');
+      return svc.openSelfReviewForPending(activeCycle.id);
+    },
+    onSuccess: (opened) => {
+      toast.success(opened
+        ? `Opened self-review for ${opened} instance${opened === 1 ? '' : 's'}.`
+        : 'No instances were pending — everything is already open.');
+      qc.invalidateQueries();
+      refetch();
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
   const filtered = instances; // server-side filtering already applied
   const inProgressCount = counts.pending_manager + counts.pending_skip + counts.pending_bu + counts.pending_hr;
   const summaryCounts = { total: counts.total, self: counts.pending_self, in_progress: inProgressCount, completed: counts.completed };
@@ -785,6 +802,15 @@ function ProgressTab() {
           >
             {resyncReviewers.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
             Resync reviewers from master
+          </Button>
+          <Button
+            variant="outline" className="gap-2"
+            disabled={openSelfLate.isPending || !activeCycle}
+            onClick={() => openSelfLate.mutate()}
+            title="Open self-review for any late-seeded instance still stuck at 'not started' after the cycle's self-review start. Idempotent."
+          >
+            {openSelfLate.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+            Open self-review for pending
           </Button>
           <Button
             variant="outline" className="gap-2"

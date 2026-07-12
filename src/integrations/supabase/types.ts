@@ -14569,6 +14569,10 @@ export type Database = {
       }
       normalize_kpi_text: { Args: { p: string }; Returns: string }
       normalize_kpi_text_value: { Args: { txt: string }; Returns: string }
+      open_self_review_for_pending: {
+        Args: { _cycle_id: string }
+        Returns: number
+      }
       org_kpi_evidence_parity: {
         Args: { p_review_period: string; p_review_year: number }
         Returns: {
