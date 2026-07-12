@@ -1,77 +1,80 @@
-## RCA — HR Sandeep cannot fill assisted self-review for emp 200044 (Rojid Ansari)
+## 1. Assumptions
+- Correct master values you want enforced for **Admin-Pollution** department in the active Annual Review cycle:
+  - **Dept Head** = 101757, Prabhat Kumar Singh
+  - **BU Head** (Admin BU) = 101089, Sindhu Raj Singh
+- No other department/BU is being changed in this request.
 
-### What the DB says
+## 2. Clarifications
+Not Applicable — values verified against master and reporting chain in DB.
 
-**Instance `7b962b60-…` (Rojid Ansari, 200044)**
-- `overall_status = not_started`  ← the blocker
-- `template_id`, `enabled_stages`, `manager_id`, `dept_head_id` all populated correctly
-- Employee has email (`rojid1970@gmail.com`) but `auth.users.last_sign_in_at IS NULL` → non-login employee (proxy-eligible in principle)
-- Cycle `Annual Review 2025-2026` is `active`, `self_review_start = 2026-07-07` (5 days ago)
+## 3. Deep RCA (verified against DB)
 
-**Compared to a working case (`1ab610a9`, Sourabh 101790, same cycle)** — identical shape except `overall_status = pending_self`. Sandeep's HR assisted form works there.
+**Master data is already correct:**
+- `departments.Admin-Pollution.head_user_id` = 223ba922… → **101757 Prabhat Kumar Singh** ✓
+- `business_units.Admin.head_user_id` = 66b76d0c… → **101089 Sindhu Raj Singh** ✓
 
-### Root cause
+**Snapshots in the active cycle are wrong:**
+- Cycle: Annual Review 2025-2026 (active), 39 Admin-Pollution instances.
+- **Dept Head snapshot**: only 3 rows show Prabhat (101757). 36 rows show **Santosh Singh (200508)** — a reporting-chain fallback, not the master.
+- **BU Head snapshot**: 36 rows show Sindhu correctly; 3 rows show a fallback.
+- 38 of the 39 instances are in safe statuses (`not_started`, `pending_self`, `pending_manager`) — repair is safe for those.
 
-Two gates independently require `pending_self`:
+**Root cause — same class as the FAD BU-Head bug reported earlier:**
+`resolveHierarchicalHead` (dept-head and bu-head) treats the configured master head as valid *only when it appears in the reviewee's reporting ancestor chain*. When it doesn't (e.g. Prabhat is not a reporting ancestor of the 36 Admin-Pollution employees), the guard returns `reason='not_in_chain'` and stamps the reporting-chain fallback (Santosh Singh) into the instance. Every reseed/resync then re-writes this incorrect fallback, so the wrong value keeps returning.
 
-1. `stageForReviewer.ts` maps `pending_self` → self role. `not_started` → returns null → **Read-only view** is rendered.
-2. `TeamReviewDetailContent.tsx` line 124: `proxyMode = !stageRole && instance.overall_status === 'pending_self' && proxyEligible === true` → false when status is `not_started`, so "Verify & Submit on behalf" button never renders.
-3. Even if the UI let him through, RPC `can_proxy_submit_annual_review` returns false early: `IF v_status <> 'pending_self' THEN RETURN false`.
+## 4. Risk & Impact Report
+- **Data**: Only `annual_review_instances.dept_head_id` / `bu_head_id` change on the 38 safe rows. No scores, responses, or workflow status touched.
+- **Workflow**: Reviewer routing corrected forward; no completed/approved rows modified.
+- **RLS/Security**: No policy changes; existing RLS unaffected.
+- **Regression risk**: Low — scope is `department = Admin-Pollution`, `cycle = active`, `overall_status IN (not_started, pending_self, pending_manager)`.
+- **Rollback**: Snapshot old values into `system_audit_logs` (`action = AR_HEAD_SNAPSHOT_REPAIR`) before update.
+- **Scalability**: ≤ 39 rows — trivial.
+- **Backup**: No schema change; no backup denylist impact.
 
-So the assisted flow is correctly locked — but the *pre-condition* (open self-review stage) never fired for this instance.
+## 5. Step-by-step Plan
 
-**Why the status is stuck:** 21 instances in this cycle are still `not_started` while 1,916 peers correctly moved to `pending_self`. These 21 were seeded (or re-seeded) **after** the cycle's initial "release for self-review" bulk transition ran on `self_review_start = 2026-07-07`. There is no automatic transition that catches instances born *after* that date, and no admin UI action to open self-review for a specific cohort — so late seeds sit at `not_started` indefinitely.
+### Part A — Immediate data repair for Admin-Pollution (active cycle)
+1. Insert one `system_audit_logs` row per targeted instance capturing `{ instance_id, old_dept_head_id, old_bu_head_id, new_dept_head_id=223ba922…, new_bu_head_id=66b76d0c…, reason }`.
+2. `UPDATE annual_review_instances SET dept_head_id='223ba922-9da1-4491-8dd7-d39daf262982', bu_head_id='66b76d0c-72c0-4588-baa7-718cee76c99b', updated_at=now() WHERE cycle_id=<active> AND employee_id IN (Admin-Pollution employees) AND overall_status IN ('not_started','pending_self','pending_manager') AND (dept_head_id IS DISTINCT FROM '223ba922…' OR bu_head_id IS DISTINCT FROM '66b76d0c…')`.
+3. Verify: expect 38 rows corrected; 0 mismatches remaining in safe statuses.
 
-Affected employees (21) — all in the same cohort, e.g.
-Rojid Ansari (200044), Ankit Kumar (200713), Shashi Karmali (200770), Sandeep Kumar Verma (200755), Rakesh Kumar (200091), Vinod Tiwari (200090), Mukesh Kumar (200089), … (full list in the query result).
+### Part B — Root-cause fix so the values don't drift back
+1. Modify `resolveHierarchicalHead` to treat `configured` master head as **authoritative** when it is an active user, regardless of whether it appears in the employee's reporting ancestor chain. Fallback path stays only for: `null_configured`, `self`, inactive user.
+2. Keep `peer/not_in_chain` classification as a diagnostic (still logged), but no longer force fallback.
+3. Update `seedInstancesByRules` / `buildSeedUpdatePatch` to write these authoritative values on every reseed. This makes reseeds idempotent and stops the recurrence pattern.
 
-### Risk & impact report
+### Part C — Regression tests
+1. Extend `src/test/annualReview/hierarchyGuard.test.ts`:
+   - Configured BU head **not in ancestor chain** but active → `usedFallback=false`, `headId=configured` (new expected behavior).
+   - Configured head **inactive** → falls back with reason `inactive`.
+2. Add `src/test/annualReview/adminPollutionSnapshotRepair.test.ts` — pure predicate test asserting the repair filter targets only safe statuses and skips already-correct rows.
 
-| Dimension | Assessment |
-|---|---|
-| Data | Only `annual_review_instances.overall_status` flips `not_started` → `pending_self`. No scores touched. Reversible. |
-| Workflow | Unlocks self / assisted-self stage for the 21 employees. Downstream reviewer chain already correct. |
-| RLS / security | No policy changes. Existing self / proxy checks continue to gate writes. |
-| Regression | Low — the update is scoped by `cycle_id`, `overall_status='not_started'`, and the cycle already being past `self_review_start`. |
-| Rollback | `UPDATE ... SET overall_status='not_started' WHERE id = ANY(:ids)` if needed. IDs will be captured in an audit row before the flip. |
-| Backup | No table added/removed. Existing coverage unaffected. |
+### Part D — Admin diagnostic (small, optional in same turn)
+Add read-only badge on Admin → Progress row: "Snapshot ≠ master (BU/Dept head)" when the instance snapshot diverges from the current master. Uses existing joins; no writes.
 
-### Fix plan
+### Part E — Docs (SSOT)
+- `DOCUMENTATION.md`: authoritative rule — snapshotted `dept_head_id`/`bu_head_id` come from configured masters directly.
+- `POLICY.md`: new clause **§AR-HEAD-MASTER-AUTHORITATIVE** — reporting chain is not required to justify a configured head.
+- ADR appendix under `docs/adr/ADR-annual-review.md`.
 
-**Part A — one-off data repair (data migration, `insert` tool)**
-1. Snapshot the 21 target IDs into `system_audit_logs` (action `AR_OPEN_SELF_LATE_SEED`, metadata = { cycle_id, instance_ids[], performed_by = NULL }) so the change is auditable and rollback-able.
-2. `UPDATE annual_review_instances SET overall_status='pending_self', updated_at=now() WHERE cycle_id='b82a935f-…' AND overall_status='not_started'`.
-3. Verify: expect 0 rows remaining in `(cycle, not_started)` and 1,937 rows in `(cycle, pending_self)`.
+## 6. UI Changes
+No visual redesign. Existing Team review detail for the 38 affected employees will now show Prabhat Kumar Singh as Dept Head and Sindhu Raj Singh as BU Head immediately after Part A runs.
 
-After this, Sandeep's HR assisted form will render for Rojid and the other 20.
+## 7. Implementation
+- Part A: `insert` tool with the audit `INSERT` + `UPDATE`.
+- Part B/C/D/E: code + test + doc edits after Part A commits.
 
-**Part B — prevent recurrence (schema migration)**
-Add DB function `public.open_self_review_for_pending(_cycle_id uuid) RETURNS int` (SECURITY DEFINER) that:
-- Flips any `annual_review_instances` for the given cycle from `not_started` → `pending_self` **only when** `annual_review_cycles.self_review_start <= now()` and the cycle `status='active'`.
-- Writes an audit row per flipped instance.
+## 8. Tests
+- New/updated Vitest cases listed above.
+- Post-Part-A SQL verification (0 mismatches).
 
-Wire it in two places:
-1. **Automatic:** call it at the end of `seedInstancesByRules` / `writeSeedRowsPreservingOverrides` in `annualReviewService.ts` so any late-seed batch is auto-opened.
-2. **Admin UI:** new button "Open self-review for pending" on the same Admin → Annual Review → Progress screen (next to "Resync reviewers from master"). Calls the same RPC. Idempotent and safe to press repeatedly.
+## 9/10. DOCUMENTATION.md / POLICY.md
+- Updates as in Part E.
 
-### Tests
+## 11. Post-implementation notes
+- After approval, I will execute in this order: Part A → verify → Part B code/test → Part E docs → optional Part D.
 
-- `src/test/annualReview/openSelfLateSeed.test.ts` — new
-  - Late-seeded instance with cycle already past `self_review_start` → status flips to `pending_self`.
-  - Cycle not yet started → status stays `not_started`.
-  - Cycle `closed` → no-op.
-  - Instance already `pending_manager` → untouched.
-- Extend `resyncReviewers.test.ts` to assert combined flow: resync + open-self are order-independent.
-- Regression asserting `can_proxy_submit_annual_review` returns `true` for HR user + `pending_self` employee-with-no-signin, `false` for `not_started`.
-
-### Documentation updates
-- `DOCUMENTATION.md`: new "Late-seed self-review opener" section under Annual Review.
-- `POLICY.md`: new clause **§AR-SELF-OPEN-LATE** — instances seeded after cycle `self_review_start` must be auto-opened; admin has an idempotent manual opener; scores/reviewer routing untouched by this transition.
-- ADR entry appended to `docs/adr/ADR-annual-review.md` under Consequences.
-
-### Clarifying question before I execute
-Do you want me to:
-- **(a)** run only Part A (immediate fix for the 21 employees so HR can start filling today) and defer Part B to a follow-up, or
-- **(b)** run Part A + Part B together in this turn?
-
-Recommendation: **(b)** — Part B is small, prevents this exact ticket from re-opening every time HR seeds a late joiner, and shares the audit trail with Part A.
+### Approval needed
+Confirm to proceed with:
+- **(a)** Part A only (fix the 38 rows now, defer root-cause fix), or
+- **(b)** Part A + Part B + tests + docs together (recommended — prevents recurrence and closes the same-class FAD BU-Head issue in one shot).

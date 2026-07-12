@@ -32,14 +32,29 @@ describe('resolveHierarchicalHead', () => {
     expect(r).toEqual({ headId: 'mgr', usedFallback: true, reason: 'self' });
   });
 
-  it('falls back when configured head is a peer (same direct manager)', () => {
+  // POLICY §AR-HEAD-MASTER-AUTHORITATIVE — configured head is authoritative
+  // even when it is a peer or unrelated to the reporting chain.
+  it('keeps configured head even when it is a peer (diagnostic reason=peer)', () => {
     const r = resolveHierarchicalHead({ employeeId: 'emp', configuredHeadId: 'peer', fallbackId: 'mgr', mgrMap });
-    expect(r).toEqual({ headId: 'mgr', usedFallback: true, reason: 'peer' });
+    expect(r).toEqual({ headId: 'peer', usedFallback: false, reason: 'peer' });
   });
 
-  it('falls back when configured head is unrelated to the chain', () => {
+  it('keeps configured head even when it is unrelated (diagnostic reason=authoritative)', () => {
     const r = resolveHierarchicalHead({ employeeId: 'emp', configuredHeadId: 'unrelated', fallbackId: 'mgr', mgrMap });
-    expect(r).toEqual({ headId: 'mgr', usedFallback: true, reason: 'not_in_chain' });
+    expect(r).toEqual({ headId: 'unrelated', usedFallback: false, reason: 'authoritative' });
+  });
+
+  it('falls back when configured head is inactive (activeSet excludes it)', () => {
+    const activeSet = new Set<string>(['emp', 'mgr', 'dept_head', 'bu_head', 'ceo', 'peer']);
+    // 'unrelated' NOT in the active set
+    const r = resolveHierarchicalHead({
+      employeeId: 'emp',
+      configuredHeadId: 'unrelated',
+      fallbackId: 'mgr',
+      mgrMap,
+      activeSet,
+    });
+    expect(r).toEqual({ headId: 'mgr', usedFallback: true, reason: 'inactive' });
   });
 
   it('returns fallback with null_configured when configured id is null/undefined', () => {
@@ -55,6 +70,9 @@ describe('resolveHierarchicalHead', () => {
       ['b', 'a'],
     ]);
     const r = resolveHierarchicalHead({ employeeId: 'a', configuredHeadId: 'unrelated', fallbackId: null, mgrMap: cyclic });
-    expect(r.usedFallback).toBe(true);
+    // Configured head is authoritative even on a cyclic chain — the walk
+    // terminates safely and reason falls back to 'authoritative'.
+    expect(r.headId).toBe('unrelated');
+    expect(r.usedFallback).toBe(false);
   });
 });
