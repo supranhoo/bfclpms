@@ -160,6 +160,8 @@ export function useMonthlyTrend(filters: MonthlyTrendFilters) {
       const empIds = Array.from(new Set(allKpis.map(k => k.employee_id)));
       const profileMap = new Map<string, any>();
       const subMap = new Map<string, any>();
+      let subBatchSuccesses = 0;
+      let subBatchAttempts = 0;
 
       const profilePromise = (async () => {
         for (let i = 0; i < empIds.length; i += 500) {
@@ -176,31 +178,54 @@ export function useMonthlyTrend(filters: MonthlyTrendFilters) {
         const ids = allKpis.map(k => k.id);
         // Keep batch small enough that the resulting `kpi_id=in.(...)` URL
         // stays well under the ~16KB PostgREST/CDN limit (≈ 38 chars per UUID
-        // including the `%2C` separator). 200 IDs ≈ 7.6KB of querystring.
-        const SUB_BATCH = 200;
+        // including the `%2C` separator). 150 IDs ≈ 5.7KB of querystring and
+        // keeps RLS work per request low enough that 4-month ranges
+        // (~52 batches) don't hit sporadic timeouts.
+        const SUB_BATCH = 150;
         const batches: string[][] = [];
         for (let i = 0; i < ids.length; i += SUB_BATCH) {
           batches.push(ids.slice(i, i + SUB_BATCH));
         }
-        // Run batches in parallel (cap concurrency at 4)
+
+        // Resilient per-batch fetch:
+        //   attempt 1: full batch
+        //   attempt 2: 400ms backoff, retry full batch
+        //   attempt 3: split in halves, retry each once
+        // Only throw after all three fail. Track successes so the empty-map
+        // guard below can distinguish "all batches errored" from
+        // "everything succeeded but there really were no submissions".
+        const fetchIds = async (b: string[]) => {
+          return supabase
+            .from('review_submissions')
+            .select('kpi_id, final_score, management_score, auditor_score, hr_pms_score, skip_level_score, manager_score, self_score, is_na')
+            .in('kpi_id', b);
+        };
+        const runBatch = async (b: string[]): Promise<void> => {
+          subBatchAttempts++;
+          let r = await fetchIds(b);
+          if (r.error) {
+            await new Promise(res => setTimeout(res, 400));
+            r = await fetchIds(b);
+          }
+          if (r.error) {
+            if (b.length > 1) {
+              const mid = Math.floor(b.length / 2);
+              await runBatch(b.slice(0, mid));
+              await runBatch(b.slice(mid));
+              return;
+            }
+            console.error('[useMonthlyTrend] submissions batch failed after retries:', r.error);
+            throw r.error;
+          }
+          subBatchSuccesses++;
+          (r.data ?? []).forEach((s: any) => subMap.set(s.kpi_id, s));
+        };
+
+        // Run batches with concurrency cap of 4.
         const CONC = 4;
         for (let i = 0; i < batches.length; i += CONC) {
           const slice = batches.slice(i, i + CONC);
-          const results = await Promise.all(slice.map(b =>
-            supabase
-              .from('review_submissions')
-              .select('kpi_id, final_score, management_score, auditor_score, hr_pms_score, skip_level_score, manager_score, self_score, is_na')
-              .in('kpi_id', b)
-          ));
-          results.forEach((r) => {
-            if (r.error) {
-              // Surface partial-fetch failures (e.g. URL-length / 414) instead
-              // of silently rendering all dashes.
-              console.error('[useMonthlyTrend] submissions batch failed:', r.error);
-              throw r.error;
-            }
-            (r.data ?? []).forEach((s: any) => subMap.set(s.kpi_id, s));
-          });
+          await Promise.all(slice.map(runBatch));
         }
       })();
 
@@ -263,10 +288,11 @@ export function useMonthlyTrend(filters: MonthlyTrendFilters) {
         console.warn('[useMonthlyTrend] reporting manager fetch failed:', e);
       }
 
-      // Diagnostic: KPIs returned but zero submissions matched. This is the
-      // exact signature of the URL-length / batch-size regression that
-      // produced an all-dashes Score Trend table — keep it loud.
-      if (allKpis.length > 0 && subMap.size === 0) {
+      // Diagnostic: KPIs returned but zero submissions matched.
+      // Only throw if NO batch succeeded — that's the "all-dashes report"
+      // signature. If some batches succeeded and simply produced no rows
+      // (e.g. brand-new period with no submissions yet), render normally.
+      if (allKpis.length > 0 && subMap.size === 0 && subBatchSuccesses === 0 && subBatchAttempts > 0) {
         console.warn(
           '[useMonthlyTrend] Fetched %d KPIs but 0 submissions — possible batch/URL failure.',
           allKpis.length,
