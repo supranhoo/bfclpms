@@ -115,6 +115,7 @@ const SafetyIncidentTypes = lazy(() => import("./pages/safety/SafetyIncidentType
 // Report pages
 const PerformanceReport = lazy(() => import("./pages/reports/PerformanceReport"));
 const KRAIssuance = lazy(() => import("./pages/reports/KRAIssuance"));
+const FirstKraRolloutReport = lazy(() => import("./pages/reports/FirstKraRolloutReport"));
 const ReportsHub = lazy(() => import("./pages/reports/ReportsHub"));
 const QueryReport = lazy(() => import("./pages/reports/QueryReport"));
 const DepartmentReport = lazy(() => import("./pages/reports/DepartmentReport"));
