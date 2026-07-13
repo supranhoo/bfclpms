@@ -1,71 +1,66 @@
-## Problem
-
-On narrow tablet/mobile widths, the "Previous Months" mini section inside the scorecard side card renders three columns of `Jun 2026 / May 2026 / Apr 2026` with the month, year, and score all forced onto single lines. Because each `grid-cols-3` cell is only ~38px wide at that viewport, the label `Jun 2026` and score `5.02` visually collide/overlap with the adjacent cell — producing the observed `JunMayApr / 202620262026 / 5.02…4.74` overlap.
-
-Source: `src/components/review/PreviousMonthsScoreMini.tsx`.
-
 ## Root cause
 
-Inside each grid cell:
-```
-<p>{r.month.slice(0,3)} {r.year}</p>   // "Jun 2026" — one line, ~52px min
-<p>{r.score.toFixed(2)}</p>            // "5.02"
-```
-The text has no `whitespace-nowrap`, but the space between "Jun" and "2026" is a normal space that the browser keeps on one line as long as it fits — and when it doesn't, the cell content visually spills into the next cell because there's no horizontal padding/gap enforcement and the parent doesn't `overflow-hidden`.
+Shailesh Singh (200511) is on `pending_self` for his annual-review instance, but the row in `annual_review_responses` for `reviewer_role='self'` has `reviewer_id = Prakash Chandra Goswami (200549)` — a proxy who opened/drafted the self review on his behalf (Admin View / assisted flow).
 
-## Fix (scoped — presentation only, this component only)
+That combined with schema + RLS locks the employee out:
 
-1. Stack month and year on two lines inside each cell (`Jun` on line 1, `2026` on line 2) so each column stays well within its width at any viewport.
-2. Use a shortened year (`'26`) alongside the month on one line as a fallback for wider layouts is unnecessary — vertical stacking is simpler and works at every width.
-3. Add `min-w-0` to each grid cell and `gap-2` on the grid so columns can shrink without bleeding into neighbours.
-4. Keep score styling, colours, N/A handling, and data-fetching logic unchanged.
+1. `UNIQUE (instance_id, reviewer_role)` — only one `self` row per instance can exist.
+2. RLS `responses_select_visible` lets the employee see the row only if `reviewer_id = auth.uid()` OR the instance is `completed`. While `pending_self` with a proxy-owned row, the employee **cannot even SELECT** the draft.
+3. RLS `responses_self_update` allows update only if `reviewer_id = auth.uid()` OR caller is a valid proxy. The actual employee is neither, so UPDATE is blocked.
+4. His UI therefore sees "no draft" and attempts an INSERT, which fails on the unique constraint. Result: nothing saves, self review can't be filled.
 
-### Exact JSX change
+This is systemic — a query across the active cycle shows **many** `pending_self` instances whose `self` row is owned by a proxy (managers/admins), so the same lockout affects a large batch of employees, not just Shailesh.
 
-```tsx
-<div className="grid gap-2 grid-cols-3">
-  {results.map((r) => (
-    <div key={`${r.month}-${r.year}`} className="text-center min-w-0">
-      <p className="text-[10px] leading-tight text-muted-foreground font-medium">
-        {r.month.slice(0, 3)}
-      </p>
-      <p className="text-[9px] leading-tight text-muted-foreground">
-        {r.year}
-      </p>
-      {r.score !== null ? (
-        <p className={cn('text-sm font-bold mt-0.5', scoreColor(r.score))}>
-          {r.score.toFixed(2)}
-        </p>
-      ) : (
-        <p className="text-[10px] text-muted-foreground italic mt-0.5">N/A</p>
-      )}
-    </div>
-  ))}
-</div>
-```
+## Risk & impact
 
-## Scope guardrails
+- Data: no destructive change. Draft self responses touched only where `submitted_at IS NULL` AND `overall_status='pending_self'`. Submitted / advanced rows are untouched.
+- Workflow: unchanged — status stays `pending_self`, chain stays `self → bu_head`.
+- Security: SELECT/UPDATE policies broadened only for the reviewee on their own instance while `overall_status='pending_self'` and `is_locked=false`. Proxy submission stays fully supported.
+- Regression risk: low; scoped predicate (`reviewer_role='self'` + own instance + pending_self + unlocked).
+- Rollback: migration keeps prior policies in a comment block; a follow-up migration can restore them, and the data repair only rewrites `reviewer_id` on unsubmitted self drafts (idempotent).
 
-- Only `src/components/review/PreviousMonthsScoreMini.tsx` is touched.
-- No changes to data fetching, scoring math, RLS, workflows, or any other card.
-- No change to the KRA/KPI monthly review OR annual review business logic.
-- Purely a Tailwind/layout fix.
+## Fix (3 parts, one migration + one small hook change)
 
-## Risk & Impact
+### 1. Data repair (one-shot, in migration)
+For every response row where:
+- `reviewer_role = 'self'`
+- `submitted_at IS NULL` AND `is_locked = false`
+- parent instance `overall_status = 'pending_self'`
+- `reviewer_id <> instance.employee_id`
 
-- Data Impact: none.
-- Workflow Impact: none.
-- UI Impact: cells in the Previous Months mini strip now render month and year on two lines; score sits below. Desktop appearance is virtually identical (~2px taller strip).
-- Regression Risk: negligible — component is only consumed inside the scorecard side card (`UnifiedScorecard`, `KpiJourneySection`).
-- Rollback: revert the single-file diff.
+reassign `reviewer_id := instance.employee_id`. Log each rewrite into `annual_review_head_remap_audit_YYYY_MM` (reuse existing audit table pattern) with reason `self_proxy_draft_reassigned_v1`. Preserves the draft content the proxy typed so nothing is lost; hands ownership back to the employee.
 
-## Verification
+### 2. RLS adjustment
+Add two narrow predicates:
 
-- Visual check at 469px viewport (current preview width) confirms no overlap.
-- Visual check at desktop confirms unchanged layout.
-- No test changes required (component has no existing tests; behaviour unchanged).
+- `responses_select_visible`: also allow when
+  `reviewer_role='self' AND EXISTS(instance where employee_id=auth.uid() AND overall_status='pending_self')`.
+- `responses_self_update`: also allow when
+  `reviewer_role='self' AND is_locked=false AND EXISTS(instance where employee_id=auth.uid() AND overall_status='pending_self')`.
 
-## Docs
+Effect: while a self review is legitimately open, the reviewee can always read + edit their own self row regardless of who last touched it. Nothing changes once the instance advances past `pending_self`.
 
-- `DOCUMENTATION.md`: append a patch entry (v-bump `+.1`) noting "PreviousMonthsScoreMini: two-line month/year to prevent narrow-viewport overlap".
-- `POLICY.md`: not applicable (presentation-only fix, no policy change).
+### 3. Client hardening (`useAnnualReviewSelfDraft` / self-review save path)
+On save, force-write `reviewer_id = user.id` in the upsert payload for `reviewer_role='self'` (currently it re-uses whatever came back on read). This prevents a future proxy save from re-orphaning the row.
+
+No UI redesign, no workflow logic change.
+
+## Tests
+
+- `src/test/annualReview/selfDraftProxyLockout.test.ts` — unit test for the SELECT + UPDATE predicate matrix (employee, proxy, admin, HR PMS, unrelated user × pending_self / pending_bu / completed).
+- SQL smoke in the migration: assert that after repair, no `pending_self` instance has a `self` row with `reviewer_id <> employee_id AND submitted_at IS NULL`.
+
+## Docs / policy sync
+
+- `POLICY.md` §AR-SELF-DRAFT-OWNERSHIP (new): "Self-review draft rows MUST always be owned by the reviewee; proxy assistance updates content but never transfers ownership. RLS guarantees the reviewee can read + edit their own self draft while `overall_status='pending_self'`."
+- `DOCUMENTATION.md` — version bump + entry describing the lockout RCA, data repair, RLS extension, and client fix.
+- `mem://features/annual-review/assisted-submission` — append a note that proxy save must never rewrite `reviewer_id` away from the reviewee.
+
+## Files touched
+
+- `supabase/migrations/<ts>_annual_review_self_draft_ownership.sql` (new): data repair + policy replace + audit rows.
+- `src/hooks/useAnnualReviewSelfDraft.ts` (or the equivalent self-save site — I'll confirm the exact file when implementing): force `reviewer_id = user.id` on upsert.
+- `src/test/annualReview/selfDraftProxyLockout.test.ts` (new).
+- `POLICY.md`, `DOCUMENTATION.md`, memory file above.
+
+Ready to implement on approval.
