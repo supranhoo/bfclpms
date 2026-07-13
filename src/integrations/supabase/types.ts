@@ -13987,6 +13987,32 @@ export type Database = {
           reporting_manager_id: string
         }[]
       }
+      get_monthly_trend: {
+        Args: {
+          p_from_month: string
+          p_from_year: number
+          p_include_inactive?: boolean
+          p_to_month: string
+          p_to_year: number
+        }
+        Returns: {
+          business_unit_id: string
+          business_unit_name: string
+          department_id: string
+          department_name: string
+          designation: string
+          employee_code: string
+          employee_id: string
+          final_only_score: number
+          full_name: string
+          is_active: boolean
+          reporting_manager_id: string
+          reporting_manager_label: string
+          review_period: string
+          review_year: number
+          weighted_score: number
+        }[]
+      }
       get_org_kpi_data_entry_snapshot: {
         Args: { p_period: string; p_year: number }
         Returns: Json
