@@ -68,6 +68,7 @@ function CriterionRow({
   onRemoveEvidence,
 }: CriteriaScoringMatrixProps & { criterion: TemplateCriterion }) {
   const [uploading, setUploading] = useState(false);
+  const [pickedOptionId, setPickedOptionId] = useState<string | null>(null);
   const { t, tTemplate, tTemplateOptionBilingual, currentLanguage, defaultLanguage } = useAnnualReviewI18n();
   const criterionName = tTemplate('criterion', criterion.id, 'name', criterion.name);
   const criterionDesc = criterion.description
@@ -79,6 +80,14 @@ function CriterionRow({
   const enableRemarks = criterion.enable_remarks !== false;
   const enableEvidence = !!criterion.enable_evidence;
   const hasOptions = Array.isArray(criterion.options) && criterion.options.length > 0;
+  const pickedOption = hasOptions
+    ? criterion.options!.find((opt) => opt.id === pickedOptionId)
+    : undefined;
+  const activeOptionId = hasOptions && typeof score === 'number'
+    ? pickedOption?.score === score
+      ? pickedOption.id
+      : criterion.options!.find((opt) => opt.score === score)?.id ?? null
+    : null;
   const optionLabel = (opt: NonNullable<TemplateCriterion['options']>[number]) => {
     const translated = opt.label_hi?.trim();
     const fallback = opt.label;
@@ -134,7 +143,7 @@ function CriterionRow({
           {hasOptions ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               {criterion.options!.map((opt) => {
-                const active = score === opt.score;
+                const active = activeOptionId === opt.id;
                 const c = SCORE_COLOR[opt.score] ?? SCORE_COLOR[0];
                 const label = optionLabel(opt);
                 return (
@@ -142,7 +151,10 @@ function CriterionRow({
                   <button
                     type="button"
                     disabled={readOnly}
-                    onClick={() => onChangeScore?.(criterion.id, opt.score)}
+                    onClick={() => {
+                      setPickedOptionId(opt.id);
+                      onChangeScore?.(criterion.id, opt.score);
+                    }}
                     aria-pressed={active}
                     aria-label={`${label} — Score ${opt.score}`}
                     className={[
