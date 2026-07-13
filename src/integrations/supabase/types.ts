@@ -1057,6 +1057,39 @@ export type Database = {
           },
         ]
       }
+      annual_review_self_draft_reassign_audit: {
+        Row: {
+          created_at: string
+          cycle_id: string | null
+          id: string
+          instance_id: string
+          new_reviewer_id: string | null
+          old_reviewer_id: string | null
+          reason: string
+          response_id: string
+        }
+        Insert: {
+          created_at?: string
+          cycle_id?: string | null
+          id?: string
+          instance_id: string
+          new_reviewer_id?: string | null
+          old_reviewer_id?: string | null
+          reason: string
+          response_id: string
+        }
+        Update: {
+          created_at?: string
+          cycle_id?: string | null
+          id?: string
+          instance_id?: string
+          new_reviewer_id?: string | null
+          old_reviewer_id?: string | null
+          reason?: string
+          response_id?: string
+        }
+        Relationships: []
+      }
       annual_review_self_review_bundle_items: {
         Row: {
           bundle_id: string
