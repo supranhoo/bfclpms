@@ -139,18 +139,21 @@ export function PreviousMonthsScoreMini({
       <p className="text-[10px] font-medium text-muted-foreground mb-1.5 uppercase tracking-wider">
         Previous Months
       </p>
-      <div className="grid gap-1 grid-cols-3">
+      <div className="grid gap-2 grid-cols-3">
         {results.map((r) => (
-          <div key={`${r.month}-${r.year}`} className="text-center">
-            <p className="text-[10px] text-muted-foreground font-medium">
-              {r.month.slice(0, 3)} {r.year}
+          <div key={`${r.month}-${r.year}`} className="text-center min-w-0">
+            <p className="text-[10px] leading-tight text-muted-foreground font-medium">
+              {r.month.slice(0, 3)}
+            </p>
+            <p className="text-[9px] leading-tight text-muted-foreground">
+              {r.year}
             </p>
             {r.score !== null ? (
-              <p className={cn('text-sm font-bold', scoreColor(r.score))}>
+              <p className={cn('text-sm font-bold mt-0.5', scoreColor(r.score))}>
                 {r.score.toFixed(2)}
               </p>
             ) : (
-              <p className="text-[10px] text-muted-foreground italic">N/A</p>
+              <p className="text-[10px] text-muted-foreground italic mt-0.5">N/A</p>
             )}
           </div>
         ))}
