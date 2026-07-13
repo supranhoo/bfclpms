@@ -1,60 +1,58 @@
 ## Root cause
 
-Love Sahrawat (101896) — and every employee submitting self-review — hits `new row violates row-level security policy for table "review_submissions"` because the client submits in the wrong order relative to the newly tightened RLS policy.
+Shailesh Singh (200511, `3ad163a6-…`) is blocked by the **pilot allow-list gate** on `/annual-review`, not by data or RLS.
 
-The recent policy hardening (see prior turn: "Review submission self-update: Column-scope employee UPDATE to self_* fields only, gated by kpi_status='self_review'") requires, for both INSERT and UPDATE on `review_submissions` by an employee:
+Evidence:
+- His instance `31e8123c-…` is healthy: `overall_status = pending_self`, `self` response row exists, `reviewer_id` = Shailesh, `is_locked = false`. RLS on `annual_review_instances` and `annual_review_responses` allows him to read AND update.
+- The active cycle "Annual Review – 2025-2026" is the only one; `useMyInstance` would return his row.
+- `AnnualReviewGate` calls the feature-flag RPC `is_feature_flag_enabled_for_me('annual_review_enabled')`. That flag has:
+  - `value = true`
+  - `target_roles = {admin, hr_pms}`
+  - `target_user_ids` = 632 uuids — **Shailesh's uuid is NOT in this list**
+- So the RPC returns `false` for him → gate does `<Navigate to="/dashboard" replace />` → the "Read-only" page he sees is the dashboard, not the self-review form. The admin's screenshots are the `/annual-review/team/:id` route (reviewer view), which correctly renders read-only for anyone who isn't the active-stage reviewer.
 
-```
-EXISTS (
-  SELECT 1 FROM kpis k
-  WHERE k.id = review_submissions.kpi_id
-    AND k.employee_id = auth.uid()
-    AND k.status = 'self_review'
-)
-```
+## Risk & Impact Report
 
-But `src/hooks/useKpis.ts` (`submitSelfReview`, ~line 1060-1089) does the reverse:
+- **Data impact:** None. No schema, RLS, or historical data changes.
+- **Workflow impact:** Any employee who has a seeded annual-review instance but is missing from `admin_feature_flags.target_user_ids['annual_review_enabled']` becomes unable to submit self-review. This is a data-drift bug in the pilot allow-list, not a code bug — but it is currently silent (redirect to dashboard, no message).
+- **UI/UX impact:** After fix, affected employees regain access to `/annual-review` and the sidebar "My Annual Review" link.
+- **Regression risk:** Low. We only widen access to users who already have a seeded instance in the current active cycle; admin/hr_pms remain covered by role.
+- **Scalability impact:** One extra RPC-side `EXISTS` check against `annual_review_instances` scoped by `employee_id = auth.uid()` + active cycle — indexed lookup.
+- **Mitigation:** Keep the existing role/user-id allow-list; only ADD the instance-existence path. Unit test on the RPC + gate.
 
-1. `upsert` into `review_submissions` — **blocked** because `kpis.status` is still `kra_set`.
-2. Only afterwards, `update kpis.status = 'self_review'`.
+## Plan
 
-Step 1 always fails; step 2 never runs. Result: toast "Submission Failed – new row violates row-level security policy".
+**A. Immediate unblock for Shailesh (data fix — 1 row)**
+- Append `3ad163a6-3c1b-4adb-b9c1-382f77b94542` to `admin_feature_flags.target_user_ids` for key `annual_review_enabled`. Idempotent, audit-friendly.
 
-Confirmed via DB: employee 101896 has 15 KPIs in `kra_set`, 0 in `self_review`. Same client bug affects every employee on the platform since the RLS tightening.
+**B. Structural fix (SSOT — instance existence implies pilot access)**
+- Amend the SECURITY DEFINER function `is_feature_flag_enabled_for_me` (only for the `annual_review_enabled` branch, or via a wrapper) so it also returns `true` when there is a non-excluded `annual_review_instances` row in an `active` cycle with `employee_id = auth.uid()`, `manager_id = auth.uid()`, `skip_id = auth.uid()`, `dept_head_id = auth.uid()`, `bu_head_id = auth.uid()`, or `hr_id = auth.uid()`.
+- Rationale: an assigned reviewee or reviewer is by definition already in the pilot; requiring double-bookkeeping in the allow-list produces exactly this bug.
+- Keep the explicit `target_roles` / `target_user_ids` paths unchanged.
 
-## Risk & impact
+**C. Diagnostic surface (prevent silent redirect)**
+- In `AnnualReviewGate`, when `enabled !== true` AND the user has any seeded instance in the active cycle, log a `console.warn` with the instance id and show a small "You don't have pilot access — contact HR" card instead of a silent redirect to `/dashboard`. Prevents future "why can't I fill self review" tickets.
 
-- Scope: single client-side reorder in `useKpis.ts` — 2 blocks swapped.
-- Data: no schema, RLS, or workflow-logic change. Zero migration.
-- Regression risk: minimal. The `kpis` UPDATE policy already permits an employee to move their own KPI from `kra_set → self_review` (that's how it worked before — status flip was step 2 and never rejected). If the status flip succeeds but the submission upsert then fails for a *non-RLS* reason, the KPI is left in `self_review` with no submission row — same visible state the app already handles today (self-review sheet reopens on `self_review` with empty fields). Add a compensating rollback catch so status is reverted to `kra_set` on submission failure to avoid orphaning.
-- Rollback: trivial revert of the reorder + try/catch.
+## Technical details
 
-## Fix
+- Migration: `ALTER FUNCTION public.is_feature_flag_enabled_for_me(text)` — add the annual-review-specific EXISTS branch. Search-path pinned, `SECURITY DEFINER`, unchanged signature.
+- Data patch (Section A): single `UPDATE admin_feature_flags SET target_user_ids = array_append(...) WHERE key = 'annual_review_enabled' AND NOT ('…' = ANY(target_user_ids))`.
+- Frontend touch: `src/components/annual-review/AnnualReviewGate.tsx` — replace the blanket `<Navigate to="/dashboard">` with a conditional info card when a seeded instance exists.
+- Tests:
+  - `AnnualReviewGate.test.tsx` — new case: flag `false` + seeded instance → renders children (post-RPC fix) OR shows the diagnostic card (frontend fallback).
+  - PG regression: `pg_tap`-style check that `is_feature_flag_enabled_for_me` returns true for a user with a pending self instance who is not in `target_user_ids`.
+- DOCUMENTATION.md: add entry under "Annual Review – Pilot Access" describing the SSOT change.
+- POLICY.md §AR-PILOT-ALLOWLIST: amend — instance assignment is authoritative; explicit allow-list remains for pre-seed dry runs.
 
-In `src/hooks/useKpis.ts` `submitSelfReview` mutation:
+## Rollout & rollback
 
-1. Flip `kpis.status` to `self_review` FIRST (satisfies RLS pre-condition).
-2. Then upsert the `review_submissions` row.
-3. Wrap step 2 in a try/catch — on failure, revert `kpis.status` back to `kra_set` so the user can retry cleanly, and re-throw the original error to the toast.
-4. Audit log stays after the successful upsert.
+- Section A is instantly reversible (`array_remove`).
+- Section B function change ships behind a normal migration; rollback = redeploy prior function body (kept in `docs/adr/`).
+- Section C is a pure UI change.
 
-The `is_na` self-N/A path in the same file (if it does the same upsert-first pattern) gets the same reorder — I'll re-check it while editing.
+## Steps → Verification
 
-## Tests
-
-- `src/test/selfReviewSubmitOrder.test.ts` — new: mocks supabase client, asserts the status update is called BEFORE the submissions upsert, and that a failing upsert triggers the status-revert compensator.
-- Re-run `src/test/bugBountyFixes.test.ts` and `src/test/self*.test.ts` to catch regressions in the self-review flow.
-
-## Docs / policy sync
-
-- `POLICY.md` §SELF-REVIEW-SUBMIT-ORDER (new): "Client-side self-review submission MUST flip `kpis.status` to `self_review` before writing to `review_submissions`. Any submission failure must compensate by reverting the status flip. This mirrors the RLS pre-condition; do not relax the RLS in place of ordering the client correctly."
-- `DOCUMENTATION.md` version bump + entry.
-- `mem://features/review/self-review-specifications` — append the ordering rule.
-
-## Files touched
-
-- `src/hooks/useKpis.ts` (reorder + compensator in `submitSelfReview`, ~30 line diff).
-- `src/test/selfReviewSubmitOrder.test.ts` (new).
-- `POLICY.md`, `DOCUMENTATION.md`, memory file above.
-
-Ready to implement on approval.
+1. Apply data patch A → verify `is_feature_flag_enabled_for_me` returns true for Shailesh via psql (`SET LOCAL role authenticated; SET LOCAL request.jwt.claims …`) — Shailesh can now open `/annual-review` and see editable form.
+2. Ship migration B → same RPC returns true for another sampled reviewee not in the allow-list.
+3. Ship frontend C → simulate `enabled=false` with seeded instance in unit test; assert diagnostic card renders (no redirect).
+4. Manually re-check with a second affected user before closing.
