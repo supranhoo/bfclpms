@@ -397,6 +397,11 @@ const App = () => (
                     <KRAIssuance />
                   </ReportRoute>
                 } />
+                <Route path="/reports/first-kra-rollout" element={
+                  <ReportRoute reportKey="first-kra-rollout">
+                    <FirstKraRolloutReport />
+                  </ReportRoute>
+                } />
                 <Route path="/reports/queries" element={
                   <ReportRoute reportKey="queries">
                     <QueryReport />
