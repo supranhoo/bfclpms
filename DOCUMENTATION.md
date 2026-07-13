@@ -1,6 +1,8 @@
 # Performance Management System (PMS) - Documentation
 
-> **Last Updated:** 2026-07-13 · **Version:** v2.66.103
+> **Last Updated:** 2026-07-13 · **Version:** v2.66.104
+>
+> **Version:** 2.66.104 — **Monthly Scorecard Trend now aggregates on the server (2026-07-13).** RCA: 6-month ranges (13k+ KPIs) triggered 88+ client-side REST batches on `review_submissions`; any single batch timing out or exceeding the PostgREST URL limit threw the entire report into the generic "Failed to load trend data. The range may be too wide…" banner, even when every employee had scores below the PIP threshold in every month. CAPA: added `public.get_monthly_trend(...)` SECURITY DEFINER RPC gated to admin/hr_pms/management; rewrote `useMonthlyTrend` to a single round trip and pivot on the client; the error banner now surfaces the underlying error message so future failures are actionable. Only the Monthly Scorecard → Date Range (Trend) tab consumes cross-month ranges; other reports remain single-period. See POLICY §REPORT-TREND-SERVER-AGG.
 >
 > **Version:** 2.66.103 — **Annual Review option cards now select only one authored option (2026-07-13).** RCA: one active FAD- M - E&I criterion (`crit_rhsnun4`, FAD - E&I KPI & Target Achievement) had six authored options persisted with `score: 0`; the review form highlighted cards by comparing only `currentScore === option.score`, so selecting/loading score 0 ticked every card. CAPA: repaired the affected template option scores to the intended 5→0 ladder, changed `CriteriaScoringMatrix` to keep the clicked option id as the active visual identity while still persisting the numeric score, and added an admin authoring warning for duplicate option scores. Historical submitted criteria_scores are not recalculated; stored 0 remains a valid severe-failure score. Regression: `src/test/annualReview/criteriaScoringMatrixOptions.test.tsx` covers duplicate-score hydration and click behavior. See POLICY §AR-OPTION-CARD-SELECTION.
 >
