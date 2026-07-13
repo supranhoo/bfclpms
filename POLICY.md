@@ -1,6 +1,7 @@
-### §REPORT-TREND-SERVER-AGG — Multi-period trend reports MUST aggregate on the server (v2.66.104, 2026-07-13)
+### §REPORT-TREND-SERVER-AGG — Multi-period trend reports MUST aggregate on the server (v2.66.107, 2026-07-13)
 - Cross-month/quarter/year trend reports (currently: Monthly Scorecard → Date Range Trend) MUST perform score aggregation inside Postgres via a dedicated function (`public.get_monthly_trend` and future siblings). Client-side batching of `review_submissions` by `kpi_id IN (...)` for a full range is banned — it fails intermittently on URL length and per-batch RLS cost and hides the failure behind a generic error banner.
 - The aggregation function MUST be `SECURITY DEFINER`, gate access to Admin / HR-PMS / Management, mirror the canonical best-of-8 score cascade (final → management → auditor → hr_pms → skip_level → manager → self), exclude `is_na` submissions and non-positive weightage, and return per-employee per-month rows the client can pivot without re-fetching.
+- Employee business-unit metadata in trend output MUST be resolved from the current hierarchy (`profiles.department_id → departments.business_unit_id → business_units.id`). The trend RPC MUST NOT assume a denormalized `profiles.business_unit_id` column exists.
 - Report UIs MUST surface the actual error message from the hook. Generic "range may be too wide" copy is banned — it prevented operators from diagnosing real timeouts, authorization gaps, and RLS regressions.
 
 ### §AR-OPTION-CARD-SELECTION — Annual Review authored option cards select by option identity (v2.66.103, 2026-07-13)
