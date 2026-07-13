@@ -1057,36 +1057,49 @@ export function useSubmitSelfReview() {
         throw friendly(lastErr);
       };
 
-      // First upsert the submission (with retry on transient errors)
-      await runWithRetry(() =>
-        supabase
-          .from('review_submissions')
-          .upsert({
-            kpi_id,
-            achieved_value: is_na ? null : achieved_value,
-            // §SELF-SNAPSHOT-DISPLAY Part 2: write the frozen self-entered
-            // value alongside the (shared, reviewer-mutable) achieved_value.
-            self_achieved_value: is_na ? null : achieved_value,
-            self_rating: is_na ? null : self_rating,
-            self_score: is_na ? null : self_score,
-            self_remarks,
-            self_evidence_url,
-            self_evidence_urls: self_evidence_urls || [],
-            is_na,
-            na_marked_by_role: is_na ? 'employee' : null,
-            kpi_status: 'submitted' as const,
-          }, {
-            onConflict: 'kpi_id',
-          }) as any
-      );
-
-      // Then update KPI status to self_review (employee has submitted, awaiting manager)
+      // POLICY §SELF-REVIEW-SUBMIT-ORDER
+      // RLS on `review_submissions` requires the parent `kpis.status` to
+      // already be `self_review` before an employee can insert/update. Flip
+      // status FIRST, then upsert the submission. On upsert failure, revert
+      // the status flip so the KPI is not orphaned in `self_review` with no
+      // row.
       await runWithRetry(() =>
         supabase
           .from('kpis')
           .update({ status: 'self_review' as const })
           .eq('id', kpi_id) as any
       );
+
+      try {
+        await runWithRetry(() =>
+          supabase
+            .from('review_submissions')
+            .upsert({
+              kpi_id,
+              achieved_value: is_na ? null : achieved_value,
+              // §SELF-SNAPSHOT-DISPLAY Part 2: write the frozen self-entered
+              // value alongside the (shared, reviewer-mutable) achieved_value.
+              self_achieved_value: is_na ? null : achieved_value,
+              self_rating: is_na ? null : self_rating,
+              self_score: is_na ? null : self_score,
+              self_remarks,
+              self_evidence_url,
+              self_evidence_urls: self_evidence_urls || [],
+              is_na,
+              na_marked_by_role: is_na ? 'employee' : null,
+              kpi_status: 'submitted' as const,
+            }, {
+              onConflict: 'kpi_id',
+            }) as any
+        );
+      } catch (submissionErr) {
+        // Compensate: put the KPI back into kra_set so the user can retry.
+        await supabase
+          .from('kpis')
+          .update({ status: 'kra_set' as const })
+          .eq('id', kpi_id);
+        throw submissionErr;
+      }
 
       // Fire-and-forget audit log for recall eligibility tracking
       supabase.auth.getUser().then(({ data }) => {

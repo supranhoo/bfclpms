@@ -1,66 +1,60 @@
 ## Root cause
 
-Shailesh Singh (200511) is on `pending_self` for his annual-review instance, but the row in `annual_review_responses` for `reviewer_role='self'` has `reviewer_id = Prakash Chandra Goswami (200549)` — a proxy who opened/drafted the self review on his behalf (Admin View / assisted flow).
+Love Sahrawat (101896) — and every employee submitting self-review — hits `new row violates row-level security policy for table "review_submissions"` because the client submits in the wrong order relative to the newly tightened RLS policy.
 
-That combined with schema + RLS locks the employee out:
+The recent policy hardening (see prior turn: "Review submission self-update: Column-scope employee UPDATE to self_* fields only, gated by kpi_status='self_review'") requires, for both INSERT and UPDATE on `review_submissions` by an employee:
 
-1. `UNIQUE (instance_id, reviewer_role)` — only one `self` row per instance can exist.
-2. RLS `responses_select_visible` lets the employee see the row only if `reviewer_id = auth.uid()` OR the instance is `completed`. While `pending_self` with a proxy-owned row, the employee **cannot even SELECT** the draft.
-3. RLS `responses_self_update` allows update only if `reviewer_id = auth.uid()` OR caller is a valid proxy. The actual employee is neither, so UPDATE is blocked.
-4. His UI therefore sees "no draft" and attempts an INSERT, which fails on the unique constraint. Result: nothing saves, self review can't be filled.
+```
+EXISTS (
+  SELECT 1 FROM kpis k
+  WHERE k.id = review_submissions.kpi_id
+    AND k.employee_id = auth.uid()
+    AND k.status = 'self_review'
+)
+```
 
-This is systemic — a query across the active cycle shows **many** `pending_self` instances whose `self` row is owned by a proxy (managers/admins), so the same lockout affects a large batch of employees, not just Shailesh.
+But `src/hooks/useKpis.ts` (`submitSelfReview`, ~line 1060-1089) does the reverse:
+
+1. `upsert` into `review_submissions` — **blocked** because `kpis.status` is still `kra_set`.
+2. Only afterwards, `update kpis.status = 'self_review'`.
+
+Step 1 always fails; step 2 never runs. Result: toast "Submission Failed – new row violates row-level security policy".
+
+Confirmed via DB: employee 101896 has 15 KPIs in `kra_set`, 0 in `self_review`. Same client bug affects every employee on the platform since the RLS tightening.
 
 ## Risk & impact
 
-- Data: no destructive change. Draft self responses touched only where `submitted_at IS NULL` AND `overall_status='pending_self'`. Submitted / advanced rows are untouched.
-- Workflow: unchanged — status stays `pending_self`, chain stays `self → bu_head`.
-- Security: SELECT/UPDATE policies broadened only for the reviewee on their own instance while `overall_status='pending_self'` and `is_locked=false`. Proxy submission stays fully supported.
-- Regression risk: low; scoped predicate (`reviewer_role='self'` + own instance + pending_self + unlocked).
-- Rollback: migration keeps prior policies in a comment block; a follow-up migration can restore them, and the data repair only rewrites `reviewer_id` on unsubmitted self drafts (idempotent).
+- Scope: single client-side reorder in `useKpis.ts` — 2 blocks swapped.
+- Data: no schema, RLS, or workflow-logic change. Zero migration.
+- Regression risk: minimal. The `kpis` UPDATE policy already permits an employee to move their own KPI from `kra_set → self_review` (that's how it worked before — status flip was step 2 and never rejected). If the status flip succeeds but the submission upsert then fails for a *non-RLS* reason, the KPI is left in `self_review` with no submission row — same visible state the app already handles today (self-review sheet reopens on `self_review` with empty fields). Add a compensating rollback catch so status is reverted to `kra_set` on submission failure to avoid orphaning.
+- Rollback: trivial revert of the reorder + try/catch.
 
-## Fix (3 parts, one migration + one small hook change)
+## Fix
 
-### 1. Data repair (one-shot, in migration)
-For every response row where:
-- `reviewer_role = 'self'`
-- `submitted_at IS NULL` AND `is_locked = false`
-- parent instance `overall_status = 'pending_self'`
-- `reviewer_id <> instance.employee_id`
+In `src/hooks/useKpis.ts` `submitSelfReview` mutation:
 
-reassign `reviewer_id := instance.employee_id`. Log each rewrite into `annual_review_head_remap_audit_YYYY_MM` (reuse existing audit table pattern) with reason `self_proxy_draft_reassigned_v1`. Preserves the draft content the proxy typed so nothing is lost; hands ownership back to the employee.
+1. Flip `kpis.status` to `self_review` FIRST (satisfies RLS pre-condition).
+2. Then upsert the `review_submissions` row.
+3. Wrap step 2 in a try/catch — on failure, revert `kpis.status` back to `kra_set` so the user can retry cleanly, and re-throw the original error to the toast.
+4. Audit log stays after the successful upsert.
 
-### 2. RLS adjustment
-Add two narrow predicates:
-
-- `responses_select_visible`: also allow when
-  `reviewer_role='self' AND EXISTS(instance where employee_id=auth.uid() AND overall_status='pending_self')`.
-- `responses_self_update`: also allow when
-  `reviewer_role='self' AND is_locked=false AND EXISTS(instance where employee_id=auth.uid() AND overall_status='pending_self')`.
-
-Effect: while a self review is legitimately open, the reviewee can always read + edit their own self row regardless of who last touched it. Nothing changes once the instance advances past `pending_self`.
-
-### 3. Client hardening (`useAnnualReviewSelfDraft` / self-review save path)
-On save, force-write `reviewer_id = user.id` in the upsert payload for `reviewer_role='self'` (currently it re-uses whatever came back on read). This prevents a future proxy save from re-orphaning the row.
-
-No UI redesign, no workflow logic change.
+The `is_na` self-N/A path in the same file (if it does the same upsert-first pattern) gets the same reorder — I'll re-check it while editing.
 
 ## Tests
 
-- `src/test/annualReview/selfDraftProxyLockout.test.ts` — unit test for the SELECT + UPDATE predicate matrix (employee, proxy, admin, HR PMS, unrelated user × pending_self / pending_bu / completed).
-- SQL smoke in the migration: assert that after repair, no `pending_self` instance has a `self` row with `reviewer_id <> employee_id AND submitted_at IS NULL`.
+- `src/test/selfReviewSubmitOrder.test.ts` — new: mocks supabase client, asserts the status update is called BEFORE the submissions upsert, and that a failing upsert triggers the status-revert compensator.
+- Re-run `src/test/bugBountyFixes.test.ts` and `src/test/self*.test.ts` to catch regressions in the self-review flow.
 
 ## Docs / policy sync
 
-- `POLICY.md` §AR-SELF-DRAFT-OWNERSHIP (new): "Self-review draft rows MUST always be owned by the reviewee; proxy assistance updates content but never transfers ownership. RLS guarantees the reviewee can read + edit their own self draft while `overall_status='pending_self'`."
-- `DOCUMENTATION.md` — version bump + entry describing the lockout RCA, data repair, RLS extension, and client fix.
-- `mem://features/annual-review/assisted-submission` — append a note that proxy save must never rewrite `reviewer_id` away from the reviewee.
+- `POLICY.md` §SELF-REVIEW-SUBMIT-ORDER (new): "Client-side self-review submission MUST flip `kpis.status` to `self_review` before writing to `review_submissions`. Any submission failure must compensate by reverting the status flip. This mirrors the RLS pre-condition; do not relax the RLS in place of ordering the client correctly."
+- `DOCUMENTATION.md` version bump + entry.
+- `mem://features/review/self-review-specifications` — append the ordering rule.
 
 ## Files touched
 
-- `supabase/migrations/<ts>_annual_review_self_draft_ownership.sql` (new): data repair + policy replace + audit rows.
-- `src/hooks/useAnnualReviewSelfDraft.ts` (or the equivalent self-save site — I'll confirm the exact file when implementing): force `reviewer_id = user.id` on upsert.
-- `src/test/annualReview/selfDraftProxyLockout.test.ts` (new).
+- `src/hooks/useKpis.ts` (reorder + compensator in `submitSelfReview`, ~30 line diff).
+- `src/test/selfReviewSubmitOrder.test.ts` (new).
 - `POLICY.md`, `DOCUMENTATION.md`, memory file above.
 
 Ready to implement on approval.
