@@ -15338,6 +15338,91 @@ export type Database = {
       }
       submit_audit_run: { Args: { p_run_id: string }; Returns: Json }
       submit_permit: { Args: { p_permit_id: string }; Returns: Json }
+      submit_self_review: {
+        Args: {
+          p_achieved_value: number
+          p_is_na: boolean
+          p_kpi_id: string
+          p_self_evidence_url: string
+          p_self_evidence_urls: Json
+          p_self_rating: string
+          p_self_remarks: string
+          p_self_score: number
+        }
+        Returns: {
+          achieved_value: number | null
+          auditor_achieved_value: number | null
+          auditor_evidence_url: string | null
+          auditor_evidence_urls: Json | null
+          auditor_rating: Database["public"]["Enums"]["rating_level"] | null
+          auditor_remarks: string | null
+          auditor_score: number | null
+          auto_advance_reason: string | null
+          final_rating: Database["public"]["Enums"]["rating_level"] | null
+          final_revision_no: number
+          final_score: number | null
+          final_score_calculated_at: string | null
+          final_score_explanation: string | null
+          final_score_rule_snapshot: Json | null
+          final_score_rule_type: string | null
+          functional_manager_evidence_urls: Json
+          functional_manager_rating:
+            | Database["public"]["Enums"]["rating_level"]
+            | null
+          functional_manager_remarks: string | null
+          functional_manager_score: number | null
+          group_write_batch_id: string | null
+          hr_pms_achieved_value: number | null
+          hr_pms_evidence_url: string | null
+          hr_pms_evidence_urls: Json | null
+          hr_pms_rating: Database["public"]["Enums"]["rating_level"] | null
+          hr_pms_remarks: string | null
+          hr_pms_score: number | null
+          id: string
+          is_auditor_override_of_hr: boolean
+          is_group_override: boolean
+          is_na: boolean
+          kpi_id: string
+          kpi_status: Database["public"]["Enums"]["kpi_status"]
+          management_achieved_value: number | null
+          management_evidence_url: string | null
+          management_evidence_urls: Json | null
+          management_rating: Database["public"]["Enums"]["rating_level"] | null
+          management_remarks: string | null
+          management_score: number | null
+          manager_achieved_value: number | null
+          manager_evidence_url: string | null
+          manager_evidence_urls: Json | null
+          manager_rating: Database["public"]["Enums"]["rating_level"] | null
+          manager_remarks: string | null
+          manager_score: number | null
+          na_marked_by_role: string | null
+          na_reason: string | null
+          performance_review_id: string | null
+          row_version: number
+          self_achieved_value: number | null
+          self_evidence_url: string | null
+          self_evidence_urls: Json | null
+          self_rating: Database["public"]["Enums"]["rating_level"] | null
+          self_remarks: string | null
+          self_score: number | null
+          skip_level_achieved_value: number | null
+          skip_level_evidence_url: string | null
+          skip_level_evidence_urls: Json | null
+          skip_level_rating: Database["public"]["Enums"]["rating_level"] | null
+          skip_level_remarks: string | null
+          skip_level_score: number | null
+          skipped_by_management: Json | null
+          submitted_at: string
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "review_submissions"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       suggest_alias_candidates: {
         Args: { p_limit?: number; p_min_similarity?: number }
         Returns: {
