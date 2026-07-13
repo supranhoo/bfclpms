@@ -91,7 +91,9 @@ export function CriterionOptionsDialog({
       seenScores.set(s, (seenScores.get(s) ?? 0) + 1);
     });
     const dupScores = [...seenScores.entries()].filter(([, c]) => c > 1).map(([s]) => s);
-    if (dupScores.length) list.push(`Duplicate scores: ${dupScores.join(', ')}`);
+    if (dupScores.length) {
+      list.push(`Duplicate option scores: ${dupScores.join(', ')}. Review forms will highlight only one selected option; use unique scores when each option represents a different band.`);
+    }
     const blank = options.filter((o) => !o.label.trim()).length;
     if (blank) list.push(`${blank} option${blank > 1 ? 's' : ''} missing label`);
     const outOfRange = options.filter((o) => Number(o.score) < 0 || Number(o.score) > 5);
