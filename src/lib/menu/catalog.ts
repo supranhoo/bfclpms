@@ -179,6 +179,7 @@ const SIDEBAR_ITEMS: CatalogEntry[] = [
   item('reports-hub',         'View Reports',         'group-reports',     10, '/reports'),
   item('reports-performance', 'Performance Report',   'group-reports',     20, '/reports/performance'),
   item('reports-kra-issuance','KRA Issuance',         'group-reports',     30, '/reports/kra-issuance'),
+  item('reports-first-kra-rollout','First KRA Rollout','group-reports',    35, '/reports/first-kra-rollout'),
   item('reports-tni',         'TNI Report',           'group-reports',     40, '/reports/tni'),
 ];
 

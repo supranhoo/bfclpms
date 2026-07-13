@@ -69,6 +69,14 @@ const reports: ReportCard[] = [
     reportKey: 'kra-issuance',
   },
   {
+    title: 'First KRA Rollout',
+    description: 'See when each employee first received KRAs, who rolled them out, and how (Bundle / Auto Rollover / Manual). Includes new joiners without any KRA yet.',
+    icon: Calendar,
+    path: '/reports/first-kra-rollout',
+    color: 'text-teal-600',
+    reportKey: 'first-kra-rollout',
+  },
+  {
     title: 'Query Report',
     description: 'All open and resolved queries with response times and resolution status',
     icon: AlertTriangle,

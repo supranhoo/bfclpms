@@ -13992,6 +13992,39 @@ export type Database = {
           template_name: string
         }[]
       }
+      get_first_kra_rollout: {
+        Args: {
+          p_bu_id?: string
+          p_company_id?: string
+          p_dept_id?: string
+          p_from?: string
+          p_limit?: number
+          p_offset?: number
+          p_only_missing?: boolean
+          p_search?: string
+          p_source?: string
+          p_to?: string
+        }
+        Returns: {
+          business_unit_name: string
+          company_name: string
+          department_name: string
+          designation: string
+          doj: string
+          employee_code: string
+          employee_id: string
+          first_kra_at: string
+          first_kra_by: string
+          first_kra_by_name: string
+          first_kra_period: string
+          first_kra_year: number
+          full_name: string
+          kpis_in_first_batch: number
+          source: string
+          total_count: number
+          total_kpis: number
+        }[]
+      }
       get_incentive_program_employees: {
         Args: { _program_id: string }
         Returns: {

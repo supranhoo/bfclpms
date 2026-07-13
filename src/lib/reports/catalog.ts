@@ -87,6 +87,18 @@ export const REPORT_CATALOG: ReportSeed[] = [
     f('approved',    'Approved',      30, { data_type: 'number' }),
     f('completion',  'Completion',    40, { data_type: 'string' }),
   ], 30),
+  r('RPT-KRA-002',  'first-kra-rollout', 'KRA',  'First KRA Rollout',        '/reports/first-kra-rollout', 'reports-first-kra-rollout', [
+    f('full_name',           'Employee',           10, { is_required: true, data_type: 'string' }),
+    f('employee_code',       'Employee Code',      20, { data_type: 'string' }),
+    f('department_name',     'Department',         30, { data_type: 'string' }),
+    f('doj',                 'DOJ',                40, { data_type: 'string' }),
+    f('first_kra_period',    'First KRA Period',   50, { data_type: 'string' }),
+    f('first_kra_at',        'Rolled Out On',      60, { data_type: 'string' }),
+    f('first_kra_by_name',   'Rolled Out By',      70, { data_type: 'string' }),
+    f('source',              'Source',             80, { data_type: 'string' }),
+    f('kpis_in_first_batch', 'KPIs (first batch)', 90, { data_type: 'number' }),
+    f('total_kpis',          'Total KPIs',        100, { data_type: 'number' }),
+  ], 35),
   r('RPT-TNI-001',  'tni',               'TNI',  'Training Needs (TNI)',     '/reports/tni',               'reports-tni', [
     f('company',                 'Company',                 10, { data_type: 'string' }),
     f('employee_name',           'Employee Name',           20, { is_required: true, data_type: 'string' }),
