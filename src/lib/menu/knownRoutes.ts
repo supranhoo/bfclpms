@@ -42,6 +42,7 @@ export const KNOWN_ROUTES: ReadonlyArray<KnownRoute> = [
   { path: '/reports', label: 'Reports Hub' },
   { path: '/reports/performance', label: 'Performance Report' },
   { path: '/reports/kra-issuance', label: 'KRA Issuance Report' },
+  { path: '/reports/first-kra-rollout', label: 'First KRA Rollout' },
   { path: '/reports/tni', label: 'TNI Report' },
   { path: '/reports/incentive', label: 'Incentive Report' },
 ];
