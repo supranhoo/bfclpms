@@ -340,7 +340,12 @@ export function MonthlyTrendView({ canExport }: Props) {
             <div className="flex items-center justify-between gap-2 text-sm text-destructive border border-destructive/30 bg-destructive/10 rounded-md p-3">
               <div className="flex items-center gap-2">
                 <AlertTriangle className="h-4 w-4" />
-                Failed to load trend data. The range may be too wide or the server timed out.
+                <span>
+                  Failed to load trend data:{' '}
+                  <span className="font-medium">
+                    {(error as any)?.message || 'unknown error'}
+                  </span>
+                </span>
               </div>
               <Button variant="outline" size="sm" onClick={() => refetch()}>Retry</Button>
             </div>
