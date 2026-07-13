@@ -1355,9 +1355,25 @@ export async function upsertResponseDraft(args: {
   weighted_score?: number | null;
   notes?: string | null;
 }): Promise<AnnualReviewResponse> {
+  // POLICY §AR-SELF-DRAFT-OWNERSHIP: self-review response rows MUST always be
+  // owned by the reviewee, even when a proxy (manager/admin) is drafting on
+  // their behalf. Otherwise the reviewee gets locked out of their own draft
+  // by the (instance_id, reviewer_role) unique constraint + RLS scoping.
+  let payload = args;
+  if (args.reviewer_role === 'self') {
+    const { data: inst, error: instErr } = await db
+      .from('annual_review_instances')
+      .select('employee_id')
+      .eq('id', args.instance_id)
+      .single();
+    if (instErr) throw instErr;
+    if (inst?.employee_id) {
+      payload = { ...args, reviewer_id: inst.employee_id };
+    }
+  }
   const { data, error } = await db
     .from('annual_review_responses')
-    .upsert(args, { onConflict: 'instance_id,reviewer_role' })
+    .upsert(payload, { onConflict: 'instance_id,reviewer_role' })
     .select('*')
     .single();
   if (error) throw error;
