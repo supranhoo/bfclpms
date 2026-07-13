@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 /**
@@ -14,6 +14,23 @@ import { join } from 'node:path';
  */
 function read(rel: string) {
   return readFileSync(join(process.cwd(), rel), 'utf8');
+}
+
+function readLatestMonthlyTrendMigration() {
+  const dir = join(process.cwd(), 'supabase/migrations');
+  const files = readdirSync(dir)
+    .filter(file => file.endsWith('.sql'))
+    .sort()
+    .reverse();
+
+  for (const file of files) {
+    const src = readFileSync(join(dir, file), 'utf8');
+    if (src.includes('CREATE OR REPLACE FUNCTION public.get_monthly_trend')) {
+      return src;
+    }
+  }
+
+  throw new Error('No get_monthly_trend migration found');
 }
 
 describe('Monthly Scorecard trend — server-side aggregation contract', () => {
@@ -54,5 +71,12 @@ describe('Monthly Scorecard trend — server-side aggregation contract', () => {
   it('Monthly Trend export includes Reporting Manager column', () => {
     const view = read('src/components/reports/MonthlyTrendView.tsx');
     expect(view).toMatch(/'Reporting Manager':\s*emp\.reportingManagerName/);
+  });
+
+  it('get_monthly_trend derives business unit through department hierarchy', () => {
+    const migration = readLatestMonthlyTrendMigration();
+    expect(migration).toMatch(/d\.business_unit_id\s+AS business_unit_id/i);
+    expect(migration).toMatch(/LEFT JOIN business_units bu ON bu\.id = d\.business_unit_id/i);
+    expect(migration).not.toMatch(/p\.business_unit_id/i);
   });
 });
