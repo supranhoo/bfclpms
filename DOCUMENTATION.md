@@ -1,6 +1,8 @@
 # Performance Management System (PMS) - Documentation
 
-> **Last Updated:** 2026-07-11 · **Version:** v2.66.102
+> **Last Updated:** 2026-07-13 · **Version:** v2.66.103
+>
+> **Version:** 2.66.103 — **Annual Review option cards now select only one authored option (2026-07-13).** RCA: one active FAD- M - E&I criterion (`crit_rhsnun4`, FAD - E&I KPI & Target Achievement) had six authored options persisted with `score: 0`; the review form highlighted cards by comparing only `currentScore === option.score`, so selecting/loading score 0 ticked every card. CAPA: repaired the affected template option scores to the intended 5→0 ladder, changed `CriteriaScoringMatrix` to keep the clicked option id as the active visual identity while still persisting the numeric score, and added an admin authoring warning for duplicate option scores. Historical submitted criteria_scores are not recalculated; stored 0 remains a valid severe-failure score. Regression: `src/test/annualReview/criteriaScoringMatrixOptions.test.tsx` covers duplicate-score hydration and click behavior. See POLICY §AR-OPTION-CARD-SELECTION.
 >
 > **Version:** 2.66.102 — **Annual Review reseed now overwrites stale reviewer hierarchy snapshots (2026-07-11).** RCA: the hierarchy guard correctly resolved misconfigured Dept/BU heads during seeding, but the existing-instance update path only wrote `manager_id`, `skip_id`, `bu_head_id`, and `hr_id`; it omitted `dept_head_id` and `enabled_stages`, so employees already seeded before the guard kept stale heads such as 200114 on 200449. CAPA: the seed update patch now writes all seed-controlled hierarchy fields while still preserving `template_override_id`. Pending/self-not-started instance repair is restricted to unsubmitted rows and audit-logged with automated performer. Regression: `src/test/annualReview/seedUpdatePatch.test.ts`. See POLICY §AR-SEED-HIERARCHY-RESNAPSHOT.
 >
