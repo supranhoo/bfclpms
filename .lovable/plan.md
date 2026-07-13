@@ -1,81 +1,87 @@
-## Goal
+## Symptom
+Monthly Scorecard Report → Date Range (Trend) tab, Feb 2026 → Jul 2026 fails with
+"Failed to load trend data. The range may be too wide or the server timed out."
+Employees clearly have scores in every month of that range (many well below 2).
 
-Enforce the finalized policy without deviation: for every Annual Review instance,
+## RCA — the fetch pipeline is fragile, not the data
 
-- `dept_head_id` = `departments.head_user_id` of the employee's department (org setting).
-- `bu_head_id`  = `business_units.head_user_id` of the employee's BU (org setting).
+Verified against the DB:
+- 13,203 KPIs exist across Feb–Jul 2026.
+- 10,333 matching `review_submissions`; 9,912 have at least one non-null score.
+So the underlying data is present in every month; the report fails during **client-side fetching**, not during aggregation.
 
-No manager/ancestor fallbacks, no legacy 3-hop BU inference, no peer/self stamping.
+`src/hooks/useMonthlyTrend.ts` currently:
+1. Fetches all KPIs for the range (paginated).
+2. For every KPI id, fetches the matching submission via `IN (...)` batches of 150.
+3. With 13,203 KPIs → **~88 REST batches**, concurrency capped at 4, so ~22 waves.
+4. Each batch re-runs full RLS on `review_submissions` (63 columns × 21 policies).
+5. On the first batch that fails 3 attempts (URL length, connection reset, PostgREST timeout), the whole hook throws → banner shown, entire report empty.
 
-## Assumptions
+Even when it succeeds, the second guard (line 295 in `useMonthlyTrend.ts`) throws when `subMap.size === 0`. It also throws (line 366) if RLS filters out the profiles. Any of those trip → same red banner.
 
-- Org settings screen already lets admin set `departments.head_user_id` and `business_units.head_user_id` per department / BU — this remains the single source of truth.
-- Cycles already opened will be resynced in place; historical closed cycles are left as-is unless the user asks otherwise.
-- If a department/BU has no head configured, the slot stays `NULL` and the effective-chain resolver marks that stage as `no_reviewer_mapped` (existing behavior). Admin gets a visible warning; we do NOT invent a fallback.
+Additional issue: profile fetch omits the `manager_id` guard entirely if the current user's RLS blocks a subset — silent partial hydration is possible.
 
-## Deviations found (RCA)
+## Other range-based reports in the app
+Only one true "range across months" report exists — **Monthly Scorecard Report → Date Range (Trend)** (the one broken here). The rest are single-period:
+- Monthly Scorecard (Single Month)
+- Completion Report (per-period, one at a time)
+- KPI Detail / Audit Trail / Employee Performance Summary (single period + trend chart for one selected employee only, using cached submissions)
+- Team vs Manager Score (single period)
 
-File: `src/services/annualReview/annualReviewService.ts` (seed + reseed paths).
+There is no other cross-month "range" report. If the user expected one, we should surface the trend inside Employee Performance Summary too — flag for future work but out of scope here.
 
-1. **BU fallback path** — `bu_head_id: buResolved.headId ?? buFallback` still stamps a legacy 3-hops-above-employee ancestor when the configured BU head is missing. Violates policy.
-2. **Dept fallback path** — `resolveHierarchicalHead(..., fallbackId: mgr)` falls back to the employee's direct manager when the configured dept head is null or the dept head is inactive. Violates policy.
-3. `**resolveHierarchicalHead` (`src/lib/annualReview/hierarchyGuard.ts`)** — on `null_configured` / `inactive` / `self`, returns the caller-provided fallback. Under the new policy, dept/BU flows must pass `fallbackId: null` (i.e. leave the slot empty) instead of substituting a manager. Same applies to the second seeder (`seedInstancesForCycle` around line 1245–1262).
-4. **Preflight/admin UI** — `AnnualReviewFormMapping` / `BuHeadColumn` should surface departments and BUs with no head configured so admin can fix org settings before seeding.
-5. **In-flight instances** — existing rows already carry the wrong `dept_head_id` / `bu_head_id` (RCA history: Uttam→Amit, Ganapathi, Prabhat cases). A one-shot resync must overwrite them from org settings.
+## Fix plan
 
-## Plan (each step ends with verification)
+### Step 1 — Ship a single server-side RPC `get_monthly_trend`
+Migration adds a stable, admin/HR-scoped SQL function:
 
-### Step 1 — Tighten `hierarchyGuard` for annual-review use
+```
+get_monthly_trend(p_from_year int, p_from_month text,
+                  p_to_year int,   p_to_month text,
+                  p_include_inactive bool default false)
+returns table (
+  employee_id uuid, full_name text, employee_code text, designation text,
+  department_id uuid, department_name text,
+  business_unit_id uuid, business_unit_name text,
+  reporting_manager_id uuid, reporting_manager_label text,
+  is_active bool,
+  review_year int, review_period text,
+  weighted_score numeric,       -- Σ(bestScore*weight)/Σweight, per (emp,month), best-of-8 cascade
+  final_score numeric            -- Σ(final_score*weight)/Σweight, per (emp,month)
+)
+```
+- Aggregation happens in Postgres: one JOIN across `kpis` + `review_submissions` + `profiles` + `departments` + `business_units`.
+- Best-score cascade identical to `bestScore()` in the hook (`final → management → auditor → hr_pms → skip_level → manager → self`).
+- Skips `is_na` submissions and `weightage ≤ 0`.
+- Grants: `EXECUTE TO authenticated`; the function body applies `has_role(auth.uid(),'admin')` OR `has_role(auth.uid(),'hr_pms')` OR `has_role(auth.uid(),'management')` — mirrors current report-page access. Non-privileged callers get an empty result set (function is `SECURITY DEFINER`).
+- Return shape is long (one row per employee-month) — pivot happens on the client.
+- Adds a supporting composite index if missing: `kpis(review_year, review_period)` and `review_submissions(kpi_id)` (already indexed).
 
-- Keep the function pure; callers already control the fallback. Add an explicit `enforceConfigured: true` option that, when set, returns `{ headId: configuredHeadId ?? null, usedFallback: false, reason: 'null_configured' | 'inactive' | 'self' | 'authoritative' }` and NEVER substitutes `fallbackId`.
-- Verify: extend `src/test/annualReview/hierarchyGuard.test.ts` to assert null-in → null-out with `enforceConfigured: true`, and that `self` / `inactive` also return null (not the fallback).
+Rollback: single `DROP FUNCTION` — additive change, no schema touch.
 
-### Step 2 — Update both seeders to policy-authoritative mode
+### Step 2 — Rewrite `useMonthlyTrend` to call the RPC
+- Replace the multi-stage fetch with `supabase.rpc('get_monthly_trend', { … })`.
+- Client pivots the long rows into the existing `TrendEmployee` shape (unchanged public API — table & PIP logic untouched).
+- Drop the URL-length batching, the resilience retries, and the "subMap empty" guard (no longer applicable — SQL either returns rows or an error).
+- Keep short `staleTime` (30 s) and the "load on click" pattern.
 
-- In `seedInstancesForCycleFast` and `seedInstancesForCycle` (annualReviewService.ts):
-  - Call `resolveHierarchicalHead(..., enforceConfigured: true, fallbackId: null)` for both dept and BU.
-  - Set `dept_head_id = deptResolved.headId` (may be null).
-  - Set `bu_head_id  = buResolved.headId`  (drop `?? buFallback`; remove `buFallback` variable).
-  - Keep `fallbackEvents` logging so we can audit "missing configured head" instead of silently substituting.
-- Verify: update `src/test/orgHeadsSeederIntegration.test.ts` — assert `bu_head_id === null` when BU has no configured head (replaces the current "falls back to 3-hop ancestor" expectation), and add a case that asserts `dept_head_id === null` when the department has no head configured.
+### Step 3 — Better error surfacing on the UI
+Currently every failure collapses to one generic red banner. Change it to render the actual error message from the hook (e.g. "server timeout", "not authorized", "no matching data"). This alone would have surfaced the true cause today.
 
-### Step 3 — Resync RPC for in-flight cycles
+### Step 4 — Tests & docs
+- SQL test (`supabase/migrations/*_test.sql` pattern already in repo) — seed 2 employees × 3 months with mixed final/manager/self scores and `is_na`, assert `get_monthly_trend` returns expected weighted averages and skips N/A.
+- Hook test `src/test/monthlyTrendCacheBust.test.ts` — extend to mock the RPC and verify the pivot builds correct `monthlyScores`.
+- Component test — asserts the error banner shows the real message, not the generic string.
+- `DOCUMENTATION.md`: version bump, describe RPC + client rewrite.
+- `POLICY.md`: add note that multi-period trend reports MUST aggregate on the server (client-side batching over N×100 REST calls is banned) — reinforces `mem://architecture/database/large-export-pagination-policy`.
 
-- Add a targeted admin-only RPC `resync_annual_review_org_heads(p_cycle_id uuid)` (migration).
-  - Updates `annual_review_instances` for the cycle: `dept_head_id = departments.head_user_id` for the employee's dept; `bu_head_id = business_units.head_user_id` for the dept's BU.
-  - Skips instances whose stage has already been actioned by the current dept/BU head (guard: only overwrite when the slot's stage hasn't been submitted yet — status ∈ pre-that-stage). Log skipped rows with reason.
-  - Writes an audit row per changed instance to `annual_review_assignment_overrides` (existing table) tagged `source = 'org_head_resync'`.
-- Client wrapper: `src/services/annualReview/resyncOrgHeads.ts` (mirrors `resyncDeptHead.ts`).
-- Admin surface: add a "Resync Org Heads (Dept + BU)" action button on the cycle admin page (next to the existing dept-head resync), gated by admin/HR role. Confirm-destructive dialog required (rewrites reviewer assignments).
-- Verify: unit test the client wrapper (mirrors `resyncDeptHead.test.ts`); integration-style test asserting the RPC updates the two columns and leaves acted stages untouched.
+## Risk & Impact
+- Data: read-only, no schema change to existing tables; only a new function.
+- Workflow: none. Same numbers, same PIP logic, same threshold.
+- UI: only the error banner text changes (better) and the report actually loads.
+- Regression risk: low. RPC is additive; client can fall back to the old code path behind a feature flag if needed (I'll gate the new hook behind `USE_TREND_RPC=true`, default on; toggling off restores prior behavior).
+- Scalability: single SQL round trip regardless of range width (still capped at 12 months by hook).
 
-### Step 4 — Preflight validation UI
-
-- On `AnnualReviewFormMapping` seed screen, add a preflight banner listing:
-  - Departments with `head_user_id IS NULL` (blocking — cannot seed until fixed OR admin explicitly acknowledges "leave dept_head empty").
-  - BUs with `head_user_id IS NULL` (same treatment for bu_head).
-- Verify: component test showing banner appears when a demo dept/BU has no head, and disappears once configured.
-
-### Step 5 — Docs, policy, changelog
-
-- `POLICY.md`: add `§AR-ORG-HEAD-AUTHORITATIVE-ONLY` — dept/BU heads come solely from org settings, no manager/ancestor fallback; missing head = empty slot; effective-chain marks stage `no_reviewer_mapped`.
-- `DOCUMENTATION.md`: bump version, describe seeder change, resync RPC, preflight UI.
-- Cross-link supersedes `§AR-HEAD-MASTER-AUTHORITATIVE` (which allowed peers but still permitted fallbacks).
-
-## Risk & Impact Report
-
-- Data impact: `dept_head_id` / `bu_head_id` will change on in-flight instances after resync. Historical closed cycles untouched.
-- Workflow impact: Employees whose dept/BU had no head configured will see the dept/BU stage marked "not mapped" — HR must fix org settings before that stage becomes actionable. Explicit banner + resync report communicates this.
-- UI impact: banner on seed screen, new resync button on cycle admin.
-- Regression risk: existing tests that expected the 3-hop BU fallback must be rewritten (Step 2). Low risk otherwise — the change narrows behavior, doesn't broaden it.
-- Rollback: seeder change is a one-line revert; resync RPC is idempotent and audited; no destructive schema change.
-
-## Open question
-
-Before I execute: should the resync also **overwrite stages that were already actioned** by the old (wrong) reviewer, forcing those stages to be re-reviewed by the correct configured head? Or preserve completed actions and only fix pending stages? My default is **preserve completed, fix pending** — but the phrasing "All the forms should be mapped this way only" could go either way.
-
-&nbsp;
-
-&nbsp;
-
-Here, we should update whatever. If the incorrect mapping has approved it, that should not be the case. Approval should be as per the defined map only. Show me how many cases there are, and based on that, we can take the final decision. 
+## Non-scope
+- I will NOT change PIP threshold logic, the export sheet layout, or the Single-Month tab.
+- If the user wants an additional cross-month "range" report elsewhere (Employee Performance Summary, KPI matrix), that is a separate ticket — I'll note it in DOCUMENTATION.md as a follow-up.
