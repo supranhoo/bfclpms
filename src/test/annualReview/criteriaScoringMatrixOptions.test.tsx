@@ -69,6 +69,61 @@ describe('CriteriaScoringMatrix — option cards', () => {
     expect(selected).toHaveAttribute('aria-pressed', 'true');
   });
 
+  it('hydrates duplicate-score option cards with only one selected card', () => {
+    const duplicateScoreCriterion: TemplateCriterion = {
+      ...baseCriterion,
+      id: 'fad_ei',
+      options: [
+        { id: 'o5', label: 'Exceptional achievement', score: 0 },
+        { id: 'o4', label: 'Met or exceeded major targets', score: 0 },
+        { id: 'o3', label: 'Met basic performance benchmarks', score: 0 },
+      ],
+    };
+
+    wrap(<CriteriaScoringMatrix criteria={[duplicateScoreCriterion]} values={{ fad_ei: 0 }} remarks={{}} />);
+
+    expect(screen.getByRole('button', { name: /Exceptional achievement/ })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: /Met or exceeded major targets/ })).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.getByRole('button', { name: /Met basic performance benchmarks/ })).toHaveAttribute('aria-pressed', 'false');
+  });
+
+  it('moves the selected state to the clicked duplicate-score option only', () => {
+    const onChangeScore = vi.fn();
+    const duplicateScoreCriterion: TemplateCriterion = {
+      ...baseCriterion,
+      id: 'fad_ei',
+      options: [
+        { id: 'o5', label: 'Exceptional achievement', score: 0 },
+        { id: 'o4', label: 'Met or exceeded major targets', score: 0 },
+        { id: 'o3', label: 'Met basic performance benchmarks', score: 0 },
+      ],
+    };
+
+    wrap(
+      <CriteriaScoringMatrix
+        criteria={[duplicateScoreCriterion]}
+        values={{ fad_ei: 0 }}
+        remarks={{}}
+        onChangeScore={onChangeScore}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /Met or exceeded major targets/ }));
+
+    expect(onChangeScore).toHaveBeenCalledWith('fad_ei', 0);
+    expect(screen.getByRole('button', { name: /Exceptional achievement/ })).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.getByRole('button', { name: /Met or exceeded major targets/ })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: /Met basic performance benchmarks/ })).toHaveAttribute('aria-pressed', 'false');
+  });
+
+  it('hydrates a saved unique score by selecting only the matching score card', () => {
+    wrap(<CriteriaScoringMatrix criteria={[baseCriterion]} values={{ attendance: 3 }} remarks={{}} />);
+
+    expect(screen.getByRole('button', { name: /Usually on time/ })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: /Always on time/ })).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.getByRole('button', { name: /Rarely late/ })).toHaveAttribute('aria-pressed', 'false');
+  });
+
   it('shows bilingual option labels + Hindi heading when language=hi and translations exist', () => {
     wrap(
       <CriteriaScoringMatrix

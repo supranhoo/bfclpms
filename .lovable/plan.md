@@ -1,49 +1,62 @@
+# Plan: Fix self-review option card multi-selection
+
 ## Assumptions
-- Feb→May 2026 = ~7,774 KPIs → 39 submission batches at 200 IDs each.
-- The red "Failed to load trend data" banner is our own throw firing from `useMonthlyTrend.subsPromise` because **one submissions batch returned an error** (likely a transient PostgREST/RLS timeout on a heavy 200-ID `.in()`) that the previous code silently swallowed.
-- No console logs are available right now (user is on `/auth`), so we cannot pinpoint which batch — but the fix is the same either way.
+- The screenshot is from the annual review self-review criteria scoring card.
+- The affected criterion is **FAD - E&I KPI & Target Achievement** in template **FAD- M - E&I**.
+- The correct business scoring should be descending from best to worst: **5, 4, 3, 2, 1, 0**.
 
-## Root cause
-The last change made two things stricter at the same time:
-1. `throw r.error` on any single submissions-batch error.
-2. `throw` when `subMap.size === 0`.
+## RCA
+- The UI currently marks an option selected using the numeric score: `active = currentScore === option.score`.
+- Backend data check found this criterion has six options, and **all six are stored as `score: 0`**.
+- Therefore, when score `0` is selected or loaded, every option matches `currentScore === 0`, so all six cards show the selected tick.
 
-For a 1-month range (Feb 2026) with a working network this correctly surfaces the bug. For a 4-month range (~39 batches × RLS-heavy `review_submissions`), one flaky batch now fails the entire report. The old code was too silent; the new code is too brittle. Neither is right.
+## Risk & Impact Report
+- **Data Impact:** Targeted repair to one annual review template criterion only. No historical score recalculation will be done automatically.
+- **Workflow Impact:** No review stage, permission, or approval workflow change.
+- **UI/UX Impact:** Only the option-card selected state changes; one option will show selected instead of all matching-score cards.
+- **Regression Risk:** Low, but option cards with duplicate scores are a known edge case.
+- **Scalability Impact:** No large dataset loading or pagination change; only one JSON template row is repaired.
+- **Mitigation Plan:** Add regression tests for duplicate-score options and hydrated existing score values.
 
-## Fix plan (surgical, hook-only)
+## Step-by-step Plan
+1. **Repair incorrect template data**
+   - Add a targeted backend migration to update the affected criterion options:
+     - Exceptional achievement → 5
+     - 95–100% → 4
+     - 90–95% → 3
+     - 80–90% → 2
+     - 70–80% → 1
+     - <70% → 0
+   - Include a backup/audit row before modifying the JSON template data if the existing project pattern supports it.
 
-### Step 1 — Retry each submissions batch with exponential backoff and shrink-on-error
-In `useMonthlyTrend.ts` `subsPromise`, wrap each `.in('kpi_id', b)` call in a helper:
-- Attempt 1: 200 IDs.
-- On error → wait 400ms, retry same batch.
-- On second error → split the 200-ID batch into two 100-ID batches and retry each once.
-- On third error → `throw` (real failure, surface it).
+2. **Harden the UI selection logic**
+   - Update `CriteriaScoringMatrix.tsx` so option-card selection is tracked by option identity for the current session, not only by numeric score.
+   - Keep persisted scoring unchanged: save only the numeric option score, so existing annual-review scoring logic remains compatible.
+   - When opening an existing saved response, select only the first matching score option instead of all matching options.
 
-This handles the common case (transient timeout on a wide `.in()`) without hiding genuine failures. No cache-level changes.
+3. **Add admin authoring warning**
+   - In the criterion option editor, show an inline warning when multiple options share the same score.
+   - This prevents another all-zero option set from being missed during template authoring.
 
-### Step 2 — Lower the default batch size from 200 → 150
-Empirically, 200 IDs × RLS predicates on `review_submissions` sits close to Supabase's per-request budget for 4-month ranges. 150 keeps URL well under 16 KB (~5.7 KB) and reduces RLS work per call. Batch count for 4 months: 39 → 52; concurrency stays at 4.
+4. **Regression tests**
+   - Add/extend tests proving that duplicate-score options only highlight one selected card.
+   - Add a hydration test proving existing numeric values show one selected card.
+   - Add a data-contract test for the repaired criterion score sequence where feasible.
 
-### Step 3 — Keep the `subMap.size === 0` guard but only throw if **all** batches errored
-Track batch outcomes; if at least one batch returned rows successfully, do NOT throw on empty aggregation for the other batches — just log. The all-dashes report only occurs when literally every batch failed, which the Step-1 retry already prevents.
+5. **Documentation / Policy sync**
+   - Update annual-review documentation version history with the RCA and fix.
+   - Add a policy note that option-card scores should be unique unless deliberately authored, and duplicate scores must show a warning.
 
-### Step 4 — Keep the `empAgg.size === 0` guard as-is
-That guard only fires when KPIs exist but zero profile records visible → still a real bug worth surfacing loudly. No change.
+## UI Changes
+- **Location:** Annual review self-review score card option grid.
+- **Visual change:** Only one card will display the selected ring/tick.
+- **Interaction impact:** Clicking one option deselects the previous option visually.
+- **Responsiveness:** No layout change; existing grid remains unchanged.
 
-## UI changes
-- Happy path: no visible change; report loads with all rows.
-- Failure path: only after 3 retry attempts + shrink; the same existing red banner appears with the underlying error.
+## Rollback Strategy
+- Revert the migration or restore the previous `sections` JSON from backup/audit row.
+- Revert the UI change to score-based active state if needed.
 
-## Files
-- `src/hooks/useMonthlyTrend.ts` — add `fetchSubmissionsBatchWithRetry` helper; lower `SUB_BATCH` to 150; soften the `subMap.size === 0` throw to conditional on all-batches-failed.
-- `src/test/monthlyTrendCacheBust.test.ts` — update the SUB_BATCH regex to 150; add case: one batch errors once but succeeds on retry → no throw.
-
-## Risk & impact
-- **Data**: read-only.
-- **Regression**: Feb-only PIP fix still works — retry is transparent; guard still fires for the exact original silent-empty case.
-- **Scale**: 30% more batches (39 → 52 for 4 months) but each is 25% smaller and RLS is lighter. Net latency comparable.
-- **Rollback**: revert 1 file.
-
-## Not applicable
-- POLICY.md — no policy change; batch tuning is an implementation detail already documented under `mem/features/reports/monthly-scorecard-trend.md` (will update the SUB_BATCH number there in the same commit).
-- DOCUMENTATION.md — small note under Monthly Scorecard describing retry.
+## Tests
+- Run the relevant annual-review component tests after implementation.
+- Verify the self-review page visually after applying the fix.

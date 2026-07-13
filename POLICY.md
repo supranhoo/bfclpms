@@ -1,3 +1,9 @@
+### §AR-OPTION-CARD-SELECTION — Annual Review authored option cards select by option identity (v2.66.103, 2026-07-13)
+- Review forms MUST visually select at most one authored option card per criterion. Option-card active state MUST use the clicked option id when available, with numeric-score fallback only for hydrating existing saved responses.
+- Persisted response data remains numeric (`criteria_scores[criterion_id] = score`) for compatibility with weighted-score calculation and exports; the option id is presentation state only.
+- Admin authoring surfaces MUST warn when multiple options share the same score. Duplicate scores are allowed only when intentional, but they MUST NOT cause multiple cards to display as selected.
+- Data repair for malformed template options must be targeted, audit-logged with `performed_by = NULL`, and must not recalculate historical submitted scores unless separately approved.
+
 ### §AR-SEED-HIERARCHY-RESNAPSHOT — Annual Review reseed must refresh all seed-controlled reviewer snapshots (v2.66.102, 2026-07-11)
 - Annual Review seeding/reseeding MUST treat `manager_id`, `skip_id`, `dept_head_id`, `bu_head_id`, `hr_id`, `assigned_rule_id`, and `enabled_stages` as seed-controlled snapshot fields. Existing instances MUST refresh these fields from Employee Master plus the hierarchy guard; `template_override_id` remains protected and MUST NOT be overwritten by reseed.
 - Configured Dept/BU heads are valid only when they are in the employee's reporting chain. Self, peer, unrelated, or null configured heads MUST fall back to the reporting-chain resolver and emit `annual_review.head_fallback` audit metadata.
