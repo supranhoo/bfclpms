@@ -1,54 +1,34 @@
+## Problem
+The Results panel shows `column k.created_by does not exist`. The `public.kpis` table has no `created_by` column, but `get_first_kra_rollout` references `k.created_by` for the "who first rolled out" actor.
 
-## Goal
-Give admins a single screen that answers: **"When was KRA first rolled out for this employee, by whom, and how?"** — especially useful for new joiners.
+## Fix (surgical, single migration)
+Replace the RPC `public.get_first_kra_rollout` so it derives the actor without touching `kpis.created_by`:
 
-## What the user will see
-A new admin page **Admin → Reports → First KRA Rollout** with:
+- Remove `k.created_by` from the `kpi_first` CTE (keep `first_at`, `period`, `year`).
+- Add a new CTE `kpi_first_actor` that pulls the earliest `KPI_CREATED` performer per employee from `public.kpi_audit_logs`:
+  ```sql
+  kpi_first_actor AS (
+    SELECT DISTINCT ON (k.employee_id)
+      k.employee_id, a.performed_by AS first_by
+    FROM public.kpi_audit_logs a
+    JOIN public.kpis k ON k.id = a.kpi_id
+    WHERE a.action = 'KPI_CREATED'
+    ORDER BY k.employee_id, a.created_at ASC
+  )
+  ```
+- Use `bundle.assigned_by` when source resolves to `bundle`, else `kpi_first_actor.first_by` (may be NULL for legacy rows — display as "—").
+- No schema change, no frontend change, no policy change.
 
-- Search box (name / employee code) + filters: Company, Business Unit, Department, Date-range (rolled-out on), Source.
-- Paginated table (server-side, 50/page) with columns:
-  - Employee (name + code)
-  - Designation / Department
-  - Date of Joining
-  - **First KRA period** (e.g. "July 2026")
-  - **Rolled out on** (timestamp)
-  - **Rolled out by** (user name; "System / Cron" when automated)
-  - **Source** — one of: `Bundle`, `Smart Assign`, `Manual`, `Rollover`, `Import`
-  - KPIs created (count)
-  - Row action: "View KRAs" → deep-link to the employee's KRA tab.
-- Export to CSV (respects current filters).
-- Empty state for employees who have **no KRAs yet** (toggle: "Show only employees without any KRA") — this is the real value-add for spotting missed new joiners.
+## Verification
+- Re-open Admin → Reports → First KRA Rollout; the red error disappears and rows load.
+- Search by employee code (e.g. `101785`) still filters correctly.
+- Source filter (`bundle` / `rollover` / `manual`) still works.
+- "Only employees without any KRA" toggle still lists new joiners with no KPIs.
 
-## Data source (read-only, no schema change)
-Derived per employee from existing tables:
+## Out of scope
+- No changes to safety RLS policies from the previous migration.
+- No changes to the report UI, hook, or service layer.
+- No changes to `kpis` schema.
 
-- `bundle_assignment_logs` — earliest row per `employee_id` → Source = `Bundle`.
-- `kpi_audit_logs` where `action = 'KPI_CREATED'` — earliest row per employee (joined via `kpis.employee_id`) → Source inferred from `metadata` (`bundle` / `smart` / `manual` / `rollover` / `import`), falling back to `Manual`.
-- `kra_rollover_logs.details` JSONB — used only to attribute Source = `Rollover` when the earliest KPI_CREATED falls inside a rollover run window.
-- Employee master (`profiles`) — for name/code/DOJ/org scope + "no KRA yet" detection via LEFT JOIN on `kpis`.
-
-The "first rollout" per employee = `MIN(created_at)` across the union of the two log sources.
-
-## Technical section
-- New SECURITY DEFINER RPC `public.get_first_kra_rollout(...)` with params: `p_search`, `p_company_id`, `p_bu_id`, `p_dept_id`, `p_from`, `p_to`, `p_source`, `p_only_missing bool`, `p_limit`, `p_offset`. Returns rows + `total_count`. Server-side pagination + filtering (per project rule §13).
-- Grants: `EXECUTE` to `authenticated`; internal role check limits to Admin / HR PMS / Management (reuses `has_role`).
-- Frontend:
-  - `src/pages/admin/reports/FirstKraRolloutReport.tsx`
-  - `src/hooks/useFirstKraRollout.ts` (react-query, 60s stale)
-  - `src/services/reports/firstKraRollout.ts` (thin RPC wrapper + CSV builder)
-  - Menu entry added under Admin → Reports (via existing menu registry — no hardcoding).
-- Tests: unit tests for source-inference + CSV builder; RPC pgTAP-style test for pagination + role gating.
-- Docs: append section to `DOCUMENTATION.md` (Reports) and note in `POLICY.md` that first-KRA attribution is derived, immutable, and read-only.
-
-## Risk & Impact
-- **Data**: additive only — no schema/RLS changes to existing tables. New RPC is read-only.
-- **Workflow**: none — purely a reporting surface.
-- **UI**: new page + one menu item; no existing screen changes.
-- **Regression risk**: low; isolated module.
-- **Scalability**: server-side paginated RPC with indexed lookups on `employee_id` + `created_at`. Safe for tens of thousands of employees.
-- **Rollback**: drop the RPC + delete the new files; menu entry removes itself.
-
-## Out of scope (ask separately if wanted)
-- Editing / back-dating first-rollout attribution.
-- Email alerts for "new joiner without KRA for N days".
-- Bulk-assign action from within this report (already exists in Late Joiner Backfill).
+## Risk
+Low. Single RPC replacement via `CREATE OR REPLACE FUNCTION`; grants preserved. Rollback = re-run previous definition.
