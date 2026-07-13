@@ -1,87 +1,55 @@
-## Symptom
-Monthly Scorecard Report → Date Range (Trend) tab, Feb 2026 → Jul 2026 fails with
-"Failed to load trend data. The range may be too wide or the server timed out."
-Employees clearly have scores in every month of that range (many well below 2).
+## Refined plan — self-head short-circuits + strict re-mapping
 
-## RCA — the fetch pipeline is fragile, not the data
+### Rules (locked)
+1. **Employee IS the configured BU head of their own BU** → chain terminates at self. `enabled_stages = ['self','manager','skip_manager']` (or existing enabled subset minus dept/bu/hr), `bu_head_id = NULL`, `dept_head_id = NULL`. Once skip approves, `overall_status → completed`.
+2. **Employee IS the configured Department head of their own department** → skip the dept-head stage. `dept_head_id = NULL`, `enabled_stages` drops `'dept_head'`. Chain becomes self → manager → skip → BU head → HR.
+3. **Everyone else** → `dept_head_id = departments.head_user_id`, `bu_head_id = business_units.head_user_id`. No manager-as-fallback for the dept-head or BU-head stage; if the configured slot is empty, the stage is skipped (not filled by the manager).
+4. **Fallback for manager / skip** stays as-is (working correctly).
 
-Verified against the DB:
-- 13,203 KPIs exist across Feb–Jul 2026.
-- 10,333 matching `review_submissions`; 9,912 have at least one non-null score.
-So the underlying data is present in every month; the report fails during **client-side fetching**, not during aggregation.
+### What "wrong reviewer" means now
+Any instance where `dept_head_id` or `bu_head_id` is a person other than the currently-configured head (typically the direct manager who was stamped as a fallback at seed time) is wrong and must be re-mapped. That was the visible symptom in the earlier employee case — the review card was showing the manager instead of the actual dept/BU head.
 
-`src/hooks/useMonthlyTrend.ts` currently:
-1. Fetches all KPIs for the range (paginated).
-2. For every KPI id, fetches the matching submission via `IN (...)` batches of 150.
-3. With 13,203 KPIs → **~88 REST batches**, concurrency capped at 4, so ~22 waves.
-4. Each batch re-runs full RLS on `review_submissions` (63 columns × 21 policies).
-5. On the first batch that fails 3 attempts (URL length, connection reset, PostgREST timeout), the whole hook throws → banner shown, entire report empty.
+### Execution steps
 
-Even when it succeeds, the second guard (line 295 in `useMonthlyTrend.ts`) throws when `subMap.size === 0`. It also throws (line 366) if RLS filters out the profiles. Any of those trip → same red banner.
+**Step 1 — Audit snapshot.** For every affected instance write `(id, old_dept_head_id, old_bu_head_id, old_enabled_stages, old_overall_status, reason, corrected_by, corrected_at)` into `annual_review_rescore_audit_2026_07`. Reversible.
 
-Additional issue: profile fetch omits the `manager_id` guard entirely if the current user's RLS blocks a subset — silent partial hydration is possible.
+**Step 2 — Classify each of the 56 past-dept instances into one of:**
+- `self_is_bu_head` → apply Rule 1
+- `self_is_dept_head` → apply Rule 2
+- `dept_head_changed` → rewrite `dept_head_id` to current configured head
+- `bu_head_changed` → rewrite `bu_head_id` to current configured head
+- `already_correct` → no-op
 
-## Other range-based reports in the app
-Only one true "range across months" report exists — **Monthly Scorecard Report → Date Range (Trend)** (the one broken here). The rest are single-period:
-- Monthly Scorecard (Single Month)
-- Completion Report (per-period, one at a time)
-- KPI Detail / Audit Trail / Employee Performance Summary (single period + trend chart for one selected employee only, using cached submissions)
-- Team vs Manager Score (single period)
+**Step 3 — Rewrite columns per classification.** `manager_id`, `skip_id`, `hr_id` untouched. `enabled_stages` recomputed from the rules above.
 
-There is no other cross-month "range" report. If the user expected one, we should surface the trend inside Employee Performance Summary too — flag for future work but out of scope here.
+**Step 4 — Step-back policy (preserves completed & pending correctly).**
+- If dept stage was already approved by the WRONG person (was the manager or an outdated head) → reset `overall_status = 'pending_dept'` and clear `annual_review_responses.dept_head_*` for that instance. New (correct) dept head must approve.
+- If dept stage was correct and only BU was wrong → keep dept approval, rewrite `bu_head_id`, status stays `pending_bu`.
+- If Rule 1 (self-is-BU-head) applies and skip already approved → status becomes `completed` immediately (no BU/HR stage exists).
+- If Rule 2 (self-is-dept-head) applies and manager/skip already approved → status advances to `pending_bu` (dept stage removed from `enabled_stages`).
+- `completed` instances are re-opened ONLY if the dept-head approval on them was by the wrong person; otherwise left alone (view-approval stays as-is per your earlier ask).
 
-## Fix plan
+**Step 5 — Cascade trigger to prevent recurrence.**
+`BEFORE UPDATE` trigger on `departments.head_user_id` and `business_units.head_user_id`. When changed:
+- Rewrite `dept_head_id` / `bu_head_id` on all active-cycle instances whose status is ≤ the stage in question (dept change → status in `pending_self/manager/skip/dept`; BU change → status in those + `pending_bu`).
+- Re-evaluate self-is-head rules for the affected employees and update `enabled_stages` accordingly.
+- Post-approval instances are NOT rewritten silently — HR must run explicit re-mapping.
+- Every change written to `system_audit_logs` as `org_heads.dept_head_cascaded` / `org_heads.bu_head_cascaded`.
 
-### Step 1 — Ship a single server-side RPC `get_monthly_trend`
-Migration adds a stable, admin/HR-scoped SQL function:
+**Step 6 — Tests + docs**
+- `hierarchyGuard.test.ts` — add cases: self-is-BU-head, self-is-dept-head, dept head empty (stage skipped, no manager fallback).
+- New `orgHeadCascadeTrigger.test.sql` — insert instance, change `departments.head_user_id`, assert pre-approval row is rewritten and post-approval row is preserved.
+- `resyncDeptHead.test.ts` — verify manager-as-fallback rows are corrected and no new manager fallbacks are ever produced.
+- `POLICY.md` §AR-HEAD-MASTER-AUTHORITATIVE — rewrite: (a) manager is never a fallback for dept/BU stage, (b) self-is-head short-circuits the chain, (c) org master edits cascade pre-approval only.
+- `DOCUMENTATION.md` v-bump + changelog listing the 26 corrected instances and the 3 Org-Settings self-head fixes.
 
-```
-get_monthly_trend(p_from_year int, p_from_month text,
-                  p_to_year int,   p_to_month text,
-                  p_include_inactive bool default false)
-returns table (
-  employee_id uuid, full_name text, employee_code text, designation text,
-  department_id uuid, department_name text,
-  business_unit_id uuid, business_unit_name text,
-  reporting_manager_id uuid, reporting_manager_label text,
-  is_active bool,
-  review_year int, review_period text,
-  weighted_score numeric,       -- Σ(bestScore*weight)/Σweight, per (emp,month), best-of-8 cascade
-  final_score numeric            -- Σ(final_score*weight)/Σweight, per (emp,month)
-)
-```
-- Aggregation happens in Postgres: one JOIN across `kpis` + `review_submissions` + `profiles` + `departments` + `business_units`.
-- Best-score cascade identical to `bestScore()` in the hook (`final → management → auditor → hr_pms → skip_level → manager → self`).
-- Skips `is_na` submissions and `weightage ≤ 0`.
-- Grants: `EXECUTE TO authenticated`; the function body applies `has_role(auth.uid(),'admin')` OR `has_role(auth.uid(),'hr_pms')` OR `has_role(auth.uid(),'management')` — mirrors current report-page access. Non-privileged callers get an empty result set (function is `SECURITY DEFINER`).
-- Return shape is long (one row per employee-month) — pivot happens on the client.
-- Adds a supporting composite index if missing: `kpis(review_year, review_period)` and `review_submissions(kpi_id)` (already indexed).
+### Two confirmation points before I switch to build
 
-Rollback: single `DROP FUNCTION` — additive change, no schema touch.
-
-### Step 2 — Rewrite `useMonthlyTrend` to call the RPC
-- Replace the multi-stage fetch with `supabase.rpc('get_monthly_trend', { … })`.
-- Client pivots the long rows into the existing `TrendEmployee` shape (unchanged public API — table & PIP logic untouched).
-- Drop the URL-length batching, the resilience retries, and the "subMap empty" guard (no longer applicable — SQL either returns rows or an error).
-- Keep short `staleTime` (30 s) and the "load on click" pattern.
-
-### Step 3 — Better error surfacing on the UI
-Currently every failure collapses to one generic red banner. Change it to render the actual error message from the hook (e.g. "server timeout", "not authorized", "no matching data"). This alone would have surfaced the true cause today.
-
-### Step 4 — Tests & docs
-- SQL test (`supabase/migrations/*_test.sql` pattern already in repo) — seed 2 employees × 3 months with mixed final/manager/self scores and `is_na`, assert `get_monthly_trend` returns expected weighted averages and skips N/A.
-- Hook test `src/test/monthlyTrendCacheBust.test.ts` — extend to mock the RPC and verify the pivot builds correct `monthlyScores`.
-- Component test — asserts the error banner shows the real message, not the generic string.
-- `DOCUMENTATION.md`: version bump, describe RPC + client rewrite.
-- `POLICY.md`: add note that multi-period trend reports MUST aggregate on the server (client-side batching over N×100 REST calls is banned) — reinforces `mem://architecture/database/large-export-pagination-policy`.
+1. **Rule 1 wording** — when employee IS the BU head, do you want the chain to end after `skip_manager` (self → mgr → skip → done, HR stage also removed)? Or should HR still finalize? Your message says "process ends there and then only", which I'm reading as HR-stage also removed. Confirm.
+2. **Completed instances with wrong dept head** — reopen them to `pending_dept` (strict), or leave them closed with an audit-only note (pragmatic)? Earlier you said "preserve completed"; the strict interpretation of the new policy would reopen. I'll default to **leave completed as-is + audit note** unless you say otherwise.
 
 ## Risk & Impact
-- Data: read-only, no schema change to existing tables; only a new function.
-- Workflow: none. Same numbers, same PIP logic, same threshold.
-- UI: only the error banner text changes (better) and the report actually loads.
-- Regression risk: low. RPC is additive; client can fall back to the old code path behind a feature flag if needed (I'll gate the new hook behind `USE_TREND_RPC=true`, default on; toggling off restores prior behavior).
-- Scalability: single SQL round trip regardless of range width (still capped at 12 months by hook).
-
-## Non-scope
-- I will NOT change PIP threshold logic, the export sheet layout, or the Single-Month tab.
-- If the user wants an additional cross-month "range" report elsewhere (Employee Performance Summary, KPI matrix), that is a separate ticket — I'll note it in DOCUMENTATION.md as a follow-up.
+- **Data**: ≤ 26 instance rows rewritten, ≤ 22 responses cleared, 26 audit rows, 3 Org-Settings self-head rows flagged for HR to fix, 2 new triggers.
+- **Workflow**: up to 22 employees regress from `pending_bu` → `pending_dept`; a handful may jump to `completed` if Rule 1 applies with skip already approved.
+- **UI**: reviewer name on the review card will now always match Organization Settings; no component changes needed beyond that.
+- **Regression risk**: low — trigger scoped to pre-approval, self-head short-circuit is idempotent, full audit for rollback.

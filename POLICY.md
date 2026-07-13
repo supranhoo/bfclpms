@@ -4613,3 +4613,33 @@ Regression: `src/test/dailySubmissionSummaryWorkflowAware.test.tsx`.
 - The workbook is the SSOT for that template's `sections.criteria` and each criterion's `weight_pct`. Manual edits to those fields will be overwritten on the next re-import of the same sheet.
 - The assignment rule created per workbook sheet routes employees to the template via `filters.department_ids` (+ optional archetype / grade_bucket / grade_code). One rule per (template × cycle); rerunning the import refreshes its filters in place.
 - The Criteria Library still stages the individual criteria for reuse in hand-built templates via "Add from Library"; the workbook flow does not require going through it manually.
+
+## §AR-HEAD-MASTER-AUTHORITATIVE (revised 2026-07-13)
+Organization Settings are the SINGLE source of truth for Annual Review dept-head
+and BU-head reviewer identity. The chain is derived, not chosen.
+
+1. **Employee IS the BU head of their own BU** → the chain terminates after
+   `skip_manager`. Stages `dept_head`, `bu_head`, and `hr` are removed from
+   `enabled_stages`. `dept_head_id = NULL`, `bu_head_id = NULL`. Once skip
+   approves, the instance transitions directly to `completed`.
+2. **Employee IS the Department head of their own department** → the
+   `dept_head` stage is dropped from `enabled_stages`, `dept_head_id = NULL`.
+   The chain is self → manager → skip → BU head → HR.
+3. **Everyone else** → `dept_head_id = departments.head_user_id` and
+   `bu_head_id = business_units.head_user_id` at ALL times.
+4. **Manager is NEVER a fallback for the dept-head or BU-head stage.** If the
+   configured slot is empty, the stage is skipped. Historical fallbacks that
+   stamped the direct manager as dept head are forbidden going forward.
+5. **Cascade on org master edits.** Triggers
+   `trg_cascade_department_head_change` and `trg_cascade_bu_head_change`
+   propagate any change to `departments.head_user_id` or
+   `business_units.head_user_id` onto every in-flight instance whose status
+   is at or before the affected stage (dept change → status ≤ `pending_dept`;
+   BU change → status ≤ `pending_bu`). Post-approval instances are NEVER
+   rewritten silently — HR must run explicit re-mapping.
+6. **Completed instances are frozen.** Approvals already granted are
+   preserved even if the configured head has changed. Correction requires an
+   explicit reopen with an audit-trail entry.
+7. Every correction — one-off sweep or trigger cascade — is written to
+   `annual_review_head_remap_audit_YYYY_MM` (immutable, admin/hr_pms
+   readable). Rollback is a snapshot restore from this audit row.

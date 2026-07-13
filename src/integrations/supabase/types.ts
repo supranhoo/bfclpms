@@ -583,6 +583,63 @@ export type Database = {
         }
         Relationships: []
       }
+      annual_review_head_remap_audit_2026_07: {
+        Row: {
+          classification: string
+          corrected_at: string
+          corrected_by: string | null
+          employee_code: string | null
+          employee_name: string | null
+          id: string
+          instance_id: string
+          new_bu_head_id: string | null
+          new_dept_head_id: string | null
+          new_enabled_stages: Json | null
+          new_overall_status: string | null
+          old_bu_head_id: string | null
+          old_dept_head_id: string | null
+          old_enabled_stages: Json | null
+          old_overall_status: string | null
+          reason: string | null
+        }
+        Insert: {
+          classification: string
+          corrected_at?: string
+          corrected_by?: string | null
+          employee_code?: string | null
+          employee_name?: string | null
+          id?: string
+          instance_id: string
+          new_bu_head_id?: string | null
+          new_dept_head_id?: string | null
+          new_enabled_stages?: Json | null
+          new_overall_status?: string | null
+          old_bu_head_id?: string | null
+          old_dept_head_id?: string | null
+          old_enabled_stages?: Json | null
+          old_overall_status?: string | null
+          reason?: string | null
+        }
+        Update: {
+          classification?: string
+          corrected_at?: string
+          corrected_by?: string | null
+          employee_code?: string | null
+          employee_name?: string | null
+          id?: string
+          instance_id?: string
+          new_bu_head_id?: string | null
+          new_dept_head_id?: string | null
+          new_enabled_stages?: Json | null
+          new_overall_status?: string | null
+          old_bu_head_id?: string | null
+          old_dept_head_id?: string | null
+          old_enabled_stages?: Json | null
+          old_overall_status?: string | null
+          reason?: string | null
+        }
+        Relationships: []
+      }
       annual_review_instances: {
         Row: {
           acknowledged_at: string | null
