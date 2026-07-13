@@ -1,55 +1,43 @@
-## Refined plan — self-head short-circuits + strict re-mapping
+## Security hardening — employee self-update RLS
 
-### Rules (locked)
-1. **Employee IS the configured BU head of their own BU** → chain terminates at self. `enabled_stages = ['self','manager','skip_manager']` (or existing enabled subset minus dept/bu/hr), `bu_head_id = NULL`, `dept_head_id = NULL`. Once skip approves, `overall_status → completed`.
-2. **Employee IS the configured Department head of their own department** → skip the dept-head stage. `dept_head_id = NULL`, `enabled_stages` drops `'dept_head'`. Chain becomes self → manager → skip → BU head → HR.
-3. **Everyone else** → `dept_head_id = departments.head_user_id`, `bu_head_id = business_units.head_user_id`. No manager-as-fallback for the dept-head or BU-head stage; if the configured slot is empty, the stage is skipped (not filled by the manager).
-4. **Fallback for manager / skip** stays as-is (working correctly).
+Scope: monthly KPI review only. Annual Review paths unchanged.
 
-### What "wrong reviewer" means now
-Any instance where `dept_head_id` or `bu_head_id` is a person other than the currently-configured head (typically the direct manager who was stamped as a fallback at seed time) is wrong and must be re-mapped. That was the visible symptom in the earlier employee case — the review card was showing the manager instead of the actual dept/BU head.
+### Fix 1 — `public.kpis`
+Replace the current `Users can update their own KPIs` policy with a stage-gated, column-scoped version.
 
-### Execution steps
+- **USING**: `employee_id = auth.uid() AND status IN ('kra_set','draft')`
+- **WITH CHECK** (via BEFORE UPDATE trigger `tg_kpis_employee_column_guard`, invoked only when `auth.uid() = employee_id` AND caller is not admin/hr_pms/manager): raise if any of these columns changed
+  - `status`, `weightage`, `target_value`, `criteria`, `scoring_config`, `frequency`, `frequency_config`, `is_org_level`, `is_na`, `manager_id`, `category_id`, `kra_name`, `kpi_name`, `uom`, `review_period`, `review_year`, `weightage_locked`, any score column (`final_score`, `manager_score`, `auditor_score`, etc. if present on the row)
+- Employees may still edit: `description`, `remarks`, evidence pointers on their own KPI while in KRA-set.
+- Admin / HR PMS / manager / auditor / management / skip-level paths unaffected (separate policies).
 
-**Step 1 — Audit snapshot.** For every affected instance write `(id, old_dept_head_id, old_bu_head_id, old_enabled_stages, old_overall_status, reason, corrected_by, corrected_at)` into `annual_review_rescore_audit_2026_07`. Reversible.
+### Fix 2 — `public.review_submissions`
+Replace `Employees can update self review fields` and `Employees can create/update their own submissions` with one stage- and column-gated policy.
 
-**Step 2 — Classify each of the 56 past-dept instances into one of:**
-- `self_is_bu_head` → apply Rule 1
-- `self_is_dept_head` → apply Rule 2
-- `dept_head_changed` → rewrite `dept_head_id` to current configured head
-- `bu_head_changed` → rewrite `bu_head_id` to current configured head
-- `already_correct` → no-op
+- **USING**: exists a `kpis` row where `kpi_id = kpis.id AND employee_id = auth.uid() AND status = 'self_review'`
+- **WITH CHECK** (via BEFORE UPDATE trigger `tg_review_submissions_self_column_guard`, when `auth.uid()` is the employee and not admin/hr_pms/reviewer): reject the update if any non-self column changed. Allowed columns:
+  - `self_score`, `self_remarks`, `self_achieved_value`, `self_evidence`, `self_submitted_at`, `self_submitted_by`, `updated_at`
+  - INSERT: employee may only insert a row with those same columns populated, all reviewer columns NULL.
+- Reviewer / auditor / manager / HR / management / skip policies unchanged.
 
-**Step 3 — Rewrite columns per classification.** `manager_id`, `skip_id`, `hr_id` untouched. `enabled_stages` recomputed from the rules above.
+### Migration structure
+1. Create both trigger functions (SECURITY DEFINER, `SET search_path = public`, use `TG_OP='UPDATE'`).
+2. Attach `BEFORE UPDATE` triggers.
+3. Drop the offending permissive policies. Recreate with the stage-gated USING / WITH CHECK.
+4. Verify no existing rows violate the new invariants (audit query in the same migration).
 
-**Step 4 — Step-back policy (preserves completed & pending correctly).**
-- If dept stage was already approved by the WRONG person (was the manager or an outdated head) → reset `overall_status = 'pending_dept'` and clear `annual_review_responses.dept_head_*` for that instance. New (correct) dept head must approve.
-- If dept stage was correct and only BU was wrong → keep dept approval, rewrite `bu_head_id`, status stays `pending_bu`.
-- If Rule 1 (self-is-BU-head) applies and skip already approved → status becomes `completed` immediately (no BU/HR stage exists).
-- If Rule 2 (self-is-dept-head) applies and manager/skip already approved → status advances to `pending_bu` (dept stage removed from `enabled_stages`).
-- `completed` instances are re-opened ONLY if the dept-head approval on them was by the wrong person; otherwise left alone (view-approval stays as-is per your earlier ask).
+### Regression tests
+- `src/test/security/kpiEmployeeSelfUpdateGuard.test.ts` — employee cannot flip `status`, cannot change `weightage`, `target_value`, `criteria`; can edit `remarks` when status=`kra_set`; blocked when status=`approved`.
+- `src/test/security/reviewSubmissionSelfGuard.test.ts` — employee cannot write `manager_score`, `auditor_score`, `final_score`; can write `self_score` when kpi.status=`self_review`; blocked in other stages.
 
-**Step 5 — Cascade trigger to prevent recurrence.**
-`BEFORE UPDATE` trigger on `departments.head_user_id` and `business_units.head_user_id`. When changed:
-- Rewrite `dept_head_id` / `bu_head_id` on all active-cycle instances whose status is ≤ the stage in question (dept change → status in `pending_self/manager/skip/dept`; BU change → status in those + `pending_bu`).
-- Re-evaluate self-is-head rules for the affected employees and update `enabled_stages` accordingly.
-- Post-approval instances are NOT rewritten silently — HR must run explicit re-mapping.
-- Every change written to `system_audit_logs` as `org_heads.dept_head_cascaded` / `org_heads.bu_head_cascaded`.
+### Docs
+- POLICY.md new §KPI-EMPLOYEE-SELF-UPDATE-GUARD and §REVIEW-SUBMISSION-SELF-UPDATE-GUARD.
+- DOCUMENTATION.md v2.66.106 bullet listing the two policies and the two triggers.
+- Mark both findings `mark_as_fixed` with explanation.
 
-**Step 6 — Tests + docs**
-- `hierarchyGuard.test.ts` — add cases: self-is-BU-head, self-is-dept-head, dept head empty (stage skipped, no manager fallback).
-- New `orgHeadCascadeTrigger.test.sql` — insert instance, change `departments.head_user_id`, assert pre-approval row is rewritten and post-approval row is preserved.
-- `resyncDeptHead.test.ts` — verify manager-as-fallback rows are corrected and no new manager fallbacks are ever produced.
-- `POLICY.md` §AR-HEAD-MASTER-AUTHORITATIVE — rewrite: (a) manager is never a fallback for dept/BU stage, (b) self-is-head short-circuits the chain, (c) org master edits cascade pre-approval only.
-- `DOCUMENTATION.md` v-bump + changelog listing the 26 corrected instances and the 3 Org-Settings self-head fixes.
+### Risk & Impact
+- **Data**: none — RLS + trigger only. No row rewrites.
+- **UX**: legitimate employee flows (self-review submission, KRA editing during KRA-set window) preserved. Any client code accidentally writing reviewer columns from the employee path will now surface a clear DB error — that IS the intended regression signal.
+- **Rollback**: `DROP TRIGGER … ; DROP FUNCTION …;` and restore previous policies from git history.
 
-### Two confirmation points before I switch to build
-
-1. **Rule 1 wording** — when employee IS the BU head, do you want the chain to end after `skip_manager` (self → mgr → skip → done, HR stage also removed)? Or should HR still finalize? Your message says "process ends there and then only", which I'm reading as HR-stage also removed. Confirm.
-2. **Completed instances with wrong dept head** — reopen them to `pending_dept` (strict), or leave them closed with an audit-only note (pragmatic)? Earlier you said "preserve completed"; the strict interpretation of the new policy would reopen. I'll default to **leave completed as-is + audit note** unless you say otherwise.
-
-## Risk & Impact
-- **Data**: ≤ 26 instance rows rewritten, ≤ 22 responses cleared, 26 audit rows, 3 Org-Settings self-head rows flagged for HR to fix, 2 new triggers.
-- **Workflow**: up to 22 employees regress from `pending_bu` → `pending_dept`; a handful may jump to `completed` if Rule 1 applies with skip already approved.
-- **UI**: reviewer name on the review card will now always match Organization Settings; no component changes needed beyond that.
-- **Regression risk**: low — trigger scoped to pre-approval, self-head short-circuit is idempotent, full audit for rollback.
+Proceeding requires switching to build mode.

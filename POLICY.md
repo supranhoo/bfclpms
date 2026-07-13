@@ -4643,3 +4643,62 @@ and BU-head reviewer identity. The chain is derived, not chosen.
 7. Every correction — one-off sweep or trigger cascade — is written to
    `annual_review_head_remap_audit_YYYY_MM` (immutable, admin/hr_pms
    readable). Rollback is a snapshot restore from this audit row.
+
+## §KPI-EMPLOYEE-SELF-UPDATE-GUARD (added 2026-07-13, monthly KPI workflow only)
+
+Employees may only edit their own `public.kpis` row while the KPI is still in
+the `kra_set` stage. The RLS policy `Users can update their own KPIs` enforces
+both:
+
+- **USING**: `employee_id = auth.uid() AND status = 'kra_set'`
+- **WITH CHECK**: `employee_id = auth.uid() AND status IN ('kra_set','self_review')`
+
+Consequences:
+- Employees cannot advance a KPI past submission (self_review). Any jump to
+  `manager_check`, `audit`, `approved`, `management_review`, `skip_level_check`
+  or `hr_pms_review` from the employee path is rejected by RLS.
+- Once the KPI leaves `kra_set`, the employee has no update path at all — all
+  downstream edits must come from the reviewer, admin, HR PMS or auditor
+  policy that owns the current stage.
+- The admin, manager, auditor, HR PMS, management, skip-level, functional
+  manager and org-KPI data-owner update policies are unchanged.
+
+Rollback: restore the previous `Users can update their own KPIs` policy
+(`employee_id = auth.uid()` with no WITH CHECK).
+
+## §REVIEW-SUBMISSION-SELF-UPDATE-GUARD (added 2026-07-13, monthly KPI workflow only)
+
+Employees may only touch their own `public.review_submissions` row while the
+parent KPI is in `self_review`, and may only write self-owned columns.
+
+- INSERT policy `Employees can create their own submissions`
+  - Requires parent KPI `status = 'self_review'` and belongs to `auth.uid()`.
+  - Rejects any row that pre-populates a reviewer column
+    (`manager_*`, `auditor_*`, `management_*`, `final_score`, `final_rating`).
+- UPDATE policy `Employees can update self review fields`
+  - USING and WITH CHECK both require parent KPI `status = 'self_review'` and
+    belongs to `auth.uid()`.
+- Column-level guard: BEFORE INSERT/UPDATE trigger
+  `tg_review_submissions_self_column_guard` on `public.review_submissions`
+  raises whenever the caller is the KPI's employee AND does not hold
+  `admin` / `hr_pms` / `auditor` / `management` / `manager` role AND any of the
+  following columns are set on INSERT or changed on UPDATE:
+  `manager_score`, `manager_rating`, `manager_remarks`, `manager_evidence_url`,
+  `manager_evidence_urls`, `manager_achieved_value`, `auditor_*` counterparts,
+  `management_*` counterparts, `final_score`, `final_rating`,
+  `final_score_rule_type`, `final_score_rule_snapshot`,
+  `final_score_explanation`, `final_score_calculated_at`,
+  `functional_manager_remarks`, `functional_manager_evidence_urls`,
+  `kpi_id`, `kpi_status`, `is_na`.
+
+Consequences:
+- The employee-self path can only write self-owned fields (`self_score`,
+  `self_rating`, `self_remarks`, `self_evidence_url`, `self_evidence_urls`,
+  `self_achieved_value`, `submitted_at`, `updated_at`).
+- Reviewer, admin, HR PMS, auditor, management, skip-level, functional manager
+  and org-KPI data-owner paths are unaffected (they carry a privileged role
+  and bypass the trigger's guard branch).
+
+Rollback: drop the trigger and function, and recreate the previous
+`Employees can create/update their own submissions` and
+`Employees can update self review fields` policies without WITH CHECK.
