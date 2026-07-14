@@ -132,6 +132,44 @@ export async function bulkReassignViaOverride(
 }
 
 /**
+ * Destructive force-reset: snapshots the instance's responses/proxy rows into
+ * `annual_review_reset_archive`, wipes them, swaps template, restarts the
+ * instance at `pending_self`. Admin / hr_pms only; reason must be ≥ 10 chars.
+ * Used when the caller intentionally wants to move an employee that is already
+ * past pending_self onto a different template (the non-destructive
+ * `set_annual_review_template_override` refuses these).
+ */
+export interface ForceResetItem {
+  instanceId: string;
+  templateId: string;
+}
+export interface ForceResetBulkResult {
+  ok: number;
+  failed: { instanceId: string; error: string }[];
+}
+export async function bulkForceResetInstances(
+  items: ForceResetItem[],
+  reason: string,
+): Promise<ForceResetBulkResult> {
+  if (items.length === 0) return { ok: 0, failed: [] };
+  const payload = items.map((i) => ({
+    instance_id: i.instanceId,
+    new_template_id: i.templateId,
+  }));
+  const { data, error } = await db.rpc(
+    // Cast: generated types may lag until the migration types are regenerated.
+    'bulk_force_reset_annual_review_instances' as never,
+    { p_items: payload as never, p_reason: reason } as never,
+  );
+  if (error) throw new Error(error.message);
+  const res = (data ?? {}) as { ok?: number; failed?: { instance_id: string; error: string }[] };
+  return {
+    ok: Number(res.ok ?? 0),
+    failed: (res.failed ?? []).map((f) => ({ instanceId: f.instance_id, error: f.error })),
+  };
+}
+
+/**
  * Set or clear the per-instance final-score weight override (Phase 2).
  * Pass `weights = null` to clear. Reason is mandatory; admin/hr_pms only —
  * enforced inside the RPC. Audit-logged under
