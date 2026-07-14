@@ -1,42 +1,27 @@
-## Root cause
+## No build required — feature already exists
 
-When a reviewer sends an annual review back to the self stage, the RPC `send_back_annual_review_status` runs two updates:
+The Department Head re-sync you're looking for is already built and live.
 
-1. Unlock the previous stage's response (`is_locked=false`, `submitted_at=NULL`).
-2. Move `annual_review_instances.overall_status` back to the previous status.
+### Where to find it
+1. Go to **Admin → Organization Setup → Departments** tab.
+2. In the **Head** column for the department you updated, look at the small icon row on the right (next to the Auto/Manual badge).
+3. Click the **people icon** (👥, tooltip: *"Re-sync open Annual Reviews with this head"*).
+   - It's only visible when a Dept Head is set AND an Annual Review cycle is active.
+4. Confirm in the dialog "Re-sync Annual Reviews for &lt;dept&gt;" → **Re-sync now**.
 
-The function is **not** `SECURITY DEFINER`, so it runs with the caller's rights. On `annual_review_responses` the UPDATE RLS policy requires the caller to be admin/HR-PMS, the `reviewer_id`, or a proxy submitter. When a dept head / manager / BU head / HR reviewer clicks "Send back", none of those apply for the `self` response row, so the UPDATE silently touches **0 rows** (no error — RLS filter). The instance status still flips to `pending_self`, but the self response stays `is_locked=true` with the old `submitted_at`.
+### What it does
+- Calls RPC `resync_annual_review_dept_head(cycle, dept)`.
+- Pushes the current Dept Head onto every open Annual Review instance in the department for the active cycle.
+- **Skips** instances that already moved past the Dept Head stage or are finalized (reported back as "skipped" in the toast).
+- Writes an audit-log row per invocation.
 
-Verified on Abes Raja (emp 200687), instance `733e4c88-1cba-4a8d-8cbc-cc674ed02a3f`:
-- `system_audit_logs` shows `annual_review.send_back` from `dept_head → self` on 2026-07-14, performed by the dept head (f730b2d8…, not admin).
-- Instance `overall_status = pending_self`.
-- Self response row: `is_locked = true`, `submitted_at = 2026-07-11` (unchanged).
+### If it still doesn't sync after clicking
+Likely one of:
+- The instance has already advanced past the Dept Head stage → intentionally skipped (immutable-history rule).
+- The employee's `department_id` on their profile doesn't match the department whose head you changed.
+- No active Annual Review cycle.
 
-`EmployeeAnnualReview.tsx` line 69 gates edit mode as:
-`locked = myResponse?.is_locked || instance.overall_status !== 'pending_self'`
-Because `is_locked` is still true, all fields render read-only and Submit is disabled.
+Tell me the employee code + department and I'll trace the RPC's audit log and confirm which branch fired.
 
-The same defect will silently block every non-admin send-back path (`manager → self`, `skip → manager`, `dept_head → skip/manager`, `bu → dept_head`, `hr → bu`), because in each case the previous stage's response row is owned by a different user.
-
-## Fix
-
-1. **Migration — harden the send-back RPC**
-   - Recreate `public.send_back_annual_review_status(uuid, annual_reviewer_role, text)` with `SECURITY DEFINER` and keep `SET search_path = public`. Body is unchanged; permission gating already lives inside the function (`v_is_admin` + explicit caller/stage checks).
-   - No signature or return-type change → no frontend impact.
-
-2. **Migration — one-shot data repair for Abes Raja's stuck row**
-   - `UPDATE annual_review_responses SET is_locked = false, submitted_at = NULL WHERE instance_id = '733e4c88-1cba-4a8d-8cbc-cc674ed02a3f' AND reviewer_role = 'self' AND is_locked = true;`
-   - Scope limited to this single instance/role/state so no other data is touched.
-   - Insert a `system_audit_logs` row (`annual_review.response_repair`) recording the manual unlock and reason.
-
-3. **No frontend changes.** Existing UI already handles `is_locked=false` correctly.
-
-## Verification
-
-- After migration, re-open `/annual-review/self` as Abes Raja: fields become editable, Save draft / Submit enabled.
-- Spot-check another send-back on a different instance (or in the test cycle) — confirm `annual_review_responses` for the target `reviewer_role` shows `is_locked=false` and `submitted_at=NULL` immediately after send-back by a non-admin reviewer.
-
-## Not applicable
-
-- Schema changes, RLS policy edits, and UI/UX changes are not required.
-- `advance_annual_review_status` is out of scope (only touches the caller's own row; RLS allows that).
+### Not building anything now
+Per your answer ("Feature exists but I didn't see it"), no code changes. Approve this plan to close the loop; ping me if the re-sync click doesn't take effect on a specific employee.
