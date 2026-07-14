@@ -2363,6 +2363,8 @@ function RulesTab() {
         targetTemplateName={syncRule?.templateName ?? ''}
         onConfirm={runSync}
         submitting={syncing}
+        onForceReset={runForceReset}
+        forceResetting={forceResetting}
       />
     </div>
   );
