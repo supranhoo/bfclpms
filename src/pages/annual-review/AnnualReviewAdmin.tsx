@@ -2056,6 +2056,7 @@ function RulesTab() {
   // the Form Mapping Save flow. See mem://features/annual-review/per-employee-template-override.
   const [syncOpen, setSyncOpen] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [forceResetting, setForceResetting] = useState(false);
   const [syncConflicts, setSyncConflicts] = useState<SeededConflict[]>([]);
   const [syncRule, setSyncRule] = useState<{ templateId: string; templateName: string; ruleLabel: string } | null>(null);
   const [syncResolving, setSyncResolving] = useState<string | null>(null);
@@ -2166,6 +2167,32 @@ function RulesTab() {
       toast.error((e as Error).message);
     } finally {
       setSyncing(false);
+    }
+  };
+
+  const runForceReset = async (instanceIds: string[], reason: string) => {
+    if (!syncRule || instanceIds.length === 0) return;
+    setForceResetting(true);
+    try {
+      const res = await svc.bulkForceResetInstances(
+        instanceIds.map((id) => ({ instanceId: id, templateId: syncRule.templateId })),
+        reason,
+      );
+      if (res.failed.length === 0) {
+        toast.success(
+          `Force-reset ${res.ok} employee${res.ok === 1 ? '' : 's'} onto ${syncRule.templateName}.`,
+        );
+      } else {
+        toast.warning(`Force-reset ${res.ok}; ${res.failed.length} failed.`);
+      }
+      setSyncOpen(false);
+      setSyncConflicts([]);
+      setSyncRule(null);
+      qc.invalidateQueries();
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setForceResetting(false);
     }
   };
 
@@ -2336,6 +2363,8 @@ function RulesTab() {
         targetTemplateName={syncRule?.templateName ?? ''}
         onConfirm={runSync}
         submitting={syncing}
+        onForceReset={runForceReset}
+        forceResetting={forceResetting}
       />
     </div>
   );

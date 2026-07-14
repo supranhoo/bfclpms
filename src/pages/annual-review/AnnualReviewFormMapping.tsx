@@ -762,6 +762,7 @@ function AudienceBuilder({
   const [syncOpen, setSyncOpen] = useState(false);
   const [syncConflicts, setSyncConflicts] = useState<SeededConflict[]>([]);
   const [syncTemplateId, setSyncTemplateId] = useState<string | null>(null);
+  const [forceResetting, setForceResetting] = useState(false);
   const [syncing, setSyncing] = useState(false);
 
   const previewQ = useQuery({
@@ -854,6 +855,32 @@ function AudienceBuilder({
       toast.error((e as Error).message);
     } finally {
       setSyncing(false);
+    }
+  };
+
+  const runForceReset = async (instanceIds: string[], reason: string) => {
+    if (!syncTemplateId || instanceIds.length === 0) return;
+    setForceResetting(true);
+    try {
+      const res = await svc.bulkForceResetInstances(
+        instanceIds.map((id) => ({ instanceId: id, templateId: syncTemplateId })),
+        reason,
+      );
+      if (res.failed.length === 0) {
+        toast.success(
+          `Force-reset ${res.ok} employee${res.ok === 1 ? '' : 's'} onto ${savedTemplateName}.`,
+        );
+      } else {
+        toast.warning(`Force-reset ${res.ok}; ${res.failed.length} failed.`);
+      }
+      setSyncOpen(false);
+      setSyncConflicts([]);
+      setSyncTemplateId(null);
+      await onCommitted();
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setForceResetting(false);
     }
   };
 
@@ -1003,6 +1030,8 @@ function AudienceBuilder({
         targetTemplateName={savedTemplateName}
         onConfirm={runSync}
         submitting={syncing}
+        onForceReset={runForceReset}
+        forceResetting={forceResetting}
       />
     </Card>
   );
