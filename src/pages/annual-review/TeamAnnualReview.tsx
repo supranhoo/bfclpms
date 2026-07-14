@@ -228,10 +228,14 @@ export default function TeamAnnualReview() {
                         {initials}
                       </div>
                       <div className="min-w-0 flex-1">
-                        <p className="font-medium text-sm leading-tight truncate">{i.employee?.full_name ?? i.employee_id}</p>
-                        <p className="text-[11px] text-muted-foreground truncate mt-0.5">
-                          {i.employee?.employee_code} · {i.employee?.designation ?? '—'}
+                        <p className="font-medium text-sm leading-tight truncate">
+                          {i.employee?.full_name ?? 'Employee unavailable'}
                         </p>
+                        {i.employee && (
+                          <p className="text-[11px] text-muted-foreground truncate mt-0.5">
+                            {i.employee.employee_code ?? '—'} · {i.employee.designation ?? '—'}
+                          </p>
+                        )}
                       </div>
                       <ChevronRight className="h-4 w-4 text-muted-foreground/60 group-hover:text-primary shrink-0" />
                     </div>
