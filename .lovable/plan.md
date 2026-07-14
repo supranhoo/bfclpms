@@ -1,58 +1,76 @@
-## Issue
+## RCA — Employee 102021, HOD stage shows only a subset of questions
 
-Employee 101896 gets **"Submission Failed — Employees cannot modify reviewer or workflow fields on review_submissions (self-guard)"** when submitting/updating a self-review.
+### What the HOD sees
+`EmployeeAnnualReview → TeamReviewDetailContent` renders criteria via `criteriaForStage(template, role)` (`src/lib/annualReview/templateVisibility.ts`), which keeps only criteria whose `reviewer_stages` array contains the current stage. For Prabhat Kumar Singh, `stageForReviewer(...)` resolves to `dept_head` (he is the instance's `dept_head_id`).
 
-## Root Cause
+### Instance snapshot
+- Employee 102021 (Dilip Kumar), instance `129a9fd6…`, `overall_status = pending_dept`
+- `enabled_stages = [self, dept_head, bu_head]`
+- Effective template = `template_override_id = 408ae1b3…` → **"DRI/Admin - W - Pollution"** (19 criteria)
 
-The self-guard trigger `tg_review_submissions_self_column_guard` (migration `20260713084902`) blocks any UPDATE on `review_submissions` from a non-privileged user when certain columns change — including `kpi_status` and `is_na`.
+### The mismatch (root cause)
+On template `408ae1b3…`, only 3 of the 19 criteria include `dept_head` in `reviewer_stages`:
 
-The self-submit path goes through the SECURITY DEFINER RPC `submit_self_review` (migration `20260713134241`), which does:
+| # | Criterion | reviewer_stages |
+|---|---|---|
+| 1 | Attendance & Punctuality | self, **dept_head**, bu_head, hr |
+| 2 | PPE, Safety Rules & Shop-Floor Discipline | self, **dept_head**, bu_head, hr |
+| 3 | Quality & Efficiency of Work | self, **dept_head**, bu_head, hr |
+| 4–19 | Pollution/Ops criteria | self, **manager**, **skip_manager**, bu_head, hr |
 
+Criteria 4–19 target `manager` / `skip_manager` but the instance workflow uses `dept_head` (Head-Master workflow). The template was authored/imported with the wrong stage keys for its second block, so `criteriaForStage(template, 'dept_head')` legitimately returns only rows 1–3. (The extra "question" the user sees comes from the system-score card above — hence the "3 to 6" perception.)
+
+Blast radius check: **39 instances** consume this template, **all via override**, all with the same `enabled_stages = [self, dept_head, bu_head]`. Every one of them is affected identically. No other template is impacted.
+
+### Fix (surgical, one template only)
+
+Single data migration that rewrites `reviewer_stages` on the 16 offending criteria of template `408ae1b3-95ac-4fc9-a404-54c5178bc510` so they align to the workflow the template is actually mapped to:
+
+- Old: `["self","manager","skip_manager","bu_head","hr"]`
+- New: `["self","dept_head","bu_head","hr"]`
+
+Rows 1–3 are already correct and left untouched. `hr` is preserved so HR read/finalize keeps rendering the row (harmless — HR stage is not enabled here, but consistent with rows 1–3). No schema change, no code change, no touch to other templates or other instances.
+
+```sql
+-- Migration: fix reviewer_stages on template 408ae1b3… (DRI/Admin - W - Pollution)
+-- Rows 4..19: replace manager/skip_manager with dept_head to match the
+-- enabled_stages [self, dept_head, bu_head] used by all 39 instances.
+UPDATE public.annual_review_templates
+SET sections = jsonb_set(
+  sections,
+  '{criteria}',
+  (
+    SELECT jsonb_agg(
+      CASE
+        WHEN ord BETWEEN 4 AND 19
+          THEN jsonb_set(c, '{reviewer_stages}',
+                         '["self","dept_head","bu_head","hr"]'::jsonb)
+        ELSE c
+      END
+      ORDER BY ord
+    )
+    FROM jsonb_array_elements(sections->'criteria') WITH ORDINALITY arr(c, ord)
+  ),
+  false
+),
+updated_at = now()
+WHERE id = '408ae1b3-95ac-4fc9-a404-54c5178bc510';
 ```
-INSERT INTO review_submissions (... kpi_status='submitted' ...)
-ON CONFLICT (kpi_id) DO UPDATE SET ... kpi_status = EXCLUDED.kpi_status ...
-```
 
-When a `review_submissions` row **already exists** (typical for a re-submit after admin step-back, or for a KPI that had a KRA-set draft row), the ON CONFLICT branch fires an UPDATE. Inside the trigger, `auth.uid()` still returns the calling employee (SECURITY DEFINER does not change `auth.uid()`), the employee is not privileged, and `kpi_status` transitions from e.g. `open`/`self_review` → `submitted` — so `IS DISTINCT FROM OLD.kpi_status` is true and the trigger raises.
+### Verification steps
+1. Re-query the template: all 19 criteria have `dept_head` in `reviewer_stages`.
+2. Reload the appraisal form as Prabhat Kumar Singh (HOD) for emp 102021 → all 19 questions visible under the HOD stage.
+3. Open one instance where the self-stage was already submitted → self-view still shows all 19 rows (unchanged, `self` was always present).
+4. Confirm no other template rows were modified: `SELECT updated_at FROM annual_review_templates WHERE id <> '408ae1b3…' AND updated_at > <migration_ts>` returns empty.
 
-Employee 101896's row already existed (evident from prior period activity in the screenshot — several months already `APPROVED`), so every re-submit attempt hits the UPDATE branch and fails.
+### Guard against regression (documentation-only, no code)
+Add a short note in `DOCUMENTATION.md` / template authoring section: **every criterion's `reviewer_stages` must intersect the instance's `enabled_stages`, otherwise the row is invisible to that stage**. A schema-level lint (future work, out of scope for this fix) can flag templates where any `reviewer_stages` list does not overlap the workflow's enabled_stages set.
 
-This is a regression introduced by the July-13 self-guard trigger against the July-13 v2 atomic RPC — the two migrations were not aware of each other.
+### Rollback
+Single-statement revert: restore prior `reviewer_stages` on rows 4–19 to `["self","manager","skip_manager","bu_head","hr"]`. No dependent code paths to unwind.
 
-## Fix Plan
-
-Introduce a session-scoped bypass flag that only `submit_self_review` (and other trusted SECURITY DEFINER writers) can raise, and teach the trigger to honor it. This keeps the guard intact for all client-side writes while unblocking the legitimate atomic RPC.
-
-### Migration
-
-1. Trigger patch — `tg_review_submissions_self_column_guard`:
-   - At the top, read `current_setting('app.self_submit_bypass', true)`. If it equals `'on'`, `RETURN COALESCE(NEW, OLD)` immediately (skip all checks). Everything else stays identical.
-
-2. RPC patch — `submit_self_review`:
-   - At the start of the function body: `PERFORM set_config('app.self_submit_bypass', 'on', true);` (transaction-local — `true` means LOCAL, auto-cleared at txn end, cannot leak to other statements outside the RPC's txn).
-   - No signature change, no behaviour change for callers.
-
-3. No schema changes, no data changes.
-
-### Verification
-
-- Reproduce 101896's scenario in a scratch txn (existing row + employee UID) and confirm the RPC succeeds.
-- Confirm a direct client-side UPDATE that tries to change `kpi_status` / `manager_score` / etc. from the employee's session still raises (guard intact).
-- `supabase--read_query` a quick check on 101896's row before/after.
-
-### Tests
-
-- Add SQL comment + policy note in `POLICY.md` §SELF-REVIEW-SUBMIT-ORDER cross-referencing §REVIEW-SUBMISSION-SELF-UPDATE-GUARD, documenting the bypass GUC contract (name, scope=LOCAL, only settable inside vetted SECURITY DEFINER functions).
-- Extend existing self-guard test (if present) with a case that runs through `submit_self_review` on an existing row and asserts success.
-
-### Risk & Impact
-
-- Data: none. No schema changes.
-- Security: bypass is a transaction-local GUC set only inside `submit_self_review`; client-side writes cannot set it in a way that survives to the trigger's evaluation without going through a definer function we control. RLS unchanged.
-- Regression: minimal — the trigger's behaviour is unchanged for every path except the vetted RPC.
-- Rollback: revert the two `CREATE OR REPLACE` bodies to their previous versions.
-
-## Follow-up (documentation)
-
-- `POLICY.md` — annotate §SELF-REVIEW-SUBMIT-ORDER and §REVIEW-SUBMISSION-SELF-UPDATE-GUARD with the shared bypass GUC contract.
-- `DOCUMENTATION.md` — Version History entry: "Self-submit RPC bypasses self-column guard via LOCAL GUC `app.self_submit_bypass`."
+### Not changed
+- No source code files
+- No other templates
+- No employee, department, or workflow definitions
+- No RLS / policies / triggers
