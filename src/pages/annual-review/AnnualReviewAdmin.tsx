@@ -2170,6 +2170,32 @@ function RulesTab() {
     }
   };
 
+  const runForceReset = async (instanceIds: string[], reason: string) => {
+    if (!syncRule || instanceIds.length === 0) return;
+    setForceResetting(true);
+    try {
+      const res = await svc.bulkForceResetInstances(
+        instanceIds.map((id) => ({ instanceId: id, templateId: syncRule.templateId })),
+        reason,
+      );
+      if (res.failed.length === 0) {
+        toast.success(
+          `Force-reset ${res.ok} employee${res.ok === 1 ? '' : 's'} onto ${syncRule.templateName}.`,
+        );
+      } else {
+        toast.warning(`Force-reset ${res.ok}; ${res.failed.length} failed.`);
+      }
+      setSyncOpen(false);
+      setSyncConflicts([]);
+      setSyncRule(null);
+      qc.invalidateQueries();
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setForceResetting(false);
+    }
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3">
