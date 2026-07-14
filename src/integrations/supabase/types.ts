@@ -987,6 +987,51 @@ export type Database = {
         }
         Relationships: []
       }
+      annual_review_reset_archive: {
+        Row: {
+          cycle_id: string
+          employee_id: string
+          id: string
+          instance_id: string
+          new_template_id: string
+          prior_status: Database["public"]["Enums"]["annual_review_status"]
+          prior_template_id: string | null
+          reason: string
+          reset_at: string
+          reset_by: string
+          wiped_proxy_submissions: Json
+          wiped_responses: Json
+        }
+        Insert: {
+          cycle_id: string
+          employee_id: string
+          id?: string
+          instance_id: string
+          new_template_id: string
+          prior_status: Database["public"]["Enums"]["annual_review_status"]
+          prior_template_id?: string | null
+          reason: string
+          reset_at?: string
+          reset_by: string
+          wiped_proxy_submissions?: Json
+          wiped_responses?: Json
+        }
+        Update: {
+          cycle_id?: string
+          employee_id?: string
+          id?: string
+          instance_id?: string
+          new_template_id?: string
+          prior_status?: Database["public"]["Enums"]["annual_review_status"]
+          prior_template_id?: string | null
+          reason?: string
+          reset_at?: string
+          reset_by?: string
+          wiped_proxy_submissions?: Json
+          wiped_responses?: Json
+        }
+        Relationships: []
+      }
       annual_review_responses: {
         Row: {
           created_at: string
@@ -13516,6 +13561,10 @@ export type Database = {
         }
         Returns: number
       }
+      bulk_force_reset_annual_review_instances: {
+        Args: { p_items: Json; p_reason: string }
+        Returns: Json
+      }
       bulk_management_approve: {
         Args: {
           p_achieved_values?: Json
@@ -13890,6 +13939,14 @@ export type Database = {
           p_rule: Json
           p_stage_scores: Json
           p_workflow_stages: string[]
+        }
+        Returns: Json
+      }
+      force_reset_annual_review_instance: {
+        Args: {
+          p_instance_id: string
+          p_new_template_id: string
+          p_reason: string
         }
         Returns: Json
       }
