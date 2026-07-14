@@ -1030,6 +1030,8 @@ function AudienceBuilder({
         targetTemplateName={savedTemplateName}
         onConfirm={runSync}
         submitting={syncing}
+        onForceReset={runForceReset}
+        forceResetting={forceResetting}
       />
     </Card>
   );
