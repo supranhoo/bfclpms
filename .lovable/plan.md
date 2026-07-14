@@ -1,76 +1,98 @@
-## RCA — Employee 102021, HOD stage shows only a subset of questions
+# RCA — UUID shown in Team Annual Review queue
 
-### What the HOD sees
-`EmployeeAnnualReview → TeamReviewDetailContent` renders criteria via `criteriaForStage(template, role)` (`src/lib/annualReview/templateVisibility.ts`), which keeps only criteria whose `reviewer_stages` array contains the current stage. For Prabhat Kumar Singh, `stageForReviewer(...)` resolves to `dept_head` (he is the instance's `dept_head_id`).
+## Reproduction of the reported record
+The card that shows `ea42868d-c67e-46d5-8758-6a…` with blank code/designation is **Sourabh Kumar Singh (101790, Senior Engineer)**, instance `1ab610a9…` in cycle `b82a935f…`, currently at stage **`pending_bu`**.
 
-### Instance snapshot
-- Employee 102021 (Dilip Kumar), instance `129a9fd6…`, `overall_status = pending_dept`
-- `enabled_stages = [self, dept_head, bu_head]`
-- Effective template = `template_override_id = 408ae1b3…` → **"DRI/Admin - W - Pollution"** (19 criteria)
+Reviewer chain on that instance:
+- manager = Rishi Raj (101142)
+- skip = **Prabhat Kumar Singh (101757)**
+- dept_head = Sushanta Ghosh (101883)
+- bu_head = Sajid Raza (100264)
+- hr = Jaspal (101125)
 
-### The mismatch (root cause)
-On template `408ae1b3…`, only 3 of the 19 criteria include `dept_head` in `reviewer_stages`:
+Sourabh's `reporting_manager_id` = Sushanta (not Rishi). So Sourabh is Sushanta's direct report and Sajid's skip-level report through the org tree — but he is NOT under Prabhat in the reporting chain.
 
-| # | Criterion | reviewer_stages |
-|---|---|---|
-| 1 | Attendance & Punctuality | self, **dept_head**, bu_head, hr |
-| 2 | PPE, Safety Rules & Shop-Floor Discipline | self, **dept_head**, bu_head, hr |
-| 3 | Quality & Efficiency of Work | self, **dept_head**, bu_head, hr |
-| 4–19 | Pollution/Ops criteria | self, **manager**, **skip_manager**, bu_head, hr |
+## Why the name renders as a UUID
 
-Criteria 4–19 target `manager` / `skip_manager` but the instance workflow uses `dept_head` (Head-Master workflow). The template was authored/imported with the wrong stage keys for its second block, so `criteriaForStage(template, 'dept_head')` legitimately returns only rows 1–3. (The extra "question" the user sees comes from the system-score card above — hence the "3 to 6" perception.)
+`src/pages/annual-review/TeamAnnualReview.tsx` line 231:
+```
+{i.employee?.full_name ?? i.employee_id}
+```
+The card falls back to `employee_id` (a UUID) when the embedded `employee` join is `null`, and the code/designation line then renders `undefined · —`.
 
-Blast radius check: **39 instances** consume this template, **all via override**, all with the same `enabled_stages = [self, dept_head, bu_head]`. Every one of them is affected identically. No other template is impacted.
+The embed is a PostgREST join to `profiles`:
+```
+employee:profiles!annual_review_instances_employee_id_fkey(id, full_name, employee_code, designation, doj)
+```
+PostgREST enforces RLS on the embedded side independently. The instance row is visible to every reviewer (its RLS uses `manager_id / skip_id / dept_head_id / bu_head_id / hr_id`), but the **profiles** table has NO policy for "reviewer assigned on this employee's active review instance". Its reviewer-oriented policies only cover:
+- `Managers can view their direct reports` (reporting_manager_id = auth.uid())
+- `Managers can view skip-level reports` (reporting_manager_id ∈ direct reports of auth.uid())
+- `Annual review directory reviewers` (Admin/HR PMS/BU-head via directory access)
 
-### Fix (surgical, one template only)
+Consequence: Any reviewer who sees an instance solely because they are the assigned `skip_id`, `dept_head_id`, `bu_head_id`, or `hr_id` — but who is NOT on the reviewee's reporting-manager chain — gets the instance row without the joined profile row.
 
-Single data migration that rewrites `reviewer_stages` on the 16 offending criteria of template `408ae1b3-95ac-4fc9-a404-54c5178bc510` so they align to the workflow the template is actually mapped to:
+For this specific record, **Prabhat Kumar Singh** is the assigned skip reviewer, but his own direct report is Rishi Raj; Sourabh does not roll up through Rishi. Result → profile join is silently dropped → UI falls back to the UUID.
 
-- Old: `["self","manager","skip_manager","bu_head","hr"]`
-- New: `["self","dept_head","bu_head","hr"]`
+**Not** caused by:
+- Master data / cycle mapping — the profile exists, is_active=true, department mapped, employee_code populated.
+- Deleted/separated employee — Sourabh is active.
+- Assignment mapping — all five reviewer IDs are populated correctly on the instance.
+- Frontend binding — the binding is correct; the API response has `employee: null`.
+- Cache — reloading, other queries all hit the same RLS.
 
-Rows 1–3 are already correct and left untouched. `hr` is preserved so HR read/finalize keeps rendering the row (harmless — HR stage is not enabled here, but consistent with rows 1–3). No schema change, no code change, no touch to other templates or other instances.
+## Blast radius (before fix)
+Any instance where the current viewer is an assigned reviewer but not on the reporting-manager chain. Currently observed with `pending_bu` on this row, but structurally affects skip / dept / bu / hr reviewers whenever the assigned reviewer differs from the tree-derived reviewer (per-employee overrides, HOD/BU reassignments, HR seat).
+
+## Fix (root-cause, RLS layer)
+
+Add one SECURITY DEFINER helper and one SELECT policy on `public.profiles`, scoped strictly to "the current user is an assigned reviewer on an active (non-excluded) annual review instance for this profile". No other table, no other role, no other flow is touched.
 
 ```sql
--- Migration: fix reviewer_stages on template 408ae1b3… (DRI/Admin - W - Pollution)
--- Rows 4..19: replace manager/skip_manager with dept_head to match the
--- enabled_stages [self, dept_head, bu_head] used by all 39 instances.
-UPDATE public.annual_review_templates
-SET sections = jsonb_set(
-  sections,
-  '{criteria}',
-  (
-    SELECT jsonb_agg(
-      CASE
-        WHEN ord BETWEEN 4 AND 19
-          THEN jsonb_set(c, '{reviewer_stages}',
-                         '["self","dept_head","bu_head","hr"]'::jsonb)
-        ELSE c
-      END
-      ORDER BY ord
-    )
-    FROM jsonb_array_elements(sections->'criteria') WITH ORDINALITY arr(c, ord)
-  ),
-  false
-),
-updated_at = now()
-WHERE id = '408ae1b3-95ac-4fc9-a404-54c5178bc510';
+create or replace function public.is_annual_review_reviewer_for_profile(p_profile_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1
+    from public.annual_review_instances i
+    where i.employee_id = p_profile_id
+      and i.overall_status <> 'excluded'
+      and auth.uid() in (i.manager_id, i.skip_id, i.dept_head_id, i.bu_head_id, i.hr_id)
+  )
+$$;
+
+create policy "Annual review reviewers can view reviewee profiles"
+  on public.profiles
+  for select
+  using (public.is_annual_review_reviewer_for_profile(id));
 ```
 
-### Verification steps
-1. Re-query the template: all 19 criteria have `dept_head` in `reviewer_stages`.
-2. Reload the appraisal form as Prabhat Kumar Singh (HOD) for emp 102021 → all 19 questions visible under the HOD stage.
-3. Open one instance where the self-stage was already submitted → self-view still shows all 19 rows (unchanged, `self` was always present).
-4. Confirm no other template rows were modified: `SELECT updated_at FROM annual_review_templates WHERE id <> '408ae1b3…' AND updated_at > <migration_ts>` returns empty.
+Why this is safe:
+- Additive-only (new function, new SELECT policy). No existing policy or function is modified. Rollback = drop the policy + function.
+- Scope matches the instance's own RLS envelope: if a user cannot see the instance, `auth.uid()` will not appear in any of the reviewer columns and the policy denies. So this grants exactly the profile visibility that the queue query already implicitly needs — nothing more.
+- Filters `overall_status <> 'excluded'` so excluded instances don't leak profiles.
+- Column exposure is unchanged: the queue only selects `id, full_name, employee_code, designation, doj`. No sensitive columns beyond what other reviewer policies already return.
 
-### Guard against regression (documentation-only, no code)
-Add a short note in `DOCUMENTATION.md` / template authoring section: **every criterion's `reviewer_stages` must intersect the instance's `enabled_stages`, otherwise the row is invisible to that stage**. A schema-level lint (future work, out of scope for this fix) can flag templates where any `reviewer_stages` list does not overlap the workflow's enabled_stages set.
+## Frontend safety net (defense-in-depth, tiny)
 
-### Rollback
-Single-statement revert: restore prior `reviewer_stages` on rows 4–19 to `["self","manager","skip_manager","bu_head","hr"]`. No dependent code paths to unwind.
+Even after the RLS fix, the UUID-in-name fallback is a latent bug. Change `TeamAnnualReview.tsx` fallback so that when `employee` is still missing (future edge cases like archived profiles) it renders a neutral label instead of leaking the UUID:
 
-### Not changed
-- No source code files
-- No other templates
-- No employee, department, or workflow definitions
-- No RLS / policies / triggers
+```
+{i.employee?.full_name ?? 'Employee unavailable'}
+```
+and hide the code/designation line (`—`) when `employee` is null. Purely presentational; no logic change.
+
+## Verification
+
+1. As Prabhat Kumar Singh (skip reviewer, no reporting-chain link to Sourabh): reload `/annual-review/team` → the card renders "Sourabh Kumar Singh · 101790 · Senior Engineer".
+2. As Sajid Raza (BU head, on chain): unchanged behavior.
+3. As Rishi Raj (manager, on chain): unchanged.
+4. As an unrelated employee (e.g. a random Employee-role user): `select * from profiles where id = 'ea42868d…'` still returns 0 rows (no new leakage).
+5. Directory-search flow (Admin / HR PMS / BU-head with directory access) unaffected — separate policy still applies.
+6. No other module reads `profiles` embed via reviewer role; unit tests in `src/test/annualReview/*` continue to pass.
+
+## Deliverable
+Single migration adding the helper + policy, plus the two-line UI fallback hardening.

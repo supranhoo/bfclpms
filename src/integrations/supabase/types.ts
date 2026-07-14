@@ -14628,6 +14628,10 @@ export type Database = {
         Returns: number
       }
       is_annual_review_admin: { Args: { _uid: string }; Returns: boolean }
+      is_annual_review_reviewer_for_profile: {
+        Args: { p_profile_id: string }
+        Returns: boolean
+      }
       is_bulk_review_enabled: { Args: never; Returns: boolean }
       is_canonical_enforcement_period: {
         Args: { p_period: string; p_year: number }
