@@ -55,7 +55,6 @@ import { UnifiedBulkDialog } from '@/components/annual-review/UnifiedBulkDialog'
 import { AnnualReviewExportMenu } from '@/components/annual-review/AnnualReviewExportMenu';
 import { ChangeWorkflowDialog } from '@/components/annual-review/ChangeWorkflowDialog';
 import { InstanceStageWeightsDialog } from '@/components/annual-review/InstanceStageWeightsDialog';
-import { ResetAndReassignTemplateDialog } from '@/components/annual-review/ResetAndReassignTemplateDialog';
 import { TemplateEditorDialog } from '@/components/annual-review/TemplateEditorDialog';
 import { TemplateUploadDialog } from '@/components/annual-review/TemplateUploadDialog';
 import { downloadTemplateFormatWorkbook, downloadFilledTemplateWorkbook } from '@/lib/annualReview/templateWorkbook';
@@ -495,7 +494,6 @@ function ProgressTab() {
   const { data: template } = useTemplate(svc.resolveTemplateId(selected) ?? undefined);
   const { data: uploadTemplate } = useTemplate(svc.resolveTemplateId(instances[0]) ?? undefined);
   const [changeTplFor, setChangeTplFor] = useState<InstanceWithEmployee | null>(null);
-  const [resetTplFor, setResetTplFor] = useState<InstanceWithEmployee | null>(null);
   const [changeWfFor, setChangeWfFor] = useState<InstanceWithEmployee | null>(null);
   const [weightsFor, setWeightsFor] = useState<InstanceWithEmployee | null>(null);
   const [stepBackFor, setStepBackFor] = useState<InstanceWithEmployee | null>(null);
@@ -1107,12 +1105,6 @@ function ProgressTab() {
         instance={changeTplFor}
         onClose={() => setChangeTplFor(null)}
         onDone={() => { setChangeTplFor(null); refetch(); }}
-      />
-
-      <ResetAndReassignTemplateDialog
-        instance={resetTplFor}
-        onClose={() => setResetTplFor(null)}
-        onDone={() => { setResetTplFor(null); refetch(); }}
       />
 
       <ChangeWorkflowDialog
