@@ -963,12 +963,15 @@ function ProgressTab() {
                     ? <span className="text-muted-foreground/50">—</span>
                     : rating.toFixed(1);
                 };
-                const canChange = i.overall_status === 'not_started' || i.overall_status === 'pending_self';
-                const canForceReset =
-                  i.overall_status !== 'not_started' &&
-                  i.overall_status !== 'pending_self' &&
+                // Per policy: template can be changed at any non-terminal stage.
+                // ChangeTemplateDialog auto-force-resets past-self instances.
+                const canChange =
                   i.overall_status !== 'completed' &&
                   i.overall_status !== 'excluded';
+                const isPastSelf =
+                  canChange &&
+                  i.overall_status !== 'not_started' &&
+                  i.overall_status !== 'pending_self';
                 return (
                 <TableRow key={i.id} className="min-h-10">
                   <TableCell>
