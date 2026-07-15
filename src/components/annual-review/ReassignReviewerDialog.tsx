@@ -54,7 +54,8 @@ export function ReassignReviewerDialog({
         .eq('is_active', true)
         .order('full_name', { ascending: true })
         .limit(100);
-      if (search.trim()) q = q.ilike('full_name', `%${search.trim()}%`);
+      const s = search.trim();
+      if (s) q = q.or(`full_name.ilike.%${s}%,employee_code.ilike.%${s}%`);
       const { data, error } = await q;
       if (error) throw error;
       return data ?? [];
