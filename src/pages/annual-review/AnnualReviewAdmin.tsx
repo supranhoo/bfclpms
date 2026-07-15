@@ -1029,24 +1029,24 @@ function ProgressTab() {
                         )}
                         {canChange && (
                           <>
-                            <DropdownMenuItem onClick={() => setChangeTplFor(i)}>
-                              <Layers className="h-4 w-4 mr-2" /> Change template
+                            <DropdownMenuItem
+                              onClick={() => setChangeTplFor(i)}
+                              className={isPastSelf ? 'text-destructive focus:text-destructive' : undefined}
+                            >
+                              <Layers className="h-4 w-4 mr-2" />
+                              {isPastSelf ? 'Change template (reset self-review)' : 'Change template'}
                             </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => setChangeWfFor(i)}>
-                              <ListChecks className="h-4 w-4 mr-2" /> Change workflow
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => setWeightsFor(i)}>
-                              <Scale className="h-4 w-4 mr-2" /> Customise weights
-                            </DropdownMenuItem>
+                            {!isPastSelf && (
+                              <>
+                                <DropdownMenuItem onClick={() => setChangeWfFor(i)}>
+                                  <ListChecks className="h-4 w-4 mr-2" /> Change workflow
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => setWeightsFor(i)}>
+                                  <Scale className="h-4 w-4 mr-2" /> Customise weights
+                                </DropdownMenuItem>
+                              </>
+                            )}
                           </>
-                        )}
-                        {canForceReset && (
-                          <DropdownMenuItem
-                            onClick={() => setResetTplFor(i)}
-                            className="text-destructive focus:text-destructive"
-                          >
-                            <Layers className="h-4 w-4 mr-2" /> Reset &amp; reassign template
-                          </DropdownMenuItem>
                         )}
                       </DropdownMenuContent>
                     </DropdownMenu>
