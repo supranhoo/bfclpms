@@ -1037,6 +1037,14 @@ function ProgressTab() {
                             </DropdownMenuItem>
                           </>
                         )}
+                        {canForceReset && (
+                          <DropdownMenuItem
+                            onClick={() => setResetTplFor(i)}
+                            className="text-destructive focus:text-destructive"
+                          >
+                            <Layers className="h-4 w-4 mr-2" /> Reset &amp; reassign template
+                          </DropdownMenuItem>
+                        )}
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </TableCell>
