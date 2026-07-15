@@ -2288,7 +2288,7 @@ function RulesTab() {
                         className="mr-2"
                         onClick={() => openSyncForRule(r)}
                         disabled={syncResolving === r.id}
-                        title="Move employees who are already seeded on a different template onto this rule's template. Only touches instances still in not_started or pending_self."
+                        title="Move ALL employees who are already seeded on a different template onto this rule's template. Employees who have already submitted are archived and restarted at pending_self."
                         aria-label={`Sync assignments for rule ${r.name ?? ''}`}
                       >
                         {syncResolving === r.id
