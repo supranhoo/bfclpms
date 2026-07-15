@@ -762,7 +762,6 @@ function AudienceBuilder({
   const [syncOpen, setSyncOpen] = useState(false);
   const [syncConflicts, setSyncConflicts] = useState<SeededConflict[]>([]);
   const [syncTemplateId, setSyncTemplateId] = useState<string | null>(null);
-  const [forceResetting, setForceResetting] = useState(false);
   const [syncing, setSyncing] = useState(false);
 
   const previewQ = useQuery({
