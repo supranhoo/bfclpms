@@ -55,6 +55,7 @@ import { UnifiedBulkDialog } from '@/components/annual-review/UnifiedBulkDialog'
 import { AnnualReviewExportMenu } from '@/components/annual-review/AnnualReviewExportMenu';
 import { ChangeWorkflowDialog } from '@/components/annual-review/ChangeWorkflowDialog';
 import { InstanceStageWeightsDialog } from '@/components/annual-review/InstanceStageWeightsDialog';
+import { ResetAndReassignTemplateDialog } from '@/components/annual-review/ResetAndReassignTemplateDialog';
 import { TemplateEditorDialog } from '@/components/annual-review/TemplateEditorDialog';
 import { TemplateUploadDialog } from '@/components/annual-review/TemplateUploadDialog';
 import { downloadTemplateFormatWorkbook, downloadFilledTemplateWorkbook } from '@/lib/annualReview/templateWorkbook';
@@ -494,6 +495,7 @@ function ProgressTab() {
   const { data: template } = useTemplate(svc.resolveTemplateId(selected) ?? undefined);
   const { data: uploadTemplate } = useTemplate(svc.resolveTemplateId(instances[0]) ?? undefined);
   const [changeTplFor, setChangeTplFor] = useState<InstanceWithEmployee | null>(null);
+  const [resetTplFor, setResetTplFor] = useState<InstanceWithEmployee | null>(null);
   const [changeWfFor, setChangeWfFor] = useState<InstanceWithEmployee | null>(null);
   const [weightsFor, setWeightsFor] = useState<InstanceWithEmployee | null>(null);
   const [stepBackFor, setStepBackFor] = useState<InstanceWithEmployee | null>(null);
@@ -962,6 +964,11 @@ function ProgressTab() {
                     : rating.toFixed(1);
                 };
                 const canChange = i.overall_status === 'not_started' || i.overall_status === 'pending_self';
+                const canForceReset =
+                  i.overall_status !== 'not_started' &&
+                  i.overall_status !== 'pending_self' &&
+                  i.overall_status !== 'completed' &&
+                  i.overall_status !== 'excluded';
                 return (
                 <TableRow key={i.id} className="min-h-10">
                   <TableCell>
@@ -1030,6 +1037,14 @@ function ProgressTab() {
                             </DropdownMenuItem>
                           </>
                         )}
+                        {canForceReset && (
+                          <DropdownMenuItem
+                            onClick={() => setResetTplFor(i)}
+                            className="text-destructive focus:text-destructive"
+                          >
+                            <Layers className="h-4 w-4 mr-2" /> Reset &amp; reassign template
+                          </DropdownMenuItem>
+                        )}
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </TableCell>
@@ -1089,6 +1104,12 @@ function ProgressTab() {
         instance={changeTplFor}
         onClose={() => setChangeTplFor(null)}
         onDone={() => { setChangeTplFor(null); refetch(); }}
+      />
+
+      <ResetAndReassignTemplateDialog
+        instance={resetTplFor}
+        onClose={() => setResetTplFor(null)}
+        onDone={() => { setResetTplFor(null); refetch(); }}
       />
 
       <ChangeWorkflowDialog

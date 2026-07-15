@@ -27,6 +27,8 @@ Both `seedInstancesForCycle` and `seedInstancesByRules` write through `writeSeed
 ## UI surface
 Progress tab in `AnnualReviewAdmin.tsx` exposes a per-row "Change template" button (only when status ∈ not_started / pending_self) → `ChangeTemplateDialog` (current vs new template select, mandatory reason, "Clear override" option when an override is set).
 
+For instances **past** `pending_self` (i.e. `pending_manager` .. `pending_hr`) the same row exposes a destructive "Reset & reassign template" action → `ResetAndReassignTemplateDialog`. It wraps `bulkForceResetInstances` (n=1) → RPC `bulk_force_reset_annual_review_instances`: archives + wipes existing responses, swaps template, restarts at `pending_self`. Guardrails: mandatory template pick, reason min 10 chars, typed `RESET` gate. This is the ONLY UI path to reassign a template for an employee who has already submitted.
+
 ## Bulk CSV/XLSX (Part C)
 `BulkTemplateAssignmentDialog` + `bulkSetTemplateOverrides` (thin loop over the same RPC). Workbook columns: `Employee Code`, `Full Name`, `Current Template`, `Stage`, `New Template`, `Reason`. Use literal `CLEAR` in `New Template` to remove an override. Upload runs a client-side dry-run classifying each row as Apply/Skip/Error before any RPC fires. No new schema, no new RPC — server-side stage/role/reason gates are identical to single-row.
 
