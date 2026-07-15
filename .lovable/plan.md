@@ -1,43 +1,51 @@
-## Root cause
+## Goal (policy statement, per your ask)
 
-The admin re-mapped the employee onto a new template, but the instance is already past `pending_self` (currently `pending_dept`). All non-destructive template-swap paths (`set_annual_review_template_override` RPC, single-row "Change template" dropdown, `BulkTemplateAssignmentDialog`, Form-Mapping "Reassign now") **refuse anything past `pending_self`** and only affect future seed runs. Result:
+Whenever an admin/HR maps a new template to an employee (or an audience) mid-cycle, **all** affected employees must end up on the new template. Employees still on `pending_self` are non-destructively overridden. Employees who already submitted (past `pending_self`) are archived + wiped + restarted at `pending_self` on the new template so they see and refill the blank new form. **No partial state, no per-row opt-in.**
 
-- Instance stays on the OLD template.
-- `overall_status` stays at `pending_dept` (dept head sees it in their queue).
-- Employee only sees the already-submitted self-review (read-only), never a fresh form.
+Today the three template-change entry points make past-self opt-in (checkbox / separate button), which is how the current 19 CPP - W - Operation employees got stranded.
 
-The only server path that actually moves a past-self instance onto a new template and restarts it at `pending_self` is the destructive `bulk_force_reset_annual_review_instances` RPC (archives responses → wipes → swaps template → status `pending_self`). Today that RPC is only reachable from the Form-Mapping Save flow's `SyncAssignmentsDialog` when the admin explicitly ticks "Force reset" per row — easy to miss.
+## Fix — make "sync everyone" the only path
 
-## Fix (single-employee "Reset & reassign template" action)
+### 1. `SyncAssignmentsDialog` (Form Mapping + Rules tab entry point)
+- Collapse the two buttons into a single primary **"Sync all N employees to `<new template>`"** action.
+- Table still lists everyone with their per-row action badge (`Will move` / `Will reset` — no checkboxes).
+- When past-self count > 0, require:
+  - Reason textarea (min 10 chars)
+  - Type `RESET` gate (present the destructive summary — "X employees have already submitted; their responses will be archived and they will refill the new form")
+- When past-self count == 0, no RESET gate needed; still audit-log reason (min 3 chars, reuse existing default).
+- Submit runs both server calls in a single transaction-like sequence:
+  1. `bulkReassignViaOverride` for eligible rows
+  2. `bulkForceResetInstances` for past-self rows (same `new_template_id`)
+  Aggregate results into one toast; partial failures reported per-row.
+- Callers `AnnualReviewFormMapping.tsx` and `AnnualReviewAdmin.tsx` (Rules tab) drop their split `runSync` / `runForceReset` handlers and pass a single `onSyncAll(payload, reason)` handler.
 
-Add a per-row destructive action on the Admin → Progress table so HR can reset one employee's instance onto a new template without going through Form Mapping. Reuses the existing RPC — no new schema, no policy change.
+### 2. Per-row "Change template" on Admin → Progress (`ChangeTemplateDialog`)
+- Remove the `not_started / pending_self` gate on the dropdown item.
+- When invoked on a past-self instance, the dialog shows the destructive warning + `RESET` typed gate and calls `bulkForceResetInstances([{instanceId,newTemplateId}], reason)` instead of `setTemplateOverride`.
+- For not-started / pending_self it keeps the existing non-destructive path.
+- The separate "Reset & reassign template" menu item I added earlier is folded back into "Change template" so admins see one action, not two.
 
-### 1. `src/pages/annual-review/AnnualReviewAdmin.tsx`
-- Add a new dropdown item **"Reset & reassign template"** visible when `overall_status` is past `pending_self` and not `completed` / `excluded` (i.e. `pending_manager | pending_skip | pending_dept | pending_bu | pending_hr`), gated to admin / hr_pms (same gate as existing template actions).
-- Opens a new `ResetAndReassignTemplateDialog` prefilled with the instance.
+### 3. `BulkTemplateAssignmentDialog` (CSV/XLSX)
+- Stop skipping past-self rows in the client dry-run. Classify them as **"Will reset"** in the preview instead of **"Skip"**.
+- Upload runs `bulkReassignViaOverride` for eligible + `bulkForceResetInstances` for past-self, both with the row's supplied reason (still min 10 chars when any past-self are present; the CSV template already collects a Reason column).
 
-### 2. New `src/components/annual-review/ResetAndReassignTemplateDialog.tsx`
-- Fields: current template (read-only), **New template** (Select — active templates only), **Reason** (Textarea, min 10 chars), **Type `RESET` to confirm** (Input).
-- Prominent destructive warning listing what will happen (archive + wipe responses, swap template, restart at `pending_self`, notify employee).
-- Submit calls `bulkForceResetInstances([{ instanceId, templateId }], reason)` (existing service helper).
-- On success: toast, invalidate the Progress + instance queries, close.
+### 4. Backfill the 19 CPP - W - Operation employees still stranded
 
-### 3. Employee-side visibility (no code change required)
-Once the RPC runs, `overall_status = 'pending_self'` and `template_override_id = new template`. Existing self-review page already renders `resolveTemplateId(instance)` and shows the form when status = `pending_self`. Verify by opening the employee's self-review route after the reset.
+Once the code lands, HR reopens Form Mapping → CPP - W - Operation (Casual workers) rule → Save (or just re-open the sync dialog) → single button reassigns everyone. No SQL / no manual RPC calls required.
 
-### 4. Tests
-`src/test/annualReview/resetAndReassignTemplateDialog.test.ts` (Vitest + RTL):
-- Renders with current template label, submit disabled until reason ≥ 10 chars AND gate = "RESET" AND new template chosen.
-- Submitting calls `bulkForceResetInstances` with `[{ instanceId, templateId }]` + reason.
-- Failure path shows toast, dialog stays open.
+If you want, I can *separately* run the destructive backfill for the 19 codes I listed via the RPC now (with a reason string you approve) before the code change ships — say the word and I'll fire it.
 
-## Data / policy notes
-- SSOT unchanged: `resolveTemplateId` still `COALESCE(template_override_id, template_id)`; RPC writes `template_override_id`. Update `mem/features/annual-review/per-employee-template-override.md` to note the new single-row destructive entry-point.
-- Audit trail preserved by the RPC (`annual_review.instance_force_reset`).
-- No RLS change; RPC is admin/hr_pms only server-side.
+## Tests
+- New: `src/test/annualReview/syncAssignmentsDialog.behavior.test.tsx` — dialog with only-eligible / only-past-self / mixed conflicts; asserts submit button label + gate visibility, and asserts the combined handler is called with the right splits.
+- Update: `resetAndReassignTemplateDialog.test.ts` → merge into `changeTemplateDialog.test.ts` after the two paths are unified.
+- Update: `bulkSetTemplateOverrides.test.ts` and any bulk CSV tests to cover the past-self→reset classification.
+- Regression: `bulkForceResetInstances.test.ts` (added in previous turn) — unchanged; still guards the RPC contract.
 
-## Rollback
-Remove the dropdown item + new dialog file + memory note. RPC and prior flows unchanged.
+## Not changed
+- Server RPCs (`set_annual_review_template_override`, `bulk_force_reset_annual_review_instances`) already enforce the correct gates (role, reason length, stage). No migration.
+- `resolveTemplateId` SSOT unchanged.
+- Auditing is preserved via the two existing RPCs (`annual_review.template_override_set` + `annual_review.instance_force_reset`).
 
 ## Risk
-Low — additive UI over an existing, already-audited destructive RPC. Same guardrails as the bulk path (min-10-char reason + typed "RESET" gate + two-step confirm).
+- Destructive-by-default is intentional per your stated policy but changes an existing safety gate. Mitigations: mandatory reason + `RESET` typed gate whenever past-self > 0, prominent red warning summary, per-row action visible in the table so admin sees exactly whose data will be wiped.
+- Rollback: revert the SyncAssignmentsDialog + ChangeTemplateDialog + BulkTemplateAssignmentDialog edits. RPCs and data model untouched.

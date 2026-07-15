@@ -55,7 +55,6 @@ import { UnifiedBulkDialog } from '@/components/annual-review/UnifiedBulkDialog'
 import { AnnualReviewExportMenu } from '@/components/annual-review/AnnualReviewExportMenu';
 import { ChangeWorkflowDialog } from '@/components/annual-review/ChangeWorkflowDialog';
 import { InstanceStageWeightsDialog } from '@/components/annual-review/InstanceStageWeightsDialog';
-import { ResetAndReassignTemplateDialog } from '@/components/annual-review/ResetAndReassignTemplateDialog';
 import { TemplateEditorDialog } from '@/components/annual-review/TemplateEditorDialog';
 import { TemplateUploadDialog } from '@/components/annual-review/TemplateUploadDialog';
 import { downloadTemplateFormatWorkbook, downloadFilledTemplateWorkbook } from '@/lib/annualReview/templateWorkbook';
@@ -495,7 +494,6 @@ function ProgressTab() {
   const { data: template } = useTemplate(svc.resolveTemplateId(selected) ?? undefined);
   const { data: uploadTemplate } = useTemplate(svc.resolveTemplateId(instances[0]) ?? undefined);
   const [changeTplFor, setChangeTplFor] = useState<InstanceWithEmployee | null>(null);
-  const [resetTplFor, setResetTplFor] = useState<InstanceWithEmployee | null>(null);
   const [changeWfFor, setChangeWfFor] = useState<InstanceWithEmployee | null>(null);
   const [weightsFor, setWeightsFor] = useState<InstanceWithEmployee | null>(null);
   const [stepBackFor, setStepBackFor] = useState<InstanceWithEmployee | null>(null);
@@ -963,12 +961,15 @@ function ProgressTab() {
                     ? <span className="text-muted-foreground/50">—</span>
                     : rating.toFixed(1);
                 };
-                const canChange = i.overall_status === 'not_started' || i.overall_status === 'pending_self';
-                const canForceReset =
-                  i.overall_status !== 'not_started' &&
-                  i.overall_status !== 'pending_self' &&
+                // Per policy: template can be changed at any non-terminal stage.
+                // ChangeTemplateDialog auto-force-resets past-self instances.
+                const canChange =
                   i.overall_status !== 'completed' &&
                   i.overall_status !== 'excluded';
+                const isPastSelf =
+                  canChange &&
+                  i.overall_status !== 'not_started' &&
+                  i.overall_status !== 'pending_self';
                 return (
                 <TableRow key={i.id} className="min-h-10">
                   <TableCell>
@@ -1026,24 +1027,24 @@ function ProgressTab() {
                         )}
                         {canChange && (
                           <>
-                            <DropdownMenuItem onClick={() => setChangeTplFor(i)}>
-                              <Layers className="h-4 w-4 mr-2" /> Change template
+                            <DropdownMenuItem
+                              onClick={() => setChangeTplFor(i)}
+                              className={isPastSelf ? 'text-destructive focus:text-destructive' : undefined}
+                            >
+                              <Layers className="h-4 w-4 mr-2" />
+                              {isPastSelf ? 'Change template (reset self-review)' : 'Change template'}
                             </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => setChangeWfFor(i)}>
-                              <ListChecks className="h-4 w-4 mr-2" /> Change workflow
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => setWeightsFor(i)}>
-                              <Scale className="h-4 w-4 mr-2" /> Customise weights
-                            </DropdownMenuItem>
+                            {!isPastSelf && (
+                              <>
+                                <DropdownMenuItem onClick={() => setChangeWfFor(i)}>
+                                  <ListChecks className="h-4 w-4 mr-2" /> Change workflow
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => setWeightsFor(i)}>
+                                  <Scale className="h-4 w-4 mr-2" /> Customise weights
+                                </DropdownMenuItem>
+                              </>
+                            )}
                           </>
-                        )}
-                        {canForceReset && (
-                          <DropdownMenuItem
-                            onClick={() => setResetTplFor(i)}
-                            className="text-destructive focus:text-destructive"
-                          >
-                            <Layers className="h-4 w-4 mr-2" /> Reset &amp; reassign template
-                          </DropdownMenuItem>
                         )}
                       </DropdownMenuContent>
                     </DropdownMenu>
@@ -1104,12 +1105,6 @@ function ProgressTab() {
         instance={changeTplFor}
         onClose={() => setChangeTplFor(null)}
         onDone={() => { setChangeTplFor(null); refetch(); }}
-      />
-
-      <ResetAndReassignTemplateDialog
-        instance={resetTplFor}
-        onClose={() => setResetTplFor(null)}
-        onDone={() => { setResetTplFor(null); refetch(); }}
       />
 
       <ChangeWorkflowDialog
@@ -1311,30 +1306,55 @@ function ChangeTemplateDialog({
   const activeTemplates = templates.filter((t) => t.is_active);
   const [tplId, setTplId] = useState<string>('');
   const [reason, setReason] = useState<string>('');
+  const [gate, setGate] = useState<string>('');
   const currentId = svc.resolveTemplateId(instance) ?? '';
   const isClearing = tplId === '__clear__';
+  const isPastSelf =
+    !!instance &&
+    instance.overall_status !== 'not_started' &&
+    instance.overall_status !== 'pending_self' &&
+    instance.overall_status !== 'completed' &&
+    instance.overall_status !== 'excluded';
 
   // Reset when opening on a new instance.
   useMemo(() => {
     setTplId(currentId || '');
     setReason('');
+    setGate('');
   }, [instance?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const save = useMutation({
-    mutationFn: () => {
+    mutationFn: async () => {
       if (!instance) throw new Error('No instance');
-      return svc.setTemplateOverride({
+      if (isPastSelf) {
+        // Past self-review: destructive path — archive + wipe responses,
+        // swap template, restart at pending_self so employee refills.
+        if (isClearing) throw new Error('Cannot clear override after submission — pick an explicit template.');
+        const res = await svc.bulkForceResetInstances(
+          [{ instanceId: instance.id, templateId: tplId }],
+          reason.trim(),
+        );
+        if (res.failed.length > 0) throw new Error(res.failed[0].error);
+        return;
+      }
+      await svc.setTemplateOverride({
         instanceId: instance.id,
         templateId: isClearing ? null : tplId,
         reason: reason.trim(),
       });
     },
-    onSuccess: () => { toast.success('Template updated.'); onDone(); },
+    onSuccess: () => {
+      toast.success(isPastSelf
+        ? 'Template swapped. Employee can now re-submit the self-review.'
+        : 'Template updated.');
+      onDone();
+    },
     onError: (e: Error) => toast.error(e.message),
   });
 
   const canSave =
-    reason.trim().length >= 3 &&
+    reason.trim().length >= (isPastSelf ? 10 : 3) &&
+    (isPastSelf ? gate.trim().toUpperCase() === 'RESET' : true) &&
     (isClearing
       ? !!instance?.template_override_id
       : !!tplId && tplId !== currentId);
@@ -1343,10 +1363,22 @@ function ChangeTemplateDialog({
     <AlertDialog open={!!instance} onOpenChange={(o) => !o && onClose()}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Change template</AlertDialogTitle>
-          <AlertDialogDescription>
-            Override the template for <strong>{instance?.employee?.full_name ?? '—'}</strong> for this
-            cycle only. Allowed before the review starts. The change is audit-logged.
+          <AlertDialogTitle className={isPastSelf ? 'text-destructive' : undefined}>
+            {isPastSelf ? 'Change template (reset self-review)' : 'Change template'}
+          </AlertDialogTitle>
+          <AlertDialogDescription asChild>
+            <div className="space-y-2 text-sm">
+              <p>
+                {isPastSelf
+                  ? <>
+                      <strong>{instance?.employee?.full_name ?? '—'}</strong> has already submitted
+                      (<code>{instance?.overall_status}</code>). Swapping the template will archive
+                      and wipe existing responses, then restart the instance at <code>pending_self</code>
+                      {' '}so the employee refills the blank new form. Audit-logged.
+                    </>
+                  : <>Override the template for <strong>{instance?.employee?.full_name ?? '—'}</strong> for this cycle only. Audit-logged.</>}
+              </p>
+            </div>
           </AlertDialogDescription>
         </AlertDialogHeader>
         <div className="space-y-3">
@@ -1362,24 +1394,32 @@ function ChangeTemplateDialog({
                 {activeTemplates.map((t) => (
                   <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
                 ))}
-                {instance?.template_override_id && (
+                {!isPastSelf && instance?.template_override_id && (
                   <SelectItem value="__clear__">— Clear override (use rule-seeded template) —</SelectItem>
                 )}
               </SelectContent>
             </Select>
           </div>
           <div className="space-y-1">
-            <Label>Reason (min 3 chars)</Label>
+            <Label>Reason {isPastSelf ? '(min 10 chars)' : '(min 3 chars)'}</Label>
             <Textarea rows={3} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Why is this employee getting a different template?" />
           </div>
+          {isPastSelf && (
+            <div className="space-y-1">
+              <Label>Type <code>RESET</code> to confirm</Label>
+              <Input value={gate} onChange={(e) => setGate(e.target.value)} autoComplete="off" />
+            </div>
+          )}
         </div>
         <AlertDialogFooter>
           <AlertDialogCancel>Cancel</AlertDialogCancel>
           <AlertDialogAction
             onClick={(e) => { e.preventDefault(); save.mutate(); }}
             disabled={!canSave || save.isPending}
+            className={isPastSelf ? 'bg-destructive text-destructive-foreground hover:bg-destructive/90' : undefined}
           >
-            {save.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />} Save
+            {save.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+            {isPastSelf ? 'Reset & swap template' : 'Save'}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
@@ -2077,7 +2117,6 @@ function RulesTab() {
   // the Form Mapping Save flow. See mem://features/annual-review/per-employee-template-override.
   const [syncOpen, setSyncOpen] = useState(false);
   const [syncing, setSyncing] = useState(false);
-  const [forceResetting, setForceResetting] = useState(false);
   const [syncConflicts, setSyncConflicts] = useState<SeededConflict[]>([]);
   const [syncRule, setSyncRule] = useState<{ templateId: string; templateName: string; ruleLabel: string } | null>(null);
   const [syncResolving, setSyncResolving] = useState<string | null>(null);
@@ -2161,24 +2200,32 @@ function RulesTab() {
     }
   };
 
-  const runSync = async () => {
+  const runSyncAll = async ({
+    eligibleInstanceIds, resetInstanceIds, reason,
+  }: { eligibleInstanceIds: string[]; resetInstanceIds: string[]; reason: string }) => {
     if (!syncRule) return;
-    const eligible = syncConflicts.filter((c) => c.eligible_for_reassign);
-    if (eligible.length === 0) {
-      toast.error('No conflicts eligible for reassignment (all past pending_self).');
-      return;
-    }
     setSyncing(true);
     try {
-      const reason = `Reassigned via Form Mapping rule (${syncRule.ruleLabel})`;
-      const res = await svc.bulkReassignViaOverride(
-        eligible.map((c) => ({ instanceId: c.instance_id, templateId: syncRule.templateId })),
-        reason,
-      );
-      if (res.failed.length === 0) {
-        toast.success(`Reassigned ${res.ok} employee${res.ok === 1 ? '' : 's'} to ${syncRule.templateName}.`);
+      let okMove = 0, failMove = 0, okReset = 0, failReset = 0;
+      if (eligibleInstanceIds.length > 0) {
+        const res = await svc.bulkReassignViaOverride(
+          eligibleInstanceIds.map((id) => ({ instanceId: id, templateId: syncRule.templateId })),
+          reason,
+        );
+        okMove = res.ok; failMove = res.failed.length;
+      }
+      if (resetInstanceIds.length > 0) {
+        const res = await svc.bulkForceResetInstances(
+          resetInstanceIds.map((id) => ({ instanceId: id, templateId: syncRule.templateId })),
+          reason,
+        );
+        okReset = res.ok; failReset = res.failed.length;
+      }
+      const totalFail = failMove + failReset;
+      if (totalFail === 0) {
+        toast.success(`Synced ${okMove + okReset} employees to ${syncRule.templateName} (${okMove} moved, ${okReset} reset).`);
       } else {
-        toast.warning(`Reassigned ${res.ok}; ${res.failed.length} failed.`);
+        toast.warning(`Synced ${okMove + okReset}; ${totalFail} failed.`);
       }
       setSyncOpen(false);
       setSyncConflicts([]);
@@ -2188,32 +2235,6 @@ function RulesTab() {
       toast.error((e as Error).message);
     } finally {
       setSyncing(false);
-    }
-  };
-
-  const runForceReset = async (instanceIds: string[], reason: string) => {
-    if (!syncRule || instanceIds.length === 0) return;
-    setForceResetting(true);
-    try {
-      const res = await svc.bulkForceResetInstances(
-        instanceIds.map((id) => ({ instanceId: id, templateId: syncRule.templateId })),
-        reason,
-      );
-      if (res.failed.length === 0) {
-        toast.success(
-          `Force-reset ${res.ok} employee${res.ok === 1 ? '' : 's'} onto ${syncRule.templateName}.`,
-        );
-      } else {
-        toast.warning(`Force-reset ${res.ok}; ${res.failed.length} failed.`);
-      }
-      setSyncOpen(false);
-      setSyncConflicts([]);
-      setSyncRule(null);
-      qc.invalidateQueries();
-    } catch (e) {
-      toast.error((e as Error).message);
-    } finally {
-      setForceResetting(false);
     }
   };
 
@@ -2307,7 +2328,7 @@ function RulesTab() {
                         className="mr-2"
                         onClick={() => openSyncForRule(r)}
                         disabled={syncResolving === r.id}
-                        title="Move employees who are already seeded on a different template onto this rule's template. Only touches instances still in not_started or pending_self."
+                        title="Move ALL employees who are already seeded on a different template onto this rule's template. Employees who have already submitted are archived and restarted at pending_self."
                         aria-label={`Sync assignments for rule ${r.name ?? ''}`}
                       >
                         {syncResolving === r.id
@@ -2382,10 +2403,8 @@ function RulesTab() {
         }}
         conflicts={syncConflicts}
         targetTemplateName={syncRule?.templateName ?? ''}
-        onConfirm={runSync}
+        onSyncAll={runSyncAll}
         submitting={syncing}
-        onForceReset={runForceReset}
-        forceResetting={forceResetting}
       />
     </div>
   );
