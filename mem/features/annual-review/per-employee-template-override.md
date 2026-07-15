@@ -25,12 +25,19 @@ Both `seedInstancesForCycle` and `seedInstancesByRules` write through `writeSeed
 `template_override_id` is NEVER written by the seeder, so overrides survive every re-seed. Do not revert to plain `upsert(..., { onConflict: 'employee_id,cycle_id' })` — it silently nulls overrides via EXCLUDED.
 
 ## UI surface
-Progress tab in `AnnualReviewAdmin.tsx` exposes a per-row "Change template" button (only when status ∈ not_started / pending_self) → `ChangeTemplateDialog` (current vs new template select, mandatory reason, "Clear override" option when an override is set).
+Progress tab in `AnnualReviewAdmin.tsx` exposes a per-row "Change template" action on any non-terminal instance (not `completed` / `excluded`).
 
-For instances **past** `pending_self` (i.e. `pending_manager` .. `pending_hr`) the same row exposes a destructive "Reset & reassign template" action → `ResetAndReassignTemplateDialog`. It wraps `bulkForceResetInstances` (n=1) → RPC `bulk_force_reset_annual_review_instances`: archives + wipes existing responses, swaps template, restarts at `pending_self`. Guardrails: mandatory template pick, reason min 10 chars, typed `RESET` gate. This is the ONLY UI path to reassign a template for an employee who has already submitted.
+`ChangeTemplateDialog` auto-branches by stage:
+- `not_started` / `pending_self`: non-destructive override via `set_annual_review_template_override` (reason ≥ 3 chars, optional "Clear override").
+- Past `pending_self` (`pending_manager` .. `pending_hr`): destructive path via `bulk_force_reset_annual_review_instances` (n=1) — archives + wipes responses, swaps template, restarts at `pending_self`. Guardrails: mandatory template pick, reason ≥ 10 chars, typed `RESET` gate. Menu label switches to "Change template (reset self-review)". "Clear override" is disabled in this mode. Change workflow / Customise weights are hidden past-self.
+
+There is NO separate "Reset & reassign template" menu — the single "Change template" action is authoritative.
 
 ## Bulk CSV/XLSX (Part C)
-`BulkTemplateAssignmentDialog` + `bulkSetTemplateOverrides` (thin loop over the same RPC). Workbook columns: `Employee Code`, `Full Name`, `Current Template`, `Stage`, `New Template`, `Reason`. Use literal `CLEAR` in `New Template` to remove an override. Upload runs a client-side dry-run classifying each row as Apply/Skip/Error before any RPC fires. No new schema, no new RPC — server-side stage/role/reason gates are identical to single-row.
+`BulkTemplateAssignmentDialog` classifies rows as **Apply** (non-destructive override), **Reset** (past-self → force reset), **Skip**, or **Error**. Apply rows call `bulkSetTemplateOverrides`. Reset rows call `bulkForceResetInstances` (n=1 per row for per-row error attribution). Past-self rows require reason ≥ 10 chars; `CLEAR` is rejected past-self.
+
+## Sync from Form Mapping / Rules
+`SyncAssignmentsDialog` (used by both Form Mapping save flow and Rules tab "Sync") is a single-action UI: one **"Sync all N to <template>"** button that moves eligible rows via override AND force-resets past-self rows in a single confirmation. No per-row checkboxes. When any past-self row is present the admin must supply reason ≥ 10 chars and type `RESET`. Callers implement `onSyncAll({ eligibleInstanceIds, resetInstanceIds, reason })` and run both server calls, aggregating results into one toast.
 
 ## Test
 - `src/test/annualReview/resolveTemplateId.test.ts` — resolver fallback chain.
