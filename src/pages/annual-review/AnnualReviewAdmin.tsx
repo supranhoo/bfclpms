@@ -964,6 +964,11 @@ function ProgressTab() {
                     : rating.toFixed(1);
                 };
                 const canChange = i.overall_status === 'not_started' || i.overall_status === 'pending_self';
+                const canForceReset =
+                  i.overall_status !== 'not_started' &&
+                  i.overall_status !== 'pending_self' &&
+                  i.overall_status !== 'completed' &&
+                  i.overall_status !== 'excluded';
                 return (
                 <TableRow key={i.id} className="min-h-10">
                   <TableCell>
