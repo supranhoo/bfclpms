@@ -1306,30 +1306,55 @@ function ChangeTemplateDialog({
   const activeTemplates = templates.filter((t) => t.is_active);
   const [tplId, setTplId] = useState<string>('');
   const [reason, setReason] = useState<string>('');
+  const [gate, setGate] = useState<string>('');
   const currentId = svc.resolveTemplateId(instance) ?? '';
   const isClearing = tplId === '__clear__';
+  const isPastSelf =
+    !!instance &&
+    instance.overall_status !== 'not_started' &&
+    instance.overall_status !== 'pending_self' &&
+    instance.overall_status !== 'completed' &&
+    instance.overall_status !== 'excluded';
 
   // Reset when opening on a new instance.
   useMemo(() => {
     setTplId(currentId || '');
     setReason('');
+    setGate('');
   }, [instance?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const save = useMutation({
-    mutationFn: () => {
+    mutationFn: async () => {
       if (!instance) throw new Error('No instance');
-      return svc.setTemplateOverride({
+      if (isPastSelf) {
+        // Past self-review: destructive path — archive + wipe responses,
+        // swap template, restart at pending_self so employee refills.
+        if (isClearing) throw new Error('Cannot clear override after submission — pick an explicit template.');
+        const res = await svc.bulkForceResetInstances(
+          [{ instanceId: instance.id, templateId: tplId }],
+          reason.trim(),
+        );
+        if (res.failed.length > 0) throw new Error(res.failed[0].error);
+        return;
+      }
+      await svc.setTemplateOverride({
         instanceId: instance.id,
         templateId: isClearing ? null : tplId,
         reason: reason.trim(),
       });
     },
-    onSuccess: () => { toast.success('Template updated.'); onDone(); },
+    onSuccess: () => {
+      toast.success(isPastSelf
+        ? 'Template swapped. Employee can now re-submit the self-review.'
+        : 'Template updated.');
+      onDone();
+    },
     onError: (e: Error) => toast.error(e.message),
   });
 
   const canSave =
-    reason.trim().length >= 3 &&
+    reason.trim().length >= (isPastSelf ? 10 : 3) &&
+    (isPastSelf ? gate.trim().toUpperCase() === 'RESET' : true) &&
     (isClearing
       ? !!instance?.template_override_id
       : !!tplId && tplId !== currentId);
@@ -1338,10 +1363,22 @@ function ChangeTemplateDialog({
     <AlertDialog open={!!instance} onOpenChange={(o) => !o && onClose()}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Change template</AlertDialogTitle>
-          <AlertDialogDescription>
-            Override the template for <strong>{instance?.employee?.full_name ?? '—'}</strong> for this
-            cycle only. Allowed before the review starts. The change is audit-logged.
+          <AlertDialogTitle className={isPastSelf ? 'text-destructive' : undefined}>
+            {isPastSelf ? 'Change template (reset self-review)' : 'Change template'}
+          </AlertDialogTitle>
+          <AlertDialogDescription asChild>
+            <div className="space-y-2 text-sm">
+              <p>
+                {isPastSelf
+                  ? <>
+                      <strong>{instance?.employee?.full_name ?? '—'}</strong> has already submitted
+                      (<code>{instance?.overall_status}</code>). Swapping the template will archive
+                      and wipe existing responses, then restart the instance at <code>pending_self</code>
+                      {' '}so the employee refills the blank new form. Audit-logged.
+                    </>
+                  : <>Override the template for <strong>{instance?.employee?.full_name ?? '—'}</strong> for this cycle only. Audit-logged.</>}
+              </p>
+            </div>
           </AlertDialogDescription>
         </AlertDialogHeader>
         <div className="space-y-3">
@@ -1357,24 +1394,32 @@ function ChangeTemplateDialog({
                 {activeTemplates.map((t) => (
                   <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
                 ))}
-                {instance?.template_override_id && (
+                {!isPastSelf && instance?.template_override_id && (
                   <SelectItem value="__clear__">— Clear override (use rule-seeded template) —</SelectItem>
                 )}
               </SelectContent>
             </Select>
           </div>
           <div className="space-y-1">
-            <Label>Reason (min 3 chars)</Label>
+            <Label>Reason {isPastSelf ? '(min 10 chars)' : '(min 3 chars)'}</Label>
             <Textarea rows={3} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Why is this employee getting a different template?" />
           </div>
+          {isPastSelf && (
+            <div className="space-y-1">
+              <Label>Type <code>RESET</code> to confirm</Label>
+              <Input value={gate} onChange={(e) => setGate(e.target.value)} autoComplete="off" />
+            </div>
+          )}
         </div>
         <AlertDialogFooter>
           <AlertDialogCancel>Cancel</AlertDialogCancel>
           <AlertDialogAction
             onClick={(e) => { e.preventDefault(); save.mutate(); }}
             disabled={!canSave || save.isPending}
+            className={isPastSelf ? 'bg-destructive text-destructive-foreground hover:bg-destructive/90' : undefined}
           >
-            {save.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />} Save
+            {save.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+            {isPastSelf ? 'Reset & swap template' : 'Save'}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
