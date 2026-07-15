@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Download, Upload, Loader2, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { toast } from 'sonner';
-import type { AnnualReviewTemplate, AnnualReviewCycle, AnnualReviewStatus } from '@/types/annualReview';
+import type { AnnualReviewTemplate, AnnualReviewCycle } from '@/types/annualReview';
 import * as svc from '@/services/annualReview/annualReviewService';
 
 /**
@@ -22,18 +22,20 @@ import * as svc from '@/services/annualReview/annualReviewService';
  *
  * Validation per row:
  *   - Employee Code must resolve to an instance in this cycle.
- *   - Instance overall_status MUST be `not_started` or `pending_self`
- *     (server-side RPC enforces; client classifies for preview).
+ *   - Instance overall_status must be non-terminal (not `completed`, not
+ *     `excluded`). Past-self rows are classified as `reset` — the apply step
+ *     archives + wipes their responses and restarts them at `pending_self` on
+ *     the new template so the employee refills the blank form. Reason must
+ *     be >=10 chars when any past-self row is present.
  *   - New Template must match an active template name (case-insensitive trim),
  *     OR the literal value `CLEAR` to remove an override.
- *   - Reason min 3 chars.
+ *   - Reason min 3 chars for non-destructive rows, min 10 for reset rows.
  *   - Rows where the resolved target == current effective template are skipped.
  */
 
-const ELIGIBLE_STAGES: AnnualReviewStatus[] = ['not_started', 'pending_self'];
-
 type RowOutcome =
   | { kind: 'apply'; instanceId: string; targetId: string | null; reason: string; employeeCode: string; employeeName: string; from: string; to: string }
+  | { kind: 'reset'; instanceId: string; targetId: string; reason: string; employeeCode: string; employeeName: string; from: string; to: string }
   | { kind: 'noop'; employeeCode: string; reason: string }
   | { kind: 'error'; employeeCode: string; reason: string };
 
@@ -65,6 +67,7 @@ export function BulkTemplateAssignmentDialog({
   const tplById = useMemo(() => new Map(templates.map((t) => [t.id, t])), [templates]);
 
   const applies = (outcomes ?? []).filter((o) => o.kind === 'apply') as Extract<RowOutcome, { kind: 'apply' }>[];
+  const resets = (outcomes ?? []).filter((o) => o.kind === 'reset') as Extract<RowOutcome, { kind: 'reset' }>[];
   const noops = (outcomes ?? []).filter((o) => o.kind === 'noop') as Extract<RowOutcome, { kind: 'noop' }>[];
   const errors = (outcomes ?? []).filter((o) => o.kind === 'error') as Extract<RowOutcome, { kind: 'error' }>[];
 
@@ -113,18 +116,25 @@ export function BulkTemplateAssignmentDialog({
 
         const inst = byCode.get(code);
         if (!inst) { res.push({ kind: 'error', employeeCode: code, reason: 'Employee not in this cycle' }); continue; }
-        if (!ELIGIBLE_STAGES.includes(inst.overall_status)) {
-          res.push({ kind: 'error', employeeCode: code, reason: `Stage ${inst.overall_status} — review already started` });
+        if (inst.overall_status === 'completed' || inst.overall_status === 'excluded') {
+          res.push({ kind: 'error', employeeCode: code, reason: `Stage ${inst.overall_status} — cannot remap terminal instances` });
           continue;
         }
-        if (reason.length < 3) {
-          res.push({ kind: 'error', employeeCode: code, reason: 'Reason missing or < 3 chars' });
+        const isPastSelf =
+          inst.overall_status !== 'not_started' && inst.overall_status !== 'pending_self';
+        const minReason = isPastSelf ? 10 : 3;
+        if (reason.length < minReason) {
+          res.push({ kind: 'error', employeeCode: code, reason: `Reason missing or < ${minReason} chars` });
           continue;
         }
 
         let targetId: string | null;
         let targetName: string;
         if (newTplRaw.toUpperCase() === 'CLEAR') {
+          if (isPastSelf) {
+            res.push({ kind: 'error', employeeCode: code, reason: 'Cannot CLEAR after submission — pick an explicit template' });
+            continue;
+          }
           if (!inst.template_override_id) { res.push({ kind: 'noop', employeeCode: code, reason: 'No override to clear' }); continue; }
           targetId = null;
           targetName = `(clear → ${tplById.get(inst.template_id)?.name ?? '—'})`;
@@ -142,16 +152,29 @@ export function BulkTemplateAssignmentDialog({
           continue;
         }
 
-        res.push({
-          kind: 'apply',
-          instanceId: inst.id,
-          targetId,
-          reason,
-          employeeCode: code,
-          employeeName: inst.employee?.full_name ?? '',
-          from: currentEffectiveId ? tplById.get(currentEffectiveId)?.name ?? '—' : '—',
-          to: targetName,
-        });
+        if (isPastSelf) {
+          res.push({
+            kind: 'reset',
+            instanceId: inst.id,
+            targetId: targetId as string,
+            reason,
+            employeeCode: code,
+            employeeName: inst.employee?.full_name ?? '',
+            from: currentEffectiveId ? tplById.get(currentEffectiveId)?.name ?? '—' : '—',
+            to: targetName,
+          });
+        } else {
+          res.push({
+            kind: 'apply',
+            instanceId: inst.id,
+            targetId,
+            reason,
+            employeeCode: code,
+            employeeName: inst.employee?.full_name ?? '',
+            from: currentEffectiveId ? tplById.get(currentEffectiveId)?.name ?? '—' : '—',
+            to: targetName,
+          });
+        }
       }
       setOutcomes(res);
     } catch (e) {
@@ -160,24 +183,51 @@ export function BulkTemplateAssignmentDialog({
   };
 
   const handleApply = async () => {
-    if (applies.length === 0) return;
+    if (applies.length === 0 && resets.length === 0) return;
     setApplying(true);
-    setProgress({ done: 0, total: applies.length });
+    setProgress({ done: 0, total: applies.length + resets.length });
     try {
-      const results = await svc.bulkSetTemplateOverrides(
-        applies.map((a) => ({ instanceId: a.instanceId, templateId: a.targetId, reason: a.reason, rowKey: a.employeeCode })),
-        (done, total) => setProgress({ done, total }),
-      );
-      const okN = results.filter((r) => r.ok).length;
-      const failN = results.length - okN;
-      if (failN === 0) toast.success(`Applied ${okN} override${okN === 1 ? '' : 's'}.`);
-      else toast.warning(`Applied ${okN}, failed ${failN}. See report.`);
+      const total = applies.length + resets.length;
+      let done = 0;
+      const failByKey = new Map<string, string>();
+
+      // Non-destructive overrides first.
+      if (applies.length > 0) {
+        const results = await svc.bulkSetTemplateOverrides(
+          applies.map((a) => ({ instanceId: a.instanceId, templateId: a.targetId, reason: a.reason, rowKey: a.employeeCode })),
+          (d) => setProgress({ done: done + d, total }),
+        );
+        done += results.length;
+        for (const r of results) {
+          if (!r.ok) failByKey.set(r.rowKey ?? r.instanceId, r.error ?? 'Failed');
+        }
+      }
+
+      // Past-self resets (one RPC per row via the bulk helper — pass n=1 each
+      // so per-row errors are attributable to a specific Employee Code).
+      for (const r of resets) {
+        try {
+          const res = await svc.bulkForceResetInstances(
+            [{ instanceId: r.instanceId, templateId: r.targetId }],
+            r.reason,
+          );
+          if (res.failed.length > 0) failByKey.set(r.employeeCode, res.failed[0].error);
+        } catch (e) {
+          failByKey.set(r.employeeCode, (e as Error).message);
+        }
+        done += 1;
+        setProgress({ done, total });
+      }
+
+      const failN = failByKey.size;
+      const okN = total - failN;
+      if (failN === 0) toast.success(`Applied ${okN} template change${okN === 1 ? '' : 's'} (${applies.length} moved, ${resets.length} reset).`);
+      else toast.warning(`Applied ${okN}; ${failN} failed. See report.`);
 
       // Surface failures back into the outcomes table.
       if (failN > 0) {
-        const failByKey = new Map(results.filter((r) => !r.ok).map((r) => [r.rowKey ?? r.instanceId, r.error ?? 'Failed']));
         setOutcomes((prev) => (prev ?? []).map((o) => {
-          if (o.kind === 'apply' && failByKey.has(o.employeeCode)) {
+          if ((o.kind === 'apply' || o.kind === 'reset') && failByKey.has(o.employeeCode)) {
             return { kind: 'error', employeeCode: o.employeeCode, reason: failByKey.get(o.employeeCode) ?? 'Failed' };
           }
           return o;
@@ -228,6 +278,9 @@ export function BulkTemplateAssignmentDialog({
             {outcomes && (
               <div className="ml-auto flex items-center gap-2 text-xs">
                 <Badge variant="default" className="gap-1"><CheckCircle2 className="h-3 w-3" /> {applies.length} to apply</Badge>
+                {resets.length > 0 && (
+                  <Badge variant="destructive" className="gap-1"><AlertTriangle className="h-3 w-3" /> {resets.length} will reset</Badge>
+                )}
                 <Badge variant="secondary">{noops.length} skipped</Badge>
                 {errors.length > 0 && (
                   <Badge variant="destructive" className="gap-1"><AlertTriangle className="h-3 w-3" /> {errors.length} errors</Badge>
@@ -255,11 +308,12 @@ export function BulkTemplateAssignmentDialog({
                       <TableCell className="font-mono text-xs">{o.kind === 'apply' ? o.employeeCode : o.employeeCode}</TableCell>
                       <TableCell>
                         {o.kind === 'apply' && <Badge variant="default">Apply</Badge>}
+                        {o.kind === 'reset' && <Badge variant="destructive">Reset</Badge>}
                         {o.kind === 'noop' && <Badge variant="secondary">Skip</Badge>}
                         {o.kind === 'error' && <Badge variant="destructive">Error</Badge>}
                       </TableCell>
                       <TableCell className="text-xs">
-                        {o.kind === 'apply'
+                        {(o.kind === 'apply' || o.kind === 'reset')
                           ? <span>{o.from} → <strong>{o.to}</strong> · <span className="text-muted-foreground">{o.reason}</span></span>
                           : o.reason}
                       </TableCell>
@@ -279,11 +333,13 @@ export function BulkTemplateAssignmentDialog({
           <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={applying}>Close</Button>
           <Button
             onClick={handleApply}
-            disabled={applying || !outcomes || applies.length === 0}
+            disabled={applying || !outcomes || (applies.length === 0 && resets.length === 0)}
             className="gap-2"
           >
             {applying && <Loader2 className="h-4 w-4 animate-spin" />}
-            Apply {applies.length} override{applies.length === 1 ? '' : 's'}
+            {resets.length > 0
+              ? `Apply ${applies.length} & reset ${resets.length}`
+              : `Apply ${applies.length} override${applies.length === 1 ? '' : 's'}`}
           </Button>
         </DialogFooter>
       </DialogContent>
