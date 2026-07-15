@@ -1106,6 +1106,12 @@ function ProgressTab() {
         onDone={() => { setChangeTplFor(null); refetch(); }}
       />
 
+      <ResetAndReassignTemplateDialog
+        instance={resetTplFor}
+        onClose={() => setResetTplFor(null)}
+        onDone={() => { setResetTplFor(null); refetch(); }}
+      />
+
       <ChangeWorkflowDialog
         instance={changeWfFor}
         onClose={() => setChangeWfFor(null)}
