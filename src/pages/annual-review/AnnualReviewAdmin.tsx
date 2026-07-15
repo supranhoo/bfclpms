@@ -2161,24 +2161,32 @@ function RulesTab() {
     }
   };
 
-  const runSync = async () => {
+  const runSyncAll = async ({
+    eligibleInstanceIds, resetInstanceIds, reason,
+  }: { eligibleInstanceIds: string[]; resetInstanceIds: string[]; reason: string }) => {
     if (!syncRule) return;
-    const eligible = syncConflicts.filter((c) => c.eligible_for_reassign);
-    if (eligible.length === 0) {
-      toast.error('No conflicts eligible for reassignment (all past pending_self).');
-      return;
-    }
     setSyncing(true);
     try {
-      const reason = `Reassigned via Form Mapping rule (${syncRule.ruleLabel})`;
-      const res = await svc.bulkReassignViaOverride(
-        eligible.map((c) => ({ instanceId: c.instance_id, templateId: syncRule.templateId })),
-        reason,
-      );
-      if (res.failed.length === 0) {
-        toast.success(`Reassigned ${res.ok} employee${res.ok === 1 ? '' : 's'} to ${syncRule.templateName}.`);
+      let okMove = 0, failMove = 0, okReset = 0, failReset = 0;
+      if (eligibleInstanceIds.length > 0) {
+        const res = await svc.bulkReassignViaOverride(
+          eligibleInstanceIds.map((id) => ({ instanceId: id, templateId: syncRule.templateId })),
+          reason,
+        );
+        okMove = res.ok; failMove = res.failed.length;
+      }
+      if (resetInstanceIds.length > 0) {
+        const res = await svc.bulkForceResetInstances(
+          resetInstanceIds.map((id) => ({ instanceId: id, templateId: syncRule.templateId })),
+          reason,
+        );
+        okReset = res.ok; failReset = res.failed.length;
+      }
+      const totalFail = failMove + failReset;
+      if (totalFail === 0) {
+        toast.success(`Synced ${okMove + okReset} employees to ${syncRule.templateName} (${okMove} moved, ${okReset} reset).`);
       } else {
-        toast.warning(`Reassigned ${res.ok}; ${res.failed.length} failed.`);
+        toast.warning(`Synced ${okMove + okReset}; ${totalFail} failed.`);
       }
       setSyncOpen(false);
       setSyncConflicts([]);
@@ -2188,32 +2196,6 @@ function RulesTab() {
       toast.error((e as Error).message);
     } finally {
       setSyncing(false);
-    }
-  };
-
-  const runForceReset = async (instanceIds: string[], reason: string) => {
-    if (!syncRule || instanceIds.length === 0) return;
-    setForceResetting(true);
-    try {
-      const res = await svc.bulkForceResetInstances(
-        instanceIds.map((id) => ({ instanceId: id, templateId: syncRule.templateId })),
-        reason,
-      );
-      if (res.failed.length === 0) {
-        toast.success(
-          `Force-reset ${res.ok} employee${res.ok === 1 ? '' : 's'} onto ${syncRule.templateName}.`,
-        );
-      } else {
-        toast.warning(`Force-reset ${res.ok}; ${res.failed.length} failed.`);
-      }
-      setSyncOpen(false);
-      setSyncConflicts([]);
-      setSyncRule(null);
-      qc.invalidateQueries();
-    } catch (e) {
-      toast.error((e as Error).message);
-    } finally {
-      setForceResetting(false);
     }
   };
 
@@ -2382,10 +2364,8 @@ function RulesTab() {
         }}
         conflicts={syncConflicts}
         targetTemplateName={syncRule?.templateName ?? ''}
-        onConfirm={runSync}
+        onSyncAll={runSyncAll}
         submitting={syncing}
-        onForceReset={runForceReset}
-        forceResetting={forceResetting}
       />
     </div>
   );
