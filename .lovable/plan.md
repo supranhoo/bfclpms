@@ -1,51 +1,60 @@
-# RCA — Nitesh Kumar Baldwa (100012) Team Annual Review population
+# Standardize every Worker (W) template to the reference reviewer-stage settings
 
-## Current Reporting Relationship
+## Goal
+Apply the exact settings shown in your screenshot to **every criterion** of **every active Worker template** (templates whose name contains the "W" cadre marker):
 
-- Nitesh Kumar Baldwa (100012, Senior DGM) reports to **Gaurav Budhia (100001)** in `profiles.reporting_manager_id`.
-- Per current org master, Nitesh has **only 6 direct reports**:
-  100200 Manoj K. Choudhary, 100327 Swaraj Mukhopadhyay, 100355 Ashish K. Gupta, 100397 Sachchidanand Shukla, 101394 Nitin Agrawal, 101906 Bijay K. Mandal.
-- His true skip-level population (reports-of-those-6) is a small set — nowhere near 40.
+- Reviewer Stages **enabled**: `self`, `dept_head`, `bu_head`, `hr`
+- Reviewer Stages **disabled**: `manager`, `skip_manager`
+- Toggles **off**: `enable_remarks = false`, `enable_evidence = false`, `evidence_required = false`
 
-## Review Eligibility Analysis (why the queue shows 40)
+## Scope discovered
+Active Worker templates matched (name pattern `- W -`, `W Plant`, `W -`, `W with`, `W without`): **28 templates**, e.g. CLU/CPP/DRI/FAD/SMS "- W -" variants, HK/Pol/Dust/hort - W, Generic W (With/Without KRA), Generic W with env (Functional), Generic W without Env, Generic - W Plant (Purchase/Store).
 
-`annual_review_instances` for cycle **Annual Review 2025-2026** contains **40 rows** where `manager_id`, `skip_id`, `dept_head_id`, or `bu_head_id` = Nitesh. The Team page unions all four slots. Breakdown of what's inflating the list:
+Current state (sampled from criterion #1 only):
+- 26/28 already match the target shape.
+- **1 template** ("Generic W without Env") has drifted stages `['self','manager','skip_manager','bu_head','hr']` and `enable_remarks = true`.
+- **1 template** ("Generic W - (With KRA)") has 0 criteria — safely skipped.
+- Full-criteria audit will still be enforced by the migration (rewrites every criterion, not only #1), which catches per-criterion drift like the 11 "missing dept_head" rows found earlier.
 
-| Bucket | Count | Example rows | Problem |
-|---|---|---|---|
-| `manager_id` = Nitesh (real direct reports) | 2 in queue view (100200, plus his own instance 100012) | ok | legitimate |
-| `skip_id` = Nitesh but employee's current manager rolls up through **someone else** (Sajid Raza / Piyush Bansal / Jaspal / RAKESH K. GUPTA / Parshu Ram / Sindhu Raj / Dippendu / Rupesh / Brundaban) | ~35 | e.g. 100004 Indar Prasad → mgr 102028 Brundaban → currently rolls to Gaurav Budhia, **not** Nitesh | **stale snapshot** |
-| `dept_head_id` / `bu_head_id` = Nitesh on **100000 Hari Krishna Budhia (MD)** | 1 | MD's dept/BU head set to a Sr DGM | **config error** |
-| Test profile **001 "Dummy — hr test"** included in cycle with skip=Nitesh | 1 | Test row, mgr = Jaspal | **should be excluded/deactivated** |
+Manager ("M") templates and any non-W templates are **not** touched.
 
-## Root Cause
+## What will change (build phase)
+1. **Migration — one transactional UPDATE.**  
+   For each row in `annual_review_templates` where `is_active = true` AND `name` matches the Worker pattern, rewrite `sections.criteria` so every element sets:
+   ```
+   reviewer_stages   = ['self','dept_head','bu_head','hr']
+   enable_remarks    = false
+   enable_evidence   = false
+   evidence_required = false
+   ```
+   All other criterion fields (id, key, name, weight, options, translations, sort order) are preserved verbatim. `updated_at = now()`, `version = version + 1` only on rows that actually changed.
+2. **Audit trail.** Insert one row per changed template into `template_change_logs` with change_type `w_reviewer_stages_normalized`, capturing the previous `sections` snapshot and the list of criterion keys touched. Enables one-line rollback.
+3. **Regression test.** Add `src/services/annualReview/wTemplateStageContract.test.ts` — asserts every active W template has criteria with exactly the target `reviewer_stages` set and the three flags = false.
+4. **Docs & memory.**
+   - New memory `mem/features/annual-review/w-template-stage-contract.md` codifying the W-cadre invariant.
+   - Append to POLICY as §AR-W-CADRE-STAGE-CONTRACT.
+   - `DOCUMENTATION.md` version bump line.
+5. **Verification query** post-migration: assert that no active W template has any criterion whose `reviewer_stages` ≠ `['self','dept_head','bu_head','hr']` or whose flags ≠ false.
+6. **No UI code changes** — Template Editor already writes/reads these fields; scoring SSOT already respects `reviewer_stages`.
 
-Two independent issues, both traced against `mem://features/annual-review/head-master-authoritative`:
+## Impact on in-flight instances
+- **Pre-manager instances (still at `pending_self`).** No visible impact — when they advance, the manager/skip stages are simply skipped for criteria scoring (per existing `reviewer_stages` gate). If the *instance* still lists `manager`/`skip_manager` in `enabled_stages`, the manager will see the qualitative section (comments/goals) but no criteria block — mirrors what the setting already implies.
+- **Instances currently at `pending_manager` / `pending_skip`.** Same effect — criteria disappear for those roles going forward. Anything already submitted stays as-is; no response rows deleted.
+- **Instances past dept_head.** dept_head/bu_head criteria contributions already recorded stay; new criteria enabled don't retroactively force re-scoring.
+- **Completed / cycle-closed instances.** Frozen; not touched.
+- **`enabled_stages` on instances is NOT modified** by this change. If you also want to strip `manager`/`skip_manager` from the workflow chain for Worker instances, that is a separate bulk action via `set_annual_review_enabled_stages` — say the word and I'll add it as Step 1b.
 
-1. **Stale reviewer-chain snapshot (primary).** The cycle was seeded (or last cascaded) when Nitesh sat higher in the chain — e.g., over Sajid Raza / Brundaban / Jaspal / RAKESH K. GUPTA / Piyush Bansal / Parshu / Sindhu / Dippendu / Rupesh. Master has since been re-parented so those managers now roll up to **Gaurav Budhia**. Head-master trigger (`trg_cascade_department_head_change` / `_bu_head_change`) only cascades **dept_head / bu_head** — **manager_id and skip_id are NEVER auto-cascaded**. As a result, ~35 instances carry Nitesh in their `skip_id` slot even though today's reporting_manager_id chain no longer routes through him.
-2. **MD + test-account contamination.** `100000 Hari Krishna Budhia` (Managing Director) and `001 Dummy — hr test` were seeded into the cycle with Nitesh in head/skip slots. MD should either be excluded or bound to a dedicated top-of-house rule; the "Dummy" row is a test artifact that should not exist in a prod cycle.
+## Risk & Impact Report
+- **Data:** JSON rewrite on ~28 template rows. Idempotent for the 26 already at the target. Reversible via `template_change_logs` snapshot.
+- **Workflow:** Only per-criterion visibility for manager/skip is removed. No response data touched.
+- **UI:** Template Editor pop-over will now show the target checkbox pattern for every W template.
+- **Scalability:** Single UPDATE, negligible.
+- **Regression risk:** Any code path that assumes W templates expose criteria to manager — searched, none found; scoring SSOT reads `reviewer_stages` at runtime.
+- **Rollback:** UPDATE from `template_change_logs.previous_snapshot` per row.
 
-## Supporting Evidence
+## Decision needed before I ship
+1. Confirm the "W" scope: 28 active Worker templates as listed above — anything to include or exclude?
+2. Do you also want the same normalization applied to **instances' `enabled_stages`** (drop `manager` + `skip_manager` from the workflow chain for currently-in-flight Worker reviews), or just the template criteria as above?
 
-- `profiles`: Nitesh → mgr Gaurav Budhia; 6 direct reports (list above).
-- `annual_review_instances` (cycle `b82a935f-05a3-4a18-a65c-215d2ef16c4c`): 40 rows tie to Nitesh across the 4 reviewer slots.
-- Cross-check on `skip_id=Nitesh` rows: the employee's current `reporting_manager_id → reporting_manager_id` chain resolves to **Gaurav Budhia (100001)** for every listed manager (Sajid Raza, Piyush Bansal, Jaspal, RAKESH K. GUPTA, Parshu Ram Shukla, Sindhu Raj Singh, Dippendu Das, Rupesh V. Dalvi, Brundaban Chandra Das) — none currently roll through Nitesh.
-- Policy: §AR-HEAD-MASTER-AUTHORITATIVE cascades **only dept_head / bu_head** pre-approval; **manager/skip drift is not covered** by triggers or by `resyncDeptHead.ts`.
-
-## Recommended Actions
-
-Nothing to build until you approve; below is the corrective sequence I'd execute in build mode.
-
-1. **Resync reviewer chain for cycle 2025-2026** — recompute `manager_id` and `skip_id` from current `profiles.reporting_manager_id` for every instance still at `pending_self` / `pending_manager` / `pending_skip` (per §AR-REVIEWER-RESYNC gate). Audit the change into `annual_review_head_remap_audit_2026_07`. Expected effect: ~35 stray rows leave Nitesh's queue and re-anchor to Gaurav Budhia (or the correct skip).
-2. **Extend head-master cascade to manager/skip changes** — add `trg_cascade_manager_change` + `trg_cascade_skip_change` (pre-approval only) so future re-parents don't silently strand instances. Update `mem://features/annual-review/head-master-authoritative` and POLICY §AR-HEAD-MASTER-AUTHORITATIVE with the new invariant, plus regression tests.
-3. **Fix MD (100000 Hari Krishna Budhia) instance** — either exclude the MD from cycle seeding via `annual_review_assignment_rules`, or map dept_head/bu_head to the Chairman / self-terminating stage; do not carry Nitesh in those slots.
-4. **Purge/deactivate the "001 Dummy" test profile** — remove from `annual_review_instances` and set `is_active=false` on the profile so future cycles never seed it.
-5. **Guardrails** — add a scheduled diagnostic that flags any AR instance where `skip_id` ≠ `profiles.reporting_manager_id → reporting_manager_id` of the employee (analogue to `TeamReviewsZeroDiagnostic`), so drift is surfaced immediately in future cycles.
-
-## Data / Workflow / UI / Regression Impact
-
-- **Data:** Step 1 rewrites `manager_id`/`skip_id` on ~35 rows; fully audited, reversible from the audit table. Step 3 rewrites 1 row. Step 4 deletes 1 instance + deactivates 1 profile.
-- **Workflow:** Only pre-approval instances touched; approved/completed instances remain frozen per policy.
-- **UI:** Nitesh's queue shrinks from 40 → ~7 (his 6 direct reports + skip-level rollup of those 6). Gaurav Budhia's queue grows by the same delta.
-- **Regression:** Add unit tests for the new manager/skip cascade triggers and the drift diagnostic. No client code changes required for Step 1 alone.
-- **Rollback:** All chain rewrites replayable from `annual_review_head_remap_audit_2026_07`.
+## Not applicable
+- No schema changes, no new RLS, no edge functions, no dependencies.
