@@ -1102,6 +1102,51 @@ export type Database = {
           },
         ]
       }
+      annual_review_reviewer_remap_audit_2026_07: {
+        Row: {
+          corrected_at: string
+          corrected_by: string | null
+          cycle_id: string | null
+          employee_code: string | null
+          employee_name: string | null
+          id: string
+          instance_id: string
+          new_user_id: string | null
+          old_overall_status: string | null
+          old_user_id: string | null
+          reason: string | null
+          slot: string
+        }
+        Insert: {
+          corrected_at?: string
+          corrected_by?: string | null
+          cycle_id?: string | null
+          employee_code?: string | null
+          employee_name?: string | null
+          id?: string
+          instance_id: string
+          new_user_id?: string | null
+          old_overall_status?: string | null
+          old_user_id?: string | null
+          reason?: string | null
+          slot: string
+        }
+        Update: {
+          corrected_at?: string
+          corrected_by?: string | null
+          cycle_id?: string | null
+          employee_code?: string | null
+          employee_name?: string | null
+          id?: string
+          instance_id?: string
+          new_user_id?: string | null
+          old_overall_status?: string | null
+          old_user_id?: string | null
+          reason?: string | null
+          slot?: string
+        }
+        Relationships: []
+      }
       annual_review_self_draft_reassign_audit: {
         Row: {
           created_at: string
