@@ -649,7 +649,23 @@ export interface ListReviewerInstancesPaginatedArgs {
   pageSize: number;
   search?: string;
   status?: AnnualReviewStatus | 'all';
+  /**
+   * "My role" filter — restrict the queue to rows where the current user is
+   * only the specified reviewer. Default `'any'` preserves the legacy 5-way
+   * OR envelope so multi-hat users still see everything.
+   */
+  scope?: ReviewerScope;
 }
+
+export type ReviewerScope = 'any' | 'manager' | 'skip' | 'dept' | 'bu' | 'hr';
+
+const SCOPE_COLUMN: Record<Exclude<ReviewerScope, 'any'>, string> = {
+  manager: 'manager_id',
+  skip: 'skip_id',
+  dept: 'dept_head_id',
+  bu: 'bu_head_id',
+  hr: 'hr_id',
+};
 
 export async function listInstancesForReviewerPaginated(
   args: ListReviewerInstancesPaginatedArgs,
@@ -665,10 +681,15 @@ export async function listInstancesForReviewerPaginated(
       { count: 'exact' },
     )
     .eq('cycle_id', args.cycleId)
-    .neq('overall_status', 'excluded')
-    .or(
+    .neq('overall_status', 'excluded');
+
+  if (args.scope && args.scope !== 'any') {
+    q = q.eq(SCOPE_COLUMN[args.scope], args.reviewerId);
+  } else {
+    q = q.or(
       `manager_id.eq.${args.reviewerId},skip_id.eq.${args.reviewerId},dept_head_id.eq.${args.reviewerId},bu_head_id.eq.${args.reviewerId},hr_id.eq.${args.reviewerId}`,
     );
+  }
 
   if (args.status && args.status !== 'all' && args.status !== 'excluded') q = q.eq('overall_status', args.status);
 
@@ -691,6 +712,46 @@ export async function listInstancesForReviewerPaginated(
   const { data, error, count } = await q;
   if (error) throw error;
   return { rows: (data ?? []) as InstanceWithEmployee[], total: count ?? 0 };
+}
+
+/**
+ * Per-reviewer-role counts for the current user in a cycle. Drives which
+ * "My role" chips render on the Team Annual Review page (chip hidden when
+ * count === 0). One head+count query per role — cheap and RLS-safe.
+ */
+export type ReviewerRoleCounts = {
+  manager: number;
+  skip: number;
+  dept: number;
+  bu: number;
+  hr: number;
+};
+
+export async function getReviewerRoleCounts(
+  reviewerId: string,
+  cycleId: string,
+): Promise<ReviewerRoleCounts> {
+  const roles: (keyof ReviewerRoleCounts)[] = ['manager', 'skip', 'dept', 'bu', 'hr'];
+  const results = await Promise.all(
+    roles.map(async (role) => {
+      const col = SCOPE_COLUMN[role];
+      const { count, error } = await db
+        .from('annual_review_instances')
+        .select('id', { count: 'exact', head: true })
+        .eq('cycle_id', cycleId)
+        .neq('overall_status', 'excluded')
+        .eq(col, reviewerId);
+      if (error) return 0;
+      return count ?? 0;
+    }),
+  );
+  return {
+    manager: results[0],
+    skip: results[1],
+    dept: results[2],
+    bu: results[3],
+    hr: results[4],
+  };
 }
 
 /**
