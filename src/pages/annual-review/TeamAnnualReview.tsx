@@ -215,6 +215,34 @@ export default function TeamAnnualReview() {
 
       <div className="space-y-3 min-w-0">
 
+          {/* "My role" scope filter — hidden for single-role users */}
+          {showScopeRow && (
+            <div className="flex flex-wrap items-center gap-1">
+              <span className="text-[11px] text-muted-foreground mr-1">My role:</span>
+              {visibleScopeFilters.map((s) => {
+                const count = s.value === 'any' ? undefined : roleCounts?.[s.value];
+                return (
+                  <button
+                    key={s.value}
+                    type="button"
+                    onClick={() => setScopeFilter(s.value)}
+                    className={`text-[11px] px-2.5 py-1 rounded-full border transition-colors ${
+                      scopeFilter === s.value
+                        ? 'bg-primary text-primary-foreground border-primary'
+                        : 'bg-background hover:bg-muted border-border text-muted-foreground'
+                    }`}
+                    title={s.value === 'manager' ? 'Employees who report directly to you' : undefined}
+                  >
+                    {s.label}
+                    {typeof count === 'number' && count > 0 && (
+                      <span className="ml-1 opacity-70 tabular-nums">({count})</span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
           {/* Search + filters */}
           <div className="flex flex-col md:flex-row md:items-center gap-2">
             <div className="relative flex-1 min-w-0">
@@ -265,6 +293,7 @@ export default function TeamAnnualReview() {
           <ul className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-2.5">
             {rows.map((i) => {
               const stage = stageForReviewer(i, user?.id);
+              const myRole = resolveMyRole(i, user?.id);
               const initials = (i.employee?.full_name ?? '?')
                 .trim().split(/\s+/).slice(0, 2)
                 .map((p) => p[0]?.toUpperCase() ?? '').join('') || '?';
@@ -293,6 +322,14 @@ export default function TeamAnnualReview() {
                     </div>
                     <div className="flex flex-wrap items-center gap-1.5 mt-auto">
                       <AnnualReviewStatusBadge status={i.overall_status} />
+                      {myRole && (
+                        <span
+                          className="inline-flex items-center rounded-md border border-primary/20 bg-primary/5 px-1.5 py-0.5 text-[10px] font-medium text-primary"
+                          title={`Your relationship to this employee: ${SCOPE_BADGE_LABEL[myRole]}`}
+                        >
+                          You: {SCOPE_BADGE_LABEL[myRole]}
+                        </span>
+                      )}
                       {stage && (
                         <span className="text-[10px] font-medium text-amber-600 dark:text-amber-400">
                           Awaiting you
