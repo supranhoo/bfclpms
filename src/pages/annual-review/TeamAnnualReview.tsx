@@ -3,6 +3,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import {
   useActiveCycle,
   useReviewerInstancesPaginated,
+  useReviewerRoleCounts,
 } from '@/hooks/useAnnualReview';
 import { AnnualReviewStatusBadge } from '@/components/annual-review/AnnualReviewStatusBadge';
 import { Button } from '@/components/ui/button';
@@ -11,6 +12,7 @@ import { Loader2, ChevronRight, Scale, Search, Users, UserPlus, ChevronLeft } fr
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import type { AnnualReviewerRole, AnnualReviewStatus } from '@/types/annualReview';
 import type { InstanceWithEmployee } from '@/services/annualReview/annualReviewService';
+import type { ReviewerScope } from '@/services/annualReview/annualReviewService';
 import { stageForReviewer } from '@/lib/annualReview/stageForReviewer';
 import { Badge } from '@/components/ui/badge';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -36,6 +38,41 @@ const STATUS_FILTERS: { value: AnnualReviewStatus | 'all'; label: string }[] = [
   { value: 'completed', label: 'Done' },
 ];
 
+const SCOPE_FILTERS: { value: ReviewerScope; label: string }[] = [
+  { value: 'any', label: 'Any' },
+  { value: 'manager', label: 'Direct reports' },
+  { value: 'skip', label: 'Skip-level' },
+  { value: 'dept', label: 'Dept Head' },
+  { value: 'bu', label: 'BU Head' },
+  { value: 'hr', label: 'HR' },
+];
+
+const SCOPE_BADGE_LABEL: Record<Exclude<ReviewerScope, 'any'>, string> = {
+  manager: 'Manager',
+  skip: 'Skip',
+  dept: 'Dept Head',
+  bu: 'BU Head',
+  hr: 'HR',
+};
+
+/**
+ * Priority order when the current user matches multiple reviewer columns on
+ * one instance (e.g. HR head of his own direct report). "Closest relationship
+ * first" — mirrors the reviewer-chain sequence.
+ */
+function resolveMyRole(
+  row: InstanceWithEmployee,
+  uid: string | undefined,
+): Exclude<ReviewerScope, 'any'> | null {
+  if (!uid) return null;
+  if (row.manager_id === uid) return 'manager';
+  if (row.skip_id === uid) return 'skip';
+  if (row.dept_head_id === uid) return 'dept';
+  if (row.bu_head_id === uid) return 'bu';
+  if (row.hr_id === uid) return 'hr';
+  return null;
+}
+
 // Reviewer resolution — see `@/lib/annualReview/stageForReviewer`.
 
 export default function TeamAnnualReview() {
@@ -49,10 +86,12 @@ export default function TeamAnnualReview() {
   const urlSearch  = urlParams.get('q') ?? '';
   const urlStatus  = (urlParams.get('status') as AnnualReviewStatus | 'all' | null) ?? 'all';
   const urlPage    = Math.max(1, Number(urlParams.get('page') ?? '1') || 1);
+  const urlScope   = (urlParams.get('scope') as ReviewerScope | null) ?? 'any';
 
   const [search, setSearch] = useState(urlSearch);
   const [debouncedSearch, setDebouncedSearch] = useState(urlSearch);
   const [statusFilter, setStatusFilter] = useState<AnnualReviewStatus | 'all'>(urlStatus);
+  const [scopeFilter, setScopeFilter] = useState<ReviewerScope>(urlScope);
   const [page, setPage] = useState(urlPage);
   const [pageSize, setPageSize] = useState<number>(() => {
     if (typeof window === 'undefined') return DEFAULT_PAGE_SIZE;
@@ -86,7 +125,7 @@ export default function TeamAnnualReview() {
     const t = setTimeout(() => setDebouncedSearch(search.trim()), 300);
     return () => clearTimeout(t);
   }, [search]);
-  useEffect(() => { setPage(1); }, [debouncedSearch, statusFilter, pageSize]);
+  useEffect(() => { setPage(1); }, [debouncedSearch, statusFilter, scopeFilter, pageSize]);
 
   // Mirror queue state into the URL so the detail page's Back button restores
   // the exact filters/page (and a browser refresh stays put).
@@ -94,18 +133,30 @@ export default function TeamAnnualReview() {
     const next = new URLSearchParams();
     if (debouncedSearch) next.set('q', debouncedSearch);
     if (statusFilter !== 'all') next.set('status', statusFilter);
+    if (scopeFilter !== 'any') next.set('scope', scopeFilter);
     if (page !== 1) next.set('page', String(page));
     setUrlParams(next, { replace: true });
-  }, [debouncedSearch, statusFilter, page, setUrlParams]);
+  }, [debouncedSearch, statusFilter, scopeFilter, page, setUrlParams]);
 
   const { data: paged, isLoading, isFetching } = useReviewerInstancesPaginated(
     user?.id,
     cycle?.id,
-    { page, pageSize, search: debouncedSearch || undefined, status: statusFilter },
+    { page, pageSize, search: debouncedSearch || undefined, status: statusFilter, scope: scopeFilter },
   );
   const rows = paged?.rows ?? [];
   const total = paged?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
+
+  // Per-role counts — drives which "My role" chips render.
+  const { data: roleCounts } = useReviewerRoleCounts(user?.id, cycle?.id);
+  const visibleScopeFilters = SCOPE_FILTERS.filter((s) => {
+    if (s.value === 'any') return true;
+    // Always show the currently selected chip so the user can un-select it
+    // even if counts haven't loaded yet.
+    if (s.value === scopeFilter) return true;
+    return (roleCounts?.[s.value] ?? 0) > 0;
+  });
+  const showScopeRow = visibleScopeFilters.length > 2; // Any + at least one role
 
   const setStoredPageSize = (n: number) => {
     setPageSize(n);
@@ -117,10 +168,11 @@ export default function TeamAnnualReview() {
     const qs = new URLSearchParams();
     if (debouncedSearch) qs.set('q', debouncedSearch);
     if (statusFilter !== 'all') qs.set('status', statusFilter);
+    if (scopeFilter !== 'any') qs.set('scope', scopeFilter);
     if (page !== 1) qs.set('page', String(page));
     const s = qs.toString();
     return s ? `/annual-review/team?${s}` : '/annual-review/team';
-  }, [debouncedSearch, statusFilter, page]);
+  }, [debouncedSearch, statusFilter, scopeFilter, page]);
 
   const goToDetail = (instanceId: string) => {
     navigate(`/annual-review/team/${instanceId}`, {
