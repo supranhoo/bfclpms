@@ -1,46 +1,47 @@
-## Scope (narrowed)
+## Request
 
-Only the two templates:
-- **CPP - W - E** (`60854223-…`)
-- **CPP - W - Instrument** (`f31f3266-…`)
+Move these 10 employees to template **CPP - W - E** (`60854223-…`) and make sure each one can submit their Self review against the new template.
 
-Template criteria were last updated at **2026-07-16 11:05:05 UTC** (the standardisation migration).
+## Current state
 
-## Candidates found (12 in-flight, 10 eligible)
+All 10 are currently on **CPP - W - E&I** (`316a9249-…`). Nine are already at `pending_self` with no responses — a clean template swap. One (Shrawan Prajapati, 101133) has already submitted and locked his Self under E&I and is at `pending_dept` — he must also go back to Self.
 
-Filter used: instance currently mapped to one of the two templates (via `template_override_id` or `template_id`), `overall_status` past self, only a `self` response exists, and that `self.submitted_at < template.updated_at` (i.e. submitted against the OLD template).
+| Emp code | Name | Status | Action |
+|---|---|---|---|
+| 100289 | Sandeep Thakur | pending_self (empty draft row) | Set override → CPP-W-E |
+| 100290 | Mukesh Kumar | pending_self | Set override → CPP-W-E |
+| 100635 | Ranjeet Kumar Sinha | pending_self | Set override → CPP-W-E |
+| 100738 | Laxman Prajapati | pending_self | Set override → CPP-W-E |
+| 100935 | Bhanu Pratap Singh | pending_self | Set override → CPP-W-E |
+| 101218 | Safdar Ansari | pending_self | Set override → CPP-W-E |
+| 101612 | Bimalesh Kumar Lal | pending_self | Set override → CPP-W-E |
+| 101690 | Mohit Kumar | pending_self | Set override → CPP-W-E |
+| 101698 | Sahil Ansari | pending_self | Set override → CPP-W-E |
+| 101133 | Shrawan Prajapati | pending_dept (locked self) | Set override → CPP-W-E, unlock self, reset to `pending_self` |
 
-| # | Emp code | Name | Template | Self submitted | Action |
-|---|---|---|---|---|---|
-| 1 | 100592 | Pawan Kumar Singh | CPP - W - E | 10:10 | Reset |
-| 2 | 100710 | Bijay Kumar Patel | CPP - W - E | 10:39 | Reset |
-| 3 | 100711 | Vivek Kumar Patel | CPP - W - E | 08:09 | Reset |
-| 4 | 100737 | Niraj Kumar Yadav | CPP - W - E | 07:15 | Reset |
-| 5 | 100760 | Vikash Kumar | CPP - W - E | 09:27 | Reset |
-| 6 | 100771 | Sandeep Kumar | CPP - W - E | 07:33 | Reset |
-| 7 | 100844 | Avinash Kumar | CPP - W - E | 07:00 | Reset |
-| 8 | 101015 | Prabhat Kumar | CPP - W - E | 09:14 | Reset |
-| 9 | 101291 | Md Mujanabin Ansari | CPP - W - E | 09:55 | Reset |
-| 10 | 100774 | Surjya Narayan Jena | CPP - W - Instrument | 10:12 | Reset |
-| — | 100284 | Pritam Kumar Singh | CPP - W - E | 11:07 (after) | **Skip** — submitted under new template |
-| — | 101088 | Anand Kumar | CPP - W - E | 11:06 (after) | **Skip** — submitted under new template |
-
-Instances where any non-self reviewer has already scored → **not touched** (none in this set anyway).
-
-## Risk & Impact
-
-- **Data**: Self response is preserved; only `is_locked` flipped to `false`. `overall_status` regresses to `pending_self`. No score loss.
-- **Workflow**: 10 dept-head queue items disappear; 10 self-review items reappear for the employees.
-- **Audit**: One `annual_review_audit_logs` row per instance — action `annual_review.reset_to_self_for_template_change`, metadata contains previous status, template id, template `updated_at`, and self `submitted_at`.
-- **Rollback**: Reverse from the audit log rows (set status back, re-lock self).
+Sandeep Thakur (100289) has an empty draft self row (no `submitted_at`). It stays intact — he can just edit it under the new template.
 
 ## Plan
 
-1. **Migration** (single transaction, WHERE clause hard-scoped to the 10 candidate instance IDs derived by the query above):
-   - `UPDATE annual_review_responses SET is_locked = false, updated_at = now()` for the Self rows of the 10 instances.
-   - `UPDATE annual_review_instances SET overall_status = 'pending_self', updated_at = now()` for the 10 instances.
-   - Insert one `annual_review_audit_logs` row per instance.
-2. **Verify**: re-run the candidate query — expected count = 0. Spot-check 3 employees (100710, 100844, 100774) show `pending_self` + unlocked self + original criteria_scores intact.
-3. No code changes; no test changes required.
+Single migration, transactional:
 
-Nothing else in the DB or app is touched — CPP - M, CPP - W - E&I, CPP - W - Mech, CPP - W - Operation*, CPP - W - QC DMP, and every non-CPP template are all left alone.
+1. `UPDATE annual_review_instances SET template_override_id = '60854223-…', updated_at = now()` for all 10 instance IDs.
+2. For Shrawan Prajapati only:
+   - `UPDATE annual_review_responses SET is_locked = false, updated_at = now()` on his Self row.
+   - `UPDATE annual_review_instances SET overall_status = 'pending_self', updated_at = now()`.
+3. Insert one `system_audit_logs` row per instance — action `annual_review.template_override_assigned`, metadata: `{previous_template_id, new_template_id, previous_status, reason: 'Reassigned to CPP - W - E per HR request; self reopened where applicable'}`.
+
+## Why `template_override_id` (not `template_id`)
+
+Per the per-employee-template-override memory, `template_override_id` is the SSOT for per-employee overrides — it survives future seeder re-runs and keeps the original assigned-rule chain (`template_id`) intact for audit.
+
+## Risk & Impact
+
+- **Data**: Shrawan's existing self answers preserved (only unlocked). No score loss.
+- **Workflow**: 1 dept-head queue item disappears; 10 self-review items reappear for the employees against the new template.
+- **Regression**: None — no code changes, `template_override_id` is already respected everywhere via the resolver.
+- **Rollback**: One `UPDATE ... SET template_override_id = NULL` on the 10 IDs; re-lock Shrawan's self and set his status back to `pending_dept`.
+
+## Note on the truncated message
+
+Your last sentence ("Also ensure that need to submit this from") appears cut off. I'm reading it as "ensure they can submit this from Self review", which the plan above handles. If you meant something else (e.g. submit-on-behalf/proxy), tell me and I'll extend the plan.
