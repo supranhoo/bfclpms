@@ -78,7 +78,13 @@ export const useReviewerInstances = (reviewerId?: string, cycleId?: string) =>
 export const useReviewerInstancesPaginated = (
   reviewerId: string | undefined,
   cycleId: string | undefined,
-  opts: { page: number; pageSize: number; search?: string; status?: svc.ListReviewerInstancesPaginatedArgs['status'] },
+  opts: {
+    page: number;
+    pageSize: number;
+    search?: string;
+    status?: svc.ListReviewerInstancesPaginatedArgs['status'];
+    scope?: svc.ReviewerScope;
+  },
 ) =>
   useQuery({
     queryKey: [
@@ -96,10 +102,27 @@ export const useReviewerInstancesPaginated = (
         pageSize: opts.pageSize,
         search: opts.search,
         status: opts.status,
+        scope: opts.scope,
       }),
     enabled: !!reviewerId && !!cycleId,
     staleTime: 30_000,
     placeholderData: keepPreviousData,
+  });
+
+/**
+ * Per-reviewer-role counts for the current user in the given cycle. Cached
+ * 5 min. Used by the Team Annual Review page to hide "My role" chips the
+ * user doesn't qualify for.
+ */
+export const useReviewerRoleCounts = (
+  reviewerId: string | undefined,
+  cycleId: string | undefined,
+) =>
+  useQuery({
+    queryKey: [...annualReviewKeys.all, 'reviewerRoleCounts', reviewerId ?? '', cycleId ?? ''],
+    queryFn: () => svc.getReviewerRoleCounts(reviewerId!, cycleId!),
+    enabled: !!reviewerId && !!cycleId,
+    staleTime: 5 * 60_000,
   });
 
 /**
