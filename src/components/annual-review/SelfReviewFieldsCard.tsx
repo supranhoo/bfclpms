@@ -1,9 +1,61 @@
+import { useEffect, useLayoutEffect, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { SpeakButton } from '@/components/annual-review/SpeakButton';
 import { useAnnualReviewI18n } from '@/components/annual-review/AnnualReviewI18nContext';
 import type { SelfReviewField } from '@/types/annualReview';
+
+/**
+ * Auto-growing textarea: syncs height to scrollHeight so the full answer
+ * is visible without an internal scrollbar. Min height ≈ 3 rows.
+ */
+function AutoGrowTextarea(props: {
+  id: string;
+  value: string;
+  placeholder: string;
+  disabled?: boolean;
+  readOnly?: boolean;
+  onChange?: (value: string) => void;
+}) {
+  const ref = useRef<HTMLTextAreaElement | null>(null);
+
+  const resize = () => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${el.scrollHeight}px`;
+  };
+
+  useLayoutEffect(() => {
+    resize();
+  }, [props.value, props.readOnly, props.disabled]);
+
+  useEffect(() => {
+    const onResize = () => resize();
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+
+  return (
+    <Textarea
+      ref={ref}
+      id={props.id}
+      rows={3}
+      placeholder={props.placeholder}
+      value={props.value}
+      disabled={props.disabled}
+      readOnly={props.readOnly}
+      onChange={
+        props.readOnly || !props.onChange
+          ? undefined
+          : (e) => props.onChange!(e.target.value)
+      }
+      className="resize-none overflow-hidden min-h-[5.25rem]"
+      style={{ overflowY: 'hidden' }}
+    />
+  );
+}
 
 /**
  * SSOT for rendering the template's `self_review_fields` (Qualitative
@@ -53,17 +105,14 @@ export function SelfReviewFieldsCard({
                 </Label>
                 <SpeakButton text={label} />
               </div>
-              <Textarea
+              <AutoGrowTextarea
                 id={`self-field-${f.id}`}
-                rows={3}
                 placeholder={placeholder}
                 value={value}
                 disabled={readOnly}
                 readOnly={readOnly}
                 onChange={
-                  readOnly || !onChange
-                    ? undefined
-                    : (e) => onChange(f.id, e.target.value)
+                  readOnly || !onChange ? undefined : (v) => onChange(f.id, v)
                 }
               />
             </div>
