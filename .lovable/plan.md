@@ -1,47 +1,89 @@
-## Request
+## Problem
 
-Move these 10 employees to template **CPP - W - E** (`60854223-…`) and make sure each one can submit their Self review against the new template.
+On **Team Annual Review**, the HR Head appears in every row because he is simultaneously:
 
-## Current state
+- **Manager** for his own direct reports,
+- **Dept Head / BU Head** for his department + BU, and
+- **HR** for the entire company.
 
-All 10 are currently on **CPP - W - E&I** (`316a9249-…`). Nine are already at `pending_self` with no responses — a clean template swap. One (Shrawan Prajapati, 101133) has already submitted and locked his Self under E&I and is at `pending_dept` — he must also go back to Self.
+The current queue merges all five reviewer roles with a single `.or(manager_id.eq…,skip_id.eq…,dept_head_id.eq…,bu_head_id.eq…,hr_id.eq…)` in `listInstancesForReviewerPaginated` (annualReviewService.ts:669), and every card renders the same "BU Head Review Pending" chip. He has no way to answer *"who reports to me directly?"* without opening each card.
 
-| Emp code | Name | Status | Action |
-|---|---|---|---|
-| 100289 | Sandeep Thakur | pending_self (empty draft row) | Set override → CPP-W-E |
-| 100290 | Mukesh Kumar | pending_self | Set override → CPP-W-E |
-| 100635 | Ranjeet Kumar Sinha | pending_self | Set override → CPP-W-E |
-| 100738 | Laxman Prajapati | pending_self | Set override → CPP-W-E |
-| 100935 | Bhanu Pratap Singh | pending_self | Set override → CPP-W-E |
-| 101218 | Safdar Ansari | pending_self | Set override → CPP-W-E |
-| 101612 | Bimalesh Kumar Lal | pending_self | Set override → CPP-W-E |
-| 101690 | Mohit Kumar | pending_self | Set override → CPP-W-E |
-| 101698 | Sahil Ansari | pending_self | Set override → CPP-W-E |
-| 101133 | Shrawan Prajapati | pending_dept (locked self) | Set override → CPP-W-E, unlock self, reset to `pending_self` |
+The same friction hits any user who holds >1 reviewer role (BU Heads who also manage a team, Dept Heads who are also skip-level, etc.). The fix must be generic, not HR-only.
 
-Sandeep Thakur (100289) has an empty draft self row (no `submitted_at`). It stays intact — he can just edit it under the new template.
+## Solution — add a "My role" scope filter + per-row role badge
 
-## Plan
+Two coordinated, minimal changes on the existing screen. No schema/RLS changes.
 
-Single migration, transactional:
+### 1. New "My role" filter (chip group)
 
-1. `UPDATE annual_review_instances SET template_override_id = '60854223-…', updated_at = now()` for all 10 instance IDs.
-2. For Shrawan Prajapati only:
-   - `UPDATE annual_review_responses SET is_locked = false, updated_at = now()` on his Self row.
-   - `UPDATE annual_review_instances SET overall_status = 'pending_self', updated_at = now()`.
-3. Insert one `system_audit_logs` row per instance — action `annual_review.template_override_assigned`, metadata: `{previous_template_id, new_template_id, previous_status, reason: 'Reassigned to CPP - W - E per HR request; self reopened where applicable'}`.
+A second row of chips above the existing status chips, showing only the roles the current user actually holds in the current cycle:
 
-## Why `template_override_id` (not `template_id`)
+```text
+My role:  [ Any ]  [ Direct reports ]  [ Skip-level ]  [ Dept Head ]  [ BU Head ]  [ HR ]
+Status :  [ All ]  [ Self ] [ Manager ] [ Skip ] [ Dept Head ] [ BU ] [ HR ] [ Done ]
+```
 
-Per the per-employee-template-override memory, `template_override_id` is the SSOT for per-employee overrides — it survives future seeder re-runs and keeps the original assigned-rule chain (`template_id`) intact for audit.
+- Default = **Any** (current behavior — no regression).
+- Selecting **Direct reports** filters the queue to instances where `manager_id = me` (i.e. the employee's `profiles.reporting_manager_id` at snapshot time).
+- Skip / Dept / BU / HR do the same against `skip_id` / `dept_head_id` / `bu_head_id` / `hr_id`.
+- Chips are hidden when the user is not that role for anyone (e.g. a pure manager only sees `Any` + `Direct reports`).
+- Selection is URL-synced (`?scope=direct`) so Back-from-detail restores it, matching how `q` / `status` / `page` already work.
+
+**Independent from the Status filter** — the two combine (e.g. `scope=direct` + `status=pending_manager` = "my direct reports still awaiting me").
+
+### 2. Per-row "your role" badge
+
+Every card gets one extra tiny badge next to the existing status badge, showing *which hat* the current user is wearing for that row:
+
+```text
+[BU Head Review Pending]  You: Manager    Assisted
+[BU Head Review Pending]  You: BU Head    Assisted
+[BU Head Review Pending]  You: HR
+```
+
+Priority order when the user matches multiple fields on one row (e.g. HR head of his own direct report): **Manager → Skip → Dept Head → BU Head → HR**. This mirrors the natural "closest relationship first" mental model and matches the reviewer-chain order already used elsewhere in the codebase.
+
+The badge is computed client-side from fields already returned by the query (`manager_id`, `skip_id`, `dept_head_id`, `bu_head_id`, `hr_id` vs `user.id`) — no extra fetch.
+
+## Technical Details
+
+**Files touched (3):**
+
+1. **`src/services/annualReview/annualReviewService.ts`**
+   - Extend `ListReviewerInstancesPaginatedArgs` with `scope?: 'any' | 'manager' | 'skip' | 'dept' | 'bu' | 'hr'`.
+   - When `scope` is set and ≠ `'any'`, replace the 5-way `.or(...)` with a single `.eq('<role>_id', reviewerId)`. Falls back to the current `.or(...)` when `scope='any'` or omitted → zero behavior change for existing callers.
+   - Add a tiny helper `getReviewerRoleCounts(reviewerId, cycleId)` returning `{manager, skip, dept, bu, hr}` counts so the UI can hide chips the user doesn't qualify for. One RPC-free query using PostgREST `head: true, count: 'exact'` per role, cached 5 min.
+
+2. **`src/hooks/useAnnualReview.ts`**
+   - Add `scope` to `useReviewerInstancesPaginated` opts (passes straight through).
+   - Add `useReviewerRoleCounts(reviewerId, cycleId)`.
+
+3. **`src/pages/annual-review/TeamAnnualReview.tsx`**
+   - Add `scope` URL param + state (default `'any'`), reset page on change, mirror into `returnTo`.
+   - Render the "My role" chip row using role counts (chip hidden if `count === 0`; the "Any" chip is always shown).
+   - Add a small `RelationshipBadge` next to `AnnualReviewStatusBadge` inside each card, computed once per row via the priority order above.
+
+**No DB / RLS changes.** All 5 reviewer id columns are already selected by the query and already RLS-visible to the user (row wouldn't be in the queue otherwise).
+
+## Verification
+
+1. Log in as the HR head account, open `/annual-review/team` → confirm 5 chips visible (Any + all 4 roles he holds).
+2. Click **Direct reports** → confirm queue narrows to only employees whose `reporting_manager_id` is him, and card badges read `You: Manager`.
+3. Combine with `Status = Self` → confirm only his direct reports still at `pending_self` show.
+4. Log in as a pure Manager → only `Any` + `Direct reports` chips render (others hidden by zero counts).
+5. Browser Back from detail restores `scope`, `q`, `status`, `page` together.
+6. Existing users who never touch the new filter see identical results (default `scope='any'` skips the new WHERE branch).
 
 ## Risk & Impact
 
-- **Data**: Shrawan's existing self answers preserved (only unlocked). No score loss.
-- **Workflow**: 1 dept-head queue item disappears; 10 self-review items reappear for the employees against the new template.
-- **Regression**: None — no code changes, `template_override_id` is already respected everywhere via the resolver.
-- **Rollback**: One `UPDATE ... SET template_override_id = NULL` on the 10 IDs; re-lock Shrawan's self and set his status back to `pending_dept`.
+- **Data:** none — read-only additive filter over columns already selected.
+- **Workflow:** none — no permissions change, no writes.
+- **UI:** one new chip row + one small badge per card. Preserves current layout; wraps on mobile.
+- **Regression:** low. Default path is unchanged; new WHERE branch only fires when `scope ≠ 'any'`.
+- **Perf:** the single-column `.eq()` variant is strictly cheaper than the 5-way `.or()`. Role-counts query is 5 tiny `head:true, count:'exact'` calls, cached 5 min per user+cycle.
 
-## Note on the truncated message
+## Out of Scope (call out, don't build)
 
-Your last sentence ("Also ensure that need to submit this from") appears cut off. I'm reading it as "ensure they can submit this from Self review", which the plan above handles. If you meant something else (e.g. submit-on-behalf/proxy), tell me and I'll extend the plan.
+- Filtering by *functional manager* relationship — not currently a reviewer column on the instance.
+- Persisting per-user default scope (e.g. "always start on Direct reports") — trivial follow-up via localStorage if desired after we see usage.
+- Applying the same scope filter to the Calibration worksheet — separate screen with its own query; flag for a later pass if the user wants parity.
