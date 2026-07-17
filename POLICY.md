@@ -4820,3 +4820,23 @@ Enforcement:
   `annual_review_bu_head_terminal_audit_2026_07` (reversible).
 
 See ADR-109 for the RCA (Sajid Raza / Jitendra Dwivedi / Abhas Luharuwalla).
+
+## §108c — Notification-authorization function schema guardrail (2026-07-17)
+
+Any migration that redefines `public.can_send_notification_to(uuid, uuid)` MUST:
+
+1. Reference only real columns — `departments.head_user_id` and
+   `business_units.head_user_id`; never `head_id` on either table.
+2. Preserve the bidirectional matrix: sender→target AND target→sender for
+   org hierarchy (reporting manager, functional manager, skip, dept head,
+   BU head), KPI reviewer↔assignee (`audit_kpi_assignments`,
+   `audit_kpi_level_assignments`), and annual-review reviewer slots
+   (`manager_id, skip_id, dept_head_id, bu_head_id, hr_id` on
+   `annual_review_instances`), plus AR proxy submitters.
+3. Remain `STABLE SECURITY DEFINER` with `SET search_path = public`.
+4. Ship with, or continue to satisfy, the guardrail tests in
+   `src/tests/canSendNotificationToSchema.test.ts`. Adding new forbidden
+   identifiers is done by extending the `FORBIDDEN` array in that file.
+
+Rationale: reference §108b (bidirectional matrix) and DOCUMENTATION.md
+v2.66.114 (RCA of the `d.head_id` regression).
