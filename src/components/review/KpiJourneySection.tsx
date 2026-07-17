@@ -509,12 +509,15 @@ export function KpiJourneySection({
       // downstream reviewer stages (auditor bulk sign-off, etc.), so it can
       // disagree with the frozen `self_score`. Resolve a self-specific value
       // before handing to buildStage. See lib/review/resolveSelfAchievedValue.
-      const resolved = resolveSelfAchievedValue(submission as any, kpi as any);
-      const fallback = submission ? (resolved.value ?? null) : null;
+      // Pass orgAchievedValue as the last-resort fallback so ambiguous
+      // reverse-derivation surfaces the Data Owner's number rather than "—".
+      const resolved = resolveSelfAchievedValue(
+        submission as any,
+        kpi as any,
+        orgAchievedValue ?? null,
+      );
       const selfValue = submission
-        ? (resolved.source === 'unknown'
-            ? null
-            : (fallback ?? orgAchievedValue ?? null))
+        ? (resolved.value ?? orgAchievedValue ?? null)
         : null;
       const stage = buildStage(
         User, 'blue', 'Self',
@@ -523,9 +526,12 @@ export function KpiJourneySection({
         buildEvidenceUrls(submission?.self_evidence_urls, submission?.self_evidence_url),
         selfValue,
       );
-      (stage as any).achievedValueUnknownReason = resolved.source === 'unknown'
-        ? 'Original self-entered value is not stored separately and was overwritten by a later reviewer edit. See the audit log for the original value.'
-        : null;
+      (stage as any).achievedValueUnknownReason =
+        resolved.source === 'unknown'
+          ? 'Original self-entered value is not stored separately and was overwritten by a later reviewer edit. See the audit log for the original value.'
+          : resolved.source === 'org_owner'
+            ? 'Displayed value is the latest number entered by the Org KPI Data Owner for this period (the original self snapshot could not be uniquely reconstructed from the KPI scale).'
+            : null;
       // §88.5 — surface that this auto-advanced stub will refresh from OKV
       // on the next propagation, so Admins know what to expect.
       {
