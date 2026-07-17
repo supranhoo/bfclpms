@@ -14386,6 +14386,21 @@ export type Database = {
           weighted_score: number
         }[]
       }
+      get_my_annual_review_queue: {
+        Args: {
+          p_cycle_id: string
+          p_page?: number
+          p_page_size?: number
+          p_scope?: string
+          p_search?: string
+          p_status?: string
+        }
+        Returns: Json
+      }
+      get_my_annual_review_role_counts: {
+        Args: { p_cycle_id: string }
+        Returns: Json
+      }
       get_org_kpi_data_entry_snapshot: {
         Args: { p_period: string; p_year: number }
         Returns: Json
