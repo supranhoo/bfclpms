@@ -526,9 +526,12 @@ export function KpiJourneySection({
         buildEvidenceUrls(submission?.self_evidence_urls, submission?.self_evidence_url),
         selfValue,
       );
-      (stage as any).achievedValueUnknownReason = resolved.source === 'unknown'
-        ? 'Original self-entered value is not stored separately and was overwritten by a later reviewer edit. See the audit log for the original value.'
-        : null;
+      (stage as any).achievedValueUnknownReason =
+        resolved.source === 'unknown'
+          ? 'Original self-entered value is not stored separately and was overwritten by a later reviewer edit. See the audit log for the original value.'
+          : resolved.source === 'org_owner'
+            ? 'Displayed value is the latest number entered by the Org KPI Data Owner for this period (the original self snapshot could not be uniquely reconstructed from the KPI scale).'
+            : null;
       // §88.5 — surface that this auto-advanced stub will refresh from OKV
       // on the next propagation, so Admins know what to expect.
       {
