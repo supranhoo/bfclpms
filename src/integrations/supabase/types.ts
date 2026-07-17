@@ -13690,6 +13690,12 @@ export type Database = {
           stage_still_open: boolean
         }[]
       }
+      annual_review_subtree_ids: {
+        Args: { p_manager: string; p_max_depth?: number }
+        Returns: {
+          employee_id: string
+        }[]
+      }
       annual_review_validate_stage_weights: {
         Args: { p_weights: Json }
         Returns: boolean
