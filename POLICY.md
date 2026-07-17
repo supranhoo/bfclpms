@@ -4730,3 +4730,23 @@ Rules 4 and 5 were added because HODs who head more than one department
 across different business units were being denied by the directory
 resolver's `LIMIT 1` collapse. The form appeared read-only for them even
 though they legitimately own the review. See ADR-107 follow-up.
+
+## §Self Value Snapshot Contract (2026-07-17)
+
+The "Value" shown under the Self card in the KPI Journey / View KPI Details
+panel and on the employee dashboard follows a strict source-of-truth chain:
+
+1. `review_submissions.self_achieved_value` (frozen at self-submit / propagation).
+2. Reverse-derived from `self_score` + KPI thresholds when unique.
+3. Latest `org_kpi_values.achieved_value` for the period (Data Owner value).
+4. `—` (empty) — only when none of the above are recoverable.
+
+Writer contract:
+- Every writer that sets `self_score` or `achieved_value` on behalf of the
+  employee MUST also write `self_achieved_value`.
+- Reviewer-stage writers (auditor / manager / management / skip-level / HR PMS)
+  MUST NOT touch `self_achieved_value`.
+- A DB trigger (`enforce_self_snapshot_mirror`) enforces (1) by mirroring
+  `achieved_value` onto the snapshot on any self-owning update as long as the
+  snapshot is still `NULL` and no reviewer column was modified in the same
+  statement. See ADR-106 for the full record.
