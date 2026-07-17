@@ -16,6 +16,7 @@ describe('can_send_notification_to schema references', () => {
   const dir = resolve(__dirname, '../../supabase/migrations');
   const bodies = readdirSync(dir)
     .filter((f) => f.endsWith('.sql'))
+    .sort()
     .map((f) => readFileSync(resolve(dir, f), 'utf8'))
     .filter((b) => b.includes('can_send_notification_to'));
 
