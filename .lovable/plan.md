@@ -1,49 +1,53 @@
-## 1. Assumptions
-- The screenshot’s `column d.head_id does not exist` toast is the current blocker after clicking **Verify & Submit**.
-- The uploaded photograph is valid; media capture/upload is not the failing step.
+## Assumptions
+- Live DB has already been repaired: `public.can_send_notification_to(uuid,uuid)` uses `d.head_user_id` (verified — no function, view, policy, or trigger in `public` references `d.head_id` or bare `head_id`).
+- The screenshots showing "column d.head_id does not exist" are from the pre-repair state (before migration `20260717122200_49e4d033…` was applied). No new occurrences have been reproduced against the current schema.
+- Scope of this task: institutionalize the fix — RCA record, regression guards, tests, documentation — not another data migration.
 
-## 2. Clarifications
-- Not Applicable; the failure and intended behavior are unambiguous.
+## Risk & Impact Report
+- **Data Impact:** None. No schema or data changes.
+- **Workflow Impact:** None. Notification authorization matrix already restored.
+- **UI/UX Impact:** None.
+- **Regression Risk:** Medium if not guarded — a future migration could reintroduce `d.head_id` or another non-existent column and silently break notification inserts across audit/self/annual-review save paths. Mitigated by (a) a schema-validation unit test and (b) a runtime smoke test invoking `can_send_notification_to` for representative role pairs.
+- **Scalability Impact:** None; guards are O(1) at test/CI time.
+- **Rollback:** Pure additive (tests + docs). Delete the added files to revert.
 
-## 3. Risk & Impact Report
-- **Data impact:** No schema or historical-row changes. The failed transaction should have rolled back the review transition and notification together. Confirm the instance remains pending before repair.
-- **Workflow impact:** Restores assisted Annual Review submission and other legitimate cross-user notifications. Authorization remains relationship-based.
-- **UI/UX impact:** No visual change; the existing dialog should submit successfully instead of showing the database error.
-- **Regression risk:** Medium. The live helper was repaired earlier, but migration `20260717120422...` later overwrote it with an obsolete definition containing `departments.head_id` and nonexistent KPI reviewer columns.
-- **Scalability impact:** Neutral; retain indexed relationship lookups and bounded `EXISTS` checks.
-- **Mitigation:** Replace the helper with the already schema-valid relationship model, add deployment-order-aware regression coverage, verify the live function body and both allow/deny cases.
-- **Rollback:** Reapply the immediately preceding schema-valid helper definition; no data rollback is required.
+## Root Cause (5-why summary)
+1. Users saw "column d.head_id does not exist" on Save/Send-back → notification INSERT failed.
+2. The failing INSERT invoked `can_send_notification_to(...)` in an RLS policy / BEFORE trigger.
+3. A prior migration (`20260717120422_159c1980…`) redefined that function referencing `departments d.head_id`.
+4. `public.departments` has `head_user_id`, not `head_id` — the function's column reference was invalid.
+5. Function code was authored from stale schema memory; no schema-validation test caught it before deploy.
 
-## 4. Step-by-step Plan
-1. Add one corrective backend migration that replaces `can_send_notification_to` with the schema-valid bidirectional matrix:
-   - use `departments.head_user_id`, never `head_id`;
-   - use profile/org-master relationships for manager, skip, department head, and BU head;
-   - use real audit-assignment tables rather than nonexistent KPI reviewer columns;
-   - preserve Annual Review employee↔reviewer and reviewer-peer authorization;
-   - preserve authenticated/backend execution only.
-2. Verify the affected review instance is still pending and no partial proxy audit/submission state was committed.
-3. Test the actual affected sender/recipient authorization, an unrelated-user denial, and inspect the deployed function definition for forbidden columns.
-4. Update regression fixtures/tests so the newest migration can never reintroduce `d.head_id` or invalid `kpis` aliases, regardless of migration ordering.
-5. Synchronize RCA/CAPA documentation and policy version history.
+Current state: superseded by `20260717122200_49e4d033…` which restored the bidirectional matrix using the correct `d.head_user_id`. Verified via `pg_get_functiondef` and `pg_proc` scan (only one overload exists).
 
-## 5. UI Changes
-- Not Applicable.
+## Plan
+1. **Regression test — schema validity of notification-authorization function.**
+   `src/tests/canSendNotificationToSchema.test.ts`: query `pg_get_functiondef('public.can_send_notification_to'::regproc)` shape via a mocked supabase client and assert the definition:
+   - references `head_user_id` (not bare `head_id`),
+   - references `audit_kpi_assignments` and `audit_kpi_level_assignments`,
+   - contains bidirectional `sender`/`target` branches for org hierarchy, KPI reviewers, and annual-review reviewers.
+2. **Regression test — behavioural matrix.**
+   `src/tests/notificationsSenderRelationshipMatrix.test.ts` (extend existing): cover self→self, admin↔any, manager↔subordinate, dept-head↔member, bu-head↔member, kpi-reviewer↔assignee, ar-reviewer↔employee, ar-peer↔ar-peer, unrelated→denied.
+3. **Migration-linter guard (source-side).**
+   `scripts/check-migrations-schema.mjs` run in `bun test`: scans `supabase/migrations/*.sql` for forbidden identifiers (`departments…head_id\b`, `kpi\.…` alias without joined table, etc.) and fails CI on match. Denylist is data-driven via `scripts/forbidden-columns.json` so future columns can be added without code changes.
+4. **DOCUMENTATION.md** — append v2.66.114 entry: RCA, CAPA, verification steps, links to test files.
+5. **POLICY.md** — reaffirm §108b (bidirectional notification matrix) and add §108c: "Every migration that redefines `can_send_notification_to` must be accompanied by the schema-validity test in step 1."
+6. **Post-verify** — after tests pass, re-run `can_send_notification_to` for the Jitendra→Gaurav pair via `supabase--read_query` (using a service-role wrapper query) to confirm `true`, and instruct the user to reload the Audit Review page.
 
-## 6. Implementation
-- One additive `CREATE OR REPLACE FUNCTION` migration only; no table changes, destructive statements, or client workaround.
-- Root cause: a later timestamped migration reintroduced the obsolete function after the earlier repair, so source tests and documentation described a fixed state while the live database was regressed.
+## UI Changes
+Not Applicable.
 
-## 7. Tests
-- Update `notificationsSenderRelationshipSchema.test.ts` and its realistic relationship mock fixture.
-- Cover valid upward/downward Annual Review relationships, reviewer-peer access, unrelated-user denial, forbidden-column detection, and anonymous execution revocation.
-- Run the focused test suite and live read-only verification queries.
+## Files Touched
+- `src/tests/canSendNotificationToSchema.test.ts` (new)
+- `src/tests/notificationsSenderRelationshipMatrix.test.ts` (new or extended)
+- `scripts/check-migrations-schema.mjs` (new)
+- `scripts/forbidden-columns.json` (new)
+- `DOCUMENTATION.md` (append v2.66.114)
+- `POLICY.md` (append §108c)
 
-## 8. DOCUMENTATION.md updates
-- Add a version-history entry documenting the migration-order regression, live-state verification, rollback, and CAPA.
+## Out of Scope
+- No new DB migration (live function already correct).
+- No UI, RLS, or table changes.
+- No rollback of prior migrations — historical files are retained as source-of-record.
 
-## 9. POLICY.md updates
-- Reaffirm the notification schema-truth rule and require the final chronological function definition—not merely an earlier valid migration—to pass schema-reference tests.
-
-## 10. Post-implementation notes
-- Confirm backup coverage remains automatic; no new table is introduced.
-- Report the final review status and authorization checks without exposing employee-sensitive data.
+Approve to switch to build mode and implement.
