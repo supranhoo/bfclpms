@@ -47,6 +47,18 @@ describe('useDirectoryAccess', () => {
     expect(result.current.businessUnitId).toBe('bu-1');
   });
 
+  it('grants team-scope for plain Reporting / Skip-Level Managers', async () => {
+    rpcMock.mockResolvedValueOnce({
+      data: { can_access: true, scope: 'team', business_unit_id: null },
+      error: null,
+    });
+    const { result } = renderHook(() => useDirectoryAccess(), { wrapper: wrap() });
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(result.current.canAccess).toBe(true);
+    expect(result.current.scope).toBe('team');
+    expect(result.current.businessUnitId).toBeNull();
+  });
+
   it('denies when resolver returns can_access=false', async () => {
     rpcMock.mockResolvedValueOnce({ data: { can_access: false }, error: null });
     const { result } = renderHook(() => useDirectoryAccess(), { wrapper: wrap() });
