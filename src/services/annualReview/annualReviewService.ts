@@ -659,14 +659,6 @@ export interface ListReviewerInstancesPaginatedArgs {
 
 export type ReviewerScope = 'any' | 'manager' | 'skip' | 'dept' | 'bu' | 'hr';
 
-const SCOPE_COLUMN: Record<Exclude<ReviewerScope, 'any'>, string> = {
-  manager: 'manager_id',
-  skip: 'skip_id',
-  dept: 'dept_head_id',
-  bu: 'bu_head_id',
-  hr: 'hr_id',
-};
-
 export async function listInstancesForReviewerPaginated(
   args: ListReviewerInstancesPaginatedArgs,
 ): Promise<PaginatedInstances> {
