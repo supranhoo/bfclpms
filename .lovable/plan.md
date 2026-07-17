@@ -1,40 +1,66 @@
-# Fix: instance detail page rejects HODs/BU-Heads viewing employees in their home BU
+# Notification "not authorized" toast on Annual Review save — RCA & CAPA
 
-## Root cause
-The RLS SELECT policy `instances_select_directory_assistance` on `annual_review_instances` calls `public.can_access_annual_review_instance_for_assistance(id)`. That helper still reads the **single** `business_unit_id` field from `annual_review_directory_access(uid)` — it was not updated in ADR-111 when the resolver became multi-BU.
+## 1. Symptom
+Employee (Binod Kumar, id `1530a276-…ddc96`) saves his Annual Review draft and the UI shows a red toast:
 
-For Prabhat (101757), the resolver now returns `business_unit_ids = [Admin, 1050 TPD]` but `business_unit_id = Admin` (first entry). Mukesh's instance sits in 1050 TPD, so the helper falls through to `RETURN false`, RLS hides the row, and the detail page renders "This review isn't available…".
+> not authorized to send notifications to user 1530a276-8fad-4196-af49-28ce819ddc96
 
-The helper also doesn't handle `scope='team'` — plain reporting managers who can see an employee in the directory can't open the instance either unless they're already a named reviewer.
+The save itself likely succeeded, but the AR stage-change trigger tried to insert an in-app notification and was blocked by the notifications BEFORE INSERT guard.
 
-## Decision
-Extend `can_access_annual_review_instance_for_assistance(p_instance_id)` to mirror the resolver's new contract:
+## 2. 5-Why Analysis
 
-1. Read `business_unit_ids` (array) from `annual_review_directory_access`; fall back to `[business_unit_id]` for safety.
-2. `scope='all'` → allow (unchanged).
-3. `scope='bu'` → allow when `employee.department.business_unit_id = ANY(business_unit_ids)`.
-4. **NEW `scope='team'`** → allow when the caller is `manager_id`/`skip_id` on the instance, OR the employee is a direct/skip report of the caller (mirrors the write-side check in `create_or_get_annual_review_instance`).
-5. Everything else → deny.
+1. **Why did the toast appear?** The AR save transitioned `overall_status` (e.g. `pending_self` → `pending_manager`, or a system re-fire to the employee), which invoked `notify_annual_review_stage_change()`, which inserted into `public.notifications`.
+2. **Why did the INSERT fail?** The `BEFORE INSERT` trigger `tg_notifications_enforce_sender_relationship` called `can_send_notification_to(auth.uid(), NEW.user_id)` and it returned `false`.
+3. **Why did the guard return `false`?** The guard only recognises **downward** relationships — `p.reporting_manager_id = sender`, `mgr.reporting_manager_id = sender` (skip), `d.head_id = sender`, `bu.head_user_id = sender`, or reviewer roles on KPIs/AR instances where `sender` is the reviewer. It has **no branch for the reverse direction** where the sender is the employee/subordinate and the target is their manager / skip / dept-head / BU-head / HR reviewer.
+4. **Why does that matter here?** The self-review submission is an inherently **upward** notification: employee → manager (or → employee themselves on completion). `auth.uid()` inside the `SECURITY DEFINER` trigger is still the JWT caller (the employee), so the guard rejects the legitimate system-generated notification.
+5. **Why wasn't this caught earlier?** Migration `20260717063237` (notification sender guard) was added recently and only unit-tested the manager→subordinate paths. The upward direction and the "SECURITY DEFINER trigger acting on behalf of the system" case were not modelled. POLICY §108 (notification-recipient-guard) covers FK to `auth.users` but not this new authorization guard.
 
-No change to write policies (`instances_stage_update`, response RLS, submit RPCs) — approval rights stay gated to the named reviewer / admin / hr_pms. This is a **read-only** widening consistent with ADR-111's SSOT intent.
+**Root cause:** `public.can_send_notification_to()` is unidirectional (downward-only). Any DB trigger that fires under a subordinate's JWT and notifies upward is blocked.
 
-## Backend (one migration, extends ADR-111)
-- `CREATE OR REPLACE FUNCTION public.can_access_annual_review_instance_for_assistance(uuid)` with the array + team branch above. Same signature, same return type, `STABLE SECURITY DEFINER`, `search_path=public`. RLS policy stays untouched (already calls the function by name).
+## 3. Impact & Risk
 
-## Frontend
-- None. `useReviewInstance` / `TeamAnnualReviewDetail` unchanged — server RLS drives visibility.
+- **Blast radius:** Every AR stage transition initiated by a non-admin user (self-review submit, manager forward to skip/BU/HR, send-back to self) can raise a `42501` exception inside the trigger. Because the trigger is `AFTER UPDATE`, the exception rolls back the parent UPDATE — meaning the AR save itself may also be silently failing on transitions, not just the notification.
+- **Similar sites at risk (same class of bug):** `useKpis.ts`, `useQueryWorkflow.ts`, `useKpiObservations.ts`, `useObservationReplies.ts`, `useKpiRollbackRequests.ts`, `useAdminDataEntry.ts`, `usePIP.ts` — anywhere a non-admin employee client-side inserts a notification aimed at a manager/HR/auditor.
+- **Data loss risk:** AFTER UPDATE trigger raising = full transaction rollback. Fix category, not the instance.
 
-## Tests / verification
-- Post-migration psql: as Prabhat (`223ba922-…`), `SELECT can_access_annual_review_instance_for_assistance('06783199-0694-41f9-bd1f-77222b280478')` returns `true`; the instance row is returned by `SELECT … FROM annual_review_instances WHERE id = …` under his JWT.
-- Regression: an unrelated employee (no leadership, not a reviewer on the instance) still returns `false`.
-- `directoryAccess.test.ts` gets an extra assertion covering the multi-BU visibility path.
+## 4. CAPA
 
-## Governance
-- `docs/adr/ADR-111.md`: append "Read-side helper" note documenting that the assistance helper mirrors the resolver's `business_unit_ids` and adds a `team` branch.
-- `POLICY.md` §AR-DIRECTORY-ACCESS-MATRIX: add "Instance visibility mirrors directory scope (read-only); write rights remain gated to named reviewers."
+### Corrective (immediate)
+Extend `public.can_send_notification_to(sender, target)` to also allow **upward and peer-reviewer** paths, mirroring the existing downward branches:
 
-## Risk & rollback
-Additive read widening for users who already qualify via the directory resolver. No write path affected. Rollback = restore previous function body; UI falls back to the same "not available" screen.
+- `target` is admin or `hr_pms` (any employee may notify HR/Admin about their own review).
+- `sender` reports (directly, functionally, or skip) to `target`, OR `target` is the dept-head/BU-head of `sender`'s department.
+- On KPIs: `sender = k.assigned_to` and `target IN (k.manager_id, k.skip_manager_id, k.hr_id, k.auditor_id, k.management_id)`.
+- On AR instances: `sender = i.employee_id` and `target IN (i.manager_id, i.skip_id, i.dept_head_id, i.bu_head_id, i.hr_id)`, **and** the reverse — any named reviewer on the same instance may notify any other named reviewer or the employee (peer handoff between manager↔skip↔BU↔HR).
 
-## Out of scope
-No changes to review stages, reviewer resync, BU-Head-terminal (ADR-109), team-queue RPCs, or the global directory feature flag.
+Keep the existing downward branches unchanged. Function stays `STABLE SECURITY DEFINER` with `search_path=public`.
+
+No changes to the trigger `tg_notifications_enforce_sender_relationship` or to any RLS policy. No schema changes. No frontend changes.
+
+### Preventive
+1. **Unit tests** (`src/test/notificationSenderGuard.test.ts`, new) covering the full matrix: self, admin→any, HR→any, manager↔subordinate, skip↔subordinate, dept-head↔member, BU-head↔member, KPI reviewer↔subject (both directions), AR reviewer↔employee (both directions), AR peer reviewers, unrelated users denied.
+2. **POLICY.md** — extend §108 (Notification Recipient Guard) with a new sub-section "§108b Sender authorization matrix" listing every allowed edge (down, up, peer) as the canonical table. Any future addition must land in that table and the test file in the same PR.
+3. **DOCUMENTATION.md** — add a short "Notification authorization" section under Security cross-referencing POLICY §108b.
+4. **ADR-112** — record the RCA, the bidirectional decision, and the rejected alternatives (bypass flag, service-role re-invoke, per-trigger `SET LOCAL`).
+
+### Rejected alternatives
+- *"Skip the guard when caller is inside a SECURITY DEFINER function"* — Postgres exposes no reliable flag; would require a session GUC set/unset around every trigger, high drift risk.
+- *"Move notification inserts out of triggers into edge functions using the service role"* — huge refactor for the whole notification surface, disproportionate to this fix.
+- *"Wrap every trigger notification insert in `EXCEPTION WHEN insufficient_privilege`"* — hides the real signal and would mask genuine authorization bugs.
+
+## 5. Verification (post-migration)
+
+- psql: `select public.can_send_notification_to('<binod>','<his_manager>');` → `true`.
+- psql: reproduce the AR stage transition as Binod and confirm no `42501`; row lands in `public.notifications`.
+- Vitest: `notificationSenderGuard.test.ts` all green.
+- Manual: reload Binod's AR page, click Save, no toast; bell shows the notification for the manager.
+
+## 6. Deliverables (this fix)
+
+- **Backend:** one migration replacing `public.can_send_notification_to`.
+- **Tests:** `src/test/notificationSenderGuard.test.ts` (SQL-string assertions on the migration, matching the pattern used in `bugBountyFixes.test.ts` §BUG-037).
+- **Docs:** `docs/adr/ADR-112.md`, `POLICY.md` §108b, `DOCUMENTATION.md` cross-ref.
+- **Frontend:** none.
+- **Out of scope:** notification RLS policies, trigger refactor, edge-function rewiring, unrelated notification sites.
+
+Awaiting approval to implement.
