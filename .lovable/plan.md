@@ -1,52 +1,56 @@
-## Assumptions
-- `authorized_proxy` Assisted Submission writes a `review_submissions` row and then inserts a `notifications` row for the on-behalf-of user.
-- That insert fires the `BEFORE INSERT` trigger on `public.notifications` which calls `public.can_send_notification_to(sender, target)`.
-- The `can_send_notification_to` body references `k.assigned_to` on `public.kpis` — but the actual column is `k.employee_id` (verified via `information_schema`). Postgres raises `42703 column k.assigned_to does not exist`, the insert fails, and the UI toast surfaces the raw error.
+## 1. Assumptions
+- The uploaded screenshot corresponds to the database error recorded at **2026-07-17 07:12:02 UTC**.
+- Ayush/Pankaj used the production-facing assisted-submission workflow.
+- The current live definition of `public.can_send_notification_to` is already corrected and contains no `k.*` references.
 
-## Risk & Impact Report
-- **Data**: none — signature/body change only, no schema drift, no historical data touched.
-- **Workflow**: unblocks every non-admin cross-user notification path (assisted submission, observations, queries, reviewer nudges). Admin/HR paths short-circuit at the `has_role` branch above and are unaffected today.
-- **UI/UX**: none. Error toast disappears once the insert succeeds.
-- **Regression**: low. Same-shape edit as the previous `d.head_id → d.head_user_id` correction in this same function.
-- **Scalability**: unchanged — still one bounded index lookup per notification insert.
-- **Mitigation**: extend the existing regression test (`src/test/notificationsSenderRelationshipSchema.test.ts`) to also assert `k.employee_id` is used and `k.assigned_to` is not referenced anywhere in the latest `can_send_notification_to` migration.
+## 2. Clarifications
+Not Applicable — the exact error and affected workflow are visible in the screenshot.
 
-## Root Cause (5-why)
-1. Ayush/Pankaj's assisted submission fails with `column k.assigned_to does not exist`.
-2. The notifications BEFORE INSERT trigger calls `can_send_notification_to`, which SELECTs from `public.kpis k` using `k.assigned_to`.
-3. `public.kpis` has no `assigned_to` column — the owner column is `employee_id`.
-4. Previous hardening migration (`20260717063237` and its re-issue `…064353`) was written from memory of a generic "assignee" model instead of the live schema.
-5. Regression guard added last round only checked the `departments.head_user_id` alias, not the `kpis.assigned_to` alias — so this second wrong column slipped through.
+## 3. Risk & Impact Report
+- **Data:** No table or historical-row mutation is expected; repair only stale database execution state or the remaining routine discovered by the audit.
+- **Workflow:** Assisted Submission Verification and any cross-user notification insert may currently fail for ordinary users.
+- **UI/UX:** No visual change; the raw `column k.manager_id does not exist` toast should disappear.
+- **Regression:** Medium until the exact executing routine/session is isolated. A broad schema search found no current function/view source containing `k.manager_id`, indicating either a cached pre-replacement PL/pgSQL plan or an execution environment mismatch.
+- **Scalability:** Unchanged; no additional steady-state queries or API calls.
+- **Mitigation:** Inspect all live routines/triggers and migration history, deploy a cache-invalidating replacement only after confirmation, add schema-truth regression coverage, and run a real authenticated smoke test.
+- **Rollback:** Reapply the immediately preceding valid function definition; no data rollback required.
 
-## Fix Plan
+## 4. Step-by-step Plan
+1. **Identify the exact live execution path**
+   - Correlate the 07:12 errors with database statement/context logs.
+   - Inspect function dependencies, trigger bindings, overloads, and applied migration records—not only source text search.
+   - Confirm whether preview and published/custom-domain traffic use the same backend environment.
+2. **Apply the narrow backend correction**
+   - If another routine contains the invalid alias, replace only that routine using authoritative profile/audit-assignment relationships.
+   - If the live catalog is correct but a pooled session retained the old PL/pgSQL plan, force safe function-plan invalidation by replacing the function through a new migration; restart the backend only if invalidation cannot clear the stale execution state.
+3. **Strengthen regression protection**
+   - Extend the existing notification relationship fixture/test to scan every migration/function definition participating in notification inserts and reject all nonexistent qualified columns, including `k.manager_id`.
+   - Include success and failure fixtures: valid profile/auditor relationships pass; legacy KPI reviewer aliases fail.
+4. **Verify the actual user flow**
+   - Run the focused test.
+   - Execute Assisted Submission Verification as an authenticated non-admin user and confirm submission advancement plus recipient notification.
+   - Recheck database logs for zero new `k.manager_id`/`42703` errors after the test.
+5. **Synchronize governance records**
+   - Update ADR-107, `DOCUMENTATION.md`, and `POLICY.md` with the true second-order cause, correction, verification timestamp, and rollback.
 
-### Step 1 — Correct the SECURITY DEFINER function (single migration)
-`CREATE OR REPLACE FUNCTION public.can_send_notification_to(...)` with the exact current body, changing only:
-- line 42: `WHERE k.assigned_to = target` → `WHERE k.employee_id = target`
+## 5. UI Changes
+Not Applicable.
 
-All other branches (self, admin/HR short-circuit, profiles/departments/BU, annual_review_instances) stay byte-identical. `SECURITY DEFINER`, `STABLE`, `SET search_path = public` preserved.
+## 6. Implementation
+Pending approval.
 
-### Step 2 — Strengthen the regression guard
-Extend `src/test/notificationsSenderRelationshipSchema.test.ts` so the "latest can_send_notification_to migration" assertion also fails if:
-- `k.assigned_to` appears anywhere in the function body, OR
-- `k.employee_id` is missing from the `kpis` branch.
+## 7. Tests
+- Static schema-reference regression across all notification-path routines.
+- Valid relationship happy path.
+- Legacy invalid KPI alias rejection case.
+- Authenticated assisted-submission smoke test and post-test log check.
 
-Same test file, additive assertions only — no new file.
+## 8. DOCUMENTATION.md updates
+Record the corrected root cause, deployed function state, migration, live verification evidence, and version-history entry.
 
-### Step 3 — Verification recipe
-- Run vitest: `bunx vitest run src/test/notificationsSenderRelationshipSchema.test.ts` — must pass.
-- Post-deploy: log in as a plain authenticated user (not admin/HR), open the assisted-submission dialog, click **Verify & Submit**, and confirm the toast now shows success and the notification row appears in the recipient's inbox. Repeat for a KPI observation reply as a smoke test of the same code path.
+## 9. POLICY.md updates
+Require catalog-level schema validation across the full trigger/function dependency chain and post-deployment non-admin smoke testing for notification guards.
 
-### Step 4 — Docs / memory sync
-- Add ADR-107 (`docs/adr/ADR-107.md`) recording: symptom, 5-why, fix, and the widened regression test.
-- Append a bullet to `mem://architecture/database/notification-recipient-guard` noting that every column referenced by `can_send_notification_to` must be verified against `information_schema` before merge (schema-truth check, not memory).
-
-## Not Applicable
-- UI changes (backend-only fix)
-- Data backfill (no rows were mutated by the failing path)
-- Rollback plan beyond re-running the previous migration (function is `CREATE OR REPLACE`, trivially reversible)
-
-## Deliverables on approval
-1. New migration: `CREATE OR REPLACE public.can_send_notification_to` with `k.employee_id`.
-2. Extended `src/test/notificationsSenderRelationshipSchema.test.ts`.
-3. `docs/adr/ADR-107.md` + memory update.
+## 10. Post-implementation notes
+- Earlier remediation fixed `can_send_notification_to`, and the live catalog now shows that corrected body.
+- The remaining error therefore cannot be closed by another blind column rename; the exact stale execution path must be invalidated or removed and verified through the real workflow.
