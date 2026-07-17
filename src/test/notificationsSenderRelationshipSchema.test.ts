@@ -1,7 +1,25 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { notificationRelationshipSchema } from './fixtures/notificationRelationshipSchema';
+import {
+  notificationRelationshipSchema,
+  notificationRelationshipSqlFixtures,
+} from './fixtures/notificationRelationshipSchema';
+
+const INVALID_KPI_RELATIONSHIP = /\bk\.(assigned_to|manager_id|skip_manager_id|hr_id|auditor_id|management_id)\b/;
+
+function invalidRelationshipColumns(sql: string): string[] {
+  const invalid: string[] = [];
+  for (const [alias, columns] of Object.entries(notificationRelationshipSchema)) {
+    for (const match of sql.matchAll(new RegExp(`\\b${alias}\\.([a-z_]+)\\b`, 'g'))) {
+      if (!columns.includes(match[1] as never)) invalid.push(`${alias}.${match[1]}`);
+    }
+  }
+  for (const match of sql.matchAll(new RegExp(INVALID_KPI_RELATIONSHIP.source, 'g'))) {
+    invalid.push(match[0]);
+  }
+  return [...new Set(invalid)];
+}
 
 /**
  * Regression guard for the `d.head_id` typo that broke non-admin notification
@@ -19,7 +37,7 @@ describe('can_send_notification_to schema references', () => {
     .filter((f) => f.endsWith('.sql'))
     .sort()
     .map((f) => readFileSync(resolve(dir, f), 'utf8'))
-    .filter((b) => b.includes('can_send_notification_to'));
+    .filter((b) => b.includes('CREATE OR REPLACE FUNCTION public.can_send_notification_to'));
 
   it('has at least one migration defining the helper', () => {
     expect(bodies.length).toBeGreaterThan(0);
@@ -35,7 +53,7 @@ describe('can_send_notification_to schema references', () => {
     const latest = bodies[bodies.length - 1];
     expect(latest).not.toMatch(/FROM public\.kpis k/);
     expect(latest).not.toMatch(/\bk\.assigned_to\b/);
-    expect(latest).not.toMatch(/\bk\.(manager_id|skip_manager_id|hr_id|auditor_id|management_id)\b/);
+    expect(latest).not.toMatch(INVALID_KPI_RELATIONSHIP);
     expect(latest).toContain('FROM public.audit_kpi_assignments a');
   });
 
@@ -49,5 +67,27 @@ describe('can_send_notification_to schema references', () => {
       expect(references.length, `expected references for alias ${alias}`).toBeGreaterThan(0);
       expect(references.filter((column) => !columns.includes(column as never))).toEqual([]);
     }
+  });
+
+  it('accepts the authoritative relationship fixture', () => {
+    expect(invalidRelationshipColumns(notificationRelationshipSqlFixtures.valid)).toEqual([]);
+  });
+
+  it('rejects legacy KPI relationship aliases in failure fixtures', () => {
+    expect(invalidRelationshipColumns(notificationRelationshipSqlFixtures.invalidLegacyKpi))
+      .toEqual(['k.assigned_to', 'k.manager_id']);
+  });
+
+  it('latest definition revokes anonymous execution explicitly', () => {
+    const latestMigration = readdirSync(dir)
+      .filter((f) => f.endsWith('.sql'))
+      .sort()
+      .map((f) => readFileSync(resolve(dir, f), 'utf8'))
+      .reverse()
+      .find((body) => body.includes('can_send_notification_to'));
+
+    expect(latestMigration).toContain(
+      'REVOKE EXECUTE ON FUNCTION public.can_send_notification_to(uuid, uuid) FROM anon',
+    );
   });
 });
