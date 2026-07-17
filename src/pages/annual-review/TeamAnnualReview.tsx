@@ -65,11 +65,18 @@ function resolveMyRole(
   uid: string | undefined,
 ): Exclude<ReviewerScope, 'any'> | null {
   if (!uid) return null;
-  if (row.manager_id === uid) return 'manager';
-  if (row.skip_id === uid) return 'skip';
-  if (row.dept_head_id === uid) return 'dept';
-  if (row.bu_head_id === uid) return 'bu';
-  if (row.hr_id === uid) return 'hr';
+  // Defense-in-depth: ignore a reviewer-id column whose stage isn't part of
+  // this instance's enabled_stages. Historical rows kept stale reviewer ids
+  // (e.g. manager_id) after HR narrowed the workflow, causing ghost "Direct
+  // reports" chips. Server backfill nulls these, but this guard protects
+  // rows fetched before the backfill lands and any future drift.
+  const stages = Array.isArray(row.enabled_stages) ? row.enabled_stages : [];
+  const has = (s: string) => stages.length === 0 || stages.includes(s);
+  if (row.manager_id === uid && has('manager')) return 'manager';
+  if (row.skip_id === uid && has('skip_manager')) return 'skip';
+  if (row.dept_head_id === uid && has('dept_head')) return 'dept';
+  if (row.bu_head_id === uid && has('bu_head')) return 'bu';
+  if (row.hr_id === uid && has('hr')) return 'hr';
   return null;
 }
 
