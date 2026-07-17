@@ -60,10 +60,12 @@ export interface ResolvedSelfValue {
   /**
    * 'pristine'  — `achieved_value` was never overwritten by a reviewer.
    * 'recovered' — reverse-derived from the KPI scale + frozen `self_score`.
+   * 'org_owner' — surfaced from the latest Org KPI Data Owner value for the
+   *               period when the frozen self columns can't be reconstructed.
    * 'unknown'   — reviewer overwrote `achieved_value` and we could not
    *               reconstruct the original self value; UI should show "—".
    */
-  source: 'pristine' | 'recovered' | 'unknown';
+  source: 'pristine' | 'recovered' | 'org_owner' | 'unknown';
 }
 
 function reviewerStageWroteAchieved(s: AchievedSubmission): boolean {
@@ -118,6 +120,13 @@ function thresholdCandidates(kpi: ThresholdSource): number[] {
 export function resolveSelfAchievedValue(
   submission: AchievedSubmission | null | undefined,
   kpi: ThresholdSource,
+  /**
+   * Optional Org KPI data-owner value for the same period. Used as a last-resort
+   * fallback so the Self card never renders "—" when the org owner has actually
+   * entered a value — the Data Owner's number is treated as the authoritative
+   * source of truth for Org-KPI-Employee rows per POLICY §Self Value Snapshot.
+   */
+  orgAchievedValue?: number | null,
 ): ResolvedSelfValue {
   if (!submission) return { value: null, source: 'pristine' };
 
@@ -182,6 +191,9 @@ export function resolveSelfAchievedValue(
   if (matches.length === 1) {
     return { value: matches[0], source: 'recovered' };
   }
-  // Couldn't recover unambiguously.
+  // Couldn't recover unambiguously — fall back to the org owner value.
+  if (orgAchievedValue != null) {
+    return { value: orgAchievedValue, source: 'org_owner' };
+  }
   return { value: null, source: 'unknown' };
 }
