@@ -62,6 +62,25 @@ describe('resolveSelfAchievedValue', () => {
     expect(out.source).toBe('unknown');
   });
 
+  it('falls back to the org owner value when reverse-derivation is ambiguous and orgAchievedValue is provided', () => {
+    const out = resolveSelfAchievedValue(
+      { achieved_value: 3, self_score: 4, auditor_achieved_value: 3 },
+      kpiMayGrievance,
+      2, // Data Owner's latest number for the period
+    );
+    expect(out).toEqual({ value: 2, source: 'org_owner' });
+  });
+
+  it('prefers the reconstructed self value over the org owner value when reverse-derivation succeeds', () => {
+    const out = resolveSelfAchievedValue(
+      { achieved_value: 3, self_score: 2, auditor_achieved_value: 3 },
+      kpiMayGrievance,
+      99,
+    );
+    // Uniquely derivable (r2=1) — must not be overridden by orgAchievedValue.
+    expect(out).toEqual({ value: 1, source: 'recovered' });
+  });
+
   it('for binary/tiered KPIs, returns self_score as the displayed value', () => {
     const tieredKpi: any = {
       uom_type: 'tiered',
