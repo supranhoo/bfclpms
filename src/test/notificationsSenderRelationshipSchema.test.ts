@@ -29,4 +29,10 @@ describe('can_send_notification_to schema references', () => {
     expect(latest).toContain('d.head_user_id');
     expect(latest).not.toMatch(/\bd\.head_id\b/);
   });
+
+  it('latest definition uses kpis.employee_id, not assigned_to', () => {
+    const latest = bodies[bodies.length - 1];
+    expect(latest).toContain('k.employee_id');
+    expect(latest).not.toMatch(/\bk\.assigned_to\b/);
+  });
 });
