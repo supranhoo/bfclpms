@@ -60,6 +60,14 @@ function buildUpdateFields(
   if (data.achieved_value !== undefined) {
     if (roleLevel === 'self') {
       fields.achieved_value = data.achieved_value;
+      // POLICY §88.6 / CAPA-2026-07 — self-owning writers MUST mirror the
+      // frozen self snapshot column. Otherwise the Self card resolver
+      // (`resolveSelfAchievedValue`) keeps returning the stale snapshot
+      // while `achieved_value` / `self_score` reflect the corrected value.
+      // Reviewer-stage writers (role_level !== 'self') MUST NOT touch this
+      // column — that write-once invariant is what protects the self card
+      // from auditor/manager overrides.
+      fields.self_achieved_value = data.achieved_value;
     } else {
       fields[`${roleLevel}_achieved_value`] = data.achieved_value;
     }
