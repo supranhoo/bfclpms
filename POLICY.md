@@ -1,3 +1,9 @@
+### §SAFETY-PERMIT-HIRA-DRAFT-LOCK — Requesters cannot rewrite submitted risk assessments (v2.66.113, 2026-07-17)
+- A permit requester may create, update, or remove `safety_permit_hira` rows only while the parent `safety_permits.status = 'draft'`.
+- Once submitted, approved, active, closed, expired, rejected, or otherwise outside draft, requester HIRA writes MUST be denied. Safety Admin and Safety Head retain oversight write access; existing parent-permit read authorization is unchanged.
+- Both the policy's existing-row condition and new-row condition MUST enforce the same parent status rule so changing `permit_id` cannot bypass the lock.
+- Regression guard: `src/test/safetyPermitHiraPolicy.test.ts` validates the final chronological policy definition.
+
 ### §AR-TEAM-QUEUE-AUTH — Team Annual Review queue is session-derived and fail-visible (v2.66.111, 2026-07-17)
 - `/annual-review/team` MUST use `get_my_annual_review_queue` and `get_my_annual_review_role_counts`; both resolve reviewer identity from `auth.uid()` and reject anonymous or inactive callers. A browser-supplied reviewer id MUST NOT control queue visibility.
 - A reviewer relationship is visible only when its stage is present in the instance's `enabled_stages`. Stale ids on disabled slots MUST NOT create ghost queue rows or role counts.
@@ -18,10 +24,11 @@
 - A reviewer's queue count on `/annual-review/team` is thus fully determined by (a) enabled stages for each instance and (b) current master data. If a HOD's team is smaller than expected, the fix is master-data (assign the HOD as `departments.head_user_id` on the additional departments) — NOT re-introducing ghost reviewer slots.
 - Regression guards: `src/test/annualReview/reviewerSlotResync.test.ts` covers dry-run parity, past-stage skip, and cascade semantics. ADR-108 records the contract.
 
-### §NOTIFICATION-RELATIONSHIP-SCHEMA-TRUTH — Notification recipient guards must use verified schema columns (v2.66.109, 2026-07-17)
+### §NOTIFICATION-RELATIONSHIP-SCHEMA-TRUTH — Notification recipient guards must use verified schema columns (v2.66.112, 2026-07-17)
 - `public.can_send_notification_to(sender, target)` remains the authoritative SECURITY DEFINER relationship check for cross-user notification creation. Its role and reporting-chain authorization semantics must not be bypassed in client code.
 - Every qualified column referenced by this function MUST exist in the live table schema. Reviewer relationships MUST NOT be inferred from nonexistent columns on `kpis`; manager/skip/head relationships come from employee profiles and organization masters, management access is role-gated, and auditor scope comes from `audit_kpi_assignments`. `kpis.assigned_to`, `kpis.manager_id`, `kpis.skip_manager_id`, `kpis.hr_id`, `kpis.auditor_id`, and `kpis.management_id` are forbidden. Department leadership MUST use `departments.head_user_id`; `departments.head_id` is forbidden.
 - Any future function edit MUST verify all table aliases against schema truth and pass `notificationsSenderRelationshipSchema.test.ts`, which checks the complete qualified-column set against the maintained relationship-schema fixture.
+- Regression validation MUST select the final chronological migration that defines the function. A valid earlier repair does not satisfy this rule if a later migration overwrites it. Any migration that replaces this guard MUST preserve bidirectional organization, real audit-assignment, Annual Review reviewer-peer, and authorized-proxy relationships unless a documented policy change explicitly removes one.
 - A schema-reference correction is function-only and forward-safe: it MUST NOT modify notification rows, KPI rows, Annual Review state, scores, or historical audit records.
 - Production verification MUST compare the failing request timestamp with the applied migration timestamp; a screenshot captured before the final migration is not evidence that the final definition failed. After replacing this PL/pgSQL guard, reissue the schema-valid body when needed to invalidate pooled plans and verify the catalog contains no forbidden aliases.
 - This internal SECURITY DEFINER helper MUST explicitly revoke execution from both `PUBLIC` and `anon`; only `authenticated` and `service_role` may execute it.
