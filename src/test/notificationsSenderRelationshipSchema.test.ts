@@ -31,10 +31,12 @@ describe('can_send_notification_to schema references', () => {
     expect(latest).not.toMatch(/\bd\.head_id\b/);
   });
 
-  it('latest definition uses kpis.employee_id, not assigned_to', () => {
+  it('latest definition does not infer reviewer relationships from KPI columns', () => {
     const latest = bodies[bodies.length - 1];
-    expect(latest).toContain('k.employee_id');
+    expect(latest).not.toMatch(/FROM public\.kpis k/);
     expect(latest).not.toMatch(/\bk\.assigned_to\b/);
+    expect(latest).not.toMatch(/\bk\.(manager_id|skip_manager_id|hr_id|auditor_id|management_id)\b/);
+    expect(latest).toContain('FROM public.audit_kpi_assignments a');
   });
 
   it('latest definition only references columns present in the relationship schema', () => {
