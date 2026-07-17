@@ -13712,6 +13712,10 @@ export type Database = {
         Args: { _instance_id: string; _proxy_user_id: string }
         Returns: boolean
       }
+      can_send_notification_to: {
+        Args: { sender: string; target: string }
+        Returns: boolean
+      }
       can_view_kpi_row: {
         Args: {
           _category_id: string
