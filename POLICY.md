@@ -4840,3 +4840,6 @@ Any migration that redefines `public.can_send_notification_to(uuid, uuid)` MUST:
 
 Rationale: reference §108b (bidirectional matrix) and DOCUMENTATION.md
 v2.66.114 (RCA of the `d.head_id` regression).
+
+### §113a — user_roles writers must respect Non-Login User Provisioning
+Any function or code path that writes to `public.user_roles` MUST first verify that the target user has a row in `auth.users`. Non-login (backfilled) employees have a `profiles` row but no auth row, and `user_roles.user_id` FKs `auth.users(id)` — attempting a write violates `user_roles_user_id_fkey`. Correct behavior for non-login targets: silently no-op and emit a `functional_role_skipped_non_login` audit entry. Enforced in `public.set_functional_role` (SSOT); see DOCUMENTATION.md v2.66.115 for the CAPA.

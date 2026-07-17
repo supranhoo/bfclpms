@@ -1,53 +1,50 @@
-## Assumptions
-- Live DB has already been repaired: `public.can_send_notification_to(uuid,uuid)` uses `d.head_user_id` (verified — no function, view, policy, or trigger in `public` references `d.head_id` or bare `head_id`).
-- The screenshots showing "column d.head_id does not exist" are from the pre-repair state (before migration `20260717122200_49e4d033…` was applied). No new occurrences have been reproduced against the current schema.
-- Scope of this task: institutionalize the fix — RCA record, regression guards, tests, documentation — not another data migration.
+## Error
+`Failed to update user — insert or update on table "user_roles" violates foreign key constraint "user_roles_user_id_fkey"` when saving the Edit User dialog for **Kameshwar Rai (emp 100431)**.
+
+## 5-Why Analysis
+1. **Why did saving fail?** The `set_functional_role` RPC tried to `INSERT INTO public.user_roles (user_id, role)` for this user.
+2. **Why did the INSERT fail?** `user_roles.user_id` has a FK to `auth.users(id)`, and no matching `auth.users` row exists for this user.
+3. **Why is there no `auth.users` row?** Kameshwar Rai is a **non-login (backfilled) employee** — profile exists, email is NULL, `auth.users` was never provisioned (canonical Non-Login User Provisioning pattern, POLICY §113).
+4. **Why did the code attempt a role write anyway?** `updateUser` in `UserManagement.tsx` unconditionally calls `setFunctionalRole(userId, role)` after any profile edit. The RPC has no guard for "target user has no login".
+5. **Why is there no guard?** The role subsystem was designed pre-§113, assuming every profile has an `auth.users` counterpart. It was never revisited when non-login provisioning was introduced.
+
+## Root Cause
+`public.set_functional_role` is missing a Non-Login-User guard. Any admin edit of a backfilled employee (2600+ such users) that reaches the role-write step violates `user_roles_user_id_fkey`. Verified in DB: profile `eaf516f8-…` has `has_auth_user=false` and zero `user_roles` rows.
+
+## CAPA (Corrective + Preventive)
+**Corrective (single migration, additive, reversible):**
+- Update the `set_functional_role` RPC to short-circuit when `auth.users` has no row for `p_user_id`:
+  - Skip both the DELETE and INSERT branches.
+  - Write an audit row `functional_role_skipped_non_login` (best-effort) so admins can trace the no-op.
+  - Return normally so the profile update in `UserManagement.tsx` still succeeds.
+- No schema, RLS, or column changes. Function body only.
+
+**Preventive:**
+- Regression test `src/test/admin/setFunctionalRoleNonLoginGuard.test.ts` — mocks the RPC contract: non-login user → no-op success; login user → normal path (already covered).
+- Schema-truth test extending existing `src/test/admin/userRoleUpdate.test.ts` docs to state the non-login contract.
+- Append `DOCUMENTATION.md` v2.66.115 RCA entry.
+- Add `POLICY.md` §113a: "Any function that writes to `public.user_roles` MUST first verify `auth.users` has a row for the target user, else no-op."
 
 ## Risk & Impact Report
-- **Data Impact:** None. No schema or data changes.
-- **Workflow Impact:** None. Notification authorization matrix already restored.
-- **UI/UX Impact:** None.
-- **Regression Risk:** Medium if not guarded — a future migration could reintroduce `d.head_id` or another non-existent column and silently break notification inserts across audit/self/annual-review save paths. Mitigated by (a) a schema-validation unit test and (b) a runtime smoke test invoking `can_send_notification_to` for representative role pairs.
-- **Scalability Impact:** None; guards are O(1) at test/CI time.
-- **Rollback:** Pure additive (tests + docs). Delete the added files to revert.
-
-## Root Cause (5-why summary)
-1. Users saw "column d.head_id does not exist" on Save/Send-back → notification INSERT failed.
-2. The failing INSERT invoked `can_send_notification_to(...)` in an RLS policy / BEFORE trigger.
-3. A prior migration (`20260717120422_159c1980…`) redefined that function referencing `departments d.head_id`.
-4. `public.departments` has `head_user_id`, not `head_id` — the function's column reference was invalid.
-5. Function code was authored from stale schema memory; no schema-validation test caught it before deploy.
-
-Current state: superseded by `20260717122200_49e4d033…` which restored the bidirectional matrix using the correct `d.head_user_id`. Verified via `pg_get_functiondef` and `pg_proc` scan (only one overload exists).
-
-## Plan
-1. **Regression test — schema validity of notification-authorization function.**
-   `src/tests/canSendNotificationToSchema.test.ts`: query `pg_get_functiondef('public.can_send_notification_to'::regproc)` shape via a mocked supabase client and assert the definition:
-   - references `head_user_id` (not bare `head_id`),
-   - references `audit_kpi_assignments` and `audit_kpi_level_assignments`,
-   - contains bidirectional `sender`/`target` branches for org hierarchy, KPI reviewers, and annual-review reviewers.
-2. **Regression test — behavioural matrix.**
-   `src/tests/notificationsSenderRelationshipMatrix.test.ts` (extend existing): cover self→self, admin↔any, manager↔subordinate, dept-head↔member, bu-head↔member, kpi-reviewer↔assignee, ar-reviewer↔employee, ar-peer↔ar-peer, unrelated→denied.
-3. **Migration-linter guard (source-side).**
-   `scripts/check-migrations-schema.mjs` run in `bun test`: scans `supabase/migrations/*.sql` for forbidden identifiers (`departments…head_id\b`, `kpi\.…` alias without joined table, etc.) and fails CI on match. Denylist is data-driven via `scripts/forbidden-columns.json` so future columns can be added without code changes.
-4. **DOCUMENTATION.md** — append v2.66.114 entry: RCA, CAPA, verification steps, links to test files.
-5. **POLICY.md** — reaffirm §108b (bidirectional notification matrix) and add §108c: "Every migration that redefines `can_send_notification_to` must be accompanied by the schema-validity test in step 1."
-6. **Post-verify** — after tests pass, re-run `can_send_notification_to` for the Jitendra→Gaurav pair via `supabase--read_query` (using a service-role wrapper query) to confirm `true`, and instruct the user to reload the Audit Review page.
-
-## UI Changes
-Not Applicable.
-
-## Files Touched
-- `src/tests/canSendNotificationToSchema.test.ts` (new)
-- `src/tests/notificationsSenderRelationshipMatrix.test.ts` (new or extended)
-- `scripts/check-migrations-schema.mjs` (new)
-- `scripts/forbidden-columns.json` (new)
-- `DOCUMENTATION.md` (append v2.66.114)
-- `POLICY.md` (append §108c)
+- **Data Impact:** None. RPC body only; no rows mutated by the migration itself.
+- **Workflow Impact:** Admin Edit User on non-login employees now succeeds silently on the role step (matches user intent — they were editing profile fields, not granting login).
+- **UI/UX Impact:** Removes the misleading red error toast. No visual change.
+- **Regression Risk:** Very low. Login users are unaffected — the existing DELETE/INSERT path runs unchanged when `auth.users` row exists. Idempotency and platform-role preservation logic untouched.
+- **Scalability Impact:** One extra `EXISTS` probe per role write; negligible.
+- **Rollback:** Re-apply the previous function definition (already captured above) via a follow-up migration.
 
 ## Out of Scope
-- No new DB migration (live function already correct).
-- No UI, RLS, or table changes.
-- No rollback of prior migrations — historical files are retained as source-of-record.
+- No changes to `UserManagement.tsx` write path (DB guard is the SSOT; UI-side skip would duplicate the rule).
+- No changes to `create-user` / `update-user-email` edge functions (they provision `auth.users` first, so they never hit this path).
+- No RLS, no other RPCs, no touching PMS/Safety/Annual Review code.
 
-Approve to switch to build mode and implement.
+## Deliverables (build mode)
+1. Migration: redefine `public.set_functional_role` with non-login guard.
+2. `src/test/admin/setFunctionalRoleNonLoginGuard.test.ts` — contract test.
+3. `DOCUMENTATION.md` — v2.66.115 entry.
+4. `POLICY.md` — §113a guardrail.
+
+## Verification
+- Re-run failed action for Kameshwar Rai after migration: profile save succeeds, no toast error, no `user_roles` row created (correct — no login).
+- Repeat for a login user (e.g., current admin) → functional role change still lands.
+- Existing `userRoleUpdate.test.ts` still green.
