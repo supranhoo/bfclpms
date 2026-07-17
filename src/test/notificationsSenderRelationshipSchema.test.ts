@@ -49,12 +49,13 @@ describe('can_send_notification_to schema references', () => {
     expect(latest).not.toMatch(/\bd\.head_id\b/);
   });
 
-  it('latest definition does not infer reviewer relationships from KPI columns', () => {
+  it('latest definition uses only the real KPI employee relationship', () => {
     const latest = bodies[bodies.length - 1];
-    expect(latest).not.toMatch(/FROM public\.kpis k/);
     expect(latest).not.toMatch(/\bk\.assigned_to\b/);
     expect(latest).not.toMatch(INVALID_KPI_RELATIONSHIP);
     expect(latest).toContain('FROM public.audit_kpi_assignments a');
+    expect(latest).toContain('FROM public.audit_kpi_level_assignments la');
+    expect(latest).toContain('JOIN public.kpis k ON k.id = la.kpi_id');
   });
 
   it('latest definition only references columns present in the relationship schema', () => {
@@ -71,6 +72,16 @@ describe('can_send_notification_to schema references', () => {
 
   it('accepts the authoritative relationship fixture', () => {
     expect(invalidRelationshipColumns(notificationRelationshipSqlFixtures.valid)).toEqual([]);
+    expect(invalidRelationshipColumns(
+      notificationRelationshipSqlFixtures.validBidirectionalAnnualReview,
+    )).toEqual([]);
+  });
+
+  it('latest definition preserves bidirectional Annual Review and proxy paths', () => {
+    const latest = bodies[bodies.length - 1];
+    expect(latest).toMatch(/i\.employee_id = sender[\s\S]+target IN \(i\.manager_id/);
+    expect(latest).toMatch(/sender IN \(i\.manager_id[\s\S]+target IN \(i\.employee_id/);
+    expect(latest).toContain('FROM public.annual_review_proxy_submissions ps');
   });
 
   it('rejects legacy KPI relationship aliases in failure fixtures', () => {
