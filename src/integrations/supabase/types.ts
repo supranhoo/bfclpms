@@ -1147,6 +1147,48 @@ export type Database = {
         }
         Relationships: []
       }
+      annual_review_reviewer_resync_audit: {
+        Row: {
+          created_at: string
+          cycle_id: string | null
+          employee_id: string | null
+          id: string
+          instance_id: string
+          new_user_id: string | null
+          old_user_id: string | null
+          performed_by: string | null
+          reason: string
+          slot: string
+          source: string | null
+        }
+        Insert: {
+          created_at?: string
+          cycle_id?: string | null
+          employee_id?: string | null
+          id?: string
+          instance_id: string
+          new_user_id?: string | null
+          old_user_id?: string | null
+          performed_by?: string | null
+          reason: string
+          slot: string
+          source?: string | null
+        }
+        Update: {
+          created_at?: string
+          cycle_id?: string | null
+          employee_id?: string | null
+          id?: string
+          instance_id?: string
+          new_user_id?: string | null
+          old_user_id?: string | null
+          performed_by?: string | null
+          reason?: string
+          slot?: string
+          source?: string | null
+        }
+        Relationships: []
+      }
       annual_review_self_draft_reassign_audit: {
         Row: {
           created_at: string
@@ -13568,6 +13610,23 @@ export type Database = {
         }
         Returns: Database["public"]["Enums"]["annual_review_status"]
       }
+      annual_review_reviewer_slot_diagnostic: {
+        Args: { p_cycle_id: string }
+        Returns: {
+          actual_user_id: string
+          employee_code: string
+          employee_id: string
+          employee_name: string
+          enabled_stages: Json
+          expected_user_id: string
+          instance_id: string
+          mismatch_kind: string
+          overall_status: string
+          slot: string
+          stage_enabled: boolean
+          stage_still_open: boolean
+        }[]
+      }
       annual_review_validate_stage_weights: {
         Args: { p_weights: Json }
         Returns: boolean
@@ -13579,6 +13638,13 @@ export type Database = {
           rows_inserted: number
           rows_skipped: number
           run_id: string
+        }[]
+      }
+      ar_expected_reviewer_slots: {
+        Args: { p_instance_id: string }
+        Returns: {
+          expected_user_id: string
+          slot: string
         }[]
       }
       backfill_late_joiner_org_kpis: {
@@ -15228,6 +15294,16 @@ export type Database = {
       resync_annual_review_dept_head: {
         Args: { p_cycle_id: string; p_dept_id: string }
         Returns: Json
+      }
+      resync_annual_review_reviewer_slots: {
+        Args: { p_cycle_id: string; p_dry_run?: boolean }
+        Returns: {
+          applied: boolean
+          instance_id: string
+          new_user_id: string
+          old_user_id: string
+          slot: string
+        }[]
       }
       resync_org_kpi_evidence: {
         Args: { p_mode?: string; p_okv_id: string }
