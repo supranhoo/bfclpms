@@ -351,6 +351,14 @@ export default function TeamAnnualReview() {
                     </div>
                     <div className="flex flex-wrap items-center gap-1.5 mt-auto">
                       <AnnualReviewStatusBadge status={i.overall_status} />
+                      {(i as unknown as { visibility_only?: boolean }).visibility_only && (
+                        <span
+                          className="inline-flex items-center rounded-md border border-muted-foreground/20 bg-muted/40 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground"
+                          title="You are not a named reviewer on this review. Shown because the employee reports to you (directly or indirectly). Read-only."
+                        >
+                          View only
+                        </span>
+                      )}
                       {myRole && (
                         <span
                           className="inline-flex items-center rounded-md border border-primary/20 bg-primary/5 px-1.5 py-0.5 text-[10px] font-medium text-primary"
