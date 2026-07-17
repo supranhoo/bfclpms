@@ -1,3 +1,16 @@
+### §AR-REVIEWER-SLOT-RESOLUTION — Annual Review reviewer id columns are master-data-derived and cascade-safe (v2.66.110, 2026-07-17)
+- Reviewer id columns on `annual_review_instances` (`manager_id`, `skip_id`, `dept_head_id`, `bu_head_id`, `hr_id`) are **derived state**. The source of truth is:
+  - `manager` → `profiles.reporting_manager_id`
+  - `skip` → reporting manager's `reporting_manager_id`
+  - `dept_head` → `departments.head_user_id` for the employee's department
+  - `bu_head` → `business_units.head_user_id` for that department's BU
+  - `hr` → `org_head_config.hr_head_user_id` for the employee's company
+- A slot MUST be NULL when the corresponding stage is not in `enabled_stages` (the 17-Jul CAPA remains in force via `tg_annual_review_clear_disabled_reviewer_slots`).
+- Master-data changes (`departments.head_user_id`, `business_units.head_user_id`, `org_head_config.hr_head_user_id`) cascade automatically into open instances via triggers `departments_cascade_head_to_ar`, `business_units_cascade_head_to_ar`, `org_head_config_cascade_hr_to_ar`. Cascade is skipped for stages already past that reviewer or for `completed`/`excluded` instances.
+- HR PMS and Admin may repair drift on demand via `resync_annual_review_reviewer_slots(cycle_id, dry_run)`; every write is audited in `annual_review_reviewer_resync_audit`. Diagnostics: `annual_review_reviewer_slot_diagnostic(cycle_id)`.
+- A reviewer's queue count on `/annual-review/team` is thus fully determined by (a) enabled stages for each instance and (b) current master data. If a HOD's team is smaller than expected, the fix is master-data (assign the HOD as `departments.head_user_id` on the additional departments) — NOT re-introducing ghost reviewer slots.
+- Regression guards: `src/test/annualReview/reviewerSlotResync.test.ts` covers dry-run parity, past-stage skip, and cascade semantics. ADR-108 records the contract.
+
 ### §NOTIFICATION-RELATIONSHIP-SCHEMA-TRUTH — Notification recipient guards must use verified schema columns (v2.66.109, 2026-07-17)
 - `public.can_send_notification_to(sender, target)` remains the authoritative SECURITY DEFINER relationship check for cross-user notification creation. Its role and reporting-chain authorization semantics must not be bypassed in client code.
 - Every qualified column referenced by this function MUST exist in the live table schema. Reviewer relationships MUST NOT be inferred from nonexistent columns on `kpis`; manager/skip/head relationships come from employee profiles and organization masters, management access is role-gated, and auditor scope comes from `audit_kpi_assignments`. `kpis.assigned_to`, `kpis.manager_id`, `kpis.skip_manager_id`, `kpis.hr_id`, `kpis.auditor_id`, and `kpis.management_id` are forbidden. Department leadership MUST use `departments.head_user_id`; `departments.head_id` is forbidden.

@@ -1,75 +1,73 @@
-## Problem
+## Problem (verified against DB)
 
-On the **View KPI Details** panel and dashboards, the **Self stage** shows `Value: —` for Org-KPI-Employee rows where:
-- `review_submissions.self_achieved_value` is `NULL`, AND
-- `achieved_value` was already overwritten by a downstream reviewer (`auditor_achieved_value`, `management_achieved_value`, …).
+**Prabhat Kumar Singh (101757)** — dept head of `Admin-Pollution` (39 active employees). Queue = **39**, correctly matches master data. Previously **~120** because instances still carried his id in `manager_id`/`dept_head_id`/`bu_head_id` for stages that were **not** in `enabled_stages`. Migration `20260717062346` (ghost-reviewer CAPA) nulled those columns → queue shrank to the truthful set.
 
-We already have:
-1. A `self_achieved_value` column,
-2. A one-time backfill (Jun-2026),
-3. A `trg_enforce_self_snapshot_mirror` trigger (17-Jul-2026).
+**Umesh Kumar Mehta (100316)** — dept head of 7 departments. DB currently shows him mapped as `dept_head_id` on **79 instances** (59 `pending_dept`, 17 `pending_self`, 3 `pending_bu`). If his dashboard shows **zero**, this is **not** the same root cause as Prabhat — the mapping in the DB is intact. Likely a client-side or auth-context bug (needs live verification when logged in as him).
 
-But we still see blanks because:
+**Reviewer master data model** — a single profile can already be dept head of many departments (`departments.head_user_id` is 1:N with the profile). Prabhat is head of 1 dept today; if the business intent is that he heads more, that must be entered as master data — that is the SSOT the seeder reads.
 
-- The trigger **exempts** any UPDATE that also touches a reviewer `*_achieved_value` column. `propagate_org_kpi_value` (org owner re-entry after a rollback) and some admin data-entry paths update `achieved_value` **in the same UPDATE** as a reviewer stage, so the mirror never fires.
-- Rollback flows preserve reviewer stage values while re-writing `achieved_value`, leaving `self_achieved_value` untouched.
-- Historical rows still exist where `self_achieved_value IS NULL` and `achieved_value` no longer matches `self_score`; the client resolver falls through to reverse-derivation, and when the KPI scale is ambiguous (e.g. Compliance `r5=0, r2=1, r0=>1`), returns `unknown` → renders `—`.
+## Two different bugs, one policy
 
-## Risk & Impact Report
-
-| Area | Impact | Mitigation |
-|---|---|---|
-| Data | Backfill `UPDATE` on `review_submissions.self_achieved_value` only where currently NULL. Reversible via audit log; `session_replication_role=replica` disables triggers so `enforce_self_snapshot_mirror` won't loop. Only writes when reverse-derivation is unambiguous → **no data loss, no over-write.** | Dry-run count + `RAISE NOTICE` per KPI; log every row into `kpi_audit_logs` with `action='SELF_SNAPSHOT_BACKFILL_V2'`. |
-| Workflow | RPCs (`propagate_org_kpi_value`, admin data-entry, rollback) get a `self_achieved_value :=` write. No stage/score/rating changes. | Regression tests for each RPC. |
-| UI/UX | `KpiJourneySection` / dashboard tile learn to use the **Org KPI value** as a "trusted fallback" when the resolver returns `unknown`. Rating stays untouched. | Snapshot test on the modal. |
-| Regression | Trigger tightened, not broadened. Existing self-only writes remain covered. | Extend `enforce_self_snapshot_mirror` test suite; add a mixed-update case. |
-| Scalability | Backfill is a single `UPDATE … WHERE self_achieved_value IS NULL`; expected O(10⁴) rows, well within Postgres. | Batched in `LIMIT 5000` loop. |
+| # | Symptom | Root cause | Fix |
+|---|---------|------------|-----|
+| 1 | Prabhat 120 → 39 | Ghost reviewer slots removed. 39 IS the truth per master data. He's mapped to only 1 dept. | **Master-data patch** + admin UI to map him (and any HOD) to additional departments; a **resync** re-seeds `dept_head_id` on open instances. |
+| 2 | Umesh sees 0 despite 79 in DB | Not a data bug — client/auth issue. | Reproduce as Umesh in Playwright, capture RLS/API response, then patch the actual gap (RLS, auth.uid mismatch, or client filter). |
 
 ## Plan
 
-### 1. DB — tighten the write contract (migration)
+### Phase 1 — RCA & impact scan (read-only, no data changes yet)
+- **Diagnostic RPC** `annual_review_reviewer_slot_diagnostic(p_cycle_id)` returning, per active cycle instance:
+  - resolved-from-master: `expected_manager_id`, `expected_dept_head_id`, `expected_bu_head_id`, `expected_hr_id` (from `profiles.reporting_manager_id`, `departments.head_user_id`, `business_units.head_user_id`, `org_head_config`)
+  - actual columns
+  - `mismatch_kind[]` (`missing_slot`, `wrong_person`, `stage_disabled_but_expected`, `orphan_head`)
+- **Admin page** `AR Reviewer Coverage` (HR PMS / Admin only) — grouped by reviewer, shows before-fix count, expected count after resync, and downloadable CSV.
+- Deliverable: exact list of every reviewer whose queue changed on 17-Jul and by how much. No writes.
 
-- **Rewrite `enforce_self_snapshot_mirror`** so it always mirrors `achieved_value` → `self_achieved_value` when `self_score IS NOT NULL` AND `NEW.self_achieved_value IS NULL`, regardless of whether a reviewer column was touched in the same UPDATE. (Reviewer columns only matter for deciding whether `achieved_value` is the *self* value; if `self_achieved_value` is still `NULL` we must not leave it that way.)
-- **Update `propagate_org_kpi_value`** and every admin/rollback RPC that writes `achieved_value` or `self_score` to always co-write `self_achieved_value := <org value>`.
-- **Backfill v2**: reverse-derive from thresholds + criteria + `uom_type` (mirrors the TS resolver). Write only when a single threshold value maps back to the frozen `self_score`; otherwise leave NULL. Audit every write.
-- No schema change beyond function bodies.
+### Phase 2 — Master-data completeness (Prabhat's case)
+- Verify whether "Prabhat is dept head of additional departments" is a business fact. If yes:
+  - Use existing `Departments` admin UI to assign `head_user_id = Prabhat` on the intended departments. Master data is SSOT.
+  - No hardcoded per-person patch.
+- If Umesh / others also need additional department assignments, they go through the same UI.
 
-### 2. Client — never render `—` when a trusted fallback exists
+### Phase 3 — Idempotent resync
+- **RPC** `resync_annual_review_reviewer_slots(p_cycle_id, p_dry_run boolean)`:
+  - For each instance in cycle where `overall_status NOT IN ('completed','excluded')`:
+    - Compute expected slots from master data + `enabled_stages` (a disabled stage stays NULL — 17-Jul rule preserved).
+    - Update only the slots that differ.
+  - Skips instances that have already advanced past the affected stage.
+  - Full audit row per change into a new `annual_review_reviewer_resync_audit` table.
+  - Dry-run mode returns diff without writing.
+- **Trigger** on `departments`, `business_units`, `org_head_config` `AFTER UPDATE OF head_user_id / hr_head_user_id`: cascade the new head into open annual-review instances (only slots the trigger-audit hasn't manually overridden, and only if the stage is enabled). Prevents future drift.
 
-- Extend `resolveSelfAchievedValue` to accept an optional `orgAchievedValue` argument. When result would be `unknown`, use `orgAchievedValue` if it recomputes to `self_score`; if not, still return the org value tagged `source: 'org_owner'` so we display it with a tooltip "Latest value entered by the Data Owner".
-- `KpiJourneySection` and `KpiReviewPanel` already receive `orgAchievedValue`; thread it into the resolver call.
-- Dashboard "value" tile (`KpiLogicModal`, `KpiTimeline`, KPI cards on Employee/Manager dashboards) — when the KPI is an Org KPI and `self_achieved_value` is `NULL`, use the latest `org_kpi_values.achieved_value` for that period.
+### Phase 4 — Umesh case (client/auth investigation)
+- Run Playwright as Umesh (via managed session injection) against `/annual-review/team`. Capture:
+  - the actual `useReviewerInstancesPaginated` request / response
+  - RLS-visible count with his JWT
+  - client-side filter chain (scope, status, search)
+- Fix the specific gap surfaced (only after evidence — could be RLS, could be `directoryAccess` denying, could be a stale query key).
 
-### 3. Regression tests (Vitest)
+### Phase 5 — Policy & tests
+- **POLICY.md §AR-REVIEWER-SLOT-RESOLUTION**: rules for reviewer id columns
+  1. `enabled_stages` is authoritative — disabled stage's id column MUST be NULL (17-Jul rule preserved).
+  2. Enabled stage's id column MUST equal the master-data resolver's output at seed time, and must be cascaded on master-data change while status is still pre-that-stage.
+  3. Manual overrides via `set_annual_review_reviewer_slot` audit-log the override reason; the trigger honors the override flag.
+- **ADR-108** — Reviewer slot cascade contract.
+- **Regression tests**:
+  - `resync_annual_review_reviewer_slots.test.ts` — happy path, no double-writes, dry-run correctness, past-stage skip
+  - `department_head_change_cascade.test.ts` — head change re-seeds only enabled + pre-that-stage rows
+  - `reviewerRoleCounts.test.ts` — asserts counts match diagnostic RPC for known fixtures
 
-- `resolveSelfAchievedValue.test.ts`: add cases
-  - reviewer overwrote AV + org value present → returns org value.
-  - reviewer overwrote AV + ambiguous scale + no org value → `unknown` (unchanged).
-- New `selfSnapshotMirrorTrigger.test.sql` executed via `pgTAP` script: mixed UPDATE (`achieved_value` + `auditor_achieved_value` in one statement) with `self_achieved_value NULL` → row is mirrored.
-- `orgKpiPropagationSelfSnapshot.test.ts`: after propagation, `self_achieved_value` equals the org value.
+### Out of scope
+- Rolling back the 17-Jul ghost-slot null-out (that CAPA was correct and stays).
+- Changing `enabled_stages` for existing instances (business owns that decision).
+- Auto-enabling `manager` stage where the workflow doesn't include it.
 
-### 4. Documentation
+## Deliverables
+1. Diagnostic RPC + admin coverage page (Phase 1)
+2. `resync_annual_review_reviewer_slots` RPC + cascade triggers (Phase 3)
+3. Umesh-specific fix once Playwright evidence identifies the actual gap (Phase 4)
+4. POLICY §AR-REVIEWER-SLOT-RESOLUTION + ADR-108 + regression tests (Phase 5)
 
-- **POLICY.md** — new section *Self Value Snapshot Contract (SSOT)*:
-  1. Every writer that sets `self_score` or `achieved_value` on behalf of the employee MUST co-write `self_achieved_value`.
-  2. Reviewer-stage writers MUST NOT touch `self_achieved_value`.
-  3. UI displays: `self_achieved_value` → org KPI value → `—` (never `—` when either exists).
-- **docs/adr/ADR-106.md** — append "17 Jul 2026 v3" documenting the trigger tightening and Org-KPI fallback.
-- **DOCUMENTATION.md** — Version History entry.
-
-### 5. Rollback plan
-
-Every DB change is a function replacement — restoring the prior definition is a single migration. The backfill is idempotent; rows written can be reverted using `kpi_audit_logs` where `action='SELF_SNAPSHOT_BACKFILL_V2'`.
-
-## What is explicitly out of scope
-
-- Recomputing `final_score` or any rating — those remain frozen.
-- Redesigning the `review_submissions` table (no new columns).
-- Rewriting reviewer stage logic; only self-value plumbing changes.
-
-## Verification
-
-1. Query the sample KPI (Sindhu Raj Singh / June 2026): `self_achieved_value` becomes non-NULL where recoverable, else org value is displayed.
-2. Reload the **View KPI Details** modal → Self card shows a real value (with tooltip "Latest Data Owner value" when it came from the org fallback).
-3. Roll back → org owner re-enters value → panel and dashboard both immediately reflect the new value on the Self card.
-4. Run migration lints + all Vitest suites.
+## What I need from you before Phase 2 writes anything
+- Confirm which **additional departments** Prabhat is supposed to head (so you or Admin can enter them via master data — I won't hardcode names).
+- Any other reviewers currently showing wrong queue counts you already know about (helps prioritize Phase 4 reproduction list).
