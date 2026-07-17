@@ -34,12 +34,32 @@ when it is null (pre-migration data). Reviewer-stage RPCs MUST NOT write
 this column — keeping it write-once at self-submit is what guarantees
 the frozen snapshot.
 
-**Still out of scope:** auditor/manager bulk sign-off and stage-edit
-RPCs still overwrite the shared `achieved_value`. That is now harmless
-for the Self card (it no longer reads `achieved_value`), but if other
-UIs ever start treating `achieved_value` as "self value" they will
-regress this fix. Anchor new UIs to `self_achieved_value` (preferred)
-or `resolveSelfAchievedValue`.
+**Part 5 (shipped 2026-07-17, CAPA-2026-07 / ADR-106 / POLICY §88.6):**
+Every *self-owning* writer MUST mirror `self_achieved_value` whenever it
+updates the shared `achieved_value` column. The gap was `useAdminSubmitReviewData`
+(Admin Data Entry → Self): it stamped `achieved_value` + `self_score` +
+`self_rating` but never touched `self_achieved_value`, so the Self card
+kept showing the stale auto-advance snapshot (e.g. 38) while rating had
+advanced to 5. `buildUpdateFields` now writes `fields.self_achieved_value`
+in the `role_level === 'self'` branch.
+
+Belt-and-braces:
+1. DB trigger `enforce_self_snapshot_mirror` (BEFORE UPDATE on
+   `review_submissions`) auto-mirrors `NEW.self_achieved_value :=
+   NEW.achieved_value` whenever `achieved_value` changes AND the same
+   UPDATE did not set `self_achieved_value` AND no
+   `<stage>_achieved_value` was set (that would flag a reviewer-stage
+   writer, which must NOT touch the snapshot).
+2. `resolveSelfAchievedValue` now has a stale-guard: if
+   `self_achieved_value` no longer recomputes to `self_score`, it prefers
+   `achieved_value` when that matches, else falls through to recovery.
+3. Source-level test `src/test/adminDataEntrySelfSnapshotMirror.test.ts`
+   pins the invariant.
+
+**Rule (recap):** self-owning writers mirror; reviewer-stage writers do
+not. Any new writer that stamps `achieved_value` on a self-owned row
+MUST also stamp `self_achieved_value` (or rely on the DB trigger, but
+prefer explicit writes).
 
 **Part 3 (shipped 2026-06-29, v2.66.66 / ADR-097 / POLICY §88.5):**
 `propagate_org_kpi_value` now refreshes `self_achieved_value`,

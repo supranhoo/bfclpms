@@ -126,7 +126,29 @@ export function resolveSelfAchievedValue(
   // from kpi_audit_logs for historical rows. Reviewer-stage RPCs do NOT
   // touch it, so it survives auditor/manager overrides.
   if (submission.self_achieved_value != null) {
-    return { value: submission.self_achieved_value, source: 'pristine' };
+    // CAPA-2026-07 stale-guard: if the snapshot no longer matches the
+    // frozen `self_score` under the current KPI thresholds, a self-owning
+    // writer (Admin Data Entry, admin override) refreshed
+    // `achieved_value` / `self_score` without mirroring the snapshot.
+    // Prefer whichever column recomputes to `self_score`; otherwise fall
+    // through to the recovery logic instead of rendering a stale number.
+    const selfScore = submission.self_score ?? null;
+    if (selfScore == null) {
+      return { value: submission.self_achieved_value, source: 'pristine' };
+    }
+    const snapshotRating = ratingFor(submission.self_achieved_value, kpi);
+    if (snapshotRating === selfScore) {
+      return { value: submission.self_achieved_value, source: 'pristine' };
+    }
+    const av = submission.achieved_value ?? null;
+    if (av != null) {
+      const avRating = ratingFor(av, kpi);
+      if (avRating === selfScore) {
+        return { value: av, source: 'recovered' };
+      }
+    }
+    // Snapshot is stale and shared column doesn't match either — fall
+    // through to reverse-derivation below.
   }
 
   const av = submission.achieved_value ?? null;
