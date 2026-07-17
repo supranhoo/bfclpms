@@ -13466,6 +13466,21 @@ export type Database = {
       }
     }
     Functions: {
+      _derive_self_value_from_score: {
+        Args: {
+          p_criteria: string
+          p_r0: string
+          p_r1: string
+          p_r2: string
+          p_r3: string
+          p_r4: string
+          p_r5: string
+          p_self_score: number
+          p_target: number
+          p_uom_type: string
+        }
+        Returns: number
+      }
       _filter_files_for_employee: {
         Args: { p_department_id: string; p_employee_id: string; p_files: Json }
         Returns: Json
