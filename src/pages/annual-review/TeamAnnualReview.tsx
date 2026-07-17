@@ -291,10 +291,16 @@ export default function TeamAnnualReview() {
                 className="h-9 gap-1.5 shrink-0"
                 title={directoryAccess.scope === 'bu'
                   ? 'Search employees in your business unit and start a review to assist with form filling.'
-                  : 'Search the full employee directory and start a review for anyone — even outside your team.'}
+                  : directoryAccess.scope === 'team'
+                    ? 'Search your direct and skip-level reports and start a review to assist with form filling.'
+                    : 'Search the full employee directory and start a review for anyone — even outside your team.'}
               >
                 <UserPlus className="h-4 w-4" />
-                {directoryAccess.scope === 'bu' ? 'BU employees' : 'All employees'}
+                {directoryAccess.scope === 'bu'
+                  ? 'BU employees'
+                  : directoryAccess.scope === 'team'
+                    ? 'Team employees'
+                    : 'All employees'}
               </Button>
             )}
           </div>
