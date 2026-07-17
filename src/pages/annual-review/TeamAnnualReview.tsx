@@ -70,8 +70,10 @@ function resolveMyRole(
   // (e.g. manager_id) after HR narrowed the workflow, causing ghost "Direct
   // reports" chips. Server backfill nulls these, but this guard protects
   // rows fetched before the backfill lands and any future drift.
-  const stages = Array.isArray(row.enabled_stages) ? row.enabled_stages : [];
-  const has = (s: string) => stages.length === 0 || stages.includes(s);
+  const stages: readonly AnnualReviewerRole[] = Array.isArray(row.enabled_stages)
+    ? (row.enabled_stages as AnnualReviewerRole[])
+    : [];
+  const has = (s: AnnualReviewerRole) => stages.length === 0 || stages.includes(s);
   if (row.manager_id === uid && has('manager')) return 'manager';
   if (row.skip_id === uid && has('skip_manager')) return 'skip';
   if (row.dept_head_id === uid && has('dept_head')) return 'dept';
