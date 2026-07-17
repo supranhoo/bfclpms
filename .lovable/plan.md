@@ -1,55 +1,40 @@
-## Goal
-Restore the assisted-submission entry point on `/annual-review/team` for **Reporting Managers** and **Skip-Level Managers**, scoped to their own reports. Confirmed on employee 101187 (role `manager`, 11 direct reports, not BU Head / HOD): the server resolver `annual_review_directory_access` returns `{can_access:false}`, so `TeamAnnualReview.tsx` line 285 never renders the button.
-
-The resolver was never widened for plain managers — today's other fixes (BU-Head-terminal, reviewer resync, team-queue auth RPC) don't touch it, but the button behaviour you saw this morning matches a manager-inclusive rule. We'll add that rule.
+# Fix: Prabhat (101757) can't see Mukesh Bedia (100956)
 
 ## Root cause
-`public.annual_review_directory_access(uid)` only returns `can_access:true` for Admin / HR PMS / HR-BU members / BU Heads / HODs. Plain Reporting Managers and Skip-Level Managers are denied even though they own the review queues for their reports. Client is a pure passthrough — the fix is server-side.
+`public.annual_review_directory_access(uid)` currently returns exactly one `business_unit_id` and stops at the first matching rule. For 101757 it matches Rule 4 (HOD of dept **Admin-Pollution**, BU **Admin** `ea9b1de1…`) and returns `scope='bu', business_unit_id=Admin`. His **home** BU (dept `1050 TPD-Mech` → BU `1050 TPD` `88e3ed27…`), where Mukesh Bedia sits, is never included. `search_active_employees_for_review` therefore filters Mukesh out.
 
-## Risk & Impact
-- **Data:** no schema change. New scope value `'team'` added to the resolver's JSON output.
-- **Workflow:** no change to review stages, BU-Head-terminal (ADR-109), or queue retrieval (§AR-TEAM-QUEUE-AUTH). Managers only gain the ability to initiate/assist a `pending_self` instance for their own reports; downstream routing is unchanged.
-- **Security:** enforcement stays server-side. The same resolver already gates `search_active_employees_for_review` and `create_or_get_annual_review_instance`; both get a `scope='team'` branch that filters to the caller's direct + skip reports. A manager cannot see or create for anyone outside their reporting subtree.
-- **UI:** one additional button (variant="outline", `UserPlus` icon) appears for previously-denied managers. Label per scope: `all` → "All employees", `bu` → "BU employees", `team` → **"Team employees"**.
-- **Regression:** first-match order in the resolver is preserved (admin → hr_pms → hr_bu → bu_head → hod → **team**), so users who currently resolve to `all` / `bu` keep that exact scope. Verified: 101187 currently `false` → after change resolves to `scope='team'`.
+Mukesh does **not** report to Prabhat (his `reporting_manager_id` is a different user), so the `team` fallback wouldn't help either — and it never runs because `bu` already matched.
 
-## Plan
+## Decision
+Widen `scope='bu'` to a **set of BUs** instead of one. A user's BU scope becomes the union of:
+1. BUs where they are `business_units.head_user_id` (BU Head).
+2. BUs of departments where they are `departments.head_user_id` (HOD) — current behaviour.
+3. **NEW:** their own home BU (`departments.business_unit_id` of `profiles.department_id`) **only if** they also qualify under rule 1, 2, or the team rule (has direct/skip reports, or already assigned as manager/skip on an AR instance). Pure line staff without any leadership signal do not gain BU-wide access from home BU alone — that would be a privilege expansion.
 
-### 1. Backend — one migration
-- Extend `public.annual_review_directory_access(v_uid)`:
-  - Append rule 6: if `v_uid` has ≥1 active direct report (`profiles.reporting_manager_id = v_uid AND is_active`) OR ≥1 active skip report (two-hop) OR appears as `manager_id` / `skip_id` on any `annual_review_instances` row in the active cycle → return `{ can_access:true, scope:'team', business_unit_id:null }`.
-- Extend `public.search_active_employees_for_review(...)`:
-  - `scope='team'` branch: restrict results to employees whose `reporting_manager_id = v_uid`, whose reporting manager's `reporting_manager_id = v_uid` (skip), or who have an AR instance with `manager_id=v_uid` / `skip_id=v_uid` in the given cycle.
-- Extend `public.create_or_get_annual_review_instance(...)`:
-  - `scope='team'` branch: same predicate; reject with a clear `RAISE` when the target is outside the manager's subtree.
-- Audit: `annual_review.instance.auto_created` records `actor_scope='reporting_manager'` when the caller resolved via rule 6.
+Admin / HR PMS / HR-BU keep `scope='all'`. Plain managers with no headship keep `scope='team'`.
 
-### 2. Frontend
-- `src/hooks/useDirectoryAccess.ts`: widen `DirectoryAccessScope` to `'all' | 'bu' | 'team'`.
-- `src/pages/annual-review/TeamAnnualReview.tsx` (line 285-299): add a third label branch for `scope === 'team'` → **Team employees**, tooltip "Search your direct and skip-level reports and start a review to assist with form filling." No change to the existing `directoryEnabled` gate — the same `annual_review_directory_search_enabled` app_setting flag still governs the whole feature.
-- `EmployeeDirectoryDialog` needs no change (it just calls the RPC).
+## Backend changes (one migration, ADR-111)
+1. `annual_review_directory_access(uid)` returns `{can_access, scope, business_unit_ids: uuid[], business_unit_id}` where `business_unit_id` remains populated with the first entry for backwards compatibility. Scopes: `all` (unchanged), `bu` (array of BUs — union of rules 1/2/3 above), `team` (unchanged).
+2. `search_active_employees_for_review(...)`: when `scope='bu'`, filter `department.business_unit_id = ANY(business_unit_ids)` instead of `= business_unit_id`.
+3. `create_or_get_annual_review_instance(...)`: same `ANY(...)` check on write; reject out-of-scope with `42501`.
+4. Preserve first-match precedence: Admin/HR still short-circuit to `all`; team rule only fires when the BU set is empty.
 
-### 3. Governance
-- Update `POLICY.md` §AR-DIRECTORY-ACCESS-MATRIX with rule 6 and the invariant "scope='team' never exposes employees outside the caller's reporting subtree".
-- Update `mem://features/annual-review/directory-access.md` to mirror the new row.
-- New `docs/adr/ADR-110.md` — "Reporting/Skip-Level Manager access to assisted submission directory": decision, alternatives, rollback.
+## Frontend changes
+- `useDirectoryAccess`: expose `businessUnitIds: string[]` (derived — fall back to `[businessUnitId]` when the RPC hasn't been redeployed yet). No UI copy change; the "BU employees" button label stays.
+- No change to `EmployeeDirectoryDialog`; server does the filtering.
 
-### 4. Tests
-- `src/test/annualReview/teamAccess.test.ts`: add coverage for `scope='team'`.
-- `src/test/annualReview/employeeDirectory.test.ts`: mock resolver returning `scope='team'`; assert search RPC is invoked and `create_or_get_annual_review_instance` rejects an out-of-team employee.
-- Resolver precedence: a BU Head who is also a reporting manager still resolves to `scope='bu'` (first-match wins; no regression).
-- Post-migration verification (psql read): `annual_review_directory_access('<101187 uid>'::uuid)` returns `{can_access:true, scope:'team'}`.
+## Tests
+- `directoryAccess.test.ts`: new case — HOD-of-A whose home BU is B returns both BUs.
+- `employeeDirectory.test.ts`: search returns rows in either BU.
+- Post-migration psql check: `annual_review_directory_access('223ba922-…')` returns `business_unit_ids` containing both `ea9b1de1` (Admin) and `88e3ed27` (1050 TPD); Mukesh `100956` appears in the search result set for a query = "mukesh".
 
-### 5. Rollback
-Additive only — reverting the migration restores the prior resolver body and the label branch becomes dead code. No data cleanup required; instances created via `create_or_get_annual_review_instance` are indistinguishable from any other AR instance.
+## Governance
+- `POLICY.md` §AR-DIRECTORY-ACCESS-MATRIX: Rule 3 (HOD) note updated — HODs additionally see their own home BU.
+- `docs/adr/ADR-111.md` documenting the multi-BU scope change and the "home BU only with a leadership signal" guardrail.
+- `mem/features/annual-review/directory-access.md` refreshed.
 
-## UI Changes
-- Location: `/annual-review/team`, top filter row, right side (existing slot at line 285).
-- Before: managers like 101187 see no button.
-- After: same slot shows outline button **Team employees** with `UserPlus` icon → opens existing `EmployeeDirectoryDialog` restricted to their reports.
-- No layout / spacing / responsive change.
+## Risk & rollback
+Additive: broadens BU visibility for HODs / BU Heads only. Line staff unaffected. Reverting the migration restores single-BU behaviour; frontend fallback (`[businessUnitId]`) keeps working against the old resolver.
 
 ## Out of scope
-- No change to who can *review* (stage routing).
-- No change to `assisted_self_submission_enabled` or `annual_review_directory_search_enabled` global flags.
-- No change to BU-Head-terminal (ADR-109) or team-queue RPCs (§AR-TEAM-QUEUE-AUTH).
+No change to review stage logic, reviewer resync, BU-Head-terminal (ADR-109), or the global `annual_review_directory_search_enabled` flag.
