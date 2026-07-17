@@ -1,40 +1,40 @@
-# Fix: Prabhat (101757) can't see Mukesh Bedia (100956)
+# Fix: instance detail page rejects HODs/BU-Heads viewing employees in their home BU
 
 ## Root cause
-`public.annual_review_directory_access(uid)` currently returns exactly one `business_unit_id` and stops at the first matching rule. For 101757 it matches Rule 4 (HOD of dept **Admin-Pollution**, BU **Admin** `ea9b1de1…`) and returns `scope='bu', business_unit_id=Admin`. His **home** BU (dept `1050 TPD-Mech` → BU `1050 TPD` `88e3ed27…`), where Mukesh Bedia sits, is never included. `search_active_employees_for_review` therefore filters Mukesh out.
+The RLS SELECT policy `instances_select_directory_assistance` on `annual_review_instances` calls `public.can_access_annual_review_instance_for_assistance(id)`. That helper still reads the **single** `business_unit_id` field from `annual_review_directory_access(uid)` — it was not updated in ADR-111 when the resolver became multi-BU.
 
-Mukesh does **not** report to Prabhat (his `reporting_manager_id` is a different user), so the `team` fallback wouldn't help either — and it never runs because `bu` already matched.
+For Prabhat (101757), the resolver now returns `business_unit_ids = [Admin, 1050 TPD]` but `business_unit_id = Admin` (first entry). Mukesh's instance sits in 1050 TPD, so the helper falls through to `RETURN false`, RLS hides the row, and the detail page renders "This review isn't available…".
+
+The helper also doesn't handle `scope='team'` — plain reporting managers who can see an employee in the directory can't open the instance either unless they're already a named reviewer.
 
 ## Decision
-Widen `scope='bu'` to a **set of BUs** instead of one. A user's BU scope becomes the union of:
-1. BUs where they are `business_units.head_user_id` (BU Head).
-2. BUs of departments where they are `departments.head_user_id` (HOD) — current behaviour.
-3. **NEW:** their own home BU (`departments.business_unit_id` of `profiles.department_id`) **only if** they also qualify under rule 1, 2, or the team rule (has direct/skip reports, or already assigned as manager/skip on an AR instance). Pure line staff without any leadership signal do not gain BU-wide access from home BU alone — that would be a privilege expansion.
+Extend `can_access_annual_review_instance_for_assistance(p_instance_id)` to mirror the resolver's new contract:
 
-Admin / HR PMS / HR-BU keep `scope='all'`. Plain managers with no headship keep `scope='team'`.
+1. Read `business_unit_ids` (array) from `annual_review_directory_access`; fall back to `[business_unit_id]` for safety.
+2. `scope='all'` → allow (unchanged).
+3. `scope='bu'` → allow when `employee.department.business_unit_id = ANY(business_unit_ids)`.
+4. **NEW `scope='team'`** → allow when the caller is `manager_id`/`skip_id` on the instance, OR the employee is a direct/skip report of the caller (mirrors the write-side check in `create_or_get_annual_review_instance`).
+5. Everything else → deny.
 
-## Backend changes (one migration, ADR-111)
-1. `annual_review_directory_access(uid)` returns `{can_access, scope, business_unit_ids: uuid[], business_unit_id}` where `business_unit_id` remains populated with the first entry for backwards compatibility. Scopes: `all` (unchanged), `bu` (array of BUs — union of rules 1/2/3 above), `team` (unchanged).
-2. `search_active_employees_for_review(...)`: when `scope='bu'`, filter `department.business_unit_id = ANY(business_unit_ids)` instead of `= business_unit_id`.
-3. `create_or_get_annual_review_instance(...)`: same `ANY(...)` check on write; reject out-of-scope with `42501`.
-4. Preserve first-match precedence: Admin/HR still short-circuit to `all`; team rule only fires when the BU set is empty.
+No change to write policies (`instances_stage_update`, response RLS, submit RPCs) — approval rights stay gated to the named reviewer / admin / hr_pms. This is a **read-only** widening consistent with ADR-111's SSOT intent.
 
-## Frontend changes
-- `useDirectoryAccess`: expose `businessUnitIds: string[]` (derived — fall back to `[businessUnitId]` when the RPC hasn't been redeployed yet). No UI copy change; the "BU employees" button label stays.
-- No change to `EmployeeDirectoryDialog`; server does the filtering.
+## Backend (one migration, extends ADR-111)
+- `CREATE OR REPLACE FUNCTION public.can_access_annual_review_instance_for_assistance(uuid)` with the array + team branch above. Same signature, same return type, `STABLE SECURITY DEFINER`, `search_path=public`. RLS policy stays untouched (already calls the function by name).
 
-## Tests
-- `directoryAccess.test.ts`: new case — HOD-of-A whose home BU is B returns both BUs.
-- `employeeDirectory.test.ts`: search returns rows in either BU.
-- Post-migration psql check: `annual_review_directory_access('223ba922-…')` returns `business_unit_ids` containing both `ea9b1de1` (Admin) and `88e3ed27` (1050 TPD); Mukesh `100956` appears in the search result set for a query = "mukesh".
+## Frontend
+- None. `useReviewInstance` / `TeamAnnualReviewDetail` unchanged — server RLS drives visibility.
+
+## Tests / verification
+- Post-migration psql: as Prabhat (`223ba922-…`), `SELECT can_access_annual_review_instance_for_assistance('06783199-0694-41f9-bd1f-77222b280478')` returns `true`; the instance row is returned by `SELECT … FROM annual_review_instances WHERE id = …` under his JWT.
+- Regression: an unrelated employee (no leadership, not a reviewer on the instance) still returns `false`.
+- `directoryAccess.test.ts` gets an extra assertion covering the multi-BU visibility path.
 
 ## Governance
-- `POLICY.md` §AR-DIRECTORY-ACCESS-MATRIX: Rule 3 (HOD) note updated — HODs additionally see their own home BU.
-- `docs/adr/ADR-111.md` documenting the multi-BU scope change and the "home BU only with a leadership signal" guardrail.
-- `mem/features/annual-review/directory-access.md` refreshed.
+- `docs/adr/ADR-111.md`: append "Read-side helper" note documenting that the assistance helper mirrors the resolver's `business_unit_ids` and adds a `team` branch.
+- `POLICY.md` §AR-DIRECTORY-ACCESS-MATRIX: add "Instance visibility mirrors directory scope (read-only); write rights remain gated to named reviewers."
 
 ## Risk & rollback
-Additive: broadens BU visibility for HODs / BU Heads only. Line staff unaffected. Reverting the migration restores single-BU behaviour; frontend fallback (`[businessUnitId]`) keeps working against the old resolver.
+Additive read widening for users who already qualify via the directory resolver. No write path affected. Rollback = restore previous function body; UI falls back to the same "not available" screen.
 
 ## Out of scope
-No change to review stage logic, reviewer resync, BU-Head-terminal (ADR-109), or the global `annual_review_directory_search_enabled` flag.
+No changes to review stages, reviewer resync, BU-Head-terminal (ADR-109), team-queue RPCs, or the global directory feature flag.
