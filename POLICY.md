@@ -4711,3 +4711,22 @@ Consequences:
 Rollback: drop the trigger and function, and recreate the previous
 `Employees can create/update their own submissions` and
 `Employees can update self review fields` policies without WITH CHECK.
+
+## §Assisted Submission Eligibility (2026-07-17)
+
+`can_proxy_submit_annual_review(_instance_id, _proxy_user_id)` returns
+`true` when the target instance is `pending_self`, the assisted feature
+flag is on, the employee has never signed in, and the proxy is ANY of:
+
+1. `manager_id` or `skip_id` on the instance
+2. `profiles.designated_proxy_user_id` for the employee
+3. holder of `admin` or `hr_pms` role
+4. **direct head of the employee's own department** (`departments.head_user_id`)
+5. **direct head of the employee's business unit** — either the BU row
+   itself or any department inside that BU
+6. resolved by `annual_review_directory_access` (HR-team BU scope / global)
+
+Rules 4 and 5 were added because HODs who head more than one department
+across different business units were being denied by the directory
+resolver's `LIMIT 1` collapse. The form appeared read-only for them even
+though they legitimately own the review. See ADR-107 follow-up.
