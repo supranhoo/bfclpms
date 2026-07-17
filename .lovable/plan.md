@@ -1,56 +1,64 @@
-## 1. Assumptions
-- The uploaded screenshot corresponds to the database error recorded at **2026-07-17 07:12:02 UTC**.
-- Ayush/Pankaj used the production-facing assisted-submission workflow.
-- The current live definition of `public.can_send_notification_to` is already corrected and contains no `k.*` references.
+# Fix: Auditor "Add Observation" & Bulk Review Score Save Failures
 
-## 2. Clarifications
-Not Applicable — the exact error and affected workflow are visible in the screenshot.
+## Root Cause Analysis (from live Postgres error logs)
 
-## 3. Risk & Impact Report
-- **Data:** No table or historical-row mutation is expected; repair only stale database execution state or the remaining routine discovered by the audit.
-- **Workflow:** Assisted Submission Verification and any cross-user notification insert may currently fail for ordinary users.
-- **UI/UX:** No visual change; the raw `column k.manager_id does not exist` toast should disappear.
-- **Regression:** Medium until the exact executing routine/session is isolated. A broad schema search found no current function/view source containing `k.manager_id`, indicating either a cached pre-replacement PL/pgSQL plan or an execution environment mismatch.
-- **Scalability:** Unchanged; no additional steady-state queries or API calls.
-- **Mitigation:** Inspect all live routines/triggers and migration history, deploy a cache-invalidating replacement only after confirmation, add schema-truth regression coverage, and run a real authenticated smoke test.
-- **Rollback:** Reapply the immediately preceding valid function definition; no data rollback required.
+Two distinct DB-level failures — not the KPI schema issue we chased earlier.
 
-## 4. Step-by-step Plan
-1. **Identify the exact live execution path**
-   - Correlate the 07:12 errors with database statement/context logs.
-   - Inspect function dependencies, trigger bindings, overloads, and applied migration records—not only source text search.
-   - Confirm whether preview and published/custom-domain traffic use the same backend environment.
-2. **Apply the narrow backend correction**
-   - If another routine contains the invalid alias, replace only that routine using authoritative profile/audit-assignment relationships.
-   - If the live catalog is correct but a pooled session retained the old PL/pgSQL plan, force safe function-plan invalidation by replacing the function through a new migration; restart the backend only if invalidation cannot clear the stale execution state.
-3. **Strengthen regression protection**
-   - Extend the existing notification relationship fixture/test to scan every migration/function definition participating in notification inserts and reject all nonexistent qualified columns, including `k.manager_id`.
-   - Include success and failure fixtures: valid profile/auditor relationships pass; legacy KPI reviewer aliases fail.
-4. **Verify the actual user flow**
-   - Run the focused test.
-   - Execute Assisted Submission Verification as an authenticated non-admin user and confirm submission advancement plus recipient notification.
-   - Recheck database logs for zero new `k.manager_id`/`42703` errors after the test.
-5. **Synchronize governance records**
-   - Update ADR-107, `DOCUMENTATION.md`, and `POLICY.md` with the true second-order cause, correction, verification timestamp, and rollback.
+### Bug 1 — Bulk Review score save fails
+Error: `record "new" has no field "functional_manager_achieved_value"`
 
-## 5. UI Changes
-Not Applicable.
+The trigger `public.enforce_self_snapshot_mirror` (BEFORE UPDATE on `review_submissions`) references `NEW.functional_manager_achieved_value`, but that column does **not exist** on `review_submissions`. The table has only these achieved_value columns:
+`achieved_value, self_achieved_value, manager_achieved_value, skip_level_achieved_value, hr_pms_achieved_value, auditor_achieved_value, management_achieved_value`.
 
-## 6. Implementation
-Pending approval.
+Every bulk-review UPDATE that changes `achieved_value` aborts with `42703`.
 
-## 7. Tests
-- Static schema-reference regression across all notification-path routines.
-- Valid relationship happy path.
-- Legacy invalid KPI alias rejection case.
-- Authenticated assisted-submission smoke test and post-test log check.
+### Bug 2 — Adding observation (Auditor) fails
+Error: `not authorized to send notifications to user <kpi_owner>` (SQLSTATE 42501)
 
-## 8. DOCUMENTATION.md updates
-Record the corrected root cause, deployed function state, migration, live verification evidence, and version-history entry.
+`notify_on_observation_change` (AFTER INSERT on `kpi_observations`) inserts a notification for the KPI owner. `tg_notifications_enforce_sender_relationship` then calls `can_send_notification_to(auditor, kpi_owner)`. The current function only accepts an auditor when a row exists in `audit_kpi_assignments (auditor_id, employee_id)`. Ayush audits employees via the **level-based** assignment table `audit_kpi_level_assignments` (and via role scope), so the auditor branch returns false and the trigger raises.
 
-## 9. POLICY.md updates
-Require catalog-level schema validation across the full trigger/function dependency chain and post-deployment non-admin smoke testing for notification guards.
+## Risk & Impact Report
 
-## 10. Post-implementation notes
-- Earlier remediation fixed `can_send_notification_to`, and the live catalog now shows that corrected body.
-- The remaining error therefore cannot be closed by another blind column rename; the exact stale execution path must be invalidated or removed and verified through the real workflow.
+| Area | Impact |
+|---|---|
+| Data | No schema change to data tables. Only function bodies replaced. |
+| Workflow | Restores bulk score save and auditor observation add. No behavior change for other roles. |
+| UI/UX | None. |
+| Regression | Low. Both changes are narrow: (a) drop reference to a non-existent column, (b) widen an existing auditor allow-branch. |
+| Security | Notification authorization stays role-gated. Auditors already have read/comment access to KPIs of employees they audit; they gain no new visibility, only the ability to notify those employees. |
+| Rollback | Both are `CREATE OR REPLACE FUNCTION` — revert by reissuing prior definition. |
+| Scalability | New EXISTS subquery is index-backed (`audit_kpi_level_assignments` has FK indexes on auditor/employee). |
+
+## Plan
+
+1. **Migration — fix `enforce_self_snapshot_mirror`**
+   - Remove the `NEW.functional_manager_achieved_value` clause from the `reviewer_stage_touched` expression. Keep all other reviewer-stage checks intact. No other logic change.
+
+2. **Migration — widen auditor branch in `can_send_notification_to`**
+   - In the auditor block, accept the sender when EITHER:
+     - a row in `audit_kpi_assignments (auditor_id=sender, employee_id=target)`, OR
+     - a row in `audit_kpi_level_assignments` that resolves the sender as an auditor of any KPI owned by `target` (join through `kpis`/`profiles` on the level dimensions already used elsewhere in the app's auditor-scope resolver).
+   - Leaves the admin / HR PMS / management / manager / reviewer / annual-review branches untouched.
+
+3. **Regression tests**
+   - Extend `src/test/notificationsSenderRelationshipSchema.test.ts` with a schema-truth assertion that every column referenced by `enforce_self_snapshot_mirror` exists on `review_submissions` (parsed from the migration file against `src/test/fixtures/notificationRelationshipSchema.ts` — extended with a `review_submissions` fixture).
+   - Add a unit test asserting the auditor branch of `can_send_notification_to` accepts a level-assignment-only auditor (mock via SQL fixture executed in the test harness).
+
+4. **Verification**
+   - `psql` smoke: `UPDATE review_submissions SET achieved_value = achieved_value WHERE id = <sample>` succeeds without `42703`.
+   - `psql` smoke as an auditor with only `audit_kpi_level_assignments`: `INSERT INTO kpi_observations …` succeeds and the follow-on notification row is created.
+   - Re-check `postgres_logs` for the two error strings after deploy — expect zero new occurrences.
+
+5. **Docs & policy**
+   - `DOCUMENTATION.md`: note the two trigger corrections under Version History.
+   - `POLICY.md`: record that auditor-to-employee notification authorization is granted through either direct or level-based audit assignment.
+   - `docs/adr/ADR-107.md`: append the corrected root cause and the two fixes.
+
+## Out of Scope (Observed but Deferred)
+
+The same log window shows three unrelated errors — flagged for a **separate** ticket so this fix stays surgical:
+- `operator does not exist: review_status = text` (enum cast missing in some RPC).
+- `permission denied for function has_role` / `can_send_notification_to` (anon role hitting these — needs `REVOKE FROM anon` or an anon-safe wrapper).
+- `invalid input syntax for type uuid: "null"` (client passing the string `"null"`).
+
+Confirm you want these deferred, or expand scope before I implement.
