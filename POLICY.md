@@ -2851,6 +2851,26 @@ The non-canonical literals `l1_review`, `auditor_review`, and `skip_level_review
 
 `BUG-037` is the canonical anchor for this rule.
 
+## §108b — Notification Sender Authorization Matrix (ADR-112)
+
+**Rule.** `public.can_send_notification_to(sender, target)` is the SSOT for who may insert into `public.notifications`. It is invoked both by the BEFORE-INSERT trigger `tg_notifications_enforce_sender_relationship` **and** by the RLS INSERT policy `Notifications insert requires sender relationship`. Any new legitimate sender/target edge MUST be added to this function AND to the matrix below in the same PR.
+
+**Allowed edges** (bidirectional unless noted):
+
+| Edge | Allowed |
+| --- | --- |
+| self → self | ✅ |
+| admin / hr_pms → any | ✅ |
+| any → admin / hr_pms | ✅ |
+| manager / functional / skip / dept-head / BU-head → subordinate | ✅ |
+| subordinate → their manager / functional / skip / dept-head / BU-head | ✅ |
+| KPI reviewer (`manager_id` / `skip_manager_id` / `hr_id` / `auditor_id` / `management_id`) ↔ `assigned_to` | ✅ |
+| Annual-Review reviewer (`manager_id` / `skip_id` / `dept_head_id` / `bu_head_id` / `hr_id`) ↔ `employee_id` | ✅ |
+| Annual-Review peer reviewers on the same instance | ✅ |
+| anything else | ❌ |
+
+**Background.** The original guard (migration `20260717063237`) allowed only the downward and reviewer-outbound edges. Every AR stage transition initiated by a non-admin employee raised `42501` inside the AFTER-UPDATE trigger `notify_annual_review_stage_change`, rolling back the parent update and surfacing as the "not authorized to send notifications to user …" toast on Annual Review Draft save. ADR-112 documents the widened matrix and the RLS-policy tightening that mirrors it.
+
 ## §109 — Large-Table Export Pagination (v2.66.7.40)
 
 **Rule.** Any client-side export that walks a table of more than ~1k rows MUST (a) paginate via `fetchAllPaged()` from `src/lib/fetchAll.ts`, (b) include an explicit `.order(<indexed_column>)` before every `.range(from, to)`, and (c) resolve foreign-key descriptions via separate `.in('id', [...])` lookups instead of nested PostgREST joins on the paged select.
