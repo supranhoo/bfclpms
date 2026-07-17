@@ -1,70 +1,75 @@
+## Problem
 
-## Reported issue
-Awadhesh Kumar Singh (100070, role = `manager`, department head) opens Anup Kumar (101381)'s Annual Review to help submit the self-form on his behalf. Every field renders as **read-only** — the "Verify & Submit on behalf" action never appears.
+On the **View KPI Details** panel and dashboards, the **Self stage** shows `Value: —` for Org-KPI-Employee rows where:
+- `review_submissions.self_achieved_value` is `NULL`, AND
+- `achieved_value` was already overwritten by a downstream reviewer (`auditor_achieved_value`, `management_achieved_value`, …).
 
-## Root Cause (5 Whys)
+We already have:
+1. A `self_achieved_value` column,
+2. A one-time backfill (Jun-2026),
+3. A `trg_enforce_self_snapshot_mirror` trigger (17-Jul-2026).
 
-1. **Why is the form read-only?**
-   `role` in `TeamReviewDetailContent` resolved to `null` → `locked = true` → `selfEditable = false`.
-2. **Why did `role` resolve to null?**
-   Awadhesh isn't the current stage reviewer (instance is `pending_self`) and `proxyMode` was `false`, so the code fell through to `role = null`.
-3. **Why was `proxyMode` false?**
-   The RPC `can_proxy_submit_annual_review` returned `false` for (instance = Anup, proxy = Awadhesh).
-4. **Why did the RPC return false?**
-   Awadhesh isn't `manager_id`/`skip_id`/`designated_proxy`/admin/hr_pms. The fallback branch uses `annual_review_directory_access(uid)` which returns exactly **one** `business_unit_id` for a department head via `LIMIT 1` without `ORDER BY`. Awadhesh heads two departments in two different BUs (`3X100 TPD-RMH` → BU `659e1a82…`, `1050 TPD-RMH` → BU `88e3ed27…`). Anup sits in dept `1050 TPD-RMH` (BU `88e3ed27…`). When `LIMIT 1` returned the *other* BU, the equality check `v_emp_bu = v_access_bu` failed → `false`.
-5. **Why does the system only compare one BU?**
-   `annual_review_directory_access` was designed to return a single scope (`all` | `bu` | none). It was never extended to represent "head of multiple BUs / departments", and `can_proxy_submit_annual_review` never consulted `departments.head_user_id` directly for the employee's specific department.
+But we still see blanks because:
 
-**RCA:** Multi-department HODs get non-deterministic proxy eligibility because the directory-access resolver collapses their scope to a single arbitrary BU. Direct "you head the employee's department" is not checked at all.
-
-## CAPA
-
-### Corrective — new migration
-`CREATE OR REPLACE public.can_proxy_submit_annual_review(_instance_id, _proxy_user_id)` — preserve every existing branch verbatim, insert an authoritative direct-headship branch **before** the `annual_review_directory_access` fallback:
-
-```
--- Direct head of the employee's department
-IF EXISTS (
-  SELECT 1 FROM public.departments
-   WHERE head_user_id = _proxy_user_id
-     AND id = (SELECT department_id FROM public.profiles WHERE id = v_employee_id)
-) THEN RETURN true;
-END IF;
-
--- Direct head of the employee's business unit (any dept in that BU, or the BU itself)
-IF v_emp_bu IS NOT NULL AND (
-  EXISTS (SELECT 1 FROM public.business_units WHERE id = v_emp_bu AND head_user_id = _proxy_user_id)
-  OR EXISTS (SELECT 1 FROM public.departments  WHERE business_unit_id = v_emp_bu AND head_user_id = _proxy_user_id)
-) THEN RETURN true;
-END IF;
-```
-
-No signature change, no other branches touched, no schema change. Function stays `SECURITY DEFINER` with `search_path = public`.
-
-### Preventive
-- Add a Vitest that documents the multi-BU HOD proxy contract by mocking the RPC boundary: HOD of the employee's department must be eligible even when they also head a second BU.
-- POLICY.md — add "Assisted Submission Eligibility" clause listing every eligible relationship (self, manager, skip, designated proxy, admin, hr_pms, direct department head, direct BU head, HR-team BU directory scope).
-- ADR-107 — append the multi-department HOD case and the direct-headship branch decision.
-- Changelog / DOCUMENTATION.md — one-line entry.
+- The trigger **exempts** any UPDATE that also touches a reviewer `*_achieved_value` column. `propagate_org_kpi_value` (org owner re-entry after a rollback) and some admin data-entry paths update `achieved_value` **in the same UPDATE** as a reviewer stage, so the mirror never fires.
+- Rollback flows preserve reviewer stage values while re-writing `achieved_value`, leaving `self_achieved_value` untouched.
+- Historical rows still exist where `self_achieved_value IS NULL` and `achieved_value` no longer matches `self_score`; the client resolver falls through to reverse-derivation, and when the KPI scale is ambiguous (e.g. Compliance `r5=0, r2=1, r0=>1`), returns `unknown` → renders `—`.
 
 ## Risk & Impact Report
 
-- **Data impact:** none. Function-only change; no schema, RLS, or historical rows touched.
-- **Workflow impact:** widens `pending_self` proxy eligibility to include department heads and BU heads of the employee. Matches business intent (they already control review of these employees) and is narrower than the existing `directory_access` fallback for HR-team / admin / hr_pms.
-- **UI/UX impact:** none — same `AssistedSubmissionDialog` path is enabled once `proxyMode = true`.
-- **Regression risk:** low. All existing `RETURN true` branches remain; new branches are additive `IF EXISTS` short-circuits.
-- **Scalability:** two indexed `EXISTS` lookups against `departments`/`business_units` per RPC call (already tiny tables).
-- **Rollback:** re-run the previous function definition via a follow-up migration; no data cleanup required.
+| Area | Impact | Mitigation |
+|---|---|---|
+| Data | Backfill `UPDATE` on `review_submissions.self_achieved_value` only where currently NULL. Reversible via audit log; `session_replication_role=replica` disables triggers so `enforce_self_snapshot_mirror` won't loop. Only writes when reverse-derivation is unambiguous → **no data loss, no over-write.** | Dry-run count + `RAISE NOTICE` per KPI; log every row into `kpi_audit_logs` with `action='SELF_SNAPSHOT_BACKFILL_V2'`. |
+| Workflow | RPCs (`propagate_org_kpi_value`, admin data-entry, rollback) get a `self_achieved_value :=` write. No stage/score/rating changes. | Regression tests for each RPC. |
+| UI/UX | `KpiJourneySection` / dashboard tile learn to use the **Org KPI value** as a "trusted fallback" when the resolver returns `unknown`. Rating stays untouched. | Snapshot test on the modal. |
+| Regression | Trigger tightened, not broadened. Existing self-only writes remain covered. | Extend `enforce_self_snapshot_mirror` test suite; add a mixed-update case. |
+| Scalability | Backfill is a single `UPDATE … WHERE self_achieved_value IS NULL`; expected O(10⁴) rows, well within Postgres. | Batched in `LIMIT 5000` loop. |
+
+## Plan
+
+### 1. DB — tighten the write contract (migration)
+
+- **Rewrite `enforce_self_snapshot_mirror`** so it always mirrors `achieved_value` → `self_achieved_value` when `self_score IS NOT NULL` AND `NEW.self_achieved_value IS NULL`, regardless of whether a reviewer column was touched in the same UPDATE. (Reviewer columns only matter for deciding whether `achieved_value` is the *self* value; if `self_achieved_value` is still `NULL` we must not leave it that way.)
+- **Update `propagate_org_kpi_value`** and every admin/rollback RPC that writes `achieved_value` or `self_score` to always co-write `self_achieved_value := <org value>`.
+- **Backfill v2**: reverse-derive from thresholds + criteria + `uom_type` (mirrors the TS resolver). Write only when a single threshold value maps back to the frozen `self_score`; otherwise leave NULL. Audit every write.
+- No schema change beyond function bodies.
+
+### 2. Client — never render `—` when a trusted fallback exists
+
+- Extend `resolveSelfAchievedValue` to accept an optional `orgAchievedValue` argument. When result would be `unknown`, use `orgAchievedValue` if it recomputes to `self_score`; if not, still return the org value tagged `source: 'org_owner'` so we display it with a tooltip "Latest value entered by the Data Owner".
+- `KpiJourneySection` and `KpiReviewPanel` already receive `orgAchievedValue`; thread it into the resolver call.
+- Dashboard "value" tile (`KpiLogicModal`, `KpiTimeline`, KPI cards on Employee/Manager dashboards) — when the KPI is an Org KPI and `self_achieved_value` is `NULL`, use the latest `org_kpi_values.achieved_value` for that period.
+
+### 3. Regression tests (Vitest)
+
+- `resolveSelfAchievedValue.test.ts`: add cases
+  - reviewer overwrote AV + org value present → returns org value.
+  - reviewer overwrote AV + ambiguous scale + no org value → `unknown` (unchanged).
+- New `selfSnapshotMirrorTrigger.test.sql` executed via `pgTAP` script: mixed UPDATE (`achieved_value` + `auditor_achieved_value` in one statement) with `self_achieved_value NULL` → row is mirrored.
+- `orgKpiPropagationSelfSnapshot.test.ts`: after propagation, `self_achieved_value` equals the org value.
+
+### 4. Documentation
+
+- **POLICY.md** — new section *Self Value Snapshot Contract (SSOT)*:
+  1. Every writer that sets `self_score` or `achieved_value` on behalf of the employee MUST co-write `self_achieved_value`.
+  2. Reviewer-stage writers MUST NOT touch `self_achieved_value`.
+  3. UI displays: `self_achieved_value` → org KPI value → `—` (never `—` when either exists).
+- **docs/adr/ADR-106.md** — append "17 Jul 2026 v3" documenting the trigger tightening and Org-KPI fallback.
+- **DOCUMENTATION.md** — Version History entry.
+
+### 5. Rollback plan
+
+Every DB change is a function replacement — restoring the prior definition is a single migration. The backfill is idempotent; rows written can be reverted using `kpi_audit_logs` where `action='SELF_SNAPSHOT_BACKFILL_V2'`.
+
+## What is explicitly out of scope
+
+- Recomputing `final_score` or any rating — those remain frozen.
+- Redesigning the `review_submissions` table (no new columns).
+- Rewriting reviewer stage logic; only self-value plumbing changes.
 
 ## Verification
 
-1. `SELECT can_proxy_submit_annual_review('59314a94-0ebc-47d4-9748-4cd19e4cae73', '56fab487-b554-4d2e-9f6a-2a1f4a3fdd63')` → expect `true`.
-2. Reload Anup's review as Awadhesh in the preview — self fields become editable, "Verify & Submit on behalf" appears.
-3. Vitest suite green.
-
-## Out of scope
-
-- Rewriting `annual_review_directory_access` to return multi-BU scope arrays (larger contract change; not needed for this bug).
-- Unrelated notification / trigger errors covered by earlier migrations.
-
-Approve to switch to build mode and apply the migration + tests + docs.
+1. Query the sample KPI (Sindhu Raj Singh / June 2026): `self_achieved_value` becomes non-NULL where recoverable, else org value is displayed.
+2. Reload the **View KPI Details** modal → Self card shows a real value (with tooltip "Latest Data Owner value" when it came from the org fallback).
+3. Roll back → org owner re-enters value → panel and dashboard both immediately reflect the new value on the Self card.
+4. Run migration lints + all Vitest suites.
