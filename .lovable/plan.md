@@ -1,73 +1,86 @@
-## Problem (verified against DB)
+# Fix — BU Head reviews must not route to a Dept Head
 
-**Prabhat Kumar Singh (101757)** — dept head of `Admin-Pollution` (39 active employees). Queue = **39**, correctly matches master data. Previously **~120** because instances still carried his id in `manager_id`/`dept_head_id`/`bu_head_id` for stages that were **not** in `enabled_stages`. Migration `20260717062346` (ghost-reviewer CAPA) nulled those columns → queue shrank to the truthful set.
+## Problem (RCA)
 
-**Umesh Kumar Mehta (100316)** — dept head of 7 departments. DB currently shows him mapped as `dept_head_id` on **79 instances** (59 `pending_dept`, 17 `pending_self`, 3 `pending_bu`). If his dashboard shows **zero**, this is **not** the same root cause as Prabhat — the mapping in the DB is intact. Likely a client-side or auth-context bug (needs live verification when logged in as him).
+A BU Head does not report to a Department Head, so their Annual Review must terminate at the BU Head stage (mirroring the Jaspal precedent). Today, when an employee is themselves the `business_units.head_user_id`, their own review instance still carries `dept_head` in `enabled_stages` with `dept_head_id` pointing to a **subordinate** dept head. After Self, the workflow incorrectly routes to `pending_dept` (a junior reviewer).
 
-**Reviewer master data model** — a single profile can already be dept head of many departments (`departments.head_user_id` is 1:N with the profile). Prabhat is head of 1 dept today; if the business intent is that he heads more, that must be entered as master data — that is the SSOT the seeder reads.
+Live examples in the active cycle (sample):
 
-## Two different bugs, one policy
+| BU Head (employee) | BU headed | Wrongly routed dept_head | Status |
+|---|---|---|---|
+| Sajid Raza (100264) | 1050 TPD / 3X100 TPD / DRI | Jyoti Prakash Dwivedi | pending_self |
+| Jitendra Kumar Dwivedi (101148) | 45 MW / 8 MW | Satyendra Kumar Singh | pending_self |
+| Abhas Luharuwalla (100856) | Commercial-Plant | Atul Kumar Khaitan | **pending_dept** (already mis-routed) |
+| Anil Kumar Pathak (200301) | BFCL-Infra / CLU | Umesh Kumar Mahato | pending_self |
+| Parshu Ram Shukla (100894) | CCM | Dilip Kumar Ojha | pending_self |
 
-| # | Symptom | Root cause | Fix |
-|---|---------|------------|-----|
-| 1 | Prabhat 120 → 39 | Ghost reviewer slots removed. 39 IS the truth per master data. He's mapped to only 1 dept. | **Master-data patch** + admin UI to map him (and any HOD) to additional departments; a **resync** re-seeds `dept_head_id` on open instances. |
-| 2 | Umesh sees 0 despite 79 in DB | Not a data bug — client/auth issue. | Reproduce as Umesh in Playwright, capture RLS/API response, then patch the actual gap (RLS, auth.uid mismatch, or client filter). |
+The Jaspal case worked only accidentally, because he happens to also be the configured dept_head — the `duplicate_reviewer` rule in `effectiveChain` collapsed dept_head into bu_head. For BU Heads whose configured dept head is a different (junior) person, no dedup rule fires.
+
+## Rule (new — POLICY §AR-BU-HEAD-TERMINAL)
+
+> If an employee's `id` appears in `business_units.head_user_id` for any active BU, the `dept_head` stage MUST be removed from that employee's review chain. The chain terminates at `bu_head` (then `hr` if enabled). Rationale: a BU Head is organizationally senior to every Dept Head under their BU; routing their form to a Dept Head is a hierarchy inversion.
+
+Interaction with existing policy §AR-HEAD-MASTER-AUTHORITATIVE: the master-data head remains authoritative for *other* employees. This rule only strips the stage for the BU-head-employee's own instance.
+
+## Risk & Impact Report
+
+- **Data**: Rewrites `enabled_stages` (drop `dept_head`) and sets `dept_head_id = NULL` on open instances of BU-head employees only. Full audit row per change into a new `annual_review_bu_head_terminal_audit_2026_07`. No completed instances touched.
+- **Workflow**: Instances currently at `pending_dept` for BU-head employees jump forward to `pending_bu` (or `completed` if bu_head === self and hr disabled). Any dept_head submissions already recorded for these instances are preserved as historical rows in `annual_review_responses`; they simply become non-blocking.
+- **UI**: Stepper for these employees will show `Self → BU → HR` (no Dept card). Team queues of the wrongly-mapped dept heads shrink correspondingly — desired.
+- **Regression**: `effectiveChain` still handles the Jaspal duplicate-reviewer case; new rule is additive and evaluated *before* duplicate detection.
+- **Rollback**: `annual_review_bu_head_terminal_audit_2026_07` stores prior `enabled_stages` + `dept_head_id`; a single UPDATE reverses the patch.
 
 ## Plan
 
-### Phase 1 — RCA & impact scan (read-only, no data changes yet)
-- **Diagnostic RPC** `annual_review_reviewer_slot_diagnostic(p_cycle_id)` returning, per active cycle instance:
-  - resolved-from-master: `expected_manager_id`, `expected_dept_head_id`, `expected_bu_head_id`, `expected_hr_id` (from `profiles.reporting_manager_id`, `departments.head_user_id`, `business_units.head_user_id`, `org_head_config`)
-  - actual columns
-  - `mismatch_kind[]` (`missing_slot`, `wrong_person`, `stage_disabled_but_expected`, `orphan_head`)
-- **Admin page** `AR Reviewer Coverage` (HR PMS / Admin only) — grouped by reviewer, shows before-fix count, expected count after resync, and downloadable CSV.
-- Deliverable: exact list of every reviewer whose queue changed on 17-Jul and by how much. No writes.
+### 1. Diagnostic (read-only)
+Add RPC `annual_review_bu_head_terminal_diagnostic(cycle_id)` returning every instance where `employee_id` ∈ `business_units.head_user_id` AND `enabled_stages` contains `dept_head`. Columns: employee, BU(s) headed, current `overall_status`, current `dept_head_id`, projected new chain.
 
-### Phase 2 — Master-data completeness (Prabhat's case)
-- Verify whether "Prabhat is dept head of additional departments" is a business fact. If yes:
-  - Use existing `Departments` admin UI to assign `head_user_id = Prabhat` on the intended departments. Master data is SSOT.
-  - No hardcoded per-person patch.
-- If Umesh / others also need additional department assignments, they go through the same UI.
+### 2. Systemic fix (SSOT — SQL + TS mirror)
 
-### Phase 3 — Idempotent resync
-- **RPC** `resync_annual_review_reviewer_slots(p_cycle_id, p_dry_run boolean)`:
-  - For each instance in cycle where `overall_status NOT IN ('completed','excluded')`:
-    - Compute expected slots from master data + `enabled_stages` (a disabled stage stays NULL — 17-Jul rule preserved).
-    - Update only the slots that differ.
-  - Skips instances that have already advanced past the affected stage.
-  - Full audit row per change into a new `annual_review_reviewer_resync_audit` table.
-  - Dry-run mode returns diff without writing.
-- **Trigger** on `departments`, `business_units`, `org_head_config` `AFTER UPDATE OF head_user_id / hr_head_user_id`: cascade the new head into open annual-review instances (only slots the trigger-audit hasn't manually overridden, and only if the stage is enabled). Prevents future drift.
+**SQL** (`resolve_effective_chain` and seed functions):
+- New helper `public.is_bu_head(user_id, cycle_id)` returning boolean.
+- In `seed_annual_review_instances*`: if `is_bu_head(employee_id)`, exclude `dept_head` from `enabled_stages` and leave `dept_head_id` NULL.
+- Cascade trigger on `business_units.head_user_id` (already exists from ADR-108) extended: when a new BU head is set, run the strip-dept_head repair on their open instances.
 
-### Phase 4 — Umesh case (client/auth investigation)
-- Run Playwright as Umesh (via managed session injection) against `/annual-review/team`. Capture:
-  - the actual `useReviewerInstancesPaginated` request / response
-  - RLS-visible count with his JWT
-  - client-side filter chain (scope, status, search)
-- Fix the specific gap surfaced (only after evidence — could be RLS, could be `directoryAccess` denying, could be a stale query key).
+**TypeScript mirror** (`src/lib/annualReview/effectiveChain.ts`):
+- Add new skip reason `bu_head_terminal` evaluated first.
+- Extend `ResolveInput` with `employeeIsBuHead: boolean`.
+- When true and stage === `dept_head`, mark skipped with reason `bu_head_terminal`.
 
-### Phase 5 — Policy & tests
-- **POLICY.md §AR-REVIEWER-SLOT-RESOLUTION**: rules for reviewer id columns
-  1. `enabled_stages` is authoritative — disabled stage's id column MUST be NULL (17-Jul rule preserved).
-  2. Enabled stage's id column MUST equal the master-data resolver's output at seed time, and must be cascaded on master-data change while status is still pre-that-stage.
-  3. Manual overrides via `set_annual_review_reviewer_slot` audit-log the override reason; the trigger honors the override flag.
-- **ADR-108** — Reviewer slot cascade contract.
-- **Regression tests**:
-  - `resync_annual_review_reviewer_slots.test.ts` — happy path, no double-writes, dry-run correctness, past-stage skip
-  - `department_head_change_cascade.test.ts` — head change re-seeds only enabled + pre-that-stage rows
-  - `reviewerRoleCounts.test.ts` — asserts counts match diagnostic RPC for known fixtures
+### 3. One-shot data patch
+`repair_bu_head_terminal_chains(cycle_id, dry_run)`:
+- For each open instance where employee is a BU head and `dept_head` ∈ enabled_stages:
+  - Snapshot to audit table.
+  - Remove `dept_head` from `enabled_stages`, set `dept_head_id = NULL`.
+  - If `overall_status = 'pending_dept'`, advance to `pending_bu` (or resolve via existing `next_status` helper).
+- Dry-run mode returns projected changes without writing.
 
-### Out of scope
-- Rolling back the 17-Jul ghost-slot null-out (that CAPA was correct and stays).
-- Changing `enabled_stages` for existing instances (business owns that decision).
-- Auto-enabling `manager` stage where the workflow doesn't include it.
+### 4. UI
+`KpiJourneySection` / stepper already reads `enabled_stages` — no code change needed; the Dept card disappears automatically.
 
-## Deliverables
-1. Diagnostic RPC + admin coverage page (Phase 1)
-2. `resync_annual_review_reviewer_slots` RPC + cascade triggers (Phase 3)
-3. Umesh-specific fix once Playwright evidence identifies the actual gap (Phase 4)
-4. POLICY §AR-REVIEWER-SLOT-RESOLUTION + ADR-108 + regression tests (Phase 5)
+### 5. Governance & tests
+- POLICY.md: add §AR-BU-HEAD-TERMINAL with the rule above.
+- DOCUMENTATION.md: version history entry.
+- ADR-109 documenting the decision.
+- Vitest: extend `effectiveChain.test.ts` — BU-head-employee with a distinct dept_head configured must produce chain `[self, bu_head, hr]`.
+- SQL test: `is_bu_head` + repair RPC round-trip on a seeded fixture.
 
-## What I need from you before Phase 2 writes anything
-- Confirm which **additional departments** Prabhat is supposed to head (so you or Admin can enter them via master data — I won't hardcode names).
-- Any other reviewers currently showing wrong queue counts you already know about (helps prioritize Phase 4 reproduction list).
+## Expected outcome (all BU Heads, active cycle)
+
+After patch, every row where `dept_is_self = false` in the diagnostic table becomes:
+
+```text
+Self → BU Head (self-approve or auto-skip via existing self_assignment rule) → HR (if enabled)
+```
+
+Rows where `dept_is_self = true` (e.g. Sindhu Raj Singh, Gaurav Budhia, Nitesh Kumar Baldwa) are unaffected — they already collapse via `duplicate_reviewer`.
+
+## Out of scope
+- Changing `business_units.head_user_id` master data.
+- Retro-editing already `completed` instances.
+- Applying the same terminal rule to Dept Heads (a Dept Head still reports up to a BU Head — no inversion).
+
+## Files to change
+- `supabase/migrations/<ts>_bu_head_terminal.sql` — helper, seed update, repair + diagnostic RPCs, audit table, cascade trigger extension.
+- `src/lib/annualReview/effectiveChain.ts` + test.
+- `POLICY.md`, `DOCUMENTATION.md`, `docs/adr/ADR-109.md`.
