@@ -1,86 +1,51 @@
-# Fix — BU Head reviews must not route to a Dept Head
+## 1. Assumptions
+- “Not fixed” means Umesh Kumar Mehta (employee 100316) still sees **0 employees** on `/annual-review/team` after signing in or refreshing.
+- The uploaded screenshot shows the same empty-queue symptom from Amarjeet Kumar; Amarjeet’s organizational mapping will be diagnosed separately because the backend currently has no annual-review reviewer assignments for him.
 
-## Problem (RCA)
+## 2. Clarifications
+- None required to begin. The backend evidence is sufficient to isolate Umesh’s issue.
 
-A BU Head does not report to a Department Head, so their Annual Review must terminate at the BU Head stage (mirroring the Jaspal precedent). Today, when an employee is themselves the `business_units.head_user_id`, their own review instance still carries `dept_head` in `enabled_stages` with `dept_head_id` pointing to a **subordinate** dept head. After Self, the workflow incorrectly routes to `pending_dept` (a junior reviewer).
+## 3. Risk & Impact Report
+- **Data impact:** Umesh already has **89** active-cycle reviewer assignments, including **68 currently awaiting Dept Head action**. His profile ID and authentication ID match, and he is active. No second remap or historical-row rewrite is justified.
+- **Workflow impact:** The fix will change only how the Team Annual Review queue is retrieved for the signed-in reviewer; reviewer hierarchy, scores, stages, and completed reviews remain unchanged.
+- **UI/UX impact:** The page will no longer silently convert a failed queue request into “No employees in your queue.” A genuine empty queue and a load failure will be distinct states.
+- **Security impact:** Queue identity will be resolved from the authenticated session in the backend, rather than trusting a reviewer ID supplied by the browser. Results remain constrained to rows where the caller occupies an enabled reviewer slot.
+- **Regression risk:** Moderate because all reviewer roles use this queue. Mitigate with role, RLS, pagination, status, search, and failure-state tests.
+- **Scalability impact:** Preserve server-side pagination (20 default, 100 maximum), exact counts, sorting, and search limits; do not load full reviewer queues.
+- **Rollback:** Restore the existing service queries and remove the additive queue RPCs; no data rollback is needed.
 
-Live examples in the active cycle (sample):
+## 4. Step-by-step Plan
+1. Add authenticated, paginated backend queue/count functions that derive the reviewer from the session and return only enabled reviewer relationships for the active cycle.
+2. Replace the browser-built five-column reviewer query and role-count queries with the backend functions, preserving current filters, sorting, search, and pagination.
+3. Add explicit queue error handling with a retry action; render “No employees in your queue” only after a successful zero-row response.
+4. Verify Umesh’s expected result against the active cycle: **89 total assigned**, with the current status distribution preserved (68 `pending_dept`, 18 `pending_self`, 3 `pending_bu`).
+5. Diagnose Amarjeet separately in the same validation: his current backend assignment count is genuinely 0, so do not disguise that master-data issue as the same retrieval defect.
 
-| BU Head (employee) | BU headed | Wrongly routed dept_head | Status |
-|---|---|---|---|
-| Sajid Raza (100264) | 1050 TPD / 3X100 TPD / DRI | Jyoti Prakash Dwivedi | pending_self |
-| Jitendra Kumar Dwivedi (101148) | 45 MW / 8 MW | Satyendra Kumar Singh | pending_self |
-| Abhas Luharuwalla (100856) | Commercial-Plant | Atul Kumar Khaitan | **pending_dept** (already mis-routed) |
-| Anil Kumar Pathak (200301) | BFCL-Infra / CLU | Umesh Kumar Mahato | pending_self |
-| Parshu Ram Shukla (100894) | CCM | Dilip Kumar Ojha | pending_self |
+## 5. UI Changes
+- **Location:** `/annual-review/team`, in the employee-grid area.
+- **Visual change:** Add a clear load-error alert and Retry button.
+- **Interaction:** Existing role/status/search/page controls remain unchanged.
+- **Responsiveness:** Alert follows the existing responsive content width; no navigation or layout changes.
 
-The Jaspal case worked only accidentally, because he happens to also be the configured dept_head — the `duplicate_reviewer` rule in `effectiveChain` collapsed dept_head into bu_head. For BU Heads whose configured dept head is a different (junior) person, no dedup rule fires.
+## 6. Implementation
+- Add a migration containing the authenticated reviewer-queue and reviewer-role-count functions, with explicit authenticated/backend grants and anonymous access revoked.
+- Update the Annual Review service and hooks to consume those functions.
+- Keep the page component rendering-focused and surface query errors instead of defaulting to an empty array.
+- Add an immutable audit/diagnostic path only if needed; this retrieval fix does not mutate sensitive review data.
 
-## Rule (new — POLICY §AR-BU-HEAD-TERMINAL)
+## 7. Tests
+- Unit tests with realistic mock reviewers: Umesh as multi-department head, multi-role reviewer, inactive reviewer, genuine zero-assignment reviewer, and request failure.
+- Validate happy paths and failures for pagination, search, status filter, scope filter, enabled-stage filtering, and identity isolation.
+- Backend contract test: one authenticated reviewer cannot request another reviewer’s queue.
+- Run the focused Annual Review test suite and verify the rendered queue/error states.
 
-> If an employee's `id` appears in `business_units.head_user_id` for any active BU, the `dept_head` stage MUST be removed from that employee's review chain. The chain terminates at `bu_head` (then `hr` if enabled). Rationale: a BU Head is organizationally senior to every Dept Head under their BU; routing their form to a Dept Head is a hierarchy inversion.
+## 8. DOCUMENTATION.md updates
+- Document the authenticated reviewer-queue retrieval contract, pagination limits, error semantics, and version-history entry in both root and Annual Review technical documentation.
 
-Interaction with existing policy §AR-HEAD-MASTER-AUTHORITATIVE: the master-data head remains authoritative for *other* employees. This rule only strips the stage for the BU-head-employee's own instance.
+## 9. POLICY.md updates
+- Add/align the rule that Team Annual Review visibility is session-derived, enabled-stage-aware, and must distinguish retrieval failure from a genuine empty queue.
 
-## Risk & Impact Report
-
-- **Data**: Rewrites `enabled_stages` (drop `dept_head`) and sets `dept_head_id = NULL` on open instances of BU-head employees only. Full audit row per change into a new `annual_review_bu_head_terminal_audit_2026_07`. No completed instances touched.
-- **Workflow**: Instances currently at `pending_dept` for BU-head employees jump forward to `pending_bu` (or `completed` if bu_head === self and hr disabled). Any dept_head submissions already recorded for these instances are preserved as historical rows in `annual_review_responses`; they simply become non-blocking.
-- **UI**: Stepper for these employees will show `Self → BU → HR` (no Dept card). Team queues of the wrongly-mapped dept heads shrink correspondingly — desired.
-- **Regression**: `effectiveChain` still handles the Jaspal duplicate-reviewer case; new rule is additive and evaluated *before* duplicate detection.
-- **Rollback**: `annual_review_bu_head_terminal_audit_2026_07` stores prior `enabled_stages` + `dept_head_id`; a single UPDATE reverses the patch.
-
-## Plan
-
-### 1. Diagnostic (read-only)
-Add RPC `annual_review_bu_head_terminal_diagnostic(cycle_id)` returning every instance where `employee_id` ∈ `business_units.head_user_id` AND `enabled_stages` contains `dept_head`. Columns: employee, BU(s) headed, current `overall_status`, current `dept_head_id`, projected new chain.
-
-### 2. Systemic fix (SSOT — SQL + TS mirror)
-
-**SQL** (`resolve_effective_chain` and seed functions):
-- New helper `public.is_bu_head(user_id, cycle_id)` returning boolean.
-- In `seed_annual_review_instances*`: if `is_bu_head(employee_id)`, exclude `dept_head` from `enabled_stages` and leave `dept_head_id` NULL.
-- Cascade trigger on `business_units.head_user_id` (already exists from ADR-108) extended: when a new BU head is set, run the strip-dept_head repair on their open instances.
-
-**TypeScript mirror** (`src/lib/annualReview/effectiveChain.ts`):
-- Add new skip reason `bu_head_terminal` evaluated first.
-- Extend `ResolveInput` with `employeeIsBuHead: boolean`.
-- When true and stage === `dept_head`, mark skipped with reason `bu_head_terminal`.
-
-### 3. One-shot data patch
-`repair_bu_head_terminal_chains(cycle_id, dry_run)`:
-- For each open instance where employee is a BU head and `dept_head` ∈ enabled_stages:
-  - Snapshot to audit table.
-  - Remove `dept_head` from `enabled_stages`, set `dept_head_id = NULL`.
-  - If `overall_status = 'pending_dept'`, advance to `pending_bu` (or resolve via existing `next_status` helper).
-- Dry-run mode returns projected changes without writing.
-
-### 4. UI
-`KpiJourneySection` / stepper already reads `enabled_stages` — no code change needed; the Dept card disappears automatically.
-
-### 5. Governance & tests
-- POLICY.md: add §AR-BU-HEAD-TERMINAL with the rule above.
-- DOCUMENTATION.md: version history entry.
-- ADR-109 documenting the decision.
-- Vitest: extend `effectiveChain.test.ts` — BU-head-employee with a distinct dept_head configured must produce chain `[self, bu_head, hr]`.
-- SQL test: `is_bu_head` + repair RPC round-trip on a seeded fixture.
-
-## Expected outcome (all BU Heads, active cycle)
-
-After patch, every row where `dept_is_self = false` in the diagnostic table becomes:
-
-```text
-Self → BU Head (self-approve or auto-skip via existing self_assignment rule) → HR (if enabled)
-```
-
-Rows where `dept_is_self = true` (e.g. Sindhu Raj Singh, Gaurav Budhia, Nitesh Kumar Baldwa) are unaffected — they already collapse via `duplicate_reviewer`.
-
-## Out of scope
-- Changing `business_units.head_user_id` master data.
-- Retro-editing already `completed` instances.
-- Applying the same terminal rule to Dept Heads (a Dept Head still reports up to a BU Head — no inversion).
-
-## Files to change
-- `supabase/migrations/<ts>_bu_head_terminal.sql` — helper, seed update, repair + diagnostic RPCs, audit table, cascade trigger extension.
-- `src/lib/annualReview/effectiveChain.ts` + test.
-- `POLICY.md`, `DOCUMENTATION.md`, `docs/adr/ADR-109.md`.
+## 10. Post-implementation notes
+- This avoids another unnecessary data repair: Umesh’s 89 mappings are already present.
+- Backup coverage remains automatic because no new table is required.
+- Amarjeet’s screenshot represents a separate master-data/mapping case and will be reported with its exact cause after queue retrieval is corrected.

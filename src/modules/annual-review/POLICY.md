@@ -88,6 +88,11 @@ Caveats:
 - Mid-cycle change: HR/admin inserts an `annual_review_assignment_overrides` row. Overrides take precedence over the snapshot for that instance + role.
 - **Auto-skip at advance time:** the `advance_annual_review_status` / `send_back_annual_review_status` RPCs walk `public.annual_review_effective_chain(instance_id)`, which is `enabled_stages` further filtered to drop any stage whose reviewer slot resolves to NULL, points at an `is_active = false` profile, or equals `employee_id`. The `self` stage is never auto-skipped. Auto-skips are recorded in `system_audit_logs` (`annual_review.stage_auto_skipped`).
 - **Cycle-level default:** `annual_review_cycles.default_enabled_stages` is the workflow chain stamped onto every newly-seeded instance. Admin-editable on Annual Review Admin → Cycles. Per-employee overrides via `set_annual_review_enabled_stages` still win and survive re-seed.
+- **Team queue identity and errors:** `/annual-review/team` MUST retrieve rows and
+  role counts through session-derived backend functions. The browser MUST NOT
+  choose the reviewer id. Disabled reviewer slots do not create queue entries.
+  Request failures MUST be shown as retryable errors and MUST NOT be presented
+  as a successful empty queue.
 
 ## Per-employee workflow override
 - Each instance has `enabled_stages` (subset of `self / manager / skip_manager / dept_head / bu_head / hr`).

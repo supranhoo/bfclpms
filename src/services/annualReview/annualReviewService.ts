@@ -659,59 +659,20 @@ export interface ListReviewerInstancesPaginatedArgs {
 
 export type ReviewerScope = 'any' | 'manager' | 'skip' | 'dept' | 'bu' | 'hr';
 
-const SCOPE_COLUMN: Record<Exclude<ReviewerScope, 'any'>, string> = {
-  manager: 'manager_id',
-  skip: 'skip_id',
-  dept: 'dept_head_id',
-  bu: 'bu_head_id',
-  hr: 'hr_id',
-};
-
 export async function listInstancesForReviewerPaginated(
   args: ListReviewerInstancesPaginatedArgs,
 ): Promise<PaginatedInstances> {
-  const pageSize = Math.min(Math.max(args.pageSize, 1), 100);
-  const from = (Math.max(args.page, 1) - 1) * pageSize;
-  const to = from + pageSize - 1;
-
-  let q = db
-    .from('annual_review_instances')
-    .select(
-      '*, employee:profiles!annual_review_instances_employee_id_fkey(id, full_name, employee_code, designation, doj)',
-      { count: 'exact' },
-    )
-    .eq('cycle_id', args.cycleId)
-    .neq('overall_status', 'excluded');
-
-  if (args.scope && args.scope !== 'any') {
-    q = q.eq(SCOPE_COLUMN[args.scope], args.reviewerId);
-  } else {
-    q = q.or(
-      `manager_id.eq.${args.reviewerId},skip_id.eq.${args.reviewerId},dept_head_id.eq.${args.reviewerId},bu_head_id.eq.${args.reviewerId},hr_id.eq.${args.reviewerId}`,
-    );
-  }
-
-  if (args.status && args.status !== 'all' && args.status !== 'excluded') q = q.eq('overall_status', args.status);
-
-  const term = args.search?.trim();
-  if (term) {
-    const safe = term.replace(/[(),]/g, ' ');
-    const { data: profs, error: pErr } = await db
-      .from('profiles')
-      .select('id')
-      .or(`full_name.ilike.%${safe}%,employee_code.ilike.%${safe}%`)
-      .limit(500);
-    if (pErr) throw pErr;
-    const ids = (profs ?? []).map((p: { id: string }) => p.id);
-    if (ids.length === 0) return { rows: [], total: 0 };
-    q = q.in('employee_id', ids);
-  }
-
-  q = q.order('created_at', { ascending: false }).range(from, to);
-
-  const { data, error, count } = await q;
+  const { data, error } = await db.rpc('get_my_annual_review_queue', {
+    p_cycle_id: args.cycleId,
+    p_page: Math.max(args.page, 1),
+    p_page_size: Math.min(Math.max(args.pageSize, 1), 100),
+    p_search: args.search?.trim() || null,
+    p_status: args.status ?? 'all',
+    p_scope: args.scope ?? 'any',
+  });
   if (error) throw error;
-  return { rows: (data ?? []) as InstanceWithEmployee[], total: count ?? 0 };
+  const payload = data as { rows?: InstanceWithEmployee[]; total?: number } | null;
+  return { rows: payload?.rows ?? [], total: Number(payload?.total ?? 0) };
 }
 
 /**
@@ -728,29 +689,20 @@ export type ReviewerRoleCounts = {
 };
 
 export async function getReviewerRoleCounts(
-  reviewerId: string,
+  _reviewerId: string,
   cycleId: string,
 ): Promise<ReviewerRoleCounts> {
-  const roles: (keyof ReviewerRoleCounts)[] = ['manager', 'skip', 'dept', 'bu', 'hr'];
-  const results = await Promise.all(
-    roles.map(async (role) => {
-      const col = SCOPE_COLUMN[role];
-      const { count, error } = await db
-        .from('annual_review_instances')
-        .select('id', { count: 'exact', head: true })
-        .eq('cycle_id', cycleId)
-        .neq('overall_status', 'excluded')
-        .eq(col, reviewerId);
-      if (error) return 0;
-      return count ?? 0;
-    }),
-  );
+  const { data, error } = await db.rpc('get_my_annual_review_role_counts', {
+    p_cycle_id: cycleId,
+  });
+  if (error) throw error;
+  const counts = data as Partial<ReviewerRoleCounts> | null;
   return {
-    manager: results[0],
-    skip: results[1],
-    dept: results[2],
-    bu: results[3],
-    hr: results[4],
+    manager: Number(counts?.manager ?? 0),
+    skip: Number(counts?.skip ?? 0),
+    dept: Number(counts?.dept ?? 0),
+    bu: Number(counts?.bu ?? 0),
+    hr: Number(counts?.hr ?? 0),
   };
 }
 
