@@ -8,7 +8,7 @@ import {
 import { AnnualReviewStatusBadge } from '@/components/annual-review/AnnualReviewStatusBadge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Loader2, ChevronRight, Scale, Search, Users, UserPlus, ChevronLeft } from 'lucide-react';
+import { Loader2, ChevronRight, Scale, Search, Users, UserPlus, ChevronLeft, AlertTriangle } from 'lucide-react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import type { AnnualReviewerRole, AnnualReviewStatus } from '@/types/annualReview';
 import type { InstanceWithEmployee } from '@/services/annualReview/annualReviewService';
@@ -22,6 +22,7 @@ import { useDirectoryAccess } from '@/hooks/useDirectoryAccess';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
 const QUEUE_PAGE_SIZE_KEY = 'annual-review:team:pageSize';
 const PAGE_SIZE_OPTIONS = [10, 20, 50] as const;
@@ -147,7 +148,7 @@ export default function TeamAnnualReview() {
     setUrlParams(next, { replace: true });
   }, [debouncedSearch, statusFilter, scopeFilter, page, setUrlParams]);
 
-  const { data: paged, isLoading, isFetching } = useReviewerInstancesPaginated(
+  const { data: paged, isLoading, isFetching, isError, error, refetch } = useReviewerInstancesPaginated(
     user?.id,
     cycle?.id,
     { page, pageSize, search: debouncedSearch || undefined, status: statusFilter, scope: scopeFilter },
@@ -298,6 +299,19 @@ export default function TeamAnnualReview() {
             )}
           </div>
 
+          {isError && (
+            <Alert variant="destructive">
+              <AlertTriangle className="h-4 w-4" />
+              <AlertTitle>Team queue could not be loaded</AlertTitle>
+              <AlertDescription className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                <span>{error instanceof Error ? error.message : 'Please retry. Your reviewer assignments have not been changed.'}</span>
+                <Button type="button" size="sm" variant="outline" onClick={() => void refetch()}>
+                  Retry
+                </Button>
+              </AlertDescription>
+            </Alert>
+          )}
+
           {/* Grid of employees */}
           <ul className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-2.5">
             {rows.map((i) => {
@@ -354,7 +368,7 @@ export default function TeamAnnualReview() {
                 </li>
               );
             })}
-            {rows.length === 0 && (
+            {!isError && rows.length === 0 && (
               <li className="col-span-full rounded-md border border-dashed p-8 text-center text-sm text-muted-foreground">
                 <Users className="h-8 w-8 mx-auto mb-2 text-muted-foreground/50" />
                 <p>

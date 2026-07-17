@@ -1,3 +1,10 @@
+### §AR-TEAM-QUEUE-AUTH — Team Annual Review queue is session-derived and fail-visible (v2.66.111, 2026-07-17)
+- `/annual-review/team` MUST use `get_my_annual_review_queue` and `get_my_annual_review_role_counts`; both resolve reviewer identity from `auth.uid()` and reject anonymous or inactive callers. A browser-supplied reviewer id MUST NOT control queue visibility.
+- A reviewer relationship is visible only when its stage is present in the instance's `enabled_stages`. Stale ids on disabled slots MUST NOT create ghost queue rows or role counts.
+- Queue reads remain server-paginated (20 default, 100 maximum) and support status, reviewer-scope, and employee name/code filters without loading the full cycle.
+- Retrieval/RLS/function failures MUST render a retryable error state. The successful-empty message "No employees in your queue" is permitted only after a completed zero-row response.
+- Regression guard: `src/test/annualReview/service.pagination.test.ts` covers identity isolation, pagination caps, Umesh-style multi-department counts, and failure propagation.
+
 ### §AR-REVIEWER-SLOT-RESOLUTION — Annual Review reviewer id columns are master-data-derived and cascade-safe (v2.66.110, 2026-07-17)
 - Reviewer id columns on `annual_review_instances` (`manager_id`, `skip_id`, `dept_head_id`, `bu_head_id`, `hr_id`) are **derived state**. The source of truth is:
   - `manager` → `profiles.reporting_manager_id`

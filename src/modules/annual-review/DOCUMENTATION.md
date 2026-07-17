@@ -48,6 +48,12 @@ per-row update (existing instances, updating only seeded columns). It NEVER writ
 
 ## Pagination contract
 - `listInstancesPaginated({ cycleId, page, pageSize, search, status, sort })`. `pageSize` capped at 100.
+- Team reviewer queues use authenticated RPCs `get_my_annual_review_queue` and
+  `get_my_annual_review_role_counts`. Reviewer identity is always `auth.uid()`;
+  the browser cannot request another user's queue. Results are filtered to
+  enabled reviewer stages and remain server-paginated (20 default, 100 max).
+- A failed queue request renders a retryable error state. It MUST NOT render the
+  successful-empty copy "No employees in your queue."
 - Search resolves via a `profiles.full_name ilike` pre-fetch (cap 500). PostgREST cannot `ilike` across an embedded resource.
 - Summary cards use `getCycleStatusCounts(cycleId)` — one-column projection, ~few KB even at 5k rows.
 - **Seeding (`seedInstancesByRules`, `seedInstancesForCycle`)** reads the active roster via `fetchAllPaged` (POLICY §94). Department→BU lookup chunks `.in(id, …)` at 500 ids/page.
@@ -59,6 +65,7 @@ UI → hooks (`useAnnualReview.ts`) → services (`annualReviewService.ts`) → 
 `admin_feature_flags.annual_review_enabled` (resolved via `is_feature_flag_enabled_for_me`).
 
 ## Version history
+- 2026-07-17 — Team reviewer queue reads moved to session-derived, enabled-stage-aware RPCs. Added explicit retryable error UI so retrieval/RLS failures cannot masquerade as a genuine zero queue. Regression coverage pins identity isolation, pagination caps, counts, and failure propagation.
 - 2026-06-14 — Initial docs. Server-side pagination, standalone report, cycle reopen, mid-cycle reassignment.
 - 2026-07-12 — Added `resyncReviewersFromMaster(cycleId, hrUserId, companyId)` in `annualReviewService.ts` and a **"Resync reviewers from master"** button in Admin → Progress next to "Seed missing employees". Refactored `seedInstancesByRules` to share row computation with the new resync path via `computeSeedRowsForCycle`. Resync is stage-gated (safe statuses: `not_started`, `pending_self`); rows already advanced are skipped and reported. Returns `{ resynced, skippedInFlight, skippedNew, skippedNoRule }`. See POLICY §AR-REVIEWER-RESYNC.
 - 2026-06-15 — Seeder now pages `profiles` via `fetchAllPaged`; previously capped at 1000 rows ("Seeded 1000 instances" bug).

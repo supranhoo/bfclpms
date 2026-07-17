@@ -21,6 +21,7 @@ const makeBuilder = () => {
 };
 
 const tables = new Map<string, ReturnType<typeof makeBuilder>>();
+const rpcMock = vi.hoisted(() => vi.fn());
 
 vi.mock('@/integrations/supabase/client', () => ({
   supabase: {
@@ -30,13 +31,16 @@ vi.mock('@/integrations/supabase/client', () => ({
     }),
     storage: { from: vi.fn() },
     functions: { invoke: vi.fn() },
-    rpc: vi.fn(),
+    rpc: rpcMock,
   },
 }));
 
 import * as svc from '@/services/annualReview/annualReviewService';
 
-beforeEach(() => tables.clear());
+beforeEach(() => {
+  tables.clear();
+  rpcMock.mockReset();
+});
 
 describe('listInstancesPaginated', () => {
   it('caps page size at 100 and applies cycle_id eq', async () => {
@@ -145,5 +149,43 @@ describe('getCycleStatusCounts', () => {
     expect(inst.select).toHaveBeenCalledWith('id', { count: 'exact', head: true });
     expect(c.total).toBe(2560);
     expect(c.total).toBeGreaterThan(1000);
+  });
+});
+
+describe('authenticated reviewer queue', () => {
+  it('uses the session-derived paginated RPC and never sends reviewerId', async () => {
+    rpcMock.mockResolvedValue({
+      data: { rows: [{ id: 'ar-1' }], total: 89 },
+      error: null,
+    });
+
+    const out = await svc.listInstancesForReviewerPaginated({
+      reviewerId: 'browser-supplied-id', cycleId: 'cycle-1', page: 2,
+      pageSize: 999, search: ' Umesh ', status: 'pending_dept', scope: 'dept',
+    });
+
+    expect(out.total).toBe(89);
+    expect(rpcMock).toHaveBeenCalledWith('get_my_annual_review_queue', {
+      p_cycle_id: 'cycle-1', p_page: 2, p_page_size: 100,
+      p_search: 'Umesh', p_status: 'pending_dept', p_scope: 'dept',
+    });
+    expect(rpcMock.mock.calls[0][1]).not.toHaveProperty('reviewerId');
+  });
+
+  it('throws queue errors instead of returning a false empty state', async () => {
+    rpcMock.mockResolvedValue({ data: null, error: new Error('permission denied') });
+    await expect(svc.listInstancesForReviewerPaginated({
+      reviewerId: 'u1', cycleId: 'c1', page: 1, pageSize: 20,
+    })).rejects.toThrow('permission denied');
+  });
+
+  it('loads all role counts through the authenticated count RPC', async () => {
+    rpcMock.mockResolvedValue({
+      data: { manager: 0, skip: 0, dept: 89, bu: 0, hr: 0 }, error: null,
+    });
+    await expect(svc.getReviewerRoleCounts('ignored-user-id', 'c1')).resolves.toEqual({
+      manager: 0, skip: 0, dept: 89, bu: 0, hr: 0,
+    });
+    expect(rpcMock).toHaveBeenCalledWith('get_my_annual_review_role_counts', { p_cycle_id: 'c1' });
   });
 });
