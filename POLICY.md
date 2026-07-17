@@ -1,3 +1,9 @@
+### §NOTIFICATION-RELATIONSHIP-SCHEMA-TRUTH — Notification recipient guards must use verified schema columns (v2.66.108, 2026-07-17)
+- `public.can_send_notification_to(sender, target)` remains the authoritative SECURITY DEFINER relationship check for cross-user notification creation. Its role and reporting-chain authorization semantics must not be bypassed in client code.
+- Every qualified column referenced by this function MUST exist in the live table schema. KPI ownership MUST use `kpis.employee_id`; `kpis.assigned_to` is forbidden. Department leadership MUST use `departments.head_user_id`; `departments.head_id` is forbidden.
+- Any future function edit MUST verify all table aliases against schema truth and pass `notificationsSenderRelationshipSchema.test.ts`, which checks the complete qualified-column set against the maintained relationship-schema fixture.
+- A schema-reference correction is function-only and forward-safe: it MUST NOT modify notification rows, KPI rows, Annual Review state, scores, or historical audit records.
+
 ### §REPORT-TREND-SERVER-AGG — Multi-period trend reports MUST aggregate on the server (v2.66.107, 2026-07-13)
 - Cross-month/quarter/year trend reports (currently: Monthly Scorecard → Date Range Trend) MUST perform score aggregation inside Postgres via a dedicated function (`public.get_monthly_trend` and future siblings). Client-side batching of `review_submissions` by `kpi_id IN (...)` for a full range is banned — it fails intermittently on URL length and per-batch RLS cost and hides the failure behind a generic error banner.
 - The aggregation function MUST be `SECURITY DEFINER`, gate access to Admin / HR-PMS / Management, mirror the canonical best-of-8 score cascade (final → management → auditor → hr_pms → skip_level → manager → self), exclude `is_na` submissions and non-positive weightage, and return per-employee per-month rows the client can pivot without re-fetching.

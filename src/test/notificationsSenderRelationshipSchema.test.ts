@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { notificationRelationshipSchema } from './fixtures/notificationRelationshipSchema';
 
 /**
  * Regression guard for the `d.head_id` typo that broke non-admin notification
@@ -34,5 +35,17 @@ describe('can_send_notification_to schema references', () => {
     const latest = bodies[bodies.length - 1];
     expect(latest).toContain('k.employee_id');
     expect(latest).not.toMatch(/\bk\.assigned_to\b/);
+  });
+
+  it('latest definition only references columns present in the relationship schema', () => {
+    const latest = bodies[bodies.length - 1];
+
+    for (const [alias, columns] of Object.entries(notificationRelationshipSchema)) {
+      const references = [...latest.matchAll(new RegExp(`\\b${alias}\\.([a-z_]+)\\b`, 'g'))]
+        .map((match) => match[1]);
+
+      expect(references.length, `expected references for alias ${alias}`).toBeGreaterThan(0);
+      expect(references.filter((column) => !columns.includes(column as never))).toEqual([]);
+    }
   });
 });
