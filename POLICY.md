@@ -1,3 +1,9 @@
+### §SAFETY-PERMIT-HIRA-DRAFT-LOCK — Requesters cannot rewrite submitted risk assessments (v2.66.113, 2026-07-17)
+- A permit requester may create, update, or remove `safety_permit_hira` rows only while the parent `safety_permits.status = 'draft'`.
+- Once submitted, approved, active, closed, expired, rejected, or otherwise outside draft, requester HIRA writes MUST be denied. Safety Admin and Safety Head retain oversight write access; existing parent-permit read authorization is unchanged.
+- Both the policy's existing-row condition and new-row condition MUST enforce the same parent status rule so changing `permit_id` cannot bypass the lock.
+- Regression guard: `src/test/safetyPermitHiraPolicy.test.ts` validates the final chronological policy definition.
+
 ### §AR-TEAM-QUEUE-AUTH — Team Annual Review queue is session-derived and fail-visible (v2.66.111, 2026-07-17)
 - `/annual-review/team` MUST use `get_my_annual_review_queue` and `get_my_annual_review_role_counts`; both resolve reviewer identity from `auth.uid()` and reject anonymous or inactive callers. A browser-supplied reviewer id MUST NOT control queue visibility.
 - A reviewer relationship is visible only when its stage is present in the instance's `enabled_stages`. Stale ids on disabled slots MUST NOT create ghost queue rows or role counts.
