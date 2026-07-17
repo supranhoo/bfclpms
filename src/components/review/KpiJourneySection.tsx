@@ -509,12 +509,15 @@ export function KpiJourneySection({
       // downstream reviewer stages (auditor bulk sign-off, etc.), so it can
       // disagree with the frozen `self_score`. Resolve a self-specific value
       // before handing to buildStage. See lib/review/resolveSelfAchievedValue.
-      const resolved = resolveSelfAchievedValue(submission as any, kpi as any);
-      const fallback = submission ? (resolved.value ?? null) : null;
+      // Pass orgAchievedValue as the last-resort fallback so ambiguous
+      // reverse-derivation surfaces the Data Owner's number rather than "—".
+      const resolved = resolveSelfAchievedValue(
+        submission as any,
+        kpi as any,
+        orgAchievedValue ?? null,
+      );
       const selfValue = submission
-        ? (resolved.source === 'unknown'
-            ? null
-            : (fallback ?? orgAchievedValue ?? null))
+        ? (resolved.value ?? orgAchievedValue ?? null)
         : null;
       const stage = buildStage(
         User, 'blue', 'Self',
