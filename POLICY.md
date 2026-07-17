@@ -4763,3 +4763,25 @@ Writer contract:
   `achieved_value` onto the snapshot on any self-owning update as long as the
   snapshot is still `NULL` and no reviewer column was modified in the same
   statement. See ADR-106 for the full record.
+
+## §AR-BU-HEAD-TERMINAL (2026-07-17)
+
+A Business Unit Head does **not** report to a Department Head. For their own
+Annual Review instance the workflow therefore terminates at `bu_head`
+(then `hr` if enabled) and the `dept_head` stage is stripped.
+
+Rule: if `annual_review_instances.employee_id` appears in
+`business_units.head_user_id` for any BU, then that instance MUST NOT contain
+`dept_head` in `enabled_stages` and `dept_head_id` MUST be `NULL`.
+
+Enforcement:
+- SQL: `is_bu_head(uuid)` helper + `repair_bu_head_terminal_chains` RPC +
+  `business_units_apply_terminal_rule` trigger.
+- Cascade guard: `tg_departments_cascade_head_to_ar` skips BU-head employees
+  so a new dept-head assignment cannot re-inject a subordinate reviewer.
+- TS mirror: `resolveEffectiveChain({ employeeIsBuHead: true })` emits
+  `skipReason='bu_head_terminal'` for `dept_head`.
+- Audit: every stripped stage row is written to
+  `annual_review_bu_head_terminal_audit_2026_07` (reversible).
+
+See ADR-109 for the RCA (Sajid Raza / Jitendra Dwivedi / Abhas Luharuwalla).

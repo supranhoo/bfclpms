@@ -21,7 +21,7 @@ function stageState(
 
 export interface SkippedStageInfo {
   stage: AnnualReviewerRole;
-  reason: 'no_reviewer_mapped' | 'self_assignment' | 'reviewer_inactive' | 'duplicate_reviewer';
+  reason: 'no_reviewer_mapped' | 'self_assignment' | 'reviewer_inactive' | 'duplicate_reviewer' | 'bu_head_terminal';
 }
 
 const SKIP_REASON_LABEL: Record<SkippedStageInfo['reason'], string> = {
@@ -29,6 +29,7 @@ const SKIP_REASON_LABEL: Record<SkippedStageInfo['reason'], string> = {
   self_assignment: 'reviewer is the employee',
   reviewer_inactive: 'reviewer is inactive',
   duplicate_reviewer: 'same reviewer at a higher stage',
+  bu_head_terminal: 'BU Head is the terminal reviewer (no Dept Head routing)',
 };
 
 export function AnnualReviewStageTracker({

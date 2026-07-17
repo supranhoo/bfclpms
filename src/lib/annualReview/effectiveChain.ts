@@ -24,7 +24,8 @@ export type SkipReason =
   | 'no_reviewer_mapped'
   | 'self_assignment'
   | 'reviewer_inactive'
-  | 'duplicate_reviewer';
+  | 'duplicate_reviewer'
+  | 'bu_head_terminal';
 
 export interface StageResolution {
   stage: AnnualReviewerRole;
@@ -41,6 +42,13 @@ export interface ResolveInput {
   reviewers: Partial<Record<Exclude<AnnualReviewerRole, 'self'>, string | null | undefined>>;
   /** Map of reviewer id → is_active flag. Missing entries are treated as inactive. */
   activeById: Record<string, boolean>;
+  /**
+   * POLICY §AR-BU-HEAD-TERMINAL — set true when the employee is themselves a
+   * BU Head (id present in `business_units.head_user_id`). When true, the
+   * `dept_head` stage is force-skipped regardless of who is configured, because
+   * a BU Head does not report to a Dept Head.
+   */
+  employeeIsBuHead?: boolean;
 }
 
 const SENIORITY: AnnualReviewerRole[] = [
@@ -63,6 +71,14 @@ export function resolveEffectiveChain(input: ResolveInput): StageResolution[] {
       seniorityRows.push({
         stage, reviewerId: input.employeeId,
         skipped: false, skipReason: null, duplicateOf: null,
+      });
+      continue;
+    }
+
+    if (stage === 'dept_head' && input.employeeIsBuHead) {
+      seniorityRows.push({
+        stage, reviewerId: input.reviewers.dept_head ?? null,
+        skipped: true, skipReason: 'bu_head_terminal', duplicateOf: null,
       });
       continue;
     }

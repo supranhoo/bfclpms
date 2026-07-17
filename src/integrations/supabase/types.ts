@@ -399,6 +399,54 @@ export type Database = {
           },
         ]
       }
+      annual_review_bu_head_terminal_audit_2026_07: {
+        Row: {
+          created_at: string
+          cycle_id: string | null
+          employee_id: string | null
+          id: string
+          instance_id: string
+          new_enabled_stages: Json | null
+          new_overall_status: string | null
+          old_dept_head_id: string | null
+          old_enabled_stages: Json | null
+          old_overall_status: string | null
+          performed_by: string | null
+          reason: string
+          source: string | null
+        }
+        Insert: {
+          created_at?: string
+          cycle_id?: string | null
+          employee_id?: string | null
+          id?: string
+          instance_id: string
+          new_enabled_stages?: Json | null
+          new_overall_status?: string | null
+          old_dept_head_id?: string | null
+          old_enabled_stages?: Json | null
+          old_overall_status?: string | null
+          performed_by?: string | null
+          reason: string
+          source?: string | null
+        }
+        Update: {
+          created_at?: string
+          cycle_id?: string | null
+          employee_id?: string | null
+          id?: string
+          instance_id?: string
+          new_enabled_stages?: Json | null
+          new_overall_status?: string | null
+          old_dept_head_id?: string | null
+          old_enabled_stages?: Json | null
+          old_overall_status?: string | null
+          performed_by?: string | null
+          reason?: string
+          source?: string | null
+        }
+        Relationships: []
+      }
       annual_review_criteria_assignments: {
         Row: {
           archetype_code: string | null
@@ -13557,6 +13605,21 @@ export type Database = {
           source_config_id: string
         }[]
       }
+      annual_review_bu_head_terminal_diagnostic: {
+        Args: { p_cycle_id: string }
+        Returns: {
+          bu_names: string
+          current_dept_head_id: string
+          employee_code: string
+          employee_id: string
+          employee_name: string
+          enabled_stages: Json
+          instance_id: string
+          overall_status: string
+          projected_chain: Json
+          projected_status: string
+        }[]
+      }
       annual_review_compute_final_score: {
         Args: {
           p_criteria_weighted_score: number
@@ -14762,6 +14825,7 @@ export type Database = {
         Args: { p_profile_id: string }
         Returns: boolean
       }
+      is_bu_head: { Args: { p_user_id: string }; Returns: boolean }
       is_bulk_review_enabled: { Args: never; Returns: boolean }
       is_canonical_enforcement_period: {
         Args: { p_period: string; p_year: number }
@@ -15086,6 +15150,18 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      repair_bu_head_terminal_chains: {
+        Args: { p_cycle_id: string; p_dry_run?: boolean }
+        Returns: {
+          applied: boolean
+          employee_id: string
+          instance_id: string
+          new_enabled_stages: Json
+          new_overall_status: string
+          old_enabled_stages: Json
+          old_overall_status: string
+        }[]
       }
       repair_intra_year_cycle_anchor_drift: {
         Args: { p_dry_run?: boolean; p_safety_ceiling?: number }

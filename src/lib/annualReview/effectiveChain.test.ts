@@ -72,4 +72,23 @@ describe('resolveEffectiveChain — duplicate reviewer de-dup', () => {
     });
     expect(rows[0]).toMatchObject({ stage: 'self', skipped: false, reviewerId: EMP });
   });
+
+  it('§AR-BU-HEAD-TERMINAL — employee who IS a BU head skips dept_head', () => {
+    const rows = resolveEffectiveChain({
+      enabledStages: [...ENABLED],
+      employeeId: EMP,
+      reviewers: { manager: 'mgr', skip_manager: SKIP, dept_head: 'junior-dept', bu_head: 'bu', hr: HR },
+      activeById: active('mgr', SKIP, 'junior-dept', 'bu', HR),
+      employeeIsBuHead: true,
+    });
+    const byStage = Object.fromEntries(rows.map((r) => [r.stage, r]));
+    expect(byStage.dept_head.skipped).toBe(true);
+    expect(byStage.dept_head.skipReason).toBe('bu_head_terminal');
+    expect(effectiveStages({
+      enabledStages: [...ENABLED], employeeId: EMP,
+      reviewers: { manager: 'mgr', skip_manager: SKIP, dept_head: 'junior-dept', bu_head: 'bu', hr: HR },
+      activeById: active('mgr', SKIP, 'junior-dept', 'bu', HR),
+      employeeIsBuHead: true,
+    })).toEqual(['self','manager','skip_manager','bu_head','hr']);
+  });
 });
