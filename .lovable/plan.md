@@ -1,59 +1,65 @@
-## Goal
+## Scope
 
-Confirm — end-to-end — that Auditor Shekhar Sharad (and every user with the `auditor` role) can review any KPI from both the **Dashboard** and **Bulk Review** paths, exactly as they could yesterday. If any verification step fails, restore the pre-today behavior surgically.
+FAD- W - E&I (New) template (`a0d7040e-dcfc-426c-9723-9598a68bd103`) — 12 mapped employees. Two problems, both traced to today's 13:25 IST template re-save.
 
-## Current-state findings (verified this turn)
+## Assumptions
 
-- `public.can_send_notification_to` (live in DB) now returns `true` whenever the sender has role `auditor` — matches the pre-today permissive `notifications` INSERT behavior for auditors (POLICY §108d, applied last turn).
-- RLS on `kpis`, `review_submissions`, `sub_period_submissions`, `kpi_audit_logs`, `kpi_observations`, `kpi_queries` still grants auditors global SELECT/UPDATE — unchanged today.
-- No trigger on `kpis` / `review_submissions` today references the broken `d.head_id`; the only bidirectional guard reference is the fixed `can_send_notification_to`.
-- No migration today altered auditor-scoped RLS on the review tables. The only auditor-relevant behavioral change today was the notification guard, which is already widened.
+- "Reset" = the template re-save that happened at 13:25 IST today. Nothing else has cleared/rewritten instance data in that window.
+- Validation should stay in place. The real defect is that clicks on the option cards / 0–5 buttons are being dropped for at least one criterion, so the draft goes up to the server empty and Submit legitimately blocks.
+- No policy change to which criteria are mandatory — only fix the write path so scored values actually persist.
 
-**Preliminary conclusion:** the auditor path should already be restored. This plan is a verification pass with a narrow contingent fix if any check fails.
+## Risk & Impact Report
 
-## Verification checklist (no code changes yet)
+- **Data**: Only `annual_review_instances.system_scores` / `system_scores_raw` for the 12 E&I employees are touched, and only for values that today's re-save regressed. Every write is preceded by a snapshot into an audit table so it's fully reversible.
+- **Workflow**: No stage advance triggered; `status`, `current_stage`, `final_rating` untouched. Submissions continue to require the reviewer to hit Submit.
+- **UI/UX**: One narrow bug fix in the self-review scoring surface (`CriteriaScoringMatrix` + draft debounce). No visual redesign.
+- **Regression risk**: Medium — the draft debounce and option-card write path is shared with every annual-review template. Mitigated by (a) reproducing on a copy of Md Sagir's instance in a Playwright script before touching code, (b) targeted unit tests, (c) rollback = revert the migration/patch, `system_scores` audit table lets us re-restore.
+- **Mitigation**: All backfills are idempotent and gated by "value changed" checks; a `POLICY §AR-TEMPLATE-RESAVE-PRESERVES-SYSTEM-DATA` note is added so any future template edit path is required to preserve `system_scores`.
 
-For each check, capture the outcome; only if a check fails do we cut a follow-up migration.
+## Investigation plan (do this first, don't code yet)
 
-1. **Notification guard — matrix probe**
-   - `SELECT can_send_notification_to('<Shekhar>', '<Rama>')` → expect `true`
-   - Probe 3 more auditor→arbitrary-employee pairs (one from each BU) → expect `true`
-   - Probe employee→auditor upward → expect `true`
+1. **Confirm what got wiped and when.**
+   - Compare current `system_scores` / `system_scores_raw` on the 12 instances against the pre-13:25 values. Sources of truth to cross-check per `library_key`: safety KPIs (LTI/STI/UA-UC-NM/5S) → safety module aggregates; Training Attended → HR module; Fugitive PM10 → env source; Annual Production + Annual PM → manual/org-KPI values.
+   - Any key whose current value ≠ SSOT-recomputed value = a value the re-save regressed. That's the exact set we restore.
+2. **Confirm the save-drop for scoring.**
+   - Open Md Sagir's instance in Playwright as an assisted-submission proxy, click one option card per criterion, wait for the debounced autosave, then read `annual_review_responses.criteria_scores`. Whichever criterion IDs never land in the row are the ones with a broken write path.
+   - Prime suspect: the 5 new criteria (`crit_dzlyer7`, `crit_94h19de`, `crit_it39bx4`, `crit_nrm3dlt`, `crit_348k3lz`) were authored today without a `key` field. Every reader keys off `id`, but I need to prove the write actually reaches the debounced service call before assuming it's only a validation bug.
 
-2. **RLS reachability — dashboard path**
-   - As service_role, simulate: `SELECT id FROM kpis WHERE employee_id = <sample> LIMIT 5` under auditor JWT (via a `SET LOCAL role authenticated` + `request.jwt.claims` block) → expect rows returned.
-   - Same for `review_submissions` on the sampled KPIs.
+Only after both are confirmed do we touch code.
 
-3. **Update path — dashboard action**
-   - Simulate an auditor `UPDATE kpis SET status = <next> WHERE id = <sample>` on a KPI not in `audit_kpi_assignments` for Shekhar → expect success; no `not authorized to send notifications` error from the `notify_kpi_status_change` trigger.
+## Fixes
 
-4. **Bulk review path**
-   - Read `bulk_review_batches` RLS + the bulk review RPC(s) invoked from the UI (`services/*bulk*` + any `bulk-review-*` edge function) and confirm no auditor-scoping was tightened today.
-   - Execute one bulk-review dry run against 2 KPIs outside Shekhar's formal assignment set.
+### 1. System-data restoration (issue #1)
 
-5. **UI reachability**
-   - Log in as auditor in Playwright, open Dashboard → KPI detail → try Approve / Send Back / Forward. Then open Bulk Review → select 2 rows → Approve. Screenshot each toast.
+- Create `annual_review_system_scores_resave_audit_2026_07` (append-only) and snapshot the current `system_scores` / `system_scores_raw` for the 12 E&I instances before any write.
+- Recompute the 8 system-score values per instance from their canonical sources using the existing template-factory / system-score resolvers (no new math introduced). Update `annual_review_instances.system_scores[*]` and `system_scores_raw[*]` only where the recomputed value differs from the currently persisted value.
+- Add `POLICY §AR-TEMPLATE-RESAVE-PRESERVES-SYSTEM-DATA`: template edits must never blank an existing instance's `system_scores` — the resolver must reconcile deltas (add new sys_ids, keep values for surviving sys_ids, retire dropped sys_ids) rather than overwrite the whole map.
+- Patch the template save path that regressed the data so this can't recur (surgical change in the template-factory / template-editor save code — no unrelated refactor).
 
-## Contingent fixes (only if a check fails)
+### 2. Self-scoring save (issue #2)
 
-| Failing check | Fix |
-|---|---|
-| 1 (guard) | Re-issue `can_send_notification_to` with the auditor branch and add a pinned regression test in `src/tests/canSendNotificationToSchema.test.ts`. |
-| 2 (RLS SELECT) | Add the missing auditor SELECT policy on the affected table, matching the pre-today permissive rule. |
-| 3 (UPDATE) | Wrap the offending trigger's `INSERT INTO notifications` in `BEGIN … EXCEPTION WHEN insufficient_privilege OR check_violation THEN NULL; END;` per `mem://architecture/database/notification-recipient-guard`. |
-| 4 (bulk RPC) | Restore the auditor branch in the bulk-review RPC / edge function to its yesterday form. |
-| 5 (UI) | Trace the specific error to a resolver/hook and restore its auditor branch. |
+- Once the reproduction pinpoints the criterion(s) whose scores don't land, fix the specific dropped-write bug. Two most likely surfaces:
+  - `CriteriaScoringMatrix` writing under a stale/unexpected id for the 5 newly authored criteria.
+  - `useDebouncedResponseDraft` initial-load race that overwrites the just-clicked score with an older server draft.
+- Backfill the missing `key` field on the 5 criteria (`Breakdown Response time`, `Shutdown Maintenance Adherence`, `33 KV Sub-station Maintenance & Availability`, `MRP & Briquetting Plant Maintenance & Availability`, `Plant Inside and Outside lighting availability`) so template exports / translations / analytics stay consistent with the first 5. This is data hygiene, not the root fix.
+- Keep the "Please score all criteria" validation exactly as it is today — it is the correct guardrail; only the write path is broken.
 
-Any fix will be additive (widen auditor access) — no destructive schema changes, fully rollback-safe.
+## Tests (mandatory)
 
-## Deliverables
+- `criteriaScoringMatrixSaveOnClick.test.tsx` — clicking every criterion in the new-template criteria list produces a call to `setDraft` with the correct `criterion.id` (covers criteria with and without a `key`).
+- `useDebouncedResponseDraftLateInitial.test.ts` — extend to cover the specific race exposed by repro if that's the culprit.
+- `annualReviewTemplateResavePreservesSystemScores.test.ts` — saving a template must never blank an instance's `system_scores` for surviving sys_ids.
+- Backfill migration is idempotent (running twice changes nothing on the second pass); verified by a dry-run assertion in the migration description.
 
-- Verification report (per-check pass/fail with the query, expected vs. actual).
-- If any check fails: one migration + one regression test + POLICY.md §108d update + DOCUMENTATION.md version bump.
-- If all checks pass: a POLICY.md note under §108d confirming auditor dashboard + bulk-review parity as of v2.66.116, plus a new regression test `src/tests/auditorReviewAccessMatrix.test.ts` that pins the guard matrix and RLS SELECT/UPDATE for auditors on `kpis` / `review_submissions` so a future migration cannot silently narrow it.
+## Docs / Policy sync
 
-## Non-goals
+- `POLICY.md` — add §AR-TEMPLATE-RESAVE-PRESERVES-SYSTEM-DATA.
+- `DOCUMENTATION.md` — Version History entry for both fixes and the new audit table.
 
-- No changes to non-auditor roles.
-- No touch to safety / incentive / annual-review flows beyond what is required to restore auditor behavior.
-- No refactoring outside the auditor path.
+## Deliverables order
+
+1. Diagnostic script output (which sys_ids regressed, which criteria drop their write) — reported back to you before any migration.
+2. Restore migration + audit table.
+3. UI/service patch for the dropped-write bug + criteria `key` backfill.
+4. Tests + doc/policy updates.
+5. Rollback: revert migration + revert code patch; audit table lets us re-restore any instance to today's post-fix state.
