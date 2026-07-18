@@ -14186,13 +14186,18 @@ export type Database = {
       get_annual_review_comprehensive_report: {
         Args: { p_cycle_id: string }
         Returns: {
+          bu_head_comment: string
+          bu_head_id: string
           bu_head_name: string
           bu_head_score: number
           business_unit_id: string
           business_unit_name: string
+          cycle_default_stages: Json
           days_pending: number
           department_id: string
           department_name: string
+          dept_head_comment: string
+          dept_head_id: string
           dept_head_name: string
           dept_head_score: number
           designation: string
@@ -14207,13 +14212,21 @@ export type Database = {
           final_rating: string
           finalized_at: string
           grade: string
+          hr_comment: string
+          hr_id: string
           hr_name: string
+          hr_response_exists: boolean
+          hr_response_submitted_at: string
           hr_score: number
+          hr_stage_enabled: boolean
           instance_id: string
           is_excluded: boolean
+          manager_comment: string
+          manager_id: string
           manager_name: string
           manager_score: number
           overall_status: Database["public"]["Enums"]["annual_review_status"]
+          self_comment: string
           self_score: number
           total_score: number
           updated_at: string

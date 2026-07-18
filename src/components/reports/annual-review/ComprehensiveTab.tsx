@@ -1,8 +1,9 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Download, Loader2 } from 'lucide-react';
@@ -14,6 +15,8 @@ import {
   pendingWith,
   eligibilityLabel,
   completionStatus,
+  diagnoseHr,
+  stageRatingFromScore,
   type ComprehensiveRow,
   type GroupSummary,
 } from '@/services/annualReview/comprehensiveReport';
@@ -78,6 +81,17 @@ export function ComprehensiveTab({ cycleId, cycleName }: { cycleId: string | und
     staleTime: 30_000,
   });
   const rows = q.data ?? [];
+  const [rcaSearch, setRcaSearch] = useState('101784');
+
+  const rcaRow = useMemo<ComprehensiveRow | null>(() => {
+    const q = rcaSearch.trim().toLowerCase();
+    if (!q) return null;
+    return rows.find((r) =>
+      (r.employee_code ?? '').toLowerCase() === q ||
+      (r.employee_code ?? '').toLowerCase().includes(q) ||
+      (r.employee_name ?? '').toLowerCase().includes(q)
+    ) ?? null;
+  }, [rows, rcaSearch]);
 
   const summary = useMemo(() => summarize(rows), [rows]);
   const byDept = useMemo(() => groupBy(rows, (r) => ({ key: r.department_id ?? 'none', name: r.department_name ?? 'Unassigned' })), [rows]);
@@ -123,6 +137,83 @@ export function ComprehensiveTab({ cycleId, cycleName }: { cycleId: string | und
 
   return (
     <div className="space-y-4">
+      {/* Single-employee RCA */}
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between gap-2">
+          <CardTitle className="text-base">Employee RCA — single row</CardTitle>
+          <Input
+            value={rcaSearch}
+            onChange={(e) => setRcaSearch(e.target.value)}
+            placeholder="Employee code or name (e.g. 101784)"
+            className="max-w-xs"
+          />
+        </CardHeader>
+        <CardContent className="p-0 overflow-x-auto">
+          {!rcaRow ? (
+            <p className="p-4 text-sm text-muted-foreground">No match in the current cycle & access scope.</p>
+          ) : (() => {
+            const r = rcaRow;
+            const diag = diagnoseHr(r);
+            const hod = r.dept_head_score ?? r.manager_score ?? null;
+            const hodComment = r.dept_head_comment ?? r.manager_comment ?? '';
+            const pending = r.overall_status === 'completed' || r.is_excluded ? '—'
+              : r.overall_status === 'pending_self' ? (r.employee_name ?? 'Self')
+              : r.overall_status === 'pending_manager' ? (r.manager_name ?? 'Manager')
+              : r.overall_status === 'pending_dept' ? (r.dept_head_name ?? 'Dept Head')
+              : r.overall_status === 'pending_bu' ? (r.bu_head_name ?? 'BU Head')
+              : r.overall_status === 'pending_hr' ? (r.hr_name ?? 'HR')
+              : pendingWith(r.overall_status);
+            const cells: Array<[string, React.ReactNode]> = [
+              ['Employee Code', r.employee_code ?? '—'],
+              ['Employee Name', r.employee_name ?? '—'],
+              ['Designation', r.designation ?? '—'],
+              ['Department', r.department_name ?? '—'],
+              ['Business Unit', r.business_unit_name ?? '—'],
+              ['Division', r.division_name ?? '—'],
+              ['Grade', r.grade ?? '—'],
+              ['Date of Joining', r.doj ?? '—'],
+              ['Eligibility', eligibilityLabel(r)],
+              ['Self Score', r.self_score?.toFixed(2) ?? '—'],
+              ['Self Rating', stageRatingFromScore(r.self_score) || '—'],
+              ['Self Comment', r.self_comment ?? '—'],
+              ['HOD Score', hod?.toFixed(2) ?? '—'],
+              ['HOD Rating', stageRatingFromScore(hod) || '—'],
+              ['HOD Comment', hodComment || '—'],
+              ['BU Head Score', r.bu_head_score?.toFixed(2) ?? '—'],
+              ['BU Head Rating', stageRatingFromScore(r.bu_head_score) || '—'],
+              ['BU Head Comment', r.bu_head_comment ?? '—'],
+              ['HR Score', r.hr_score?.toFixed(2) ?? '—'],
+              ['HR Rating', stageRatingFromScore(r.hr_score) || '—'],
+              ['HR Comment', r.hr_comment ?? '—'],
+              ['Final Score', r.total_score?.toFixed(2) ?? '—'],
+              ['Final Rating', r.final_rating ?? '—'],
+              ['Current Stage', pendingWith(r.overall_status)],
+              ['Pending With', pending],
+              ['Completion Status', completionStatus(r.overall_status)],
+              ['Days Since Update', r.days_pending ?? '—'],
+              ['HR Data Available', diag.hr_data_available ? 'Yes' : 'No'],
+              ['HR Data Visible in Report', diag.hr_data_visible ? 'Yes' : 'No'],
+              ['Root Cause', <Badge key="rc" variant={diag.root_cause === 'OK' ? 'secondary' : 'destructive'}>{diag.root_cause}</Badge>],
+              ['Evidence', <span key="ev" className="text-xs">{diag.evidence}</span>],
+              ['Impact', diag.impact],
+              ['Recommended Fix', diag.recommended_fix],
+            ];
+            return (
+              <Table>
+                <TableHeader><TableRow>
+                  {cells.map(([h]) => <TableHead key={h} className="whitespace-nowrap">{h}</TableHead>)}
+                </TableRow></TableHeader>
+                <TableBody>
+                  <TableRow>
+                    {cells.map(([h, v]) => <TableCell key={h} className="text-xs whitespace-nowrap max-w-[240px] truncate" title={typeof v === 'string' ? v : undefined}>{v}</TableCell>)}
+                  </TableRow>
+                </TableBody>
+              </Table>
+            );
+          })()}
+        </CardContent>
+      </Card>
+
       {/* Executive Summary */}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-sm font-semibold text-muted-foreground">Executive Summary — {cycleName}</h3>

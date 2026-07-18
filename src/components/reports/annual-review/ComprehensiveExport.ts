@@ -1,6 +1,6 @@
 import * as XLSX from 'xlsx';
 import type { ComprehensiveRow, KpiSummary, GroupSummary } from '@/services/annualReview/comprehensiveReport';
-import { pendingWith, eligibilityLabel, completionStatus, ratingDistribution } from '@/services/annualReview/comprehensiveReport';
+import { pendingWith, eligibilityLabel, completionStatus, ratingDistribution, diagnoseHr, stageRatingFromScore } from '@/services/annualReview/comprehensiveReport';
 
 export interface ExportInput {
   cycleName: string;
@@ -15,7 +15,11 @@ export interface ExportInput {
 }
 
 function toEmployeeSheet(rows: ComprehensiveRow[]) {
-  return rows.map((r) => ({
+  return rows.map((r) => {
+    const diag = diagnoseHr(r);
+    const hodScore = r.dept_head_score ?? r.manager_score ?? null;
+    const hodComment = r.dept_head_comment ?? r.manager_comment ?? '';
+    return ({
     'Employee Code': r.employee_code ?? '',
     'Name': r.employee_name ?? '',
     'Designation': r.designation ?? '',
@@ -26,9 +30,17 @@ function toEmployeeSheet(rows: ComprehensiveRow[]) {
     'Date of Joining': r.doj ?? '',
     'Eligibility': eligibilityLabel(r),
     'Self Score': r.self_score ?? '',
-    'HOD Score': r.dept_head_score ?? r.manager_score ?? '',
+    'Self Rating': stageRatingFromScore(r.self_score),
+    'Self Comment': r.self_comment ?? '',
+    'HOD Score': hodScore ?? '',
+    'HOD Rating': stageRatingFromScore(hodScore),
+    'HOD Comment': hodComment,
     'BU Head Score': r.bu_head_score ?? '',
+    'BU Head Rating': stageRatingFromScore(r.bu_head_score),
+    'BU Head Comment': r.bu_head_comment ?? '',
     'HR Score': r.hr_score ?? '',
+    'HR Rating': stageRatingFromScore(r.hr_score),
+    'HR Comment': r.hr_comment ?? '',
     'Final Score': r.total_score ?? '',
     'Rating': r.final_rating ?? '',
     'Current Stage': pendingWith(r.overall_status),
@@ -43,7 +55,14 @@ function toEmployeeSheet(rows: ComprehensiveRow[]) {
           : pendingWith(r.overall_status)),
     'Completion Status': completionStatus(r.overall_status),
     'Days Since Update': r.days_pending ?? '',
-  }));
+    'HR Data Available': diag.hr_data_available ? 'Yes' : 'No',
+    'HR Data Visible in Report': diag.hr_data_visible ? 'Yes' : 'No',
+    'Root Cause': diag.root_cause,
+    'Evidence': diag.evidence,
+    'Impact': diag.impact,
+    'Recommended Fix': diag.recommended_fix,
+    });
+  });
 }
 
 function summaryToSheet(s: KpiSummary, cycleName: string) {
