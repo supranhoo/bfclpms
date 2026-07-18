@@ -32,6 +32,19 @@ export interface ComprehensiveRow {
   dept_head_name: string | null;
   bu_head_name: string | null;
   hr_name: string | null;
+  self_comment: string | null;
+  manager_comment: string | null;
+  dept_head_comment: string | null;
+  bu_head_comment: string | null;
+  hr_comment: string | null;
+  hr_stage_enabled: boolean | null;
+  hr_response_exists: boolean | null;
+  hr_response_submitted_at: string | null;
+  manager_id: string | null;
+  dept_head_id: string | null;
+  bu_head_id: string | null;
+  hr_id: string | null;
+  cycle_default_stages: unknown;
 }
 
 export async function fetchComprehensiveReport(cycleId: string): Promise<ComprehensiveRow[]> {
@@ -167,4 +180,105 @@ export function ratingDistribution(rows: ComprehensiveRow[]): Array<{ rating: st
   return Array.from(map.entries())
     .map(([rating, count]) => ({ rating, count, pct: denom > 0 ? Math.round((count / denom) * 1000) / 10 : 0 }))
     .sort((a, b) => b.count - a.count);
+}
+
+// ---------- HR RCA diagnostics ----------
+
+export type HrRootCause =
+  | 'OK'
+  | 'HR Review Not Started'
+  | 'HR Review Pending'
+  | 'HR Review Not Submitted'
+  | 'HR Data Not Mapped'
+  | 'Data Migration Issue'
+  | 'Report Configuration Issue';
+
+export interface HrDiagnosis {
+  hr_data_available: boolean;
+  hr_data_visible: boolean;
+  root_cause: HrRootCause;
+  evidence: string;
+  impact: string;
+  recommended_fix: string;
+}
+
+function stagesArray(v: unknown): string[] {
+  if (Array.isArray(v)) return v as string[];
+  if (v && typeof v === 'object') return Object.keys(v as object);
+  return [];
+}
+
+export function diagnoseHr(row: ComprehensiveRow): HrDiagnosis {
+  const hrExists = !!row.hr_response_exists;
+  const hrVisible = hrExists && row.hr_score != null;
+
+  const instStages = stagesArray(row.enabled_stages);
+  const cycleStages = stagesArray(row.cycle_default_stages);
+  const hrEnabled = row.hr_stage_enabled ?? (instStages.includes('hr') || cycleStages.includes('hr'));
+
+  let rootCause: HrRootCause = 'OK';
+  let evidence = '';
+
+  if (hrVisible) {
+    rootCause = 'OK';
+    evidence = `HR score present (${row.hr_score}); submitted_at=${row.hr_response_submitted_at ?? 'null'}`;
+  } else if (!hrEnabled) {
+    rootCause = 'HR Review Not Started';
+    evidence = `enabled_stages=${JSON.stringify(instStages.length ? instStages : cycleStages)}; hr stage not enabled for this cycle/instance`;
+  } else if (!row.hr_id) {
+    rootCause = 'HR Data Not Mapped';
+    evidence = `instance.hr_id=null; enabled_stages includes hr`;
+  } else if (!hrExists && row.overall_status === 'pending_hr') {
+    rootCause = 'HR Review Pending';
+    evidence = `overall_status=pending_hr; no annual_review_responses row for reviewer_role=hr; hr_id=${row.hr_id}`;
+  } else if (!hrExists) {
+    rootCause = 'HR Review Not Started';
+    evidence = `overall_status=${row.overall_status}; workflow not yet at HR; hr_id=${row.hr_id}`;
+  } else if (hrExists && !row.hr_response_submitted_at) {
+    rootCause = 'HR Review Not Submitted';
+    evidence = `response row exists but submitted_at is null; weighted_score=${row.hr_score ?? 'null'}`;
+  } else if (hrExists && row.hr_score == null) {
+    rootCause = 'Data Migration Issue';
+    evidence = `response row exists and submitted_at=${row.hr_response_submitted_at}, but weighted_score is null (backfill needed)`;
+  } else {
+    rootCause = 'Report Configuration Issue';
+    evidence = `hrExists=${hrExists}, hrScore=${row.hr_score}, submittedAt=${row.hr_response_submitted_at}`;
+  }
+
+  const impactMap: Record<HrRootCause, string> = {
+    'OK': 'None — HR score is present and visible.',
+    'HR Review Not Started': 'Final score cannot include HR weight; workflow has not reached HR.',
+    'HR Review Pending': 'Final rating blocked until HR submits.',
+    'HR Review Not Submitted': 'Draft only — score not counted; final rating blocked.',
+    'HR Data Not Mapped': 'HR reviewer unassigned; instance cannot advance to HR.',
+    'Data Migration Issue': 'Score column blank despite submission — report/UI shows dash.',
+    'Report Configuration Issue': 'Unexpected state; UI fallback triggered.',
+  };
+  const fixMap: Record<HrRootCause, string> = {
+    'OK': 'No action required.',
+    'HR Review Not Started': 'Advance workflow through prior stages; verify HR stage is enabled on the cycle.',
+    'HR Review Pending': 'Notify HR reviewer to complete the pending review.',
+    'HR Review Not Submitted': 'HR reviewer should submit their draft.',
+    'HR Data Not Mapped': 'Assign HR reviewer on the instance (Admin → Annual Review → Reviewer mapping).',
+    'Data Migration Issue': 'Run rescore/backfill RPC (annual_review_rescore) for this instance.',
+    'Report Configuration Issue': 'Escalate — check report resolver for column mapping.',
+  };
+
+  return {
+    hr_data_available: hrExists,
+    hr_data_visible: hrVisible,
+    root_cause: rootCause,
+    evidence,
+    impact: impactMap[rootCause],
+    recommended_fix: fixMap[rootCause],
+  };
+}
+
+export function stageRatingFromScore(score: number | null): string {
+  if (score == null) return '';
+  if (score >= 90) return 'Outstanding';
+  if (score >= 80) return 'Exceeds Expectations';
+  if (score >= 70) return 'Meets Expectations';
+  if (score >= 60) return 'Needs Improvement';
+  return 'Below Expectations';
 }
