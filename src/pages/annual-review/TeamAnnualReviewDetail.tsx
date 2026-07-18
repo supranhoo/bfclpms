@@ -1,8 +1,10 @@
 import { useMemo } from 'react';
-import { useLocation, useNavigate, useParams, useSearchParams, Link } from 'react-router-dom';
+import { useLocation, useNavigate, useParams, useSearchParams, Link, Navigate } from 'react-router-dom';
+import { useAuth } from '@/contexts/AuthContext';
 import { useActiveCycle, useReviewInstance } from '@/hooks/useAnnualReview';
 import { TeamReviewDetailContent } from '@/components/annual-review/TeamReviewDetailContent';
 import { fyStartFromCycle } from '@/lib/annualReview/fiscalYear';
+import { shouldRedirectToOwnAnnualReview } from '@/lib/annualReview/reviewDetailRouting';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
@@ -15,6 +17,7 @@ type LocState = { siblings?: string[]; returnTo?: string } | null;
  * has its own URL, scroll context, and Suspense boundary.
  */
 export default function TeamAnnualReviewDetail() {
+  const { user } = useAuth();
   const { instanceId } = useParams<{ instanceId: string }>();
   const [params] = useSearchParams();
   const navigate = useNavigate();
@@ -94,6 +97,13 @@ export default function TeamAnnualReviewDetail() {
         </Card>
       </div>
     );
+  }
+
+  // The team surface derives only reviewer/proxy roles. If an employee reaches
+  // their own record through the directory or a saved team-detail link, send
+  // them to the employee surface instead of showing disabled score controls.
+  if (shouldRedirectToOwnAnnualReview(instance.employee_id, user?.id)) {
+    return <Navigate to="/annual-review" replace />;
   }
 
   return (
