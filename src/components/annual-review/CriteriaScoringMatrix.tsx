@@ -74,7 +74,14 @@ function CriterionRow({
   const criterionDesc = criterion.description
     ? tTemplate('criterion', criterion.id, 'description', criterion.description)
     : '';
-  const score = values[criterion.id];
+  // ADR-119: normalize the persisted score to a real number. Historical drafts
+  // and some jsonb round-trips can surface the value as a string (e.g. "5"),
+  // which broke the strict `opt.score === score` match below and left every
+  // option tile visually unselected — users perceived this as "clicks blocked"
+  // because tapping a tile appeared to do nothing.
+  const rawScore = values[criterion.id];
+  const coerced = typeof rawScore === 'number' ? rawScore : Number(rawScore);
+  const score: number | undefined = Number.isFinite(coerced) ? coerced : undefined;
   const w = Number(criterion.weight) || 0;
   const total = typeof score === 'number' ? w * score : null;
   const enableRemarks = criterion.enable_remarks !== false;
@@ -84,9 +91,9 @@ function CriterionRow({
     ? criterion.options!.find((opt) => opt.id === pickedOptionId)
     : undefined;
   const activeOptionId = hasOptions && typeof score === 'number'
-    ? pickedOption?.score === score
+    ? pickedOption && Number(pickedOption.score) === score
       ? pickedOption.id
-      : criterion.options!.find((opt) => opt.score === score)?.id ?? null
+      : criterion.options!.find((opt) => Number(opt.score) === score)?.id ?? null
     : null;
   const optionLabel = (opt: NonNullable<TemplateCriterion['options']>[number]) => {
     const translated = opt.label_hi?.trim();
@@ -195,7 +202,7 @@ function CriterionRow({
             <div className="flex flex-wrap items-center gap-2">
               {[0, 1, 2, 3, 4, 5].map((n) => {
             const c = SCORE_COLOR[n];
-            const active = score === n;
+            const active = typeof score === 'number' && score === n;
             return (
               <Tooltip key={n}>
                 <TooltipTrigger asChild>

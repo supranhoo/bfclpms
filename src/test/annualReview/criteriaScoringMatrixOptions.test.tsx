@@ -203,4 +203,35 @@ describe('CriteriaScoringMatrix — option cards', () => {
     );
     expect(screen.getByText(/Always on time, zero unexcused absences \/ लीगेसी अनुवाद/)).toBeInTheDocument();
   });
+
+  // ADR-119 — 100807 (Shubham Kumar) regression: draft persisted with a
+  // STRING score. Previous code used `opt.score === score` which failed the
+  // strict-equality check and left every tile visually unselected, so users
+  // read the form as unresponsive ("mouse blocked") and could never reach
+  // the submit summary dialog.
+  it('hydrates when the saved score is a string (jsonb round-trip)', () => {
+    wrap(
+      <CriteriaScoringMatrix
+        criteria={[baseCriterion]}
+        // `values` is typed as number | undefined, but at runtime the draft can
+        // arrive as "3" from historical rows — simulate that here.
+        values={{ attendance: '3' as unknown as number }}
+        remarks={{}}
+      />,
+    );
+    expect(screen.getByRole('button', { name: /Usually on time/ })).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('hydrates the 0–5 fallback row when the saved score is a string', () => {
+    const legacy = { ...baseCriterion, options: undefined };
+    wrap(
+      <CriteriaScoringMatrix
+        criteria={[legacy]}
+        values={{ attendance: '4' as unknown as number }}
+        remarks={{}}
+      />,
+    );
+    expect(screen.getByRole('button', { name: /Score 4 —/ })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: /Score 3 —/ })).toHaveAttribute('aria-pressed', 'false');
+  });
 });
