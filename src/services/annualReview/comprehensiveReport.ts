@@ -1,4 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
+import { fetchAllRpcPaged } from '@/lib/fetchAll';
 
 export interface ComprehensiveRow {
   instance_id: string;
@@ -49,11 +50,13 @@ export interface ComprehensiveRow {
 
 export async function fetchComprehensiveReport(cycleId: string): Promise<ComprehensiveRow[]> {
   if (!cycleId) return [];
-  const { data, error } = await (supabase as any).rpc('get_annual_review_comprehensive_report', {
-    p_cycle_id: cycleId,
-  });
-  if (error) throw new Error(error.message);
-  return (data ?? []) as ComprehensiveRow[];
+  // POLICY §125 / ADR-094 — PostgREST caps RPC responses at 1,000 rows.
+  // Page via Range headers so the Comprehensive report shows the full roster.
+  return await fetchAllRpcPaged<ComprehensiveRow>((from, to) =>
+    (supabase as any)
+      .rpc('get_annual_review_comprehensive_report', { p_cycle_id: cycleId })
+      .range(from, to),
+  );
 }
 
 export const STAGE_LABEL: Record<string, string> = {
