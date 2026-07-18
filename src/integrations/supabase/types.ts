@@ -14183,6 +14183,42 @@ export type Database = {
         }[]
       }
       get_admin_dashboard_stats: { Args: never; Returns: Json }
+      get_annual_review_comprehensive_report: {
+        Args: { p_cycle_id: string }
+        Returns: {
+          bu_head_name: string
+          bu_head_score: number
+          business_unit_id: string
+          business_unit_name: string
+          days_pending: number
+          department_id: string
+          department_name: string
+          dept_head_name: string
+          dept_head_score: number
+          designation: string
+          division_id: string
+          division_name: string
+          doj: string
+          employee_code: string
+          employee_id: string
+          employee_name: string
+          enabled_stages: Json
+          excluded_reason: string
+          final_rating: string
+          finalized_at: string
+          grade: string
+          hr_name: string
+          hr_score: number
+          instance_id: string
+          is_excluded: boolean
+          manager_name: string
+          manager_score: number
+          overall_status: Database["public"]["Enums"]["annual_review_status"]
+          self_score: number
+          total_score: number
+          updated_at: string
+        }[]
+      }
       get_annual_review_dept_submission_summary: {
         Args: { p_cycle_id: string }
         Returns: {

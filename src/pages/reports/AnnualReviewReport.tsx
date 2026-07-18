@@ -14,6 +14,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { DepartmentSubmissionTab } from '@/components/reports/annual-review/DepartmentSubmissionTab';
 import { ReviewerQueuesTab } from '@/components/reports/annual-review/ReviewerQueuesTab';
 import { PendingDrilldownTab } from '@/components/reports/annual-review/PendingDrilldownTab';
+import { ComprehensiveTab } from '@/components/reports/annual-review/ComprehensiveTab';
 
 type StatusFilter = 'all' | 'not_started' | 'pending_self' | 'pending_manager' | 'pending_skip' | 'pending_bu' | 'pending_hr' | 'completed';
 
@@ -150,13 +151,17 @@ export default function AnnualReviewReport() {
         </div>
       )}
 
-      <Tabs defaultValue="detail" className="space-y-3">
+      <Tabs defaultValue="comprehensive" className="space-y-3">
         <TabsList>
+          <TabsTrigger value="comprehensive">Comprehensive</TabsTrigger>
           <TabsTrigger value="detail">Detail</TabsTrigger>
           <TabsTrigger value="by-dept">By Department</TabsTrigger>
           <TabsTrigger value="by-reviewer">By Reviewer</TabsTrigger>
           <TabsTrigger value="pending">Pending Drill-down</TabsTrigger>
         </TabsList>
+        <TabsContent value="comprehensive">
+          <ComprehensiveTab cycleId={cycleId} cycleName={cycles.find((c) => c.id === cycleId)?.name ?? 'Cycle'} />
+        </TabsContent>
         <TabsContent value="detail">
           <Card>
         <CardHeader className="flex flex-row items-center justify-between">
