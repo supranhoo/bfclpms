@@ -39,6 +39,15 @@ describe('Assisted submission — wiring', () => {
     expect(src).toMatch(/if \(proxyMode\)[\s\S]{0,120}setAssistedOpen\(true\)/);
   });
 
+  it('explains why an unassigned viewer cannot edit instead of showing a generic read-only label', () => {
+    const detail = read('components/annual-review/TeamReviewDetailContent.tsx');
+    const notice = read('lib/annualReview/readOnlyReviewNotice.ts');
+    expect(detail).toMatch(/getReadOnlyReviewNotice/);
+    expect(detail).not.toMatch(/'Read-only view'/);
+    expect(notice).toMatch(/personal login access/);
+    expect(notice).toMatch(/assigned reviewer for the current stage/);
+  });
+
   it('directory entry no longer force-opens the selfie dialog', () => {
     const team = read('pages/annual-review/TeamAnnualReview.tsx');
     // Directory picks navigate to the detail page WITHOUT the ?assisted=1 flag.

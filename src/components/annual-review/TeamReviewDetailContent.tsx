@@ -22,7 +22,7 @@ import { deriveAutoInputs } from '@/lib/annualReview/eligibilityAutoFill';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Loader2, Pencil } from 'lucide-react';
+import { Info, Loader2, Pencil } from 'lucide-react';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -50,6 +50,8 @@ import {
   RECOMMENDATION_KEY,
 } from '@/components/annual-review/OverallRecommendationCard';
 import { computeRunningFinalScore } from '@/lib/annualReview/runningFinalScore';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { getReadOnlyReviewNotice } from '@/lib/annualReview/readOnlyReviewNotice';
 // computeCriteriaRatingOutOf5 no longer used — the /5 shown to reviewers is
 // now the composite (System + Criteria) via composition.overallActual.
 
@@ -123,6 +125,7 @@ export function TeamReviewDetailContent({
   );
   const proxyMode = !stageRole && instance.overall_status === 'pending_self' && proxyEligible === true;
   const role: AnnualReviewerRole | null = stageRole ?? (proxyMode ? 'self' : null);
+  const readOnlyNotice = role ? null : getReadOnlyReviewNotice(instance.overall_status);
   const myResponse = role ? responses.find((r) => r.reviewer_role === role) ?? null : null;
   const locked = !role || myResponse?.is_locked;
   const [sendBackOpen, setSendBackOpen] = useState(false);
@@ -272,6 +275,7 @@ export function TeamReviewDetailContent({
       template={template}
       role={role}
       locked={locked}
+      readOnlyNotice={readOnlyNotice}
       proxyMode={proxyMode}
       availLangs={availLangs}
       lang={lang}
@@ -313,7 +317,7 @@ export function TeamReviewDetailContent({
 /* eslint-disable @typescript-eslint/no-explicit-any */
 function TeamReviewDetailInner(props: any) {
   const {
-    instance, template, role, locked, proxyMode, availLangs, lang, setLang,
+    instance, template, role, locked, readOnlyNotice, proxyMode, availLangs, lang, setLang,
     visibleStages, skippedStages, reviewerNamesByStage, fiscalYear,
     draft, setDraft, status, flush, composition, running, comparison, onUpload,
     responses, handleSubmit, handleSendBack, canSendBack,
@@ -433,6 +437,14 @@ function TeamReviewDetailInner(props: any) {
         <RunningFinalScoreCard running={running} />
       )}
 
+      {readOnlyNotice && (
+        <Alert>
+          <Info className="h-4 w-4" />
+          <AlertTitle>{readOnlyNotice.title}</AlertTitle>
+          <AlertDescription>{readOnlyNotice.description}</AlertDescription>
+        </Alert>
+      )}
+
       {role && shouldHideCriteriaCard(template, role) ? (
         <Card>
           <CardContent className="p-4 text-sm text-muted-foreground">
@@ -445,7 +457,7 @@ function TeamReviewDetailInner(props: any) {
       ) : (
         <Card>
           <CardHeader>
-            <CardTitle>{role ? `${role.replace('_', ' ')} review` : 'Read-only view'}</CardTitle>
+            <CardTitle>{role ? `${role.replace('_', ' ')} review` : readOnlyNotice?.title}</CardTitle>
           </CardHeader>
           <CardContent>
             <CriteriaScoringMatrix

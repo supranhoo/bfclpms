@@ -1,34 +1,44 @@
-## What we know (verified)
+## Assumptions
+- Awadhesh Kumar Singh (100070) is viewing Shubham Kumar (100807) from Team Annual Review.
+- The confirmed policy remains: employees who can log in must submit their own self-review; managers cannot proxy-submit for them.
 
-- DB: instance `95fa23c0-2eea-4b52-b159-2a0b6af32fda` for Shubham Kumar (100807) is `pending_self`. `annual_review_responses(self)` row: **all 12 criteria scored**, qualitative filled, `is_locked=false`, `submitted_at=NULL`.
-- UI code path (`EmployeeAnnualReview.tsx` L71) correctly evaluates `locked = false` for this state, so the criteria matrix is *supposed* to be interactive.
-- User symptom: on Shubham's screen the radio options for each criterion **appear unselected** even though the chip shows `Self: 5`, and **clicks on the radio options don't register** ("mouse is getting blocked"). Because nothing appears selected, our client-side "all criteria scored" precondition inside `SelfReviewSummaryDialog` / submit never lets him confirm — hence no `advance_annual_review_status` call ever hits the server.
+## Clarifications
+- Resolved: keep the login restriction.
 
-## Root-cause hypothesis (unconfirmed — Step 1 verifies)
+## Risk & Impact Report
+- **Data:** Shubham’s instance is `pending_self`; his self response is unlocked and contains all 12 scores. No score/draft reset is needed.
+- **Workflow:** The instance’s snapshotted `manager_id` is null although Shubham’s live reporting manager is Vivek Kumar Patel (100711), not Awadhesh. This causes the generic read-only screen. Restoring the snapshot preserves the configured hierarchy; it does not grant Awadhesh proxy rights.
+- **UI/UX:** Replace the ambiguous generic read-only state with a clear policy message explaining that Shubham must submit from his own account and identifying the active review owner/route.
+- **Regression:** 499 pending-self instances have the same live-manager/snapshot drift; 17 belong under Awadhesh’s reporting subtree. A narrowly gated repair and regression tests prevent reviewer reassignment after a review advances.
+- **Scalability:** One set-based repair on pending-self rows only; no new unpaginated queries or client load.
+- **Rollback:** Additive migration with an audit record of old/new reviewer IDs; rollback can restore values from that audit.
 
-The `CriteriaScoringMatrix` radio state is not being seeded from `draft.criteria_scores`. Two candidate causes:
+## Step-by-step Plan
+1. Add a migration that resynchronizes `manager_id` from the current profile hierarchy only for `pending_self` instances where the snapshot is null/drifted, including 100807, without touching scores, responses, templates, or later-stage reviews.
+2. Record every repaired row in the existing reviewer-resync audit mechanism (or a dedicated immutable audit table if its schema is incompatible).
+3. Keep `can_proxy_submit_annual_review` unchanged so login-enabled employees remain ineligible for assisted submission.
+4. Update the Team detail read-only presentation to explain the reason instead of implying a broken form; include a route back to the queue. No editable controls will be shown to Awadhesh for 100807.
+5. Add regression tests and realistic mocks for: pending-self null manager repair, later-stage preservation, unlocked self draft preservation, and login-enabled proxy denial.
+6. Update `DOCUMENTATION.md`, annual-review `DOCUMENTATION.md`, and `POLICY.md` with the corrected RCA, 5 Whys, CAPA, version history, and rollback details.
+7. Verify 100807 remains `pending_self`, retains all saved scores, has the correct manager snapshot, and that the manager view clearly directs Shubham to submit from **My Annual Review**.
 
-1. **Value-type mismatch** — draft stores `5` (number) but `RadioGroup value` is compared as string, so no option is `checked` and the pointer target ends up on an inert wrapper.
-2. **Overlay covering the tiles** — a `pointer-events`/`z-index` regression from a recent sticky-footer / composition-card change is sitting over the option cards, so clicks never reach the radio inputs.
+## UI Changes
+- **Location:** Team Annual Review detail, where “Read-only view” currently appears.
+- **Visual:** Clear non-editable notice: this employee has login access and must submit personally; manager assistance is unavailable by policy.
+- **Interaction:** Back-to-queue remains available; no proxy submit controls.
+- **Responsive:** Existing card layout and mobile wrapping retained.
 
-Either way the visible result is: chip shows saved value, tiles look empty, clicks do nothing, Submit stays disabled.
+## Implementation
+- Pending approval.
 
-## Plan
+## Tests
+- Migration/source regression tests plus focused component tests for the policy-specific read-only state.
 
-1. **Reproduce as Shubham via Playwright** using the injected session (localhost:8080, his instance URL). Screenshot the self-review page; DOM-inspect one criterion tile to confirm which of the two hypotheses is real (check `aria-checked`, computed `pointer-events`, and elementFromPoint at the radio center).
-2. **Fix the actual cause** in `src/components/annual-review/CriteriaScoringMatrix.tsx` (and, if needed, the wrapping card in `EmployeeAnnualReview.tsx`):
-   - If (1): normalise stored/compared values to the same type (coerce to `String(value)` on both sides of `RadioGroup`) and add a regression test with a numeric-keyed draft.
-   - If (2): remove/relax the offending `pointer-events`/absolute overlay; add a Playwright test that clicks each option and asserts `aria-checked`.
-3. **Data hygiene for 100807**: none needed — his draft row already has valid scores. Once the UI is fixed he can click Submit; server RPC is healthy.
-4. **Regression coverage**: unit test for the matrix binding (numeric vs string keys) + one interaction test that a click on an option updates state.
-5. **Docs**: append ADR-119 (CriteriaScoringMatrix interaction regression) to `src/modules/annual-review/DOCUMENTATION.md`; no POLICY.md change (no business-rule change).
+## DOCUMENTATION.md updates
+- Correct ADR-120’s earlier diagnosis and add the manager-snapshot RCA/CAPA and version entry.
 
-## Risk & impact
+## POLICY.md updates
+- Reaffirm the login restriction and document reviewer-snapshot repair boundaries.
 
-- Data: none — read-only UI fix + client state binding.
-- Workflow: unblocks any employee in `pending_self` whose draft was pre-seeded with numeric scores (potentially all of them if hypothesis 1 is right — will confirm in Step 1 and report the blast radius before shipping).
-- Rollback: pure component change, revert-safe.
-
-## Deliverable back to you
-
-Step 1 output (screenshot + DOM evidence) posted in chat before I ship the fix, so you can confirm the diagnosis matches what Shubham sees.
+## Post-implementation notes
+- Shubham must submit using employee code 100807 through **My Annual Review**. Awadhesh will not be allowed to complete Shubham’s self-stage under the selected policy.

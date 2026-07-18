@@ -146,6 +146,7 @@ Caveats:
 - Summary/status counts MUST use count-only queries (`head: true, count: 'exact'`) or a paged read. Unpaged `.select(column)` reads are forbidden for cycle-wide aggregates — the Data API caps payloads at 1000 rows and silently undercounts large cycles.
 
 ## Version history
+- 2026-07-18 — **§AR-READ-ONLY-STAGE-EXPLANATION.** A team-detail viewer without the current stage role remains view-only. If the instance is `pending_self` and assisted submission is denied, the UI must explain that an employee with personal login access must submit from My Annual Review. If the instance has advanced, the UI must name the current stage and explain that only its assigned reviewer can act. Completed/locked self responses must never be reopened merely to make a manager-side form editable. Reviewer IDs intentionally cleared because their stage is disabled must not be treated as snapshot drift.
 - 2026-07-18 — **§AR-OWNED-DETAIL-ROUTING.** Owned team-detail records redirect to the employee self-review surface. Reviewer and authorized proxy routing is unchanged.
 - 2026-06-14 — Initial policy. Documented reopen, reassignment override precedence, and export scope.
 - 2026-06-15 — Added per-employee configurable workflow (`enabled_stages` + bulk XLSX + override-safe seeder).
