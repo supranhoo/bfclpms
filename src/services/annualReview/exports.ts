@@ -11,7 +11,7 @@ import type {
   AnnualReviewResponse,
   AnnualReviewerRole,
 } from '@/types/annualReview';
-import type { InstanceWithEmployee } from './annualReviewService';
+import { resolveTemplateId, type InstanceWithEmployee } from './annualReviewService';
 import { computeCriteriaRatingOutOf5 } from '@/lib/annualReview/scoring';
 
 const STAGE_ORDER: AnnualReviewerRole[] = ['self', 'manager', 'skip_manager', 'dept_head', 'bu_head', 'hr'];
@@ -102,7 +102,11 @@ export function buildBulkResultsWorkbook(opts: BulkResultsWorkbookOpts): XLSX.Wo
 
   const data = instances.map((inst) => {
     const scores = stageScores[inst.id] ?? {};
-    const tpl = templatesById[inst.template_id] ?? null;
+    // ADR-117 / POLICY §AR-TEMPLATE-EFFECTIVE-ONLY — always resolve via
+    // template_override_id ?? template_id so exports match what the employee
+    // and reviewers actually see on screen.
+    const effTplId = resolveTemplateId(inst);
+    const tpl = effTplId ? (templatesById[effTplId] ?? null) : null;
     const criteria = tpl?.sections?.criteria ?? [];
     const rate = (v: number | null | undefined, role: AnnualReviewerRole) => {
       const r = computeCriteriaRatingOutOf5(criteria, v ?? null, role);

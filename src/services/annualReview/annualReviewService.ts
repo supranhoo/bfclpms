@@ -1085,8 +1085,12 @@ type SeedRowForWrite = {
 };
 
 export function buildSeedUpdatePatch(r: SeedRowForWrite): Record<string, unknown> {
+  // ADR-117 — template_id is intentionally NOT part of the update patch.
+  // Rewriting it on an existing row would clobber any per-employee template
+  // choice (force-reset or explicit override) with the rule-driven value,
+  // reintroducing the drift that caused the "employee still sees the old
+  // template" bug. New instances still get template_id via the INSERT path.
   const patch: Record<string, unknown> = {
-    template_id: r.template_id,
     manager_id: r.manager_id,
     skip_id: r.skip_id,
     bu_head_id: r.bu_head_id,
