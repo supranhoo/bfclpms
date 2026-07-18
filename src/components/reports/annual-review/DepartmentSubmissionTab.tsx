@@ -27,13 +27,13 @@ export function DepartmentSubmissionTab({ cycleId }: { cycleId?: string }) {
     if (!cycleId) { setRows([]); return; }
     let cancelled = false;
     setLoading(true);
-    supabase.rpc('get_annual_review_dept_submission_summary', { p_cycle_id: cycleId })
-      .then(({ data, error }) => {
-        if (cancelled) return;
-        if (error) { toast.error(error.message); setRows([]); }
-        else setRows((data as Row[]) ?? []);
-      })
-      .finally(() => !cancelled && setLoading(false));
+    (async () => {
+      const { data, error } = await supabase.rpc('get_annual_review_dept_submission_summary', { p_cycle_id: cycleId });
+      if (cancelled) return;
+      if (error) { toast.error(error.message); setRows([]); }
+      else setRows((data as Row[]) ?? []);
+      setLoading(false);
+    })();
     return () => { cancelled = true; };
   }, [cycleId]);
 
