@@ -15238,6 +15238,10 @@ export type Database = {
         Returns: undefined
       }
       refresh_safety_analytics: { Args: never; Returns: Json }
+      remap_annual_review_criteria_scores: {
+        Args: { p_instance_id: string; p_prev_template_id: string }
+        Returns: number
+      }
       remap_system_scores_by_library_key: {
         Args: {
           p_new_template_id: string
