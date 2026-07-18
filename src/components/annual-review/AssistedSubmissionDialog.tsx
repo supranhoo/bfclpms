@@ -9,6 +9,7 @@ import { Loader2, Camera, RefreshCw, ShieldCheck, SkipForward, Upload, X } from 
 import { toast } from 'sonner';
 import { submitWithAssistance } from '@/services/annualReview/proxySubmission';
 import { useAnnualReviewI18n } from '@/components/annual-review/AnnualReviewI18nContext';
+import { hasAnyNumericCriterion } from '@/lib/annualReview/hasScoredSelf';
 
 interface Props {
   open: boolean;
@@ -66,22 +67,25 @@ export function AssistedSubmissionDialog({
 
   const declarationText = selfieRequired ? DECLARATION : DECLARATION_NO_PHOTO;
 
-  // ADR-114: assisted submit MUST NOT advance the workflow when no self scores
-  // exist. Server enforces this via `submit_annual_review_self_as_proxy`; the
-  // UI mirrors the check so the proxy sees a clear reason before submitting.
+  // ADR-115 (supersedes ADR-114): assisted submit MUST NOT advance the
+  // workflow when the self form is empty. The correct signal is "any numeric
+  // criterion score saved" — NOT `weighted_score IS NOT NULL`, because draft
+  // auto-save never writes weighted_score (that only happens at submit time
+  // inside `advance_annual_review_status` / the proxy RPC). Server enforces
+  // the same rule inside `submit_annual_review_self_as_proxy`.
   const { data: selfScoreState, isLoading: selfScoreLoading } = useQuery({
     queryKey: ['assisted-self-score-guard', instanceId],
     enabled: open && !!instanceId,
     staleTime: 15_000,
     queryFn: async () => {
-      const { count, error } = await supabase
+      const { data, error } = await supabase
         .from('annual_review_responses')
-        .select('id', { count: 'exact', head: true })
+        .select('criteria_scores')
         .eq('instance_id', instanceId)
         .eq('reviewer_role', 'self')
-        .not('weighted_score', 'is', null);
+        .maybeSingle();
       if (error) throw error;
-      return { hasScoredSelf: (count ?? 0) > 0 };
+      return { hasScoredSelf: hasAnyNumericCriterion(data?.criteria_scores) };
     },
   });
   const hasScoredSelf = !!selfScoreState?.hasScoredSelf;
