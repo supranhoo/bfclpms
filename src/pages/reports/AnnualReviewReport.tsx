@@ -10,6 +10,10 @@ import { AnnualReviewStatusBadge } from '@/components/annual-review/AnnualReview
 import { Download, FileBarChart2 } from 'lucide-react';
 import { toast } from 'sonner';
 import type { InstanceWithEmployee } from '@/services/annualReview/annualReviewService';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { DepartmentSubmissionTab } from '@/components/reports/annual-review/DepartmentSubmissionTab';
+import { ReviewerQueuesTab } from '@/components/reports/annual-review/ReviewerQueuesTab';
+import { PendingDrilldownTab } from '@/components/reports/annual-review/PendingDrilldownTab';
 
 type StatusFilter = 'all' | 'not_started' | 'pending_self' | 'pending_manager' | 'pending_skip' | 'pending_bu' | 'pending_hr' | 'completed';
 
@@ -146,7 +150,15 @@ export default function AnnualReviewReport() {
         </div>
       )}
 
-      <Card>
+      <Tabs defaultValue="detail" className="space-y-3">
+        <TabsList>
+          <TabsTrigger value="detail">Detail</TabsTrigger>
+          <TabsTrigger value="by-dept">By Department</TabsTrigger>
+          <TabsTrigger value="by-reviewer">By Reviewer</TabsTrigger>
+          <TabsTrigger value="pending">Pending Drill-down</TabsTrigger>
+        </TabsList>
+        <TabsContent value="detail">
+          <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="text-base">Results {isFetching && <span className="text-xs text-muted-foreground">(loading…)</span>}</CardTitle>
           <Button variant="outline" size="sm" className="gap-2" disabled={!cycleId || filtered.length === 0} onClick={onExport}>
@@ -204,7 +216,12 @@ export default function AnnualReviewReport() {
             </div>
           </div>
         )}
-      </Card>
+          </Card>
+        </TabsContent>
+        <TabsContent value="by-dept"><DepartmentSubmissionTab cycleId={cycleId} /></TabsContent>
+        <TabsContent value="by-reviewer"><ReviewerQueuesTab cycleId={cycleId} /></TabsContent>
+        <TabsContent value="pending"><PendingDrilldownTab cycleId={cycleId} /></TabsContent>
+      </Tabs>
     </div>
   );
 }
