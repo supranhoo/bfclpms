@@ -1,71 +1,70 @@
 ## Goal
-Expand `/reports/annual-review` into a full **Comprehensive Annual Review Report** with all requested columns, summary KPIs, breakdowns, highlights, charts, and a single Excel export that mirrors the on-screen report.
+Extend the existing **Comprehensive Annual Review Report** (`/reports/annual-review` → Comprehensive tab) with a single-row-per-employee **RCA view** that adds per-stage ratings, comments, HR-visibility diagnostics, and root-cause columns — then use it to answer the 101784 case.
 
-## Assumptions (confirmed from codebase)
-- Source: `annual_review_instances` joined to `profiles`, `departments`, `business_units`, `divisions`, `pms_grades`, `designations`, and per-stage score columns already used by the existing tabs.
-- Cycle filter, scope (Admin/HR = all, BU Head/HOD = BUs, Manager = subtree) and RLS reuse `annual_review_directory_access(auth.uid())` — no new access surface.
-- "Pending With" derives from `overall_status` (`pending_self` / `pending_manager` (HOD) / `pending_bu` / `pending_hr` / `completed` / `excluded`). BU-Head-terminal cases (POLICY §AR-BU-HEAD-TERMINAL) already collapse the dept_head stage — respected as-is.
-- "Rating" = existing rating band derived from `final_score` (same mapping used in the current detail tab).
-- "Days pending" = `now() - last stage transition timestamp` (already exposed by the pending drill-down RPC).
+## Scope confirmation before I code
+The current Comprehensive tab already returns: employee master fields, per-stage scores, final score/rating, current stage, pending-with, days pending. It does **not** yet return per-stage `rating`, per-stage `comment`, or the HR-visibility diagnostic columns you listed. That's the actual delta.
 
 ## Risk & Impact
-- **Data:** read-only. One new aggregate RPC + reuse of existing ones.
-- **Workflow / RLS writes:** none.
-- **UI:** replaces the current 4-tab report with a richer single-page report + tabs; existing tabs preserved as sub-views.
-- **Regression:** low — additive fields, no change to write paths, scoring, or notifications.
-- **Scalability:** server-side aggregation in RPCs; detail table uses existing server-side pagination (page 50). Excel export capped at 5,000 rows (matches ADR export cap) with guarded toast.
-- **Rollback:** drop 1 new RPC + revert the report page and one new component file.
+- **Data:** read-only. Extend one existing RPC (`get_annual_review_comprehensive_report`) to also return per-stage `rating` and `comment` from `annual_review_responses` (already the source of stage scores). No schema change, no writes.
+- **RLS:** unchanged — RPC stays `SECURITY DEFINER` and scope resolver (`annual_review_directory_access`) is untouched, so who sees whom does not change.
+- **UI:** additive columns in the same Comprehensive tab + a new **"RCA (single row)"** sub-view that shows all 30+ requested columns for one selected employee (default: search by code, e.g. `101784`).
+- **Excel export:** the existing single-sheet "Employees" sheet gains the new columns; no new workbook, no new sheet — matches "single sheet / single table only".
+- **Regression risk:** low. Additive columns only; existing consumers ignore new fields.
+- **Scalability:** per-stage comments are already indexed by `(instance_id, reviewer_role)` in `annual_review_responses`; one extra join, no row explosion.
+- **Rollback:** revert one RPC + one component file.
 
 ## Deliverables
 
-### 1. Executive summary strip (top of page)
-Cards: Total · Eligible · Excluded · Self Pending · HOD Pending · BU Pending · HR Pending · In Progress · Completed · Avg Final Score.
+### 1. RPC change — `get_annual_review_comprehensive_report`
+Add to the returned row:
+- `self_rating`, `self_comment`
+- `manager_rating`, `manager_comment`
+- `dept_head_rating`, `dept_head_comment` (HOD)
+- `bu_head_rating`, `bu_head_comment`
+- `hr_rating`, `hr_comment`
+- `hr_stage_enabled` (bool — from cycle's `default_enabled_stages` ∪ instance overrides)
+- `hr_response_exists` (bool — a row in `annual_review_responses` for role=`hr`)
+- `hr_response_submitted_at` (timestamptz | null)
 
-### 2. Rating distribution
-Horizontal bar chart (reuses existing Recharts setup) — count per rating band, with % labels.
+### 2. Derived diagnostics (client-side, pure fn)
+Given the row, compute:
+- **HR Data Available** = `hr_response_exists`
+- **HR Data Visible in Report** = `hr_response_exists && hr_score IS NOT NULL` (visibility here = report can render it; the RPC is SECURITY DEFINER so RLS is not the blocker)
+- **Root Cause for missing HR** (single value from the exact list you gave):
+  - stage not in enabled_stages → **HR Review Not Started** (workflow hasn't reached HR)
+  - enabled, `overall_status = 'pending_hr'`, no response row → **HR Review Pending**
+  - response row exists, `submitted_at` null → **HR Review Not Submitted**
+  - `hr_id IS NULL` on instance → **HR Data Not Mapped**
+  - `hr_response_exists && hr_score IS NULL` → **Data Migration Issue** (score column not backfilled — matches ADR-106 pattern)
+  - all above pass but UI still blank → **Report Configuration Issue** (column-mapping fallback)
+- **Evidence** = short string with the exact field values that drove the diagnosis (e.g. `enabled_stages=[self,manager,bu]; hr_id=null`).
+- **Impact** = fixed strings tied to the root cause (e.g. "HR score excluded from final calc" or "Final rating cannot be computed").
+- **Recommended Fix** = fixed strings per root cause (e.g. "Enable HR stage on cycle X" / "Assign HR reviewer on instance" / "Run backfill RPC").
 
-### 3. Breakdown tables (tabs)
-- By Department · By Business Unit · By Division · By Grade · By Designation · By Reviewer Stage
-- Each: Name · Total · Eligible · Excluded · Self Done · HOD Done · BU Done · HR Done · Completed · Submission % · Avg Final Score.
+Regression test file: `src/services/annualReview/comprehensiveReportRca.test.ts` — 8 cases, one per root-cause branch, plus the "all green" happy path.
 
-### 4. Highlights panel (collapsible)
-- Missing scores (final_score null but not excluded)
-- Pending > 15 days (uses existing days-pending calc)
-- Excluded list
-- Top 10 final scores
-- Bottom 10 final scores (excluding null/excluded)
+### 3. UI — Comprehensive tab
+- **New "RCA — single employee" section at top of the tab.** Input: employee code or name. Renders **one horizontal table row** with every column you listed (33 columns), horizontally scrollable. This is the "single sheet / single table" view you asked for.
+- The existing employees table keeps its current shape; the new stage-rating / stage-comment columns become optional toggles (off by default) to avoid overwhelming the default view.
 
-### 5. Detailed employee table
-Columns (in this order): Employee Code · Name · Designation · Department · Business Unit · Division · Grade · DOJ · Eligibility · Self · HOD · BU · HR · Final · Rating · Current Stage · Pending With · Completion Status.
-- Sort: Department → Business Unit → Employee Name.
-- Server-side pagination (50/page), name/code search, stage filter, eligibility filter.
-- DOJ binds to `profiles.doj` (per memory rule — never `created_at`).
+### 4. Excel export
+Single sheet "Employees" gains the new columns in this exact order after existing ones:
+`Self Rating, Self Comment, HOD Rating, HOD Comment, BU Head Rating, BU Head Comment, HR Rating, HR Comment, HR Data Available, HR Data Visible, Root Cause, Evidence, Impact, Recommended Fix`.
+Sort remains **Department → Business Unit → Employee Name** (already in place).
 
-### 6. Single Excel export ("Download full report")
-One workbook, multiple sheets:
-1. Executive Summary (KPIs + rating distribution)
-2. Detail (all filtered rows, sorted as above; up to 5,000)
-3. By Department · 4. By Business Unit · 5. By Division · 6. By Grade · 7. By Designation · 8. By Reviewer Stage
-9. Highlights (missing scores, >15d pending, excluded, top 10, bottom 10)
-Uses the existing `xlsx` builder pattern in `src/services/annualReview/exports.ts`.
+### 5. 101784 answer (runs after code lands)
+Once the RPC returns the new fields, I'll query the row for employee `101784` in the current active cycle and report:
+- Master fields (code, name, designation, dept, BU, division, grade, DOJ, eligibility)
+- Per-stage score / rating / comment for Self, HOD, BU Head, HR
+- Final score & rating, current stage, pending with, days since update
+- HR Data Available, HR Data Visible, and the single Root Cause + Evidence + Impact + Recommended Fix
 
-## Technical notes
-- New RPC: `get_annual_review_comprehensive_report(p_cycle_id, p_scope)` returning one row per instance with all display columns already joined (avoids N client joins). Scope filtered through `annual_review_directory_access(auth.uid())`.
-- Reuse existing RPCs for department / reviewer / drill-down aggregates; add thin wrappers for BU / Division / Grade / Designation summaries (same shape as `get_annual_review_dept_submission_summary`).
-- New file: `src/pages/reports/AnnualReviewReport.tsx` — refactor to host the new sections.
-- New file: `src/components/reports/annual-review/ComprehensiveExport.ts` — pure builder, no DB.
-- New file: `src/components/reports/annual-review/HighlightsPanel.tsx`.
-- New file: `src/components/reports/annual-review/RatingDistributionChart.tsx`.
-- Tests: `annualReviewComprehensiveReport.test.ts` — scope enforcement, sort order, "pending >15d" math, rating distribution totals, export sheet shape.
-- Docs: append to `DOCUMENTATION.md` (Reports → Annual Review Comprehensive) and `POLICY.md` §AR-REPORT-VISIBILITY (unchanged scope, expanded column list).
+If HR is blank, the diagnostic function above will pick exactly one of your 8 listed reasons — no guessing.
 
 ## What I will NOT touch
-- Write paths, notifications, scoring, RLS on `annual_review_instances`.
-- The existing per-department / per-reviewer / drill-down tabs — they become the "Breakdowns" tab group inside the new report.
-- Scheduled email of the report — not in this plan; ask if you want it added.
+- Notification guard, RLS on `annual_review_instances`, scoring math, write paths.
+- Existing By-Department / Reviewer-Queues / Drilldown tabs.
+- No new workbook / no multi-sheet export — you asked for a single table, so the export stays single-sheet.
 
-## Open question before build
-For **"Pending With"**, when the current stage's reviewer id is null (data drift case fixed in ADR-108/113 — visibility-only rows), should the report show:
-(a) the **stage label only** (e.g. "HOD — unassigned"), or
-(b) fall back to the **subtree-visible reviewer** already used in the Team queue?
-Default I will use: **(a) stage label + "unassigned"** so the report reflects reality instead of implying an owner. Say "use (b)" if you'd rather show the visibility owner.
+## Open question before I build
+For **"HR Comment"** the schema exposes both a private HR note (`review_action_notes`, HR-only) and the reviewer's `comment` on `annual_review_responses` (visible to the employee at completion). The report should show the latter — the on-record reviewer comment, not the private HR note — to stay consistent with what the employee sees. Say "use private notes" if you want the HR-only note instead; default is the on-record comment.
