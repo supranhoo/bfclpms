@@ -220,6 +220,14 @@ const reports: ReportCard[] = [
     color: 'text-slate-600',
     reportKey: 'dev-report',
   },
+  {
+    title: 'Annual Review Report',
+    description: 'Cycle-scoped annual review status with per-department submission %, reviewer-wise pending queues, and stage-wise pending drill-down.',
+    icon: ClipboardList,
+    path: '/reports/annual-review',
+    color: 'text-indigo-600',
+    reportKey: 'annual-review',
+  },
 ];
 
 const ICON_MAP: Record<string, React.ElementType> = {
