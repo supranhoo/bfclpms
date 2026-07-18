@@ -15238,6 +15238,15 @@ export type Database = {
         Returns: undefined
       }
       refresh_safety_analytics: { Args: never; Returns: Json }
+      remap_system_scores_by_library_key: {
+        Args: {
+          p_new_template_id: string
+          p_old_system_scores: Json
+          p_old_system_scores_raw: Json
+          p_old_template_id: string
+        }
+        Returns: Json
+      }
       rename_incident_evidence: {
         Args: { p_evidence_id: string; p_new_file_name: string }
         Returns: Json

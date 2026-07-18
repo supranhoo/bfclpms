@@ -18,6 +18,8 @@ import { AnnualReviewStatusBadge } from '@/components/annual-review/AnnualReview
 import { CriteriaScoringMatrix } from '@/components/annual-review/CriteriaScoringMatrix';
 import { shouldHideCriteriaCard, criteriaForStage } from '@/lib/annualReview/templateVisibility';
 import { SystemScoresPanel } from '@/components/annual-review/SystemScoresPanel';
+import { missingRawSystemScoreItems } from '@/lib/annualReview/systemScoresStatus';
+import { AlertTriangle } from 'lucide-react';
 import { LanguageSwitcher } from '@/components/annual-review/LanguageSwitcher';
 import { useAnnualReviewTranslation } from '@/hooks/useAnnualReviewTranslation';
 import { AnnualReviewI18nProvider } from '@/components/annual-review/AnnualReviewI18nContext';
@@ -200,6 +202,31 @@ export default function EmployeeAnnualReview() {
       <AnnualReviewStageTracker status={instance.overall_status} enabledStages={visibleStages} reviewerNamesByStage={reviewerNamesByStage} skippedStages={skippedStages} />
 
       <AppraisalCompositionCard composition={composition} variant="full" />
+
+      {(() => {
+        const missing = missingRawSystemScoreItems(
+          template,
+          instance.system_scores_raw ?? {},
+          instance.system_scores ?? {},
+        );
+        if (missing.length === 0) return null;
+        return (
+          <div
+            role="alert"
+            className="flex items-start gap-3 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-500/40 dark:bg-amber-950/40 dark:text-amber-100"
+          >
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+            <div>
+              <p className="font-medium">System Score inputs pending HR entry</p>
+              <p className="mt-1">
+                The following System Score items have no value yet — HR must enter them
+                before the appraisal can be finalized:{' '}
+                <span className="font-medium">{missing.map((m) => m.name).join(', ')}</span>.
+              </p>
+            </div>
+          </div>
+        );
+      })()}
 
       <SystemScoresPanel
         systemScores={template?.sections.system_scores ?? []}
