@@ -120,6 +120,7 @@ Caveats:
 ## Stages & status
 - `not_started → pending_self → pending_manager → pending_skip → pending_bu → pending_hr → completed`.
 - Send-back reverts to the previous stage and clears `is_locked` on the affected response.
+- An employee viewing their own annual-review instance MUST use `/annual-review`, including when they enter through a team-directory or saved team-detail URL. `/annual-review/team/:instanceId` is reserved for active reviewers and authorized assisted-submission proxies; it MUST NOT present an employee's editable `pending_self` draft as a read-only reviewer view.
 
 ## Scoring
 - Criteria score cascades HR → BU → Skip → Manager → Self (first non-empty wins).
@@ -145,6 +146,7 @@ Caveats:
 - Summary/status counts MUST use count-only queries (`head: true, count: 'exact'`) or a paged read. Unpaged `.select(column)` reads are forbidden for cycle-wide aggregates — the Data API caps payloads at 1000 rows and silently undercounts large cycles.
 
 ## Version history
+- 2026-07-18 — **§AR-OWNED-DETAIL-ROUTING.** Owned team-detail records redirect to the employee self-review surface. Reviewer and authorized proxy routing is unchanged.
 - 2026-06-14 — Initial policy. Documented reopen, reassignment override precedence, and export scope.
 - 2026-06-15 — Added per-employee configurable workflow (`enabled_stages` + bulk XLSX + override-safe seeder).
 - 2026-06-15 — Added Carry KRA Score system-score source. Template authors may configure a System Score with `source = 'carry_kra'` and a `carry_config` choosing `overall_avg`, `last_n_months`, or `selected_months`. The carry value is the **average of monthly KRA averages** for the cycle's fiscal year (July–June). Monthly scores are weight-aware aggregates of the employee's `review_submissions` (cascade `final_score → auditor → manager → self`), excluding `is_na`. The value is fed into `system_scores[<id>]`, displayed read-only with a monthly breakdown, and is NOT scaled to the score's weight cap. Reads inherit existing PMS RLS; snapshots cached on `annual_review_instances.carry_score_snapshots`.
