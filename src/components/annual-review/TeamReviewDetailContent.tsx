@@ -275,6 +275,7 @@ export function TeamReviewDetailContent({
       template={template}
       role={role}
       locked={locked}
+      readOnlyNotice={readOnlyNotice}
       proxyMode={proxyMode}
       availLangs={availLangs}
       lang={lang}
@@ -316,7 +317,7 @@ export function TeamReviewDetailContent({
 /* eslint-disable @typescript-eslint/no-explicit-any */
 function TeamReviewDetailInner(props: any) {
   const {
-    instance, template, role, locked, proxyMode, availLangs, lang, setLang,
+    instance, template, role, locked, readOnlyNotice, proxyMode, availLangs, lang, setLang,
     visibleStages, skippedStages, reviewerNamesByStage, fiscalYear,
     draft, setDraft, status, flush, composition, running, comparison, onUpload,
     responses, handleSubmit, handleSendBack, canSendBack,
