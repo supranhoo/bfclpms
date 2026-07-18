@@ -13605,6 +13605,12 @@ export type Database = {
           source_config_id: string
         }[]
       }
+      annual_review_accessible_instances: {
+        Args: { p_cycle_id: string }
+        Returns: {
+          instance_id: string
+        }[]
+      }
       annual_review_bu_head_terminal_diagnostic: {
         Args: { p_cycle_id: string }
         Returns: {
@@ -13689,6 +13695,10 @@ export type Database = {
           stage_enabled: boolean
           stage_still_open: boolean
         }[]
+      }
+      annual_review_status_rank: {
+        Args: { s: Database["public"]["Enums"]["annual_review_status"] }
+        Returns: number
       }
       annual_review_subtree_ids: {
         Args: { p_manager: string; p_max_depth?: number }
@@ -14173,7 +14183,52 @@ export type Database = {
         }[]
       }
       get_admin_dashboard_stats: { Args: never; Returns: Json }
+      get_annual_review_dept_submission_summary: {
+        Args: { p_cycle_id: string }
+        Returns: {
+          bu_done: number
+          completed: number
+          department_id: string
+          department_name: string
+          hr_done: number
+          manager_done: number
+          self_submitted: number
+          skip_done: number
+          submission_pct: number
+          total: number
+        }[]
+      }
       get_annual_review_directory_access: { Args: never; Returns: Json }
+      get_annual_review_pending_at_stage: {
+        Args: {
+          p_cycle_id: string
+          p_page?: number
+          p_page_size?: number
+          p_stage: string
+        }
+        Returns: {
+          days_pending: number
+          department_name: string
+          employee_code: string
+          employee_id: string
+          employee_name: string
+          instance_id: string
+          reviewer_id: string
+          reviewer_name: string
+          total_count: number
+          updated_at: string
+        }[]
+      }
+      get_annual_review_reviewer_pending_queues: {
+        Args: { p_cycle_id: string }
+        Returns: {
+          oldest_days: number
+          pending_count: number
+          reviewer_id: string
+          reviewer_name: string
+          stage: string
+        }[]
+      }
       get_backup_table_order: {
         Args: never
         Returns: {
