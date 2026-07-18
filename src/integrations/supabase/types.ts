@@ -15289,6 +15289,19 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      repair_all_orphan_criteria_scores: {
+        Args: { p_dry_run?: boolean; p_include_completed?: boolean }
+        Returns: {
+          action: string
+          detected_prev_template: string
+          employee_code: string
+          instance_id: string
+          orphan_keys_before: number
+          overlap_keys: number
+          response_rows: number
+          status: string
+        }[]
+      }
       repair_bu_head_terminal_chains: {
         Args: { p_cycle_id: string; p_dry_run?: boolean }
         Returns: {

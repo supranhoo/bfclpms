@@ -1,49 +1,57 @@
-## Problem
-Sajid Raza (100264) is a BU Head of "1050 TPD" and "3X100 TPD DRI", yet his Annual Review still lists **Dept Head → Jyoti Prakash Dwivedi (101789)** as stage 2. Per **POLICY §AR-BU-HEAD-TERMINAL (ADR-109)**, the `dept_head` stage must be stripped for any employee who heads at least one BU — self review is terminal for them (like Jaspal).
+## Findings — scope of the template-swap orphan-score issue
 
-Same regression affects **19 BU-Head instances** in the active cycle. `is_bu_head()` still returns TRUE for them, but a later cascade/reset (rows updated today at 11:00 and 11:38 UTC) re-added `dept_head` to `enabled_stages` and re-populated `dept_head_id` from the department master.
+Ran a system sweep matching every response row's `criteria_scores` keys against its current effective template's criterion IDs.
 
-## Root Cause (5-Why)
-1. Why does Sajid see Dept Head? — `enabled_stages` includes `dept_head` and `dept_head_id` is set.
-2. Why is it set on a BU Head? — Because a recent write path re-seeded stages from `annual_review_cycles.default_enabled_stages` without consulting `is_bu_head`.
-3. Why did that write path skip the ADR-109 guard? — The BU-Head strip logic lives only in the initial seed RPC + the ADR-109 one-shot patch. The cascade triggers introduced with ADR-108/113 (department/BU cascades) and the template/cycle reset RPCs write `enabled_stages` and reviewer IDs directly, bypassing the guard.
-4. Why isn't the guard enforced at DB level? — There is no `BEFORE INSERT/UPDATE` invariant trigger on `annual_review_instances` that removes `dept_head` (+ nulls `dept_head_id`) when `is_bu_head(employee_id)` is TRUE.
-5. Why did QA not catch it? — Regression test for ADR-109 only exercised the seed RPC, not the cascade/reset paths.
+**16 instances have orphaned score keys (20 response rows total):**
 
-## Fix Plan (surgical, additive)
+| Status | Instances | Notes |
+|---|---|---|
+| pending_dept | 8 | Employee has submitted; dept head will see missing/blank scores. |
+| pending_bu | 2 | Same, later stage. |
+| pending_self | 1 | `test003` (test user). |
+| completed | 5 | Already finalised — `final_score` may be frozen. |
 
-### 1. DB — enforce invariant at the source
-- New migration `20260718_ar_bu_head_terminal_invariant.sql`:
-  - `CREATE OR REPLACE FUNCTION public.enforce_bu_head_terminal_stage()` — `BEFORE INSERT OR UPDATE OF enabled_stages, dept_head_id, employee_id ON annual_review_instances`. If `is_bu_head(NEW.employee_id)` then remove `'dept_head'` from `NEW.enabled_stages` (JSONB) and set `NEW.dept_head_id = NULL`. No-op otherwise.
-  - Attach `trg_enforce_bu_head_terminal_stage`.
-  - Repair the 19 affected rows in the same migration (idempotent UPDATE), and log to `annual_review_bu_head_terminal_audit_2026_07`.
-- Rollback: `DROP TRIGGER` + revert UPDATE using audit table.
+**Sample worst offenders** (all orphans on the self response):
 
-### 2. RPCs — belt & suspenders
-- Patch cascade RPCs (`cascade_department_change`, `cascade_bu_change`, `resync_annual_review_dept_head`) and any cycle-reset RPC to call a helper `_strip_dept_stage_if_bu_head(instance_id)` after they write reviewer chains.
+- `100958` Prabhat Kumar — 12/24 keys orphaned (`pending_dept`)
+- `100118` Sohan Mahto — 10 dept_head orphans (`pending_bu`)
+- `100955` Ajij Ansari, `101133` Shrawan Prajapati — 7 each (`pending_dept`)
+- `101853` Aftab Khan — 7 on both self + dept_head rows (`pending_bu`)
+- Plus 100089, 100289, 101708, 101755, 101815, 200207, 200378, 200474, 200483, 201015 (2–5 orphans each)
 
-### 3. Tests
-- `src/test/annualReview/buHeadTerminalStage.test.ts`:
-  - Seed BU-Head instance → assert `enabled_stages` has no `dept_head`, `dept_head_id` NULL.
-  - Simulate cascade RPC re-write → assert invariant re-holds.
-  - Non-BU-Head unaffected (regression guard).
-- DB regression in `src/tests/canSendNotificationToSchema.test.ts` style: SELECT count of BU-Head rows carrying `dept_head` — must be 0.
+The trigger shipped last turn prevents *new* occurrences; these are historical rows from swaps that happened before the trigger existed.
 
-### 4. UI verification
-No UI code change. `TeamReviewDetailContent`/stepper already renders from `enabled_stages`; once the array no longer contains `dept_head`, the "auto-skipped: BU Head (no reviewer mapped)" line disappears and Self Review becomes the terminal stage — matching Jaspal's flow.
+## Proposed repair
 
-### 5. Documentation & Policy
-- `docs/adr/ADR-109.md`: append "v2 — 2026-07-18: promoted from one-shot patch to DB-enforced invariant after regression via cascade/reset RPCs." 
-- `POLICY.md` §AR-BU-HEAD-TERMINAL: add "Invariant is enforced by trigger `trg_enforce_bu_head_terminal_stage`; any write path that populates `enabled_stages` or `dept_head_id` for a BU Head is auto-corrected."
-- `DOCUMENTATION.md` version history: v2.66.121.
+1. **Add a bulk repair RPC** `repair_all_orphan_criteria_scores(dry_run bool, include_completed bool)` that, for each affected instance:
+   - Auto-detects the previous template by finding the active template whose `criteria[].id` set best covers the orphan keys (highest overlap wins; ties broken by most recent audit-log override entry).
+   - Calls the existing `remap_annual_review_criteria_scores` with that prev template.
+   - Writes a row per instance to `system_audit_logs` with the detected prev template, coverage %, and per-row before/after counts.
 
-## Risk & Impact
-- **Data:** 19 rows updated (nulling `dept_head_id`, removing `dept_head` from `enabled_stages`). All in `pending_self`/pre-dept-head status, no completed dept-head reviews will be discarded (verified via status check). Audit row per change.
-- **Workflow:** BU Heads whose reviews were incorrectly queued to a subordinate Dept Head will now terminate at Self. This matches the stated policy.
-- **UI:** Stepper drops the Dept Head node for these employees. No component changes.
-- **Regression risk:** Low — trigger is scoped to `is_bu_head=TRUE` rows only; non-BU-heads untouched. Existing ADR-109 tests plus new invariant tests protect the guarantee.
-- **Rollback:** `DROP TRIGGER` restores prior behaviour; audit table lets us re-apply old chains if ever needed.
+2. **Run it live for the 11 in-flight instances** (`pending_self`, `pending_dept`, `pending_bu`). Orphan keys that can't be matched by `key`/`name` are dropped — same behaviour we just used for 200274.
 
-## Verification after build
-- Re-query: `SELECT COUNT(*) FROM annual_review_instances WHERE enabled_stages ? 'dept_head' AND is_bu_head(employee_id)` → expect **0**.
-- Reload Sajid Raza's review page → stepper shows only "Self Review" as active stage, no auto-skip banner for BU Head, no Dept Head node.
+3. **Completed instances (5): DO NOT touch by default.** They already have a frozen `final_score`. Options:
+   - (a) Leave them — orphans are cosmetic since the review is closed.
+   - (b) Remap keys but recompute nothing (safe cosmetic fix, `final_score` untouched).
+   - (c) Full recompute (risky — changes historical scores).
+
+   I recommend **(b)** if you want the reports/audit views to show scores against the correct criteria; otherwise leave (a).
+
+4. **Post-repair verification query** re-runs the orphan sweep and confirms zero rows.
+
+### Files / DB changes
+- New migration: `20260718131000_repair_orphan_criteria_scores.sql` — adds the bulk repair RPC (SECURITY DEFINER, admin/hr_pms only).
+- Data operation via `supabase--insert`: `SELECT public.repair_all_orphan_criteria_scores(false, false);` for the 11 in-flight.
+- Optional second call with `include_completed=true` **only** if you choose option (b) for the 5 completed instances.
+
+### Not touched
+- The auto-carry trigger from last turn stays as-is.
+- No schema changes.
+- No template edits.
+
+## Question before I build
+
+For the **5 completed instances** (100089 Dhirendra, 101708 Anup Jha, 200378 Abhishek Bedia, 201015 Pinku, 101755 Adarsh), pick one:
+- **(a) Leave alone** — safest, `final_score` unchanged, but historical reports still show orphaned keys.
+- **(b) Cosmetic remap only** — rewrite keys to current template IDs; `final_score` and any archived reviewer scores stay numerically identical.
+- **(c) Skip for now, list them separately** and decide case-by-case.
