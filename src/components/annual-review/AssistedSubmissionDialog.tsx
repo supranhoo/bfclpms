@@ -332,7 +332,15 @@ export function AssistedSubmissionDialog({
         </div>
 
         <DialogFooter className="flex-col items-stretch gap-2 sm:flex-row sm:items-center sm:justify-end">
-          {!snapshot && !uploadFile && (
+          {!hasScoredSelf && !selfScoreLoading && (
+            <p className="text-xs text-destructive sm:mr-auto">
+              {t(
+                'assisted.hint.needsSelfScores',
+                'Save the employee\'s self scores first — assisted submission cannot advance an empty form.',
+              )}
+            </p>
+          )}
+          {hasScoredSelf && !snapshot && !uploadFile && (
             <p className="text-xs text-amber-600 sm:mr-auto">
               {t(
                 'assisted.hint.anyMedia',
@@ -343,7 +351,7 @@ export function AssistedSubmissionDialog({
           <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={submitting}>{t('assisted.btn.cancel', 'Cancel')}</Button>
           <Button
             onClick={submit}
-            disabled={(!snapshot && !uploadFile) || submitting}
+            disabled={(!snapshot && !uploadFile) || submitting || !hasScoredSelf || selfScoreLoading}
           >
             {submitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
             {t('assisted.btn.submit', 'Verify & Submit')}
