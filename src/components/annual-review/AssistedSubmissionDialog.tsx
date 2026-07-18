@@ -66,6 +66,26 @@ export function AssistedSubmissionDialog({
 
   const declarationText = selfieRequired ? DECLARATION : DECLARATION_NO_PHOTO;
 
+  // ADR-114: assisted submit MUST NOT advance the workflow when no self scores
+  // exist. Server enforces this via `submit_annual_review_self_as_proxy`; the
+  // UI mirrors the check so the proxy sees a clear reason before submitting.
+  const { data: selfScoreState, isLoading: selfScoreLoading } = useQuery({
+    queryKey: ['assisted-self-score-guard', instanceId],
+    enabled: open && !!instanceId,
+    staleTime: 15_000,
+    queryFn: async () => {
+      const { count, error } = await supabase
+        .from('annual_review_responses')
+        .select('id', { count: 'exact', head: true })
+        .eq('instance_id', instanceId)
+        .eq('reviewer_role', 'self')
+        .not('weighted_score', 'is', null);
+      if (error) throw error;
+      return { hasScoredSelf: (count ?? 0) > 0 };
+    },
+  });
+  const hasScoredSelf = !!selfScoreState?.hasScoredSelf;
+
   const stopStream = () => {
     streamRef.current?.getTracks().forEach((t) => t.stop());
     streamRef.current = null;
