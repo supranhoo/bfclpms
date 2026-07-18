@@ -153,6 +153,15 @@ export function AssistedSubmissionDialog({
   const submit = async () => {
     // At least one form of visual evidence must be provided (selfie OR uploaded photo).
     if (!snapshot && !uploadFile) return;
+    if (!hasScoredSelf) {
+      toast.error(
+        t(
+          'assisted.toast.needsSelfScores',
+          'Please fill and save the self scoring form for this employee before assisted submission.',
+        ),
+      );
+      return;
+    }
     setSubmitting(true);
     try {
       await submitWithAssistance({
