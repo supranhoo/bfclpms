@@ -53,6 +53,8 @@ import { HrFinalizationSheet } from '@/components/annual-review/HrFinalizationSh
 import { BulkActionsTab } from '@/components/annual-review/BulkActionsTab';
 import { fyStartFromCycle } from '@/lib/annualReview/fiscalYear';
 import { prevStatus } from '@/lib/annualReview/stageChain';
+import { useKraDerivedRatingsForInstances } from '@/hooks/useKraDerivedRatingsForInstances';
+import { isKraBasedTemplate } from '@/lib/annualReview/kraDerivedRating';
 import { UnifiedBulkDialog } from '@/components/annual-review/UnifiedBulkDialog';
 import { AnnualReviewExportMenu } from '@/components/annual-review/AnnualReviewExportMenu';
 import { ChangeWorkflowDialog } from '@/components/annual-review/ChangeWorkflowDialog';
