@@ -1,46 +1,62 @@
-## Assumptions
-- Employee: Atul Singh (200414), profile `34dd3f55-b364-4ddd-98ae-201f275df95b`.
-- Instance `662da035-ae3f-4d0c-8b5c-14a2d06a0fee`, cycle `b82a935f…`.
-- Current state: `overall_status = pending_self`, `template_id = fcf38994 (FAD- M - Mech)`, `template_override_id = fcf38994 (same)`, `enabled_stages = [self, dept_head, bu_head]`, `annual_review_responses` for this instance = 0 rows.
-- Target: keep him on `FAD- M - Mech` but force the form to re-hydrate against the current template definition (Option 1 chosen).
+## 1. Assumptions
+- Atul Singh (200414) will submit through **My Annual Review** using his own employee login, as selected.
+- The manager/team-assisted page must remain read-only for employees who have personal login access.
 
-## RCA (why he is stuck on the "old" version)
-1. On 2026-07-13 a Form Mapping rule wrote `template_override_id = fcf38994` (FAD- M - Mech), replacing the seeder's `af2a2c7c`.
-2. Since then, the template `fcf38994` has been edited (criteria added/renamed). The `is_active` template row was updated 2026-07-16.
-3. Trigger `trg_guard_ar_template_id_stability` (ADR-117) correctly prevents the seeder from touching `template_id` while an override exists, so any re-mapping to the same override is a no-op.
-4. His draft rendering is anchored to a stale in-memory snapshot of criteria (the pre-edit set). With no `annual_review_responses` row he still sees the "old" form and cannot save because the client-side score keys don't match the current template criteria set that the submit-guard validates against (ADR-115 / ADR-122 remap only fires when responses exist).
-5. Net effect: read-only-feeling form with validation failing on submit — matches the reported symptom.
+## 2. Clarifications
+- Resolved: use direct employee submission; do not enable assisted submission for 200414.
 
-## Risk & Impact Report
-- Data impact: none destructive. 0 response rows exist for this instance — nothing to archive or wipe.
-- Workflow impact: instance stays in `pending_self`; reviewer chain (`enabled_stages`) unchanged.
-- UI/UX: employee's self-review page re-fetches the template, criteria list matches the current definition, submit guard passes.
-- Regression risk: low — using the existing, audited RPC `set_annual_review_template_override` twice (clear, then re-apply) is the sanctioned non-destructive path.
-- Mitigation: verify post-state and criteria count; keep audit trail via mandatory reasons on both RPC calls.
+## 3. RCA and 5 Why
+**Confirmed current state**
+- Employee: Atul Singh (200414), active, employee role, registered email.
+- Instance `662da035…` is `pending_self`.
+- Effective template is already the latest assigned **FAD- M - Mech v25**.
+- The template contains five self-stage criteria, each with six valid options scored 5–0.
+- There is no self-response row, submitted response, or response lock.
 
-## Fix (single instance, no code change)
-Two audited RPC calls on the same instance:
+**Root cause:** The screenshot is from the **Team Annual Review assisted-submission page**, not Atul’s own **My Annual Review** page. The team page intentionally sets the matrix to read-only because Atul has personal login access.
 
-1. `set_annual_review_template_override(p_instance_id := '662da035-ae3f-4d0c-8b5c-14a2d06a0fee', p_template_id := NULL, p_reason := 'RCA-Atul-200414 step 1: clear stale override so template snapshot re-hydrates.')`
-2. `set_annual_review_template_override(p_instance_id := '662da035-ae3f-4d0c-8b5c-14a2d06a0fee', p_template_id := 'fcf38994-e641-44c8-8b73-a396886562a2', p_reason := 'RCA-Atul-200414 step 2: re-apply FAD- M - Mech so the self-review form loads the current criteria set.')`
+1. Why can no option be selected? The option buttons receive `readOnly=true`.
+2. Why is the form read-only? The viewer has no current reviewer/proxy role for Atul’s pending-self stage.
+3. Why is proxy mode unavailable? Atul has personal login access.
+4. Why did the earlier template refresh not fix it? Template reassignment and input authorization are separate concerns; the template was corrected, but the same assisted route was reopened.
+5. Why was this mistaken for the earlier option-selection defect? Both show six unselectable-looking cards, but ADR-119 concerned score hydration; this case is an intentional route-level authorization lock.
 
-Both are allowed by the RPC because `overall_status = pending_self`.
+## 4. Risk & Impact Report
+- **Data impact:** No schema change and no reset. Existing template assignment, scores, and history remain untouched.
+- **Workflow impact:** No permission change; Atul continues to own the self stage.
+- **UI/UX impact:** Make the read-only assisted-page message more explicit about the required direct-login route, so users do not interpret disabled cards as a broken template.
+- **Regression risk:** Low; confined to read-only guidance and regression coverage for route/lock resolution.
+- **Scalability impact:** None; no new query or dataset loading.
+- **Mitigation:** Add tests for the 200414-shaped pending-self/no-response case and preserve the existing proxy-login guard.
+- **Rollback:** Revert the guidance/test changes; no database rollback required.
 
-## Verification
-- Re-read `annual_review_instances` row: `template_override_id = fcf38994`, `overall_status = pending_self`, response count still 0.
-- Read `annual_review_templates` → `sections->'criteria'` count matches what Atul will see.
-- Confirm two `annual_review.template_override_set` rows in `system_audit_logs` with the reasons above.
-- Ask HR/PMS to have Atul reopen his self-review page; expected: fresh criteria list, radio options selectable, submit succeeds.
+## 5. Step-by-step Plan
+1. Add a regression fixture matching 200414: pending self, valid personal login, latest template, and no response lock.
+2. Verify the direct employee surface resolves this state as editable and all six option cards emit score changes.
+3. Verify the same instance remains read-only on the team-assisted surface.
+4. Improve the read-only notice to explicitly state that the manager must not fill this form and that Atul must sign in and open **My Annual Review**.
+5. Run the focused Annual Review routing, read-only notice, and scoring-matrix tests.
+6. Re-check the live instance after implementation to confirm no reset or unintended data mutation occurred.
 
-## What is NOT changed
-- No code, migration, RLS, or trigger change.
-- No other employees are touched.
-- No responses, evidence, or system scores modified.
-- ADR-117 trigger stays in place.
+## 6. UI Changes
+- **Location:** Team Annual Review → employee detail, above the disabled criteria.
+- **Visual change:** Clearer “Assisted submission unavailable” guidance naming **My Annual Review** as the correct route.
+- **Interaction:** No controls are enabled on the manager page; Atul’s own page remains editable.
+- **Responsiveness:** Existing alert layout and mobile wrapping are preserved.
 
-## Rollback
-If Atul's page still shows the old form after refresh: repeat the clear step (step 1 only) and ask him to hard-reload. If a genuinely different template is intended, re-run `set_annual_review_template_override` with the new template id — same non-destructive path.
+## 7. Implementation
+- Surgical frontend clarification only; no permission bypass, template reset, or database mutation.
 
-## Documentation
-- Append a one-line entry to `DOCUMENTATION.md` Version History: "v2.66.117-hotfix — Atul Singh (200414) template snapshot refresh via clear-then-reapply override (RCA-Atul-200414)."
-- No POLICY.md change needed: policy `§AR-TEMPLATE-OVERRIDE` already sanctions this path.
+## 8. Tests
+- Success: pending-self employee on **My Annual Review** can select each of the six score options.
+- Failure/security: manager/team view cannot select those options when the employee has personal login access.
+- Data fixture: include the effective-template and unlocked/no-response state that reproduces 200414’s case.
+
+## 9. DOCUMENTATION.md Updates
+- Add the confirmed RCA, distinction from ADR-119, corrective UX, validation, and rollback note to Version History.
+
+## 10. POLICY.md Updates
+- Clarify that template refresh does not override the personal-login assisted-submission guard and that direct employee submission is the required path.
+
+## 11. Post-implementation Notes
+- Atul should sign in with employee code **200414**, open **My Annual Review**, and select the options there. The Team Annual Review copy will clearly explain why that page remains read-only.

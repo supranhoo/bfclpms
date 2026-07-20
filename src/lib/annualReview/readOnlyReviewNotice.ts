@@ -19,7 +19,7 @@ export function getReadOnlyReviewNotice(status: AnnualReviewStatus): {
   if (status === 'pending_self') {
     return {
       title: 'Assisted submission unavailable',
-      description: 'This employee has personal login access and must submit the self review from My Annual Review. Their saved draft remains unchanged.',
+      description: 'This employee has personal login access, so a manager cannot complete this form. Ask the employee to sign in and open My Annual Review to select options and submit. Their saved draft remains unchanged.',
     };
   }
 
