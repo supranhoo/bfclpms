@@ -1,82 +1,52 @@
 
-# Fix — Completed reviews missing criteria_weighted_score / total_score / final_rating
+## Assumptions
+- Applies to every `annual_review_instance` whose employee's department name starts with `CLU` (CLU-Operation, CLU-MECH, CLU-Elect, CLU-Inst, CLU-Refractory, CLU-RMH) — 185 rows across all statuses.
+- Effective template = `template_override_id` when present, else `template_id`; only items keyed by `library_key = 'annual_production' | 'annual_pm'` are touched. Templates that don't expose them are skipped safely.
+- Full weight = raw score meets the 100% threshold: Production `104% → weight (25)`, PM `100% → weight (10)`. No scoring_rules will be persisted on the template (per your choice).
+- No changes to CLU templates, RLS, workflow, other departments, or any other system_score item.
 
-## 1. Assumptions
-- Employee **200141 (Mithu Kumar Mahto)** was surfaced as the reproducer. His instance `3ddaabb9…` shows `overall_status='completed'`, `finalized_at=2026-07-19`, all three reviewer responses locked (self / dept_head / bu_head, weighted 225/220/220), **but** the instance columns `criteria_weighted_score`, `total_score`, `final_rating` are NULL — which is why the employee page shows Criteria 0/45 and no rating.
-- His workflow terminates at BU Head (no HR stage). This is the intended terminal per POLICY §AR-BU-HEAD-TERMINAL (ADR-109).
+## Risk & Impact
+- **Data**: Overwrites two `library_key` slots per instance in `system_scores` and `system_scores_raw`. All prior values captured in `system_audit_logs` before overwrite (reversible).
+- **Workflow**: Advancement / stage state untouched.
+- **Completed rows**: `total_score` and `final_rating` are re-derived via the existing `annual_review_compute_final_score` SSOT (ADR-124) so downstream reports stay consistent.
+- **Regression**: Zero risk to non-CLU instances — SQL is scoped by department name and by `library_key`.
+- **Rollback**: single UPDATE from the audit snapshot restores prior maps.
 
-## 2. Verified current state (data reads, not assumption)
-- `SELECT COUNT(*) FROM annual_review_instances WHERE overall_status='completed' AND (criteria_weighted_score IS NULL OR total_score IS NULL OR final_rating IS NULL)` → **760 / 760**. 100% of completed instances are affected — this is not a per-employee anomaly.
-- `pg_get_functiondef('advance_annual_review_status')` confirms the completion branch only sets `finalized_at`/`finalized_by`; it never computes or writes `criteria_weighted_score`, `total_score`, or `final_rating`. Those columns are only written by `finalizeInstance()` (HR route) in `annualReviewService.ts`.
-- Result: workflows that legitimately end at BU Head / Dept Head / Skip / Manager silently complete without persisting the final numbers the employee UI (`EmployeeResultsView.tsx`) and reports rely on.
+## Diagnosis (verified pre-plan)
+- `sys_3jsce5p` (Annual Production, weight 25) and `sys_2z4e0vw` (Annual PM, weight 10) exist on all CLU templates with `scoring_rules = NULL`.
+- Sampled CLU-Operation (`200810`) and CLU-MECH (`201149`) rows show `system_scores_raw.sys_3jsce5p ≈ 1.0356` and `system_scores.sys_3jsce5p = 0` — a legacy fractional raw with no bands → `scoreFromRaw` clamped to 0 points.
+- 185 CLU instances need backfill; ADR-123 previously handled FAD identically and left CLU untouched.
 
-## 3. Root Cause (5-Why)
-1. Employee sees Criteria 0/45 and no /5 rating → because `instance.criteria_weighted_score` and `instance.final_rating` are NULL.
-2. Why NULL? → No routine wrote them on this instance.
-3. Why not written? → `advance_annual_review_status` never populates them; only HR's `finalizeInstance` does.
-4. Why is HR the only writer? → Legacy assumption that every workflow ends at `pending_hr`; BU-Head-terminal workflows (ADR-109) weren't retrofitted onto the finalization path.
-5. Why did this survive to prod? → No trigger/test asserting "when `overall_status='completed'` then all three final columns must be non-NULL".
+## Plan
 
-## 4. Risk & Impact
-| Area | Impact |
-|---|---|
-| Data | 760 completed instances get final columns backfilled from locked responses + system_scores. Additive UPDATE only; audit-logged. No historical value is destroyed. |
-| Workflow | Terminal advancement now writes final numbers. HR-terminated flows still go through `finalizeInstance` unchanged (HR-typed rating wins). |
-| UI/UX | Employee's "Your Final Review" card, admin exports, and comprehensive report will show real numbers instead of `—`. |
-| Regression | Low — the change is scoped to the `v_next = 'completed'` branch of one RPC + a one-shot backfill. Existing HR-path finalization is untouched. |
-| Scalability | 760 row backfill is trivial; ongoing writes are O(1) per submit. |
-| Rollback | Migration is additive; a rollback script would NULL back the backfilled columns from `annual_review_final_backfill_audit_2026_07`. |
+### Step 1 — Data-only backfill migration (`20260720170000_clu_annual_production_pm_backfill.sql`)
+Single transactional block:
+1. Snapshot existing `system_scores` / `system_scores_raw` into `system_audit_logs` (action: `annual_review.system_score_backfill`, category: `CLU_ANNUAL_PROD_PM_V1`) — one row per instance so a per-row rollback is possible.
+2. For each CLU instance where the effective template exposes `annual_production`: set `system_scores_raw[<id>] = 104` and `system_scores[<id>] = 25`.
+3. For each CLU instance where the effective template exposes `annual_pm`: set `system_scores_raw[<id>] = 100` and `system_scores[<id>] = 10`.
+4. For any instance already `overall_status IN ('completed','pending_dept','pending_bu_head','pending_hr_pms')` where `criteria_weighted_score IS NOT NULL`, call `public.annual_review_compute_final_score(id)` so `total_score` / `final_rating` reflect the new system total.
+5. Emit a summary audit row (`annual_review.clu_prod_pm_backfill_summary`) with counts per sub-department and a list of skipped instances (templates without the slot).
 
-## 5. Plan (Step → Verification)
+### Step 2 — Verification query (bundled in the migration as `RAISE NOTICE`)
+Prints per-sub-department count of updated rows, mean `system_scores.sys_annual_production`, and any residual zeros so we can eyeball the result before HR opens the app.
 
-### Step 1 — Add PL/pgSQL SSOT `public.annual_review_compute_final_score(instance_id)`
-Mirrors `computeFinalScore` in `src/lib/annualReview/finalScore.ts`:
-- Resolves effective stage weights (`stage_weights_override` → template `stage_weights_v2`/`stage_weights` → legacy `{criteria:100}`).
-- Reads locked reviewer `weighted_score`s from `annual_review_responses`.
-- Sums `system_scores` (already in /100 points) for the system bucket.
-- Uses instance `criteria_weighted_score` (when present) for the legacy `criteria` bucket, else the **terminal reviewer's weighted_score** normalised via effective template's criteria max.
-- Returns `(criteria_weighted_score, total_score numeric(0..100), final_rating text band)`.
+### Step 3 — Regression test `src/test/annualReview/cluBackfill.test.ts`
+Pure TS test (no DB) that pins the SSOT: given a mock CLU instance with `annual_production` weight 25 and raw 104, `scoreFromRaw` used with the "no bands, treat as pre-scaled" contract must round up to `weight` when raw ≥ threshold — plus a locked expectation that `system_scores_raw` now stores integer percentages, not fractions.
 
-Rating band derivation is master-data driven — read from `annual_review_settings` if a rating scale exists, else standard band: `≥90 O, ≥80 E, ≥70 M, ≥60 P, else U` (same bands used elsewhere; will confirm at build time by reading `annual_review_settings`).
+### Step 4 — Docs
+- `POLICY.md` — add §AR-CLU-ANNUAL-PROD-PM-BACKFILL noting the one-shot 104%/100% grant and the ADR link.
+- `DOCUMENTATION.md` — v2.66.119 changelog entry.
+- New `docs/adr/ADR-125.md` — decision + rollback SQL (`UPDATE ... FROM system_audit_logs WHERE category = 'CLU_ANNUAL_PROD_PM_V1'`).
 
-**Verify:** New unit tests in `supabase/functions/*` mirror sample from 200141 and assert `total_score ≈ 60.2`, `final_rating='M'`.
+## UI Changes
+Not applicable — this is data + docs only. Existing `SystemScoresPanel` will render the new values on next load.
 
-### Step 2 — Patch `advance_annual_review_status`
-When `v_next = 'completed'` and `criteria_weighted_score IS NULL` (i.e., not already set by HR path), call the SSOT and UPDATE the three columns in the same statement that sets `finalized_at`. HR path (`finalizeInstance`) is unchanged — HR still wins on the columns it writes.
+## Files to touch
+- `supabase/migrations/20260720170000_clu_annual_production_pm_backfill.sql` (new)
+- `src/test/annualReview/cluBackfill.test.ts` (new)
+- `docs/adr/ADR-125.md` (new)
+- `POLICY.md`, `DOCUMENTATION.md` (append)
 
-**Verify:** Manual test on a scratch instance advancing through terminal BU Head → three columns are non-NULL.
-
-### Step 3 — One-shot backfill of the 760 existing completed instances
-- Snapshot to new `annual_review_final_backfill_audit_2026_07` table (id, instance_id, old/new values, at).
-- Run the new SSOT for each `overall_status='completed' AND criteria_weighted_score IS NULL` row.
-- Log a single `system_audit_logs` entry with counts.
-
-**Verify:** Re-run the diagnostic query; expect 0/760 remaining. Spot-check 200141 shows populated columns.
-
-### Step 4 — Add DB invariant + regression tests
-- New CHECK-style validation via trigger: block `overall_status → 'completed'` transitions where the three columns end up NULL (defense in depth).
-- Tests:
-  - `src/tests/annualReviewFinalScorePersistence.test.ts` — TS SSOT parity harness on Mithu's shape.
-  - `supabase/functions/*/annual_review_terminal_completion_test.ts` — Deno test asserting the RPC persists all three columns.
-
-### Step 5 — SSOT docs
-- `DOCUMENTATION.md`: v2.66.119 entry describing ADR-124 (Terminal Completion Persistence).
-- `POLICY.md` §AR-TERMINAL-COMPLETION-PERSISTENCE: "Every `overall_status='completed'` instance MUST have `criteria_weighted_score`, `total_score`, and `final_rating` persisted. Whichever routine performs the terminal transition (HR path or `advance_annual_review_status`) is responsible for writing them."
-- `mem/features/annual-review/terminal-completion-persistence.md` + index entry.
-
-## 6. UI Changes
-Not Applicable — no rendering code changes. `EmployeeResultsView.tsx` already reads the three columns; once they are populated by the backfill, the employee's Total Score, Criteria weighted, `≈ x.x / 5` and Final Rating badge appear automatically.
-
-## 7. Zero-Hardcoding & Multi-tenancy
-- Rating band thresholds sourced from `annual_review_settings` (fallback constants only when no config row exists — same policy the HR UI already applies).
-- No employee/department names hardcoded; backfill is set-based.
-
-## 8. Rollback
-Provide `docs/adr/ADR-124-rollback.sql` that: (a) restores the three columns from the audit snapshot, (b) drops the invariant trigger, (c) reverts `advance_annual_review_status` to the previous body preserved as `advance_annual_review_status_pre_adr124`.
-
-## 9. Out of Scope (call-outs, no code)
-- The separate scale mismatch between raw `weighted_score` (e.g. 220 for max 250) and the /100 scale assumed by `computeFinalScore` exists in TS too. This plan normalises consistently inside the SSOT (dividing by `criteria_raw_max` and scaling to `100 − systemMax`) but does NOT refactor the TS reader — happy to open a follow-up if you want the running-score projections aligned.
-
----
-
-**One approval → I ship Steps 1–5 in a single migration + companion TS test + doc updates, and run the 760-row backfill.**
+## Post-implementation notes
+- Templates keep `scoring_rules = NULL` per your instruction; future raw uploads for these two slots will still fall through the "treat raw as pre-scaled points" legacy path — flagged for a follow-up ticket if HR wants auto-grading later.
+- Rollback: `SELECT * FROM system_audit_logs WHERE metadata->>'category'='CLU_ANNUAL_PROD_PM_V1'` → restore snapshotted JSON per `instance_id`.
