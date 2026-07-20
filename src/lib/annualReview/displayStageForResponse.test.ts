@@ -5,14 +5,14 @@ import {
   remapStageValueMapByDuplicates,
 } from './displayStageForResponse';
 
-const BASE = {
+const BASE: any = {
   employee_id: 'emp',
   manager_id: 'mgr',
   skip_id: 'skip',
   dept_head_id: 'dept',
   bu_head_id: 'bu',
   hr_id: 'hr',
-  enabled_stages: ['self','manager','skip_manager','dept_head','bu_head','hr'] as const,
+  enabled_stages: ['self','manager','skip_manager','dept_head','bu_head','hr'],
 };
 
 describe('displayStageForResponse', () => {
