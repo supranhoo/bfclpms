@@ -631,6 +631,45 @@ export type Database = {
         }
         Relationships: []
       }
+      annual_review_final_backfill_audit_2026_07: {
+        Row: {
+          created_at: string
+          id: string
+          instance_id: string
+          new_criteria_weighted_score: number | null
+          new_final_rating: string | null
+          new_total_score: number | null
+          old_criteria_weighted_score: number | null
+          old_final_rating: string | null
+          old_total_score: number | null
+          source: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          instance_id: string
+          new_criteria_weighted_score?: number | null
+          new_final_rating?: string | null
+          new_total_score?: number | null
+          old_criteria_weighted_score?: number | null
+          old_final_rating?: string | null
+          old_total_score?: number | null
+          source?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          instance_id?: string
+          new_criteria_weighted_score?: number | null
+          new_final_rating?: string | null
+          new_total_score?: number | null
+          old_criteria_weighted_score?: number | null
+          old_final_rating?: string | null
+          old_total_score?: number | null
+          source?: string
+        }
+        Relationships: []
+      }
       annual_review_head_remap_audit_2026_07: {
         Row: {
           classification: string
@@ -13635,6 +13674,14 @@ export type Database = {
         }
         Returns: Json
       }
+      annual_review_compute_final_summary: {
+        Args: { p_instance_id: string }
+        Returns: {
+          criteria_weighted_score: number
+          final_rating: string
+          total_score: number
+        }[]
+      }
       annual_review_directory_access: { Args: { v_uid: string }; Returns: Json }
       annual_review_effective_chain: {
         Args: { p_instance_id: string }
@@ -13678,6 +13725,10 @@ export type Database = {
           p_role: Database["public"]["Enums"]["annual_reviewer_role"]
         }
         Returns: Database["public"]["Enums"]["annual_review_status"]
+      }
+      annual_review_resolve_final_rating: {
+        Args: { p_total_score: number }
+        Returns: string
       }
       annual_review_reviewer_slot_diagnostic: {
         Args: { p_cycle_id: string }
