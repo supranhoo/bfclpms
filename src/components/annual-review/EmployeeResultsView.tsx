@@ -15,6 +15,7 @@ import type {
   AnnualReviewInstance, AnnualReviewResponse, AnnualReviewTemplate,
 } from '@/types/annualReview';
 import { collectRecommendations } from './OverallRecommendationCard';
+import { groupResponsesByDisplayStage } from '@/lib/annualReview/displayStageForResponse';
 
 /**
  * Read-only finalized view for the employee: HR rating + remarks, criteria-by-criteria
@@ -32,8 +33,19 @@ export function EmployeeResultsView({
   const [rebuttal, setRebuttal] = useState('');
 
   const criteria = template?.sections.criteria ?? [];
-  const byRole = new Map(responses.map((r) => [r.reviewer_role, r] as const));
-  const recommendations = collectRecommendations(responses);
+  // POLICY §AR-STAGE-LABEL-DISPLAY-SSOT (ADR-128): remap responses onto their
+  // effective display stage so duplicate-reviewer collapses (e.g. Dept≡BU)
+  // render under the winning column (BU), matching the header.
+  const byRoleObj = groupResponsesByDisplayStage(
+    responses as any,
+    instance as any,
+  );
+  const byRole = new Map(
+    (Object.keys(byRoleObj) as (keyof typeof byRoleObj)[])
+      .filter((k) => !!byRoleObj[k])
+      .map((k) => [k, byRoleObj[k]!] as const),
+  );
+  const recommendations = collectRecommendations(responses, instance as any);
   const stageLabel: Record<string, string> = {
     self: 'Self', manager: 'Manager', skip_manager: 'Skip Manager',
     dept_head: 'Department Head', bu_head: 'BU Head', hr: 'HR',
