@@ -1,84 +1,82 @@
 
-## Verified facts (from DB, not assumed)
+# Fix — Completed reviews missing criteria_weighted_score / total_score / final_rating
 
-- Two `manual` System-KPI slots are involved: `sys_3jsce5p` (Annual Production Target vs Actual) and `sys_2z4e0vw` (Annual PM Target vs Actual). Slot IDs are stable across all 49 templates that carry them — no key drift.
-- Across the FAD family the two slots are present on the template for **FAD-E And I** (19), **FAD-Mech** (66), and **FAD-Production** (333 incl. 71 `excluded`). They are **not present** on the FAD-Metal Handling, FAD-Pollution, FAD-RMH, and part of FAD-E And I / FAD-Mech / FAD-Production templates (see table below).
-- Existing coverage (raw values already persisted) matches the last successful upload pass — 342 FAD instances already have both values, 71 excluded FAD-Production are intentionally empty, and roughly **~55 FAD instances that carry the slots are still blank** (mostly `pending_bu` E And I and a handful of `pending_self` / `pending_dept` rows).
-- Uploader bug: `SystemScoresUploadDialog.tsx` writes the HR-entered raw value straight into `system_scores` (points), never into `system_scores_raw`, and never routes it through `scoreFromRaw` / `pickBand`. That contradicts **ADR-116 / POLICY §AR-SYSTEM-SCORES-KEY-STABILITY** (raw is SSOT). It is the reason your Excel numbers "just disappeared" for some employees: the value overwrites a stale computed point but doesn't survive a template refresh or remap.
+## 1. Assumptions
+- Employee **200141 (Mithu Kumar Mahto)** was surfaced as the reproducer. His instance `3ddaabb9…` shows `overall_status='completed'`, `finalized_at=2026-07-19`, all three reviewer responses locked (self / dept_head / bu_head, weighted 225/220/220), **but** the instance columns `criteria_weighted_score`, `total_score`, `final_rating` are NULL — which is why the employee page shows Criteria 0/45 and no rating.
+- His workflow terminates at BU Head (no HR stage). This is the intended terminal per POLICY §AR-BU-HEAD-TERMINAL (ADR-109).
 
-Templates without the two slots (per FAD sub-department, `pending_*` only — excluded/completed skipped):
+## 2. Verified current state (data reads, not assumption)
+- `SELECT COUNT(*) FROM annual_review_instances WHERE overall_status='completed' AND (criteria_weighted_score IS NULL OR total_score IS NULL OR final_rating IS NULL)` → **760 / 760**. 100% of completed instances are affected — this is not a per-employee anomaly.
+- `pg_get_functiondef('advance_annual_review_status')` confirms the completion branch only sets `finalized_at`/`finalized_by`; it never computes or writes `criteria_weighted_score`, `total_score`, or `final_rating`. Those columns are only written by `finalizeInstance()` (HR route) in `annualReviewService.ts`.
+- Result: workflows that legitimately end at BU Head / Dept Head / Skip / Manager silently complete without persisting the final numbers the employee UI (`EmployeeResultsView.tsx`) and reports rely on.
 
-| Sub-department | Status | Count |
-|---|---|---|
-| FAD-E And I | pending_bu | 8 |
-| FAD-Mech | pending_self / pending_dept | 4 |
-| FAD-Metal Handling | pending_self / pending_dept | 21 |
-| FAD-Pollution | pending_self / pending_dept | 23 |
-| FAD-Production | pending_self / pending_dept | 3 |
-| FAD-RMH | pending_dept | 14 |
+## 3. Root Cause (5-Why)
+1. Employee sees Criteria 0/45 and no /5 rating → because `instance.criteria_weighted_score` and `instance.final_rating` are NULL.
+2. Why NULL? → No routine wrote them on this instance.
+3. Why not written? → `advance_annual_review_status` never populates them; only HR's `finalizeInstance` does.
+4. Why is HR the only writer? → Legacy assumption that every workflow ends at `pending_hr`; BU-Head-terminal workflows (ADR-109) weren't retrofitted onto the finalization path.
+5. Why did this survive to prod? → No trigger/test asserting "when `overall_status='completed'` then all three final columns must be non-NULL".
 
-## Assumptions
+## 4. Risk & Impact
+| Area | Impact |
+|---|---|
+| Data | 760 completed instances get final columns backfilled from locked responses + system_scores. Additive UPDATE only; audit-logged. No historical value is destroyed. |
+| Workflow | Terminal advancement now writes final numbers. HR-terminated flows still go through `finalizeInstance` unchanged (HR-typed rating wins). |
+| UI/UX | Employee's "Your Final Review" card, admin exports, and comprehensive report will show real numbers instead of `—`. |
+| Regression | Low — the change is scoped to the `v_next = 'completed'` branch of one RPC + a one-shot backfill. Existing HR-path finalization is untouched. |
+| Scalability | 760 row backfill is trivial; ongoing writes are O(1) per submit. |
+| Rollback | Migration is additive; a rollback script would NULL back the backfilled columns from `annual_review_final_backfill_audit_2026_07`. |
 
-- "Entire FAD" = every FAD-* sub-department where the employee's review is still live (`overall_status IN ('not_started','pending_self','pending_manager','pending_dept','pending_bu','pending_hr','pending_management')`).
-- `excluded` FAD-Production (71) rows are intentionally out of scope. Confirm if you actually want them backfilled.
-- For FAD-* rows on templates that **don't** expose the two slots today, I'll flag them in the dry-run report; adding the slots is a template edit and needs your explicit go-ahead per department (I won't silently add scoring items).
+## 5. Plan (Step → Verification)
 
-## Risk & Impact Report
+### Step 1 — Add PL/pgSQL SSOT `public.annual_review_compute_final_score(instance_id)`
+Mirrors `computeFinalScore` in `src/lib/annualReview/finalScore.ts`:
+- Resolves effective stage weights (`stage_weights_override` → template `stage_weights_v2`/`stage_weights` → legacy `{criteria:100}`).
+- Reads locked reviewer `weighted_score`s from `annual_review_responses`.
+- Sums `system_scores` (already in /100 points) for the system bucket.
+- Uses instance `criteria_weighted_score` (when present) for the legacy `criteria` bucket, else the **terminal reviewer's weighted_score** normalised via effective template's criteria max.
+- Returns `(criteria_weighted_score, total_score numeric(0..100), final_rating text band)`.
 
-- **Data**: writes to `system_scores_raw` + `system_scores` for ~55 in-scope FAD instances. Every write audit-trailed in `annual_review_rescore_audit_2026_07`. FAD-Production already has 15 `pending_bu` rows populated — those will not be rewritten unless the current raw differs from 98/100.
-- **Workflow**: no status transitions; no reviewer notifications; no cycle changes.
-- **UI/UX**: System Scores card for affected FAD employees will render the 98% → rating and 100% → rating derived via the template's library rules.
-- **Regression risk**: uploader-fix is scoped to `SystemScoresUploadDialog.tsx` — the derivative path already used elsewhere (`upsertSystemScoresRaw` in `cycleBulkDataUpload.ts`) is the reference. Existing tests in `systemKpiScoring.test.ts` pin the raw→points behaviour.
-- **Scalability**: single-shot RPC over ~55 rows; O(rows) with two JSONB merges each. Negligible.
-- **Rollback**: RPC is dry-run by default; the audit table stores previous JSONB so a reversal query is a one-liner if needed.
+Rating band derivation is master-data driven — read from `annual_review_settings` if a rating scale exists, else standard band: `≥90 O, ≥80 E, ≥70 M, ≥60 P, else U` (same bands used elsewhere; will confirm at build time by reading `annual_review_settings`).
 
-## Step-by-step Plan
+**Verify:** New unit tests in `supabase/functions/*` mirror sample from 200141 and assert `total_score ≈ 60.2`, `final_rating='M'`.
 
-1. **New SECURITY DEFINER RPC** `admin_backfill_annual_review_manual_scores(cycle_id uuid, filter jsonb, entries jsonb, dry_run boolean)`:
-   - `filter` supports `{ department_name_prefix: 'FAD-', include_statuses: [...], skip_excluded: true }`.
-   - `entries` = `[{ library_key: 'annual_production', raw: 98 }, { library_key: 'annual_pm', raw: 100 }]`.
-   - Per matched instance: resolve the two slots by `library_key` on the resolved template (`template_override_id ?? template_id`), copy the library `scoring_rules` + `weight_pct`, compute `rating`/`points` in-DB (same math as `scoreFromRaw`), merge into `system_scores_raw` and `system_scores`, and — only when `overall_status IN ('completed','acknowledged')` — recompute `total_score` per the finalization formula. Skip `excluded`.
-   - Emit one `annual_review_rescore_audit_2026_07` row per instance capturing before/after JSONB and formula inputs.
-   - Return `{ dry_run, matched, would_update, skipped_no_slot, skipped_excluded, skipped_same_value }`.
-   - `has_role(auth.uid(), 'admin')` OR `has_role(auth.uid(), 'hr_pms')` gate.
-   - **Verification**: unit tests + one dry-run call from a small admin UI button; sample 3 FAD sub-departments and confirm counts.
+### Step 2 — Patch `advance_annual_review_status`
+When `v_next = 'completed'` and `criteria_weighted_score IS NULL` (i.e., not already set by HR path), call the SSOT and UPDATE the three columns in the same statement that sets `finalized_at`. HR path (`finalizeInstance`) is unchanged — HR still wins on the columns it writes.
 
-2. **Uploader bug fix** in `SystemScoresUploadDialog.tsx`:
-   - Rewrite the import path to write **raw** values, using `scoreFromRaw` + the resolved library rule to derive `points`, mirroring `cycleBulkDataUpload.parseAndDryRun`.
-   - Reject silently-blank cells for `source: 'manual'` slots with a per-row warning banner ("2 employees have an empty Annual Production value — leave blank to keep the previous value, enter 0 to zero it").
-   - Enforce the existing `STAGE_SAFE` guard (unchanged) so full-workbook uploads can't overwrite finalized totals — the new manual-only backfill RPC is the only path allowed to touch completed rows.
-   - **Verification**: new unit tests in `src/test/annualReview/systemScoresUploadDialog.parse.test.ts` for the raw/points split and the empty-cell warning.
+**Verify:** Manual test on a scratch instance advancing through terminal BU Head → three columns are non-NULL.
 
-3. **FAD one-shot backfill** driven from the same dialog:
-   - New "FAD department backfill (98% / 100%)" section, admin-only, calls the RPC in dry-run first, shows a per-employee preview (Employee Code, Full Name, Sub-dept, current raw, next raw, status, action) with the missing-slot rows highlighted and skipped, then requires a typed confirmation ("BACKFILL FAD") before the commit call.
-   - **Verification**: dry-run against production shows 55± touched, 0 skipped-excluded outside FAD-Production/71, 0 missing-slot rows. Then commit → recheck sample: Atul Singh (200414), Anshu Mishra (200222), Ujjwal Chauhan (200408) show 98/100 with derived ratings.
+### Step 3 — One-shot backfill of the 760 existing completed instances
+- Snapshot to new `annual_review_final_backfill_audit_2026_07` table (id, instance_id, old/new values, at).
+- Run the new SSOT for each `overall_status='completed' AND criteria_weighted_score IS NULL` row.
+- Log a single `system_audit_logs` entry with counts.
 
-4. **Silent-blank health strip on bulk uploader** (guardrail against recurrence):
-   - Extend `cycleBulkDataUpload.parseAndDryRun`'s existing report with `emptyManualColumns[]`. UI adds a red strip when any `source: 'manual'` cell is empty on a row whose template exposes that slot.
-   - **Verification**: unit test with a fixture that leaves the two columns blank and expects the strip to fire.
+**Verify:** Re-run the diagnostic query; expect 0/760 remaining. Spot-check 200141 shows populated columns.
 
-5. **Docs & Policy**:
-   - ADR-123 — "Manual-source system-KPI backfill after finalization" (RPC contract, audit obligations, STAGE_SAFE separation).
-   - POLICY.md — new §AR-MANUAL-BACKFILL (admin-gated, must rescore + audit, raw is SSOT).
-   - DOCUMENTATION.md — v2.66.119 entry cross-linking ADR-123 and the uploader fix.
+### Step 4 — Add DB invariant + regression tests
+- New CHECK-style validation via trigger: block `overall_status → 'completed'` transitions where the three columns end up NULL (defense in depth).
+- Tests:
+  - `src/tests/annualReviewFinalScorePersistence.test.ts` — TS SSOT parity harness on Mithu's shape.
+  - `supabase/functions/*/annual_review_terminal_completion_test.ts` — Deno test asserting the RPC persists all three columns.
 
-## UI Changes
+### Step 5 — SSOT docs
+- `DOCUMENTATION.md`: v2.66.119 entry describing ADR-124 (Terminal Completion Persistence).
+- `POLICY.md` §AR-TERMINAL-COMPLETION-PERSISTENCE: "Every `overall_status='completed'` instance MUST have `criteria_weighted_score`, `total_score`, and `final_rating` persisted. Whichever routine performs the terminal transition (HR path or `advance_annual_review_status`) is responsible for writing them."
+- `mem/features/annual-review/terminal-completion-persistence.md` + index entry.
 
-- `SystemScoresUploadDialog.tsx`:
-  - New sub-section "Bulk backfill by department (raw values)".
-  - Dropdown: sub-department (FAD-*), inputs: library key + raw value pairs, dry-run preview table, typed-confirmation commit.
-  - Preview table: sticky header, virtualised for >200 rows, columns "Employee Code / Full Name / Sub-dept / Current raw / Next raw / Status / Action".
-  - Existing workbook uploader gains a red banner listing rows with empty manual-source cells and a "Show all" toggle (pagination at 50 rows/page).
-  - Responsive: dialog switches to full-screen on `<md` viewports; typed-confirmation input auto-focuses; toast on success and on failure with copy-paste error text.
+## 6. UI Changes
+Not Applicable — no rendering code changes. `EmployeeResultsView.tsx` already reads the three columns; once they are populated by the backfill, the employee's Total Score, Criteria weighted, `≈ x.x / 5` and Final Rating badge appear automatically.
 
-## Tests
+## 7. Zero-Hardcoding & Multi-tenancy
+- Rating band thresholds sourced from `annual_review_settings` (fallback constants only when no config row exists — same policy the HR UI already applies).
+- No employee/department names hardcoded; backfill is set-based.
 
-- `admin_backfill_annual_review_manual_scores` — pgTAP-style tests via `psql` fixtures: (a) writes raw + points, (b) rescores only completed/acknowledged, (c) skips excluded, (d) skips rows whose template lacks the slot, (e) idempotent when values match.
-- `SystemScoresUploadDialog.parse.test.ts` — 6 cases: raw vs points, empty cell warning, non-numeric guard, missing header, weight-0 slot, per-user-weight parity.
-- `fadBackfillDryRun.test.ts` — freezes the 55± dry-run against a snapshot fixture so a template edit changing the FAD scope produces a review-visible diff.
+## 8. Rollback
+Provide `docs/adr/ADR-124-rollback.sql` that: (a) restores the three columns from the audit snapshot, (b) drops the invariant trigger, (c) reverts `advance_annual_review_status` to the previous body preserved as `advance_annual_review_status_pre_adr124`.
 
-## Open questions (please answer before I implement)
+## 9. Out of Scope (call-outs, no code)
+- The separate scale mismatch between raw `weighted_score` (e.g. 220 for max 250) and the /100 scale assumed by `computeFinalScore` exists in TS too. This plan normalises consistently inside the SSOT (dividing by `criteria_raw_max` and scaling to `100 − systemMax`) but does NOT refactor the TS reader — happy to open a follow-up if you want the running-score projections aligned.
 
-1. Include the **71 `excluded` FAD-Production** rows in the backfill? Default is **no**.
-2. For FAD sub-departments whose templates **don't currently expose Annual Production / Annual PM** (Metal Handling / Pollution / RMH and the 4 FAD-Mech + 3 FAD-Production stragglers on legacy templates), do you want me to (a) skip and list, (b) add the two slots to those templates and then backfill, or (c) reassign those instances onto the standard FAD-Mech template as a separate ticket?
-3. Should the 98% / 100% values be locked in for **only the current cycle**, or applied any time a FAD instance appears with those slots empty (persistent policy vs one-shot data fix)? Default is **one-shot data fix**; a persistent policy would require a new `cycle_scoped_defaults` config surface.
+---
+
+**One approval → I ship Steps 1–5 in a single migration + companion TS test + doc updates, and run the 760-row backfill.**
