@@ -512,6 +512,21 @@ function ProgressTab() {
     for (const t of allTemplates) m[t.id] = t;
     return m;
   }, [allTemplates]);
+  // ADR-130 / POLICY §AR-KRA-GRID-DISPLAY — for KRA-based templates
+  // (weighted_score is always 0), project a rating from the employee's
+  // rolled-up KRA achievement so the grid's /5, Final and Rating columns
+  // stop rendering "—" for locked stages.
+  const kraFiscalYear = activeCycle ? fyStartFromCycle(activeCycle) : null;
+  const kraTemplateFor = useCallback(
+    (i: InstanceWithEmployee) =>
+      templatesByIdMap[svc.resolveTemplateId(i) ?? ''] ?? null,
+    [templatesByIdMap],
+  );
+  const kraDerivedByInstance = useKraDerivedRatingsForInstances(
+    instances,
+    kraTemplateFor,
+    kraFiscalYear,
+  );
   const qc = useQueryClient();
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkOpen, setBulkOpen] = useState<null | 'finalize' | 'sendBack'>(null);
