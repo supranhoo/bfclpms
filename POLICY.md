@@ -1,3 +1,15 @@
+### §AR-WEIGHTED-SCORE-SCALE — Reviewer weighted_score is raw points, not /100 (ADR-126, v2.66.119, 2026-07-20)
+- `annual_review_responses.weighted_score` and `annual_review_instances.criteria_weighted_score` are stored as **raw weighted point sums**: `Σ (criterion.weight × selected_score_0..5)`. They are NOT on a 0..100 scale.
+- All downstream blending — `computeRunningFinalScore` (projection card) and `annual_review_compute_final_summary` (server terminal-completion RPC) — MUST normalise raw values into the criteria pool before adding system score:
+  - `criteriaRawMax  = Σ (criterion.weight × 5)`
+  - `systemMaxRaw    = Σ (system_score.weight)`
+  - `criteriaPoolMax = clamp(100 − systemMaxRaw, 0, 100)`
+  - `criteriaPct     = raw_weighted / criteriaRawMax`
+  - `total_score     = clamp(system_total + criteriaPct × criteriaPoolMax, 0, 100)`
+- Mirrors the on-screen `computeScoreComposition` SSOT so client, server and UI agree; both TS and PL/pgSQL implementations must stay aligned.
+- Backfill: 712 previously-completed instances were re-scored on 2026-07-20 (Mithu Kumar Mahto 200141 moved from 100.00/Outstanding to 89.60/Outstanding). Every prior value is preserved in `system_audit_logs` under action `ADR_126_PROJECTED_SCORE_NORMALIZATION_V1` for full reversibility.
+- Regression guard: `src/lib/annualReview/runningFinalScore.test.ts` covers terminal-picker order, criteria-pool normalisation, overflow clamping, and legacy no-criteria fallback.
+
 ### §SAFETY-PERMIT-HIRA-DRAFT-LOCK — Requesters cannot rewrite submitted risk assessments (v2.66.113, 2026-07-17)
 - A permit requester may create, update, or remove `safety_permit_hira` rows only while the parent `safety_permits.status = 'draft'`.
 - Once submitted, approved, active, closed, expired, rejected, or otherwise outside draft, requester HIRA writes MUST be denied. Safety Admin and Safety Head retain oversight write access; existing parent-permit read authorization is unchanged.
