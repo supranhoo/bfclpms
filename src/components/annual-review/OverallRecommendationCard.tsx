@@ -5,6 +5,10 @@ import type {
   AnnualReviewResponse,
   AnnualReviewerRole,
 } from '@/types/annualReview';
+import {
+  displayStageForResponse,
+  type StageDisplayInstanceLike,
+} from '@/lib/annualReview/displayStageForResponse';
 
 /**
  * Reserved key inside `annual_review_responses.qualitative_responses` for the
@@ -37,6 +41,7 @@ export const RECOMMENDATION_ROLES: readonly AnnualReviewerRole[] = [
  */
 export function collectRecommendations(
   responses: Pick<AnnualReviewResponse, 'reviewer_role' | 'qualitative_responses'>[],
+  instance?: StageDisplayInstanceLike,
 ): Array<{ role: AnnualReviewerRole; text: string }> {
   const order: AnnualReviewerRole[] = [
     'self',
@@ -50,7 +55,20 @@ export function collectRecommendations(
   for (const r of responses) {
     const raw = (r.qualitative_responses ?? {})[RECOMMENDATION_KEY];
     const txt = (raw ?? '').trim();
-    if (txt) byRole.set(r.reviewer_role, txt);
+    if (!txt) continue;
+    // POLICY §AR-STAGE-LABEL-DISPLAY-SSOT (ADR-128): attribute the note to
+    // the winning display stage when duplicate reviewers collapse.
+    const displayRole = instance
+      ? displayStageForResponse(
+          { reviewer_role: r.reviewer_role, reviewer_id: (r as any).reviewer_id ?? null },
+          instance,
+          responses.map((x) => ({
+            reviewer_role: x.reviewer_role,
+            reviewer_id: (x as any).reviewer_id ?? null,
+          })),
+        )
+      : r.reviewer_role;
+    if (!byRole.has(displayRole)) byRole.set(displayRole, txt);
   }
   return order
     .filter((role) => byRole.has(role))
