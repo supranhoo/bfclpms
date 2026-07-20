@@ -291,6 +291,7 @@ export function TeamReviewDetailContent({
       composition={composition}
       running={running}
       comparison={comparison}
+      resolvedSystemScores={resolvedSystemScores}
       onUpload={onUpload}
       responses={responses}
       handleSubmit={handleSubmit}
@@ -319,7 +320,7 @@ function TeamReviewDetailInner(props: any) {
   const {
     instance, template, role, locked, readOnlyNotice, proxyMode, availLangs, lang, setLang,
     visibleStages, skippedStages, reviewerNamesByStage, fiscalYear,
-    draft, setDraft, status, flush, composition, running, comparison, onUpload,
+    draft, setDraft, status, flush, composition, running, comparison, resolvedSystemScores, onUpload,
     responses, handleSubmit, handleSendBack, canSendBack,
     stageRatingOutOf5,
     sendBackOpen, setSendBackOpen, sendBackReason, setSendBackReason,
@@ -399,7 +400,7 @@ function TeamReviewDetailInner(props: any) {
         systemScores={template?.sections.system_scores ?? []}
         // ADR-127 — feed the normalised map so per-KPI "Contributes X/weight"
         // never shows the raw 0..5 rating overflowing its slot.
-        values={composition ? (undefined as never) ?? {} : {}}
+        values={resolvedSystemScores ?? {}}
         rawValues={instance.system_scores_raw ?? {}}
         eligibility={template?.sections.eligibility_criteria}
         eligibilityInputs={instance.eligibility_inputs}
