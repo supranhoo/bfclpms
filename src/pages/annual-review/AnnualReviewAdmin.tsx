@@ -1239,15 +1239,20 @@ function ProgressTab() {
 
       <AlertDialog open={!!rollbackFor} onOpenChange={(o) => !o && setRollbackFor(null)}>
         <AlertDialogContent>
-          {rollbackFor && (
+          {rollbackFor && (() => {
+            const terminalLabel = rollbackTerminalLabel(
+              (rollbackFor.enabled_stages ?? []) as any,
+            );
+            const noTerminal = terminalLabel === 'the previous reviewer stage';
+            return (
             <>
               <AlertDialogHeader>
                 <AlertDialogTitle>Roll back finalized review?</AlertDialogTitle>
                 <AlertDialogDescription>
                   {rollbackFor.employee?.full_name ?? rollbackFor.employee_id} — this will clear the
                   {' '}<strong>final rating</strong>, HR remarks and finalized timestamp, unlock the
-                  {' '}HR stage response, and return the instance to <strong>pending HR</strong> so
-                  {' '}it can be revised. Historical audit trail is preserved.
+                  {' '}last reviewer stage response, and return the instance to{' '}
+                  <strong>{terminalLabel}</strong> so it can be revised. Historical audit trail is preserved.
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <div className="space-y-1">
@@ -1266,11 +1271,11 @@ function ProgressTab() {
                     e.preventDefault();
                     if (!rollbackFor) return;
                     try {
-                      await rollbackFinalized.mutateAsync({
+                      const to = await rollbackFinalized.mutateAsync({
                         instanceId: rollbackFor.id,
                         reason: rollbackReason.trim(),
                       });
-                      toast.success('Finalized review rolled back to pending HR.');
+                      toast.success(`Finalized review rolled back to ${to ?? terminalLabel}.`);
                       setRollbackFor(null);
                       setRollbackReason('');
                       qc.invalidateQueries();
@@ -1279,14 +1284,15 @@ function ProgressTab() {
                       toast.error(e?.message || e?.hint || e?.details || 'Failed to roll back');
                     }
                   }}
-                  disabled={rollbackReason.trim().length < 3 || rollbackFinalized.isPending}
+                  disabled={rollbackReason.trim().length < 3 || rollbackFinalized.isPending || noTerminal}
                   className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                 >
                   {rollbackFinalized.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />} Roll back
                 </AlertDialogAction>
               </AlertDialogFooter>
             </>
-          )}
+            );
+          })()}
         </AlertDialogContent>
       </AlertDialog>
     </div>
