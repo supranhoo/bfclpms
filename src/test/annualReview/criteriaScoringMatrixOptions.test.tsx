@@ -166,6 +166,65 @@ describe('CriteriaScoringMatrix — option cards', () => {
     expect(screen.getByRole('button', { name: /Rarely late/ })).toHaveAttribute('aria-pressed', 'true');
   });
 
+  it('keeps the six FAD Mechanical options editable on the employee self-review surface', () => {
+    const onChangeScore = vi.fn();
+    const atulCriterion: TemplateCriterion = {
+      ...baseCriterion,
+      id: 'crit_8srxl73',
+      name: 'FAD - Mechanical KPI & Target Achievement',
+      options: [5, 4, 3, 2, 1, 0].map((score) => ({
+        id: `score-${score}`,
+        label: `Performance level ${score}`,
+        score,
+      })),
+    };
+
+    wrap(
+      <CriteriaScoringMatrix
+        criteria={[atulCriterion]}
+        values={{}}
+        remarks={{}}
+        onChangeScore={onChangeScore}
+      />,
+    );
+
+    const options = screen.getAllByRole('button', { name: /Performance level/ });
+    expect(options).toHaveLength(6);
+    options.forEach((option) => expect(option).toBeEnabled());
+    fireEvent.click(screen.getByRole('button', { name: /Performance level 5/ }));
+    expect(onChangeScore).toHaveBeenCalledWith('crit_8srxl73', 5);
+  });
+
+  it('keeps those same options disabled on a non-eligible team-assisted surface', () => {
+    const onChangeScore = vi.fn();
+    const atulCriterion: TemplateCriterion = {
+      ...baseCriterion,
+      id: 'crit_8srxl73',
+      name: 'FAD - Mechanical KPI & Target Achievement',
+      options: [5, 4, 3, 2, 1, 0].map((score) => ({
+        id: `score-${score}`,
+        label: `Performance level ${score}`,
+        score,
+      })),
+    };
+
+    wrap(
+      <CriteriaScoringMatrix
+        criteria={[atulCriterion]}
+        values={{}}
+        remarks={{}}
+        readOnly
+        onChangeScore={onChangeScore}
+      />,
+    );
+
+    const options = screen.getAllByRole('button', { name: /Performance level/ });
+    expect(options).toHaveLength(6);
+    options.forEach((option) => expect(option).toBeDisabled());
+    fireEvent.click(options[0]);
+    expect(onChangeScore).not.toHaveBeenCalled();
+  });
+
   it('renders independent Hindi labels for two criteria that share option ids (namespaced keys)', () => {
     const safety: TemplateCriterion = {
       ...baseCriterion,
