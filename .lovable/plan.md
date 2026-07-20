@@ -1,76 +1,94 @@
+## Problem
 
-# Fix: Reviews auto-completing when Dept/BU Head is inactive
+For Prabhu Bediya (201119) — and any employee whose Dept Head and BU Head are the **same person** — the UI is inconsistent:
 
-## 1. Root cause (verified against DB)
+- **Header / pipeline / Projected Score card**: correctly de-duplicates via `resolveEffectiveChain`. Dept Head is skipped ("1 stage auto-skipped: Dept Head (same reviewer at a higher stage)"), and the score is attributed to **BU Head** (winning stage per POLICY §AR-BU-HEAD-TERMINAL / duplicate-reviewer seniority).
+- **Per-criterion chips** at the bottom of each criterion (`Self: 4`, `Dept: 4`) and the **team grid `/5` columns** (SELF/MANAGER/SKIP/**DEPT**/BU/HR) show the response under its **physical** `reviewer_role` (`dept_head`), because that's what got persisted in `annual_review_responses`.
 
-`annual_review_effective_chain_details` currently marks a stage as **`skipped`** with reason `reviewer_inactive` when the assigned reviewer's `profiles.is_active = false`. `annual_review_next_status` then computes the "next" stage from the shortened chain, and `advance_annual_review_status` obediently transitions the instance — including, per ADR-124, all the way to `completed` with a full auto-computed `total_score` / `final_rating`.
+Result: the same locked score simultaneously appears as "Dept" in the grid/chips and as "BU" in the header — confusing and self-contradictory system-wide.
 
-Concrete evidence (`system_audit_logs.annual_review.stage_auto_skipped`, all 4 cases):
+## Root Cause (RCA)
+
+- `annual_review_responses.reviewer_role` stores the **physical stage** where the reviewer acted (`dept_head`). This is correct as an audit record and must not be rewritten (POLICY §88 submission immutability).
+- Presentation layers (`TeamReviewDetailContent.comparison`, `AnnualReviewAdmin` team grid columns, `EmployeeResultsView`, `HrFinalizationSheet`, `OverallRecommendationCard`) read `reviewer_role` **verbatim** and label chips/columns by that raw value.
+- Only the pipeline / RunningFinalScoreCard / final-score math consumes `resolveEffectiveChain`, which collapses duplicates upward (dept_head → bu_head).
+- Therefore any duplicate-reviewer collapse (Dept≡BU, Manager≡BU, Manager≡Dept, etc.) is invisible to chips and grid.
+
+**5 Whys**
+1. Why does Dept chip show "Dept: 4" while header shows BU? → Chip reads `reviewer_role` directly.
+2. Why isn't it remapped? → No presentation-layer stage remap exists; only scoring math uses the effective chain.
+3. Why was the remap only added to scoring? → Duplicate-reviewer dedup (ADR-108/109) targeted score correctness first; the label layer was assumed to be cosmetic.
+4. Why does the grid show DEPT=4.0 but BU=—? → Grid column keys are physical `reviewer_role` slots, not effective-chain slots.
+5. Why did the inconsistency surface now? → BU-head-terminal cases (Prabhu, Bhim Rajak, etc.) are rare; historical cycles typically had distinct dept & BU heads.
+
+## Fix (presentation-only; zero mutation of stored responses)
+
+Introduce a **single SSOT presentation mapper** and apply it everywhere a stage label or `/5` column is derived from `reviewer_role`.
+
+### 1. New pure helper — `src/lib/annualReview/displayStageForResponse.ts`
+
+```ts
+// Given the effective chain + a stored response, return the stage the response
+// should DISPLAY as. If the physical stage was collapsed as a duplicate of a
+// higher tier, return the higher tier. Otherwise return the physical stage.
+displayStageForResponse(response, effectiveChain): AnnualReviewerRole
 ```
-enabled:  [self, dept_head, bu_head]
-effective:[self]
-skipped:  [{stage:bu_head, reason:reviewer_inactive},
-           {stage:dept_head, reason:reviewer_inactive}]
-resolved_to: completed
+
+Rules:
+- If `effectiveChain` marks `response.reviewer_role` as `skipped` with `skipReason === 'duplicate_reviewer'` **and** the `duplicateOf` stage has NO stored response of its own → present the row as `duplicateOf`.
+- If the higher stage already has its own response, keep the physical label (do not merge — both are real).
+- `self` never remaps.
+- BU-head-terminal (`skipReason === 'bu_head_terminal'`) already means the row shouldn't exist; log a diagnostic but keep physical label to avoid data loss in the UI.
+
+### 2. Group responses by display stage — `src/lib/annualReview/responsesByDisplayStage.ts`
+
+Utility used by every consumer:
+```ts
+groupResponsesByDisplayStage(responses, effectiveChain)
+  → Record<AnnualReviewerRole, AnnualReviewResponse | null>
 ```
 
-The same inactive user was mapped to BOTH `dept_head_id` and `bu_head_id`, so once they were deactivated the entire downstream chain collapsed. Self submitted → jumped straight to `completed` with only the employee's own weighted score contributing to the final.
+### 3. Wire consumers to the remap (surgical edits only)
 
-### 5-Whys
-1. Review shows completed → `advance_annual_review_status` set `overall_status='completed'` after Self.
-2. Why after Self? → Effective chain collapsed to `[self]`, so `next_status` returned `completed`.
-3. Why did the chain collapse? → Both Dept Head and BU Head were skipped by the resolver.
-4. Why were they skipped? → Reviewer profile `is_active=false` → resolver emits `reviewer_inactive` skip.
-5. Why does an inactive reviewer silently disappear from a governance chain? → Resolver treats `inactive` the same as `no_reviewer_mapped` / `duplicate_reviewer`, but inactivity should require **admin remap**, not silent completion.
+| File | Change |
+|---|---|
+| `src/components/annual-review/TeamReviewDetailContent.tsx` (L150–162) | Replace `r.reviewer_role` label lookup with `displayStageForResponse(...)`. Result: chips read "Self: 4 | BU: 4" for Prabhu instead of "Self: 4 | Dept: 4". |
+| `src/pages/annual-review/AnnualReviewAdmin.tsx` (grid `SELF/MANAGER/SKIP/DEPT/BU/HR /5` columns, near L946) | Feed columns from `groupResponsesByDisplayStage` instead of raw `reviewer_role`. Dept column will render `—`; BU column will render 4.0 for Prabhu / Bhim Rajak. |
+| `src/components/annual-review/EmployeeResultsView.tsx` (L35 `byRole = new Map(...)`) | Build map from `groupResponsesByDisplayStage` for stage cards & Criteria panel. |
+| `src/components/annual-review/HrFinalizationSheet.tsx` (L75, L104) | Use display map when checking "which stages are locked" for HR's completeness banner. |
+| `src/components/annual-review/OverallRecommendationCard.tsx` (L39–L87) | Group notes by display stage so a duplicate Dept/BU note is attributed once, to the winning stage. |
+| `src/pages/annual-review/ManagerCalibration.tsx` (L59–L60) | Also route through display mapper (defensive; manager rarely collides, but keep SSOT). |
+| Exports — `src/components/annual-review/AnnualReviewExportMenu.tsx` (L224) | Add a computed `display_reviewer_role` column so CSV/XLSX exports match the on-screen values. Keep raw `reviewer_role` too, marked as "physical stage" for auditors. |
 
-### Confirmed blast radius
-- **4 instances real-bug completed** with no dept/BU review (Prince Prakash 101769, Rupesh Kumar Sharma 101851, Preeti Jain 101149, Sumit Kumar 100563).
-- 39 other completed-without-dept instances are **legit** — same person was both Dept & BU, and the BU stage was properly locked; those stay untouched.
+### 4. Regression tests
 
-## 2. Risk & Impact
+- `displayStageForResponse.test.ts` — Prabhu case (Dept≡BU, both responses stored as `dept_head`), Ankit/Jaspal case, Manager≡Dept≡BU triple collapse, self never remaps, BU-head-terminal, no false remap when both stages have real distinct responses.
+- `TeamReviewDetailContent.test.tsx` — chips render "BU: 4" (not "Dept: 4") for a Dept≡BU instance.
+- `AnnualReviewAdmin.test.tsx` — grid: DEPT `/5` cell = `—`, BU `/5` cell = 4.0 when reviewer collapses upward.
+- `EmployeeResultsView.test.tsx` — stage card for BU Head shows the collapsed score; Dept card hidden / shows "Skipped (same reviewer as BU Head)".
+- Existing `stageForReviewer` and `effectiveChain` tests remain unchanged.
 
-- **Data**: 4 rows to repair. All have `finalized_at`, `total_score`, `final_rating` populated purely from Self — must be nulled so real reviewers can score. Self responses stay locked (Self did submit).
-- **Workflow**: Prevents future silent completions when reviewers are deactivated; forces admin remap. No effect on the healthy 800 completed rows.
-- **UI/UX**: None (server-only change + data repair).
-- **Regression**: Low — the change tightens skip semantics. Existing `no_reviewer_mapped`, `self_assignment`, and `duplicate_reviewer` paths remain identical.
-- **Rollback**: Full audit rows written per repair; trigger and function changes are additive (previous definitions kept in migration comment).
+### 5. Docs & policy
 
-## 3. Plan
+- **ADR-128 — Display Stage Remap for Duplicate Reviewers** (presentation-only SSOT).
+- **POLICY §AR-STAGE-LABEL-DISPLAY-SSOT**: every UI/CSV surface that labels a stored response MUST route through `displayStageForResponse`; direct `reviewer_role` label lookups are forbidden outside audit views.
+- Update `DOCUMENTATION.md v2.66.119` — Version History entry.
 
-### Step A — Server: harden the resolver
-`annual_review_effective_chain_details`: keep the `reviewer_inactive` diagnosis, but **do not mark the stage `skipped`**. Instead, keep the stage in the effective chain so the workflow blocks on it until an admin remaps the reviewer.
+## Risk & Impact
 
-Verification: query the 4 instances after the change — effective chain must again include `dept_head`/`bu_head`; `advance_annual_review_status` from Self returns `pending_dept` (not `completed`).
+- **Data impact**: none. `annual_review_responses.reviewer_role` untouched. No migrations.
+- **Workflow impact**: none. Stage advancement, RLS, and final-score math already use the effective chain.
+- **UI/UX**: chips/grid/exports now agree with header. Old "Dept: 4" chips vanish for collapsed cases and reappear as "BU: 4". Users see one consistent stage everywhere.
+- **Regression risk**: Low — the mapper is pure, defaults to physical stage when the effective chain lacks a duplicate flag. Rollback = revert 6 file edits + delete helper.
+- **Scalability**: O(1) per response; effective chain already computed once per instance page.
 
-### Step B — Server: completion invariant
-Add a `BEFORE UPDATE OF overall_status` trigger on `annual_review_instances` that blocks a transition to `completed` when the terminal stage in `enabled_stages` has no locked response in `annual_review_responses`. Belt-and-suspenders against any future path that tries to fast-forward past a real reviewer.
+## Rollback
 
-Verification: attempt an admin UPDATE that sets `overall_status='completed'` on a `pending_dept` row → trigger raises.
+Feature-flagged behind a compile-time constant `USE_DISPLAY_STAGE_REMAP` (default `true`). Flip to `false` to fall back to raw `reviewer_role` if regressions surface.
 
-### Step C — Repair the 4 instances
-Single migration:
-- Reset `overall_status` → `pending_dept` (Dept is the first pending stage per `enabled_stages` order).
-- NULL `finalized_at`, `finalized_by`, `total_score`, `final_rating`, `criteria_weighted_score`.
-- Leave `system_scores`, `system_scores_raw`, and the locked Self response untouched.
-- Write an `annual_review.auto_complete_reversal` audit row per instance.
+## Deliverables
 
-Verification: `SELECT overall_status, finalized_at, total_score FROM annual_review_instances WHERE id IN (...)` returns `pending_dept / NULL / NULL`. Simulate `advance_annual_review_status` for Dept — must not complete unless a real Dept response is locked.
-
-### Step D — Notify admins to remap
-Note in the audit metadata which reviewer_id is inactive so HR/Admin can update the Employee Master hierarchy for the affected 4 (or replace the deactivated user directly on the instance). No code path is needed for this — surface in the existing admin console using the audit-log-driven "reviewer inactive" listing (already visible via the Comprehensive Report queue).
-
-### Step E — Documentation
-- **ADR-127b — Inactive reviewers block, never skip.** New ADR documenting the tightened resolver semantics.
-- **POLICY.md § AR-INACTIVE-REVIEWER-BLOCK** (new): "A stage whose assigned reviewer is `is_active=false` remains in the effective chain and blocks advancement until an admin remaps the reviewer. Inactivity is NOT a skip reason."
-- **DOCUMENTATION.md** entry: v2.66.120.
-
-## 4. UI changes
-**Not Applicable** — this is a server-side governance fix and a targeted 4-row repair. No visual changes on any page.
-
-## 5. Tests
-- Unit (Vitest): none — logic is in PL/pgSQL.
-- Add a plpgsql regression via a dedicated migration comment sanity check that runs the resolver on a synthesized fixture and asserts `reviewer_inactive` is present but `skipped=false`.
-- Manual verification queries listed inline per step.
-
-## 6. What I need from you
-Approve the plan and I'll ship the migration (Steps A + B + C) and the doc updates in one build turn. The 4 repaired reviews will re-appear in the Dept Heads' queues immediately; you'll want to instruct HR to remap the inactive reviewer (`1a92c542-…` for Preeti/Rupesh/Prince; `dfaf1ab8-…` for Sumit) so their Dept/BU stages can proceed.
+1. `src/lib/annualReview/displayStageForResponse.ts` + `responsesByDisplayStage.ts` (+ tests).
+2. Wired into the 7 consumer files above.
+3. `docs/adr/ADR-128.md`, POLICY.md §AR-STAGE-LABEL-DISPLAY-SSOT, DOCUMENTATION.md v2.66.119.
+4. Regression tests for chips, grid, results view, exports.
