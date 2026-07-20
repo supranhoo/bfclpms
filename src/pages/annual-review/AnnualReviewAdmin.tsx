@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   useCycles, useTemplates, useRules, useCycleInstances, useActiveCycle, useTemplate,
@@ -53,6 +53,8 @@ import { HrFinalizationSheet } from '@/components/annual-review/HrFinalizationSh
 import { BulkActionsTab } from '@/components/annual-review/BulkActionsTab';
 import { fyStartFromCycle } from '@/lib/annualReview/fiscalYear';
 import { prevStatus } from '@/lib/annualReview/stageChain';
+import { useKraDerivedRatingsForInstances } from '@/hooks/useKraDerivedRatingsForInstances';
+import { isKraBasedTemplate } from '@/lib/annualReview/kraDerivedRating';
 import { UnifiedBulkDialog } from '@/components/annual-review/UnifiedBulkDialog';
 import { AnnualReviewExportMenu } from '@/components/annual-review/AnnualReviewExportMenu';
 import { ChangeWorkflowDialog } from '@/components/annual-review/ChangeWorkflowDialog';
@@ -510,6 +512,21 @@ function ProgressTab() {
     for (const t of allTemplates) m[t.id] = t;
     return m;
   }, [allTemplates]);
+  // ADR-130 / POLICY §AR-KRA-GRID-DISPLAY — for KRA-based templates
+  // (weighted_score is always 0), project a rating from the employee's
+  // rolled-up KRA achievement so the grid's /5, Final and Rating columns
+  // stop rendering "—" for locked stages.
+  const kraFiscalYear = activeCycle ? fyStartFromCycle(activeCycle) : null;
+  const kraTemplateFor = useCallback(
+    (i: InstanceWithEmployee) =>
+      templatesByIdMap[svc.resolveTemplateId(i) ?? ''] ?? null,
+    [templatesByIdMap],
+  );
+  const kraDerivedByInstance = useKraDerivedRatingsForInstances(
+    instances,
+    kraTemplateFor,
+    kraFiscalYear,
+  );
   const qc = useQueryClient();
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkOpen, setBulkOpen] = useState<null | 'finalize' | 'sendBack'>(null);
@@ -963,12 +980,34 @@ function ProgressTab() {
                 );
                 const tplForRow = templatesByIdMap[svc.resolveTemplateId(i) ?? ''] ?? null;
                 const criteriaForRow = tplForRow?.sections?.criteria ?? [];
+                const isKraTpl = isKraBasedTemplate(tplForRow);
+                const kraRow = kraDerivedByInstance[i.id];
+                // For KRA-based templates, weighted_score is always 0 because
+                // reviewers don't touch per-criterion scores. Fall back to the
+                // KRA-derived /5 for any stage that has a locked response.
                 const fmt = (v: number | null | undefined, role: AnnualReviewerRole) => {
                   const rating = computeCriteriaRatingOutOf5(criteriaForRow, v, role);
-                  return rating == null
-                    ? <span className="text-muted-foreground/50">—</span>
-                    : rating.toFixed(1);
+                  if (rating != null) return rating.toFixed(1);
+                  if (isKraTpl && ss[role] != null && kraRow?.rating_0_5 != null) {
+                    return (
+                      <span title="Derived from KRA achievement (POLICY §AR-KRA-GRID-DISPLAY)">
+                        {kraRow.rating_0_5.toFixed(1)}
+                      </span>
+                    );
+                  }
+                  return <span className="text-muted-foreground/50">—</span>;
                 };
+                const finalDisplay = i.total_score != null
+                  ? i.total_score.toFixed(2)
+                  : isKraTpl && kraRow?.projected
+                    ? <span title="Projected — HR has not finalized (POLICY §AR-KRA-GRID-DISPLAY).">
+                        {kraRow.projected.total_0_100.toFixed(2)}*
+                      </span>
+                    : <span className="text-muted-foreground/50">—</span>;
+                const ratingDisplay = i.final_rating
+                  ?? (isKraTpl && kraRow?.projected
+                    ? <span title="Projected — HR has not finalized.">{kraRow.projected.rating}*</span>
+                    : <span className="text-muted-foreground/50">—</span>);
                 // Per policy: template can be changed at any non-terminal stage.
                 // ChangeTemplateDialog auto-force-resets past-self instances.
                 const canChange =
@@ -998,8 +1037,8 @@ function ProgressTab() {
                   <TableCell className="text-right tabular-nums">{fmt(ss.dept_head, 'dept_head')}</TableCell>
                   <TableCell className="text-right tabular-nums">{fmt(ss.bu_head, 'bu_head')}</TableCell>
                   <TableCell className="text-right tabular-nums">{fmt(ss.hr, 'hr')}</TableCell>
-                  <TableCell className="text-right tabular-nums font-medium">{i.total_score?.toFixed(2) ?? <span className="text-muted-foreground/50">—</span>}</TableCell>
-                  <TableCell className="text-right">{i.final_rating ?? <span className="text-muted-foreground/50">—</span>}</TableCell>
+                  <TableCell className="text-right tabular-nums font-medium">{finalDisplay}</TableCell>
+                  <TableCell className="text-right">{ratingDisplay}</TableCell>
                   <TableCell className="text-right">
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
