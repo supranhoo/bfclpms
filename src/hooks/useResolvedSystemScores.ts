@@ -1,6 +1,7 @@
 import { useQueries } from '@tanstack/react-query';
 import type { AnnualReviewTemplate, CarryKraConfig } from '@/types/annualReview';
 import { buildCarrySnapshot } from '@/services/annualReview/carryKraScore';
+import { normaliseSystemScoreValue } from '@/lib/annualReview/systemScoreNormalise';
 
 /**
  * Resolve the system-score map used for *display* on the employee/team pages.
@@ -17,7 +18,11 @@ import { buildCarrySnapshot } from '@/services/annualReview/carryKraScore';
  */
 export function useResolvedSystemScores(
   template: AnnualReviewTemplate | null | undefined,
-  instance: { employee_id?: string | null; system_scores?: Record<string, number> | null } | null | undefined,
+  instance: {
+    employee_id?: string | null;
+    system_scores?: Record<string, number> | null;
+    system_scores_raw?: Record<string, number> | null;
+  } | null | undefined,
   fiscalYear: number | undefined,
 ): { values: Record<string, number>; isLoading: boolean } {
   const systemScores = template?.sections.system_scores ?? [];
@@ -39,8 +44,16 @@ export function useResolvedSystemScores(
     }),
   });
 
+  // ADR-127 — normalise every persisted slot to weight-scaled points before
+  // handing the map to consumers. Fixes the "System 54/50" over-count where
+  // safety/hr/env writers had stored the 0..5 rating instead of scaled points.
   const base = instance?.system_scores ?? {};
+  const raw = instance?.system_scores_raw ?? {};
   const out: Record<string, number> = { ...base };
+  for (const s of systemScores) {
+    if (s.source === 'carry_kra') continue; // filled below from live snapshot
+    out[s.id] = normaliseSystemScoreValue(s, base[s.id], raw[s.id]);
+  }
   carryEntries.forEach((s, i) => {
     const snap = queries[i]?.data;
     if (snap && typeof snap.value === 'number') out[s.id] = snap.value;
