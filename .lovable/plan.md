@@ -1,50 +1,46 @@
-## Request
-Grant Swastik Kar (employee 102061) access to the **Assisted Annual Review Submission** feature (proxy-submit self review on behalf of blue-collar / non-login employees).
+## Assumptions
+- Employee: Atul Singh (200414), profile `34dd3f55-b364-4ddd-98ae-201f275df95b`.
+- Instance `662da035-ae3f-4d0c-8b5c-14a2d06a0fee`, cycle `b82a935f…`.
+- Current state: `overall_status = pending_self`, `template_id = fcf38994 (FAD- M - Mech)`, `template_override_id = fcf38994 (same)`, `enabled_stages = [self, dept_head, bu_head]`, `annual_review_responses` for this instance = 0 rows.
+- Target: keep him on `FAD- M - Mech` but force the form to re-hydrate against the current template definition (Option 1 chosen).
 
-## Current State (verified)
-- `profiles`: Swastik Kar, `swastik.kar@bfclalloys.com`, active, dept `541a4085…`.
-- `user_roles`: already has `hr_pms`.
-- `iac_user_role_assignments`: none.
+## RCA (why he is stuck on the "old" version)
+1. On 2026-07-13 a Form Mapping rule wrote `template_override_id = fcf38994` (FAD- M - Mech), replacing the seeder's `af2a2c7c`.
+2. Since then, the template `fcf38994` has been edited (criteria added/renamed). The `is_active` template row was updated 2026-07-16.
+3. Trigger `trg_guard_ar_template_id_stability` (ADR-117) correctly prevents the seeder from touching `template_id` while an override exists, so any re-mapping to the same override is a no-op.
+4. His draft rendering is anchored to a stale in-memory snapshot of criteria (the pre-edit set). With no `annual_review_responses` row he still sees the "old" form and cannot save because the client-side score keys don't match the current template criteria set that the submit-guard validates against (ADR-115 / ADR-122 remap only fires when responses exist).
+5. Net effect: read-only-feeling form with validation failing on submit — matches the reported symptom.
 
-## Analysis
-Per **POLICY §AR-HR-PROXY** and `ANNUAL_REVIEW_TEAM_STATIC_ROLES` (`src/lib/annualReview/teamAccess.ts`), the `hr_pms` role already grants:
-- Access to `/team-annual-review` (route guard passes),
-- The "Find employee" directory dialog,
-- Proxy-submit rights via `can_proxy_submit_annual_review` and `submit_annual_review_self_as_proxy`.
+## Risk & Impact Report
+- Data impact: none destructive. 0 response rows exist for this instance — nothing to archive or wipe.
+- Workflow impact: instance stays in `pending_self`; reviewer chain (`enabled_stages`) unchanged.
+- UI/UX: employee's self-review page re-fetches the template, criteria list matches the current definition, submit guard passes.
+- Regression risk: low — using the existing, audited RPC `set_annual_review_template_override` twice (clear, then re-apply) is the sanctioned non-destructive path.
+- Mitigation: verify post-state and criteria count; keep audit trail via mandatory reasons on both RPC calls.
 
-So **no role grant is required** — he technically already has the access. The likely real problem is one of:
-1. Feature flag `app_settings.assisted_self_submission_enabled` is OFF (then no one sees the assisted flow).
-2. Directory search flag `app_settings.annual_review_directory_search_enabled` is OFF (Find-employee button hidden).
-3. Menu visibility: the "Team Annual Review" menu entry is hidden for him via `menu_access_config` / access-profile.
-4. He is looking under **My Annual Review** and expects a Team button that lives under **Team Annual Review**.
+## Fix (single instance, no code change)
+Two audited RPC calls on the same instance:
 
-Before making any change I need to know which of these is the actual blocker — granting a duplicate role or flipping a global flag on a hunch would be exactly the "band-aid" the RCA policy forbids.
+1. `set_annual_review_template_override(p_instance_id := '662da035-ae3f-4d0c-8b5c-14a2d06a0fee', p_template_id := NULL, p_reason := 'RCA-Atul-200414 step 1: clear stale override so template snapshot re-hydrates.')`
+2. `set_annual_review_template_override(p_instance_id := '662da035-ae3f-4d0c-8b5c-14a2d06a0fee', p_template_id := 'fcf38994-e641-44c8-8b73-a396886562a2', p_reason := 'RCA-Atul-200414 step 2: re-apply FAD- M - Mech so the self-review form loads the current criteria set.')`
 
-## Proposed Plan
-Step 1 — Verify the real blocker (read-only, no changes yet):
-- Read `app_settings` row for `assisted_self_submission_enabled` and `annual_review_directory_search_enabled`.
-- Read `menu_access_config` + any `menu_access_user_overrides` / access-profile assignment for user `c25853e6…` to confirm `Team Annual Review` menu is visible.
-- Confirm from Swastik what he sees: no menu item, menu present but no "Find employee" button, or button present but employee not found.
+Both are allowed by the RPC because `overall_status = pending_self`.
 
-Step 2 — Apply the minimum fix based on Step 1:
-- If menu hidden → add menu override for this user (data insert).
-- If directory flag off → discuss with admin before flipping (global effect).
-- If assisted flag off → same (global).
-- If nothing hidden → he already has the access; provide navigation guidance instead of a code/data change.
+## Verification
+- Re-read `annual_review_instances` row: `template_override_id = fcf38994`, `overall_status = pending_self`, response count still 0.
+- Read `annual_review_templates` → `sections->'criteria'` count matches what Atul will see.
+- Confirm two `annual_review.template_override_set` rows in `system_audit_logs` with the reasons above.
+- Ask HR/PMS to have Atul reopen his self-review page; expected: fresh criteria list, radio options selectable, submit succeeds.
 
-Step 3 — Regression guard:
-- Add a Vitest case asserting `hr_pms` passes `annualReviewTeamAccessAllowed` (existing test already covers this — extend only if a new code path is touched).
-- No DB schema change expected, so no migration/rollback plan needed unless Step 2 requires a menu override insert (additive, reversible by deleting the override row).
+## What is NOT changed
+- No code, migration, RLS, or trigger change.
+- No other employees are touched.
+- No responses, evidence, or system scores modified.
+- ADR-117 trigger stays in place.
 
-## Risk & Impact
-- **Data:** none in Step 1. Step 2 at most inserts one menu-override row.
-- **Workflow:** none unless a global feature flag is toggled (would require explicit approval).
-- **UI:** none directly; Swastik would gain visibility of Team Annual Review entry if that's the blocker.
-- **Regression:** near-zero for a per-user menu override; high for global flag flips — hence Step 1 gate.
+## Rollback
+If Atul's page still shows the old form after refresh: repeat the clear step (step 1 only) and ask him to hard-reload. If a genuinely different template is intended, re-run `set_annual_review_template_override` with the new template id — same non-destructive path.
 
-## Ask
-Please confirm which of the following Swastik sees today so I can jump straight to the correct fix:
-(a) No "Team Annual Review" menu at all,
-(b) Menu present but no "Find employee" button,
-(c) Button present but the target employee isn't found,
-(d) Something else (screenshot helpful).
+## Documentation
+- Append a one-line entry to `DOCUMENTATION.md` Version History: "v2.66.117-hotfix — Atul Singh (200414) template snapshot refresh via clear-then-reapply override (RCA-Atul-200414)."
+- No POLICY.md change needed: policy `§AR-TEMPLATE-OVERRIDE` already sanctions this path.
