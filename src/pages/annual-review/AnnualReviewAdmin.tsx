@@ -7,6 +7,7 @@ import {
   useInstanceStageScores, useRollbackFinalizedInstance,
 } from '@/hooks/useAnnualReview';
 import * as svc from '@/services/annualReview/annualReviewService';
+import { remapStageValueMapByDuplicates } from '@/lib/annualReview/displayStageForResponse';
 import { useAuth } from '@/contexts/AuthContext';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
