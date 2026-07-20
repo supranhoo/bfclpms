@@ -7,6 +7,7 @@ import {
   useInstanceStageScores, useRollbackFinalizedInstance,
 } from '@/hooks/useAnnualReview';
 import * as svc from '@/services/annualReview/annualReviewService';
+import { remapStageValueMapByDuplicates } from '@/lib/annualReview/displayStageForResponse';
 import { useAuth } from '@/contexts/AuthContext';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -952,7 +953,13 @@ function ProgressTab() {
             </TableHeader>
             <TableBody>
               {filtered.map((i) => {
-                const ss = stageScoresMap[i.id] ?? {};
+                // POLICY §AR-STAGE-LABEL-DISPLAY-SSOT (ADR-128): shift a lower
+                // stage's /5 value up to its duplicate higher stage so the
+                // grid columns agree with the header/pipeline (Dept≡BU etc.).
+                const ss = remapStageValueMapByDuplicates(
+                  stageScoresMap[i.id] ?? {},
+                  i as any,
+                );
                 const tplForRow = templatesByIdMap[svc.resolveTemplateId(i) ?? ''] ?? null;
                 const criteriaForRow = tplForRow?.sections?.criteria ?? [];
                 const fmt = (v: number | null | undefined, role: AnnualReviewerRole) => {

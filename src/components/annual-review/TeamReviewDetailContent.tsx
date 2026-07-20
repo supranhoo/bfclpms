@@ -50,6 +50,7 @@ import {
   RECOMMENDATION_KEY,
 } from '@/components/annual-review/OverallRecommendationCard';
 import { computeRunningFinalScore } from '@/lib/annualReview/runningFinalScore';
+import { displayStageForResponse } from '@/lib/annualReview/displayStageForResponse';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { getReadOnlyReviewNotice } from '@/lib/annualReview/readOnlyReviewNotice';
 // computeCriteriaRatingOutOf5 no longer used — the /5 shown to reviewers is
@@ -151,15 +152,23 @@ export function TeamReviewDetailContent({
     const labels: Record<AnnualReviewerRole, string> = { self: 'Self', manager: 'Manager', skip_manager: 'Skip', dept_head: 'Dept', bu_head: 'BU', hr: 'HR' };
     const previous: { label: string; role: AnnualReviewerRole; values: Record<string, number | undefined>; remarks: Record<string, string> }[] = [];
     for (const r of responses) {
-      if (r.reviewer_role !== role) previous.push({
-        label: labels[r.reviewer_role],
-        role: r.reviewer_role,
+      // POLICY §AR-STAGE-LABEL-DISPLAY-SSOT (ADR-128): duplicate-reviewer
+      // collapses (e.g. Dept≡BU) surface the response under its winning
+      // display stage so chips agree with the header/pipeline.
+      const displayRole = displayStageForResponse(
+        r as { reviewer_role: AnnualReviewerRole; reviewer_id: string | null },
+        instance as any,
+        responses as any,
+      );
+      if (displayRole !== role) previous.push({
+        label: labels[displayRole],
+        role: displayRole,
         values: r.criteria_scores,
         remarks: (r.qualitative_responses ?? {}) as Record<string, string>,
       });
     }
     return previous;
-  }, [responses, role]);
+  }, [responses, role, instance]);
 
   const onUpload = async (criterionId: string, file: File): Promise<EvidenceItem | void> => {
     if (!user || !role) return;
