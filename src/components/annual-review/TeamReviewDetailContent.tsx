@@ -397,7 +397,9 @@ function TeamReviewDetailInner(props: any) {
 
       <SystemScoresPanel
         systemScores={template?.sections.system_scores ?? []}
-        values={instance.system_scores ?? {}}
+        // ADR-127 — feed the normalised map so per-KPI "Contributes X/weight"
+        // never shows the raw 0..5 rating overflowing its slot.
+        values={composition ? (undefined as never) ?? {} : {}}
         rawValues={instance.system_scores_raw ?? {}}
         eligibility={template?.sections.eligibility_criteria}
         eligibilityInputs={instance.eligibility_inputs}
