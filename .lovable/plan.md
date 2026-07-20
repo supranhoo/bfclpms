@@ -1,94 +1,104 @@
-## Problem
 
-For Prabhu Bediya (201119) — and any employee whose Dept Head and BU Head are the **same person** — the UI is inconsistent:
+## Confirmed root cause (verified against live data for 100972)
 
-- **Header / pipeline / Projected Score card**: correctly de-duplicates via `resolveEffectiveChain`. Dept Head is skipped ("1 stage auto-skipped: Dept Head (same reviewer at a higher stage)"), and the score is attributed to **BU Head** (winning stage per POLICY §AR-BU-HEAD-TERMINAL / duplicate-reviewer seniority).
-- **Per-criterion chips** at the bottom of each criterion (`Self: 4`, `Dept: 4`) and the **team grid `/5` columns** (SELF/MANAGER/SKIP/**DEPT**/BU/HR) show the response under its **physical** `reviewer_role` (`dept_head`), because that's what got persisted in `annual_review_responses`.
+Instance `d7b9c891…` for **Sourav Kumar Jaiswal (100972)**:
 
-Result: the same locked score simultaneously appears as "Dept" in the grid/chips and as "BU" in the header — confusing and self-contradictory system-wide.
+- `enabled_stages = ["self","dept_head","bu_head"]` — HR stage is **not** part of this employee's chain (per POLICY §AR-BU-HEAD-TERMINAL / ADR-109).
+- Terminal locked response: `bu_head` on 2026-07-20 → status went to `completed`.
 
-## Root Cause (RCA)
+The RPC `rollback_annual_review_completed` (migration `20260705120009`) hardcodes the exit state:
 
-- `annual_review_responses.reviewer_role` stores the **physical stage** where the reviewer acted (`dept_head`). This is correct as an audit record and must not be rewritten (POLICY §88 submission immutability).
-- Presentation layers (`TeamReviewDetailContent.comparison`, `AnnualReviewAdmin` team grid columns, `EmployeeResultsView`, `HrFinalizationSheet`, `OverallRecommendationCard`) read `reviewer_role` **verbatim** and label chips/columns by that raw value.
-- Only the pipeline / RunningFinalScoreCard / final-score math consumes `resolveEffectiveChain`, which collapses duplicates upward (dept_head → bu_head).
-- Therefore any duplicate-reviewer collapse (Dept≡BU, Manager≡BU, Manager≡Dept, etc.) is invisible to chips and grid.
-
-**5 Whys**
-1. Why does Dept chip show "Dept: 4" while header shows BU? → Chip reads `reviewer_role` directly.
-2. Why isn't it remapped? → No presentation-layer stage remap exists; only scoring math uses the effective chain.
-3. Why was the remap only added to scoring? → Duplicate-reviewer dedup (ADR-108/109) targeted score correctness first; the label layer was assumed to be cosmetic.
-4. Why does the grid show DEPT=4.0 but BU=—? → Grid column keys are physical `reviewer_role` slots, not effective-chain slots.
-5. Why did the inconsistency surface now? → BU-head-terminal cases (Prabhu, Bhim Rajak, etc.) are rare; historical cycles typically had distinct dept & BU heads.
-
-## Fix (presentation-only; zero mutation of stored responses)
-
-Introduce a **single SSOT presentation mapper** and apply it everywhere a stage label or `/5` column is derived from `reviewer_role`.
-
-### 1. New pure helper — `src/lib/annualReview/displayStageForResponse.ts`
-
-```ts
-// Given the effective chain + a stored response, return the stage the response
-// should DISPLAY as. If the physical stage was collapsed as a duplicate of a
-// higher tier, return the higher tier. Otherwise return the physical stage.
-displayStageForResponse(response, effectiveChain): AnnualReviewerRole
+```
+UPDATE annual_review_responses SET is_locked=false … WHERE reviewer_role = 'hr';
+UPDATE annual_review_instances SET overall_status = 'pending_hr', … ;
+RETURN 'pending_hr';
 ```
 
-Rules:
-- If `effectiveChain` marks `response.reviewer_role` as `skipped` with `skipReason === 'duplicate_reviewer'` **and** the `duplicateOf` stage has NO stored response of its own → present the row as `duplicateOf`.
-- If the higher stage already has its own response, keep the physical label (do not merge — both are real).
-- `self` never remaps.
-- BU-head-terminal (`skipReason === 'bu_head_terminal'`) already means the row shouldn't exist; log a diagnostic but keep physical label to avoid data loss in the UI.
+So for 100972 the rollback:
 
-### 2. Group responses by display stage — `src/lib/annualReview/responsesByDisplayStage.ts`
+1. Sets status to `pending_hr` — a stage that isn't in this instance's chain (dead-end; the HR sheet isn't reachable).
+2. Unlocks a non-existent `hr` response row → 0 rows updated, nothing actually reopened.
+3. The dialog copy also promises "returns the instance to **pending HR**", which contradicts the BU-Head-terminal policy.
 
-Utility used by every consumer:
-```ts
-groupResponsesByDisplayStage(responses, effectiveChain)
-  → Record<AnnualReviewerRole, AnnualReviewResponse | null>
+Net effect: the review appears "rolled back" but is stuck in a phantom state with no reviewer able to act. Same bug affects every BU-Head-terminal (ADR-109) or Dept-Head-terminal instance, and any future instance where HR is disabled.
+
+## Fix — target the actual terminal stage
+
+Introduce a resolver that picks the terminal reviewer stage from the instance's `enabled_stages`, then unlock that stage's response and set `overall_status` to its matching `pending_*`. HR-terminal instances continue to behave exactly as today.
+
+### 1. Migration `20260721000000_rollback_to_actual_terminal_stage.sql`
+
+Replace `public.rollback_annual_review_completed(uuid, text)`:
+
+- Compute `v_terminal_stage` = the highest-seniority stage present in `enabled_stages`, walking `hr → bu_head → dept_head → skip_manager → manager → self`.
+- Map to status: `hr→pending_hr`, `bu_head→pending_bu`, `dept_head→pending_dept`, `skip_manager→pending_skip`, `manager→pending_manager`. Refuse to roll back if terminal is `self` (nothing to unlock upstream).
+- Unlock the terminal-stage response (`UPDATE … WHERE reviewer_role = v_terminal_stage`).
+- Set `overall_status = v_new_status`, clear `final_rating / hr_remarks / finalized_at / finalized_by / total_score / criteria_weighted_score` (aligns with ADR-124 which now populates these on `completed`).
+- Audit-log includes `terminal_stage`, `to_status`, previous scores + reason (extends existing `annual_review.rollback_finalized` payload — no new action name so downstream notification mapping is untouched).
+- Keep admin / hr_pms authorization and 3-char reason guard.
+
+Regression guards inside the RPC:
+
+- If `enabled_stages` is empty or malformed → `RAISE EXCEPTION 'enabled_stages missing on instance %'`.
+- If the terminal response row is missing → `RAISE EXCEPTION` (don't silently leave the instance half-open).
+
+### 2. UI — `AnnualReviewAdmin.tsx` rollback dialog (lines 1240-1290)
+
+- Read the terminal stage from the selected `rollbackFor` instance (same resolver, TS mirror in `src/lib/annualReview/terminalStage.ts` — new file, ~15 lines).
+- Replace the hardcoded "returns the instance to **pending HR**" copy with `returns the instance to **{terminalStageLabel}**` (e.g. "pending BU Head review").
+- Disable the "Roll back" button when terminal stage is `self` (rare; nothing to roll back to).
+
+### 3. Tests
+
+- `src/lib/annualReview/terminalStage.test.ts` — covers HR-enabled, BU-terminal (ADR-109), Dept-terminal, and manager-only chains.
+- `supabase/tests/rollback_annual_review_completed.spec.sql` (via `pgTAP`-style asserts in a repair script or a dedicated Vitest against a seeded fixture) — asserts:
+  - HR-enabled chain → status `pending_hr`, HR response unlocked.
+  - BU-terminal chain (100972 shape) → status `pending_bu`, BU response unlocked, HR row untouched.
+  - Dept-terminal chain → status `pending_dept`.
+  - Non-completed instance → raises.
+  - Missing reason → raises.
+
+### 4. One-shot repair for 100972 (and any similar drift)
+
+Same migration, at the tail:
+
+```sql
+-- Repair instances that were rolled back to pending_hr but have no HR in
+-- enabled_stages (they are the ones stranded by the old RPC).
+WITH stranded AS (
+  SELECT id FROM annual_review_instances
+   WHERE overall_status = 'pending_hr'
+     AND NOT (enabled_stages ? 'hr')
+)
+UPDATE annual_review_instances i
+   SET overall_status = CASE
+     WHEN enabled_stages ? 'bu_head'   THEN 'pending_bu'
+     WHEN enabled_stages ? 'dept_head' THEN 'pending_dept'
+     WHEN enabled_stages ? 'skip_manager' THEN 'pending_skip'
+     WHEN enabled_stages ? 'manager'   THEN 'pending_manager'
+     ELSE overall_status
+   END,
+       updated_at = now()
+  FROM stranded WHERE i.id = stranded.id;
 ```
 
-### 3. Wire consumers to the remap (surgical edits only)
+Paired with an `UPDATE annual_review_responses … is_locked = false` for the matching terminal role, and an audit-log row per repaired instance (`action = 'annual_review.rollback_repair_terminal_stage'`, metadata cites this ADR).
 
-| File | Change |
-|---|---|
-| `src/components/annual-review/TeamReviewDetailContent.tsx` (L150–162) | Replace `r.reviewer_role` label lookup with `displayStageForResponse(...)`. Result: chips read "Self: 4 | BU: 4" for Prabhu instead of "Self: 4 | Dept: 4". |
-| `src/pages/annual-review/AnnualReviewAdmin.tsx` (grid `SELF/MANAGER/SKIP/DEPT/BU/HR /5` columns, near L946) | Feed columns from `groupResponsesByDisplayStage` instead of raw `reviewer_role`. Dept column will render `—`; BU column will render 4.0 for Prabhu / Bhim Rajak. |
-| `src/components/annual-review/EmployeeResultsView.tsx` (L35 `byRole = new Map(...)`) | Build map from `groupResponsesByDisplayStage` for stage cards & Criteria panel. |
-| `src/components/annual-review/HrFinalizationSheet.tsx` (L75, L104) | Use display map when checking "which stages are locked" for HR's completeness banner. |
-| `src/components/annual-review/OverallRecommendationCard.tsx` (L39–L87) | Group notes by display stage so a duplicate Dept/BU note is attributed once, to the winning stage. |
-| `src/pages/annual-review/ManagerCalibration.tsx` (L59–L60) | Also route through display mapper (defensive; manager rarely collides, but keep SSOT). |
-| Exports — `src/components/annual-review/AnnualReviewExportMenu.tsx` (L224) | Add a computed `display_reviewer_role` column so CSV/XLSX exports match the on-screen values. Keep raw `reviewer_role` too, marked as "physical stage" for auditors. |
+### 5. Docs / POLICY
 
-### 4. Regression tests
-
-- `displayStageForResponse.test.ts` — Prabhu case (Dept≡BU, both responses stored as `dept_head`), Ankit/Jaspal case, Manager≡Dept≡BU triple collapse, self never remaps, BU-head-terminal, no false remap when both stages have real distinct responses.
-- `TeamReviewDetailContent.test.tsx` — chips render "BU: 4" (not "Dept: 4") for a Dept≡BU instance.
-- `AnnualReviewAdmin.test.tsx` — grid: DEPT `/5` cell = `—`, BU `/5` cell = 4.0 when reviewer collapses upward.
-- `EmployeeResultsView.test.tsx` — stage card for BU Head shows the collapsed score; Dept card hidden / shows "Skipped (same reviewer as BU Head)".
-- Existing `stageForReviewer` and `effectiveChain` tests remain unchanged.
-
-### 5. Docs & policy
-
-- **ADR-128 — Display Stage Remap for Duplicate Reviewers** (presentation-only SSOT).
-- **POLICY §AR-STAGE-LABEL-DISPLAY-SSOT**: every UI/CSV surface that labels a stored response MUST route through `displayStageForResponse`; direct `reviewer_role` label lookups are forbidden outside audit views.
-- Update `DOCUMENTATION.md v2.66.119` — Version History entry.
+- New **ADR-129 — Rollback lands on effective terminal stage**.
+- **POLICY §AR-ROLLBACK-TERMINAL-STAGE**: rollback always returns to the highest-seniority reviewer in `enabled_stages`; HR is only the target when HR is part of the chain.
+- Update `DOCUMENTATION.md` v2.66.119 change log.
 
 ## Risk & Impact
 
-- **Data impact**: none. `annual_review_responses.reviewer_role` untouched. No migrations.
-- **Workflow impact**: none. Stage advancement, RLS, and final-score math already use the effective chain.
-- **UI/UX**: chips/grid/exports now agree with header. Old "Dept: 4" chips vanish for collapsed cases and reappear as "BU: 4". Users see one consistent stage everywhere.
-- **Regression risk**: Low — the mapper is pure, defaults to physical stage when the effective chain lacks a duplicate flag. Rollback = revert 6 file edits + delete helper.
-- **Scalability**: O(1) per response; effective chain already computed once per instance page.
+- **Data**: additive migration + one-shot repair. No destructive schema change. Audit trail preserved and extended.
+- **Workflow**: HR-terminal reviews behave identically (regression-tested). BU/Dept-terminal reviews now correctly reopen to the right person.
+- **UI**: dialog copy is dynamic; button is disabled only in the degenerate `self`-only case.
+- **Regression risk**: low — the RPC surface stays the same (same name, same args, same return type).
+- **Rollback of this fix**: revert migration → old RPC restored; repaired instances stay in the correct `pending_*` state (which is what they should have been all along).
 
-## Rollback
+## Out of scope (explicit)
 
-Feature-flagged behind a compile-time constant `USE_DISPLAY_STAGE_REMAP` (default `true`). Flip to `false` to fall back to raw `reviewer_role` if regressions surface.
-
-## Deliverables
-
-1. `src/lib/annualReview/displayStageForResponse.ts` + `responsesByDisplayStage.ts` (+ tests).
-2. Wired into the 7 consumer files above.
-3. `docs/adr/ADR-128.md`, POLICY.md §AR-STAGE-LABEL-DISPLAY-SSOT, DOCUMENTATION.md v2.66.119.
-4. Regression tests for chips, grid, results view, exports.
+- Not touching `send_back_annual_review_status`, notifications, or the KPI-side `RollbackRequestDialog`.
+- Not changing who is authorized to trigger rollback.
