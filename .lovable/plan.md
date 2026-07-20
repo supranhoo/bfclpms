@@ -1,52 +1,70 @@
+# Fix: Projected Final Score > 100
 
-## Assumptions
-- Applies to every `annual_review_instance` whose employee's department name starts with `CLU` (CLU-Operation, CLU-MECH, CLU-Elect, CLU-Inst, CLU-Refractory, CLU-RMH) — 185 rows across all statuses.
-- Effective template = `template_override_id` when present, else `template_id`; only items keyed by `library_key = 'annual_production' | 'annual_pm'` are touched. Templates that don't expose them are skipped safely.
-- Full weight = raw score meets the 100% threshold: Production `104% → weight (25)`, PM `100% → weight (10)`. No scoring_rules will be persisted on the template (per your choice).
-- No changes to CLU templates, RLS, workflow, other departments, or any other system_score item.
+## Root cause (to confirm in Step 1, high confidence)
 
-## Risk & Impact
-- **Data**: Overwrites two `library_key` slots per instance in `system_scores` and `system_scores_raw`. All prior values captured in `system_audit_logs` before overwrite (reversible).
-- **Workflow**: Advancement / stage state untouched.
-- **Completed rows**: `total_score` and `final_rating` are re-derived via the existing `annual_review_compute_final_score` SSOT (ADR-124) so downstream reports stay consistent.
-- **Regression**: Zero risk to non-CLU instances — SQL is scoped by department name and by `library_key`.
-- **Rollback**: single UPDATE from the audit snapshot restores prior maps.
+`computeFinalScore` (SSOT used by both the projection card and the ADR-124 server-side finalizer) assumes every `reviewer_role → weighted_score` value is already on a **0..100** scale. In practice, `annual_review_responses.weighted_score` is stored as the **raw weighted point sum** out of the template's criteria maximum (e.g. 225 / 45, 229 / 88). Blending raw sums with a percentage-based system score produces the `269.6 / 100` and `13.48 / 5` shown in the screenshot — and, worse, the same math ran server-side during the ADR-124 backfill for 768 completed instances, so their `total_score` and `final_rating` are likely wrong too.
 
-## Diagnosis (verified pre-plan)
-- `sys_3jsce5p` (Annual Production, weight 25) and `sys_2z4e0vw` (Annual PM, weight 10) exist on all CLU templates with `scoring_rules = NULL`.
-- Sampled CLU-Operation (`200810`) and CLU-MECH (`201149`) rows show `system_scores_raw.sys_3jsce5p ≈ 1.0356` and `system_scores.sys_3jsce5p = 0` — a legacy fractional raw with no bands → `scoreFromRaw` clamped to 0 points.
-- 185 CLU instances need backfill; ADR-123 previously handled FAD identically and left CLU untouched.
+## Step 1 — Confirm before fixing (read-only)
 
-## Plan
+Query the affected instance + a spread of ADR-124 backfilled rows:
 
-### Step 1 — Data-only backfill migration (`20260720170000_clu_annual_production_pm_backfill.sql`)
-Single transactional block:
-1. Snapshot existing `system_scores` / `system_scores_raw` into `system_audit_logs` (action: `annual_review.system_score_backfill`, category: `CLU_ANNUAL_PROD_PM_V1`) — one row per instance so a per-row rollback is possible.
-2. For each CLU instance where the effective template exposes `annual_production`: set `system_scores_raw[<id>] = 104` and `system_scores[<id>] = 25`.
-3. For each CLU instance where the effective template exposes `annual_pm`: set `system_scores_raw[<id>] = 100` and `system_scores[<id>] = 10`.
-4. For any instance already `overall_status IN ('completed','pending_dept','pending_bu_head','pending_hr_pms')` where `criteria_weighted_score IS NOT NULL`, call `public.annual_review_compute_final_score(id)` so `total_score` / `final_rating` reflect the new system total.
-5. Emit a summary audit row (`annual_review.clu_prod_pm_backfill_summary`) with counts per sub-department and a list of skipped instances (templates without the slot).
+- Identify the instance behind the screenshot (Dept stage locked, BU pending, System 6/12, Criteria pool max 88).
+- For that instance and 20 sampled ADR-124-completed instances, pull:
+  - `template.sections.criteria_max` (or per-section max), resolved `stage_weights`
+  - each locked response's `weighted_score`, `criteria_scores` sum, `is_locked`
+  - persisted `criteria_weighted_score`, `total_score`, `final_rating`
+- Confirm `weighted_score` is raw points (not /100). If some templates persist it as /100 and others as raw, capture both shapes — the fix must handle whichever is truth.
 
-### Step 2 — Verification query (bundled in the migration as `RAISE NOTICE`)
-Prints per-sub-department count of updated rows, mean `system_scores.sys_annual_production`, and any residual zeros so we can eyeball the result before HR opens the app.
+**Do not proceed past Step 1 until this is verified.** If the assumption is wrong, re-plan.
 
-### Step 3 — Regression test `src/test/annualReview/cluBackfill.test.ts`
-Pure TS test (no DB) that pins the SSOT: given a mock CLU instance with `annual_production` weight 25 and raw 104, `scoreFromRaw` used with the "no bands, treat as pre-scaled" contract must round up to `weight` when raw ≥ threshold — plus a locked expectation that `system_scores_raw` now stores integer percentages, not fractions.
+## Step 2 — Normalize at the SSOT boundary (TS)
 
-### Step 4 — Docs
-- `POLICY.md` — add §AR-CLU-ANNUAL-PROD-PM-BACKFILL noting the one-shot 104%/100% grant and the ADR link.
-- `DOCUMENTATION.md` — v2.66.119 changelog entry.
-- New `docs/adr/ADR-125.md` — decision + rollback SQL (`UPDATE ... FROM system_audit_logs WHERE category = 'CLU_ANNUAL_PROD_PM_V1'`).
+In `src/lib/annualReview/finalScore.ts` / `runningFinalScore.ts`:
 
-## UI Changes
-Not applicable — this is data + docs only. Existing `SystemScoresPanel` will render the new values on next load.
+- Add a single normalization helper `toPercent(rawWeighted, criteriaMax)` used at the point where reviewer scores enter `computeFinalScore`.
+- Change `RunningFinalScoreInput` to also take `criteriaMax` (resolved from template).
+- `criteria_weighted_score` on the instance gets the same treatment (it's persisted with the same raw-points convention).
+- Guard: if `criteriaMax` is missing or 0, drop the bucket (mark pending) instead of dividing by 0 or emitting raw values.
+- Clamp the final blended score to `[0, 100]` and `[0, 5]` defensively; log a console warning when a clamp fires so future drift is visible.
 
-## Files to touch
-- `supabase/migrations/20260720170000_clu_annual_production_pm_backfill.sql` (new)
-- `src/test/annualReview/cluBackfill.test.ts` (new)
-- `docs/adr/ADR-125.md` (new)
-- `POLICY.md`, `DOCUMENTATION.md` (append)
+## Step 3 — Mirror the fix server-side
 
-## Post-implementation notes
-- Templates keep `scoring_rules = NULL` per your instruction; future raw uploads for these two slots will still fall through the "treat raw as pre-scaled points" legacy path — flagged for a follow-up ticket if HR wants auto-grading later.
-- Rollback: `SELECT * FROM system_audit_logs WHERE metadata->>'category'='CLU_ANNUAL_PROD_PM_V1'` → restore snapshotted JSON per `instance_id`.
+Migration updates `public.annual_review_compute_final_summary` (ADR-124) to apply the same `raw / criteria_max * 100` conversion before blending. Keep the RPC signature stable. Add a Postgres-side clamp + `RAISE WARNING` when a pre-clamp value exceeds 100 so we catch future template misconfig.
+
+## Step 4 — Re-run the ADR-124 backfill correctly
+
+- One-shot: recompute `criteria_weighted_score` (percent-scale), `total_score`, `final_rating` for every instance previously touched by category `ADR_124_TERMINAL_COMPLETION_V1` (~768 rows).
+- Log old→new values in `system_audit_logs` under `ADR_126_PROJECTED_SCORE_NORMALIZATION_V1` for full reversibility.
+- Re-verify Mithu Kumar Mahto (200141) and 4 other spot samples before/after.
+
+## Step 5 — Card UI polish
+
+`RunningFinalScoreCard`:
+- Keep the current copy; add a `criteriaMax` prop plumbed from the parent so the projection uses the correct denominator.
+- If `score_0_100 > 100` after math (should never happen post-fix), render `—` and a "Score temporarily unavailable" line instead of a nonsense number — belt-and-braces guard.
+
+**Visual change**: numbers in the "Projected final score to date" card become sane (`≤ 100 / 100`, `≤ 5 / 5`). No layout, color, spacing, or component changes. No other screens change visually.
+
+## Step 6 — Tests (mandatory)
+
+- New unit tests in `runningFinalScore.test.ts`:
+  - Raw-points input with `criteriaMax=45` → correct /100 projection
+  - Missing `criteriaMax` → bucket dropped, marked pending
+  - Pre-clamp overflow → clamped + warned
+- PL/pgSQL regression test: two fixture instances (one raw, one already-normalised template) both produce the same `total_score` after Step 3.
+- Snapshot the pre/post values for Mithu 200141 and the screenshot instance.
+
+## Step 7 — Docs & policy
+
+- `DOCUMENTATION.md` v2.66.119 entry: ADR-126 (Weighted-score normalization).
+- `POLICY.md` §AR-WEIGHTED-SCORE-SCALE: `annual_review_responses.weighted_score` and `annual_review_instances.criteria_weighted_score` are **raw weighted point sums** on the template's criteria max; all downstream blending must normalise to /100 at the SSOT boundary.
+
+## Rollback
+
+Every mutated row is captured pre-image in `system_audit_logs`; a single `UPDATE ... FROM system_audit_logs WHERE category='ADR_126_PROJECTED_SCORE_NORMALIZATION_V1'` reverts Step 4. TS/PL/pgSQL SSOT changes revert by reverting the migration + commit.
+
+## Out of scope
+
+- No changes to how reviewers enter scores.
+- No template weight edits.
+- No changes to system-score storage (already on /100).
