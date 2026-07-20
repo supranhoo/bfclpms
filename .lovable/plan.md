@@ -1,70 +1,115 @@
-# Fix: Projected Final Score > 100
+## The bug (verified in DB)
 
-## Root cause (to confirm in Step 1, high confidence)
+Ujjwal Chauhan (200408) shows **System Score = 54.00 / 50** and **Criteria = 0 / 50 → Overall 54/100**.
 
-`computeFinalScore` (SSOT used by both the projection card and the ADR-124 server-side finalizer) assumes every `reviewer_role → weighted_score` value is already on a **0..100** scale. In practice, `annual_review_responses.weighted_score` is stored as the **raw weighted point sum** out of the template's criteria maximum (e.g. 225 / 45, 229 / 88). Blending raw sums with a percentage-based system score produces the `269.6 / 100` and `13.48 / 5` shown in the screenshot — and, worse, the same math ran server-side during the ADR-124 backfill for 768 completed instances, so their `total_score` and `final_rating` are likely wrong too.
+Template `system_scores[]` weights sum to **50** (2+2+3+4+3+3+25+8). Per-slot values persisted on the instance:
 
-## Step 1 — Confirm before fixing (read-only)
+| Slot | Source | Weight | `system_scores_raw` | `system_scores` (stored) | Correct scaled points |
+|---|---|---|---|---|---|
+| LTI | safety | 2 | 0 | **5** | 2 |
+| STI | safety | 2 | 0 | **5** | 2 |
+| UA/UC/NM | safety | 3 | 21 | **5** | 3 |
+| 5S | safety | 4 | 2.33 | 2 | 2 (band 2) |
+| Training | hr | 3 | 9 | **5** | 3 |
+| Fugitive | env | 3 | 35 | **4** | 2.4 (or 3) |
+| Annual Production | manual | 25 | 98 | 20 | 20 |
+| Annual PM | manual | 8 | 100 | 8 | 8 |
+| **Sum** | | **50** | | **54** | **≤ 50** |
 
-Query the affected instance + a spread of ADR-124 backfilled rows:
+For safety/hr/env slots the map contains the **0..5 rating** instead of the weight-scaled points, so the pool over-flows its own max (54/50). Manual slots (Production, PM) are correctly scaled.
 
-- Identify the instance behind the screenshot (Dept stage locked, BU pending, System 6/12, Criteria pool max 88).
-- For that instance and 20 sampled ADR-124-completed instances, pull:
-  - `template.sections.criteria_max` (or per-section max), resolved `stage_weights`
-  - each locked response's `weighted_score`, `criteria_scores` sum, `is_locked`
-  - persisted `criteria_weighted_score`, `total_score`, `final_rating`
-- Confirm `weighted_score` is raw points (not /100). If some templates persist it as /100 and others as raw, capture both shapes — the fix must handle whichever is truth.
+## 5 Whys
 
-**Do not proceed past Step 1 until this is verified.** If the assumption is wrong, re-plan.
+1. Why is System Score 54/50? Because per-slot values summed to 54 while the pool max is 50.
+2. Why per-slot values > their weight? Safety/HR/Env slots store the 0..5 rating (e.g. LTI=5) instead of `rating/5 × weight` (LTI=2).
+3. Why is rating stored where points belong? The safety/HR/env carry writers push the rating directly into `system_scores` without applying `rating/5 × weight`; the front-end assumes `system_scores[id]` is already in weight-points.
+4. Why did the front-end not rescale? The template's `system_scores[]` slot has `scoring_rules.bands = []` (bands live only in the KPI Library, not copied into the template slot), so `scoreFromRaw` takes the "no bands → treat as pre-scaled points" path.
+5. Why didn't a guard catch this? There is no write-path invariant `stored ≤ weight` and no read-path normaliser that rescales rating-like values into the pool. Only ADR-125 (CLU) and ADR-123 (FAD) touched the two "manual" slots, so the mismatch stayed hidden.
 
-## Step 2 — Normalize at the SSOT boundary (TS)
+## Root cause (ADR-127)
 
-In `src/lib/annualReview/finalScore.ts` / `runningFinalScore.ts`:
+Two problems compound:
 
-- Add a single normalization helper `toPercent(rawWeighted, criteriaMax)` used at the point where reviewer scores enter `computeFinalScore`.
-- Change `RunningFinalScoreInput` to also take `criteriaMax` (resolved from template).
-- `criteria_weighted_score` on the instance gets the same treatment (it's persisted with the same raw-points convention).
-- Guard: if `criteriaMax` is missing or 0, drop the bucket (mark pending) instead of dividing by 0 or emitting raw values.
-- Clamp the final blended score to `[0, 100]` and `[0, 5]` defensively; log a console warning when a clamp fires so future drift is visible.
+- **RC-A (writer)**: safety/HR/env resolvers write the **0..5 rating** into `annual_review_instances.system_scores` while manual slots write **weight-scaled points**. There is no SSOT normaliser at the boundary.
+- **RC-B (template snapshot)**: `annual_review_templates.sections.system_scores[]` snapshots `weight` but not `scoring_rules.bands`, so the client can never re-derive points from `system_scores_raw` at read time.
 
-## Step 3 — Mirror the fix server-side
+Result: `Σ system_scores` overflows the pool cap for every employee where a safety/HR/env slot's rating > that slot's weight (i.e. almost everyone).
 
-Migration updates `public.annual_review_compute_final_summary` (ADR-124) to apply the same `raw / criteria_max * 100` conversion before blending. Keep the RPC signature stable. Add a Postgres-side clamp + `RAISE WARNING` when a pre-clamp value exceeds 100 so we catch future template misconfig.
+## Blast radius (to be measured before we write)
 
-## Step 4 — Re-run the ADR-124 backfill correctly
+Instances where `Σ values(system_scores) > Σ weight(template.system_scores)`. Read-only diagnostic first — no writes until numbers are confirmed.
 
-- One-shot: recompute `criteria_weighted_score` (percent-scale), `total_score`, `final_rating` for every instance previously touched by category `ADR_124_TERMINAL_COMPLETION_V1` (~768 rows).
-- Log old→new values in `system_audit_logs` under `ADR_126_PROJECTED_SCORE_NORMALIZATION_V1` for full reversibility.
-- Re-verify Mithu Kumar Mahto (200141) and 4 other spot samples before/after.
+## Fix plan (POLICY §AR-SYSTEM-SCORE-SCALE)
 
-## Step 5 — Card UI polish
+### Step 1 — Read-only diagnostic (no writes)
 
-`RunningFinalScoreCard`:
-- Keep the current copy; add a `criteriaMax` prop plumbed from the parent so the projection uses the correct denominator.
-- If `score_0_100 > 100` after math (should never happen post-fix), render `—` and a "Score temporarily unavailable" line instead of a nonsense number — belt-and-braces guard.
+`SELECT ...` to count affected instances grouped by department/template, and to prove per-slot rescale = `min(weight, round(stored/5 × weight, 2))` when `stored ≤ 5` AND `weight < 5`, else `min(weight, stored)`.
 
-**Visual change**: numbers in the "Projected final score to date" card become sane (`≤ 100 / 100`, `≤ 5 / 5`). No layout, color, spacing, or component changes. No other screens change visually.
+**Verification**: publish the counts back in chat before Step 2.
 
-## Step 6 — Tests (mandatory)
+### Step 2 — SSOT normaliser (client)
 
-- New unit tests in `runningFinalScore.test.ts`:
-  - Raw-points input with `criteriaMax=45` → correct /100 projection
-  - Missing `criteriaMax` → bucket dropped, marked pending
-  - Pre-clamp overflow → clamped + warned
-- PL/pgSQL regression test: two fixture instances (one raw, one already-normalised template) both produce the same `total_score` after Step 3.
-- Snapshot the pre/post values for Mithu 200141 and the screenshot instance.
+New module `src/lib/annualReview/systemScoreNormalise.ts`:
 
-## Step 7 — Docs & policy
+```
+normaliseSystemScoreValue(stored, rawMeasurement, slot):
+  if slot.scoring_rules.bands present  → scoreFromRaw(raw, rules, weight).points
+  else if stored ≤ 5 AND weight < 5    → (stored / 5) * weight     // rating stored
+  else                                 → min(weight, stored)        // clamp
+```
 
-- `DOCUMENTATION.md` v2.66.119 entry: ADR-126 (Weighted-score normalization).
-- `POLICY.md` §AR-WEIGHTED-SCORE-SCALE: `annual_review_responses.weighted_score` and `annual_review_instances.criteria_weighted_score` are **raw weighted point sums** on the template's criteria max; all downstream blending must normalise to /100 at the SSOT boundary.
+Called from `SystemScoresPanel`, `AppraisalCompositionCard`, `RunningFinalScoreCard`, `EmployeeResultsView`, and `useResolvedSystemScores` so **every** surface displays the same normalised points. Add unit tests covering all three branches + Ujjwal's exact matrix.
 
-## Rollback
+### Step 3 — Server-side one-shot backfill (ADR-127 migration)
 
-Every mutated row is captured pre-image in `system_audit_logs`; a single `UPDATE ... FROM system_audit_logs WHERE category='ADR_126_PROJECTED_SCORE_NORMALIZATION_V1'` reverts Step 4. TS/PL/pgSQL SSOT changes revert by reverting the migration + commit.
+RPC `annual_review_normalise_system_scores(cycle_id, dry_run boolean)`:
 
-## Out of scope
+- For each instance in the cycle, rebuild `system_scores` from `system_scores_raw` + template slot config using the same three-branch rule.
+- Cap each slot at its `weight`.
+- Recompute `total_score` and `final_rating` via existing `annual_review_compute_final_summary` (ADR-124) for completed / late-stage rows.
+- Write an audit row per instance to `system_audit_logs` (`action='annual_review.system_scores_normalise'`, `performed_by=NULL`, metadata = before/after per slot).
+- Dry-run first, then live. Only touches `system_scores`, `total_score`, `final_rating`.
 
-- No changes to how reviewers enter scores.
-- No template weight edits.
-- No changes to system-score storage (already on /100).
+### Step 4 — Write-path guard (prevent regression)
+
+DB trigger `trg_ar_system_scores_within_weight` on `annual_review_instances` BEFORE INSERT/UPDATE: for each key in NEW.system_scores, clamp to slot weight from the resolved template; if a value looks like a 0..5 rating (`value ≤ 5 AND weight < 5 AND system_scores_raw[key] IS NOT NULL`), rescale as `(value/5)*weight`. Logged as `SYSTEM_SCORE_CLAMPED` when it fires so we can watch for offenders.
+
+### Step 5 — Template snapshot repair (RC-B)
+
+One-shot: for every `annual_review_templates.sections.system_scores[]` slot whose `source_kpi_id` (or matching library entry by name) has `scoring_rules.bands`, copy the bands into the slot so future edits + client rescale work uniformly. No behaviour change for slots that already have bands.
+
+### Step 6 — Docs
+
+- `POLICY.md` — new section §AR-SYSTEM-SCORE-SCALE (SSOT rules + write-path guard).
+- `DOCUMENTATION.md` — v2.66.119 entry for ADR-127.
+- New `docs/adr/ADR-127.md`.
+
+## UI impact
+
+- `System Scores` panel per-KPI "Contributes" numbers change for safety/HR/env slots (e.g. LTI 5.00 → 2.00). Nothing moves visually except the numbers becoming correct.
+- Overall pill in `EmployeeResultsView` drops from over-inflated `54.00 / 50` to the correct value ≤ 50 (Ujjwal → 42.4 / 50).
+- `RunningFinalScoreCard` and BU/Dept detail pages reflect the corrected system total.
+- No layout or navigation change.
+
+## Risk & rollback
+
+- **Regression risk**: total_score / final_rating shift downward for completed rows with over-count. That is the correction users asked for; each change is logged in `system_audit_logs` for reversal.
+- **Rollback**: the audit row includes the old `system_scores` map; a companion RPC `annual_review_revert_system_scores_normalise(instance_id)` restores the pre-migration snapshot.
+- **Scalability**: RPC batches 500 instances per statement; ~2k instances → seconds. No API hot path affected.
+
+## Tests
+
+- Unit: three-branch normaliser (rating stored, bands present, already-scaled).
+- Unit: `RunningFinalScoreCard` after normaliser wired in.
+- Unit: `computeScoreComposition` uses normalised map.
+- Regression: Ujjwal's exact matrix → system 42.4 / 50, criteria 0 / 50, overall 42.4 / 100.
+- DB: dry-run RPC on one cycle, compare before/after counts.
+
+## Sign-off gates
+
+1. Post the read-only diagnostic counts in chat.
+2. Ship Steps 2 (client normaliser) + 5 (template band snapshot repair) together.
+3. Ship Step 3 dry-run, share results, then live backfill.
+4. Ship Step 4 guard trigger last so it doesn't reject in-flight repairs.
+
+Awaiting approval to proceed with Step 1 (diagnostic).
