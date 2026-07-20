@@ -1,18 +1,25 @@
 /**
  * Annual Review — Running Final Score projection.
  *
- * Thin wrapper around `computeFinalScore` that projects the cycle-final score
- * from the stages already **locked** (submitted) on an instance. Used by the
- * Dept Head / BU Head detail page so late-chain reviewers see the same number
- * HR will apply, re-normalised over the buckets still pending.
+ * Projects the cycle-final score from the stages already **locked** (submitted)
+ * on an instance using the SAME math the ADR-124 server-side finalizer applies
+ * so late-chain reviewers see the number HR will persist.
  *
- * SSOT rules (see POLICY §AR-RUNNING-FINAL-SCORE):
- *   - Only `is_locked === true` responses contribute; drafts must never leak.
- *   - Weight resolution reuses `resolveStageWeights` (override → template → legacy).
- *   - System-score contribution is the sum of the already-resolved system score
- *     values (already in /100 percentage points).
- *   - `criteria_weighted_score` is passed through so template-legacy configs
- *     (`{criteria:100}`) keep working.
+ * SSOT rules (POLICY §AR-RUNNING-FINAL-SCORE, §AR-WEIGHTED-SCORE-SCALE — ADR-126):
+ *   - `annual_review_responses.weighted_score` and
+ *     `annual_review_instances.criteria_weighted_score` are **raw weighted
+ *      point sums** = Σ (criterion.weight × selected_score_0..5). They are NOT
+ *      already on a 0..100 scale — the pre-ADR-126 projection treated them as
+ *      /100 and produced values >100 (e.g. 269.6/100).
+ *   - Overall projection mirrors `computeScoreComposition`:
+ *         systemActual  = Σ resolvedSystemScores            (already /100 pts)
+ *         criteriaPool  = 100 − Σ template.system_scores.weight
+ *         criteriaPct   = raw_weighted / (Σ criterion.weight × 5)
+ *         projected     = clamp(systemActual + criteriaPct × criteriaPool, 0, 100)
+ *   - Terminal reviewer selection matches ADR-124 (HR → BU Head → Dept Head →
+ *     Skip → Manager → Self). Only `is_locked === true` responses count.
+ *   - Returns null score when there is no criteria max available or no locked
+ *     reviewer; the UI card hides itself in that case.
  */
 
 import type {
@@ -21,12 +28,14 @@ import type {
   AnnualReviewTemplate,
   AnnualReviewerRole,
 } from '@/types/annualReview';
-import {
-  computeFinalScore,
-  resolveStageWeights,
-  STAGE_WEIGHT_KEYS,
-  type StageWeightKey,
-} from './finalScore';
+import type { StageWeightKey } from './finalScore';
+
+/** ADR-124 terminal-picker order (highest priority first). */
+const TERMINAL_ORDER: AnnualReviewerRole[] = [
+  'hr', 'bu_head', 'dept_head', 'skip_manager', 'manager', 'self',
+];
+
+const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n));
 
 export interface RunningFinalScoreInput {
   instance:
@@ -54,61 +63,106 @@ export interface RunningFinalScoreOutput {
   hasLockedStage: boolean;
 }
 
+function sumWeightMax(items: Array<{ weight?: number | null }> | undefined | null): number {
+  if (!items) return 0;
+  let t = 0;
+  for (const it of items) {
+    const w = Number(it?.weight);
+    if (Number.isFinite(w) && w > 0) t += w;
+  }
+  return t;
+}
+
 export function computeRunningFinalScore(
   input: RunningFinalScoreInput,
 ): RunningFinalScoreOutput {
   const { instance, template, responses, resolvedSystemScores } = input;
-  const stageWeights = resolveStageWeights(instance ?? null, template ?? null);
+  const sections = (template?.sections ?? {}) as {
+    criteria?: Array<{ weight?: number | null }>;
+    system_scores?: Array<{ weight?: number | null }>;
+  };
 
-  const responsesByRole: Partial<Record<AnnualReviewerRole, number | null>> = {};
-  let hasLockedStage = false;
-  for (const r of responses ?? []) {
-    if (!r.is_locked) continue;
-    if (typeof r.weighted_score === 'number' && Number.isFinite(r.weighted_score)) {
-      responsesByRole[r.reviewer_role] = r.weighted_score;
-      hasLockedStage = true;
-    }
-  }
+  // Template maxima (SSOT: matches computeScoreComposition).
+  const criteriaRawMax = sumWeightMax(sections.criteria) * 5;
+  const systemMaxRaw = sumWeightMax(sections.system_scores);
+  // The criteria pool occupies whatever is left of the /100 axis after the
+  // system slot. Clamp defensively when a template mis-configures weights.
+  const criteriaPoolMax = clamp(100 - systemMaxRaw, 0, 100);
 
-  const systemTotal = (() => {
-    if (!resolvedSystemScores) return null;
-    let t = 0;
-    let any = false;
+  // System actual — values are persisted already in /100 percentage points.
+  let systemActual = 0;
+  let systemContributed = false;
+  if (resolvedSystemScores) {
     for (const k of Object.keys(resolvedSystemScores)) {
       const v = resolvedSystemScores[k];
       if (typeof v === 'number' && Number.isFinite(v)) {
-        t += v;
-        any = true;
+        systemActual += v;
+        systemContributed = true;
       }
     }
-    return any ? t : null;
-  })();
+  }
 
-  const criteriaWeighted =
-    typeof instance?.criteria_weighted_score === 'number'
-      ? instance.criteria_weighted_score
-      : null;
+  // Terminal-locked reviewer picker (mirrors ADR-124 server RPC).
+  const lockedRaw: Partial<Record<AnnualReviewerRole, number>> = {};
+  for (const r of responses ?? []) {
+    if (!r.is_locked) continue;
+    if (typeof r.weighted_score === 'number' && Number.isFinite(r.weighted_score)) {
+      lockedRaw[r.reviewer_role] = r.weighted_score;
+    }
+  }
+  let terminalRole: AnnualReviewerRole | null = null;
+  let terminalRaw: number | null = null;
+  for (const role of TERMINAL_ORDER) {
+    if (lockedRaw[role] != null) {
+      terminalRole = role;
+      terminalRaw = lockedRaw[role]!;
+      break;
+    }
+  }
 
-  const out = computeFinalScore({
-    stageWeights,
-    responsesByRole,
-    systemScoreTotal: systemTotal,
-    criteriaWeightedScore: criteriaWeighted,
-  });
+  const hasLockedStage = terminalRaw != null;
 
-  // Compute pending: configured buckets (weight > 0) that did NOT contribute.
-  const contributed = new Set<StageWeightKey>(out.contributing);
+  // Compose contributing / pending buckets for the UI copy.
+  const contributing: StageWeightKey[] = [];
   const pending: StageWeightKey[] = [];
-  for (const key of STAGE_WEIGHT_KEYS) {
-    const w = stageWeights[key];
-    if (w == null || w <= 0) continue;
-    if (!contributed.has(key)) pending.push(key);
+  if (systemContributed) contributing.push('system');
+  else if (systemMaxRaw > 0) pending.push('system');
+  if (terminalRole) contributing.push(terminalRole as StageWeightKey);
+  for (const role of TERMINAL_ORDER) {
+    if (role === terminalRole) continue;
+    if (lockedRaw[role] != null) continue; // earlier stage locked but not terminal → don't re-list
+    pending.push(role as StageWeightKey);
+  }
+
+  if (!hasLockedStage && !systemContributed) {
+    return { score_0_100: null, scaled_0_5: null, contributing, pending, hasLockedStage };
+  }
+
+  // Normalise the terminal reviewer's raw weighted score into the criteria pool.
+  let criteriaContribution = 0;
+  if (terminalRaw != null && criteriaRawMax > 0 && criteriaPoolMax > 0) {
+    const pct = terminalRaw / criteriaRawMax; // 0..1 (may exceed 1 if data drift)
+    criteriaContribution = pct * criteriaPoolMax;
+  } else if (terminalRaw != null && criteriaRawMax === 0) {
+    // Template has no criteria; treat raw as already-scaled 0..100 (legacy).
+    criteriaContribution = terminalRaw;
+  }
+
+  const raw = systemActual + criteriaContribution;
+  const clamped = clamp(raw, 0, 100);
+  if (raw > 100.01 || raw < -0.01) {
+    // Belt-and-braces guard: surfaces template mis-config in the console
+    // without breaking the UI.
+    // eslint-disable-next-line no-console
+    console.warn('[runningFinalScore] pre-clamp overflow', {
+      raw, systemActual, criteriaContribution, criteriaRawMax, criteriaPoolMax,
+    });
   }
 
   return {
-    score_0_100: out.rawScore_0_100,
-    scaled_0_5: out.scaled_0_5,
-    contributing: out.contributing,
+    score_0_100: Number(clamped.toFixed(4)),
+    scaled_0_5: Number(((clamped / 100) * 5).toFixed(4)),
+    contributing,
     pending,
     hasLockedStage,
   };
