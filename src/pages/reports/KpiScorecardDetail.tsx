@@ -651,6 +651,13 @@ export default function KpiScorecardDetail() {
       const ws = XLSX.utils.json_to_sheet(allRecords, { header: headers });
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, 'KPI Scorecard');
+      // Summary spans the whole exported range so users see aggregate load.
+      // We approximate `pendingSinceDays` per row using its value at fetch time.
+      appendPendingWithSummarySheet(
+        wb,
+        allRecords as unknown as Array<{ status: string; isNa: boolean; pendingWith: string; pendingSinceDays: number | null }>,
+        overdueDays,
+      );
       const first = periods[0];
       const last = periods[periods.length - 1];
       XLSX.writeFile(wb, `KPI_Scorecard_${first.month}-${first.year}_to_${last.month}-${last.year}.xlsx`);
