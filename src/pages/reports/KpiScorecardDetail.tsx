@@ -50,7 +50,7 @@ const KSD_DEFAULT_FIELDS = [
   { field_key: 'final_score',       default_label: 'Final Score',        default_sort: 280 },
   { field_key: 'final_approver',    default_label: 'Final Approver',     default_sort: 285 },
   { field_key: 'status',            default_label: 'Status',             default_sort: 290 },
-  { field_key: 'pending_with',      default_label: 'Pending With',       default_sort: 295 },
+  { field_key: 'pending_with',      default_label: 'Pending With (Name)', default_sort: 295 },
 ] as const;
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
 import { useToast } from '@/hooks/use-toast';
@@ -58,6 +58,16 @@ import { enumeratePeriods, validateRange, MAX_RANGE_MONTHS } from '@/lib/kpiScor
 import { fetchFinalApproverMap, NO_APPROVER_LABEL } from '@/lib/finalApproverMap';
 import { ColumnFilterPopover } from '@/components/reports/ColumnFilterPopover';
 import { resolvePendingWith, PENDING_WITH_NONE } from '@/lib/kpiPendingWith';
+import {
+  displayPendingWith,
+  summarizePendingWith,
+  agingHistogram,
+  overdueCount,
+  pendingSinceDaysFor,
+  AGING_BUCKETS,
+  DEFAULT_OVERDUE_DAYS,
+} from '@/lib/kpiPendingWithSummary';
+import { Checkbox } from '@/components/ui/checkbox';
 
 const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
