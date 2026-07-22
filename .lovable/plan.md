@@ -1,61 +1,67 @@
+
 ## Assumptions
-- The screenshot is from a manager moving a KPI from Self Review to Manager Check.
-- Recipient `3d06ca4d-42f3-4704-9f60-fade01ad2d1e` is Mayank (`Auditor002`), an active auditor.
 
-## Clarifications
-- Not required; the failing database path and recipient are confirmed.
+- The complaint is that Umesh Kumar Mehta (100316, `manager` + dept-head of 7 departments) and his manager Jitendra still see the "not authorized to send notifications to user 3d06ca4d… (Mayank / Auditor002)" toast when approving a KPI, i.e. moving `self_review → manager_check`.
+- The recipient in the toast (`3d06ca4d…`) is the auditor **Mayank (Auditor002)**, not the reviewer. So the toast is auditor-directed, but the *actor* is a reviewer — that is the angle you asked me to re-check.
 
-## RCA and 5 Why
-1. The KPI status update fails because its notification insert is rejected by the sender-relationship guard.
-2. The rejected recipient is Mayank, who is not necessarily assigned to the KPI being updated.
-3. `notify_on_kpi_status_change()` currently sends “KPI Ready for Audit” to **every user with the auditor role**, rather than only the KPI’s assigned auditor(s).
-4. ADR-131 correctly authorized reviewer↔**assigned auditor** relationships, but it did not change this legacy global fan-out.
-5. Therefore, when the broadcast reaches the first unrelated auditor, authorization fails and rolls back the parent KPI status update. This is the same notification-guard failure class as ADR-112/131, but a different root cause: invalid recipient selection rather than a missing valid authorization edge.
+## What I verified in the live DB
 
-## Risk & Impact Report
-- **Data:** No destructive changes or historical-data rewrite. Notification recipient selection only.
-- **Workflow:** Manager approval/N/A/status transitions will stop failing; only assigned auditors will receive audit-ready notifications.
-- **Security:** Improves least privilege by preventing unrelated auditors from receiving employee KPI details. The guard remains strict; no broad authorization bypass.
-- **UI/UX:** No layout change. Existing error toast disappears when the status transaction succeeds.
-- **Regression:** Other status transitions could share this trigger; preserve employee, manager, finalization, and send-back notifications unchanged.
-- **Scalability:** Replaces organization-wide role fan-out with indexed assignment-based recipient lookup, reducing inserts and database load.
-- **Backup:** No new table; existing automatic public-table backup coverage is unchanged.
-- **Rollback:** Restore the previous trigger function definition through a forward migration; no data rollback required.
+1. `notify_on_kpi_status_change()` no longer does a role-wide auditor broadcast — it dispatches only to the UNION of `audit_kpi_level_assignments` (by KPI) and `audit_kpi_assignments` (by employee). ADR-132 code is live.
+2. `can_send_notification_to()` contains the ADR-131 reviewer↔auditor edge (auditor of an employee ↔ that employee's reporting/functional manager, skip, dept head, BU head).
+3. Mayank has **516** KPI-level and **1** employee-level assignments overall, but **only 1** of those touches an employee inside Umesh's dept-head scope (91 employees) and **0** inside his direct reporting team (11 employees).
+4. That means the failing toast fires precisely on the specific KPIs where Mayank *is* an assigned auditor AND the caller is *not* recognised as a reviewer of that KPI's employee by `can_send_notification_to`.
 
-## Step-by-step Plan
-1. Add a forward-only database migration redefining `notify_on_kpi_status_change()`.
-2. Replace the global `user_roles.role='auditor'` fan-out with the union of active, login-enabled auditors assigned through:
-   - `audit_kpi_level_assignments` for the specific KPI, and
-   - `audit_kpi_assignments` for the KPI’s employee.
-3. Deduplicate recipients and retain the existing auth-user check and best-effort notification handling.
-4. Keep `can_send_notification_to()` unchanged: it already authorizes both confirmed assignment relationships.
-5. Audit sibling KPI notification paths for any other role-wide recipient broadcasts and correct only equivalent invalid fan-outs found in the active definitions.
-6. Add regression tests proving:
-   - assigned KPI-level auditor receives the notification;
-   - assigned employee-level auditor receives it;
-   - unrelated auditors do not receive it;
-   - duplicate assignments produce one notification;
-   - status updates are not rolled back by unrelated auditors;
-   - all existing status notification branches remain present.
-7. Update realistic notification relationship fixtures/mock data for assigned and unrelated auditors.
-8. Update `POLICY.md`, `DOCUMENTATION.md` version history, and add an ADR/CAPA note documenting assignment-scoped auditor dispatch.
-9. Apply the migration and verify the active function definition plus assignment counts. No replay/backfill is needed because failed transactions rolled back cleanly; affected users can retry.
+## Root-cause hypothesis (unconfirmed until we capture one live failure)
 
-## UI Changes
-- Not Applicable.
+The guard currently treats "reviewer of the audited employee" as: reporting manager, functional manager, skip (mgr-of-mgr), dept head, BU head. It does **not** include several reviewer roles that Umesh legitimately holds when approving:
 
-## Implementation
-- Database trigger correction, regression fixtures/tests, and synchronized documentation only.
+- **Sub-unit / sub-branch head** (`business_unit_sub_units`) — Umesh heads a sub-unit for at least one dept employee.
+- **Workflow-resolved manager** via `workflow_config` / effective chain (someone acting as the KPI's next-stage reviewer even though they aren't the profile's reporting manager).
+- **HR PMS / bulk-approval proxy** invoking `advance_kpi_status` on behalf of the manager.
 
-## Tests
-- Targeted Vitest notification-trigger contract tests.
-- Database verification of the deployed function and recipient query behavior.
+If Umesh approved via any of those paths, the auditor dispatch is correct (Mayank is assigned) but the guard rejects him as sender, rolling back the whole KPI status update.
 
-## DOCUMENTATION.md updates
-- Record the confirmed RCA, affected flow, implementation, validation, rollback, and version-history entry.
+I want to confirm the actual failing KPI + caller before widening the guard, so the plan starts with a targeted read.
 
-## POLICY.md updates
-- State that audit-ready KPI notifications are assignment-scoped and must never be broadcast to every auditor.
+## Risk & Impact
 
-## Post-implementation notes
-- This resolves the remaining gap without weakening notification authorization or exposing KPI data to unrelated auditors.
+- **Data**: guard changes only widen who may INSERT into `notifications`; no historical data touched.
+- **Workflow**: unblocks legitimate reviewer→auditor notifications; no change to who sees what.
+- **Security**: only adds authenticated, structurally-verified relationships (sub-unit head, workflow-resolved reviewer). No blanket allowances.
+- **Regression**: covered by extending existing tests in `kpiAuditorNotificationDispatch.test.ts` and a new `canSendNotificationTo.reviewerAuditor.test.ts`.
+- **Rollback**: single migration replacing the function; previous body preserved in ADR-132/133.
+
+## Plan
+
+1. **Capture the real failure** (read-only)
+   - Query recent `kpis` rows for Umesh's dept employees where `updated_at` is in the last 24h and status is stuck at `self_review`, cross-join with Mayank's assignments to pinpoint the exact KPI(s) that couldn't advance.
+   - For each such (caller=Umesh, target=Mayank, emp=X) triple, evaluate `can_send_notification_to` and print which branch fails.
+
+2. **Extend `can_send_notification_to` (ADR-133)** to recognise the missing reviewer relationships found in step 1. Expected additions:
+   - Sub-unit / sub-branch head of the audited employee's sub-unit.
+   - Any user resolved as the employee's next-stage reviewer via `workflow_config` / effective workflow (SECURITY DEFINER helper `is_effective_reviewer_of(sender, emp)`).
+   - HR PMS acting on behalf of a manager (already covered globally, verify).
+   Keep the change strictly additive.
+
+3. **Trigger safety net**
+   - Wrap the auditor-fanout INSERT in `notify_on_kpi_status_change()` in a per-row `BEGIN … EXCEPTION WHEN insufficient_privilege THEN NULL; END;` so a single unauthorised recipient never rolls back the status change. This mirrors the pattern already used for `foreign_key_violation`.
+
+4. **Documentation & policy**
+   - New ADR-133 "Reviewer↔Auditor guard completeness".
+   - POLICY §108g clarifies that notification failures are non-blocking for KPI status transitions.
+   - DOCUMENTATION.md version history entry.
+
+5. **Tests**
+   - Unit: `canSendNotificationTo.reviewerAuditor.test.ts` covering reporting mgr, functional mgr, skip, dept head, BU head, sub-unit head, workflow-resolved reviewer.
+   - Integration: `kpiStatusChange.dispatchIsolation.test.ts` proving one unauthorised recipient does not roll back the transition.
+
+6. **Manual verification for Umesh**
+   - Re-run the exact `self_review → manager_check` transition on the previously failing KPI as Umesh and confirm success in the app.
+
+## Technical notes
+
+- `notify_on_kpi_status_change` is `SECURITY DEFINER`, but INSERT policy on `notifications` uses `auth.uid()` (the caller), so widening the guard is the correct lever — not switching the trigger's role.
+- Sub-unit head lookup uses `business_unit_sub_units.head_user_id` (verified present).
+- Effective reviewer resolution reuses existing helper (`resolve_next_reviewer_for_kpi`) rather than re-encoding the workflow.
+
+No hardcoding of names/IDs; all lookups go through master data.
