@@ -1,50 +1,61 @@
+## Assumptions
+- The screenshot is from a manager moving a KPI from Self Review to Manager Check.
+- Recipient `3d06ca4d-42f3-4704-9f60-fade01ad2d1e` is Mayank (`Auditor002`), an active auditor.
 
-## Problem (verified)
+## Clarifications
+- Not required; the failing database path and recipient are confirmed.
 
-For Sourav Kumar Jaiswal (100972) — and every employee mapped to a KRA-based template such as **Generic M / W - (With KRA)** — the Annual Review admin grid shows `—` in every column (Self /5, Manager /5, Dept /5, BU /5, Final, Rating).
+## RCA and 5 Why
+1. The KPI status update fails because its notification insert is rejected by the sender-relationship guard.
+2. The rejected recipient is Mayank, who is not necessarily assigned to the KPI being updated.
+3. `notify_on_kpi_status_change()` currently sends “KPI Ready for Audit” to **every user with the auditor role**, rather than only the KPI’s assigned auditor(s).
+4. ADR-131 correctly authorized reviewer↔**assigned auditor** relationships, but it did not change this legacy global fan-out.
+5. Therefore, when the broadcast reaches the first unrelated auditor, authorization fails and rolls back the parent KPI status update. This is the same notification-guard failure class as ADR-112/131, but a different root cause: invalid recipient selection rather than a missing valid authorization edge.
 
-### Root cause
+## Risk & Impact Report
+- **Data:** No destructive changes or historical-data rewrite. Notification recipient selection only.
+- **Workflow:** Manager approval/N/A/status transitions will stop failing; only assigned auditors will receive audit-ready notifications.
+- **Security:** Improves least privilege by preventing unrelated auditors from receiving employee KPI details. The guard remains strict; no broad authorization bypass.
+- **UI/UX:** No layout change. Existing error toast disappears when the status transaction succeeds.
+- **Regression:** Other status transitions could share this trigger; preserve employee, manager, finalization, and send-back notifications unchanged.
+- **Scalability:** Replaces organization-wide role fan-out with indexed assignment-based recipient lookup, reducing inserts and database load.
+- **Backup:** No new table; existing automatic public-table backup coverage is unchanged.
+- **Rollback:** Restore the previous trigger function definition through a forward migration; no data rollback required.
 
-- The grid's `Self /5 … HR /5` columns are derived from `annual_review_responses.weighted_score` via `computeCriteriaRatingOutOf5(criteria, weightedScore, role)` (`AnnualReviewAdmin.tsx:966`).
-- KRA-based templates carry the score through the `carry_kra` slot inside `system_scores_raw`, NOT through per-criterion ratings. Reviewers submit with `criteria_scores = {}` and `weighted_score = 0.00` (confirmed for 100972: self/dept locked, both `weighted_score=0.00`).
-- The `Final` and `Rating` columns read `instances.total_score` / `final_rating`, both of which are only written on completion (ADR-124). Nothing is shown while the instance is still moving through stages, even though a KRA-based rating is fully determined the moment KRA data is present.
+## Step-by-step Plan
+1. Add a forward-only database migration redefining `notify_on_kpi_status_change()`.
+2. Replace the global `user_roles.role='auditor'` fan-out with the union of active, login-enabled auditors assigned through:
+   - `audit_kpi_level_assignments` for the specific KPI, and
+   - `audit_kpi_assignments` for the KPI’s employee.
+3. Deduplicate recipients and retain the existing auth-user check and best-effort notification handling.
+4. Keep `can_send_notification_to()` unchanged: it already authorizes both confirmed assignment relationships.
+5. Audit sibling KPI notification paths for any other role-wide recipient broadcasts and correct only equivalent invalid fan-outs found in the active definitions.
+6. Add regression tests proving:
+   - assigned KPI-level auditor receives the notification;
+   - assigned employee-level auditor receives it;
+   - unrelated auditors do not receive it;
+   - duplicate assignments produce one notification;
+   - status updates are not rolled back by unrelated auditors;
+   - all existing status notification branches remain present.
+7. Update realistic notification relationship fixtures/mock data for assigned and unrelated auditors.
+8. Update `POLICY.md`, `DOCUMENTATION.md` version history, and add an ADR/CAPA note documenting assignment-scoped auditor dispatch.
+9. Apply the migration and verify the active function definition plus assignment counts. No replay/backfill is needed because failed transactions rolled back cleanly; affected users can retry.
 
-Result: the grid tells the user "no data" for exactly the employees whose scores ARE known.
+## UI Changes
+- Not Applicable.
 
-## Fix plan
+## Implementation
+- Database trigger correction, regression fixtures/tests, and synchronized documentation only.
 
-Presentation-only. No changes to stored responses, weighted_score, or the finalization RPCs.
+## Tests
+- Targeted Vitest notification-trigger contract tests.
+- Database verification of the deployed function and recipient query behavior.
 
-### 1. New helper `src/lib/annualReview/kraDerivedRating.ts`
-- Given an instance + resolved template, detect a "KRA-based" template (template exposes a `carry_kra` slot in `sections.system_slots` OR name matches the "*(With KRA)*" archetype).
-- Read `system_scores_raw.carry_kra` (already ADR-116 stable-key backed) → normalise to `/5` using the slot's `max_points` (or the KRA rules if `scoring_rules.carry_kra` is defined).
-- Return `{ isKraTemplate, kraRating_0_5, kraPoints, kraMaxPoints }` or `null` when the KRA value is not yet present.
-- Unit tests covering: non-KRA template (null), KRA template with no value (null), KRA template with 4.2/5, KRA template using scoring_rules override.
+## DOCUMENTATION.md updates
+- Record the confirmed RCA, affected flow, implementation, validation, rollback, and version-history entry.
 
-### 2. Grid column fallback (`src/pages/annual-review/AnnualReviewAdmin.tsx`)
-Inside the row map (around L966), when the template is KRA-based:
-- Replace the per-stage `fmt(ss.role, role)` with `fmt(ss.role, role) ?? kraRating_0_5.toFixed(1)` for every stage that has a locked/submitted response for that role. i.e. once Self is locked and KRA data exists, Self /5 shows the KRA rating; same for Manager/Dept/BU/HR as each stage submits.
-- Add a small `KRA` chip after the stage name in the "Stage" cell so it's obvious the numbers are KRA-derived, not criteria-derived.
+## POLICY.md updates
+- State that audit-ready KPI notifications are assignment-scoped and must never be broadcast to every auditor.
 
-### 3. Live Final + Rating for in-flight KRA rows
-- When the template is KRA-based and `total_score IS NULL`, compute a projected final on the client with the existing `annual_review_compute_final_summary` inputs (system_scores + carry_kra + weights), reuse `computeFinalScore` / `resolveRating` from `runningFinalScore.ts`.
-- Render as `21.7*` (asterisk + tooltip: "Projected — pending BU Head") to keep it visually distinct from a finalized value. Rating column shows the projected band label with the same asterisk.
-- Zero server changes; the SSOT for the final math stays `annual_review_compute_final_summary` (ADR-126). This projection uses the same TS mirror.
-
-### 4. Export parity
-Update `exportProgress` (same file, L327+) and `src/services/annualReview/exports.ts` so the xlsx export emits the KRA-derived per-stage rating and projected final for KRA rows, with a new "Score Source" column (`kra` vs `criteria`) so the user can filter in Excel.
-
-### 5. Tests
-- Extend `src/lib/annualReview/runningFinalScore.test.ts` with a KRA-only case.
-- New test in the admin grid render (react-testing-library) verifying that a KRA row with `carry_kra=45`, template max 50, and a locked self response renders `Self /5 = 4.5` and a projected Final with asterisk.
-
-## Risk & impact
-
-- Data: none — no writes. `weighted_score`, `final_rating`, `total_score` untouched. Trigger `trg_annual_review_guard_completion` and ADR-124 finalization path unchanged.
-- Workflow: none — stages, RLS, RPCs untouched.
-- UI: adds numbers where "—" was shown; adds a `KRA` chip on affected rows and an asterisk on projected values.
-- Regression: `computeCriteriaRatingOutOf5` still runs first for non-KRA templates; the KRA fallback only fires when the value is null AND the template is KRA-based.
-
-## Rollback
-
-Pure client change — revert the two files (`kraDerivedRating.ts` + `AnnualReviewAdmin.tsx` diff) to restore prior behaviour.
+## Post-implementation notes
+- This resolves the remaining gap without weakening notification authorization or exposing KPI data to unrelated auditors.
