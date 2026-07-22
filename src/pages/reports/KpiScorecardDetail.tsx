@@ -612,6 +612,7 @@ export default function KpiScorecardDetail() {
     setRangeExporting(true);
     try {
       const allRecords: ReturnType<typeof toExportRecord>[] = [];
+      const allFlatRows: FlatRow[] = [];
       const visible = resolvedFields.filter((f) => !f.is_hidden);
       const headers = visible.map((f) => f.label);
       const search = searchTerm.toLowerCase();
@@ -631,12 +632,16 @@ export default function KpiScorecardDetail() {
               !r.employeeName.toLowerCase().includes(search) &&
               !r.employeeCode.toLowerCase().includes(search) &&
               !r.kpiName.toLowerCase().includes(search) &&
-              !r.kraName.toLowerCase().includes(search)
+              !r.kraName.toLowerCase().includes(search) &&
+              !displayPendingWith(r).toLowerCase().includes(search)
             ) return false;
           }
           return true;
         });
-        filteredPeriod.forEach(r => allRecords.push(toExportRecord(r, p.year, visible)));
+        filteredPeriod.forEach(r => {
+          allRecords.push(toExportRecord(r, p.year, visible));
+          allFlatRows.push(r);
+        });
       }
 
       if (allRecords.length === 0) {
