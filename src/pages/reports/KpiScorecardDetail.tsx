@@ -965,8 +965,23 @@ export default function KpiScorecardDetail() {
                               {statusLabels[r.status] ?? r.status}
                             </Badge>
                           </TableCell>
-                          <TableCell className="text-xs py-1.5 px-2 max-w-[180px] truncate whitespace-nowrap" title={r.pendingWith}>
-                            {r.pendingWith || '—'}
+                          <TableCell className="text-xs py-1.5 px-2 max-w-[220px] whitespace-nowrap" title={displayPendingWith(r)}>
+                            <div className="flex items-center gap-1.5 min-w-0">
+                              <span className="truncate">{displayPendingWith(r)}</span>
+                              {r.pendingSinceDays != null && (
+                                <Badge
+                                  variant="outline"
+                                  className={`text-[10px] px-1.5 py-0 border-0 shrink-0 ${
+                                    r.pendingSinceDays > overdueDays
+                                      ? 'bg-destructive/10 text-destructive'
+                                      : 'bg-muted/50'
+                                  }`}
+                                  title={`Pending for ${r.pendingSinceDays} day${r.pendingSinceDays === 1 ? '' : 's'}`}
+                                >
+                                  {r.pendingSinceDays}d
+                                </Badge>
+                              )}
+                            </div>
                           </TableCell>
                         </TableRow>
                       );
