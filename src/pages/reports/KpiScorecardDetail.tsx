@@ -914,6 +914,12 @@ export default function KpiScorecardDetail() {
                       </TableHead>
                       <TableHead className={thClass} title="Who this KPI is currently waiting on. Person name for Self/Manager/Skip-Level; role queue for HR PMS/Audit/Management; Data Owner name(s) for org KPIs still at KRA Set.">
                         <span onClick={() => toggleSort('pendingWith')} className="inline-flex items-center">Pending With<SortIcon field="pendingWith" /></span>
+                        <ColumnFilterPopover
+                          label="Pending With"
+                          values={pendingWithValues}
+                          selected={pendingWithFilter}
+                          onChange={v => { setPendingWithFilter(v); setCurrentPage(1); }}
+                        />
                       </TableHead>
                     </TableRow>
                   </TableHeader>
