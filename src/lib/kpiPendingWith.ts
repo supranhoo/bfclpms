@@ -42,6 +42,11 @@ export interface ResolvePendingWithInput {
   skipManagerName: string | null;
   /** Ordered stage chain from get_employee_workflow (no framing stages). */
   stageChain: string[];
+  /** Optional pre-joined names for queue stages. When empty/undefined, the
+   *  resolver falls back to the queue label (e.g. "HR PMS"). */
+  hrPmsNames?: string;
+  auditorNames?: string;
+  managementNames?: string;
 }
 
 const QUEUE_LABEL: Record<string, string> = {
@@ -65,10 +70,16 @@ function labelForNext(
   next: string | null,
   managerName: string | null,
   skipManagerName: string | null,
+  hrPmsNames?: string,
+  auditorNames?: string,
+  managementNames?: string,
 ): string {
   if (!next) return PENDING_WITH_NONE;
   if (next === 'manager_check') return managerName || PENDING_WITH_NONE;
   if (next === 'skip_level_check') return skipManagerName || PENDING_WITH_NONE;
+  if (next === 'hr_pms_review') return (hrPmsNames?.trim()) || QUEUE_LABEL[next] || PENDING_WITH_NONE;
+  if (next === 'audit') return (auditorNames?.trim()) || QUEUE_LABEL[next] || PENDING_WITH_NONE;
+  if (next === 'management_review') return (managementNames?.trim()) || QUEUE_LABEL[next] || PENDING_WITH_NONE;
   return QUEUE_LABEL[next] || PENDING_WITH_NONE;
 }
 
@@ -81,6 +92,9 @@ export function resolvePendingWith(input: ResolvePendingWithInput): string {
     managerName,
     skipManagerName,
     stageChain,
+    hrPmsNames,
+    auditorNames,
+    managementNames,
   } = input;
 
   if (!status || status === 'approved') return PENDING_WITH_NONE;
@@ -103,7 +117,7 @@ export function resolvePendingWith(input: ResolvePendingWithInput): string {
     status === 'management_review'
   ) {
     const next = nextStage(stageChain, status);
-    return labelForNext(next, managerName, skipManagerName);
+    return labelForNext(next, managerName, skipManagerName, hrPmsNames, auditorNames, managementNames);
   }
 
   return PENDING_WITH_NONE;

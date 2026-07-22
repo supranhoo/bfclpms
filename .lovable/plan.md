@@ -1,30 +1,55 @@
-## Current State (verified from src/pages/reports/KpiScorecardDetail.tsx)
+## Current state (verified)
 
-The "Pending With (Name)" column is already fully wired end-to-end:
+The `pending_with` column already exists in `KpiScorecardDetail.tsx` (default field, sort 295) and is included in both single-month (`handleExport`) and range (`handleRangeExport`) XLSX exports via the shared `ksdValueFor` mapper — UI/Excel parity is already guaranteed row-by-row.
 
-- **Default field registry** (line 53): `pending_with` is a default visible field labelled "Pending With (Name)".
-- **Row data** (line 306, 351): each `FlatRow` carries a resolved `pendingWith` computed via `resolvePendingWith(...)` using the workflow chain.
-- **UI table** (line 1013–1017): renders `displayPendingWith(r)` with a sortable header and a column filter popover.
-- **Single-month export** (`handleExport`, line 554–564): builds headers from `resolvedFields.filter(f => !f.is_hidden)` and maps each row via `toExportRecord` → `ksdValueFor` case `'pending_with'` → `displayPendingWith(r)`.
-- **Range export** (`handleRangeExport`, line 618–674): uses the same `visible` fields, the same `toExportRecord`, and applies the same UI filters (company, department, search including Pending With).
-- **Terminal states**: `displayPendingWith` returns `"Completed"` for approved rows and `"N/A"` for `is_na` rows; otherwise the resolved reviewer/owner name, falling back to em-dash `—` if unresolved — matching the existing standard used elsewhere in the report.
+The gap is in `src/lib/kpiPendingWith.ts`: for the `hr_pms_review`, `audit`, and `management_review` stages, it currently returns queue **labels** (`"HR PMS"`, `"Audit"`, `"Management"`) instead of the actual person names, as the user is now requesting.
 
-Row-by-row parity is guaranteed because both the UI grid and the export iterate the same `filtered` array (or per-period equivalent) and both resolve Pending With through the identical `displayPendingWith` helper.
+## Scope
 
-## Plan
+Show person names for every stage in Pending With (Name):
 
-No code changes required. I will:
+| Next stage           | Show                                                          |
+| -------------------- | ------------------------------------------------------------- |
+| kra_set (individual) | Employee name (unchanged)                                     |
+| kra_set (org KPI)    | Data Owner name(s) (unchanged)                                |
+| self_review          | Reporting Manager name (unchanged)                            |
+| manager_check        | Reporting Manager name (unchanged)                            |
+| skip_level_check     | Skip-Level Manager name (unchanged)                           |
+| **hr_pms_review**    | **HR PMS user name(s)** — comma-joined, from `user_roles`     |
+| **audit**            | **Assigned Auditor name** for this KPI (from assignments), else all auditors |
+| **management_review**| **Management user name(s)** — comma-joined, from `user_roles` |
+| approved             | `"Completed"` (unchanged, via `displayPendingWith`)           |
+| is_na                | `"N/A"` (unchanged)                                           |
+| Unresolvable         | Em-dash `—` (unchanged fallback)                              |
 
-1. Run the existing unit tests (`src/test/kpiPendingWithSummary.test.ts`, `kpiPendingWith.test.ts`) to confirm the resolver + display helpers are green.
-2. Spot-check the export path by tracing one `FlatRow` through `ksdValueFor('pending_with', …)` and confirming the header list includes "Pending With (Name)" when the field is not hidden in `report_field_configs`.
-3. Confirm no admin has hidden the `pending_with` field for this report; if a workspace has hidden it, document that unhiding it in Report Settings restores the column in both UI and Excel (the field respects the existing show/hide governance — per project rules I will not force-show it).
+## Implementation
 
-## Deliverable
+1. **`src/lib/kpiPendingWith.ts`** — extend `ResolvePendingWithInput` with three optional string fields: `hrPmsNames`, `auditorNames`, `managementNames`. In `labelForNext`, prefer the resolved name(s) for `hr_pms_review`/`audit`/`management_review` and fall back to the existing queue labels only when unresolved. Keep manager/skip-level behavior unchanged. All strings pre-joined by the caller — resolver stays pure.
 
-A short confirmation with test results and the trace, plus a note on the `is_hidden` governance dependency. If tests fail or the trace reveals a gap, I'll return with a follow-up fix plan before touching code.
+2. **`src/pages/reports/KpiScorecardDetail.tsx`** — in `fetchScorecardForPeriod`:
+   - After fetching `profiles`, fetch role members once from `user_roles` for `role in ('hr_pms','management')`, join names via `profileMap`, and pre-join to `hrPmsNamesGlobal` / `managementNamesGlobal` strings.
+   - Fetch per-KPI auditor assignments from `audit_kpi_level_assignments` in 500-id chunks (matches existing `WF_CHUNK` pattern used elsewhere in the file), build `kpiIdToAuditorNames: Map<string, string>` via `profileMap`. When a KPI has no assignment, fall back to the global auditor pool (all users with role `auditor`) — pre-joined once.
+   - Pass these three name strings into every `resolvePendingWith(...)` call (per-KPI auditor lookup, shared global HR PMS / Management strings).
+   - No changes to the `FlatRow` shape beyond the already-existing `pendingWith` string — export and UI both read `displayPendingWith(r)` unchanged, so Excel parity is preserved automatically.
 
-## Not Applicable
+3. **Filtering, sorting, search** — already wired against `displayPendingWith(r)` and the `pendingWithFilter` popover; no changes needed. The column-filter popover values will just now list real names for those stages.
 
-- Schema / RLS / migrations
-- UI restructure (additive column already present)
-- New backend calls (uses existing `updated_at` fetch already added)
+4. **Tests** — extend `src/test/kpiPendingWith.test.ts` with three cases (hr_pms next → HR PMS user name; audit next → assigned auditor name; management next → management user name), plus fallback-to-label when names are empty. Existing 30 tests remain green.
+
+## What does NOT change
+
+- No column added or removed (Pending With already exists).
+- No change to `KSD_DEFAULT_FIELDS`, `ksdValueFor`, `toExportRecord`, `handleExport`, `handleRangeExport`, or the "Pending With Summary" sheet.
+- No RLS, migration, or backend change — reads use existing tables (`user_roles`, `audit_kpi_level_assignments`, `profiles`).
+- No policy/status semantics change — only the *display label* for three reviewer stages becomes an actual name.
+
+## Risk & Impact
+
+- **Data**: read-only, additive lookups. Batched by 500 to respect the existing pagination policy for large workspaces.
+- **Regression**: pure display change; queue-label fallback preserved if a role has zero members or an assignment is missing.
+- **UI/UX**: consistent with all other stages already showing person names; column filter now surfaces real people, which is the intent.
+- **Performance**: two small `user_roles` scans + one chunked `audit_kpi_level_assignments` fetch per load — comparable to the existing manager/skip-level fetches.
+
+## Docs
+
+Update `POLICY.md` (Pending With rule) and add a short ADR entry noting queue-label → person-name resolution and the assignment/role fallback order.

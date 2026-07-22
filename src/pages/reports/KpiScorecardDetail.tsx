@@ -251,6 +251,44 @@ async function fetchScorecardForPeriod(month: string, year: number): Promise<Fla
 
   const approverMap = await fetchFinalApproverMap(month, year);
 
+  // Resolve names for queue stages (HR PMS, Auditor, Management).
+  // Pending With must show real person names for these stages, not queue labels.
+  const { data: roleRows } = await supabase
+    .from('user_roles')
+    .select('user_id, role')
+    .in('role', ['hr_pms', 'management', 'auditor'] as any);
+  const namesForRole = (r: string) =>
+    (roleRows ?? [])
+      .filter((x: any) => x.role === r)
+      .map((x: any) => profileMap.get(x.user_id))
+      .filter((p: any) => p && (p.is_active ?? true) && p.full_name)
+      .map((p: any) => p.full_name as string)
+      .sort();
+  const hrPmsNamesGlobal = Array.from(new Set(namesForRole('hr_pms'))).join(', ');
+  const managementNamesGlobal = Array.from(new Set(namesForRole('management'))).join(', ');
+  const auditorNamesGlobal = Array.from(new Set(namesForRole('auditor'))).join(', ');
+
+  // Per-KPI auditor assignment overrides the global auditor pool.
+  const kpiIdToAuditorNames = new Map<string, string>();
+  const AUD_CHUNK = 500;
+  for (let i = 0; i < kpiIds.length; i += AUD_CHUNK) {
+    const batch = kpiIds.slice(i, i + AUD_CHUNK);
+    const { data: aud } = await supabase
+      .from('audit_kpi_level_assignments')
+      .select('kpi_id, auditor_id')
+      .in('kpi_id', batch);
+    const byKpi = new Map<string, string[]>();
+    (aud ?? []).forEach((row: any) => {
+      const name = profileMap.get(row.auditor_id)?.full_name;
+      if (!name) return;
+      if (!byKpi.has(row.kpi_id)) byKpi.set(row.kpi_id, []);
+      byKpi.get(row.kpi_id)!.push(name);
+    });
+    byKpi.forEach((names, kpiId) => {
+      kpiIdToAuditorNames.set(kpiId, Array.from(new Set(names)).sort().join(', '));
+    });
+  }
+
   // Resolve per-employee workflow chains (POLICY §105 — never hardcode stages).
   const empIds = [...new Set(allKpis.map(k => k.employee_id).filter(Boolean))];
   const stageChainMap = new Map<string, string[]>();
@@ -303,6 +341,7 @@ async function fetchScorecardForPeriod(month: string, year: number): Promise<Fla
     const skipManagerName = skipId ? (profileMap.get(skipId)?.full_name ?? null) : null;
     const dataOwnerNames = owners.join(', ');
     const stageChain = stageChainMap.get(kpi.employee_id) ?? [];
+    const auditorNames = kpiIdToAuditorNames.get(kpi.id) || auditorNamesGlobal;
     const pendingWith = resolvePendingWith({
       status: kpi.status,
       isOrgKpi,
@@ -311,6 +350,9 @@ async function fetchScorecardForPeriod(month: string, year: number): Promise<Fla
       managerName,
       skipManagerName,
       stageChain,
+      hrPmsNames: hrPmsNamesGlobal,
+      auditorNames,
+      managementNames: managementNamesGlobal,
     });
     const pendingSinceDays = pendingSinceDaysFor(
       { status: kpi.status, isNa },

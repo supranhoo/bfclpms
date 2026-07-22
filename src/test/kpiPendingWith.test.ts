@@ -117,4 +117,48 @@ describe('resolvePendingWith', () => {
       }),
     ).toBe(PENDING_WITH_NONE);
   });
+
+  it('manager_check → hr_pms shows HR PMS user names when provided', () => {
+    expect(
+      resolvePendingWith({
+        ...base,
+        status: 'manager_check',
+        stageChain: ['self_review', 'manager_check', 'hr_pms_review'],
+        hrPmsNames: 'Neha Sharma, Priya Verma',
+      }),
+    ).toBe('Neha Sharma, Priya Verma');
+  });
+
+  it('manager_check → audit shows assigned auditor names when provided', () => {
+    expect(
+      resolvePendingWith({
+        ...base,
+        status: 'manager_check',
+        stageChain: ['self_review', 'manager_check', 'audit', 'management_review'],
+        auditorNames: 'Shekhar Sharad',
+      }),
+    ).toBe('Shekhar Sharad');
+  });
+
+  it('audit → management shows management user names when provided', () => {
+    expect(
+      resolvePendingWith({
+        ...base,
+        status: 'audit',
+        stageChain: ['self_review', 'manager_check', 'audit', 'management_review'],
+        managementNames: 'Umesh Mehta',
+      }),
+    ).toBe('Umesh Mehta');
+  });
+
+  it('falls back to queue label when queue-stage names are empty', () => {
+    expect(
+      resolvePendingWith({
+        ...base,
+        status: 'manager_check',
+        stageChain: ['self_review', 'manager_check', 'hr_pms_review'],
+        hrPmsNames: '',
+      }),
+    ).toBe('HR PMS');
+  });
 });
