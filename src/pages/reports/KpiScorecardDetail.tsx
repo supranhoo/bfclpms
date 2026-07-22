@@ -76,6 +76,23 @@ const MONTHS = [
 
 const PAGE_SIZES = [50, 100, 200, 500];
 
+/** Append a "Pending With Summary" sheet to a workbook. Additive — never
+ *  modifies the primary "KPI Scorecard" sheet. */
+function appendPendingWithSummarySheet(
+  wb: XLSX.WorkBook,
+  rows: Array<{ status: string; isNa: boolean; pendingWith: string; pendingSinceDays: number | null }>,
+  overdueDays: number,
+): void {
+  const summary = summarizePendingWith(rows, { overdueDays });
+  if (!summary.length) return;
+  const aoa: (string | number)[][] = [
+    ['Pending With', 'Pending KPIs', `Overdue (> ${overdueDays}d)`, 'Avg days', 'Max days'],
+    ...summary.map(o => [o.owner, o.count, o.overdue, o.avgDays, o.maxDays]),
+  ];
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  XLSX.utils.book_append_sheet(wb, ws, 'Pending With Summary');
+}
+
 interface FlatRow {
   employeeId: string;
   employeeCode: string;
