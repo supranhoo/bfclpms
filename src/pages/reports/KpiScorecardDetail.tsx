@@ -422,7 +422,8 @@ export default function KpiScorecardDetail() {
         r.employeeName.toLowerCase().includes(s) ||
         r.employeeCode.toLowerCase().includes(s) ||
         r.kpiName.toLowerCase().includes(s) ||
-        r.kraName.toLowerCase().includes(s)
+        r.kraName.toLowerCase().includes(s) ||
+        displayPendingWith(r).toLowerCase().includes(s)
       );
     }
     // Excel-style column filters
@@ -430,6 +431,7 @@ export default function KpiScorecardDetail() {
     if (typeFilter?.size) result = result.filter(r => typeFilter.has(getOrgTypeLabel(r)));
     if (approverFilter?.size) result = result.filter(r => approverFilter.has(r.finalApprover || NO_APPROVER_LABEL));
     if (statusFilter?.size) result = result.filter(r => statusFilter.has(r.status || ''));
+    if (pendingWithFilter?.size) result = result.filter(r => pendingWithFilter.has(displayPendingWith(r)));
     // Sort
     result = [...result].sort((a, b) => {
       const av = a[sortField];
@@ -441,7 +443,7 @@ export default function KpiScorecardDetail() {
       return sortDir === 'asc' ? cmp : -cmp;
     });
     return result;
-  }, [rows, selectedDept, searchTerm, sortField, sortDir, filterByCompany, freqFilter, typeFilter, approverFilter, statusFilter]);
+  }, [rows, selectedDept, searchTerm, sortField, sortDir, filterByCompany, freqFilter, typeFilter, approverFilter, statusFilter, pendingWithFilter]);
 
   // Distinct values for column filters — derived from company/dept/search-filtered
   // rows (ignoring column filters themselves, so users can always re-expand).
@@ -455,7 +457,8 @@ export default function KpiScorecardDetail() {
         r.employeeName.toLowerCase().includes(s) ||
         r.employeeCode.toLowerCase().includes(s) ||
         r.kpiName.toLowerCase().includes(s) ||
-        r.kraName.toLowerCase().includes(s)
+        r.kraName.toLowerCase().includes(s) ||
+        displayPendingWith(r).toLowerCase().includes(s)
       );
     }
     return result;
