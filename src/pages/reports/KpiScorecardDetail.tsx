@@ -260,10 +260,9 @@ async function fetchScorecardForPeriod(month: string, year: number): Promise<Fla
   const namesForRole = (r: string) =>
     (roleRows ?? [])
       .filter((x: any) => x.role === r)
-      .map((x: any) => profileMap.get(x.user_id)?.full_name)
-      .filter((n: any): n is string => !!n && (profileMap.get(
-        (roleRows ?? []).find((y: any) => y.role === r && y.user_id && profileMap.get(y.user_id)?.full_name === n)?.user_id,
-      )?.is_active ?? true))
+      .map((x: any) => profileMap.get(x.user_id))
+      .filter((p: any) => p && (p.is_active ?? true) && p.full_name)
+      .map((p: any) => p.full_name as string)
       .sort();
   const hrPmsNamesGlobal = Array.from(new Set(namesForRole('hr_pms'))).join(', ');
   const managementNamesGlobal = Array.from(new Set(namesForRole('management'))).join(', ');
