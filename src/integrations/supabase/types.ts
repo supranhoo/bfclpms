@@ -13705,6 +13705,17 @@ export type Database = {
         Args: { p_enabled: Json }
         Returns: Database["public"]["Enums"]["annual_review_status"]
       }
+      annual_review_last_send_back: {
+        Args: { p_instance_id: string }
+        Returns: {
+          from_stage: string
+          performed_by: string
+          performer_name: string
+          reason: string
+          sent_back_at: string
+          to_stage: string
+        }[]
+      }
       annual_review_next_status: {
         Args: {
           p_current: Database["public"]["Enums"]["annual_review_status"]
