@@ -361,6 +361,10 @@ export default function KpiScorecardDetail() {
   const [typeFilter, setTypeFilter] = useState<Set<string> | null>(null);
   const [approverFilter, setApproverFilter] = useState<Set<string> | null>(null);
   const [statusFilter, setStatusFilter] = useState<Set<string> | null>(null);
+  const [pendingWithFilter, setPendingWithFilter] = useState<Set<string> | null>(null);
+  const [groupByPendingWith, setGroupByPendingWith] = useState(false);
+  const [summaryOpen, setSummaryOpen] = useState(true);
+  const [overdueDays, setOverdueDays] = useState<number>(DEFAULT_OVERDUE_DAYS);
 
   // Range export state
   const [rangeFromMonth, setRangeFromMonth] = useState(MONTHS[now.getMonth()]);
