@@ -566,7 +566,7 @@ export default function KpiScorecardDetail() {
       case 'final_score':       return r.isNa ? 'N/A' : (r.finalScore ?? '');
       case 'final_approver':    return r.finalApprover || NO_APPROVER_LABEL;
       case 'status':            return statusLabels[r.status] ?? r.status;
-      case 'pending_with':      return r.pendingWith || PENDING_WITH_NONE;
+      case 'pending_with':      return displayPendingWith(r);
       default: return '';
     }
   }
