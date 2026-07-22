@@ -509,7 +509,10 @@ export default function KpiScorecardDetail() {
     () => summarizePendingWith(filtered, { overdueDays }),
     [filtered, overdueDays],
   );
-  const pendingAging = useMemo(() => agingHistogram(filtered), [filtered]);
+  const pendingAging = useMemo(() => {
+    const h = agingHistogram(filtered);
+    return AGING_BUCKETS.map(b => ({ bucket: b.label, count: h[b.key] }));
+  }, [filtered]);
   const pendingOverdueTotal = useMemo(
     () => overdueCount(filtered, overdueDays),
     [filtered, overdueDays],
