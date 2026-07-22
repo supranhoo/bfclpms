@@ -50,7 +50,7 @@ const KSD_DEFAULT_FIELDS = [
   { field_key: 'final_score',       default_label: 'Final Score',        default_sort: 280 },
   { field_key: 'final_approver',    default_label: 'Final Approver',     default_sort: 285 },
   { field_key: 'status',            default_label: 'Status',             default_sort: 290 },
-  { field_key: 'pending_with',      default_label: 'Pending With',       default_sort: 295 },
+  { field_key: 'pending_with',      default_label: 'Pending With (Name)', default_sort: 295 },
 ] as const;
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
 import { useToast } from '@/hooks/use-toast';
@@ -58,6 +58,16 @@ import { enumeratePeriods, validateRange, MAX_RANGE_MONTHS } from '@/lib/kpiScor
 import { fetchFinalApproverMap, NO_APPROVER_LABEL } from '@/lib/finalApproverMap';
 import { ColumnFilterPopover } from '@/components/reports/ColumnFilterPopover';
 import { resolvePendingWith, PENDING_WITH_NONE } from '@/lib/kpiPendingWith';
+import {
+  displayPendingWith,
+  summarizePendingWith,
+  agingHistogram,
+  overdueCount,
+  pendingSinceDaysFor,
+  AGING_BUCKETS,
+  DEFAULT_OVERDUE_DAYS,
+} from '@/lib/kpiPendingWithSummary';
+import { Checkbox } from '@/components/ui/checkbox';
 
 const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -65,6 +75,23 @@ const MONTHS = [
 ];
 
 const PAGE_SIZES = [50, 100, 200, 500];
+
+/** Append a "Pending With Summary" sheet to a workbook. Additive — never
+ *  modifies the primary "KPI Scorecard" sheet. */
+function appendPendingWithSummarySheet(
+  wb: XLSX.WorkBook,
+  rows: Array<{ status: string; isNa: boolean; pendingWith: string; pendingSinceDays: number | null }>,
+  overdueDays: number,
+): void {
+  const summary = summarizePendingWith(rows, { overdueDays });
+  if (!summary.length) return;
+  const aoa: (string | number)[][] = [
+    ['Pending With', 'Pending KPIs', `Overdue (> ${overdueDays}d)`, 'Avg days', 'Max days'],
+    ...summary.map(o => [o.owner, o.count, o.overdue, o.avgDays, o.maxDays]),
+  ];
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  XLSX.utils.book_append_sheet(wb, ws, 'Pending With Summary');
+}
 
 interface FlatRow {
   employeeId: string;
@@ -99,6 +126,8 @@ interface FlatRow {
   isNa: boolean;
   finalApprover: string;
   pendingWith: string;
+  /** Days since the KPI last moved (null for approved / N/A). */
+  pendingSinceDays: number | null;
 }
 
 type SortField = keyof FlatRow;
@@ -165,7 +194,7 @@ async function fetchScorecardForPeriod(month: string, year: number): Promise<Fla
     const { data, error } = await supabase
       .from('kpis')
       .select(`
-        id, employee_id, kra_name, kpi_name, weightage, target_value, review_period, review_year, status,
+        id, employee_id, kra_name, kpi_name, weightage, target_value, review_period, review_year, status, updated_at,
         frequency, is_org_level, org_level_scope, category_id,
         kra_categories ( name )
       `)
@@ -283,6 +312,10 @@ async function fetchScorecardForPeriod(month: string, year: number): Promise<Fla
       skipManagerName,
       stageChain,
     });
+    const pendingSinceDays = pendingSinceDaysFor(
+      { status: kpi.status, isNa },
+      kpi.updated_at,
+    );
     return {
       employeeId: kpi.employee_id ?? '',
       employeeCode: profile?.employee_code ?? '',
@@ -316,6 +349,7 @@ async function fetchScorecardForPeriod(month: string, year: number): Promise<Fla
       isNa,
       finalApprover: approverMap.get(kpi.employee_id) ?? NO_APPROVER_LABEL,
       pendingWith,
+      pendingSinceDays,
     };
   });
 }
@@ -344,6 +378,10 @@ export default function KpiScorecardDetail() {
   const [typeFilter, setTypeFilter] = useState<Set<string> | null>(null);
   const [approverFilter, setApproverFilter] = useState<Set<string> | null>(null);
   const [statusFilter, setStatusFilter] = useState<Set<string> | null>(null);
+  const [pendingWithFilter, setPendingWithFilter] = useState<Set<string> | null>(null);
+  const [groupByPendingWith, setGroupByPendingWith] = useState(false);
+  const [summaryOpen, setSummaryOpen] = useState(true);
+  const [overdueDays, setOverdueDays] = useState<number>(DEFAULT_OVERDUE_DAYS);
 
   // Range export state
   const [rangeFromMonth, setRangeFromMonth] = useState(MONTHS[now.getMonth()]);
@@ -401,7 +439,8 @@ export default function KpiScorecardDetail() {
         r.employeeName.toLowerCase().includes(s) ||
         r.employeeCode.toLowerCase().includes(s) ||
         r.kpiName.toLowerCase().includes(s) ||
-        r.kraName.toLowerCase().includes(s)
+        r.kraName.toLowerCase().includes(s) ||
+        displayPendingWith(r).toLowerCase().includes(s)
       );
     }
     // Excel-style column filters
@@ -409,8 +448,18 @@ export default function KpiScorecardDetail() {
     if (typeFilter?.size) result = result.filter(r => typeFilter.has(getOrgTypeLabel(r)));
     if (approverFilter?.size) result = result.filter(r => approverFilter.has(r.finalApprover || NO_APPROVER_LABEL));
     if (statusFilter?.size) result = result.filter(r => statusFilter.has(r.status || ''));
+    if (pendingWithFilter?.size) result = result.filter(r => pendingWithFilter.has(displayPendingWith(r)));
     // Sort
     result = [...result].sort((a, b) => {
+      // Grouping toggle: primary sort by "Pending With" label before
+      // secondary sort by the user-selected column. Additive, no changes to
+      // existing sortField semantics.
+      if (groupByPendingWith) {
+        const ga = displayPendingWith(a);
+        const gb = displayPendingWith(b);
+        const gcmp = ga.localeCompare(gb);
+        if (gcmp !== 0) return gcmp;
+      }
       const av = a[sortField];
       const bv = b[sortField];
       if (av == null && bv == null) return 0;
@@ -420,7 +469,7 @@ export default function KpiScorecardDetail() {
       return sortDir === 'asc' ? cmp : -cmp;
     });
     return result;
-  }, [rows, selectedDept, searchTerm, sortField, sortDir, filterByCompany, freqFilter, typeFilter, approverFilter, statusFilter]);
+  }, [rows, selectedDept, searchTerm, sortField, sortDir, filterByCompany, freqFilter, typeFilter, approverFilter, statusFilter, pendingWithFilter, groupByPendingWith]);
 
   // Distinct values for column filters — derived from company/dept/search-filtered
   // rows (ignoring column filters themselves, so users can always re-expand).
@@ -434,7 +483,8 @@ export default function KpiScorecardDetail() {
         r.employeeName.toLowerCase().includes(s) ||
         r.employeeCode.toLowerCase().includes(s) ||
         r.kpiName.toLowerCase().includes(s) ||
-        r.kraName.toLowerCase().includes(s)
+        r.kraName.toLowerCase().includes(s) ||
+        displayPendingWith(r).toLowerCase().includes(s)
       );
     }
     return result;
@@ -455,6 +505,30 @@ export default function KpiScorecardDetail() {
   const statusValues = useMemo(
     () => [...new Set(baseForDistinct.map(r => r.status || ''))].filter(Boolean).sort(),
     [baseForDistinct],
+  );
+  const pendingWithValues = useMemo(
+    () => [...new Set(baseForDistinct.map(r => displayPendingWith(r)))]
+      .filter(v => v && v !== PENDING_WITH_NONE)
+      .sort(),
+    [baseForDistinct],
+  );
+
+  // Pending With analytics (derived from the currently visible `filtered` set).
+  const pendingSummary = useMemo(
+    () => summarizePendingWith(filtered, { overdueDays }),
+    [filtered, overdueDays],
+  );
+  const pendingAging = useMemo(() => {
+    const h = agingHistogram(filtered);
+    return AGING_BUCKETS.map(b => ({ bucket: b.label, count: h[b.key] }));
+  }, [filtered]);
+  const pendingOverdueTotal = useMemo(
+    () => overdueCount(filtered, overdueDays),
+    [filtered, overdueDays],
+  );
+  const pendingTotal = useMemo(
+    () => pendingSummary.reduce((n, o) => n + o.count, 0),
+    [pendingSummary],
   );
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
@@ -485,6 +559,7 @@ export default function KpiScorecardDetail() {
     const ws = XLSX.utils.json_to_sheet(exportData, { header: headers });
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'KPI Scorecard');
+    appendPendingWithSummarySheet(wb, filtered, overdueDays);
     XLSX.writeFile(wb, `KPI_Scorecard_${selectedMonth}_${selectedYear}.xlsx`);
   };
 
@@ -521,7 +596,7 @@ export default function KpiScorecardDetail() {
       case 'final_score':       return r.isNa ? 'N/A' : (r.finalScore ?? '');
       case 'final_approver':    return r.finalApprover || NO_APPROVER_LABEL;
       case 'status':            return statusLabels[r.status] ?? r.status;
-      case 'pending_with':      return r.pendingWith || PENDING_WITH_NONE;
+      case 'pending_with':      return displayPendingWith(r);
       default: return '';
     }
   }
@@ -549,6 +624,7 @@ export default function KpiScorecardDetail() {
     setRangeExporting(true);
     try {
       const allRecords: ReturnType<typeof toExportRecord>[] = [];
+      const allFlatRows: FlatRow[] = [];
       const visible = resolvedFields.filter((f) => !f.is_hidden);
       const headers = visible.map((f) => f.label);
       const search = searchTerm.toLowerCase();
@@ -568,12 +644,16 @@ export default function KpiScorecardDetail() {
               !r.employeeName.toLowerCase().includes(search) &&
               !r.employeeCode.toLowerCase().includes(search) &&
               !r.kpiName.toLowerCase().includes(search) &&
-              !r.kraName.toLowerCase().includes(search)
+              !r.kraName.toLowerCase().includes(search) &&
+              !displayPendingWith(r).toLowerCase().includes(search)
             ) return false;
           }
           return true;
         });
-        filteredPeriod.forEach(r => allRecords.push(toExportRecord(r, p.year, visible)));
+        filteredPeriod.forEach(r => {
+          allRecords.push(toExportRecord(r, p.year, visible));
+          allFlatRows.push(r);
+        });
       }
 
       if (allRecords.length === 0) {
@@ -588,6 +668,7 @@ export default function KpiScorecardDetail() {
       const ws = XLSX.utils.json_to_sheet(allRecords, { header: headers });
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, 'KPI Scorecard');
+      appendPendingWithSummarySheet(wb, allFlatRows, overdueDays);
       const first = periods[0];
       const last = periods[periods.length - 1];
       XLSX.writeFile(wb, `KPI_Scorecard_${first.month}-${first.year}_to_${last.month}-${last.year}.xlsx`);
@@ -758,6 +839,91 @@ export default function KpiScorecardDetail() {
         </CardContent>
       </Card>
 
+      {/* Pending With — analytics summary. Additive; does not alter primary table. */}
+      {appliedQuery && !isLoading && !isError && filtered.length > 0 && pendingTotal > 0 && (
+        <Card>
+          <CardContent className="p-3">
+            <div className="flex items-center justify-between gap-2 mb-2">
+              <button
+                type="button"
+                className="flex items-center gap-1.5 text-xs font-medium"
+                onClick={() => setSummaryOpen(o => !o)}
+              >
+                <ChevronRight className={`h-3.5 w-3.5 transition-transform ${summaryOpen ? 'rotate-90' : ''}`} />
+                Pending With — summary ({pendingTotal} pending
+                {pendingOverdueTotal > 0 && (
+                  <span className="text-destructive"> · {pendingOverdueTotal} overdue</span>
+                )})
+              </button>
+              <div className="flex items-center gap-2">
+                <label className="text-[11px] text-muted-foreground">Overdue &gt;</label>
+                <Input
+                  type="number"
+                  min={1}
+                  className="h-7 w-16 text-xs"
+                  value={overdueDays}
+                  onChange={e => setOverdueDays(Math.max(1, Number(e.target.value) || DEFAULT_OVERDUE_DAYS))}
+                />
+                <span className="text-[11px] text-muted-foreground">days</span>
+                <label className="ml-3 flex items-center gap-1 text-[11px] text-muted-foreground">
+                  <input
+                    type="checkbox"
+                    checked={groupByPendingWith}
+                    onChange={e => { setGroupByPendingWith(e.target.checked); setCurrentPage(1); }}
+                  />
+                  Group table by Pending With
+                </label>
+              </div>
+            </div>
+            {summaryOpen && (
+              <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-4">
+                <div className="overflow-auto max-h-[240px] border rounded">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="bg-muted/30">
+                        <TableHead className="text-xs py-1.5 px-2">Pending With</TableHead>
+                        <TableHead className="text-xs py-1.5 px-2 text-right">Pending</TableHead>
+                        <TableHead className="text-xs py-1.5 px-2 text-right">Overdue</TableHead>
+                        <TableHead className="text-xs py-1.5 px-2 text-right">Avg days</TableHead>
+                        <TableHead className="text-xs py-1.5 px-2 text-right">Max days</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {pendingSummary.map(o => (
+                        <TableRow key={o.owner} className="hover:bg-muted/30">
+                          <TableCell className="text-xs py-1 px-2">{o.owner}</TableCell>
+                          <TableCell className="text-xs py-1 px-2 text-right">{o.count}</TableCell>
+                          <TableCell className={`text-xs py-1 px-2 text-right ${o.overdue > 0 ? 'text-destructive font-medium' : ''}`}>{o.overdue}</TableCell>
+                          <TableCell className="text-xs py-1 px-2 text-right">{o.avgDays}</TableCell>
+                          <TableCell className="text-xs py-1 px-2 text-right">{o.maxDays}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+                <div className="border rounded p-2">
+                  <div className="text-[11px] font-medium mb-1.5 text-muted-foreground">Aging</div>
+                  <div className="space-y-1">
+                    {pendingAging.map(b => (
+                      <div key={b.bucket} className="flex items-center gap-2 text-xs">
+                        <span className="w-20 text-muted-foreground">{b.bucket}</span>
+                        <div className="flex-1 h-2 bg-muted rounded overflow-hidden">
+                          <div
+                            className="h-full bg-primary"
+                            style={{ width: pendingTotal ? `${(b.count / pendingTotal) * 100}%` : '0%' }}
+                          />
+                        </div>
+                        <span className="w-8 text-right tabular-nums">{b.count}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       {/* Table */}
       <Card>
         <CardContent className="p-0">
@@ -845,6 +1011,12 @@ export default function KpiScorecardDetail() {
                       </TableHead>
                       <TableHead className={thClass} title="Who this KPI is currently waiting on. Person name for Self/Manager/Skip-Level; role queue for HR PMS/Audit/Management; Data Owner name(s) for org KPIs still at KRA Set.">
                         <span onClick={() => toggleSort('pendingWith')} className="inline-flex items-center">Pending With<SortIcon field="pendingWith" /></span>
+                        <ColumnFilterPopover
+                          label="Pending With"
+                          values={pendingWithValues}
+                          selected={pendingWithFilter}
+                          onChange={v => { setPendingWithFilter(v); setCurrentPage(1); }}
+                        />
                       </TableHead>
                     </TableRow>
                   </TableHeader>
@@ -890,8 +1062,23 @@ export default function KpiScorecardDetail() {
                               {statusLabels[r.status] ?? r.status}
                             </Badge>
                           </TableCell>
-                          <TableCell className="text-xs py-1.5 px-2 max-w-[180px] truncate whitespace-nowrap" title={r.pendingWith}>
-                            {r.pendingWith || '—'}
+                          <TableCell className="text-xs py-1.5 px-2 max-w-[220px] whitespace-nowrap" title={displayPendingWith(r)}>
+                            <div className="flex items-center gap-1.5 min-w-0">
+                              <span className="truncate">{displayPendingWith(r)}</span>
+                              {r.pendingSinceDays != null && (
+                                <Badge
+                                  variant="outline"
+                                  className={`text-[10px] px-1.5 py-0 border-0 shrink-0 ${
+                                    r.pendingSinceDays > overdueDays
+                                      ? 'bg-destructive/10 text-destructive'
+                                      : 'bg-muted/50'
+                                  }`}
+                                  title={`Pending for ${r.pendingSinceDays} day${r.pendingSinceDays === 1 ? '' : 's'}`}
+                                >
+                                  {r.pendingSinceDays}d
+                                </Badge>
+                              )}
+                            </div>
                           </TableCell>
                         </TableRow>
                       );
