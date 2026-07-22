@@ -14,7 +14,7 @@ function latestMigrationDefining(fnName: string): { file: string; body: string }
   const files = readdirSync(MIG_DIR).filter((f) => f.endsWith(".sql")).sort();
   for (let i = files.length - 1; i >= 0; i--) {
     const body = readFileSync(join(MIG_DIR, files[i]), "utf8");
-    if (new RegExp(`FUNCTION\\s+public\\.${fnName}\\s*\\(`, "i").test(body)) {
+    if (new RegExp(`CREATE\\s+OR\\s+REPLACE\\s+FUNCTION\\s+public\\.${fnName}\\s*\\(`, "i").test(body)) {
       return { file: files[i], body };
     }
   }
