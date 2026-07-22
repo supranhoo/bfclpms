@@ -36,6 +36,7 @@ import { useResolvedSystemScores } from '@/hooks/useResolvedSystemScores';
 import type { EvidenceItem } from '@/types/annualReview';
 import { EmployeeResultsView } from '@/components/annual-review/EmployeeResultsView';
 import { SelfReviewFieldsCard } from '@/components/annual-review/SelfReviewFieldsCard';
+import { SendBackBanner } from '@/components/annual-review/SendBackBanner';
 
 export default function EmployeeAnnualReview() {
   const { user, profile } = useAuth();
@@ -200,6 +201,10 @@ export default function EmployeeAnnualReview() {
       </header>
 
       <AnnualReviewStageTracker status={instance.overall_status} enabledStages={visibleStages} reviewerNamesByStage={reviewerNamesByStage} skippedStages={skippedStages} />
+
+      {instance.overall_status === 'pending_self' && (
+        <SendBackBanner instanceId={instance.id} />
+      )}
 
       <AppraisalCompositionCard composition={composition} variant="full" />
 

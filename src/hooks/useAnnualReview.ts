@@ -50,6 +50,36 @@ export const useCycleStatusCounts = (cycleId?: string) =>
     staleTime: 30_000,
   });
 
+/**
+ * ADR-134 — read the most recent send-back audit event for an annual review
+ * instance. Powers the employee-facing "your review was sent back" banner.
+ * Returns null when no send-back has ever occurred (or the caller has no
+ * visibility) so callers can render nothing without extra checks.
+ */
+export type AnnualReviewSendBackEvent = {
+  sent_back_at: string | null;
+  performed_by: string | null;
+  performer_name: string | null;
+  from_stage: string | null;
+  to_stage: string | null;
+  reason: string | null;
+};
+
+export const useLastSendBackEvent = (instanceId: string | undefined) =>
+  useQuery({
+    queryKey: [...annualReviewKeys.all, 'lastSendBack', instanceId ?? ''],
+    enabled: !!instanceId,
+    staleTime: 30_000,
+    queryFn: async (): Promise<AnnualReviewSendBackEvent | null> => {
+      const { data, error } = await supabase.rpc('annual_review_last_send_back', {
+        p_instance_id: instanceId!,
+      });
+      if (error) throw error;
+      const row = Array.isArray(data) ? data[0] : data;
+      return (row as AnnualReviewSendBackEvent | undefined) ?? null;
+    },
+  });
+
 /** Phase 4: recent stage-weight override audit feed for the Progress tab. */
 export const useRecentStageWeightsOverrideAudits = (cycleId?: string, limit = 25) =>
   useQuery({
