@@ -4,6 +4,12 @@
 > **Status:** Living document. Append new ships under the **current week's row**, in the same step that you update `DOCUMENTATION.md` Version History.
 > **Sources:** `DOCUMENTATION.md` Version History, `supabase/migrations/`, `mem/*`.
 
+## 2026-07-22 — KPI audit-ready notifications scoped to assignments (ADR-132)
+- Replaced the legacy all-auditor broadcast with a deduplicated union of KPI-level and employee-level audit assignments.
+- Filters inactive/non-login recipients, preserves best-effort delivery, and blocks anonymous function execution.
+- Added regression coverage for both assignment paths, dual-assignment deduplication, unrelated-auditor exclusion, recipient eligibility, and function grants.
+- No table/data/backup changes; failed historical attempts rolled back and can be retried safely.
+
 ## 2026-06-04 — Safety Phase 9.3 SHIPPED — Backup History "Verify (Safety Drill)" Flow-B action
 - **What:** UI-only addition to `src/components/admin/BackupRestoreTab.tsx`. Each Backup History row with `status='completed'` or `status='completed_with_errors'` gains a ShieldCheck action that invokes the existing `safety-drill` edge function with the row's `backup_id` (Flow B), round-tripping the artifact's `safety_*.json` blobs through the isolated `safety_drill` schema and reporting row-count deltas via the existing toast surface.
 - **Gating:** `failed` rows are **excluded** — WP-9.2.a hard-fail authority is preserved (failed backups must be re-run, not "verified"). UI route is admin-only; SECURITY DEFINER drill RPCs re-enforce PMS admin / Safety admin / Safety head (defense in depth).
