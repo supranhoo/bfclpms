@@ -451,6 +451,15 @@ export default function KpiScorecardDetail() {
     if (pendingWithFilter?.size) result = result.filter(r => pendingWithFilter.has(displayPendingWith(r)));
     // Sort
     result = [...result].sort((a, b) => {
+      // Grouping toggle: primary sort by "Pending With" label before
+      // secondary sort by the user-selected column. Additive, no changes to
+      // existing sortField semantics.
+      if (groupByPendingWith) {
+        const ga = displayPendingWith(a);
+        const gb = displayPendingWith(b);
+        const gcmp = ga.localeCompare(gb);
+        if (gcmp !== 0) return gcmp;
+      }
       const av = a[sortField];
       const bv = b[sortField];
       if (av == null && bv == null) return 0;
@@ -460,7 +469,7 @@ export default function KpiScorecardDetail() {
       return sortDir === 'asc' ? cmp : -cmp;
     });
     return result;
-  }, [rows, selectedDept, searchTerm, sortField, sortDir, filterByCompany, freqFilter, typeFilter, approverFilter, statusFilter, pendingWithFilter]);
+  }, [rows, selectedDept, searchTerm, sortField, sortDir, filterByCompany, freqFilter, typeFilter, approverFilter, statusFilter, pendingWithFilter, groupByPendingWith]);
 
   // Distinct values for column filters — derived from company/dept/search-filtered
   // rows (ignoring column filters themselves, so users can always re-expand).
