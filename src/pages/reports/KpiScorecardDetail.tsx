@@ -109,6 +109,8 @@ interface FlatRow {
   isNa: boolean;
   finalApprover: string;
   pendingWith: string;
+  /** Days since the KPI last moved (null for approved / N/A). */
+  pendingSinceDays: number | null;
 }
 
 type SortField = keyof FlatRow;
