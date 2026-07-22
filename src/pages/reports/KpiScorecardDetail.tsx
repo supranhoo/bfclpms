@@ -480,6 +480,27 @@ export default function KpiScorecardDetail() {
     () => [...new Set(baseForDistinct.map(r => r.status || ''))].filter(Boolean).sort(),
     [baseForDistinct],
   );
+  const pendingWithValues = useMemo(
+    () => [...new Set(baseForDistinct.map(r => displayPendingWith(r)))]
+      .filter(v => v && v !== PENDING_WITH_NONE)
+      .sort(),
+    [baseForDistinct],
+  );
+
+  // Pending With analytics (derived from the currently visible `filtered` set).
+  const pendingSummary = useMemo(
+    () => summarizePendingWith(filtered, { overdueDays }),
+    [filtered, overdueDays],
+  );
+  const pendingAging = useMemo(() => agingHistogram(filtered), [filtered]);
+  const pendingOverdueTotal = useMemo(
+    () => overdueCount(filtered, overdueDays),
+    [filtered, overdueDays],
+  );
+  const pendingTotal = useMemo(
+    () => pendingSummary.reduce((n, o) => n + o.count, 0),
+    [pendingSummary],
+  );
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const paged = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
