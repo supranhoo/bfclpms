@@ -177,7 +177,7 @@ async function fetchScorecardForPeriod(month: string, year: number): Promise<Fla
     const { data, error } = await supabase
       .from('kpis')
       .select(`
-        id, employee_id, kra_name, kpi_name, weightage, target_value, review_period, review_year, status,
+        id, employee_id, kra_name, kpi_name, weightage, target_value, review_period, review_year, status, updated_at,
         frequency, is_org_level, org_level_scope, category_id,
         kra_categories ( name )
       `)
@@ -295,6 +295,10 @@ async function fetchScorecardForPeriod(month: string, year: number): Promise<Fla
       skipManagerName,
       stageChain,
     });
+    const pendingSinceDays = pendingSinceDaysFor(
+      { status: kpi.status, isNa },
+      kpi.updated_at,
+    );
     return {
       employeeId: kpi.employee_id ?? '',
       employeeCode: profile?.employee_code ?? '',
@@ -328,6 +332,7 @@ async function fetchScorecardForPeriod(month: string, year: number): Promise<Fla
       isNa,
       finalApprover: approverMap.get(kpi.employee_id) ?? NO_APPROVER_LABEL,
       pendingWith,
+      pendingSinceDays,
     };
   });
 }
