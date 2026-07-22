@@ -1,70 +1,104 @@
 
-# RCA & Fix Plan — Dilip Kumar Ojha (100020) stuck at Self Review after HOD send-back
+## Current state (verified)
 
-Instance: `d15c3bea-acdd-4837-9adf-8c902b575425`
-Cycle: `b82a935f-…` · Template: `Generic M - (With KRA)` v-active · Reviewers: Self → Sajid Raza (Dept Head, 100264) → Parshu Ram Shukla (BU Head, 100894)
+`src/pages/reports/KpiScorecardDetail.tsx` already ships a **Pending With** column:
+- Resolved via `resolvePendingWith()` in `src/lib/kpiPendingWith.ts` (POLICY §105, per-employee workflow chains).
+- Listed in `KSD_DEFAULT_FIELDS` (sort key 295), rendered in the table (line 847/893), included in single-month + range XLSX exports (`ksdValueFor` line 524), and sortable.
 
-## 1. Confirmed current state (from DB reads)
+Missing vs the requirements you listed:
+1. Free-text **search** does not include Pending With.
+2. No **column filter** (Excel-style multi-select) on Pending With.
+3. No **grouping** by Pending With.
+4. Approved / N/A rows show `—`; spec asks for `"Completed"` / `"N/A"`.
+5. No **summary analytics panel** for Pending With (counts, aging, overdue).
 
-- `annual_review_instances.overall_status = 'pending_self'`
-- `enabled_stages = ['self','dept_head','bu_head']` — dept_head correctly present (Dilip is not a BU Head, so ADR-109 stripping does not apply).
-- Exactly one row in `annual_review_responses` for this instance:
-  - `reviewer_role = 'self'`
-  - `qualitative_responses` — **fully populated** (11 long-form answers)
-  - `criteria_scores = {}` — **empty**
-  - `submitted_at = NULL`, `is_locked = false`, `weighted_score = 0.00`
-  - `updated_at = 2026-07-22 10:15:04` (touched after the send-back timestamp on the instance, `10:33`)
-- No `annual_review_proxy_submissions` rows — this was never a proxy flow.
+This plan only *adds* to the report — no existing field, column, filter, sort, or export behavior is removed or changed.
 
-## 2. Root Cause (5-Why)
+## Requirements coverage matrix
 
-1. **Why can Dilip not resubmit?** The submit RPC's guard (POLICY §AR-SELF-SUBMIT-CRITERIA-GUARD, ADR-115) rejects the submission because `criteria_scores` on the self response is `{}` — no scored criterion keys.
-2. **Why is `criteria_scores` empty when Dilip's qualitative answers survived?** The send-back path resets the criterion score map (and clears `submitted_at` / `weighted_score`) but preserves `qualitative_responses`. That preservation is intentional; the score wipe is a legacy behaviour of the regression trigger, not a policy decision.
-3. **Why did Sajid (HOD) see the questions but not the answers?** He opened the review while `criteria_scores` was already `{}`. Either (a) the self stage had advanced with an empty score map (a pre-ADR-115 window / proxy path), or (b) the score-wipe on send-back happened before the qualitative preservation branch and the UI he saw was already post-regression. Qualitative answers render only on the self surface, so the HOD scorecard legitimately looked empty to him — this is a **data-visibility gap** in the HOD read model, not lost data.
-4. **Why did the PMS advance a self stage with `criteria_scores = {}` in the first place?** The `advance_annual_review_status` code path that handled this instance did not re-check criteria completeness for templates whose criteria live in `annual_review_criteria_assignments` (the library-driven path) — only for the inline `sections.criteria[]` path. Generic M - (With KRA) has `sections.criteria = []` because its criteria are library-assigned, so the guard was silently skipped.
-5. **Why does the UI now feel "read-only"?** With `is_locked=false` and `submitted_at=NULL`, the form is editable, but the criterion score radios re-hydrate against an empty map. Combined with the ADR-119 radio-value coercion (string vs number), a stale `submitted_at` was cleared but the client cache may still hold the pre-send-back read-only state until a hard refresh.
-
-**Primary root cause:** advance-guard bypass on library-driven templates lets the self stage progress with an empty `criteria_scores`; the send-back's score-wipe then leaves a legitimately-editable row that the submit guard correctly refuses.
-
-## 3. Category breakdown requested
-
-| Aspect | Verdict |
+| Requirement | How it will be met |
 |---|---|
-| Workflow gap | Advance path skipped criteria-completeness check for library-driven templates |
-| Status mismatch | None — `overall_status='pending_self'` is truthful; the "still shows Self Review Pending" is correct |
-| Permission issue | None — Dilip owns the row, RLS allows edit |
-| Data visibility | HOD scorecard hides qualitative answers by design; when `criteria_scores={}` HOD sees a blank grid |
-| Configuration | Template `sections.criteria=[]`; criteria supplied via `annual_review_criteria_assignments` — valid but under-guarded |
-| Validation | Submit guard (ADR-115) is doing its job; advance guard is the weak link |
+| Retain all existing fields/data | No deletions; only additions |
+| Add "Pending With (Name)" column | Already present; rename label to "Pending With (Name)" via `KSD_DEFAULT_FIELDS` and admin field-registry seed |
+| Show current reviewer/owner per stage | Already done by `resolvePendingWith`; unchanged |
+| Filter | Add `ColumnFilterPopover` on the Pending With header (parity with Frequency/Status) |
+| Sort | Already works via `toggleSort('pendingWith')` |
+| Search | Extend `searchTerm` predicate (on-screen + range export) to include `pendingWith` |
+| Group | Add a "Group by Pending With" toggle above the table that renders collapsible group headers with per-group counts; sort/pagination stay intact |
+| Analytics/Exports | Add Pending With to a new "Summary" sheet in XLSX; the row-level export already carries it |
+| Summary — count per Pending With | New card at top with a sortable mini-table (Pending With → count) |
+| Summary — aging by Pending With | Compute days-pending from `kpis.updated_at` (add to the base query); bucket 0–7 / 8–14 / 15–30 / 30+ days; show avg + max per Pending With |
+| Summary — overdue grouped | Overdue = pending > N days (default 14, admin-tunable in code constant `PENDING_OVERDUE_DAYS`); count per Pending With + total |
+| "Completed" / "N/A" fallback | Update `pendingWith` display: `isNa` → `"N/A"`, `status === 'approved'` → `"Completed"`, else current value or `"—"` |
 
-## 4. Immediate corrective actions (data)
+## Implementation steps
 
-1. **Unblock Dilip now**: leave `overall_status='pending_self'`, keep the qualitative answers, and let him rescore the criteria. Add a one-time toast on his surface: *"Please re-score each criterion — your written answers are preserved."*
-2. Hard-refresh guidance / bust the client React Query cache for this instance so the "read-only" perception clears.
-3. Audit-log the send-back score-wipe retrospectively into `annual_review_reset_archive` for traceability (`reason='hod_send_back_score_wipe_backfill'`).
+### 1. Data model — add `pendingSinceDays` to `FlatRow`
+- Extend the `kpis` select in `fetchScorecardForPeriod` to include `updated_at`.
+- Compute `pendingSinceDays = floor((now - updated_at) / 1 day)` when `status` is a non-terminal, non-N/A stage; `null` otherwise.
+- Add `pendingSinceDays: number | null` to `FlatRow`.
 
-## 5. Permanent CAPA
+*Non-goal:* no change to how `pendingWith` itself is resolved.
 
-- **ADR-134 — Advance guard parity for library-driven templates.** Extend `advance_annual_review_status` and the `criteria-complete` predicate to resolve the effective criterion set from `annual_review_criteria_assignments` (matched by archetype/grade/department/sub-unit) when `sections.criteria` is empty. Reject self-stage advancement if any resolved criterion key is missing from `criteria_scores`.
-- **POLICY §AR-SEND-BACK-PRESERVATION.** Formalise that send-back preserves `qualitative_responses` and clears `criteria_scores`, `submitted_at`, `weighted_score` only — and require a user-facing notice on the self surface explaining what to redo.
-- **HOD read model fix.** When `criteria_scores={}` on a stage the HOD is reviewing, surface the self stage's qualitative answers in a read-only "Employee context" panel so the HOD is not left staring at an empty grid.
-- **Regression tests** (per BFCL PMS simplification skill):
-  - Unit: `advanceGuard.libraryDrivenTemplate.rejectsEmptyScores.test.ts`
-  - Unit: `sendBackPreservation.qualitativeSurvives.test.ts`
-  - Integration: HOD scorecard shows qualitative panel when scores empty.
-  - Mock factory: `generateMockAnnualReviewInstance({ templateMode: 'library', stage: 'self', criteriaScores: {} })`.
-- **DOCUMENTATION.md** + **POLICY.md**: add v2.66.134 entry (RCA + CAPA), version-history line, and cross-reference ADR-115 / ADR-119.
+### 2. Display fallback for Pending With
+- In the table cell and export mapper, wrap `r.pendingWith` with:
+  - `r.isNa` → `"N/A"`
+  - `r.status === 'approved'` → `"Completed"`
+  - empty → `"—"`
+- Applies to on-screen table, column-filter distinct values, single-month + range XLSX, and search index (so users searching "Completed" hit approved rows).
 
-## 6. Risk & Impact
+### 3. Search + column filter + grouping
+- **Search**: add `r.pendingWith` to the `searchTerm` predicate in both `filtered` (`useMemo`) and `handleRangeExport`.
+- **Column filter**: add `pendingWithFilter` state + a `ColumnFilterPopover` on the header, mirroring the existing `statusFilter` pattern; distinct values come from `baseForDistinct`.
+- **Grouping**: new `groupByPendingWith` toggle (checkbox in the toolbar). When on, `paged` rows are rendered under sticky group headers with `Pending With — N KPIs`. Pagination is applied to rows, not groups, so page size stays predictable.
 
-- **Data**: no destructive change; one archival insert, one instance touched, backfill scoped by `instance_id`.
-- **Workflow**: advance guard becomes stricter — will surface any other instances currently sitting in a wrongly-advanced stage. Ship a dry-run report first.
-- **UI**: adds one toast, one read-only qualitative panel on HOD surface.
-- **Regression**: low; guard is additive on the library-driven branch that was previously unchecked.
-- **Rollback**: revert the advance-guard patch and remove the HOD panel; data backfill is append-only.
+### 4. Summary analytics panel (new, above the table)
+A collapsible `<Card>` titled **"Pending With — Summary"** with three tiles:
+1. **By owner** — table: Pending With | Pending KPIs | Overdue | Avg days | Max days. Clickable rows apply the corresponding `pendingWithFilter`.
+2. **Aging buckets** — stacked bar: 0–7 / 8–14 / 15–30 / 30+ days, tooltip per bucket lists top 5 owners.
+3. **Overdue totals** — big number + delta vs previous month (best-effort, skips if previous month not loaded).
 
-## 7. Verification
+All three tiles derive from `filtered` (so they honor Company / Department / Status / etc.), keeping the analytics consistent with what the user sees.
 
-- Dilip: reload → six score options selectable → submit succeeds → status flips to `pending_dept_head`.
-- Sajid: opens instance → sees Dilip's qualitative answers panel + scored criteria grid.
-- SQL sweep: `SELECT count(*) FROM annual_review_instances i JOIN annual_review_responses r ON r.instance_id=i.id WHERE r.reviewer_role='self' AND r.criteria_scores='{}'::jsonb AND i.overall_status <> 'pending_self'` — expected 0 after guard rollout.
+### 5. Export — add a "Summary" sheet
+`handleExport` and `handleRangeExport` will append a second worksheet named `Pending With Summary` with the by-owner table (Pending With, Count, Overdue, Avg days, Max days). Existing "KPI Scorecard" sheet is unchanged.
+
+### 6. Admin field registry
+Update the default label to **"Pending With (Name)"** in `KSD_DEFAULT_FIELDS` and (if a `report_field_registry` seed exists for `kpi-scorecard-detail`) add a one-off migration to update the label on already-seeded rows. Admins can still rename/hide it — this only touches the *default*.
+
+### 7. Tests (Vitest)
+- Extend `src/test/kpiScorecardDetailHelpers.test.ts`:
+  - `"N/A"` when `isNa`, `"Completed"` when `approved`, real name otherwise.
+  - `pendingSinceDays` computed for non-terminal rows only; null for approved / N/A.
+- New `src/test/kpiScorecardPendingWithSummary.test.ts`:
+  - `summarizePendingWith(rows, { overdueDays: 14 })` → `{ owner, count, overdue, avgDays, maxDays }[]`, sorted by count desc.
+  - Aging bucketization boundaries (0/7/8/14/15/30/31).
+  - Overdue count matches sum across owners.
+- Guard test: existing exported field order + labels remain untouched except `pending_with` label change.
+
+## Files to touch (add / edit only — no deletions)
+
+- `src/pages/reports/KpiScorecardDetail.tsx` — search predicate, column filter state, grouping toggle, summary card, display fallback, export summary sheet, `pendingSinceDays` wiring, updated select clause.
+- `src/lib/kpiPendingWithSummary.ts` — **new** pure aggregator (`summarizePendingWith`, `bucketAging`).
+- `src/lib/kpiPendingWith.ts` — **no change** (resolution logic is correct).
+- `src/test/kpiScorecardDetailHelpers.test.ts` — extend.
+- `src/test/kpiPendingWithSummary.test.ts` — **new**.
+- `supabase/migrations/<ts>_ksd_pending_with_label.sql` — optional label bump for `report_field_registry` if a row exists; no-op otherwise.
+- `docs/adr/ADR-135-ksd-pending-with-analytics.md` — **new** ADR.
+- `POLICY.md` — new §KSD-PENDING-WITH-ANALYTICS entry.
+
+## Risk & impact
+
+- **Data**: read-only additions; no schema change beyond one label-update migration (idempotent, guarded by `IF EXISTS`).
+- **RLS / security**: no new tables, no new RPCs, no privilege changes. `pendingWith` uses names already visible in the report today.
+- **Performance**: aging math is client-side over the already-loaded month; summary is O(rows). Adding `updated_at` to the KPI select is negligible.
+- **Regression risk**: label change on `pending_with` could confuse an existing admin override — mitigated by only touching `default_label`; user overrides in `report_field_overrides` stay authoritative.
+- **UI**: additive card + one toolbar toggle + one extra header filter; existing layout unchanged.
+
+## Rollback
+
+- Feature is purely additive. Revert = drop the summary card, revert the two hook edits, and restore old `pending_with` default label. The label migration ships as an `UPDATE ... WHERE default_label = 'Pending With'` and can be reversed with the inverse statement.
+
+## Open question (non-blocking)
+
+Default **overdue threshold** — the spec doesn't name one. Proposal: **14 days** since `kpis.updated_at`, exposed as a small `<Select>` inside the summary card (7 / 14 / 21 / 30) so users can toggle without a code change. Confirm or override before I ship.
