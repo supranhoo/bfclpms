@@ -530,6 +530,7 @@ export default function KpiScorecardDetail() {
     const ws = XLSX.utils.json_to_sheet(exportData, { header: headers });
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'KPI Scorecard');
+    appendPendingWithSummarySheet(wb, filtered, overdueDays);
     XLSX.writeFile(wb, `KPI_Scorecard_${selectedMonth}_${selectedYear}.xlsx`);
   };
 
