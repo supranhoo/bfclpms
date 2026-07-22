@@ -827,6 +827,91 @@ export default function KpiScorecardDetail() {
         </CardContent>
       </Card>
 
+      {/* Pending With — analytics summary. Additive; does not alter primary table. */}
+      {appliedQuery && !isLoading && !isError && filtered.length > 0 && pendingTotal > 0 && (
+        <Card>
+          <CardContent className="p-3">
+            <div className="flex items-center justify-between gap-2 mb-2">
+              <button
+                type="button"
+                className="flex items-center gap-1.5 text-xs font-medium"
+                onClick={() => setSummaryOpen(o => !o)}
+              >
+                <ChevronRight className={`h-3.5 w-3.5 transition-transform ${summaryOpen ? 'rotate-90' : ''}`} />
+                Pending With — summary ({pendingTotal} pending
+                {pendingOverdueTotal > 0 && (
+                  <span className="text-destructive"> · {pendingOverdueTotal} overdue</span>
+                )})
+              </button>
+              <div className="flex items-center gap-2">
+                <label className="text-[11px] text-muted-foreground">Overdue &gt;</label>
+                <Input
+                  type="number"
+                  min={1}
+                  className="h-7 w-16 text-xs"
+                  value={overdueDays}
+                  onChange={e => setOverdueDays(Math.max(1, Number(e.target.value) || DEFAULT_OVERDUE_DAYS))}
+                />
+                <span className="text-[11px] text-muted-foreground">days</span>
+                <label className="ml-3 flex items-center gap-1 text-[11px] text-muted-foreground">
+                  <input
+                    type="checkbox"
+                    checked={groupByPendingWith}
+                    onChange={e => { setGroupByPendingWith(e.target.checked); setCurrentPage(1); }}
+                  />
+                  Group table by Pending With
+                </label>
+              </div>
+            </div>
+            {summaryOpen && (
+              <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-4">
+                <div className="overflow-auto max-h-[240px] border rounded">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="bg-muted/30">
+                        <TableHead className="text-xs py-1.5 px-2">Pending With</TableHead>
+                        <TableHead className="text-xs py-1.5 px-2 text-right">Pending</TableHead>
+                        <TableHead className="text-xs py-1.5 px-2 text-right">Overdue</TableHead>
+                        <TableHead className="text-xs py-1.5 px-2 text-right">Avg days</TableHead>
+                        <TableHead className="text-xs py-1.5 px-2 text-right">Max days</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {pendingSummary.map(o => (
+                        <TableRow key={o.owner} className="hover:bg-muted/30">
+                          <TableCell className="text-xs py-1 px-2">{o.owner}</TableCell>
+                          <TableCell className="text-xs py-1 px-2 text-right">{o.count}</TableCell>
+                          <TableCell className={`text-xs py-1 px-2 text-right ${o.overdue > 0 ? 'text-destructive font-medium' : ''}`}>{o.overdue}</TableCell>
+                          <TableCell className="text-xs py-1 px-2 text-right">{o.avgDays}</TableCell>
+                          <TableCell className="text-xs py-1 px-2 text-right">{o.maxDays}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+                <div className="border rounded p-2">
+                  <div className="text-[11px] font-medium mb-1.5 text-muted-foreground">Aging</div>
+                  <div className="space-y-1">
+                    {pendingAging.map(b => (
+                      <div key={b.bucket} className="flex items-center gap-2 text-xs">
+                        <span className="w-20 text-muted-foreground">{b.bucket}</span>
+                        <div className="flex-1 h-2 bg-muted rounded overflow-hidden">
+                          <div
+                            className="h-full bg-primary"
+                            style={{ width: pendingTotal ? `${(b.count / pendingTotal) * 100}%` : '0%' }}
+                          />
+                        </div>
+                        <span className="w-8 text-right tabular-nums">{b.count}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       {/* Table */}
       <Card>
         <CardContent className="p-0">
