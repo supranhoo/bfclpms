@@ -3,6 +3,14 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 
 export type DirectoryAccessScope = 'all' | 'bu' | 'team';
+export type AssistScope = 'all' | 'bu' | 'team' | 'direct' | 'none';
+
+export interface AssistBlock {
+  canAssist: boolean;
+  scope: AssistScope;
+  businessUnitIds: string[];
+  source: string | null;
+}
 
 export interface DirectoryAccess {
   canAccess: boolean;
@@ -11,11 +19,13 @@ export interface DirectoryAccess {
   businessUnitIds: string[];
   canAssist: boolean;
   source: string | null;
+  assist: AssistBlock;
 }
 
 const DENY: DirectoryAccess = {
   canAccess: false, scope: null, businessUnitId: null, businessUnitIds: [],
   canAssist: false, source: null,
+  assist: { canAssist: false, scope: 'none', businessUnitIds: [], source: null },
 };
 
 /**
@@ -43,11 +53,30 @@ export function useDirectoryAccess(): DirectoryAccess & { isLoading: boolean } {
         business_unit_ids?: string[] | null;
         can_assist?: boolean;
         source?: string | null;
+        assist?: {
+          can_assist?: boolean;
+          scope?: AssistScope;
+          business_unit_ids?: string[] | null;
+          source?: string | null;
+        };
       };
       if (!row.can_access) return DENY;
       const ids = Array.isArray(row.business_unit_ids) && row.business_unit_ids.length > 0
         ? row.business_unit_ids
         : (row.business_unit_id ? [row.business_unit_id] : []);
+      const assist: AssistBlock = row.assist
+        ? {
+            canAssist: Boolean(row.assist.can_assist),
+            scope: (row.assist.scope ?? 'none') as AssistScope,
+            businessUnitIds: Array.isArray(row.assist.business_unit_ids) ? row.assist.business_unit_ids : [],
+            source: row.assist.source ?? null,
+          }
+        : {
+            canAssist: row.can_assist !== false,
+            scope: (row.scope ?? 'none') as AssistScope,
+            businessUnitIds: ids,
+            source: row.source ?? null,
+          };
       return {
         canAccess: true,
         scope: row.scope ?? 'all',
@@ -55,6 +84,7 @@ export function useDirectoryAccess(): DirectoryAccess & { isLoading: boolean } {
         businessUnitIds: ids,
         canAssist: row.can_assist !== false,
         source: row.source ?? null,
+        assist,
       };
     },
   });
