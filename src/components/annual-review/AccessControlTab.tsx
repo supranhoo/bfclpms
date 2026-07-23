@@ -16,7 +16,6 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
-import { ConfirmDestructiveDialog } from '@/components/ui/ConfirmDestructiveDialog';
 import { OrgFilterCombobox } from '@/components/admin/OrgFilterCombobox';
 import { Shield, KeyRound, ListChecks, History, Search, Plus, Trash2, User } from 'lucide-react';
 import { toast } from 'sonner';
@@ -402,20 +401,24 @@ function OverridesCard() {
         </Dialog>
 
         {/* Delete confirm */}
-        <ConfirmDestructiveDialog
-          open={!!deleteTarget}
-          onOpenChange={(o) => { if (!o) { setDeleteTarget(null); setDeleteReason(''); } }}
-          title="Remove access override?"
-          description={deleteTarget ? `Access for ${profileById.get(deleteTarget.user_id) ?? deleteTarget.user_id.slice(0, 8)} will revert to the automatic rules.` : ''}
-          confirmLabel="Remove"
-          onConfirm={confirmDelete}
-          extraContent={
+        <Dialog open={!!deleteTarget} onOpenChange={(o) => { if (!o) { setDeleteTarget(null); setDeleteReason(''); } }}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Remove access override?</DialogTitle>
+              <DialogDescription>
+                {deleteTarget ? `Access for ${profileById.get(deleteTarget.user_id) ?? deleteTarget.user_id.slice(0, 8)} will revert to the automatic rules.` : ''}
+              </DialogDescription>
+            </DialogHeader>
             <div className="space-y-2">
               <Label>Reason (audited)</Label>
               <Textarea value={deleteReason} onChange={(e) => setDeleteReason(e.target.value)} placeholder="Why is this override being removed?" />
             </div>
-          }
-        />
+            <DialogFooter>
+              <Button variant="outline" onClick={() => { setDeleteTarget(null); setDeleteReason(''); }}>Cancel</Button>
+              <Button variant="destructive" onClick={confirmDelete} disabled={del.isPending}>Remove</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </CardContent>
     </Card>
   );
