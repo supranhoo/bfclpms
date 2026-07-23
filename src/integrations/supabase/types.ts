@@ -5232,6 +5232,54 @@ export type Database = {
           },
         ]
       }
+      incentive_stale_zero_cleanup_audit: {
+        Row: {
+          cleaned_at: string
+          employee_id: string | null
+          id: string
+          old_incentive_amount: number | null
+          old_incentive_status: string | null
+          old_production_value: number | null
+          old_status: string | null
+          payment_period: string | null
+          program_id: string | null
+          reason: string | null
+          review_period: string | null
+          review_year: number | null
+          source: string
+        }
+        Insert: {
+          cleaned_at?: string
+          employee_id?: string | null
+          id?: string
+          old_incentive_amount?: number | null
+          old_incentive_status?: string | null
+          old_production_value?: number | null
+          old_status?: string | null
+          payment_period?: string | null
+          program_id?: string | null
+          reason?: string | null
+          review_period?: string | null
+          review_year?: number | null
+          source: string
+        }
+        Update: {
+          cleaned_at?: string
+          employee_id?: string | null
+          id?: string
+          old_incentive_amount?: number | null
+          old_incentive_status?: string | null
+          old_production_value?: number | null
+          old_status?: string | null
+          payment_period?: string | null
+          program_id?: string | null
+          reason?: string | null
+          review_period?: string | null
+          review_year?: number | null
+          source?: string
+        }
+        Relationships: []
+      }
       incentive_vessel_rates: {
         Row: {
           created_at: string | null
