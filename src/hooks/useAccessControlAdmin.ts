@@ -218,3 +218,67 @@ export function useAccessExplain(userId: string | null) {
     staleTime: 15_000,
   });
 }
+
+// ---------- ADR-148: Management stage backfill ----------
+
+export interface ManagementSeedingGap {
+  instance_id: string;
+  employee_id: string;
+  employee_code: string | null;
+  employee_name: string | null;
+  overall_status: string;
+  enabled_stages: string[] | null;
+  has_management_stage: boolean;
+  has_management_id: boolean;
+  bu_head_id: string | null;
+  needs_reopen: boolean;
+  cycle_id: string | null;
+  cycle_name: string | null;
+}
+
+export function useManagementSeedingGaps(managementUid: string | null) {
+  return useQuery<ManagementSeedingGap[]>({
+    queryKey: [...AR_ACCESS_KEY, 'mgmt-gaps', managementUid],
+    enabled: !!managementUid,
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc('get_management_seeding_gaps' as never, {
+        p_management_uid: managementUid,
+      } as never);
+      if (error) throw error;
+      return (data ?? []) as ManagementSeedingGap[];
+    },
+    staleTime: 15_000,
+  });
+}
+
+export function useBackfillManagementStage() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (args: {
+      management_uid: string;
+      reopen_completed: boolean;
+      dry_run: boolean;
+      reason: string;
+    }) => {
+      const { data, error } = await supabase.rpc('backfill_management_stage_for_manager' as never, {
+        p_management_uid: args.management_uid,
+        p_reopen_completed: args.reopen_completed,
+        p_dry_run: args.dry_run,
+        p_reason: args.reason,
+      } as never);
+      if (error) throw error;
+      return data as {
+        management_uid: string;
+        dry_run: boolean;
+        reopen_completed: boolean;
+        rows_stamped: number;
+        rows_reopened: number;
+        snapshots_written: number;
+      };
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: AR_ACCESS_KEY });
+      qc.invalidateQueries({ queryKey: ['annual-review'] });
+    },
+  });
+}
