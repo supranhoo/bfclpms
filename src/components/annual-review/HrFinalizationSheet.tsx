@@ -63,6 +63,7 @@ export function HrFinalizationSheet({
       dept_head: (instance as any)?.dept_head_id ?? null,
       bu_head: (instance as any)?.bu_head_id ?? null,
       hr: (instance as any)?.hr_id ?? null,
+      management: (instance as any)?.management_id ?? null,
     };
     return enabled.filter((s) => s === 'self' || !!reviewerId[s]);
   }, [instance]);
