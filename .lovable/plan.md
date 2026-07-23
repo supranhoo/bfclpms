@@ -1,78 +1,94 @@
 
-## What you're seeing
+# Fix: System-Score-Only Templates Finalize at 0.00
 
-On the annual review detail page, the two circled blocks — **OVERALL / 100** and **Projected final score to date** — already render for Dept Head and BU Head (`TeamReviewDetailContent.tsx` lines 446–450). They just come out as `0.00 / 100` for these reviewers while an Admin viewing the *same employee* sees `87.20 / 100` (your second screenshot, Sunkara Satyanarayana).
+## Problem (Verified)
 
-## Root cause (verified)
+Instances on templates whose weight is 100% system-driven (Carry-KRA, uploaded system scores) can finalize with:
+- `criteria_weighted_score = 0.00`
+- `total_score = 0.00`
+- `final_rating = "Poor"`
 
-The "Overall" number is driven by the Carry KRA snapshot inside `useResolvedSystemScores` → `buildCarrySnapshot` → a direct `SELECT` on `public.kpis` + `public.review_submissions`.
+Verified case: Ankit Choudhary (101785, instance `0eef09b7…`) — status `completed`, but `system_scores = {}` on the instance row despite Carry-KRA being the template's only scoring source.
 
-That `SELECT` is filtered by the RLS policy `Consolidated KPI view access` on `public.kpis`, which delegates to `can_view_kpi_row(...)`. That helper only lets a reviewer see a subordinate's KPI rows when they are on the KPI's direct reporting/audit chain. A Dept Head or BU Head who is annual-review reviewer for an employee — but is NOT that employee's monthly-KPI reporting manager — gets **zero rows**, so `aggregateMonthly` produces all-null months, `rating = 0`, `value = 0`, and both cards collapse to 0.
+## Root Cause (5 Whys)
 
-Admin bypasses this via the `Admins can manage all KPIs` policy, which is why you see the correct 87.20.
+1. Why is the final score 0? Because `annual_review_compute_final_summary` returns `total_score = 0` when both `criteria_weighted_score` is NULL and `v_sys_total = 0`.
+2. Why is `v_sys_total = 0`? Because the SQL function reads `annual_review_instances.system_scores` (persisted JSONB) — which is `{}` for this instance.
+3. Why is the persisted `system_scores` empty? Because it is populated only when: (a) HR uploads via `SystemScoresUploadDialog`, or (b) `useUpdateSystemScores` is called from the client, or (c) a reviewer opens the review page (client hook `useResolvedSystemScores` resolves Carry-KRA at render time).
+4. Why did none of those run? Because a reviewer submitted through a code path (proxy / assistance / direct RPC) that never triggered the client-side hydration, and the terminal `advance_annual_review_status` did not hydrate on the server.
+5. Why does the server not hydrate? Because Carry-KRA snapshotting has always lived in TypeScript (`carryKraScore.ts`). The database has no equivalent, so any submission that bypasses the client hook finalizes with empty system_scores.
 
-This is a visibility / data-scoping gap, not a math bug. `computeScoreComposition`, `computeRunningFinalScore`, `RunningFinalScoreCard`, and the render gate are all correct.
+**Category, not instance:** every 100%-system template (Carry-KRA or uploaded) is at risk on every submission path that skips the client hook — proxy, assisted, admin advance, backfill, retries. Ankit is one of an unknown number.
 
-## Fix plan
+## Fix Strategy — SSOT on the Server (ADR-140)
 
-Add a scoped, read-only server function that returns the same Carry KRA rows an admin would see, but ONLY when the caller has legitimate reviewer/assistance access to that employee's annual review instance. Then have the frontend call it instead of hitting `kpis` directly on reviewer surfaces.
+Move Carry-KRA hydration into the database and make it a hard precondition of completion. Client hook stays as a UX preview but is no longer the source of truth.
 
-### 1. New Postgres function (SECURITY DEFINER, read-only)
+### 1. New SQL helper: `hydrate_annual_review_system_scores(p_instance_id uuid)`
+- Reads `template.sections.system_scores`.
+- For each slot with `source = 'carry_kra'`, computes the normalized score from `public.kpis` for the employee within the cycle window using the existing `carry_config` (same rules as TS `carryKraScore.ts`: N/A exclusion, weightage, partial-period, penalty).
+- For `source = 'manual'` / uploaded — leaves existing values untouched.
+- Writes the merged map to `annual_review_instances.system_scores` (and `system_scores_raw` where applicable).
+- Idempotent; returns the resulting JSONB.
 
-`public.get_annual_review_carry_kra_rows(p_instance_id uuid, p_fy_start int)`
-- Loads the instance and verifies the caller is one of: `admin`, `hr_pms`, `management`, the employee themselves, or a named reviewer on the instance (`manager_id`, `skip_id`, `dept_head_id`, `bu_head_id`, `hr_id`, `management_id`), OR that `can_access_annual_review_instance_for_assistance(p_instance_id)` returns true.
-- If not authorised → raise, so the client falls back gracefully.
-- If authorised → returns rows shaped exactly like today's client-side query:
-  `(kpi_id, review_period, review_year, weightage, is_na, final_score, manager_score, auditor_score, self_score)` for `employee_id = instance.employee_id` and `review_year IN (fy, fy+1)`.
-- `GRANT EXECUTE ... TO authenticated, service_role`. `SET search_path = public`. No writes.
+### 2. Hard-wire into `advance_annual_review_status`
+- Before recomputing the final summary at the terminal stage, call `hydrate_annual_review_system_scores(p_instance_id)`.
+- If the template declares system slots and, post-hydration, any required slot is still missing/NULL, **raise** `ADR-140: system score hydration failed for slot X`. This blocks a 0-score completion instead of silently persisting it.
 
-Rationale: authorisation is derived from the annual-review instance's reviewer chain — the same chain that gates every other reviewer surface — so exposing these rows to that exact audience is consistent with existing policy and does NOT widen visibility beyond it. Non-reviewers still see nothing.
+### 3. Update `annual_review_compute_final_summary`
+- No formula change. Only tighten the terminal branch so `total_score` cannot be forced to 0 when the template's system-slot weight > 0 and hydration returned real values.
+- Keep the "criteria-only + no scores" branch returning NULL (unchanged).
 
-### 2. Wire the RPC into the read path
+### 4. One-shot repair (audited)
+- Find every completed instance where the resolved template has system-slot weight > 0 AND `instance.system_scores` is empty OR missing declared slots.
+- For each, call `hydrate_annual_review_system_scores` then `annual_review_compute_final_summary`, and update the instance row.
+- Write every change to `annual_review_final_backfill_audit_2026_07` with before/after values.
+- Never overwrite a non-zero persisted score with a lower value without logging both.
 
-`src/services/annualReview/carryKraScore.ts`
-- Add `fetchMonthlyKraScoresForInstance(instanceId, employeeId, fyStart, excludeNa)` that:
-  1. Calls the new RPC.
-  2. On success → maps rows into the existing `RawRow` shape and calls the unchanged `aggregateMonthly`.
-  3. On `permission denied` / RPC 404 → falls back to the current direct-table path (keeps admin surfaces and other callers unchanged).
-- Keep `fetchMonthlyKraScores` and `buildCarrySnapshot` intact for admin/employee paths.
-- Add `buildCarrySnapshotForInstance(...)` that uses the RPC-backed fetcher.
+### 5. Client cleanup (non-behavioral)
+- `useResolvedSystemScores` stays for preview but reads only from the persisted `instance.system_scores` (already the case). Remove the dead expectation that the client must "save" to finalize.
+- Add a small info notice on reviewer forms for 100%-system templates: "Final score is computed from monthly KRA achievements at submission."
 
-### 3. Frontend hook
+### 6. Tests & mock data
+- Unit test `hydrate_annual_review_system_scores` for: pure Carry-KRA template, mixed criteria+system, N/A exclusion, missing monthly rows (should raise), uploaded manual slots preserved.
+- Regression test: proxy submission on a 100%-system template must produce non-zero `total_score`.
+- Mock: an instance with `system_scores = {}` and 100% carry-KRA template — expect non-zero after advance.
 
-`src/hooks/useResolvedSystemScores.ts`
-- Add an optional `instanceId?: string` parameter.
-- When present, the carry-KRA `queryFn` calls `buildCarrySnapshotForInstance` instead of `buildCarrySnapshot`.
-- Keep the query key extended with `instanceId` so the cache is scoped (avoids cross-user leakage of the same TanStack cache entry).
+## UI Changes
 
-### 4. Call-site update
+- Reviewer form (100%-system templates): add a one-line notice under the score section: "Final score is computed automatically from monthly KRA at submission." No layout changes.
+- Admin analytics: unchanged; will simply stop showing 0.00 for these instances.
 
-`src/components/annual-review/TeamReviewDetailContent.tsx` (line 249) — pass `instance.id` into the hook. This is the ONLY surface where the fix is required, because employee self-review already resolves under their own auth (they can always see their own KPIs), and Admin/HR see everything via the existing policy.
+## Risk & Impact
 
-Nothing else changes — the render gate at line 448 (`role === 'dept_head' || role === 'bu_head'`) already surfaces the Projected card; the Overall card at line 446 is always rendered.
+- **Data:** Repair will re-score previously completed instances that had 0. Every change audited; monotonic guard (never lower a real score to 0).
+- **Workflow:** Terminal submissions on system-only templates that truly have no monthly data will now **fail loudly** instead of silently completing at 0. This is desired — surfaces missing KRA data instead of demotivating employees.
+- **UI:** Additive notice only.
+- **Regression:** Criteria-only templates untouched (branch preserved). Mixed templates re-normalised through the same SSOT already in place (ADR-126).
+- **Rollback:** Repair runs inside a transaction per batch; the trigger addition is a single `CREATE OR REPLACE` that can be reverted.
 
-## Risk & impact
+## Technical Section
 
-| Area | Impact |
-|---|---|
-| Data visibility | Widens Carry-KRA READ ONLY to Dept/BU/HR/Management/Skip named on the annual review instance — the same people who already see the review's criteria, comments, and final score. No net-new information class. |
-| Write paths | None. The RPC is `STABLE`/read-only; RLS on `kpis` / `review_submissions` for INSERT/UPDATE/DELETE is untouched. |
-| Admin & employee views | Unchanged (they hit the current path). |
-| Performance | One RPC per open review; server-side query is the same shape as today's client query. |
-| Rollback | Drop the new RPC + revert 2 TS files. Additive migration. |
+- Migration `20260723_ADR140_system_score_hydration.sql`:
+  - `CREATE OR REPLACE FUNCTION public.hydrate_annual_review_system_scores(uuid) RETURNS jsonb SECURITY DEFINER`
+  - Alter `advance_annual_review_status` (`v_next = 'completed'` branch) to call hydrator + assert non-empty for declared system slots
+  - Alter `annual_review_compute_final_summary` — no logic change, add comment referencing ADR-140
+  - `GRANT EXECUTE ON FUNCTION ... TO authenticated, service_role`
+- Migration `20260723_ADR140_repair.sql`:
+  - Insert-into-audit + update loop scoped to `annual_review_final_backfill_audit_2026_07`
+- TS: no service changes required; add notice component in `EmployeeAnnualReview.tsx` and `AssistedAnnualReview.tsx`.
 
-## Verification (post-build)
+## SSOT / Policy Updates
 
-1. As BU/Dept Head named on Sunkara's instance, reopen the same detail page → OVERALL should now show `87.20 / 100` and Projected should show a non-zero value with the correct "based on N of 7 stages" caption.
-2. As a random unrelated user (not a reviewer for that instance), open the URL directly → RPC returns `permission denied`, the card falls back to `0.00 / 100` with no data leak.
-3. Admin view unchanged.
-4. Unit test: `buildCarrySnapshotForInstance` maps RPC rows through `aggregateMonthly` identically to `buildCarrySnapshot` given the same input rows.
+- **POLICY §AR-SYSTEM-SCORE-HYDRATION (ADR-140):** For any template with `system_scores` weight > 0, the database — not the client — is the source of truth. Completion is blocked until every declared system slot has a resolved numeric value. Carry-KRA slots are hydrated server-side at submission from `public.kpis` using the same rules as the TS SSOT.
+- **DOCUMENTATION.md:** Add ADR-140 to Version History; update the Annual Review scoring diagram to show server-side hydration on the terminal advance path.
 
-## Files touched
+## Verification
 
-- **New migration** — `get_annual_review_carry_kra_rows` RPC + grants.
-- `src/services/annualReview/carryKraScore.ts` — add instance-scoped fetcher + snapshot builder.
-- `src/hooks/useResolvedSystemScores.ts` — accept `instanceId`, route through the RPC when present.
-- `src/components/annual-review/TeamReviewDetailContent.tsx` — pass `instance.id` into the hook.
-- `src/modules/annual-review/POLICY.md` — add "AR-CARRY-KRA-REVIEWER-VISIBILITY (ADR-139)" note.
-- New unit test alongside `carryKraScore` for the mapper.
+1. Re-run compute on Ankit Choudhary (101785); expect non-zero `total_score` if monthly KRA exists, else a specific failure naming the missing slot.
+2. Query for other affected instances (system-slot > 0, `system_scores = '{}'`, status `completed`) — expect 0 rows post-repair.
+3. New proxy submission on a Carry-KRA template must finalize with the KRA-derived score, verified via `annual_review_terminal_auto_finalized` audit entry.
+
+## Open Question (please confirm before I build)
+
+Should the server treat a 100%-Carry-KRA slot with **no monthly KRA rows at all** for that employee as (a) hard failure that blocks completion, or (b) NULL total (unrated) so HR resolves manually? My recommendation is (a) — silence is what caused this bug in the first place.
