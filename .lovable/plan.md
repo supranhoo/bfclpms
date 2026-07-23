@@ -1,79 +1,55 @@
+## Problem
 
-# Annual Review — Dept Head data invisible to BU Head (Employee 200564, Javed Jafri)
+Editing any user in User Management fails with:
+`Failed to update user — infinite recursion detected in policy for relation "profiles"`.
 
-## 1. Facts observed (verified pre-plan)
+Reproduced by admin Ankit updating Mithilesh Kumar Jha (100841) email from `jhamithileshkumar40@gmail.com` → `jha.mithileshkumar40@gmail.com`.
 
-Instance `806d6da6-d7c4-41cc-a048-d8a11092c8da`:
-- `overall_status = pending_bu`, `enabled_stages = [self, dept_head, bu_head]`
-- `dept_head_id = 6088431e…` (**Y R V S Murthy**, emp 200493)
-- `bu_head_id = e0bc3607…` (**Anil Kumar Pathak**, emp 200301)
-- `updated_at = 2026-07-23 10:25:11`
+## Root Cause
 
-`annual_review_responses` rows for the instance (only 2):
-- `self` — Javed Jafri — locked, 5 scores, submitted 2026-07-16.
-- `dept_head` — **Shrikant Ganguly** (`a3db1d69…`) — **is_locked=false, 0 scores, submitted_at=NULL**, updated 2026-07-23 08:08:56.
+The RLS policy `"Users can update their own profile"` on `public.profiles` was recently hardened to lock down self‑editable fields. Its `WITH CHECK` clause contains ~14 inline sub‑selects of the shape:
 
-Audit trail on this instance:
-- 2026-07-13: head remap set dept_head → Shrikant, bu_head → Anil (POLICY §AR-HEAD-MASTER-AUTHORITATIVE).
-- 2026-07-21 09:31 & 2026-07-23 07:42 / 08:08: three send-backs `bu_head → dept_head` (last one is the "reason: null" system send-back).
-- Instance later flipped to `pending_bu` at 10:25:11 with **no new/locked dept_head response row** and with `dept_head_id` now pointing at **Y R V S Murthy** (different from the response's reviewer_id).
+```sql
+NOT ((SELECT p.reporting_manager_id FROM profiles p WHERE p.id = auth.uid())
+      IS DISTINCT FROM reporting_manager_id)
+```
 
-## 2. Root cause (5-Why)
+Every `UPDATE profiles` — even one performed by an admin who is authorised through the separate `"Admins can manage all profiles"` policy — forces Postgres to evaluate the WITH CHECK of every matching permissive policy. Those inline sub‑selects issue `SELECT ... FROM profiles` which re‑enters the profiles policy set. Postgres' cycle detector aborts with `infinite recursion detected in policy for relation "profiles"`.
 
-1. Why does BU Head see nothing from Dept Head?
-   The only `dept_head` response row belongs to Shrikant and is `is_locked=false` with an empty `criteria_scores` object → the reviewer UI treats it as "no submission".
-2. Why is that row Shrikant's, when the current dept_head is Y R V S Murthy?
-   `dept_head_id` was reassigned after the response row already existed. `annual_review_responses` is keyed by `(instance_id, reviewer_id, reviewer_role)` (reviewer_id, not role-slot), so the previous reviewer's draft was left orphaned and no new row was created for the new reviewer.
-3. Why did status advance to `pending_bu` without a locked dept_head response?
-   `advance_annual_review_status` promotes the instance based on `overall_status` progression alone; after the 08:08 send-back plus a subsequent proxy/manual advance, it did **not** enforce the invariant "an `is_locked=true` response must exist for the currently-assigned reviewer of the outgoing stage".
-4. Why is that invariant missing?
-   Historical assumption: reviewers never change mid-flow. Multiple ADRs (head-remap, cascade-triggers, reviewer-resync) now mutate `*_id` slots freely, but the advance/send-back RPCs still read/write responses by `reviewer_id`, not by `(instance_id, reviewer_role)`.
-5. Why did no test catch it?
-   No regression exists for "reviewer reassigned after a submission draft". Send-back + reassign + re-advance was never covered.
+This is exactly the pattern called out in the `infinite-recursion-in-rls` guardrail: a profiles policy must not query `profiles` inline — it must go through a `SECURITY DEFINER` helper.
 
-Companion issue: the "Dept Head Review Pending" screen the reviewer used never persisted scores because the front-end fetched the row by the *new* `dept_head_id` (Y R V S Murthy) → no row found → new draft on his id was written locally but the finalize call routed through a path that resolves by role and updated Shrikant's stale row instead. Net effect: BU Head sees an empty dept_head response.
+## Fix (single migration, no app code changes)
 
-## 3. CAPA
+1. Create a `SECURITY DEFINER` helper `public.current_profile_locked_fields()` that returns the caller's own row's locked columns (`reporting_manager_id`, `department_id`, `pms_grade`, `employment_status`, `is_active`, `portal_access`, `confirmation_increment_granted`, `company_id`, `designation`, `employee_code`, `level_id`, `location_id`, `functional_manager_id`, `designated_proxy_user_id`) as a single ROW. Owned by postgres, `search_path = public`, `STABLE`.
+2. Drop and recreate `"Users can update their own profile"` with the same intent but the WITH CHECK rewritten to call the helper once:
+   ```sql
+   WITH CHECK (
+     auth.uid() = id
+     AND (locked_fields).reporting_manager_id IS NOT DISTINCT FROM reporting_manager_id
+     AND (locked_fields).department_id       IS NOT DISTINCT FROM department_id
+     ... etc.
+   )
+   ```
+   using a `WHERE` on a lateral / scalar call so the helper runs exactly once and does not touch `profiles` through RLS.
+3. No changes to admin, HR, manager, auditor, safety, org‑KPI, annual‑review, or menu‑access policies. All existing SECURITY DEFINER helpers stay.
 
-### Corrective (this instance + all similar)
-- Detect every open instance where the currently-assigned reviewer for a completed stage has **no locked response row** while a *different* user does. Repair by:
-  - Rebinding the latest non-empty response for that role to the current `*_id` (only when the orphan row has scores), OR
-  - When the orphan row is empty (Javed's case): delete the empty orphan, roll `overall_status` back one stage, and notify the current reviewer to re-submit.
-- For 200564 specifically: delete the empty Shrikant dept_head draft, set `overall_status = pending_dept`, and notify Y R V S Murthy.
+## Verification
 
-### Preventive (code + schema)
-1. **Role-keyed response contract (ADR-142)**: change `annual_review_responses` unique key to `(instance_id, reviewer_role)`; keep `reviewer_id` as an attribute that must equal the instance's current `*_id` for that role at write-time. Migrate existing dupes by picking the most recent locked row per role.
-2. **`advance_annual_review_status` invariant**: before promoting off any non-terminal stage, require a row with `reviewer_role = <that stage>`, `reviewer_id = <instance.*_id for that stage>`, `is_locked = true`, and non-empty `criteria_scores`. Otherwise raise `AR_ADVANCE_MISSING_ROLE_RESPONSE`.
-3. **`send_back_annual_review_status`**: when unlocking a stage, always clear/refresh `reviewer_id` on the affected response row to match the instance's current `*_id` for that role (so a reassignment between send-back and re-submit doesn't strand the draft).
-4. **Reviewer-reassignment trigger**: when `dept_head_id`/`bu_head_id`/`management_id` changes, rebind the open unlocked response row for that role to the new reviewer (or delete it if empty) in the same transaction. Log to `annual_review_reviewer_resync_audit`.
-5. **Front-end resolver**: `useAnnualReviewInstanceResponses` and `HrFinalizationSheet` fetch by `(instance_id, reviewer_role)` — never by reviewer_id — and display the role's latest response.
-6. **Policy**: add **POLICY §AR-RESPONSE-ROLE-CANONICAL** — one row per `(instance, role)`; reviewer changes must rebind, not orphan.
-7. **Regression tests**: `sendBackThenReassignReviewer.test.ts`, `advanceBlocksOnMissingRoleResponse.test.ts`, `roleCanonicalUniqueness.test.ts`, plus a data-repair dry-run test.
+- Re‑run the failing Edit User save for Mithilesh (100841) — expect success and `profiles.email` updated to the new address.
+- Confirm a non‑admin self‑update still blocks the locked fields (regression test): attempt to update `reporting_manager_id` on own row → still rejected.
+- Run `supabase--linter` after migration — no new warnings.
+- Add regression test asserting the WITH CHECK of `"Users can update their own profile"` contains no inline `SELECT ... FROM profiles`.
 
-## 4. Rollback & risk
+## Risk & Impact
 
-- Migration is additive + one dedup pass; backup taken via `create-backup` before running.
-- Rollback: keep the old `(instance, reviewer, role)` unique index dropped only after 72h of clean logs; new invariant can be disabled via `app_settings.ar_enforce_role_response = false` if a mass-repair is needed.
-- Impact: `~130` open instances scanned; only those with orphaned-role responses touched. All CLU/ADR-125/126/127 data preserved.
+- **Data impact:** none. No column, index, or row is modified.
+- **Workflow impact:** none. Behaviour of the self‑update policy is preserved bit‑for‑bit (same locked columns).
+- **UI impact:** none.
+- **Regression risk:** low. Only one policy is touched; admin path already worked via a separate policy.
+- **Rollback:** re‑apply the previous policy definition (kept verbatim in the migration comment).
 
-## 5. Deliverables order
+## Documentation
 
-1. Read-only diagnostic SQL for all affected instances (report only).
-2. Migration: rebind trigger + new response uniqueness + guarded advance RPC + send-back rebind.
-3. Data repair migration (per-instance, audited to `annual_review_final_backfill_audit_2026_07`).
-4. Front-end resolver switch to role-keyed fetch.
-5. Vitest regressions.
-6. DOCUMENTATION.md + POLICY.md updates (ADR-142, §AR-RESPONSE-ROLE-CANONICAL).
-
-## 6. UI change
-
-Only in the "Dept Head review" panel of `HrFinalizationSheet` and BU Head read-view: the section now sources by role, so a stale draft from a previous reviewer is no longer displayed. A one-line yellow notice appears when the current reviewer has not yet submitted after a reassignment: "Dept Head was reassigned — awaiting fresh submission from {name}." No other visual changes.
-
-## 7. Open decision
-
-For the ~N orphaned-but-scored dept_head rows across the cycle:
-- **A**: Auto-rebind the orphan to the new reviewer (scores carry forward, new reviewer can edit before lock).
-- **B**: Discard and force re-submission (safer; new reviewer starts clean).
-- **C**: Rebind + require the new reviewer to explicitly "Confirm inherited scores" before advance.
-
-Please pick A / B / C before I run the data repair.
+- ADR‑143 — Break profiles self‑update RLS recursion via SECURITY DEFINER locked‑fields helper.
+- `POLICY.md` — note under §Profile Self‑Update: locked fields are enforced through `current_profile_locked_fields()`; profiles policies MUST NOT inline‑select from `profiles`.
+- `mem/architecture/security/profile-identity-integrity.md` — add the "no inline profiles select in profiles policies" rule.
