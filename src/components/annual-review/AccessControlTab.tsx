@@ -627,6 +627,184 @@ function AuditCard() {
   );
 }
 
+// -------------------- Management stage backfill (ADR-148) --------------------
+function ManagementBackfillCard() {
+  const { data: profiles = [], isLoading: pLoading } = useActiveProfilesLite();
+  const options = useMemo(
+    () => profiles.map((p) => ({ value: p.id, label: formatSafetyProfileLabel(p) })),
+    [profiles],
+  );
+  const [managerId, setManagerId] = useState<string>('');
+  const [reopen, setReopen] = useState<boolean>(true);
+  const [reason, setReason] = useState<string>('');
+  const [confirmOpen, setConfirmOpen] = useState(false);
+
+  const { data: gaps = [], isLoading: gapsLoading, refetch } = useManagementSeedingGaps(managerId || null);
+  const backfill = useBackfillManagementStage();
+
+  const totals = useMemo(() => {
+    const reopenCount = gaps.filter((g) => g.overall_status === 'completed').length;
+    return { total: gaps.length, reopenCount, augmentOnly: gaps.length - reopenCount };
+  }, [gaps]);
+
+  const runBackfill = () => {
+    if (!managerId) { toast.error('Pick a management user'); return; }
+    if (reason.trim().length < 3) { toast.error('Reason is required'); return; }
+    backfill.mutate(
+      { management_uid: managerId, reopen_completed: reopen, dry_run: false, reason: reason.trim() },
+      {
+        onSuccess: (res) => {
+          toast.success(
+            `Stamped ${res.rows_stamped} instance(s), reopened ${res.rows_reopened}.`,
+          );
+          setConfirmOpen(false);
+          setReason('');
+          refetch();
+        },
+        onError: (e: any) => toast.error(e?.message ?? 'Backfill failed'),
+      },
+    );
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <RefreshCw className="h-5 w-5" />Management stage backfill (ADR-148)
+        </CardTitle>
+        <CardDescription>
+          Stamps <b>Management</b> as the terminal reviewer on the annual review instances of a
+          management user's direct reports. Historic rows that were finalised at the BU Head stage
+          can be reopened to <b>Pending Management</b> so the management review actually happens.
+          Every affected instance is snapshotted to the reset archive and audited.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_auto] items-end">
+          <div className="max-w-md">
+            <OrgFilterCombobox
+              value={managerId}
+              onValueChange={setManagerId}
+              options={options}
+              placeholder={pLoading ? 'Loading…' : 'Search a management user…'}
+              label="Management user"
+            />
+          </div>
+          <Button variant="outline" onClick={() => refetch()} disabled={!managerId || gapsLoading}>
+            <Search className="h-4 w-4 mr-2" />Preview gaps
+          </Button>
+        </div>
+
+        {managerId && (
+          <>
+            <div className="flex flex-wrap gap-3 text-sm">
+              <Badge variant="secondary">Total gaps: {totals.total}</Badge>
+              <Badge variant={totals.reopenCount ? 'destructive' : 'secondary'}>
+                Completed rows (will reopen): {totals.reopenCount}
+              </Badge>
+              <Badge variant="secondary">Stamp only (in-flight): {totals.augmentOnly}</Badge>
+            </div>
+
+            {gapsLoading ? (
+              <Skeleton className="h-40 w-full" />
+            ) : gaps.length === 0 ? (
+              <div className="rounded-md border bg-muted/30 p-4 text-sm text-muted-foreground">
+                No gaps detected. Every direct report already has the Management stage seeded.
+              </div>
+            ) : (
+              <div className="rounded-md border overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Code</TableHead>
+                      <TableHead>Employee</TableHead>
+                      <TableHead>Current status</TableHead>
+                      <TableHead>Has mgmt stage</TableHead>
+                      <TableHead>Has mgmt ID</TableHead>
+                      <TableHead>Will reopen</TableHead>
+                      <TableHead>Cycle</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {gaps.map((g) => (
+                      <TableRow key={g.instance_id}>
+                        <TableCell className="font-mono">{g.employee_code ?? '—'}</TableCell>
+                        <TableCell>{g.employee_name ?? '—'}</TableCell>
+                        <TableCell><Badge variant="secondary">{g.overall_status}</Badge></TableCell>
+                        <TableCell>{g.has_management_stage ? 'Yes' : <Badge variant="destructive">No</Badge>}</TableCell>
+                        <TableCell>{g.has_management_id ? 'Yes' : <Badge variant="destructive">No</Badge>}</TableCell>
+                        <TableCell>
+                          {g.needs_reopen
+                            ? (reopen ? <Badge variant="destructive">Reopen</Badge> : <Badge variant="secondary">Kept</Badge>)
+                            : '—'}
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">{g.cycle_name ?? '—'}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+
+            <div className="flex flex-col gap-3 rounded-md border p-4 bg-muted/20">
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="reopen-completed"
+                  checked={reopen}
+                  onCheckedChange={(v) => setReopen(Boolean(v))}
+                />
+                <Label htmlFor="reopen-completed" className="text-sm">
+                  Reopen completed rows to <b>Pending Management</b> (recommended)
+                </Label>
+              </div>
+              <div>
+                <Label htmlFor="mgmt-reason" className="text-sm">Reason (audited)</Label>
+                <Textarea
+                  id="mgmt-reason"
+                  value={reason}
+                  onChange={(e) => setReason(e.target.value)}
+                  placeholder="e.g. Adding Gaurav as terminal management reviewer for FY25-26 direct reports"
+                  rows={2}
+                />
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button
+                  onClick={() => setConfirmOpen(true)}
+                  disabled={!managerId || gaps.length === 0 || reason.trim().length < 3 || backfill.isPending}
+                >
+                  Run backfill
+                </Button>
+              </div>
+            </div>
+          </>
+        )}
+
+        <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Confirm management stage backfill</DialogTitle>
+              <DialogDescription>
+                About to stamp <b>{totals.total}</b> instance(s). Of those,{' '}
+                <b>{reopen ? totals.reopenCount : 0}</b> completed row(s) will be reopened to
+                Pending Management (scores cleared, response rows preserved). This is snapshotted
+                and reversible via the reset archive.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setConfirmOpen(false)} disabled={backfill.isPending}>
+                Cancel
+              </Button>
+              <Button onClick={runBackfill} disabled={backfill.isPending}>
+                {backfill.isPending ? 'Running…' : 'Confirm & run'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </CardContent>
+    </Card>
+  );
+}
+
 // -------------------- Root --------------------
 export function AccessControlTab() {
   return (
