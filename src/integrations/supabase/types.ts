@@ -1374,6 +1374,36 @@ export type Database = {
         }
         Relationships: []
       }
+      annual_review_role_capabilities: {
+        Row: {
+          assist_scope: string
+          can_assist: boolean
+          can_search: boolean
+          created_at: string
+          role_source: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          assist_scope?: string
+          can_assist?: boolean
+          can_search?: boolean
+          created_at?: string
+          role_source: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          assist_scope?: string
+          can_assist?: boolean
+          can_search?: boolean
+          created_at?: string
+          role_source?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
       annual_review_self_draft_reassign_audit: {
         Row: {
           created_at: string
@@ -15303,6 +15333,24 @@ export type Database = {
           stage: string
         }[]
       }
+      list_annual_review_role_capabilities: {
+        Args: never
+        Returns: {
+          assist_scope: string
+          can_assist: boolean
+          can_search: boolean
+          created_at: string
+          role_source: string
+          updated_at: string
+          updated_by: string | null
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "annual_review_role_capabilities"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
       list_profile_grade_level_orphans: {
         Args: never
         Returns: {
@@ -15998,6 +16046,7 @@ export type Database = {
           p_query: string
         }
         Returns: {
+          can_assist_this_employee: boolean
           department_id: string
           designation: string
           employee_code: string
@@ -16279,6 +16328,30 @@ export type Database = {
         SetofOptions: {
           from: "*"
           to: "annual_review_directory_overrides"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      upsert_annual_review_role_capability: {
+        Args: {
+          p_assist_scope: string
+          p_can_assist: boolean
+          p_can_search: boolean
+          p_reason: string
+          p_role_source: string
+        }
+        Returns: {
+          assist_scope: string
+          can_assist: boolean
+          can_search: boolean
+          created_at: string
+          role_source: string
+          updated_at: string
+          updated_by: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "annual_review_role_capabilities"
           isOneToOne: true
           isSetofReturn: false
         }
