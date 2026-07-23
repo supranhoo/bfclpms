@@ -1,55 +1,39 @@
-## Problem
+## Issue
 
-Editing any user in User Management fails with:
-`Failed to update user — infinite recursion detected in policy for relation "profiles"`.
+Add New User for **Kusum Sinha (101818)** under **Aruna Industries** fails with:
+`Unknown employee category: 'Retainership'`
 
-Reproduced by admin Ankit updating Mithilesh Kumar Jha (100841) email from `jhamithileshkumar40@gmail.com` → `jha.mithileshkumar40@gmail.com`.
+## Root cause (verified)
 
-## Root Cause
+- `employee_categories` is company-scoped master data.
+- `Retainership` exists only under **Bihar Foundry & Casting Limited** (BFCL). Aruna Industries has zero categories seeded.
+- The `create-employee` edge function correctly validates category against the selected company (`company_id` match) and rejects the mismatch — behaviour is right.
+- The Add/Edit User dialog calls `useEmployeeCategories()` with **no company argument**, so the dropdown lists categories from every company. Admin was able to pick BFCL's "Retainership" for an Aruna user, guaranteeing a server-side rejection.
 
-The RLS policy `"Users can update their own profile"` on `public.profiles` was recently hardened to lock down self‑editable fields. Its `WITH CHECK` clause contains ~14 inline sub‑selects of the shape:
+Files: `src/pages/admin/UserManagement.tsx` line 263 + 568-570 (dropdown), `src/hooks/useOrganization.ts` (`useEmployeeCategories(companyId?)` already supports scoping — memory `employee-category-and-status`).
 
-```sql
-NOT ((SELECT p.reporting_manager_id FROM profiles p WHERE p.id = auth.uid())
-      IS DISTINCT FROM reporting_manager_id)
-```
+## Fix (UI-only, surgical)
 
-Every `UPDATE profiles` — even one performed by an admin who is authorised through the separate `"Admins can manage all profiles"` policy — forces Postgres to evaluate the WITH CHECK of every matching permissive policy. Those inline sub‑selects issue `SELECT ... FROM profiles` which re‑enters the profiles policy set. Postgres' cycle detector aborts with `infinite recursion detected in policy for relation "profiles"`.
+1. Pass the currently selected company into the hook for each dialog context:
+   - Add User dialog → `useEmployeeCategories(newCompanyId)`
+   - Edit User dialog → `useEmployeeCategories(editCompanyId)`
+2. Since the two dialogs need different scopes, either:
+   - call the hook twice (add + edit variants) and build two `options` memos, OR
+   - keep one hook call but derive `companyId` from whichever dialog is open.
+   Prefer two hook calls — clearer and avoids re-fetch churn when switching dialogs.
+3. When the user changes Company in the dialog, clear the selected `employeeCategory` if it is not present in the new company's list (prevents stale invalid selections).
+4. If the resulting list is empty for the chosen company, show a helper text under the field: "No categories configured for this company. Add them in Admin → Organization." (no behaviour change, just guidance).
 
-This is exactly the pattern called out in the `infinite-recursion-in-rls` guardrail: a profiles policy must not query `profiles` inline — it must go through a `SECURITY DEFINER` helper.
+No edge function change. No schema change. No policy change.
 
-## Fix (single migration, no app code changes)
+## Out of scope
 
-1. Create a `SECURITY DEFINER` helper `public.current_profile_locked_fields()` that returns the caller's own row's locked columns (`reporting_manager_id`, `department_id`, `pms_grade`, `employment_status`, `is_active`, `portal_access`, `confirmation_increment_granted`, `company_id`, `designation`, `employee_code`, `level_id`, `location_id`, `functional_manager_id`, `designated_proxy_user_id`) as a single ROW. Owned by postgres, `search_path = public`, `STABLE`.
-2. Drop and recreate `"Users can update their own profile"` with the same intent but the WITH CHECK rewritten to call the helper once:
-   ```sql
-   WITH CHECK (
-     auth.uid() = id
-     AND (locked_fields).reporting_manager_id IS NOT DISTINCT FROM reporting_manager_id
-     AND (locked_fields).department_id       IS NOT DISTINCT FROM department_id
-     ... etc.
-   )
-   ```
-   using a `WHERE` on a lateral / scalar call so the helper runs exactly once and does not touch `profiles` through RLS.
-3. No changes to admin, HR, manager, auditor, safety, org‑KPI, annual‑review, or menu‑access policies. All existing SECURITY DEFINER helpers stay.
+- Seeding Aruna Industries categories — that's an admin/data task, not a code fix.
+- `employment_status` (global master) is unaffected.
 
 ## Verification
 
-- Re‑run the failing Edit User save for Mithilesh (100841) — expect success and `profiles.email` updated to the new address.
-- Confirm a non‑admin self‑update still blocks the locked fields (regression test): attempt to update `reporting_manager_id` on own row → still rejected.
-- Run `supabase--linter` after migration — no new warnings.
-- Add regression test asserting the WITH CHECK of `"Users can update their own profile"` contains no inline `SELECT ... FROM profiles`.
-
-## Risk & Impact
-
-- **Data impact:** none. No column, index, or row is modified.
-- **Workflow impact:** none. Behaviour of the self‑update policy is preserved bit‑for‑bit (same locked columns).
-- **UI impact:** none.
-- **Regression risk:** low. Only one policy is touched; admin path already worked via a separate policy.
-- **Rollback:** re‑apply the previous policy definition (kept verbatim in the migration comment).
-
-## Documentation
-
-- ADR‑143 — Break profiles self‑update RLS recursion via SECURITY DEFINER locked‑fields helper.
-- `POLICY.md` — note under §Profile Self‑Update: locked fields are enforced through `current_profile_locked_fields()`; profiles policies MUST NOT inline‑select from `profiles`.
-- `mem/architecture/security/profile-identity-integrity.md` — add the "no inline profiles select in profiles policies" rule.
+- Open Add User, select Aruna Industries → Employee Category dropdown lists only Aruna's categories (currently empty, helper text shown).
+- Select BFCL → dropdown lists BFCL's 7 categories including Retainership.
+- Switching company after picking a category clears the stale value.
+- Submit succeeds; the "Unknown employee category" toast no longer appears for legitimate selections.
