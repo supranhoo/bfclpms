@@ -11,10 +11,12 @@ export type AnnualReviewStatus =
   | 'pending_dept'
   | 'pending_bu'
   | 'pending_hr'
+  | 'pending_management'
   | 'completed'
   | 'excluded';
 
-export type AnnualReviewerRole = 'self' | 'manager' | 'skip_manager' | 'dept_head' | 'bu_head' | 'hr';
+export type AnnualReviewerRole =
+  | 'self' | 'manager' | 'skip_manager' | 'dept_head' | 'bu_head' | 'hr' | 'management';
 
 export type CycleStatus = 'draft' | 'active' | 'closed';
 
@@ -319,6 +321,8 @@ export interface AnnualReviewInstance {
   dept_head_id: string | null;
   bu_head_id: string | null;
   hr_id: string | null;
+  /** ADR-138 — terminal Management reviewer (BU Head's manager if 'management', else fallback). */
+  management_id?: string | null;
   system_scores: Record<string, number>;
   /**
    * Raw System KPI values keyed in by HR (bulk upload or inline). Converted to
