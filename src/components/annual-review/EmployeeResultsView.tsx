@@ -33,6 +33,24 @@ export function EmployeeResultsView({
   const [rebuttal, setRebuttal] = useState('');
 
   const criteria = template?.sections.criteria ?? [];
+  const systemSlots = template?.sections.system_scores ?? [];
+  const criteriaMax = criteria.reduce((acc, c) => acc + (Number(c.weight) || 0) * 5, 0);
+  const systemWeight = systemSlots.reduce(
+    (acc, s: any) => acc + (Number(s?.weight) || 0),
+    0,
+  );
+  const hasCriteria = criteriaMax > 0;
+  const hasSystem = systemWeight > 0;
+  const systemTotal = Object.values((instance.system_scores ?? {}) as Record<string, unknown>)
+    .reduce<number>((acc, v) => acc + (typeof v === 'number' ? v : 0), 0);
+  // ADR-140-UI: numeric rating x/5 derived from the same 0..100 total the badge uses,
+  // so it is visible regardless of whether the template is criteria-only, system-only, or blended.
+  const ratingOutOf5 =
+    instance.total_score != null ? (Number(instance.total_score) / 100) * 5 : null;
+  const gridCols =
+    [true, hasCriteria, hasSystem].filter(Boolean).length >= 2
+      ? 'sm:grid-cols-2'
+      : 'sm:grid-cols-1';
   // POLICY §AR-STAGE-LABEL-DISPLAY-SSOT (ADR-128): remap responses onto their
   // effective display stage so duplicate-reviewer collapses (e.g. Dept≡BU)
   // render under the winning column (BU), matching the header.
@@ -90,33 +108,42 @@ export function EmployeeResultsView({
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className={`grid gap-3 ${gridCols}`}>
             <div className="rounded-md border p-3">
               <p className="text-xs text-muted-foreground">Total score</p>
               <p className="text-2xl font-semibold tabular-nums">
                 {instance.total_score != null ? instance.total_score.toFixed(2) : '—'}
               </p>
+              {ratingOutOf5 != null && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  ≈ {ratingOutOf5.toFixed(1)} / 5
+                </p>
+              )}
             </div>
-            <div className="rounded-md border p-3">
-              <p className="text-xs text-muted-foreground">Criteria weighted score</p>
-              <p className="text-2xl font-semibold tabular-nums">
-                {instance.criteria_weighted_score != null ? instance.criteria_weighted_score.toFixed(2) : '—'}
-              </p>
-              {(() => {
-                const maxCriteria = (criteria ?? []).reduce(
-                  (acc, c) => acc + (Number(c.weight) || 0) * 5,
-                  0,
-                );
-                const raw = instance.criteria_weighted_score;
-                if (raw == null || maxCriteria <= 0) return null;
-                const rating = (raw / maxCriteria) * 5;
-                return (
-                  <p className="text-xs text-muted-foreground mt-1">
-                    ≈ {rating.toFixed(1)} / 5
-                  </p>
-                );
-              })()}
-            </div>
+            {hasCriteria && (
+              <div className="rounded-md border p-3">
+                <p className="text-xs text-muted-foreground">Criteria weighted score</p>
+                <p className="text-2xl font-semibold tabular-nums">
+                  {instance.criteria_weighted_score != null
+                    ? instance.criteria_weighted_score.toFixed(2)
+                    : '—'}
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  out of {criteriaMax.toFixed(0)}
+                </p>
+              </div>
+            )}
+            {hasSystem && (
+              <div className="rounded-md border p-3">
+                <p className="text-xs text-muted-foreground">System score (KRA)</p>
+                <p className="text-2xl font-semibold tabular-nums">
+                  {systemTotal.toFixed(2)}
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  out of {systemWeight.toFixed(0)}
+                </p>
+              </div>
+            )}
           </div>
 
           {instance.hr_remarks && (
