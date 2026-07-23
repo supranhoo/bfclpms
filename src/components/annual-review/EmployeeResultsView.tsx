@@ -108,33 +108,42 @@ export function EmployeeResultsView({
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className={`grid gap-3 ${gridCols}`}>
             <div className="rounded-md border p-3">
               <p className="text-xs text-muted-foreground">Total score</p>
               <p className="text-2xl font-semibold tabular-nums">
                 {instance.total_score != null ? instance.total_score.toFixed(2) : '—'}
               </p>
+              {ratingOutOf5 != null && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  ≈ {ratingOutOf5.toFixed(1)} / 5
+                </p>
+              )}
             </div>
-            <div className="rounded-md border p-3">
-              <p className="text-xs text-muted-foreground">Criteria weighted score</p>
-              <p className="text-2xl font-semibold tabular-nums">
-                {instance.criteria_weighted_score != null ? instance.criteria_weighted_score.toFixed(2) : '—'}
-              </p>
-              {(() => {
-                const maxCriteria = (criteria ?? []).reduce(
-                  (acc, c) => acc + (Number(c.weight) || 0) * 5,
-                  0,
-                );
-                const raw = instance.criteria_weighted_score;
-                if (raw == null || maxCriteria <= 0) return null;
-                const rating = (raw / maxCriteria) * 5;
-                return (
-                  <p className="text-xs text-muted-foreground mt-1">
-                    ≈ {rating.toFixed(1)} / 5
-                  </p>
-                );
-              })()}
-            </div>
+            {hasCriteria && (
+              <div className="rounded-md border p-3">
+                <p className="text-xs text-muted-foreground">Criteria weighted score</p>
+                <p className="text-2xl font-semibold tabular-nums">
+                  {instance.criteria_weighted_score != null
+                    ? instance.criteria_weighted_score.toFixed(2)
+                    : '—'}
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  out of {criteriaMax.toFixed(0)}
+                </p>
+              </div>
+            )}
+            {hasSystem && (
+              <div className="rounded-md border p-3">
+                <p className="text-xs text-muted-foreground">System score (KRA)</p>
+                <p className="text-2xl font-semibold tabular-nums">
+                  {systemTotal.toFixed(2)}
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  out of {systemWeight.toFixed(0)}
+                </p>
+              </div>
+            )}
           </div>
 
           {instance.hr_remarks && (
