@@ -1,76 +1,58 @@
-# Fix — Annual Review Analytics & Calibration truncated at 1,000 employees
+## Issue
+Rolling back Anup Kumar Jha (101708, instance `c293ebc0…9562`) fails with:
+`terminal response (bu_head) missing for instance …; cannot roll back cleanly`
 
-## Confirmed gap
+## Evidence
+- `annual_review_instances`: `overall_status='completed'`, `enabled_stages=[self, dept_head, bu_head]`, `dept_head_id = bu_head_id` (same person heads both).
+- `annual_review_responses`: only `self` (locked) and `dept_head` (locked, submitted 2026-07-18 11:05:29 — matches `finalized_at`). No `bu_head` row exists.
+- `rollback_annual_review_completed` (ADR-129, migration `20260720162430`) picks the highest-seniority stage in `enabled_stages` (`bu_head`), tries to unlock that response, sees `ROW_COUNT=0`, and aborts.
 
-Both the **Analytics** and **Calibration** tabs on `AnnualReviewAdmin` read the entire cycle roster through the same hook:
+## 5-Why RCA
+1. Why does rollback fail? RPC can't find a `bu_head` response to unlock.
+2. Why is it missing? The finalization was recorded under `dept_head` even though the workflow's terminal stage is `bu_head`.
+3. Why under `dept_head`? When `dept_head_id = bu_head_id`, the advance path submitted at the `dept_head` seat (older workflow, before BU-terminal collapsing was consistent) and jumped straight to `completed` without materializing a `bu_head` response row.
+4. Why didn't the resolver notice? It reads only `enabled_stages`, not the actual `annual_review_responses` present on the instance — so it commits to a stage that has no row.
+5. Why is this a class bug? Any instance where the true last-reviewer response lives under a stage lower than the highest enabled stage (dept/BU collapse, HR skipped, inactive higher reviewer, legacy fast-forward) will hit the same guard.
 
-- `AnalyticsTab` (line 1491) → `useCycleInstances(activeCycle.id)`
-- `CalibrationTab` (line 2471) → `useCycleInstances(activeCycle.id)`
+## CAPA — Corrective Action
+Make the terminal-stage resolver **evidence-based** instead of purely `enabled_stages`-based.
 
-`useCycleInstances` calls `svc.listInstancesForCycle` (`src/services/annualReview/annualReviewService.ts:432`):
+### 1. Patch `rollback_annual_review_completed` (new migration)
+- Compute `v_terminal_stage` as: **the highest-seniority reviewer role that BOTH is present in `enabled_stages` AND has a locked/submitted row in `annual_review_responses` for the instance**.
+- Fallback order (unchanged): hr → bu_head → dept_head → skip_manager → manager.
+- Map to the correct `pending_*` status from the chosen stage.
+- Keep the existing "unlock terminal-stage response" step; the guard now only trips for genuinely orphaned instances (which should be impossible after this fix).
+- Preserve every other side-effect (null out `final_rating`, `hr_remarks`, `finalized_at`, `finalized_by`, `total_score`, `criteria_weighted_score`; audit log; admin/hr_pms only; ≥3-char reason; SECURITY INVOKER; same GRANT).
+- Audit metadata gains `enabled_terminal_stage` (what `enabled_stages` said) alongside `terminal_stage` (what was actually rolled back to) so operators can spot collapse cases.
 
-```ts
-db.from('annual_review_instances')
-  .select('*, employee:profiles!...(...)')
-  .eq('cycle_id', cycleId);   // ← no .range(), no paging
-```
+### 2. Mirror the resolver in TS
+- Update `src/lib/annualReview/rollbackTerminalStage.ts` to accept an optional `submittedReviewerRoles` set and pick the highest-seniority stage present in **both** enabled and submitted. Keep the existing enabled-only signature as a fallback overload so nothing else breaks.
+- Update `rollbackTerminalLabel` similarly so the confirm dialog copy ("return the instance to **pending BU Head**") stays truthful when the effective terminal collapses to Dept Head.
+- Wire the caller (Admin → Progress rollback dialog) to pass the response-role set it already has from the instance detail query. If it isn't fetched yet, keep the enabled-only label as a graceful default.
 
-PostgREST silently caps this at **1,000 rows** (POLICY §94, §125, ADR-094). Current cycle has ~2,533 active employees, so Analytics buckets, stage funnel, on-time metrics, rating distribution, and the Calibration override table all silently drop >60% of the population. The Admin → Progress tab is unaffected (already uses `listInstancesPaginated`).
+### 3. One-shot repair block in the same migration
+- For every `completed` instance where the resolver's new evidence-based pick differs from the old enabled-only pick (i.e. would previously have failed), do nothing destructive — just log a `system_audit_logs` row of type `annual_review.rollback_terminal_stage_mismatch` with `{instance_id, enabled_terminal_stage, effective_terminal_stage}` so we can size the blast radius. No data mutation, no `performed_by` (system row, per repo convention).
 
-Downstream, `AnalyticsTab` also feeds these truncated IDs into `useInstanceStageScores`, so per-stage weighted scores are also computed off the wrong denominator.
+### 4. Regression test
+- Add `src/lib/annualReview/rollbackTerminalStage.test.ts` cases:
+  - enabled=[self,dept,bu], submitted={self,dept} → returns `dept_head` / label "pending Department Head".
+  - enabled=[self,manager,skip,dept,bu,hr], submitted={…,hr} → returns `hr`.
+  - enabled=[self], submitted={self} → returns `null` (unchanged).
 
-## Risk & Impact
+## Not touched
+- `enabled_stages` on the instance — not mutated. BU-terminal enforcement (ADR-109) and dept/BU collapse rules stay as-is.
+- No changes to advance/send-back RPCs, RLS, notifications, or the finalization path.
+- No backfill of missing `bu_head` response rows — that would fabricate history.
 
-- **Data**: read-only; no schema change, no writes.
-- **Workflow**: none — same UI, same behavior once rows load.
-- **UI/UX**: Analytics/Calibration will now count the full roster; existing charts and tables render unchanged.
-- **Regression**: `listInstancesForCycle` is also used elsewhere; must audit call sites to confirm they either want the full set (upgrade to paged) or already have their own bounds. Progress grid uses the paginated variant, so no conflict there.
-- **Performance**: One cycle = ~2,533 rows × the embedded `profiles` projection. Paged fetch in 1,000-row chunks (~3 round-trips) on tab open, cached 30 s by React Query. Charts/loops are O(n) already and fine at 2.5k.
-- **Mitigation**: reuse existing `fetchAllPaged` helper (same pattern as `seedInstancesByRules`, comprehensive report, `useMyVisibleEmployeeIds`, etc.), keep single-shot API for existing consumers, add a regression test.
+## Verification (post-approval)
+- Run the patched RPC against `c293ebc0…9562` with the reason typed in the screenshot. Expect return `pending_dept`, `dept_head` response row unlocked, `final_rating/finalized_at/finalized_by/total_score/criteria_weighted_score` cleared, audit log written with both stage values.
+- Confirm the confirmation dialog now reads "pending Department Head" for this instance.
+- Query the new `rollback_terminal_stage_mismatch` audit rows to list any other collapsed instances.
 
-## Plan
+## POLICY / ADR
+- New **ADR-136 — Evidence-based terminal stage for finalized-review rollback** amending ADR-129.
+- POLICY §AR-ROLLBACK-TERMINAL-STAGE updated: terminal stage = highest-seniority role present in both `enabled_stages` **and** submitted `annual_review_responses`.
 
-### 1. Add a paged fetcher in the service
-
-`src/services/annualReview/annualReviewService.ts`
-
-- Add `listAllInstancesForCycle(cycleId)` that wraps the current select with `fetchAllPaged<InstanceWithEmployee>((from, to) => db.from('annual_review_instances').select('*, employee:...').eq('cycle_id', cycleId).order('id').range(from, to))`.
-- Keep `listInstancesForCycle` as a thin wrapper delegating to the paged version (so all existing callers get the fix automatically) — or rename and update call sites. Preferred: **delegate**, zero call-site churn.
-
-### 2. No hook changes required
-
-`useCycleInstances` will pick up the paged result transparently. Query key stays the same so cached data invalidates cleanly.
-
-### 3. Audit sibling call sites
-
-`rg 'listInstancesForCycle|useCycleInstances'` — confirm every caller genuinely wants the full roster (Analytics, Calibration, and any bulk ops). Anything that was implicitly limited to the first 1,000 by accident gets the correct full set.
-
-### 4. Tests
-
-`src/test/annualReview/cycleInstancesPaging.test.ts` — mirrors the existing `comprehensiveReportPaging.test.ts` / `seedInstances.paging.test.ts` pattern:
-
-- Asserts `annualReviewService.ts` source contains `fetchAllPaged<` for the cycle-instances read and chains `.range(from, to)`.
-- Asserts no bare `.from('annual_review_instances').select(...).eq('cycle_id',` remains without a `.range(...)`.
-- Simulates a 2,533-row roster through `fetchAllPaged` and asserts row 1,500 and row 2,532 are both present.
-
-### 5. Docs & memory
-
-- Append DOCUMENTATION.md and POLICY.md changelog: "v2.66.x — Analytics & Calibration paged; POLICY §125 extended to `annual_review_instances` list reads."
-- Update `mem/architecture/profiles-query-policy` compliant-sites list to add `listInstancesForCycle`.
-- Add a short ADR: **ADR-135 — Annual Review cycle-instance reads must page (POLICY §125)**.
-
-## Rollback
-
-Single-file service change plus one test. Revert = restore the two-line select, no data implications.
-
-## Technical details (files touched)
-
-```text
-src/services/annualReview/annualReviewService.ts   (paged fetcher)
-src/test/annualReview/cycleInstancesPaging.test.ts (new regression test)
-DOCUMENTATION.md, POLICY.md                         (changelog + §125 note)
-docs/adr/ADR-135.md                                 (new ADR)
-mem/architecture/profiles-query-policy              (append compliant site)
-```
-
-No migrations, no RPC changes, no UI changes.
+## Risk & rollback
+- Additive migration; the previous RPC body is fully replaced (idempotent CREATE OR REPLACE). Rollback = re-run the ADR-129 migration to restore the enabled-only resolver.
+- No schema change, no RLS change, no data mutation outside the caller's own instance during rollback.
