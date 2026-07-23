@@ -643,6 +643,7 @@ export function AccessControlTab() {
       <RoleCapabilityMatrixCard />
       <AccessExplainCard />
       <OverridesCard />
+      <ManagementBackfillCard />
       <AuditCard />
     </div>
   );
