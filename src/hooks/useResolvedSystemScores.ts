@@ -1,6 +1,6 @@
 import { useQueries } from '@tanstack/react-query';
 import type { AnnualReviewTemplate, CarryKraConfig } from '@/types/annualReview';
-import { buildCarrySnapshot } from '@/services/annualReview/carryKraScore';
+import { buildCarrySnapshot, buildCarrySnapshotForInstance } from '@/services/annualReview/carryKraScore';
 import { normaliseSystemScoreValue } from '@/lib/annualReview/systemScoreNormalise';
 
 /**
@@ -19,6 +19,7 @@ import { normaliseSystemScoreValue } from '@/lib/annualReview/systemScoreNormali
 export function useResolvedSystemScores(
   template: AnnualReviewTemplate | null | undefined,
   instance: {
+    id?: string | null;
     employee_id?: string | null;
     system_scores?: Record<string, number> | null;
     system_scores_raw?: Record<string, number> | null;
@@ -27,6 +28,7 @@ export function useResolvedSystemScores(
 ): { values: Record<string, number>; isLoading: boolean } {
   const systemScores = template?.sections.system_scores ?? [];
   const employeeId = instance?.employee_id ?? undefined;
+  const instanceId = instance?.id ?? undefined;
   const enabled = !!employeeId && typeof fiscalYear === 'number';
 
   const carryEntries = systemScores.filter((s) => s.source === 'carry_kra');
@@ -36,8 +38,13 @@ export function useResolvedSystemScores(
       const cfg: CarryKraConfig = s.carry_config ?? { aggregation: 'overall_avg', excludeNa: true };
       const weight = Number(s.weight) || 0;
       return {
-        queryKey: ['carryKraScore', employeeId, fiscalYear, cfg, weight] as const,
-        queryFn: () => buildCarrySnapshot(employeeId!, fiscalYear!, cfg, weight),
+        // ADR-139: scope cache by instanceId so reviewer-scoped RPC results
+        // never leak across viewers with different visibility.
+        queryKey: ['carryKraScore', employeeId, fiscalYear, cfg, weight, instanceId ?? null] as const,
+        queryFn: () =>
+          instanceId
+            ? buildCarrySnapshotForInstance(instanceId, employeeId!, fiscalYear!, cfg, weight)
+            : buildCarrySnapshot(employeeId!, fiscalYear!, cfg, weight),
         enabled,
         staleTime: 60_000,
       };
