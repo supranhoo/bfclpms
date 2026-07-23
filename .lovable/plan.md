@@ -1,58 +1,63 @@
-## Issue
-Rolling back Anup Kumar Jha (101708, instance `c293ebc0…9562`) fails with:
-`terminal response (bu_head) missing for instance …; cannot roll back cleanly`
+## Why Brundaban's submission failed
 
-## Evidence
-- `annual_review_instances`: `overall_status='completed'`, `enabled_stages=[self, dept_head, bu_head]`, `dept_head_id = bu_head_id` (same person heads both).
-- `annual_review_responses`: only `self` (locked) and `dept_head` (locked, submitted 2026-07-18 11:05:29 — matches `finalized_at`). No `bu_head` row exists.
-- `rollback_annual_review_completed` (ADR-129, migration `20260720162430`) picks the highest-seniority stage in `enabled_stages` (`bu_head`), tries to unlock that response, sees `ROW_COUNT=0`, and aborts.
+Instance `2876e38f…` for employee `ffe76b92…`:
+- `enabled_stages = [self, dept_head, bu_head]`
+- `dept_head_id = bu_head_id = bdf687d4…` (Brundaban — both Dept and BU head)
+- `overall_status = pending_dept`
+- Responses: `self` locked; `dept_head` draft (Brundaban's); no `bu_head` row.
 
-## 5-Why RCA
-1. Why does rollback fail? RPC can't find a `bu_head` response to unlock.
-2. Why is it missing? The finalization was recorded under `dept_head` even though the workflow's terminal stage is `bu_head`.
-3. Why under `dept_head`? When `dept_head_id = bu_head_id`, the advance path submitted at the `dept_head` seat (older workflow, before BU-terminal collapsing was consistent) and jumped straight to `completed` without materializing a `bu_head` response row.
-4. Why didn't the resolver notice? It reads only `enabled_stages`, not the actual `annual_review_responses` present on the instance — so it commits to a stage that has no row.
-5. Why is this a class bug? Any instance where the true last-reviewer response lives under a stage lower than the highest enabled stage (dept/BU collapse, HR skipped, inactive higher reviewer, legacy fast-forward) will hit the same guard.
+### 5 Whys
+1. **Why the toast?** `tg_annual_review_guard_completion` raised ADR-127b — the completion invariant found no locked response for terminal stage `bu_head`.
+2. **Why did `overall_status` jump to `completed`?** `advance_annual_review_status('dept_head')` called `annual_review_next_status(effective_chain, 'pending_dept')`, and `effective_chain = [self, bu_head]` (dept_head skipped as a **duplicate reviewer**, BU wins per seniority in `annual_review_effective_chain_details`). `dept_head` isn't in that chain → helper returns `'completed'`.
+3. **Why no `bu_head` locked response?** The RPC only locks the response row for `p_reviewer_role = dept_head`; nothing mirrors the lock onto the surviving higher stage when a duplicate collapse happens at submit time.
+4. **Why is `dept_head` still in `enabled_stages`?** Instance was created/seeded before the BU-head-terminal normalizer (ADR-109 `enforce_bu_head_terminal_stage`) fired for it, so the redundant slot was never stripped.
+5. **Why did the guard catch it instead of the RPC preventing it?** ADR-127b (correctly) refuses to silently mark instances complete without evidence at the terminal stage — the RPC just isn't producing that evidence in the collapse case.
 
-## CAPA — Corrective Action
-Make the terminal-stage resolver **evidence-based** instead of purely `enabled_stages`-based.
+**Root cause:** `advance_annual_review_status` doesn't reconcile the submitted role with the effective-chain's surviving terminal role when the same person heads both stages. The dept_head submission is treated as satisfying dept_head, but the surviving terminal `bu_head` row is never locked — so the completion guard fails.
 
-### 1. Patch `rollback_annual_review_completed` (new migration)
-- Compute `v_terminal_stage` as: **the highest-seniority reviewer role that BOTH is present in `enabled_stages` AND has a locked/submitted row in `annual_review_responses` for the instance**.
-- Fallback order (unchanged): hr → bu_head → dept_head → skip_manager → manager.
-- Map to the correct `pending_*` status from the chosen stage.
-- Keep the existing "unlock terminal-stage response" step; the guard now only trips for genuinely orphaned instances (which should be impossible after this fix).
-- Preserve every other side-effect (null out `final_rating`, `hr_remarks`, `finalized_at`, `finalized_by`, `total_score`, `criteria_weighted_score`; audit log; admin/hr_pms only; ≥3-char reason; SECURITY INVOKER; same GRANT).
-- Audit metadata gains `enabled_terminal_stage` (what `enabled_stages` said) alongside `terminal_stage` (what was actually rolled back to) so operators can spot collapse cases.
+## Impact scan
 
-### 2. Mirror the resolver in TS
-- Update `src/lib/annualReview/rollbackTerminalStage.ts` to accept an optional `submittedReviewerRoles` set and pick the highest-seniority stage present in **both** enabled and submitted. Keep the existing enabled-only signature as a fallback overload so nothing else breaks.
-- Update `rollbackTerminalLabel` similarly so the confirm dialog copy ("return the instance to **pending BU Head**") stays truthful when the effective terminal collapses to Dept Head.
-- Wire the caller (Admin → Progress rollback dialog) to pass the response-role set it already has from the instance detail query. If it isn't fetched yet, keep the enabled-only label as a graceful default.
+Any instance where two consecutive stages share a reviewer and the lower stage is the one currently pending. Query to enumerate:
+```
+enabled has both dept_head and bu_head AND dept_head_id = bu_head_id
+  AND overall_status = 'pending_dept'
+```
+Same shape applies to `manager=skip_manager`, `skip_manager=dept_head`, `dept_head=bu_head`, `bu_head=hr` — anywhere the higher tier wins the dedupe. Brundaban's instance is the reported case; sweep will find the rest.
 
-### 3. One-shot repair block in the same migration
-- For every `completed` instance where the resolver's new evidence-based pick differs from the old enabled-only pick (i.e. would previously have failed), do nothing destructive — just log a `system_audit_logs` row of type `annual_review.rollback_terminal_stage_mismatch` with `{instance_id, enabled_terminal_stage, effective_terminal_stage}` so we can size the blast radius. No data mutation, no `performed_by` (system row, per repo convention).
+## Fix plan
 
-### 4. Regression test
-- Add `src/lib/annualReview/rollbackTerminalStage.test.ts` cases:
-  - enabled=[self,dept,bu], submitted={self,dept} → returns `dept_head` / label "pending Department Head".
-  - enabled=[self,manager,skip,dept,bu,hr], submitted={…,hr} → returns `hr`.
-  - enabled=[self], submitted={self} → returns `null` (unchanged).
+### 1. Server RPC — mirror lock onto surviving terminal (SSOT change)
+Patch `advance_annual_review_status` (new migration) so that when, after locking `p_reviewer_role`:
+- `v_next = 'completed'`, AND
+- the terminal stage in `annual_review_effective_chain_details` (highest non-skipped) is a **different** role than `p_reviewer_role`, AND
+- that terminal role's reviewer_id equals the caller (duplicate-reviewer collapse — safety check),
 
-## Not touched
-- `enabled_stages` on the instance — not mutated. BU-terminal enforcement (ADR-109) and dept/BU collapse rules stay as-is.
-- No changes to advance/send-back RPCs, RLS, notifications, or the finalization path.
-- No backfill of missing `bu_head` response rows — that would fabricate history.
+then UPSERT an `annual_review_responses` row for `(instance_id, terminal_role)` with `is_locked=true`, `submitted_at=now()`, copy `criteria_scores`/`weighted_score`/`comments` from the just-locked lower-stage row, and audit as `annual_review.duplicate_reviewer_mirror` with `{from_role, to_role, reviewer_id}`. Everything else in the RPC (ADR-124 final-summary persistence) stays as-is.
 
-## Verification (post-approval)
-- Run the patched RPC against `c293ebc0…9562` with the reason typed in the screenshot. Expect return `pending_dept`, `dept_head` response row unlocked, `final_rating/finalized_at/finalized_by/total_score/criteria_weighted_score` cleared, audit log written with both stage values.
-- Confirm the confirmation dialog now reads "pending Department Head" for this instance.
-- Query the new `rollback_terminal_stage_mismatch` audit rows to list any other collapsed instances.
+This makes the guard's evidence check pass, keeps a real audit trail, and stops the RPC from ever raising ADR-127b for a legitimate submission.
 
-## POLICY / ADR
-- New **ADR-136 — Evidence-based terminal stage for finalized-review rollback** amending ADR-129.
-- POLICY §AR-ROLLBACK-TERMINAL-STAGE updated: terminal stage = highest-seniority role present in both `enabled_stages` **and** submitted `annual_review_responses`.
+### 2. Data repair for existing pending instances
+Same migration:
+- For all `pending_dept` instances where `dept_head_id = bu_head_id`, strip `dept_head` from `enabled_stages` (aligns with POLICY §AR-BU-HEAD-TERMINAL) and set `overall_status = 'pending_bu'`. Log each row in `system_audit_logs` (`annual_review.bu_terminal_normalized`).
+- Same treatment for the sibling collapses (`skip=dept`, `manager=skip`, `bu=hr`) — strip the lower duplicate on any currently-pending row where the lower stage is where the review is stuck.
+- Existing `pending_bu` / `pending_hr` rows already have the higher role active, so no state change needed for them; the RPC change alone handles their submit.
 
-## Risk & rollback
-- Additive migration; the previous RPC body is fully replaced (idempotent CREATE OR REPLACE). Rollback = re-run the ADR-129 migration to restore the enabled-only resolver.
-- No schema change, no RLS change, no data mutation outside the caller's own instance during rollback.
+### 3. Regression tests
+- `src/test/annualReview/duplicateReviewerCollapse.test.ts` — asserts the new migration file defines the mirror UPSERT (matches on `INSERT INTO public.annual_review_responses … ON CONFLICT` inside `advance_annual_review_status`) and audits `annual_review.duplicate_reviewer_mirror`.
+- Extend `src/lib/annualReview/rollbackTerminalStage.test.ts` mental model note in code comment — no logic change there; rollback already handles collapse via ADR-136.
+
+### 4. Documentation
+- New ADR `ADR-137 — Duplicate-reviewer collapse mirrors lock onto surviving terminal stage`.
+- POLICY.md — add §AR-DUPLICATE-COLLAPSE-MIRROR under the AR-BU-HEAD-TERMINAL family.
+- CHANGELOG entry.
+
+## UI impact
+None. No component, prop, or route changes. Brundaban re-clicks Submit after the migration runs; the review completes and the final summary is persisted via ADR-124's existing path.
+
+## Rollback
+Prior `advance_annual_review_status` is retained in migration history; a rollback migration can re-`CREATE OR REPLACE` the pre-ADR-137 body. The data-repair `UPDATE`s are additive-normalizing (dropping a redundant stage where the reviewer is identical); reverting `enabled_stages` back to include `dept_head` is a one-liner if ever needed.
+
+## Risk & scalability
+- Data impact: `enabled_stages` and `overall_status` are updated only on the narrow set matched by the dedupe query — expected < 100 rows.
+- Workflow impact: none for stages that already worked; the collapse case now completes instead of erroring.
+- Regression risk: low — mirror only fires when `v_next='completed'` AND terminal role differs AND same reviewer; ADR-127b still guards every other path.
