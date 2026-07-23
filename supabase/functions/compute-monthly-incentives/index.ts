@@ -879,28 +879,39 @@ serve(async (req) => {
       );
     }
 
-    // Delete existing records for affected employees before upserting.
-    // For production programmes (canonical sub-period model), also purge legacy 'Full Month' rows
-    // so they cannot survive beside new 1-10 / 11-20 / 21-31 rows. (ADR-044 v2)
-    if (scopedRecords.length > 0) {
-      const uniqueEmployeeIds = [...new Set(scopedRecords.map((r: any) => r.employee_id))];
+    // Delete existing records for the FULL roster scope before upserting.
+    // ADR-141 (2026-07-23): the delete step must run even when scopedRecords is empty
+    // (e.g. a sub-period was previously populated but corrected to zero). Otherwise
+    // stale confirmed rows survive and reports diverge from Data Entry.
+    // Paid rows are preserved (linked to disbursement); draft/confirmed rows are purged.
+    // For production programmes, also purge legacy 'Full Month' rows (ADR-044 v2).
+    const affectedEmployeeIds = [...new Set(
+      [
+        ...scopedRecords.map((r: any) => r.employee_id),
+        ...(employees as any[]).map((e: any) => e.id),
+      ],
+    )];
+    let legacyDeleted = 0;
+    let zeroedPeriodsCleaned = 0;
+    if (affectedEmployeeIds.length > 0) {
       const empBatchSize = 50;
-      let legacyDeleted = 0;
-      for (let i = 0; i < uniqueEmployeeIds.length; i += empBatchSize) {
-        const empBatch = uniqueEmployeeIds.slice(i, i + empBatchSize);
+      for (let i = 0; i < affectedEmployeeIds.length; i += empBatchSize) {
+        const empBatch = affectedEmployeeIds.slice(i, i + empBatchSize);
 
         let delQuery = supabase
           .from('employee_incentive_records')
-          .delete()
+          .delete({ count: 'exact' })
           .eq('program_id', program_id)
           .eq('review_period', review_period)
           .eq('review_year', review_year)
+          .neq('status', 'paid')
           .in('employee_id', empBatch);
         if (scopePaymentPeriod) {
           delQuery = delQuery.eq('payment_period', scopePaymentPeriod);
         }
-        const { error: delError } = await delQuery;
+        const { error: delError, count: delCount } = await delQuery;
         if (delError) console.error('Delete error:', delError);
+        else zeroedPeriodsCleaned += delCount || 0;
 
         // Legacy 'Full Month' production cleanup when scope didn't already cover it
         if (program.program_type === 'production' && scopePaymentPeriod && scopePaymentPeriod !== 'Full Month') {
@@ -911,14 +922,18 @@ serve(async (req) => {
             .eq('review_period', review_period)
             .eq('review_year', review_year)
             .eq('payment_period', 'Full Month')
+            .neq('status', 'paid')
             .in('employee_id', empBatch);
           if (legacyErr) console.error('Legacy Full Month cleanup error:', legacyErr);
           else legacyDeleted += legacyCount || 0;
         }
       }
-      diagnostics.legacy_rows_deleted = legacyDeleted;
+    }
+    diagnostics.legacy_rows_deleted = legacyDeleted;
+    diagnostics.rows_deleted_before_upsert = zeroedPeriodsCleaned;
 
-      // Upsert fresh records
+    // Upsert fresh records (may be zero when every sub-period was zeroed out)
+    if (scopedRecords.length > 0) {
       const batchSize = 100;
       for (let i = 0; i < scopedRecords.length; i += batchSize) {
         const batch = scopedRecords.slice(i, i + batchSize);
