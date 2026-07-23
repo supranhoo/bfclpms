@@ -30,7 +30,7 @@ import { enabledChain } from '@/lib/annualReview/stageChain';
 import { STAGE_TO_STATUS, STATUS_LABEL, STAGE_LABEL } from '@/lib/annualReview/constants';
 import { RECOMMENDATION_KEY, RECOMMENDATION_ROLES } from '@/components/annual-review/OverallRecommendationCard';
 
-const STAGE_ORDER: AnnualReviewerRole[] = ['self', 'manager', 'skip_manager', 'dept_head', 'bu_head', 'hr'];
+const STAGE_ORDER: AnnualReviewerRole[] = ['self', 'manager', 'skip_manager', 'dept_head', 'bu_head', 'hr', 'management'];
 
 /** Reverse of STAGE_TO_STATUS: which reviewer role owns each pending status. */
 const STATUS_TO_STAGE: Partial<Record<AnnualReviewStatus, AnnualReviewerRole>> = {
@@ -40,6 +40,7 @@ const STATUS_TO_STAGE: Partial<Record<AnnualReviewStatus, AnnualReviewerRole>> =
   pending_dept: 'dept_head',
   pending_bu: 'bu_head',
   pending_hr: 'hr',
+  pending_management: 'management',
 };
 
 /** Which instance FK holds the owner user_id for a given reviewer stage. */
@@ -50,6 +51,7 @@ const STAGE_TO_OWNER_KEY: Record<AnnualReviewerRole, keyof AnnualReviewInstance>
   dept_head: 'dept_head_id',
   bu_head: 'bu_head_id',
   hr: 'hr_id',
+  management: 'management_id',
 };
 
 export interface ProfileLite {
