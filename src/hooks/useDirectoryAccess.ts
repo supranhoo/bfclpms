@@ -2,13 +2,14 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 
-export type DirectoryAccessScope = 'all' | 'bu' | 'team';
-export type AssistScope = 'all' | 'bu' | 'team' | 'direct' | 'none';
+export type DirectoryAccessScope = 'all' | 'bu' | 'department' | 'team';
+export type AssistScope = 'all' | 'bu' | 'department' | 'team' | 'direct' | 'none';
 
 export interface AssistBlock {
   canAssist: boolean;
   scope: AssistScope;
   businessUnitIds: string[];
+  departmentIds: string[];
   source: string | null;
 }
 
@@ -17,6 +18,7 @@ export interface DirectoryAccess {
   scope: DirectoryAccessScope | null;
   businessUnitId: string | null;
   businessUnitIds: string[];
+  departmentIds: string[];
   canAssist: boolean;
   source: string | null;
   assist: AssistBlock;
@@ -24,8 +26,9 @@ export interface DirectoryAccess {
 
 const DENY: DirectoryAccess = {
   canAccess: false, scope: null, businessUnitId: null, businessUnitIds: [],
+  departmentIds: [],
   canAssist: false, source: null,
-  assist: { canAssist: false, scope: 'none', businessUnitIds: [], source: null },
+  assist: { canAssist: false, scope: 'none', businessUnitIds: [], departmentIds: [], source: null },
 };
 
 /**
@@ -51,12 +54,14 @@ export function useDirectoryAccess(): DirectoryAccess & { isLoading: boolean } {
         scope?: DirectoryAccessScope;
         business_unit_id?: string | null;
         business_unit_ids?: string[] | null;
+        department_ids?: string[] | null;
         can_assist?: boolean;
         source?: string | null;
         assist?: {
           can_assist?: boolean;
           scope?: AssistScope;
           business_unit_ids?: string[] | null;
+          department_ids?: string[] | null;
           source?: string | null;
         };
       };
@@ -64,17 +69,20 @@ export function useDirectoryAccess(): DirectoryAccess & { isLoading: boolean } {
       const ids = Array.isArray(row.business_unit_ids) && row.business_unit_ids.length > 0
         ? row.business_unit_ids
         : (row.business_unit_id ? [row.business_unit_id] : []);
+      const deptIds = Array.isArray(row.department_ids) ? row.department_ids : [];
       const assist: AssistBlock = row.assist
         ? {
             canAssist: Boolean(row.assist.can_assist),
             scope: (row.assist.scope ?? 'none') as AssistScope,
             businessUnitIds: Array.isArray(row.assist.business_unit_ids) ? row.assist.business_unit_ids : [],
+            departmentIds: Array.isArray(row.assist.department_ids) ? row.assist.department_ids : [],
             source: row.assist.source ?? null,
           }
         : {
             canAssist: row.can_assist !== false,
             scope: (row.scope ?? 'none') as AssistScope,
             businessUnitIds: ids,
+            departmentIds: deptIds,
             source: row.source ?? null,
           };
       return {
@@ -82,6 +90,7 @@ export function useDirectoryAccess(): DirectoryAccess & { isLoading: boolean } {
         scope: row.scope ?? 'all',
         businessUnitId: row.business_unit_id ?? null,
         businessUnitIds: ids,
+        departmentIds: deptIds,
         canAssist: row.can_assist !== false,
         source: row.source ?? null,
         assist,
