@@ -564,9 +564,19 @@ export default function UserManagement() {
   const createDepartmentOptions = useMemo(() => createFilteredDepartments.map(d => ({ value: d.id, label: d.name })), [createFilteredDepartments]);
   const designationOptions = useMemo(() => (designationsList || []).map(d => ({ value: d.name, label: d.name })), [designationsList]);
   const pmsGradeOptions = useMemo(() => (pmsGradesList || []).map(g => ({ value: g.name, label: g.name })), [pmsGradesList]);
-  const employeeCategoryOptions = useMemo(
-    () => (employeeCategoriesList || []).filter((c: any) => c.is_active !== false).map((c: any) => ({ value: c.name, label: c.name })),
-    [employeeCategoriesList],
+  // Company-scoped: Employee Categories are per-company master data. Two
+  // separate lists so Add (uses selected new company) and Edit (uses the
+  // selected user's company) can't cross-contaminate — otherwise
+  // `create-employee` rejects with "Unknown employee category: '<name>'".
+  const { data: newEmployeeCategoriesList } = useEmployeeCategories(newCompanyId || undefined);
+  const { data: editEmployeeCategoriesList } = useEmployeeCategories(selectedUser?.company_id || undefined);
+  const newEmployeeCategoryOptions = useMemo(
+    () => (newEmployeeCategoriesList || []).filter((c: any) => c.is_active !== false).map((c: any) => ({ value: c.name, label: c.name })),
+    [newEmployeeCategoriesList],
+  );
+  const editEmployeeCategoryOptions = useMemo(
+    () => (editEmployeeCategoriesList || []).filter((c: any) => c.is_active !== false).map((c: any) => ({ value: c.name, label: c.name })),
+    [editEmployeeCategoriesList],
   );
   const employmentStatusOptions = useMemo(
     () => (employmentStatusesList || []).filter((s: any) => s.is_active !== false).map((s: any) => ({ value: s.name, label: s.name })),
