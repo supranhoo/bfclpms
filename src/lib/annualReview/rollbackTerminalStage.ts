@@ -13,10 +13,11 @@ import type { AnnualReviewerRole } from '@/types/annualReview';
  * Returns `null` when nothing upstream of `self` is available to unlock.
  */
 const SENIORITY: Exclude<AnnualReviewerRole, 'self'>[] = [
-  'hr', 'bu_head', 'dept_head', 'skip_manager', 'manager',
+  'management', 'hr', 'bu_head', 'dept_head', 'skip_manager', 'manager',
 ];
 
 const LABELS: Record<Exclude<AnnualReviewerRole, 'self'>, string> = {
+  management: 'pending Management',
   hr: 'pending HR',
   bu_head: 'pending BU Head',
   dept_head: 'pending Department Head',
