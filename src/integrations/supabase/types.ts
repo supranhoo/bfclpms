@@ -14011,6 +14011,15 @@ export type Database = {
         Args: { p_dry_run?: boolean }
         Returns: Json
       }
+      backfill_management_stage_for_manager: {
+        Args: {
+          p_dry_run?: boolean
+          p_management_uid: string
+          p_reason?: string
+          p_reopen_completed?: boolean
+        }
+        Returns: Json
+      }
       backfill_multimonth_percolation: {
         Args: never
         Returns: {
@@ -14761,6 +14770,23 @@ export type Database = {
           skip_level_score: number
           status: string
           weightage: number
+        }[]
+      }
+      get_management_seeding_gaps: {
+        Args: { p_management_uid: string }
+        Returns: {
+          bu_head_id: string
+          cycle_id: string
+          cycle_name: string
+          employee_code: string
+          employee_id: string
+          employee_name: string
+          enabled_stages: Json
+          has_management_id: boolean
+          has_management_stage: boolean
+          instance_id: string
+          needs_reopen: boolean
+          overall_status: string
         }[]
       }
       get_manager_team_roster: {
