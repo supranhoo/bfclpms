@@ -9,9 +9,14 @@ export interface DirectoryAccess {
   scope: DirectoryAccessScope | null;
   businessUnitId: string | null;
   businessUnitIds: string[];
+  canAssist: boolean;
+  source: string | null;
 }
 
-const DENY: DirectoryAccess = { canAccess: false, scope: null, businessUnitId: null, businessUnitIds: [] };
+const DENY: DirectoryAccess = {
+  canAccess: false, scope: null, businessUnitId: null, businessUnitIds: [],
+  canAssist: false, source: null,
+};
 
 /**
  * Resolves the current user's access to the Annual Review "All employees"
@@ -36,6 +41,8 @@ export function useDirectoryAccess(): DirectoryAccess & { isLoading: boolean } {
         scope?: DirectoryAccessScope;
         business_unit_id?: string | null;
         business_unit_ids?: string[] | null;
+        can_assist?: boolean;
+        source?: string | null;
       };
       if (!row.can_access) return DENY;
       const ids = Array.isArray(row.business_unit_ids) && row.business_unit_ids.length > 0
@@ -46,6 +53,8 @@ export function useDirectoryAccess(): DirectoryAccess & { isLoading: boolean } {
         scope: row.scope ?? 'all',
         businessUnitId: row.business_unit_id ?? null,
         businessUnitIds: ids,
+        canAssist: row.can_assist !== false,
+        source: row.source ?? null,
       };
     },
   });
