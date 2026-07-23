@@ -14042,6 +14042,15 @@ export type Database = {
         }
         Returns: number
       }
+      compute_carry_kra_contribution: {
+        Args: {
+          p_cfg: Json
+          p_employee_id: string
+          p_fy_start: number
+          p_weight: number
+        }
+        Returns: number
+      }
       compute_org_kpi_score_for_kpi: {
         Args: { p_achieved: number; p_kpi_id: string }
         Returns: {
@@ -14903,6 +14912,10 @@ export type Database = {
           p_user_id: string
         }
         Returns: boolean
+      }
+      hydrate_annual_review_system_scores: {
+        Args: { p_instance_id: string }
+        Returns: Json
       }
       iac_log: {
         Args: {
