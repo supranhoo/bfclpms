@@ -13679,6 +13679,49 @@ export type Database = {
         Args: { p_department_id: string; p_employee_id: string; p_files: Json }
         Returns: Json
       }
+      _self_profile_locked_snapshot: {
+        Args: never
+        Returns: {
+          avatar_url: string | null
+          company_id: string | null
+          confirmation_date: string | null
+          confirmation_increment_effective_date: string | null
+          confirmation_increment_granted: boolean
+          created_at: string
+          deactivated_at: string | null
+          department_id: string | null
+          designated_proxy_user_id: string | null
+          designation: string | null
+          doj: string | null
+          email: string | null
+          employee_category: string | null
+          employee_code: string | null
+          employment_status: string | null
+          full_name: string | null
+          functional_manager_id: string | null
+          group_doj: string | null
+          has_real_email: boolean
+          id: string
+          is_active: boolean
+          is_dummy_employee: boolean
+          level: string | null
+          level_id: string | null
+          location_id: string | null
+          mobile_number: string | null
+          pms_grade: string | null
+          pms_grade_id: string | null
+          portal_access: boolean
+          previous_employment_status: string | null
+          reporting_manager_id: string | null
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "profiles"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       acknowledge_annual_review_instance: {
         Args: { p_instance_id: string; p_rebuttal?: string }
         Returns: undefined
