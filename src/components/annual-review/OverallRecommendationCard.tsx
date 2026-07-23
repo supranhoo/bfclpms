@@ -26,6 +26,7 @@ const STAGE_LABEL: Record<AnnualReviewerRole, string> = {
   dept_head: 'Department Head',
   bu_head: 'BU Head',
   hr: 'HR',
+  management: 'Management',
 };
 
 /** Roles that may author an overall recommendation. */
