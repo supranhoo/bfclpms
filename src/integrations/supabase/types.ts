@@ -753,6 +753,7 @@ export type Database = {
           hr_remarks: string | null
           id: string
           language_pref: string
+          management_id: string | null
           manager_id: string | null
           overall_status: Database["public"]["Enums"]["annual_review_status"]
           proxy_submission_id: string | null
@@ -791,6 +792,7 @@ export type Database = {
           hr_remarks?: string | null
           id?: string
           language_pref?: string
+          management_id?: string | null
           manager_id?: string | null
           overall_status?: Database["public"]["Enums"]["annual_review_status"]
           proxy_submission_id?: string | null
@@ -829,6 +831,7 @@ export type Database = {
           hr_remarks?: string | null
           id?: string
           language_pref?: string
+          management_id?: string | null
           manager_id?: string | null
           overall_status?: Database["public"]["Enums"]["annual_review_status"]
           proxy_submission_id?: string | null
@@ -909,6 +912,20 @@ export type Database = {
           {
             foreignKeyName: "annual_review_instances_hr_id_fkey"
             columns: ["hr_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "annual_review_instances_management_id_fkey"
+            columns: ["management_id"]
+            isOneToOne: false
+            referencedRelation: "eligible_login_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "annual_review_instances_management_id_fkey"
+            columns: ["management_id"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
@@ -15493,6 +15510,10 @@ export type Database = {
       }
       resolve_global_safety_head: { Args: never; Returns: string }
       resolve_hr_head: { Args: { p_company_id: string }; Returns: string }
+      resolve_management_reviewer: {
+        Args: { p_bu_head_id: string; p_employee_id: string }
+        Returns: string
+      }
       resolve_org_kpi_target_kpis: {
         Args: {
           p_category_id: string
@@ -16044,6 +16065,7 @@ export type Database = {
         | "pending_dept"
         | "pending_bu"
         | "pending_hr"
+        | "pending_management"
         | "completed"
         | "excluded"
       annual_reviewer_role:
@@ -16053,6 +16075,7 @@ export type Database = {
         | "dept_head"
         | "bu_head"
         | "hr"
+        | "management"
       annual_score_method: "avg_all" | "last_6" | "custom"
       app_role:
         | "admin"
@@ -16320,6 +16343,7 @@ export const Constants = {
         "pending_dept",
         "pending_bu",
         "pending_hr",
+        "pending_management",
         "completed",
         "excluded",
       ],
@@ -16330,6 +16354,7 @@ export const Constants = {
         "dept_head",
         "bu_head",
         "hr",
+        "management",
       ],
       annual_score_method: ["avg_all", "last_6", "custom"],
       app_role: [

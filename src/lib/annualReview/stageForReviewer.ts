@@ -15,6 +15,7 @@ export interface StageReviewerInstance {
   dept_head_id: string | null;
   bu_head_id: string | null;
   hr_id: string | null;
+  management_id?: string | null;
 }
 
 export function stageForReviewer(
@@ -28,6 +29,7 @@ export function stageForReviewer(
     case 'pending_dept':    return inst.dept_head_id === uid ? 'dept_head' : null;
     case 'pending_bu':      return inst.bu_head_id === uid ? 'bu_head' : null;
     case 'pending_hr':      return inst.hr_id === uid ? 'hr' : null;
+    case 'pending_management': return inst.management_id === uid ? 'management' : null;
     default: return null;
   }
 }

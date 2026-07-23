@@ -149,7 +149,7 @@ export function TeamReviewDetailContent({
   });
 
   const comparison = useMemo(() => {
-    const labels: Record<AnnualReviewerRole, string> = { self: 'Self', manager: 'Manager', skip_manager: 'Skip', dept_head: 'Dept', bu_head: 'BU', hr: 'HR' };
+    const labels: Record<AnnualReviewerRole, string> = { self: 'Self', manager: 'Manager', skip_manager: 'Skip', dept_head: 'Dept', bu_head: 'BU', hr: 'HR', management: 'Mgmt' };
     const previous: { label: string; role: AnnualReviewerRole; values: Record<string, number | undefined>; remarks: Record<string, string> }[] = [];
     for (const r of responses) {
       // POLICY §AR-STAGE-LABEL-DISPLAY-SSOT (ADR-128): duplicate-reviewer

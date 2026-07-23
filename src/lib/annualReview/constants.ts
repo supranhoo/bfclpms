@@ -27,6 +27,7 @@ export const STATUS_LABEL: Record<AnnualReviewStatus, string> = {
   pending_dept:    'Dept Head Review Pending',
   pending_bu:      'BU Head Review Pending',
   pending_hr:      'HR Finalization Pending',
+  pending_management: 'Management Review Pending',
   completed:       'Completed',
   excluded:        'Excluded',
 };
@@ -39,12 +40,13 @@ export const STATUS_BADGE_CLASS: Record<AnnualReviewStatus, string> = {
   pending_dept:    'bg-teal-500/15 text-teal-400 border-teal-500/30',
   pending_bu:      'bg-indigo-500/15 text-indigo-400 border-indigo-500/30',
   pending_hr:      'bg-yellow-500/15 text-yellow-400 border-yellow-500/30',
+  pending_management: 'bg-fuchsia-500/15 text-fuchsia-400 border-fuchsia-500/30',
   completed:       'bg-emerald-500/15 text-emerald-400 border-emerald-500/30',
   excluded:        'bg-rose-500/15 text-rose-400 border-rose-500/30',
 };
 
 /** Stages in canonical order for the stepper UI. */
-export const STAGE_ORDER: AnnualReviewerRole[] = ['self', 'manager', 'skip_manager', 'dept_head', 'bu_head', 'hr'];
+export const STAGE_ORDER: AnnualReviewerRole[] = ['self', 'manager', 'skip_manager', 'dept_head', 'bu_head', 'hr', 'management'];
 
 export const STAGE_LABEL: Record<AnnualReviewerRole, string> = {
   self:          'Self Review',
@@ -53,6 +55,7 @@ export const STAGE_LABEL: Record<AnnualReviewerRole, string> = {
   dept_head:     'Dept Head',
   bu_head:       'BU Head',
   hr:            'HR Final',
+  management:    'Management',
 };
 
 /** Which stage corresponds to which `overall_status`. */
@@ -63,6 +66,7 @@ export const STAGE_TO_STATUS: Record<AnnualReviewerRole, AnnualReviewStatus> = {
   dept_head:    'pending_dept',
   bu_head:      'pending_bu',
   hr:           'pending_hr',
+  management:   'pending_management',
 };
 
 export const FINAL_RATINGS = ['Outstanding', 'Good', 'Average', 'Poor'] as const;
