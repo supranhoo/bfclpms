@@ -1,74 +1,54 @@
+## ADR-147 — Exclude upline officers from an HOD's directory scope
 
-## Why Jyoti (101789) can see Prabhat (101757)
+### Root cause (verified)
+- Sajid Raza (100264) — `department_id = 1050 TPD-Process`, and also `business_units.head_user_id` for `1050 TPD`.
+- Jyoti (101789) — HOD of `1050 TPD-Process` (same department).
+- ADR-146 restricts an HOD's `search_active_employees_for_review` / assist scope to `department_ids = [own dept]`. Membership alone qualifies Sajid, so he appears in Jyoti's directory even though he is her BU Head.
 
-Confirmed from the DB, not guessed:
+The resolver has no "don't let a junior see their senior" rule. It must exclude the BU Head of the HOD's BU (and, for symmetry, any Management/Skip‑level above the HOD) from the HOD's department scope.
 
-- **Jyoti Prakash Dwivedi (101789)** — `departments.head_user_id = Jyoti` on dept **"1050 TPD-Process"** → she is an **HOD**.
-- **Prabhat Kumar Singh (101757)** — dept **"1050 TPD-Mech"** (different department), reporting_manager = BU head.
-- Both departments sit under the **same BU: "1050 TPD"** (`business_unit_id = 88e3ed27…`).
+### Fix
+Add an **upline-exclusion filter** to the `department`-scoped path only. Do not touch `all` / `bu` / `team` scopes.
 
-`annual_review_directory_access(Jyoti)` executes the HOD branch (resolver lines 82–117):
+Excluded from an HOD's department scope:
+1. `business_units.head_user_id` of the HOD's BU (Sajid case).
+2. Any user who is the HOD themselves (self — already excluded elsewhere, re-affirm).
+3. Any user whose `annual_review_instances.management_id` chain resolves upstream of the HOD in that cycle (defensive; skip if not cheap to compute — flag for follow-up).
 
-```
-v_bu_ids := departments.business_unit_id WHERE head_user_id = Jyoti  → {1050 TPD}
-v_source := 'hod'
-v_scope  := 'bu'                    ← entire BU, not just her dept
-```
+Rules 1–2 are the concrete fix; rule 3 is only added if it's a single join.
 
-So the search RPC returns every active employee in BU "1050 TPD" — including Prabhat in the sibling dept TPD-Mech. That is the HOD-scope leak the last plan flagged for *assist* but never closed for *search*.
+### Changes
+1. **Migration `20260723_adr_147_hod_upline_exclusion.sql`**
+   - Update `public.annual_review_directory_access(uid)` — no signature change; when `v_scope = 'department'`, also return `excluded_user_ids uuid[]` containing the BU Head(s) of the HOD's BU.
+   - Update `public.search_active_employees_for_review(...)` to apply `AND p.id <> ALL(excluded_user_ids)` in the `department` branch.
+   - Update `public.create_or_get_annual_review_instance(...)` to reject creation when the target employee is in `excluded_user_ids` (raise `ADR-147: cannot start review for upline officer`).
+   - Update `public.get_annual_review_access_explain(uid)` to surface `excluded_user_ids` with reason `"upline: BU Head"` so the Access Control "Scope Viewer" shows why.
+   - Audit event `annual_review.access.upline_blocked` when create is refused.
 
-## Fix (single migration + tiny UI trace update)
+2. **Frontend**
+   - `src/services/annualReview/employeeDirectory.ts` — no signature change; RPC filters server-side.
+   - `src/hooks/useDirectoryAccess.ts` — add optional `excludedUserIds: string[]` to `DirectoryAccess` for display only.
+   - `src/components/admin/annualReview/AccessControlTab.tsx` — show excluded IDs in the Scope Trace card.
 
-### 1. Add HOD-owned-department scope to the resolver
+3. **Docs & policy**
+   - New ADR `docs/adr/ADR-147.md`.
+   - `POLICY.md` §AR-DIRECTORY-ACCESS-MATRIX — append rule: "HOD department scope excludes the BU Head of that BU."
+   - `mem/features/annual-review/directory-access.md` — add exclusion clause.
 
-Extend `annual_review_directory_access` to compute an HOD's department set:
+4. **Tests**
+   - `src/test/annualReview/directoryAccess.test.ts` — add case: HOD sees own-dept members but not BU Head of own BU.
+   - SQL smoke: `SELECT search_active_employees_for_review('sajid', <cycle>, 50, 0)` invoked as Jyoti returns 0 rows.
 
-```sql
-SELECT array_agg(id) FROM departments WHERE head_user_id = v_uid  → v_hod_dept_ids
-```
+### Risk & impact
+- **Data**: read-only resolver change + one new exclusion filter. No schema mutation on core tables (only optional audit row).
+- **Workflow**: HODs lose the ability to open a review for a BU Head who sits in their department (correct). BU Head can still self-review, and their own reviewer (Management) is unaffected.
+- **Regression**: `all` / `bu` / `team` scopes untouched; only the `department` branch narrows. HR/Admin still see everyone.
+- **Rollback**: revert migration — resolver falls back to ADR-146 behaviour.
 
-Return a new `department_ids` field alongside `business_unit_ids`. Set `v_scope = 'department'` when the caller is an HOD **and not also a BU head / HR / admin**. Precedence stays: admin/hr_pms > hr_team > bu_head > **hod (dept-only)** > reporting_manager.
+### Verification steps
+1. As Jyoti, search "sajid" → 0 rows.
+2. As Jyoti, search a peer in `1050 TPD-Process` → visible.
+3. As BU Head / Admin, Sajid still appears.
+4. `get_annual_review_access_explain(jyoti)` lists Sajid under `excluded_user_ids` with reason.
 
-If a person is both HOD and BU Head, they keep `bu` scope (unchanged).
-
-### 2. Enforce the new scope in the two RPCs that read it
-
-- `search_active_employees_for_review`: when `scope='department'`, add `WHERE p.department_id = ANY(department_ids)`.
-- `create_or_get_annual_review_instance`: same predicate on the write path (reject with `42501` otherwise).
-- `can_proxy_submit_annual_review` / `can_access_annual_review_instance_for_assistance`: same predicate on the assist path (this closes the assist leak the previous plan described but never enforced at the search layer).
-
-### 3. Backward-compatible payload
-
-Add `department_ids: uuid[]` to the JSON. `useDirectoryAccess()` reads it into a new `departmentIds` field; existing consumers that only look at `businessUnitIds` keep working. `get_annual_review_access_explain` surfaces the resolved dept names so the admin "Scope viewer" shows "HOD → 1050 TPD-Process (dept-scoped)" instead of "HOD → 1050 TPD (BU)".
-
-### 4. Verification (post-migration)
-
-Re-run:
-
-```sql
-SELECT annual_review_directory_access('<Jyoti-uuid>');
--- expect: scope='department', department_ids=[TPD-Process], can_assist per role_capabilities
-
-SELECT count(*) FROM search_active_employees_for_review('prabhat', '<cycle>', 50, 0)
-  -- called as Jyoti; expect 0
-```
-
-Spot-check one HOD who also heads a BU (should still return BU scope) and one plain BU Head (unchanged).
-
-## Risk & impact
-
-- **Data**: additive column in resolver output; no schema changes to instances/responses.
-- **Workflow**: HODs lose visibility of employees outside their own department in the directory. They keep full visibility of their own reporting subtree via existing manager path (rule 5).
-- **UI**: no visual redesign — dialog copy already says "search across active employees you can review".
-- **Regression risk**: BU Heads, HR team, Admin, plain managers — all branches untouched. Overrides still win first.
-- **Rollback**: single `CREATE OR REPLACE` migration; reverting the function body restores current behavior instantly.
-
-## Tests
-
-- `src/test/annualReview/directoryAccessHodDeptScope.test.ts` — resolver returns `department` scope for pure HOD, `bu` for HOD+BU-Head, `bu` unchanged for BU Head only.
-- Extend `src/test/annualReview/directoryAccess.test.ts` to lock the sibling-dept exclusion (Jyoti fixture cannot see Prabhat).
-
-## Docs
-
-- New **ADR-146 — HOD directory scope is department, not BU**.
-- Update `mem/features/annual-review/directory-access.md` rule 4 and POLICY §AR-DIRECTORY-ACCESS-MATRIX to state HOD = own department(s) only.
+Not applicable: UI layout changes, mock data updates beyond the test above.
