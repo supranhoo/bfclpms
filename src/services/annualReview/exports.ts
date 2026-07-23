@@ -14,9 +14,9 @@ import type {
 import { resolveTemplateId, type InstanceWithEmployee } from './annualReviewService';
 import { computeCriteriaRatingOutOf5 } from '@/lib/annualReview/scoring';
 
-const STAGE_ORDER: AnnualReviewerRole[] = ['self', 'manager', 'skip_manager', 'dept_head', 'bu_head', 'hr'];
+const STAGE_ORDER: AnnualReviewerRole[] = ['self', 'manager', 'skip_manager', 'dept_head', 'bu_head', 'hr', 'management'];
 const STAGE_LABEL: Record<AnnualReviewerRole, string> = {
-  self: 'Self', manager: 'Manager', skip_manager: 'Skip', dept_head: 'Dept Head', bu_head: 'BU Head', hr: 'HR',
+  self: 'Self', manager: 'Manager', skip_manager: 'Skip', dept_head: 'Dept Head', bu_head: 'BU Head', hr: 'HR', management: 'Management',
 };
 
 export interface BlankReviewerWorkbookOpts {
@@ -240,7 +240,7 @@ export function buildReviewerPdfBlob(opts: ReviewerPdfOpts): Blob {
 
   const criteria = template.sections.criteria ?? [];
   const scoreByRole: Record<AnnualReviewerRole, Record<string, number>> = {
-    self: {}, manager: {}, skip_manager: {}, dept_head: {}, bu_head: {}, hr: {},
+    self: {}, manager: {}, skip_manager: {}, dept_head: {}, bu_head: {}, hr: {}, management: {},
   };
   for (const r of responses) {
     scoreByRole[r.reviewer_role] = r.criteria_scores ?? {};
