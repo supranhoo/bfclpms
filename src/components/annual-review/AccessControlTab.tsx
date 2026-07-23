@@ -24,6 +24,8 @@ import {
   useDirectoryOverrides, useUpsertOverride, useDeleteOverride,
   useAccessAudit, useAccessExplain,
   type OverrideType, type DirectoryOverride,
+  useRoleCapabilities, useUpsertRoleCapability,
+  type RoleCapability, type RoleSource, type AssistScopeSetting,
 } from '@/hooks/useAccessControlAdmin';
 
 const OVERRIDE_LABEL: Record<OverrideType, string> = {
@@ -36,6 +38,156 @@ const OVERRIDE_LABEL: Record<OverrideType, string> = {
 function OverrideBadge({ type }: { type: OverrideType }) {
   const variant = type === 'deny' ? 'destructive' : type === 'grant_all' ? 'default' : 'secondary';
   return <Badge variant={variant as any}>{OVERRIDE_LABEL[type]}</Badge>;
+}
+
+const ROLE_LABEL: Record<RoleSource, string> = {
+  admin: 'Admin',
+  hr_pms: 'HR PMS',
+  hr_team: 'HR Team (HR Business Unit)',
+  bu_head: 'BU Head',
+  hod: 'HOD (Department Head)',
+  reporting_manager: 'Reporting Manager',
+  skip_manager: 'Skip-Level Manager',
+};
+
+const ASSIST_SCOPE_LABEL: Record<AssistScopeSetting, string> = {
+  same_as_search: 'Same as search scope',
+  direct_reports_only: 'Direct reports only',
+  none: 'None',
+};
+
+function RoleCapabilityMatrixCard() {
+  const { data: rows = [], isLoading } = useRoleCapabilities();
+  const upsert = useUpsertRoleCapability();
+  const [editing, setEditing] = useState<RoleCapability | null>(null);
+  const [form, setForm] = useState<{ can_search: boolean; can_assist: boolean; assist_scope: AssistScopeSetting; reason: string }>({
+    can_search: true, can_assist: false, assist_scope: 'same_as_search', reason: '',
+  });
+
+  const openEdit = (r: RoleCapability) => {
+    setEditing(r);
+    setForm({
+      can_search: r.can_search, can_assist: r.can_assist,
+      assist_scope: r.assist_scope, reason: '',
+    });
+  };
+
+  const save = () => {
+    if (!editing) return;
+    if (form.reason.trim().length < 3) { toast.error('Reason is required'); return; }
+    upsert.mutate(
+      { role_source: editing.role_source, ...form, reason: form.reason.trim() },
+      {
+        onSuccess: () => { toast.success('Role capability updated'); setEditing(null); },
+        onError: (e: any) => toast.error(e?.message ?? 'Failed'),
+      },
+    );
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2"><Shield className="h-5 w-5" />Role capability matrix</CardTitle>
+        <CardDescription>
+          Defines defaults per detected role. "Search" enables the All Employees directory;
+          "Assist" separately enables Assisted Self-Submission. Managers can be limited to
+          direct reports only to prevent cross-team leakage.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        {isLoading ? <Skeleton className="h-40 w-full" /> : (
+          <div className="rounded-md border overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Role</TableHead>
+                  <TableHead>Can search directory</TableHead>
+                  <TableHead>Can assist self-submission</TableHead>
+                  <TableHead>Assist scope</TableHead>
+                  <TableHead className="w-24 text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {rows.map((r) => (
+                  <TableRow key={r.role_source}>
+                    <TableCell className="font-medium">{ROLE_LABEL[r.role_source]}</TableCell>
+                    <TableCell>
+                      {r.can_search
+                        ? <Badge variant="secondary">Allowed</Badge>
+                        : <Badge variant="destructive">Blocked</Badge>}
+                    </TableCell>
+                    <TableCell>
+                      {r.can_assist
+                        ? <Badge variant="secondary">Allowed</Badge>
+                        : <Badge variant="destructive">Blocked</Badge>}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">{ASSIST_SCOPE_LABEL[r.assist_scope]}</TableCell>
+                    <TableCell className="text-right">
+                      <Button variant="ghost" size="sm" onClick={() => openEdit(r)}>Edit</Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        )}
+
+        <Dialog open={!!editing} onOpenChange={(o) => { if (!o) setEditing(null); }}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Edit role: {editing ? ROLE_LABEL[editing.role_source] : ''}</DialogTitle>
+              <DialogDescription>
+                Changes apply to every user auto-detected with this role. Per-user overrides on the
+                next card still win over these defaults.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div className="flex items-center justify-between rounded-md border p-3">
+                <div>
+                  <Label>Allow directory search</Label>
+                  <p className="text-xs text-muted-foreground">Show the "All Employees" search in Team Annual Review.</p>
+                </div>
+                <Switch checked={form.can_search} onCheckedChange={(v) => setForm((f) => ({ ...f, can_search: v }))} />
+              </div>
+              <div className="flex items-center justify-between rounded-md border p-3">
+                <div>
+                  <Label>Allow Assisted self-submission</Label>
+                  <p className="text-xs text-muted-foreground">Permit proxy-submitting an employee's self-review.</p>
+                </div>
+                <Switch checked={form.can_assist} onCheckedChange={(v) => setForm((f) => ({ ...f, can_assist: v }))} />
+              </div>
+              <div>
+                <Label className="mb-1 block">Assist scope</Label>
+                <Select
+                  value={form.assist_scope}
+                  onValueChange={(v) => setForm((f) => ({ ...f, assist_scope: v as AssistScopeSetting }))}
+                >
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="same_as_search">Same as search scope</SelectItem>
+                    <SelectItem value="direct_reports_only">Direct reports only (no skip-level)</SelectItem>
+                    <SelectItem value="none">None</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Applies only when Assist is allowed. HODs are always restricted to their own department,
+                  never the whole BU, regardless of this setting.
+                </p>
+              </div>
+              <div>
+                <Label className="mb-1 block">Reason (audited)</Label>
+                <Textarea value={form.reason} onChange={(e) => setForm((f) => ({ ...f, reason: e.target.value }))} placeholder="Why is this default changing?" />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setEditing(null)}>Cancel</Button>
+              <Button onClick={save} disabled={upsert.isPending}>Save</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </CardContent>
+    </Card>
+  );
 }
 
 // -------------------- Kill switches --------------------
@@ -486,6 +638,7 @@ export function AccessControlTab() {
         </div>
       </div>
       <KillSwitchesCard />
+      <RoleCapabilityMatrixCard />
       <AccessExplainCard />
       <OverridesCard />
       <AuditCard />
