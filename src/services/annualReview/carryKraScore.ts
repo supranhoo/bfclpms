@@ -201,3 +201,88 @@ export async function buildCarrySnapshot(
     computed_at: new Date().toISOString(),
   };
 }
+
+/**
+ * ADR-139: Instance-scoped Carry KRA fetch.
+ *
+ * Dept/BU/HR/Management/Skip reviewers on an annual review instance don't
+ * necessarily sit on the monthly-KPI reporting chain, so a direct
+ * `SELECT * FROM kpis` returns zero rows for them and their appraisal cards
+ * collapse to 0. This helper calls a SECURITY DEFINER RPC that authorises
+ * against the annual review instance's reviewer chain and returns the exact
+ * rows a full-access viewer would see, then falls back to the direct-table
+ * path if the RPC is unavailable / caller is unauthorised.
+ */
+export async function fetchMonthlyKraScoresForInstance(
+  instanceId: string,
+  employeeId: string,
+  fyStart: number,
+  excludeNa = true,
+): Promise<CarryKraMonthly[]> {
+  try {
+    const { data, error } = await (supabase as any).rpc(
+      'get_annual_review_carry_kra_rows',
+      { p_instance_id: instanceId, p_fy_start: fyStart },
+    );
+    if (error) throw error;
+    // Group rpc rows (one per submission) into the RawRow shape.
+    const byKpi = new Map<string, { meta: RawRow['kpis']; subs: any[] }>();
+    for (const r of (data ?? []) as any[]) {
+      const meta = {
+        employee_id: employeeId,
+        review_period: r.review_period,
+        review_year: Number(r.review_year),
+        weightage: r.weightage,
+      };
+      const key = String(r.kpi_id);
+      if (!byKpi.has(key)) byKpi.set(key, { meta, subs: [] });
+      if (r.is_na != null || r.final_score != null || r.manager_score != null || r.auditor_score != null || r.self_score != null) {
+        byKpi.get(key)!.subs.push(r);
+      }
+    }
+    const rows: RawRow[] = [];
+    for (const [kpiId, { meta, subs }] of byKpi) {
+      if (subs.length === 0) {
+        rows.push({ kpi_id: kpiId, is_na: null, final_score: null, manager_score: null, auditor_score: null, self_score: null, kpis: meta });
+      } else {
+        for (const s of subs) {
+          rows.push({
+            kpi_id: kpiId,
+            is_na: s.is_na ?? null,
+            final_score: s.final_score ?? null,
+            manager_score: s.manager_score ?? null,
+            auditor_score: s.auditor_score ?? null,
+            self_score: s.self_score ?? null,
+            kpis: meta,
+          });
+        }
+      }
+    }
+    return aggregateMonthly(rows, fyStart, excludeNa);
+  } catch {
+    // Fallback preserves current behaviour for admins / employees whose direct
+    // RLS access already covers the rows.
+    return fetchMonthlyKraScores(employeeId, fyStart, excludeNa);
+  }
+}
+
+export async function buildCarrySnapshotForInstance(
+  instanceId: string,
+  employeeId: string,
+  fyStart: number,
+  cfg: CarryKraConfig,
+  weight: number,
+): Promise<CarryKraSnapshot> {
+  const monthly = await fetchMonthlyKraScoresForInstance(instanceId, employeeId, fyStart, cfg.excludeNa ?? true);
+  const rating = computeCarryRating(monthly, cfg);
+  const value = computeCarryContribution(rating, weight);
+  return {
+    monthly,
+    rating,
+    value,
+    maxValue: Math.max(0, Number(weight) || 0),
+    fiscal_year: fyStart,
+    config: cfg,
+    computed_at: new Date().toISOString(),
+  };
+}
