@@ -260,16 +260,6 @@ export default function UserManagement() {
   const { data: departments } = useDepartments();
   const { data: designationsList } = useDesignations();
   const { data: pmsGradesList } = usePmsGrades();
-  // Company-scoped: Employee Categories are per-company master data. Two
-  // separate hook calls so Add (uses selected new company) and Edit (uses
-  // the selected user's company) don't cross-contaminate — otherwise the
-  // admin could pick another company's category and `create-employee`
-  // rejects with "Unknown employee category: '<name>'".
-  const { data: newEmployeeCategoriesList } = useEmployeeCategories(
-    // will be re-read below once newCompanyId state is defined; safe because
-    // hook runs on every render and re-fetches on companyId change.
-    undefined,
-  );
   const { data: employmentStatusesList } = useEmploymentStatuses();
   const { data: divisions } = useDivisions();
   const { data: businessUnits } = useBusinessUnits();
