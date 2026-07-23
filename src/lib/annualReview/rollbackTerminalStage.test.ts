@@ -32,3 +32,42 @@ describe('rollbackTerminalLabel', () => {
     expect(rollbackTerminalLabel(['self','manager','hr'])).toBe('pending HR');
   });
 });
+
+// ADR-136: evidence-based resolver (BU/Dept collapse — Anup 101708 shape).
+describe('resolveRollbackTerminalStage — evidence-based (ADR-136)', () => {
+  it('enabled=[self,dept,bu] submitted={self,dept} → dept_head', () => {
+    expect(
+      resolveRollbackTerminalStage(
+        ['self','dept_head','bu_head'],
+        ['self','dept_head'],
+      ),
+    ).toBe('dept_head');
+  });
+  it('enabled=[self,mgr,skip,dept,bu,hr] submitted has HR → hr', () => {
+    expect(
+      resolveRollbackTerminalStage(
+        ['self','manager','skip_manager','dept_head','bu_head','hr'],
+        ['self','manager','dept_head','hr'],
+      ),
+    ).toBe('hr');
+  });
+  it('enabled=[self] submitted={self} → null', () => {
+    expect(resolveRollbackTerminalStage(['self'], ['self'])).toBeNull();
+  });
+  it('empty submitted set falls back to enabled-only', () => {
+    expect(
+      resolveRollbackTerminalStage(['self','dept_head','bu_head'], []),
+    ).toBe('bu_head');
+  });
+});
+
+describe('rollbackTerminalLabel — evidence-based (ADR-136)', () => {
+  it('BU/Dept collapse → labels as pending Department Head', () => {
+    expect(
+      rollbackTerminalLabel(
+        ['self','dept_head','bu_head'],
+        ['self','dept_head'],
+      ),
+    ).toBe('pending Department Head');
+  });
+});
