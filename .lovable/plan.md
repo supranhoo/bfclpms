@@ -1,82 +1,79 @@
 
-# Incentive Data Entry vs Report mismatch — Metal Sizing / Bihar Foundry / 11-20 / July 2026
+# Annual Review — Dept Head data invisible to BU Head (Employee 200564, Javed Jafri)
 
-Employee: Akash Rajvanshi (200631)
+## 1. Facts observed (verified pre-plan)
 
-## Evidence (from DB, no changes made)
+Instance `806d6da6-d7c4-41cc-a048-d8a11092c8da`:
+- `overall_status = pending_bu`, `enabled_stages = [self, dept_head, bu_head]`
+- `dept_head_id = 6088431e…` (**Y R V S Murthy**, emp 200493)
+- `bu_head_id = e0bc3607…` (**Anil Kumar Pathak**, emp 200301)
+- `updated_at = 2026-07-23 10:25:11`
 
-`employee_incentive_records` rows for Akash · July 2026 · Metal Sizing:
+`annual_review_responses` rows for the instance (only 2):
+- `self` — Javed Jafri — locked, 5 scores, submitted 2026-07-16.
+- `dept_head` — **Shrikant Ganguly** (`a3db1d69…`) — **is_locked=false, 0 scores, submitted_at=NULL**, updated 2026-07-23 08:08:56.
 
-| payment_period | production_value | incentive_amount | base % | final % | status    | last updated       |
-|----------------|------------------|------------------|--------|---------|-----------|--------------------|
-| 1-10           | 6                | ₹2,943.72        | 0      | 0       | confirmed | 2026-07-15 11:41   |
-| 11-20          | 4                | ₹1,962.48        | 0      | 0       | confirmed | 2026-07-23 08:03   |
+Audit trail on this instance:
+- 2026-07-13: head remap set dept_head → Shrikant, bu_head → Anil (POLICY §AR-HEAD-MASTER-AUTHORITATIVE).
+- 2026-07-21 09:31 & 2026-07-23 07:42 / 08:08: three send-backs `bu_head → dept_head` (last one is the "reason: null" system send-back).
+- Instance later flipped to `pending_bu` at 10:25:11 with **no new/locked dept_head response row** and with `dept_head_id` now pointing at **Y R V S Murthy** (different from the response's reviewer_id).
 
-`production_daily_entries` for Akash · July 2026 (unique row, last edited 2026-07-13):
-```
-{"6":2,"7":1,"8":1,"9":1,"10":1,"11":1,"12":1,"13":1,"16":1}
-```
-So the *current* daily grid values sum to: 1-10 → 6, 11-20 → 4, 21-31 → 0 — but the user says the Data Entry grid for 11-20 is now 0 for this employee. That means the daily-values field for 11-20 was reduced to zero at some point after 2026-07-23 08:03 and Recompute was rerun, yet the 11-20 record with ₹1,962.48 is still in the report.
+## 2. Root cause (5-Why)
 
-## Root Cause (5 Whys)
+1. Why does BU Head see nothing from Dept Head?
+   The only `dept_head` response row belongs to Shrikant and is `is_locked=false` with an empty `criteria_scores` object → the reviewer UI treats it as "no submission".
+2. Why is that row Shrikant's, when the current dept_head is Y R V S Murthy?
+   `dept_head_id` was reassigned after the response row already existed. `annual_review_responses` is keyed by `(instance_id, reviewer_id, reviewer_role)` (reviewer_id, not role-slot), so the previous reviewer's draft was left orphaned and no new row was created for the new reviewer.
+3. Why did status advance to `pending_bu` without a locked dept_head response?
+   `advance_annual_review_status` promotes the instance based on `overall_status` progression alone; after the 08:08 send-back plus a subsequent proxy/manual advance, it did **not** enforce the invariant "an `is_locked=true` response must exist for the currently-assigned reviewer of the outgoing stage".
+4. Why is that invariant missing?
+   Historical assumption: reviewers never change mid-flow. Multiple ADRs (head-remap, cascade-triggers, reviewer-resync) now mutate `*_id` slots freely, but the advance/send-back RPCs still read/write responses by `reviewer_id`, not by `(instance_id, reviewer_role)`.
+5. Why did no test catch it?
+   No regression exists for "reviewer reassigned after a submission draft". Send-back + reassign + re-advance was never covered.
 
-1. **Why does the Report show ₹1,962 while Data Entry shows 0?**
-   Report reads `employee_incentive_records`; a stale "confirmed" row with `production_value=4, incentive_amount=1962.48, payment_period='11-20'` is still there.
+Companion issue: the "Dept Head Review Pending" screen the reviewer used never persisted scores because the front-end fetched the row by the *new* `dept_head_id` (Y R V S Murthy) → no row found → new draft on his id was written locally but the finalize call routed through a path that resolves by role and updated Shrikant's stale row instead. Net effect: BU Head sees an empty dept_head response.
 
-2. **Why did Recompute not overwrite / clear that stale row?**
-   `supabase/functions/compute-monthly-incentives/index.ts` gates the *delete-existing* block on `if (scopedRecords.length > 0)` (line 885). When the corrected daily values make the 11-20 sub-period sum to 0, the loop at line 742 (`if (total > 0) rangeTotals.push(...)`) emits **no** record for 11-20. `scopedRecords` becomes empty → the delete step is skipped → the previous confirmed row survives.
+## 3. CAPA
 
-3. **Why does the sub-period loop skip zero totals?**
-   By design "no record per empty sub-period" — but that assumption breaks the delete-before-upsert contract (**ADR-044 v2**) when a period *was previously populated* and later corrected to zero.
+### Corrective (this instance + all similar)
+- Detect every open instance where the currently-assigned reviewer for a completed stage has **no locked response row** while a *different* user does. Repair by:
+  - Rebinding the latest non-empty response for that role to the current `*_id` (only when the orphan row has scores), OR
+  - When the orphan row is empty (Javed's case): delete the empty orphan, roll `overall_status` back one stage, and notify the current reviewer to re-submit.
+- For 200564 specifically: delete the empty Shrikant dept_head draft, set `overall_status = pending_dept`, and notify Y R V S Murthy.
 
-4. **Why did the "confirmed" status not prevent this in the first place?**
-   The compute function currently deletes even confirmed rows when it does run; there is no interlock keeping confirmed/paid rows sacrosanct, and no zero-out path either. Confirm is a UI decoration only.
+### Preventive (code + schema)
+1. **Role-keyed response contract (ADR-142)**: change `annual_review_responses` unique key to `(instance_id, reviewer_role)`; keep `reviewer_id` as an attribute that must equal the instance's current `*_id` for that role at write-time. Migrate existing dupes by picking the most recent locked row per role.
+2. **`advance_annual_review_status` invariant**: before promoting off any non-terminal stage, require a row with `reviewer_role = <that stage>`, `reviewer_id = <instance.*_id for that stage>`, `is_locked = true`, and non-empty `criteria_scores`. Otherwise raise `AR_ADVANCE_MISSING_ROLE_RESPONSE`.
+3. **`send_back_annual_review_status`**: when unlocking a stage, always clear/refresh `reviewer_id` on the affected response row to match the instance's current `*_id` for that role (so a reassignment between send-back and re-submit doesn't strand the draft).
+4. **Reviewer-reassignment trigger**: when `dept_head_id`/`bu_head_id`/`management_id` changes, rebind the open unlocked response row for that role to the new reviewer (or delete it if empty) in the same transaction. Log to `annual_review_reviewer_resync_audit`.
+5. **Front-end resolver**: `useAnnualReviewInstanceResponses` and `HrFinalizationSheet` fetch by `(instance_id, reviewer_role)` — never by reviewer_id — and display the role's latest response.
+6. **Policy**: add **POLICY §AR-RESPONSE-ROLE-CANONICAL** — one row per `(instance, role)`; reviewer changes must rebind, not orphan.
+7. **Regression tests**: `sendBackThenReassignReviewer.test.ts`, `advanceBlocksOnMissingRoleResponse.test.ts`, `roleCanonicalUniqueness.test.ts`, plus a data-repair dry-run test.
 
-5. **Why did QA not catch it earlier?**
-   No test covers the "previously non-zero → now zero" recompute scenario at sub-period grain. `computeMonthlyIncentivesPagination.test.ts` only asserts non-empty paths.
+## 4. Rollback & risk
 
-**Cause classification:** Logic bug in compute function (delete-before-upsert scope) + policy gap on confirmed/paid row lifecycle.
+- Migration is additive + one dedup pass; backup taken via `create-backup` before running.
+- Rollback: keep the old `(instance, reviewer, role)` unique index dropped only after 72h of clean logs; new invariant can be disabled via `app_settings.ar_enforce_role_response = false` if a mass-repair is needed.
+- Impact: `~130` open instances scanned; only those with orphaned-role responses touched. All CLU/ADR-125/126/127 data preserved.
 
-## Risk & Impact Report
+## 5. Deliverables order
 
-- **Data impact:** Only stale `employee_incentive_records` rows for zeroed sub-periods; underlying daily entries are correct. Bihar Foundry / Metal Sizing / July 2026 / 11-20 is one confirmed occurrence; a scan across all production programmes may reveal more.
-- **Workflow impact:** None — recompute path is unchanged for the "still has production" case.
-- **UI impact:** None (backend fix + one-shot cleanup).
-- **Regression risk:** Low. The added delete is scoped exactly to `(program_id, review_period, review_year, employee_batch, scopePaymentPeriod?)` — identical to today's delete filter.
-- **Mitigation:** Add unit tests covering zero-out at sub-period grain; run cleanup as an audited data-repair with before/after logging.
+1. Read-only diagnostic SQL for all affected instances (report only).
+2. Migration: rebind trigger + new response uniqueness + guarded advance RPC + send-back rebind.
+3. Data repair migration (per-instance, audited to `annual_review_final_backfill_audit_2026_07`).
+4. Front-end resolver switch to role-keyed fetch.
+5. Vitest regressions.
+6. DOCUMENTATION.md + POLICY.md updates (ADR-142, §AR-RESPONSE-ROLE-CANONICAL).
 
-## Fix Plan (CAPA)
+## 6. UI change
 
-### Corrective (data)
-1. **Detect** all `employee_incentive_records` rows for production programmes whose current `production_daily_entries` sum for that `payment_period` is `0` (or missing) while `production_value > 0` on the record. Log to a new `incentive_stale_zero_cleanup_audit` table (id, employee, program, period, year, payment_period, old production_value, old incentive_amount, old status, cleaned_at).
-2. **Delete** those stale records (or set `production_value=0, incentive_amount=0, base=0, final=0, status='draft'` — decision below in Open Question).
+Only in the "Dept Head review" panel of `HrFinalizationSheet` and BU Head read-view: the section now sources by role, so a stale draft from a previous reviewer is no longer displayed. A one-line yellow notice appears when the current reviewer has not yet submitted after a reassignment: "Dept Head was reassigned — awaiting fresh submission from {name}." No other visual changes.
 
-### Preventive (code — ADR-141: "Zero-out sub-period recompute")
-1. `supabase/functions/compute-monthly-incentives/index.ts`
-   - Move the delete-existing block **out** of the `if (scopedRecords.length > 0)` guard.
-   - Compute `affectedEmployeeIds` from the input roster (all employees the compute call considered), not from `scopedRecords`, so zeroed employees still get their stale rows purged.
-   - Keep the scope filters exactly as today: `program_id`, `review_period`, `review_year`, `employee_id IN batch`, and `payment_period = scopePaymentPeriod` when provided.
-2. Emit diagnostics `zeroed_periods_cleaned` count in the compute response for auditability.
-3. Policy update — **POLICY §INCENTIVE-COMPUTE-DELETE-INVARIANT**: "Every compute run MUST purge the scoped `(program, period, year, employees, payment_period?)` slice before upsert, regardless of whether the new record set is empty. A zero-total sub-period MUST NOT leave a prior record behind."
+## 7. Open decision
 
-### Regression protection (tests)
-- `src/test/computeMonthlyIncentivesZeroSubPeriod.test.ts` — covers the exact case: prior row present, daily values updated so 11-20 sums to 0, recompute → row is gone.
-- Extend `computeMonthlyIncentivesPagination.test.ts` to assert delete runs on empty-record path.
+For the ~N orphaned-but-scored dept_head rows across the cycle:
+- **A**: Auto-rebind the orphan to the new reviewer (scores carry forward, new reviewer can edit before lock).
+- **B**: Discard and force re-submission (safer; new reviewer starts clean).
+- **C**: Rebind + require the new reviewer to explicitly "Confirm inherited scores" before advance.
 
-### Documentation
-- Update `DOCUMENTATION.md` "Incentive Compute" section with the new invariant and ADR-141.
-- `POLICY.md` §INCENTIVE-COMPUTE-DELETE-INVARIANT (see above).
-
-## Open Question (need your call before I switch to build)
-
-Confirmed/Paid record lifecycle when the underlying daily values are zeroed *after* confirmation:
-
-**Option A — Hard delete** the stale row (matches current compute semantics, simpler).
-**Option B — Preserve as `status='draft'` with amount 0** (keeps a paper trail that the period was ever populated; needed if audit requires seeing "this was once ₹1,962").
-**Option C — Preserve for `status IN ('paid')` only**; hard-delete `draft`/`confirmed`. Recommended default because paid rows likely tie to disbursement records.
-
-Please pick A / B / C, and I'll finalize the migration + edge-function patch + tests in build mode.
-
-## Rollback strategy
-- Edge-function change is a single-file patch; revert to previous version if needed.
-- Data cleanup writes to `incentive_stale_zero_cleanup_audit`, so any deletion can be re-inserted from the audit table.
+Please pick A / B / C before I run the data repair.
