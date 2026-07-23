@@ -199,12 +199,14 @@ export function HrFinalizationSheet({
           )}
 
           <div className="rounded-lg border p-3 text-sm">
-            <div className="flex items-center justify-between">
-              <span className="text-muted-foreground">Criteria weighted score</span>
-              <span className="font-semibold tabular-nums">
-                {sumCriteria.totalCriteriaScore.toFixed(2)} / {sumCriteria.maxCriteriaScore.toFixed(2)}
-              </span>
-            </div>
+            {sumCriteria.maxCriteriaScore > 0 && (
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">Criteria weighted score</span>
+                <span className="font-semibold tabular-nums">
+                  {sumCriteria.totalCriteriaScore.toFixed(2)} / {sumCriteria.maxCriteriaScore.toFixed(2)}
+                </span>
+              </div>
+            )}
             <div className="flex items-center justify-between mt-1">
               <span className="text-muted-foreground">Overall (capped at 100)</span>
               <span className="font-semibold text-lg tabular-nums text-primary">{overall.toFixed(2)}</span>
