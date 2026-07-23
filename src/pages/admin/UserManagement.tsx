@@ -1904,9 +1904,14 @@ export default function UserManagement() {
                     <OrgFilterCombobox
                       value={editEmployeeCategory}
                       onValueChange={setEditEmployeeCategory}
-                      options={employeeCategoryOptions}
+                      options={editEmployeeCategoryOptions}
                       placeholder="Select employee category"
                     />
+                    {editEmployeeCategoryOptions.length === 0 && (
+                      <p className="text-xs text-muted-foreground">
+                        No categories configured for this company. Add them in Admin → Organization.
+                      </p>
+                    )}
                   </div>
                   <div className="space-y-1.5">
                     <Label>Employment Status</Label>
@@ -2262,9 +2267,14 @@ export default function UserManagement() {
                     <OrgFilterCombobox
                       value={newEmployeeCategory}
                       onValueChange={setNewEmployeeCategory}
-                      options={employeeCategoryOptions}
+                      options={newEmployeeCategoryOptions}
                       placeholder="Select employee category"
                     />
+                    {newCompanyId && newEmployeeCategoryOptions.length === 0 && (
+                      <p className="text-xs text-muted-foreground">
+                        No categories configured for this company. Add them in Admin → Organization.
+                      </p>
+                    )}
                   </div>
                   <div className="space-y-1.5">
                     <Label>Employment Status<ReqMark k="employment_status" /></Label>
