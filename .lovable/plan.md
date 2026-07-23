@@ -1,40 +1,47 @@
-## What the user is seeing
+## Goal
+On the finalized annual review screen (`EmployeeResultsView`), fix three UX issues the employee reported:
+1. They can't re-open the self-review form they submitted.
+2. The acknowledgment note is shown at the top (inside the score card) — it should live at the bottom.
+3. The screen should feel more purposeful: clear sections, expandable self-review, and easier scanning of what matters (rating, KRA, feedback, then your response).
 
-Ankit Choudhary's review card shows:
-- Total score **91.72**
-- Criteria weighted score **0.00**
-- "Outstanding" badge, but no numeric x / 5
+Scope is **frontend-only** — `src/components/annual-review/EmployeeResultsView.tsx` and a small render addition in `src/pages/annual-review/EmployeeAnnualReview.tsx` (already imports `SelfReviewSummaryDialog`). No schema, RPC, RLS, or business-logic changes.
 
-## Root cause (not a data bug)
+## Risk & Impact
+- Data: none.
+- Workflow: none — acknowledgment mutation and rebuttal payload unchanged.
+- UI/UX: reorders sections and adds an "expand self-review" affordance. No labels or scores change.
+- Regression: low — pure presentational changes, existing tests unaffected.
+- Mitigation: keep the same props/state; only re-arrange JSX and gate a dialog.
 
-Ankit's template `sys_bgd6797` is **100% System (Carry-KRA) + 0% Criteria**. So `criteria_weighted_score = 0.00` is arithmetically correct — there are no criteria to score. The problem is purely UI:
+## Plan
 
-1. `EmployeeResultsView.tsx` always renders the "Criteria weighted score" card, even when the template has zero criteria weight. On system-only templates this looks like a failure.
-2. The "≈ x / 5" helper is only rendered under the criteria card, so on system-only templates no numeric rating appears anywhere — only the qualitative "Outstanding" badge.
-3. There is no "System score" card at all, so the driver of the 91.72 is invisible.
+### 1. New section order in `EmployeeResultsView`
+Top → bottom:
+1. **Header card** — title, finalized date, `final_rating` badge, `Acknowledged` badge. (unchanged)
+2. **Score summary** — Total / Criteria / System cards, `≈ x/5` under Total. (unchanged)
+3. **HR remarks** — read-only block. (unchanged, stays under score summary)
+4. **Reviewer criteria scores table** — moved up so employees see reviewer scoring next. (unchanged content)
+5. **Recommendations** — moved up next to feedback. (unchanged content)
+6. **"Your submitted self-review" collapsible** — new. A `<Collapsible>` (shadcn) that, when opened, renders the existing read-only `SelfReviewSummaryDialog` content inline, or opens the dialog on click if inline embedding is heavier. Simplest path: add a `Button` "View my self-review" that opens the already-imported `SelfReviewSummaryDialog`. This keeps parity with the rest of the app and avoids duplicating the fields renderer.
+7. **Your acknowledgment** section (bottom, in its own card):
+   - If not yet acknowledged: the current sticky action + `Acknowledge` button + hint text.
+   - If acknowledged: show `acknowledged_at` timestamp and, if present, the `employee_rebuttal` note. This is the block currently sitting inside the top score card — it moves out and to the bottom.
 
-## Plan (UI only — no scoring / DB changes)
+### 2. Wire the self-review dialog
+- `EmployeeResultsView` accepts a new optional prop `onOpenSelfReview?: () => void`. The parent (`EmployeeAnnualReview.tsx`) passes a handler that toggles the already-present `SelfReviewSummaryDialog` state (or lift a tiny local state into `EmployeeResultsView` and render the dialog itself using props already available: template + responses).
+- Preferred: render `SelfReviewSummaryDialog` inside `EmployeeResultsView` gated by local `showSelf` state so the results view is self-contained. Uses the same instance + template + self-response already in scope.
 
-### 1. Make the score cards template-aware in `src/components/annual-review/EmployeeResultsView.tsx`
-- Compute `hasCriteria = criteriaMax > 0` and `hasSystem = sum(template.system_scores[].weight) > 0`.
-- Render cards conditionally:
-  - Always: **Total score** (out of 100).
-  - Only when `hasCriteria`: **Criteria weighted score** (current card, unchanged).
-  - Only when `hasSystem`: **System score (KRA)** — new card driven by the sum of `instance.system_scores` values, matching the existing card's styling.
-- Grid becomes `sm:grid-cols-2` when two cards render, `sm:grid-cols-1` when only Total is shown, so it doesn't leave an empty slot.
-
-### 2. Always show numeric rating out of 5 next to Total
-- Move the "≈ x / 5" hint out from under the Criteria card and place it under **Total score**, computed as `total_score / 100 * 5` (the same formula the rating band already uses). This guarantees the numeric rating is visible for every template style.
-
-### 3. Mirror the same three-card layout in `HrFinalizationSheet.tsx`
-- Same conditional-cards treatment so HR/Admin sees a consistent, non-misleading view of a system-only review.
+### 3. Visual polish (per skill/ui-ux-pro-max)
+- Card typography hierarchy unchanged; add a subtle section divider heading ("Reviewer feedback", "Your self-review", "Your acknowledgment") to signal purpose.
+- Keep the sticky bottom bar only when `!acknowledged`; remove it once acknowledged.
+- No color/hex changes — reuse existing semantic tokens.
+- Ensure the acknowledgment card meets 44px touch targets for the button and stacks cleanly on mobile.
 
 ## Out of scope
-- No changes to `advance_annual_review_status`, `hydrate_annual_review_system_scores`, `annual_review_compute_final_summary`, or any migration.
-- No change to badge thresholds or the "Outstanding / Good / Poor" mapping.
+- Any change to score computation, HR finalization, notifications, or RLS.
+- Reworking the self-review renderer itself.
+- Multi-language copy changes beyond re-parenting existing strings.
 
-## Risk & impact
-- **Data**: none — read-only presentation changes.
-- **Workflow**: none.
-- **Regression risk**: low, isolated to two components; existing criteria-only templates continue to render exactly as today (both cards, criteria x / 5 hint preserved — moved to Total).
-- **Rollback**: revert the two component edits.
+## Verification
+- Manual: as an employee on a finalized instance, confirm order (Header → Scores → HR remarks → Criteria table → Recommendations → View self-review → Acknowledgment at bottom); confirm dialog opens and shows submitted answers; confirm rebuttal text now appears in the bottom acknowledgment card, not the header card; confirm sticky bar disappears after acknowledging.
+- Run `bunx vitest run` for annual-review component tests (should stay green — no logic touched).
