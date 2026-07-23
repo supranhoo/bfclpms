@@ -16044,6 +16044,7 @@ export type Database = {
         | "pending_dept"
         | "pending_bu"
         | "pending_hr"
+        | "pending_management"
         | "completed"
         | "excluded"
       annual_reviewer_role:
@@ -16053,6 +16054,7 @@ export type Database = {
         | "dept_head"
         | "bu_head"
         | "hr"
+        | "management"
       annual_score_method: "avg_all" | "last_6" | "custom"
       app_role:
         | "admin"
@@ -16320,6 +16322,7 @@ export const Constants = {
         "pending_dept",
         "pending_bu",
         "pending_hr",
+        "pending_management",
         "completed",
         "excluded",
       ],
@@ -16330,6 +16333,7 @@ export const Constants = {
         "dept_head",
         "bu_head",
         "hr",
+        "management",
       ],
       annual_score_method: ["avg_all", "last_6", "custom"],
       app_role: [
