@@ -20,14 +20,14 @@ describe('Annual Review listInstancesForCycle — paging (POLICY §125)', () => 
   );
 
   it('listInstancesForCycle uses fetchAllPaged', () => {
-    const fn = src.match(/export async function listInstancesForCycle[\s\S]{0,600}/);
+    const fn = src.match(/export async function listInstancesForCycle[\s\S]{0,1200}/);
     expect(fn, 'listInstancesForCycle not found').toBeTruthy();
     expect(fn![0]).toMatch(/fetchAllPaged<InstanceWithEmployee>/);
     expect(fn![0]).toMatch(/\.range\(from, to\)/);
   });
 
   it('must NOT keep the bare unpaged select that hit the 1,000-row cap', () => {
-    const fn = src.match(/export async function listInstancesForCycle[\s\S]{0,600}/);
+    const fn = src.match(/export async function listInstancesForCycle[\s\S]{0,1200}/);
     expect(fn).toBeTruthy();
     // The old shape: `.from('annual_review_instances').select(...).eq('cycle_id', ...)` with no `.range`.
     const body = fn![0];
