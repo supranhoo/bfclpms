@@ -430,12 +430,18 @@ export interface InstanceWithEmployee extends AnnualReviewInstance {
 }
 
 export async function listInstancesForCycle(cycleId: string): Promise<InstanceWithEmployee[]> {
-  const { data, error } = await db
-    .from('annual_review_instances')
-    .select('*, employee:profiles!annual_review_instances_employee_id_fkey(id, full_name, employee_code, designation, doj)')
-    .eq('cycle_id', cycleId);
-  if (error) throw error;
-  return data ?? [];
+  // POLICY §125 / ADR-135 — PostgREST silently caps unranged reads at 1,000 rows.
+  // Analytics & Calibration tabs feed the entire cycle roster (~2,533 employees)
+  // through this call, so the read MUST page. Order by `id` to guarantee a
+  // stable pagination window.
+  return fetchAllPaged<InstanceWithEmployee>((from, to) =>
+    db
+      .from('annual_review_instances')
+      .select('*, employee:profiles!annual_review_instances_employee_id_fkey(id, full_name, employee_code, designation, doj)')
+      .eq('cycle_id', cycleId)
+      .order('id')
+      .range(from, to),
+  );
 }
 
 // ---------- Server-side pagination ----------
