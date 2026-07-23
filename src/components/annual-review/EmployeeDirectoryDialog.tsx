@@ -39,6 +39,13 @@ function AssistedHint({ row }: { row: DirectoryEmployee }) {
   // Employee will land in assisted-mode if no login
   const assisted = !(row.has_email && row.has_signed_in);
   if (!assisted) return null;
+  if (row.can_assist_this_employee === false) {
+    return (
+      <span className="text-[10px] text-muted-foreground inline-flex items-center gap-1" title="You don't have permission to assist this employee">
+        <UserPlus className="h-3 w-3" /> Assist not allowed
+      </span>
+    );
+  }
   return (
     <span className="text-[10px] text-muted-foreground inline-flex items-center gap-1">
       <UserPlus className="h-3 w-3" /> Assisted
@@ -74,6 +81,11 @@ export function EmployeeDirectoryDialog({ open, onOpenChange, cycleId, cycleName
 
   const handleSelect = async (row: DirectoryEmployee) => {
     if (!cycleId) return;
+    const assisted = !(row.has_email && row.has_signed_in);
+    if (assisted && row.can_assist_this_employee === false) {
+      toast.error("You don't have permission to assist this employee's self-review.");
+      return;
+    }
     setPendingId(row.employee_id);
     try {
       let instanceId = row.instance_id;
@@ -83,7 +95,6 @@ export function EmployeeDirectoryDialog({ open, onOpenChange, cycleId, cycleName
         instanceId = res.instanceId;
         created = res.wasCreated;
       }
-      const assisted = !(row.has_email && row.has_signed_in);
       onSelectInstance(instanceId!, { autoOpenAssisted: assisted });
       onOpenChange(false);
       if (created) toast.success('Annual review created — opening now.');
@@ -169,6 +180,8 @@ export function EmployeeDirectoryDialog({ open, onOpenChange, cycleId, cycleName
             <ul className="divide-y">
               {results.map((row) => {
                 const busy = pendingId === row.employee_id;
+                const assisted = !(row.has_email && row.has_signed_in);
+                const assistBlocked = assisted && row.can_assist_this_employee === false;
                 return (
                   <li key={row.employee_id} className="flex items-center gap-3 px-4 py-3 hover:bg-muted/40">
                     <div className="h-10 w-10 rounded-full bg-primary/10 text-primary flex items-center justify-center text-xs font-semibold shrink-0">
@@ -187,7 +200,8 @@ export function EmployeeDirectoryDialog({ open, onOpenChange, cycleId, cycleName
                     <Button
                       size="sm"
                       variant={row.instance_id ? 'outline' : 'default'}
-                      disabled={busy}
+                      disabled={busy || assistBlocked}
+                      title={assistBlocked ? "You don't have permission to assist this employee." : undefined}
                       onClick={() => handleSelect(row)}
                       className="shrink-0 gap-1.5"
                     >

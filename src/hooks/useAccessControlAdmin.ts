@@ -32,6 +32,58 @@ export interface KillSwitches {
 
 const AR_ACCESS_KEY = ['ar', 'access-control'] as const;
 
+export type RoleSource =
+  | 'admin' | 'hr_pms' | 'hr_team' | 'bu_head' | 'hod' | 'reporting_manager' | 'skip_manager';
+export type AssistScopeSetting = 'same_as_search' | 'direct_reports_only' | 'none';
+
+export interface RoleCapability {
+  role_source: RoleSource;
+  can_search: boolean;
+  can_assist: boolean;
+  assist_scope: AssistScopeSetting;
+  updated_at: string;
+  updated_by: string | null;
+}
+
+export function useRoleCapabilities() {
+  return useQuery<RoleCapability[]>({
+    queryKey: [...AR_ACCESS_KEY, 'role-capabilities'],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc('list_annual_review_role_capabilities' as never);
+      if (error) throw error;
+      return (data ?? []) as RoleCapability[];
+    },
+    staleTime: 30_000,
+  });
+}
+
+export function useUpsertRoleCapability() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (args: {
+      role_source: RoleSource;
+      can_search: boolean;
+      can_assist: boolean;
+      assist_scope: AssistScopeSetting;
+      reason: string;
+    }) => {
+      const { error } = await supabase.rpc('upsert_annual_review_role_capability' as never, {
+        p_role_source: args.role_source,
+        p_can_search: args.can_search,
+        p_can_assist: args.can_assist,
+        p_assist_scope: args.assist_scope,
+        p_reason: args.reason,
+      } as never);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: AR_ACCESS_KEY });
+      qc.invalidateQueries({ queryKey: ['annual-review', 'directory-access'] });
+      qc.invalidateQueries({ queryKey: ['annual-review', 'directory-search'] });
+    },
+  });
+}
+
 export function useKillSwitches() {
   return useQuery<KillSwitches>({
     queryKey: [...AR_ACCESS_KEY, 'kill-switches'],
