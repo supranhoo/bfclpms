@@ -584,16 +584,18 @@ export default function UserManagement() {
   // "Unknown employee category" rejection on submit.
   useEffect(() => {
     if (!newEmployeeCategory) return;
+    if (!newEmployeeCategoriesList) return; // still loading
     if (!newEmployeeCategoryOptions.some(o => o.value.toLowerCase() === newEmployeeCategory.toLowerCase())) {
       setNewEmployeeCategory('');
     }
-  }, [newEmployeeCategoryOptions, newEmployeeCategory]);
+  }, [newEmployeeCategoriesList, newEmployeeCategoryOptions, newEmployeeCategory]);
   useEffect(() => {
     if (!editEmployeeCategory) return;
+    if (!editEmployeeCategoriesList) return; // still loading
     if (!editEmployeeCategoryOptions.some(o => o.value.toLowerCase() === editEmployeeCategory.toLowerCase())) {
       setEditEmployeeCategory('');
     }
-  }, [editEmployeeCategoryOptions, editEmployeeCategory]);
+  }, [editEmployeeCategoriesList, editEmployeeCategoryOptions, editEmployeeCategory]);
   const employmentStatusOptions = useMemo(
     () => (employmentStatusesList || []).filter((s: any) => s.is_active !== false).map((s: any) => ({ value: s.name, label: s.name })),
     [employmentStatusesList],
