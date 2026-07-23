@@ -14262,6 +14262,20 @@ export type Database = {
         }[]
       }
       get_admin_dashboard_stats: { Args: never; Returns: Json }
+      get_annual_review_carry_kra_rows: {
+        Args: { p_fy_start: number; p_instance_id: string }
+        Returns: {
+          auditor_score: number
+          final_score: number
+          is_na: boolean
+          kpi_id: string
+          manager_score: number
+          review_period: string
+          review_year: number
+          self_score: number
+          weightage: number
+        }[]
+      }
       get_annual_review_comprehensive_report: {
         Args: { p_cycle_id: string }
         Returns: {
