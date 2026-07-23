@@ -11,6 +11,7 @@ export interface DirectoryEmployee {
   instance_id: string | null;
   overall_status: string | null;
   in_my_queue: boolean;
+  can_assist_this_employee?: boolean;
 }
 
 export interface SearchActiveEmployeesArgs {
