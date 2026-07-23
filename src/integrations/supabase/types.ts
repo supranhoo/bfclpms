@@ -295,6 +295,39 @@ export type Database = {
           },
         ]
       }
+      annual_review_access_audit: {
+        Row: {
+          action: string
+          actor_id: string | null
+          after: Json | null
+          before: Json | null
+          created_at: string
+          id: number
+          reason: string | null
+          target_user_id: string | null
+        }
+        Insert: {
+          action: string
+          actor_id?: string | null
+          after?: Json | null
+          before?: Json | null
+          created_at?: string
+          id?: number
+          reason?: string | null
+          target_user_id?: string | null
+        }
+        Update: {
+          action?: string
+          actor_id?: string | null
+          after?: Json | null
+          before?: Json | null
+          created_at?: string
+          id?: number
+          reason?: string | null
+          target_user_id?: string | null
+        }
+        Relationships: []
+      }
       annual_review_assignment_overrides: {
         Row: {
           created_at: string
@@ -630,6 +663,54 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      annual_review_directory_overrides: {
+        Row: {
+          business_unit_ids: string[]
+          can_assist: boolean
+          created_at: string
+          created_by: string | null
+          override_type: string
+          reason: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          business_unit_ids?: string[]
+          can_assist?: boolean
+          created_at?: string
+          created_by?: string | null
+          override_type: string
+          reason: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          business_unit_ids?: string[]
+          can_assist?: boolean
+          created_at?: string
+          created_by?: string | null
+          override_type?: string
+          reason?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "annual_review_directory_overrides_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "eligible_login_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "annual_review_directory_overrides_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       annual_review_final_backfill_audit_2026_07: {
         Row: {
@@ -14182,6 +14263,10 @@ export type Database = {
         Args: { p_decision: string; p_notes?: string; p_permit_id: string }
         Returns: Json
       }
+      delete_annual_review_directory_override: {
+        Args: { p_reason: string; p_user_id: string }
+        Returns: undefined
+      }
       detect_alias_drift: {
         Args: never
         Returns: {
@@ -14362,6 +14447,10 @@ export type Database = {
         }[]
       }
       get_admin_dashboard_stats: { Args: never; Returns: Json }
+      get_annual_review_access_explain: {
+        Args: { v_uid: string }
+        Returns: Json
+      }
       get_annual_review_carry_kra_rows: {
         Args: { p_fy_start: number; p_instance_id: string }
         Returns: {
@@ -15929,6 +16018,10 @@ export type Database = {
         }
         Returns: Database["public"]["Enums"]["annual_review_status"]
       }
+      set_annual_review_access_setting: {
+        Args: { p_key: string; p_reason: string; p_value: boolean }
+        Returns: undefined
+      }
       set_annual_review_enabled_stages: {
         Args: {
           p_enabled_stages: Json
@@ -16165,6 +16258,31 @@ export type Database = {
             }
             Returns: Json
           }
+      upsert_annual_review_directory_override: {
+        Args: {
+          p_business_unit_ids: string[]
+          p_can_assist: boolean
+          p_override_type: string
+          p_reason: string
+          p_user_id: string
+        }
+        Returns: {
+          business_unit_ids: string[]
+          can_assist: boolean
+          created_at: string
+          created_by: string | null
+          override_type: string
+          reason: string
+          updated_at: string
+          user_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "annual_review_directory_overrides"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       user_can_see_employee: {
         Args: { p_employee_id: string; p_user_id: string }
         Returns: boolean
