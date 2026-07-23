@@ -4,11 +4,12 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { CheckCircle2, Loader2 } from 'lucide-react';
+import { CheckCircle2, Loader2, ChevronDown, FileText } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAcknowledgeInstance } from '@/hooks/useAnnualReview';
 import type {
@@ -81,6 +82,15 @@ export function EmployeeResultsView({
   };
 
   const acknowledged = !!instance.acknowledged_at;
+  const selfResponse = responses.find((r) => r.reviewer_role === 'self') ?? null;
+  const selfFields = template?.sections.self_review_fields ?? [];
+  const selfQualitative = (selfResponse?.qualitative_responses ?? {}) as Record<string, string>;
+  const selfCriteriaScores = (selfResponse?.criteria_scores ?? {}) as Record<string, number>;
+  const hasSelfSubmission =
+    !!selfResponse &&
+    (selfFields.some((f) => (selfQualitative[f.id] ?? '').trim().length > 0) ||
+      Object.keys(selfCriteriaScores).length > 0);
+  const [selfOpen, setSelfOpen] = useState(false);
 
   return (
     <div className="space-y-4">
@@ -154,17 +164,6 @@ export function EmployeeResultsView({
               </p>
             </div>
           )}
-
-          {instance.employee_rebuttal && (
-            <div className="space-y-1">
-              <Label className="text-xs text-muted-foreground">
-                Your acknowledgment note · {instance.acknowledged_at && new Date(instance.acknowledged_at).toLocaleString()}
-              </Label>
-              <p className="text-sm whitespace-pre-wrap rounded-md border p-3 bg-muted/30">
-                {instance.employee_rebuttal}
-              </p>
-            </div>
-          )}
         </CardContent>
       </Card>
 
@@ -219,12 +218,126 @@ export function EmployeeResultsView({
         </Card>
       )}
 
+      {hasSelfSubmission && (
+        <Card>
+          <Collapsible open={selfOpen} onOpenChange={setSelfOpen}>
+            <CardHeader className="py-3">
+              <CollapsibleTrigger asChild>
+                <button
+                  type="button"
+                  className="w-full flex items-center justify-between gap-3 text-left"
+                  aria-expanded={selfOpen}
+                >
+                  <span className="inline-flex items-center gap-2">
+                    <FileText className="h-4 w-4 text-muted-foreground" />
+                    <CardTitle className="text-base">Your submitted self-review</CardTitle>
+                  </span>
+                  <span className="inline-flex items-center gap-2 text-xs text-muted-foreground">
+                    {selfOpen ? 'Hide' : 'View'}
+                    <ChevronDown
+                      className={`h-4 w-4 transition-transform ${selfOpen ? 'rotate-180' : ''}`}
+                    />
+                  </span>
+                </button>
+              </CollapsibleTrigger>
+            </CardHeader>
+            <CollapsibleContent>
+              <CardContent className="space-y-4 pt-0">
+                {selfFields.length > 0 && (
+                  <div className="space-y-3">
+                    {selfFields.map((f) => {
+                      const val = (selfQualitative[f.id] ?? '').trim();
+                      return (
+                        <div key={f.id} className="space-y-1">
+                          <Label className="text-xs text-muted-foreground">{f.label}</Label>
+                          <p className="text-sm whitespace-pre-wrap rounded-md border p-3 bg-muted/30 min-h-[2.5rem]">
+                            {val || <span className="text-muted-foreground italic">No response</span>}
+                          </p>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+                {criteria.length > 0 && Object.keys(selfCriteriaScores).length > 0 && (
+                  <div className="rounded-md border overflow-hidden">
+                    <table className="w-full text-sm">
+                      <thead className="bg-muted/50 text-left">
+                        <tr>
+                          <th className="p-3 font-medium">Criterion</th>
+                          <th className="p-3 font-medium text-right">Your score</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {criteria.map((c) => {
+                          const v = selfCriteriaScores[c.id];
+                          return (
+                            <tr key={c.id} className="border-t">
+                              <td className="p-3">{c.name}</td>
+                              <td className="p-3 text-right tabular-nums text-muted-foreground">
+                                {typeof v === 'number' ? v.toFixed(1) : '—'}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </CardContent>
+            </CollapsibleContent>
+          </Collapsible>
+        </Card>
+      )}
+
+      <Card>
+        <CardHeader className="py-3">
+          <CardTitle className="text-base">Your acknowledgment</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {acknowledged ? (
+            <>
+              <div className="flex flex-wrap items-center gap-2 text-sm">
+                <Badge className="bg-emerald-500/15 text-emerald-500 border-emerald-500/30">
+                  <CheckCircle2 className="h-3.5 w-3.5 mr-1" /> Acknowledged
+                </Badge>
+                {instance.acknowledged_at && (
+                  <span className="text-xs text-muted-foreground">
+                    on {new Date(instance.acknowledged_at).toLocaleString()}
+                  </span>
+                )}
+              </div>
+              {instance.employee_rebuttal ? (
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">Your acknowledgment note</Label>
+                  <p className="text-sm whitespace-pre-wrap rounded-md border p-3 bg-muted/30">
+                    {instance.employee_rebuttal}
+                  </p>
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  No note was added with your acknowledgment.
+                </p>
+              )}
+            </>
+          ) : (
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <p className="text-xs text-muted-foreground max-w-md">
+                Please acknowledge that you have reviewed your final rating. You may optionally add a rebuttal note.
+              </p>
+              <Button onClick={() => setOpen(true)} className="min-h-10">
+                <CheckCircle2 className="h-4 w-4 mr-2" /> Acknowledge
+              </Button>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       {!acknowledged && (
         <div className="sticky bottom-0 bg-background/80 backdrop-blur border-t py-3 flex flex-wrap items-center justify-between gap-3">
           <p className="text-xs text-muted-foreground">
             Please acknowledge that you have reviewed your final rating. You may optionally add a rebuttal note.
           </p>
-          <Button onClick={() => setOpen(true)}>
+          <Button onClick={() => setOpen(true)} className="min-h-10">
             <CheckCircle2 className="h-4 w-4 mr-2" /> Acknowledge
           </Button>
         </div>
