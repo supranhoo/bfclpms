@@ -4,7 +4,6 @@ import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
@@ -17,7 +16,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { OrgFilterCombobox } from '@/components/admin/OrgFilterCombobox';
-import { Shield, KeyRound, ListChecks, History, Search, Plus, Trash2, User } from 'lucide-react';
+import { Shield, KeyRound, ListChecks, History, Search, Plus, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useBusinessUnits, useActiveProfilesLite, formatSafetyProfileLabel } from '@/hooks/useSafetyOrg';
 import {
