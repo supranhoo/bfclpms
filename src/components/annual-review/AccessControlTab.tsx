@@ -16,7 +16,8 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { OrgFilterCombobox } from '@/components/admin/OrgFilterCombobox';
-import { Shield, KeyRound, ListChecks, History, Search, Plus, Trash2 } from 'lucide-react';
+import { Shield, KeyRound, ListChecks, History, Search, Plus, Trash2, RefreshCw } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
 import { toast } from 'sonner';
 import { useBusinessUnits, useActiveProfilesLite, formatSafetyProfileLabel } from '@/hooks/useSafetyOrg';
 import {
@@ -26,6 +27,7 @@ import {
   type OverrideType, type DirectoryOverride,
   useRoleCapabilities, useUpsertRoleCapability,
   type RoleCapability, type RoleSource, type AssistScopeSetting,
+  useManagementSeedingGaps, useBackfillManagementStage,
 } from '@/hooks/useAccessControlAdmin';
 
 const OVERRIDE_LABEL: Record<OverrideType, string> = {
