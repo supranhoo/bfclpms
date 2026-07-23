@@ -578,6 +578,22 @@ export default function UserManagement() {
     () => (editEmployeeCategoriesList || []).filter((c: any) => c.is_active !== false).map((c: any) => ({ value: c.name, label: c.name })),
     [editEmployeeCategoriesList],
   );
+  // Clear a stale category selection if the company changes (Add) or the
+  // selected user's company differs (Edit) and the previously picked name
+  // no longer exists in that company's list. Prevents server-side
+  // "Unknown employee category" rejection on submit.
+  useEffect(() => {
+    if (!newEmployeeCategory) return;
+    if (!newEmployeeCategoryOptions.some(o => o.value.toLowerCase() === newEmployeeCategory.toLowerCase())) {
+      setNewEmployeeCategory('');
+    }
+  }, [newEmployeeCategoryOptions, newEmployeeCategory]);
+  useEffect(() => {
+    if (!editEmployeeCategory) return;
+    if (!editEmployeeCategoryOptions.some(o => o.value.toLowerCase() === editEmployeeCategory.toLowerCase())) {
+      setEditEmployeeCategory('');
+    }
+  }, [editEmployeeCategoryOptions, editEmployeeCategory]);
   const employmentStatusOptions = useMemo(
     () => (employmentStatusesList || []).filter((s: any) => s.is_active !== false).map((s: any) => ({ value: s.name, label: s.name })),
     [employmentStatusesList],
