@@ -33,6 +33,24 @@ export function EmployeeResultsView({
   const [rebuttal, setRebuttal] = useState('');
 
   const criteria = template?.sections.criteria ?? [];
+  const systemSlots = template?.sections.system_scores ?? [];
+  const criteriaMax = criteria.reduce((acc, c) => acc + (Number(c.weight) || 0) * 5, 0);
+  const systemWeight = systemSlots.reduce(
+    (acc, s: any) => acc + (Number(s?.weight) || 0),
+    0,
+  );
+  const hasCriteria = criteriaMax > 0;
+  const hasSystem = systemWeight > 0;
+  const systemTotal = Object.values((instance.system_scores ?? {}) as Record<string, unknown>)
+    .reduce<number>((acc, v) => acc + (typeof v === 'number' ? v : 0), 0);
+  // ADR-140-UI: numeric rating x/5 derived from the same 0..100 total the badge uses,
+  // so it is visible regardless of whether the template is criteria-only, system-only, or blended.
+  const ratingOutOf5 =
+    instance.total_score != null ? (Number(instance.total_score) / 100) * 5 : null;
+  const gridCols =
+    [true, hasCriteria, hasSystem].filter(Boolean).length >= 2
+      ? 'sm:grid-cols-2'
+      : 'sm:grid-cols-1';
   // POLICY §AR-STAGE-LABEL-DISPLAY-SSOT (ADR-128): remap responses onto their
   // effective display stage so duplicate-reviewer collapses (e.g. Dept≡BU)
   // render under the winning column (BU), matching the header.
