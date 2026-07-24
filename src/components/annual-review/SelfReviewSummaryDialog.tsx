@@ -98,7 +98,7 @@ export function SelfReviewSummaryDialog({
                   </div>
                 </div>
                 <div className="text-2xl font-semibold tabular-nums">
-                  {ratingOutOf5.toFixed(1)}
+                  {ratingOutOf5.toFixed(2)}
                   <span className="text-base font-normal text-muted-foreground"> / 5</span>
                 </div>
               </div>
