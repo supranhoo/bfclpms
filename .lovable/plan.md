@@ -1,64 +1,90 @@
+## 1. Assumptions
+- The active cycle remains **Annual Review 2025–2026**.
+- “Total Active Reviews” should preserve the existing definition: every instance in the active cycle, including administratively excluded rows unless the current policy explicitly says otherwise.
+- No review data should be rewritten; this is an access-policy and read-path repair.
 
-## What we know
+## 2. Clarifications
+Not Applicable. The live reproduction and database state identify the failure conclusively.
 
-- DB confirms one `active` cycle: **Annual Review - 2025-2026** (`b82a935f…`), with **2,580** instances (1,767 completed, 279 pending_bu, 12 pending_dept, 31 pending_self, 17 pending_management, 474 excluded).
-- Viewer Ankit Choudhary (101785) has roles `admin, platform_owner`.
-- RLS `instances_select_visible` grants full SELECT to `admin` and `hr_pms` — so counts must not be blocked by policy.
-- Progress tab tiles are driven by `useCycleStatusCounts(activeCycle?.id)` → `getCycleStatusCounts` in `src/services/annualReview/annualReviewService.ts`, which runs `count: 'exact', head: true` queries filtered only by `cycle_id`.
-- Because the "Activate a cycle to see progress." fallback is NOT rendered in the screenshot, `activeCycle` did resolve — so the 0s can only come from the count queries returning 0, from an unresolved/failed fetch, or from a stale/mismatched cached `activeCycle.id`.
+## 3. RCA and 5-Why Analysis
+### Confirmed facts
+- The active cycle exists and contains **2,580** instances: 31 pending self, 12 pending department, 279 pending BU, 17 pending management, 1,767 completed, and 474 excluded.
+- The browser successfully loads the active cycle, but every request to `annual_review_instances` returns **HTTP 403**.
+- The authenticated preview user has the Admin role.
 
-## Likely root causes (unverified — must confirm from client)
+### Root cause
+ADR-162 added `EXISTS (SELECT 1 FROM auth.users …)` directly inside the `annual_review_instances` RLS policy. Authenticated application roles cannot query the protected `auth` schema. PostgreSQL may evaluate this branch even when the earlier Admin branch is true, so the entire SELECT fails with `permission denied for schema auth`. The prior auth-readiness fix could not resolve a deterministic database authorization failure.
 
-1. **PostgREST count request failed silently** (e.g. transient 5xx / auth token race). React Query keeps the destructure default `{ total: 0, … }`, so tiles render 0 even though DB has 2,580 rows. Same failure would also explain the empty paginated grid ("No instances.") because both queries hit the same table.
-2. **Stale `activeCycle` cache** from a previous session where no cycle was active. The `useActiveCycle` query uses `annualReviewKeys.activeCycle()` with default staleTime; on this render it may still be returning a cached stale value whose `id` does not match the current active cycle. Count query then targets a non-existent cycle → 0.
-3. **Admin View toggle mismatch** (see `mem://features/admin/admin-role-switch`). If the natural role mask silently downgrades the JWT-visible role before RLS evaluation, `has_role('admin')` false → 0 rows. Screenshot shows toggle ON, so this is lowest probability but worth confirming.
+### 5 Whys
+1. Why are all dashboard cards zero? The instance count and page queries fail with 403, while the UI falls back to zero/empty data.
+2. Why do the queries fail? The SELECT policy evaluates a subquery against `auth.users`.
+3. Why is that forbidden? Application roles intentionally have no direct access to the protected auth schema.
+4. Why did Admin access not bypass it? SQL policy expressions do not guarantee short-circuit evaluation of `OR` branches.
+5. Why did the UI look like valid empty data? The Progress tab supplies zero defaults and does not render the query errors.
 
-## Plan
+A secondary correctness gap is also confirmed: the count service does not enumerate the newer `pending_dept`, `pending_management`, or `excluded` statuses, so “In Progress” remains incomplete even after access is restored.
 
-### Step 1 — Confirm which cause is real (no code change)
+## 4. Risk & Impact Report
+- **Data impact:** No row mutation or historical-score change. Add a narrowly scoped SECURITY DEFINER boolean helper and replace affected SELECT policy branches.
+- **Workflow impact:** Read visibility only; submission and reviewer transitions remain unchanged.
+- **UI/UX impact:** Real counts and rows return. Query failures will show an explicit retryable error instead of misleading zeros.
+- **Security impact:** Preserve the “platform-login employees only” rule without granting application roles access to `auth.users`. The helper exposes only a boolean and uses a fixed `search_path`.
+- **Regression risk:** Moderate because the affected instance/response policies are shared by employee, reviewer, hierarchy, and admin views.
+- **Scalability:** Add a primary-key existence check per relevant completed row; `auth.users.id` is indexed. Existing server-side pagination remains capped at 100 rows.
+- **Backup:** No new table and no data rewrite; automatic backup discovery remains unchanged.
+- **Mitigation:** Policy matrix tests, authenticated browser verification, exact database count comparison, and no broad auth-schema grants.
+- **Rollback:** Restore the previous policies and drop the helper. No data rollback is required.
 
-Ask the user (or check via Playwright driving `/annual-review-admin` in the sandbox) to:
-- Open DevTools → Network, filter `annual_review_instances`, reload the page.
-- Capture:
-  - The `cycle_id` param actually sent.
-  - HTTP status of the count call (`select=id&…&cycle_id=eq.<uuid>` with `Prefer: count=exact`, `HEAD`).
-  - Any `Postgrest` error body (403 / 42501 / 42P17 / 42883).
+## 5. Step-by-step Plan
+1. **Secure the login-access predicate**
+   - Add a SECURITY DEFINER helper that answers only whether a profile ID has a platform login.
+   - Lock its `search_path`, revoke public execution, and grant execution only to `authenticated` and `service_role`.
+   - Replace direct `auth.users` references in the affected instance and response SELECT policies with this helper.
+   - Preserve all existing employee, assigned-reviewer, Admin, HR PMS, and completed-upline visibility branches.
 
-Verification: response headers `Content-Range: 0-*/<n>`. If `<n> = 2580`, tiles are wrong for a different reason (state). If HTTP is non-200 or `<n> = 0`, we know it is a query-time failure.
+2. **Audit ADR-162 sibling paths**
+   - Update any hierarchy-completed policy/RPC path that performs the same unsafe auth-schema check.
+   - Confirm the hierarchy RPC still restricts results to login-enabled employees and remains server-side paginated.
 
-### Step 2 — Fix based on evidence
+3. **Complete status aggregation**
+   - Add `pending_dept`, `pending_management`, and `excluded` to the status-count model.
+   - Include department and management queues in “In Progress”.
+   - Keep excluded rows separate internally so the existing Total definition remains stable and future UI filtering stays correct.
 
-- **If cause 1 (silent count failure):**
-  - Surface the error instead of swallowing it: change `useCycleStatusCounts` to expose `error`/`isError`, and in `ProgressTab` render a red inline alert with a Retry button when the counts query errors. Prevents "0" from ever masking a failed fetch.
-  - Add `refetchOnWindowFocus: true` and `retry: 2` for that query.
+4. **Stop masking backend failures**
+   - Gate all Progress queries on `isReady && !!user` and include the user ID in auth-scoped query keys.
+   - Render a clear error state with Retry when counts or paginated rows fail; do not display zero cards as if the request succeeded.
+   - Keep the current table, filters, and pagination unchanged.
 
-- **If cause 2 (stale `activeCycle`):**
-  - Set `staleTime: 0` and `refetchOnMount: 'always'` on `useActiveCycle`, or add a manual invalidation of `annualReviewKeys.activeCycle()` on ProgressTab mount.
-  - Also add a hard equality guard: if `activeCycle.status !== 'active'`, treat as no cycle and refetch.
+5. **Regression coverage and verification**
+   - Add policy-contract tests proving no client-facing RLS policy directly queries `auth.users` and all reviewer slots remain present.
+   - Add count tests covering department, management, completed, and excluded statuses.
+   - Update realistic mock status data with all current workflow states and failure cases.
+   - Verify live as an authenticated Admin: no 403 responses, Total = 2,580, Completed = 1,767, In Progress includes 12 department + 279 BU + 17 management, and the first paginated rows render.
+   - Verify a hierarchy viewer still sees only completed, login-enabled employees in their allowed downline.
 
-- **If cause 3 (admin role mask):**
-  - Add a dev-only banner on ProgressTab when `has_role(auth.uid(),'admin')` returns false but the local role mask says admin, so the mismatch is obvious.
+## 6. UI Changes
+- **Location:** Annual Review Admin → Progress.
+- **Visual change:** No redesign. On query failure, replace misleading zero metrics/empty table with an inline error and Retry action.
+- **Interaction:** Existing filters, downloads, bulk actions, and pagination remain unchanged.
+- **Responsiveness:** Error state uses the existing responsive card/container layout.
 
-### Step 3 — Regression protection
+## 7. Implementation
+Pending approval.
 
-Add a Vitest for `getCycleStatusCounts` that:
-- Mocks 2,580 rows across mixed statuses and asserts `total === 2580` and per-status buckets match.
-- Mocks a PostgREST error and asserts the hook exposes `isError = true` (rather than silently defaulting to 0).
+## 8. Tests
+- RLS policy safety/role matrix.
+- Full annual-review status aggregation.
+- Query failure versus genuine empty-state rendering.
+- Auth-ready/user-scoped query gate.
+- Authenticated browser/network verification.
 
-### Step 4 — Doc & policy touch-ups
+## 9. DOCUMENTATION.md Updates
+Document the confirmed 403 RCA, secure helper pattern, complete status aggregation, measured database totals, rollback, and version-history entry.
 
-- Append to `DOCUMENTATION.md` under Annual Review Admin: "Progress tiles must never render silent zeros; a failed count query surfaces an inline error with Retry."
-- Add short note to `POLICY.md`: **§AR-ADMIN-PROGRESS-NO-SILENT-ZERO** — count/aggregate widgets on admin dashboards must distinguish loading / error / empty from zero.
+## 10. POLICY.md Updates
+Add the rule that client-facing RLS policies must never directly query protected auth tables; platform-login checks must use a minimal SECURITY DEFINER boolean helper. Record all supported annual-review statuses in the aggregation contract.
 
-## Risk & impact
-
-- Data: none (read-only diagnostics + hook wiring).
-- Workflow: none.
-- UI: an inline error alert appears above the tiles only when the count query fails; layout unchanged otherwise.
-- Regression: low — hook signature stays backward-compatible; only ProgressTab consumes new `isError`.
-
-## What I need from you before implementing
-
-One of:
-- A screenshot of the Network tab entry for `annual_review_instances?select=id…` (status code + `Content-Range`), **or**
-- Permission to just implement Step 2 option 1 + option 2 together (both are safe additive changes) and ship the diagnostic banner so the next occurrence is self-explanatory.
+## 11. Post-implementation Notes
+- CAPA: add a static regression guard against protected-schema references in RLS policy migrations.
+- No users, reviews, scores, reviewer mappings, or workflow stages will be changed.
