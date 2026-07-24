@@ -663,7 +663,7 @@ export interface ListReviewerInstancesPaginatedArgs {
   scope?: ReviewerScope;
 }
 
-export type ReviewerScope = 'any' | 'manager' | 'skip' | 'dept' | 'bu' | 'hr';
+export type ReviewerScope = 'any' | 'manager' | 'skip' | 'dept' | 'bu' | 'hr' | 'management';
 
 export async function listInstancesForReviewerPaginated(
   args: ListReviewerInstancesPaginatedArgs,
@@ -692,6 +692,7 @@ export type ReviewerRoleCounts = {
   dept: number;
   bu: number;
   hr: number;
+  management: number;
 };
 
 export async function getReviewerRoleCounts(
@@ -709,6 +710,7 @@ export async function getReviewerRoleCounts(
     dept: Number(counts?.dept ?? 0),
     bu: Number(counts?.bu ?? 0),
     hr: Number(counts?.hr ?? 0),
+    management: Number(counts?.management ?? 0),
   };
 }
 
