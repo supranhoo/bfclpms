@@ -203,19 +203,27 @@ export function ComprehensiveTab({ cycleId, cycleName }: { cycleId: string | und
             const stageRow = (label: string, name: string | null, score: number | null, comment: string | null): Cell[] => [
               { label: `${label} Reviewer`, value: name ?? '—' },
               { label: `${label} Score`, value: fmt(score) },
-              { label: `${label} Rating`, value: stageRatingFromScore(score) || '—' },
+              { label: `${label} Rating`, value: stageRatingDisplay(score, comment) },
               { label: `${label} Comment`, value: comment || '—', wide: true },
             ];
 
+            // ADR-155 — Collapse the HOD/Manager row when dept_head == bu_head
+            // (dept=BU collapse). The BU Head row already represents that
+            // reviewer, so a duplicated blank HOD row is misleading.
+            const deptCollapsedIntoBu =
+              !!r.dept_head_id && !!r.bu_head_id && r.dept_head_id === r.bu_head_id;
+
             const stageCells: Cell[] = [
               ...stageRow('Self', r.employee_name, r.self_score, r.self_comment),
-              ...(has('manager') || has('dept_head')
+              ...((has('manager') || has('dept_head')) && !deptCollapsedIntoBu
                 ? stageRow('HOD / Manager', r.dept_head_name ?? r.manager_name, hod, hodComment)
                 : []),
               ...(has('bu_head') ? stageRow('BU Head', r.bu_head_name, r.bu_head_score, r.bu_head_comment) : []),
               ...(has('management') ? stageRow('Management', r.management_name, r.management_score, r.management_comment) : []),
               ...(has('hr') ? stageRow('HR', r.hr_name, r.hr_score, r.hr_comment) : []),
             ];
+
+            const systemScoredBanner = isSystemScoredOnly(r);
 
             const outcome: Cell[] = [
               { label: 'Final Score', value: fmt(r.total_score) },
@@ -238,6 +246,12 @@ export function ComprehensiveTab({ cycleId, cycleName }: { cycleId: string | und
             return (
               <div className="space-y-5 p-4">
                 {section('Employee', employee)}
+                {systemScoredBanner && (
+                  <p className="rounded-md border border-amber-300/60 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-500/40 dark:bg-amber-950/30 dark:text-amber-200">
+                    System-scored template — per-stage criteria were not collected.
+                    Final Score reflects system inputs only, so per-stage Score/Rating are shown as "—".
+                  </p>
+                )}
                 {section('Stage scores', stageCells)}
                 {section('Outcome', outcome)}
                 {section('Diagnosis', diagnosis)}
