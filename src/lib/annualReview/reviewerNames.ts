@@ -9,6 +9,7 @@ interface InstanceLike {
   dept_head_id: string | null;
   bu_head_id: string | null;
   hr_id: string | null;
+  management_id?: string | null;
 }
 
 /**
@@ -31,5 +32,6 @@ export function buildReviewerNamesByStage(
     dept_head:    label(instance.dept_head_id),
     bu_head:      label(instance.bu_head_id),
     hr:           label(instance.hr_id),
+    management:   label(instance.management_id ?? null),
   };
 }
