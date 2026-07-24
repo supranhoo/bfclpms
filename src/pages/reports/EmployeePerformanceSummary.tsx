@@ -83,6 +83,16 @@ const STATUS_PRIORITY_ORDER = [
   'hr_pms_review', 'audit', 'management_review', 'approved',
 ];
 
+/** Returns true when the row has at least one KPI in any selected status.
+ *  Empty selection means "all statuses". */
+export function matchesSelectedStatuses(
+  selected: string[],
+  statusCounts: Record<string, number>,
+): boolean {
+  if (selected.length === 0) return true;
+  return selected.some((s) => (statusCounts[s] || 0) > 0);
+}
+
 interface EmployeePerformance {
   employeeId: string;
   employeeCode: string;
