@@ -17,6 +17,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Download, Search, Users, TrendingUp, TrendingDown, Minus, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { FrequencyLockToggle } from '@/components/ui/FrequencyLockToggle';
+import { MultiSelectId } from '@/components/ui/multi-select-id';
 import { useBulkEmployeeWorkflows } from '@/hooks/useWorkflowConfig';
 import { EmployeeStatusFilter } from '@/components/reports/EmployeeStatusFilter';
 import { applyEmployeeStatusFilter, employeeStatusLabel, type EmployeeStatusMode } from '@/lib/reportEmployeeFilter';
@@ -82,6 +83,16 @@ const STATUS_PRIORITY_ORDER = [
   'hr_pms_review', 'audit', 'management_review', 'approved',
 ];
 
+/** Returns true when the row has at least one KPI in any selected status.
+ *  Empty selection means "all statuses". */
+export function matchesSelectedStatuses(
+  selected: string[],
+  statusCounts: Record<string, number>,
+): boolean {
+  if (selected.length === 0) return true;
+  return selected.some((s) => (statusCounts[s] || 0) > 0);
+}
+
 interface EmployeePerformance {
   employeeId: string;
   employeeCode: string;
@@ -120,7 +131,7 @@ export default function EmployeePerformanceSummary() {
   const [pageSize, setPageSize] = useState(25);
   const [activeTab, setActiveTab] = useState('summary');
   const [comparisonEmployee, setComparisonEmployee] = useState<string | null>(null);
-  const [selectedStatus, setSelectedStatus] = useState('all');
+  const [selectedStatus, setSelectedStatus] = useState<string[]>([]);
   const [selectedFm, setSelectedFm] = useState('all');
   const [showFreqLocked, setShowFreqLocked] = useState(false);
   const [empStatusMode, setEmpStatusMode] = useState<EmployeeStatusMode>('active');
@@ -434,7 +445,7 @@ export default function EmployeePerformanceSummary() {
         // Hide employees that only have frequency-locked KPIs when toggle is off
         if (!showFreqLocked && row.kpiCount === 0 && row.lockedKpiCount > 0) return false;
         // Status filter
-        if (selectedStatus !== 'all' && !(row.statusCounts[selectedStatus] > 0)) return false;
+        if (!matchesSelectedStatuses(selectedStatus, row.statusCounts)) return false;
         // Functional Manager filter
         if (selectedFm !== 'all' && row.functionalManagerId !== selectedFm) return false;
         // Search filter
@@ -687,19 +698,13 @@ export default function EmployeePerformanceSummary() {
                     ))}
                   </SelectContent>
                 </Select>
-                <Select value={selectedStatus} onValueChange={setSelectedStatus}>
-                  <SelectTrigger className="w-[180px]">
-                    <SelectValue placeholder="Status" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Status</SelectItem>
-                    {Object.entries(STATUS_LABELS).map(([key, label]) => (
-                      <SelectItem key={key} value={key}>
-                        {label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <MultiSelectId
+                  options={Object.entries(STATUS_LABELS).map(([id, label]) => ({ id, label }))}
+                  value={selectedStatus}
+                  onChange={setSelectedStatus}
+                  placeholder="All Status"
+                  className="w-[180px]"
+                />
                 <Select value={selectedFm} onValueChange={setSelectedFm}>
                   <SelectTrigger className="w-[220px]">
                     <SelectValue placeholder="Functional Manager" />
