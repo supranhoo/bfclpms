@@ -17,6 +17,8 @@ import {
   completionStatus,
   diagnoseHr,
   stageRatingFromScore,
+  stageRatingDisplay,
+  isSystemScoredOnly,
   type ComprehensiveRow,
   type GroupSummary,
 } from '@/services/annualReview/comprehensiveReport';
