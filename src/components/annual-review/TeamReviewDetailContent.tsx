@@ -48,6 +48,7 @@ import { RunningFinalScoreCard } from '@/components/annual-review/RunningFinalSc
 import {
   OverallRecommendationCard,
   RECOMMENDATION_KEY,
+  RECOMMENDATION_REQUIRED_ROLES,
 } from '@/components/annual-review/OverallRecommendationCard';
 import { computeRunningFinalScore } from '@/lib/annualReview/runningFinalScore';
 import { displayStageForResponse } from '@/lib/annualReview/displayStageForResponse';
@@ -215,6 +216,15 @@ export function TeamReviewDetailContent({
             .map((f) => f.label)
             .join(', ')}`,
         );
+        return;
+      }
+    }
+    // POLICY §AR-RECOMMENDATION-REQUIRED (ADR-151): BU Head and Management
+    // terminal stages cannot submit without an Overall Recommendation.
+    if (role && RECOMMENDATION_REQUIRED_ROLES.includes(role)) {
+      const rec = (((draft.qualitative_responses ?? {}) as Record<string, string>)[RECOMMENDATION_KEY] ?? '').trim();
+      if (!rec) {
+        toast.error('Please add an Overall Recommendation before submitting.');
         return;
       }
     }
