@@ -1,37 +1,49 @@
-# Why Reports section is hidden for HR PMS
+Plan: Convert the Status filter on Employee Performance Summary to multi-select
 
-## Root cause
-In `src/components/layout/AppSidebar.tsx` (lines 129–134), every item in the `reports` group has a static `roles` allowlist that omits `hr_pms`:
+1. Scope
+   - Target: the single "Status" dropdown on `/reports/employee-performance-summary` (see screenshot: currently shows "All Status", "Approved", "Management Review", "Audit", etc.).
+   - Change only the filter control and its local state; no schema, API, or export changes.
 
-```
-View Reports         → ['admin', 'manager', 'auditor', 'management']
-Performance Report   → ['admin', 'manager', 'auditor']
-KRA Issuance         → ['admin', 'manager', 'auditor']
-TNI Report           → ['admin', 'manager', 'auditor']
-```
+2. What changes visually
+   - Replace the single shadcn `<Select>` with the existing generic `<MultiSelectId>` component.
+   - Users can select any combination of statuses: Approved, Management Review, Audit, HR PMS Review, Skip-Level Check, Manager Check, Self Review, KRA Set.
+   - Default remains "All Status" (empty selection = no filtering).
+   - Trigger shows the selected label when one item is selected, or "N selected" when multiple.
+   - Dropdown is searchable and includes Select All / Deselect All shortcuts.
+   - Keep the current ~180px width and filter-bar alignment.
 
-The group renders through `CollapsibleSidebarGroup`, which hides itself when the filtered item list is empty. So an HR PMS user gets zero items and the whole "Reports" group disappears from the sidebar. (Page-level access via `report_access_config` still works if HR PMS navigates directly by URL, but the menu never surfaces it.)
+3. Code changes
+   File: `src/pages/reports/EmployeePerformanceSummary.tsx`
+   - Import `MultiSelectId` from `@/components/ui/multi-select-id`.
+   - Change state `selectedStatus` from `string` to `string[]` and default to `[]`.
+   - Update `filteredData` predicate: include the row if `selectedStatus` is empty OR the row has at least one KPI whose status is in `selectedStatus`.
+   - Update the `useEffect` that resets `currentPage` to depend on `selectedStatus` (array reference stable via state setter).
+   - Replace the `<Select value={selectedStatus} …>` block with `<MultiSelectId options={STATUS_LABELS entries} value={selectedStatus} onChange={setSelectedStatus} placeholder="All Status" className="w-[180px]" />`.
+   - Remove the now-unused `Select*` imports if they are no longer used elsewhere on the page.
 
-Note: `Incentive Report` is in the `incentive` group (line 112) and already includes `hr_pms` — that's why HR PMS sees the incentive report but not the general Reports section.
+4. Logic details
+   - Current: `selectedStatus` is a single key; filter keeps rows with `statusCounts[selectedStatus] > 0`.
+   - New: `selectedStatus` is an array of keys; filter keeps rows when `selectedStatus.length === 0` OR `selectedStatus.some(s => row.statusCounts[s] > 0)`.
+   - This preserves the existing behavior for single selections and extends it naturally to multiple selections.
 
-## Fix (UI-only, surgical)
-Add `'hr_pms'` to the `roles` array of the four items in the `reports` group in `src/components/layout/AppSidebar.tsx`:
+5. Tests
+   - Create `src/test/employeePerformanceSummaryStatusFilter.test.ts`.
+   - Cover:
+     - Empty selection includes all rows.
+     - Single selection keeps only rows with that status.
+     - Multiple selection keeps rows with any of the selected statuses.
+     - Selection excludes rows that have none of the selected statuses.
+   - Use a small helper that mirrors the inline filter predicate so tests remain lightweight.
 
-- `View Reports` → add `hr_pms`
-- `Performance Report` → add `hr_pms`
-- `KRA Issuance` → add `hr_pms`
-- `TNI Report` → add `hr_pms`
+6. Risk & impact
+   - Data impact: none.
+   - Workflow impact: none; users can still choose one status exactly as before.
+   - UI/UX impact: only the status dropdown control changes; table, pagination, summary cards, and export continue to work from `filteredData`.
+   - Regression risk: very low; if the component is wired correctly, filtering behavior is a strict superset of the old behavior.
+   - Mitigation: unit tests for the new predicate; manual smoke-test of the dropdown and table counts.
 
-No changes to page-level RLS, `report_access_config`, or reporting services — HR PMS is already granted at those layers per existing policy; this only unhides the menu.
+7. Rollback
+   - Revert the single file change and the new test file; the original single-select code is removed in-place, so rolling back restores the previous behavior.
 
-## Risk & impact
-- Data impact: none.
-- Workflow impact: none.
-- UI impact: HR PMS users will now see the "Reports" collapsible group with the four entries above.
-- Regression risk: minimal — additive role entry, same pattern used by `Incentive Report`.
-
-## Rollback
-Revert the four `roles` array edits.
-
-## Confirm before I build
-Should HR PMS get all four items (View Reports, Performance Report, KRA Issuance, TNI Report), or only a subset? Default in this plan: all four.
+8. Documentation / policy
+   - Not Applicable: this is a UI-only enhancement with no business-policy or schema change.
