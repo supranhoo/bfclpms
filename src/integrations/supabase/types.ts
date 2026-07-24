@@ -14930,6 +14930,15 @@ export type Database = {
           total_kpis: number
         }[]
       }
+      get_hierarchy_completed_reviews: {
+        Args: {
+          p_cycle_id: string
+          p_page?: number
+          p_page_size?: number
+          p_search?: string
+        }
+        Returns: Json
+      }
       get_incentive_program_employees: {
         Args: { _program_id: string }
         Returns: {
