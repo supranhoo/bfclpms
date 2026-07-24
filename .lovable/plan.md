@@ -1,60 +1,64 @@
-## RCA — "Could not load hierarchy reviews" and empty Admin Progress tiles
 
-### 5 Whys (hierarchy tab)
-1. Why does the "Hierarchy — Completed" tab show a red error and zero rows? → The RPC `get_hierarchy_completed_reviews` throws a Postgres error before returning.
-2. Why does the RPC throw? → `ERROR: column emp.business_unit_id does not exist` (verified by running the RPC as an admin user against the live DB).
-3. Why did the RPC reference `emp.business_unit_id`? → The ADR-162 function joined `business_units bu ON bu.id = emp.business_unit_id`, assuming BU lived on `profiles`.
-4. Why doesn't `profiles.business_unit_id` exist? → BU membership on this platform is derived through `departments.business_unit_id`, not stored directly on the profile.
-5. Root cause → An incorrect schema assumption in the ADR-162 RPC. All hierarchy calls fail immediately, regardless of the caller's role or subtree.
+## What we know
 
-### Admin Progress tiles showing 0
-- Verified in DB: cycle `Annual Review – 2025-2026` has 2,580 instances (1,767 completed, 279 pending_bu, …).
-- RLS on `annual_review_instances` allows `admin` / `hr_pms` full SELECT — the count RPC is not blocked.
-- The Admin Progress page (`AnnualReviewAdmin.tsx`) uses `getCycleStatusCounts` (head-count queries) and is independent of the hierarchy RPC. The most likely cause of tiles being 0 in the screenshot is that no active cycle was resolved at load time (screenshot was taken during initial fetch, or `activeCycle?.id` was still undefined). No code fault was found in the counts path.
-- The plan therefore fixes the confirmed backend defect (hierarchy RPC) and adds a small frontend guard to surface a clear message when the Admin page has no active cycle, so a transient empty state stops being mistaken for real zero data.
+- DB confirms one `active` cycle: **Annual Review - 2025-2026** (`b82a935f…`), with **2,580** instances (1,767 completed, 279 pending_bu, 12 pending_dept, 31 pending_self, 17 pending_management, 474 excluded).
+- Viewer Ankit Choudhary (101785) has roles `admin, platform_owner`.
+- RLS `instances_select_visible` grants full SELECT to `admin` and `hr_pms` — so counts must not be blocked by policy.
+- Progress tab tiles are driven by `useCycleStatusCounts(activeCycle?.id)` → `getCycleStatusCounts` in `src/services/annualReview/annualReviewService.ts`, which runs `count: 'exact', head: true` queries filtered only by `cycle_id`.
+- Because the "Activate a cycle to see progress." fallback is NOT rendered in the screenshot, `activeCycle` did resolve — so the 0s can only come from the count queries returning 0, from an unresolved/failed fetch, or from a stale/mismatched cached `activeCycle.id`.
 
-### CAPA
+## Likely root causes (unverified — must confirm from client)
 
-**Correction (backend, single migration)**
-Recreate `public.get_hierarchy_completed_reviews(uuid, text, int, int)` with the correct BU join:
+1. **PostgREST count request failed silently** (e.g. transient 5xx / auth token race). React Query keeps the destructure default `{ total: 0, … }`, so tiles render 0 even though DB has 2,580 rows. Same failure would also explain the empty paginated grid ("No instances.") because both queries hit the same table.
+2. **Stale `activeCycle` cache** from a previous session where no cycle was active. The `useActiveCycle` query uses `annualReviewKeys.activeCycle()` with default staleTime; on this render it may still be returning a cached stale value whose `id` does not match the current active cycle. Count query then targets a non-existent cycle → 0.
+3. **Admin View toggle mismatch** (see `mem://features/admin/admin-role-switch`). If the natural role mask silently downgrades the JWT-visible role before RLS evaluation, `has_role('admin')` false → 0 rows. Screenshot shows toggle ON, so this is lowest probability but worth confirming.
 
-```
-LEFT JOIN public.departments   dept ON dept.id = emp.department_id
-LEFT JOIN public.business_units bu  ON bu.id   = dept.business_unit_id
-```
+## Plan
 
-No signature change, no RLS change, no policy change. Everything else (auth guard, subtree scope, login-employee gate, viewer_relationship classification, pagination, search) stays byte-identical to ADR-162.
+### Step 1 — Confirm which cause is real (no code change)
 
-**Corrective (frontend, presentation only)**
-- `HierarchyCompletedList.tsx` already renders a retry alert on error — no change needed once the RPC is fixed.
-- `AnnualReviewAdmin.tsx`: when `activeCycle?.id` is undefined, render a small inline notice above the tiles ("No active cycle selected — pick a cycle to see progress") instead of silently showing `0 / 0 / 0 / 0`. Zero real code-path change; purely a clarifying label.
+Ask the user (or check via Playwright driving `/annual-review-admin` in the sandbox) to:
+- Open DevTools → Network, filter `annual_review_instances`, reload the page.
+- Capture:
+  - The `cycle_id` param actually sent.
+  - HTTP status of the count call (`select=id&…&cycle_id=eq.<uuid>` with `Prefer: count=exact`, `HEAD`).
+  - Any `Postgrest` error body (403 / 42501 / 42P17 / 42883).
 
-**Preventive**
-- Add a Vitest for `listHierarchyCompletedReviews` that mocks a minimal RPC response so a regression in the service contract is caught.
-- Add a note to `docs/adr/ADR-162.md`: "BU is resolved via departments.business_unit_id — profiles has no business_unit_id column."
+Verification: response headers `Content-Range: 0-*/<n>`. If `<n> = 2580`, tiles are wrong for a different reason (state). If HTTP is non-200 or `<n> = 0`, we know it is a query-time failure.
 
-### Risk & Impact
+### Step 2 — Fix based on evidence
 
-| Area | Impact |
-| --- | --- |
-| Data | None. Read-only function replacement. |
-| Workflow | None. |
-| UI | Hierarchy tab starts loading rows; Admin tiles gain a "no active cycle" notice. |
-| RLS / Security | Unchanged — same auth guard and same visibility predicates. |
-| Regression | Very low. Function body identical except one join column. |
-| Rollback | Redeploy previous function body (kept in git history / ADR-162 migration). |
+- **If cause 1 (silent count failure):**
+  - Surface the error instead of swallowing it: change `useCycleStatusCounts` to expose `error`/`isError`, and in `ProgressTab` render a red inline alert with a Retry button when the counts query errors. Prevents "0" from ever masking a failed fetch.
+  - Add `refetchOnWindowFocus: true` and `retry: 2` for that query.
 
-### Files to touch
+- **If cause 2 (stale `activeCycle`):**
+  - Set `staleTime: 0` and `refetchOnMount: 'always'` on `useActiveCycle`, or add a manual invalidation of `annualReviewKeys.activeCycle()` on ProgressTab mount.
+  - Also add a hard equality guard: if `activeCycle.status !== 'active'`, treat as no cycle and refetch.
 
-- Migration: `CREATE OR REPLACE FUNCTION public.get_hierarchy_completed_reviews(...)` with the corrected BU join.
-- `src/pages/annual-review/AnnualReviewAdmin.tsx`: add the "no active cycle" hint above the summary tiles.
-- `src/test/annualReview/hierarchyCompleted.test.ts` (new): contract test for `listHierarchyCompletedReviews`.
-- `docs/adr/ADR-162.md`: append clarification about the BU column.
+- **If cause 3 (admin role mask):**
+  - Add a dev-only banner on ProgressTab when `has_role(auth.uid(),'admin')` returns false but the local role mask says admin, so the mismatch is obvious.
 
-### Verification
+### Step 3 — Regression protection
 
-1. Reload the Team Annual Review page → "Hierarchy — Completed" tab shows counts and rows for the caller's subtree; error alert gone.
-2. As Admin, open Annual Review Admin → tiles reflect real counts (total 2,580, completed 1,767 for the active cycle).
-3. `bunx vitest run src/test/annualReview/hierarchyCompleted.test.ts` passes.
+Add a Vitest for `getCycleStatusCounts` that:
+- Mocks 2,580 rows across mixed statuses and asserts `total === 2580` and per-status buckets match.
+- Mocks a PostgREST error and asserts the hook exposes `isError = true` (rather than silently defaulting to 0).
 
-Switch to build mode to apply.
+### Step 4 — Doc & policy touch-ups
+
+- Append to `DOCUMENTATION.md` under Annual Review Admin: "Progress tiles must never render silent zeros; a failed count query surfaces an inline error with Retry."
+- Add short note to `POLICY.md`: **§AR-ADMIN-PROGRESS-NO-SILENT-ZERO** — count/aggregate widgets on admin dashboards must distinguish loading / error / empty from zero.
+
+## Risk & impact
+
+- Data: none (read-only diagnostics + hook wiring).
+- Workflow: none.
+- UI: an inline error alert appears above the tiles only when the count query fails; layout unchanged otherwise.
+- Regression: low — hook signature stays backward-compatible; only ProgressTab consumes new `isError`.
+
+## What I need from you before implementing
+
+One of:
+- A screenshot of the Network tab entry for `annual_review_instances?select=id…` (status code + `Content-Range`), **or**
+- Permission to just implement Step 2 option 1 + option 2 together (both are safe additive changes) and ship the diagnostic banner so the next occurrence is self-explanatory.
