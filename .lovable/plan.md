@@ -1,62 +1,60 @@
-# ADR-162 — Hierarchy Visibility of Completed Annual Reviews
+## RCA — "Could not load hierarchy reviews" and empty Admin Progress tiles
 
-Give every stakeholder in an employee's reporting chain (Reporting Manager, Skip-Level / Dept Head, BU Head, Management, plus Admin/HR) read-only access to that employee's completed annual review — restricted to employees who have a platform login (auth.users row present).
+### 5 Whys (hierarchy tab)
+1. Why does the "Hierarchy — Completed" tab show a red error and zero rows? → The RPC `get_hierarchy_completed_reviews` throws a Postgres error before returning.
+2. Why does the RPC throw? → `ERROR: column emp.business_unit_id does not exist` (verified by running the RPC as an admin user against the live DB).
+3. Why did the RPC reference `emp.business_unit_id`? → The ADR-162 function joined `business_units bu ON bu.id = emp.business_unit_id`, assuming BU lived on `profiles`.
+4. Why doesn't `profiles.business_unit_id` exist? → BU membership on this platform is derived through `departments.business_unit_id`, not stored directly on the profile.
+5. Root cause → An incorrect schema assumption in the ADR-162 RPC. All hierarchy calls fail immediately, regardless of the caller's role or subtree.
 
-Entry point: **Team Annual Review** page only. No new top-level route.
+### Admin Progress tiles showing 0
+- Verified in DB: cycle `Annual Review – 2025-2026` has 2,580 instances (1,767 completed, 279 pending_bu, …).
+- RLS on `annual_review_instances` allows `admin` / `hr_pms` full SELECT — the count RPC is not blocked.
+- The Admin Progress page (`AnnualReviewAdmin.tsx`) uses `getCycleStatusCounts` (head-count queries) and is independent of the hierarchy RPC. The most likely cause of tiles being 0 in the screenshot is that no active cycle was resolved at load time (screenshot was taken during initial fetch, or `activeCycle?.id` was still undefined). No code fault was found in the counts path.
+- The plan therefore fixes the confirmed backend defect (hierarchy RPC) and adds a small frontend guard to surface a clear message when the Admin page has no active cycle, so a transient empty state stops being mistaken for real zero data.
 
----
+### CAPA
 
-## Risk & Impact
+**Correction (backend, single migration)**
+Recreate `public.get_hierarchy_completed_reviews(uuid, text, int, int)` with the correct BU join:
 
-- **Data**: no schema mutation; adds one SECURITY DEFINER RPC + one view. Read-only surface — no writes.
-- **Workflow**: unchanged. Existing "queue" (action items) and "assist" flows untouched.
-- **UI/UX**: adds a second tab "Hierarchy — Completed" beside the current queue. Zero change to existing tab.
-- **Regression**: contained to Team Annual Review page + one new RPC. No trigger changes.
-- **Security**: RPC gates by (a) caller in employee's upline chain OR admin/hr_pms, and (b) employee has `auth.users` row. RLS on `annual_review_instances` unchanged; new RPC is the only widened path.
+```
+LEFT JOIN public.departments   dept ON dept.id = emp.department_id
+LEFT JOIN public.business_units bu  ON bu.id   = dept.business_unit_id
+```
 
-## Scope Rules (who sees whom)
+No signature change, no RLS change, no policy change. Everything else (auth guard, subtree scope, login-employee gate, viewer_relationship classification, pagination, search) stays byte-identical to ADR-162.
 
-Given caller C and employee E with a **completed** instance in the current cycle, C sees E's completed review iff **any** is true:
-1. C is Admin or HR PMS.
-2. C is E's Reporting Manager (direct).
-3. C is a Skip-Level / Dept Head above E (recursive upline via `annual_review_subtree_ids` inverse).
-4. C is BU Head of E's Business Unit (via `business_units.head_id` chain including headed BUs — reuse ADR-111 logic).
-5. C is Management above E's chain (reuse ADR-158 direct-report logic + transitive management chain).
+**Corrective (frontend, presentation only)**
+- `HierarchyCompletedList.tsx` already renders a retry alert on error — no change needed once the RPC is fixed.
+- `AnnualReviewAdmin.tsx`: when `activeCycle?.id` is undefined, render a small inline notice above the tiles ("No active cycle selected — pick a cycle to see progress") instead of silently showing `0 / 0 / 0 / 0`. Zero real code-path change; purely a clarifying label.
 
-**Gate**: `EXISTS (SELECT 1 FROM auth.users WHERE id = E.employee_id)` — instances for non-login employees are excluded.
+**Preventive**
+- Add a Vitest for `listHierarchyCompletedReviews` that mocks a minimal RPC response so a regression in the service contract is caught.
+- Add a note to `docs/adr/ADR-162.md`: "BU is resolved via departments.business_unit_id — profiles has no business_unit_id column."
 
-## Backend Deliverables (single migration)
+### Risk & Impact
 
-1. `get_hierarchy_completed_reviews(p_cycle_id uuid, p_search text, p_page int, p_page_size int)` — SECURITY DEFINER, returns paginated rows: `instance_id, employee_id, employee_code, employee_name, department, business_unit, final_rating_5, total_score_100, completed_at, terminal_role, terminal_reviewer_name, acknowledged_at, viewer_relationship` (enum: `admin|hr|manager|skip|dept_head|bu_head|management`).
-   - Page size capped at 100 (per ADR-annual-review §6).
-   - Uses existing helpers `is_admin_or_hr_pms`, `annual_review_subtree_ids`, `is_bu_head`, and the management resolver.
-2. `get_hierarchy_completed_review_detail(p_instance_id uuid)` — SECURITY DEFINER, returns the full read-only bundle already used by `EmployeeResultsView` (scores, criteria, all stage responses, system scores, self-review answers, acknowledgment). Rejects if caller fails the same 5-rule gate or if instance is not `completed`.
-3. Audit: every detail read writes one row to `annual_review_access_audit` with `action='hierarchy_view_completed'` (extend the check constraint accordingly).
+| Area | Impact |
+| --- | --- |
+| Data | None. Read-only function replacement. |
+| Workflow | None. |
+| UI | Hierarchy tab starts loading rows; Admin tiles gain a "no active cycle" notice. |
+| RLS / Security | Unchanged — same auth guard and same visibility predicates. |
+| Regression | Very low. Function body identical except one join column. |
+| Rollback | Redeploy previous function body (kept in git history / ADR-162 migration). |
 
-## Frontend Deliverables
+### Files to touch
 
-- **`TeamAnnualReview.tsx`**: add a tab switcher `My Queue` (existing) | `Hierarchy — Completed` (new). URL param `view=hierarchy` for deep link + Back-restore parity.
-- **`HierarchyCompletedList.tsx`** (new): server-paginated table using `useHierarchyCompletedReviews`. Columns: Employee, Dept / BU, Terminal Reviewer, Completed On, Rating (x.xx / 5), Acknowledged?, Relationship badge, `View` action.
-- **`HierarchyCompletedDetail.tsx`** (new route `/annual-review/hierarchy/:instanceId`): renders the existing `EmployeeResultsView` in fully read-only mode using the new detail RPC. Shows a "You are viewing as {relationship}" info banner.
-- **Hooks** in `src/hooks/annualReview/`: `useHierarchyCompletedReviews`, `useHierarchyCompletedReviewDetail`.
-- **Service** `src/services/annualReview/hierarchyVisibility.ts` — thin wrapper over the two RPCs.
+- Migration: `CREATE OR REPLACE FUNCTION public.get_hierarchy_completed_reviews(...)` with the corrected BU join.
+- `src/pages/annual-review/AnnualReviewAdmin.tsx`: add the "no active cycle" hint above the summary tiles.
+- `src/test/annualReview/hierarchyCompleted.test.ts` (new): contract test for `listHierarchyCompletedReviews`.
+- `docs/adr/ADR-162.md`: append clarification about the BU column.
 
-## Non-Login Employee Handling
+### Verification
 
-RPCs filter `employee_id IN (SELECT id FROM auth.users)`. Empty-state copy on the tab explains: "Only employees with active platform access appear here."
+1. Reload the Team Annual Review page → "Hierarchy — Completed" tab shows counts and rows for the caller's subtree; error alert gone.
+2. As Admin, open Annual Review Admin → tiles reflect real counts (total 2,580, completed 1,767 for the active cycle).
+3. `bunx vitest run src/test/annualReview/hierarchyCompleted.test.ts` passes.
 
-## Testing
-
-- Vitest: `hierarchyVisibility.test.ts` — mocks RPC and asserts 5-rule filtering + login-only filter.
-- SQL: assertion queries confirm (a) 0 rows for a peer with no upline relationship, (b) rows appear for direct manager, skip, BU Head, Management, Admin, (c) 0 rows for a non-login employee.
-- Manual smoke: verify with Gaurav Budhia (Management), a Dept Head, and a BU Head against 3 completed instances.
-
-## Rollback
-
-Single migration file — drop the two RPCs and revert the audit check constraint. Frontend tab is gated by a feature flag `hierarchy_completed_view.enabled` in `admin_feature_flags` for staged rollout.
-
-## Docs
-
-- `docs/adr/ADR-162.md` — decision record.
-- `POLICY.md` §AR-HIERARCHY-COMPLETED-VIEW — read-only, login-only, audit-logged, 5-rule scope.
-- `DOCUMENTATION.md` — new section under Annual Review > Visibility.
+Switch to build mode to apply.
