@@ -126,7 +126,7 @@ export function EmployeeResultsView({
               </p>
               {ratingOutOf5 != null && (
                 <p className="text-xs text-muted-foreground mt-1">
-                  ≈ {ratingOutOf5.toFixed(1)} / 5
+                  ≈ {ratingOutOf5.toFixed(2)} / 5
                 </p>
               )}
             </div>
