@@ -632,7 +632,7 @@ export async function listInstancesForReviewer(reviewerId: string, cycleId: stri
     .select('*, employee:profiles!annual_review_instances_employee_id_fkey(id, full_name, employee_code, designation, doj)')
     .eq('cycle_id', cycleId)
     .neq('overall_status', 'excluded')
-    .or(`manager_id.eq.${reviewerId},skip_id.eq.${reviewerId},dept_head_id.eq.${reviewerId},bu_head_id.eq.${reviewerId},hr_id.eq.${reviewerId}`);
+    .or(`manager_id.eq.${reviewerId},skip_id.eq.${reviewerId},dept_head_id.eq.${reviewerId},bu_head_id.eq.${reviewerId},hr_id.eq.${reviewerId},management_id.eq.${reviewerId}`);
   if (error) throw error;
   return data ?? [];
 }
