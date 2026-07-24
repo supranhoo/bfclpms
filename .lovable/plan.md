@@ -1,33 +1,45 @@
-## What's actually wrong
+## Goal
+Prakash Kumar Sinha (100840) reports directly to Gaurav Budhia (Management). His annual review chain today is `Self → Dept Head (Arun Goswami) → BU Head (Gaurav Budhia)`. It should be `Self → Management (Gaurav Budhia)` — no dept/BU hop.
 
-For Jaspal (101125) the master data on the RCA card is correct in the DB (Dept `HR-Human Resources`, BU `HR`, Division `Support Function`, Grade `GM-President`, DOJ `2025-04-15`, RM `Dummy`, Active/Confirmed). What is *missing* on screen is the **rest of the review detail** — Self / HOD / BU / Management / HR scores, ratings, comments, current stage, pending-with, days pending, HR data diagnosis, root cause, evidence, impact and recommended fix.
+## Risk & Impact
+- **Data:** Rewriting `enabled_stages` / reviewer slots on an in-flight instance. Currently at `pending_bu` with Self + Dept Head responses already locked. Dept Head lock must be preserved as an audit artifact but should not gate advancement.
+- **Workflow:** Same class of change as ADR-109 (BU-head terminal) and ADR-148 (Management backfill). Need to make sure no other employee is silently re-routed.
+- **Regression:** Any employee whose reporting manager is a Management-role user (Gaurav today, others later) should get the same terminal chain. We must not accidentally strip stages for employees whose manager just happens to also carry `management` as a secondary role.
+- **Mitigation:** New policy is scoped to "employee's *reporting manager* is a Management user AND employee is not themselves a BU/Dept Head". Idempotent repair with an audit row per changed instance; dry-run first.
 
-Those 32 fields are already assembled in `ComprehensiveTab.tsx` (lines 166–200), but they're rendered as **one very wide horizontally-scrolling table row** with `whitespace-nowrap max-w-[240px] truncate`. The screenshot shows only the first 9 columns because the rest are behind the horizontal scrollbar and each cell is truncated. On top of that, for Management-terminal cases (ADR-138 / ADR-151) the row still labels the terminal reviewer as "HR" / "BU Head" instead of "Management", which reads as incorrect data.
+## Policy (new — POLICY §AR-MANAGEMENT-DIRECT-REPORT-TERMINAL, ADR-154)
+If `profiles.reports_to = <mgmt_user>` where `<mgmt_user>` has `user_roles.role = 'management'`, and the employee is not themselves a BU/Dept Head, then:
+- `enabled_stages = ['self','management']`
+- `management_id = reports_to`
+- `dept_head_id = null`, `bu_head_id = null`, `skip_id = null`
+- Trigger enforces this on insert/update of instance and on changes to `profiles.reports_to` / role grants.
 
-## Fix (UI only — no schema, no policy change)
+Precedence order (top wins) — already established:
+1. BU-Head-terminal (ADR-109)
+2. Dept=BU collapse (ADR-137R)
+3. **Management-direct-report-terminal (new)**
+4. Standard chain
 
-**File:** `src/components/reports/annual-review/ComprehensiveTab.tsx` (lines 138–215 only; nothing else touched.)
+## Plan
 
-1. Replace the single-row `<Table>` inside the RCA card with a responsive **key–value grid** (`grid-cols-1 md:grid-cols-2 xl:grid-cols-3`) so every one of the 32 fields is visible on one screen without horizontal scroll or truncation. Each cell shows the label (muted, small) above the value (foreground, wraps freely). Long comments wrap; badges (Root Cause) stay inline.
-2. Group the cells into four visual sections with subtle dividers, in this order:
-   - **Employee** — Code, Name, Designation, Department, Business Unit, Division, Grade, Date of Joining, Eligibility
-   - **Stage scores** — Self, HOD, BU Head, Management, HR (score + rating + comment for each stage that exists on the instance)
-   - **Outcome** — Final Score, Final Rating, Current Stage, Pending With, Completion Status, Days Since Update
-   - **Diagnosis** — HR Data Available, HR Data Visible in Report, Root Cause (badge), Evidence, Impact, Recommended Fix
-3. **Stage-aware labels.** When `r.enabled_stages` (already on `ComprehensiveRow`) does not include `dept_head` / `bu_head` / `hr`, hide those rows instead of showing "—". When the terminal stage is `management`, add a "Management Score / Rating / Comment" triplet driven by `r.management_score` / `r.management_comment` (falling back to `bu_head_*` if the field name differs — will confirm in `comprehensiveReport.ts` before wiring). This makes Jaspal's row show **Self → Management** with real values instead of empty HOD/BU/HR placeholders.
-4. Keep the existing search input, `diagnoseHr`, `stageRatingFromScore`, `pendingWith`, `completionStatus`, `eligibilityLabel` helpers and their outputs untouched — the RCA payload does not change, only its presentation.
-5. No changes to the Executive Summary, breakdowns, Employees table or export workbook.
+1. **Diagnostic RPC** `annual_review_mgmt_direct_report_diagnostic(cycle uuid)` — list every open instance where reporting manager has `management` role but chain still contains dept/bu. Read-only preview.
+2. **Repair RPC** `repair_mgmt_direct_report_terminal_chains(cycle uuid, dry_run bool)`:
+   - Set `enabled_stages`, null dept/bu/skip ids, stamp `management_id`.
+   - Preserve locked Self/Dept/BU responses in `annual_review_responses` (do not delete; leave as historical).
+   - Recompute `overall_status`: if Self locked → `pending_management`; if nothing locked → `pending_self`; never touch `completed`.
+   - Audit rows in new `annual_review_mgmt_direct_terminal_audit_2026_07`.
+3. **Enforcement trigger** `tg_annual_review_apply_mgmt_direct_terminal` on `annual_review_instances` BEFORE INSERT/UPDATE — re-applies rule so cycle resets/reassigns can't regress.
+4. **Cascade trigger** on `profiles` (AFTER UPDATE OF reports_to) and `user_roles` (AFTER INSERT/DELETE of role='management') — re-apply rule to affected employees' open instances.
+5. **TS resolver mirror** `src/lib/annualReview/effectiveChain.ts` — add `employeeReportsToManagement` input; emit new `skipReason='mgmt_direct_terminal'` for dept_head / bu_head when true. Keeps stepper labels honest.
+6. **One-shot repair** on the active cycle for Prakash Kumar Sinha (100840) + any other direct reports of Management users found by step 1. Present the list before executing (dry_run first).
+7. **UI** — no new screen. Stepper will automatically show `Self → Management` after chain refresh. Admin Access Control tab gets a small "Management direct reports" diagnostic card mirroring the Terminal Integrity card from ADR-153.
+8. **Docs** — ADR-154, POLICY.md §AR-MANAGEMENT-DIRECT-REPORT-TERMINAL, DOCUMENTATION.md version history bump.
+9. **Tests** — unit tests for the TS resolver (new skip reason + precedence vs BU-head-terminal) and a SQL test that the trigger is idempotent and never touches `completed` rows.
 
-## Verification steps
+## Deliverable order
+Diagnostic RPC → present list → your approval → repair (dry_run then apply) → triggers + TS mirror + tests → docs.
 
-- Search `101125` → see all four sections populated; "Management" section shows a name/score/rating/comment or a clear "Pending" row; no horizontal scroll.
-- Search `101784` (existing default) → HOD / BU / HR sections still render as before for a non-terminal-Management case.
-- Search a `pending_self` case → outcome section shows `Pending With: <employee name>`, stage scores show "—" for later stages, diagnosis still renders.
-- Run `bunx vitest run src/components/reports/annual-review` if tests exist for this file; otherwise no test change.
-
-## Out of scope
-
-- No database migration, RPC change, RLS change, or edits to `comprehensiveReport.ts` service (I'll only *read* it to confirm the Management field name; if that field isn't yet exposed I will surface it as a small typed passthrough in the same service file — flagged before doing so).
-- No changes to POLICY.md / DOCUMENTATION.md unless the Management passthrough is needed, in which case a one-line ADR-151 addendum is added.
-
-Confirm and I'll switch to build mode.
+## What I need from you before building
+1. Confirm the rule scope: **only** direct reports of a Management-role user get the terminal chain (i.e. one hop, no transitive "manager's manager is Management"). Correct?
+2. For instances already `completed` under the old chain, do nothing (audit-only) — OK?
+3. Preserve the already-locked Dept Head response by Arun Goswami on Prakash's record as historical (not deleted), just no longer gating — OK?
