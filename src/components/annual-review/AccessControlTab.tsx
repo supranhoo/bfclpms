@@ -28,6 +28,7 @@ import {
   useRoleCapabilities, useUpsertRoleCapability,
   type RoleCapability, type RoleSource, type AssistScopeSetting,
   useManagementSeedingGaps, useBackfillManagementStage,
+  useBackfillAllManagement, type ManagementBulkBackfillRow,
 } from '@/hooks/useAccessControlAdmin';
 
 const OVERRIDE_LABEL: Record<OverrideType, string> = {
@@ -642,6 +643,40 @@ function ManagementBackfillCard() {
   const { data: gaps = [], isLoading: gapsLoading, refetch } = useManagementSeedingGaps(managerId || null);
   const backfill = useBackfillManagementStage();
 
+  // ---- Bulk (all Management users) ----
+  const bulk = useBackfillAllManagement();
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const [bulkReopen, setBulkReopen] = useState<boolean>(true);
+  const [bulkReason, setBulkReason] = useState<string>('');
+  const [bulkPreview, setBulkPreview] = useState<ManagementBulkBackfillRow[] | null>(null);
+
+  const runBulkPreview = () => {
+    if (bulkReason.trim().length < 3) { toast.error('Reason is required'); return; }
+    bulk.mutate(
+      { reopen_completed: bulkReopen, dry_run: true, reason: bulkReason.trim() },
+      {
+        onSuccess: (rows) => setBulkPreview(rows),
+        onError: (e: any) => toast.error(e?.message ?? 'Bulk preview failed'),
+      },
+    );
+  };
+  const runBulkExecute = () => {
+    if (bulkReason.trim().length < 3) { toast.error('Reason is required'); return; }
+    bulk.mutate(
+      { reopen_completed: bulkReopen, dry_run: false, reason: bulkReason.trim() },
+      {
+        onSuccess: (rows) => {
+          setBulkPreview(rows);
+          const stamped = rows.reduce((s, r) => s + (r.rows_stamped ?? 0), 0);
+          const reopened = rows.reduce((s, r) => s + (r.rows_reopened ?? 0), 0);
+          toast.success(`Bulk backfill: ${stamped} stamped, ${reopened} reopened across ${rows.length} management user(s).`);
+          if (managerId) refetch();
+        },
+        onError: (e: any) => toast.error(e?.message ?? 'Bulk backfill failed'),
+      },
+    );
+  };
+
   const totals = useMemo(() => {
     const reopenCount = gaps.filter((g) => g.overall_status === 'completed').length;
     return { total: gaps.length, reopenCount, augmentOnly: gaps.length - reopenCount };
@@ -690,9 +725,17 @@ function ManagementBackfillCard() {
               label="Management user"
             />
           </div>
-          <Button variant="outline" onClick={() => refetch()} disabled={!managerId || gapsLoading}>
-            <Search className="h-4 w-4 mr-2" />Preview gaps
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => refetch()} disabled={!managerId || gapsLoading}>
+              <Search className="h-4 w-4 mr-2" />Preview gaps
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={() => { setBulkPreview(null); setBulkOpen(true); }}
+            >
+              <RefreshCw className="h-4 w-4 mr-2" />Backfill all Management users
+            </Button>
+          </div>
         </div>
 
         {managerId && (
@@ -796,6 +839,87 @@ function ManagementBackfillCard() {
               </Button>
               <Button onClick={runBackfill} disabled={backfill.isPending}>
                 {backfill.isPending ? 'Running…' : 'Confirm & run'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Bulk dialog */}
+        <Dialog open={bulkOpen} onOpenChange={setBulkOpen}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>Bulk backfill — every Management user</DialogTitle>
+              <DialogDescription>
+                Runs the ADR-148 backfill for <b>every user carrying the Management role</b>. Preview
+                first (dry-run), then execute. Reopen toggles whether already-completed instances are
+                demoted to Pending Management. All writes are snapshotted to the reset archive and
+                audited.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="bulk-reopen"
+                  checked={bulkReopen}
+                  onCheckedChange={(v) => setBulkReopen(Boolean(v))}
+                />
+                <Label htmlFor="bulk-reopen" className="text-sm">
+                  Reopen completed rows to <b>Pending Management</b>
+                </Label>
+              </div>
+              <div>
+                <Label htmlFor="bulk-reason" className="text-sm">Reason (audited)</Label>
+                <Textarea
+                  id="bulk-reason"
+                  value={bulkReason}
+                  onChange={(e) => setBulkReason(e.target.value)}
+                  placeholder="e.g. FY25-26 rollout: map all BU Heads under every Management user"
+                  rows={2}
+                />
+              </div>
+
+              {bulkPreview && (
+                <div className="rounded-md border overflow-x-auto max-h-72">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Management user</TableHead>
+                        <TableHead className="text-right">Stamped</TableHead>
+                        <TableHead className="text-right">Reopened</TableHead>
+                        <TableHead className="text-right">Snapshots</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {bulkPreview.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={4} className="text-sm text-muted-foreground text-center">
+                            No Management users found.
+                          </TableCell>
+                        </TableRow>
+                      ) : bulkPreview.map((r) => (
+                        <TableRow key={r.management_uid}>
+                          <TableCell>{r.management_name ?? r.management_uid}</TableCell>
+                          <TableCell className="text-right">{r.rows_stamped}</TableCell>
+                          <TableCell className="text-right">{r.rows_reopened}</TableCell>
+                          <TableCell className="text-right text-muted-foreground">{r.snapshots_written}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </div>
+
+            <DialogFooter className="gap-2">
+              <Button variant="outline" onClick={() => setBulkOpen(false)} disabled={bulk.isPending}>
+                Close
+              </Button>
+              <Button variant="outline" onClick={runBulkPreview} disabled={bulk.isPending || bulkReason.trim().length < 3}>
+                {bulk.isPending ? 'Running…' : 'Preview (dry-run)'}
+              </Button>
+              <Button onClick={runBulkExecute} disabled={bulk.isPending || bulkReason.trim().length < 3}>
+                {bulk.isPending ? 'Running…' : 'Execute backfill'}
               </Button>
             </DialogFooter>
           </DialogContent>
