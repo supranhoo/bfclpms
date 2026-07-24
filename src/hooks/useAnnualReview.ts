@@ -3,6 +3,7 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tansta
 import * as svc from '@/services/annualReview/annualReviewService';
 import { supabase } from '@/integrations/supabase/client';
 import { useUnsavedChanges } from '@/hooks/useUnsavedChanges';
+import { useAuth } from '@/contexts/AuthContext';
 import type {
   AnnualReviewerRole,
   AnnualReviewInstance,
@@ -23,8 +24,17 @@ export const annualReviewKeys = {
   responses:         (instanceId: string) => [...annualReviewKeys.all, 'responses', instanceId] as const,
 };
 
-export const useCycles = () => useQuery({ queryKey: annualReviewKeys.cycles(), queryFn: svc.listCycles });
-export const useActiveCycle = () => useQuery({ queryKey: annualReviewKeys.activeCycle(), queryFn: svc.getActiveCycle });
+// v2.66.163 — gate on auth-readiness. Pre-bootstrap requests hit PostgREST
+// as anon and RLS helpers like has_role() return `permission denied`,
+// leaving admin dashboards stuck at 0.
+export const useCycles = () => {
+  const { isReady } = useAuth();
+  return useQuery({ queryKey: annualReviewKeys.cycles(), queryFn: svc.listCycles, enabled: isReady });
+};
+export const useActiveCycle = () => {
+  const { isReady } = useAuth();
+  return useQuery({ queryKey: annualReviewKeys.activeCycle(), queryFn: svc.getActiveCycle, enabled: isReady });
+};
 export const useTemplates = () => useQuery({ queryKey: annualReviewKeys.templates(), queryFn: svc.listTemplates });
 export const useTemplate = (id: string | undefined) =>
   useQuery({ queryKey: annualReviewKeys.template(id ?? ''), queryFn: () => svc.getTemplate(id!), enabled: !!id });
@@ -42,13 +52,15 @@ export const useAnnualReviewInstancesPaginated = (args: svc.ListInstancesPaginat
     placeholderData: keepPreviousData,
   });
 
-export const useCycleStatusCounts = (cycleId?: string) =>
-  useQuery({
+export const useCycleStatusCounts = (cycleId?: string) => {
+  const { isReady } = useAuth();
+  return useQuery({
     queryKey: [...annualReviewKeys.all, 'statusCounts', cycleId ?? ''],
     queryFn: () => svc.getCycleStatusCounts(cycleId!),
-    enabled: !!cycleId,
+    enabled: !!cycleId && isReady,
     staleTime: 30_000,
   });
+};
 
 /**
  * ADR-134 — read the most recent send-back audit event for an annual review
