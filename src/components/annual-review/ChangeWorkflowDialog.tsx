@@ -19,6 +19,8 @@ import type { InstanceWithEmployee, ReassignableReviewerRole } from '@/services/
 import type { AnnualReviewerRole } from '@/types/annualReview';
 import { enabledChain, describeChain } from '@/lib/annualReview/stageChain';
 import { useReviewerCandidates, type ReviewerCandidate } from '@/hooks/annualReview/useReviewerCandidates';
+import { useInstanceLockedResponses } from '@/hooks/annualReview/useInstanceLockedResponses';
+import { computeWorkflowEditImpact } from '@/lib/annualReview/workflowEditImpact';
 import { cn } from '@/lib/utils';
 
 const POST_ACTION_STATUSES = new Set([
@@ -70,6 +72,8 @@ export function ChangeWorkflowDialog({
   const [supersede, setSupersede] = useState(false);
   const [confirmText, setConfirmText] = useState('');
 
+  const { data: lockedResponses = [] } = useInstanceLockedResponses(instance?.id ?? null);
+
   useEffect(() => {
     setEnabled(new Set(enabledChain(instance?.enabled_stages)));
     setReason('');
@@ -115,6 +119,16 @@ export function ChangeWorkflowDialog({
 
   const needsSupersede = stageChangeRequiresSupersede || reviewerChangeOnPastStage;
 
+  const impact = useMemo(() => computeWorkflowEditImpact({
+    currentStages: current,
+    currentStatus: status,
+    nextStages: hasAny ? next : current,
+    reviewerChanges: reviewerChanges.map((r) => ({ role: r.role as any, newReviewerId: r.newReviewerId })),
+    lockedResponses,
+  }), [current, status, hasAny, next, reviewerChanges, lockedResponses]);
+
+  const minReason = needsSupersede ? 10 : 3;
+
   const save = useMutation({
     mutationFn: async () => {
       if (!instance) throw new Error('No instance');
@@ -148,7 +162,7 @@ export function ChangeWorkflowDialog({
   const confirmOk = !needsSupersede || (supersede && confirmText.trim().toUpperCase() === 'REPLAN');
   const canSave =
     (isDirty || hasReviewerChange) &&
-    reason.trim().length >= 3 &&
+    reason.trim().length >= minReason &&
     hasAny &&
     confirmOk;
 
@@ -206,16 +220,30 @@ export function ChangeWorkflowDialog({
                 <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
                 <div className="space-y-1">
                   <div className="font-medium">This review is already in progress ({status}).</div>
-                  <ul className="list-disc pl-4">
-                    {removedStages.length > 0 && (
-                      <li>Removing stage(s) <strong>{removedStages.join(', ')}</strong> will archive any locked responses for those stages.</li>
-                    )}
-                    {reviewerChanges.length > 0 && (
-                      <li>Replacing reviewer(s) <strong>{reviewerChanges.map(r => r.role).join(', ')}</strong> will archive their locked response (if any) and rewind status to that stage.</li>
-                    )}
-                    <li>Archived responses are preserved in the reset archive and can be inspected by admins later.</li>
-                    <li>The new reviewer receives an in-app notification.</li>
-                  </ul>
+                  {impact.rewindFrom && impact.rewindTo && (
+                    <div>
+                      Status will rewind: <strong>{impact.rewindFrom}</strong> → <strong>{impact.rewindTo}</strong>
+                    </div>
+                  )}
+                  {impact.archives.length > 0 && (
+                    <div className="mt-1">
+                      <div className="font-medium">Locked responses that will be archived:</div>
+                      <ul className="list-disc pl-4">
+                        {impact.archives.map((a, i) => (
+                          <li key={i}>
+                            <strong>{a.role}</strong>
+                            {a.reviewer_name ? ` — ${a.reviewer_name}` : ''}
+                            {a.submitted_at ? ` (submitted ${new Date(a.submitted_at).toLocaleDateString()})` : ''}
+                            {' — '}<span className="italic">{a.cause === 'stage_removed' ? 'stage removed' : 'reviewer replaced'}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  <div className="mt-1">Archived responses are preserved in the reset archive.</div>
+                  {impact.notifications.length > 0 && (
+                    <div>Notifications will be sent: {impact.notifications.map((n) => `${n.role} (${n.kind})`).join(', ')}.</div>
+                  )}
                 </div>
               </div>
               <label className="flex items-center gap-2 text-xs">
@@ -259,7 +287,7 @@ export function ChangeWorkflowDialog({
           )}
 
           <div className="space-y-1">
-            <Label>Reason (min 3 chars)</Label>
+            <Label>Reason (min {minReason} chars)</Label>
             <Textarea
               rows={3}
               value={reason}

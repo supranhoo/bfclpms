@@ -13804,6 +13804,14 @@ export type Database = {
       }
     }
     Functions: {
+      _ar_enqueue_email: {
+        Args: {
+          p_metadata: Json
+          p_recipient_id: string
+          p_template_key: string
+        }
+        Returns: undefined
+      }
       _derive_self_value_from_score: {
         Args: {
           p_criteria: string

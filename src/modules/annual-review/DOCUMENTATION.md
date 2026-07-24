@@ -94,3 +94,19 @@ UI → hooks (`useAnnualReview.ts`) → services (`annualReviewService.ts`) → 
 - 2026-07-04 — **Templates tab: Delete action.** Each template card in the Admin → Templates tab gains a red `Delete` button (with `ConfirmDestructiveDialog`). New service `deleteTemplate(id)` counts references in `annual_review_assignment_rules`, `annual_review_assignment_overrides`, and `annual_review_instances` (both `template_id` and `template_override_id`); if any are non-zero, throws a message with the counts and no rows are deleted. Only unreferenced templates are hard-deleted. No RLS/schema change — existing admin-only write policies apply.
 
 - 2026-07-18 — **ADR-119 — CriteriaScoringMatrix score coercion.** Fixes the "mouse-blocked / options unresponsive" symptom on the self-review page (first reported by 100807 Shubham Kumar). `CriterionRow` now coerces `values[criterion.id]` via `Number(...)` and treats `NaN` as `undefined` before matching against `opt.score`, and the 0–5 fallback row uses the same normalized value. Historical drafts whose `criteria_scores` JSONB persisted a string (e.g. `"5"`) previously failed strict `===` equality, so no option tile ever showed as selected — users read the form as broken and never reached the submit dialog. Regression tests added in `criteriaScoringMatrixOptions.test.tsx` covering both the option-card path and the legacy 0–5 button row. Pure UI change; no schema, RLS, or workflow change.
+
+## ADR-160 / 160b — Edit workflow & reviewers at any stage (2026-07-24)
+
+**Problem.** The prior "Change workflow" dialog refused to save once a review had been actioned, and reviewer reassignment could not archive an already-locked response. Admins had no supported path to correct a workflow mid-cycle without hand-editing rows.
+
+**Solution.**
+1. **Marker column** `annual_review_instances.has_admin_workflow_override` blocks the four normalisation triggers from reverting admin edits.
+2. **Two extended RPCs** — `set_annual_review_enabled_stages(..., p_mode)` and `reassign_annual_review_reviewer(..., p_mode)` — accept `safe` (pre-action only) or `supersede` (archive + rewind + notify).
+3. **Orchestrator RPC** `annual_review_edit_workflow` runs both in one transaction and writes a single summary audit row.
+4. **Email dispatch** goes through `email_dispatch_queue` via the guarded helper `_ar_enqueue_email` so mail failures never block the data change.
+5. **Frontend impact preview** — `ChangeWorkflowDialog` calls `useInstanceLockedResponses` and the pure calculator `computeWorkflowEditImpact` to show archive targets, status rewind, and pending notifications before the admin confirms.
+6. **Supersede gate** — reason ≥ 10 characters and typed `REPLAN` confirmation.
+
+**Tests.** `src/test/workflowEditImpact.test.ts`, `src/test/editWorkflowRpc.contract.test.ts`.
+
+**Version.** `v2.66.160b`
