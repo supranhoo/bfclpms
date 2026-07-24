@@ -33,6 +33,17 @@ const STAGE_LABEL: Record<AnnualReviewerRole, string> = {
 export const RECOMMENDATION_ROLES: readonly AnnualReviewerRole[] = [
   'dept_head',
   'bu_head',
+  'management',
+];
+
+/**
+ * Roles for which the Overall Recommendation is MANDATORY before submission.
+ * POLICY §AR-RECOMMENDATION-REQUIRED (ADR-151) — mirrors the BU Head rule onto
+ * the Management terminal stage.
+ */
+export const RECOMMENDATION_REQUIRED_ROLES: readonly AnnualReviewerRole[] = [
+  'bu_head',
+  'management',
 ];
 
 /**
@@ -51,6 +62,7 @@ export function collectRecommendations(
     'dept_head',
     'bu_head',
     'hr',
+    'management',
   ];
   const byRole = new Map<AnnualReviewerRole, string>();
   for (const r of responses) {
@@ -101,6 +113,7 @@ export function OverallRecommendationCard({
 }) {
   const canEdit =
     !!role && !locked && RECOMMENDATION_ROLES.includes(role);
+  const required = !!role && RECOMMENDATION_REQUIRED_ROLES.includes(role);
 
   const previous = collectRecommendations(
     responses.filter((r) => r.reviewer_role !== role),
@@ -131,7 +144,12 @@ export function OverallRecommendationCard({
         {canEdit && (
           <div className="space-y-1.5">
             <Label htmlFor="ar-overall-recommendation">
-              Your recommendation (optional)
+              Your recommendation {required ? (
+                <span>
+                  (required)
+                  <span className="text-destructive ml-0.5" aria-hidden="true">*</span>
+                </span>
+              ) : '(optional)'}
             </Label>
             <Textarea
               id="ar-overall-recommendation"
@@ -139,10 +157,12 @@ export function OverallRecommendationCard({
               value={draftValue}
               onChange={(e) => onChangeDraft(e.target.value)}
               placeholder="e.g. Recommend for promotion, rotation to Ops, additional coaching…"
+              aria-required={required}
             />
             <p className="text-xs text-muted-foreground">
-              Shared with the next reviewer, HR, and the employee at
-              acknowledgment. Do not include confidential HR-only notes.
+              {required
+                ? 'A recommendation is required before this review can be submitted. Shared with HR and the employee at acknowledgment.'
+                : 'Shared with the next reviewer, HR, and the employee at acknowledgment. Do not include confidential HR-only notes.'}
             </p>
           </div>
         )}
