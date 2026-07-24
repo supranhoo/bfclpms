@@ -1,6 +1,6 @@
 import * as XLSX from 'xlsx';
 import type { ComprehensiveRow, KpiSummary, GroupSummary } from '@/services/annualReview/comprehensiveReport';
-import { pendingWith, eligibilityLabel, completionStatus, ratingDistribution, diagnoseHr, stageRatingFromScore } from '@/services/annualReview/comprehensiveReport';
+import { pendingWith, eligibilityLabel, completionStatus, ratingDistribution, diagnoseHr, stageRatingDisplay } from '@/services/annualReview/comprehensiveReport';
 
 export interface ExportInput {
   cycleName: string;
@@ -19,6 +19,10 @@ function toEmployeeSheet(rows: ComprehensiveRow[]) {
     const diag = diagnoseHr(r);
     const hodScore = r.dept_head_score ?? r.manager_score ?? null;
     const hodComment = r.dept_head_comment ?? r.manager_comment ?? '';
+    // ADR-155 — dept=BU collapse: blank the HOD columns to avoid a
+    // duplicated reviewer showing up in exports.
+    const deptCollapsedIntoBu =
+      !!r.dept_head_id && !!r.bu_head_id && r.dept_head_id === r.bu_head_id;
     return ({
     'Employee Code': r.employee_code ?? '',
     'Name': r.employee_name ?? '',
@@ -30,16 +34,16 @@ function toEmployeeSheet(rows: ComprehensiveRow[]) {
     'Date of Joining': r.doj ?? '',
     'Eligibility': eligibilityLabel(r),
     'Self Score': r.self_score ?? '',
-    'Self Rating': stageRatingFromScore(r.self_score),
+    'Self Rating': stageRatingDisplay(r.self_score, r.self_comment),
     'Self Comment': r.self_comment ?? '',
-    'HOD Score': hodScore ?? '',
-    'HOD Rating': stageRatingFromScore(hodScore),
-    'HOD Comment': hodComment,
+    'HOD Score': deptCollapsedIntoBu ? '' : (hodScore ?? ''),
+    'HOD Rating': deptCollapsedIntoBu ? '' : stageRatingDisplay(hodScore, hodComment),
+    'HOD Comment': deptCollapsedIntoBu ? '' : hodComment,
     'BU Head Score': r.bu_head_score ?? '',
-    'BU Head Rating': stageRatingFromScore(r.bu_head_score),
+    'BU Head Rating': stageRatingDisplay(r.bu_head_score, r.bu_head_comment),
     'BU Head Comment': r.bu_head_comment ?? '',
     'HR Score': r.hr_score ?? '',
-    'HR Rating': stageRatingFromScore(r.hr_score),
+    'HR Rating': stageRatingDisplay(r.hr_score, r.hr_comment),
     'HR Comment': r.hr_comment ?? '',
     'Final Score': r.total_score ?? '',
     'Rating': r.final_rating ?? '',

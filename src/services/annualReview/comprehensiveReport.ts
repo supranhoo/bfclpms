@@ -289,3 +289,35 @@ export function stageRatingFromScore(score: number | null): string {
   if (score >= 60) return 'Needs Improvement';
   return 'Below Expectations';
 }
+
+/**
+ * ADR-155 — Stage rating display rule.
+ *
+ * A stage that carries no real reviewer signal must not be rendered as
+ * "Below Expectations" just because its numeric score is 0. Treat a stage as
+ * "no rating" (return '—') when its score is null or 0 AND no comment is
+ * present. Only bucket-label a score of 0 when the reviewer actually left a
+ * comment (i.e. they made an active zero call).
+ */
+export function stageRatingDisplay(
+  score: number | null | undefined,
+  comment: string | null | undefined,
+): string {
+  const s = score == null ? null : Number(score);
+  const hasComment = !!(comment && String(comment).trim());
+  if (s == null || (s === 0 && !hasComment)) return '—';
+  return stageRatingFromScore(s) || '—';
+}
+
+/**
+ * ADR-155 — Detect a 100%-system-scored template from the report row.
+ * We infer this shape (no new RPC field) when Self carries no criteria
+ * signal (score 0, no comment) but the instance still has a positive
+ * final total score.
+ */
+export function isSystemScoredOnly(row: ComprehensiveRow): boolean {
+  const selfBlank = (row.self_score == null || Number(row.self_score) === 0)
+    && !(row.self_comment && row.self_comment.trim());
+  const hasFinal = row.total_score != null && Number(row.total_score) > 0;
+  return selfBlank && hasFinal;
+}
