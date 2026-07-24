@@ -282,3 +282,30 @@ export function useBackfillManagementStage() {
     },
   });
 }
+
+export interface ManagementBulkBackfillRow {
+  management_uid: string;
+  management_name: string | null;
+  rows_stamped: number;
+  rows_reopened: number;
+  snapshots_written: number;
+}
+
+export function useBackfillAllManagement() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (args: { reopen_completed: boolean; dry_run: boolean; reason: string }) => {
+      const { data, error } = await supabase.rpc('backfill_management_stage_all' as never, {
+        p_reopen_completed: args.reopen_completed,
+        p_dry_run: args.dry_run,
+        p_reason: args.reason,
+      } as never);
+      if (error) throw error;
+      return (data ?? []) as ManagementBulkBackfillRow[];
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: AR_ACCESS_KEY });
+      qc.invalidateQueries({ queryKey: ['annual-review'] });
+    },
+  });
+}
