@@ -278,12 +278,15 @@ export async function setEnabledStages(args: {
   instanceId: string;
   enabledStages: AnnualReviewerRole[];
   reason: string;
+  /** ADR-160 — 'safe' (default) enforces pre-action gate; 'supersede' allows post-action edits. */
+  mode?: 'safe' | 'supersede';
 }) {
   const normalised = enabledChain(args.enabledStages);
   const { error } = await db.rpc('set_annual_review_enabled_stages', {
     p_instance_id: args.instanceId,
     p_enabled_stages: normalised,
     p_reason: args.reason,
+    p_mode: args.mode ?? 'safe',
   });
   if (error) throw error;
 }
@@ -1586,11 +1589,38 @@ export async function reassignReviewer(args: {
   role: ReassignableReviewerRole;
   newReviewerId: string;
   reason: string;
+  /** ADR-160 — 'redirect' (default) keeps locked history; 'supersede' archives locked response and rewinds status to that stage. */
+  mode?: 'redirect' | 'supersede';
 }) {
   const { error } = await db.rpc('reassign_annual_review_reviewer', {
     p_instance_id: args.instanceId,
     p_role: args.role,
     p_new_reviewer_id: args.newReviewerId,
+    p_reason: args.reason,
+    p_mode: args.mode ?? 'redirect',
+  });
+  if (error) throw error;
+}
+
+/**
+ * ADR-160 — Orchestrator: change enabled stages and/or reviewer slots in a single
+ * transaction. Admin / HR PMS only. `mode='supersede'` allows post-action edits
+ * and archives any locked responses whose stage is removed or whose reviewer is
+ * being replaced.
+ */
+export async function editAnnualReviewWorkflow(args: {
+  instanceId: string;
+  enabledStages?: AnnualReviewerRole[] | null;
+  reviewerOverrides?: Partial<Record<ReassignableReviewerRole, string>>;
+  mode: 'safe' | 'supersede';
+  reason: string;
+}) {
+  const stages = args.enabledStages ? enabledChain(args.enabledStages) : null;
+  const { error } = await db.rpc('annual_review_edit_workflow', {
+    p_instance_id: args.instanceId,
+    p_enabled_stages: stages,
+    p_reviewer_overrides: args.reviewerOverrides ?? {},
+    p_mode: args.mode,
     p_reason: args.reason,
   });
   if (error) throw error;
