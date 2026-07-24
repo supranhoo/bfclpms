@@ -245,10 +245,6 @@ export function TeamReviewDetailContent({
 
   const chain = enabledChain(instance.enabled_stages);
   const canSendBack = !!role && role !== 'self' && chain.indexOf(role) > 0;
-  // Terminal stages (last in the effective chain) complete the review on
-  // submit rather than forward it. Relabel the CTA so reviewers — especially
-  // Management, the new terminal stage per ADR-138 — see a clear final action.
-  const isTerminalStage = !!role && chain.indexOf(role) === chain.length - 1;
 
   const { values: resolvedSystemScores } = useResolvedSystemScores(template, instance, fiscalYear);
   const composition = useMemo(
