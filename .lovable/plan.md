@@ -1,51 +1,33 @@
-# Revert Non-Gaurav-Reporting BU Heads from Management Stage
+## What's actually wrong
 
-## Findings (verified)
+For Jaspal (101125) the master data on the RCA card is correct in the DB (Dept `HR-Human Resources`, BU `HR`, Division `Support Function`, Grade `GM-President`, DOJ `2025-04-15`, RM `Dummy`, Active/Confirmed). What is *missing* on screen is the **rest of the review detail** — Self / HOD / BU / Management / HR scores, ratings, comments, current stage, pending-with, days pending, HR data diagnosis, root cause, evidence, impact and recommended fix.
 
-Only 5 instances currently have the `management` stage stamped on an employee who does not report to Gaurav Budhia (`b796a417-…`). All 5 are pointing at the "Dummy" placeholder user (001), not Gaurav — this is a leftover from the Management backfill that ran before we had a reporting-manager filter.
+Those 32 fields are already assembled in `ComprehensiveTab.tsx` (lines 166–200), but they're rendered as **one very wide horizontally-scrolling table row** with `whitespace-nowrap max-w-[240px] truncate`. The screenshot shows only the first 9 columns because the rest are behind the horizontal scrollbar and each cell is truncated. On top of that, for Management-terminal cases (ADR-138 / ADR-151) the row still labels the terminal reviewer as "HR" / "BU Head" instead of "Management", which reads as incorrect data.
 
-| Emp Code | Employee | Reports To | overall_status | enabled_stages |
-|---|---|---|---|---|
-| 101711 | Dhiraj Kumar Chaturbedi | Jaspal (BU Head) | excluded | self, management |
-| 100001 | Gaurav Budhia | — (top of org) | excluded | self, management |
-| 101125 | Jaspal | — (no real upline) | pending_management | self, management |
-| 101963 | Shyam Sundar Hati | Sajid Raza (BU Head) | completed | self, management |
-| 100600 | Umesh Kumar Singh | Piyush Bansal (BU Head) | pending_bu | self, management |
+## Fix (UI only — no schema, no policy change)
 
-## Plan
+**File:** `src/components/reports/annual-review/ComprehensiveTab.tsx` (lines 138–215 only; nothing else touched.)
 
-### 1. Revert the 3 with a real BU-Head upline (Shyam, Umesh, Dhiraj)
-For each of `101963`, `100600`, `101711`:
-- Strip `management` from `enabled_stages` → chain becomes `["self","bu_head"]` (or `["self"]` if bu_head_id is null; re-resolve via existing seeder helper).
-- Null `management_id`.
-- Recompute `overall_status` based on locked responses:
-  - `101963` Shyam (currently `completed`) → if a `bu_head` response is locked, keep `completed`; otherwise roll back to `pending_bu`. Audit the rollback either way.
-  - `100600` Umesh → already `pending_bu`, unchanged.
-  - `101711` Dhiraj → `excluded` unchanged.
-- Write audit rows to `annual_review_access_audit` with action `management_stage_reverted` and the previous vs new `enabled_stages`/`management_id`.
+1. Replace the single-row `<Table>` inside the RCA card with a responsive **key–value grid** (`grid-cols-1 md:grid-cols-2 xl:grid-cols-3`) so every one of the 32 fields is visible on one screen without horizontal scroll or truncation. Each cell shows the label (muted, small) above the value (foreground, wraps freely). Long comments wrap; badges (Root Cause) stay inline.
+2. Group the cells into four visual sections with subtle dividers, in this order:
+   - **Employee** — Code, Name, Designation, Department, Business Unit, Division, Grade, Date of Joining, Eligibility
+   - **Stage scores** — Self, HOD, BU Head, Management, HR (score + rating + comment for each stage that exists on the instance)
+   - **Outcome** — Final Score, Final Rating, Current Stage, Pending With, Completion Status, Days Since Update
+   - **Diagnosis** — HR Data Available, HR Data Visible in Report, Root Cause (badge), Evidence, Impact, Recommended Fix
+3. **Stage-aware labels.** When `r.enabled_stages` (already on `ComprehensiveRow`) does not include `dept_head` / `bu_head` / `hr`, hide those rows instead of showing "—". When the terminal stage is `management`, add a "Management Score / Rating / Comment" triplet driven by `r.management_score` / `r.management_comment` (falling back to `bu_head_*` if the field name differs — will confirm in `comprehensiveReport.ts` before wiring). This makes Jaspal's row show **Self → Management** with real values instead of empty HOD/BU/HR placeholders.
+4. Keep the existing search input, `diagnoseHr`, `stageRatingFromScore`, `pendingWith`, `completionStatus`, `eligibilityLabel` helpers and their outputs untouched — the RCA payload does not change, only its presentation.
+5. No changes to the Executive Summary, breakdowns, Employees table or export workbook.
 
-### 2. Leave Jaspal (101125) and Gaurav (100001) as-is for now
-Both genuinely have no upline above them. Reverting Jaspal would remove the only active reviewer (he'd end at `self` → auto-complete without oversight). Gaurav is `excluded` anyway. **Decision needed from user only if they want these two also stripped** — flagged in the closing question.
+## Verification steps
 
-### 3. Guard future backfills
-Update `backfill_management_stage_all` (and the trigger `enforce_management_terminal_stage` used by seeders) to skip employees whose `reporting_manager_id` is NULL or does not resolve to a user with the `management` role. Emit a skip row in the existing audit table so admins can see who was excluded and why.
+- Search `101125` → see all four sections populated; "Management" section shows a name/score/rating/comment or a clear "Pending" row; no horizontal scroll.
+- Search `101784` (existing default) → HOD / BU / HR sections still render as before for a non-terminal-Management case.
+- Search a `pending_self` case → outcome section shows `Pending With: <employee name>`, stage scores show "—" for later stages, diagnosis still renders.
+- Run `bunx vitest run src/components/reports/annual-review` if tests exist for this file; otherwise no test change.
 
-### 4. Documentation
-- New ADR-152 "Management stage is scoped to Management's direct reports".
-- Update `POLICY.md §AR-MANAGEMENT-STAGE`.
-- Update mem entry for the Management-terminal feature.
+## Out of scope
 
-## Risk & Impact
+- No database migration, RPC change, RLS change, or edits to `comprehensiveReport.ts` service (I'll only *read* it to confirm the Management field name; if that field isn't yet exposed I will surface it as a small typed passthrough in the same service file — flagged before doing so).
+- No changes to POLICY.md / DOCUMENTATION.md unless the Management passthrough is needed, in which case a one-line ADR-151 addendum is added.
 
-- **Data**: 3 instances mutated; 1 (`Shyam`) may roll back from `completed` → `pending_bu`. Fully audited; reversible via the audit rows.
-- **Workflow**: Sajid Raza and Piyush Bansal regain their correct terminal reviewer role for these employees; Jaspal regains Dhiraj.
-- **UI/UX**: Stepper for the 3 employees will show `Self → BU Head` instead of `Self → Management`.
-- **Regression**: The backfill guard prevents recurrence but does not touch other Management-mapped instances (Gaurav's real reports remain intact — verified none in the affected set report to Gaurav).
-- **Rollback**: Every change is captured in `annual_review_access_audit`; a single UPDATE reversing the audited row restores prior state.
-
-## Tests
-- Unit test on `effectiveChain.ts`: BU Head whose reporting_manager is not Management-role → chain terminates at `bu_head`, no `management` stage.
-- SQL test: backfill RPC with a non-Management upline → skip + audit row written, no `enabled_stages` change.
-
-## Open question for user (non-blocking)
-Should Jaspal (101125) also be reverted to `self`-only (his ADR-109 BU-head-terminal state)? If yes, his current `pending_management` status disappears and the review auto-completes on self-submit. Default: **leave Jaspal untouched**.
+Confirm and I'll switch to build mode.
