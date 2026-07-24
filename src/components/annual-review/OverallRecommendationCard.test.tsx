@@ -4,6 +4,8 @@ import {
   OverallRecommendationCard,
   collectRecommendations,
   RECOMMENDATION_KEY,
+  RECOMMENDATION_REQUIRED_ROLES,
+  RECOMMENDATION_ROLES,
 } from './OverallRecommendationCard';
 
 describe('collectRecommendations', () => {
@@ -66,5 +68,43 @@ describe('OverallRecommendationCard', () => {
     expect(screen.getByText(/agreed/)).toBeInTheDocument();
     expect(screen.getByText(/Priya S\./)).toBeInTheDocument();
     expect(screen.queryByLabelText(/Your recommendation/i)).toBeNull();
+  });
+});
+
+describe('Overall recommendation requiredness (POLICY §AR-RECOMMENDATION-REQUIRED)', () => {
+  it('includes management in required and authoring roles', () => {
+    expect(RECOMMENDATION_ROLES).toContain('management');
+    expect(RECOMMENDATION_REQUIRED_ROLES).toEqual(expect.arrayContaining(['bu_head', 'management']));
+    expect(RECOMMENDATION_REQUIRED_ROLES).not.toContain('dept_head');
+  });
+
+  it('marks the field as required for Management', () => {
+    render(
+      <OverallRecommendationCard
+        role="management"
+        locked={false}
+        draftValue=""
+        onChangeDraft={vi.fn()}
+        responses={[]}
+      />,
+    );
+    const ta = screen.getByLabelText(/Your recommendation/i) as HTMLTextAreaElement;
+    expect(ta).toBeInTheDocument();
+    expect(ta.getAttribute('aria-required')).toBe('true');
+    expect(screen.getByText(/required before this review can be submitted/i)).toBeInTheDocument();
+  });
+
+  it('keeps Dept Head remark optional', () => {
+    render(
+      <OverallRecommendationCard
+        role="dept_head"
+        locked={false}
+        draftValue=""
+        onChangeDraft={vi.fn()}
+        responses={[]}
+      />,
+    );
+    const ta = screen.getByLabelText(/Your recommendation/i) as HTMLTextAreaElement;
+    expect(ta.getAttribute('aria-required')).toBe('false');
   });
 });
