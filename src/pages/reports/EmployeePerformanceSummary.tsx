@@ -688,19 +688,13 @@ export default function EmployeePerformanceSummary() {
                     ))}
                   </SelectContent>
                 </Select>
-                <Select value={selectedStatus} onValueChange={setSelectedStatus}>
-                  <SelectTrigger className="w-[180px]">
-                    <SelectValue placeholder="Status" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Status</SelectItem>
-                    {Object.entries(STATUS_LABELS).map(([key, label]) => (
-                      <SelectItem key={key} value={key}>
-                        {label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <MultiSelectId
+                  options={Object.entries(STATUS_LABELS).map(([id, label]) => ({ id, label }))}
+                  value={selectedStatus}
+                  onChange={setSelectedStatus}
+                  placeholder="All Status"
+                  className="w-[180px]"
+                />
                 <Select value={selectedFm} onValueChange={setSelectedFm}>
                   <SelectTrigger className="w-[220px]">
                     <SelectValue placeholder="Functional Manager" />
