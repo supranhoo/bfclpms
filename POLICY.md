@@ -1,3 +1,15 @@
+### §AR-PROTECTED-AUTH-RLS — Annual Review policies must not directly query protected auth tables (ADR-163, v2.66.163, 2026-07-24)
+- Client-facing RLS policy expressions MUST NOT contain direct reads from `auth.users`; authenticated application roles intentionally cannot access the protected auth schema, and boolean policy branches do not guarantee short-circuit evaluation.
+- The platform-login eligibility check for hierarchy-completed annual reviews MUST use `public.annual_review_employee_has_login(uuid)`, which returns only a boolean, runs with a fixed search path, denies PUBLIC/anon execution, and is executable only by authenticated/backend roles.
+- Employee, assigned-reviewer, Admin, HR PMS, Management, and completed-upline visibility remain unchanged; the hierarchy branch remains restricted to completed reviews for login-enabled employees.
+- Retrieval failures MUST be displayed as retryable errors and MUST NOT be represented as successful zero counts or empty lists.
+
+### §AR-PROGRESS-STATUS-AGGREGATION — Annual Review Progress covers every workflow state (v2.66.163, 2026-07-24)
+- Cycle status aggregation MUST count `not_started`, `pending_self`, `pending_manager`, `pending_skip`, `pending_dept`, `pending_bu`, `pending_hr`, `pending_management`, `completed`, and `excluded` using count-only server queries.
+- The Progress “In Progress” metric is the sum of Manager, Skip, Department Head, BU Head, HR, and Management pending states.
+- “Total Active Reviews” retains the existing cycle-instance definition, including excluded administrative records; excluded remains separately counted for reporting/filtering.
+- RLS-gated Progress hooks MUST wait for `isReady && user`, include `user.id` in query keys, and retain server pagination of at most 100 rows.
+
 ### §AR-WEIGHTED-SCORE-SCALE — Reviewer weighted_score is raw points, not /100 (ADR-126, v2.66.119, 2026-07-20)
 - `annual_review_responses.weighted_score` and `annual_review_instances.criteria_weighted_score` are stored as **raw weighted point sums**: `Σ (criterion.weight × selected_score_0..5)`. They are NOT on a 0..100 scale.
 - All downstream blending — `computeRunningFinalScore` (projection card) and `annual_review_compute_final_summary` (server terminal-completion RPC) — MUST normalise raw values into the criteria pool before adding system score:

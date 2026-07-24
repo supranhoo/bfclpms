@@ -37,11 +37,12 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
 import { toast } from 'sonner';
-import { Loader2, Upload, Settings2, ListChecks, Calendar, Layers, Pencil, Plus, Download, BarChart3, CheckCheck, Undo2, Lock, Bell, Scale, Copy, Unlock, MoreHorizontal, Trash2 } from 'lucide-react';
+import { Loader2, Upload, Settings2, ListChecks, Calendar, Layers, Pencil, Plus, Download, BarChart3, CheckCheck, Undo2, Lock, Bell, Scale, Copy, Unlock, MoreHorizontal, Trash2, AlertTriangle } from 'lucide-react';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
   DropdownMenuSeparator, DropdownMenuTrigger,
@@ -488,13 +489,15 @@ function ProgressTab() {
         level: level || undefined,
       }
     : undefined;
-  const { data: paged, refetch } = useAnnualReviewInstancesPaginated(paginatedArgs);
+  const pagedQuery = useAnnualReviewInstancesPaginated(paginatedArgs);
+  const { data: paged, refetch } = pagedQuery;
   const instances = paged?.rows ?? [];
   const total = paged?.total ?? 0;
   const pageInstanceIds = useMemo(() => instances.map((i) => i.id), [instances]);
   const { data: stageScoresMap = {} } = useInstanceStageScores(pageInstanceIds);
   const [exporting, setExporting] = useState(false);
-  const { data: counts = { total: 0, pending_self: 0, completed: 0, not_started: 0, pending_manager: 0, pending_skip: 0, pending_bu: 0, pending_hr: 0 } } = useCycleStatusCounts(activeCycle?.id);
+  const countsQuery = useCycleStatusCounts(activeCycle?.id);
+  const { data: counts = { total: 0, pending_self: 0, completed: 0, not_started: 0, pending_manager: 0, pending_skip: 0, pending_dept: 0, pending_bu: 0, pending_hr: 0, pending_management: 0, excluded: 0 } } = countsQuery;
   const [selected, setSelected] = useState<InstanceWithEmployee | null>(null);
   const [unifiedOpen, setUnifiedOpen] = useState(false);
   const [bulkInstances, setBulkInstances] = useState<InstanceWithEmployee[] | null>(null);
@@ -631,7 +634,8 @@ function ProgressTab() {
   });
 
   const filtered = instances; // server-side filtering already applied
-  const inProgressCount = counts.pending_manager + counts.pending_skip + counts.pending_bu + counts.pending_hr;
+  const inProgressCount = counts.pending_manager + counts.pending_skip + counts.pending_dept
+    + counts.pending_bu + counts.pending_hr + counts.pending_management;
   const summaryCounts = { total: counts.total, self: counts.pending_self, in_progress: inProgressCount, completed: counts.completed };
 
   const allFilteredSelected = filtered.length > 0 && filtered.every((i) => selectedIds.has(i.id));
@@ -657,6 +661,21 @@ function ProgressTab() {
 
   return (
     <div className="space-y-4">
+      {(countsQuery.isError || pagedQuery.isError) && (
+        <Alert variant="destructive">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertTitle>Could not load annual review progress</AlertTitle>
+          <AlertDescription className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <span>{(countsQuery.error ?? pagedQuery.error) instanceof Error
+              ? (countsQuery.error ?? pagedQuery.error as Error).message
+              : 'The review data request failed. Please retry.'}</span>
+            <Button type="button" size="sm" variant="outline" onClick={() => {
+              void countsQuery.refetch();
+              void pagedQuery.refetch();
+            }}>Retry</Button>
+          </AlertDescription>
+        </Alert>
+      )}
       <div className="grid gap-3 md:grid-cols-4">
         {[
           { label: 'Total Active Reviews', val: summaryCounts.total },

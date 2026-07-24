@@ -14109,6 +14109,10 @@ export type Database = {
         Args: { p_instance_id: string }
         Returns: string
       }
+      annual_review_employee_has_login: {
+        Args: { p_employee_id: string }
+        Returns: boolean
+      }
       annual_review_first_pending_status: {
         Args: { p_enabled: Json }
         Returns: Database["public"]["Enums"]["annual_review_status"]

@@ -596,11 +596,13 @@ export async function getCycleStatusCounts(cycleId: string): Promise<Record<Annu
   // rows unpaged and was silently capped at 1000 on cycles >1k employees.
   const statuses: AnnualReviewStatus[] = [
     'not_started', 'pending_self', 'pending_manager',
-    'pending_skip', 'pending_bu', 'pending_hr', 'completed',
+    'pending_skip', 'pending_dept', 'pending_bu', 'pending_hr',
+    'pending_management', 'completed', 'excluded',
   ];
   const out = {
     total: 0, not_started: 0, pending_self: 0, pending_manager: 0,
-    pending_skip: 0, pending_bu: 0, pending_hr: 0, completed: 0,
+    pending_skip: 0, pending_dept: 0, pending_bu: 0, pending_hr: 0,
+    pending_management: 0, completed: 0, excluded: 0,
   } as Record<AnnualReviewStatus, number> & { total: number };
 
   const totalRes = await db

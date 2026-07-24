@@ -144,9 +144,12 @@ describe('getCycleStatusCounts', () => {
     tables.set('annual_review_instances', inst);
 
     const c = await svc.getCycleStatusCounts('c1');
-    // 1 total query + 7 per-status queries.
-    expect(inst.select).toHaveBeenCalledTimes(8);
+    // 1 total query + 10 per-status queries, including Dept, Management and Excluded.
+    expect(inst.select).toHaveBeenCalledTimes(11);
     expect(inst.select).toHaveBeenCalledWith('id', { count: 'exact', head: true });
+    expect(inst.eq).toHaveBeenCalledWith('overall_status', 'pending_dept');
+    expect(inst.eq).toHaveBeenCalledWith('overall_status', 'pending_management');
+    expect(inst.eq).toHaveBeenCalledWith('overall_status', 'excluded');
     expect(c.total).toBe(2560);
     expect(c.total).toBeGreaterThan(1000);
   });
@@ -181,10 +184,10 @@ describe('authenticated reviewer queue', () => {
 
   it('loads all role counts through the authenticated count RPC', async () => {
     rpcMock.mockResolvedValue({
-      data: { manager: 0, skip: 0, dept: 89, bu: 0, hr: 0 }, error: null,
+      data: { manager: 0, skip: 0, dept: 89, bu: 0, hr: 0, management: 0 }, error: null,
     });
     await expect(svc.getReviewerRoleCounts('ignored-user-id', 'c1')).resolves.toEqual({
-      manager: 0, skip: 0, dept: 89, bu: 0, hr: 0,
+      manager: 0, skip: 0, dept: 89, bu: 0, hr: 0, management: 0,
     });
     expect(rpcMock).toHaveBeenCalledWith('get_my_annual_review_role_counts', { p_cycle_id: 'c1' });
   });
