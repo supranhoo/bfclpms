@@ -1,46 +1,51 @@
-## Root cause
+# Revert Non-Gaurav-Reporting BU Heads from Management Stage
 
-Management submit fails with `new row violates row-level security policy for table "annual_review_instances"`.
+## Findings (verified)
 
-The UPDATE policy `instances_stage_update` on `annual_review_instances` has a `USING` clause but **no `WITH CHECK`**. Postgres then reuses `USING` as the implicit `WITH CHECK`. Management's submit transitions `overall_status` from `pending_management` → `completed`, so the post-update row no longer satisfies `(management_id = auth.uid()) AND (overall_status = 'pending_management')`, and RLS rejects it.
+Only 5 instances currently have the `management` stage stamped on an employee who does not report to Gaurav Budhia (`b796a417-…`). All 5 are pointing at the "Dummy" placeholder user (001), not Gaurav — this is a leftover from the Management backfill that ran before we had a reporting-manager filter.
 
-This is the exact class of bug captured in mem `RLS Workflow Transitions` — status-transition UPDATE policies must supply an explicit `WITH CHECK` that permits the destination status.
+| Emp Code | Employee | Reports To | overall_status | enabled_stages |
+|---|---|---|---|---|
+| 101711 | Dhiraj Kumar Chaturbedi | Jaspal (BU Head) | excluded | self, management |
+| 100001 | Gaurav Budhia | — (top of org) | excluded | self, management |
+| 101125 | Jaspal | — (no real upline) | pending_management | self, management |
+| 101963 | Shyam Sundar Hati | Sajid Raza (BU Head) | completed | self, management |
+| 100600 | Umesh Kumar Singh | Piyush Bansal (BU Head) | pending_bu | self, management |
 
-Note: earlier stages don't hit this because their write path goes through a `SECURITY DEFINER` RPC (`advance_annual_review_stage`, etc.) that bypasses RLS. The Management finalize path performs a direct `.update()` from the client, exposing the missing `WITH CHECK`.
+## Plan
 
-## 5 Whys
-1. Why does the toast fire? RLS rejects the UPDATE on `annual_review_instances`.
-2. Why? The new row (`overall_status = 'completed'`) fails the policy check.
-3. Why? Policy has no explicit `WITH CHECK`, so `USING` is reused and demands `pending_management` on the new row.
-4. Why wasn't this caught for other roles? They go through SECURITY DEFINER RPCs that skip RLS.
-5. Why does the Management path write directly? ADR-138 added the stage but reused the generic client update helper without adding a matching WITH CHECK for terminal transitions.
+### 1. Revert the 3 with a real BU-Head upline (Shyam, Umesh, Dhiraj)
+For each of `101963`, `100600`, `101711`:
+- Strip `management` from `enabled_stages` → chain becomes `["self","bu_head"]` (or `["self"]` if bu_head_id is null; re-resolve via existing seeder helper).
+- Null `management_id`.
+- Recompute `overall_status` based on locked responses:
+  - `101963` Shyam (currently `completed`) → if a `bu_head` response is locked, keep `completed`; otherwise roll back to `pending_bu`. Audit the rollback either way.
+  - `100600` Umesh → already `pending_bu`, unchanged.
+  - `101711` Dhiraj → `excluded` unchanged.
+- Write audit rows to `annual_review_access_audit` with action `management_stage_reverted` and the previous vs new `enabled_stages`/`management_id`.
 
-## Fix plan (surgical, DB-only)
+### 2. Leave Jaspal (101125) and Gaurav (100001) as-is for now
+Both genuinely have no upline above them. Reverting Jaspal would remove the only active reviewer (he'd end at `self` → auto-complete without oversight). Gaurav is `excluded` anyway. **Decision needed from user only if they want these two also stripped** — flagged in the closing question.
 
-### Migration: `fix_instances_stage_update_with_check`
-Recreate `instances_stage_update` with an explicit `WITH CHECK` that allows the legal destination status for each role:
+### 3. Guard future backfills
+Update `backfill_management_stage_all` (and the trigger `enforce_management_terminal_stage` used by seeders) to skip employees whose `reporting_manager_id` is NULL or does not resolve to a user with the `management` role. Emit a skip row in the existing audit table so admins can see who was excluded and why.
 
-- admin / hr_pms → any row (unchanged)
-- employee (`employee_id = auth.uid()`) — USING `pending_self`; WITH CHECK `overall_status IN ('pending_self','pending_manager','pending_skip','pending_dept','pending_bu','pending_hr','pending_management','completed')` scoped to their own row
-- manager → USING `pending_manager`; WITH CHECK forward statuses + `pending_self` (send-back)
-- skip_manager → USING `pending_skip`; WITH CHECK forward + send-back
-- dept_head → USING `pending_dept`; WITH CHECK forward + send-back
-- bu_head → USING `pending_bu`; WITH CHECK forward + send-back + `completed`
-- hr → USING `pending_hr`; WITH CHECK forward + `completed` + send-back
-- **management → USING `pending_management`; WITH CHECK `overall_status IN ('pending_management','completed')` + send-back statuses**
+### 4. Documentation
+- New ADR-152 "Management stage is scoped to Management's direct reports".
+- Update `POLICY.md §AR-MANAGEMENT-STAGE`.
+- Update mem entry for the Management-terminal feature.
 
-Only the destination `overall_status` is constrained; ownership columns (`management_id`, etc.) must remain equal to `auth.uid()` in the new row so a reviewer cannot reassign the instance to someone else during their transition.
+## Risk & Impact
 
-### Verification
-- Re-run the Management "Finalise & Complete review" action on Jaspal's instance in preview — expect success, `overall_status = 'completed'`.
-- Confirm other roles' send-back / advance still work (queries against `annual_review_access_audit`).
-- Add a Vitest RLS contract test under `src/tests/` mirroring `RLS Workflow Transitions` memory: attempt a Management transition to `completed` and assert success.
+- **Data**: 3 instances mutated; 1 (`Shyam`) may roll back from `completed` → `pending_bu`. Fully audited; reversible via the audit rows.
+- **Workflow**: Sajid Raza and Piyush Bansal regain their correct terminal reviewer role for these employees; Jaspal regains Dhiraj.
+- **UI/UX**: Stepper for the 3 employees will show `Self → BU Head` instead of `Self → Management`.
+- **Regression**: The backfill guard prevents recurrence but does not touch other Management-mapped instances (Gaurav's real reports remain intact — verified none in the affected set report to Gaurav).
+- **Rollback**: Every change is captured in `annual_review_access_audit`; a single UPDATE reversing the audited row restores prior state.
 
-## Out of scope
-- No UI or business-logic changes.
-- No changes to SELECT / INSERT / DELETE policies.
-- No refactor of the Management submit call site (the direct update is intentional; RLS is the missing guardrail, not the client code).
+## Tests
+- Unit test on `effectiveChain.ts`: BU Head whose reporting_manager is not Management-role → chain terminates at `bu_head`, no `management` stage.
+- SQL test: backfill RPC with a non-Management upline → skip + audit row written, no `enabled_stages` change.
 
-## Risk & rollback
-- Additive policy replacement inside a single transaction; rollback = restore prior policy body.
-- No data mutation.
+## Open question for user (non-blocking)
+Should Jaspal (101125) also be reverted to `self`-only (his ADR-109 BU-head-terminal state)? If yes, his current `pending_management` status disappears and the review auto-completes on self-submit. Default: **leave Jaspal untouched**.
