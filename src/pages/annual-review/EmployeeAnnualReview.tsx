@@ -294,7 +294,7 @@ export default function EmployeeAnnualReview() {
           {selfRatingOutOf5 != null && (
             <div className="text-xs font-medium text-foreground">
               {t('rating.your_rating', 'Your rating')}:{' '}
-              <span className="tabular-nums">{selfRatingOutOf5.toFixed(1)}</span>
+              <span className="tabular-nums">{selfRatingOutOf5.toFixed(2)}</span>
               <span className="text-muted-foreground"> / 5</span>
             </div>
           )}
