@@ -288,6 +288,13 @@ export async function setEnabledStages(args: {
   if (error) throw error;
 }
 
+/**
+ * ADR-157 — role list expanded to include `management`. See reassignReviewer
+ * declaration below in the "Cycles / mid-cycle admin" section.
+ */
+export type ReassignableReviewerRole =
+  | 'manager' | 'skip_manager' | 'dept_head' | 'bu_head' | 'hr' | 'management';
+
 export interface BulkEnabledStagesInput {
   instanceId: string;
   enabledStages: AnnualReviewerRole[];
@@ -1576,7 +1583,7 @@ export async function reopenCycle(cycleId: string, reason: string): Promise<Annu
 /** Reassign a reviewer on a single instance mid-cycle (admin/hr_pms). */
 export async function reassignReviewer(args: {
   instanceId: string;
-  role: 'manager' | 'skip_manager' | 'dept_head' | 'bu_head' | 'hr';
+  role: ReassignableReviewerRole;
   newReviewerId: string;
   reason: string;
 }) {

@@ -1088,7 +1088,7 @@ function ProgressTab() {
                             {!isPastSelf && (
                               <>
                                 <DropdownMenuItem onClick={() => setChangeWfFor(i)}>
-                                  <ListChecks className="h-4 w-4 mr-2" /> Change workflow
+                                  <ListChecks className="h-4 w-4 mr-2" /> Edit workflow &amp; reviewers
                                 </DropdownMenuItem>
                                 <DropdownMenuItem onClick={() => setWeightsFor(i)}>
                                   <Scale className="h-4 w-4 mr-2" /> Customise weights
