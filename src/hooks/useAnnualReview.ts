@@ -28,12 +28,12 @@ export const annualReviewKeys = {
 // as anon and RLS helpers like has_role() return `permission denied`,
 // leaving admin dashboards stuck at 0.
 export const useCycles = () => {
-  const { isReady } = useAuth();
-  return useQuery({ queryKey: annualReviewKeys.cycles(), queryFn: svc.listCycles, enabled: isReady });
+  const { isReady, user } = useAuth();
+  return useQuery({ queryKey: [...annualReviewKeys.cycles(), user?.id ?? ''], queryFn: svc.listCycles, enabled: isReady && !!user });
 };
 export const useActiveCycle = () => {
-  const { isReady } = useAuth();
-  return useQuery({ queryKey: annualReviewKeys.activeCycle(), queryFn: svc.getActiveCycle, enabled: isReady });
+  const { isReady, user } = useAuth();
+  return useQuery({ queryKey: [...annualReviewKeys.activeCycle(), user?.id ?? ''], queryFn: svc.getActiveCycle, enabled: isReady && !!user });
 };
 export const useTemplates = () => useQuery({ queryKey: annualReviewKeys.templates(), queryFn: svc.listTemplates });
 export const useTemplate = (id: string | undefined) =>
@@ -43,21 +43,23 @@ export const useRules = (cycleId?: string) =>
 export const useCycleInstances = (cycleId?: string) =>
   useQuery({ queryKey: annualReviewKeys.cycleInstances(cycleId ?? ''), queryFn: () => svc.listInstancesForCycle(cycleId!), enabled: !!cycleId });
 
-export const useAnnualReviewInstancesPaginated = (args: svc.ListInstancesPaginatedArgs | undefined) =>
-  useQuery({
-    queryKey: [...annualReviewKeys.all, 'instancesPaginated', args],
+export const useAnnualReviewInstancesPaginated = (args: svc.ListInstancesPaginatedArgs | undefined) => {
+  const { isReady, user } = useAuth();
+  return useQuery({
+    queryKey: [...annualReviewKeys.all, 'instancesPaginated', user?.id ?? '', args],
     queryFn: () => svc.listInstancesPaginated(args!),
-    enabled: !!args?.cycleId,
+    enabled: isReady && !!user && !!args?.cycleId,
     staleTime: 30_000,
     placeholderData: keepPreviousData,
   });
+};
 
 export const useCycleStatusCounts = (cycleId?: string) => {
-  const { isReady } = useAuth();
+  const { isReady, user } = useAuth();
   return useQuery({
-    queryKey: [...annualReviewKeys.all, 'statusCounts', cycleId ?? ''],
+    queryKey: [...annualReviewKeys.all, 'statusCounts', user?.id ?? '', cycleId ?? ''],
     queryFn: () => svc.getCycleStatusCounts(cycleId!),
-    enabled: !!cycleId && isReady,
+    enabled: !!cycleId && isReady && !!user,
     staleTime: 30_000,
   });
 };
