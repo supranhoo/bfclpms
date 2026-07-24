@@ -162,53 +162,84 @@ export function ComprehensiveTab({ cycleId, cycleName }: { cycleId: string | und
               : r.overall_status === 'pending_dept' ? (r.dept_head_name ?? 'Dept Head')
               : r.overall_status === 'pending_bu' ? (r.bu_head_name ?? 'BU Head')
               : r.overall_status === 'pending_hr' ? (r.hr_name ?? 'HR')
+              : r.overall_status === 'pending_management' ? (r.management_name ?? 'Management')
               : pendingWith(r.overall_status);
-            const cells: Array<[string, React.ReactNode]> = [
-              ['Employee Code', r.employee_code ?? '—'],
-              ['Employee Name', r.employee_name ?? '—'],
-              ['Designation', r.designation ?? '—'],
-              ['Department', r.department_name ?? '—'],
-              ['Business Unit', r.business_unit_name ?? '—'],
-              ['Division', r.division_name ?? '—'],
-              ['Grade', r.grade ?? '—'],
-              ['Date of Joining', r.doj ?? '—'],
-              ['Eligibility', eligibilityLabel(r)],
-              ['Self Score', r.self_score?.toFixed(2) ?? '—'],
-              ['Self Rating', stageRatingFromScore(r.self_score) || '—'],
-              ['Self Comment', r.self_comment ?? '—'],
-              ['HOD Score', hod?.toFixed(2) ?? '—'],
-              ['HOD Rating', stageRatingFromScore(hod) || '—'],
-              ['HOD Comment', hodComment || '—'],
-              ['BU Head Score', r.bu_head_score?.toFixed(2) ?? '—'],
-              ['BU Head Rating', stageRatingFromScore(r.bu_head_score) || '—'],
-              ['BU Head Comment', r.bu_head_comment ?? '—'],
-              ['HR Score', r.hr_score?.toFixed(2) ?? '—'],
-              ['HR Rating', stageRatingFromScore(r.hr_score) || '—'],
-              ['HR Comment', r.hr_comment ?? '—'],
-              ['Final Score', r.total_score?.toFixed(2) ?? '—'],
-              ['Final Rating', r.final_rating ?? '—'],
-              ['Current Stage', pendingWith(r.overall_status)],
-              ['Pending With', pending],
-              ['Completion Status', completionStatus(r.overall_status)],
-              ['Days Since Update', r.days_pending ?? '—'],
-              ['HR Data Available', diag.hr_data_available ? 'Yes' : 'No'],
-              ['HR Data Visible in Report', diag.hr_data_visible ? 'Yes' : 'No'],
-              ['Root Cause', <Badge key="rc" variant={diag.root_cause === 'OK' ? 'secondary' : 'destructive'}>{diag.root_cause}</Badge>],
-              ['Evidence', <span key="ev" className="text-xs">{diag.evidence}</span>],
-              ['Impact', diag.impact],
-              ['Recommended Fix', diag.recommended_fix],
+            const stages = Array.isArray(r.enabled_stages)
+              ? (r.enabled_stages as string[])
+              : (Array.isArray(r.cycle_default_stages) ? (r.cycle_default_stages as string[]) : []);
+            const has = (s: string) => stages.length === 0 || stages.includes(s);
+            const fmt = (n: number | null | undefined) =>
+              n == null || Number.isNaN(n as number) ? '—' : (n as number).toFixed(2);
+
+            type Cell = { label: string; value: React.ReactNode; wide?: boolean };
+            const section = (title: string, cells: Cell[]) => (
+              <div className="space-y-2">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{title}</p>
+                <div className="grid gap-3 grid-cols-1 md:grid-cols-2 xl:grid-cols-3">
+                  {cells.map((c) => (
+                    <div key={c.label} className={`rounded-md border bg-card p-3 ${c.wide ? 'md:col-span-2 xl:col-span-3' : ''}`}>
+                      <p className="text-[11px] uppercase tracking-wide text-muted-foreground">{c.label}</p>
+                      <div className="mt-1 text-sm text-foreground break-words whitespace-pre-wrap">{c.value ?? '—'}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+
+            const employee: Cell[] = [
+              { label: 'Employee Code', value: r.employee_code ?? '—' },
+              { label: 'Employee Name', value: r.employee_name ?? '—' },
+              { label: 'Designation', value: r.designation ?? '—' },
+              { label: 'Department', value: r.department_name ?? '—' },
+              { label: 'Business Unit', value: r.business_unit_name ?? '—' },
+              { label: 'Division', value: r.division_name ?? '—' },
+              { label: 'Grade', value: r.grade ?? '—' },
+              { label: 'Date of Joining', value: r.doj ?? '—' },
+              { label: 'Eligibility', value: eligibilityLabel(r) },
             ];
+
+            const stageRow = (label: string, name: string | null, score: number | null, comment: string | null): Cell[] => [
+              { label: `${label} Reviewer`, value: name ?? '—' },
+              { label: `${label} Score`, value: fmt(score) },
+              { label: `${label} Rating`, value: stageRatingFromScore(score) || '—' },
+              { label: `${label} Comment`, value: comment || '—', wide: true },
+            ];
+
+            const stageCells: Cell[] = [
+              ...stageRow('Self', r.employee_name, r.self_score, r.self_comment),
+              ...(has('manager') || has('dept_head')
+                ? stageRow('HOD / Manager', r.dept_head_name ?? r.manager_name, hod, hodComment)
+                : []),
+              ...(has('bu_head') ? stageRow('BU Head', r.bu_head_name, r.bu_head_score, r.bu_head_comment) : []),
+              ...(has('management') ? stageRow('Management', r.management_name, r.management_score, r.management_comment) : []),
+              ...(has('hr') ? stageRow('HR', r.hr_name, r.hr_score, r.hr_comment) : []),
+            ];
+
+            const outcome: Cell[] = [
+              { label: 'Final Score', value: fmt(r.total_score) },
+              { label: 'Final Rating', value: r.final_rating ?? '—' },
+              { label: 'Current Stage', value: pendingWith(r.overall_status) },
+              { label: 'Pending With', value: pending },
+              { label: 'Completion Status', value: completionStatus(r.overall_status) },
+              { label: 'Days Since Update', value: r.days_pending ?? '—' },
+            ];
+
+            const diagnosis: Cell[] = [
+              { label: 'HR Data Available', value: diag.hr_data_available ? 'Yes' : 'No' },
+              { label: 'HR Data Visible in Report', value: diag.hr_data_visible ? 'Yes' : 'No' },
+              { label: 'Root Cause', value: <Badge variant={diag.root_cause === 'OK' ? 'secondary' : 'destructive'}>{diag.root_cause}</Badge> },
+              { label: 'Evidence', value: <span className="text-xs">{diag.evidence}</span>, wide: true },
+              { label: 'Impact', value: diag.impact, wide: true },
+              { label: 'Recommended Fix', value: diag.recommended_fix, wide: true },
+            ];
+
             return (
-              <Table>
-                <TableHeader><TableRow>
-                  {cells.map(([h]) => <TableHead key={h} className="whitespace-nowrap">{h}</TableHead>)}
-                </TableRow></TableHeader>
-                <TableBody>
-                  <TableRow>
-                    {cells.map(([h, v]) => <TableCell key={h} className="text-xs whitespace-nowrap max-w-[240px] truncate" title={typeof v === 'string' ? v : undefined}>{v}</TableCell>)}
-                  </TableRow>
-                </TableBody>
-              </Table>
+              <div className="space-y-5 p-4">
+                {section('Employee', employee)}
+                {section('Stage scores', stageCells)}
+                {section('Outcome', outcome)}
+                {section('Diagnosis', diagnosis)}
+              </div>
             );
           })()}
         </CardContent>
