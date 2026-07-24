@@ -16,7 +16,6 @@ import {
   eligibilityLabel,
   completionStatus,
   diagnoseHr,
-  stageRatingFromScore,
   stageRatingDisplay,
   isSystemScoredOnly,
   type ComprehensiveRow,
