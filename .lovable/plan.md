@@ -1,75 +1,60 @@
-## Diagnosis (verified against DB + code)
+## Goal
+Make the Overall Recommendation remark **mandatory** for Management submissions, mirroring BU Head. Also enable the remark editor for Management (currently it doesn't render because `management` isn't in the recommendation-authoring roles list). Enforce the same "no remark → cannot submit" rule for BU Head.
 
-**Instance:** Jaspal (101125) — `01f168dd-4f07-44ea-b8bf-9fb20452a497`
-- `overall_status = pending_management`
-- `management_id = ef74c606…` (Dummy/001)
-- `annual_review_responses`: `management` row is `is_locked=true, submitted_at=2026-07-24 06:50:59`, `weighted_score=0.00`
-- `annual_review_effective_chain(...)` returns `["self","management"]` ✔
-- `annual_review_next_status(["self","management"], 'pending_management')` returns **`pending_management`** ✗ (should be `completed`)
+## Current State (verified)
+- `src/components/annual-review/OverallRecommendationCard.tsx`
+  - `RECOMMENDATION_ROLES = ['dept_head', 'bu_head']` — **Management is missing**, so the textarea never renders for a Management reviewer.
+  - Label reads `"Your recommendation (optional)"` — no requirement anywhere.
+- `src/components/annual-review/TeamReviewDetailContent.tsx` → `handleSubmit`
+  - Only guards the **self** stage. No check on the reserved `__overall_recommendation` key before `advance.mutateAsync` for reviewer stages.
+- No server-side RPC enforcement of a non-empty recommendation.
 
-### Root cause — question 2 ("why submit didn't work")
-`public.annual_review_next_status` (SQL, IMMUTABLE) was written before ADR-138 added the Management stage. It has two gaps:
-1. Its seniority VALUES list stops at `('hr',6)` — no `management` row.
-2. Its `p_current → v_cur` CASE doesn't map `pending_management`.
+## Change Plan
 
-So `advance_annual_review_status` for a management submit:
-- correctly locks the response row (that's why the toast said "Submitted"),
-- then computes `v_next := annual_review_next_status(...)` → returns `pending_management` unchanged,
-- updates the instance to the same status → no advancement, no terminal completion, no `hydrate_annual_review_system_scores`, no `finalized_at`.
+1. **`OverallRecommendationCard.tsx`**
+   - Add `'management'` to `RECOMMENDATION_ROLES` so the editor renders on the Management terminal stage.
+   - Export a new constant `RECOMMENDATION_REQUIRED_ROLES = ['bu_head', 'management']` (Dept Head stays optional — user only mirrored BU Head).
+   - When the current `role` is in `RECOMMENDATION_REQUIRED_ROLES`:
+     - Change label from `"Your recommendation (optional)"` to `"Your recommendation (required)"` with a red asterisk.
+     - Show inline helper text: `"A recommendation is required before this review can be submitted."`
+   - Include `'management'` in `collectRecommendations` display order (append after `hr`) so the aggregated block on the employee results view and downstream stages shows Management notes.
+   - Extend `STAGE_LABEL` usage already covers `management`.
 
-That is exactly the symptom: response looks submitted, but the instance stays at "Management Review Pending" everywhere.
+2. **`TeamReviewDetailContent.tsx` → `handleSubmit`**
+   - After the existing `self` block, add a guard:
+     ```ts
+     if (role && RECOMMENDATION_REQUIRED_ROLES.includes(role)) {
+       const rec = ((draft.qualitative_responses ?? {})[RECOMMENDATION_KEY] ?? '').trim();
+       if (!rec) {
+         toast.error('Please add an Overall Recommendation before submitting.');
+         return;
+       }
+     }
+     ```
+   - Same guard runs before the proxy-assisted branch so assisted submissions can't bypass it.
 
-### Root cause — question 3 (no other options for Management)
-`TeamReviewDetailContent` renders a single "Submit & forward" button for all reviewer stages. For a terminal role like `management` it should:
-- read as a terminal CTA ("Finalise & Complete review"), not "forward",
-- expose the same review notes textarea already used by other stages (Management stage in the UI currently has no remarks field wired in),
-- expose "Send back" to the previous effective stage (Self) with a reason — parity with HR/BU terminal.
+3. **Tests** (`src/test/annualReview/`)
+   - Extend/add unit tests:
+     - `OverallRecommendationCard` renders the editor for role `management` and shows the "required" label.
+     - `handleSubmit` blocks (toast + no `advance.mutateAsync`) when `bu_head` or `management` submits with empty recommendation.
+     - `dept_head` submission still succeeds without a recommendation (unchanged behaviour).
 
-## Fix Plan
-
-### 1. Data rollback for Jaspal (surgical, one instance)
-Migration that:
-- Unlocks and clears the management submission on `01f168dd-4f07-44ea-b8bf-9fb20452a497`:
-  `UPDATE annual_review_responses SET is_locked = false, submitted_at = NULL, weighted_score = NULL WHERE instance_id = '01f168dd…' AND reviewer_role = 'management';`
-- Leaves `overall_status = 'pending_management'` (already correct).
-- Writes an `annual_review.stage_rollback` row to `system_audit_logs` with reason "user-requested test rollback".
-
-Rationale: the response was locked but the instance never advanced, so this is enough to let Gaurav/Dummy edit + resubmit cleanly. No cascade needed.
-
-### 2. Patch `annual_review_next_status` (SSOT fix, benefits every future Management submit)
-Migration `CREATE OR REPLACE FUNCTION` that:
-- Adds `('management',7)` to the seniority VALUES.
-- Adds `WHEN 'pending_management' THEN 'management'` to the current-status CASE.
-- Adds `WHEN 'management' THEN 'pending_management'` to the next-status CASE.
-Behaviour becomes: for a chain `[self, management]`, `next_status('pending_management') → 'completed'`; for `[…, hr, management]` any HR submit routes to `pending_management`; for management submit routes to `completed`. This aligns SQL with the TS SSOT already fixed in `effectiveChain.ts` (SENIORITY/FORWARD).
-
-Verification queries after migration:
-- `annual_review_next_status('["self","management"]'::jsonb, 'pending_management')` → `completed`
-- `annual_review_next_status('["self","manager","hr","management"]'::jsonb, 'pending_hr')` → `pending_management`
-- Existing 6-stage chains unchanged (regression-safe: additive only).
-
-### 3. UI — Management terminal actions in `TeamReviewDetailContent.tsx`
-Presentation-only, no business-logic changes:
-- Relabel primary CTA when the current stage is the last effective stage: "Finalise & Complete review" (keep "Submit & forward" for non-terminal stages). Uses `computeVisibleStages(instance, profiles)` (already imported) to detect terminal.
-- Ensure the existing reviewer-notes textarea is rendered for `management` the same way it renders for `hr` / `bu_head` (currently the render guard omits `management`). Notes persist to `annual_review_responses.notes` through the existing upsert path — no schema change.
-- Ensure "Send back" button is available on the Management stage (goes back to Self per the effective chain) with the same reason dialog used at HR/BU. `send_back_annual_review_status` already handles `management` because it uses `annual_review_effective_chain` for the prev-stage lookup — no RPC change needed.
-
-### 4. Tests
-- SQL regression: add `src/test/annualReview/effectiveChainManagement.test.ts` sibling — a small vitest that exercises `annual_review_next_status` through a Supabase RPC mock and asserts the three cases above (or a pure SQL check in a migration test if the harness supports it).
-- UI: extend `src/test/annualReview/stageTrackerReviewerNames.test.tsx` with a management-terminal fixture — asserts the CTA label switches to "Finalise & Complete review" and the notes textarea + "Send back" button render for `reviewer_role === 'management'`.
+4. **Docs / Policy**
+   - Append `POLICY §AR-RECOMMENDATION-REQUIRED` to `POLICY.md`: "For BU Head and Management terminal stages, submission is blocked unless a non-empty Overall Recommendation is provided."
+   - Add ADR-151 in `docs/adr/` capturing the decision and the parity with BU Head.
+   - Update `DOCUMENTATION.md` Version History.
 
 ## Risk & Impact
 
-- **Data:** 1 row updated (management response for Jaspal). Instance `overall_status` unchanged.
-- **Workflow:** `annual_review_next_status` change is additive — it only introduces a new mapping and a new seniority slot. Existing chains that don't contain `management` behave identically. Every Management submit that failed silently on the same code path is now resolvable by re-clicking Submit (only Jaspal is affected today; his response is unlocked in step 1).
-- **UI:** Management reviewers see a terminal CTA + notes + send-back parity. No other stage's rendering changes.
-- **Regression:** Low. Additive DB change, presentation-only UI change, single-row data patch.
-- **Rollback:** Revert the two migrations and the TSX diff. The data patch is idempotent to re-apply.
+| Vector | Assessment |
+|---|---|
+| Data | None — client-side guard only; existing storage key `__overall_recommendation` unchanged. |
+| Workflow | BU Head and Management can no longer submit without a note. Dept Head/HR/others unaffected. |
+| UI/UX | Textarea now visible for Management; label switches to "required" for BU Head + Management. |
+| Regression | Low — additive to `handleSubmit`; RECOMMENDATION_ROLES extension only enables an existing card path. |
+| Rollback | Revert the two files + drop the tests. No schema changes. |
 
-## Verification checklist
-
-1. `SELECT annual_review_next_status('["self","management"]'::jsonb, 'pending_management');` → `completed`.
-2. Jaspal's `annual_review_responses` management row: `is_locked=false`, `submitted_at=null`.
-3. As Dummy (001): open Jaspal's review, notes field visible, "Send back" available, primary CTA reads "Finalise & Complete review".
-4. Click Finalise → toast success → instance `overall_status = 'completed'`, `finalized_at` set, `criteria_weighted_score` hydrated, response `is_locked=true`.
-5. Existing HR-terminal instances (any completed 6-stage review) unaffected.
+## Out of scope
+- Server-side RPC validation (client guard is sufficient per current pattern used for self-stage; can be added later if bypasses appear).
+- Making Dept Head remark mandatory.
+- Retroactive backfill of already-locked BU Head/Management responses.
