@@ -1,73 +1,82 @@
-## Goal
-Give **Management** reviewers (e.g. Gaurav Budhiya) a working queue and detail page for their `pending_management` stage — the same UX Manager/HOD/BU-Head already have — so they can open, score, and submit final approval on the reviews now landing at their desk (ADR-138).
+# Goal
 
-## Current state (verified)
+1. Every BU Head whose `reporting_manager_id` points to a user with the `management` role must have `management` appended to `enabled_stages` and `management_id` stamped on their annual-review instance.
+2. Those Management users must be able to see the instance in **Annual Reviews (Team) → Management** and open it in edit mode to score / approve.
 
-- `annual_review_instances.management_id` is populated by ADR-148 backfill; instances now advance to status `pending_management`.
-- Backend RPC `get_my_annual_review_queue` (mig `20260717134401`) hard-codes scopes to `'any' | 'manager' | 'skip' | 'dept' | 'bu' | 'hr' | 'subtree'` — **no `management` branch**, and validator rejects `'pending_management'` in `p_status`.
-- `get_my_annual_review_role_counts` returns only manager/skip/dept/bu/hr/subtree.
-- Frontend (`src/pages/annual-review/TeamAnnualReview.tsx`) `STATUS_FILTERS`, `SCOPE_FILTERS`, `SCOPE_BADGE_LABEL`, and `resolveMyRole()` do not know about `management` / `pending_management` / `management_id`.
-- `src/services/annualReview/annualReviewService.ts` `ReviewerScope` type and `ReviewerRoleCounts` shape omit `management`.
-- `src/lib/annualReview/stageForReviewer.ts` already returns `'management'` for `pending_management` when `management_id === uid` → the detail page **will render in edit mode** for a Management user once the queue lists it. No detail-page change required.
-- Sidebar (`useMenuAccess.ts`) already grants `management` role access to `team-reviews` and `management-review`, so the entry point exists.
+Both pieces already exist in code (ADR-138, ADR-148, ADR-149); the gap is that the last bulk backfill run didn't finish, so 11 `pending_management` instances still have `management_id = NULL` and `enabled_stages` without `'management'`.
 
-Net effect: even though data is correctly parked at `pending_management`, a Management user opens **Team Annual Review** and sees an empty queue with no filter chip and no way to reach the instance.
+---
 
-## Risk & Impact
+# Verified current state (from DB reads this turn)
 
-- **Data:** none — no schema change, only RPC signature widening + new enum values accepted.
-- **Workflow:** unlocks the final Management approval step for ~14 BU-Head instances plus any future ones.
-- **UI:** adds one status option, one scope chip, one badge label; no removals.
-- **Regression:** low — additive `WHEN 'management'` branches; existing scopes untouched. Guarded by unit tests.
-- **Rollback:** re-run prior migration `20260717134401` to restore old RPC.
+| Bucket | Count |
+|---|---|
+| `overall_status='pending_management'` correctly stamped to Gaurav Budhia | 4 |
+| `overall_status='pending_management'` with `management_id = NULL` | 11 (10 report to Gaurav, 1 → Jaspal reports to "Dummy") |
+| Jaspal (101125) instance `01f168dd-…` | `enabled_stages = ['self','bu_head']`, `management_id = NULL` |
+| Users carrying `management` role | Gaurav Budhia (100001), Dummy (001) |
 
-## Plan
+RPC `backfill_management_stage_for_manager` and the bulk wrapper `backfill_management_stage_all` are deployed. Validator + audit check-constraint now accept `management` / `management_stage.backfilled(_bulk)`. Queue RPC `get_my_annual_review_queue` already supports the `management` scope, and `TeamAnnualReview.tsx` shows the Management filter chip.
 
-### 1. Backend (single migration)
-Recreate `get_my_annual_review_queue` and `get_my_annual_review_role_counts`:
+So the code path is complete — the data just hasn't been re-stamped since the earlier failed run.
 
-- Extend `v_scope` allow-list with `'management'`.
-- Extend `v_status` allow-list with `'pending_management'`.
-- Add `is_named` term `(enabled_stages ? 'management' AND management_id = v_uid)` so `'any'` includes management rows.
-- Add `WHEN 'management' THEN v.i.enabled_stages ? 'management' AND v.i.management_id = v_uid`.
-- Role-counts RPC: add `'management'` bucket; include the same predicate in the outer visibility `WHERE`.
+---
 
-### 2. Frontend
-`src/services/annualReview/annualReviewService.ts`
-- `ReviewerScope`: add `'management'`.
-- `ReviewerRoleCounts`: add `management: number` and read `counts?.management` in `getReviewerRoleCounts`.
+# Plan
 
-`src/pages/annual-review/TeamAnnualReview.tsx`
-- `STATUS_FILTERS`: append `{ value: 'pending_management', label: 'Management' }`.
-- `SCOPE_FILTERS`: append `{ value: 'management', label: 'Management' }`.
-- `SCOPE_BADGE_LABEL`: add `management: 'Management'`.
-- `resolveMyRole()`: append `if (row.management_id === uid && has('management')) return 'management';` at the end of the chain (lowest priority so it doesn't shadow closer relationships).
-- Ensure the "My role" chip rendering block renders the management chip when `counts.management > 0`.
+### Step 1 — Data fix: finish the Management backfill
+Run the existing admin RPC (via **Admin → Annual Review → Access Control → Backfill all Management users**):
+- `p_dry_run = false`
+- `p_reopen_completed = true` (so any BU-Head instance already at `completed` moves back to `pending_management`)
+- Reason: `ADR-148 rollout completion — stamp management_id + enabled_stages for all BU Heads reporting to Management`
 
-### 3. Detail page
-No change — `stageForReviewer` already maps `pending_management` → `management` from `management_id`, so the review form loads in edit mode with submit/send-back controls.
+Expected effect:
+- All 11 NULL rows get `management_id` set to their `reporting_manager_id` (10 → Gaurav, 1 → Dummy/Jaspal).
+- `enabled_stages` gets `'management'` appended.
+- Any already-completed BU-Head rows for these managers are reopened to `pending_management` with `total_score / final_rating / finalized_at` cleared and archived to `annual_review_reset_archive`.
 
-### 4. Tests
-- Extend `src/test/bulkReview/…` or add `src/test/annualReview/managementScope.test.ts` covering:
-  - `resolveMyRole` returns `'management'` when only `management_id` matches.
-  - Scope-filter selection routes to RPC with `p_scope='management'`.
-- Add mock rows with `overall_status='pending_management'` and `management_id=uid` to `mocks`.
+**Verification query (read-only):**
+```sql
+SELECT overall_status, management_id, count(*)
+FROM annual_review_instances
+WHERE overall_status = 'pending_management'
+GROUP BY 1,2;
+```
+Success = zero rows with `management_id IS NULL`.
 
-### 5. Documentation
-- Append **ADR-149 — Management scope on Team Annual Review queue** to `DOCUMENTATION.md`.
-- Update `POLICY.md §AR-TEAM-QUEUE-VISIBILITY`: add management to named-reviewer predicate and to allowed scope/status enums.
+### Step 2 — Data hygiene: confirm Jaspal's Management routing
+Jaspal (101125) currently reports to **Dummy**, not to a real Management user. Before Step 1 executes, confirm whether:
+- (a) Jaspal should route to Gaurav Budhia → update `profiles.reporting_manager_id` for Jaspal to Gaurav first, then run backfill; **or**
+- (b) "Dummy" is the intended terminal reviewer (test account) → leave as-is.
 
-## How a Management user will experience the flow (post-change)
+### Step 3 — Access verification (no code change expected)
+Sign in as Gaurav Budhia and open **Annual Reviews (Team)**:
+- Scope filter shows **Management** chip with the correct badge count.
+- Status filter includes **Management Review Pending**.
+- Row click opens the instance in edit mode (not read-only), Management approval action visible.
 
-1. Log in → sidebar shows **Team Annual Review** (already visible for `management` role).
-2. Page loads → **"My role: Management (N)"** chip appears alongside any other chips they have.
-3. Click chip → queue filtered to `pending_management` rows where they are the mapped `management_id`.
-4. Open a row → detail page loads in edit mode (Management stage) with scoring + Submit / Send Back.
-5. On submit → advancement engine marks `status='completed'` (terminal), audit log captures `management` performer.
+If any of those three UI checks fails, drop into build mode to patch:
+- `resolveMyRole()` in `TeamAnnualReview.tsx` (management precedence)
+- `annual_review_directory_access` / instance-level RLS for the `management` role
+- `TeamReviewDetailContent.tsx` edit-mode gate for `management` stage
 
-## Verification steps
+(No file edits are planned up-front — Step 3 is a check, and code is already in place per ADR-149.)
 
-1. Run migration; retry queue for Gaurav Budhiya → non-empty list of the 14 backfilled BU-Head instances.
-2. Open one instance → editable Management scorecard renders.
-3. Submit → instance flips to `completed` and audit row records `management` reviewer.
-4. Unit tests green; existing manager/HOD/BU/HR scopes unchanged (regression suite passes).
+### Step 4 — Guardrail (small, additive) to prevent recurrence
+Add a lightweight scheduled check / admin dashboard tile: **"BU-Head instances missing Management routing"** = count of rows where `overall_status IN ('pending_bu','pending_management','completed')` AND employee's `reporting_manager` has role `management` AND (`management_id IS NULL` OR `NOT enabled_stages ? 'management'`). Zero-touch surfacing so this can never silently drift again.
+
+---
+
+# Risk & Impact
+
+- **Data impact:** Step 1 mutates up to 11 in-flight rows plus any completed BU-Head rows under Gaurav/Dummy. Every mutation is snapshotted to `annual_review_reset_archive` and logged to `annual_review_access_audit` → fully reversible.
+- **Workflow impact:** Reopens completed instances to `pending_management`. Employees will see status revert; acceptable per ADR-138 intent (Management is the true terminal).
+- **UI/UX impact:** None from Step 1. Step 3 is verification only.
+- **Regression risk:** Low — RPC is idempotent (skips rows already stamped) and constraint/validator fixes are already live.
+- **Rollback:** `annual_review_reset_archive` holds the pre-image; a targeted revert RPC can restore prior status/stages if needed.
+- **Scalability:** Bounded to ~15 rows today; RPC is O(n) over Management users' direct reports.
+
+# Success criteria
+- 0 rows with `overall_status='pending_management' AND management_id IS NULL`.
+- Gaurav Budhia sees all his direct-report BU Heads in the Management queue and can submit scores.
+- Jaspal's instance shows a **Management Review Pending** stage routed to the intended reviewer, not skipped.
