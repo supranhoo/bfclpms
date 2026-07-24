@@ -333,6 +333,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // resulting empty Set silently filtered the entire roster to "0 of 0".
     // Invalidate once auth is ready so the scoped roster recovers.
     queryClient.invalidateQueries({ queryKey: ['my-visible-employee-ids'] });
+    // v2.66.163 — Annual Review admin dashboard (Progress tiles, cycle
+    // status counts, paginated instance grid) also raced the auth bootstrap.
+    // The first request hit PostgREST as anon → `permission denied for
+    // function has_role` → tiles rendered 0 despite 2,580 instances.
+    // Evict the whole `annualReview` cache tree so counts, cycles and
+    // paginated instance queries refetch with a valid JWT.
+    queryClient.invalidateQueries({ queryKey: ['annualReview'] });
   }, [isReady, user?.id, queryClient]);
 
   const signIn = async (email: string, password: string, rememberMe: boolean = true) => {
