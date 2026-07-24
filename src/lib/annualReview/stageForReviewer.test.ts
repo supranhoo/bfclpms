@@ -43,7 +43,7 @@ describe('stageForReviewer', () => {
  */
 describe('reviewer visibility SSOT (app query ↔ RLS)', () => {
   const REVIEWER_ID_SLOTS = [
-    'manager_id', 'skip_id', 'dept_head_id', 'bu_head_id', 'hr_id',
+    'manager_id', 'skip_id', 'dept_head_id', 'bu_head_id', 'hr_id', 'management_id',
   ] as const;
 
   it('service .or() predicate covers every reviewer id slot', () => {
