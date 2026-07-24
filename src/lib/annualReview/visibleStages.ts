@@ -8,6 +8,7 @@ interface InstanceLike {
   dept_head_id: string | null;
   bu_head_id: string | null;
   hr_id: string | null;
+  management_id?: string | null;
   enabled_stages: AnnualReviewerRole[];
 }
 
@@ -38,6 +39,7 @@ export function computeVisibleStages(
       dept_head: instance.dept_head_id,
       bu_head: instance.bu_head_id,
       hr: instance.hr_id,
+      management: instance.management_id ?? null,
     },
     activeById,
   });
@@ -60,6 +62,7 @@ export function computeStageResolutions(
       dept_head: instance.dept_head_id,
       bu_head: instance.bu_head_id,
       hr: instance.hr_id,
+      management: instance.management_id ?? null,
     },
     activeById,
   });
