@@ -1,60 +1,46 @@
-## Goal
-Make the Overall Recommendation remark **mandatory** for Management submissions, mirroring BU Head. Also enable the remark editor for Management (currently it doesn't render because `management` isn't in the recommendation-authoring roles list). Enforce the same "no remark → cannot submit" rule for BU Head.
+## Root cause
 
-## Current State (verified)
-- `src/components/annual-review/OverallRecommendationCard.tsx`
-  - `RECOMMENDATION_ROLES = ['dept_head', 'bu_head']` — **Management is missing**, so the textarea never renders for a Management reviewer.
-  - Label reads `"Your recommendation (optional)"` — no requirement anywhere.
-- `src/components/annual-review/TeamReviewDetailContent.tsx` → `handleSubmit`
-  - Only guards the **self** stage. No check on the reserved `__overall_recommendation` key before `advance.mutateAsync` for reviewer stages.
-- No server-side RPC enforcement of a non-empty recommendation.
+Management submit fails with `new row violates row-level security policy for table "annual_review_instances"`.
 
-## Change Plan
+The UPDATE policy `instances_stage_update` on `annual_review_instances` has a `USING` clause but **no `WITH CHECK`**. Postgres then reuses `USING` as the implicit `WITH CHECK`. Management's submit transitions `overall_status` from `pending_management` → `completed`, so the post-update row no longer satisfies `(management_id = auth.uid()) AND (overall_status = 'pending_management')`, and RLS rejects it.
 
-1. **`OverallRecommendationCard.tsx`**
-   - Add `'management'` to `RECOMMENDATION_ROLES` so the editor renders on the Management terminal stage.
-   - Export a new constant `RECOMMENDATION_REQUIRED_ROLES = ['bu_head', 'management']` (Dept Head stays optional — user only mirrored BU Head).
-   - When the current `role` is in `RECOMMENDATION_REQUIRED_ROLES`:
-     - Change label from `"Your recommendation (optional)"` to `"Your recommendation (required)"` with a red asterisk.
-     - Show inline helper text: `"A recommendation is required before this review can be submitted."`
-   - Include `'management'` in `collectRecommendations` display order (append after `hr`) so the aggregated block on the employee results view and downstream stages shows Management notes.
-   - Extend `STAGE_LABEL` usage already covers `management`.
+This is the exact class of bug captured in mem `RLS Workflow Transitions` — status-transition UPDATE policies must supply an explicit `WITH CHECK` that permits the destination status.
 
-2. **`TeamReviewDetailContent.tsx` → `handleSubmit`**
-   - After the existing `self` block, add a guard:
-     ```ts
-     if (role && RECOMMENDATION_REQUIRED_ROLES.includes(role)) {
-       const rec = ((draft.qualitative_responses ?? {})[RECOMMENDATION_KEY] ?? '').trim();
-       if (!rec) {
-         toast.error('Please add an Overall Recommendation before submitting.');
-         return;
-       }
-     }
-     ```
-   - Same guard runs before the proxy-assisted branch so assisted submissions can't bypass it.
+Note: earlier stages don't hit this because their write path goes through a `SECURITY DEFINER` RPC (`advance_annual_review_stage`, etc.) that bypasses RLS. The Management finalize path performs a direct `.update()` from the client, exposing the missing `WITH CHECK`.
 
-3. **Tests** (`src/test/annualReview/`)
-   - Extend/add unit tests:
-     - `OverallRecommendationCard` renders the editor for role `management` and shows the "required" label.
-     - `handleSubmit` blocks (toast + no `advance.mutateAsync`) when `bu_head` or `management` submits with empty recommendation.
-     - `dept_head` submission still succeeds without a recommendation (unchanged behaviour).
+## 5 Whys
+1. Why does the toast fire? RLS rejects the UPDATE on `annual_review_instances`.
+2. Why? The new row (`overall_status = 'completed'`) fails the policy check.
+3. Why? Policy has no explicit `WITH CHECK`, so `USING` is reused and demands `pending_management` on the new row.
+4. Why wasn't this caught for other roles? They go through SECURITY DEFINER RPCs that skip RLS.
+5. Why does the Management path write directly? ADR-138 added the stage but reused the generic client update helper without adding a matching WITH CHECK for terminal transitions.
 
-4. **Docs / Policy**
-   - Append `POLICY §AR-RECOMMENDATION-REQUIRED` to `POLICY.md`: "For BU Head and Management terminal stages, submission is blocked unless a non-empty Overall Recommendation is provided."
-   - Add ADR-151 in `docs/adr/` capturing the decision and the parity with BU Head.
-   - Update `DOCUMENTATION.md` Version History.
+## Fix plan (surgical, DB-only)
 
-## Risk & Impact
+### Migration: `fix_instances_stage_update_with_check`
+Recreate `instances_stage_update` with an explicit `WITH CHECK` that allows the legal destination status for each role:
 
-| Vector | Assessment |
-|---|---|
-| Data | None — client-side guard only; existing storage key `__overall_recommendation` unchanged. |
-| Workflow | BU Head and Management can no longer submit without a note. Dept Head/HR/others unaffected. |
-| UI/UX | Textarea now visible for Management; label switches to "required" for BU Head + Management. |
-| Regression | Low — additive to `handleSubmit`; RECOMMENDATION_ROLES extension only enables an existing card path. |
-| Rollback | Revert the two files + drop the tests. No schema changes. |
+- admin / hr_pms → any row (unchanged)
+- employee (`employee_id = auth.uid()`) — USING `pending_self`; WITH CHECK `overall_status IN ('pending_self','pending_manager','pending_skip','pending_dept','pending_bu','pending_hr','pending_management','completed')` scoped to their own row
+- manager → USING `pending_manager`; WITH CHECK forward statuses + `pending_self` (send-back)
+- skip_manager → USING `pending_skip`; WITH CHECK forward + send-back
+- dept_head → USING `pending_dept`; WITH CHECK forward + send-back
+- bu_head → USING `pending_bu`; WITH CHECK forward + send-back + `completed`
+- hr → USING `pending_hr`; WITH CHECK forward + `completed` + send-back
+- **management → USING `pending_management`; WITH CHECK `overall_status IN ('pending_management','completed')` + send-back statuses**
+
+Only the destination `overall_status` is constrained; ownership columns (`management_id`, etc.) must remain equal to `auth.uid()` in the new row so a reviewer cannot reassign the instance to someone else during their transition.
+
+### Verification
+- Re-run the Management "Finalise & Complete review" action on Jaspal's instance in preview — expect success, `overall_status = 'completed'`.
+- Confirm other roles' send-back / advance still work (queries against `annual_review_access_audit`).
+- Add a Vitest RLS contract test under `src/tests/` mirroring `RLS Workflow Transitions` memory: attempt a Management transition to `completed` and assert success.
 
 ## Out of scope
-- Server-side RPC validation (client guard is sufficient per current pattern used for self-stage; can be added later if bypasses appear).
-- Making Dept Head remark mandatory.
-- Retroactive backfill of already-locked BU Head/Management responses.
+- No UI or business-logic changes.
+- No changes to SELECT / INSERT / DELETE policies.
+- No refactor of the Management submit call site (the direct update is intentional; RLS is the missing guardrail, not the client code).
+
+## Risk & rollback
+- Additive policy replacement inside a single transaction; rollback = restore prior policy body.
+- No data mutation.
