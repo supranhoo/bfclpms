@@ -17,6 +17,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Download, Search, Users, TrendingUp, TrendingDown, Minus, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { FrequencyLockToggle } from '@/components/ui/FrequencyLockToggle';
+import { MultiSelectId } from '@/components/ui/multi-select-id';
 import { useBulkEmployeeWorkflows } from '@/hooks/useWorkflowConfig';
 import { EmployeeStatusFilter } from '@/components/reports/EmployeeStatusFilter';
 import { applyEmployeeStatusFilter, employeeStatusLabel, type EmployeeStatusMode } from '@/lib/reportEmployeeFilter';
