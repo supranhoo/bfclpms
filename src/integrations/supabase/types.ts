@@ -1055,6 +1055,36 @@ export type Database = {
           },
         ]
       }
+      annual_review_mgmt_scope_backfill_2026_07: {
+        Row: {
+          created_at: string
+          employee_id: string
+          id: string
+          instance_id: string
+          prev_enabled_stages: Json
+          prev_management_id: string | null
+          prev_overall_status: string
+        }
+        Insert: {
+          created_at?: string
+          employee_id: string
+          id?: string
+          instance_id: string
+          prev_enabled_stages: Json
+          prev_management_id?: string | null
+          prev_overall_status: string
+        }
+        Update: {
+          created_at?: string
+          employee_id?: string
+          id?: string
+          instance_id?: string
+          prev_enabled_stages?: Json
+          prev_management_id?: string | null
+          prev_overall_status?: string
+        }
+        Relationships: []
+      }
       annual_review_proxy_submissions: {
         Row: {
           captured_at: string
