@@ -1,112 +1,71 @@
-## Goal
+# ADR-161 — Post-June KRA Rehydrate for Completed Annual Reviews
 
-Make **Admin → Edit workflow & reviewers** work at **any stage** of the annual review — before start, mid-flow, or after completion — and let it **force a reviewer change at any time** without leaving the instance stuck, mis-attributed, or silently reverted by another trigger.
+## Confirmation (answers the question)
+For KRA-based Annual Review templates, `carry_kra` values are computed live from monthly KPI scores (cascade Final → Auditor → Manager → Self, weighted by KPI weightage, scaled `(rating/5) × weight`). In-progress reviews automatically pick up newer scores (including June once approved) on next open/advance. **Completed / HR-locked reviews do not**, per POLICY §88 (Submission Snapshot Immutability): any retro update must be an explicit, audit-logged admin action. This plan adds exactly that action.
 
-## Status recap
+## Risk & Impact
+- **Data**: Overwrites `system_scores[<carry_kra slot>]`, `system_scores_raw`, `total_score`, `final_rating`, `carry_score_snapshots` on completed KRA-based instances. Non-KRA slots untouched. Full pre-image snapshot archived to a new audit table for rollback.
+- **Workflow**: No status changes. Instance remains `completed`; no stage reopens; no notifications by default.
+- **UI/UX**: Read-only surfaces (`EmployeeResultsView`, RCA, exports, comprehensive report) start showing refreshed totals. Nothing added or removed visually beyond the admin trigger card.
+- **Regression**: Non-KRA templates skipped by construction (`isKraBasedTemplate`). Locked-response contract unchanged. Rollback path preserved.
+- **Scalability**: ~cycle-scoped set of KRA instances; run in batches of 200 with server-side pagination, executed inside a single admin RPC.
 
-Core plumbing for ADR-160 already shipped last turn (migration + service + dialog). What follows is the **complete** plan so remaining hardening, notifications, tests, and docs land explicitly.
+## Scope (in / out)
+**In scope**
+- Cycle-scoped, admin-triggered bulk rehydrate for `completed` KRA-based instances.
+- Reuses existing SSOT: `buildCarrySnapshot` logic mirrored inside a `SECURITY DEFINER` SQL routine that reads the same cascade from `review_submissions`.
+- Dry-run preview with per-instance delta (old vs new total, rating band change).
+- Immutable audit + one-click rollback per run.
 
-| Piece | State |
-|---|---|
-| `has_admin_workflow_override` marker column | Done |
-| `set_annual_review_enabled_stages(..., p_mode)` with archive on removed stages | Done |
-| `reassign_annual_review_reviewer(..., p_mode)` with locked-response archive + status rewind + in-app notification | Done |
-| `annual_review_edit_workflow` orchestrator RPC | Done |
-| Normalisation triggers (`bu_head_terminal`, `collapsed_dept_bu`, `missing_dept_head_strip`, `management_terminal`) honour override flag | Done |
-| Admin dialog: post-action edits allowed, impact warning, "REPLAN" typed confirmation, single-RPC submit | Done |
-| Email dispatch (`email_dispatch_queue`) for new/old reviewer & employee | **Pending** |
-| Bulk audit summary row + explicit "reason" length rule (min 10 chars) for post-action edits | **Pending** |
-| Impact preview showing exact locked responses (not just role names) | **Pending** |
-| POLICY.md §AR-WORKFLOW-EDIT-ANYTIME + DOCUMENTATION.md ADR-160 | **Pending** |
-| Vitest unit tests (impact calculator, service contract) | **Pending** |
+**Out of scope**
+- Any change to in-progress reviews (they already pick up June live).
+- Any change to non-KRA templates.
+- Automatic (cron) re-runs. Trigger stays manual; §88 requires explicit initiation.
 
-## Failure scenarios the plan must cover (unchanged from prior plan)
+## Design
 
-1. Reviewer swap before anyone acted — trivial; keep working.
-2. Reviewer swap while a stage has an unlocked draft — rebind trigger handles.
-3. Reviewer swap on a stage with a locked response — admin picks *supersede & rewind* or *redirect only*.
-4. Reviewer swap on a stage already behind current status — supersede rewinds status.
-5. Add a stage after action — insert at correct seniority; recompute pending.
-6. Remove an already-actioned stage — archive locked response, recompute totals, recompute status.
-7. Remove Self after employee submitted — same as (6); archived to `annual_review_reset_archive`.
-8. Instance already `completed` — reopen path via supersede + typed confirmation.
-9. Cycle closed — reject with clear message.
-10. Normalisation triggers reverting the admin's change — all four triggers now short-circuit on `has_admin_workflow_override`.
-11. Notifications — in-app done; email + old-reviewer + employee notice pending.
-12. RLS on new reviewer's queue — verified via `_id = auth.uid()` slot policies.
-13. Audit trail — `annual_review_access_audit` (`workflow_edited_post_action`, `reviewer_reassigned_supersede`) + `annual_review_reset_archive` + `system_audit_logs`.
-14. Concurrency — `SELECT … FOR UPDATE` inside the RPC.
-15. Client-side validation — impact preview + typed confirmation + reason min 3 chars.
+### 1. New DB objects (migration)
+- `public.annual_review_kra_rehydrate_runs` — one row per admin run (`id`, `cycle_id`, `initiated_by`, `mode` ∈ `dry_run|apply|rollback`, `reason text NOT NULL CHECK length ≥ 10`, `instance_count`, `changed_count`, `status`, `created_at`, `completed_at`).
+- `public.annual_review_kra_rehydrate_items` — per-instance pre/post snapshot (`run_id`, `instance_id`, `employee_id`, `template_id`, `old_system_scores jsonb`, `old_system_scores_raw jsonb`, `old_total_score numeric`, `old_final_rating text`, `new_system_scores jsonb`, `new_total_score numeric`, `new_final_rating text`, `delta_total numeric`, `band_changed bool`, `applied bool`).
+- Full GRANT + RLS: admin-only (`has_role('admin')`) via existing helper.
+- RPC `annual_review_rehydrate_kra_for_cycle(p_cycle_id uuid, p_mode text, p_reason text, p_instance_ids uuid[] DEFAULT NULL) RETURNS uuid` — returns run id. Iterates completed KRA-based instances (optionally filtered), recomputes each `carry_kra` slot using the existing month cascade, replays the KRA total projection (mirrors `projectKraFinalFromSystemScores`), then in `apply` mode updates the instance and records the delta. `dry_run` records deltas only. `rollback` restores from the referenced run's `old_*` columns.
+- Rating band table read from `annual_review_settings.auto_final_rating_thresholds` (SSOT — no hardcoded 85/70/55).
 
-## Remaining work — detailed
+### 2. Service layer (`src/services/annualReview/kraRehydrate.ts`)
+Thin wrapper: `startRehydrate({ cycleId, mode, reason, instanceIds? })`, `getRun(runId)`, `listItems(runId, { pagination })`, `rollbackRun(runId, reason)`.
 
-### 1. Email dispatch (backend)
+### 3. Admin UI (`AccessControlTab.tsx` → new sub-card "KRA Score Rehydrate")
+- Cycle selector (defaults to active cycle).
+- Reason textarea (min 10 chars).
+- Buttons: **Preview (dry run)** → **Apply** → **Rollback last run**.
+- Preview table (paginated, server-side, 50/page) columns: Employee, Old Total, New Total, Δ, Old Rating, New Rating, Band Changed?.
+- Confirm dialog requires typing `REHYDRATE` before Apply, and `ROLLBACK` before Rollback (parity with ADR-160 REPLAN).
+- Toast on completion with counts (changed / unchanged / skipped-non-KRA / skipped-no-KRA-scores).
+- No auto-notifications; opt-in checkbox "Notify HR PMS of impacted employees" queues via existing `email_dispatch_queue` (off by default).
 
-Extend `reassign_annual_review_reviewer` and `set_annual_review_enabled_stages` to enqueue rows in `public.email_dispatch_queue` (already used by other annual-review flows):
+### 4. Read paths untouched
+`EmployeeResultsView`, `SystemScoresPanel`, `useResolvedSystemScores`, `useKraDerivedRatingsForInstances` continue to work as today; they'll simply reflect the new persisted values on next fetch. React Query invalidations issued after Apply/Rollback.
 
-- **New reviewer** — template `annual_review.reviewer_assigned`.
-- **Old reviewer** (only in `supersede` mode when their locked response was archived) — template `annual_review.reviewer_removed`.
-- **Employee** — template `annual_review.workflow_changed` when Self stage is added/removed OR terminal stage changes.
+## Steps
+1. Migration: new tables + RLS + GRANT + RPCs (`_rehydrate_kra_for_cycle`, `_rollback_kra_rehydrate_run`, helper `_carry_kra_recompute_for_instance` mirroring TS SSOT). **Verify**: linter clean, RLS checks pass in `docs/rls-audit.sql`.
+2. Types regen; add service layer + hooks (`useKraRehydrateRun`, `useKraRehydrateItems`). **Verify**: unit tests for delta computation and band lookup (mocked settings row).
+3. Admin UI card + dialogs. **Verify**: RTL tests for reason gate, typed confirmation, disabled states.
+4. Documentation: append **ADR-161** entry to `docs/adr/` and **POLICY §AR-KRA-REHYDRATE**; update **DOCUMENTATION.md** version history.
+5. Post-June operational note: user runs Preview → reviews deltas → Apply. Rollback available indefinitely from the run row.
 
-Wrap each insert in `BEGIN … EXCEPTION WHEN OTHERS THEN NULL; END;` so a mail failure never blocks the data change (mirrors ADR-133).
+## Rollback strategy
+- Every applied run stores full pre-image per instance → single-click restore via `rollback_kra_rehydrate_run(run_id)`.
+- Migration itself is additive (no drops); reversible by dropping the two new tables and the three new RPCs.
 
-### 2. Enhanced audit summary
+## Tests (Vitest + pgTAP-style RPC tests via `supabase--read_query`)
+- Happy path: KRA instance with all 12 months → total recomputes, band updates.
+- Partial June: null-June month excluded correctly; no divide-by-zero.
+- Non-KRA template: skipped, no row written.
+- Rollback restores exact prior `system_scores`/`total_score`/`final_rating`.
+- Dry-run makes zero writes to `annual_review_instances`.
+- Locked-response invariant: no rows in `annual_review_responses` mutated.
 
-Add a single `workflow_edited_post_action` row from the **orchestrator** summarising the whole request (stages added/removed + all reviewer changes + mode + prior/new status) so admins can review one canonical entry instead of correlating multiple stage/reviewer rows. Existing per-operation rows remain for granular history.
-
-### 3. Post-action reason rule
-
-Bump minimum reason length to 10 chars when `p_mode = 'supersede'`. Under 10 chars the RPC raises a helpful message; the dialog reflects the same threshold.
-
-### 4. Frontend impact preview
-
-- Add `useInstanceLockedResponses(instanceId)` hook returning `[{ role, reviewer_name, submitted_at }]`.
-- Replace the current warning list with a table: for each removed stage or reassigned stage, show "**Manager (Rakesh, submitted 12 Jul)** — will be archived".
-- Show status rewind arrow: `Completed → BU Head Review Pending`.
-- Keep the typed-`REPLAN` confirmation gate.
-
-### 5. Tests
-
-- `src/test/workflowEditImpact.test.ts` — pure calculator: given (currentStages, currentStatus, currentSlots, nextStages, reviewerPicks) → `{ archives, rewindTo, notifications }`.
-- `src/test/editWorkflowRpc.contract.test.ts` — mocks the supabase client, asserts orchestrator arguments for each mode.
-
-### 6. Docs
-
-- `src/modules/annual-review/POLICY.md` → **§AR-WORKFLOW-EDIT-ANYTIME (ADR-160)** with the rules above.
-- `src/modules/annual-review/DOCUMENTATION.md` → ADR-160 entry + version bump.
-
-## Files to touch (remaining)
-
-Migration (`ADR-160b`):
-1. Extend the two RPCs and orchestrator with:
-   - email-queue inserts (guarded);
-   - min-10-char reason in supersede mode;
-   - orchestrator writes a single summary `workflow_edited_post_action` audit row.
-
-Code:
-- `src/hooks/annualReview/useInstanceLockedResponses.ts` — new.
-- `src/lib/annualReview/workflowEditImpact.ts` — new pure calculator.
-- `src/components/annual-review/ChangeWorkflowDialog.tsx` — replace warning block with a proper impact table using the hook + calculator.
-- `src/test/workflowEditImpact.test.ts` — new.
-- `src/test/editWorkflowRpc.contract.test.ts` — new.
-
-Docs:
-- `src/modules/annual-review/POLICY.md`, `src/modules/annual-review/DOCUMENTATION.md` — new section + ADR entry.
-
-## Risk & impact
-
-- **Data**: additive column + additive arguments; existing callers unaffected. Archive is non-destructive (`annual_review_reset_archive` retains full row).
-- **Workflow**: post-action edits admin/HR-only; other RPCs unchanged.
-- **UI**: dialog gains a preview table; destructive edits stay behind the typed confirmation.
-- **Regression**: normalisation triggers now honour explicit overrides — mitigated by RPC re-validating `annual_review_first_pending_status`.
-- **Scalability**: single-instance operations, bounded work.
-
-## Rollback
-
-- Migration is reversible: drop the new column + revert the RPC bodies + revert trigger heads.
-- Archived rows in `annual_review_reset_archive` allow full response restoration (helper pattern already exists from ADR-155/159).
-
-## Not applicable
-
-- Pagination — instance-scoped.
-- New RLS — reuses existing role/slot policies.
+## Decision notes
+- Chose an explicit admin RPC (not a trigger on `review_submissions` writes) to comply with §88 and avoid surprise mutations to HR-signed appraisals.
+- Chose to mirror the TS SSOT inside SQL rather than call an edge function so the operation is transactional per batch and auditable in one place.
+- Chose typed confirmations + reason gate to match ADR-160's admin-edit governance.
