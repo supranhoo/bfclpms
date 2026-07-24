@@ -289,29 +289,11 @@ export async function setEnabledStages(args: {
 }
 
 /**
- * ADR-157 — Reassign a single reviewer slot on an annual-review instance.
- * Server-side RPC validates caller (admin/hr_pms), role, target role membership
- * (Management slot requires `management` role), writes to
- * `annual_review_assignment_overrides`, updates the corresponding `*_id` column,
- * and inserts a `annual_review.reviewer_reassigned` audit row.
+ * ADR-157 — role list expanded to include `management`. See reassignReviewer
+ * declaration below in the "Cycles / mid-cycle admin" section.
  */
 export type ReassignableReviewerRole =
   | 'manager' | 'skip_manager' | 'dept_head' | 'bu_head' | 'hr' | 'management';
-
-export async function reassignReviewer(args: {
-  instanceId: string;
-  role: ReassignableReviewerRole;
-  newReviewerId: string;
-  reason: string;
-}) {
-  const { error } = await db.rpc('reassign_annual_review_reviewer', {
-    p_instance_id: args.instanceId,
-    p_role: args.role,
-    p_new_reviewer_id: args.newReviewerId,
-    p_reason: args.reason,
-  });
-  if (error) throw error;
-}
 
 export interface BulkEnabledStagesInput {
   instanceId: string;
