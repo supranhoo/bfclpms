@@ -245,6 +245,10 @@ export function TeamReviewDetailContent({
 
   const chain = enabledChain(instance.enabled_stages);
   const canSendBack = !!role && role !== 'self' && chain.indexOf(role) > 0;
+  // Terminal stages (last in the effective chain) complete the review on
+  // submit rather than forward it. Relabel the CTA so reviewers — especially
+  // Management, the new terminal stage per ADR-138 — see a clear final action.
+  const isTerminalStage = !!role && chain.indexOf(role) === chain.length - 1;
 
   const { values: resolvedSystemScores } = useResolvedSystemScores(template, instance, fiscalYear);
   const composition = useMemo(
@@ -552,7 +556,11 @@ function TeamReviewDetailInner(props: any) {
             <Button variant="outline" onClick={flush}>Save draft</Button>
             <Button onClick={handleSubmit} disabled={advancePending}>
               {advancePending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              {proxyMode ? 'Verify & Submit on behalf' : 'Submit & forward'}
+              {proxyMode
+                ? 'Verify & Submit on behalf'
+                : isTerminalStage
+                  ? 'Finalise & Complete review'
+                  : 'Submit & forward'}
             </Button>
           </div>
         </div>
