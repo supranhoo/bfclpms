@@ -121,7 +121,7 @@ export default function EmployeePerformanceSummary() {
   const [pageSize, setPageSize] = useState(25);
   const [activeTab, setActiveTab] = useState('summary');
   const [comparisonEmployee, setComparisonEmployee] = useState<string | null>(null);
-  const [selectedStatus, setSelectedStatus] = useState('all');
+  const [selectedStatus, setSelectedStatus] = useState<string[]>([]);
   const [selectedFm, setSelectedFm] = useState('all');
   const [showFreqLocked, setShowFreqLocked] = useState(false);
   const [empStatusMode, setEmpStatusMode] = useState<EmployeeStatusMode>('active');
