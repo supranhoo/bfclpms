@@ -36,6 +36,7 @@ const STATUS_FILTERS: { value: AnnualReviewStatus | 'all'; label: string }[] = [
   { value: 'pending_dept', label: 'Dept Head' },
   { value: 'pending_bu', label: 'BU' },
   { value: 'pending_hr', label: 'HR' },
+  { value: 'pending_management', label: 'Management' },
   { value: 'completed', label: 'Done' },
 ];
 
@@ -46,6 +47,7 @@ const SCOPE_FILTERS: { value: ReviewerScope; label: string }[] = [
   { value: 'dept', label: 'Dept Head' },
   { value: 'bu', label: 'BU Head' },
   { value: 'hr', label: 'HR' },
+  { value: 'management', label: 'Management' },
 ];
 
 const SCOPE_BADGE_LABEL: Record<Exclude<ReviewerScope, 'any'>, string> = {
@@ -54,6 +56,7 @@ const SCOPE_BADGE_LABEL: Record<Exclude<ReviewerScope, 'any'>, string> = {
   dept: 'Dept Head',
   bu: 'BU Head',
   hr: 'HR',
+  management: 'Management',
 };
 
 /**
@@ -80,6 +83,7 @@ function resolveMyRole(
   if (row.dept_head_id === uid && has('dept_head')) return 'dept';
   if (row.bu_head_id === uid && has('bu_head')) return 'bu';
   if (row.hr_id === uid && has('hr')) return 'hr';
+  if (row.management_id === uid && has('management')) return 'management';
   return null;
 }
 
