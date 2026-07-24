@@ -184,10 +184,10 @@ describe('authenticated reviewer queue', () => {
 
   it('loads all role counts through the authenticated count RPC', async () => {
     rpcMock.mockResolvedValue({
-      data: { manager: 0, skip: 0, dept: 89, bu: 0, hr: 0 }, error: null,
+      data: { manager: 0, skip: 0, dept: 89, bu: 0, hr: 0, management: 0 }, error: null,
     });
     await expect(svc.getReviewerRoleCounts('ignored-user-id', 'c1')).resolves.toEqual({
-      manager: 0, skip: 0, dept: 89, bu: 0, hr: 0,
+      manager: 0, skip: 0, dept: 89, bu: 0, hr: 0, management: 0,
     });
     expect(rpcMock).toHaveBeenCalledWith('get_my_annual_review_role_counts', { p_cycle_id: 'c1' });
   });
