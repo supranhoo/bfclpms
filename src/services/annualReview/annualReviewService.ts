@@ -1583,7 +1583,7 @@ export async function reopenCycle(cycleId: string, reason: string): Promise<Annu
 /** Reassign a reviewer on a single instance mid-cycle (admin/hr_pms). */
 export async function reassignReviewer(args: {
   instanceId: string;
-  role: 'manager' | 'skip_manager' | 'dept_head' | 'bu_head' | 'hr';
+  role: ReassignableReviewerRole;
   newReviewerId: string;
   reason: string;
 }) {
