@@ -339,6 +339,11 @@ function TeamReviewDetailInner(props: any) {
   const { t } = useAnnualReviewI18n();
   const [eligDlgOpen, setEligDlgOpen] = useState(false);
   const canEditEligibility = effectiveRole === 'admin' || effectiveRole === 'hr_pms';
+  // Terminal stages (last in the effective chain) complete the review on
+  // submit rather than forward it. Relabel the CTA so reviewers — especially
+  // Management, the new terminal stage per ADR-138 — see a clear final action.
+  const innerChain = enabledChain(instance.enabled_stages);
+  const isTerminalStage = !!role && innerChain.indexOf(role) === innerChain.length - 1;
   const eligibilityCriteria = template?.sections?.eligibility_criteria ?? [];
   const reviewYear = typeof fiscalYear === 'number' ? fiscalYear + 1 : undefined;
   const autoEligibilityInputs = useMemo(
@@ -552,7 +557,11 @@ function TeamReviewDetailInner(props: any) {
             <Button variant="outline" onClick={flush}>Save draft</Button>
             <Button onClick={handleSubmit} disabled={advancePending}>
               {advancePending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              {proxyMode ? 'Verify & Submit on behalf' : 'Submit & forward'}
+              {proxyMode
+                ? 'Verify & Submit on behalf'
+                : isTerminalStage
+                  ? 'Finalise & Complete review'
+                  : 'Submit & forward'}
             </Button>
           </div>
         </div>
