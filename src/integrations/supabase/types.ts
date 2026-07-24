@@ -830,6 +830,7 @@ export type Database = {
           final_rating: string | null
           finalized_at: string | null
           finalized_by: string | null
+          has_admin_workflow_override: boolean
           hr_id: string | null
           hr_remarks: string | null
           id: string
@@ -869,6 +870,7 @@ export type Database = {
           final_rating?: string | null
           finalized_at?: string | null
           finalized_by?: string | null
+          has_admin_workflow_override?: boolean
           hr_id?: string | null
           hr_remarks?: string | null
           id?: string
@@ -908,6 +910,7 @@ export type Database = {
           final_rating?: string | null
           finalized_at?: string | null
           finalized_by?: string | null
+          has_admin_workflow_override?: boolean
           hr_id?: string | null
           hr_remarks?: string | null
           id?: string
@@ -13932,6 +13935,16 @@ export type Database = {
         }[]
       }
       annual_review_directory_access: { Args: { v_uid: string }; Returns: Json }
+      annual_review_edit_workflow: {
+        Args: {
+          p_enabled_stages: Json
+          p_instance_id: string
+          p_mode: string
+          p_reason: string
+          p_reviewer_overrides: Json
+        }
+        Returns: undefined
+      }
       annual_review_effective_chain: {
         Args: { p_instance_id: string }
         Returns: Json
@@ -14036,6 +14049,10 @@ export type Database = {
           expected_user_id: string
           slot: string
         }[]
+      }
+      archive_annual_review_response: {
+        Args: { p_reason: string; p_response_id: string }
+        Returns: undefined
       }
       backfill_late_joiner_org_kpis: {
         Args: { p_dry_run?: boolean }
@@ -15583,29 +15600,54 @@ export type Database = {
         }
         Returns: Json
       }
-      reassign_annual_review_reviewer: {
-        Args: {
-          p_instance_id: string
-          p_new_reviewer_id: string
-          p_reason: string
-          p_role: string
-        }
-        Returns: {
-          created_at: string
-          created_by: string | null
-          id: string
-          instance_id: string
-          new_reviewer_id: string
-          reason: string
-          role: string
-        }
-        SetofOptions: {
-          from: "*"
-          to: "annual_review_assignment_overrides"
-          isOneToOne: true
-          isSetofReturn: false
-        }
-      }
+      reassign_annual_review_reviewer:
+        | {
+            Args: {
+              p_instance_id: string
+              p_new_reviewer_id: string
+              p_reason: string
+              p_role: string
+            }
+            Returns: {
+              created_at: string
+              created_by: string | null
+              id: string
+              instance_id: string
+              new_reviewer_id: string
+              reason: string
+              role: string
+            }
+            SetofOptions: {
+              from: "*"
+              to: "annual_review_assignment_overrides"
+              isOneToOne: true
+              isSetofReturn: false
+            }
+          }
+        | {
+            Args: {
+              p_instance_id: string
+              p_mode?: string
+              p_new_reviewer_id: string
+              p_reason: string
+              p_role: string
+            }
+            Returns: {
+              created_at: string
+              created_by: string | null
+              id: string
+              instance_id: string
+              new_reviewer_id: string
+              reason: string
+              role: string
+            }
+            SetofOptions: {
+              from: "*"
+              to: "annual_review_assignment_overrides"
+              isOneToOne: true
+              isSetofReturn: false
+            }
+          }
       rebatch_bimonthly_reanchor: {
         Args: { p_dry_run?: boolean; p_employee_ids: string[] }
         Returns: Json
@@ -16145,14 +16187,24 @@ export type Database = {
         Args: { p_key: string; p_reason: string; p_value: boolean }
         Returns: undefined
       }
-      set_annual_review_enabled_stages: {
-        Args: {
-          p_enabled_stages: Json
-          p_instance_id: string
-          p_reason: string
-        }
-        Returns: undefined
-      }
+      set_annual_review_enabled_stages:
+        | {
+            Args: {
+              p_enabled_stages: Json
+              p_instance_id: string
+              p_reason: string
+            }
+            Returns: undefined
+          }
+        | {
+            Args: {
+              p_enabled_stages: Json
+              p_instance_id: string
+              p_mode?: string
+              p_reason: string
+            }
+            Returns: undefined
+          }
       set_annual_review_stage_weights_override: {
         Args: { p_instance_id: string; p_reason: string; p_weights: Json }
         Returns: undefined

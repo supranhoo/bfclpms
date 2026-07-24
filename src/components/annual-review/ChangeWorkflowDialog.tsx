@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { Check, ChevronsUpDown, Loader2, AlertTriangle } from 'lucide-react';
@@ -19,6 +20,10 @@ import type { AnnualReviewerRole } from '@/types/annualReview';
 import { enabledChain, describeChain } from '@/lib/annualReview/stageChain';
 import { useReviewerCandidates, type ReviewerCandidate } from '@/hooks/annualReview/useReviewerCandidates';
 import { cn } from '@/lib/utils';
+
+const POST_ACTION_STATUSES = new Set([
+  'pending_manager','pending_skip','pending_dept','pending_bu','pending_hr','pending_management','completed',
+]);
 
 /**
  * Per-employee workflow override dialog.
@@ -62,11 +67,15 @@ export function ChangeWorkflowDialog({
   const [enabled, setEnabled] = useState<Set<AnnualReviewerRole>>(new Set(current));
   const [reason, setReason] = useState('');
   const [reviewerPicks, setReviewerPicks] = useState<Record<string, string | null>>({});
+  const [supersede, setSupersede] = useState(false);
+  const [confirmText, setConfirmText] = useState('');
 
   useEffect(() => {
     setEnabled(new Set(enabledChain(instance?.enabled_stages)));
     setReason('');
     setReviewerPicks({});
+    setSupersede(false);
+    setConfirmText('');
   }, [instance?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const hasAny = enabled.size > 0;
@@ -76,6 +85,11 @@ export function ChangeWorkflowDialog({
   const firstStageLabel = next[0]
     ? ({ self: 'Self', manager: 'Manager', skip_manager: 'Skip Manager', dept_head: 'Department Head', bu_head: 'BU Head', hr: 'HR', management: 'Management' } as const)[next[0]]
     : '—';
+
+  const status = (instance?.overall_status as string | undefined) ?? 'not_started';
+  const isPostAction = POST_ACTION_STATUSES.has(status);
+  const removedStages = current.filter((s) => !enabled.has(s));
+  const stageChangeRequiresSupersede = isPostAction && (isDirty || removedStages.length > 0);
 
   // Reviewer-slot changes vs current instance values.
   const reviewerChanges = useMemo(() => {
@@ -93,24 +107,26 @@ export function ChangeWorkflowDialog({
     return out;
   }, [instance, reviewerPicks, enabled]);
 
+  const reviewerChangeOnPastStage = useMemo(() => {
+    if (!isPostAction || reviewerChanges.length === 0) return false;
+    // If status has moved past any of the changed stages, superseding is likely required.
+    return true;
+  }, [isPostAction, reviewerChanges]);
+
+  const needsSupersede = stageChangeRequiresSupersede || reviewerChangeOnPastStage;
+
   const save = useMutation({
     mutationFn: async () => {
       if (!instance) throw new Error('No instance');
-      if (isDirty) {
-        await svc.setEnabledStages({
-          instanceId: instance.id,
-          enabledStages: next,
-          reason: reason.trim(),
-        });
-      }
-      for (const change of reviewerChanges) {
-        await svc.reassignReviewer({
-          instanceId: instance.id,
-          role: change.role,
-          newReviewerId: change.newReviewerId,
-          reason: reason.trim(),
-        });
-      }
+      const overrides: Partial<Record<ReassignableReviewerRole, string>> = {};
+      for (const c of reviewerChanges) overrides[c.role] = c.newReviewerId;
+      await svc.editAnnualReviewWorkflow({
+        instanceId: instance.id,
+        enabledStages: isDirty ? next : null,
+        reviewerOverrides: overrides,
+        mode: needsSupersede && supersede ? 'supersede' : 'safe',
+        reason: reason.trim(),
+      });
     },
     onSuccess: () => {
       const parts: string[] = [];
@@ -129,7 +145,12 @@ export function ChangeWorkflowDialog({
   };
 
   const hasReviewerChange = reviewerChanges.length > 0;
-  const canSave = (isDirty || hasReviewerChange) && reason.trim().length >= 3 && hasAny;
+  const confirmOk = !needsSupersede || (supersede && confirmText.trim().toUpperCase() === 'REPLAN');
+  const canSave =
+    (isDirty || hasReviewerChange) &&
+    reason.trim().length >= 3 &&
+    hasAny &&
+    confirmOk;
 
   return (
     <AlertDialog open={!!instance} onOpenChange={(o) => !o && onClose()}>
@@ -146,6 +167,9 @@ export function ChangeWorkflowDialog({
         <div className="space-y-4">
           <div className="text-xs text-muted-foreground">
             Current chain: <span className="font-medium text-foreground">{describeChain(current)}</span>
+            <span className="ml-2">
+              Status: <span className="font-medium text-foreground">{status}</span>
+            </span>
           </div>
           <div className="rounded-md border p-3 space-y-2">
             <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Stages</div>
@@ -173,6 +197,37 @@ export function ChangeWorkflowDialog({
                 Self Review is disabled — <strong>{instance?.employee?.full_name ?? 'the employee'}</strong> will
                 not submit self ratings; the cycle starts at <strong>{firstStageLabel}</strong>.
               </span>
+            </div>
+          )}
+
+          {needsSupersede && (
+            <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3 space-y-2">
+              <div className="flex items-start gap-2 text-xs text-destructive">
+                <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+                <div className="space-y-1">
+                  <div className="font-medium">This review is already in progress ({status}).</div>
+                  <ul className="list-disc pl-4">
+                    {removedStages.length > 0 && (
+                      <li>Removing stage(s) <strong>{removedStages.join(', ')}</strong> will archive any locked responses for those stages.</li>
+                    )}
+                    {reviewerChanges.length > 0 && (
+                      <li>Replacing reviewer(s) <strong>{reviewerChanges.map(r => r.role).join(', ')}</strong> will archive their locked response (if any) and rewind status to that stage.</li>
+                    )}
+                    <li>Archived responses are preserved in the reset archive and can be inspected by admins later.</li>
+                    <li>The new reviewer receives an in-app notification.</li>
+                  </ul>
+                </div>
+              </div>
+              <label className="flex items-center gap-2 text-xs">
+                <Checkbox checked={supersede} onCheckedChange={(v) => setSupersede(v === true)} />
+                <span>I understand — apply in <strong>supersede</strong> mode.</span>
+              </label>
+              {supersede && (
+                <div className="space-y-1">
+                  <Label className="text-xs">Type <span className="font-mono font-semibold">REPLAN</span> to confirm</Label>
+                  <Input value={confirmText} onChange={(e) => setConfirmText(e.target.value)} placeholder="REPLAN" />
+                </div>
+              )}
             </div>
           )}
 
