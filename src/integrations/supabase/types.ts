@@ -14011,6 +14011,20 @@ export type Database = {
         Args: { p_dry_run?: boolean }
         Returns: Json
       }
+      backfill_management_stage_all: {
+        Args: {
+          p_dry_run?: boolean
+          p_reason?: string
+          p_reopen_completed?: boolean
+        }
+        Returns: {
+          management_name: string
+          management_uid: string
+          rows_reopened: number
+          rows_stamped: number
+          snapshots_written: number
+        }[]
+      }
       backfill_management_stage_for_manager: {
         Args: {
           p_dry_run?: boolean
