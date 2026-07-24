@@ -1,82 +1,78 @@
-# Goal
+## Root cause of the "instance … not found" toast (verified)
 
-1. Every BU Head whose `reporting_manager_id` points to a user with the `management` role must have `management` appended to `enabled_stages` and `management_id` stamped on their annual-review instance.
-2. Those Management users must be able to see the instance in **Annual Reviews (Team) → Management** and open it in edit mode to score / approve.
+`annual_review_instances` RLS was updated for every reviewer slot **except** the new Management stage:
 
-Both pieces already exist in code (ADR-138, ADR-148, ADR-149); the gap is that the last bulk backfill run didn't finish, so 11 `pending_management` instances still have `management_id = NULL` and `enabled_stages` without `'management'`.
+| Policy | Current predicate | Gap |
+|---|---|---|
+| `instances_select_visible` (SELECT) | `employee_id / manager_id / skip_id / dept_head_id / bu_head_id / hr_id = auth.uid()` + admin/HR-PMS | **`management_id` missing** |
+| `instances_stage_update` (UPDATE) | Per-stage `(*_id = auth.uid() AND status = 'pending_*')` for the other five roles | **No `(management_id = auth.uid() AND status = 'pending_management')` branch** |
+
+Consequence for Gaurav / Dummy on `01f168dd-…`:
+- Team queue lists it (queue RPC is SECURITY DEFINER — bypasses RLS).
+- Detail page opens because a *different* policy — `instances_select_directory_assistance` — happens to grant access via the assistance helper.
+- The moment they click **Save draft** / **Send back** / **Approve**, the RPCs run as `SECURITY INVOKER`, do `SELECT … INTO v_inst FROM annual_review_instances WHERE id = p_instance_id` — the row is invisible to RLS → `RAISE EXCEPTION 'instance % not found'`.
+
+`annual_review_responses` RLS already covers `i.management_id = auth.uid()`, so read/write of the response row itself is fine — only the instance-level policies need patching.
+
+Also missing / worth strengthening for a true "Final Stage owned by Management":
+1. Instance UPDATE gate for `pending_management` stage (blocks save/advance/send-back at RLS layer today).
+2. Reviewer-visibility SSOT test (`stageForReviewer.test.ts`) enumerates only the five legacy slots — a contract test drift that lets this exact regression re-happen. Extend to include `management_id`.
+3. UI polish for the terminal stage so the reviewer feels the weight of the decision (label, confirmation, remarks, finalization CTA, employee-visible acknowledgment of Management sign-off).
+4. Guardrail tile on Access Control tab: "BU-Head instances missing Management routing" — count of BU Heads whose reporting manager holds `management` but whose instance lacks `management_id` / `'management'` in `enabled_stages`. Surfaces future drift instantly.
 
 ---
 
-# Verified current state (from DB reads this turn)
+## Plan
 
-| Bucket | Count |
-|---|---|
-| `overall_status='pending_management'` correctly stamped to Gaurav Budhia | 4 |
-| `overall_status='pending_management'` with `management_id = NULL` | 11 (10 report to Gaurav, 1 → Jaspal reports to "Dummy") |
-| Jaspal (101125) instance `01f168dd-…` | `enabled_stages = ['self','bu_head']`, `management_id = NULL` |
-| Users carrying `management` role | Gaurav Budhia (100001), Dummy (001) |
+### Step 1 — RLS fix (migration, additive only, no data changes)
+`ALTER POLICY instances_select_visible` and `ALTER POLICY instances_stage_update` on `annual_review_instances` to add the Management branches:
 
-RPC `backfill_management_stage_for_manager` and the bulk wrapper `backfill_management_stage_all` are deployed. Validator + audit check-constraint now accept `management` / `management_stage.backfilled(_bulk)`. Queue RPC `get_my_annual_review_queue` already supports the `management` scope, and `TeamAnnualReview.tsx` shows the Management filter chip.
-
-So the code path is complete — the data just hasn't been re-stamped since the earlier failed run.
-
----
-
-# Plan
-
-### Step 1 — Data fix: finish the Management backfill
-Run the existing admin RPC (via **Admin → Annual Review → Access Control → Backfill all Management users**):
-- `p_dry_run = false`
-- `p_reopen_completed = true` (so any BU-Head instance already at `completed` moves back to `pending_management`)
-- Reason: `ADR-148 rollout completion — stamp management_id + enabled_stages for all BU Heads reporting to Management`
-
-Expected effect:
-- All 11 NULL rows get `management_id` set to their `reporting_manager_id` (10 → Gaurav, 1 → Dummy/Jaspal).
-- `enabled_stages` gets `'management'` appended.
-- Any already-completed BU-Head rows for these managers are reopened to `pending_management` with `total_score / final_rating / finalized_at` cleared and archived to `annual_review_reset_archive`.
-
-**Verification query (read-only):**
-```sql
-SELECT overall_status, management_id, count(*)
-FROM annual_review_instances
-WHERE overall_status = 'pending_management'
-GROUP BY 1,2;
+```text
+SELECT USING: … OR management_id = auth.uid()
+UPDATE USING: … OR (management_id = auth.uid() AND overall_status = 'pending_management')
 ```
-Success = zero rows with `management_id IS NULL`.
 
-### Step 2 — Data hygiene: confirm Jaspal's Management routing
-Jaspal (101125) currently reports to **Dummy**, not to a real Management user. Before Step 1 executes, confirm whether:
-- (a) Jaspal should route to Gaurav Budhia → update `profiles.reporting_manager_id` for Jaspal to Gaurav first, then run backfill; **or**
-- (b) "Dummy" is the intended terminal reviewer (test account) → leave as-is.
+Rollback: revert the two `ALTER POLICY` statements — no schema or data change.
 
-### Step 3 — Access verification (no code change expected)
-Sign in as Gaurav Budhia and open **Annual Reviews (Team)**:
-- Scope filter shows **Management** chip with the correct badge count.
-- Status filter includes **Management Review Pending**.
-- Row click opens the instance in edit mode (not read-only), Management approval action visible.
+### Step 2 — SSOT contract test extension
+`src/lib/annualReview/stageForReviewer.test.ts` — add `management_id` to `REVIEWER_ID_SLOTS`. The test walks `annualReviewService.ts` and the RLS migration to assert both surfaces mention the slot. This makes any future stage addition fail CI unless the RLS migration is present.
 
-If any of those three UI checks fails, drop into build mode to patch:
-- `resolveMyRole()` in `TeamAnnualReview.tsx` (management precedence)
-- `annual_review_directory_access` / instance-level RLS for the `management` role
-- `TeamReviewDetailContent.tsx` edit-mode gate for `management` stage
+Also add a case in `stageForReviewer` tests: `pending_management + uid=management_id → 'management'` (function already handles it; the assertion locks it in).
 
-(No file edits are planned up-front — Step 3 is a check, and code is already in place per ADR-149.)
+### Step 3 — Management-stage terminal UX in `TeamReviewDetailContent.tsx`
+Frontend-only, presentation:
 
-### Step 4 — Guardrail (small, additive) to prevent recurrence
-Add a lightweight scheduled check / admin dashboard tile: **"BU-Head instances missing Management routing"** = count of rows where `overall_status IN ('pending_bu','pending_management','completed')` AND employee's `reporting_manager` has role `management` AND (`management_id IS NULL` OR `NOT enabled_stages ? 'management'`). Zero-touch surfacing so this can never silently drift again.
+- **Header chip:** show "Management Review — Final Stage" with a distinct emerald tone (reuse existing `stagePresentation` map) and a subtitle *"Your approval finalises this review."*
+- **Action bar:** rename the primary CTA to **"Finalise & Approve"** when `role === 'management'`; keep **Send back** and **Save draft** unchanged.
+- **Confirmation dialog** before Finalise: shows employee name, total score, final rating, and a required *Management remarks* textarea (persists to `notes` on the management response). Copy: *"Once finalised, the review is locked and shared with the employee. This action is audit-logged."*
+- **Post-finalisation banner** on the employee's completed view: "Reviewed and approved by Management — {name}, {date}." Read from the locked `management` response row (no schema change).
+- Empty-state copy tweak on employee page while `pending_management`: "Your review is with Management for final approval."
+
+### Step 4 — Guardrail tile on `AccessControlTab.tsx`
+Read-only counter (no writes): "BU-Head instances missing Management routing" using a new SECURITY DEFINER view or inline RPC that counts rows where the employee's `reporting_manager` has the `management` role AND (`management_id IS NULL` OR `NOT (enabled_stages ? 'management')`). Clicking opens a drawer listing affected employee codes so admins can run the existing "Backfill all Management users" button.
+
+### Step 5 — Verification
+1. Sign in as Gaurav (Management) → open Jaspal's instance → **Save draft** succeeds (no toast).
+2. Click **Finalise & Approve** → confirmation dialog → status moves to `completed`, response `is_locked = true`, `finalized_by / finalized_at` stamped.
+3. Sign in as Jaspal → completed view shows the Management acknowledgment banner.
+4. Contract test `stageForReviewer.test.ts` passes with the new `management_id` assertion.
+5. Guardrail tile shows `0` after Step 1's RLS fix (data already backfilled).
 
 ---
 
-# Risk & Impact
+## Risk & Impact
 
-- **Data impact:** Step 1 mutates up to 11 in-flight rows plus any completed BU-Head rows under Gaurav/Dummy. Every mutation is snapshotted to `annual_review_reset_archive` and logged to `annual_review_access_audit` → fully reversible.
-- **Workflow impact:** Reopens completed instances to `pending_management`. Employees will see status revert; acceptable per ADR-138 intent (Management is the true terminal).
-- **UI/UX impact:** None from Step 1. Step 3 is verification only.
-- **Regression risk:** Low — RPC is idempotent (skips rows already stamped) and constraint/validator fixes are already live.
-- **Rollback:** `annual_review_reset_archive` holds the pre-image; a targeted revert RPC can restore prior status/stages if needed.
-- **Scalability:** Bounded to ~15 rows today; RPC is O(n) over Management users' direct reports.
+- **Data impact:** None. Migration only widens two `USING` clauses; no rows are touched.
+- **Workflow impact:** Management users regain full save/send-back/approve capability that ADR-148/149 intended. No other role's permissions change.
+- **UI/UX impact:** Terminal stage gets a distinct, confidence-inspiring finalisation flow (confirmation + remarks + audit line). No layout regression for the other five reviewer roles — all new copy is gated on `role === 'management'`.
+- **Regression risk:** Low. Additive OR-branches to policies; existing predicates unchanged. Contract test locks the SSOT so a future 8th stage can't re-open this hole.
+- **Scalability:** No change — same predicate shape as the other five reviewer slots.
+- **Rollback:** Two `ALTER POLICY` statements to previous predicates; UI changes are behind role check.
 
-# Success criteria
-- 0 rows with `overall_status='pending_management' AND management_id IS NULL`.
-- Gaurav Budhia sees all his direct-report BU Heads in the Management queue and can submit scores.
-- Jaspal's instance shows a **Management Review Pending** stage routed to the intended reviewer, not skipped.
+---
+
+## Open question before I build
+
+The screenshot toast fires on **Save draft**. Save draft goes through the `annual_review_responses` table directly (RLS on that table already allows Management), so the "instance not found" wording must be coming from a wrapper RPC or a pre-check I haven't opened yet. Before writing the migration I will grep the exact string `instance % not found` across all `advance_/send_back_/finalize_/upsert_*` RPCs and confirm which one is the emitter — the fix (RLS widening) is the same either way, but I want to attach the correct RPC name to the ADR.
+
+Shall I proceed with Steps 1-5 as above, or do you want to expand Step 3 (Management UX) into a broader brainstorm — e.g. calibration view side-by-side with peer BU-Head scores, one-click "Approve all pending Management" batch, mandatory rating band justification when Final Rating < 3 or = 5?
