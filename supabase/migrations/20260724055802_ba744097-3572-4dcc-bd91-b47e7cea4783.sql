@@ -1,0 +1,2 @@
+ALTER TABLE public.annual_review_access_audit DROP CONSTRAINT annual_review_access_audit_action_check;
+ALTER TABLE public.annual_review_access_audit ADD CONSTRAINT annual_review_access_audit_action_check CHECK (action = ANY (ARRAY['kill_switch_toggled'::text, 'override_upserted'::text, 'override_deleted'::text, 'management_stage.backfilled'::text, 'management_stage.backfilled_bulk'::text]));
