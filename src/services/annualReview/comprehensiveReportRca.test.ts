@@ -13,6 +13,7 @@ const base: ComprehensiveRow = {
   self_comment: null, manager_comment: null, dept_head_comment: null, bu_head_comment: null, hr_comment: null,
   hr_stage_enabled: true, hr_response_exists: false, hr_response_submitted_at: null,
   manager_id: null, dept_head_id: null, bu_head_id: null, hr_id: 'hr-uuid',
+  management_score: null, management_name: null, management_comment: null, management_id: null,
   cycle_default_stages: ['self','manager','hr'],
 };
 
