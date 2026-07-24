@@ -52,11 +52,11 @@ export interface ResolveInput {
 }
 
 const SENIORITY: AnnualReviewerRole[] = [
-  'hr', 'bu_head', 'dept_head', 'skip_manager', 'manager', 'self',
+  'management', 'hr', 'bu_head', 'dept_head', 'skip_manager', 'manager', 'self',
 ];
 
 const FORWARD: AnnualReviewerRole[] = [
-  'self', 'manager', 'skip_manager', 'dept_head', 'bu_head', 'hr',
+  'self', 'manager', 'skip_manager', 'dept_head', 'bu_head', 'hr', 'management',
 ];
 
 export function resolveEffectiveChain(input: ResolveInput): StageResolution[] {
