@@ -1058,6 +1058,144 @@ export type Database = {
           },
         ]
       }
+      annual_review_kra_rehydrate_items: {
+        Row: {
+          applied: boolean
+          band_changed: boolean
+          created_at: string
+          delta_total: number | null
+          employee_id: string
+          id: string
+          instance_id: string
+          new_final_rating: string | null
+          new_system_scores: Json
+          new_total_score: number | null
+          note: string | null
+          old_final_rating: string | null
+          old_system_scores: Json
+          old_system_scores_raw: Json
+          old_total_score: number | null
+          run_id: string
+          template_id: string | null
+        }
+        Insert: {
+          applied?: boolean
+          band_changed?: boolean
+          created_at?: string
+          delta_total?: number | null
+          employee_id: string
+          id?: string
+          instance_id: string
+          new_final_rating?: string | null
+          new_system_scores?: Json
+          new_total_score?: number | null
+          note?: string | null
+          old_final_rating?: string | null
+          old_system_scores?: Json
+          old_system_scores_raw?: Json
+          old_total_score?: number | null
+          run_id: string
+          template_id?: string | null
+        }
+        Update: {
+          applied?: boolean
+          band_changed?: boolean
+          created_at?: string
+          delta_total?: number | null
+          employee_id?: string
+          id?: string
+          instance_id?: string
+          new_final_rating?: string | null
+          new_system_scores?: Json
+          new_total_score?: number | null
+          note?: string | null
+          old_final_rating?: string | null
+          old_system_scores?: Json
+          old_system_scores_raw?: Json
+          old_total_score?: number | null
+          run_id?: string
+          template_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "annual_review_kra_rehydrate_items_instance_id_fkey"
+            columns: ["instance_id"]
+            isOneToOne: false
+            referencedRelation: "annual_review_instances"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "annual_review_kra_rehydrate_items_run_id_fkey"
+            columns: ["run_id"]
+            isOneToOne: false
+            referencedRelation: "annual_review_kra_rehydrate_runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      annual_review_kra_rehydrate_runs: {
+        Row: {
+          changed_count: number
+          completed_at: string | null
+          created_at: string
+          cycle_id: string
+          error_message: string | null
+          id: string
+          initiated_by: string
+          instance_count: number
+          instance_ids: string[] | null
+          mode: string
+          reason: string
+          rollback_of_run_id: string | null
+          status: string
+        }
+        Insert: {
+          changed_count?: number
+          completed_at?: string | null
+          created_at?: string
+          cycle_id: string
+          error_message?: string | null
+          id?: string
+          initiated_by: string
+          instance_count?: number
+          instance_ids?: string[] | null
+          mode: string
+          reason: string
+          rollback_of_run_id?: string | null
+          status?: string
+        }
+        Update: {
+          changed_count?: number
+          completed_at?: string | null
+          created_at?: string
+          cycle_id?: string
+          error_message?: string | null
+          id?: string
+          initiated_by?: string
+          instance_count?: number
+          instance_ids?: string[] | null
+          mode?: string
+          reason?: string
+          rollback_of_run_id?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "annual_review_kra_rehydrate_runs_cycle_id_fkey"
+            columns: ["cycle_id"]
+            isOneToOne: false
+            referencedRelation: "annual_review_cycles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "annual_review_kra_rehydrate_runs_rollback_of_run_id_fkey"
+            columns: ["rollback_of_run_id"]
+            isOneToOne: false
+            referencedRelation: "annual_review_kra_rehydrate_runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       annual_review_mgmt_scope_backfill_2026_07: {
         Row: {
           created_at: string
@@ -14007,6 +14145,15 @@ export type Database = {
         }
         Returns: Database["public"]["Enums"]["annual_review_status"]
       }
+      annual_review_rehydrate_kra_for_cycle: {
+        Args: {
+          p_cycle_id: string
+          p_instance_ids?: string[]
+          p_mode: string
+          p_reason: string
+        }
+        Returns: string
+      }
       annual_review_resolve_final_rating: {
         Args: { p_total_score: number }
         Returns: string
@@ -14027,6 +14174,10 @@ export type Database = {
           stage_enabled: boolean
           stage_still_open: boolean
         }[]
+      }
+      annual_review_rollback_kra_rehydrate_run: {
+        Args: { p_reason: string; p_run_id: string }
+        Returns: string
       }
       annual_review_status_rank: {
         Args: { s: Database["public"]["Enums"]["annual_review_status"] }

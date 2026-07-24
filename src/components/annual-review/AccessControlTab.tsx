@@ -17,6 +17,7 @@ import {
 } from '@/components/ui/select';
 import { OrgFilterCombobox } from '@/components/admin/OrgFilterCombobox';
 import { Shield, KeyRound, ListChecks, History, Search, Plus, Trash2, RefreshCw } from 'lucide-react';
+import { KraRehydrateCard } from '@/components/annual-review/KraRehydrateCard';
 import { Checkbox } from '@/components/ui/checkbox';
 import { toast } from 'sonner';
 import { useBusinessUnits, useActiveProfilesLite, formatSafetyProfileLabel } from '@/hooks/useSafetyOrg';
@@ -946,6 +947,7 @@ export function AccessControlTab() {
       <AccessExplainCard />
       <OverridesCard />
       <ManagementBackfillCard />
+      <KraRehydrateCard />
       <AuditCard />
     </div>
   );
