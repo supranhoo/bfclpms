@@ -435,7 +435,7 @@ export default function EmployeePerformanceSummary() {
         // Hide employees that only have frequency-locked KPIs when toggle is off
         if (!showFreqLocked && row.kpiCount === 0 && row.lockedKpiCount > 0) return false;
         // Status filter
-        if (selectedStatus !== 'all' && !(row.statusCounts[selectedStatus] > 0)) return false;
+        if (selectedStatus.length > 0 && !selectedStatus.some(s => (row.statusCounts[s] || 0) > 0)) return false;
         // Functional Manager filter
         if (selectedFm !== 'all' && row.functionalManagerId !== selectedFm) return false;
         // Search filter
