@@ -23,6 +23,8 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { HierarchyCompletedList } from '@/components/annual-review/HierarchyCompletedList';
 
 const QUEUE_PAGE_SIZE_KEY = 'annual-review:team:pageSize';
 const PAGE_SIZE_OPTIONS = [10, 20, 50] as const;
@@ -101,6 +103,14 @@ export default function TeamAnnualReview() {
   const urlStatus  = (urlParams.get('status') as AnnualReviewStatus | 'all' | null) ?? 'all';
   const urlPage    = Math.max(1, Number(urlParams.get('page') ?? '1') || 1);
   const urlScope   = (urlParams.get('scope') as ReviewerScope | null) ?? 'any';
+  const urlTab     = (urlParams.get('tab') === 'hierarchy' ? 'hierarchy' : 'queue') as 'queue' | 'hierarchy';
+  const [tab, setTab] = useState<'queue' | 'hierarchy'>(urlTab);
+  useEffect(() => {
+    const next = new URLSearchParams(urlParams);
+    if (tab === 'hierarchy') next.set('tab', 'hierarchy'); else next.delete('tab');
+    setUrlParams(next, { replace: true });
+     
+  }, [tab]);
 
   const [search, setSearch] = useState(urlSearch);
   const [debouncedSearch, setDebouncedSearch] = useState(urlSearch);
@@ -227,7 +237,12 @@ export default function TeamAnnualReview() {
         </div>
       </header>
 
-      <div className="space-y-3 min-w-0">
+      <Tabs value={tab} onValueChange={(v) => setTab(v as 'queue' | 'hierarchy')} className="min-w-0">
+        <TabsList className="mb-3">
+          <TabsTrigger value="queue">My Queue</TabsTrigger>
+          <TabsTrigger value="hierarchy">Hierarchy — Completed</TabsTrigger>
+        </TabsList>
+        <TabsContent value="queue" className="space-y-3 min-w-0">
 
           {/* "My role" scope filter — hidden for single-role users */}
           {showScopeRow && (
@@ -446,7 +461,11 @@ export default function TeamAnnualReview() {
               </div>
             </div>
           )}
-        </div>
+        </TabsContent>
+        <TabsContent value="hierarchy" className="min-w-0">
+          <HierarchyCompletedList cycleId={cycle.id} />
+        </TabsContent>
+      </Tabs>
 
       <EmployeeDirectoryDialog
         open={directoryOpen}
