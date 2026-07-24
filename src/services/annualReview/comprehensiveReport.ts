@@ -24,6 +24,7 @@ export interface ComprehensiveRow {
   dept_head_score: number | null;
   bu_head_score: number | null;
   hr_score: number | null;
+  management_score: number | null;
   total_score: number | null;
   final_rating: string | null;
   finalized_at: string | null;
@@ -33,11 +34,13 @@ export interface ComprehensiveRow {
   dept_head_name: string | null;
   bu_head_name: string | null;
   hr_name: string | null;
+  management_name: string | null;
   self_comment: string | null;
   manager_comment: string | null;
   dept_head_comment: string | null;
   bu_head_comment: string | null;
   hr_comment: string | null;
+  management_comment: string | null;
   hr_stage_enabled: boolean | null;
   hr_response_exists: boolean | null;
   hr_response_submitted_at: string | null;
@@ -45,6 +48,7 @@ export interface ComprehensiveRow {
   dept_head_id: string | null;
   bu_head_id: string | null;
   hr_id: string | null;
+  management_id: string | null;
   cycle_default_stages: unknown;
 }
 

@@ -14556,6 +14556,10 @@ export type Database = {
           hr_stage_enabled: boolean
           instance_id: string
           is_excluded: boolean
+          management_comment: string
+          management_id: string
+          management_name: string
+          management_score: number
           manager_comment: string
           manager_id: string
           manager_name: string
