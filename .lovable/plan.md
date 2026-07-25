@@ -1,45 +1,56 @@
-## Root cause (5-Why)
+## 1. Assumptions
+- The screenshot is Balram Mahto’s completed annual review, and the intended save is a superseding workflow/reviewer edit.
+- The selected chain remains `Self → Department Head → BU Head`; no business-policy change is requested.
 
-Saving "Edit workflow & reviewers" in **supersede** mode calls `annual_review_edit_workflow` → `set_annual_review_enabled_stages` → `reassign_annual_review_reviewer`. All three write an audit row like:
+## 2. Clarifications
+- Not Applicable. The failure and expected behavior are confirmed from the screenshot, source, and live database definitions.
 
-```sql
-INSERT INTO public.annual_review_access_audit(action, actor_id, target_id, metadata) ...
-```
+## 3. Risk & Impact Report
+- **Data:** No schema or historical-data rewrite. Replace only invalid status mapping inside the two 5-argument workflow RPCs. Existing failed transactions made no partial changes.
+- **Workflow:** Completed reviews can be reopened to the correct canonical stage. Audit/archive/notification behavior remains unchanged.
+- **UI/UX:** No layout change. Save should succeed and the dialog should close with refreshed workflow data.
+- **Regression:** Moderate because both stage editing and reviewer reassignment share supersede routing.
+- **Scalability:** Constant-time, single-instance operations; no added query or API load.
+- **Mitigation:** Patch both sibling RPC paths, test every role-to-status mapping, and verify Balram’s save path.
+- **Rollback:** Reapply the prior function definitions; no table/data rollback is required.
 
-But the live table only has: `id, actor_id, target_user_id, action, before, after, reason, created_at`. There is no `target_id` and no `metadata` column — so PostgREST returns `column "target_id" of relation "annual_review_access_audit" does not exist` and the entire supersede save is rolled back.
+## 4. Step-by-step Plan
+1. Add a corrective database migration replacing `pending_dept_head` with canonical `pending_dept` in both `set_annual_review_enabled_stages(..., p_mode)` and `reassign_annual_review_reviewer(..., p_mode)`.
+2. Preserve SECURITY DEFINER, authorization, response archival, score clearing, immutable audit logs, and notifications exactly as currently implemented.
+3. Add/update unit tests and realistic workflow mock data covering completed `Self → Dept → BU` supersede saves plus all canonical mappings: manager, skip, department, BU, HR, and management.
+4. Update `DOCUMENTATION.md`, `POLICY.md`, and version history with the RCA/5-Why/CAPA and canonical enum invariant.
+5. After migration approval, verify the live functions contain no `pending_dept_head`/`pending_bu_head`, run focused tests, and retry the Balram workflow save through the UI.
 
-- Why did the error appear now? Supersede path is the only branch that always writes these audit rows (the safe path skips them when nothing rewinds).
-- Why do the functions use the wrong column names? Migration `20260724122536` and `20260724123142` (ADR-160/160b) were authored against a proposed audit schema that was never applied — the table still has the older `target_user_id` + `before/after/reason` shape.
-- Why wasn't it caught? No supersede save was exercised end-to-end after ADR-160b landed; the code path only fires when a completed review is re-opened with REPLAN.
+## 5. UI Changes
+- Not Applicable; behavior-only correction in the existing **Annual Review Admin → Edit workflow & reviewers** dialog.
 
-## Fix (one migration, no UI/logic change)
+## 6. Implementation
+- Database RPC correction plus narrowly scoped regression artifacts only.
 
-Rewrite the three offending INSERTs to use the real columns. Map:
-- `target_id`  → `target_user_id` (set to the **instance's employee_id**, which is what all other audit rows use — resolve via `SELECT employee_id FROM annual_review_instances WHERE id = p_instance_id`).
-- `metadata`   → `after` (jsonb), keeping the same jsonb payload.
-- `reason`     → populate from `p_reason` so admins can filter by it.
+## 7. Tests
+- Success: completed Self/Dept/BU review reopens to `pending_dept` without enum error.
+- Success: each reviewer role resolves to a valid enum value.
+- Failure: unauthorized caller, invalid mode, missing reason, and invalid reviewer remain blocked.
+- Integrity: failed requests do not partially archive responses or alter instance status.
 
-Functions to replace (CREATE OR REPLACE, signatures unchanged):
-1. `public.set_annual_review_enabled_stages(uuid, jsonb, text, text)` — fix the audit INSERT at the tail.
-2. `public.reassign_annual_review_reviewer(uuid, text, uuid, text, text)` — fix the supersede-branch audit INSERT.
-3. `public.annual_review_edit_workflow(uuid, jsonb, jsonb, text, text)` — fix the summary audit INSERT.
+## 8. DOCUMENTATION.md Updates
+- Add RCA/CAPA entry and version-history record for canonical workflow-status mapping.
 
-No other behavior changes; no schema changes; RLS unaffected (policies are role-based, not column-based).
+## 9. POLICY.md Updates
+- State that role-to-status conversion must use canonical enum values only (`dept_head → pending_dept`, `bu_head → pending_bu`).
 
-## Verification
+## 10. Post-implementation Notes
+### 5 Why / RCA / CAPA
+1. Save failed because the database rejected `pending_dept_head`.
+2. That value was generated by the supersede branch for Department Head.
+3. The branch used the role name to form a non-canonical status.
+4. The enum uses abbreviated canonical statuses (`pending_dept`, `pending_bu`).
+5. The latest replacement migration copied the stale mapping back into both live 5-argument functions.
 
-- Re-run Balram Mahto REPLAN save from the "Edit workflow & reviewers" dialog — expect success toast, status rewinds `completed → pending_bu`, notifications fire.
-- `SELECT action, target_user_id, after, reason FROM annual_review_access_audit WHERE action IN ('workflow_edited_post_action','reviewer_reassigned_supersede') ORDER BY id DESC LIMIT 5;` — expect three rows for the save with correct instance/employee mapping.
-- Run a safe-mode edit on another instance — still works (no regression).
+**Root cause:** stale non-canonical Department Head status mapping in the supersede RPC definitions.
 
-## Risk & Impact
+**Corrective action:** replace it with `pending_dept` in both workflow-edit paths.
 
-- Data: additive only; existing rows untouched. No schema change.
-- Workflow: unblocks supersede saves that are currently 100% failing.
-- Regression: low — only INSERT column list changes in three RPCs.
-- Rollback: drop the new migration and previous functions come back (still broken, but no data loss).
+**Preventive action:** exhaustive role/status mapping tests and a documented canonical mapping invariant.
 
-## Docs
-
-- POLICY §AR-EDIT-WORKFLOW-AUDIT: audit rows for `workflow_edited_post_action` and `reviewer_reassigned_supersede` write `target_user_id = instance.employee_id`, payload in `after`, reason in `reason`.
-- ADR-167: audit-column mismatch fix for ADR-160/160b RPCs.
+**Skill applied:** BFCL PMS Code Simplification Pro Max.
