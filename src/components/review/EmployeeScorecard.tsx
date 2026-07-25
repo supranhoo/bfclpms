@@ -4,6 +4,7 @@ import { resolveForwardStatus, DEFAULT_WORKFLOW_STAGES } from '@/lib/workflowEng
 import { useReviewPeriodPermissions } from '@/hooks/useReviewPeriodPermissions';
 import { useRemarksMandatorySettings } from '@/hooks/useWorkflowSettings';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { useIsTablet } from '@/hooks/use-tablet';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
