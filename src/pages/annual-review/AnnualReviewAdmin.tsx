@@ -1036,13 +1036,16 @@ function ProgressTab() {
                     : <span className="text-muted-foreground/50">—</span>);
                 // Per policy: template can be changed at any non-terminal stage.
                 // ChangeTemplateDialog auto-force-resets past-self instances.
-                const canChange =
-                  i.overall_status !== 'completed' &&
-                  i.overall_status !== 'excluded';
-                const isPastSelf =
-                  canChange &&
-                  i.overall_status !== 'not_started' &&
-                  i.overall_status !== 'pending_self';
+                 // ADR-160c: workflow/reviewer edit is allowed even on Completed
+                 // (re-open via supersede). Change-template / weights stay gated.
+                 const canChange = i.overall_status !== 'excluded';
+                 const isCompleted = i.overall_status === 'completed';
+                 const canChangeTemplateOrWeights =
+                   canChange && !isCompleted;
+                 const isPastSelf =
+                   canChangeTemplateOrWeights &&
+                   i.overall_status !== 'not_started' &&
+                   i.overall_status !== 'pending_self';
                 return (
                 <TableRow key={i.id} className="min-h-10">
                   <TableCell>
@@ -1098,26 +1101,28 @@ function ProgressTab() {
                             <Undo2 className="h-4 w-4 mr-2" /> Roll back finalized review
                           </DropdownMenuItem>
                         )}
-                        {canChange && (
-                          <>
-                            <DropdownMenuItem
-                              onClick={() => setChangeTplFor(i)}
-                              className={isPastSelf ? 'text-destructive focus:text-destructive' : undefined}
-                            >
-                              <Layers className="h-4 w-4 mr-2" />
-                              {isPastSelf ? 'Change template (reset self-review)' : 'Change template'}
-                            </DropdownMenuItem>
-                            {!isPastSelf && (
-                              <>
-                                <DropdownMenuItem onClick={() => setChangeWfFor(i)}>
-                                  <ListChecks className="h-4 w-4 mr-2" /> Edit workflow &amp; reviewers
-                                </DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => setWeightsFor(i)}>
-                                  <Scale className="h-4 w-4 mr-2" /> Customise weights
-                                </DropdownMenuItem>
-                              </>
-                            )}
-                          </>
+                        {canChangeTemplateOrWeights && (
+                          <DropdownMenuItem
+                            onClick={() => setChangeTplFor(i)}
+                            className={isPastSelf ? 'text-destructive focus:text-destructive' : undefined}
+                          >
+                            <Layers className="h-4 w-4 mr-2" />
+                            {isPastSelf ? 'Change template (reset self-review)' : 'Change template'}
+                          </DropdownMenuItem>
+                        )}
+                        {canChange && !isPastSelf && (
+                          <DropdownMenuItem
+                            onClick={() => setChangeWfFor(i)}
+                            className={isCompleted ? 'text-destructive focus:text-destructive' : undefined}
+                          >
+                            <ListChecks className="h-4 w-4 mr-2" />
+                            {isCompleted ? 'Edit workflow & reviewers (re-open)' : 'Edit workflow & reviewers'}
+                          </DropdownMenuItem>
+                        )}
+                        {canChangeTemplateOrWeights && !isPastSelf && (
+                          <DropdownMenuItem onClick={() => setWeightsFor(i)}>
+                            <Scale className="h-4 w-4 mr-2" /> Customise weights
+                          </DropdownMenuItem>
                         )}
                       </DropdownMenuContent>
                     </DropdownMenu>
