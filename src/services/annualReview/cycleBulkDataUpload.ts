@@ -439,7 +439,12 @@ function coercePercentRaw(
   return { value: n };
 }
 
-export async function parseAndDryRun(file: File, plan: CycleBulkPlan): Promise<DryRunReport> {
+export async function parseAndDryRun(
+  file: File,
+  plan: CycleBulkPlan,
+  opts: { allowCompletedUpgrades?: boolean } = {},
+): Promise<DryRunReport> {
+  const allowCompletedUpgrades = !!opts.allowCompletedUpgrades;
   const buf = await file.arrayBuffer();
   const wb = XLSX.read(buf);
   const ws = wb.Sheets[wb.SheetNames[0]];
@@ -461,11 +466,15 @@ export async function parseAndDryRun(file: File, plan: CycleBulkPlan): Promise<D
       err++;
       continue;
     }
-    if (!STAGE_SAFE.has(inst.overallStatus)) {
+    const isSafeStage = STAGE_SAFE.has(inst.overallStatus);
+    // ADR-171: admin non-destructive upgrade for completed rows only.
+    const canAdminUpgrade = allowCompletedUpgrades && inst.overallStatus === 'completed';
+    if (!isSafeStage && !canAdminUpgrade) {
       rows.push({ employeeCode: code, fullName: inst.fullName, templateName: inst.templateName, verdict: 'skip', reason: `Locked stage: ${inst.overallStatus}`, changes: [] });
       skip++;
       continue;
     }
+    const rowMode: 'safe' | 'admin_upgrade' = isSafeStage ? 'safe' : 'admin_upgrade';
     const rowChanges: DryRunRow['changes'] = [];
     const rowWarnings: string[] = [];
     for (const col of plan.columns) {
@@ -498,6 +507,14 @@ export async function parseAndDryRun(file: File, plan: CycleBulkPlan): Promise<D
         const result = scoreFromRaw(afterRaw, rules, weight);
         const beforePoints = inst.systemScores[slot.id];
         if (beforeRaw === afterRaw && Number(beforePoints ?? NaN) === result.points) continue;
+        // ADR-171 monotonic guard: for completed rows, block cell-level downgrades.
+        if (rowMode === 'admin_upgrade' && typeof beforePoints === 'number'
+            && result.points < beforePoints) {
+          rowWarnings.push(
+            `"${col.name}" skipped — new score (${result.points.toFixed(2)}) is lower than stored (${beforePoints.toFixed(2)}); downgrades are blocked on completed reviews`,
+          );
+          continue;
+        }
         rowChanges.push({
           column: col.name,
           kind: 'system_scores',
@@ -513,6 +530,12 @@ export async function parseAndDryRun(file: File, plan: CycleBulkPlan): Promise<D
         const before = inst.eligibilityInputs[slot.id];
         const after = typeof raw === 'string' || typeof raw === 'number' || typeof raw === 'boolean' ? raw : String(raw);
         if (before === after) continue;
+        // Eligibility text/flags are non-numeric — cannot be classified as
+        // an upgrade. Skip on completed rows.
+        if (rowMode === 'admin_upgrade') {
+          rowWarnings.push(`"${col.name}" skipped — eligibility inputs cannot be modified on completed reviews`);
+          continue;
+        }
         rowChanges.push({ column: col.name, kind: 'eligibility_inputs', before, after });
       }
     }
@@ -523,6 +546,8 @@ export async function parseAndDryRun(file: File, plan: CycleBulkPlan): Promise<D
         templateName: inst.templateName,
         verdict: 'skip',
         reason: rowWarnings.length ? rowWarnings.join('; ') : 'No changes',
+        mode: rowMode,
+        lockedStage: isSafeStage ? undefined : inst.overallStatus,
         warnings: rowWarnings.length ? rowWarnings : undefined,
         changes: [],
       });
@@ -534,6 +559,8 @@ export async function parseAndDryRun(file: File, plan: CycleBulkPlan): Promise<D
       fullName: inst.fullName,
       templateName: inst.templateName,
       verdict: 'apply',
+      mode: rowMode,
+      lockedStage: isSafeStage ? undefined : inst.overallStatus,
       changes: rowChanges,
       warnings: rowWarnings.length ? rowWarnings : undefined,
     });
