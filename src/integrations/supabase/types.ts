@@ -14673,6 +14673,22 @@ export type Database = {
         }
         Returns: string
       }
+      find_orphan_criteria_scores: {
+        Args: { p_cycle_id?: string }
+        Returns: {
+          current_keys: string[]
+          cycle_id: string
+          employee_id: string
+          instance_id: string
+          orphan_keys: string[]
+          response_id: string
+          reviewer_role: Database["public"]["Enums"]["annual_reviewer_role"]
+          stored_keys: string[]
+          submitted_at: string
+          template_id: string
+          weighted_score: number
+        }[]
+      }
       fiscal_year_for_month: {
         Args: { p_fiscal_start_year: number; p_period: string }
         Returns: number
