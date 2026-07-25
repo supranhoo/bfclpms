@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { useIsTablet } from '@/hooks/use-tablet';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -92,7 +93,10 @@ export function AuditScorecard({
   onBack,
   autoOpenKpiId 
 }: AuditScorecardProps) {
-  const isMobile = useIsMobile();
+  const isMobileRaw = useIsMobile();
+  const isTablet = useIsTablet();
+  // ADR-170: treat tablet 768-1279 like mobile so cards replace horizontal-scroll tables.
+  const isMobile = isMobileRaw || isTablet;
   const { user } = useAuth();
   const { data: allKpis, isLoading } = useKpisByEmployee(employee.id);
   const queryClient = useQueryClient();
