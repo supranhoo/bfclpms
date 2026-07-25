@@ -22,6 +22,7 @@ import { useReviewerCandidates, type ReviewerCandidate } from '@/hooks/annualRev
 import { useInstanceLockedResponses } from '@/hooks/annualReview/useInstanceLockedResponses';
 import { computeWorkflowEditImpact } from '@/lib/annualReview/workflowEditImpact';
 import { cn } from '@/lib/utils';
+import { TransferStageResponseDialog } from './TransferStageResponseDialog';
 
 const POST_ACTION_STATUSES = new Set([
   'pending_manager','pending_skip','pending_dept','pending_bu','pending_hr','pending_management','completed',
@@ -71,6 +72,7 @@ export function ChangeWorkflowDialog({
   const [reviewerPicks, setReviewerPicks] = useState<Record<string, string | null>>({});
   const [supersede, setSupersede] = useState(false);
   const [confirmText, setConfirmText] = useState('');
+  const [transferOpen, setTransferOpen] = useState(false);
 
   const { data: lockedResponses = [] } = useInstanceLockedResponses(instance?.id ?? null);
 
@@ -312,6 +314,15 @@ export function ChangeWorkflowDialog({
         </div>
         <AlertDialogFooter>
           <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <Button
+            type="button"
+            variant="outline"
+            className="mr-auto"
+            onClick={(e) => { e.preventDefault(); setTransferOpen(true); }}
+            disabled={!instance}
+          >
+            Transfer response to another stage…
+          </Button>
           <AlertDialogAction
             onClick={(e) => { e.preventDefault(); save.mutate(); }}
             disabled={!canSave || save.isPending}
@@ -320,6 +331,12 @@ export function ChangeWorkflowDialog({
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
+      <TransferStageResponseDialog
+        instance={instance}
+        open={transferOpen}
+        onClose={() => setTransferOpen(false)}
+        onDone={() => { setTransferOpen(false); onDone(); }}
+      />
     </AlertDialog>
   );
 }
