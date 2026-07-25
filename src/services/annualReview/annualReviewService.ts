@@ -1636,6 +1636,42 @@ export async function overrideRating(instanceId: string, newRating: string, reas
   if (error) throw error;
 }
 
+/**
+ * ADR-169 — Transfer an already-locked reviewer response from one stage to
+ * another on a single Annual Review instance. Reusable when a reviewer is
+ * moved between roles mid-cycle (e.g. BU Head demoted to Dept Head). The
+ * locked response payload (scores/comments) is preserved; only the
+ * `reviewer_role` label — and optionally the source-stage slot — change.
+ *
+ * Admin / HR PMS only. Every call is audit-logged and reversible via
+ * `revert_stage_transfer(audit_id)`.
+ */
+export async function transferAnnualReviewStage(args: {
+  instanceId: string;
+  fromRole: Exclude<AnnualReviewerRole, 'self'>;
+  toRole: Exclude<AnnualReviewerRole, 'self'>;
+  newReviewerIdForSourceSlot?: string | null;
+  dropFromStage?: boolean;
+  reason: string;
+}): Promise<string> {
+  const { data, error } = await db.rpc('transfer_annual_review_stage_response' as any, {
+    p_instance_id: args.instanceId,
+    p_from_role: args.fromRole,
+    p_to_role: args.toRole,
+    p_new_reviewer_id: args.newReviewerIdForSourceSlot ?? null,
+    p_drop_from_stage: args.dropFromStage ?? true,
+    p_reason: args.reason,
+  } as any);
+  if (error) throw error;
+  return data as string;
+}
+
+/** ADR-169 — Revert a previous stage-transfer by its audit id (admin only). */
+export async function revertStageTransfer(auditId: string): Promise<void> {
+  const { error } = await db.rpc('revert_stage_transfer' as any, { p_audit_id: auditId } as any);
+  if (error) throw error;
+}
+
 /** Manually invoke the reminder cron (admins). */
 export async function runReminderCron(): Promise<{ queued: number; skipped: number }> {
   const { data, error } = await supabase.functions.invoke('annual-review-reminders');
