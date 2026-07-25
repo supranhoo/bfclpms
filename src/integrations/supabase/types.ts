@@ -14101,7 +14101,7 @@ export type Database = {
         Args: {
           p_enabled_stages: Json
           p_instance_id: string
-          p_mode: string
+          p_mode?: string
           p_reason: string
           p_reviewer_overrides: Json
         }
