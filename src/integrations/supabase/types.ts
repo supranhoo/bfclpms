@@ -14098,7 +14098,7 @@ export type Database = {
       activate_permit: { Args: { p_permit_id: string }; Returns: Json }
       admin_apply_system_scores_upgrade: {
         Args: {
-          p_final_rating?: number
+          p_final_rating?: string
           p_instance_id: string
           p_reason?: string
           p_system_scores: Json
