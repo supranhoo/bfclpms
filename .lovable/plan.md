@@ -1,73 +1,103 @@
-## 1. Assumptions
-- The requested outcome is to make **Edit workflow & reviewers → REPLAN → Save** work for completed reviews such as Kiran Devi’s, without losing archived reviewer evidence or leaving a partially updated review.
-- The intended reset follows the established completed-review rollback contract: clear `total_score`, `final_rating`, `criteria_weighted_score`, `finalized_at`, and `finalized_by` before reopening.
+# Tablet-Friendly Monthly KRA/KPI Dashboard — Plan
 
-## 2. Clarifications
-Not Applicable. The screenshot and live database state identify the failure precisely.
+Scope: Employee (`Dashboard` / `UnifiedScorecard`), Reviewer (`EmployeeSelectorGrid` + `EmployeeScorecard`), Auditor (`AuditScorecard`), HR PMS / Skip-Level / Management (`ManagementScorecard`). Frontend-only. Desktop (≥1280) layout untouched.
 
-## 3. Risk & Impact Report
-- **Data impact:** No schema or historical-row rewrite. Replace one backend function. A successful supersede will intentionally clear final aggregate fields while preserving/archive-copying locked responses according to the existing workflow.
-- **Workflow impact:** Completed reviews can reopen to the first pending enabled reviewer stage. Kiran Devi’s requested Self → Dept → BU chain should move from `completed` to `pending_bu`.
-- **UI/UX impact:** No visual changes. The existing dialog, REPLAN confirmation, warnings, reviewer selectors, and Save button remain unchanged.
-- **Regression risk:** Medium because this path has already exposed sequential phantom-column errors. Mitigation is schema-derived contract testing plus a transactional live smoke test.
-- **Scalability impact:** Negligible; the RPC locks and updates one instance and its relevant response/override rows. No unbounded read or new API load.
-- **Security/RLS impact:** No permission expansion. Existing Admin/HR PMS authorization and audit logging remain.
-- **Backup/data integrity:** No new table; normal automatic backup coverage remains unchanged. Failed calls are transactional, and Kiran Devi’s row is currently still `completed` with scores/finalization intact.
-- **Rollback:** Restore the prior function definition. No data rollback is needed for the migration itself.
+## 1. Risk & Impact Report
 
-## 4. Step-by-step Plan
-1. **Replace the faulty reset column**
-   - Add a focused migration replacing `set_annual_review_enabled_stages(uuid,jsonb,text,text)`.
-   - Remove nonexistent `completed_at` and use the real finalization fields `finalized_at` and `finalized_by`.
-   - Preserve the verified canonical mapping, especially `dept_head → pending_dept` and `bu_head → pending_bu`.
-   - Keep archive, override cleanup, audit, notification, authorization, and status logic otherwise unchanged.
+- **Data impact:** None. Read paths, RPCs, and mutations remain unchanged.
+- **Workflow impact:** None. Same actions, same permissions, same guardrails.
+- **UI/UX impact:** New adaptive tier only within `md` (768) → `xl` (1280). Below `md` still uses existing mobile cards; ≥`xl` still uses the current desktop tables.
+- **Regression risk:** Medium — touches four large scorecards. Mitigated by (a) gating every change behind a new `useIsTablet()` hook so desktop CSS/DOM is byte-identical when the viewport is ≥1280, (b) reusing existing card sub-components (`MobileKpiCard`, `KpiDetailsTable`, `RatingSelector`, etc.) rather than forking logic, (c) snapshot + interaction tests for tap targets and layout contracts.
+- **Scalability:** Server payload unchanged. Client render is lighter on tablet (card list + windowed rows instead of 12-column table).
 
-2. **Add schema-aware regression protection**
-   - Add a realistic completed-review fixture representing Kiran Devi’s Self → Dept review being extended to Self → Dept → BU.
-   - Assert the final chronological function references only real `annual_review_instances` columns.
-   - Assert the supersede reset clears `total_score`, `final_rating`, `criteria_weighted_score`, `finalized_at`, and `finalized_by`.
-   - Assert it contains neither `weighted_final_score` nor `completed_at`.
-   - Retain canonical role/status assertions, including `pending_dept` and `pending_bu`.
+## 2. Root Problem (why tablets feel broken today)
 
-3. **Run targeted tests**
-   - Run the new supersede-reset contract test.
-   - Run `workflowStatusMapping.test.ts` and `editWorkflowRpc.contract.test.ts` to protect enum mapping and client RPC payloads.
-   - Run the relevant Annual Review workflow test group to detect sibling regressions.
+`useIsMobile()` in `src/hooks/use-mobile.tsx` flips at **768 px**. Everything ≥ 768 renders the desktop scorecard — a 10–14 column table with 28-px score chips, 32-px icon buttons, and a dense filter bar. On a portrait iPad (820) or landscape (1180) this forces horizontal scroll, sub-44-pt taps, and a toolbar that eats ~35 % of viewport height. There is no middle tier.
 
-4. **Verify the deployed function and behavior**
-   - Query the deployed function definition after migration and compare every referenced instance column to the live schema.
-   - Perform a transaction-safe smoke test of the supersede path using a disposable/rollback test transaction where possible.
-   - Confirm Kiran Devi remains unchanged before the user action: `completed`, score `74.00`, rating `Good`, and existing finalization metadata intact.
-   - Then verify the real dialog flow: Save succeeds, status becomes `pending_bu`, Dept evidence is preserved, BU reviewer is Bijay Kumar Mandal, aggregate/finalization fields are cleared, and audit records are created.
+## 3. Design commitments
 
-5. **Audit sibling paths**
-   - Recheck `reassign_annual_review_reviewer` and `annual_review_edit_workflow` for the same phantom-column category.
-   - Confirm reviewer-only supersede already uses `finalized_at` and does not reintroduce invalid columns.
+Three breakpoints, one behavior each:
 
-## 5. UI Changes
-Not Applicable. Functional behavior only; responsiveness and layout remain unchanged.
+```text
+< 768 px         Phone     → existing MobileKpiCard / MobileSelfReviewCard
+768 – 1279 px    Tablet    → NEW compact/list layout (this plan)
+≥ 1280 px        Desktop   → existing table (unchanged)
+```
 
-## 6. Implementation
-- One additive backend migration replacing the affected function.
-- One focused regression test with mock scenario data.
-- No unrelated refactor or schema addition.
+Tablet UX principles applied across all four scorecards:
 
-## 7. Tests
-- Success: completed Self → Dept review adds BU stage and reopens to `pending_bu`.
-- Success: only real reset fields are cleared.
-- Success: locked Dept response remains preserved when Dept remains enabled.
-- Failure: invalid/noncanonical status mappings remain rejected by regression tests.
-- Failure: any future phantom `annual_review_instances` reset column fails the static schema contract.
-- Atomicity: failed operations leave scores, status, responses, and reviewer assignments unchanged.
+1. **No horizontal scroll.** Replace multi-column tables with a **2-column responsive grid of `KpiRowCard`s** (portrait: 1 col; landscape: 2 col). Each card shows KPI name, target, current value, weightage badge, score chip, and one-tap action.
+2. **44×44 pt minimum tap targets.** All score chips, rating pills, evidence buttons, and filter chips forced to `min-h-11 min-w-11`. Segmented controls replace narrow dropdowns for R1–R5.
+3. **Collapsible toolbar.** `ReviewFilters` collapses to a single "Filters (n)" button + inline period selector on tablet; opens as a `Sheet` from the right. Frees ~180 px vertical.
+4. **Sticky action bar.** Bulk actions (Save, Send Back, Approve) move to a bottom sticky bar (adapting `SafetyStickyActionBar` pattern) so reviewers never scroll to find them.
+5. **Two-pane split (landscape only).** In `EmployeeSelectorGrid` landscape, left rail (320 px) lists employees, right pane loads `EmployeeScorecard` — replaces today's tap-back-tap-forward navigation.
+6. **Evidence flow.** Full-screen `Sheet` (not `Dialog`) for evidence upload/preview on tablet; native file picker uses `capture="environment"` hint so field auditors can shoot directly.
+7. **Score entry.** Numeric inputs get `inputMode="decimal"`, larger 48-pt height, and a segmented R1–R5 selector below the input for one-tap rating.
 
-## 8. DOCUMENTATION.md updates
-- Add v2.66.169.2 RCA/CAPA entry describing why the first patch was incomplete, the corrected finalization fields, verification evidence, and rollback.
-- Update version history in the same change.
+## 4. Deliverables
 
-## 9. POLICY.md updates
-- Extend §AR-CANONICAL-ROLE-STATUS-MAPPING with a schema-truth invariant: completed-review supersede must clear only verified live columns and must clear both `finalized_at` and `finalized_by` when reopening.
+### 4.1 New primitives (`src/components/review/tablet/`)
 
-## 10. Post-implementation notes
-- **Verified root cause:** the previous repair removed `weighted_final_score` but retained another nonexistent field, `completed_at`. The live table uses `finalized_at` and `finalized_by`.
-- **5 Why summary:** Save fails because the reset writes `completed_at`; it was copied from an obsolete/other-table convention; the first repair targeted only the reported phantom field; tests checked individual strings rather than the complete live schema contract; therefore sequential invalid-column failures escaped. CAPA is a full reset-column/schema contract, not another one-line symptom patch.
-- Final confirmation will include targeted test results, deployed function inspection, and the observed Kiran Devi workflow state.
+- `useIsTablet.ts` — mirrors `useIsMobile` shape; true when `768 ≤ vw < 1280`.
+- `TabletKpiRowCard.tsx` — compact card: header row (KPI name + category dot + weightage), metric row (target / current / score), action row (44-pt buttons). Accepts a `variant` prop (`self` | `reviewer` | `auditor` | `management`) so all four scorecards reuse it.
+- `TabletScoreEntry.tsx` — 48-pt numeric input + R1–R5 segmented control + evidence button; wraps existing `ScoreSelector` / `RatingSelector` logic.
+- `TabletFilterSheet.tsx` — wraps existing `ReviewFilters` in a right-side `Sheet`; keeps counted "Filters" trigger button in the toolbar.
+- `TabletStickyActionBar.tsx` — port of `SafetyStickyActionBar` with a tablet variant (`forceVisible` on `md`–`lg`).
+- `TabletSplitPane.tsx` — landscape-only two-pane layout used by `EmployeeSelectorGrid` and `AuditScorecard`.
+
+### 4.2 Scorecard integrations (behind `useIsTablet` guard)
+
+Each of the four scorecards gets a small conditional branch — desktop DOM stays untouched:
+
+```tsx
+if (isMobile) return <MobileKpiCard … />;      // unchanged
+if (isTablet) return <TabletKpiRowCard … />;   // NEW branch
+// desktop table unchanged
+```
+
+Files touched:
+
+1. `src/components/review/UnifiedScorecard.tsx` — swap KPI list rendering, toolbar, and action buttons.
+2. `src/components/review/EmployeeSelectorGrid.tsx` — enable `TabletSplitPane` in landscape; card grid in portrait.
+3. `src/components/review/EmployeeScorecard.tsx`, `AuditScorecard.tsx`, `ManagementScorecard.tsx` — same conditional pattern; reuse `TabletKpiRowCard` with role-appropriate variant.
+4. `src/components/review/ReviewFilters.tsx` — expose a `compact` prop consumed by `TabletFilterSheet`.
+5. `src/pages/Dashboard.tsx` — pad bottom for sticky bar (`pb-24 md:pb-28 xl:pb-6`), collapse KPI summary cards into a horizontal scroll strip on tablet.
+
+### 4.3 Design tokens (no new colors)
+
+Reuse existing semantic tokens (`--primary`, `--muted-foreground`, `--destructive`, `--accent`). Only adds spacing/size utility classes; no new CSS variables, no palette changes.
+
+## 5. Verification
+
+- **Regression tests (new):**
+  - `src/test/tabletBreakpoint.test.tsx` — asserts `useIsTablet` boundaries (767, 768, 1279, 1280).
+  - `src/test/tabletKpiRowCardTapTargets.test.tsx` — every interactive element ≥ 44 pt.
+  - `src/test/tabletScorecardConditional.test.tsx` — snapshots that desktop (≥1280) branch remains byte-identical for all four scorecards.
+  - `src/test/tabletFilterSheet.test.tsx` — filter count badge, sheet open/close, portrait vs landscape.
+- **Manual matrix (documented in ADR):** iPad Mini (768×1024), iPad Air (820×1180), iPad Pro 11" (834×1194 & 1194×834), Surface Go (912×1368). Both orientations. Verify no horizontal scroll, sticky bar visible, evidence upload works.
+- **Playwright smoke:** viewport 820×1180 and 1180×820 against `/dashboard`, `/review/team`, `/review/audit`, `/review/management` — screenshot each and confirm the tablet layout renders.
+
+## 6. Documentation & policy
+
+- New `docs/adr/ADR-170.md` — "Tablet-Friendly Monthly KPI Dashboard": records breakpoint contract, primitive inventory, and the four-scorecard integration map.
+- `DOCUMENTATION.md` — append v2.67.0 entry linking ADR-170 and listing the new primitives.
+- `POLICY.md` — new **§UX-TABLET-BREAKPOINT-CONTRACT**: 768–1279 uses tablet primitives; ≥1280 stays on desktop tables; all interactive elements ≥ 44 pt.
+- `mem://design/responsive-ui-strategy` — update to add the tablet tier alongside existing mobile/desktop rules.
+
+## 7. Rollout
+
+Ship in three additive PRs so each is independently revertable:
+
+1. **Primitives + `useIsTablet`** (no scorecard changes) — safe to merge, ships dormant code.
+2. **Employee + Reviewer scorecards** (`Dashboard`, `EmployeeSelectorGrid`, `EmployeeScorecard`) — highest-traffic surface first.
+3. **Auditor + Management scorecards** (`AuditScorecard`, `ManagementScorecard`) — smaller audience, same primitives.
+
+Each PR is behind the `useIsTablet` conditional, so rollback = revert the PR; no data migration.
+
+## 8. Out of scope (explicit)
+
+- No RPC or schema changes (existing hooks already paginate).
+- No new server-side filters or aggregates.
+- No changes to score computation, workflow transitions, RLS, notifications, evidence storage, or scoring rules.
+- Desktop layout (≥1280 px) is not modified.
+- Annual review, Safety, Incentive dashboards — not in this plan.
