@@ -1,36 +1,73 @@
-## Root cause (verified)
+## 1. Assumptions
+- The requested outcome is to make **Edit workflow & reviewers → REPLAN → Save** work for completed reviews such as Kiran Devi’s, without losing archived reviewer evidence or leaving a partially updated review.
+- The intended reset follows the established completed-review rollback contract: clear `total_score`, `final_rating`, `criteria_weighted_score`, `finalized_at`, and `finalized_by` before reopening.
 
-The toast `column "weighted_final_score" of relation "annual_review_instances" does not exist` fires when the "Edit workflow & reviewers" dialog saves in **supersede mode** on a completed review (typing `REPLAN`).
+## 2. Clarifications
+Not Applicable. The screenshot and live database state identify the failure precisely.
 
-Confirmed via live DB:
-- `annual_review_instances` score/rating columns are: `total_score`, `final_rating`, `criteria_weighted_score`, `system_scores`, `system_scores_raw`, `carry_score_snapshots`, `finalized_at`, `finalized_by`. **`weighted_final_score` does not exist.**
-- The live definition of `public.set_annual_review_enabled_stages(...)` (installed by migration `20260725105144`, ADR-160c) still contains `weighted_final_score = NULL` in its supersede-reset `UPDATE`. The earlier ADR-168 fix (`20260725105555`) only corrected the enum mapping in that function; it did not remove the phantom column.
-- The `pending_dept_head` enum bug from the same migration is already fixed live (maps to `pending_dept`). No other issue in this path.
+## 3. Risk & Impact Report
+- **Data impact:** No schema or historical-row rewrite. Replace one backend function. A successful supersede will intentionally clear final aggregate fields while preserving/archive-copying locked responses according to the existing workflow.
+- **Workflow impact:** Completed reviews can reopen to the first pending enabled reviewer stage. Kiran Devi’s requested Self → Dept → BU chain should move from `completed` to `pending_bu`.
+- **UI/UX impact:** No visual changes. The existing dialog, REPLAN confirmation, warnings, reviewer selectors, and Save button remain unchanged.
+- **Regression risk:** Medium because this path has already exposed sequential phantom-column errors. Mitigation is schema-derived contract testing plus a transactional live smoke test.
+- **Scalability impact:** Negligible; the RPC locks and updates one instance and its relevant response/override rows. No unbounded read or new API load.
+- **Security/RLS impact:** No permission expansion. Existing Admin/HR PMS authorization and audit logging remain.
+- **Backup/data integrity:** No new table; normal automatic backup coverage remains unchanged. Failed calls are transactional, and Kiran Devi’s row is currently still `completed` with scores/finalization intact.
+- **Rollback:** Restore the prior function definition. No data rollback is needed for the migration itself.
 
-## Fix
+## 4. Step-by-step Plan
+1. **Replace the faulty reset column**
+   - Add a focused migration replacing `set_annual_review_enabled_stages(uuid,jsonb,text,text)`.
+   - Remove nonexistent `completed_at` and use the real finalization fields `finalized_at` and `finalized_by`.
+   - Preserve the verified canonical mapping, especially `dept_head → pending_dept` and `bu_head → pending_bu`.
+   - Keep archive, override cleanup, audit, notification, authorization, and status logic otherwise unchanged.
 
-New migration that `CREATE OR REPLACE`s `public.set_annual_review_enabled_stages` with the exact current body, minus the `weighted_final_score = NULL,` line in the supersede reset block. All other logic (canonical role→status mapping, override cleanup, audit insert, notifications) is preserved byte-for-byte.
+2. **Add schema-aware regression protection**
+   - Add a realistic completed-review fixture representing Kiran Devi’s Self → Dept review being extended to Self → Dept → BU.
+   - Assert the final chronological function references only real `annual_review_instances` columns.
+   - Assert the supersede reset clears `total_score`, `final_rating`, `criteria_weighted_score`, `finalized_at`, and `finalized_by`.
+   - Assert it contains neither `weighted_final_score` nor `completed_at`.
+   - Retain canonical role/status assertions, including `pending_dept` and `pending_bu`.
 
-Fields cleared on supersede reset become: `total_score`, `final_rating`, `criteria_weighted_score`, `completed_at` — which matches the real schema and matches what the frontend impact-preview text promises ("the final rating and totals will be cleared").
+3. **Run targeted tests**
+   - Run the new supersede-reset contract test.
+   - Run `workflowStatusMapping.test.ts` and `editWorkflowRpc.contract.test.ts` to protect enum mapping and client RPC payloads.
+   - Run the relevant Annual Review workflow test group to detect sibling regressions.
 
-No frontend, no other RPC, no policy change.
+4. **Verify the deployed function and behavior**
+   - Query the deployed function definition after migration and compare every referenced instance column to the live schema.
+   - Perform a transaction-safe smoke test of the supersede path using a disposable/rollback test transaction where possible.
+   - Confirm Kiran Devi remains unchanged before the user action: `completed`, score `74.00`, rating `Good`, and existing finalization metadata intact.
+   - Then verify the real dialog flow: Save succeeds, status becomes `pending_bu`, Dept evidence is preserved, BU reviewer is Bijay Kumar Mandal, aggregate/finalization fields are cleared, and audit records are created.
 
-## Regression guard
+5. **Audit sibling paths**
+   - Recheck `reassign_annual_review_reviewer` and `annual_review_edit_workflow` for the same phantom-column category.
+   - Confirm reviewer-only supersede already uses `finalized_at` and does not reintroduce invalid columns.
 
-Add `src/test/annualReview/supersedeResetColumns.test.ts` — a static-source test that reads the latest migration touching `set_annual_review_enabled_stages` and asserts:
-- it does NOT contain `weighted_final_score`
-- it DOES clear `total_score`, `final_rating`, `criteria_weighted_score`, `completed_at`
-- the `dept_head` branch maps to `pending_dept` (locks ADR-168 in the same code path)
+## 5. UI Changes
+Not Applicable. Functional behavior only; responsiveness and layout remain unchanged.
 
-## Docs
+## 6. Implementation
+- One additive backend migration replacing the affected function.
+- One focused regression test with mock scenario data.
+- No unrelated refactor or schema addition.
 
-- `DOCUMENTATION.md` — add v2.66.169.1 note under ADR-160c / ADR-167 lineage.
-- `POLICY.md` — extend §AR-CANONICAL-ROLE-STATUS-MAPPING with the invariant "supersede reset writes only real columns; any change to the reset column set requires a schema check".
-- New `docs/adr/ADR-169a.md` — small addendum documenting the phantom-column fix.
+## 7. Tests
+- Success: completed Self → Dept review adds BU stage and reopens to `pending_bu`.
+- Success: only real reset fields are cleared.
+- Success: locked Dept response remains preserved when Dept remains enabled.
+- Failure: invalid/noncanonical status mappings remain rejected by regression tests.
+- Failure: any future phantom `annual_review_instances` reset column fails the static schema contract.
+- Atomicity: failed operations leave scores, status, responses, and reviewer assignments unchanged.
 
-## Risk & Impact
+## 8. DOCUMENTATION.md updates
+- Add v2.66.169.2 RCA/CAPA entry describing why the first patch was incomplete, the corrected finalization fields, verification evidence, and rollback.
+- Update version history in the same change.
 
-- **Data**: none. The removed assignment referenced a non-existent column, so every supersede save was rolling back. Existing rows are unaffected.
-- **Workflow**: unblocks the "Edit workflow & reviewers → Save" supersede path for completed instances (Kiran Devi and the rest of the ADR-160c cohort).
-- **Regression**: static test locks the column set; canonical role/status mapping test from ADR-168 remains authoritative.
-- **Rollback**: re-run the previous `CREATE OR REPLACE` from `20260725105144` if needed.
+## 9. POLICY.md updates
+- Extend §AR-CANONICAL-ROLE-STATUS-MAPPING with a schema-truth invariant: completed-review supersede must clear only verified live columns and must clear both `finalized_at` and `finalized_by` when reopening.
+
+## 10. Post-implementation notes
+- **Verified root cause:** the previous repair removed `weighted_final_score` but retained another nonexistent field, `completed_at`. The live table uses `finalized_at` and `finalized_by`.
+- **5 Why summary:** Save fails because the reset writes `completed_at`; it was copied from an obsolete/other-table convention; the first repair targeted only the reported phantom field; tests checked individual strings rather than the complete live schema contract; therefore sequential invalid-column failures escaped. CAPA is a full reset-column/schema contract, not another one-line symptom patch.
+- Final confirmation will include targeted test results, deployed function inspection, and the observed Kiran Devi workflow state.
