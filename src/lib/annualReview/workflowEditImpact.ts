@@ -42,8 +42,7 @@ const POST_ACTION = new Set([
   'pending_manager','pending_skip','pending_dept','pending_bu','pending_hr','pending_management','completed',
 ]);
 
-function firstPendingStatus(stages: AnnualReviewerRole[]): string {
-  if (stages.length === 0) return 'not_started';
+export function pendingStatusForRole(role: AnnualReviewerRole): string {
   const map: Record<AnnualReviewerRole, string> = {
     self: 'pending_self',
     manager: 'pending_manager',
@@ -53,7 +52,12 @@ function firstPendingStatus(stages: AnnualReviewerRole[]): string {
     hr: 'pending_hr',
     management: 'pending_management',
   };
-  return map[stages[0]];
+  return map[role];
+}
+
+function firstPendingStatus(stages: AnnualReviewerRole[]): string {
+  if (stages.length === 0) return 'not_started';
+  return pendingStatusForRole(stages[0]);
 }
 
 /**
