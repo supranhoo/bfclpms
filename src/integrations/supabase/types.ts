@@ -1722,6 +1722,69 @@ export type Database = {
         }
         Relationships: []
       }
+      annual_review_stage_transfer_audit_2026_07: {
+        Row: {
+          actor_id: string | null
+          before_enabled_stages: Json | null
+          before_from_response: Json | null
+          before_slot_ids: Json | null
+          before_status: string | null
+          before_to_response: Json | null
+          created_at: string
+          drop_from_stage: boolean
+          employee_id: string
+          from_role: string
+          id: string
+          instance_id: string
+          new_reviewer_id: string | null
+          no_op: boolean
+          reason: string
+          reverted_at: string | null
+          reverted_by: string | null
+          to_role: string
+        }
+        Insert: {
+          actor_id?: string | null
+          before_enabled_stages?: Json | null
+          before_from_response?: Json | null
+          before_slot_ids?: Json | null
+          before_status?: string | null
+          before_to_response?: Json | null
+          created_at?: string
+          drop_from_stage: boolean
+          employee_id: string
+          from_role: string
+          id?: string
+          instance_id: string
+          new_reviewer_id?: string | null
+          no_op?: boolean
+          reason: string
+          reverted_at?: string | null
+          reverted_by?: string | null
+          to_role: string
+        }
+        Update: {
+          actor_id?: string | null
+          before_enabled_stages?: Json | null
+          before_from_response?: Json | null
+          before_slot_ids?: Json | null
+          before_status?: string | null
+          before_to_response?: Json | null
+          created_at?: string
+          drop_from_stage?: boolean
+          employee_id?: string
+          from_role?: string
+          id?: string
+          instance_id?: string
+          new_reviewer_id?: string | null
+          no_op?: boolean
+          reason?: string
+          reverted_at?: string | null
+          reverted_by?: string | null
+          to_role?: string
+        }
+        Relationships: []
+      }
       annual_review_system_kpi_weights: {
         Row: {
           created_at: string
@@ -16199,6 +16262,10 @@ export type Database = {
         Returns: Json
       }
       revert_bimonthly_reanchor: { Args: { p_batch_id: string }; Returns: Json }
+      revert_stage_transfer: {
+        Args: { p_audit_id: string }
+        Returns: undefined
+      }
       review_drill: {
         Args: { p_drill_id: string; p_summary?: string }
         Returns: Json
@@ -16620,6 +16687,17 @@ export type Database = {
       sync_hr_final_to_current_bu_head: {
         Args: { p_cycle_id: string; p_performed_by?: string }
         Returns: number
+      }
+      transfer_annual_review_stage_response: {
+        Args: {
+          p_drop_from_stage?: boolean
+          p_from_role: string
+          p_instance_id: string
+          p_new_reviewer_id?: string
+          p_reason?: string
+          p_to_role: string
+        }
+        Returns: string
       }
       transition_safety_incident:
         | {
