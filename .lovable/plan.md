@@ -1,40 +1,27 @@
-## Root cause of "Committed 0, 611 failed"
+## Issue
+Jai Prakash Kumar Das (102044) — instance `b58a9e27` in cycle "Annual Review - 2025-2026" is stuck at `overall_status = 'not_started'`. He is the **only** instance in this state across 2,580 rows (all others are `pending_self`/`pending_dept`/`pending_bu`/`pending_management`/`completed`/`excluded`).
 
-The RPC `admin_apply_system_scores_upgrade` (ADR-171) declares:
+## Verified state
+- Employee active, has manager (dept_head mapped to Md Humayun, bu_head mapped to Jitendra Kumar Dwivedi).
+- `enabled_stages = ["self","dept_head","bu_head"]` — correct BU-terminal chain for JE-SE.
+- Template attached: `036143d1-…` (FAD E&I variant).
+- Zero rows in `annual_review_responses` for the instance — employee never got to open the self-review form because the status never advanced past `not_started`.
+- Cycle is `active`.
 
-```sql
-v_next_final numeric;
-...
-v_next_final := v_inst.final_rating;
-```
+## Root cause (unconfirmed, needs one query in build)
+`not_started → pending_self` transition normally happens at cycle activation / seeder finalize. This one instance was created 2026-07-06 but the transition trigger/RPC missed it (likely a seeder run that partially failed on this row — no override, no audit event for advance). Since it is a single-row outlier, this is a data-repair case, not a systemic bug requiring a new migration.
 
-But `annual_review_instances.final_rating` is a **text** column populated with labels like `Good`, `Average`, `Outstanding`, `Poor` (verified: 1,775 completed rows currently hold text labels).
+## Fix plan
+1. **Read-only verify** (one query): confirm no `annual_review_responses` rows and no `annual_review_access_audit` entries indicating a prior manual regression for this instance. If a regression exists, treat as ADR-155-style rewind and stop for review.
+2. **Repair migration** — single-row `UPDATE`:
+   - `overall_status = 'pending_self'`
+   - `updated_at = now()`
+   - Insert one `annual_review_access_audit` row: `action = 'annual_review.stage_repair'`, `metadata = { from: 'not_started', to: 'pending_self', reason: 'seeder-missed transition, single-instance repair' }`.
+3. **Verify** after migration: re-query the row, confirm `pending_self`, and confirm Jai can now see the editable self-review form (queue RPC will surface it to him).
 
-On the very first line of the assignment, PostgreSQL tries to cast `'Good'::text → numeric` and raises `invalid input syntax for type numeric: "Good"`. Every completed instance the client tried to upgrade therefore aborted with that error — hence **0 committed / 611 failed**.
+## Not doing
+- No trigger / RPC change. One stuck row out of 2,580 is not a systemic defect — introducing a "sweep `not_started` on cycle activation" job would risk re-seeding legitimately excluded rows and violates the surgical-change rule.
+- No ADR — repair only. Note added to the existing operations memory under a one-line entry if you want it recorded.
 
-The JS caller always passes `p_final_rating: null` / `p_total_score: null`, so the whole "monotonic final rating" branch is dead weight in the current shipping code — it was written against an assumed numeric column that never existed.
-
-## Fix (single migration, minimal blast radius)
-
-Redefine `public.admin_apply_system_scores_upgrade` so it:
-
-1. Declares `v_next_final text` (matches the column) and, defensively, changes the `p_final_rating` parameter to `text` — the JS caller passes `null` today, so this is source-compatible.
-2. Keeps the same monotonic guard for `p_total_score` (numeric — that column really is numeric).
-3. For `final_rating`, only overwrites when `p_final_rating IS NOT NULL AND v_inst.final_rating IS DISTINCT FROM p_final_rating` (no `>=` numeric compare — labels aren't ordered).
-4. Everything else — per-cell monotonic system-score merge, audit-log insert with `system_scores.admin_override`, return shape — stays byte-identical.
-
-No client change required. TS type file will regenerate after migration is approved.
-
-## Verification plan
-
-- Regression SQL test in the migration itself:
-  - Seed one completed instance with `final_rating='Good'`.
-  - Call the RPC with a strictly higher `system_scores` payload.
-  - Assert: `system_scores` upgraded, `final_rating` still `'Good'`, one audit row inserted.
-- Post-migration, ask you to re-run the same file with **Apply to completed reviews (upgrades only)** ticked; the toast should read `Committed N, 0 failed` (N = apply count from the dry run).
-
-## Risk & impact
-
-- **Data impact**: none — RPC only writes when a cell strictly upgrades; audit row still recorded.
-- **Regression risk**: low — signature stays name-compatible (`p_final_rating` optional, default null); no other caller in the codebase passes it.
-- **Rollback**: re-run previous migration body (kept in git history) if needed.
+## Rollback
+Repair is a single `UPDATE` + one audit-log row. Rollback = set status back to `not_started` and delete the audit row by its id.
