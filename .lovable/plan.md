@@ -1,69 +1,42 @@
+## Error
+Toast: `invalid input value for enum annual_review_status: "pending_bu_head"` when saving the Edit workflow & reviewers dialog in supersede mode for Balram Mahto (bu_head reviewer replaced).
 
-# Remove subtree-only rows from Team Annual Review "My Queue"
+## 5-Why RCA
+1. **Why did save fail?** DB rejected `pending_bu_head`.
+2. **Why was that string used?** `reassign_annual_review_reviewer` builds the rewind status as `'pending_' || p_role` (ADR-160/160b, migration `20260725083353` line 224).
+3. **Why is that wrong?** Enum values are canonical short forms: `pending_bu`, `pending_dept`, `pending_skip` — not `pending_bu_head`/`pending_dept_head`/`pending_skip_manager`.
+4. **Why didn't the CASE cover it?** Only `skip_manager → skip` was patched; `bu_head → bu` and `dept_head → dept` were missed.
+5. **Why not caught earlier?** Prior supersede tests exercised `manager`/`hr`/`management` (identity mapping works); `bu_head`/`dept_head` reassignment in supersede was never triggered until this admin action.
 
-## Root cause (verified in DB)
+## Impact
+- Any supersede reassignment of `bu_head` or `dept_head` currently 500s.
+- `set_annual_review_enabled_stages` in same file uses a proper `_pending_status_for_role()` mapping already, so it's fine — only `reassign_annual_review_reviewer` is affected.
 
-Piyush Bansal is `100076`. Both flagged rows appear because Umesh Kumar Singh (`100600`) reports to Piyush, and Saroj Devi (`101786`) / Vikash Kumar Anand (`101832`) report to Umesh — putting them inside Piyush's reporting subtree.
-
-`get_my_annual_review_queue` (SECURITY DEFINER RPC, scope=`any`) currently returns any row where:
-
-```
-is_named   -- user is on a reviewer slot listed in enabled_stages
-OR is_subtree -- employee is anywhere in the user's reporting subtree
-```
-
-For both 101786 and 101832:
-- `manager_id / skip_id / dept_head_id / bu_head_id / hr_id / management_id` — none equal Piyush.
-- `enabled_stages` = `[self, bu_head]` / `[self, dept_head, bu_head]` — Piyush is not a stage on either workflow.
-- `is_subtree` = true.
-
-The RPC therefore adds them to Piyush's queue with `visibility_only: true` (rendered as "View only" — no `You: <role>` badge, no action). That is exactly the two cards the screenshot circles.
-
-The "Hierarchy — Completed" tab already exists to give managers downline visibility into completed reviews, so "My Queue" does not need to double as a subtree viewer.
-
-## Fix
-
-Restrict "My Queue" (scope=`any`) to rows where the viewer is a named reviewer. Subtree visibility stays in the "Hierarchy — Completed" tab and in the explicit `subtree` scope (unchanged).
-
-### DB — new migration
-
-Redefine `public.get_my_annual_review_queue` with a single change: the `any` branch drops `OR v.is_subtree`.
+## Fix (single migration)
+Redefine `public.reassign_annual_review_reviewer` with a correct role→status mapping:
 
 ```sql
-WHEN 'subtree' THEN v.is_subtree
-ELSE v.is_named            -- was: (v.is_named OR v.is_subtree)
+v_target_status := (CASE p_role
+    WHEN 'manager'      THEN 'pending_manager'
+    WHEN 'skip_manager' THEN 'pending_skip'
+    WHEN 'dept_head'    THEN 'pending_dept'
+    WHEN 'bu_head'      THEN 'pending_bu'
+    WHEN 'hr'           THEN 'pending_hr'
+    WHEN 'management'   THEN 'pending_management'
+END)::public.annual_review_status;
 ```
 
-Everything else (auth check, status/scope validation, search, pagination, `visibility_only` flag, seniority ordering) stays identical. `subtree` scope is preserved so any current caller that opts in still works.
-
-### Frontend
-
-No functional change required. Optional cleanup in `src/pages/annual-review/TeamAnnualReview.tsx`:
-- `resolveMyRole` no longer needs its stage-membership defence for visibility_only rows (rows returned will always have `is_named=true`), but leaving it in is safe.
-- The "View only" chip path in the queue card can stay — used only for edge cases where a reviewer slot was reassigned mid-flight.
-
-No change to `HierarchyCompletedList` / `get_hierarchy_completed_reviews` — that remains the canonical downline visibility surface.
+All other logic (locked-response archiving, override upsert, instance update, audit rows, notifications) stays identical — surgical change.
 
 ## Verification
+- Retry the failing Balram Mahto save: bu_head replaced, expect status rewind to `pending_bu`.
+- Confirm dept_head supersede also lands on `pending_dept` (spot query).
+- Grep for other `'pending_' || p_role` concatenations in `supabase/migrations` — the two older migrations (`20260724122536`, `20260724123142`) are superseded by `20260725083353`; only this file's function is live. New migration replaces it in place.
 
-Run in the same migration after the CREATE FUNCTION, as a sanity SELECT (not asserted):
+## CAPA
+- **Corrective:** Migration replaces the function with the explicit mapping.
+- **Preventive:** Add a POLICY note (§AR-STATUS-ROLE-MAP) that any `role → pending_*` mapping must use the canonical short form, and audit any future dynamic `'pending_' || role` construction as forbidden.
+- Update ADR-160c doc line noting the enum-mapping fix.
 
-- `get_my_annual_review_queue(active_cycle, 1, 100, null, 'all', 'any')` impersonated for Piyush (`100076`) must NOT contain 101786 or 101832.
-- Same call for a user who IS a named reviewer on those instances must still return them.
-- `scope='subtree'` for Piyush must still return them (contract preserved).
-
-Add regression test `src/test/annualReview/queueScopeAnyExcludesSubtreeVisibilityOnly.test.ts` locking:
-1. The RPC's `any` branch uses `v.is_named` only.
-2. The `subtree` branch still includes `v.is_subtree` rows.
-
-## Rollback
-
-Single-file DB migration; rollback = re-issue the previous function body (kept in the migration comment header). No data mutation, no UI-breaking API change.
-
-## Risk & impact
-
-- Data impact: none — read-only RPC.
-- Workflow impact: none — no reviewer/stage rewiring.
-- UI impact: managers stop seeing downline "View only" completed rows in "My Queue"; they still see them under "Hierarchy — Completed".
-- Regression risk: low. Subtree-scope callers unaffected. Named reviewers unaffected.
-- Scalability: strictly reduces the row count returned per user; positive impact.
+## Not applicable
+UI changes, tests (SQL-only RPC fix; existing unit test `workflowEditImpact` already asserts `pending_bu`).
