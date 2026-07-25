@@ -83,7 +83,10 @@ export function EmployeeScorecard({
   onBack,
   autoOpenKpiId 
 }: EmployeeScorecardProps) {
-  const isMobile = useIsMobile();
+  const isMobileRaw = useIsMobile();
+  const isTablet = useIsTablet();
+  // ADR-170: treat tablet 768-1279 like mobile so cards replace horizontal-scroll tables.
+  const isMobile = isMobileRaw || isTablet;
   const { user } = useAuth();
   const { data: allKpis, isLoading } = useKpisByEmployee(employee.id);
   const queryClient = useQueryClient();

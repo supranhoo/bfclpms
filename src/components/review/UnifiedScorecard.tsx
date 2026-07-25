@@ -212,7 +212,10 @@ export function UnifiedScorecard({
   // Derived values from period selection
   const selectedPeriod = periodSelection.selectedMonth;
   const selectedYear = periodSelection.selectedYear;
-  const isMobile = useIsMobile();
+  const isMobileRaw = useIsMobile();
+  const isTablet = useIsTablet();
+  // ADR-170: treat tablet 768-1279 like mobile so cards replace horizontal-scroll tables.
+  const isMobile = isMobileRaw || isTablet;
   const { user, effectiveRole } = useAuth();
   const isAdmin = effectiveRole === 'admin';
   const [zeroScoreDialogOpen, setZeroScoreDialogOpen] = useState(false);
