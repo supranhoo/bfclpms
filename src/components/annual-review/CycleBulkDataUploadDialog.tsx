@@ -4,7 +4,8 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Download, Upload, Loader2, FileSpreadsheet, AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { Download, Upload, Loader2, FileSpreadsheet, AlertTriangle, CheckCircle2, ShieldAlert } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
 import { toast } from 'sonner';
 import { useQuery } from '@tanstack/react-query';
 import {
@@ -29,6 +30,8 @@ export function CycleBulkDataUploadDialog({
   const [file, setFile] = useState<File | null>(null);
   const [report, setReport] = useState<DryRunReport | null>(null);
   const [busy, setBusy] = useState(false);
+  // ADR-171: opt-in admin override to also apply upgrades to Completed reviews.
+  const [allowCompletedUpgrades, setAllowCompletedUpgrades] = useState(false);
 
   const { data: plan, isLoading, refetch } = useQuery<CycleBulkPlan>({
     queryKey: ['annual-review', 'bulk-data-plan', cycle?.id],
@@ -48,7 +51,7 @@ export function CycleBulkDataUploadDialog({
     if (!plan) return;
     setBusy(true);
     try {
-      const r = await parseAndDryRun(f, plan);
+      const r = await parseAndDryRun(f, plan, { allowCompletedUpgrades });
       setReport(r);
       setFile(f);
     } catch (e) {
@@ -62,9 +65,14 @@ export function CycleBulkDataUploadDialog({
     if (!plan || !report) return;
     setBusy(true);
     try {
-      const res = await commitDryRun(report, plan);
-      if (res.failed) toast.error(`Committed ${res.updated}, ${res.failed} failed.`);
-      else toast.success(`Committed ${res.updated} instance${res.updated === 1 ? '' : 's'}.`);
+      const res = await commitDryRun(report, plan, {
+        reason: allowCompletedUpgrades ? 'Bulk system-score upgrade (admin override)' : undefined,
+      });
+      const upgradeNote = res.upgradedCompleted
+        ? ` (${res.upgradedCompleted} completed review${res.upgradedCompleted === 1 ? '' : 's'} upgraded)`
+        : '';
+      if (res.failed) toast.error(`Committed ${res.updated}, ${res.failed} failed${upgradeNote}.`);
+      else toast.success(`Committed ${res.updated} instance${res.updated === 1 ? '' : 's'}${upgradeNote}.`);
       setReport(null); setFile(null);
       onDone?.();
       await refetch();
@@ -105,6 +113,30 @@ export function CycleBulkDataUploadDialog({
               <Badge variant="outline">
                 {plan.columns.filter((c) => c.kind === 'eligibility_inputs').length} Eligibility
               </Badge>
+            </div>
+
+            {/* ADR-171 — admin override for locked/completed rows */}
+            <div className="flex items-start gap-3 rounded-md border border-amber-500/40 bg-amber-500/5 px-3 py-2">
+              <Checkbox
+                id="allow-completed-upgrades"
+                checked={allowCompletedUpgrades}
+                onCheckedChange={(v) => {
+                  setAllowCompletedUpgrades(!!v);
+                  // Any existing dry-run was built under the previous flag; force re-upload.
+                  setReport(null);
+                  setFile(null);
+                }}
+                className="mt-0.5"
+              />
+              <label htmlFor="allow-completed-upgrades" className="text-sm cursor-pointer space-y-1">
+                <div className="flex items-center gap-1.5 font-medium">
+                  <ShieldAlert className="h-4 w-4 text-amber-600" />
+                  Apply to Completed reviews (upgrades only)
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  Admin override. Even on Completed reviews, System KPI values that would raise the stored score are re-applied; values that would lower the score are blocked cell-by-cell. Eligibility fields are never modified on Completed rows. Every override is audit-logged.
+                </div>
+              </label>
             </div>
 
             {/* Scoring health strip — v2.66.91, POLICY §AR-SYSTEM-KPI-LIBRARY-LINK */}
@@ -223,6 +255,11 @@ export function CycleBulkDataUploadDialog({
                               <Badge variant={r.verdict === 'apply' ? 'default' : r.verdict === 'error' ? 'destructive' : 'secondary'} className="text-xs">
                                 {r.verdict}
                               </Badge>
+                              {r.mode === 'admin_upgrade' && r.verdict === 'apply' && (
+                                <Badge variant="outline" className="ml-1 text-[10px] border-amber-500/60 text-amber-700 dark:text-amber-400">
+                                  upgrade · {r.lockedStage ?? 'locked'}
+                                </Badge>
+                              )}
                             </TableCell>
                             <TableCell className="text-xs">
                               {r.changes.length === 0 ? (
