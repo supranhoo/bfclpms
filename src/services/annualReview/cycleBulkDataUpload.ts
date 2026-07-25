@@ -571,10 +571,14 @@ export async function parseAndDryRun(
   return { rows, applyCount: apply, skipCount: skip, errorCount: err, totalChanges: changes };
 }
 
-export interface CommitResult { updated: number; failed: number; errors: string[] }
+export interface CommitResult { updated: number; failed: number; errors: string[]; upgradedCompleted: number }
 
-export async function commitDryRun(report: DryRunReport, plan: CycleBulkPlan): Promise<CommitResult> {
-  const out: CommitResult = { updated: 0, failed: 0, errors: [] };
+export async function commitDryRun(
+  report: DryRunReport,
+  plan: CycleBulkPlan,
+  opts: { reason?: string } = {},
+): Promise<CommitResult> {
+  const out: CommitResult = { updated: 0, failed: 0, errors: [], upgradedCompleted: 0 };
   const instByCode = new Map(plan.instances.map((i) => [i.employeeCode.trim(), i]));
   for (const row of report.rows) {
     if (row.verdict !== 'apply') continue;
@@ -583,6 +587,8 @@ export async function commitDryRun(report: DryRunReport, plan: CycleBulkPlan): P
     const nextSys: Record<string, number> = { ...inst.systemScores };
     const nextSysRaw: Record<string, number> = { ...inst.systemScoresRaw };
     const nextElig: Record<string, string | number | boolean> = { ...inst.eligibilityInputs };
+    const patchSys: Record<string, number> = {};
+    const patchSysRaw: Record<string, number> = {};
     for (const ch of row.changes) {
       const col = plan.columns.find((c) => c.name === ch.column);
       if (!col) continue;
@@ -591,17 +597,36 @@ export async function commitDryRun(report: DryRunReport, plan: CycleBulkPlan): P
       if (col.kind === 'system_scores') {
         nextSysRaw[slot.id] = Number(ch.after);
         nextSys[slot.id] = typeof ch.afterPoints === 'number' ? ch.afterPoints : Number(ch.after);
+        patchSysRaw[slot.id] = Number(ch.after);
+        patchSys[slot.id] = typeof ch.afterPoints === 'number' ? ch.afterPoints : Number(ch.after);
       } else {
         nextElig[slot.id] = ch.after as string | number | boolean;
       }
     }
     try {
-      await svc.updateInstance(inst.instanceId, {
-        system_scores: nextSys,
-        system_scores_raw: nextSysRaw,
-        eligibility_inputs: nextElig,
-      });
-      out.updated++;
+      if (row.mode === 'admin_upgrade') {
+        // ADR-171: route through the SECURITY DEFINER RPC which enforces
+        // per-cell monotonic upgrades and writes an audit trail. Only
+        // system_score cells are supplied (eligibility is filtered upstream).
+        const { error } = await supabase.rpc('admin_apply_system_scores_upgrade' as never, {
+          p_instance_id: inst.instanceId,
+          p_system_scores: patchSys as never,
+          p_system_scores_raw: patchSysRaw as never,
+          p_total_score: null as never,
+          p_final_rating: null as never,
+          p_reason: opts.reason ?? 'bulk system-score admin upgrade' as never,
+        } as never);
+        if (error) throw error;
+        out.updated++;
+        out.upgradedCompleted++;
+      } else {
+        await svc.updateInstance(inst.instanceId, {
+          system_scores: nextSys,
+          system_scores_raw: nextSysRaw,
+          eligibility_inputs: nextElig,
+        });
+        out.updated++;
+      }
     } catch (e) {
       out.failed++;
       out.errors.push(`${row.employeeCode}: ${(e as Error).message}`);
