@@ -365,6 +365,16 @@ export interface DryRunRow {
   verdict: RowVerdict;
   reason?: string;
   /**
+   * Set when the row targets a stage-locked (typically `completed`) instance
+   * and the admin explicitly opted into the "Apply to completed reviews
+   * (upgrades only)" path. See POLICY §AR-SYSTEM-SCORE-ADMIN-UPGRADE / ADR-171.
+   * commitDryRun routes these rows through the SECURITY DEFINER RPC
+   * `admin_apply_system_scores_upgrade` instead of a direct table update.
+   */
+  mode?: 'safe' | 'admin_upgrade';
+  /** Original locked stage (e.g. `completed`) — for the UI badge. */
+  lockedStage?: string;
+  /**
    * Per-cell warnings (v2.66.95): columns that were skipped for this row
    * (unlinked KPI, non-numeric value, etc.) while the rest of the row still
    * applies. Row-fatal issues stay in `reason`.
@@ -429,7 +439,12 @@ function coercePercentRaw(
   return { value: n };
 }
 
-export async function parseAndDryRun(file: File, plan: CycleBulkPlan): Promise<DryRunReport> {
+export async function parseAndDryRun(
+  file: File,
+  plan: CycleBulkPlan,
+  opts: { allowCompletedUpgrades?: boolean } = {},
+): Promise<DryRunReport> {
+  const allowCompletedUpgrades = !!opts.allowCompletedUpgrades;
   const buf = await file.arrayBuffer();
   const wb = XLSX.read(buf);
   const ws = wb.Sheets[wb.SheetNames[0]];
@@ -451,11 +466,15 @@ export async function parseAndDryRun(file: File, plan: CycleBulkPlan): Promise<D
       err++;
       continue;
     }
-    if (!STAGE_SAFE.has(inst.overallStatus)) {
+    const isSafeStage = STAGE_SAFE.has(inst.overallStatus);
+    // ADR-171: admin non-destructive upgrade for completed rows only.
+    const canAdminUpgrade = allowCompletedUpgrades && inst.overallStatus === 'completed';
+    if (!isSafeStage && !canAdminUpgrade) {
       rows.push({ employeeCode: code, fullName: inst.fullName, templateName: inst.templateName, verdict: 'skip', reason: `Locked stage: ${inst.overallStatus}`, changes: [] });
       skip++;
       continue;
     }
+    const rowMode: 'safe' | 'admin_upgrade' = isSafeStage ? 'safe' : 'admin_upgrade';
     const rowChanges: DryRunRow['changes'] = [];
     const rowWarnings: string[] = [];
     for (const col of plan.columns) {
@@ -488,6 +507,14 @@ export async function parseAndDryRun(file: File, plan: CycleBulkPlan): Promise<D
         const result = scoreFromRaw(afterRaw, rules, weight);
         const beforePoints = inst.systemScores[slot.id];
         if (beforeRaw === afterRaw && Number(beforePoints ?? NaN) === result.points) continue;
+        // ADR-171 monotonic guard: for completed rows, block cell-level downgrades.
+        if (rowMode === 'admin_upgrade' && typeof beforePoints === 'number'
+            && result.points < beforePoints) {
+          rowWarnings.push(
+            `"${col.name}" skipped — new score (${result.points.toFixed(2)}) is lower than stored (${beforePoints.toFixed(2)}); downgrades are blocked on completed reviews`,
+          );
+          continue;
+        }
         rowChanges.push({
           column: col.name,
           kind: 'system_scores',
@@ -503,6 +530,12 @@ export async function parseAndDryRun(file: File, plan: CycleBulkPlan): Promise<D
         const before = inst.eligibilityInputs[slot.id];
         const after = typeof raw === 'string' || typeof raw === 'number' || typeof raw === 'boolean' ? raw : String(raw);
         if (before === after) continue;
+        // Eligibility text/flags are non-numeric — cannot be classified as
+        // an upgrade. Skip on completed rows.
+        if (rowMode === 'admin_upgrade') {
+          rowWarnings.push(`"${col.name}" skipped — eligibility inputs cannot be modified on completed reviews`);
+          continue;
+        }
         rowChanges.push({ column: col.name, kind: 'eligibility_inputs', before, after });
       }
     }
@@ -513,6 +546,8 @@ export async function parseAndDryRun(file: File, plan: CycleBulkPlan): Promise<D
         templateName: inst.templateName,
         verdict: 'skip',
         reason: rowWarnings.length ? rowWarnings.join('; ') : 'No changes',
+        mode: rowMode,
+        lockedStage: isSafeStage ? undefined : inst.overallStatus,
         warnings: rowWarnings.length ? rowWarnings : undefined,
         changes: [],
       });
@@ -524,6 +559,8 @@ export async function parseAndDryRun(file: File, plan: CycleBulkPlan): Promise<D
       fullName: inst.fullName,
       templateName: inst.templateName,
       verdict: 'apply',
+      mode: rowMode,
+      lockedStage: isSafeStage ? undefined : inst.overallStatus,
       changes: rowChanges,
       warnings: rowWarnings.length ? rowWarnings : undefined,
     });
@@ -534,10 +571,14 @@ export async function parseAndDryRun(file: File, plan: CycleBulkPlan): Promise<D
   return { rows, applyCount: apply, skipCount: skip, errorCount: err, totalChanges: changes };
 }
 
-export interface CommitResult { updated: number; failed: number; errors: string[] }
+export interface CommitResult { updated: number; failed: number; errors: string[]; upgradedCompleted: number }
 
-export async function commitDryRun(report: DryRunReport, plan: CycleBulkPlan): Promise<CommitResult> {
-  const out: CommitResult = { updated: 0, failed: 0, errors: [] };
+export async function commitDryRun(
+  report: DryRunReport,
+  plan: CycleBulkPlan,
+  opts: { reason?: string } = {},
+): Promise<CommitResult> {
+  const out: CommitResult = { updated: 0, failed: 0, errors: [], upgradedCompleted: 0 };
   const instByCode = new Map(plan.instances.map((i) => [i.employeeCode.trim(), i]));
   for (const row of report.rows) {
     if (row.verdict !== 'apply') continue;
@@ -546,6 +587,8 @@ export async function commitDryRun(report: DryRunReport, plan: CycleBulkPlan): P
     const nextSys: Record<string, number> = { ...inst.systemScores };
     const nextSysRaw: Record<string, number> = { ...inst.systemScoresRaw };
     const nextElig: Record<string, string | number | boolean> = { ...inst.eligibilityInputs };
+    const patchSys: Record<string, number> = {};
+    const patchSysRaw: Record<string, number> = {};
     for (const ch of row.changes) {
       const col = plan.columns.find((c) => c.name === ch.column);
       if (!col) continue;
@@ -554,17 +597,36 @@ export async function commitDryRun(report: DryRunReport, plan: CycleBulkPlan): P
       if (col.kind === 'system_scores') {
         nextSysRaw[slot.id] = Number(ch.after);
         nextSys[slot.id] = typeof ch.afterPoints === 'number' ? ch.afterPoints : Number(ch.after);
+        patchSysRaw[slot.id] = Number(ch.after);
+        patchSys[slot.id] = typeof ch.afterPoints === 'number' ? ch.afterPoints : Number(ch.after);
       } else {
         nextElig[slot.id] = ch.after as string | number | boolean;
       }
     }
     try {
-      await svc.updateInstance(inst.instanceId, {
-        system_scores: nextSys,
-        system_scores_raw: nextSysRaw,
-        eligibility_inputs: nextElig,
-      });
-      out.updated++;
+      if (row.mode === 'admin_upgrade') {
+        // ADR-171: route through the SECURITY DEFINER RPC which enforces
+        // per-cell monotonic upgrades and writes an audit trail. Only
+        // system_score cells are supplied (eligibility is filtered upstream).
+        const { error } = await supabase.rpc('admin_apply_system_scores_upgrade' as never, {
+          p_instance_id: inst.instanceId,
+          p_system_scores: patchSys as never,
+          p_system_scores_raw: patchSysRaw as never,
+          p_total_score: null as never,
+          p_final_rating: null as never,
+          p_reason: opts.reason ?? 'bulk system-score admin upgrade' as never,
+        } as never);
+        if (error) throw error;
+        out.updated++;
+        out.upgradedCompleted++;
+      } else {
+        await svc.updateInstance(inst.instanceId, {
+          system_scores: nextSys,
+          system_scores_raw: nextSysRaw,
+          eligibility_inputs: nextElig,
+        });
+        out.updated++;
+      }
     } catch (e) {
       out.failed++;
       out.errors.push(`${row.employeeCode}: ${(e as Error).message}`);
