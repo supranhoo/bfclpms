@@ -5,6 +5,13 @@ import {
   useReviewerInstancesPaginated,
   useReviewerRoleCounts,
 } from '@/hooks/useAnnualReview';
+import {
+  useTeamQueueScopeSettings,
+  useMyTeamQueueDefault,
+  useSetMyTeamQueueDefault,
+} from '@/hooks/useTeamQueueScopeConfig';
+import { resolveTeamQueueScopeConfig } from '@/lib/annualReview/teamQueueScopeConfig';
+import { toast } from 'sonner';
 import { AnnualReviewStatusBadge } from '@/components/annual-review/AnnualReviewStatusBadge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -92,7 +99,7 @@ function resolveMyRole(
 // Reviewer resolution — see `@/lib/annualReview/stageForReviewer`.
 
 export default function TeamAnnualReview() {
-  const { user } = useAuth();
+  const { user, effectiveRole } = useAuth();
   const { data: cycle } = useActiveCycle();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -173,10 +180,45 @@ export default function TeamAnnualReview() {
 
   // Per-role counts — drives which "My role" chips render.
   const { data: roleCounts } = useReviewerRoleCounts(user?.id, cycle?.id);
+
+  // Admin-configurable defaults + accessibility of the scope chips.
+  const { data: scopeSettings } = useTeamQueueScopeSettings();
+  const { data: myScopeDefault } = useMyTeamQueueDefault(user?.id);
+  const setMyDefault = useSetMyTeamQueueDefault();
+  const availableScopes = useMemo(() => {
+    const set = new Set<ReviewerScope>();
+    if (roleCounts) {
+      (Object.keys(roleCounts) as ReviewerScope[]).forEach((k) => {
+        if (k !== 'any' && (roleCounts[k] ?? 0) > 0) set.add(k);
+      });
+    }
+    return set as unknown as Set<import('@/lib/annualReview/teamQueueScopeConfig').TeamQueueScope>;
+  }, [roleCounts]);
+  const resolvedScopeCfg = useMemo(() => resolveTeamQueueScopeConfig({
+    role: effectiveRole,
+    appSettings: scopeSettings ?? null,
+    profileOverride: myScopeDefault ?? null,
+    availableScopes,
+    currentSelection: scopeFilter,
+  }), [effectiveRole, scopeSettings, myScopeDefault, availableScopes, scopeFilter]);
+
+  // Apply admin/user default the first time counts load, when URL didn't pin one.
+  const [scopeDefaultApplied, setScopeDefaultApplied] = useState(false);
+  useEffect(() => {
+    if (scopeDefaultApplied) return;
+    if (!roleCounts) return;
+    if (urlParams.get('scope')) { setScopeDefaultApplied(true); return; }
+    if (resolvedScopeCfg.defaultScope !== scopeFilter) {
+      setScopeFilter(resolvedScopeCfg.defaultScope as ReviewerScope);
+    }
+    setScopeDefaultApplied(true);
+     
+  }, [roleCounts, resolvedScopeCfg.defaultScope]);
+
+  const allowed = new Set<string>(resolvedScopeCfg.allowedScopes);
   const visibleScopeFilters = SCOPE_FILTERS.filter((s) => {
+    if (!allowed.has(s.value)) return false;
     if (s.value === 'any') return true;
-    // Always show the currently selected chip so the user can un-select it
-    // even if counts haven't loaded yet.
     if (s.value === scopeFilter) return true;
     return (roleCounts?.[s.value] ?? 0) > 0;
   });
@@ -269,6 +311,22 @@ export default function TeamAnnualReview() {
                   </button>
                 );
               })}
+              {resolvedScopeCfg.allowUserOverride && myScopeDefault !== scopeFilter && (
+                <button
+                  type="button"
+                  className="ml-1 text-[11px] px-2 py-1 rounded-full border border-dashed border-border text-muted-foreground hover:bg-muted"
+                  disabled={setMyDefault.isPending}
+                  onClick={() => {
+                    setMyDefault.mutate(scopeFilter, {
+                      onSuccess: () => toast.success(`"${SCOPE_FILTERS.find(s => s.value === scopeFilter)?.label}" is now your default`),
+                      onError: (e: any) => toast.error(e?.message ?? 'Could not save default'),
+                    });
+                  }}
+                  title="Remember this chip as your default when opening Team Annual Review"
+                >
+                  Set as default
+                </button>
+              )}
             </div>
           )}
 

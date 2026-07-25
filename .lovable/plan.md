@@ -1,90 +1,84 @@
-## 1. Assumptions
-- The active cycle remains **Annual Review 2025–2026**.
-- “Total Active Reviews” should preserve the existing definition: every instance in the active cycle, including administratively excluded rows unless the current policy explicitly says otherwise.
-- No review data should be rewritten; this is an access-policy and read-path repair.
 
-## 2. Clarifications
-Not Applicable. The live reproduction and database state identify the failure conclusively.
+## Goal
 
-## 3. RCA and 5-Why Analysis
-### Confirmed facts
-- The active cycle exists and contains **2,580** instances: 31 pending self, 12 pending department, 279 pending BU, 17 pending management, 1,767 completed, and 474 excluded.
-- The browser successfully loads the active cycle, but every request to `annual_review_instances` returns **HTTP 403**.
-- The authenticated preview user has the Admin role.
+Give admins a Settings surface to control the "My role" scope chips (Any / Dept Head / BU Head / Manager / Skip / HR / Management) shown on the **Team Annual Review → My Queue** page, per the highlighted row in the screenshot. Two capabilities:
 
-### Root cause
-ADR-162 added `EXISTS (SELECT 1 FROM auth.users …)` directly inside the `annual_review_instances` RLS policy. Authenticated application roles cannot query the protected `auth` schema. PostgreSQL may evaluate this branch even when the earlier Admin branch is true, so the entire SELECT fails with `permission denied for schema auth`. The prior auth-readiness fix could not resolve a deterministic database authorization failure.
+1. **Default chip** — which scope is pre-selected when a user lands on the page (currently hardcoded to `Any`).
+2. **Accessibility** — which chips are allowed to render for each role; disallowed chips are hidden even if the user has instances under them.
 
-### 5 Whys
-1. Why are all dashboard cards zero? The instance count and page queries fail with 403, while the UI falls back to zero/empty data.
-2. Why do the queries fail? The SELECT policy evaluates a subquery against `auth.users`.
-3. Why is that forbidden? Application roles intentionally have no direct access to the protected auth schema.
-4. Why did Admin access not bypass it? SQL policy expressions do not guarantee short-circuit evaluation of `OR` branches.
-5. Why did the UI look like valid empty data? The Progress tab supplies zero defaults and does not render the query errors.
+Also let each user override the default for themselves (sticky per-browser).
 
-A secondary correctness gap is also confirmed: the count service does not enumerate the newer `pending_dept`, `pending_management`, or `excluded` statuses, so “In Progress” remains incomplete even after access is restored.
+## Where the setting lives
 
-## 4. Risk & Impact Report
-- **Data impact:** No row mutation or historical-score change. Add a narrowly scoped SECURITY DEFINER boolean helper and replace affected SELECT policy branches.
-- **Workflow impact:** Read visibility only; submission and reviewer transitions remain unchanged.
-- **UI/UX impact:** Real counts and rows return. Query failures will show an explicit retryable error instead of misleading zeros.
-- **Security impact:** Preserve the “platform-login employees only” rule without granting application roles access to `auth.users`. The helper exposes only a boolean and uses a fixed `search_path`.
-- **Regression risk:** Moderate because the affected instance/response policies are shared by employee, reviewer, hierarchy, and admin views.
-- **Scalability:** Add a primary-key existence check per relevant completed row; `auth.users.id` is indexed. Existing server-side pagination remains capped at 100 rows.
-- **Backup:** No new table and no data rewrite; automatic backup discovery remains unchanged.
-- **Mitigation:** Policy matrix tests, authenticated browser verification, exact database count comparison, and no broad auth-schema grants.
-- **Rollback:** Restore the previous policies and drop the helper. No data rollback is required.
+Annual Review Admin → **Access Control** tab (already home to ADR-144 directory kill-switch, capability matrix, and Management backfill). New card: **"My Queue — scope chips"**.
 
-## 5. Step-by-step Plan
-1. **Secure the login-access predicate**
-   - Add a SECURITY DEFINER helper that answers only whether a profile ID has a platform login.
-   - Lock its `search_path`, revoke public execution, and grant execution only to `authenticated` and `service_role`.
-   - Replace direct `auth.users` references in the affected instance and response SELECT policies with this helper.
-   - Preserve all existing employee, assigned-reviewer, Admin, HR PMS, and completed-upline visibility branches.
+## Risk & Impact
 
-2. **Audit ADR-162 sibling paths**
-   - Update any hierarchy-completed policy/RPC path that performs the same unsafe auth-schema check.
-   - Confirm the hierarchy RPC still restricts results to login-enabled employees and remains server-side paginated.
+- **Data:** additive JSON columns on `app_settings` and one new nullable `team_queue_default_scope` on `profiles` (user override). No schema breakage.
+- **Workflow:** display-only. Server-side RPC filters (`scope`) are unchanged — hiding a chip does not restrict what a user can query directly via URL; enforcement stays at the reviewer-id level in `get_my_annual_review_queue` (unchanged).
+- **UI/UX:** `TeamAnnualReview.tsx` gains one hook read; if disabled/empty, current behavior is preserved. `showScopeRow` still hides the row for single-role users.
+- **Regression:** low. Default `allowed_scopes = null` = "all" (today's behavior). Default `default_scope = 'any'` (today's behavior).
+- **Mitigation:** feature-flagged behind existing `app_settings` row; unit tests on the resolver; Playwright smoke on Team Annual Review render.
 
-3. **Complete status aggregation**
-   - Add `pending_dept`, `pending_management`, and `excluded` to the status-count model.
-   - Include department and management queues in “In Progress”.
-   - Keep excluded rows separate internally so the existing Total definition remains stable and future UI filtering stays correct.
+## Plan
 
-4. **Stop masking backend failures**
-   - Gate all Progress queries on `isReady && !!user` and include the user ID in auth-scoped query keys.
-   - Render a clear error state with Retry when counts or paginated rows fail; do not display zero cards as if the request succeeded.
-   - Keep the current table, filters, and pagination unchanged.
+### 1. Storage (migration)
 
-5. **Regression coverage and verification**
-   - Add policy-contract tests proving no client-facing RLS policy directly queries `auth.users` and all reviewer slots remain present.
-   - Add count tests covering department, management, completed, and excluded statuses.
-   - Update realistic mock status data with all current workflow states and failure cases.
-   - Verify live as an authenticated Admin: no 403 responses, Total = 2,580, Completed = 1,767, In Progress includes 12 department + 279 BU + 17 management, and the first paginated rows render.
-   - Verify a hierarchy viewer still sees only completed, login-enabled employees in their allowed downline.
+- Extend `app_settings` (single-row table) with:
+  - `team_queue_default_scope text` — one of `any | manager | skip | dept | bu | hr | management`. Default `'any'`.
+  - `team_queue_allowed_scopes jsonb` — array of scope keys the UI is allowed to render. `null` = allow all.
+  - `team_queue_role_overrides jsonb` — optional per-role map, e.g. `{ "manager": { "default": "manager", "allowed": ["any","manager"] } }`. `null`/missing key = fall back to the two fields above.
+- Extend `profiles` with `team_queue_default_scope text NULL` (user-level override; user-writable via a lightweight RPC or RLS `UPDATE own row` on that column only).
+- GRANT + RLS: read `app_settings` = authenticated (already the pattern). Write = admin/hr_pms only.
 
-## 6. UI Changes
-- **Location:** Annual Review Admin → Progress.
-- **Visual change:** No redesign. On query failure, replace misleading zero metrics/empty table with an inline error and Retry action.
-- **Interaction:** Existing filters, downloads, bulk actions, and pagination remain unchanged.
-- **Responsiveness:** Error state uses the existing responsive card/container layout.
+### 2. Resolver (pure, testable)
 
-## 7. Implementation
-Pending approval.
+New `src/lib/annualReview/teamQueueScopeConfig.ts`:
 
-## 8. Tests
-- RLS policy safety/role matrix.
-- Full annual-review status aggregation.
-- Query failure versus genuine empty-state rendering.
-- Auth-ready/user-scoped query gate.
-- Authenticated browser/network verification.
+```
+resolveTeamQueueScopeConfig({
+  role, appSettings, profileOverride, roleCounts
+}) -> { defaultScope, allowedScopes }
+```
 
-## 9. DOCUMENTATION.md Updates
-Document the confirmed 403 RCA, secure helper pattern, complete status aggregation, measured database totals, rollback, and version-history entry.
+Precedence: `profileOverride` > `role_overrides[role]` > global fields > current defaults. Always intersects `allowedScopes` with roles the user has count > 0 (so we never show an empty chip).
 
-## 10. POLICY.md Updates
-Add the rule that client-facing RLS policies must never directly query protected auth tables; platform-login checks must use a minimal SECURITY DEFINER boolean helper. Record all supported annual-review statuses in the aggregation contract.
+Unit tests cover: no config, admin-defined default with allowed subset, per-role override, invalid values fall back safely, chip user selected is preserved even if newly disallowed (grace: still visible while selected, mirrors today's rule at line 180).
 
-## 11. Post-implementation Notes
-- CAPA: add a static regression guard against protected-schema references in RLS policy migrations.
-- No users, reviews, scores, reviewer mappings, or workflow stages will be changed.
+### 3. Wire into `TeamAnnualReview.tsx`
+
+- Replace hardcoded `urlScope ?? 'any'` init with resolver output.
+- Filter `visibleScopeFilters` through `allowedScopes`.
+- Add a small "Set as default" link next to the chip row that writes `profiles.team_queue_default_scope` for the current user (toast on success). Hidden if admin disallows overrides.
+
+### 4. Admin UI (Access Control tab)
+
+New card "My Queue — scope chips" with:
+
+- Global **Default chip** dropdown (Any / Dept Head / BU Head / …).
+- Global **Allowed chips** multi-select (checkbox list; "All" = clear).
+- **Per-role overrides** table: rows for `manager`, `skip_level`, `hr_pms`, `management`, `auditor`, `admin`; each row = default dropdown + allowed multi-select + "Reset" button.
+- **Allow user override** toggle (controls whether the "Set as default" affordance renders in the queue UI).
+- Save button writes a single `app_settings` row; audit event `annual_review.settings.team_queue_scope_updated` with actor + diff.
+
+### 5. Docs & policy
+
+- ADR-164 — "Team Annual Review scope-chip configurability".
+- POLICY §AR-TEAM-QUEUE-SCOPE-CONFIG — precedence rules, override semantics, note that this is display-only and does not weaken RLS.
+- Memory: `mem/features/annual-review/team-queue-scope-config.md` describing knobs and default behaviors.
+
+### 6. Tests
+
+- `teamQueueScopeConfig.test.ts` — resolver precedence & fallbacks.
+- `TeamAnnualReview.render.test.tsx` — chip visibility given admin config + role counts.
+- Playwright smoke: admin sets default = "Dept Head", allowed = ["any","dept","bu"] → BU-Head user loads queue → Dept Head chip is preselected, Manager chip is hidden.
+
+## Not in scope (call out)
+
+- Server-side enforcement of "allowed scopes" (URL param bypass). Add later if a security review demands it; today it's a UX/organisation control, not an access boundary.
+- Changing the reviewer resolution or the `get_my_annual_review_queue` RPC contract.
+- Renaming chips (Dept Head / BU Head labels stay as-is).
+
+## Rollback
+
+Migration is additive. Rollback = drop the two columns and remove the Admin card; UI falls back to `any` default and full chip list automatically because the resolver treats missing config as "today's behavior".

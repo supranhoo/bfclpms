@@ -2069,6 +2069,10 @@ export type Database = {
           pms_policy_content: string | null
           pms_policy_url: string | null
           pms_policy_visible_roles: Json | null
+          team_queue_allow_user_override: boolean
+          team_queue_allowed_scopes: Json | null
+          team_queue_default_scope: string | null
+          team_queue_role_overrides: Json | null
           updated_at: string
           view_mode_strip_color: string
         }
@@ -2093,6 +2097,10 @@ export type Database = {
           pms_policy_content?: string | null
           pms_policy_url?: string | null
           pms_policy_visible_roles?: Json | null
+          team_queue_allow_user_override?: boolean
+          team_queue_allowed_scopes?: Json | null
+          team_queue_default_scope?: string | null
+          team_queue_role_overrides?: Json | null
           updated_at?: string
           view_mode_strip_color?: string
         }
@@ -2117,6 +2125,10 @@ export type Database = {
           pms_policy_content?: string | null
           pms_policy_url?: string | null
           pms_policy_visible_roles?: Json | null
+          team_queue_allow_user_override?: boolean
+          team_queue_allowed_scopes?: Json | null
+          team_queue_default_scope?: string | null
+          team_queue_role_overrides?: Json | null
           updated_at?: string
           view_mode_strip_color?: string
         }
@@ -9259,6 +9271,7 @@ export type Database = {
           portal_access: boolean
           previous_employment_status: string | null
           reporting_manager_id: string | null
+          team_queue_default_scope: string | null
           updated_at: string
         }
         Insert: {
@@ -9293,6 +9306,7 @@ export type Database = {
           portal_access?: boolean
           previous_employment_status?: string | null
           reporting_manager_id?: string | null
+          team_queue_default_scope?: string | null
           updated_at?: string
         }
         Update: {
@@ -9327,6 +9341,7 @@ export type Database = {
           portal_access?: boolean
           previous_employment_status?: string | null
           reporting_manager_id?: string | null
+          team_queue_default_scope?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -14003,6 +14018,7 @@ export type Database = {
           portal_access: boolean
           previous_employment_status: string | null
           reporting_manager_id: string | null
+          team_queue_default_scope: string | null
           updated_at: string
         }
         SetofOptions: {
@@ -16406,6 +16422,10 @@ export type Database = {
       }
       set_hr_head: {
         Args: { p_company_id: string; p_reason: string; p_user_id: string }
+        Returns: undefined
+      }
+      set_my_team_queue_default_scope: {
+        Args: { p_scope: string }
         Returns: undefined
       }
       set_safety_setting: {
