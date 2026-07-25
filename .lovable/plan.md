@@ -1,103 +1,60 @@
-# Tablet-Friendly Monthly KRA/KPI Dashboard — Plan
+# Plan — Non-destructive bulk system-score update (incl. completed reviews)
 
-Scope: Employee (`Dashboard` / `UnifiedScorecard`), Reviewer (`EmployeeSelectorGrid` + `EmployeeScorecard`), Auditor (`AuditScorecard`), HR PMS / Skip-Level / Management (`ManagementScorecard`). Frontend-only. Desktop (≥1280) layout untouched.
+## Goal
+Let Admin re-upload the "Annual Production Target vs Actual" (and any other system-KPI column) from the bulk sheet and have new values **apply even when the review status is `completed`/`finalized`**, provided the new score is **≥ the currently locked score** (no downgrades). Rows where the incoming value equals the stored value are silent no-ops.
 
-## 1. Risk & Impact Report
+## Current behavior (verified)
+- `SystemScoresUploadDialog` and the Bulk Data Upload dry-run (screenshot) skip any instance whose `Locked stage: completed` — hence the 1597 skips in the preview.
+- `system_scores` is a JSONB on `annual_review_instances`; final rating is computed from it + criteria on advancement/finalize.
+- POLICY §88 (Submission Snapshot Immutability) forbids silent mutation of approved history — so we need an **explicit, audit-logged, admin-only** override path with a no-downgrade guard.
 
-- **Data impact:** None. Read paths, RPCs, and mutations remain unchanged.
-- **Workflow impact:** None. Same actions, same permissions, same guardrails.
-- **UI/UX impact:** New adaptive tier only within `md` (768) → `xl` (1280). Below `md` still uses existing mobile cards; ≥`xl` still uses the current desktop tables.
-- **Regression risk:** Medium — touches four large scorecards. Mitigated by (a) gating every change behind a new `useIsTablet()` hook so desktop CSS/DOM is byte-identical when the viewport is ≥1280, (b) reusing existing card sub-components (`MobileKpiCard`, `KpiDetailsTable`, `RatingSelector`, etc.) rather than forking logic, (c) snapshot + interaction tests for tap targets and layout contracts.
-- **Scalability:** Server payload unchanged. Client render is lighter on tablet (card list + windowed rows instead of 12-column table).
+## Approach
+Two-track, minimal change:
 
-## 2. Root Problem (why tablets feel broken today)
+### 1. Backend RPC — `admin_apply_system_scores_bulk(cycle_id, rows[], allow_completed, no_downgrade)`
+SECURITY DEFINER, admin-only. Per row:
+1. Load instance + template.
+2. Diff each incoming `system_scores[key]` vs stored.
+   - equal → skip (report `unchanged`)
+   - new < old and `no_downgrade=true` → skip (report `downgrade_blocked`)
+   - new > old OR old is null → stage change
+3. If `status IN ('completed','finalized')` and `allow_completed=true`:
+   - Update `system_scores` in place.
+   - Recompute `total_score`, `final_rating`, `criteria_weighted_score` using the existing scoring helper (same one used at finalize).
+   - **Only persist the recomputed rating if it is ≥ the stored `final_rating`** (guard against downgrades from cross-effects).
+   - Write a row per instance to `annual_review_access_audit` (action `system_scores.admin_override`) with before/after JSON.
+   - Leave `finalized_at`/`finalized_by` intact so the review stays "Completed".
+4. Non-completed rows: apply as today (write to `system_scores`, no recompute of final rating).
+5. Return `{ applied, unchanged, downgrade_blocked, upgraded_completed, errors }` per row for the UI summary.
 
-`useIsMobile()` in `src/hooks/use-mobile.tsx` flips at **768 px**. Everything ≥ 768 renders the desktop scorecard — a 10–14 column table with 28-px score chips, 32-px icon buttons, and a dense filter bar. On a portrait iPad (820) or landscape (1180) this forces horizontal scroll, sub-44-pt taps, and a toolbar that eats ~35 % of viewport height. There is no middle tier.
+### 2. UI — extend the existing Bulk Data Upload dry-run
+In the dry-run preview (the dialog in the screenshot):
+- Replace the blanket `Locked stage: completed → skip` with a three-way classification for completed rows:
+  - `unchanged` (grey) — value equals stored
+  - `upgrade` (blue) — new value would raise the score; eligible to apply
+  - `downgrade_blocked` (amber) — new value is lower; will not be applied
+- Add an Admin-only checkbox **"Apply to completed reviews (upgrades only)"** — default OFF. When ON, completed `upgrade` rows are included in the commit count and the button reads e.g. `Commit 1 + 42 completed upgrades`.
+- Post-commit summary lists per-employee before → after for every changed cell, grouped by (Applied / Upgraded completed / Downgrade blocked / Unchanged / Errors), with CSV export.
 
-## 3. Design commitments
+No changes to non-admin flows, no changes to Self/Manager/Auditor pipelines, no schema changes beyond the audit rows already supported by `annual_review_access_audit`.
 
-Three breakpoints, one behavior each:
+## Risk & impact
+- **Data**: only `system_scores`, `total_score`, `final_rating`, `criteria_weighted_score` on targeted instances; every write audited; strict no-downgrade guard.
+- **Policy**: preserves §88 (change is explicit + audited + admin-only + monotonic upward).
+- **Workflow**: completed reviews stay completed; employees are not re-notified unless the score actually changes (optional toast/email — off by default; happy to wire in if you want).
+- **Regression**: existing dry-run behavior for non-completed rows is byte-identical; new branch is gated by the new checkbox.
+- **Rollback**: audit row stores the previous JSON; a one-click "revert this override" action can be added later using that snapshot.
 
-```text
-< 768 px         Phone     → existing MobileKpiCard / MobileSelfReviewCard
-768 – 1279 px    Tablet    → NEW compact/list layout (this plan)
-≥ 1280 px        Desktop   → existing table (unchanged)
-```
+## Deliverables
+1. Migration: `admin_apply_system_scores_bulk` RPC + audit action enum value.
+2. `SystemScoresUploadDialog` and Bulk Data Upload dialog: new classification + admin checkbox + post-commit summary.
+3. Tests: RPC (upgrade / equal / downgrade-blocked / non-admin denied / completed-flag off), UI classification unit tests.
+4. ADR-171 + POLICY §AR-SYSTEM-SCORE-ADMIN-UPGRADE (monotonic, admin-only, audited).
+5. DOCUMENTATION.md + Version History bump.
 
-Tablet UX principles applied across all four scorecards:
+## Open questions before I build
+1. **Scope of "no negative impact"**: block any row whose new value would decrease the KPI's contribution, or only block if the recomputed **final rating** would drop? (Cell-level is safer; final-level allows benign offsetting swaps.) Default in this plan: **cell-level**.
+2. **Notify employees** when a completed review's score is upgraded? Default: **no email**, only in-app audit trail visible to Admin/HR.
+3. **All system KPI columns** in the sheet, or **only Annual Production Target vs Actual** for this run? Default: **all columns**, since the same guard makes it safe.
 
-1. **No horizontal scroll.** Replace multi-column tables with a **2-column responsive grid of `KpiRowCard`s** (portrait: 1 col; landscape: 2 col). Each card shows KPI name, target, current value, weightage badge, score chip, and one-tap action.
-2. **44×44 pt minimum tap targets.** All score chips, rating pills, evidence buttons, and filter chips forced to `min-h-11 min-w-11`. Segmented controls replace narrow dropdowns for R1–R5.
-3. **Collapsible toolbar.** `ReviewFilters` collapses to a single "Filters (n)" button + inline period selector on tablet; opens as a `Sheet` from the right. Frees ~180 px vertical.
-4. **Sticky action bar.** Bulk actions (Save, Send Back, Approve) move to a bottom sticky bar (adapting `SafetyStickyActionBar` pattern) so reviewers never scroll to find them.
-5. **Two-pane split (landscape only).** In `EmployeeSelectorGrid` landscape, left rail (320 px) lists employees, right pane loads `EmployeeScorecard` — replaces today's tap-back-tap-forward navigation.
-6. **Evidence flow.** Full-screen `Sheet` (not `Dialog`) for evidence upload/preview on tablet; native file picker uses `capture="environment"` hint so field auditors can shoot directly.
-7. **Score entry.** Numeric inputs get `inputMode="decimal"`, larger 48-pt height, and a segmented R1–R5 selector below the input for one-tap rating.
-
-## 4. Deliverables
-
-### 4.1 New primitives (`src/components/review/tablet/`)
-
-- `useIsTablet.ts` — mirrors `useIsMobile` shape; true when `768 ≤ vw < 1280`.
-- `TabletKpiRowCard.tsx` — compact card: header row (KPI name + category dot + weightage), metric row (target / current / score), action row (44-pt buttons). Accepts a `variant` prop (`self` | `reviewer` | `auditor` | `management`) so all four scorecards reuse it.
-- `TabletScoreEntry.tsx` — 48-pt numeric input + R1–R5 segmented control + evidence button; wraps existing `ScoreSelector` / `RatingSelector` logic.
-- `TabletFilterSheet.tsx` — wraps existing `ReviewFilters` in a right-side `Sheet`; keeps counted "Filters" trigger button in the toolbar.
-- `TabletStickyActionBar.tsx` — port of `SafetyStickyActionBar` with a tablet variant (`forceVisible` on `md`–`lg`).
-- `TabletSplitPane.tsx` — landscape-only two-pane layout used by `EmployeeSelectorGrid` and `AuditScorecard`.
-
-### 4.2 Scorecard integrations (behind `useIsTablet` guard)
-
-Each of the four scorecards gets a small conditional branch — desktop DOM stays untouched:
-
-```tsx
-if (isMobile) return <MobileKpiCard … />;      // unchanged
-if (isTablet) return <TabletKpiRowCard … />;   // NEW branch
-// desktop table unchanged
-```
-
-Files touched:
-
-1. `src/components/review/UnifiedScorecard.tsx` — swap KPI list rendering, toolbar, and action buttons.
-2. `src/components/review/EmployeeSelectorGrid.tsx` — enable `TabletSplitPane` in landscape; card grid in portrait.
-3. `src/components/review/EmployeeScorecard.tsx`, `AuditScorecard.tsx`, `ManagementScorecard.tsx` — same conditional pattern; reuse `TabletKpiRowCard` with role-appropriate variant.
-4. `src/components/review/ReviewFilters.tsx` — expose a `compact` prop consumed by `TabletFilterSheet`.
-5. `src/pages/Dashboard.tsx` — pad bottom for sticky bar (`pb-24 md:pb-28 xl:pb-6`), collapse KPI summary cards into a horizontal scroll strip on tablet.
-
-### 4.3 Design tokens (no new colors)
-
-Reuse existing semantic tokens (`--primary`, `--muted-foreground`, `--destructive`, `--accent`). Only adds spacing/size utility classes; no new CSS variables, no palette changes.
-
-## 5. Verification
-
-- **Regression tests (new):**
-  - `src/test/tabletBreakpoint.test.tsx` — asserts `useIsTablet` boundaries (767, 768, 1279, 1280).
-  - `src/test/tabletKpiRowCardTapTargets.test.tsx` — every interactive element ≥ 44 pt.
-  - `src/test/tabletScorecardConditional.test.tsx` — snapshots that desktop (≥1280) branch remains byte-identical for all four scorecards.
-  - `src/test/tabletFilterSheet.test.tsx` — filter count badge, sheet open/close, portrait vs landscape.
-- **Manual matrix (documented in ADR):** iPad Mini (768×1024), iPad Air (820×1180), iPad Pro 11" (834×1194 & 1194×834), Surface Go (912×1368). Both orientations. Verify no horizontal scroll, sticky bar visible, evidence upload works.
-- **Playwright smoke:** viewport 820×1180 and 1180×820 against `/dashboard`, `/review/team`, `/review/audit`, `/review/management` — screenshot each and confirm the tablet layout renders.
-
-## 6. Documentation & policy
-
-- New `docs/adr/ADR-170.md` — "Tablet-Friendly Monthly KPI Dashboard": records breakpoint contract, primitive inventory, and the four-scorecard integration map.
-- `DOCUMENTATION.md` — append v2.67.0 entry linking ADR-170 and listing the new primitives.
-- `POLICY.md` — new **§UX-TABLET-BREAKPOINT-CONTRACT**: 768–1279 uses tablet primitives; ≥1280 stays on desktop tables; all interactive elements ≥ 44 pt.
-- `mem://design/responsive-ui-strategy` — update to add the tablet tier alongside existing mobile/desktop rules.
-
-## 7. Rollout
-
-Ship in three additive PRs so each is independently revertable:
-
-1. **Primitives + `useIsTablet`** (no scorecard changes) — safe to merge, ships dormant code.
-2. **Employee + Reviewer scorecards** (`Dashboard`, `EmployeeSelectorGrid`, `EmployeeScorecard`) — highest-traffic surface first.
-3. **Auditor + Management scorecards** (`AuditScorecard`, `ManagementScorecard`) — smaller audience, same primitives.
-
-Each PR is behind the `useIsTablet` conditional, so rollback = revert the PR; no data migration.
-
-## 8. Out of scope (explicit)
-
-- No RPC or schema changes (existing hooks already paginate).
-- No new server-side filters or aggregates.
-- No changes to score computation, workflow transitions, RLS, notifications, evidence storage, or scoring rules.
-- Desktop layout (≥1280 px) is not modified.
-- Annual review, Safety, Incentive dashboards — not in this plan.
+If those defaults are fine, say "go" and I'll build it; otherwise tell me which to flip.
