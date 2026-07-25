@@ -185,6 +185,20 @@ export function ChangeWorkflowDialog({
               Status: <span className="font-medium text-foreground">{status}</span>
             </span>
           </div>
+          {status === 'completed' && (
+            <div className="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-800 dark:text-amber-200">
+              <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+              <div className="space-y-1">
+                <div className="font-medium">This review is finalized (Completed).</div>
+                <div>
+                  Saving will re-open it in <strong>supersede</strong> mode: locked responses for any
+                  removed or reassigned stage will be archived, the final rating and totals will be
+                  cleared, and the review will move back to the appropriate pending stage. The
+                  employee will be notified.
+                </div>
+              </div>
+            </div>
+          )}
           <div className="rounded-md border p-3 space-y-2">
             <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Stages</div>
             {TOGGLABLE.map((s) => (
