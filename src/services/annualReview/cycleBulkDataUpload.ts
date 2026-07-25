@@ -365,6 +365,16 @@ export interface DryRunRow {
   verdict: RowVerdict;
   reason?: string;
   /**
+   * Set when the row targets a stage-locked (typically `completed`) instance
+   * and the admin explicitly opted into the "Apply to completed reviews
+   * (upgrades only)" path. See POLICY §AR-SYSTEM-SCORE-ADMIN-UPGRADE / ADR-171.
+   * commitDryRun routes these rows through the SECURITY DEFINER RPC
+   * `admin_apply_system_scores_upgrade` instead of a direct table update.
+   */
+  mode?: 'safe' | 'admin_upgrade';
+  /** Original locked stage (e.g. `completed`) — for the UI badge. */
+  lockedStage?: string;
+  /**
    * Per-cell warnings (v2.66.95): columns that were skipped for this row
    * (unlinked KPI, non-numeric value, etc.) while the rest of the row still
    * applies. Row-fatal issues stay in `reason`.
