@@ -458,7 +458,7 @@ function ProgressTab() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'pending_self' | 'pending_manager' | 'pending_skip' | 'pending_bu' | 'pending_hr' | 'completed' | 'not_started'>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'pending_self' | 'pending_manager' | 'pending_skip' | 'pending_dept' | 'pending_bu' | 'pending_management' | 'pending_hr' | 'completed' | 'not_started' | 'excluded'>('all');
   const [customWeightsOnly, setCustomWeightsOnly] = useState(false);
   const [departmentId, setDepartmentId] = useState<string>('');
   const [businessUnitId, setBusinessUnitId] = useState<string>('');
@@ -711,9 +711,12 @@ function ProgressTab() {
               <SelectItem value="pending_self">Pending self</SelectItem>
               <SelectItem value="pending_manager">Pending manager</SelectItem>
               <SelectItem value="pending_skip">Pending skip</SelectItem>
+              <SelectItem value="pending_dept">Pending dept head</SelectItem>
               <SelectItem value="pending_bu">Pending BU</SelectItem>
+              <SelectItem value="pending_management">Pending management</SelectItem>
               <SelectItem value="pending_hr">Pending HR</SelectItem>
               <SelectItem value="completed">Completed</SelectItem>
+              <SelectItem value="excluded">Excluded</SelectItem>
             </SelectContent>
           </Select>
           <Select
