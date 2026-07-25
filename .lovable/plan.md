@@ -1,77 +1,69 @@
-## Goal
 
-Make **Edit workflow & reviewers** accessible on the Annual Review Admin grid even when `overall_status = 'completed'`, so admins/HR can add a Management stage or swap a reviewer and re-run the review — without breaking any existing (pre-action / in-flight) behaviour.
+# Remove subtree-only rows from Team Annual Review "My Queue"
 
-## Current state (verified)
+## Root cause (verified in DB)
 
-- `src/pages/annual-review/AnnualReviewAdmin.tsx` (row menu)
-  - `canChange = status !== 'completed' && status !== 'excluded'`
-  - `isPastSelf = canChange && status not in (not_started, pending_self)`
-  - **Edit workflow & reviewers** and **Customise weights** only render when `canChange && !isPastSelf` — so both are hidden the moment the review is finalized.
-- Server RPCs already support post-action edits via **supersede** mode (ADR-160):
-  - `annual_review_edit_workflow(...)` accepts `p_mode = 'supersede'`, requires reason ≥10 chars, and orchestrates `set_annual_review_enabled_stages` + `reassign_annual_review_reviewer`.
-  - `set_annual_review_enabled_stages(..., 'supersede')` archives locked responses for removed stages and re-computes `overall_status` via `annual_review_first_pending_status` — but does **not** check for `completed` and does **not** auto-reset scoring fields.
-  - `reassign_annual_review_reviewer(..., 'supersede')` archives the locked response for the reassigned role and sets `overall_status := 'pending_<role>'` — again no `completed`-specific handling.
-- `ChangeWorkflowDialog.tsx` already renders full stage toggles + reviewer pickers + supersede checkbox + `REPLAN` gate.
+Piyush Bansal is `100076`. Both flagged rows appear because Umesh Kumar Singh (`100600`) reports to Piyush, and Saroj Devi (`101786`) / Vikash Kumar Anand (`101832`) report to Umesh — putting them inside Piyush's reporting subtree.
 
-So the block is purely the row-menu gate; the dialog and RPCs work if we let the menu open on `completed`. But we must also make sure a re-opened Completed instance behaves like a fresh in-flight review (correct status, cleared final rating, notifications, audit).
+`get_my_annual_review_queue` (SECURITY DEFINER RPC, scope=`any`) currently returns any row where:
 
-## Scope
+```
+is_named   -- user is on a reviewer slot listed in enabled_stages
+OR is_subtree -- employee is anywhere in the user's reporting subtree
+```
 
-Frontend row-menu gate + a small, additive DB hardening path for the Completed → re-opened transition. No changes to already-working pre-action or in-flight flows.
+For both 101786 and 101832:
+- `manager_id / skip_id / dept_head_id / bu_head_id / hr_id / management_id` — none equal Piyush.
+- `enabled_stages` = `[self, bu_head]` / `[self, dept_head, bu_head]` — Piyush is not a stage on either workflow.
+- `is_subtree` = true.
 
-### 1. Row menu — open on Completed (frontend)
+The RPC therefore adds them to Piyush's queue with `visibility_only: true` (rendered as "View only" — no `You: <role>` badge, no action). That is exactly the two cards the screenshot circles.
 
-`src/pages/annual-review/AnnualReviewAdmin.tsx`
-- Extend `canChange` to also allow `overall_status === 'completed'` (still exclude `excluded`).
-- Introduce `isCompleted = status === 'completed'`.
-- Show **Edit workflow & reviewers** whenever `canChange` (drop the `!isPastSelf` guard for this specific item; keep it for **Change template** / **Customise weights** as-is).
-- When `isCompleted`, label the item **"Edit workflow & reviewers (re-open)"** and give it the destructive style, so admins understand it re-opens a finalized review.
+The "Hierarchy — Completed" tab already exists to give managers downline visibility into completed reviews, so "My Queue" does not need to double as a subtree viewer.
 
-### 2. Dialog UX for the Completed case
+## Fix
 
-`src/components/annual-review/ChangeWorkflowDialog.tsx`
-- Treat `status === 'completed'` as `isPostAction = true` → `needsSupersede` is already forced true whenever the user changes anything, so the existing `REPLAN` + 10-char-reason gate applies unchanged.
-- Add an amber banner at the top when `status === 'completed'`:
-  > "This review is finalized. Saving will re-open it in **supersede** mode: locked responses for any removed/reassigned stage will be archived, the final rating will be cleared, and the review will move back to the appropriate pending stage."
-- `computeWorkflowEditImpact` already summarizes archived/redirected stages; keep the existing impact list visible so admins see exactly what will be undone.
-- No behavioural change for non-Completed instances.
+Restrict "My Queue" (scope=`any`) to rows where the viewer is a named reviewer. Subtree visibility stays in the "Hierarchy — Completed" tab and in the explicit `subtree` scope (unchanged).
 
-### 3. Server hardening (additive, backwards-compatible)
+### DB — new migration
 
-New migration touching only the supersede branches — no signature changes.
+Redefine `public.get_my_annual_review_queue` with a single change: the `any` branch drops `OR v.is_subtree`.
 
-- `set_annual_review_enabled_stages(_, _, _, 'supersede')` and `reassign_annual_review_reviewer(_, _, _, _, 'supersede')`:
-  - When the current `overall_status = 'completed'`, additionally:
-    - Set `final_rating = NULL`, `total_score = NULL`, `criteria_weighted_score = NULL`, `finalized_at = NULL` on the instance (fields already used elsewhere — no schema change).
-    - Log an extra `annual_review_access_audit` row with action `workflow_reopened_from_completed`, metadata: `{prior_status:'completed', new_status, reason, mode}`.
-    - Enqueue `annual_review.workflow_reopened` email to the employee (reuses `_ar_enqueue_email`).
-  - No change for non-completed transitions.
-- Keep the existing `has_admin_workflow_override = true` flag write so downstream resolvers (ADR-158 etc.) do not re-derive/strip stages against the admin edit.
-- No RLS changes required: the RPCs are `SECURITY DEFINER` and already restricted to `admin`/`hr_pms`.
+```sql
+WHEN 'subtree' THEN v.is_subtree
+ELSE v.is_named            -- was: (v.is_named OR v.is_subtree)
+```
 
-### 4. Documentation / policy sync
+Everything else (auth check, status/scope validation, search, pagination, `visibility_only` flag, seniority ordering) stays identical. `subtree` scope is preserved so any current caller that opts in still works.
 
-- **POLICY.md** — extend §ADR-160 with an **ADR-160c — Re-open Completed via Edit workflow & reviewers**:
-  > Admins/HR may edit workflow or reviewers on a Completed annual review. This is supersede-only, requires a ≥10-char reason and `REPLAN` confirmation, archives affected locked responses, clears the finalized rating/score fields, retargets `overall_status`, sets `has_admin_workflow_override`, audit-logs `workflow_reopened_from_completed`, and notifies the employee.
-- **DOCUMENTATION.md** — Annual Review Admin section: note that the row action is available on Completed rows and describe the re-open semantics.
+### Frontend
 
-### 5. Tests / mocks
+No functional change required. Optional cleanup in `src/pages/annual-review/TeamAnnualReview.tsx`:
+- `resolveMyRole` no longer needs its stage-membership defence for visibility_only rows (rows returned will always have `is_named=true`), but leaving it in is safe.
+- The "View only" chip path in the queue card can stay — used only for edge cases where a reviewer slot was reassigned mid-flight.
 
-- Unit: extend `ChangeWorkflowDialog` render test to assert:
-  - On `overall_status = 'completed'`, the dialog opens, the re-open banner renders, `needsSupersede` is true, Save is blocked until `REPLAN` + ≥10-char reason.
-- Unit for `computeWorkflowEditImpact`: add a `completed` fixture confirming the impact list flags "final rating will be cleared".
-- SQL smoke (via existing repo test harness): supersede-edit on a completed instance clears `final_rating`, sets `overall_status` to the correct pending stage, archives locked responses for the removed/reassigned role, and inserts the `workflow_reopened_from_completed` audit row.
+No change to `HierarchyCompletedList` / `get_hierarchy_completed_reviews` — that remains the canonical downline visibility surface.
 
-## Risk & Impact
+## Verification
 
-- **Data**: Additive — only the supersede branch clears finalized fields, and only when the caller supplies a supersede reason + `REPLAN` confirmation. Old responses go to the existing archive path (no destructive delete).
-- **Workflow**: Existing pre-action / in-flight edit paths untouched. Completed → re-opened uses the same resolver that already handles fresh workflows.
-- **UI/UX**: One new menu entry variant + one amber banner; no layout changes.
-- **Regression**: Low. The dialog already exercises supersede for other post-action statuses (e.g. `pending_bu`, `pending_hr`); Completed just becomes another supersede-required status.
-- **Rollback**: Frontend revert restores the old gate; DB migration is idempotent `CREATE OR REPLACE` and can be reverted by re-issuing the prior function bodies.
+Run in the same migration after the CREATE FUNCTION, as a sanity SELECT (not asserted):
 
-## Non-goals
+- `get_my_annual_review_queue(active_cycle, 1, 100, null, 'all', 'any')` impersonated for Piyush (`100076`) must NOT contain 101786 or 101832.
+- Same call for a user who IS a named reviewer on those instances must still return them.
+- `scope='subtree'` for Piyush must still return them (contract preserved).
 
-- No change to Change template / Customise weights gating.
-- No auto-recompute of scores on re-open — the re-opened stage owner re-submits, and the standard advancement path recomputes totals on next completion.
+Add regression test `src/test/annualReview/queueScopeAnyExcludesSubtreeVisibilityOnly.test.ts` locking:
+1. The RPC's `any` branch uses `v.is_named` only.
+2. The `subtree` branch still includes `v.is_subtree` rows.
+
+## Rollback
+
+Single-file DB migration; rollback = re-issue the previous function body (kept in the migration comment header). No data mutation, no UI-breaking API change.
+
+## Risk & impact
+
+- Data impact: none — read-only RPC.
+- Workflow impact: none — no reviewer/stage rewiring.
+- UI impact: managers stop seeing downline "View only" completed rows in "My Queue"; they still see them under "Hierarchy — Completed".
+- Regression risk: low. Subtree-scope callers unaffected. Named reviewers unaffected.
+- Scalability: strictly reduces the row count returned per user; positive impact.
