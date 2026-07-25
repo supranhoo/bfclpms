@@ -2,6 +2,8 @@
 - Every Annual Review role-to-status conversion must use the declared `annual_review_status` values: `self → pending_self`, `manager → pending_manager`, `skip_manager → pending_skip`, `dept_head → pending_dept`, `bu_head → pending_bu`, `hr → pending_hr`, and `management → pending_management`.
 - Derived forms such as `pending_dept_head` and `pending_bu_head` are forbidden in RPCs, triggers, services, filters, and migrations.
 - Completed-review supersede operations must remain transactional: an invalid transition must not partially archive responses, replace reviewers, clear scores, or alter the instance status.
+- A completed-review supersede reset may write only columns verified against the live `annual_review_instances` schema. It must clear `total_score`, `final_rating`, `criteria_weighted_score`, `finalized_at`, and `finalized_by`; `weighted_final_score` and `completed_at` are forbidden because they are not instance columns.
+- Locked responses for stages retained in the new workflow must remain preserved; only responses belonging to removed stages may be archived by the stage-edit operation.
 - Any migration replacing workflow RPCs must regression-test the full mapping rather than only the role changed in that migration.
 
 ### §AR-PROTECTED-AUTH-RLS — Annual Review policies must not directly query protected auth tables (ADR-163, v2.66.163, 2026-07-24)
