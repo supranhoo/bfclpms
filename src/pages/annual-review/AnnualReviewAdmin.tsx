@@ -1110,7 +1110,7 @@ function ProgressTab() {
                             {isPastSelf ? 'Change template (reset self-review)' : 'Change template'}
                           </DropdownMenuItem>
                         )}
-                        {canChange && !isPastSelf && (
+                        {canEditWorkflowAndReviewers(i.overall_status) && (
                           <DropdownMenuItem
                             onClick={() => setChangeWfFor(i)}
                             className={isCompleted ? 'text-destructive focus:text-destructive' : undefined}
