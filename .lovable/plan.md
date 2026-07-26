@@ -1,49 +1,47 @@
-## Confirmed issue (verified, not assumed)
+## Umesh is right — and my previous diagnosis was partly wrong
 
-Employee: **Umesh Kumar Singh (100600)**, instance `89ca37ec-fcf2-42c4-857a-f8e349a21b78`, cycle `b82a935f…`.
+Verified from the database just now:
 
-Verified state from the database:
-- `overall_status = 'pending_self'`, `enabled_stages = ["self"]`, all reviewer ids (`manager_id`, `dept_head_id`, `bu_head_id`, `hr_id`, `management_id`) NULL.
-- His `self` response **exists, is submitted and locked** (2026-07-23 12:18), but with `criteria_scores = {}` and `weighted_score = 0.00`.
-- Audit trail 2026-07-24: two `management_stage.reverted*` entries (ADR-152 cleanup) stripped `management` from the chain and pushed status backwards `pending_bu → pending_self`.
+- His template `a6e88cd5…` has **`criteria: []`** — zero scoreable criteria. It has **11 narrative self-review fields** and **one system score** (`carry_kra`, weight 100, Sep–Jun aggregation).
+- Across **all 143 self responses** on this template, **0 have any `criteria_scores`** and 140 are locked. Empty `criteria_scores` is *normal* here, not data loss.
+- His response `7f894655…` holds all 11 narrative answers (3,015 chars), intact, and was submitted 2026-07-23 12:18.
 
-Result: the self stage is locked *and* current, and there is no downstream stage — the form renders read-only and the review can never advance. This is a single-instance data-repair case, not a systemic trigger defect.
+So there was never any missing self scoring, and nothing was wiped. `weighted_score = 0.00` is simply because the self stage has no criteria — his score comes entirely from the `carry_kra` system score, which is currently `{}` (never hydrated).
 
-Resolved requirements from you:
-- Correct chain = **Self → BU Head (Piyush Bansal, 100076)** — his actual reporting manager, himself a BU Head.
-- He should be allowed to **re-do his self scoring** before it moves forward.
+**What actually needs correcting is my own repair from the last turn**: I unlocked his response and cleared `submitted_at` on the assumption he had to rescore. That was unnecessary and it un-did his real submission. He should be restored, not asked to redo anything.
 
 ## Fix
 
-1. **Pre-flight re-verify** (read-only): re-confirm the instance is still `pending_self` / `["self"]` and that only one `self` response row exists. Abort if anything changed since this check.
+1. **Pre-flight re-verify** (read-only): confirm the instance is still `pending_self` with `enabled_stages = ["self","bu_head"]`, `bu_head_id` = Piyush Bansal, and that the response is still unlocked with all 11 narrative answers present. Abort if he has already re-submitted himself in the meantime (in that case nothing to restore — just advance).
 
-2. **Repair the instance** (data update, via the insert tool — no schema change):
-   - `enabled_stages = ["self","bu_head"]`
-   - `bu_head_id = <Piyush Bansal, 100076>`
-   - `overall_status = 'pending_self'` (unchanged — he rescores first)
-   - clear `total_score` / `final_rating` so the score recomputes on advance
-   - `updated_at = now()`
+2. **Restore the original submission** (data update, no schema change) on response `7f894655…`:
+   - `submitted_at = '2026-07-23 12:18:14.510111+00'` (his original stamp, from audit row 357's `before` block)
+   - `is_locked = true`
+   - `criteria_scores` and narrative answers left exactly as they are
 
-3. **Unlock his self response** so he can rescore:
-   - `annual_review_responses` row `7f894655…`: `is_locked = false`, `submitted_at = NULL`.
-   - Qualitative narrative answers are preserved untouched; only the lock and submission stamp are cleared, so nothing he wrote is lost.
+3. **Advance the instance to the BU Head stage**: `overall_status = 'pending_bu'`, chain stays `["self","bu_head"]`, `bu_head_id` stays Piyush Bansal (100076).
 
-4. **Audit entry**: one row in `annual_review_access_audit` with `action = 'workflow_edited_post_action'` (an allowed value under the table's CHECK constraint), `target_user_id = Umesh`, `before`/`after` capturing chain + status + lock state, and a `reason` naming this repair and the ADR-152 revert that caused it. `actor_id = NULL` per the system-performer attribution rule.
+4. **Hydrate his system score** via the existing `hydrate_annual_review_system_scores(instance_id)` RPC so the `carry_kra` (Sep–Jun, excl. N/A) value populates and `total_score` / `final_rating` compute from the real KRA data instead of showing 0.
 
-5. **Verify after the write**: re-query the instance and response; confirm chain `["self","bu_head"]`, `bu_head_id` = Piyush, self response unlocked, and that `get_my_annual_review_queue` surfaces the item for Piyush once Umesh submits.
+5. **Audit + verify**: one `annual_review_access_audit` row (`workflow_edited_post_action`, `actor_id = NULL` per system-attribution rule) recording the restore and referencing audit row 357 as the action being corrected. Then re-query: response locked with the original stamp, status `pending_bu`, system score non-empty, and the item visible in `get_my_annual_review_queue` for Piyush Bansal.
 
 ## Risk & impact
 
-- **Data impact**: two single-row updates plus one audit insert. No schema change, no other instance touched. Historical narrative content preserved.
-- **Workflow impact**: Umesh regains an editable self form; on submit the review routes to Piyush Bansal instead of dead-ending.
-- **Regression risk**: low — scoped by instance id. One watch-point: the `enforce_bu_head_terminal_stage` / management-terminal triggers must not re-strip `bu_head` on write. The verify step in 5 catches that immediately; if a trigger reverts the chain, I stop and report rather than fighting the trigger with more writes.
-- **Rollback**: restore `enabled_stages = ["self"]`, `bu_head_id = NULL`, re-lock the response with `submitted_at = '2026-07-23 12:18:14.510111+00'`, and delete the audit row by id.
+- **Data impact**: two single-row updates + one audit insert + one hydrate call, all scoped to instance `89ca37ec…`. No other employee touched. No content rewritten — only lock/stamp/status restored.
+- **Workflow impact**: Umesh stops seeing a form he has no reason to refill; the review sits with Piyush Bansal as intended.
+- **Regression risk**: low. Watch-point: the BU/management terminal triggers must not re-strip `bu_head` on write — step 5 catches that; if a trigger reverts the chain I stop and report rather than fighting it.
+- **Rollback**: set `is_locked = false`, `submitted_at = NULL`, `overall_status = 'pending_self'`, delete the new audit row by id.
+
+## Correction to the policy I added last turn
+
+§AR-STAGE-REVERT-NO-DEAD-END stays (the dead-end it describes was real), but it needs one amendment: the remedy for a locked-and-terminal current stage is **attach the correct downstream reviewer first**, and unlock the response *only* when the template actually has self-scored criteria. For narrative-only templates, unlocking destroys a valid submission with nothing to regain. I'll add a companion note — §AR-TEMPLATE-NARRATIVE-ONLY — stating that empty `criteria_scores` is not evidence of an incomplete self review; the template's `sections->'criteria'` must be checked before any "rescore" repair.
 
 ## Docs
 
-- `DOCUMENTATION.md`: version-history entry recording the repair and the ADR-152 revert that caused it.
-- `POLICY.md`: one-line addition under the annual-review section — an ADR-152-style revert must never leave an instance with a locked terminal-and-current stage; if the revert strips the only downstream stage, the self response must be unlocked in the same operation.
+- `POLICY.md`: amend §AR-STAGE-REVERT-NO-DEAD-END and add §AR-TEMPLATE-NARRATIVE-ONLY.
+- `DOCUMENTATION.md`: v2.66.170 version-history entry recording the restore and the corrected diagnosis.
+- Unit test for a small pure helper (`templateHasSelfCriteria`) covering narrative-only vs criteria-bearing templates, so no future repair repeats this.
 
 ## Not doing
 
-No new trigger, no migration, no sweep across other instances. A scan of the cycle showed only this one instance in the locked-self / self-only-chain state, so a broad job would risk disturbing the 2 legitimately `excluded` and 1 legitimately `completed` self-only rows.
+No sweep across the other 142 instances on this template — they are all in the same (correct) empty-criteria state, and none are dead-ended. No trigger and no migration.
