@@ -110,3 +110,26 @@ UI → hooks (`useAnnualReview.ts`) → services (`annualReviewService.ts`) → 
 **Tests.** `src/test/workflowEditImpact.test.ts`, `src/test/editWorkflowRpc.contract.test.ts`.
 
 **Version.** `v2.66.160b`
+
+## ADR-160d — "Edit workflow & reviewers" hidden for mid-workflow instances (2026-07-26)
+
+**Problem.** Admins reported the row action was missing for "a few employees". It was not a permissions issue and not random: in `AnnualReviewAdmin.tsx` the menu item rendered under `canChange && !isPastSelf`. `isPastSelf` is the **template-change** gate (a template swap discards the self review) and is true for every status past `pending_self`. Because `isPastSelf` is itself derived from `canChangeTemplateOrWeights` (false when `completed`), the resulting matrix was inverted against policy:
+
+| Status | Action shown (before) |
+|---|---|
+| `not_started`, `pending_self` | yes |
+| `pending_manager` / `skip` / `dept` / `bu` / `management` / `hr` | **no** |
+| `completed` | yes (re-open) |
+| `excluded` | no |
+
+So the exact instances an admin needs to re-point mid-cycle — the ones sitting with a wrong or inactive reviewer — were the ones that hid the fix. This contradicted §AR-WORKFLOW-EDIT-ANYTIME (ADR-160/160b/160c), which the server RPCs already honoured.
+
+**5 Whys.** Action missing → gated on `!isPastSelf` → `isPastSelf` true for all post-self statuses → the template-reset gate was reused for an unrelated action when ADR-160c added the completed/re-open branch → no test asserted the visibility matrix, so the inversion (visible on `completed`, hidden mid-workflow) went unnoticed.
+
+**Solution (UI only).** Extracted the predicate to `src/lib/annualReview/workflowEditVisibility.ts` — `canEditWorkflowAndReviewers(status)` returns true for every status except `excluded` (and nullish). `AnnualReviewAdmin.tsx` now calls it directly. `isPastSelf` is untouched and still gates Change template / Customise weights. No schema, RLS, or RPC change; mode selection (`safe` vs `supersede`) remains a dialog/RPC concern.
+
+**CAPA.** Policy §AR-WORKFLOW-EDIT-ANYTIME gains an explicit menu-visibility clause naming the SSOT helper and forbidding reuse of the template-reset gate. Regression test `src/test/annualReview/workflowEditVisibility.test.ts` pins the full status matrix (12 cases).
+
+**Rollback.** Restore `canChange && !isPastSelf` at the call site; the helper and test can remain.
+
+**Version.** `v2.66.171`

@@ -9,6 +9,7 @@ import {
 import * as svc from '@/services/annualReview/annualReviewService';
 import { remapStageValueMapByDuplicates } from '@/lib/annualReview/displayStageForResponse';
 import { rollbackTerminalLabel } from '@/lib/annualReview/rollbackTerminalStage';
+import { canEditWorkflowAndReviewers } from '@/lib/annualReview/workflowEditVisibility';
 import { useAuth } from '@/contexts/AuthContext';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -1110,7 +1111,7 @@ function ProgressTab() {
                             {isPastSelf ? 'Change template (reset self-review)' : 'Change template'}
                           </DropdownMenuItem>
                         )}
-                        {canChange && !isPastSelf && (
+                        {canEditWorkflowAndReviewers(i.overall_status) && (
                           <DropdownMenuItem
                             onClick={() => setChangeWfFor(i)}
                             className={isCompleted ? 'text-destructive focus:text-destructive' : undefined}
