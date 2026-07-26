@@ -1,6 +1,6 @@
 # Performance Management System (PMS) - Documentation
 
-> **Last Updated:** 2026-07-25 · **Version:** v2.66.170
+> **Last Updated:** 2026-07-26 · **Version:** v2.66.170
 >
 > **Version:** 2.66.169.2 — **Completed-review REPLAN schema-truth repair (ADR-169a, 2026-07-25).** RCA: the first phantom-column correction removed `weighted_final_score` but retained `completed_at`, which also does not exist on `annual_review_instances`; the real completion fields are `finalized_at` and `finalized_by`. Consequently **Edit workflow & reviewers → REPLAN → Save** still rolled back atomically for completed reviews such as Kiran Devi (100457). CAPA: `set_annual_review_enabled_stages` now clears only verified fields (`total_score`, `final_rating`, `criteria_weighted_score`, `finalized_at`, `finalized_by`), preserves locked responses for retained stages, and retains canonical `pending_dept` / `pending_bu` mappings. Regression now resolves the final chronological function migration and rejects both phantom fields. No row changed during deployment; Kiran Devi remained completed with score 74.00 and rating Good until an authorized Save. Rollback restores the preceding function, though that reintroduces the failure. See POLICY §AR-CANONICAL-ROLE-STATUS-MAPPING.
 >
