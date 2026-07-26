@@ -1,47 +1,61 @@
-## Umesh is right — and my previous diagnosis was partly wrong
+## Root cause (verified in code)
 
-Verified from the database just now:
+`src/pages/annual-review/AnnualReviewAdmin.tsx` lines 1041-1048 and 1113:
 
-- His template `a6e88cd5…` has **`criteria: []`** — zero scoreable criteria. It has **11 narrative self-review fields** and **one system score** (`carry_kra`, weight 100, Sep–Jun aggregation).
-- Across **all 143 self responses** on this template, **0 have any `criteria_scores`** and 140 are locked. Empty `criteria_scores` is *normal* here, not data loss.
-- His response `7f894655…` holds all 11 narrative answers (3,015 chars), intact, and was submitted 2026-07-23 12:18.
+```
+const canChange = i.overall_status !== 'excluded';
+const isCompleted = i.overall_status === 'completed';
+const canChangeTemplateOrWeights = canChange && !isCompleted;
+const isPastSelf = canChangeTemplateOrWeights
+  && i.overall_status !== 'not_started'
+  && i.overall_status !== 'pending_self';
+...
+{canChange && !isPastSelf && ( <DropdownMenuItem …>Edit workflow & reviewers</DropdownMenuItem> )}
+```
 
-So there was never any missing self scoring, and nothing was wiped. `weighted_score = 0.00` is simply because the self stage has no criteria — his score comes entirely from the `carry_kra` system score, which is currently `{}` (never hydrated).
+`isPastSelf` is a **template-change** gate (a template swap resets the self review). It was reused for the workflow menu item, so:
 
-**What actually needs correcting is my own repair from the last turn**: I unlocked his response and cleared `submitted_at` on the assumption he had to rescore. That was unnecessary and it un-did his real submission. He should be restored, not asked to redo anything.
+| Status | Menu item shown? |
+|---|---|
+| not_started, pending_self | Yes |
+| pending_manager / skip / dept / bu / hr / **pending_management** | **No** — `isPastSelf` is true |
+| completed | Yes (`isPastSelf` false because `canChangeTemplateOrWeights` is false) |
+| excluded | No (correct) |
 
-## Fix
+So exactly the mid-workflow employees lose the option — the odd case where a *completed* review can be edited but an in-progress one cannot. This directly contradicts POLICY §AR-WORKFLOW-EDIT-ANYTIME (ADR-160/160b/160c), which states admin/HR PMS may edit stages and reviewers **at any status**; the RPC already enforces the real rules server-side.
 
-1. **Pre-flight re-verify** (read-only): confirm the instance is still `pending_self` with `enabled_stages = ["self","bu_head"]`, `bu_head_id` = Piyush Bansal, and that the response is still unlocked with all 11 narrative answers present. Abort if he has already re-submitted himself in the meantime (in that case nothing to restore — just advance).
+Not a permissions issue: the item's only gate is status; role gating happens on the page/RPC level.
 
-2. **Restore the original submission** (data update, no schema change) on response `7f894655…`:
-   - `submitted_at = '2026-07-23 12:18:14.510111+00'` (his original stamp, from audit row 357's `before` block)
-   - `is_locked = true`
-   - `criteria_scores` and narrative answers left exactly as they are
+## Fix (UI-only, one line)
 
-3. **Advance the instance to the BU Head stage**: `overall_status = 'pending_bu'`, chain stays `["self","bu_head"]`, `bu_head_id` stays Piyush Bansal (100076).
+Change the render condition at line 1113 to `{canChange && (` and keep the existing label logic, extended so the intent is readable:
 
-4. **Hydrate his system score** via the existing `hydrate_annual_review_system_scores(instance_id)` RPC so the `carry_kra` (Sep–Jun, excl. N/A) value populates and `total_score` / `final_rating` compute from the real KRA data instead of showing 0.
+- `not_started` / `pending_self` → "Edit workflow & reviewers"
+- any pending_* mid-stage → "Edit workflow & reviewers" (normal styling)
+- `completed` → "Edit workflow & reviewers (re-open)" in destructive styling (unchanged)
+- `excluded` → still hidden
 
-5. **Audit + verify**: one `annual_review_access_audit` row (`workflow_edited_post_action`, `actor_id = NULL` per system-attribution rule) recording the restore and referencing audit row 357 as the action being corrected. Then re-query: response locked with the original stamp, status `pending_bu`, system score non-empty, and the item visible in `get_my_annual_review_queue` for Piyush Bansal.
+No change to `isPastSelf`, which remains correct for the Change-template and Customise-weights items.
+
+## UI change description
+
+Location: Admin → Annual Review → Progress tab → row "…" actions menu.
+Visual: the "Edit workflow & reviewers" entry now appears for every non-excluded row instead of only pre-self and completed rows. No layout, no new controls, no responsiveness impact.
 
 ## Risk & impact
 
-- **Data impact**: two single-row updates + one audit insert + one hydrate call, all scoped to instance `89ca37ec…`. No other employee touched. No content rewritten — only lock/stamp/status restored.
-- **Workflow impact**: Umesh stops seeing a form he has no reason to refill; the review sits with Piyush Bansal as intended.
-- **Regression risk**: low. Watch-point: the BU/management terminal triggers must not re-strip `bu_head` on write — step 5 catches that; if a trigger reverts the chain I stop and report rather than fighting it.
-- **Rollback**: set `is_locked = false`, `submitted_at = NULL`, `overall_status = 'pending_self'`, delete the new audit row by id.
+- **Data impact**: none — no schema, no RLS, no migration. The `set_annual_review_enabled_stages` / reassignment RPCs already validate role, stage, and audit-log every edit.
+- **Workflow impact**: admins regain the documented ability to fix reviewer mapping mid-review, which is the current manual-escalation path.
+- **Regression risk**: low; the change is confined to one JSX condition. Change-template and weights gates untouched.
+- **Scalability**: none (per-row boolean).
+- **Rollback**: restore `canChange && !isPastSelf`.
 
-## Correction to the policy I added last turn
+## Verification
 
-§AR-STAGE-REVERT-NO-DEAD-END stays (the dead-end it describes was real), but it needs one amendment: the remedy for a locked-and-terminal current stage is **attach the correct downstream reviewer first**, and unlock the response *only* when the template actually has self-scored criteria. For narrative-only templates, unlocking destroys a valid submission with nothing to regain. I'll add a companion note — §AR-TEMPLATE-NARRATIVE-ONLY — stating that empty `criteria_scores` is not evidence of an incomplete self review; the template's `sections->'criteria'` must be checked before any "rescore" repair.
+1. Unit test `src/test/annualReview/workflowEditVisibility.test.ts` — extract the predicate as a tiny pure helper (`canEditWorkflowAndReviewers(status)`) in `src/lib/annualReview/` and assert: true for not_started, pending_self, pending_manager, pending_skip, pending_dept, pending_bu, pending_management, pending_hr, completed; false for excluded.
+2. Manual: open Progress, filter Stage = "Manager review pending", confirm the menu item appears and the dialog opens.
 
 ## Docs
 
-- `POLICY.md`: amend §AR-STAGE-REVERT-NO-DEAD-END and add §AR-TEMPLATE-NARRATIVE-ONLY.
-- `DOCUMENTATION.md`: v2.66.170 version-history entry recording the restore and the corrected diagnosis.
-- Unit test for a small pure helper (`templateHasSelfCriteria`) covering narrative-only vs criteria-bearing templates, so no future repair repeats this.
-
-## Not doing
-
-No sweep across the other 142 instances on this template — they are all in the same (correct) empty-criteria state, and none are dead-ended. No trigger and no migration.
+- `src/modules/annual-review/DOCUMENTATION.md`: version-history entry (ADR-160d) recording the regression and fix.
+- `src/modules/annual-review/POLICY.md`: clarify under §AR-WORKFLOW-EDIT-ANYTIME that the menu-item gate is `status !== 'excluded'` only, and must not reuse the template-reset gate.
