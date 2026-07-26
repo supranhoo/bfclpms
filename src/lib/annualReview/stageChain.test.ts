@@ -27,7 +27,9 @@ describe('nextStatus', () => {
     expect(nextStatus('pending_skip',    null)).toBe('pending_dept');
     expect(nextStatus('pending_dept',    null)).toBe('pending_bu');
     expect(nextStatus('pending_bu',      null)).toBe('pending_hr');
-    expect(nextStatus('pending_hr',      null)).toBe('completed');
+    // `management` is the canonical terminal stage (ADR-138).
+    expect(nextStatus('pending_hr',      null)).toBe('pending_management');
+    expect(nextStatus('pending_management', null)).toBe('completed');
   });
 
   it('skips disabled stages', () => {
@@ -70,7 +72,7 @@ describe('prevStatus', () => {
 
 describe('describeChain', () => {
   it('renders a human label', () => {
-    expect(describeChain(null)).toBe('Self → Manager → Skip → Dept → BU → HR');
+    expect(describeChain(null)).toBe('Self → Manager → Skip → Dept → BU → HR → Mgmt');
     expect(describeChain(['self', 'hr'])).toBe('Self → HR');
   });
 });
