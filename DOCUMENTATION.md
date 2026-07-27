@@ -7242,3 +7242,46 @@ chunked reads per tracker load (same cost profile as KPI Scorecard Detail).
 Rollback = revert the two page files and delete the service.
 
 **Policy.** See POLICY.md §RPT-PENDING-WITH-SSOT.
+
+## ADR-179 — KRA-derived stage ratings restored in grid + report (2026-07-27)
+
+**Symptom.** Employees on KRA-weighted templates (e.g. Ankit Choudhary,
+101785) showed "—" for every stage column (Self / Manager / Dept / BU / HR)
+in the Annual Review admin grid and in the Comprehensive report, while the
+Final score rendered normally (91.72, "Outstanding").
+
+**RCA (5-Why).**
+1. Why blank? The grid's KRA fallback (ADR-130) never fired.
+2. Why? It was gated on `ss[role] != null`, and the stage value was `null`.
+3. Why null? `fetchInstanceStageScores` (ADR-172) maps a submitted response
+   with an empty `criteria_scores` map to `null` so unscored stages can't show
+   a misleading `0.0`.
+4. Why does that hit KRA rows? KRA templates carry **zero criteria**, so every
+   response is legitimately empty — indistinguishable from a data gap in a
+   `number | null` map.
+5. Root cause. The transport type was too lossy to express both facts:
+   "submitted" and "scored" were collapsed into one nullable number.
+
+**CAPA.**
+- `src/lib/annualReview/kraStageDisplay.ts` — SSOT `resolveStageDisplayRating`
+  (+ `toStageNumberMap`), with `kraStageDisplay.test.ts` locking both ADR-172
+  ("unscored criteria stage stays blank") and ADR-130 ("KRA template shows the
+  KRA rating") so neither can regress the other again.
+- `fetchInstanceStageCells` added to `annualReviewService.ts` returning
+  `{ weighted_score, scored, submitted }`; `fetchInstanceStageScores` is now a
+  thin projection of it, so every existing numeric consumer is byte-identical.
+- `useInstanceStageCells` hook; `AnnualReviewAdmin` progress grid consumes
+  cells and renders the KRA-derived /5 with an explanatory tooltip.
+- `get_annual_review_comprehensive_report` gained `self_rating_5`,
+  `manager_rating_5`, `dept_head_rating_5`, `bu_head_rating_5`, `hr_rating_5`,
+  `management_rating_5` and `rating_source` ('criteria' | 'kra' | 'none').
+  Criteria ratings mirror `computeCriteriaRatingOutOf5` (weighted ÷ role-scoped
+  weight sum); KRA ratings are `kra_points ÷ kra_weight × 5`, clamped 0..5.
+- Comprehensive report table + Excel export now show the /5 ratings and the
+  stage rating source alongside the existing derivation columns (ADR-174/175).
+
+**Risk / rollback.** Display-only: no writes, no workflow or RLS change; the
+RPC is additive (new trailing columns). Rollback = restore the previous RPC
+definition and revert the four frontend files.
+
+**Policy.** See POLICY.md §AR-KRA-GRID-DISPLAY.

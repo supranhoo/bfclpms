@@ -11,6 +11,7 @@ import type {
   EvidenceItem,
 } from '@/types/annualReview';
 import { enabledChain } from '@/lib/annualReview/stageChain';
+import { toStageNumberMap, type StageScoreCell } from '@/lib/annualReview/kraStageDisplay';
 import { getHrHeadUserId } from '@/services/orgHeads/hrHeadResolver';
 import { bucketFromGradeCode } from './archetypeResolver';
 import {
@@ -832,7 +833,26 @@ export async function fetchAllInstancesForExport(args: {
 export async function fetchInstanceStageScores(
   instanceIds: string[],
 ): Promise<Record<string, Partial<Record<AnnualReviewerRole, number | null>>>> {
+  const cells = await fetchInstanceStageCells(instanceIds);
   const out: Record<string, Partial<Record<AnnualReviewerRole, number | null>>> = {};
+  for (const [instanceId, slot] of Object.entries(cells)) {
+    out[instanceId] = toStageNumberMap<AnnualReviewerRole>(slot);
+  }
+  return out;
+}
+
+/**
+ * ADR-179 — richer sibling of `fetchInstanceStageScores`.
+ *
+ * Returns `instance_id → reviewer_role → { weighted_score, scored, submitted }`
+ * so callers can tell "reviewer submitted but scored nothing" (ADR-172 → "—")
+ * apart from "template has no criteria, so the KRA rating applies" (ADR-130).
+ * Only submitted responses are included.
+ */
+export async function fetchInstanceStageCells(
+  instanceIds: string[],
+): Promise<Record<string, Partial<Record<AnnualReviewerRole, StageScoreCell>>>> {
+  const out: Record<string, Partial<Record<AnnualReviewerRole, StageScoreCell>>> = {};
   if (instanceIds.length === 0) return out;
   const BATCH = 200;
   for (let i = 0; i < instanceIds.length; i += BATCH) {
@@ -849,7 +869,11 @@ export async function fetchInstanceStageScores(
     }>) {
       const slot = (out[r.instance_id] ??= {});
       const scoredCount = Object.keys(r.criteria_scores ?? {}).length;
-      slot[r.reviewer_role] = scoredCount === 0 ? null : r.weighted_score;
+      slot[r.reviewer_role] = {
+        weighted_score: r.weighted_score,
+        scored: scoredCount > 0,
+        submitted: true,
+      };
     }
   }
   return out;

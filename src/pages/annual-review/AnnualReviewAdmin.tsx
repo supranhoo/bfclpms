@@ -4,7 +4,7 @@ import {
   useCycles, useTemplates, useRules, useCycleInstances, useActiveCycle, useTemplate,
   useSendBackStatus, useCloseCycle, useOverrideRating, useCloneTemplate, useCloneCycle,
   useAnnualReviewInstancesPaginated, useCycleStatusCounts, useReopenCycle,
-  useInstanceStageScores, useRollbackFinalizedInstance,
+  useInstanceStageScores, useInstanceStageCells, useRollbackFinalizedInstance,
 } from '@/hooks/useAnnualReview';
 import * as svc from '@/services/annualReview/annualReviewService';
 import { remapStageValueMapByDuplicates } from '@/lib/annualReview/displayStageForResponse';
@@ -60,6 +60,7 @@ import { fyStartFromCycle } from '@/lib/annualReview/fiscalYear';
 import { prevStatus } from '@/lib/annualReview/stageChain';
 import { useKraDerivedRatingsForInstances } from '@/hooks/useKraDerivedRatingsForInstances';
 import { isKraBasedTemplate } from '@/lib/annualReview/kraDerivedRating';
+import { resolveStageDisplayRating } from '@/lib/annualReview/kraStageDisplay';
 import { UnifiedBulkDialog } from '@/components/annual-review/UnifiedBulkDialog';
 import { AnnualReviewExportMenu } from '@/components/annual-review/AnnualReviewExportMenu';
 import { ChangeWorkflowDialog } from '@/components/annual-review/ChangeWorkflowDialog';
@@ -498,7 +499,9 @@ function ProgressTab() {
   const instances = paged?.rows ?? [];
   const total = paged?.total ?? 0;
   const pageInstanceIds = useMemo(() => instances.map((i) => i.id), [instances]);
-  const { data: stageScoresMap = {} } = useInstanceStageScores(pageInstanceIds);
+  // ADR-179: cells (not bare numbers) so the grid can tell "submitted but
+  // unscored" (ADR-172 → "—") from "KRA template" (ADR-130 → KRA rating).
+  const { data: stageCellsMap = {} } = useInstanceStageCells(pageInstanceIds);
   const [exporting, setExporting] = useState(false);
   const countsQuery = useCycleStatusCounts(activeCycle?.id);
   const { data: counts = { total: 0, pending_self: 0, completed: 0, not_started: 0, pending_manager: 0, pending_skip: 0, pending_dept: 0, pending_bu: 0, pending_hr: 0, pending_management: 0, excluded: 0 } } = countsQuery;
@@ -1005,7 +1008,7 @@ function ProgressTab() {
                 // stage's /5 value up to its duplicate higher stage so the
                 // grid columns agree with the header/pipeline (Dept≡BU etc.).
                 const ss = remapStageValueMapByDuplicates(
-                  stageScoresMap[i.id] ?? {},
+                  stageCellsMap[i.id] ?? {},
                   i as any,
                 );
                 const tplForRow = templatesByIdMap[svc.resolveTemplateId(i) ?? ''] ?? null;
@@ -1015,17 +1018,23 @@ function ProgressTab() {
                 // For KRA-based templates, weighted_score is always 0 because
                 // reviewers don't touch per-criterion scores. Fall back to the
                 // KRA-derived /5 for any stage that has a locked response.
-                const fmt = (v: number | null | undefined, role: AnnualReviewerRole) => {
-                  const rating = computeCriteriaRatingOutOf5(criteriaForRow, v, role);
-                  if (rating != null) return rating.toFixed(1);
-                  if (isKraTpl && ss[role] != null && kraRow?.rating_0_5 != null) {
+                const fmt = (role: AnnualReviewerRole) => {
+                  const { value, source } = resolveStageDisplayRating({
+                    cell: ss[role],
+                    criteria: criteriaForRow,
+                    role,
+                    isKraTemplate: isKraTpl,
+                    kraRating: kraRow?.rating_0_5 ?? null,
+                  });
+                  if (value == null) return <span className="text-muted-foreground/50">—</span>;
+                  if (source === 'kra') {
                     return (
                       <span title="Derived from KRA achievement (POLICY §AR-KRA-GRID-DISPLAY)">
-                        {kraRow.rating_0_5.toFixed(1)}
+                        {value.toFixed(1)}
                       </span>
                     );
                   }
-                  return <span className="text-muted-foreground/50">—</span>;
+                  return value.toFixed(1);
                 };
                 const finalDisplay = i.total_score != null
                   ? i.total_score.toFixed(2)
@@ -1064,12 +1073,12 @@ function ProgressTab() {
                     <div className="text-xs text-muted-foreground">{i.employee?.employee_code}</div>
                   </TableCell>
                   <TableCell><AnnualReviewStatusBadge status={i.overall_status} /></TableCell>
-                  <TableCell className="text-right tabular-nums">{fmt(ss.self, 'self')}</TableCell>
-                  <TableCell className="text-right tabular-nums">{fmt(ss.manager, 'manager')}</TableCell>
-                  <TableCell className="text-right tabular-nums">{fmt(ss.skip_manager, 'skip_manager')}</TableCell>
-                  <TableCell className="text-right tabular-nums">{fmt(ss.dept_head, 'dept_head')}</TableCell>
-                  <TableCell className="text-right tabular-nums">{fmt(ss.bu_head, 'bu_head')}</TableCell>
-                  <TableCell className="text-right tabular-nums">{fmt(ss.hr, 'hr')}</TableCell>
+                  <TableCell className="text-right tabular-nums">{fmt('self')}</TableCell>
+                  <TableCell className="text-right tabular-nums">{fmt('manager')}</TableCell>
+                  <TableCell className="text-right tabular-nums">{fmt('skip_manager')}</TableCell>
+                  <TableCell className="text-right tabular-nums">{fmt('dept_head')}</TableCell>
+                  <TableCell className="text-right tabular-nums">{fmt('bu_head')}</TableCell>
+                  <TableCell className="text-right tabular-nums">{fmt('hr')}</TableCell>
                   <TableCell className="text-right tabular-nums font-medium">{finalDisplay}</TableCell>
                   <TableCell className="text-right">{ratingDisplay}</TableCell>
                   <TableCell className="text-right">

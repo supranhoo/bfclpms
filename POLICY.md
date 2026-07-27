@@ -5020,3 +5020,20 @@ detectable and repairable without a developer.
    workflow-orphaned rows MUST render `—`, never a stale holder name.
 6. **Exportable + searchable.** The column MUST be registered in the report
    field registry (renamable/hideable) and included in the export.
+
+## §AR-KRA-GRID-DISPLAY — Stage /5 display SSOT (ADR-179, 2026-07-27)
+
+1. A stage column shows a number ONLY when that stage has a **submitted**
+   response.
+2. If the response carries per-criterion scores, the number is the criteria
+   rating: `weighted_score ÷ (sum of criterion weights scoped to that role)`.
+3. If the response carries **no** criterion scores:
+   - on a KRA-weighted template (all weight in a `carry_kra` system slot) the
+     stage shows the KRA-derived rating (`kra_points ÷ kra_weight × 5`), marked
+     as KRA-derived in the UI tooltip and as `rating_source = 'kra'` in the
+     report;
+   - on a criteria template it shows "—" (§AR-STAGE-SCORE-REQUIRED / ADR-172).
+     It must NEVER show `0.0`.
+4. This logic lives in `src/lib/annualReview/kraStageDisplay.ts` and its SQL
+   mirror inside `get_annual_review_comprehensive_report`. New surfaces must
+   reuse it rather than re-deriving stage ratings.

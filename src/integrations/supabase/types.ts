@@ -15056,6 +15056,7 @@ export type Database = {
           bu_head_comment: string
           bu_head_id: string
           bu_head_name: string
+          bu_head_rating_5: number
           bu_head_score: number
           business_unit_id: string
           business_unit_name: string
@@ -15067,6 +15068,7 @@ export type Database = {
           dept_head_comment: string
           dept_head_id: string
           dept_head_name: string
+          dept_head_rating_5: number
           dept_head_score: number
           designation: string
           division_id: string
@@ -15083,6 +15085,7 @@ export type Database = {
           hr_comment: string
           hr_id: string
           hr_name: string
+          hr_rating_5: number
           hr_response_exists: boolean
           hr_response_submitted_at: string
           hr_score: number
@@ -15094,14 +15097,18 @@ export type Database = {
           management_comment: string
           management_id: string
           management_name: string
+          management_rating_5: number
           management_score: number
           manager_comment: string
           manager_id: string
           manager_name: string
+          manager_rating_5: number
           manager_score: number
           overall_status: Database["public"]["Enums"]["annual_review_status"]
+          rating_source: string
           scoring_mode: string
           self_comment: string
+          self_rating_5: number
           self_score: number
           system_scores: Json
           system_weight: number
