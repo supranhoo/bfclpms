@@ -480,6 +480,57 @@ export type Database = {
         }
         Relationships: []
       }
+      annual_review_bu_removal_repair_2026_07: {
+        Row: {
+          after_criteria_weighted_score: number | null
+          after_final_rating: string | null
+          after_status: string | null
+          after_total_score: number | null
+          before_final_rating: string | null
+          before_stages: Json | null
+          before_status: string | null
+          before_total_score: number | null
+          created_at: string
+          employee_id: string
+          id: number
+          instance_id: string
+          performed_by: string | null
+          reason: string
+        }
+        Insert: {
+          after_criteria_weighted_score?: number | null
+          after_final_rating?: string | null
+          after_status?: string | null
+          after_total_score?: number | null
+          before_final_rating?: string | null
+          before_stages?: Json | null
+          before_status?: string | null
+          before_total_score?: number | null
+          created_at?: string
+          employee_id: string
+          id?: number
+          instance_id: string
+          performed_by?: string | null
+          reason: string
+        }
+        Update: {
+          after_criteria_weighted_score?: number | null
+          after_final_rating?: string | null
+          after_status?: string | null
+          after_total_score?: number | null
+          before_final_rating?: string | null
+          before_stages?: Json | null
+          before_status?: string | null
+          before_total_score?: number | null
+          created_at?: string
+          employee_id?: string
+          id?: number
+          instance_id?: string
+          performed_by?: string | null
+          reason?: string
+        }
+        Relationships: []
+      }
       annual_review_criteria_assignments: {
         Row: {
           archetype_code: string | null

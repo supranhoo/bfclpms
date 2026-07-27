@@ -7384,3 +7384,38 @@ Excel export. That text lives in
 revert the three client files; the report falls back to blank cells.
 
 **Policy.** POLICY §RPT-RECOMMENDATION-COLUMNS.
+
+---
+
+## ADR-183 — Supersede must not rewind past an actioned stage (2026-07-27)
+
+**Symptom.** Ten annual reviews (102008, 102009, 100890, 101997, 101959,
+200449, 101961, 101200, 100759, 101942) lost their BU-Head-era completion:
+status `pending_dept`, all aggregates NULL, even though the `dept_head`
+response was locked and submitted days earlier.
+
+**Root cause.** The supersede branch of
+`set_annual_review_enabled_stages(uuid, jsonb, text, text)` picked the first
+non-`self` enabled stage (`LIMIT 1`, unordered, no response check) and always
+nulled `total_score / criteria_weighted_score / final_rating / finalized_*`.
+Removing the trailing `bu_head` stage therefore rewound the chain onto the
+already-approved Dept Head stage.
+
+**Fix.** The RPC now resolves the next stage in canonical order, skipping any
+stage with a locked response. When nothing is left unactioned the instance is
+promoted to `completed` and the aggregates are recomputed via
+`annual_review_compute_final_summary`; clearing happens only on the pending
+branch.
+
+**Data impact.** New audit table
+`public.annual_review_bu_removal_repair_2026_07` (admin/HR read-only). Seven
+instances re-finalized from their existing Dept Head submission; the three
+narrative-only ones stay `pending_dept` for real scoring.
+
+**Tests.** `src/test/annualReview/supersedeTerminalPromotion.test.ts`
+(plus the existing `supersedeResetColumns.test.ts` guard).
+
+**Rollback.** Re-deploy the previous function body and restore instance rows
+from the repair table.
+
+**Policy.** POLICY §AR-SUPERSEDE-NO-FALSE-REWIND.

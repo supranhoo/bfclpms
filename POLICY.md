@@ -1,3 +1,11 @@
+### §AR-SUPERSEDE-NO-FALSE-REWIND — Stage removal must never rewind past an actioned stage (ADR-183, v2.66.171, 2026-07-27)
+- A supersede workflow edit MUST resolve the resulting status as the first **enabled** stage, in canonical order (`self → manager → skip_manager → dept_head → bu_head → hr → management`), that has **no locked response**. Arbitrary JSON ordering or "first non-self stage" selection is forbidden.
+- If every enabled stage already holds a locked response, the instance is terminal: status MUST become `completed` and `total_score`, `criteria_weighted_score` and `final_rating` MUST be **recomputed** through `annual_review_compute_final_summary`, never erased.
+- Aggregates and finalization fields may be cleared only when the resolved status is a genuine `pending_*` stage.
+- Responses belonging to stages retained in the new workflow MUST stay untouched; only removed-stage responses may be archived.
+- Narrative-only instances (empty `criteria_scores`, per §AR-TEMPLATE-NARRATIVE-ONLY) MUST NOT be force-finalized to a 0 / "Poor" outcome by a repair; the responsible reviewer scores them instead.
+- Every corrective repair of this class MUST record before/after state in a dated repair table (`annual_review_bu_removal_repair_2026_07`).
+
 ### §AR-CANONICAL-ROLE-STATUS-MAPPING — Workflow roles must map only to canonical statuses (ADR-168, v2.66.168, 2026-07-25)
 - Every Annual Review role-to-status conversion must use the declared `annual_review_status` values: `self → pending_self`, `manager → pending_manager`, `skip_manager → pending_skip`, `dept_head → pending_dept`, `bu_head → pending_bu`, `hr → pending_hr`, and `management → pending_management`.
 - Derived forms such as `pending_dept_head` and `pending_bu_head` are forbidden in RPCs, triggers, services, filters, and migrations.
@@ -1434,6 +1442,7 @@ When creating or importing KPIs with multi-month frequencies (Quarterly, Bi-Mont
 
 | Version | Date | Change |
 |---------|------|--------|
+| 2.66.171 | 2026-07-27 | §AR-SUPERSEDE-NO-FALSE-REWIND added (ADR-183) — removing a downstream stage in supersede mode no longer rewinds onto an already-approved stage nor wipes the final score; when all enabled stages are actioned the instance is promoted to `completed` with recomputed aggregates. Repaired 7 instances (100759, 101200, 101961, 101997, 102008, 102009, 200449); 3 narrative-only instances (100890, 101942, 101959) left pending for Dept Head scoring. |
 | 2.66.170 | 2026-07-26 | §AR-TEMPLATE-NARRATIVE-ONLY added and §AR-STAGE-REVERT-NO-DEAD-END amended — empty `criteria_scores` on a narrative-only template (no `sections.criteria`) is a valid submitted state, so dead-end repairs must attach the downstream reviewer rather than unlock the response. Applied as a restore for 100600 (Umesh Kumar Singh): original 2026-07-23 submission re-locked and advanced to `pending_bu`. No schema change. |
 | 2.66.169 | 2026-07-26 | §AR-STAGE-REVERT-NO-DEAD-END added — stage-stripping reverts must not leave a locked stage as the current-and-last stage; the operation must attach a downstream reviewer or unlock the response in the same step. Applied as a single-instance repair for 100600 (Umesh Kumar Singh). No schema change. |
 | 2.66.168 | 2026-07-25 | §AR-CANONICAL-ROLE-STATUS-MAPPING added — completed-review workflow edits now use canonical `pending_dept`/`pending_bu` enum values in both supersede RPC paths; exhaustive mapping tests prevent stale derived status names from returning. |
