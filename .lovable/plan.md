@@ -1,36 +1,38 @@
 ## Goal
 
-The KPI Status Tracker currently counts every employee's KPIs, including people who have left. For June 2026 that is **159 KPI rows across 9 inactive employees** showing as pending. Add the same Active / Inactive / All control the other reports already use, defaulting to **Active only**.
+KPI Status Tracker currently shows only **Pending At Level** (a role label such as "Manager", "HR PMS"). Add a **Pending With (Name)** column that names the actual person(s) the KPI is waiting on.
 
 ## Verified current state
 
-- `src/pages/reports/KpiStatusTracker.tsx` fetches profiles with `id, employee_code, full_name, designation, department_id, departments(...)` — it does **not** select `is_active` and never filters on it.
-- A reusable control already exists and is used by Employee Performance Summary / KPI Journey: `src/components/reports/EmployeeStatusFilter.tsx` (URL-synced `?emp_status=`) plus the SSOT helpers `applyEmployeeStatusFilter` / `employeeStatusLabel` / `countByStatus` in `src/lib/reportEmployeeFilter.ts`.
-- Database check: 2,668 profiles, 88 inactive. June 2026 KPIs split 2,585 (active, 163 employees) / 159 (inactive, 9 employees).
-- Related defect found in the same query: the profiles fetch has no pagination, so PostgREST returns only the first 1,000 of 2,668 profiles. Employees beyond that cut-off render as "Unknown / —" and would also have an unknown active flag, which would silently defeat the new filter. This must be fixed together with the filter.
+- `src/pages/reports/KpiStatusTracker.tsx` (676 lines) builds `StatusTrackerRow` from `kpis` + paginated `profiles`. It has `pendingAt` from the hardcoded `PENDING_AT_MAP` role labels only — no person names. It already fetches per-employee workflow chains via `useBulkEmployeeWorkflows` (used for orphan detection).
+- A tested pure resolver already exists: `src/lib/kpiPendingWith.ts` → `resolvePendingWith()` (tests in `src/test/kpiPendingWith.test.ts`). It handles kra_set → org KPI data owners / employee, self_review → manager, reviewer stages → next stage in the resolved chain (skip-level name, HR PMS / Auditor / Management names, falling back to queue labels).
+- `src/pages/reports/KpiScorecardDetail.tsx` (lines 227–356) already assembles all the inputs that resolver needs: org KPI data owners map, global `hr_pms` / `management` / `auditor` role name pools, per-KPI auditor overrides from `audit_kpi_level_assignments`, skip-level manager (manager's `reporting_manager_id`), and `get_bulk_employee_workflows` chains. That enrichment block is inline in the page and is not currently reusable.
 
 ## Changes
 
-**1. `src/pages/reports/KpiStatusTracker.tsx` (only file with logic changes)**
-- Add `is_active` to the profiles select and paginate that fetch in 1,000-row batches (same `while (hasMore)` pattern already used for `kpis` in this file), so every employee resolves.
-- Carry `isActive: boolean` onto `StatusTrackerRow`.
-- Add `empStatus` state (`EmployeeStatusMode`, default `'active'`), applied in `filteredRows` via `applyEmployeeStatusFilter(..., r => r.isActive)` before the existing department/status/search filters — so summary cards, pagination and export all follow it automatically.
-- Reset to page 1 when the mode changes.
+**1. Extract the enrichment into a shared service (SSOT)** — new `src/services/reports/pendingWithResolver.ts`:
+- `buildPendingWithContext({ kpiIds, employeeIds, month, year })` → fetches (all chunked/paged, same patterns as today): data-owner map, role-name pools, per-KPI auditor overrides, manager + skip-manager names, workflow stage chains.
+- `resolvePendingWithForKpi(ctx, kpi)` → thin wrapper that calls the existing `resolvePendingWith()`. No logic change; the pure resolver stays the single decision point.
 
-**2. UI placement**
-- Render `<EmployeeStatusFilter onChange={setEmpStatus} />` in the existing filter `Card`, on the same wrapped flex row, immediately to the right of the Search box and before `FrequencyLockToggle`. Desktop shows the 3-segment Active/Inactive/All toggle; below 640px it auto-collapses to a Select (built into the component). No layout/grid changes elsewhere.
-- Add an "Employee Status" column to the table and to `KST_DEFAULT_FIELDS` (`employee_status`, sort 45, so admins can hide/rename it via Report Field settings) rendering `Active` / `Inactive` — needed so an "All" view is readable.
-- Excel export: include the same field, and stamp `employeeStatusLabel(empStatus)` into the sheet name/header line so an exported file states its scope.
+**2. `KpiStatusTracker.tsx`**
+- Add `reporting_manager_id` to the existing paginated profiles select.
+- After the main KPI fetch, build the context once and set `pendingWithName: string` on each `StatusTrackerRow` (`'—'` when nothing is pending).
+- Add field `pending_with` (default label **"Pending With (Name)"**, `default_sort: 145`) to `KST_DEFAULT_FIELDS`, so admins can rename/hide it via Report Field settings.
+- Render the column in the table immediately after "Pending At Level"; truncate long multi-name values with a tooltip/title.
+- Include it in `valueFor()` for the Excel export.
+- Extend the search filter to match `pendingWithName`, so "show me everything sitting with X" works.
 
-**3. Tests** — `src/pages/reports/kpiStatusTracker.filter.test.ts` (new, pure-function level): active-only excludes inactive rows, inactive-only keeps just those, `all` keeps everything, unknown flag treated as active.
+**3. `KpiScorecardDetail.tsx`** — replace its inline enrichment block with calls to the new service. Behaviour-identical; guarded by the existing `kpiPendingWith` tests.
 
-**4. Docs** — ADR-177 in `DOCUMENTATION.md` and `POLICY.md §RPT-EMPLOYEE-STATUS-FILTER` stating every employee-scoped report must expose the Active/Inactive/All control, default to Active, and resolve `is_active` through a fully paginated profile fetch.
+**4. Tests** — `src/services/reports/__tests__/pendingWithResolver.test.ts`: context-shaping tests with mock data (per-KPI auditor override beats global pool; missing manager → em-dash; org KPI at `kra_set` → data owners; approved → em-dash).
+
+**5. Docs** — ADR-178 in `DOCUMENTATION.md` + `POLICY.md §RPT-PENDING-WITH-SSOT`: any report showing "who is this pending with" must resolve it through `resolvePendingWith` over a workflow chain from `get_bulk_employee_workflows` — never a hardcoded stage→role map.
 
 ## Risk & impact
 
-- **Data:** none — read-only report, no schema or RLS change.
-- **Workflow:** none. Pending KPIs of inactive employees still exist; they are only hidden from the default view and reachable via Inactive/All.
-- **UI/UX:** default view row count drops (June: 2,744 → 2,585). Filter row gains one control; it already wraps responsively.
-- **Regression:** low. Only this page changes. The profile-pagination fix will *add* previously missing names — expect some rows that read "Unknown" to now show real employees.
-- **Scalability:** batched profile fetch is 3 requests at current volume; client-side filtering is unchanged in cost.
-- **Rollback:** revert the single page file (and the two doc entries).
+- **Data:** none — read-only report, no schema/RLS change.
+- **Workflow:** none.
+- **UI/UX:** one extra column on an already horizontally scrolling table; hideable via Report Field settings. Filter row unchanged.
+- **Performance:** adds ~4 extra chunked reads per report load (data owners, user_roles, auditor assignments, manager lookups) on top of the existing workflow RPC. All are `.in()`-chunked at 500 and paged at 1000, matching the KPI Scorecard Detail cost profile.
+- **Regression risk:** low for the tracker (additive). Moderate-but-contained for KPI Scorecard Detail because of the refactor — mitigated by keeping the extracted code byte-equivalent in behaviour and by the existing resolver test suite.
+- **Rollback:** revert the two page files + delete the new service (and the doc entries).
