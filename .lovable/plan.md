@@ -1,54 +1,58 @@
 ## Assumptions
 
-- The BU Head's existing (unlocked) scores are the intended final BU assessment; no re-scoring is needed.
-- Only these two instances are affected — verified: they are the only two in the whole system sitting at `pending_bu` with a fully-scored unlocked BU draft.
+- Both employees should carry the same "Annual Production Target Vs Actual" outcome as their template peers (all 37 scored rows carry **15 points of the 25 weight**). If their plant/line figure differs, tell me the correct raw value and the plan uses that instead.
+- No re-scoring of any other criterion is intended.
 
 ## What the data actually shows (verified)
 
+Effective template for **both** is `DRI/Admin - W - Pollution` (`408ae1b3…`; 100508 reaches it via `template_override_id`). That template has 7 system slots, including `sys_3jsce5p` — **Annual Production Target Vs Actual, weight 25**.
+
 | | 100508 Satyam Kumar Jha | 101676 Satyaban Roy |
 |---|---|---|
-| Status | `pending_bu` | `pending_bu` |
-| Enabled stages | self → dept_head → bu_head | self → dept_head → bu_head |
-| Self | locked | locked |
-| Dept Head (Prabhat Kumar Singh) | locked, re-submitted 26-Jul 04:11 | locked, re-submitted 25-Jul 10:30 |
-| BU Head (Sindhu Raj Singh) | 19/19 criteria scored, weighted 195, **not locked, never submitted** | 19/19 criteria scored, weighted 231, **not locked, never submitted** |
-| Aggregates | total/rating/finalized all empty | total/rating/finalized all empty |
+| Status | completed (finalised 27-Jul, ADR-185) | completed (finalised 27-Jul, ADR-185) |
+| System slots stored | 6 of 7 | 6 of 7 |
+| `sys_3jsce5p` (Annual Production) | **absent** | **absent** |
+| Criteria weighted | 195.00 | 231.00 |
+| Total / rating | 51.00 Poor | 58.20 Average |
 
-Stage-transition history (from notification metadata) explains it:
+Every other non-excluded instance on this template has `sys_3jsce5p = 15`, all written in one burst on **25-Jul 16:08–16:09**. The only rows without it are these two plus the two `excluded` instances (101375, 101376).
 
-```text
-101676:  25-Jul 10:27:34  completed   -> pending_bu    (review re-opened)
-         25-Jul 10:27:51  pending_bu  -> pending_dept  (BU sent it back to Dept)
-         25-Jul 10:30:14  pending_dept-> pending_bu    (Dept re-submitted)  <- stuck here
+## Root cause — 5 Why
 
-100508:  25-Jul 13:07:21  completed   -> pending_bu    (review re-opened)
-         25-Jul 13:07:42  pending_bu  -> pending_dept  (BU sent it back to Dept)
-         26-Jul 04:11:11  pending_dept-> pending_bu    (Dept re-submitted)  <- stuck here
-```
+1. **Why is the score missing?** The 25-Jul bulk system-scores upload never wrote `sys_3jsce5p` for these two instances.
+2. **Why not?** The uploader classified them as `verdict: 'skip', reason: "Locked stage: …"`.
+3. **Why skipped?** `src/services/annualReview/cycleBulkDataUpload.ts:462-476` allows a write only when the status is in `STAGE_SAFE = {not_started, pending_self, pending_manager}`, or when it is exactly `completed` **and** the admin ticked "apply to completed reviews" (ADR-171 upgrade path).
+4. **Why did that exclude them?** At 25-Jul 16:08 these two were mid-workflow after the ADR-185 re-open: 101676 was `pending_bu`, 100508 was `pending_dept`. Neither is in `STAGE_SAFE`, and neither was `completed` — a **coverage gap** covering `pending_dept`, `pending_bu`, `pending_skip`, `pending_hr`, `pending_management`. Their 37 peers were all `completed`, so the upgrade path caught them.
+5. **Why did nobody notice?** The skip is reported only as an aggregate "N skip" badge with a status reason; nothing flags "a system slot the template requires has no value at finalisation".
 
-So this is **not** a workflow bug. Both were completed, then deliberately re-opened; the re-open correctly unlocked the BU response and cleared the aggregates but **preserved the BU's scores** (per the send-back preservation policy). Reports therefore still show BU scores, which reads as "BU review done", while the workflow correctly awaits a fresh BU sign-off that was never given.
+Compounding effect: `annual_review_compute_final_summary` builds the system denominator from **template weights**, not from stored keys — so the missing slot counts as **0 out of 25**, not as excluded. The ADR-185 finalisation on 27-Jul therefore locked in totals depressed by up to 15 points each. This is a real scoring defect, not just a display gap.
 
 ## Risk & Impact Report
 
-- **Data impact:** Locks 2 existing `annual_review_responses` rows and writes `total_score`, `criteria_weighted_score`, `final_rating`, `finalized_at/by`, `overall_status='completed'` on 2 instances. No schema change. Additive only.
-- **Workflow impact:** These two leave Sindhu Raj Singh's queue and appear as Completed for the employees, Dept Head and upline. The `trg_ar_no_downstream_rewind` and BU-terminal guards remain satisfied (bu_head is the last enabled stage).
-- **UI/UX impact:** None — no component changes in this option.
-- **Regression risk:** Low, and scoped by an explicit 2-ID whitelist. Main risk is recomputing aggregates differently from the normal submit path.
-- **Mitigation:** Reuse the same server-side aggregate routine the normal submit uses (`annual_review_compute_final_summary` / `annual_review_compute_final_score`) rather than hand-computing; snapshot before/after into an audit table; a one-statement rollback is available from that snapshot.
+- **Data impact:** Writes one system-score key on 2 instances and recomputes `total_score` / `final_rating`. Ratings will change (both rise). No schema change; additive plus a dated audit snapshot.
+- **Workflow impact:** None — both stay `completed`; no stage moves, no reviewer queues touched.
+- **UI/UX impact:** Score card, admin grid, and the Annual Review report show the new total and rating; a new skip-reason surface in the bulk-upload dialog (below).
+- **Regression risk:** Low for the repair (explicit 2-instance whitelist, monotonic upgrade only). Moderate for widening `STAGE_SAFE` — that is why the uploader change is a *reported gap*, not a silent widening.
+- **Scalability:** Two rows; detector query is a single indexed scan over the cycle.
+- **Mitigation:** Reuse `admin_apply_system_scores_upgrade` (monotonic, already audited) plus `annual_review_compute_final_summary` — no hand-computed totals. Full before-state snapshot for one-statement rollback.
 
 ## Plan
 
-1. **Pre-snapshot** — insert the current instance + BU response state for both IDs into a new audit table `annual_review_bu_draft_finalise_2026_07` (instance_id, employee_code, prior_status, prior lock/submitted state, criteria_scores, weighted_score, reason, performed_by = NULL for system-applied, applied_at). *Verify: 2 rows captured.*
-2. **Lock the BU responses** — set `is_locked = true`, `submitted_at = now()` on the two `bu_head` rows, leaving scores untouched. *Verify: both rows locked with 19 criteria intact.*
-3. **Finalise the instances** — call the existing final-summary routine so `criteria_weighted_score`, `total_score` and `final_rating` are derived exactly as a normal BU submit would, then set `overall_status='completed'`, `finalized_at=now()`. *Verify: both rows have non-null score + rating, status completed.*
-4. **Post-checks** — re-run the "pending_bu with fully-scored unlocked BU draft" detector (expect 0), confirm no guard trigger fired, and confirm the two employees now appear under completed reviews in the hierarchy view. *Verify: detector returns 0.*
-5. **Regression test** — `src/test/annualReview/buDraftFinalise.test.ts` asserting: a re-opened→sent-back→re-submitted instance with a scored-but-unlocked terminal response is reported as *awaiting terminal sign-off* (not completed), and that finalising it derives the score from the preserved draft rather than zeroing it.
-6. **Docs & policy** — `docs/adr/ADR-185.md` (Re-open preserves reviewer drafts; terminal stage still needs an explicit re-submit), append **POLICY §AR-REOPEN-REQUIRES-TERMINAL-RESUBMIT**, bump `DOCUMENTATION.md` version history, and register the rule in project memory.
+1. **Confirm the source figure.** Re-read the 25-Jul upload workbook value for this template group (peers = 15/25) and confirm it applies to both employees. *Verify: value agreed before any write.*
+2. **Pre-snapshot.** New audit table `annual_review_missing_system_slot_repair_2026_07`: instance_id, employee_code, prior `system_scores`, `system_scores_raw`, `total_score`, `final_rating`, slot key, applied points, reason, `performed_by = NULL` (system-applied). *Verify: 2 rows.*
+3. **Apply the missing slot** via `admin_apply_system_scores_upgrade` for each instance — monotonic, so it can only add, never downgrade. *Verify: both instances now hold 7/7 slots.*
+4. **Recompute aggregates** with `annual_review_compute_final_summary` and write `total_score` / `final_rating`, exactly as the normal path does. *Verify: new totals ≈ 51.00 → ~66 and 58.20 → ~73; ratings re-derived, not hand-set.*
+5. **System-wide detector (the real CAPA).** Query every instance in the cycle for template system slots with **no stored value**, and report count by status. Repair anything else the same way only after review — no blind sweep. *Verify: list produced; scope of the gap known beyond these two.*
+6. **Close the uploader gap.** In `cycleBulkDataUpload.ts`, treat mid-workflow statuses as an explicit, visible outcome: keep them skipped by default but change the reason to `"Mid-workflow stage: pending_bu — not covered by safe or completed-upgrade mode"`, and surface a per-status breakdown in the dialog's skip badge so a whole cohort can never be silently missed again. Add a "Mid-workflow rows (upgrades only)" admin opt-in routed through the same monotonic RPC.
+7. **Guard at finalisation.** Extend the ADR-172 stage-score guard family with a warning-level check: finalising an instance whose effective template has a weighted system slot with no stored value logs to the audit trail and shows an admin warning (not a hard block — some slots legitimately land late).
+8. **Tests.** `src/test/annualReview/missingSystemSlot.test.ts` — (a) a mid-workflow status is reported as an explicit skip with a status-specific reason, not folded into "Locked stage"; (b) a template slot with no stored value scores 0/weight in the total, proving the depression is real; (c) the repair is monotonic and cannot lower a stored value.
+9. **Docs, policy, memory.** `docs/adr/ADR-186.md`, POLICY **§AR-SYSTEM-SLOT-COVERAGE** ("a weighted system slot with no stored value scores zero — bulk uploads must never silently skip a cohort by status"), `DOCUMENTATION.md` version bump, and a memory entry.
 
 ## UI Changes
 
-Not Applicable for this option (chosen: admin-finalise only). Note for later: the grid still shows BU scores for a re-opened review, which is what made this look like a bug — a "draft, not submitted" badge would remove the ambiguity. Say the word and I'll add it.
+- **Bulk Data Upload dialog** — the existing `N skip` badge becomes a hoverable breakdown listing skip reasons by status (e.g. `12 completed · 2 pending_bu · 1 pending_dept`), plus a new "Mid-workflow rows (upgrades only)" checkbox next to the existing completed-rows checkbox. Same card, no layout shift, wraps on mobile.
+- **Admin review detail** — a warning chip "System slot missing: Annual Production Target Vs Actual (0/25)" on any instance with an unfilled weighted slot. Inline in the score breakdown card; no new route or dialog.
 
 ## Rollback
 
-`annual_review_bu_draft_finalise_2026_07` holds the full prior state; one update restores both instances to `pending_bu` and unlocks the BU responses.
+`annual_review_missing_system_slot_repair_2026_07` stores prior `system_scores`, `system_scores_raw`, `total_score` and `final_rating`; one update restores both instances exactly.
