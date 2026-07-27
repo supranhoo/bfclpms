@@ -63,14 +63,18 @@ function toEmployeeSheet(
       ? ''
       : ((r.dept_head_rating_5 ?? r.manager_rating_5) ?? ''),
     'HOD Comment': deptCollapsedIntoBu ? '' : hodComment,
+    // ADR-182 — overall recommendation authored by the Dept Head.
+    'Dept Head Recommendation': r.dept_head_recommendation ?? '',
     'BU Head Score': r.bu_head_score ?? '',
     'BU Head Rating': stageRatingDisplay(r.bu_head_score, r.bu_head_comment),
     'BU Head Rating (/5)': r.bu_head_rating_5 ?? '',
     'BU Head Comment': r.bu_head_comment ?? '',
+    'BU Head Recommendation': r.bu_head_recommendation ?? '',
     'HR Score': r.hr_score ?? '',
     'HR Rating': stageRatingDisplay(r.hr_score, r.hr_comment),
     'HR Rating (/5)': r.hr_rating_5 ?? '',
     'Management Rating (/5)': r.management_rating_5 ?? '',
+    'Management Recommendation': r.management_recommendation ?? '',
     'HR Comment': r.hr_comment ?? '',
     'Final Score': r.total_score ?? '',
     'Rating': r.final_rating ?? '',
