@@ -143,6 +143,29 @@ export function CycleBulkDataUploadDialog({
               </label>
             </div>
 
+            {/* ADR-186 — mid-workflow coverage opt-in (POLICY §AR-SYSTEM-SLOT-COVERAGE) */}
+            <div className="flex items-start gap-3 rounded-md border border-amber-500/40 bg-amber-500/5 px-3 py-2">
+              <Checkbox
+                id="allow-midworkflow-upgrades"
+                checked={allowMidWorkflowUpgrades}
+                onCheckedChange={(v) => {
+                  setAllowMidWorkflowUpgrades(!!v);
+                  setReport(null);
+                  setFile(null);
+                }}
+                className="mt-0.5"
+              />
+              <label htmlFor="allow-midworkflow-upgrades" className="text-sm cursor-pointer space-y-1">
+                <div className="flex items-center gap-1.5 font-medium">
+                  <ShieldAlert className="h-4 w-4 text-amber-600" />
+                  Apply to mid-workflow reviews (upgrades only)
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  Covers reviews sitting at Skip-level, Dept Head, BU Head, HR or Management. Without this, those rows are skipped and their weighted System KPI slots stay empty — which scores as <b>0 of the slot weight</b>, not as excluded. Same monotonic, audit-logged upgrade path as Completed rows.
+                </div>
+              </label>
+            </div>
+
             {/* Scoring health strip — v2.66.91, POLICY §AR-SYSTEM-KPI-LIBRARY-LINK */}
             {(() => {
               const totalSystem = plan.columns.filter((c) => c.kind === 'system_scores').length;
@@ -236,6 +259,17 @@ export function CycleBulkDataUploadDialog({
                       {report.totalChanges} cell change{report.totalChanges === 1 ? '' : 's'}
                     </span>
                   </div>
+                  {/* ADR-186 — skip cohorts are never allowed to hide behind one number */}
+                  {report.skipsByStatus?.length > 0 && (
+                    <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                      <span className="text-muted-foreground">Skipped by stage:</span>
+                      {report.skipsByStatus.map((s) => (
+                        <Badge key={s.status} variant="outline" className="text-[10px]">
+                          {s.status}: {s.count}
+                        </Badge>
+                      ))}
+                    </div>
+                  )}
                   <div className="max-h-[420px] overflow-y-auto border rounded-md">
                     <Table>
                       <TableHeader>
