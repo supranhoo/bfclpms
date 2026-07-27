@@ -149,3 +149,4 @@ Fiscal-window: any code fetching time-series data across two calendar years for 
 - [AR Head Master Authoritative + Cascade](mem://features/annual-review/head-master-authoritative) — POLICY §AR-HEAD-MASTER-AUTHORITATIVE: dept_head/bu_head must mirror org settings; self-is-head short-circuits; manager is never a fallback; org-master edits cascade pre-approval only via triggers on departments / business_units
 - [AR Workflow Edit Visibility Gate](mem://features/annual-review/workflow-edit-visibility) — ADR-160d: "Edit workflow & reviewers" shows for every status except `excluded`; never gate it on the `isPastSelf` template-reset flag
 - [Stage Score Requirement](mem://features/annual-review/stage-score-required) — No stage may lock an empty response; unscored locked stages render "—" not 0.0
+- [Pending With Resolver](mem://features/reports/pending-with-resolver) — SSOT for "Pending With (Name)" columns across KPI reports
