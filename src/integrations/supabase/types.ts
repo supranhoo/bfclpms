@@ -994,6 +994,60 @@ export type Database = {
         }
         Relationships: []
       }
+      annual_review_final_score_repair_2026_07: {
+        Row: {
+          created_at: string
+          employee_code: string | null
+          employee_id: string | null
+          employee_name: string | null
+          id: string
+          instance_id: string
+          new_criteria_weighted_score: number | null
+          new_final_rating: string | null
+          new_total_score: number | null
+          old_criteria_weighted_score: number | null
+          old_final_rating: string | null
+          old_total_score: number | null
+          performed_by: string | null
+          reason: string
+          template_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          employee_code?: string | null
+          employee_id?: string | null
+          employee_name?: string | null
+          id?: string
+          instance_id: string
+          new_criteria_weighted_score?: number | null
+          new_final_rating?: string | null
+          new_total_score?: number | null
+          old_criteria_weighted_score?: number | null
+          old_final_rating?: string | null
+          old_total_score?: number | null
+          performed_by?: string | null
+          reason: string
+          template_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          employee_code?: string | null
+          employee_id?: string | null
+          employee_name?: string | null
+          id?: string
+          instance_id?: string
+          new_criteria_weighted_score?: number | null
+          new_final_rating?: string | null
+          new_total_score?: number | null
+          old_criteria_weighted_score?: number | null
+          old_final_rating?: string | null
+          old_total_score?: number | null
+          performed_by?: string | null
+          reason?: string
+          template_id?: string | null
+        }
+        Relationships: []
+      }
       annual_review_head_remap_audit_2026_07: {
         Row: {
           classification: string
