@@ -7058,3 +7058,45 @@ See: `docs/adr/ADR-078.md`, `src/test/reviewNotes/sidebarVisibility.test.ts`.
 - **Data repair:** 30 instances re-opened (22 → `pending_dept`, 3 → `pending_bu`, 8 previously `completed` had `total_score` / `final_rating` / `criteria_weighted_score` / `finalized_at` cleared). Narrative text preserved; before/after snapshot in `annual_review_empty_stage_repair_2026_07`. The excluded test record was skipped.
 - Tests: `src/test/annualReview/stageScoreGuard.test.ts` (16 cases).
 - Policy: **§AR-STAGE-SCORE-REQUIRED**.
+
+---
+
+## v2.66.173 — ADR-173: Orphaned annual review reviewer succession
+
+**Symptom.** Reviews such as 101851 sat at *BU Head Review Pending* forever: the mapped
+BU Head, Dinesh Chandra Chaudhary (101969), had been deactivated.
+
+**5-Why RCA.**
+1. *Why is the review stuck?* Its `bu_head_id` points at an inactive profile, so nobody can act.
+2. *Why does it still point there?* The instance snapshots the reviewer at seed time.
+3. *Why didn't the org-master cascade repoint it?* `tg_business_units_cascade_head_to_ar()`
+   filtered on `profiles.business_unit_id` — **a column that does not exist**. Every BU head
+   change raised `42703` and rolled back, so the cascade had never worked.
+4. *Why did the deactivation not raise a flag?* Deactivating a profile had no reviewer-ownership check.
+5. *Why was it only found via a user complaint?* There was no detection surface for orphaned stages.
+
+**CAPA.**
+- Fixed `tg_business_units_cascade_head_to_ar()` to resolve BU membership through
+  `profiles.department_id → departments.business_unit_id`.
+- New `public.get_orphaned_annual_reviews(uuid)` detection SSOT + TS mirror
+  `src/lib/annualReview/orphanReview.ts` (7 unit tests in
+  `src/test/annualReview/orphanReview.test.ts`).
+- New `public.admin_reassign_orphaned_reviewers(uuid[], text, uuid, text)` bulk repair RPC,
+  audited into `public.annual_review_orphan_repair_2026_07`.
+- New preventive trigger `trg_alert_on_reviewer_deactivation` on `public.profiles`.
+- New Admin console: `src/components/annual-review/OrphanedReviewsTab.tsx`
+  (paginated 25/page, stage + reason filters, "blocking now" filter, bulk reassign with
+  suggested successor and destructive confirmation), wired into `AnnualReviewAdmin.tsx`.
+
+**Data repair.** Business units *Corporate Affairs* and *EHS* and 4 Corporate Affairs /
+Corporate Communication departments were repointed from 101969 to **102050 — Amit Kumar Sharma**.
+36 pending stage slots (35 `bu_head`, 1 `dept_head`) across 36 instances were repaired and
+snapshotted. Post-repair the detector returns a single non-blocking finding
+(101892, `dept_head` unmapped on an instance already at `pending_management`).
+
+**Policy.** §AR-ORPHAN-REVIEWER-SUCCESSION.
+
+**Security.** `access_profile_assignments` delegated INSERT/DELETE policies now route through
+`public.can_grant_access_profile()`: a non-admin grantor cannot assign a profile to themselves,
+nor grant a profile carrying menu rights they do not already hold. Closes the
+`access_profile_assignments_self_escalation` privilege-escalation finding.

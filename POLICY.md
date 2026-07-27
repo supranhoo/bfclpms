@@ -4911,3 +4911,31 @@ Every annual-review stage — self **and** every reviewer stage (`manager`, `ski
 - Client enforcement lives in `src/lib/annualReview/stageScoreGuard.ts` and MUST NOT be gated on `role === 'self'`.
 - Server enforcement is the trigger `trg_ar_stage_score_required` on `public.annual_review_responses`, so **every** writer (advance RPC, proxy RPC, transfer/repair paths, direct writes) is covered by one invariant. Admin repair tooling may bypass it only via an explicit `SET LOCAL annual_review.bypass_stage_score_guard = 'on'`.
 - **Display rule:** a locked response with zero scored criteria on a scoreable template is a *data gap*, not a `0.0` rating. Grids, exports and reports MUST render `—`. `fetchInstanceStageScores()` returns `null` for such responses.
+
+---
+
+## §AR-ORPHAN-REVIEWER-SUCCESSION (ADR-173, 2026-07-27)
+
+An annual review stage is **orphaned** when the stage is enabled on a non-terminal
+instance (`overall_status ∉ {completed, excluded}`) but the mapped reviewer is
+`NULL` (`no_reviewer_mapped`) or belongs to a deactivated profile
+(`inactive_reviewer`). Orphaned stages silently stall the workflow and MUST be
+detectable and repairable without a developer.
+
+- **Detection SSOT:** `public.get_orphaned_annual_reviews(p_cycle_id)` (SECURITY
+  DEFINER, admin / HR-PMS only). The TypeScript mirror is
+  `src/lib/annualReview/orphanReview.ts`; both MUST classify identically.
+- **Succession is org-master driven.** When a head is deactivated, the successor
+  is set on `business_units.head_user_id` / `departments.head_user_id` first; the
+  cascade triggers then repoint pending instances. A manager is never a fallback
+  (§AR-HEAD-MASTER-AUTHORITATIVE).
+- **Repair path:** `public.admin_reassign_orphaned_reviewers(uuid[], stage, new_reviewer, reason)`
+  — admin / HR-PMS only, reason ≥ 3 chars, replacement must be active. Each row is
+  snapshotted (before/after reviewer and status) into
+  `public.annual_review_orphan_repair_2026_07`, which is the rollback source.
+- **Prevention:** `trg_alert_on_reviewer_deactivation` on `public.profiles` writes a
+  `reviewer_deactivated_orphan_risk` row into `annual_review_access_audit` whenever a
+  user who still owns pending review stages or org-master head roles is deactivated.
+  It warns; it never blocks deactivation.
+- **Console:** Annual Review Admin → *Orphaned Reviews* tab. Bulk reassignment is a
+  destructive action and MUST go through `ConfirmDestructiveDialog`.
