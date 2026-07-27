@@ -6590,6 +6590,69 @@ export type Database = {
           },
         ]
       }
+      kpi_dust_emission_rescale_2026_06: {
+        Row: {
+          captured_at: string
+          captured_by: string | null
+          employee_id: string | null
+          id: string
+          kpi_id: string
+          note: string | null
+          old_criteria: string | null
+          old_qualitative_options: Json | null
+          old_r0: string | null
+          old_r1: string | null
+          old_r2: string | null
+          old_r3: string | null
+          old_r4: string | null
+          old_r5: string | null
+          old_submission: Json | null
+          old_threshold_mode: string | null
+          old_uom_type: string | null
+          submission_id: string | null
+        }
+        Insert: {
+          captured_at?: string
+          captured_by?: string | null
+          employee_id?: string | null
+          id?: string
+          kpi_id: string
+          note?: string | null
+          old_criteria?: string | null
+          old_qualitative_options?: Json | null
+          old_r0?: string | null
+          old_r1?: string | null
+          old_r2?: string | null
+          old_r3?: string | null
+          old_r4?: string | null
+          old_r5?: string | null
+          old_submission?: Json | null
+          old_threshold_mode?: string | null
+          old_uom_type?: string | null
+          submission_id?: string | null
+        }
+        Update: {
+          captured_at?: string
+          captured_by?: string | null
+          employee_id?: string | null
+          id?: string
+          kpi_id?: string
+          note?: string | null
+          old_criteria?: string | null
+          old_qualitative_options?: Json | null
+          old_r0?: string | null
+          old_r1?: string | null
+          old_r2?: string | null
+          old_r3?: string | null
+          old_r4?: string | null
+          old_r5?: string | null
+          old_submission?: Json | null
+          old_threshold_mode?: string | null
+          old_uom_type?: string | null
+          submission_id?: string | null
+        }
+        Relationships: []
+      }
       kpi_mention_access: {
         Row: {
           created_at: string
@@ -14224,6 +14287,26 @@ export type Database = {
         }
         Returns: Json
       }
+      admin_rescale_dust_emission_june_2026: {
+        Args: { p_dry_run?: boolean }
+        Returns: {
+          action: string
+          employee_code: string
+          employee_name: string
+          kpi_id: string
+          new_cases: number
+          new_final_score: number
+          new_hr_score: number
+          new_manager_score: number
+          new_self_score: number
+          old_final_score: number
+          old_hr_score: number
+          old_manager_score: number
+          old_self_score: number
+          old_self_value: number
+          submission_id: string
+        }[]
+      }
       advance_annual_review_status: {
         Args: {
           p_instance_id: string
@@ -14836,6 +14919,8 @@ export type Database = {
         }
         Returns: undefined
       }
+      dust_cases_to_rating: { Args: { p_cases: number }; Returns: number }
+      dust_rating_to_level: { Args: { p_rating: number }; Returns: string }
       enqueue_safety_notification: {
         Args: {
           _body?: string
