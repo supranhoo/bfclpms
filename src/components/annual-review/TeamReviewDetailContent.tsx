@@ -16,6 +16,7 @@ import { computeVisibleStages, computeStageResolutions } from '@/lib/annualRevie
 import { AnnualReviewStatusBadge } from '@/components/annual-review/AnnualReviewStatusBadge';
 import { CriteriaScoringMatrix } from '@/components/annual-review/CriteriaScoringMatrix';
 import { shouldHideCriteriaCard, criteriaForStage } from '@/lib/annualReview/templateVisibility';
+import { stageScoreGuardMessage } from '@/lib/annualReview/stageScoreGuard';
 import { SystemScoresPanel } from '@/components/annual-review/SystemScoresPanel';
 import { EligibilityInputsEditor } from '@/components/annual-review/EligibilityInputsEditor';
 import { deriveAutoInputs } from '@/lib/annualReview/eligibilityAutoFill';
