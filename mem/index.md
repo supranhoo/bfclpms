@@ -157,3 +157,4 @@ Fiscal-window: any code fetching time-series data across two calendar years for 
 - [No Downstream Rewind](mem://features/annual-review/no-downstream-rewind) — ADR-184: guard trigger blocking any rewind past a locked downstream stage; ADR-172 empty-stage rule is submission-time only
 - [Re-open Terminal Re-submit](mem://features/annual-review/reopen-terminal-resubmit) — Preserved terminal drafts after re-open; completion needs explicit re-submit (ADR-185)
 - [Bulk Upload Stage Coverage](mem://features/annual-review/bulk-upload-stage-coverage) — Bulk System-KPI uploads must classify every status; mid-workflow rows need an opt-in (ADR-186)
+- [Final Score Scale Invariant](mem://features/annual-review/final-score-scale-invariant) — total_score always 0-100, rating band mandatory, compute_final_summary is sole writer (ADR-187)
