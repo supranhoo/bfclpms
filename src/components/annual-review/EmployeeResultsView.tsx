@@ -17,17 +17,21 @@ import type {
 } from '@/types/annualReview';
 import { collectRecommendations } from './OverallRecommendationCard';
 import { displayStageForResponse } from '@/lib/annualReview/displayStageForResponse';
+import { ScoreBreakdownCard } from './ScoreBreakdownCard';
+import { useKraDerivedRating } from '@/hooks/useKraDerivedRating';
 
 /**
  * Read-only finalized view for the employee: HR rating + remarks, criteria-by-criteria
  * scores across reviewers, and an acknowledgment action with optional rebuttal note.
  */
 export function EmployeeResultsView({
-  instance, template, responses,
+  instance, template, responses, fiscalYear,
 }: {
   instance: AnnualReviewInstance;
   template: AnnualReviewTemplate | null | undefined;
   responses: AnnualReviewResponse[];
+  /** Fiscal-year start — required to resolve the KRA rollup (ADR-174). */
+  fiscalYear?: number;
 }) {
   const ack = useAcknowledgeInstance();
   const [open, setOpen] = useState(false);
@@ -44,10 +48,19 @@ export function EmployeeResultsView({
   const hasSystem = systemWeight > 0;
   const systemTotal = Object.values((instance.system_scores ?? {}) as Record<string, unknown>)
     .reduce<number>((acc, v) => acc + (typeof v === 'number' ? v : 0), 0);
+  // ADR-174 — a KRA-driven template never populates criteria scores, so
+  // total_score / final_rating stay empty until HR finalizes. Fall back to the
+  // same projection the admin grid uses instead of rendering "—".
+  const kra = useKraDerivedRating(template, instance, fiscalYear);
   // ADR-140-UI: numeric rating x/5 derived from the same 0..100 total the badge uses,
   // so it is visible regardless of whether the template is criteria-only, system-only, or blended.
-  const ratingOutOf5 =
-    instance.total_score != null ? (Number(instance.total_score) / 100) * 5 : null;
+  const projectedTotal =
+    instance.total_score == null ? kra.projected?.total_0_100 ?? null : null;
+  const effectiveTotal =
+    instance.total_score != null ? Number(instance.total_score) : projectedTotal;
+  const ratingOutOf5 = effectiveTotal != null ? (effectiveTotal / 100) * 5 : null;
+  const isProvisional = instance.total_score == null && projectedTotal != null;
+  const effectiveRatingBand = instance.final_rating ?? (isProvisional ? kra.projected?.rating ?? null : null);
   const gridCols =
     [true, hasCriteria, hasSystem].filter(Boolean).length >= 2
       ? 'sm:grid-cols-2'
@@ -68,6 +81,12 @@ export function EmployeeResultsView({
     if (!byRole.has(display)) byRole.set(display, r);
   }
   const recommendations = collectRecommendations(responses, instance as any);
+  // ADR-174 — the terminal reviewer's criteria scores drive the published
+  // total, so the breakdown explains the score the employee actually sees.
+  const terminalCriteriaScores =
+    (['hr', 'bu_head', 'dept_head', 'skip_manager', 'manager', 'self'] as const)
+      .map((role) => byRole.get(role)?.criteria_scores as Record<string, number> | undefined)
+      .find((s) => s && Object.keys(s).length > 0) ?? {};
   const stageLabel: Record<string, string> = {
     self: 'Self', manager: 'Manager', skip_manager: 'Skip Manager',
     dept_head: 'Department Head', bu_head: 'BU Head', hr: 'HR',
@@ -104,9 +123,13 @@ export function EmployeeResultsView({
               </p>
             </div>
             <div className="flex items-center gap-2">
-              {instance.final_rating && (
-                <Badge variant="outline" className="text-base px-3 py-1">
-                  {instance.final_rating}
+              {effectiveRatingBand && (
+                <Badge
+                  variant="outline"
+                  className={`text-base px-3 py-1 ${isProvisional ? 'border-dashed text-muted-foreground' : ''}`}
+                >
+                  {effectiveRatingBand}
+                  {isProvisional && <span className="ml-1 text-xs">(provisional)</span>}
                 </Badge>
               )}
               {acknowledged && (
@@ -122,11 +145,16 @@ export function EmployeeResultsView({
             <div className="rounded-md border p-3">
               <p className="text-xs text-muted-foreground">Total score</p>
               <p className="text-2xl font-semibold tabular-nums">
-                {instance.total_score != null ? instance.total_score.toFixed(2) : '—'}
+                {effectiveTotal != null ? effectiveTotal.toFixed(2) : '—'}
               </p>
               {ratingOutOf5 != null && (
                 <p className="text-xs text-muted-foreground mt-1">
                   ≈ {ratingOutOf5.toFixed(2)} / 5
+                </p>
+              )}
+              {isProvisional && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  Provisional — derived from your KRA achievement
                 </p>
               )}
             </div>
@@ -166,6 +194,12 @@ export function EmployeeResultsView({
           )}
         </CardContent>
       </Card>
+
+      <ScoreBreakdownCard
+        template={template}
+        criteriaScores={terminalCriteriaScores}
+        systemScores={kra.resolvedSystemScores}
+      />
 
       {criteria.length > 0 && (
         <Card>

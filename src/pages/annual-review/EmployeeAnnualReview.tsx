@@ -151,7 +151,7 @@ export default function EmployeeAnnualReview() {
             <AnnualReviewStatusBadge status={instance.overall_status} />
           </header>
           <AnnualReviewStageTracker status={instance.overall_status} enabledStages={visibleStages} reviewerNamesByStage={reviewerNamesByStage} skippedStages={skippedStages} />
-          <EmployeeResultsView instance={instance} template={template} responses={responses} />
+          <EmployeeResultsView instance={instance} template={template} responses={responses} fiscalYear={fyStartFromCycle(cycle)} />
         </div>
       </AnnualReviewI18nProvider>
     );

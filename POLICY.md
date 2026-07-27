@@ -4939,3 +4939,26 @@ detectable and repairable without a developer.
   It warns; it never blocks deactivation.
 - **Console:** Annual Review Admin → *Orphaned Reviews* tab. Bulk reassignment is a
   destructive action and MUST go through `ConfirmDestructiveDialog`.
+
+## §AR-KRA-RATING-VISIBILITY — KRA-derived ratings must be visible and explainable (ADR-174, 2026-07-27)
+
+1. **Visible rating.** When an employee's annual-review template is driven by a
+   `carry_kra` system slot, the employee's own results page MUST show a rating
+   even before HR finalizes. The provisional value is the projection from
+   `@/lib/annualReview/kraDerivedRating` (the same SSOT the admin grid uses) and
+   MUST be labelled "provisional". Rendering "—" for a KRA-scored employee is a
+   defect.
+2. **Derivation label.** Every annual-review surface that shows a rating MUST be
+   able to state how it was derived. Canonical labels: `With KRA` (carry_kra
+   only), `Blended` (carry_kra + scored criteria), `Without KRA` (no carry_kra
+   slot). Resolved by `resolveScoringMode()`.
+3. **Parameter transparency.** The employee results page MUST expose a
+   parameter-level breakdown (achieved / out of / weight / contribution) for
+   every criterion and system slot, built by `buildScoreParameters()`. The
+   Annual Review Report export MUST carry the same parameters (template,
+   derivation mode, KRA weight and points, criteria and system weights, raw
+   system scores, final reviewer criteria scores) so any total can be
+   re-verified offline.
+4. **Single source of truth.** UI and export MUST both read from
+   `src/lib/annualReview/scoreParameters.ts`. No surface may re-implement the
+   contribution maths.
