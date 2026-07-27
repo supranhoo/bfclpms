@@ -4,6 +4,10 @@ import { pendingWith, eligibilityLabel, completionStatus, ratingDistribution, di
 import {
   fetchTemplateLabelMaps, formatScoreMap, type TemplateLabelMaps,
 } from '@/services/annualReview/criteriaScoreLabels';
+import {
+  fetchTemplateEligibilityMaps, buildEligibilityColumnSet, buildEligibilityRow,
+  type EligibilityMaps, type EligibilityColumn,
+} from '@/services/annualReview/eligibilityReportColumns';
 
 export interface ExportInput {
   cycleName: string;
@@ -17,9 +21,18 @@ export interface ExportInput {
   byStage: GroupSummary[];
 }
 
-function toEmployeeSheet(rows: ComprehensiveRow[], labelMaps: TemplateLabelMaps) {
+function toEmployeeSheet(
+  rows: ComprehensiveRow[],
+  labelMaps: TemplateLabelMaps,
+  eligMaps: EligibilityMaps,
+  eligColumns: EligibilityColumn[],
+) {
+  // ADR-181 — stable column set: every question, blank when not on the template.
+  const blankElig: Record<string, string> = {};
+  for (const c of eligColumns) blankElig[c.header] = '';
   return rows.map((r) => {
     const diag = diagnoseHr(r);
+    const elig = buildEligibilityRow(r.template_id, r.eligibility_inputs, eligMaps);
     const hodScore = r.dept_head_score ?? r.manager_score ?? null;
     const hodComment = r.dept_head_comment ?? r.manager_comment ?? '';
     // ADR-155 — dept=BU collapse: blank the HOD columns to avoid a
@@ -36,6 +49,10 @@ function toEmployeeSheet(rows: ComprehensiveRow[], labelMaps: TemplateLabelMaps)
     'Grade': r.grade ?? '',
     'Date of Joining': r.doj ?? '',
     'Eligibility': eligibilityLabel(r),
+    // ADR-181 — eligibility questions: value, expected condition and verdict.
+    'Eligibility Result': elig.summary,
+    ...blankElig,
+    ...elig.cells,
     'Self Score': r.self_score ?? '',
     'Self Rating': stageRatingDisplay(r.self_score, r.self_comment),
     'Self Rating (/5)': r.self_rating_5 ?? '',
@@ -131,14 +148,20 @@ function groupToSheet(g: GroupSummary[]) {
 
 export async function downloadComprehensiveWorkbook(input: ExportInput) {
   // ADR-180 — resolve criterion / system-score labels once per export.
-  const labelMaps = await fetchTemplateLabelMaps(input.rows.map((r) => r.template_id));
+  const templateIds = input.rows.map((r) => r.template_id);
+  const [labelMaps, eligMaps] = await Promise.all([
+    fetchTemplateLabelMaps(templateIds),
+    // ADR-181 — eligibility questions per template.
+    fetchTemplateEligibilityMaps(templateIds),
+  ]);
+  const eligColumns = buildEligibilityColumnSet(templateIds, eligMaps);
   const wb = XLSX.utils.book_new();
   const append = (name: string, data: unknown[]) => {
     if (!data || data.length === 0) return;
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(data as any), name);
   };
   append('Executive Summary', summaryToSheet(input.summary, input.cycleName));
-  append('Employees', toEmployeeSheet(input.rows, labelMaps));
+  append('Employees', toEmployeeSheet(input.rows, labelMaps, eligMaps, eligColumns));
   append('Rating Distribution', ratingDistribution(input.rows));
   append('By Department', groupToSheet(input.byDepartment));
   append('By Business Unit', groupToSheet(input.byBusinessUnit));
