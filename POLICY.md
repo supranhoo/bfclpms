@@ -4901,3 +4901,13 @@ Any workflow revert or normalisation that removes stages from `annual_review_ins
 A template whose `sections.criteria` array is empty is **narrative-only**: the self stage collects `self_review_fields` text and the entire score derives from `sections.system_scores` (e.g. a `carry_kra` entry at weight 100). On such templates a submitted self response legitimately carries `criteria_scores = {}` and `weighted_score = 0.00`.
 
 Before any repair that unlocks a self response on the grounds of "missing self scoring", the operator or code path MUST check `sections.criteria` (helper: `templateHasSelfCriteria` in `src/lib/annualReview/templateSelfCriteria.ts`). If it is empty, the submission is complete — do not unlock, do not ask the employee to rescore. A zero score on such an instance MUST be diagnosed against the system-score source (missing `performance_reviews` / `review_submissions` rows for the carry window), not against the self form.
+
+## §AR-STAGE-SCORE-REQUIRED — No stage may advance unscored (ADR-172)
+
+Every annual-review stage — self **and** every reviewer stage (`manager`, `skip_manager`, `dept_head`, `bu_head`, `hr`, `management`) — MUST have a numeric score for each criterion visible to that stage before its response may be locked/submitted.
+
+- Visibility is resolved by the SSOT `criteriaForStage()` / `shouldHideCriteriaCard()`; criteria without `reviewer_stages` are visible to every stage.
+- **Exemption:** narrative-only stages — templates whose `system_scores` weights already sum to ≥ 100, or that map no criteria to the stage — submit with no criteria scores. See §AR-TEMPLATE-NARRATIVE-ONLY.
+- Client enforcement lives in `src/lib/annualReview/stageScoreGuard.ts` and MUST NOT be gated on `role === 'self'`.
+- Server enforcement is the trigger `trg_ar_stage_score_required` on `public.annual_review_responses`, so **every** writer (advance RPC, proxy RPC, transfer/repair paths, direct writes) is covered by one invariant. Admin repair tooling may bypass it only via an explicit `SET LOCAL annual_review.bypass_stage_score_guard = 'on'`.
+- **Display rule:** a locked response with zero scored criteria on a scoreable template is a *data gap*, not a `0.0` rating. Grids, exports and reports MUST render `—`. `fetchInstanceStageScores()` returns `null` for such responses.
