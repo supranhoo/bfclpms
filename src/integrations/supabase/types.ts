@@ -15074,6 +15074,7 @@ export type Database = {
           division_id: string
           division_name: string
           doj: string
+          eligibility_inputs: Json
           employee_code: string
           employee_id: string
           employee_name: string
