@@ -61,6 +61,16 @@ export interface ComprehensiveRow {
   kra_points?: number | null;
   system_scores?: Record<string, number> | null;
   terminal_criteria_scores?: Record<string, number> | null;
+  // ADR-179 — normalised 0..5 stage ratings (KRA-derived when the template
+  // carries no criteria) plus where those ratings came from.
+  self_rating_5?: number | null;
+  manager_rating_5?: number | null;
+  dept_head_rating_5?: number | null;
+  bu_head_rating_5?: number | null;
+  hr_rating_5?: number | null;
+  management_rating_5?: number | null;
+  /** 'criteria' | 'kra' | 'none' */
+  rating_source?: string | null;
 }
 
 export async function fetchComprehensiveReport(cycleId: string): Promise<ComprehensiveRow[]> {
