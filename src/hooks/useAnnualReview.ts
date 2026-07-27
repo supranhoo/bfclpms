@@ -202,6 +202,19 @@ export const useInstanceStageScores = (instanceIds: string[]) =>
   });
 
 /**
+ * ADR-179 — stage cells (`{ weighted_score, scored, submitted }`) for grids
+ * that must distinguish "submitted but unscored" (ADR-172 → "—") from
+ * "KRA-based template" (ADR-130 → KRA-derived /5).
+ */
+export const useInstanceStageCells = (instanceIds: string[]) =>
+  useQuery({
+    queryKey: [...annualReviewKeys.all, 'stageCells', ...instanceIds].slice(0, 50),
+    queryFn: () => svc.fetchInstanceStageCells(instanceIds),
+    enabled: instanceIds.length > 0,
+    staleTime: 30_000,
+  });
+
+/**
  * Master switch read for the Annual Review module — used by the sidebar to
  * gate the entry points. Evaluates `admin_feature_flags.annual_review_enabled`
  * server-side (admins bypass once the master switch is ON).
