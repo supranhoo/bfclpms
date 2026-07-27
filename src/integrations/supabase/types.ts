@@ -1469,6 +1469,69 @@ export type Database = {
         }
         Relationships: []
       }
+      annual_review_missing_system_slot_repair_2026_07: {
+        Row: {
+          applied_at: string
+          applied_points: number | null
+          applied_raw: number | null
+          employee_code: string | null
+          employee_name: string | null
+          id: string
+          instance_id: string
+          new_final_rating: string | null
+          new_total_score: number | null
+          performed_by: string | null
+          prior_criteria_weighted_score: number | null
+          prior_final_rating: string | null
+          prior_system_scores: Json | null
+          prior_system_scores_raw: Json | null
+          prior_total_score: number | null
+          reason: string | null
+          slot_key: string
+          slot_name: string | null
+        }
+        Insert: {
+          applied_at?: string
+          applied_points?: number | null
+          applied_raw?: number | null
+          employee_code?: string | null
+          employee_name?: string | null
+          id?: string
+          instance_id: string
+          new_final_rating?: string | null
+          new_total_score?: number | null
+          performed_by?: string | null
+          prior_criteria_weighted_score?: number | null
+          prior_final_rating?: string | null
+          prior_system_scores?: Json | null
+          prior_system_scores_raw?: Json | null
+          prior_total_score?: number | null
+          reason?: string | null
+          slot_key: string
+          slot_name?: string | null
+        }
+        Update: {
+          applied_at?: string
+          applied_points?: number | null
+          applied_raw?: number | null
+          employee_code?: string | null
+          employee_name?: string | null
+          id?: string
+          instance_id?: string
+          new_final_rating?: string | null
+          new_total_score?: number | null
+          performed_by?: string | null
+          prior_criteria_weighted_score?: number | null
+          prior_final_rating?: string | null
+          prior_system_scores?: Json | null
+          prior_system_scores_raw?: Json | null
+          prior_total_score?: number | null
+          reason?: string | null
+          slot_key?: string
+          slot_name?: string | null
+        }
+        Relationships: []
+      }
       annual_review_orphan_repair_2026_07: {
         Row: {
           created_at: string
