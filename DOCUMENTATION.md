@@ -7345,3 +7345,42 @@ each employee were not visible anywhere in the report.
 Rollback = restore the previous RPC signature and drop the new column block.
 
 **Policy.** See POLICY.md §RPT-ELIGIBILITY-COLUMNS.
+
+## ADR-182 — Reviewer recommendations in the Annual Review report (2026-07-27)
+
+**Context.** The Annual Review report exposed per-stage `notes` as
+`* Comment` columns, but the "Overall Recommendation" written by Dept Heads,
+BU Heads and Management was invisible in both the on-screen report and the
+Excel export. That text lives in
+`annual_review_responses.qualitative_responses ->> '__overall_recommendation'`
+(456 dept_head, 887 bu_head and 1 management rows carry one), and
+`get_annual_review_comprehensive_report` never reads `qualitative_responses`.
+
+**Decision.**
+- New read-only RPC `public.get_annual_review_recommendations(p_cycle_id)`
+  (SECURITY DEFINER, `search_path = public`, granted to `authenticated`)
+  returns `instance_id` plus the dept_head / bu_head / management
+  recommendation, reusing the same `annual_review_directory_access` scope
+  guard and scope filter as the comprehensive report. Blank/whitespace-only
+  text is normalised to NULL.
+- A companion RPC was chosen over widening the 10 KB comprehensive RPC to keep
+  the change additive and trivially reversible.
+- `src/services/annualReview/recommendationColumns.ts` holds the fetch plus the
+  pure `indexRecommendations` / `mergeRecommendations` helpers.
+- `fetchComprehensiveReport` fetches both in parallel and merges, so the grid,
+  the RCA panel and the export share one source. A failed recommendation fetch
+  degrades to blank cells.
+- UI: a "Recommendations" section in the single-employee RCA panel of
+  `ComprehensiveTab.tsx`.
+- Export: `Dept Head Recommendation`, `BU Head Recommendation` and
+  `Management Recommendation` columns, each placed next to the matching stage
+  comment column in the Employees sheet.
+
+**Data impact.** None — no schema, RLS or data change; read-only additive RPC.
+
+**Tests.** `src/services/annualReview/recommendationColumns.test.ts`.
+
+**Rollback.** `DROP FUNCTION public.get_annual_review_recommendations(uuid)` and
+revert the three client files; the report falls back to blank cells.
+
+**Policy.** POLICY §RPT-RECOMMENDATION-COLUMNS.
