@@ -19,12 +19,15 @@ import { isKpiLockedForPeriod } from '@/lib/frequencyUtils';
 import { useBulkEmployeeWorkflows } from '@/hooks/useWorkflowConfig';
 import * as XLSX from 'xlsx';
 import { useResolvedReportFields } from '@/hooks/useResolvedReportFields';
+import { EmployeeStatusFilter } from '@/components/reports/EmployeeStatusFilter';
+import { applyEmployeeStatusFilter, employeeStatusLabel, type EmployeeStatusMode } from '@/lib/reportEmployeeFilter';
 
 const KST_DEFAULT_FIELDS = [
   { field_key: 'row_num',          default_label: '#',                default_sort: 10,  is_required: true, is_renamable: false },
   { field_key: 'company',          default_label: 'Company',          default_sort: 20 },
   { field_key: 'employee_code',    default_label: 'Employee Code',    default_sort: 30,  is_required: true },
   { field_key: 'employee_name',    default_label: 'Employee Name',    default_sort: 40,  is_required: true },
+  { field_key: 'employee_status',  default_label: 'Employee Status',  default_sort: 45 },
   { field_key: 'designation',      default_label: 'Designation',      default_sort: 50 },
   { field_key: 'department',       default_label: 'Department',       default_sort: 60 },
   { field_key: 'division',         default_label: 'Division',         default_sort: 70 },
@@ -112,6 +115,7 @@ interface StatusTrackerRow {
   reviewPeriod: string;
   isFrequencyLocked: boolean;
   isOrphaned: boolean;
+  isActive: boolean;
 }
 
 const PAGE_SIZE = 50;
@@ -131,6 +135,7 @@ export default function KpiStatusTracker() {
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [showFreqLocked, setShowFreqLocked] = useState(false);
+  const [empStatus, setEmpStatus] = useState<EmployeeStatusMode>('active');
 
   const years = Array.from({ length: 5 }, (_, i) => currentYear - 2 + i);
 
@@ -168,13 +173,28 @@ export default function KpiStatusTracker() {
         }
       }
 
-      // Fetch profiles with department + division chain
-      const { data: profiles, error: profErr } = await supabase
-        .from('profiles')
-        .select('id, employee_code, full_name, designation, department_id, departments!profiles_department_fk ( name, business_units ( divisions ( name ) ) )');
-      if (profErr) throw profErr;
+      // Fetch profiles with department + division chain.
+      // Paginated: PostgREST caps a plain select at 1000 rows, which previously
+      // left later employees unresolved ("Unknown") and their is_active unknown.
+      const profiles: any[] = [];
+      let pOffset = 0;
+      let pHasMore = true;
+      while (pHasMore) {
+        const { data: batch, error: profErr } = await supabase
+          .from('profiles')
+          .select('id, employee_code, full_name, designation, is_active, department_id, departments!profiles_department_fk ( name, business_units ( divisions ( name ) ) )')
+          .range(pOffset, pOffset + batchSize - 1);
+        if (profErr) throw profErr;
+        if (batch && batch.length > 0) {
+          profiles.push(...batch);
+          pOffset += batchSize;
+          pHasMore = batch.length === batchSize;
+        } else {
+          pHasMore = false;
+        }
+      }
 
-      const profileMap = new Map((profiles ?? []).map(p => [p.id, p]));
+      const profileMap = new Map(profiles.map(p => [p.id, p]));
       const now = new Date();
 
       const result: StatusTrackerRow[] = allKpis.map(kpi => {
@@ -212,6 +232,7 @@ export default function KpiStatusTracker() {
           reviewPeriod: kpi.review_period ?? '—',
           isFrequencyLocked,
           isOrphaned: false, // will be set after workflow data loads
+          isActive: (profile as any)?.is_active !== false,
         };
       });
 
@@ -265,7 +286,8 @@ export default function KpiStatusTracker() {
   const filteredRows = useMemo(() => {
     if (!enrichedRows) return [];
     const term = searchTerm.toLowerCase();
-    return enrichedRows.filter(r => {
+    const statusScoped = applyEmployeeStatusFilter(enrichedRows, empStatus, r => r.isActive);
+    return statusScoped.filter(r => {
       if (!showFreqLocked && r.isFrequencyLocked) return false;
       if (selectedDept !== 'all' && r.department !== selectedDept) return false;
       if (selectedStatus !== 'all' && r.status !== selectedStatus) return false;
@@ -279,7 +301,7 @@ export default function KpiStatusTracker() {
       }
       return true;
     });
-  }, [enrichedRows, searchTerm, selectedDept, selectedStatus, showFreqLocked]);
+  }, [enrichedRows, searchTerm, selectedDept, selectedStatus, showFreqLocked, empStatus]);
 
   // Summary stats by status
   const statusCounts = useMemo(() => {
@@ -303,7 +325,7 @@ export default function KpiStatusTracker() {
   }, [filteredRows, currentPage]);
 
   // Reset page on filter change
-  useMemo(() => { setCurrentPage(1); }, [searchTerm, selectedYear, selectedPeriod, selectedDept, selectedStatus, showFreqLocked]);
+  useMemo(() => { setCurrentPage(1); }, [searchTerm, selectedYear, selectedPeriod, selectedDept, selectedStatus, showFreqLocked, empStatus]);
 
   // Excel export
   const handleExport = () => {
@@ -315,6 +337,7 @@ export default function KpiStatusTracker() {
         case 'company':          return getCompanyCode(r.employeeId);
         case 'employee_code':    return r.employeeCode;
         case 'employee_name':    return r.employeeName;
+        case 'employee_status':  return r.isActive ? 'Active' : 'Inactive';
         case 'designation':      return r.designation;
         case 'department':       return r.department;
         case 'division':         return r.division;
@@ -336,6 +359,7 @@ export default function KpiStatusTracker() {
       return row;
     });
     const ws = XLSX.utils.json_to_sheet(exportData, { header: visible.map((f) => f.label) });
+    XLSX.utils.sheet_add_aoa(ws, [[`Scope: ${employeeStatusLabel(empStatus)} — ${selectedPeriod} ${selectedYear}`]], { origin: -1 });
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'KPI Status Tracker');
     XLSX.writeFile(wb, `KPI_Status_Tracker_${selectedPeriod}_${selectedYear}.xlsx`);
