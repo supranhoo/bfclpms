@@ -7168,3 +7168,36 @@ Custom reports keep their own `custom_reports.view_roles` mechanism (Report
 Builder) and are intentionally not listed here.
 
 **Policy.** See POLICY.md §RPT-ACCESS-REGISTRY-SSOT.
+
+## ADR-177 — KPI Status Tracker: Active/Inactive employee scoping (2026-07-27)
+
+**Symptom.** For June 2026 the KPI Status Tracker reported KPIs of separated
+employees as pending — 159 KPI rows across 9 inactive employees, inflating the
+Pending card and the by-stage badges.
+
+**Root cause.** `KpiStatusTracker.tsx` joined `kpis` to `profiles` without
+selecting or filtering `is_active`, so the report had no notion of employment
+status. A second latent defect in the same query: the profile fetch had no
+pagination, so PostgREST returned only the first 1000 of 2668 profiles —
+later employees rendered "Unknown" and would have carried an unknown active
+flag, defeating any filter added on top.
+
+**Fix.**
+- Profile fetch now selects `is_active` and pages in 1000-row batches (same
+  loop already used for `kpis` in this file).
+- `StatusTrackerRow.isActive` added; `filteredRows` scopes through the shared
+  `applyEmployeeStatusFilter()` before department/status/search, so summary
+  cards, pagination and the Excel export all follow the mode.
+- UI: shared `<EmployeeStatusFilter />` (Active / Inactive / All, URL-synced
+  `?emp_status=`, auto-collapses to a Select under 640px) sits between Search
+  and the frequency-lock toggle; new "Employee Status" column in the table and
+  in `KST_DEFAULT_FIELDS` (`employee_status`, sort 45 — hideable/renamable via
+  Report Field settings); the export sheet appends a scope line built from
+  `employeeStatusLabel()`.
+- Tests: `src/pages/reports/kpiStatusTracker.filter.test.ts`.
+
+**Risk / rollback.** Read-only report; no schema, RLS or workflow change.
+Default row count for June drops 2,744 → 2,585. Rollback = revert
+`src/pages/reports/KpiStatusTracker.tsx`.
+
+**Policy.** See POLICY.md §RPT-EMPLOYEE-STATUS-FILTER.

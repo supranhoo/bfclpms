@@ -4982,3 +4982,20 @@ detectable and repairable without a developer.
 5. **New reports.** Shipping a report REQUIRES adding it to
    `src/lib/reports/catalog.ts` and `report_registry`; that alone makes it
    mappable, no access-config seed needed.
+
+## §RPT-EMPLOYEE-STATUS-FILTER — Employee-scoped reports must scope by active status (ADR-177, 2026-07-27)
+
+1. **Control required.** Every report whose rows are keyed to an employee MUST
+   expose the shared `EmployeeStatusFilter` (Active / Inactive / All), which
+   persists to `?emp_status=`.
+2. **Default is Active.** The landing state MUST be "Active only". Inactive
+   (separated) employees are never counted as pending work by default; they stay
+   reachable via the Inactive and All modes.
+3. **Single source of truth.** Scoping MUST go through
+   `applyEmployeeStatusFilter()` in `src/lib/reportEmployeeFilter.ts`. Unknown
+   `is_active` is treated as active to avoid silent data loss.
+4. **Full profile resolution.** `is_active` MUST be read from a fully paginated
+   profile fetch (1000-row batches). A truncated fetch leaves employees with an
+   unknown flag and silently defeats the filter.
+5. **Visible + exported.** The scoped surface MUST show an "Employee Status"
+   column, and every export MUST state its scope via `employeeStatusLabel()`.
