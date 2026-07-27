@@ -5065,3 +5065,23 @@ detectable and repairable without a developer.
    the report can never disagree with the reviewer UI. The column builder and
    formatters live in `src/services/annualReview/eligibilityReportColumns.ts`
    and MUST be reused by any new report surface.
+
+## §RPT-RECOMMENDATION-COLUMNS — Reviewer recommendations are report fields (ADR-182, 2026-07-27)
+
+1. The "Overall Recommendation" authored on the Annual Review form by the
+   Dept Head, BU Head and Management stages is part of the review record and
+   MUST be visible in the Annual Review report and its Excel export.
+2. It is stored in `annual_review_responses.qualitative_responses` under the
+   `__overall_recommendation` key — NOT in `notes`. Stage "Comment" columns
+   (which map to `notes`) are a different field and MUST NOT be conflated with
+   the recommendation.
+3. Exposure is via `public.get_annual_review_recommendations(p_cycle_id)`,
+   which applies exactly the same access scope as
+   `get_annual_review_comprehensive_report` (all / bu / team). No new data is
+   made visible to any role.
+4. `fetchComprehensiveReport` merges recommendations onto report rows, so every
+   consumer (grid, RCA panel, export) sees them from one source. Fetch/merge
+   helpers live in `src/services/annualReview/recommendationColumns.ts` and MUST
+   be reused rather than re-queried ad hoc.
+5. A recommendation fetch failure MUST degrade gracefully (blank cells), never
+   break the report.

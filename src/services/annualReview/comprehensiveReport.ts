@@ -1,5 +1,6 @@
 import { supabase } from '@/integrations/supabase/client';
 import { fetchAllRpcPaged } from '@/lib/fetchAll';
+import { fetchRecommendations, mergeRecommendations } from './recommendationColumns';
 
 export interface ComprehensiveRow {
   instance_id: string;
@@ -73,17 +74,27 @@ export interface ComprehensiveRow {
   rating_source?: string | null;
   // ADR-181 — eligibility answers, keyed by criterion id.
   eligibility_inputs?: Record<string, unknown> | null;
+  // ADR-182 — overall recommendation text per reviewing authority.
+  dept_head_recommendation?: string | null;
+  bu_head_recommendation?: string | null;
+  management_recommendation?: string | null;
 }
 
 export async function fetchComprehensiveReport(cycleId: string): Promise<ComprehensiveRow[]> {
   if (!cycleId) return [];
   // POLICY §125 / ADR-094 — PostgREST caps RPC responses at 1,000 rows.
   // Page via Range headers so the Comprehensive report shows the full roster.
-  return await fetchAllRpcPaged<ComprehensiveRow>((from, to) =>
-    (supabase as any)
-      .rpc('get_annual_review_comprehensive_report', { p_cycle_id: cycleId })
-      .range(from, to),
-  );
+  const [rows, recs] = await Promise.all([
+    fetchAllRpcPaged<ComprehensiveRow>((from, to) =>
+      (supabase as any)
+        .rpc('get_annual_review_comprehensive_report', { p_cycle_id: cycleId })
+        .range(from, to),
+    ),
+    // ADR-182 — recommendations live in qualitative_responses, not in the
+    // report RPC; merged here so every consumer (grid + export) sees them.
+    fetchRecommendations(cycleId).catch(() => ({})),
+  ]);
+  return mergeRecommendations(rows, recs);
 }
 
 export const STAGE_LABEL: Record<string, string> = {

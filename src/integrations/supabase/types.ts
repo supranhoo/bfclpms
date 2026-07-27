@@ -15156,6 +15156,15 @@ export type Database = {
           updated_at: string
         }[]
       }
+      get_annual_review_recommendations: {
+        Args: { p_cycle_id: string }
+        Returns: {
+          bu_head_recommendation: string
+          dept_head_recommendation: string
+          instance_id: string
+          management_recommendation: string
+        }[]
+      }
       get_annual_review_reviewer_pending_queues: {
         Args: { p_cycle_id: string }
         Returns: {
