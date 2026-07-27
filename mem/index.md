@@ -151,3 +151,4 @@ Fiscal-window: any code fetching time-series data across two calendar years for 
 - [Stage Score Requirement](mem://features/annual-review/stage-score-required) — No stage may lock an empty response; unscored locked stages render "—" not 0.0
 - [Pending With Resolver](mem://features/reports/pending-with-resolver) — SSOT for "Pending With (Name)" columns across KPI reports
 - [Report Score Map Readability](mem://features/reports/score-map-readability) — Criteria/system score maps rendered as "Name: score", never raw id-keyed JSON (ADR-180)
+- [Annual Review Eligibility Report Columns](mem://features/reports/eligibility-columns) — Per-question eligibility columns with expected condition and pass/fail (ADR-181)
