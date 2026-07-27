@@ -15059,6 +15059,7 @@ export type Database = {
           bu_head_score: number
           business_unit_id: string
           business_unit_name: string
+          criteria_weight: number
           cycle_default_stages: Json
           days_pending: number
           department_id: string
@@ -15088,6 +15089,8 @@ export type Database = {
           hr_stage_enabled: boolean
           instance_id: string
           is_excluded: boolean
+          kra_points: number
+          kra_weight: number
           management_comment: string
           management_id: string
           management_name: string
@@ -15097,8 +15100,14 @@ export type Database = {
           manager_name: string
           manager_score: number
           overall_status: Database["public"]["Enums"]["annual_review_status"]
+          scoring_mode: string
           self_comment: string
           self_score: number
+          system_scores: Json
+          system_weight: number
+          template_id: string
+          template_name: string
+          terminal_criteria_scores: Json
           total_score: number
           updated_at: string
         }[]
