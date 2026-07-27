@@ -195,6 +195,12 @@ export function EmployeeResultsView({
         </CardContent>
       </Card>
 
+      <ScoreBreakdownCard
+        template={template}
+        criteriaScores={terminalCriteriaScores}
+        systemScores={kra.resolvedSystemScores}
+      />
+
       {criteria.length > 0 && (
         <Card>
           <CardHeader><CardTitle className="text-base">Criteria scores</CardTitle></CardHeader>
