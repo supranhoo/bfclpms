@@ -47,6 +47,17 @@ function toEmployeeSheet(rows: ComprehensiveRow[]) {
     'HR Comment': r.hr_comment ?? '',
     'Final Score': r.total_score ?? '',
     'Rating': r.final_rating ?? '',
+    // ADR-174 — how the rating was derived + the raw scoring parameters.
+    'Rating Derived From': r.scoring_mode ?? '',
+    'Template': r.template_name ?? '',
+    'KRA Weight': r.kra_weight ?? '',
+    'KRA Points': r.kra_points ?? '',
+    'Criteria Weight': r.criteria_weight ?? '',
+    'System Weight': r.system_weight ?? '',
+    'System Scores (raw)': r.system_scores ? JSON.stringify(r.system_scores) : '',
+    'Criteria Scores (final reviewer)': r.terminal_criteria_scores
+      ? JSON.stringify(r.terminal_criteria_scores)
+      : '',
     'Current Stage': pendingWith(r.overall_status),
     'Pending With': r.overall_status === 'completed' || r.is_excluded
       ? '—'
