@@ -7100,3 +7100,37 @@ snapshotted. Post-repair the detector returns a single non-blocking finding
 `public.can_grant_access_profile()`: a non-admin grantor cannot assign a profile to themselves,
 nor grant a profile carrying menu rights they do not already hold. Closes the
 `access_profile_assignments_self_escalation` privilege-escalation finding.
+
+## v2.66.174 — ADR-174: KRA rating visibility & score-parameter transparency
+
+**Problem.** Employees whose annual assessment is driven by KRA (a `carry_kra`
+system slot with no scored criteria) saw "—" for every stage and no rating on
+their own results page, while the admin grid showed a Final of e.g. 91.72 /
+"Outstanding". The Annual Review Report also gave no way to tell whether a
+rating came from KRA or from reviewer criteria, nor to verify the arithmetic.
+
+**Changes.**
+- `src/hooks/useKraDerivedRating.ts` (new) — single-instance wrapper over the
+  existing `kraDerivedRating` SSOT and `useResolvedSystemScores`; returns the
+  0..5 KRA rating and the projected /100 total.
+- `src/lib/annualReview/scoreParameters.ts` (new) — pure `buildScoreParameters()`
+  + `resolveScoringMode()`; one row per scoring parameter with achieved, out-of,
+  weight and contribution. Unit-tested in `scoreParameters.test.ts`.
+- `src/components/annual-review/ScoreBreakdownCard.tsx` (new) — collapsible
+  "How your score was calculated" card (table on ≥sm, stacked cards on mobile).
+- `EmployeeResultsView.tsx` — falls back to the KRA projection for total and
+  rating when `total_score` is null, badged "(provisional)"; renders the
+  breakdown card. New optional `fiscalYear` prop, passed by
+  `EmployeeAnnualReview.tsx` via `fyStartFromCycle(cycle)`.
+- DB: `get_annual_review_comprehensive_report` now also returns `template_id`,
+  `template_name`, `scoring_mode`, `criteria_weight`, `system_weight`,
+  `kra_weight`, `kra_points`, `system_scores`, `terminal_criteria_scores`
+  (effective template = `COALESCE(template_override_id, template_id)`).
+- Report UI/export — new "Rating Derived" column (with KRA points/weight) and
+  the full parameter set in the Excel employee sheet.
+
+**Risk / rollback.** Additive only: no writes, no schema changes, no stage
+logic touched. The RPC was dropped and recreated with a superset of columns;
+rollback = recreate the prior signature. UI changes are read-only display.
+
+**Policy.** See POLICY.md §AR-KRA-RATING-VISIBILITY.
