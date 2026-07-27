@@ -7285,3 +7285,32 @@ RPC is additive (new trailing columns). Rollback = restore the previous RPC
 definition and revert the four frontend files.
 
 **Policy.** See POLICY.md §AR-KRA-GRID-DISPLAY.
+
+## ADR-180 — Readable score maps in the Annual Review report export (2026-07-27)
+
+**Problem.** The Employees sheet of the Annual Review comprehensive export
+rendered `Criteria Scores (final reviewer)` and `System Scores (raw)` as raw
+`JSON.stringify` blobs keyed by internal ids
+(`{"crit_1kh5259":4,"crit_zi0lvui":5,…}`), which reviewers could not read.
+
+**Decision.** Resolve ids to the authored names on each employee's template and
+render one readable text cell per column:
+`Quality of Work: 4 | Attendance: 5 | Safety Compliance: 3`.
+
+- New SSOT `src/services/annualReview/criteriaScoreLabels.ts`:
+  - `fetchTemplateLabelMaps(templateIds)` — one batched `in ('id', …)` query on
+    `annual_review_templates`, building ordered id→name maps from
+    `sections.criteria[]` and `sections.system_scores[]`. Fails soft (returns
+    empty maps) so the export never breaks.
+  - `formatScoreMap(scores, labelMap)` — pure formatter; keeps the template's
+    authored order, appends unknown keys with their raw id (template swaps can
+    never silently drop persisted scores), returns `''` for empty input, and
+    trims decimals to 2 dp.
+- `ComprehensiveExport.ts` is now async: labels are fetched once per export;
+  `System Scores (raw)` is renamed to `System Scores`.
+- Regression tests: `src/services/annualReview/criteriaScoreLabels.test.ts`.
+
+**Risk / rollback.** Presentation-only — no schema, RPC or RLS change. Rollback
+= revert the two column expressions to `JSON.stringify`.
+
+**Policy.** See POLICY.md §RPT-SCORE-MAP-READABLE.

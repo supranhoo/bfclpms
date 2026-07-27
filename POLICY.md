@@ -5037,3 +5037,15 @@ detectable and repairable without a developer.
 4. This logic lives in `src/lib/annualReview/kraStageDisplay.ts` and its SQL
    mirror inside `get_annual_review_comprehensive_report`. New surfaces must
    reuse it rather than re-deriving stage ratings.
+
+## §RPT-SCORE-MAP-READABLE — No raw id JSON in reports (ADR-180, 2026-07-27)
+
+1. Reports and exports MUST NOT surface persisted score maps as raw JSON keyed
+   by internal ids (`crit_*`, system-score slot ids).
+2. Every such map is rendered as `Label: value | Label: value`, using the
+   authored `name` from the employee's template section.
+3. Keys with no matching template entry are still shown, using the raw id, so a
+   template swap can never hide persisted scores.
+4. The formatter and the template label fetch live in
+   `src/services/annualReview/criteriaScoreLabels.ts`; new report surfaces MUST
+   reuse them rather than re-implementing id→name mapping.

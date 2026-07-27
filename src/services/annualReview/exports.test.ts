@@ -92,6 +92,7 @@ describe('annual review exports', () => {
     expect(headers).toEqual([
       'Employee Code', 'Full Name', 'Designation',
       'Self Comments', 'Manager Comments', 'Skip Comments', 'Dept Head Comments', 'BU Head Comments', 'HR Comments',
+      'Management Comments',
     ]);
   });
 });
