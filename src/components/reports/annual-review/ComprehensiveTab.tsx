@@ -333,6 +333,8 @@ export function ComprehensiveTab({ cycleId, cycleName }: { cycleId: string | und
               <TableHead className="text-right">HR</TableHead>
               <TableHead className="text-right">Final</TableHead>
               <TableHead>Rating</TableHead>
+              {/* ADR-174 — how the rating was derived (KRA vs criteria). */}
+              <TableHead>Rating Derived</TableHead>
               <TableHead>Stage</TableHead>
               <TableHead>Pending With</TableHead>
               <TableHead>Status</TableHead>
@@ -353,6 +355,14 @@ export function ComprehensiveTab({ cycleId, cycleName }: { cycleId: string | und
                   <TableCell className="text-right tabular-nums">{r.hr_score?.toFixed(2) ?? '—'}</TableCell>
                   <TableCell className="text-right tabular-nums font-medium">{r.total_score?.toFixed(2) ?? '—'}</TableCell>
                   <TableCell className="text-sm">{r.final_rating ?? '—'}</TableCell>
+                  <TableCell className="text-sm whitespace-nowrap">
+                    {r.scoring_mode ?? '—'}
+                    {(r.kra_weight ?? 0) > 0 && (
+                      <span className="text-muted-foreground">
+                        {' '}({(r.kra_points ?? 0).toFixed(1)}/{(r.kra_weight ?? 0).toFixed(0)})
+                      </span>
+                    )}
+                  </TableCell>
                   <TableCell className="text-sm">{pendingWith(r.overall_status)}</TableCell>
                   <TableCell className="text-sm">
                     {r.overall_status === 'pending_manager' ? (r.manager_name ?? '—')
