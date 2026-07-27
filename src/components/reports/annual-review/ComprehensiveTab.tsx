@@ -113,9 +113,9 @@ export function ComprehensiveTab({ cycleId, cycleName }: { cycleId: string | und
     });
   }, [rows]);
 
-  const onExport = () => {
+  const onExport = async () => {
     try {
-      downloadComprehensiveWorkbook({
+      await downloadComprehensiveWorkbook({
         cycleName,
         rows: sortedRows,
         summary,
