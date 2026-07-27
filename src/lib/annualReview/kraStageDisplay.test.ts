@@ -6,8 +6,8 @@ const cell = (p: Partial<StageScoreCell>): StageScoreCell =>
   ({ weighted_score: null, scored: false, submitted: true, ...p });
 
 const criteria: TemplateCriterion[] = [
-  { id: 'c1', label: 'Quality', weight: 10, reviewer_stages: ['self', 'manager'] } as TemplateCriterion,
-  { id: 'c2', label: 'Safety', weight: 10, reviewer_stages: ['self', 'manager'] } as TemplateCriterion,
+  { id: 'c1', name: 'Quality', label: 'Quality', weight: 10, reviewer_stages: ['self', 'manager'] } as unknown as TemplateCriterion,
+  { id: 'c2', name: 'Safety', label: 'Safety', weight: 10, reviewer_stages: ['self', 'manager'] } as unknown as TemplateCriterion,
 ];
 
 describe('resolveStageDisplayRating (ADR-179)', () => {
