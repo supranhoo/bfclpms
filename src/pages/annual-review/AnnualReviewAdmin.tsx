@@ -4,7 +4,7 @@ import {
   useCycles, useTemplates, useRules, useCycleInstances, useActiveCycle, useTemplate,
   useSendBackStatus, useCloseCycle, useOverrideRating, useCloneTemplate, useCloneCycle,
   useAnnualReviewInstancesPaginated, useCycleStatusCounts, useReopenCycle,
-  useInstanceStageScores, useRollbackFinalizedInstance,
+  useInstanceStageScores, useInstanceStageCells, useRollbackFinalizedInstance,
 } from '@/hooks/useAnnualReview';
 import * as svc from '@/services/annualReview/annualReviewService';
 import { remapStageValueMapByDuplicates } from '@/lib/annualReview/displayStageForResponse';
@@ -60,6 +60,7 @@ import { fyStartFromCycle } from '@/lib/annualReview/fiscalYear';
 import { prevStatus } from '@/lib/annualReview/stageChain';
 import { useKraDerivedRatingsForInstances } from '@/hooks/useKraDerivedRatingsForInstances';
 import { isKraBasedTemplate } from '@/lib/annualReview/kraDerivedRating';
+import { resolveStageDisplayRating } from '@/lib/annualReview/kraStageDisplay';
 import { UnifiedBulkDialog } from '@/components/annual-review/UnifiedBulkDialog';
 import { AnnualReviewExportMenu } from '@/components/annual-review/AnnualReviewExportMenu';
 import { ChangeWorkflowDialog } from '@/components/annual-review/ChangeWorkflowDialog';
