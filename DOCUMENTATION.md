@@ -7201,3 +7201,44 @@ Default row count for June drops 2,744 → 2,585. Rollback = revert
 `src/pages/reports/KpiStatusTracker.tsx`.
 
 **Policy.** See POLICY.md §RPT-EMPLOYEE-STATUS-FILTER.
+
+## ADR-178 — KPI Status Tracker: "Pending With (Name)" column (2026-07-27)
+
+**Context.** The KPI Status Tracker only exposed `Pending At Level`, a static
+stage→role label ("Manager", "HR PMS"). Users could see *what* stage a KPI was
+stuck at but not *who* had to act, so chasing pending work required a second
+lookup. KPI Scorecard Detail already resolved named holders, but the enrichment
+was inline in that page and not reusable.
+
+**Decision.** Extract the enrichment into a shared service and consume it from
+both reports. The pure decision function `resolvePendingWith()`
+(`src/lib/kpiPendingWith.ts`) remains the single decision point.
+
+- New `src/services/reports/pendingWithResolver.ts`:
+  - `buildPendingWithContext({ kpiIds, employeeIds, month, year, profiles })`
+    assembles org-KPI data owners, HR PMS / Auditor / Management role name
+    pools, per-KPI auditor overrides (`audit_kpi_level_assignments`),
+    reporting + skip-level manager names, and the per-employee stage chains
+    from `get_bulk_employee_workflows` (POLICY §105). All reads are chunked at
+    500 (`.in()`) or paged at 1000.
+  - `resolvePendingWithForKpi(ctx, kpi)` is a thin wrapper over the resolver.
+- `src/pages/reports/KpiStatusTracker.tsx`: profiles select now includes
+  `reporting_manager_id`, KPI select includes `category_id`; each row carries
+  `pendingWithName`. New registry field `pending_with`
+  ("Pending With (Name)", sort 145) renders after "Pending At", is included in
+  the Excel export, and is matched by the search box. Approved /
+  frequency-locked / orphaned rows render `—`.
+- `src/pages/reports/KpiScorecardDetail.tsx`: inline enrichment replaced with
+  the shared service; behaviour unchanged.
+
+**Tests.** `src/services/reports/__tests__/pendingWithResolver.test.ts`
+(9 cases: approved, self→manager, manager→skip, org KPI data owners, kra_set
+self, per-KPI auditor override beats global pool, audit→management, missing
+manager, unknown employee). Existing `src/test/kpiPendingWith.test.ts` guards
+the pure resolver.
+
+**Risk / rollback.** Read-only; no schema, RLS or workflow change. Adds ~4
+chunked reads per tracker load (same cost profile as KPI Scorecard Detail).
+Rollback = revert the two page files and delete the service.
+
+**Policy.** See POLICY.md §RPT-PENDING-WITH-SSOT.
