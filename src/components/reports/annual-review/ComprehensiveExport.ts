@@ -1,6 +1,9 @@
 import * as XLSX from 'xlsx';
 import type { ComprehensiveRow, KpiSummary, GroupSummary } from '@/services/annualReview/comprehensiveReport';
 import { pendingWith, eligibilityLabel, completionStatus, ratingDistribution, diagnoseHr, stageRatingDisplay } from '@/services/annualReview/comprehensiveReport';
+import {
+  fetchTemplateLabelMaps, formatScoreMap, type TemplateLabelMaps,
+} from '@/services/annualReview/criteriaScoreLabels';
 
 export interface ExportInput {
   cycleName: string;
@@ -14,7 +17,7 @@ export interface ExportInput {
   byStage: GroupSummary[];
 }
 
-function toEmployeeSheet(rows: ComprehensiveRow[]) {
+function toEmployeeSheet(rows: ComprehensiveRow[], labelMaps: TemplateLabelMaps) {
   return rows.map((r) => {
     const diag = diagnoseHr(r);
     const hodScore = r.dept_head_score ?? r.manager_score ?? null;
@@ -63,10 +66,15 @@ function toEmployeeSheet(rows: ComprehensiveRow[]) {
     'KRA Points': r.kra_points ?? '',
     'Criteria Weight': r.criteria_weight ?? '',
     'System Weight': r.system_weight ?? '',
-    'System Scores (raw)': r.system_scores ? JSON.stringify(r.system_scores) : '',
-    'Criteria Scores (final reviewer)': r.terminal_criteria_scores
-      ? JSON.stringify(r.terminal_criteria_scores)
-      : '',
+    // ADR-180 — humanised score maps (criterion / system-score names, not ids).
+    'System Scores': formatScoreMap(
+      r.system_scores,
+      r.template_id ? labelMaps.system[r.template_id] : undefined,
+    ),
+    'Criteria Scores (final reviewer)': formatScoreMap(
+      r.terminal_criteria_scores,
+      r.template_id ? labelMaps.criteria[r.template_id] : undefined,
+    ),
     'Current Stage': pendingWith(r.overall_status),
     'Pending With': r.overall_status === 'completed' || r.is_excluded
       ? '—'
