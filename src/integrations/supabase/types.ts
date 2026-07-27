@@ -763,6 +763,60 @@ export type Database = {
           },
         ]
       }
+      annual_review_downstream_rewind_repair_2026_07: {
+        Row: {
+          employee_code: string | null
+          id: string
+          instance_id: string
+          new_criteria_weighted_score: number | null
+          new_final_rating: string | null
+          new_overall_status: string | null
+          new_total_score: number | null
+          prev_criteria_weighted_score: number | null
+          prev_final_rating: string | null
+          prev_overall_status: string | null
+          prev_total_score: number | null
+          reason: string | null
+          relocked_roles: string[] | null
+          repaired_at: string
+          repaired_by: string | null
+        }
+        Insert: {
+          employee_code?: string | null
+          id?: string
+          instance_id: string
+          new_criteria_weighted_score?: number | null
+          new_final_rating?: string | null
+          new_overall_status?: string | null
+          new_total_score?: number | null
+          prev_criteria_weighted_score?: number | null
+          prev_final_rating?: string | null
+          prev_overall_status?: string | null
+          prev_total_score?: number | null
+          reason?: string | null
+          relocked_roles?: string[] | null
+          repaired_at?: string
+          repaired_by?: string | null
+        }
+        Update: {
+          employee_code?: string | null
+          id?: string
+          instance_id?: string
+          new_criteria_weighted_score?: number | null
+          new_final_rating?: string | null
+          new_overall_status?: string | null
+          new_total_score?: number | null
+          prev_criteria_weighted_score?: number | null
+          prev_final_rating?: string | null
+          prev_overall_status?: string | null
+          prev_total_score?: number | null
+          reason?: string | null
+          relocked_roles?: string[] | null
+          repaired_at?: string
+          repaired_by?: string | null
+        }
+        Relationships: []
+      }
       annual_review_empty_stage_repair_2026_07: {
         Row: {
           employee_code: string | null
@@ -14422,6 +14476,16 @@ export type Database = {
         }[]
       }
       annual_review_directory_access: { Args: { v_uid: string }; Returns: Json }
+      annual_review_downstream_rewind_diagnostic: {
+        Args: never
+        Returns: {
+          employee_code: string
+          full_name: string
+          instance_id: string
+          latest_locked_role: string
+          overall_status: string
+        }[]
+      }
       annual_review_edit_workflow: {
         Args: {
           p_enabled_stages: Json
@@ -14499,6 +14563,10 @@ export type Database = {
         }
         Returns: string
       }
+      annual_review_repair_downstream_rewind: {
+        Args: { p_instance_id: string; p_reason: string }
+        Returns: Database["public"]["Enums"]["annual_review_status"]
+      }
       annual_review_resolve_final_rating: {
         Args: { p_total_score: number }
         Returns: string
@@ -14524,6 +14592,7 @@ export type Database = {
         Args: { p_reason: string; p_run_id: string }
         Returns: string
       }
+      annual_review_stage_ord: { Args: { p_role: string }; Returns: number }
       annual_review_stage_scoreable_criteria_count: {
         Args: {
           p_instance_id: string
@@ -14531,6 +14600,7 @@ export type Database = {
         }
         Returns: number
       }
+      annual_review_status_ord: { Args: { p_status: string }; Returns: number }
       annual_review_status_rank: {
         Args: { s: Database["public"]["Enums"]["annual_review_status"] }
         Returns: number
