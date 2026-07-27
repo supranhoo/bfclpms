@@ -71,6 +71,8 @@ export interface ComprehensiveRow {
   management_rating_5?: number | null;
   /** 'criteria' | 'kra' | 'none' */
   rating_source?: string | null;
+  // ADR-181 — eligibility answers, keyed by criterion id.
+  eligibility_inputs?: Record<string, unknown> | null;
 }
 
 export async function fetchComprehensiveReport(cycleId: string): Promise<ComprehensiveRow[]> {

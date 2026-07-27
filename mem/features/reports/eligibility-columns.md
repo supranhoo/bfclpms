@@ -1,0 +1,6 @@
+---
+name: Annual Review Eligibility Report Columns
+description: Annual Review export emits one column per eligibility question with value, expected condition and pass/fail via eligibilityReportColumns.ts
+type: feature
+---
+ADR-181 / POLICY §RPT-ELIGIBILITY-COLUMNS. `get_annual_review_comprehensive_report` returns `eligibility_inputs jsonb`. `src/services/annualReview/eligibilityReportColumns.ts` is the SSOT: `fetchTemplateEligibilityMaps` (batched `sections.eligibility_criteria[]`, fails soft), `buildEligibilityColumnSet` (union across cycle templates, de-duped by normalised question name, first-seen order), `formatEligibilityCell` / `buildEligibilityRow` render `3 (At most 5) — Pass` using `lib/annualReview/eligibility.evaluate` + `eligibilityFormat`. Missing answers → `— (At least 6) — Not provided` and count as fail. Employees sheet has `Eligibility Result` (`Pass` / `Fail (names)`) right after `Eligibility`, then per-question columns; templates without eligibility criteria get `—` and blank cells. Never surface criterion ids or raw operators in reports.
