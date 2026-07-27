@@ -9,7 +9,8 @@ import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Save, Search, UserPlus, Trash2, Shield } from 'lucide-react';
-import { useReportAccess, type ReportAccessConfig } from '@/hooks/useReportAccess';
+import { useReportAccess } from '@/hooks/useReportAccess';
+import type { MappableReport } from '@/lib/reports/accessCatalog';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { ALL_APP_ROLES, type AppRole } from '@/lib/roles';
@@ -30,7 +31,7 @@ const ROLE_LABELS: Record<AppRole, string> = {
 };
 
 export function ReportAccessTab() {
-  const { configs, userOverrides, isLoading, updateAccess, grantUserAccess, revokeUserAccess } = useReportAccess();
+  const { configs, mappableReports, userOverrides, isLoading, updateAccess, grantUserAccess, revokeUserAccess } = useReportAccess();
   const { toast } = useToast();
 
   // Local state for editing role configs
@@ -79,18 +80,18 @@ export function ReportAccessTab() {
       ...o,
       userName: profileMap.get(o.user_id)?.full_name || 'Unknown',
       userCode: profileMap.get(o.user_id)?.employee_code || '',
-      reportName: configs.find(c => c.report_key === o.report_key)?.report_name || o.report_key,
+      reportName: mappableReports.find(c => c.report_key === o.report_key)?.report_name || o.report_key,
     }));
-  }, [userOverrides, profiles, configs]);
+  }, [userOverrides, profiles, mappableReports]);
 
-  const getEditedConfig = (config: ReportAccessConfig) => {
+  const getEditedConfig = (config: MappableReport) => {
     return editedConfigs[config.report_key] || {
       view_roles: config.view_roles,
       download_roles: config.download_roles,
     };
   };
 
-  const toggleRole = (reportKey: string, field: 'view_roles' | 'download_roles', role: AppRole, config: ReportAccessConfig) => {
+  const toggleRole = (reportKey: string, field: 'view_roles' | 'download_roles', role: AppRole, config: MappableReport) => {
     const current = getEditedConfig(config);
     const roles = current[field];
     const updated = roles.includes(role)
@@ -102,21 +103,23 @@ export function ReportAccessTab() {
     }));
   };
 
-  const hasChanges = (config: ReportAccessConfig) => {
+  const hasChanges = (config: MappableReport) => {
     const edited = editedConfigs[config.report_key];
-    if (!edited) return false;
+    // Unmapped reports have no saved row — allow saving the defaults as-is.
+    if (!edited) return !config.isConfigured;
     return (
       JSON.stringify([...edited.view_roles].sort()) !== JSON.stringify([...config.view_roles].sort()) ||
       JSON.stringify([...edited.download_roles].sort()) !== JSON.stringify([...config.download_roles].sort())
     );
   };
 
-  const handleSave = async (config: ReportAccessConfig) => {
+  const handleSave = async (config: MappableReport) => {
     const edited = getEditedConfig(config);
     setSavingKey(config.report_key);
     try {
       await updateAccess.mutateAsync({
         reportKey: config.report_key,
+        reportName: config.report_name,
         viewRoles: edited.view_roles,
         downloadRoles: edited.download_roles,
       });
@@ -178,7 +181,8 @@ export function ReportAccessTab() {
             Role-Based Report Access
           </CardTitle>
           <CardDescription>
-            Configure which roles can view and download each report. Changes are saved per report.
+            Configure which roles can view and download each report. Every active report is listed —
+            reports marked "Unmapped" are still using system defaults until you save them.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -193,11 +197,20 @@ export function ReportAccessTab() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {configs.map(config => {
+                {mappableReports.map(config => {
                   const edited = getEditedConfig(config);
                   return (
                     <TableRow key={config.report_key}>
-                      <TableCell className="font-medium">{config.report_name}</TableCell>
+                      <TableCell className="font-medium">
+                        <div className="flex flex-col gap-1">
+                          <span>{config.report_name}</span>
+                          {!config.isConfigured && (
+                            <Badge variant="outline" className="w-fit text-[10px] font-normal">
+                              Unmapped — using defaults
+                            </Badge>
+                          )}
+                        </div>
+                      </TableCell>
                       <TableCell>
                         <div className="flex flex-wrap gap-2">
                           {ALL_APP_ROLES.map(role => (
@@ -289,7 +302,7 @@ export function ReportAccessTab() {
                     <SelectValue placeholder="Select report" />
                   </SelectTrigger>
                   <SelectContent>
-                    {configs.map(c => (
+                    {mappableReports.map(c => (
                       <SelectItem key={c.report_key} value={c.report_key}>{c.report_name}</SelectItem>
                     ))}
                   </SelectContent>
