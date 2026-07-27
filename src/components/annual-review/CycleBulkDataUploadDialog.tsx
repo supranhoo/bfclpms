@@ -32,6 +32,8 @@ export function CycleBulkDataUploadDialog({
   const [busy, setBusy] = useState(false);
   // ADR-171: opt-in admin override to also apply upgrades to Completed reviews.
   const [allowCompletedUpgrades, setAllowCompletedUpgrades] = useState(false);
+  // ADR-186: opt-in admin override for mid-workflow (pending_dept/bu/hr/management) rows.
+  const [allowMidWorkflowUpgrades, setAllowMidWorkflowUpgrades] = useState(false);
 
   const { data: plan, isLoading, refetch } = useQuery<CycleBulkPlan>({
     queryKey: ['annual-review', 'bulk-data-plan', cycle?.id],
@@ -51,7 +53,7 @@ export function CycleBulkDataUploadDialog({
     if (!plan) return;
     setBusy(true);
     try {
-      const r = await parseAndDryRun(f, plan, { allowCompletedUpgrades });
+      const r = await parseAndDryRun(f, plan, { allowCompletedUpgrades, allowMidWorkflowUpgrades });
       setReport(r);
       setFile(f);
     } catch (e) {
@@ -66,7 +68,9 @@ export function CycleBulkDataUploadDialog({
     setBusy(true);
     try {
       const res = await commitDryRun(report, plan, {
-        reason: allowCompletedUpgrades ? 'Bulk system-score upgrade (admin override)' : undefined,
+        reason: allowCompletedUpgrades || allowMidWorkflowUpgrades
+          ? 'Bulk system-score upgrade (admin override)'
+          : undefined,
       });
       const upgradeNote = res.upgradedCompleted
         ? ` (${res.upgradedCompleted} completed review${res.upgradedCompleted === 1 ? '' : 's'} upgraded)`
