@@ -7314,3 +7314,34 @@ render one readable text cell per column:
 = revert the two column expressions to `JSON.stringify`.
 
 **Policy.** See POLICY.md §RPT-SCORE-MAP-READABLE.
+
+## ADR-181 — Eligibility questions in the Annual Review report export (2026-07-27)
+
+**Problem.** The comprehensive export only carried an `Eligibility` flag
+(`Eligible` / `Excluded`). The actual eligibility questions authored on the
+template (tenure, absent days, disciplinary case…) and the values entered for
+each employee were not visible anywhere in the report.
+
+**Decision.** Emit one Excel column per eligibility question, plus a summary.
+
+- `get_annual_review_comprehensive_report` now also returns
+  `eligibility_inputs jsonb` (additive; appended at the end of the return set,
+  no schema/RLS/grant change).
+- New SSOT `src/services/annualReview/eligibilityReportColumns.ts`:
+  - `fetchTemplateEligibilityMaps(templateIds)` — batched fetch of
+    `sections.eligibility_criteria[]`, fails soft.
+  - `buildEligibilityColumnSet(...)` — union of questions across all templates
+    in the cycle, de-duplicated by normalised question name, first-seen order.
+  - `formatEligibilityCell(...)` / `buildEligibilityRow(...)` — renders
+    `3 (At most 5) — Pass`, reusing `evaluate` + `formatExpected` /
+    `formatActual` so report verdicts always match the app.
+  - Missing answers render `— (At least 6) — Not provided` and count as fail.
+- Employees sheet gains `Eligibility Result` (`Pass` / `Fail (Absent Days)`)
+  immediately after `Eligibility`, then the per-question columns. Employees on
+  a template without eligibility criteria get blank cells and `—`.
+- Regression tests: `src/services/annualReview/eligibilityReportColumns.test.ts`.
+
+**Risk / rollback.** Read-only; the migration only widens the RPC return set.
+Rollback = restore the previous RPC signature and drop the new column block.
+
+**Policy.** See POLICY.md §RPT-ELIGIBILITY-COLUMNS.

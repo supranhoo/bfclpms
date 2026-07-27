@@ -5049,3 +5049,19 @@ detectable and repairable without a developer.
 4. The formatter and the template label fetch live in
    `src/services/annualReview/criteriaScoreLabels.ts`; new report surfaces MUST
    reuse them rather than re-implementing id→name mapping.
+
+## §RPT-ELIGIBILITY-COLUMNS — Eligibility questions are report columns (ADR-181, 2026-07-27)
+
+1. The Annual Review comprehensive export MUST expose every eligibility
+   question authored on the templates used by the cycle as its own column,
+   headed by the authored question name (never a criterion id).
+2. Each cell shows the entered value, the expected condition in plain language
+   and the verdict: `3 (At most 5) — Pass`. Booleans render Yes/No; a missing
+   answer renders `— (<expected>) — Not provided` and counts as a failure.
+3. An `Eligibility Result` column summarises the row as `Pass` or
+   `Fail (<failing question names>)`; templates with no eligibility criteria
+   render `—` and blank question cells.
+4. Pass/fail MUST be computed with `lib/annualReview/eligibility.evaluate` so
+   the report can never disagree with the reviewer UI. The column builder and
+   formatters live in `src/services/annualReview/eligibilityReportColumns.ts`
+   and MUST be reused by any new report surface.
