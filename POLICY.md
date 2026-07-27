@@ -5154,3 +5154,24 @@ detectable and repairable without a developer.
    `system_scores`, `system_scores_raw`, `total_score` and `final_rating` into
    a dated audit table with `performed_by = NULL`, and recompute aggregates
    with `annual_review_compute_final_summary` — never by hand.
+
+## §AR-FINAL-SCORE-SCALE-INVARIANT — Annual review final score is always 0–100 with a rating band (ADR-187, 2026-07-27)
+
+1. `annual_review_instances.total_score` MUST be a normalised value in the
+   inclusive range 0–100. `criteria_weighted_score` is the raw Σ(weight × score)
+   sum and MAY exceed 100. Writing the raw sum into `total_score` is forbidden.
+2. `public.annual_review_compute_final_summary(instance_id)` is the single
+   source of truth for `total_score` and `final_rating`. Repair scripts, bulk
+   uploads and RPCs MUST call it rather than computing the total themselves.
+3. A review in `completed` status that carries a `total_score` MUST carry a
+   non-empty `final_rating`. The band is resolved by
+   `public.annual_review_resolve_final_rating(total_score)` against the
+   configurable `auto_final_rating_thresholds` setting — never hardcoded.
+4. Trigger `trg_ar_total_score_scale` enforces 1 and 3 at the database layer and
+   rejects out-of-range writes with `check_violation`.
+5. Every corrective write to these fields MUST record a pre-image in an audit
+   table (for this incident: `annual_review_final_score_repair_2026_07`) so the
+   change is reversible.
+6. Admins can monitor drift on the Annual Review admin → Orphaned Reviews tab
+   ("Final score integrity"); a non-zero count means a write path bypassed the
+   SSOT and MUST be investigated before the next cycle close.
