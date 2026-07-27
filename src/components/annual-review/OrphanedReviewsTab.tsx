@@ -13,6 +13,7 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
 import { ConfirmDestructiveDialog } from '@/components/ui/ConfirmDestructiveDialog';
+import { FinalScoreIntegrityCard } from '@/components/annual-review/FinalScoreIntegrityCard';
 import { Loader2, RefreshCw, ShieldAlert, UserCheck } from 'lucide-react';
 import { toast } from 'sonner';
 import {
@@ -134,6 +135,7 @@ export function OrphanedReviewsTab() {
 
   return (
     <div className="space-y-4">
+      <FinalScoreIntegrityCard />
       <Card>
         <CardHeader className="flex-row items-start justify-between gap-3 space-y-0">
           <div>

@@ -7472,3 +7472,24 @@ a status-only sweep.
 **No** schema, RLS, or edge-function change. **Rollback:** the audit table
 restores both instances in one update; the UI change is additive and defaults
 to the pre-ADR behaviour. See POLICY §AR-SYSTEM-SLOT-COVERAGE.
+
+### Annual review — final score scale invariant (ADR-187)
+
+`total_score` is the normalised 0–100 appraisal score; `criteria_weighted_score`
+is the raw weighted criteria sum and may exceed 100. Both are produced by
+`public.annual_review_compute_final_summary(instance_id)`, the only sanctioned
+writer. The database trigger `trg_ar_total_score_scale` rejects any
+`total_score` outside 0–100 and auto-stamps a missing `final_rating` on
+completed reviews via `annual_review_resolve_final_rating`.
+
+- Client mirror: `src/lib/annualReview/finalScoreScale.ts`
+  (`isNormalisedTotalScore`, `normaliseCriteriaPoints`, `resolveFinalRating`,
+  `classifyFinalScoreIntegrity`).
+- Admin drift monitor: `src/components/annual-review/FinalScoreIntegrityCard.tsx`,
+  rendered at the top of the Orphaned Reviews tab.
+- Repair audit / rollback source: `annual_review_final_score_repair_2026_07`
+  (42 rows, 2026-07-27).
+- Tests: `src/test/annualReview/finalScoreScale.test.ts`.
+
+Version history: v2.66.187 — ADR-187 final score scale invariant + 42-instance
+repair.

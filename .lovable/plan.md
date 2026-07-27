@@ -1,58 +1,70 @@
-## Assumptions
+## 1. Assumptions
 
-- Both employees should carry the same "Annual Production Target Vs Actual" outcome as their template peers (all 37 scored rows carry **15 points of the 25 weight**). If their plant/line figure differs, tell me the correct raw value and the plan uses that instead.
-- No re-scoring of any other criterion is intended.
+- The employee codes given are for the current (FY2026-07) annual review cycle; each has exactly one instance, all `completed`.
+- The correct score is whatever `public.annual_review_compute_final_summary(instance_id)` returns — the existing server-side SSOT. No reviewer-entered data changes.
+- You listed 41 codes but said 42; a 42nd instance is affected by the same defect (blank rating) and is included below.
 
-## What the data actually shows (verified)
+## 2. Clarifications
 
-Effective template for **both** is `DRI/Admin - W - Pollution` (`408ae1b3…`; 100508 reaches it via `template_override_id`). That template has 7 system slots, including `sys_3jsce5p` — **Annual Production Target Vs Actual, weight 25**.
+None blocking. One decision to confirm during implementation: whether affected employees should be notified that their displayed rating changed (default: no notification, audit log only).
 
-| | 100508 Satyam Kumar Jha | 101676 Satyaban Roy |
-|---|---|---|
-| Status | completed (finalised 27-Jul, ADR-185) | completed (finalised 27-Jul, ADR-185) |
-| System slots stored | 6 of 7 | 6 of 7 |
-| `sys_3jsce5p` (Annual Production) | **absent** | **absent** |
-| Criteria weighted | 195.00 | 231.00 |
-| Total / rating | 51.00 Poor | 58.20 Average |
+## 3. Confirmed findings (verified against the database)
 
-Every other non-excluded instance on this template has `sys_3jsce5p = 15`, all written in one burst on **25-Jul 16:08–16:09**. The only rows without it are these two plus the two `excluded` instances (101375, 101376).
+All 41 listed employees have a completed instance where:
 
-## Root cause — 5 Why
+- `total_score` = `criteria_weighted_score` = the **raw weighted criteria sum** (255 … 450), not the normalised 0–100 value.
+- `final_rating` is **blank** (so the UI and reports show no rating band).
+- System-score points (Safety/HR/Production etc., 7–19 pts each) are **not included** in the stored total.
 
-1. **Why is the score missing?** The 25-Jul bulk system-scores upload never wrote `sys_3jsce5p` for these two instances.
-2. **Why not?** The uploader classified them as `verdict: 'skip', reason: "Locked stage: …"`.
-3. **Why skipped?** `src/services/annualReview/cycleBulkDataUpload.ts:462-476` allows a write only when the status is in `STAGE_SAFE = {not_started, pending_self, pending_manager}`, or when it is exactly `completed` **and** the admin ticked "apply to completed reviews" (ADR-171 upgrade path).
-4. **Why did that exclude them?** At 25-Jul 16:08 these two were mid-workflow after the ADR-185 re-open: 101676 was `pending_bu`, 100508 was `pending_dept`. Neither is in `STAGE_SAFE`, and neither was `completed` — a **coverage gap** covering `pending_dept`, `pending_bu`, `pending_skip`, `pending_hr`, `pending_management`. Their 37 peers were all `completed`, so the upgrade path caught them.
-5. **Why did nobody notice?** The skip is reported only as an aggregate "N skip" badge with a status reason; nothing flags "a system slot the template requires has no value at finalisation".
+Recomputing with `annual_review_compute_final_summary` gives sane values for every one of them, e.g.:
 
-Compounding effect: `annual_review_compute_final_summary` builds the system denominator from **template weights**, not from stored keys — so the missing slot counts as **0 out of 25**, not as excluded. The ADR-185 finalisation on 27-Jul therefore locked in totals depressed by up to 15 points each. This is a real scoring defect, not just a display gap.
+```text
+code    stored total   correct total   correct rating
+101755  370.00         92.00           Outstanding
+101909  450.00         97.00           Outstanding
+100323  255.00         67.00           Average
+100216  260.00         70.00           Good
+101707  270.00         68.60           Average
+```
 
-## Risk & Impact Report
+Blast radius: of 2,019 completed instances, exactly **41** have `total_score > 100`, and exactly **42** have a blank `final_rating`. The 42nd is **100638 Lakhee Kant Mahto** — total is correctly normalised (79.60) but the rating band is blank.
 
-- **Data impact:** Writes one system-score key on 2 instances and recomputes `total_score` / `final_rating`. Ratings will change (both rise). No schema change; additive plus a dated audit snapshot.
-- **Workflow impact:** None — both stay `completed`; no stage moves, no reviewer queues touched.
-- **UI/UX impact:** Score card, admin grid, and the Annual Review report show the new total and rating; a new skip-reason surface in the bulk-upload dialog (below).
-- **Regression risk:** Low for the repair (explicit 2-instance whitelist, monotonic upgrade only). Moderate for widening `STAGE_SAFE` — that is why the uploader change is a *reported gap*, not a silent widening.
-- **Scalability:** Two rows; detector query is a single indexed scan over the cycle.
-- **Mitigation:** Reuse `admin_apply_system_scores_upgrade` (monotonic, already audited) plus `annual_review_compute_final_summary` — no hand-computed totals. Full before-state snapshot for one-statement rollback.
+Root cause evidence: all 41 were finalized on 18-Jul and 20-Jul, and all 41 share an identical `updated_at` of `2026-07-24 12:19:03.863653+00` — a single bulk backfill script rewrote `total_score` from the raw criteria sum and cleared `final_rating`, bypassing the compute SSOT. There is currently **no database trigger enforcing the 0–100 scale or rating presence** on `annual_review_instances` (17 triggers exist; none covers score scale).
 
-## Plan
+## 4. Five Whys
 
-1. **Confirm the source figure.** Re-read the 25-Jul upload workbook value for this template group (peers = 15/25) and confirm it applies to both employees. *Verify: value agreed before any write.*
-2. **Pre-snapshot.** New audit table `annual_review_missing_system_slot_repair_2026_07`: instance_id, employee_code, prior `system_scores`, `system_scores_raw`, `total_score`, `final_rating`, slot key, applied points, reason, `performed_by = NULL` (system-applied). *Verify: 2 rows.*
-3. **Apply the missing slot** via `admin_apply_system_scores_upgrade` for each instance — monotonic, so it can only add, never downgrade. *Verify: both instances now hold 7/7 slots.*
-4. **Recompute aggregates** with `annual_review_compute_final_summary` and write `total_score` / `final_rating`, exactly as the normal path does. *Verify: new totals ≈ 51.00 → ~66 and 58.20 → ~73; ratings re-derived, not hand-set.*
-5. **System-wide detector (the real CAPA).** Query every instance in the cycle for template system slots with **no stored value**, and report count by status. Repair anything else the same way only after review — no blind sweep. *Verify: list produced; scope of the gap known beyond these two.*
-6. **Close the uploader gap.** In `cycleBulkDataUpload.ts`, treat mid-workflow statuses as an explicit, visible outcome: keep them skipped by default but change the reason to `"Mid-workflow stage: pending_bu — not covered by safe or completed-upgrade mode"`, and surface a per-status breakdown in the dialog's skip badge so a whole cohort can never be silently missed again. Add a "Mid-workflow rows (upgrades only)" admin opt-in routed through the same monotonic RPC.
-7. **Guard at finalisation.** Extend the ADR-172 stage-score guard family with a warning-level check: finalising an instance whose effective template has a weighted system slot with no stored value logs to the audit trail and shows an admin warning (not a hard block — some slots legitimately land late).
-8. **Tests.** `src/test/annualReview/missingSystemSlot.test.ts` — (a) a mid-workflow status is reported as an explicit skip with a status-specific reason, not folded into "Locked stage"; (b) a template slot with no stored value scores 0/weight in the total, proving the depression is real; (c) the repair is monotonic and cannot lower a stored value.
-9. **Docs, policy, memory.** `docs/adr/ADR-186.md`, POLICY **§AR-SYSTEM-SLOT-COVERAGE** ("a weighted system slot with no stored value scores zero — bulk uploads must never silently skip a cohort by status"), `DOCUMENTATION.md` version bump, and a memory entry.
+1. Why is the final score wrong? — `total_score` holds a raw weighted sum, not the 0–100 normalised score.
+2. Why is it raw? — A 24-Jul bulk repair wrote `criteria_weighted_score` straight into `total_score`.
+3. Why did it write raw? — The script did its own arithmetic instead of calling `annual_review_compute_final_summary`.
+4. Why was that allowed? — No invariant blocks an out-of-range `total_score` or a completed instance with no `final_rating`.
+5. Why no invariant? — ADR-126 fixed the then-known instances but did not add a permanent guard, so any later write path can reintroduce the defect.
 
-## UI Changes
+## 5. Risk & impact
 
-- **Bulk Data Upload dialog** — the existing `N skip` badge becomes a hoverable breakdown listing skip reasons by status (e.g. `12 completed · 2 pending_bu · 1 pending_dept`), plus a new "Mid-workflow rows (upgrades only)" checkbox next to the existing completed-rows checkbox. Same card, no layout shift, wraps on mobile.
-- **Admin review detail** — a warning chip "System slot missing: Annual Production Target Vs Actual (0/25)" on any instance with an unfilled weighted slot. Inline in the score breakdown card; no new route or dialog.
+- **Data**: 42 rows updated (score/rating only). Reviewer responses, system scores and workflow state untouched. Fully reversible from the pre-image audit table.
+- **Workflow**: none — all instances stay `completed`.
+- **UI/UX**: affected employees' scorecards, admin grid and the Annual Review report will begin showing a normalised score and a rating band. Ratings may move for downstream consumers (increment/incentive eligibility) — flagged below.
+- **Regression risk**: the new trigger could reject legitimate writes. Mitigated by scoping it to `total_score` range only and allowing NULL during in-flight stages.
+- **Scalability**: one-off update over 42 rows; the trigger is O(1) per row.
 
-## Rollback
+## 6. Step-by-step plan
 
-`annual_review_missing_system_slot_repair_2026_07` stores prior `system_scores`, `system_scores_raw`, `total_score` and `final_rating`; one update restores both instances exactly.
+1. **Audit table** — create `annual_review_final_score_repair_2026_07` capturing, per instance: employee code, old/new `criteria_weighted_score`, `total_score`, `final_rating`, template id, reason, `performed_by`, timestamp. *Verify: 42 pre-image rows inserted before any update.*
+2. **Recompute repair** — update the 42 instances from `annual_review_compute_final_summary(id)` (total + rating; `criteria_weighted_score` stays as the raw weighted sum, which is its correct meaning). *Verify: zero completed instances with `total_score > 100` or blank `final_rating`.*
+3. **Invariant trigger** — add `trg_ar_total_score_scale` (BEFORE INSERT/UPDATE OF `total_score`, `final_rating`) raising an exception when `total_score` is outside 0–100, and stamping the rating via `annual_review_resolve_final_rating` when a completed instance has a score but no rating. *Verify: a deliberate `UPDATE ... total_score = 315` is rejected.*
+4. **Drift monitor** — extend the existing admin data-integrity surface with a read-only "final score out of range / missing rating" count so a recurrence is visible without a support ticket.
+5. **Regression tests** — `src/test/annualReview/finalScoreScale.test.ts` covering: raw-sum input is normalised, rating bands map correctly at boundaries (Average/Good/Outstanding), and blank rating with a present score is not a valid completed state.
+6. **Docs** — `docs/adr/ADR-187.md` and `POLICY.md` §AR-FINAL-SCORE-SCALE-INVARIANT; memory entry under `mem/features/annual-review/`.
+
+## 7. UI changes
+
+- No layout changes. The 42 affected employee scorecards, the admin progress grid and the Annual Review report will simply render a 0–100 score and a rating chip where they previously showed an inflated number and an empty rating.
+- New (admin-only) integrity counter row on the existing data-integrity panel; no new navigation.
+
+## 8. Rollback
+
+`UPDATE ... FROM annual_review_final_score_repair_2026_07` restores every pre-image value; `DROP TRIGGER trg_ar_total_score_scale` reverts the guard. No schema is dropped or altered destructively.
+
+## 9. Follow-up to confirm with you
+
+If increment or incentive runs for this cycle already consumed the inflated `total_score` for any of these 42, those runs need recomputation. I will report which runs referenced them and will **not** recompute anything outside the annual review without your go-ahead.
