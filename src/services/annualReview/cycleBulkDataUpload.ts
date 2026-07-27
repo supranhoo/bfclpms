@@ -5,6 +5,9 @@ import { resolveTemplateId } from '@/services/annualReview/annualReviewService';
 import type { AnnualReviewTemplate, TemplateSystemScore } from '@/types/annualReview';
 import { scoreFromRaw, type ScoringRules } from '@/lib/annualReview/systemKpiScoring';
 import { resolveLibraryKeyByName, normalizeSlotName } from '@/lib/annualReview/systemKpiAliases';
+import {
+  classifyStageCoverage, summariseSkipsByStatus, STAGE_SAFE_STATUSES,
+} from '@/lib/annualReview/bulkStageCoverage';
 
 /**
  * Cycle-wide "single sheet" bulk data uploader for Annual Review.
@@ -59,7 +62,7 @@ export interface CycleBulkPlan {
   unresolvedSlots: Array<{ name: string; templateNames: string[] }>;
 }
 
-const STAGE_SAFE = new Set(['not_started', 'pending_self', 'pending_manager']);
+const STAGE_SAFE = new Set(STAGE_SAFE_STATUSES);
 
 function norm(s: string): string {
   return s.trim().toLowerCase().replace(/\s+/g, ' ');
