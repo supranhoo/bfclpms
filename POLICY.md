@@ -4962,3 +4962,23 @@ detectable and repairable without a developer.
 4. **Single source of truth.** UI and export MUST both read from
    `src/lib/annualReview/scoreParameters.ts`. No surface may re-implement the
    contribution maths.
+
+## §RPT-ACCESS-REGISTRY-SSOT — Every active report must be mappable (ADR-176, 2026-07-27)
+
+1. **Registry is the catalogue.** `public.report_registry` (rows seeded from
+   `src/lib/reports/catalog.ts`) is the SSOT for which reports EXIST.
+   `public.report_access_config` only holds SAVED role mappings — it is never
+   the catalogue.
+2. **Nothing may be unmappable.** Admin → System Settings → *Report Access* MUST
+   list the union of active registry reports and existing config rows, built by
+   `buildMappableReports()` in `src/lib/reports/accessCatalog.ts`. A report that
+   has no config row is listed as "Unmapped — using defaults" and is fully
+   editable.
+3. **Save creates or updates.** `updateAccess` upserts on `report_key`, so
+   mapping an unmapped report creates its row. A silent no-op save is a defect.
+4. **Least privilege by default.** A report with no entry in
+   `DEFAULT_REPORT_ACCESS` defaults to admin-only view and download. Defaults
+   live in `accessCatalog.ts` only — never duplicated in hooks or components.
+5. **New reports.** Shipping a report REQUIRES adding it to
+   `src/lib/reports/catalog.ts` and `report_registry`; that alone makes it
+   mappable, no access-config seed needed.

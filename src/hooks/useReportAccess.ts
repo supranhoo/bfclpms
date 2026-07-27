@@ -2,6 +2,11 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import type { AppRole } from '@/lib/roles';
+import {
+  DEFAULT_REPORT_ACCESS,
+  buildMappableReports,
+  type MappableReport,
+} from '@/lib/reports/accessCatalog';
 
 export interface ReportAccessConfig {
   id: string;
@@ -23,33 +28,8 @@ export interface ReportAccessUserOverride {
   created_at: string;
 }
 
-// Default fallback when DB is empty (matches previous hardcoded routes)
-const DEFAULT_CONFIGS: Record<string, { view_roles: AppRole[]; download_roles: AppRole[] }> = {
-  'employee-summary': { view_roles: ['manager', 'admin', 'auditor', 'management'], download_roles: ['admin'] },
-  'performance': { view_roles: ['manager', 'admin', 'auditor', 'management'], download_roles: ['admin'] },
-  'monthly-scorecard': { view_roles: ['manager', 'admin', 'auditor', 'management'], download_roles: ['admin'] },
-  'kra-issuance': { view_roles: ['manager', 'admin', 'management'], download_roles: ['admin'] },
-  'queries': { view_roles: ['manager', 'admin', 'auditor', 'management'], download_roles: ['admin'] },
-  'issues': { view_roles: ['manager', 'admin', 'auditor', 'management'], download_roles: ['admin'] },
-  'completion': { view_roles: ['manager', 'admin', 'management'], download_roles: ['admin'] },
-  'department': { view_roles: ['manager', 'admin', 'management'], download_roles: ['admin'] },
-  'audit-trail': { view_roles: ['admin', 'auditor'], download_roles: ['admin'] },
-  'tni': { view_roles: ['manager', 'admin', 'management'], download_roles: ['admin'] },
-  'kpi-detail': { view_roles: ['manager', 'admin', 'auditor', 'management', 'hr_pms'], download_roles: ['admin'] },
-  'bottleneck': { view_roles: ['admin', 'auditor', 'management'], download_roles: ['admin'] },
-  'kpi-status-tracker': { view_roles: ['admin'], download_roles: ['admin'] },
-  'kpi-journey': { view_roles: ['admin', 'auditor', 'management'], download_roles: ['admin'] },
-  'incentive': { view_roles: ['admin', 'management', 'hr_pms'], download_roles: ['admin'] },
-  'manager-team-kpi': { view_roles: ['admin', 'manager', 'management', 'hr_pms'], download_roles: ['admin'] },
-  'team-vs-manager-score': { view_roles: ['admin', 'manager', 'management', 'hr_pms'], download_roles: ['admin'] },
-  // Org-wide report — managers excluded by default since RLS restricts them to direct reports,
-  // which would silently return 0 rows. Grant via per-user override if a manager needs access.
-  'kpi-scorecard-detail': { view_roles: ['admin', 'management', 'hr_pms', 'auditor'], download_roles: ['admin'] },
-  'kpi-employee-matrix': { view_roles: ['admin', 'manager', 'management', 'hr_pms', 'auditor'], download_roles: ['admin'] },
-  'workflow-resolution': { view_roles: ['admin', 'hr_pms', 'management', 'auditor'], download_roles: ['admin', 'hr_pms'] },
-  'dev-report': { view_roles: ['admin', 'management', 'auditor'], download_roles: ['admin', 'management'] },
-  'annual-review': { view_roles: ['admin', 'manager', 'management', 'hr_pms', 'auditor'], download_roles: ['admin', 'hr_pms', 'management'] },
-};
+// Defaults live in the report access catalogue (SSOT).
+const DEFAULT_CONFIGS = DEFAULT_REPORT_ACCESS;
 
 export function useReportAccess() {
   const { user, effectiveRole } = useAuth();
@@ -79,6 +59,24 @@ export function useReportAccess() {
     },
     staleTime: 5 * 60 * 1000,
   });
+
+  // Registry is the catalogue of reports that EXIST — config only holds saved
+  // role mappings. Report Access must show the union of both.
+  const { data: registry = [] } = useQuery({
+    queryKey: ['report-registry-active'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('report_registry')
+        .select('report_key, display_name, is_active')
+        .eq('is_active', true)
+        .order('display_name');
+      if (error) throw error;
+      return (data || []) as Array<{ report_key: string; display_name: string; is_active: boolean }>;
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const mappableReports: MappableReport[] = buildMappableReports(registry, configs);
 
   const canView = (reportKey: string): boolean => {
     if (!effectiveRole && !user) return false;
@@ -121,14 +119,24 @@ export function useReportAccess() {
   };
 
   const updateAccessMutation = useMutation({
-    mutationFn: async ({ reportKey, viewRoles, downloadRoles }: { reportKey: string; viewRoles: AppRole[]; downloadRoles: AppRole[] }) => {
+    mutationFn: async ({ reportKey, reportName, viewRoles, downloadRoles }: { reportKey: string; reportName?: string; viewRoles: AppRole[]; downloadRoles: AppRole[] }) => {
+      // Upsert (not update) so reports that have no config row yet — i.e. newly
+      // shipped reports listed from `report_registry` — can be mapped.
       const { error } = await supabase
         .from('report_access_config')
-        .update({ view_roles: viewRoles as any, download_roles: downloadRoles as any, updated_at: new Date().toISOString() })
-        .eq('report_key', reportKey);
+        .upsert({
+          report_key: reportKey,
+          report_name: reportName ?? reportKey,
+          view_roles: viewRoles as any,
+          download_roles: downloadRoles as any,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'report_key' });
       if (error) throw error;
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['report-access-config'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['report-access-config'] });
+      queryClient.invalidateQueries({ queryKey: ['report-registry-active'] });
+    },
   });
 
   const grantUserAccessMutation = useMutation({
@@ -161,6 +169,8 @@ export function useReportAccess() {
 
   return {
     configs,
+    registry,
+    mappableReports,
     userOverrides,
     isLoading: configsLoading || overridesLoading,
     canView,

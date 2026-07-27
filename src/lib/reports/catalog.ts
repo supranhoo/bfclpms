@@ -393,6 +393,18 @@ REPORT_CATALOG.push(
   ], 210),
 );
 
+// Annual Review Report — registered so it is mappable in Report Access.
+REPORT_CATALOG.push(
+  r('RPT-ANR-001', 'annual-review', 'ANR', 'Annual Review Report',
+    '/reports/annual-review', null, [
+    f('employee_code', 'Employee Code', 10, { is_required: true, data_type: 'string' }),
+    f('employee_name', 'Employee Name', 20, { is_required: true, data_type: 'string' }),
+    f('department',    'Department',    30, { data_type: 'string' }),
+    f('final_score',   'Final Score',   40, { data_type: 'number' }),
+    f('final_rating',  'Final Rating',  50, { data_type: 'string' }),
+  ], 230),
+);
+
 export const REPORT_CATALOG_BY_ID: Record<string, ReportSeed> = Object.fromEntries(
   REPORT_CATALOG.map((rep) => [rep.report_id, rep]),
 );

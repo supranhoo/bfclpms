@@ -7134,3 +7134,37 @@ logic touched. The RPC was dropped and recreated with a superset of columns;
 rollback = recreate the prior signature. UI changes are read-only display.
 
 **Policy.** See POLICY.md §AR-KRA-RATING-VISIBILITY.
+
+## ADR-176 — Report Access is registry-driven (2026-07-27)
+
+**Symptom.** Admin could not map "KPI Status Tracker" (and several other
+reports) to any role or user — they were absent from the Report Access screen.
+
+**Root cause.** `ReportAccessTab` rendered its role matrix and its user-override
+report dropdown purely from `report_access_config` rows. That table was
+hand-seeded once (18 rows) and never kept in sync with `report_registry`
+(22 active reports), so reports shipped afterwards
+(`kpi-status-tracker`, `kpi-scorecard-detail`, `workflow-resolution`,
+`dev-report`) had no row and were therefore invisible. Compounding it,
+`updateAccess` used `.update().eq(report_key)`, a silent no-op for a report with
+no row.
+
+**Fix.**
+- Data backfill: created access rows for the four missing reports (values equal
+  to the previous hardcoded defaults, so runtime behaviour is unchanged) and
+  registered `annual-review` + `first-kra-rollout` in `report_registry`.
+- `src/lib/reports/accessCatalog.ts` (new) — SSOT for the default role matrix
+  and `buildMappableReports(registry, configs)`, the union builder.
+- `useReportAccess` now also queries active `report_registry`, exposes
+  `mappableReports`, and upserts on save (`onConflict: report_key`).
+- `ReportAccessTab` renders `mappableReports` in both the matrix and the
+  override dropdown, badging unsaved reports "Unmapped — using defaults".
+- Tests: `src/lib/reports/accessCatalog.test.ts` (registry-only, config-only,
+  inactive, de-dup, fallback).
+
+**Risk / rollback.** Additive; no schema change. Rollback = delete the six
+inserted `report_access_config` rows and revert the three source files.
+Custom reports keep their own `custom_reports.view_roles` mechanism (Report
+Builder) and are intentionally not listed here.
+
+**Policy.** See POLICY.md §RPT-ACCESS-REGISTRY-SSOT.
