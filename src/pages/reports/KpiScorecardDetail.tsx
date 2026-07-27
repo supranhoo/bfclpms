@@ -250,6 +250,11 @@ async function fetchScorecardForPeriod(month: string, year: number): Promise<Fla
     const sub = submissionMap.get(kpi.id);
     const isNa = sub?.is_na ?? false;
     const dept = profile?.departments;
+    const isOrgKpi = kpi.is_org_level === true;
+    const dataOwnerNames = (isOrgKpi
+      ? (pendingCtx.ownerMap.get(`${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}`) ?? [])
+      : []
+    ).join(', ');
     const pendingWith = resolvePendingWithForKpi(pendingCtx, {
       id: kpi.id,
       employee_id: kpi.employee_id,
