@@ -19,7 +19,6 @@ import { collectRecommendations } from './OverallRecommendationCard';
 import { displayStageForResponse } from '@/lib/annualReview/displayStageForResponse';
 import { ScoreBreakdownCard } from './ScoreBreakdownCard';
 import { useKraDerivedRating } from '@/hooks/useKraDerivedRating';
-import { resolveScoringMode } from '@/lib/annualReview/scoreParameters';
 
 /**
  * Read-only finalized view for the employee: HR rating + remarks, criteria-by-criteria
@@ -53,7 +52,6 @@ export function EmployeeResultsView({
   // total_score / final_rating stay empty until HR finalizes. Fall back to the
   // same projection the admin grid uses instead of rendering "—".
   const kra = useKraDerivedRating(template, instance, fiscalYear);
-  const scoringMode = resolveScoringMode(template);
   // ADR-140-UI: numeric rating x/5 derived from the same 0..100 total the badge uses,
   // so it is visible regardless of whether the template is criteria-only, system-only, or blended.
   const projectedTotal =
@@ -83,6 +81,12 @@ export function EmployeeResultsView({
     if (!byRole.has(display)) byRole.set(display, r);
   }
   const recommendations = collectRecommendations(responses, instance as any);
+  // ADR-174 — the terminal reviewer's criteria scores drive the published
+  // total, so the breakdown explains the score the employee actually sees.
+  const terminalCriteriaScores =
+    (['hr', 'bu_head', 'dept_head', 'skip_manager', 'manager', 'self'] as const)
+      .map((role) => byRole.get(role)?.criteria_scores as Record<string, number> | undefined)
+      .find((s) => s && Object.keys(s).length > 0) ?? {};
   const stageLabel: Record<string, string> = {
     self: 'Self', manager: 'Manager', skip_manager: 'Skip Manager',
     dept_head: 'Department Head', bu_head: 'BU Head', hr: 'HR',
