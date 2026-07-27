@@ -32,6 +32,8 @@ export function CycleBulkDataUploadDialog({
   const [busy, setBusy] = useState(false);
   // ADR-171: opt-in admin override to also apply upgrades to Completed reviews.
   const [allowCompletedUpgrades, setAllowCompletedUpgrades] = useState(false);
+  // ADR-186: opt-in admin override for mid-workflow (pending_dept/bu/hr/management) rows.
+  const [allowMidWorkflowUpgrades, setAllowMidWorkflowUpgrades] = useState(false);
 
   const { data: plan, isLoading, refetch } = useQuery<CycleBulkPlan>({
     queryKey: ['annual-review', 'bulk-data-plan', cycle?.id],
@@ -51,7 +53,7 @@ export function CycleBulkDataUploadDialog({
     if (!plan) return;
     setBusy(true);
     try {
-      const r = await parseAndDryRun(f, plan, { allowCompletedUpgrades });
+      const r = await parseAndDryRun(f, plan, { allowCompletedUpgrades, allowMidWorkflowUpgrades });
       setReport(r);
       setFile(f);
     } catch (e) {
@@ -66,7 +68,9 @@ export function CycleBulkDataUploadDialog({
     setBusy(true);
     try {
       const res = await commitDryRun(report, plan, {
-        reason: allowCompletedUpgrades ? 'Bulk system-score upgrade (admin override)' : undefined,
+        reason: allowCompletedUpgrades || allowMidWorkflowUpgrades
+          ? 'Bulk system-score upgrade (admin override)'
+          : undefined,
       });
       const upgradeNote = res.upgradedCompleted
         ? ` (${res.upgradedCompleted} completed review${res.upgradedCompleted === 1 ? '' : 's'} upgraded)`
@@ -135,6 +139,29 @@ export function CycleBulkDataUploadDialog({
                 </div>
                 <div className="text-xs text-muted-foreground">
                   Admin override. Even on Completed reviews, System KPI values that would raise the stored score are re-applied; values that would lower the score are blocked cell-by-cell. Eligibility fields are never modified on Completed rows. Every override is audit-logged.
+                </div>
+              </label>
+            </div>
+
+            {/* ADR-186 — mid-workflow coverage opt-in (POLICY §AR-SYSTEM-SLOT-COVERAGE) */}
+            <div className="flex items-start gap-3 rounded-md border border-amber-500/40 bg-amber-500/5 px-3 py-2">
+              <Checkbox
+                id="allow-midworkflow-upgrades"
+                checked={allowMidWorkflowUpgrades}
+                onCheckedChange={(v) => {
+                  setAllowMidWorkflowUpgrades(!!v);
+                  setReport(null);
+                  setFile(null);
+                }}
+                className="mt-0.5"
+              />
+              <label htmlFor="allow-midworkflow-upgrades" className="text-sm cursor-pointer space-y-1">
+                <div className="flex items-center gap-1.5 font-medium">
+                  <ShieldAlert className="h-4 w-4 text-amber-600" />
+                  Apply to mid-workflow reviews (upgrades only)
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  Covers reviews sitting at Skip-level, Dept Head, BU Head, HR or Management. Without this, those rows are skipped and their weighted System KPI slots stay empty — which scores as <b>0 of the slot weight</b>, not as excluded. Same monotonic, audit-logged upgrade path as Completed rows.
                 </div>
               </label>
             </div>
@@ -232,6 +259,17 @@ export function CycleBulkDataUploadDialog({
                       {report.totalChanges} cell change{report.totalChanges === 1 ? '' : 's'}
                     </span>
                   </div>
+                  {/* ADR-186 — skip cohorts are never allowed to hide behind one number */}
+                  {report.skipsByStatus?.length > 0 && (
+                    <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                      <span className="text-muted-foreground">Skipped by stage:</span>
+                      {report.skipsByStatus.map((s) => (
+                        <Badge key={s.status} variant="outline" className="text-[10px]">
+                          {s.status}: {s.count}
+                        </Badge>
+                      ))}
+                    </div>
+                  )}
                   <div className="max-h-[420px] overflow-y-auto border rounded-md">
                     <Table>
                       <TableHeader>

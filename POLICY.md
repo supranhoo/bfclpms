@@ -5127,3 +5127,30 @@ detectable and repairable without a developer.
 5. Bulk finalisation MUST be scoped by an explicit instance whitelist — never by
    a status-only sweep, which would finalise reviews whose terminal reviewer has
    not yet formed an opinion.
+
+## §AR-SYSTEM-SLOT-COVERAGE — A bulk System-KPI upload must classify every review stage (ADR-186, 2026-07-27)
+
+1. A weighted System-KPI slot with no stored value scores **0 of its weight**.
+   `annual_review_compute_final_summary` builds the denominator from the
+   template weights, so an un-uploaded slot is never "excluded" — it silently
+   depresses the employee's final score and rating.
+2. Every instance status MUST be classified by the single SSOT helper
+   `src/lib/annualReview/bulkStageCoverage.ts` → `classifyStageCoverage`.
+   Three worlds, no gaps:
+   - **safe** — `not_started`, `pending_self`, `pending_manager`: direct write;
+   - **completed** — writable only with the ADR-171 admin opt-in;
+   - **mid-workflow** — `pending_skip`, `pending_dept`, `pending_bu`,
+     `pending_hr`, `pending_management`: writable only with the ADR-186 admin
+     opt-in.
+   Anything else (`excluded`, `acknowledged`, unknown) is never written to.
+3. Both opt-ins MUST route through `admin_apply_system_scores_upgrade` —
+   monotonic (a lower score is blocked cell-by-cell), audit-logged, and limited
+   to `system_scores`. Eligibility inputs are never modified on a locked row.
+4. A skipped row MUST state its status in the reason; a generic "Locked stage"
+   label is forbidden. The dry-run report carries `stageStatus` on every row
+   and a `skipsByStatus` breakdown, which the upload dialog renders as
+   per-stage badges so a whole cohort cannot hide behind one aggregate count.
+5. Repairing an already-scored instance MUST snapshot the prior
+   `system_scores`, `system_scores_raw`, `total_score` and `final_rating` into
+   a dated audit table with `performed_by = NULL`, and recompute aggregates
+   with `annual_review_compute_final_summary` — never by hand.

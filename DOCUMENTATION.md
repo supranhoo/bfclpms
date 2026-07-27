@@ -7422,3 +7422,53 @@ narrative-only ones stay `pending_dept` for real scoring.
 from the repair table.
 
 **Policy.** POLICY §AR-SUPERSEDE-NO-FALSE-REWIND.
+
+## v2.66.186 — ADR-186: Bulk System-KPI upload stage coverage
+
+**Reported:** "101676 / 100508 — Annual Production Target vs. Actual data is not where it should be."
+
+**RCA (5-why).** The `Annual Production Target Vs Actual` slot (`sys_3jsce5p`,
+weight 25) was empty for both employees while every peer on the same template
+carried `raw 91 → 15 pts` from the 25-Jul bulk upload. On that date both were
+mid-workflow following their ADR-185 re-open (`pending_bu` / `pending_dept`).
+`parseAndDryRun` recognised only `STAGE_SAFE` (early stages) and, with the
+ADR-171 opt-in, `completed` — every status in between was an uncovered gap,
+reported as a generic `Locked stage: …` and folded into one aggregate skip
+count (1597 on that run), so the cohort was invisible. Because
+`annual_review_compute_final_summary` derives the denominator from template
+weights, the empty slot scored 0/25 and depressed both totals.
+
+**Corrective (data).** Applied the peer value and recomputed via
+`annual_review_compute_final_summary`; before-state snapshotted in
+`annual_review_missing_system_slot_repair_2026_07` (`performed_by = NULL`,
+admin-read only).
+
+| Employee | Before | After |
+|---|---|---|
+| 101676 Satyaban Roy | 58.20 Average | 73.20 Good |
+| 100508 Satyam Kumar Jha | 51.00 Poor | 66.00 Average |
+
+**Preventive (code).** Added `src/lib/annualReview/bulkStageCoverage.ts` as the
+SSOT classifier (`classifyStageCoverage`, `summariseSkipsByStatus`,
+`STAGE_SAFE_STATUSES`, `MID_WORKFLOW_STATUSES`).
+`src/services/annualReview/cycleBulkDataUpload.ts` now delegates to it, carries
+`stageStatus` on every dry-run row and returns `skipsByStatus`.
+`src/components/annual-review/CycleBulkDataUploadDialog.tsx` gains an
+*Apply to mid-workflow reviews (upgrades only)* opt-in (default **off** —
+behaviour unchanged unless ticked) plus per-stage skip badges. Mid-workflow
+writes reuse the monotonic, audit-logged `admin_apply_system_scores_upgrade`
+RPC; no direct table write, no eligibility write.
+
+**Tests.** `src/test/annualReview/bulkStageCoverage.test.ts` (11 cases) locks
+that each mid-workflow status is named explicitly when skipped and that the
+completed opt-in does not silently cover mid-workflow rows.
+
+**Reported, not swept.** The post-repair detector still shows 86 `completed`
+instances missing *Annual Maintenance PM Target vs. Actual*, 14 instances with
+unnamed weighted slots, and 10 assorted `pending_bu` slots. These are separate
+data-entry cohorts and must be handled by an explicit whitelisted upload, never
+a status-only sweep.
+
+**No** schema, RLS, or edge-function change. **Rollback:** the audit table
+restores both instances in one update; the UI change is additive and defaults
+to the pre-ADR behaviour. See POLICY §AR-SYSTEM-SLOT-COVERAGE.
