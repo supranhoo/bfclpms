@@ -442,6 +442,8 @@ export default function KpiStatusTracker() {
               </div>
             </div>
 
+            <EmployeeStatusFilter onChange={setEmpStatus} className="pb-0.5" />
+
             <FrequencyLockToggle
               checked={showFreqLocked}
               onCheckedChange={v => { setShowFreqLocked(v); setCurrentPage(1); }}
@@ -545,6 +547,7 @@ export default function KpiStatusTracker() {
                       <TableHead className="w-10 text-center">#</TableHead>
                       <TableHead className="min-w-[100px]">Code</TableHead>
                       <TableHead className="min-w-[160px]">Employee Name</TableHead>
+                      <TableHead className="min-w-[110px]">Employee Status</TableHead>
                       <TableHead className="min-w-[120px]">Designation</TableHead>
                       <TableHead className="min-w-[140px]">Department</TableHead>
                       <TableHead className="min-w-[120px]">Division</TableHead>
@@ -567,6 +570,16 @@ export default function KpiStatusTracker() {
                         </TableCell>
                         <TableCell className="text-xs font-mono">{row.employeeCode}</TableCell>
                         <TableCell className="text-sm font-medium">{row.employeeName}</TableCell>
+                        <TableCell className="text-xs">
+                          <Badge
+                            variant="outline"
+                            className={`text-xs border-0 ${row.isActive
+                              ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
+                              : 'bg-muted text-muted-foreground'}`}
+                          >
+                            {row.isActive ? 'Active' : 'Inactive'}
+                          </Badge>
+                        </TableCell>
                         <TableCell className="text-xs">{row.designation}</TableCell>
                         <TableCell className="text-xs">{row.department}</TableCell>
                         <TableCell className="text-xs">{row.division}</TableCell>
