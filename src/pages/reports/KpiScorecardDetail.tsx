@@ -57,7 +57,8 @@ import { useToast } from '@/hooks/use-toast';
 import { enumeratePeriods, validateRange, MAX_RANGE_MONTHS } from '@/lib/kpiScorecardRange';
 import { fetchFinalApproverMap, NO_APPROVER_LABEL } from '@/lib/finalApproverMap';
 import { ColumnFilterPopover } from '@/components/reports/ColumnFilterPopover';
-import { resolvePendingWith, PENDING_WITH_NONE } from '@/lib/kpiPendingWith';
+import { PENDING_WITH_NONE } from '@/lib/kpiPendingWith';
+import { buildPendingWithContext, resolvePendingWithForKpi } from '@/services/reports/pendingWithResolver';
 import {
   displayPendingWith,
   summarizePendingWith,
@@ -231,101 +232,18 @@ async function fetchScorecardForPeriod(month: string, year: number): Promise<Fla
       .range(from, to)
   );
 
-  let ownerMap = new Map<string, string[]>();
-  try {
-    const dataOwners = await fetchAllPaged<any>((from, to) =>
-      supabase
-        .from('org_kpi_data_owners')
-        .select('category_id, kra_name, kpi_name, owner:profiles!org_kpi_data_owners_owner_id_fkey(full_name)')
-        .range(from, to)
-    );
-    (dataOwners ?? []).forEach((o: any) => {
-      const key = `${o.category_id}||${o.kra_name}||${o.kpi_name}`;
-      const name = o.owner?.full_name ?? '';
-      if (!ownerMap.has(key)) ownerMap.set(key, []);
-      if (name) ownerMap.get(key)!.push(name);
-    });
-  } catch { /* non-critical */ }
-
   const profileMap = new Map((profiles ?? []).map(p => [p.id, p]));
 
   const approverMap = await fetchFinalApproverMap(month, year);
 
-  // Resolve names for queue stages (HR PMS, Auditor, Management).
-  // Pending With must show real person names for these stages, not queue labels.
-  const { data: roleRows } = await supabase
-    .from('user_roles')
-    .select('user_id, role')
-    .in('role', ['hr_pms', 'management', 'auditor'] as any);
-  const namesForRole = (r: string) =>
-    (roleRows ?? [])
-      .filter((x: any) => x.role === r)
-      .map((x: any) => profileMap.get(x.user_id))
-      .filter((p: any) => p && (p.is_active ?? true) && p.full_name)
-      .map((p: any) => p.full_name as string)
-      .sort();
-  const hrPmsNamesGlobal = Array.from(new Set(namesForRole('hr_pms'))).join(', ');
-  const managementNamesGlobal = Array.from(new Set(namesForRole('management'))).join(', ');
-  const auditorNamesGlobal = Array.from(new Set(namesForRole('auditor'))).join(', ');
-
-  // Per-KPI auditor assignment overrides the global auditor pool.
-  const kpiIdToAuditorNames = new Map<string, string>();
-  const AUD_CHUNK = 500;
-  for (let i = 0; i < kpiIds.length; i += AUD_CHUNK) {
-    const batch = kpiIds.slice(i, i + AUD_CHUNK);
-    const { data: aud } = await supabase
-      .from('audit_kpi_level_assignments')
-      .select('kpi_id, auditor_id')
-      .in('kpi_id', batch);
-    const byKpi = new Map<string, string[]>();
-    (aud ?? []).forEach((row: any) => {
-      const name = profileMap.get(row.auditor_id)?.full_name;
-      if (!name) return;
-      if (!byKpi.has(row.kpi_id)) byKpi.set(row.kpi_id, []);
-      byKpi.get(row.kpi_id)!.push(name);
-    });
-    byKpi.forEach((names, kpiId) => {
-      kpiIdToAuditorNames.set(kpiId, Array.from(new Set(names)).sort().join(', '));
-    });
-  }
-
-  // Resolve per-employee workflow chains (POLICY §105 — never hardcode stages).
-  const empIds = [...new Set(allKpis.map(k => k.employee_id).filter(Boolean))];
-  const stageChainMap = new Map<string, string[]>();
-  const WF_CHUNK = 500;
-  for (let i = 0; i < empIds.length; i += WF_CHUNK) {
-    const batch = empIds.slice(i, i + WF_CHUNK);
-    const { data: wfData, error: wfErr } = await (supabase as any).rpc(
-      'get_bulk_employee_workflows',
-      { employee_ids: batch, p_review_period: month, p_review_year: year },
-    );
-    if (wfErr) throw wfErr;
-    for (const row of ((wfData || []) as { employee_id: string; stages: string[] }[])) {
-      stageChainMap.set(row.employee_id, row.stages || []);
-    }
-  }
-
-  // Skip-level manager = employee's manager's reporting_manager_id.
-  const managerIds = [
-    ...new Set(
-      (profiles ?? [])
-        .map((p: any) => p.reporting_manager_id)
-        .filter(Boolean) as string[],
-    ),
-  ];
-  const managerToSkip = new Map<string, string | null>();
-  if (managerIds.length > 0) {
-    const CHUNK_M = 500;
-    for (let i = 0; i < managerIds.length; i += CHUNK_M) {
-      const batch = managerIds.slice(i, i + CHUNK_M);
-      const { data: mgrs, error: mgrErr } = await supabase
-        .from('profiles')
-        .select('id, reporting_manager_id')
-        .in('id', batch);
-      if (mgrErr) throw mgrErr;
-      (mgrs ?? []).forEach((m: any) => managerToSkip.set(m.id, m.reporting_manager_id ?? null));
-    }
-  }
+  // ADR-178 / POLICY §RPT-PENDING-WITH-SSOT — shared "Pending With" enrichment.
+  const pendingCtx = await buildPendingWithContext({
+    kpiIds,
+    employeeIds: [...new Set(allKpis.map(k => k.employee_id).filter(Boolean))] as string[],
+    month,
+    year,
+    profiles: (profiles ?? []) as any,
+  });
 
   return allKpis.map((kpi): FlatRow => {
     const profile = profileMap.get(kpi.employee_id);
@@ -333,26 +251,18 @@ async function fetchScorecardForPeriod(month: string, year: number): Promise<Fla
     const isNa = sub?.is_na ?? false;
     const dept = profile?.departments;
     const isOrgKpi = kpi.is_org_level === true;
-    const ownerKey = `${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}`;
-    const owners = isOrgKpi ? (ownerMap.get(ownerKey) ?? []) : [];
-    const managerId: string | null = profile?.reporting_manager_id ?? null;
-    const skipId: string | null = managerId ? (managerToSkip.get(managerId) ?? null) : null;
-    const managerName = managerId ? (profileMap.get(managerId)?.full_name ?? null) : null;
-    const skipManagerName = skipId ? (profileMap.get(skipId)?.full_name ?? null) : null;
-    const dataOwnerNames = owners.join(', ');
-    const stageChain = stageChainMap.get(kpi.employee_id) ?? [];
-    const auditorNames = kpiIdToAuditorNames.get(kpi.id) || auditorNamesGlobal;
-    const pendingWith = resolvePendingWith({
+    const dataOwnerNames = (isOrgKpi
+      ? (pendingCtx.ownerMap.get(`${kpi.category_id}||${kpi.kra_name}||${kpi.kpi_name}`) ?? [])
+      : []
+    ).join(', ');
+    const pendingWith = resolvePendingWithForKpi(pendingCtx, {
+      id: kpi.id,
+      employee_id: kpi.employee_id,
       status: kpi.status,
-      isOrgKpi,
-      dataOwnerNames,
-      employeeName: profile?.full_name ?? '',
-      managerName,
-      skipManagerName,
-      stageChain,
-      hrPmsNames: hrPmsNamesGlobal,
-      auditorNames,
-      managementNames: managementNamesGlobal,
+      is_org_level: kpi.is_org_level,
+      category_id: kpi.category_id,
+      kra_name: kpi.kra_name,
+      kpi_name: kpi.kpi_name,
     });
     const pendingSinceDays = pendingSinceDaysFor(
       { status: kpi.status, isNa },

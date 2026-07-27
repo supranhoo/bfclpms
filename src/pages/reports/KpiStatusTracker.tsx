@@ -21,6 +21,7 @@ import * as XLSX from 'xlsx';
 import { useResolvedReportFields } from '@/hooks/useResolvedReportFields';
 import { EmployeeStatusFilter } from '@/components/reports/EmployeeStatusFilter';
 import { applyEmployeeStatusFilter, employeeStatusLabel, type EmployeeStatusMode } from '@/lib/reportEmployeeFilter';
+import { buildPendingWithContext, resolvePendingWithForKpi, PENDING_WITH_NONE } from '@/services/reports/pendingWithResolver';
 
 const KST_DEFAULT_FIELDS = [
   { field_key: 'row_num',          default_label: '#',                default_sort: 10,  is_required: true, is_renamable: false },
@@ -38,6 +39,7 @@ const KST_DEFAULT_FIELDS = [
   { field_key: 'frequency',        default_label: 'Frequency',        default_sort: 120 },
   { field_key: 'current_status',   default_label: 'Current Status',   default_sort: 130 },
   { field_key: 'pending_at_level', default_label: 'Pending At Level', default_sort: 140 },
+  { field_key: 'pending_with',     default_label: 'Pending With (Name)', default_sort: 145 },
   { field_key: 'days_in_stage',    default_label: 'Days in Stage',    default_sort: 150 },
   { field_key: 'org_level',        default_label: 'Org-Level',        default_sort: 160 },
 ] as const;
@@ -110,6 +112,7 @@ interface StatusTrackerRow {
   status: string;
   statusLabel: string;
   pendingAt: string;
+  pendingWithName: string;
   daysPending: number;
   isOrgLevel: boolean;
   reviewPeriod: string;
@@ -154,7 +157,7 @@ export default function KpiStatusTracker() {
           .from('kpis')
           .select(`
             id, employee_id, kra_name, kpi_name, weightage, frequency, status, updated_at,
-            review_period, review_year, is_org_level, frequency_cycle_start,
+            review_period, review_year, is_org_level, category_id, frequency_cycle_start,
             kra_categories ( name )
           `)
           .eq('review_year', year)
@@ -182,7 +185,7 @@ export default function KpiStatusTracker() {
       while (pHasMore) {
         const { data: batch, error: profErr } = await supabase
           .from('profiles')
-          .select('id, employee_code, full_name, designation, is_active, department_id, departments!profiles_department_fk ( name, business_units ( divisions ( name ) ) )')
+          .select('id, employee_code, full_name, designation, is_active, reporting_manager_id, department_id, departments!profiles_department_fk ( name, business_units ( divisions ( name ) ) )')
           .range(pOffset, pOffset + batchSize - 1);
         if (profErr) throw profErr;
         if (batch && batch.length > 0) {
@@ -196,6 +199,16 @@ export default function KpiStatusTracker() {
 
       const profileMap = new Map(profiles.map(p => [p.id, p]));
       const now = new Date();
+
+      // ADR-178 / POLICY §RPT-PENDING-WITH-SSOT — resolve the named person(s)
+      // each pending KPI is waiting on, via the shared resolver service.
+      const pendingCtx = await buildPendingWithContext({
+        kpiIds: allKpis.map(k => k.id),
+        employeeIds: Array.from(new Set(allKpis.map(k => k.employee_id).filter(Boolean))),
+        month: selectedPeriod,
+        year,
+        profiles,
+      });
 
       const result: StatusTrackerRow[] = allKpis.map(kpi => {
         const profile = profileMap.get(kpi.employee_id);
@@ -227,6 +240,15 @@ export default function KpiStatusTracker() {
           status,
           statusLabel: STATUS_LABELS[status] ?? status,
           pendingAt: PENDING_AT_MAP[status] ?? '—',
+          pendingWithName: resolvePendingWithForKpi(pendingCtx, {
+            id: kpi.id,
+            employee_id: kpi.employee_id,
+            status,
+            is_org_level: kpi.is_org_level,
+            category_id: kpi.category_id,
+            kra_name: kpi.kra_name,
+            kpi_name: kpi.kpi_name,
+          }),
           daysPending: kpi.updated_at ? differenceInDays(now, new Date(kpi.updated_at)) : 0,
           isOrgLevel: kpi.is_org_level ?? false,
           reviewPeriod: kpi.review_period ?? '—',
@@ -296,7 +318,8 @@ export default function KpiStatusTracker() {
           r.employeeName.toLowerCase().includes(term) ||
           r.employeeCode.toLowerCase().includes(term) ||
           r.kpiName.toLowerCase().includes(term) ||
-          r.kraName.toLowerCase().includes(term)
+          r.kraName.toLowerCase().includes(term) ||
+          r.pendingWithName.toLowerCase().includes(term)
         );
       }
       return true;
@@ -348,6 +371,7 @@ export default function KpiStatusTracker() {
         case 'frequency':        return r.frequency;
         case 'current_status':   return r.statusLabel;
         case 'pending_at_level': return r.pendingAt;
+        case 'pending_with':     return r.pendingWithName;
         case 'days_in_stage':    return r.daysPending;
         case 'org_level':        return r.isOrgLevel ? 'Yes' : 'No';
         default: return '';
@@ -434,7 +458,7 @@ export default function KpiStatusTracker() {
               <div className="relative">
                 <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                 <Input
-                  placeholder="Name, code, KRA, KPI…"
+                  placeholder="Name, code, KRA, KPI, pending with…"
                   value={searchTerm}
                   onChange={e => { setSearchTerm(e.target.value); setCurrentPage(1); }}
                   className="pl-8"
@@ -558,6 +582,7 @@ export default function KpiStatusTracker() {
                       <TableHead className="min-w-[120px]">Frequency</TableHead>
                       <TableHead className="min-w-[140px]">Status</TableHead>
                       <TableHead className="min-w-[160px]">Pending At</TableHead>
+                      <TableHead className="min-w-[180px]">Pending With</TableHead>
                       <TableHead className="w-20 text-center">Days</TableHead>
                       <TableHead className="w-16 text-center">Org</TableHead>
                     </TableRow>
@@ -613,6 +638,15 @@ export default function KpiStatusTracker() {
                           ) : (
                             <span className={row.daysPending >= 7 ? 'text-destructive' : row.daysPending >= 4 ? 'text-amber-600' : ''}>
                               {row.pendingAt}
+                            </span>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-xs max-w-[220px]">
+                          {row.isOrphaned || row.isFrequencyLocked || row.status === 'approved' ? (
+                            <span className="text-muted-foreground">{PENDING_WITH_NONE}</span>
+                          ) : (
+                            <span className="block truncate" title={row.pendingWithName}>
+                              {row.pendingWithName}
                             </span>
                           )}
                         </TableCell>

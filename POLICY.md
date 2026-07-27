@@ -4999,3 +4999,24 @@ detectable and repairable without a developer.
    unknown flag and silently defeats the filter.
 5. **Visible + exported.** The scoped surface MUST show an "Employee Status"
    column, and every export MUST state its scope via `employeeStatusLabel()`.
+
+## §RPT-PENDING-WITH-SSOT — "Pending With (Name)" must be resolver-derived (ADR-178, 2026-07-27)
+
+1. **Named accountability.** Any report that shows where a KPI is stuck MUST
+   surface the responsible *person(s)*, not only the stage/role label.
+2. **Single source of truth.** The decision logic is
+   `resolvePendingWith()` in `src/lib/kpiPendingWith.ts`. Input assembly is
+   `src/services/reports/pendingWithResolver.ts`
+   (`buildPendingWithContext` + `resolvePendingWithForKpi`). No report may
+   re-implement either.
+3. **Workflow-driven, never hardcoded.** The next stage MUST come from the
+   per-employee chain returned by `get_bulk_employee_workflows`
+   (POLICY §105). A static stage→role map is a defect.
+4. **Resolution order.** Per-KPI auditor assignments
+   (`audit_kpi_level_assignments`) override the global auditor pool; queue
+   stages fall back to their label ("HR PMS", "Audit", "Management") only when
+   no named holder resolves.
+5. **Nothing pending → em-dash.** Approved, frequency-locked and
+   workflow-orphaned rows MUST render `—`, never a stale holder name.
+6. **Exportable + searchable.** The column MUST be registered in the report
+   field registry (renamable/hideable) and included in the export.
