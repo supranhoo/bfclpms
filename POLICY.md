@@ -5101,3 +5101,29 @@ detectable and repairable without a developer.
    be reused rather than re-queried ad hoc.
 5. A recommendation fetch failure MUST degrade gracefully (blank cells), never
    break the report.
+
+## §AR-REOPEN-REQUIRES-TERMINAL-RESUBMIT — A re-opened review is not complete until the terminal stage re-submits (ADR-185, 2026-07-27)
+
+1. Re-opening a completed Annual Review, or sending it back upstream, unlocks
+   the terminal reviewer's response and clears the instance aggregates, but
+   **preserves** the scores that reviewer had already entered. Preserved scores
+   are a draft; they are NOT a submission.
+2. An instance therefore MUST NOT be treated as complete merely because stage
+   scores are present. Completion requires `is_locked = true` and a
+   `submitted_at` on every enabled stage, terminal stage included.
+3. Any surface that renders terminal stage scores for a non-completed instance
+   MUST label the state via
+   `src/lib/annualReview/reopenTerminalSignoff.ts`
+   (`resolveTerminalSignoffState` / `terminalSignoffLabel`) rather than
+   re-deriving it, so "Scored draft — awaiting re-submit" is worded identically
+   everywhere.
+4. Admin finalisation from a preserved draft is permitted, but MUST:
+   a. derive aggregates with `annual_review_compute_final_summary` (never
+      hand-computed and never zeroed);
+   b. lock the terminal response with its existing scores intact;
+   c. snapshot the full before-state into a dated audit table with
+      `performed_by = NULL` for system-applied repairs, keeping a
+      single-statement rollback available.
+5. Bulk finalisation MUST be scoped by an explicit instance whitelist — never by
+   a status-only sweep, which would finalise reviews whose terminal reviewer has
+   not yet formed an opinion.
