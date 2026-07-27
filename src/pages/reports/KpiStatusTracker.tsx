@@ -157,7 +157,7 @@ export default function KpiStatusTracker() {
           .from('kpis')
           .select(`
             id, employee_id, kra_name, kpi_name, weightage, frequency, status, updated_at,
-            review_period, review_year, is_org_level, frequency_cycle_start,
+            review_period, review_year, is_org_level, category_id, frequency_cycle_start,
             kra_categories ( name )
           `)
           .eq('review_year', year)
@@ -318,7 +318,8 @@ export default function KpiStatusTracker() {
           r.employeeName.toLowerCase().includes(term) ||
           r.employeeCode.toLowerCase().includes(term) ||
           r.kpiName.toLowerCase().includes(term) ||
-          r.kraName.toLowerCase().includes(term)
+          r.kraName.toLowerCase().includes(term) ||
+          r.pendingWithName.toLowerCase().includes(term)
         );
       }
       return true;
@@ -370,6 +371,7 @@ export default function KpiStatusTracker() {
         case 'frequency':        return r.frequency;
         case 'current_status':   return r.statusLabel;
         case 'pending_at_level': return r.pendingAt;
+        case 'pending_with':     return r.pendingWithName;
         case 'days_in_stage':    return r.daysPending;
         case 'org_level':        return r.isOrgLevel ? 'Yes' : 'No';
         default: return '';
@@ -456,7 +458,7 @@ export default function KpiStatusTracker() {
               <div className="relative">
                 <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                 <Input
-                  placeholder="Name, code, KRA, KPI…"
+                  placeholder="Name, code, KRA, KPI, pending with…"
                   value={searchTerm}
                   onChange={e => { setSearchTerm(e.target.value); setCurrentPage(1); }}
                   className="pl-8"
@@ -580,6 +582,7 @@ export default function KpiStatusTracker() {
                       <TableHead className="min-w-[120px]">Frequency</TableHead>
                       <TableHead className="min-w-[140px]">Status</TableHead>
                       <TableHead className="min-w-[160px]">Pending At</TableHead>
+                      <TableHead className="min-w-[180px]">Pending With</TableHead>
                       <TableHead className="w-20 text-center">Days</TableHead>
                       <TableHead className="w-16 text-center">Org</TableHead>
                     </TableRow>
@@ -635,6 +638,15 @@ export default function KpiStatusTracker() {
                           ) : (
                             <span className={row.daysPending >= 7 ? 'text-destructive' : row.daysPending >= 4 ? 'text-amber-600' : ''}>
                               {row.pendingAt}
+                            </span>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-xs max-w-[220px]">
+                          {row.isOrphaned || row.isFrequencyLocked || row.status === 'approved' ? (
+                            <span className="text-muted-foreground">{PENDING_WITH_NONE}</span>
+                          ) : (
+                            <span className="block truncate" title={row.pendingWithName}>
+                              {row.pendingWithName}
                             </span>
                           )}
                         </TableCell>
