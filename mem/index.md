@@ -154,3 +154,4 @@ Fiscal-window: any code fetching time-series data across two calendar years for 
 - [Annual Review Eligibility Report Columns](mem://features/reports/eligibility-columns) — Per-question eligibility columns with expected condition and pass/fail (ADR-181)
 - [Annual Review Recommendation Columns](mem://features/reports/recommendation-columns) — Dept Head / BU Head / Management overall recommendations in the report + export (ADR-182)
 - [Supersede No False Rewind](mem://features/annual-review/supersede-no-false-rewind) — ADR-183: removing a downstream stage promotes to completed with recomputed aggregates, never rewinds onto an actioned stage
+- [No Downstream Rewind](mem://features/annual-review/no-downstream-rewind) — ADR-184: guard trigger blocking any rewind past a locked downstream stage; ADR-172 empty-stage rule is submission-time only
