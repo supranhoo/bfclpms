@@ -14596,6 +14596,10 @@ export type Database = {
         Args: { p_instance_id: string }
         Returns: boolean
       }
+      can_grant_access_profile: {
+        Args: { _profile_id: string; _target_user: string; _uid: string }
+        Returns: boolean
+      }
       can_proxy_submit_annual_review: {
         Args: { _instance_id: string; _proxy_user_id: string }
         Returns: boolean
