@@ -129,14 +129,16 @@ function groupToSheet(g: GroupSummary[]) {
   }));
 }
 
-export function downloadComprehensiveWorkbook(input: ExportInput) {
+export async function downloadComprehensiveWorkbook(input: ExportInput) {
+  // ADR-180 — resolve criterion / system-score labels once per export.
+  const labelMaps = await fetchTemplateLabelMaps(input.rows.map((r) => r.template_id));
   const wb = XLSX.utils.book_new();
   const append = (name: string, data: unknown[]) => {
     if (!data || data.length === 0) return;
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(data as any), name);
   };
   append('Executive Summary', summaryToSheet(input.summary, input.cycleName));
-  append('Employees', toEmployeeSheet(input.rows));
+  append('Employees', toEmployeeSheet(input.rows, labelMaps));
   append('Rating Distribution', ratingDistribution(input.rows));
   append('By Department', groupToSheet(input.byDepartment));
   append('By Business Unit', groupToSheet(input.byBusinessUnit));
