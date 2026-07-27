@@ -50,6 +50,17 @@ export interface ComprehensiveRow {
   hr_id: string | null;
   management_id: string | null;
   cycle_default_stages: unknown;
+  // ADR-174 — score derivation transparency.
+  template_id: string | null;
+  template_name: string | null;
+  /** 'With KRA' | 'Blended' | 'Without KRA' */
+  scoring_mode: string | null;
+  criteria_weight: number | null;
+  system_weight: number | null;
+  kra_weight: number | null;
+  kra_points: number | null;
+  system_scores: Record<string, number> | null;
+  terminal_criteria_scores: Record<string, number> | null;
 }
 
 export async function fetchComprehensiveReport(cycleId: string): Promise<ComprehensiveRow[]> {
