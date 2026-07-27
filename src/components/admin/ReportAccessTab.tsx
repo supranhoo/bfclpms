@@ -31,7 +31,7 @@ const ROLE_LABELS: Record<AppRole, string> = {
 };
 
 export function ReportAccessTab() {
-  const { configs, mappableReports, userOverrides, isLoading, updateAccess, grantUserAccess, revokeUserAccess } = useReportAccess();
+  const { mappableReports, userOverrides, isLoading, updateAccess, grantUserAccess, revokeUserAccess } = useReportAccess();
   const { toast } = useToast();
 
   // Local state for editing role configs
