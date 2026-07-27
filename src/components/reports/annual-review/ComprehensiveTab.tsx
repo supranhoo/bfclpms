@@ -222,6 +222,13 @@ export function ComprehensiveTab({ cycleId, cycleName }: { cycleId: string | und
               ...(has('hr') ? stageRow('HR', r.hr_name, r.hr_score, r.hr_comment) : []),
             ];
 
+            // ADR-182 — overall recommendations by reviewing authority.
+            const recCells: Cell[] = [
+              { label: 'Dept Head Recommendation', value: r.dept_head_recommendation || '—', wide: true },
+              { label: 'BU Head Recommendation', value: r.bu_head_recommendation || '—', wide: true },
+              { label: 'Management Recommendation', value: r.management_recommendation || '—', wide: true },
+            ];
+
             const systemScoredBanner = isSystemScoredOnly(r);
 
             const outcome: Cell[] = [
@@ -252,6 +259,7 @@ export function ComprehensiveTab({ cycleId, cycleName }: { cycleId: string | und
                   </p>
                 )}
                 {section('Stage scores', stageCells)}
+                {section('Recommendations', recCells)}
                 {section('Outcome', outcome)}
                 {section('Diagnosis', diagnosis)}
               </div>
