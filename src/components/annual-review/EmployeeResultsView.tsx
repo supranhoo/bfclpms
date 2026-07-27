@@ -119,9 +119,13 @@ export function EmployeeResultsView({
               </p>
             </div>
             <div className="flex items-center gap-2">
-              {instance.final_rating && (
-                <Badge variant="outline" className="text-base px-3 py-1">
-                  {instance.final_rating}
+              {effectiveRatingBand && (
+                <Badge
+                  variant="outline"
+                  className={`text-base px-3 py-1 ${isProvisional ? 'border-dashed text-muted-foreground' : ''}`}
+                >
+                  {effectiveRatingBand}
+                  {isProvisional && <span className="ml-1 text-xs">(provisional)</span>}
                 </Badge>
               )}
               {acknowledged && (
@@ -137,11 +141,16 @@ export function EmployeeResultsView({
             <div className="rounded-md border p-3">
               <p className="text-xs text-muted-foreground">Total score</p>
               <p className="text-2xl font-semibold tabular-nums">
-                {instance.total_score != null ? instance.total_score.toFixed(2) : '—'}
+                {effectiveTotal != null ? effectiveTotal.toFixed(2) : '—'}
               </p>
               {ratingOutOf5 != null && (
                 <p className="text-xs text-muted-foreground mt-1">
                   ≈ {ratingOutOf5.toFixed(2)} / 5
+                </p>
+              )}
+              {isProvisional && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  Provisional — derived from your KRA achievement
                 </p>
               )}
             </div>
