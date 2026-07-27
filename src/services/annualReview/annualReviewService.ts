@@ -11,6 +11,7 @@ import type {
   EvidenceItem,
 } from '@/types/annualReview';
 import { enabledChain } from '@/lib/annualReview/stageChain';
+import { toStageNumberMap, type StageScoreCell } from '@/lib/annualReview/kraStageDisplay';
 import { getHrHeadUserId } from '@/services/orgHeads/hrHeadResolver';
 import { bucketFromGradeCode } from './archetypeResolver';
 import {
