@@ -432,6 +432,81 @@ export type Database = {
           },
         ]
       }
+      annual_review_bu_draft_finalise_2026_07: {
+        Row: {
+          applied_at: string
+          criteria_scores: Json | null
+          employee_code: string | null
+          employee_name: string | null
+          id: string
+          instance_id: string
+          new_criteria_weighted_score: number | null
+          new_final_rating: string | null
+          new_status: string | null
+          new_total_score: number | null
+          performed_by: string | null
+          prior_criteria_weighted_score: number | null
+          prior_final_rating: string | null
+          prior_finalized_at: string | null
+          prior_is_locked: boolean | null
+          prior_status: string | null
+          prior_submitted_at: string | null
+          prior_total_score: number | null
+          reason: string
+          response_id: string | null
+          response_weighted_score: number | null
+          reviewer_role: string | null
+        }
+        Insert: {
+          applied_at?: string
+          criteria_scores?: Json | null
+          employee_code?: string | null
+          employee_name?: string | null
+          id?: string
+          instance_id: string
+          new_criteria_weighted_score?: number | null
+          new_final_rating?: string | null
+          new_status?: string | null
+          new_total_score?: number | null
+          performed_by?: string | null
+          prior_criteria_weighted_score?: number | null
+          prior_final_rating?: string | null
+          prior_finalized_at?: string | null
+          prior_is_locked?: boolean | null
+          prior_status?: string | null
+          prior_submitted_at?: string | null
+          prior_total_score?: number | null
+          reason: string
+          response_id?: string | null
+          response_weighted_score?: number | null
+          reviewer_role?: string | null
+        }
+        Update: {
+          applied_at?: string
+          criteria_scores?: Json | null
+          employee_code?: string | null
+          employee_name?: string | null
+          id?: string
+          instance_id?: string
+          new_criteria_weighted_score?: number | null
+          new_final_rating?: string | null
+          new_status?: string | null
+          new_total_score?: number | null
+          performed_by?: string | null
+          prior_criteria_weighted_score?: number | null
+          prior_final_rating?: string | null
+          prior_finalized_at?: string | null
+          prior_is_locked?: boolean | null
+          prior_status?: string | null
+          prior_submitted_at?: string | null
+          prior_total_score?: number | null
+          reason?: string
+          response_id?: string | null
+          response_weighted_score?: number | null
+          reviewer_role?: string | null
+        }
+        Relationships: []
+      }
       annual_review_bu_head_terminal_audit_2026_07: {
         Row: {
           created_at: string

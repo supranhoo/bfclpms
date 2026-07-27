@@ -1,47 +1,54 @@
-## What happened (verified in the database)
+## Assumptions
 
-Sunil Ram (101361) and Sumit Kumar (102011) both run the chain `Self → Dept Head → BU Head`.
+- The BU Head's existing (unlocked) scores are the intended final BU assessment; no re-scoring is needed.
+- Only these two instances are affected — verified: they are the only two in the whole system sitting at `pending_bu` with a fully-scored unlocked BU draft.
 
-1. Their Dept Head submitted a **narrative-only** response — `criteria_scores` empty.
-2. The BU Head then scored and locked (101361 = 315 pts, 102011 = 265 pts); both instances reached **Completed** (66.00 "Average" / 53.00 "Poor").
-3. On **2026-07-27 04:15:08** the ADR-172 empty-stage repair sweep unlocked those empty Dept Head responses and forced `overall_status = pending_dept`, nulling `total_score`, `criteria_weighted_score`, `final_rating`, `finalized_at` — **without checking that a downstream stage was already actioned**. Logged in `annual_review_empty_stage_repair_2026_07`.
+## What the data actually shows (verified)
 
-That is why they read "pending Dept Head" while BU Head shows complete. It is the same defect class ADR-183 fixed in the supersede path, present here in the empty-stage path.
-
-Blast radius: 30 rows touched by that sweep; 8 were previously Completed; **5 are still stuck** with a locked downstream response:
-
-| Code | Name | Prev score / rating |
+| | 100508 Satyam Kumar Jha | 101676 Satyaban Roy |
 |---|---|---|
-| 101029 | Bunty Kumar | 14.00 / Poor |
-| 101230 | Jay Parakash Singh | 11.00 / Poor |
-| 101323 | Ankush Kumar | 0.00 / Poor |
-| 101361 | Sunil Ram | 66.00 / Average |
-| 102011 | Sumit Kumar | 53.00 / Poor |
+| Status | `pending_bu` | `pending_bu` |
+| Enabled stages | self → dept_head → bu_head | self → dept_head → bu_head |
+| Self | locked | locked |
+| Dept Head (Prabhat Kumar Singh) | locked, re-submitted 26-Jul 04:11 | locked, re-submitted 25-Jul 10:30 |
+| BU Head (Sindhu Raj Singh) | 19/19 criteria scored, weighted 195, **not locked, never submitted** | 19/19 criteria scored, weighted 231, **not locked, never submitted** |
+| Aggregates | total/rating/finalized all empty | total/rating/finalized all empty |
 
-(101199, 101751, 101982 already returned to Completed.)
+Stage-transition history (from notification metadata) explains it:
 
-## Risk & impact
+```text
+101676:  25-Jul 10:27:34  completed   -> pending_bu    (review re-opened)
+         25-Jul 10:27:51  pending_bu  -> pending_dept  (BU sent it back to Dept)
+         25-Jul 10:30:14  pending_dept-> pending_bu    (Dept re-submitted)  <- stuck here
 
-- **Data**: only the 5 listed instances plus their Dept Head response rows change. Before/after captured in a new dated audit table, so it is fully reversible.
-- **Workflow**: reviews leave the Dept Head queue; no reviewer loses submitted work — the narrative Dept Head text stays.
-- **UI/UX**: none — same components, corrected data.
-- **Regression risk**: the guard change must not weaken ADR-172 (empty locked stage on a *live* chain must still be reopened). Mitigated by scoping the new exemption strictly to "a later enabled stage already has a locked response".
-- **Scalability**: touched-row counts are tiny; the guard adds one EXISTS per evaluated instance.
-- **Rollback**: restore rows from the audit table; revert the function/trigger to the current body.
+100508:  25-Jul 13:07:21  completed   -> pending_bu    (review re-opened)
+         25-Jul 13:07:42  pending_bu  -> pending_dept  (BU sent it back to Dept)
+         26-Jul 04:11:11  pending_dept-> pending_bu    (Dept re-submitted)  <- stuck here
+```
+
+So this is **not** a workflow bug. Both were completed, then deliberately re-opened; the re-open correctly unlocked the BU response and cleared the aggregates but **preserved the BU's scores** (per the send-back preservation policy). Reports therefore still show BU scores, which reads as "BU review done", while the workflow correctly awaits a fresh BU sign-off that was never given.
+
+## Risk & Impact Report
+
+- **Data impact:** Locks 2 existing `annual_review_responses` rows and writes `total_score`, `criteria_weighted_score`, `final_rating`, `finalized_at/by`, `overall_status='completed'` on 2 instances. No schema change. Additive only.
+- **Workflow impact:** These two leave Sindhu Raj Singh's queue and appear as Completed for the employees, Dept Head and upline. The `trg_ar_no_downstream_rewind` and BU-terminal guards remain satisfied (bu_head is the last enabled stage).
+- **UI/UX impact:** None — no component changes in this option.
+- **Regression risk:** Low, and scoped by an explicit 2-ID whitelist. Main risk is recomputing aggregates differently from the normal submit path.
+- **Mitigation:** Reuse the same server-side aggregate routine the normal submit uses (`annual_review_compute_final_summary` / `annual_review_compute_final_score`) rather than hand-computing; snapshot before/after into an audit table; a one-statement rollback is available from that snapshot.
 
 ## Plan
 
-1. **Guard fix (ADR-184 / POLICY §AR-REPAIR-NO-DOWNSTREAM-REWIND)** — in the empty-stage repair/guard path (`trg_ar_stage_score_required` and the repair routine), skip any instance where a **later enabled stage already holds a locked response**. In that case the empty upstream response is left locked and the instance keeps its terminal status; a diagnostic row is recorded instead of a rewind.
-2. **Terminal recompute** — where all enabled stages are actioned, resolve status to `completed` and recompute aggregates via `annual_review_compute_final_summary`, never null them (mirrors ADR-183 rule 2).
-3. **Repair the 5 rows** — re-lock the Dept Head narrative responses, set `overall_status = completed`, recompute score/rating from the locked BU Head submission, restore `finalized_at`/`finalized_by`; log before/after into `annual_review_downstream_rewind_repair_2026_07`.
-4. **Verification query** — confirm zero instances remain in a `pending_*` status while a later enabled stage has a locked response.
-5. **Tests** — `src/test/annualReview/noDownstreamRewind.test.ts`: empty upstream + locked downstream → no rewind, promotes to completed with recomputed aggregates; empty upstream with **no** downstream action → still rewinds (ADR-172 preserved).
-6. **Docs** — `docs/adr/ADR-184.md`, POLICY §AR-REPAIR-NO-DOWNSTREAM-REWIND, DOCUMENTATION.md version history, and memory `mem/features/annual-review/no-downstream-rewind.md`.
+1. **Pre-snapshot** — insert the current instance + BU response state for both IDs into a new audit table `annual_review_bu_draft_finalise_2026_07` (instance_id, employee_code, prior_status, prior lock/submitted state, criteria_scores, weighted_score, reason, performed_by = NULL for system-applied, applied_at). *Verify: 2 rows captured.*
+2. **Lock the BU responses** — set `is_locked = true`, `submitted_at = now()` on the two `bu_head` rows, leaving scores untouched. *Verify: both rows locked with 19 criteria intact.*
+3. **Finalise the instances** — call the existing final-summary routine so `criteria_weighted_score`, `total_score` and `final_rating` are derived exactly as a normal BU submit would, then set `overall_status='completed'`, `finalized_at=now()`. *Verify: both rows have non-null score + rating, status completed.*
+4. **Post-checks** — re-run the "pending_bu with fully-scored unlocked BU draft" detector (expect 0), confirm no guard trigger fired, and confirm the two employees now appear under completed reviews in the hierarchy view. *Verify: detector returns 0.*
+5. **Regression test** — `src/test/annualReview/buDraftFinalise.test.ts` asserting: a re-opened→sent-back→re-submitted instance with a scored-but-unlocked terminal response is reported as *awaiting terminal sign-off* (not completed), and that finalising it derives the score from the preserved draft rather than zeroing it.
+6. **Docs & policy** — `docs/adr/ADR-185.md` (Re-open preserves reviewer drafts; terminal stage still needs an explicit re-submit), append **POLICY §AR-REOPEN-REQUIRES-TERMINAL-RESUBMIT**, bump `DOCUMENTATION.md` version history, and register the rule in project memory.
 
-## UI changes
+## UI Changes
 
-None.
+Not Applicable for this option (chosen: admin-finalise only). Note for later: the grid still shows BU scores for a re-opened review, which is what made this look like a bug — a "draft, not submitted" badge would remove the ambiguity. Say the word and I'll add it.
 
-## Technical notes
+## Rollback
 
-Reused invariant across all three rewind paths (supersede, stage-revert, empty-stage repair): *never set an instance to a `pending_*` stage that precedes an already-locked response; if nothing unactioned remains, the instance is terminal and aggregates are recomputed, not erased.* Canonical order stays `self → manager → skip_manager → dept_head → bu_head → hr → management`.
+`annual_review_bu_draft_finalise_2026_07` holds the full prior state; one update restores both instances to `pending_bu` and unlocks the BU responses.
