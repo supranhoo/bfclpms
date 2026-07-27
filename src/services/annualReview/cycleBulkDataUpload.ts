@@ -378,6 +378,12 @@ export interface DryRunRow {
   /** Original locked stage (e.g. `completed`) — for the UI badge. */
   lockedStage?: string;
   /**
+   * ADR-186: the instance's `overall_status` at dry-run time, on EVERY row
+   * (not just locked ones), so the dialog can break the skip count down by
+   * stage and a mid-workflow cohort can never hide behind one number.
+   */
+  stageStatus?: string;
+  /**
    * Per-cell warnings (v2.66.95): columns that were skipped for this row
    * (unlinked KPI, non-numeric value, etc.) while the rest of the row still
    * applies. Row-fatal issues stay in `reason`.
@@ -405,6 +411,8 @@ export interface DryRunReport {
   skipCount: number;
   errorCount: number;
   totalChanges: number;
+  /** ADR-186: skip counts grouped by instance status, biggest first. */
+  skipsByStatus: Array<{ status: string; count: number }>;
 }
 
 const MAX_ROWS = 5000;
@@ -445,9 +453,10 @@ function coercePercentRaw(
 export async function parseAndDryRun(
   file: File,
   plan: CycleBulkPlan,
-  opts: { allowCompletedUpgrades?: boolean } = {},
+  opts: { allowCompletedUpgrades?: boolean; allowMidWorkflowUpgrades?: boolean } = {},
 ): Promise<DryRunReport> {
   const allowCompletedUpgrades = !!opts.allowCompletedUpgrades;
+  const allowMidWorkflowUpgrades = !!opts.allowMidWorkflowUpgrades;
   const buf = await file.arrayBuffer();
   const wb = XLSX.read(buf);
   const ws = wb.Sheets[wb.SheetNames[0]];
@@ -470,14 +479,26 @@ export async function parseAndDryRun(
       continue;
     }
     const isSafeStage = STAGE_SAFE.has(inst.overallStatus);
-    // ADR-171: admin non-destructive upgrade for completed rows only.
-    const canAdminUpgrade = allowCompletedUpgrades && inst.overallStatus === 'completed';
-    if (!isSafeStage && !canAdminUpgrade) {
-      rows.push({ employeeCode: code, fullName: inst.fullName, templateName: inst.templateName, verdict: 'skip', reason: `Locked stage: ${inst.overallStatus}`, changes: [] });
+    // ADR-171 / ADR-186: stage coverage is resolved by one SSOT classifier.
+    const coverage = classifyStageCoverage(inst.overallStatus, {
+      allowCompletedUpgrades,
+      allowMidWorkflowUpgrades,
+    });
+    if (coverage.mode === 'skip') {
+      rows.push({
+        employeeCode: code,
+        fullName: inst.fullName,
+        templateName: inst.templateName,
+        verdict: 'skip',
+        reason: coverage.reason,
+        stageStatus: inst.overallStatus,
+        lockedStage: inst.overallStatus,
+        changes: [],
+      });
       skip++;
       continue;
     }
-    const rowMode: 'safe' | 'admin_upgrade' = isSafeStage ? 'safe' : 'admin_upgrade';
+    const rowMode: 'safe' | 'admin_upgrade' = coverage.mode;
     const rowChanges: DryRunRow['changes'] = [];
     const rowWarnings: string[] = [];
     for (const col of plan.columns) {
@@ -550,6 +571,7 @@ export async function parseAndDryRun(
         verdict: 'skip',
         reason: rowWarnings.length ? rowWarnings.join('; ') : 'No changes',
         mode: rowMode,
+        stageStatus: inst.overallStatus,
         lockedStage: isSafeStage ? undefined : inst.overallStatus,
         warnings: rowWarnings.length ? rowWarnings : undefined,
         changes: [],
@@ -563,6 +585,7 @@ export async function parseAndDryRun(
       templateName: inst.templateName,
       verdict: 'apply',
       mode: rowMode,
+      stageStatus: inst.overallStatus,
       lockedStage: isSafeStage ? undefined : inst.overallStatus,
       changes: rowChanges,
       warnings: rowWarnings.length ? rowWarnings : undefined,
@@ -571,7 +594,14 @@ export async function parseAndDryRun(
     changes += rowChanges.length;
   }
 
-  return { rows, applyCount: apply, skipCount: skip, errorCount: err, totalChanges: changes };
+  return {
+    rows,
+    applyCount: apply,
+    skipCount: skip,
+    errorCount: err,
+    totalChanges: changes,
+    skipsByStatus: summariseSkipsByStatus(rows),
+  };
 }
 
 export interface CommitResult { updated: number; failed: number; errors: string[]; upgradedCompleted: number }
