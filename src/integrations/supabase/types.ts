@@ -1289,6 +1289,51 @@ export type Database = {
         }
         Relationships: []
       }
+      annual_review_orphan_repair_2026_07: {
+        Row: {
+          created_at: string
+          employee_id: string | null
+          id: number
+          instance_id: string
+          new_reviewer_id: string | null
+          new_status: string | null
+          old_reviewer_id: string | null
+          old_status: string | null
+          orphan_reason: string
+          performed_by: string | null
+          reason: string | null
+          stage: string
+        }
+        Insert: {
+          created_at?: string
+          employee_id?: string | null
+          id?: number
+          instance_id: string
+          new_reviewer_id?: string | null
+          new_status?: string | null
+          old_reviewer_id?: string | null
+          old_status?: string | null
+          orphan_reason: string
+          performed_by?: string | null
+          reason?: string | null
+          stage: string
+        }
+        Update: {
+          created_at?: string
+          employee_id?: string | null
+          id?: number
+          instance_id?: string
+          new_reviewer_id?: string | null
+          new_status?: string | null
+          old_reviewer_id?: string | null
+          old_status?: string | null
+          orphan_reason?: string
+          performed_by?: string | null
+          reason?: string | null
+          stage?: string
+        }
+        Relationships: []
+      }
       annual_review_proxy_submissions: {
         Row: {
           captured_at: string
@@ -14170,6 +14215,15 @@ export type Database = {
         }
         Returns: Json
       }
+      admin_reassign_orphaned_reviewers: {
+        Args: {
+          p_instance_ids: string[]
+          p_new_reviewer_id: string
+          p_reason: string
+          p_stage: string
+        }
+        Returns: Json
+      }
       advance_annual_review_status: {
         Args: {
           p_instance_id: string
@@ -15265,6 +15319,26 @@ export type Database = {
       get_org_kpi_data_entry_snapshot: {
         Args: { p_period: string; p_year: number }
         Returns: Json
+      }
+      get_orphaned_annual_reviews: {
+        Args: { p_cycle_id?: string }
+        Returns: {
+          cycle_id: string
+          employee_code: string
+          employee_id: string
+          employee_name: string
+          instance_id: string
+          is_current_stage: boolean
+          orphan_reason: string
+          overall_status: string
+          reviewer_code: string
+          reviewer_id: string
+          reviewer_name: string
+          stage: string
+          suggested_reviewer_code: string
+          suggested_reviewer_id: string
+          suggested_reviewer_name: string
+        }[]
       }
       get_profile_directory_entries: {
         Args: { _ids: string[] }
