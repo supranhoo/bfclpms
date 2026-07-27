@@ -823,6 +823,11 @@ export async function fetchAllInstancesForExport(args: {
  * Fetches submitted reviewer responses for a set of instances and returns a
  * map of `instance_id → reviewer_role → weighted_score`. Single .in() query —
  * used by the Progress grid to show per-stage scores without N+1 loads.
+ *
+ * POLICY §AR-STAGE-SCORE-REQUIRED (ADR-172): a submitted response that
+ * carries no criteria scores is a data gap, NOT a genuine zero. It is
+ * surfaced as `null` so grids and exports render "—" instead of a
+ * misleading `0.0` rating.
  */
 export async function fetchInstanceStageScores(
   instanceIds: string[],
@@ -834,13 +839,17 @@ export async function fetchInstanceStageScores(
     const slice = instanceIds.slice(i, i + BATCH);
     const { data, error } = await db
       .from('annual_review_responses')
-      .select('instance_id, reviewer_role, weighted_score, submitted_at')
+      .select('instance_id, reviewer_role, weighted_score, submitted_at, criteria_scores')
       .in('instance_id', slice)
       .not('submitted_at', 'is', null);
     if (error) throw error;
-    for (const r of (data ?? []) as Array<{ instance_id: string; reviewer_role: AnnualReviewerRole; weighted_score: number | null }>) {
+    for (const r of (data ?? []) as Array<{
+      instance_id: string; reviewer_role: AnnualReviewerRole;
+      weighted_score: number | null; criteria_scores: Record<string, unknown> | null;
+    }>) {
       const slot = (out[r.instance_id] ??= {});
-      slot[r.reviewer_role] = r.weighted_score;
+      const scoredCount = Object.keys(r.criteria_scores ?? {}).length;
+      slot[r.reviewer_role] = scoredCount === 0 ? null : r.weighted_score;
     }
   }
   return out;

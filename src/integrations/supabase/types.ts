@@ -712,6 +712,69 @@ export type Database = {
           },
         ]
       }
+      annual_review_empty_stage_repair_2026_07: {
+        Row: {
+          employee_code: string | null
+          id: string
+          instance_id: string
+          new_overall_status:
+            | Database["public"]["Enums"]["annual_review_status"]
+            | null
+          preserved_qualitative: Json
+          prev_criteria_weighted_score: number | null
+          prev_final_rating: string | null
+          prev_overall_status:
+            | Database["public"]["Enums"]["annual_review_status"]
+            | null
+          prev_submitted_at: string | null
+          prev_total_score: number | null
+          repaired_at: string
+          response_id: string
+          reviewer_id: string | null
+          reviewer_role: Database["public"]["Enums"]["annual_reviewer_role"]
+        }
+        Insert: {
+          employee_code?: string | null
+          id?: string
+          instance_id: string
+          new_overall_status?:
+            | Database["public"]["Enums"]["annual_review_status"]
+            | null
+          preserved_qualitative?: Json
+          prev_criteria_weighted_score?: number | null
+          prev_final_rating?: string | null
+          prev_overall_status?:
+            | Database["public"]["Enums"]["annual_review_status"]
+            | null
+          prev_submitted_at?: string | null
+          prev_total_score?: number | null
+          repaired_at?: string
+          response_id: string
+          reviewer_id?: string | null
+          reviewer_role: Database["public"]["Enums"]["annual_reviewer_role"]
+        }
+        Update: {
+          employee_code?: string | null
+          id?: string
+          instance_id?: string
+          new_overall_status?:
+            | Database["public"]["Enums"]["annual_review_status"]
+            | null
+          preserved_qualitative?: Json
+          prev_criteria_weighted_score?: number | null
+          prev_final_rating?: string | null
+          prev_overall_status?:
+            | Database["public"]["Enums"]["annual_review_status"]
+            | null
+          prev_submitted_at?: string | null
+          prev_total_score?: number | null
+          repaired_at?: string
+          response_id?: string
+          reviewer_id?: string | null
+          reviewer_role?: Database["public"]["Enums"]["annual_reviewer_role"]
+        }
+        Relationships: []
+      }
       annual_review_final_backfill_audit_2026_07: {
         Row: {
           created_at: string
@@ -14272,6 +14335,13 @@ export type Database = {
       annual_review_rollback_kra_rehydrate_run: {
         Args: { p_reason: string; p_run_id: string }
         Returns: string
+      }
+      annual_review_stage_scoreable_criteria_count: {
+        Args: {
+          p_instance_id: string
+          p_reviewer_role: Database["public"]["Enums"]["annual_reviewer_role"]
+        }
+        Returns: number
       }
       annual_review_status_rank: {
         Args: { s: Database["public"]["Enums"]["annual_review_status"] }
