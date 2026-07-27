@@ -17,17 +17,22 @@ import type {
 } from '@/types/annualReview';
 import { collectRecommendations } from './OverallRecommendationCard';
 import { displayStageForResponse } from '@/lib/annualReview/displayStageForResponse';
+import { ScoreBreakdownCard } from './ScoreBreakdownCard';
+import { useKraDerivedRating } from '@/hooks/useKraDerivedRating';
+import { resolveScoringMode } from '@/lib/annualReview/scoreParameters';
 
 /**
  * Read-only finalized view for the employee: HR rating + remarks, criteria-by-criteria
  * scores across reviewers, and an acknowledgment action with optional rebuttal note.
  */
 export function EmployeeResultsView({
-  instance, template, responses,
+  instance, template, responses, fiscalYear,
 }: {
   instance: AnnualReviewInstance;
   template: AnnualReviewTemplate | null | undefined;
   responses: AnnualReviewResponse[];
+  /** Fiscal-year start — required to resolve the KRA rollup (ADR-174). */
+  fiscalYear?: number;
 }) {
   const ack = useAcknowledgeInstance();
   const [open, setOpen] = useState(false);
@@ -44,10 +49,20 @@ export function EmployeeResultsView({
   const hasSystem = systemWeight > 0;
   const systemTotal = Object.values((instance.system_scores ?? {}) as Record<string, unknown>)
     .reduce<number>((acc, v) => acc + (typeof v === 'number' ? v : 0), 0);
+  // ADR-174 — a KRA-driven template never populates criteria scores, so
+  // total_score / final_rating stay empty until HR finalizes. Fall back to the
+  // same projection the admin grid uses instead of rendering "—".
+  const kra = useKraDerivedRating(template, instance, fiscalYear);
+  const scoringMode = resolveScoringMode(template);
   // ADR-140-UI: numeric rating x/5 derived from the same 0..100 total the badge uses,
   // so it is visible regardless of whether the template is criteria-only, system-only, or blended.
-  const ratingOutOf5 =
-    instance.total_score != null ? (Number(instance.total_score) / 100) * 5 : null;
+  const projectedTotal =
+    instance.total_score == null ? kra.projected?.total_0_100 ?? null : null;
+  const effectiveTotal =
+    instance.total_score != null ? Number(instance.total_score) : projectedTotal;
+  const ratingOutOf5 = effectiveTotal != null ? (effectiveTotal / 100) * 5 : null;
+  const isProvisional = instance.total_score == null && projectedTotal != null;
+  const effectiveRatingBand = instance.final_rating ?? (isProvisional ? kra.projected?.rating ?? null : null);
   const gridCols =
     [true, hasCriteria, hasSystem].filter(Boolean).length >= 2
       ? 'sm:grid-cols-2'
