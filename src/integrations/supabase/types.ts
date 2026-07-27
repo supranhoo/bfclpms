@@ -14920,7 +14920,10 @@ export type Database = {
         Returns: undefined
       }
       dust_cases_to_rating: { Args: { p_cases: number }; Returns: number }
-      dust_rating_to_level: { Args: { p_rating: number }; Returns: string }
+      dust_rating_to_level: {
+        Args: { p_rating: number }
+        Returns: Database["public"]["Enums"]["rating_level"]
+      }
       enqueue_safety_notification: {
         Args: {
           _body?: string
