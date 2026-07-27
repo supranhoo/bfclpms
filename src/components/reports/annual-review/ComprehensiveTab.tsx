@@ -327,10 +327,10 @@ export function ComprehensiveTab({ cycleId, cycleName }: { cycleId: string | und
               <TableHead>Business Unit</TableHead>
               <TableHead>Grade</TableHead>
               <TableHead>Eligibility</TableHead>
-              <TableHead className="text-right">Self</TableHead>
-              <TableHead className="text-right">HOD</TableHead>
-              <TableHead className="text-right">BU</TableHead>
-              <TableHead className="text-right">HR</TableHead>
+              <TableHead className="text-right" title="Stage rating on a 0–5 scale (KRA-derived where the template has no criteria).">Self /5</TableHead>
+              <TableHead className="text-right" title="HOD / Dept Head rating on a 0–5 scale.">HOD /5</TableHead>
+              <TableHead className="text-right" title="BU Head rating on a 0–5 scale.">BU /5</TableHead>
+              <TableHead className="text-right" title="HR rating on a 0–5 scale.">HR /5</TableHead>
               <TableHead className="text-right">Final</TableHead>
               <TableHead>Rating</TableHead>
               {/* ADR-174 — how the rating was derived (KRA vs criteria). */}
@@ -349,10 +349,12 @@ export function ComprehensiveTab({ cycleId, cycleName }: { cycleId: string | und
                   <TableCell className="text-sm">{r.business_unit_name ?? '—'}</TableCell>
                   <TableCell className="text-sm">{r.grade ?? '—'}</TableCell>
                   <TableCell className="text-sm">{eligibilityLabel(r)}</TableCell>
-                  <TableCell className="text-right tabular-nums">{r.self_score?.toFixed(2) ?? '—'}</TableCell>
-                  <TableCell className="text-right tabular-nums">{(r.dept_head_score ?? r.manager_score)?.toFixed(2) ?? '—'}</TableCell>
-                  <TableCell className="text-right tabular-nums">{r.bu_head_score?.toFixed(2) ?? '—'}</TableCell>
-                  <TableCell className="text-right tabular-nums">{r.hr_score?.toFixed(2) ?? '—'}</TableCell>
+                  {/* ADR-179 — show the normalised /5 rating (KRA-derived when
+                      the template has no criteria) instead of a blank cell. */}
+                  <TableCell className="text-right tabular-nums">{r.self_rating_5?.toFixed(2) ?? r.self_score?.toFixed(2) ?? '—'}</TableCell>
+                  <TableCell className="text-right tabular-nums">{(r.dept_head_rating_5 ?? r.manager_rating_5)?.toFixed(2) ?? (r.dept_head_score ?? r.manager_score)?.toFixed(2) ?? '—'}</TableCell>
+                  <TableCell className="text-right tabular-nums">{r.bu_head_rating_5?.toFixed(2) ?? r.bu_head_score?.toFixed(2) ?? '—'}</TableCell>
+                  <TableCell className="text-right tabular-nums">{r.hr_rating_5?.toFixed(2) ?? r.hr_score?.toFixed(2) ?? '—'}</TableCell>
                   <TableCell className="text-right tabular-nums font-medium">{r.total_score?.toFixed(2) ?? '—'}</TableCell>
                   <TableCell className="text-sm">{r.final_rating ?? '—'}</TableCell>
                   <TableCell className="text-sm whitespace-nowrap">
