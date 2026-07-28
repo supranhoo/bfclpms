@@ -17,6 +17,11 @@ export interface BulkEmployeeAttr {
   pms_grade: string | null;
   reporting_manager_id: string | null;
   reporting_manager_name: string | null;
+  /** Org axes — ADR-195. Backing the multi-select Company / Division / BU / Dept filters. */
+  company_id: string | null;
+  department_id: string | null;
+  business_unit_id: string | null;
+  division_id: string | null;
 }
 
 export function useBulkEmployeeAttrs(employeeIds: string[], enabled: boolean) {
@@ -41,6 +46,10 @@ export function useBulkEmployeeAttrs(employeeIds: string[], enabled: boolean) {
         pms_grade: r.pms_grade ?? null,
         reporting_manager_id: r.reporting_manager_id ?? null,
         reporting_manager_name: r.reporting_manager_name ?? null,
+        company_id: r.company_id ?? null,
+        department_id: r.department_id ?? null,
+        business_unit_id: r.business_unit_id ?? null,
+        division_id: r.division_id ?? null,
       }));
     },
   });
