@@ -1,59 +1,66 @@
-## 1. Assumptions
+## Assumptions
 
-- The reported failure is the "Preview failed: {}" dialog when employee Dippendu Das (101773) opens auditor-uploaded evidence from the KPI details view.
-- Fix must be additive: nobody currently able to view evidence loses access.
+- The mail in the screenshot is the `final_approved` ("Your KPI Has Been Finalized") notification email sent by the `send-email-notification` function.
+- Jaspal's KPIs were genuinely approved with a score; the score is missing only in the email, not in the app.
 
-## 2. Verified findings (RCA)
+## Verified current state
 
-Confirmed by reading the code and querying the backend:
+1. **Backend URL leak** — `sendViaSmtp` / `sendViaResend` send an **HTML-only** message (no plain-text alternative, no preheader). The first thing in the HTML `<body>` is the branding logo `<img src="https://<backend>.supabase.co/storage/v1/object/public/branding-as...">`, so the mail client builds its snippet line from that raw URL. That is exactly the string shown in the screenshot.
+2. **Score: N/A/5** — the DB trigger `public.send_email_on_notification()` builds the payload for `send-email-notification` and **never includes `final_score`**. In the edge function (lines ~1487-1500), `final_score == null` → `'N/A'` for both `{{final_score}}` and `{{score_label}}`. So *every* finalized email shows `Score: N/A/5`, for all employees — not just Jaspal. The score itself lives in `review_submissions.final_score` (with `is_na` flag) keyed by `kpi_id`; a resolver `fn_resolve_final_score` already exists.
 
-- `review-evidence` is a **private** bucket.
-- The only general read policy is **"Users can view authorized evidence"**, which authorizes on the **first path segment** (`storage.foldername(name)[1]`): the viewer must be that UUID, be its reporting manager / skip manager, or hold `admin` / `auditor` / `hr_pms`.
-- `EvidenceUpload` builds paths as `` `${userId}/${kpiId}/...` `` where `userId` is **the uploader**, not the KPI owner. Reviewer surfaces therefore write auditor-owned folders. Real rows for this employee:
-  - `f9556e9b-…(Auditor03)/e7f2a92f-…/reviewer-evidence/1784723216401_101773_Timely_Resolution_of_Customer_rel.png`
-  - `3d06ca4d-…/…/reviewer-evidence/1777452387995_101773_Response_in_time_….pdf`
-- Dippendu's UUID is `876f255c-…`, so for these objects segment 1 is the auditor, he is not the auditor's manager, and he holds no privileged role → storage denies SELECT. The SDK `.download()` returns an error whose body is empty, so `EvidencePreviewDialog` renders `Preview failed: {}`.
+Neither issue affects stored data or the app UI — both are email-render defects.
 
-**5 Why**
-1. Preview fails → 2. Storage SELECT denied → 3. Read policy keys on path segment 1 → 4. Segment 1 is the uploader, not the KPI owner → 5. No policy models "participants of this KPI may read this KPI's evidence" for the non-observation folders (only `observation-evidence` has such a policy).
+## Risk & impact
 
-## 3. Risk & impact
+- **Data impact:** none. No schema change; only one trigger function body is replaced (`CREATE OR REPLACE`) and one edge function is edited.
+- **Workflow impact:** none. Notification rows, RLS, and dispatch conditions stay identical.
+- **UI impact:** none in-app. Email preview line and subject change.
+- **Regression risk:** the trigger is shared by *all* notification types — the added lookup must be strictly additive and wrapped so a failure can never block the notification insert (the existing body already has an EXCEPTION guard around dispatch; the new lookup gets its own guard).
+- **Rollback:** re-apply the previous version of `send_email_on_notification()` (migration `20260706080545_...`) and revert the edge function file.
 
-- **Data:** no schema change; one **new additive** storage SELECT policy. Existing policies untouched → zero regression for admins, auditors, HR, managers.
-- **Security:** the new policy grants read strictly to KPI participants derived from `kpis.id` in path segment 2 — same participant set already accepted for observation evidence. No blanket/public read; bucket stays private.
-- **Workflow/UI:** none beyond the preview working.
-- **Scalability:** policy is an `EXISTS` on `kpis` by primary key + `profiles` manager lookups — indexed, negligible.
-- **Regression risk:** low. Mitigated by tests plus a manual check that a non-participant still cannot read.
-- **Rollback:** `DROP POLICY` of the single new policy restores today's behaviour exactly.
+## Fix plan
 
-## 4. Plan
+### Step 1 — Stop the backend URL from becoming the preview text (edge function)
 
-**Step 1 — Migration: additive read policy**
-Create `Review evidence readable by KPI participants` on `storage.objects` FOR SELECT TO `authenticated`:
-- `bucket_id = 'review-evidence'`
-- path segment 3 in (`self-evidence`, `reviewer-evidence`, `auditor-evidence`, `management-evidence`, `observation-replies`) — i.e. per-KPI evidence folders
-- `EXISTS` on `kpis k WHERE k.id::text = foldername(name)[2]` AND viewer is: the KPI owner, the owner's reporting manager, the skip-level manager, an assigned auditor (`audit_kpi_assignments` / `audit_kpi_level_assignments`), or holds `kpi_mention_access` for that KPI.
-*Verification:* re-query the two real auditor-uploaded objects above as Dippendu's UUID via a `has-access` SQL simulation, and assert an unrelated employee is still denied.
+In `supabase/functions/send-email-notification/index.ts`:
 
-**Step 2 — Client: honest error surface (no silent `{}`)**
-In `src/components/review/EvidencePreviewDialog.tsx`, normalise empty/unparseable storage errors to a readable message ("You do not have access to this file, or it is no longer available") instead of printing the raw `{}`. Purely presentational.
-*Verification:* unit test on the error-normalising helper.
+- Add a **hidden preheader** as the first element inside `<body>` in `buildEmailHtml()`: a `display:none;max-height:0;overflow:hidden` span containing a short human summary (e.g. the first meaningful line of the body / event title). Mail clients use this for the snippet instead of the image URL.
+- Add a **plain-text alternative** (`text:`) to both `sendViaSmtp` and `sendViaResend`, generated from the already-available `bodyContent` (no logo, no storage URL). This also improves deliverability and accessibility.
+- The logo image itself stays as-is (still rendered inside the email); only its URL stops leaking into the snippet.
 
-**Step 3 — Forward-looking path correctness (low-risk, optional within this change)**
-Reviewer surfaces should upload under the **KPI owner's** UUID so the primary policy alone suffices for future files. This is a one-line prop change per reviewer call-site (`userId` → employee id). Historical files are already covered by Step 1, so this is hardening, not the fix. I will list the call-sites and apply it only if you confirm — it changes where new files land.
+Verification: send a test email from System Settings → Email and confirm the snippet shows the summary line, not a URL.
 
-**Step 4 — Tests**
-- `src/test/review/evidenceStorageAccess.test.ts`: migration guard asserting the new policy exists, is SELECT-only, is scoped to `review-evidence`, and that no migration drops `Users can view authorized evidence` (parity guard, same pattern as `auditorReviewAccessMatrix.test.ts`).
-- Preview error-normalisation unit test.
+### Step 2 — Send the real final score (DB trigger, additive)
 
-**Step 5 — Docs**
-- `docs/adr/ADR-190.md` — Review evidence read access keyed to KPI participation, not upload folder.
-- `POLICY.md` §EVIDENCE-READ-KPI-PARTICIPATION + memory update under `mem/features/review/office-evidence-preview.md`.
+New migration replacing `public.send_email_on_notification()` with a version that, **only when `mapped_event_type = 'final_approved'` and `NEW.kpi_id IS NOT NULL`**, looks up the score:
 
-## 5. UI changes
+```
+SELECT rs.final_score, rs.is_na INTO v_final_score, v_is_na
+FROM review_submissions rs WHERE rs.kpi_id = NEW.kpi_id
+ORDER BY rs.updated_at DESC NULLS LAST LIMIT 1;
+```
 
-Only the failure text inside the existing evidence preview modal (replaces `Preview failed: {}`). The "Download instead" button stays. No layout change.
+and adds `'final_score', v_final_score` plus `'is_na', v_is_na` to the JSON payload. Everything else in the function stays byte-identical. If `NEW.metadata->>'final_score'` is already present, that wins (future producers can pass it explicitly).
 
-## 6. Open question
+### Step 3 — Make the email honest when there is no score (edge function)
 
-Step 3 (making reviewer uploads land in the employee's folder) — apply now, or keep this change read-only and schedule it separately?
+In the `final_approved` block:
+
+- If a numeric score exists → `Score: 4.2/5` and the matching label, as today.
+- If the KPI is **N/A** → subject/body say "Marked Not Applicable" instead of `N/A/5`.
+- If the score is genuinely unresolved → drop the `— Score: …` clause from the subject entirely rather than printing `N/A/5`, and omit the score line in the body.
+
+This guarantees the misleading `N/A/5` string can never be sent again, even if the payload lookup fails.
+
+### Step 4 — Tests + docs
+
+- Unit tests for the new subject/score-formatting helper (numeric, N/A KPI, missing score) and for preheader/plain-text presence in `buildEmailHtml`.
+- Update `DOCUMENTATION.md` and `POLICY.md` with **ADR-191 / POLICY §EMAIL-SCORE-AND-PREHEADER**: (a) every outbound email must have a plain-text part and a preheader; no backend/storage URL may be the first visible content; (b) score placeholders must resolve from the submission record and must be omitted rather than rendered as `N/A` when unresolved.
+
+### Optional follow-up (not in this change)
+
+Serve the branding logo from the app's custom domain (`pms.bfclalloys.com`) instead of the backend storage host, so the URL never appears at all even in "view source". Say the word and I'll fold it in.
+
+## What stays untouched
+
+Notification creation, guards (`can_send_notification_to`), RLS, email queue/scheduler, all other event templates, and the app UI.
