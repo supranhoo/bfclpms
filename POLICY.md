@@ -5246,3 +5246,17 @@ Rules:
 - Score/preheader enrichment in `send_email_on_notification()` must stay additive and wrapped in its own exception guard: an enrichment failure may never block the notification insert or the email dispatch.
 - Template objects must be cloned before per-message mutation; module-level template constants are immutable.
 - Guarded by `src/tests/emailFinalScoreFormat.test.ts`.
+
+## §SAFETY-PII-SCOPE (ADR-192, 2026-07-28)
+
+Holding a Safety-module role is **not** by itself a licence to read every employee's personal data (email, mobile number, DOJ, confirmation dates).
+
+Tiers on `public.profiles` (SELECT, active profiles only):
+- **Elevated safety roles** — safety admin, safety head, safety officer, and the resolved global safety head — keep organisation-wide visibility, because cross-unit incident assignment depends on it.
+- **All other safety roles** — BU head, manager, supervisor, auditor, and users merely routed on an incident — are scoped to: self, their direct/functional reports, their own department, a department or business unit they head, a business unit they are routed for on an active routing rule, or an employee attached to a safety incident on which they are the assignee, router, safety head, verifier or reporter.
+
+Rules:
+- Scope resolution lives in `public.can_view_profile_for_safety(viewer, target)` (SECURITY DEFINER, `search_path = public`). Policies must call it; never inline the org-tree logic into a policy expression (RLS recursion — see §RLS-RECURSION).
+- Widening safety access must be done inside that function with a stated justification, never by adding a second broad policy on `profiles`.
+- `EXECUTE` on both helpers is revoked from `PUBLIC`/`anon`.
+- Non-safety policies on `profiles` (admin, HR, self, manager, annual-review) are out of scope and must not be altered by safety changes.

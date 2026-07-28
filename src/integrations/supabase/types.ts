@@ -15021,6 +15021,10 @@ export type Database = {
         Args: { p_profile_id: string }
         Returns: boolean
       }
+      can_view_profile_for_safety: {
+        Args: { _target_id: string; _viewer_id: string }
+        Returns: boolean
+      }
       can_view_safety_incident: {
         Args: { _incident_id: string }
         Returns: boolean
@@ -16032,6 +16036,7 @@ export type Database = {
         }
         Returns: boolean
       }
+      has_elevated_safety_role: { Args: { _user_id: string }; Returns: boolean }
       has_menu_access_override: {
         Args: { _menu_key: string; _user_id: string }
         Returns: boolean
