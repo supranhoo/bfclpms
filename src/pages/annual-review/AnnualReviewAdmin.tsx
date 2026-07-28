@@ -33,6 +33,7 @@ import { usePmsGrades, useLevels } from '@/hooks/useOrganization';
 import { Check, ChevronsUpDown, X } from 'lucide-react';
 import { AccessControlTab } from '@/components/annual-review/AccessControlTab';
 import { OrphanedReviewsTab } from '@/components/annual-review/OrphanedReviewsTab';
+import { UnscoredStagesTab } from '@/components/annual-review/UnscoredStagesTab';
 import { ShieldCheck } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
@@ -134,6 +135,7 @@ export default function AnnualReviewAdmin() {
           <TabsTrigger value="settings" className="gap-1.5 flex-1 md:flex-none whitespace-nowrap px-3"><Settings2 className="h-4 w-4" />Settings</TabsTrigger>
           <TabsTrigger value="access" className="gap-1.5 flex-1 md:flex-none whitespace-nowrap px-3"><ShieldCheck className="h-4 w-4" />Access Control</TabsTrigger>
           <TabsTrigger value="orphans" className="gap-1.5 flex-1 md:flex-none whitespace-nowrap px-3"><ShieldCheck className="h-4 w-4" />Orphaned Reviews</TabsTrigger>
+          <TabsTrigger value="unscored" className="gap-1.5 flex-1 md:flex-none whitespace-nowrap px-3"><ShieldCheck className="h-4 w-4" />Unscored Stages</TabsTrigger>
         </TabsList>
         <TabsContent value="progress" className="mt-4"><ProgressTab /></TabsContent>
         <TabsContent value="analytics" className="mt-4"><AnalyticsTab /></TabsContent>
@@ -154,6 +156,7 @@ export default function AnnualReviewAdmin() {
         <TabsContent value="settings" className="mt-4"><SettingsTab /></TabsContent>
         <TabsContent value="access" className="mt-4"><AccessControlTab /></TabsContent>
         <TabsContent value="orphans" className="mt-4"><OrphanedReviewsTab /></TabsContent>
+        <TabsContent value="unscored" className="mt-4"><UnscoredStagesTab /></TabsContent>
       </Tabs>
     </div>
   );
