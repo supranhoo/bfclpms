@@ -143,25 +143,34 @@ function summaryToSheet(s: KpiSummary, cycleName: string) {
 }
 
 /**
- * ADR-188 — builds the "Monthly KRA Scores" rows. Returns `[]` when the cycle
- * has no KRA-template employees, in which case the sheet is omitted entirely.
+ * ADR-188 — resolves the monthly KRA matrix ONCE per export. It feeds both the
+ * "KRA Months Counted" column on the Employees sheet and the "Monthly KRA
+ * Scores" sheet, so the two can never disagree inside the same workbook.
+ * Fails soft: an empty matrix blanks the column and omits the sheet.
  */
-async function buildMonthlyKraSheet(
+async function resolveKraContext(
   input: ExportInput,
   labelMaps: TemplateLabelMaps,
-): Promise<unknown[]> {
+): Promise<KraContext> {
   const isKraTemplate = (id: string | null | undefined) => !!id && !!labelMaps.isKra[id];
   const kraRows = input.rows.filter((r) => isKraTemplate(r.template_id));
-  if (kraRows.length === 0) return [];
-  const fyStart = await fetchCycleFyStart(input.cycleId);
-  if (fyStart == null) return [];
+  const empty: KraContext = { matrix: new Map(), isKraTemplate, kraRows };
+  if (kraRows.length === 0) return empty;
   try {
+    const fyStart = await fetchCycleFyStart(input.cycleId);
+    if (fyStart == null) return empty;
     const matrix = await fetchMonthlyKraMatrix(kraRows.map((r) => r.employee_id), fyStart);
-    return buildMonthlyKraRows(kraRows, matrix, isKraTemplate);
+    return { matrix, isKraTemplate, kraRows };
   } catch {
-    // Fail soft: never block the rest of the workbook on the KRA sheet.
-    return [];
+    // Fail soft: never block the rest of the workbook on the KRA aggregation.
+    return empty;
   }
+}
+
+/** Rows for the "Monthly KRA Scores" sheet; `[]` omits the sheet entirely. */
+function buildMonthlyKraSheet(kra: KraContext): unknown[] {
+  if (kra.kraRows.length === 0 || kra.matrix.size === 0) return [];
+  return buildMonthlyKraRows(kra.kraRows, kra.matrix, kra.isKraTemplate);
 }
 
 function summaryRows(s: KpiSummary, cycleName: string) {
@@ -205,15 +214,17 @@ export async function downloadComprehensiveWorkbook(input: ExportInput) {
     fetchTemplateEligibilityMaps(templateIds),
   ]);
   const eligColumns = buildEligibilityColumnSet(templateIds, eligMaps);
+  // ADR-188 — one shared fetch, used by the Employees column and the KRA sheet.
+  const kra = await resolveKraContext(input, labelMaps);
   const wb = XLSX.utils.book_new();
   const append = (name: string, data: unknown[]) => {
     if (!data || data.length === 0) return;
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(data as any), name);
   };
   append('Executive Summary', summaryToSheet(input.summary, input.cycleName));
-  append('Employees', toEmployeeSheet(input.rows, labelMaps, eligMaps, eligColumns));
+  append('Employees', toEmployeeSheet(input.rows, labelMaps, eligMaps, eligColumns, kra));
   // ADR-188 — month-by-month KRA detail for KRA-template employees only.
-  append('Monthly KRA Scores', await buildMonthlyKraSheet(input, labelMaps));
+  append('Monthly KRA Scores', buildMonthlyKraSheet(kra));
   append('Rating Distribution', ratingDistribution(input.rows));
   append('By Department', groupToSheet(input.byDepartment));
   append('By Business Unit', groupToSheet(input.byBusinessUnit));
