@@ -5195,3 +5195,29 @@ detectable and repairable without a developer.
    `kra_points`/`kra_weight`, which are a submission-time snapshot.
 5. The aggregation fails soft: an RPC error blanks the column and omits the
    sheet rather than aborting the workbook download.
+
+## §108g — Notification edges are registry-governed (ADR-189)
+
+1. Every in-app notification producer MUST declare the relationship edge that
+   authorises it in `src/lib/notifications/edgeRegistry.ts`. An unregistered
+   `type` fails the build.
+2. `public.can_send_notification_to` is the single authority. It may only be
+   tightened together with (a) an enumeration of its callers, (b) a registry
+   update, and (c) a regression test per edge.
+3. Observation/query notifications carry `observation_id` in
+   `notifications.metadata`. Two users who both participate in that thread
+   (author, KPI owner, replier, mentioned user) may notify each other. This is
+   the ONLY widening: it does not permit an employee to notify an arbitrary
+   auditor outside a shared thread.
+4. Mention access (`kpi_mention_access`) MUST be written before the mention
+   notification, because that row is what confers participation.
+
+## §OBS-REPLY-ATOMICITY — Observation replies are one transaction (ADR-189)
+
+1. Reply, auto-acknowledgement, mention notifications and mention access are
+   performed by `public.post_observation_reply` in a single transaction. The
+   client MUST NOT sequence these as separate writes.
+2. The RPC runs SECURITY INVOKER: reply RLS still applies in full.
+3. A notification that cannot be delivered is reported as a `skipped`
+   recipient. It MUST NOT roll back or block the reply, and MUST NOT surface as
+   a destructive error toast.

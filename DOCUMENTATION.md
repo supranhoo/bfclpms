@@ -7508,3 +7508,55 @@ repair.
 
 Version history: v2.66.188 — ADR-188 monthly KRA sheet + KRA Months Counted
 column on the Employees sheet.
+
+### ADR-189 — Observation thread participation as a notification edge (POLICY §108g, §OBS-REPLY-ATOMICITY)
+
+Incident: employees could not reply to an auditor's Observation. Toast:
+`not authorized to send notifications to user <uuid>`.
+
+RCA (5-Why):
+1. Reply failed -> 2. the @mention notification insert was rejected by
+   `tg_notifications_enforce_sender_relationship` -> 3.
+   `can_send_notification_to(employee, auditor)` returned false -> 4. the only
+   auditor edges modelled are assignment-based, and the observing auditor
+   (Auditor003) held no `audit_kpi_assignments` / `audit_kpi_level_assignments`
+   row for that employee or KPI -> 5. the guard models org hierarchy and audit
+   assignments only; **conversation membership was never modelled**, and no
+   contract tied notification producers to guard edges.
+
+CAPA:
+- `public.is_observation_participant(user, observation_id)` — SSOT for thread
+  membership (author, KPI owner, replier, mentioned user).
+- `public.can_send_notification_to(sender, target, context jsonb)` — 2-arg guard
+  first, then the `observation_participant` edge when
+  `context->>'observation_id'` is present and BOTH parties are participants.
+  The 2-arg signature is unchanged; all other callers are unaffected.
+- `tg_notifications_enforce_sender_relationship` passes `NEW.metadata`.
+- `public.post_observation_reply(...)` (SECURITY INVOKER) — reply +
+  acknowledge + mention access + notifications in ONE transaction; notification
+  permission failures are collected as `skipped` and never abort the reply.
+- Ordering invariant: `kpi_mention_access` is written BEFORE the notification
+  (that row is what makes a first-time mention a participant). Applied to both
+  `post_observation_reply` and `useKpiObservations.useCreateObservation`.
+- Prevention: `src/lib/notifications/edgeRegistry.ts` maps every notification
+  `type` to its authorising edge; `src/tests/notificationEdgeCoverage.test.ts`
+  fails the build on an unregistered producer or a missing guard branch.
+
+Security-change checklist (mandatory for any guard/RLS tightening):
+1. Enumerate every caller of the guard before narrowing it.
+2. Add or refresh the corresponding entry in the edge registry.
+3. Ship a regression test per edge, asserting the branch exists in the latest
+   migration that defines the function.
+4. Never let a notification/side-effect failure abort the user's primary write.
+
+- Code: `src/hooks/useObservationReplies.ts`, `src/hooks/useKpiObservations.ts`,
+  `src/lib/notifications/edgeRegistry.ts`.
+- Tests: `src/tests/notificationEdgeCoverage.test.ts` (6),
+  `src/tests/observationReplyAtomicity.test.ts` (6); existing guard tests
+  rescoped to the 2-arg signature.
+- Rollback: drop the 3-arg overload, `is_observation_participant` and
+  `post_observation_reply`, and repoint the trigger at the 2-arg guard. The
+  2-arg body was never modified.
+
+Version history: v2.66.189 — ADR-189 observation participation notification
+edge, atomic observation reply RPC, notification edge registry.
