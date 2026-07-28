@@ -1566,8 +1566,9 @@ Sender Email: ${senderEmail}`, { logoUrl, footerText });
     // Replace placeholders in subject and body
     const subject = replacePlaceholders(template.subject, placeholderData);
     const bodyContent = replacePlaceholders(template.body, placeholderData);
-    const finalScoreStr = final_score != null ? String(final_score) : undefined;
-    const roundedFinalScore = finalScoreStr ? String(Math.round(Number(finalScoreStr))) : undefined;
+    const roundedFinalScore = finalScoreDisplay.hasScore
+      ? String(Math.round(Number(finalScoreDisplay.scoreText)))
+      : undefined;
     const preheader = buildPreheaderText(bodyContent, subject.replace(/^\[PMS\]\s*/, ''));
     const html = buildEmailHtml(event_type, bodyContent, { logoUrl, footerText, finalScore: roundedFinalScore, preheader });
     const plainText = buildPlainTextEmail(bodyContent, footerText);
