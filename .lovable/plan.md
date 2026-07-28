@@ -1,65 +1,76 @@
-## 1. Audit findings (read-only, verified against live data)
+## 1. Audit findings — department "EHS-Safety" (read-only, verified)
 
-**Org mapping for department "EHS-Health"**
-- Business Unit: **EHS** → BU Head = **Amit Kumar Sharma (102050)**, active.
-- Department Head (EHS-Health) = **Firoz Ahmad (100801)**, active. (Firoz also heads EHS-Safety and EHS-Health And Safety; his own profile sits in EHS-Safety.)
+- Department id `49bb719c-69b6-449e-b35c-991a52c58898`, Business Unit **EHS**.
+- **BU Head (to be excluded): Amit Kumar Sharma (102050)** — active, mapped as BU head for all EHS departments.
+- **Department Head: Firoz Ahmad (100801)** — active; he is already the mapped dept head and the intended final reviewer.
 
-So "Feroz" is already the mapped Department Head. The only reviewer to remove is the **BU Head (Amit Kumar Sharma)**. No stray manager/skip/HR/management stages exist on these instances.
+**18 active annual review instances (25 employees are in the department — 7 have no instance, listed below).**
 
-**Instances in the active cycle: 12 employees**
+| Code | Name | Status | Stages | Self | Dept-head response | Notes |
+|---|---|---|---|---|---|---|
+| 100228 | Rahul Kumar Singh | pending_dept | self, dept_head, bu_head | done 10/10 | draft 0/10 | awaiting Firoz |
+| 100640 | Ramanand Kumar | pending_dept | self, dept_head, bu_head | done | draft 0/10 | awaiting Firoz |
+| 100722 | Nand Kumar | pending_dept | self, dept_head, bu_head | done | draft 0/10 | awaiting Firoz |
+| 100747 | Bilendra Bedia | pending_dept | self, dept_head, bu_head | done | draft 0/10 | awaiting Firoz |
+| 100757 | Kanhaiya Kumar Singh | **pending_bu** | self, dept_head, bu_head | done | submitted 10/10 | completes once BU removed |
+| 100801 | **Firoz Ahmad (dept head himself)** | pending_management | self, bu_head, **management** | submitted (narrative template) | n/a | see §4 |
+| 100857 | Avinash Prasad Sinha | pending_dept | self, dept_head, bu_head | done | draft 0/10 | awaiting Firoz |
+| 100890 | Firdoush Alam | pending_dept | self, dept_head | narrative | submitted, **0 scoreable criteria in template** | narrative-only (ADR-197), needs Firoz to submit |
+| 101279 | Dipak Kumar Chandara | **pending_bu** | self, dept_head, bu_head | done | submitted 10/10 | completes once BU removed |
+| 101292 | Rajesh Kumar Chand | pending_dept | self, dept_head, bu_head | done | submitted 10/10 | status lags behind a complete dept response — needs advance |
+| 101983 | Prashant Kumar Singh | pending_dept | self, dept_head, bu_head | done | draft 0/10 | awaiting Firoz |
+| 101985 | Akash Kumar Choudhary | pending_dept | self, dept_head, bu_head | done | draft 0/10 | awaiting Firoz |
+| 102001 | Rahul Kumar | pending_dept | self, dept_head, bu_head | done | draft 0/10 | awaiting Firoz |
+| 102008 | Sujal Haldar | completed | self, dept_head | done | 10/10 | correct (80.00 / Good) |
+| 102009 | Manoranjan Kumar Barik | completed | self, dept_head | done | 10/10 | correct (81.00 / Good) |
+| 200563 | Mritunjay Kumar Thakur | pending_dept | self, dept_head, bu_head | done | draft 0/10 | awaiting Firoz |
+| 200611 | Vishal Ray | pending_dept | self, dept_head, bu_head | done | draft 0/10 | awaiting Firoz |
+| 200839 | Ramesh Ekka | pending_dept | self, dept_head, bu_head | done | draft 0/10 | awaiting Firoz |
 
-| Code | Name | Status | enabled_stages | Dept-head response |
-|---|---|---|---|---|
-| 100374 | Abhimanyu Barik | pending_dept | self, dept_head, bu_head | draft, 0/10 scored |
-| 100505 | Pradeep Kumar | pending_dept | self, dept_head, bu_head | draft, 0/10 |
-| 100586 | Pramod Kumar Singh | pending_dept | self, dept_head, bu_head | draft, 0/10 |
-| 101248 | Vikram Rajwar | **pending_bu** | self, dept_head, bu_head | submitted, 10/10 |
-| 101714 | Md Faiyaz Ansari | pending_dept | self, dept_head, bu_head | draft, 0/10 |
-| 101758 | Vishal Kumar | pending_dept | self, dept_head, bu_head | draft, 0/10 |
-| 101959 | Lekh Raj | pending_dept | self, dept_head | submitted, **0 criteria in template** (narrative-only), recommendation present |
-| 101997 | Puja Kumari | completed | self, dept_head | submitted, 10/10, score 82 |
-| 200114 | Jitendra Kumar | pending_dept | self, dept_head, bu_head | draft, 0/10 |
-| 200449 | Abhishek Raj | **completed** | self, dept_head | submitted but **only 2 of 10 criteria scored** → total 31, rating "Poor" |
-| 200552 | Baleshwar Bedia | pending_dept | self, dept_head, bu_head | draft, 0/10 |
-| 200714 | Yogeshwar Kumar Mahto | pending_dept | self, dept_head, bu_head | draft, 0/10 |
+No manager / skip / HR stages exist on these instances; only `bu_head` needs removing (13 instances still carry it).
 
-Key issues:
-1. 9 instances still carry `bu_head` (Amit Kumar Sharma) in the chain — contrary to the desired Self → Dept Head chain.
-2. 101248 is parked at `pending_bu` waiting on the BU Head; once BU is removed it should become **completed**.
-3. **200449 is completed on an incomplete review** — 8 of 10 criteria unscored, producing an artificially low 31 / "Poor".
-4. 101959's template assigns **zero scoreable criteria to dept_head**, so its blank grid is legitimate narrative-only (ADR-197 classification) — but it is still `pending_dept` and needs Firoz to submit/advance.
-5. 8 instances are simply awaiting Firoz's scoring (drafts with nothing entered).
+**Employees with no annual review instance at all (7):** 100768 Shaikh Masuk Ali, 100863 Alok Kumar Mishra, 101158 Md. Akif Ansari, 101211 Manoj Kumar, 101749 Deepak Ray, 101966 Vedant Pawar, 200557 Rajat Kumar. Reported only — not seeded in this change unless you ask.
 
-## 2. Proposed changes
+No defective completion exists here (unlike EHS-Health 200449): both completed rows have full 10/10 dept-head scoring.
 
-**Step A — Workflow correction (data, cycle-scoped)**
-- For all 12 EHS-Health instances not yet finalised as correct: set `enabled_stages = ['self','dept_head']`, `bu_head_id = NULL`, `manager_id/skip_id/hr_id/management_id` left NULL (already NULL), and mark `has_admin_workflow_override = true` so later reseeds/cascade triggers do not re-add `bu_head`.
-- Use the existing supported path (`set_annual_review_enabled_stages` / admin workflow-override RPC) rather than raw UPDATEs, so ADR-160/168 guards, audit rows and no-false-rewind rules (ADR-183/184) apply.
-- 101248: with `bu_head` removed, advance `pending_bu` → **completed**, recomputing `total_score` / `final_rating` from the dept-head response (scale invariant per ADR-187).
-- Completed rows (101997) are not touched.
+## 2. Changes to apply (same pattern as ADR-198 / §AR-DEPT-TERMINAL-OVERRIDE)
 
-**Step B — Guard against re-mapping**
-- Add an explicit per-instance/department exclusion so the BU-head cascade triggers (ADR-109/head-master-authoritative) skip these instances; without this the next `business_units.head_user_id` edit would re-stamp Amit Kumar Sharma.
+**Step A — Contract the chain to Self → Dept Head**
+- For the 13 instances carrying `bu_head`: remove it from `enabled_stages`, set `bu_head_id = NULL`, set `has_admin_workflow_override = true` (so the hardened BU-head cascade triggers skip them permanently).
+- Excludes Firoz's own instance (100801) — handled in §4.
 
-**Step C — Repair the defective completion (200449)**
-- Re-open Abhishek Raj's dept-head stage (existing re-open path, ADR-160c/185), preserving the self review and the 2 existing scores, so Firoz completes the remaining 8 criteria. Current 31 / "Poor" is a data artefact, not a judgement.
-- Alternative if you prefer no re-open: leave as is and record the exception. Please confirm which you want.
+**Step B — Unstick the three instances whose dept-head review is already complete**
+- 100757 Kanhaiya Kumar Singh: `pending_bu` → **completed**.
+- 101279 Dipak Kumar Chandara: `pending_bu` → **completed**.
+- 101292 Rajesh Kumar Chand: dept-head response is locked and 10/10 but status is still `pending_dept` → advance to **completed**.
+- For each, recompute `criteria_weighted_score`, `total_score`, `final_rating` via `annual_review_compute_final_summary` (scale invariant, ADR-187). No score is invented.
 
-**Step D — Completion queue for Firoz**
-- Produce the working list of the 9 instances awaiting his scoring (8 drafts + 101959 narrative-only) and surface them in the existing Annual Review admin **Unscored Stages** tab filtered to EHS-Health, so HR can track closure.
-- Existing trigger `trg_ar_stage_score_required` already blocks any future submission with scoreable criteria left unscored, so no new instance can complete blank.
+**Step C — Audit + reversibility**
+- Before/after snapshot of every touched instance into `annual_review_bu_removal_repair_2026_07` with reason "EHS-Safety terminal dept-head override".
+
+**Step D — Verification**
+- Re-query the department: every instance must show `enabled_stages = [self, dept_head]`, `bu_head_id = NULL`; no instance left in `pending_bu`.
+- Report the outstanding list for Firoz (10 blank drafts + 1 narrative-only submit).
 
 **Step E — Documentation**
-- New ADR (ADR-198) + POLICY entry for department-scoped terminal-reviewer overrides, plus DOCUMENTATION.md update.
+- Extend `docs/adr/ADR-198.md` with the EHS-Safety cohort (same policy clause, no new clause needed) and add DOCUMENTATION.md / POLICY.md version-history lines.
 
-## 3. Risk & impact
+## 3. Data captured / ratings check (your specific ask)
 
-- **Data**: only `enabled_stages`, reviewer-id columns and status of 10 instances in one cycle; all changes audited and reversible from the audit table. No schema change except an optional exclusion flag/table row.
-- **Workflow**: Amit Kumar Sharma's queue shrinks by up to 9 items (intended). Firoz's queue is unchanged in size but becomes terminal.
-- **Regression**: cascade triggers could re-add `bu_head` — mitigated by Step B; verification query re-run after the change.
-- **Rollback**: restore prior `enabled_stages`/`bu_head_id`/status from the audit rows.
+- Complete and rated: 100757, 101279, 101292, 102008, 102009 (10/10 each).
+- **Nothing captured yet (blank drafts, 0 of 10 rated):** 100228, 100640, 100722, 100747, 100857, 101983, 101985, 102001, 200563, 200611, 200839 — Firoz must score these; the system cannot advance them without ratings (`trg_ar_stage_score_required`).
+- Narrative-only by template design: 100890 Firdoush Alam — no scoreable criteria at dept-head stage, only a written recommendation is required, then submit.
 
-## 4. Confirmation needed
+## 4. Firoz Ahmad's own review (100801) — needs your decision
 
-- Confirm **Firoz Ahmad (100801)** is the intended "Feroz".
-- Confirm whether to **re-open 200449** (recommended) to capture the 8 missing ratings.
+His instance runs `self → bu_head → management` and currently sits at **Management review** (management reviewer already assigned). He obviously cannot review himself. Options:
+1. **Leave as is** (recommended) — Management is a valid, senior terminal reviewer for the dept head.
+2. Remove `bu_head` from his chain too, leaving `self → management`.
+Note his BU-head stage is still mapped to Amit Kumar Sharma but the instance has already passed it.
+
+## 5. Risk & impact
+
+- **Data**: 13–16 instances in one cycle; only `enabled_stages`, `bu_head_id`, status and recomputed aggregates. Fully audited and reversible.
+- **Workflow**: Amit Kumar Sharma loses 13 EHS-Safety items from his queue (intended). Firoz's queue size unchanged but becomes terminal.
+- **Regression**: cascade re-mapping already mitigated by the override guard shipped with ADR-198; verification query re-run after the change.
+- **Rollback**: restore prior state from `annual_review_bu_removal_repair_2026_07`.
