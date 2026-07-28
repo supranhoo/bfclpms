@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import {
   buildMonthlyKraRows, foldMatrixRows, monthlyKraHeaders, MONTHLY_KRA_ROW_CAP,
-  type MonthlyKraMatrix,
+  monthsScored, type MonthlyKraMatrix,
 } from '@/services/annualReview/monthlyKraSheet';
 import type { ComprehensiveRow } from '@/services/annualReview/comprehensiveReport';
 
@@ -95,5 +95,30 @@ describe('ADR-188 — Monthly KRA sheet', () => {
     const many = Array.from({ length: MONTHLY_KRA_ROW_CAP + 10 }, (_, i) =>
       row({ employee_id: `e${i}` }));
     expect(buildMonthlyKraRows(many, new Map(), isKra)).toHaveLength(MONTHLY_KRA_ROW_CAP);
+  });
+
+  describe('monthsScored (Employees-sheet column SSOT)', () => {
+    const matrix: MonthlyKraMatrix = new Map([
+      ['e1', {
+        July: { rating: 4, pct: 80, kpiCount: 5 },
+        August: { rating: 5, pct: 100, kpiCount: 5 },
+        September: { rating: null, pct: null, kpiCount: 0 },
+      }],
+      ['e-empty', {}],
+    ]);
+
+    it('counts only months carrying a rating', () => {
+      expect(monthsScored(matrix, 'e1')).toBe(2);
+    });
+
+    it('returns 0 for a present-but-empty employee and null for an unknown one', () => {
+      expect(monthsScored(matrix, 'e-empty')).toBe(0);
+      expect(monthsScored(matrix, 'nobody')).toBeNull();
+    });
+
+    it('matches the Months Scored cell on the monthly sheet', () => {
+      const [r] = buildMonthlyKraRows([row()], matrix, isKra);
+      expect(monthsScored(matrix, 'e1')).toBe(r['Months Scored']);
+    });
   });
 });
