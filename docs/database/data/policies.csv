@@ -1,0 +1,960 @@
+table_name,policy_name,permissive,roles,cmd,using_expr,with_check_expr
+access_profile_assignments,Admins can manage profile assignments,PERMISSIVE,authenticated,ALL,"has_role(auth.uid(), 'admin'::app_role)","has_role(auth.uid(), 'admin'::app_role)"
+access_profile_assignments,Profile-granted users can delete assignments,PERMISSIVE,authenticated,DELETE,"(has_menu_right(auth.uid(), 'admin-access-profiles'::text, 'delete'::text) AND can_grant_access_profile(auth.uid(), profile_id, user_id))",""
+access_profile_assignments,Profile-granted users can insert assignments,PERMISSIVE,authenticated,INSERT,"","can_grant_access_profile(auth.uid(), profile_id, user_id)"
+access_profile_assignments,Authenticated users can view profile assignments,PERMISSIVE,authenticated,SELECT,true,""
+access_profile_menu_rights,Admins can manage menu rights,PERMISSIVE,authenticated,ALL,"has_role(auth.uid(), 'admin'::app_role)","has_role(auth.uid(), 'admin'::app_role)"
+access_profile_menu_rights,Authenticated users can view menu rights,PERMISSIVE,authenticated,SELECT,true,""
+access_profile_org_scope,Admins can manage org scopes,PERMISSIVE,authenticated,ALL,"has_role(auth.uid(), 'admin'::app_role)","has_role(auth.uid(), 'admin'::app_role)"
+access_profile_org_scope,Authenticated users can view org scopes,PERMISSIVE,authenticated,SELECT,true,""
+access_profiles,Admins can manage access profiles,PERMISSIVE,authenticated,ALL,"has_role(auth.uid(), 'admin'::app_role)","has_role(auth.uid(), 'admin'::app_role)"
+access_profiles,Authenticated users can view access profiles,PERMISSIVE,authenticated,SELECT,true,""
+action_registry,action_registry_write,PERMISSIVE,authenticated,ALL,"has_role(auth.uid(), 'platform_owner'::app_role)","has_role(auth.uid(), 'platform_owner'::app_role)"
+action_registry,action_registry_read,PERMISSIVE,authenticated,SELECT,true,""
+admin_feature_flags,feature_flags_admin_write,PERMISSIVE,authenticated,ALL,"has_role(auth.uid(), 'admin'::app_role)","has_role(auth.uid(), 'admin'::app_role)"
+admin_feature_flags,feature_flags_read_authenticated,PERMISSIVE,authenticated,SELECT,true,""
+ai_feature_registry,ai_feature_registry_write,PERMISSIVE,authenticated,ALL,"has_role(auth.uid(), 'platform_owner'::app_role)","has_role(auth.uid(), 'platform_owner'::app_role)"
+ai_feature_registry,ai_feature_registry_read,PERMISSIVE,authenticated,SELECT,true,""
+annual_review_access_audit,ar_access_audit_insert,PERMISSIVE,authenticated,INSERT,"","(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role))"
+annual_review_access_audit,ar_access_audit_read,PERMISSIVE,authenticated,SELECT,"(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role))",""
+annual_review_assignment_overrides,ar_overrides_admin_hr_all,PERMISSIVE,authenticated,ALL,"(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role))","(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role))"
+annual_review_assignment_overrides,ar_overrides_reviewer_select,PERMISSIVE,authenticated,SELECT,"(EXISTS ( SELECT 1
+   FROM annual_review_instances i
+  WHERE ((i.id = annual_review_assignment_overrides.instance_id) AND ((i.manager_id = auth.uid()) OR (i.skip_id = auth.uid()) OR (i.bu_head_id = auth.uid()) OR (i.hr_id = auth.uid())))))",""
+annual_review_assignment_rules,rules_admin_write,PERMISSIVE,authenticated,ALL,"(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role))","(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role))"
+annual_review_assignment_rules,rules_select_all_auth,PERMISSIVE,authenticated,SELECT,true,""
+annual_review_bu_draft_finalise_2026_07,Admins can view bu draft finalise audit,PERMISSIVE,authenticated,SELECT,"has_role(auth.uid(), 'admin'::app_role)",""
+annual_review_bu_head_terminal_audit_2026_07,admin_hr_read_bu_head_terminal_audit,PERMISSIVE,authenticated,SELECT,"(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role))",""
+annual_review_bu_removal_repair_2026_07,ar_bu_removal_repair_admin_read,PERMISSIVE,authenticated,SELECT,"(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role))",""
+annual_review_criteria_assignments,criteria_assignments_manage_admin_hr,PERMISSIVE,authenticated,ALL,"(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role))","(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role))"
+annual_review_criteria_assignments,criteria_assignments_read_all_authenticated,PERMISSIVE,authenticated,SELECT,true,""
+annual_review_criteria_library,criteria_library_manage_admin_hr,PERMISSIVE,authenticated,ALL,"(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role))","(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role))"
+annual_review_criteria_library,criteria_library_read_all_authenticated,PERMISSIVE,authenticated,SELECT,true,""
+annual_review_cycles,cycles_admin_write,PERMISSIVE,authenticated,ALL,"(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role))","(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role))"
+annual_review_cycles,cycles_select_all_auth,PERMISSIVE,authenticated,SELECT,true,""
+annual_review_directory_overrides,ar_overrides_admin_hrpms_delete,PERMISSIVE,authenticated,DELETE,"(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role))",""
+annual_review_directory_overrides,ar_overrides_admin_hrpms_write,PERMISSIVE,authenticated,INSERT,"","(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role))"
+annual_review_directory_overrides,ar_overrides_admin_hrpms_read,PERMISSIVE,authenticated,SELECT,"(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role))",""
+annual_review_directory_overrides,ar_overrides_admin_hrpms_update,PERMISSIVE,authenticated,UPDATE,"(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role))","(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role))"
+annual_review_downstream_rewind_repair_2026_07,admins read downstream rewind repairs,PERMISSIVE,authenticated,SELECT,"(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role))",""
+annual_review_empty_stage_repair_2026_07,ar_empty_stage_repair_read_admin_hr,PERMISSIVE,authenticated,SELECT,"(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role))",""
+annual_review_final_backfill_audit_2026_07,adr124_audit_admin_read,PERMISSIVE,authenticated,SELECT,"(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role))",""
+annual_review_final_score_repair_2026_07,ar_fs_repair_admin_read,PERMISSIVE,authenticated,SELECT,"has_role(auth.uid(), 'admin'::app_role)",""
+annual_review_head_remap_audit_2026_07,admin_hr_read_head_remap_audit,PERMISSIVE,authenticated,SELECT,"(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role))",""
+annual_review_instances,instances_admin_delete,PERMISSIVE,authenticated,DELETE,"(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role))",""
+annual_review_instances,instances_admin_insert,PERMISSIVE,authenticated,INSERT,"","(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role))"
+annual_review_instances,instances_select_directory_assistance,PERMISSIVE,authenticated,SELECT,can_access_annual_review_instance_for_assistance(id),""
+annual_review_instances,instances_select_visible,PERMISSIVE,authenticated,SELECT,"((employee_id = auth.uid()) OR (manager_id = auth.uid()) OR (skip_id = auth.uid()) OR (dept_head_id = auth.uid()) OR (bu_head_id = auth.uid()) OR (hr_id = auth.uid()) OR (management_id = auth.uid()) OR has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role) OR ((overall_status = 'completed'::annual_review_status) AND annual_review_employee_has_login(employee_id) AND (EXISTS ( SELECT 1
+   FROM annual_review_subtree_ids(auth.uid(), 6) s(employee_id)
+  WHERE (s.employee_id = annual_review_instances.employee_id)))))",""
+annual_review_instances,instances_stage_update,PERMISSIVE,public,UPDATE,"(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role) OR ((employee_id = auth.uid()) AND (overall_status = 'pending_self'::annual_review_status)) OR ((manager_id = auth.uid()) AND (overall_status = 'pending_manager'::annual_review_status)) OR ((skip_id = auth.uid()) AND (overall_status = 'pending_skip'::annual_review_status)) OR ((dept_head_id = auth.uid()) AND (overall_status = 'pending_dept'::annual_review_status)) OR ((bu_head_id = auth.uid()) AND (overall_status = 'pending_bu'::annual_review_status)) OR ((hr_id = auth.uid()) AND (overall_status = 'pending_hr'::annual_review_status)) OR ((management_id = auth.uid()) AND (overall_status = 'pending_management'::annual_review_status)))","(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role) OR ((employee_id = auth.uid()) AND (overall_status = ANY (ARRAY['pending_self'::annual_review_status, 'pending_manager'::annual_review_status, 'pending_skip'::annual_review_status, 'pending_dept'::annual_review_status, 'pending_bu'::annual_review_status, 'pending_hr'::annual_review_status, 'pending_management'::annual_review_status, 'completed'::annual_review_status]))) OR ((manager_id = auth.uid()) AND (overall_status = ANY (ARRAY['pending_self'::annual_review_status, 'pending_manager'::annual_review_status, 'pending_skip'::annual_review_status, 'pending_dept'::annual_review_status, 'pending_bu'::annual_review_status, 'pending_hr'::annual_review_status, 'pending_management'::annual_review_status, 'completed'::annual_review_status]))) OR ((skip_id = auth.uid()) AND (overall_status = ANY (ARRAY['pending_self'::annual_review_status, 'pending_skip'::annual_review_status, 'pending_dept'::annual_review_status, 'pending_bu'::annual_review_status, 'pending_hr'::annual_review_status, 'pending_management'::annual_review_status, 'completed'::annual_review_status]))) OR ((dept_head_id = auth.uid()) AND (overall_status = ANY (ARRAY['pending_self'::annual_review_status, 'pending_dept'::annual_review_status, 'pending_bu'::annual_review_status, 'pending_hr'::annual_review_status, 'pending_management'::annual_review_status, 'completed'::annual_review_status]))) OR ((bu_head_id = auth.uid()) AND (overall_status = ANY (ARRAY['pending_self'::annual_review_status, 'pending_bu'::annual_review_status, 'pending_hr'::annual_review_status, 'pending_management'::annual_review_status, 'completed'::annual_review_status]))) OR ((hr_id = auth.uid()) AND (overall_status = ANY (ARRAY['pending_self'::annual_review_status, 'pending_hr'::annual_review_status, 'pending_management'::annual_review_status, 'completed'::annual_review_status]))) OR ((management_id = auth.uid()) AND (overall_status = ANY (ARRAY['pending_self'::annual_review_status, 'pending_management'::annual_review_status, 'completed'::annual_review_status]))))"
+annual_review_kra_rehydrate_items,kra_rehydrate_items_admin_write,PERMISSIVE,authenticated,ALL,"(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role))","(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role))"
+annual_review_kra_rehydrate_items,kra_rehydrate_items_admin_read,PERMISSIVE,authenticated,SELECT,"(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role))",""
+annual_review_kra_rehydrate_runs,kra_rehydrate_runs_admin_write,PERMISSIVE,authenticated,ALL,"(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role))","(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role))"
+annual_review_kra_rehydrate_runs,kra_rehydrate_runs_admin_read,PERMISSIVE,authenticated,SELECT,"(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role))",""
+annual_review_mgmt_scope_backfill_2026_07,admins read mgmt scope backfill,PERMISSIVE,authenticated,SELECT,"has_role(auth.uid(), 'admin'::app_role)",""
+annual_review_missing_system_slot_repair_2026_07,Admins can read missing system slot repair audit,PERMISSIVE,authenticated,SELECT,"(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role))",""
+annual_review_orphan_repair_2026_07,orphan_repair_admin_read,PERMISSIVE,authenticated,SELECT,"(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role))",""
+annual_review_proxy_submissions,arps_insert_eligible_proxy,PERMISSIVE,authenticated,INSERT,"","((proxy_user_id = auth.uid()) AND can_proxy_submit_annual_review(instance_id, auth.uid()))"
+annual_review_proxy_submissions,arps_select_visible,PERMISSIVE,authenticated,SELECT,"((auth.uid() = proxy_user_id) OR (auth.uid() = employee_user_id) OR has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role) OR (EXISTS ( SELECT 1
+   FROM annual_review_instances i
+  WHERE ((i.id = annual_review_proxy_submissions.instance_id) AND ((i.manager_id = auth.uid()) OR (i.skip_id = auth.uid()))))))",""
+annual_review_rescore_audit_2026_07,arra_2026_07_admin_hrpms_read,PERMISSIVE,authenticated,SELECT,"(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role))",""
+annual_review_reset_archive,admin_hr_read_reset_archive,PERMISSIVE,authenticated,SELECT,"(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role))",""
+annual_review_responses,responses_admin_delete,PERMISSIVE,authenticated,DELETE,"(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role))",""
+annual_review_responses,responses_self_insert,PERMISSIVE,authenticated,INSERT,"","(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role) OR (reviewer_id = auth.uid()) OR ((reviewer_role = 'self'::annual_reviewer_role) AND can_proxy_submit_annual_review(instance_id, auth.uid())))"
+annual_review_responses,responses_select_directory_assistance,PERMISSIVE,authenticated,SELECT,((reviewer_role = 'self'::annual_reviewer_role) AND can_access_annual_review_instance_for_assistance(instance_id)),""
+annual_review_responses,responses_select_visible,PERMISSIVE,authenticated,SELECT,"((reviewer_id = auth.uid()) OR has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role) OR ((reviewer_role = 'self'::annual_reviewer_role) AND (EXISTS ( SELECT 1
+   FROM annual_review_instances i
+  WHERE ((i.id = annual_review_responses.instance_id) AND (i.employee_id = auth.uid()) AND (i.overall_status = 'pending_self'::annual_review_status))))) OR (EXISTS ( SELECT 1
+   FROM annual_review_instances i
+  WHERE ((i.id = annual_review_responses.instance_id) AND (((i.employee_id = auth.uid()) AND (i.overall_status = 'completed'::annual_review_status)) OR (i.manager_id = auth.uid()) OR (i.skip_id = auth.uid()) OR (i.dept_head_id = auth.uid()) OR (i.bu_head_id = auth.uid()) OR (i.hr_id = auth.uid()) OR (i.management_id = auth.uid()))))) OR (EXISTS ( SELECT 1
+   FROM (annual_review_instances i
+     JOIN annual_review_subtree_ids(auth.uid(), 6) s(employee_id) ON ((s.employee_id = i.employee_id)))
+  WHERE ((i.id = annual_review_responses.instance_id) AND (i.overall_status = 'completed'::annual_review_status) AND annual_review_employee_has_login(i.employee_id)))))",""
+annual_review_responses,responses_self_update,PERMISSIVE,public,UPDATE,"(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role) OR ((reviewer_id = auth.uid()) AND (is_locked = false)) OR ((reviewer_role = 'self'::annual_reviewer_role) AND (is_locked = false) AND (EXISTS ( SELECT 1
+   FROM annual_review_instances i
+  WHERE ((i.id = annual_review_responses.instance_id) AND (i.employee_id = auth.uid()) AND (i.overall_status = 'pending_self'::annual_review_status))))) OR ((reviewer_role = 'self'::annual_reviewer_role) AND (is_locked = false) AND can_proxy_submit_annual_review(instance_id, auth.uid())))","(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role) OR (reviewer_id = auth.uid()) OR ((reviewer_role = 'self'::annual_reviewer_role) AND (EXISTS ( SELECT 1
+   FROM annual_review_instances i
+  WHERE ((i.id = annual_review_responses.instance_id) AND (i.employee_id = auth.uid()) AND (i.overall_status = 'pending_self'::annual_review_status))))) OR ((reviewer_role = 'self'::annual_reviewer_role) AND can_proxy_submit_annual_review(instance_id, auth.uid())))"
+annual_review_reviewer_remap_audit_2026_07,admin_hr_read_reviewer_remap_audit,PERMISSIVE,authenticated,SELECT,"(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role))",""
+annual_review_reviewer_resync_audit,admin_hr_read_reviewer_resync_audit,PERMISSIVE,authenticated,SELECT,"(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role))",""
+annual_review_role_capabilities,AR role capabilities admin,PERMISSIVE,authenticated,ALL,"(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role))","(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role))"
+annual_review_role_capabilities,AR role capabilities read,PERMISSIVE,authenticated,SELECT,true,""
+annual_review_self_draft_reassign_audit,self_draft_reassign_audit_admin_read,PERMISSIVE,public,SELECT,"(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role))",""
+annual_review_self_review_bundle_items,Bundle items: admin/hr_pms write,PERMISSIVE,authenticated,ALL,"(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role))","(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role))"
+annual_review_self_review_bundle_items,Bundle items: read to authenticated,PERMISSIVE,authenticated,SELECT,true,""
+annual_review_self_review_library,Library: admin/hr_pms delete non-builtin,PERMISSIVE,authenticated,DELETE,"((has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role)) AND (is_builtin = false))",""
+annual_review_self_review_library,Library: admin/hr_pms insert,PERMISSIVE,authenticated,INSERT,"","(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role))"
+annual_review_self_review_library,Library: read active to authenticated,PERMISSIVE,authenticated,SELECT,"((is_active = true) OR has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role))",""
+annual_review_self_review_library,Library: admin/hr_pms update,PERMISSIVE,authenticated,UPDATE,"(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role))","(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role))"
+annual_review_settings,ar_settings_admin_delete,PERMISSIVE,authenticated,DELETE,"has_role(auth.uid(), 'admin'::app_role)",""
+annual_review_settings,ar_settings_admin_write,PERMISSIVE,authenticated,INSERT,"","has_role(auth.uid(), 'admin'::app_role)"
+annual_review_settings,ar_settings_read_authenticated,PERMISSIVE,authenticated,SELECT,true,""
+annual_review_settings,ar_settings_admin_update,PERMISSIVE,authenticated,UPDATE,"has_role(auth.uid(), 'admin'::app_role)","has_role(auth.uid(), 'admin'::app_role)"
+annual_review_stage_transfer_audit_2026_07,stage_transfer_audit_admin_read,PERMISSIVE,authenticated,SELECT,"(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role))",""
+annual_review_system_kpi_weights,system_kpi_weights_manage_admin_hr,PERMISSIVE,authenticated,ALL,"(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role))","(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role))"
+annual_review_system_kpi_weights,system_kpi_weights_read_all_authenticated,PERMISSIVE,authenticated,SELECT,true,""
+annual_review_system_kpis,system_kpis_manage_admin_hr,PERMISSIVE,authenticated,ALL,"(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role))","(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role))"
+annual_review_system_kpis,system_kpis_read_all_authenticated,PERMISSIVE,authenticated,SELECT,true,""
+annual_review_template_archetypes,Admin and HR PMS can manage archetypes,PERMISSIVE,authenticated,ALL,"(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role))","(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role))"
+annual_review_template_archetypes,Admin and HR PMS can view archetypes,PERMISSIVE,authenticated,SELECT,"(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role))",""
+annual_review_templates,templates_admin_write,PERMISSIVE,authenticated,ALL,"(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role))","(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role))"
+annual_review_templates,templates_select_all_auth,PERMISSIVE,authenticated,SELECT,true,""
+annual_score_config_audit,annual_score_audit_insert_admin_hrpms,PERMISSIVE,authenticated,INSERT,"","(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role))"
+annual_score_config_audit,annual_score_audit_read_admin_hrpms,PERMISSIVE,authenticated,SELECT,"(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role))",""
+annual_score_configs,annual_score_configs_admin_hrpms_write,PERMISSIVE,authenticated,ALL,"(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role))","(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role))"
+annual_score_configs,annual_score_configs_read_authenticated,PERMISSIVE,authenticated,SELECT,true,""
+app_settings,Authenticated users can read app_settings,PERMISSIVE,authenticated,SELECT,true,""
+app_settings,Admins can update app_settings,PERMISSIVE,public,UPDATE,"has_role(auth.uid(), 'admin'::app_role)",""
+audit_kpi_assignments,Auditors can delete audit assignments,PERMISSIVE,authenticated,DELETE,"(has_role(auth.uid(), 'auditor'::app_role) OR has_role(auth.uid(), 'admin'::app_role))",""
+audit_kpi_assignments,Auditors can create audit assignments,PERMISSIVE,authenticated,INSERT,"","(has_role(auth.uid(), 'auditor'::app_role) OR has_role(auth.uid(), 'admin'::app_role))"
+audit_kpi_assignments,Auditors can view audit assignments,PERMISSIVE,authenticated,SELECT,"(has_role(auth.uid(), 'auditor'::app_role) OR has_role(auth.uid(), 'admin'::app_role))",""
+audit_kpi_assignments,Auditors can update audit assignments,PERMISSIVE,authenticated,UPDATE,"(has_role(auth.uid(), 'auditor'::app_role) OR has_role(auth.uid(), 'admin'::app_role))",""
+audit_kpi_level_assignments,Auditors can delete kpi-level assignments,PERMISSIVE,authenticated,DELETE,"(has_role(auth.uid(), 'auditor'::app_role) OR has_role(auth.uid(), 'admin'::app_role))",""
+audit_kpi_level_assignments,Auditors can create kpi-level assignments,PERMISSIVE,authenticated,INSERT,"","(has_role(auth.uid(), 'auditor'::app_role) OR has_role(auth.uid(), 'admin'::app_role))"
+audit_kpi_level_assignments,Auditors can view kpi-level assignments,PERMISSIVE,authenticated,SELECT,"(has_role(auth.uid(), 'auditor'::app_role) OR has_role(auth.uid(), 'admin'::app_role))",""
+audit_kpi_level_assignments,Auditors can update kpi-level assignments,PERMISSIVE,authenticated,UPDATE,"(has_role(auth.uid(), 'auditor'::app_role) OR has_role(auth.uid(), 'admin'::app_role))",""
+audit_policies,audit_policies_write_platform_owner,PERMISSIVE,authenticated,ALL,"has_role(auth.uid(), 'platform_owner'::app_role)","has_role(auth.uid(), 'platform_owner'::app_role)"
+audit_policies,audit_policies_read_authenticated,PERMISSIVE,authenticated,SELECT,true,""
+auth_lookup_attempts,Service role manages auth lookup attempts,PERMISSIVE,service_role,ALL,true,true
+auth_lookup_attempts,Admins can view auth lookup attempts,PERMISSIVE,authenticated,SELECT,"((auth.uid() IS NOT NULL) AND has_role(auth.uid(), 'admin'::app_role))",""
+backup_denylist,Admins manage backup denylist,PERMISSIVE,authenticated,ALL,"has_role(auth.uid(), 'admin'::app_role)","has_role(auth.uid(), 'admin'::app_role)"
+backup_denylist,Anyone authenticated can read backup denylist,PERMISSIVE,authenticated,SELECT,true,""
+backup_logs,Service role can manage backup logs,PERMISSIVE,public,ALL,(auth.role() = 'service_role'::text),""
+backup_logs,Admins can create backup logs,PERMISSIVE,public,INSERT,"","has_role(auth.uid(), 'admin'::app_role)"
+backup_logs,Admins can view backup logs,PERMISSIVE,public,SELECT,"has_role(auth.uid(), 'admin'::app_role)",""
+backup_logs,Admins can update backup logs,PERMISSIVE,public,UPDATE,"has_role(auth.uid(), 'admin'::app_role)",""
+bulk_review_batches,bulk_batches_admin_read,PERMISSIVE,authenticated,SELECT,"has_role(auth.uid(), 'admin'::app_role)",""
+bulk_review_batches,bulk_batches_self_read,PERMISSIVE,authenticated,SELECT,(performed_by = auth.uid()),""
+bundle_assignment_logs,Admins can insert bundle assignment logs,PERMISSIVE,public,INSERT,"","has_role(auth.uid(), 'admin'::app_role)"
+bundle_assignment_logs,Admins can view all bundle assignment logs,PERMISSIVE,public,SELECT,"has_role(auth.uid(), 'admin'::app_role)",""
+business_unit_sub_units,Admins can manage sub-units,PERMISSIVE,authenticated,ALL,"has_role(auth.uid(), 'admin'::app_role)","has_role(auth.uid(), 'admin'::app_role)"
+business_unit_sub_units,Menu override users can delete sub units,PERMISSIVE,authenticated,DELETE,"has_menu_access_override(auth.uid(), 'admin-incentive'::text)",""
+business_unit_sub_units,Menu override users can insert sub units,PERMISSIVE,authenticated,INSERT,"","has_menu_access_override(auth.uid(), 'admin-incentive'::text)"
+business_unit_sub_units,Authenticated users can read sub-units,PERMISSIVE,authenticated,SELECT,true,""
+business_unit_sub_units,Menu override users can update sub units,PERMISSIVE,authenticated,UPDATE,"has_menu_access_override(auth.uid(), 'admin-incentive'::text)","has_menu_access_override(auth.uid(), 'admin-incentive'::text)"
+business_units,Admins can manage business_units,PERMISSIVE,authenticated,ALL,"has_role(auth.uid(), 'admin'::app_role)",""
+business_units,Authenticated users can view business_units,PERMISSIVE,authenticated,SELECT,true,""
+capability_registry,capability_registry_write,PERMISSIVE,authenticated,ALL,"has_role(auth.uid(), 'platform_owner'::app_role)","has_role(auth.uid(), 'platform_owner'::app_role)"
+capability_registry,capability_registry_read,PERMISSIVE,authenticated,SELECT,true,""
+client_action_entitlements,cae_write,PERMISSIVE,authenticated,ALL,"has_role(auth.uid(), 'platform_owner'::app_role)","has_role(auth.uid(), 'platform_owner'::app_role)"
+client_action_entitlements,cae_read,PERMISSIVE,public,SELECT,"(has_role(auth.uid(), 'platform_owner'::app_role) OR is_implementation_admin_for(client_id))",""
+client_contacts,client_contacts_insert,PERMISSIVE,authenticated,INSERT,"","(has_role(auth.uid(), 'platform_owner'::app_role) OR is_implementation_admin_for(client_id))"
+client_contacts,client_contacts_select,PERMISSIVE,authenticated,SELECT,"(has_role(auth.uid(), 'platform_owner'::app_role) OR is_implementation_admin_for(client_id))",""
+client_contacts,client_contacts_update,PERMISSIVE,authenticated,UPDATE,"(has_role(auth.uid(), 'platform_owner'::app_role) OR is_implementation_admin_for(client_id))","(has_role(auth.uid(), 'platform_owner'::app_role) OR is_implementation_admin_for(client_id))"
+client_error_reports,authenticated can insert own crash report,PERMISSIVE,authenticated,INSERT,"",((user_id IS NULL) OR (user_id = auth.uid()))
+client_error_reports,admin and hr_pms can read crash reports,PERMISSIVE,authenticated,SELECT,"(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role))",""
+client_implementer_assignments,cia_write,PERMISSIVE,authenticated,ALL,"has_role(auth.uid(), 'platform_owner'::app_role)","has_role(auth.uid(), 'platform_owner'::app_role)"
+client_implementer_assignments,cia_read,PERMISSIVE,authenticated,SELECT,"(has_role(auth.uid(), 'platform_owner'::app_role) OR (user_id = auth.uid()))",""
+client_module_entitlements,cme_write,PERMISSIVE,authenticated,ALL,"has_role(auth.uid(), 'platform_owner'::app_role)","has_role(auth.uid(), 'platform_owner'::app_role)"
+client_module_entitlements,cme_read,PERMISSIVE,public,SELECT,"(has_role(auth.uid(), 'platform_owner'::app_role) OR is_implementation_admin_for(client_id))",""
+client_notification_templates,impl_console_templates_insert,PERMISSIVE,authenticated,INSERT,"","(has_role(auth.uid(), 'platform_owner'::app_role) OR (EXISTS ( SELECT 1
+   FROM client_implementer_assignments cia
+  WHERE ((cia.client_id = client_notification_templates.client_id) AND (cia.user_id = auth.uid())))))"
+client_notification_templates,impl_console_templates_select,PERMISSIVE,authenticated,SELECT,"(has_role(auth.uid(), 'platform_owner'::app_role) OR (EXISTS ( SELECT 1
+   FROM client_implementer_assignments cia
+  WHERE ((cia.client_id = client_notification_templates.client_id) AND (cia.user_id = auth.uid())))))",""
+client_notification_templates,impl_console_templates_update,PERMISSIVE,authenticated,UPDATE,"(has_role(auth.uid(), 'platform_owner'::app_role) OR (EXISTS ( SELECT 1
+   FROM client_implementer_assignments cia
+  WHERE ((cia.client_id = client_notification_templates.client_id) AND (cia.user_id = auth.uid())))))","(has_role(auth.uid(), 'platform_owner'::app_role) OR (EXISTS ( SELECT 1
+   FROM client_implementer_assignments cia
+  WHERE ((cia.client_id = client_notification_templates.client_id) AND (cia.user_id = auth.uid())))))"
+client_setup_checklist,csl_pwo_write,PERMISSIVE,authenticated,INSERT,"","has_role(auth.uid(), 'platform_owner'::app_role)"
+client_setup_checklist,csl_read,PERMISSIVE,authenticated,SELECT,"(has_role(auth.uid(), 'platform_owner'::app_role) OR is_implementation_admin_for(client_id))",""
+client_setup_checklist,csl_update,PERMISSIVE,authenticated,UPDATE,"(has_role(auth.uid(), 'platform_owner'::app_role) OR is_implementation_admin_for(client_id))","(has_role(auth.uid(), 'platform_owner'::app_role) OR is_implementation_admin_for(client_id))"
+client_smtp_config,csc_write,PERMISSIVE,authenticated,ALL,"(has_role(auth.uid(), 'platform_owner'::app_role) OR is_implementation_admin_for(client_id))","(has_role(auth.uid(), 'platform_owner'::app_role) OR is_implementation_admin_for(client_id))"
+client_smtp_config,csc_read,PERMISSIVE,authenticated,SELECT,"(has_role(auth.uid(), 'platform_owner'::app_role) OR is_implementation_admin_for(client_id))",""
+client_urls,client_urls_insert,PERMISSIVE,authenticated,INSERT,"","(has_role(auth.uid(), 'platform_owner'::app_role) OR is_implementation_admin_for(client_id))"
+client_urls,client_urls_select,PERMISSIVE,authenticated,SELECT,"(has_role(auth.uid(), 'platform_owner'::app_role) OR is_implementation_admin_for(client_id))",""
+client_urls,client_urls_update,PERMISSIVE,authenticated,UPDATE,"(has_role(auth.uid(), 'platform_owner'::app_role) OR is_implementation_admin_for(client_id))","(has_role(auth.uid(), 'platform_owner'::app_role) OR is_implementation_admin_for(client_id))"
+clients,clients_write,PERMISSIVE,authenticated,ALL,"has_role(auth.uid(), 'platform_owner'::app_role)","has_role(auth.uid(), 'platform_owner'::app_role)"
+clients,clients_read,PERMISSIVE,public,SELECT,"(has_role(auth.uid(), 'platform_owner'::app_role) OR is_implementation_admin_for(id))",""
+companies,Admins can manage companies,PERMISSIVE,authenticated,ALL,"has_role(auth.uid(), 'admin'::app_role)","has_role(auth.uid(), 'admin'::app_role)"
+companies,Authenticated users can read companies,PERMISSIVE,authenticated,SELECT,true,""
+confirmation_increment_adjustments,conf_inc_adj_read_admin_mgmt,PERMISSIVE,authenticated,SELECT,"(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'management'::app_role))",""
+confirmation_increment_rules,conf_inc_rules_admin_delete,PERMISSIVE,authenticated,DELETE,"has_role(auth.uid(), 'admin'::app_role)",""
+confirmation_increment_rules,conf_inc_rules_admin_write,PERMISSIVE,authenticated,INSERT,"","has_role(auth.uid(), 'admin'::app_role)"
+confirmation_increment_rules,conf_inc_rules_read_authenticated,PERMISSIVE,authenticated,SELECT,true,""
+confirmation_increment_rules,conf_inc_rules_admin_update,PERMISSIVE,authenticated,UPDATE,"has_role(auth.uid(), 'admin'::app_role)","has_role(auth.uid(), 'admin'::app_role)"
+custom_reports,Admins can manage custom reports,PERMISSIVE,authenticated,ALL,"(EXISTS ( SELECT 1
+   FROM user_roles
+  WHERE ((user_roles.user_id = auth.uid()) AND (user_roles.role = 'admin'::app_role))))",""
+custom_reports,Users can view active reports matching their roles,PERMISSIVE,authenticated,SELECT,"((is_active = true) AND (EXISTS ( SELECT 1
+   FROM user_roles ur
+  WHERE ((ur.user_id = auth.uid()) AND ((ur.role)::text = ANY (custom_reports.view_roles))))))",""
+dashboard_registry,dashboard_registry_write,PERMISSIVE,authenticated,ALL,"has_role(auth.uid(), 'platform_owner'::app_role)","has_role(auth.uid(), 'platform_owner'::app_role)"
+dashboard_registry,dashboard_registry_read,PERMISSIVE,authenticated,SELECT,true,""
+data_classifications,data_classifications_write,PERMISSIVE,authenticated,ALL,"has_role(auth.uid(), 'platform_owner'::app_role)","has_role(auth.uid(), 'platform_owner'::app_role)"
+data_classifications,data_classifications_read,PERMISSIVE,authenticated,SELECT,true,""
+departments,Admins can manage departments,PERMISSIVE,authenticated,ALL,"has_role(auth.uid(), 'admin'::app_role)",""
+departments,Authenticated users can view departments,PERMISSIVE,authenticated,SELECT,true,""
+designations,Admins can manage designations,PERMISSIVE,public,ALL,"has_role(auth.uid(), 'admin'::app_role)",""
+designations,Authenticated users can view designations,PERMISSIVE,authenticated,SELECT,true,""
+dev_report_entries,dev_report_admin_all,PERMISSIVE,authenticated,ALL,"has_role(auth.uid(), 'admin'::app_role)","has_role(auth.uid(), 'admin'::app_role)"
+dev_report_entries,dev_report_viewers_select,PERMISSIVE,authenticated,SELECT,"(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'management'::app_role) OR has_role(auth.uid(), 'auditor'::app_role))",""
+dev_report_entries_archive_seed,Admins read archive seed,PERMISSIVE,authenticated,SELECT,"has_role(auth.uid(), 'admin'::app_role)",""
+divisions,Admins can manage divisions,PERMISSIVE,authenticated,ALL,"has_role(auth.uid(), 'admin'::app_role)",""
+divisions,Authenticated users can view divisions,PERMISSIVE,authenticated,SELECT,true,""
+email_change_audit,Admin reads all email changes,PERMISSIVE,authenticated,SELECT,"has_role(auth.uid(), 'admin'::app_role)",""
+email_change_audit,Users read own email changes,PERMISSIVE,authenticated,SELECT,(auth.uid() = user_id),""
+email_dispatch_queue,Service role full access on email_dispatch_queue,PERMISSIVE,service_role,ALL,true,true
+email_dispatch_queue,Admins can view email_dispatch_queue,PERMISSIVE,authenticated,SELECT,"has_role(auth.uid(), 'admin'::app_role)",""
+email_logs,Admins can view email logs,PERMISSIVE,authenticated,SELECT,"((auth.uid() IS NOT NULL) AND has_role(auth.uid(), 'admin'::app_role))",""
+employee_categories,employee_categories admin write,PERMISSIVE,authenticated,ALL,"has_role(auth.uid(), 'admin'::app_role)","has_role(auth.uid(), 'admin'::app_role)"
+employee_categories,employee_categories readable by authenticated,PERMISSIVE,authenticated,SELECT,true,""
+employee_incentive_eligibility,Admins can manage employee_incentive_eligibility,PERMISSIVE,authenticated,ALL,"has_role(auth.uid(), 'admin'::app_role)",""
+employee_incentive_eligibility,HR can manage eligibility,PERMISSIVE,authenticated,ALL,"has_role(auth.uid(), 'hr_pms'::app_role)",""
+employee_incentive_eligibility,Incentive data users can insert eligibility,PERMISSIVE,authenticated,INSERT,"","has_menu_access_override(auth.uid(), 'admin-incentive-data'::text)"
+employee_incentive_eligibility,Menu override users can insert eligibility data,PERMISSIVE,authenticated,INSERT,"","has_menu_access_override(auth.uid(), 'admin-incentive'::text)"
+employee_incentive_eligibility,Employees can view own eligibility,PERMISSIVE,authenticated,SELECT,(employee_id = auth.uid()),""
+employee_incentive_eligibility,Incentive data users can view eligibility,PERMISSIVE,authenticated,SELECT,"has_menu_access_override(auth.uid(), 'admin-incentive-data'::text)",""
+employee_incentive_eligibility,Management can view eligibility,PERMISSIVE,authenticated,SELECT,"has_role(auth.uid(), 'management'::app_role)",""
+employee_incentive_eligibility,Incentive data users can update eligibility,PERMISSIVE,authenticated,UPDATE,"has_menu_access_override(auth.uid(), 'admin-incentive-data'::text)","has_menu_access_override(auth.uid(), 'admin-incentive-data'::text)"
+employee_incentive_eligibility,Menu override users can update eligibility data,PERMISSIVE,authenticated,UPDATE,"has_menu_access_override(auth.uid(), 'admin-incentive'::text)","has_menu_access_override(auth.uid(), 'admin-incentive'::text)"
+employee_incentive_records,Admins can manage employee_incentive_records,PERMISSIVE,authenticated,ALL,"has_role(auth.uid(), 'admin'::app_role)",""
+employee_incentive_records,HR can manage incentive records,PERMISSIVE,authenticated,ALL,"has_role(auth.uid(), 'hr_pms'::app_role)",""
+employee_incentive_records,Menu override users can insert incentive records,PERMISSIVE,authenticated,INSERT,"","has_menu_access_override(auth.uid(), 'admin-incentive'::text)"
+employee_incentive_records,Employees can view own incentive records,PERMISSIVE,authenticated,SELECT,(employee_id = auth.uid()),""
+employee_incentive_records,Management can view incentive records,PERMISSIVE,authenticated,SELECT,"has_role(auth.uid(), 'management'::app_role)",""
+employee_incentive_records,Menu override users can read incentive records,PERMISSIVE,authenticated,SELECT,"has_menu_access_override(auth.uid(), 'admin-incentive'::text)",""
+employee_incentive_records,Reports-incentive users can read incentive records,PERMISSIVE,authenticated,SELECT,"has_menu_access_override(auth.uid(), 'reports-incentive'::text)",""
+employee_incentive_records,Menu override users can update incentive records,PERMISSIVE,authenticated,UPDATE,"has_menu_access_override(auth.uid(), 'admin-incentive'::text)","has_menu_access_override(auth.uid(), 'admin-incentive'::text)"
+employee_job_descriptions,Admins can manage job descriptions,PERMISSIVE,authenticated,ALL,"has_role(auth.uid(), 'admin'::app_role)","has_role(auth.uid(), 'admin'::app_role)"
+employee_job_descriptions,Authenticated users can view job descriptions,PERMISSIVE,authenticated,SELECT,true,""
+employee_master_custom_field_values,emcfv_admin_delete,PERMISSIVE,authenticated,DELETE,"has_role(auth.uid(), 'admin'::app_role)",""
+employee_master_custom_field_values,emcfv_admin_insert,PERMISSIVE,authenticated,INSERT,"","has_role(auth.uid(), 'admin'::app_role)"
+employee_master_custom_field_values,emcfv_select_scoped,PERMISSIVE,authenticated,SELECT,"((employee_id = auth.uid()) OR (EXISTS ( SELECT 1
+   FROM profiles p
+  WHERE ((p.id = employee_master_custom_field_values.employee_id) AND (p.reporting_manager_id = auth.uid())))) OR has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role) OR has_role(auth.uid(), 'management'::app_role))",""
+employee_master_custom_field_values,emcfv_admin_update,PERMISSIVE,authenticated,UPDATE,"has_role(auth.uid(), 'admin'::app_role)","has_role(auth.uid(), 'admin'::app_role)"
+employee_master_custom_fields,emcf_admin_delete,PERMISSIVE,authenticated,DELETE,"has_role(auth.uid(), 'admin'::app_role)",""
+employee_master_custom_fields,emcf_admin_insert,PERMISSIVE,authenticated,INSERT,"","has_role(auth.uid(), 'admin'::app_role)"
+employee_master_custom_fields,emcf_select_authenticated,PERMISSIVE,authenticated,SELECT,true,""
+employee_master_custom_fields,emcf_admin_update,PERMISSIVE,authenticated,UPDATE,"has_role(auth.uid(), 'admin'::app_role)","has_role(auth.uid(), 'admin'::app_role)"
+employee_working_days,Admins can manage all employee working days,PERMISSIVE,public,ALL,"has_role(auth.uid(), 'admin'::app_role)",""
+employee_working_days,Employees can view their own working days,PERMISSIVE,public,SELECT,(auth.uid() = employee_id),""
+employee_working_days,Managers can view reportee working days,PERMISSIVE,public,SELECT,"(EXISTS ( SELECT 1
+   FROM profiles p
+  WHERE ((p.id = employee_working_days.employee_id) AND (p.reporting_manager_id = auth.uid()))))",""
+employment_status_history,esh_admin_delete,PERMISSIVE,authenticated,DELETE,"has_role(auth.uid(), 'admin'::app_role)",""
+employment_status_history,esh_admin_write,PERMISSIVE,authenticated,INSERT,"","has_role(auth.uid(), 'admin'::app_role)"
+employment_status_history,esh_read_privileged,PERMISSIVE,authenticated,SELECT,"(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'management'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role) OR (employee_id = auth.uid()))",""
+employment_status_history,esh_admin_update,PERMISSIVE,authenticated,UPDATE,"has_role(auth.uid(), 'admin'::app_role)","has_role(auth.uid(), 'admin'::app_role)"
+employment_statuses,employment_statuses admin write,PERMISSIVE,authenticated,ALL,"has_role(auth.uid(), 'admin'::app_role)","has_role(auth.uid(), 'admin'::app_role)"
+employment_statuses,employment_statuses readable by authenticated,PERMISSIVE,authenticated,SELECT,true,""
+entitlement_audit,ent_audit_insert,PERMISSIVE,authenticated,INSERT,"",(actor_id = auth.uid())
+entitlement_audit,ent_audit_read,PERMISSIVE,authenticated,SELECT,"(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'platform_owner'::app_role))",""
+export_policies,export_policies_write_platform_owner,PERMISSIVE,authenticated,ALL,"has_role(auth.uid(), 'platform_owner'::app_role)","has_role(auth.uid(), 'platform_owner'::app_role)"
+export_policies,export_policies_read_authenticated,PERMISSIVE,authenticated,SELECT,true,""
+final_score_revisions,revisions_admin_read,PERMISSIVE,authenticated,SELECT,"has_role(auth.uid(), 'admin'::app_role)",""
+final_score_revisions,revisions_management_read,PERMISSIVE,authenticated,SELECT,"has_role(auth.uid(), 'management'::app_role)",""
+final_score_revisions,revisions_self_read,PERMISSIVE,authenticated,SELECT,(performed_by = auth.uid()),""
+frequency_config,Admins can manage frequency_config,PERMISSIVE,public,ALL,"has_role(auth.uid(), 'admin'::app_role)",""
+frequency_config,Authenticated users can view frequency_config,PERMISSIVE,authenticated,SELECT,true,""
+general_eligibility_audit,Admin/HR PMS insert ge audit,PERMISSIVE,authenticated,INSERT,"","(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role))"
+general_eligibility_audit,Admin/HR PMS read ge audit,PERMISSIVE,authenticated,SELECT,"(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role))",""
+general_eligibility_configs,Admin delete general eligibility,PERMISSIVE,authenticated,DELETE,"has_role(auth.uid(), 'admin'::app_role)",""
+general_eligibility_configs,Admin/HR PMS insert general eligibility,PERMISSIVE,authenticated,INSERT,"","(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role))"
+general_eligibility_configs,Admin/HR PMS read general eligibility,PERMISSIVE,authenticated,SELECT,"(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role) OR has_role(auth.uid(), 'management'::app_role))",""
+general_eligibility_configs,Admin/HR PMS update general eligibility,PERMISSIVE,authenticated,UPDATE,"(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role))",""
+iac_audit_log,iac_audit_read,PERMISSIVE,authenticated,SELECT,"has_role(auth.uid(), 'admin'::app_role)",""
+iac_capabilities,iac_capabilities_admin,PERMISSIVE,authenticated,ALL,"has_role(auth.uid(), 'admin'::app_role)","has_role(auth.uid(), 'admin'::app_role)"
+iac_capabilities,iac_capabilities_read,PERMISSIVE,authenticated,SELECT,true,""
+iac_role_capabilities,iac_rc_admin,PERMISSIVE,authenticated,ALL,"has_role(auth.uid(), 'admin'::app_role)","has_role(auth.uid(), 'admin'::app_role)"
+iac_role_capabilities,iac_rc_read,PERMISSIVE,authenticated,SELECT,true,""
+iac_roles,iac_roles_admin,PERMISSIVE,authenticated,ALL,"has_role(auth.uid(), 'admin'::app_role)","has_role(auth.uid(), 'admin'::app_role)"
+iac_roles,iac_roles_read,PERMISSIVE,authenticated,SELECT,"(is_active OR has_role(auth.uid(), 'admin'::app_role))",""
+iac_user_role_assignments,iac_assign_admin_write,PERMISSIVE,authenticated,ALL,"has_role(auth.uid(), 'admin'::app_role)","has_role(auth.uid(), 'admin'::app_role)"
+iac_user_role_assignments,iac_assign_admin_read,PERMISSIVE,authenticated,SELECT,"has_role(auth.uid(), 'admin'::app_role)",""
+iac_user_role_assignments,iac_assign_self,PERMISSIVE,authenticated,SELECT,(user_id = auth.uid()),""
+impl_console_rate_buckets,rate_buckets_self_read,PERMISSIVE,authenticated,SELECT,(actor_id = auth.uid()),""
+import_field_settings,Admins manage import field settings - delete,PERMISSIVE,authenticated,DELETE,"has_role(auth.uid(), 'admin'::app_role)",""
+import_field_settings,Admins manage import field settings - insert,PERMISSIVE,authenticated,INSERT,"","has_role(auth.uid(), 'admin'::app_role)"
+import_field_settings,Import field settings readable by authenticated,PERMISSIVE,authenticated,SELECT,true,""
+import_field_settings,Admins manage import field settings - update,PERMISSIVE,authenticated,UPDATE,"has_role(auth.uid(), 'admin'::app_role)","has_role(auth.uid(), 'admin'::app_role)"
+import_progress,Import history cannot be deleted,PERMISSIVE,public,DELETE,false,""
+import_progress,Only system can create import progress,PERMISSIVE,public,INSERT,"",false
+import_progress,Users can view their own import progress,PERMISSIVE,public,SELECT,(auth.uid() = user_id),""
+import_progress,Only system can update import progress,PERMISSIVE,public,UPDATE,false,""
+incentive_allocation_rules,Admins can manage allocation rules,PERMISSIVE,authenticated,ALL,"has_role(auth.uid(), 'admin'::app_role)","has_role(auth.uid(), 'admin'::app_role)"
+incentive_allocation_rules,Menu override users can delete allocation rules,PERMISSIVE,authenticated,DELETE,"has_menu_access_override(auth.uid(), 'admin-incentive'::text)",""
+incentive_allocation_rules,Menu override users can insert allocation rules,PERMISSIVE,authenticated,INSERT,"","has_menu_access_override(auth.uid(), 'admin-incentive'::text)"
+incentive_allocation_rules,Authenticated users can read allocation rules,PERMISSIVE,authenticated,SELECT,true,""
+incentive_allocation_rules,Menu override users can update allocation rules,PERMISSIVE,authenticated,UPDATE,"has_menu_access_override(auth.uid(), 'admin-incentive'::text)","has_menu_access_override(auth.uid(), 'admin-incentive'::text)"
+incentive_custom_tab_data,ictd_delete_admin_hr,PERMISSIVE,authenticated,DELETE,"(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role))",""
+incentive_custom_tab_data,ictd_insert_admin_hr,PERMISSIVE,authenticated,INSERT,"","(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role))"
+incentive_custom_tab_data,ictd_select_scoped,PERMISSIVE,authenticated,SELECT,"((employee_id = auth.uid()) OR (EXISTS ( SELECT 1
+   FROM profiles p
+  WHERE ((p.id = incentive_custom_tab_data.employee_id) AND (p.reporting_manager_id = auth.uid())))) OR has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role) OR has_role(auth.uid(), 'management'::app_role))",""
+incentive_custom_tab_data,ictd_update_admin_hr,PERMISSIVE,authenticated,UPDATE,"(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role))","(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role))"
+incentive_disqualification_rules,Admins can manage incentive_disqualification_rules,PERMISSIVE,authenticated,ALL,"has_role(auth.uid(), 'admin'::app_role)",""
+incentive_disqualification_rules,Menu override users can delete dq rules,PERMISSIVE,authenticated,DELETE,"has_menu_access_override(auth.uid(), 'admin-incentive'::text)",""
+incentive_disqualification_rules,Menu override users can insert dq rules,PERMISSIVE,authenticated,INSERT,"","has_menu_access_override(auth.uid(), 'admin-incentive'::text)"
+incentive_disqualification_rules,Authenticated can view incentive_disqualification_rules,PERMISSIVE,authenticated,SELECT,true,""
+incentive_disqualification_rules,Menu override users can update dq rules,PERMISSIVE,authenticated,UPDATE,"has_menu_access_override(auth.uid(), 'admin-incentive'::text)","has_menu_access_override(auth.uid(), 'admin-incentive'::text)"
+incentive_eligibility_fields,Admins can manage eligibility fields,PERMISSIVE,authenticated,ALL,"has_role(auth.uid(), 'admin'::app_role)","has_role(auth.uid(), 'admin'::app_role)"
+incentive_eligibility_fields,Menu override users can delete eligibility fields,PERMISSIVE,authenticated,DELETE,"has_menu_access_override(auth.uid(), 'admin-incentive'::text)",""
+incentive_eligibility_fields,Menu override users can insert eligibility fields,PERMISSIVE,authenticated,INSERT,"","has_menu_access_override(auth.uid(), 'admin-incentive'::text)"
+incentive_eligibility_fields,Authenticated users can view eligibility fields,PERMISSIVE,authenticated,SELECT,true,""
+incentive_eligibility_fields,Incentive data users can view eligibility fields,PERMISSIVE,authenticated,SELECT,"has_menu_access_override(auth.uid(), 'admin-incentive-data'::text)",""
+incentive_eligibility_fields,Menu override users can update eligibility fields,PERMISSIVE,authenticated,UPDATE,"has_menu_access_override(auth.uid(), 'admin-incentive'::text)","has_menu_access_override(auth.uid(), 'admin-incentive'::text)"
+incentive_production_rates,Admins and menu-override users can manage production rates,PERMISSIVE,authenticated,ALL,"(has_role(auth.uid(), 'admin'::app_role) OR has_menu_access_override(auth.uid(), 'incentive-config'::text))","(has_role(auth.uid(), 'admin'::app_role) OR has_menu_access_override(auth.uid(), 'incentive-config'::text))"
+incentive_production_rates,Incentive data users can delete production rates,PERMISSIVE,authenticated,DELETE,"has_menu_access_override(auth.uid(), 'admin-incentive-data'::text)",""
+incentive_production_rates,Incentive data users can insert production rates,PERMISSIVE,authenticated,INSERT,"","has_menu_access_override(auth.uid(), 'admin-incentive-data'::text)"
+incentive_production_rates,Incentive data users can view production rates,PERMISSIVE,authenticated,SELECT,"has_menu_access_override(auth.uid(), 'admin-incentive-data'::text)",""
+incentive_production_rates,Incentive data users can update production rates,PERMISSIVE,authenticated,UPDATE,"has_menu_access_override(auth.uid(), 'admin-incentive-data'::text)","has_menu_access_override(auth.uid(), 'admin-incentive-data'::text)"
+incentive_program_custom_tabs,Admins can delete custom tabs,PERMISSIVE,authenticated,DELETE,"has_role(auth.uid(), 'admin'::app_role)",""
+incentive_program_custom_tabs,Admins can insert custom tabs,PERMISSIVE,authenticated,INSERT,"","has_role(auth.uid(), 'admin'::app_role)"
+incentive_program_custom_tabs,Authenticated users can read custom tabs,PERMISSIVE,authenticated,SELECT,true,""
+incentive_program_custom_tabs,Admins can update custom tabs,PERMISSIVE,authenticated,UPDATE,"has_role(auth.uid(), 'admin'::app_role)","has_role(auth.uid(), 'admin'::app_role)"
+incentive_program_mappings,Admins can manage program mappings,PERMISSIVE,authenticated,ALL,"has_role(auth.uid(), 'admin'::app_role)","has_role(auth.uid(), 'admin'::app_role)"
+incentive_program_mappings,Menu override users can delete incentive mappings,PERMISSIVE,authenticated,DELETE,"has_menu_access_override(auth.uid(), 'admin-incentive'::text)",""
+incentive_program_mappings,Menu override users can insert incentive mappings,PERMISSIVE,authenticated,INSERT,"","has_menu_access_override(auth.uid(), 'admin-incentive'::text)"
+incentive_program_mappings,Authenticated users can read program mappings,PERMISSIVE,authenticated,SELECT,true,""
+incentive_program_mappings,Menu override users can update incentive mappings,PERMISSIVE,authenticated,UPDATE,"has_menu_access_override(auth.uid(), 'admin-incentive'::text)","has_menu_access_override(auth.uid(), 'admin-incentive'::text)"
+incentive_program_types,Admins can delete program types,PERMISSIVE,authenticated,DELETE,"has_role(auth.uid(), 'admin'::app_role)",""
+incentive_program_types,Menu override users can delete program types,PERMISSIVE,authenticated,DELETE,"has_menu_access_override(auth.uid(), 'admin-incentive'::text)",""
+incentive_program_types,Admins can insert program types,PERMISSIVE,authenticated,INSERT,"","has_role(auth.uid(), 'admin'::app_role)"
+incentive_program_types,Menu override users can insert program types,PERMISSIVE,authenticated,INSERT,"","has_menu_access_override(auth.uid(), 'admin-incentive'::text)"
+incentive_program_types,Authenticated users can read program types,PERMISSIVE,authenticated,SELECT,true,""
+incentive_program_types,Menu override users can update program types,PERMISSIVE,authenticated,UPDATE,"has_menu_access_override(auth.uid(), 'admin-incentive'::text)","has_menu_access_override(auth.uid(), 'admin-incentive'::text)"
+incentive_programs,Admins can manage incentive_programs,PERMISSIVE,authenticated,ALL,"has_role(auth.uid(), 'admin'::app_role)",""
+incentive_programs,Menu override users can delete incentive programs,PERMISSIVE,authenticated,DELETE,"has_menu_access_override(auth.uid(), 'admin-incentive'::text)",""
+incentive_programs,Menu override users can insert incentive programs,PERMISSIVE,authenticated,INSERT,"","has_menu_access_override(auth.uid(), 'admin-incentive'::text)"
+incentive_programs,Authenticated can view active programs,PERMISSIVE,authenticated,SELECT,(is_active = true),""
+incentive_programs,HR and management can view incentive_programs,PERMISSIVE,authenticated,SELECT,"(has_role(auth.uid(), 'hr_pms'::app_role) OR has_role(auth.uid(), 'management'::app_role))",""
+incentive_programs,Menu override users can read incentive programs,PERMISSIVE,authenticated,SELECT,"has_menu_access_override(auth.uid(), 'admin-incentive'::text)",""
+incentive_programs,Menu override users can update incentive programs,PERMISSIVE,authenticated,UPDATE,"has_menu_access_override(auth.uid(), 'admin-incentive'::text)","has_menu_access_override(auth.uid(), 'admin-incentive'::text)"
+incentive_score_revisions,Admins can manage incentive_score_revisions,PERMISSIVE,authenticated,ALL,"has_role(auth.uid(), 'admin'::app_role)",""
+incentive_score_revisions,HR can manage score revisions,PERMISSIVE,authenticated,ALL,"has_role(auth.uid(), 'hr_pms'::app_role)",""
+incentive_score_revisions,Employees can view own revisions,PERMISSIVE,authenticated,SELECT,(employee_id = auth.uid()),""
+incentive_score_revisions,Management can view score revisions,PERMISSIVE,authenticated,SELECT,"has_role(auth.uid(), 'management'::app_role)",""
+incentive_score_revisions,Menu override users can read score revisions,PERMISSIVE,authenticated,SELECT,"has_menu_access_override(auth.uid(), 'admin-incentive'::text)",""
+incentive_score_revisions,Menu override users can update score revisions,PERMISSIVE,authenticated,UPDATE,"has_menu_access_override(auth.uid(), 'admin-incentive'::text)","has_menu_access_override(auth.uid(), 'admin-incentive'::text)"
+incentive_slab_categories,Admin manage,PERMISSIVE,authenticated,ALL,"has_role(auth.uid(), 'admin'::app_role)",""
+incentive_slab_categories,Authenticated read,PERMISSIVE,authenticated,SELECT,true,""
+incentive_slabs,Admins can manage incentive_slabs,PERMISSIVE,authenticated,ALL,"has_role(auth.uid(), 'admin'::app_role)",""
+incentive_slabs,Menu override users can delete incentive slabs,PERMISSIVE,authenticated,DELETE,"has_menu_access_override(auth.uid(), 'admin-incentive'::text)",""
+incentive_slabs,Menu override users can insert incentive slabs,PERMISSIVE,authenticated,INSERT,"","has_menu_access_override(auth.uid(), 'admin-incentive'::text)"
+incentive_slabs,Privileged roles can view incentive_slabs,PERMISSIVE,authenticated,SELECT,"(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role) OR has_role(auth.uid(), 'management'::app_role) OR has_menu_access_override(auth.uid(), 'admin-incentive'::text))",""
+incentive_slabs,Menu override users can update incentive slabs,PERMISSIVE,authenticated,UPDATE,"has_menu_access_override(auth.uid(), 'admin-incentive'::text)","has_menu_access_override(auth.uid(), 'admin-incentive'::text)"
+incentive_stale_zero_cleanup_audit,Service role manages stale zero cleanup audit,PERMISSIVE,service_role,ALL,true,true
+incentive_stale_zero_cleanup_audit,Admins can view stale zero cleanup audit,PERMISSIVE,authenticated,SELECT,"(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role))",""
+incentive_vessel_rates,Admins can delete vessel rates,PERMISSIVE,authenticated,DELETE,"has_role(auth.uid(), 'admin'::app_role)",""
+incentive_vessel_rates,Incentive data users can delete vessel rates,PERMISSIVE,authenticated,DELETE,"has_menu_access_override(auth.uid(), 'admin-incentive-data'::text)",""
+incentive_vessel_rates,Menu override users can delete vessel rates,PERMISSIVE,authenticated,DELETE,"has_menu_access_override(auth.uid(), 'admin-incentive'::text)",""
+incentive_vessel_rates,Admins can insert vessel rates,PERMISSIVE,authenticated,INSERT,"","has_role(auth.uid(), 'admin'::app_role)"
+incentive_vessel_rates,Incentive data users can insert vessel rates,PERMISSIVE,authenticated,INSERT,"","has_menu_access_override(auth.uid(), 'admin-incentive-data'::text)"
+incentive_vessel_rates,Menu override users can insert vessel rates,PERMISSIVE,authenticated,INSERT,"","has_menu_access_override(auth.uid(), 'admin-incentive'::text)"
+incentive_vessel_rates,Authenticated users can read vessel rates,PERMISSIVE,authenticated,SELECT,true,""
+incentive_vessel_rates,Incentive data users can view vessel rates,PERMISSIVE,authenticated,SELECT,"has_menu_access_override(auth.uid(), 'admin-incentive-data'::text)",""
+incentive_vessel_rates,Admins can update vessel rates,PERMISSIVE,authenticated,UPDATE,"has_role(auth.uid(), 'admin'::app_role)","has_role(auth.uid(), 'admin'::app_role)"
+incentive_vessel_rates,Incentive data users can update vessel rates,PERMISSIVE,authenticated,UPDATE,"has_menu_access_override(auth.uid(), 'admin-incentive-data'::text)","has_menu_access_override(auth.uid(), 'admin-incentive-data'::text)"
+incentive_vessel_rates,Menu override users can update vessel rates,PERMISSIVE,authenticated,UPDATE,"has_menu_access_override(auth.uid(), 'admin-incentive'::text)","has_menu_access_override(auth.uid(), 'admin-incentive'::text)"
+increment_eligibility_audit,Admin/HR PMS insert audit,PERMISSIVE,authenticated,INSERT,"","(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role))"
+increment_eligibility_audit,Admin/HR PMS read audit,PERMISSIVE,authenticated,SELECT,"(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role))",""
+increment_eligibility_configs,Admin/HR PMS delete configs,PERMISSIVE,authenticated,DELETE,"(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role))",""
+increment_eligibility_configs,Admin/HR PMS insert configs,PERMISSIVE,authenticated,INSERT,"","(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role))"
+increment_eligibility_configs,Admin/HR PMS read configs,PERMISSIVE,authenticated,SELECT,"(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role))",""
+increment_eligibility_configs,Admin/HR PMS update configs,PERMISSIVE,authenticated,UPDATE,"(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role))","(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role))"
+increment_eligibility_criteria,Admin/HR PMS delete criteria,PERMISSIVE,authenticated,DELETE,"(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role))",""
+increment_eligibility_criteria,Admin/HR PMS insert criteria,PERMISSIVE,authenticated,INSERT,"","(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role))"
+increment_eligibility_criteria,Admin/HR PMS read criteria,PERMISSIVE,authenticated,SELECT,"(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role))",""
+increment_eligibility_criteria,Admin/HR PMS update criteria,PERMISSIVE,authenticated,UPDATE,"(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role))","(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role))"
+increment_eligibility_exclusions,Admin/HR PMS delete exclusions,PERMISSIVE,authenticated,DELETE,"(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role))",""
+increment_eligibility_exclusions,Admin/HR PMS insert exclusions,PERMISSIVE,authenticated,INSERT,"","(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role))"
+increment_eligibility_exclusions,Admin/HR PMS read exclusions,PERMISSIVE,authenticated,SELECT,"(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role))",""
+increment_inputs,Admin delete inputs,PERMISSIVE,authenticated,DELETE,"has_role(auth.uid(), 'admin'::app_role)",""
+increment_inputs,Admin/HR PMS insert inputs,PERMISSIVE,authenticated,INSERT,"","(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role))"
+increment_inputs,Admin/HR PMS read inputs,PERMISSIVE,authenticated,SELECT,"(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role) OR has_role(auth.uid(), 'management'::app_role))",""
+increment_inputs,Admin/HR PMS update inputs,PERMISSIVE,authenticated,UPDATE,"(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role))",""
+increment_method_configs,increment_method_configs_admin_hrpms_write,PERMISSIVE,authenticated,ALL,"(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role))","(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role))"
+increment_method_configs,increment_method_configs_read_authenticated,PERMISSIVE,authenticated,SELECT,true,""
+increment_method_slabs,increment_method_slabs_admin_hrpms_write,PERMISSIVE,authenticated,ALL,"(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role))","(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role))"
+increment_method_slabs,increment_method_slabs_read_authenticated,PERMISSIVE,authenticated,SELECT,true,""
+increment_run_items,Admin delete run items,PERMISSIVE,authenticated,DELETE,"has_role(auth.uid(), 'admin'::app_role)",""
+increment_run_items,Admin/HR PMS write run items,PERMISSIVE,authenticated,INSERT,"","(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role))"
+increment_run_items,Admin/HR PMS read run items,PERMISSIVE,authenticated,SELECT,"(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role) OR has_role(auth.uid(), 'management'::app_role))",""
+increment_run_items,Employee read own run item,PERMISSIVE,authenticated,SELECT,(employee_id = auth.uid()),""
+increment_run_items,Admin/HR PMS update run items,PERMISSIVE,authenticated,UPDATE,"(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role))",""
+increment_runs,Admin/HR PMS write runs,PERMISSIVE,authenticated,INSERT,"","(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role))"
+increment_runs,Admin/HR PMS read runs,PERMISSIVE,authenticated,SELECT,"(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role) OR has_role(auth.uid(), 'management'::app_role))",""
+increment_runs,Admin/HR PMS update runs,PERMISSIVE,authenticated,UPDATE,"(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role))",""
+increment_slabs,Admin delete slabs,PERMISSIVE,authenticated,DELETE,"has_role(auth.uid(), 'admin'::app_role)",""
+increment_slabs,Admin/HR PMS write slabs,PERMISSIVE,authenticated,INSERT,"","(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role))"
+increment_slabs,Admin/HR PMS read slabs,PERMISSIVE,authenticated,SELECT,"(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role) OR has_role(auth.uid(), 'management'::app_role))",""
+increment_slabs,Admin/HR PMS update slabs,PERMISSIVE,authenticated,UPDATE,"(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role))",""
+increment_slabs_audit,Admin/HR PMS insert slab audit,PERMISSIVE,authenticated,INSERT,"","(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role))"
+increment_slabs_audit,Admin/HR PMS read slab audit,PERMISSIVE,authenticated,SELECT,"(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role))",""
+integration_connector_registry,integration_connector_registry_write,PERMISSIVE,authenticated,ALL,"has_role(auth.uid(), 'platform_owner'::app_role)","has_role(auth.uid(), 'platform_owner'::app_role)"
+integration_connector_registry,integration_connector_registry_read,PERMISSIVE,authenticated,SELECT,true,""
+kpi_audit_logs,Admin can insert audit logs,PERMISSIVE,authenticated,INSERT,"","has_role(auth.uid(), 'admin'::app_role)"
+kpi_audit_logs,System can insert audit logs,PERMISSIVE,public,INSERT,"",(performed_by = auth.uid())
+kpi_audit_logs,Admins can view all audit logs,PERMISSIVE,public,SELECT,"has_role(auth.uid(), 'admin'::app_role)",""
+kpi_audit_logs,Auditors can view all audit logs,PERMISSIVE,public,SELECT,"has_role(auth.uid(), 'auditor'::app_role)",""
+kpi_audit_logs,Management can view audit logs,PERMISSIVE,public,SELECT,"has_role(auth.uid(), 'management'::app_role)",""
+kpi_audit_logs,Managers can view audit logs for their reports,PERMISSIVE,public,SELECT,"(has_role(auth.uid(), 'manager'::app_role) AND (EXISTS ( SELECT 1
+   FROM (kpis k
+     JOIN profiles p ON ((k.employee_id = p.id)))
+  WHERE ((k.id = kpi_audit_logs.kpi_id) AND (p.reporting_manager_id = auth.uid())))))",""
+kpi_audit_logs,Users can view audit logs for their KPIs,PERMISSIVE,public,SELECT,"(EXISTS ( SELECT 1
+   FROM kpis k
+  WHERE ((k.id = kpi_audit_logs.kpi_id) AND (k.employee_id = auth.uid()))))",""
+kpi_definitions,Admins can delete kpi_definitions,PERMISSIVE,authenticated,DELETE,"has_role(auth.uid(), 'admin'::app_role)",""
+kpi_definitions,Admins can insert kpi_definitions,PERMISSIVE,authenticated,INSERT,"","has_role(auth.uid(), 'admin'::app_role)"
+kpi_definitions,Authenticated users can view kpi_definitions,PERMISSIVE,authenticated,SELECT,true,""
+kpi_definitions,Admins can update kpi_definitions,PERMISSIVE,authenticated,UPDATE,"has_role(auth.uid(), 'admin'::app_role)","has_role(auth.uid(), 'admin'::app_role)"
+kpi_dust_emission_rescale_2026_06,dust_rescale_admin_read,PERMISSIVE,authenticated,SELECT,"has_role(auth.uid(), 'admin'::app_role)",""
+kpi_mention_access,Admins can manage all mention access,PERMISSIVE,authenticated,ALL,"has_role(auth.uid(), 'admin'::app_role)",""
+kpi_mention_access,Authenticated users can insert mention access grants,PERMISSIVE,authenticated,INSERT,"","((granted_by = auth.uid()) AND (user_id <> auth.uid()) AND (has_role(auth.uid(), 'admin'::app_role) OR (EXISTS ( SELECT 1
+   FROM kpi_observations o
+  WHERE ((o.kpi_id = kpi_mention_access.kpi_id) AND (o.created_by = auth.uid())))) OR (EXISTS ( SELECT 1
+   FROM (kpi_observation_replies r
+     JOIN kpi_observations o ON ((o.id = r.observation_id)))
+  WHERE ((o.kpi_id = kpi_mention_access.kpi_id) AND (r.reply_by = auth.uid())))) OR (EXISTS ( SELECT 1
+   FROM kpis k
+  WHERE ((k.id = kpi_mention_access.kpi_id) AND (k.employee_id = auth.uid()))))))"
+kpi_mention_access,Users can view their own mention access grants,PERMISSIVE,authenticated,SELECT,(user_id = auth.uid()),""
+kpi_name_aliases,Admins can delete kpi_name_aliases,PERMISSIVE,authenticated,DELETE,"has_role(auth.uid(), 'admin'::app_role)",""
+kpi_name_aliases,Admins can insert kpi_name_aliases,PERMISSIVE,authenticated,INSERT,"","has_role(auth.uid(), 'admin'::app_role)"
+kpi_name_aliases,Authenticated users can view kpi_name_aliases,PERMISSIVE,authenticated,SELECT,true,""
+kpi_name_aliases,Admins can update kpi_name_aliases,PERMISSIVE,authenticated,UPDATE,"has_role(auth.uid(), 'admin'::app_role)","has_role(auth.uid(), 'admin'::app_role)"
+kpi_observation_replies,Users can delete their own replies,PERMISSIVE,public,DELETE,(auth.uid() = reply_by),""
+kpi_observation_replies,Authenticated users can create observation replies,PERMISSIVE,public,INSERT,"",(auth.uid() = reply_by)
+kpi_observation_replies,Mentioned users can view observation replies,PERMISSIVE,authenticated,SELECT,"(EXISTS ( SELECT 1
+   FROM (kpi_observations o
+     JOIN kpi_mention_access m ON ((m.kpi_id = o.kpi_id)))
+  WHERE ((o.id = kpi_observation_replies.observation_id) AND (m.user_id = auth.uid()))))",""
+kpi_observation_replies,Users can view replies for accessible observations,PERMISSIVE,authenticated,SELECT,"(EXISTS ( SELECT 1
+   FROM ((kpi_observations o
+     JOIN kpis k ON ((k.id = o.kpi_id)))
+     LEFT JOIN profiles p ON ((p.id = k.employee_id)))
+  WHERE ((o.id = kpi_observation_replies.observation_id) AND ((k.employee_id = auth.uid()) OR (p.reporting_manager_id = auth.uid()) OR has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'auditor'::app_role) OR has_role(auth.uid(), 'management'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role) OR has_role(auth.uid(), 'skip_level'::app_role)))))",""
+kpi_observation_replies,Authors can edit own reply within 24h,PERMISSIVE,authenticated,UPDATE,((auth.uid() = reply_by) AND (created_at > (now() - '24:00:00'::interval))),((auth.uid() = reply_by) AND (created_at > (now() - '24:00:00'::interval)))
+kpi_observations,Users can delete own observations,PERMISSIVE,authenticated,DELETE,"((created_by = auth.uid()) OR has_role(auth.uid(), 'admin'::app_role))",""
+kpi_observations,FM can insert observations on mapped employees,PERMISSIVE,authenticated,INSERT,"","((created_by = auth.uid()) AND (EXISTS ( SELECT 1
+   FROM kpis k
+  WHERE ((k.id = kpi_observations.kpi_id) AND is_functional_manager_of(k.employee_id)))))"
+kpi_observations,Users can create observations,PERMISSIVE,authenticated,INSERT,"","((created_by = auth.uid()) AND ((EXISTS ( SELECT 1
+   FROM kpis
+  WHERE ((kpis.id = kpi_observations.kpi_id) AND (kpis.employee_id = auth.uid())))) OR has_role(auth.uid(), 'manager'::app_role) OR has_role(auth.uid(), 'auditor'::app_role) OR has_role(auth.uid(), 'management'::app_role) OR has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role)))"
+kpi_observations,FM can view observations of mapped employees,PERMISSIVE,authenticated,SELECT,"(EXISTS ( SELECT 1
+   FROM kpis k
+  WHERE ((k.id = kpi_observations.kpi_id) AND is_functional_manager_of(k.employee_id))))",""
+kpi_observations,HR PMS can view all observations,PERMISSIVE,authenticated,SELECT,"(has_role(auth.uid(), 'hr_pms'::app_role) AND ((visibility = 'public'::text) OR has_role(auth.uid(), 'auditor'::app_role) OR has_role(auth.uid(), 'admin'::app_role)))",""
+kpi_observations,Mentioned users can view public observations,PERMISSIVE,authenticated,SELECT,"((visibility = 'public'::text) AND (EXISTS ( SELECT 1
+   FROM kpi_mention_access
+  WHERE ((kpi_mention_access.kpi_id = kpi_observations.kpi_id) AND (kpi_mention_access.user_id = auth.uid())))))",""
+kpi_observations,Skip-level can view observations,PERMISSIVE,authenticated,SELECT,"(((visibility = 'public'::text) OR has_role(auth.uid(), 'auditor'::app_role) OR has_role(auth.uid(), 'admin'::app_role)) AND (EXISTS ( SELECT 1
+   FROM (kpis k
+     JOIN profiles p ON ((k.employee_id = p.id)))
+  WHERE ((k.id = kpi_observations.kpi_id) AND (get_skip_level_manager(p.id) = auth.uid())))))",""
+kpi_observations,Users can view observations for accessible KPIs,PERMISSIVE,authenticated,SELECT,"(((visibility = 'public'::text) OR has_role(auth.uid(), 'auditor'::app_role) OR has_role(auth.uid(), 'admin'::app_role)) AND (EXISTS ( SELECT 1
+   FROM kpis
+  WHERE ((kpis.id = kpi_observations.kpi_id) AND ((kpis.employee_id = auth.uid()) OR (EXISTS ( SELECT 1
+           FROM profiles
+          WHERE ((profiles.id = kpis.employee_id) AND (profiles.reporting_manager_id = auth.uid())))) OR has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'auditor'::app_role) OR has_role(auth.uid(), 'management'::app_role))))))",""
+kpi_observations,Authors can edit own observation within 24h,PERMISSIVE,authenticated,UPDATE,((auth.uid() = created_by) AND (created_at > (now() - '24:00:00'::interval))),((auth.uid() = created_by) AND (created_at > (now() - '24:00:00'::interval)))
+kpi_observations,Users can update own observations,PERMISSIVE,authenticated,UPDATE,"((created_by = auth.uid()) OR has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'management'::app_role))","((created_by = auth.uid()) OR has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'management'::app_role))"
+kpi_queries,Admins can manage all queries,PERMISSIVE,public,ALL,"has_role(auth.uid(), 'admin'::app_role)",""
+kpi_queries,FM can raise queries on mapped employees,PERMISSIVE,authenticated,INSERT,"","((raised_by = auth.uid()) AND (EXISTS ( SELECT 1
+   FROM kpis k
+  WHERE ((k.id = kpi_queries.kpi_id) AND is_functional_manager_of(k.employee_id)))))"
+kpi_queries,Users can create queries,PERMISSIVE,public,INSERT,"",(raised_by = auth.uid())
+kpi_queries,Auditors can view all queries,PERMISSIVE,public,SELECT,"has_role(auth.uid(), 'auditor'::app_role)",""
+kpi_queries,FM can view queries of mapped employees,PERMISSIVE,authenticated,SELECT,"(EXISTS ( SELECT 1
+   FROM kpis k
+  WHERE ((k.id = kpi_queries.kpi_id) AND is_functional_manager_of(k.employee_id))))",""
+kpi_queries,HR PMS can view all queries,PERMISSIVE,public,SELECT,"has_role(auth.uid(), 'hr_pms'::app_role)",""
+kpi_queries,Management can view all queries,PERMISSIVE,public,SELECT,"has_role(auth.uid(), 'management'::app_role)",""
+kpi_queries,Managers can view queries for their reports,PERMISSIVE,public,SELECT,"(has_role(auth.uid(), 'manager'::app_role) AND (EXISTS ( SELECT 1
+   FROM (kpis k
+     JOIN profiles p ON ((k.employee_id = p.id)))
+  WHERE ((k.id = kpi_queries.kpi_id) AND (p.reporting_manager_id = auth.uid())))))",""
+kpi_queries,Skip-level managers can view reports queries,PERMISSIVE,public,SELECT,"(EXISTS ( SELECT 1
+   FROM (kpis k
+     JOIN profiles p ON ((k.employee_id = p.id)))
+  WHERE ((k.id = kpi_queries.kpi_id) AND (get_skip_level_manager(p.id) = auth.uid()))))",""
+kpi_queries,Users can view queries they raised or received,PERMISSIVE,public,SELECT,((raised_by = auth.uid()) OR (raised_to = auth.uid())),""
+kpi_queries,Users can update queries they raised,PERMISSIVE,authenticated,UPDATE,(raised_by = auth.uid()),""
+kpi_queries,Users can update queries they received,PERMISSIVE,public,UPDATE,(raised_to = auth.uid()),""
+kpi_registry_audit_log,Admins can insert registry audit log,PERMISSIVE,authenticated,INSERT,"","has_role(auth.uid(), 'admin'::app_role)"
+kpi_registry_audit_log,Admins can view registry audit log,PERMISSIVE,authenticated,SELECT,"has_role(auth.uid(), 'admin'::app_role)",""
+kpi_rollback_requests,Users can create their own rollback requests,PERMISSIVE,authenticated,INSERT,"",(auth.uid() = requested_by)
+kpi_rollback_requests,krr_select_scoped,PERMISSIVE,authenticated,SELECT,"((requested_by = auth.uid()) OR (EXISTS ( SELECT 1
+   FROM kpis k
+  WHERE ((k.id = kpi_rollback_requests.kpi_id) AND ((k.employee_id = auth.uid()) OR (EXISTS ( SELECT 1
+           FROM profiles p
+          WHERE ((p.id = k.employee_id) AND (p.reporting_manager_id = auth.uid())))))))) OR has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role) OR has_role(auth.uid(), 'management'::app_role) OR has_role(auth.uid(), 'auditor'::app_role))",""
+kpi_rollback_requests,Reviewers can action rollback requests,PERMISSIVE,authenticated,UPDATE,"((auth.uid() <> requested_by) AND (has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role) OR has_role(auth.uid(), 'management'::app_role) OR has_role(auth.uid(), 'auditor'::app_role) OR (EXISTS ( SELECT 1
+   FROM (kpis k
+     JOIN profiles p ON ((p.id = k.employee_id)))
+  WHERE ((k.id = kpi_rollback_requests.kpi_id) AND ((p.reporting_manager_id = auth.uid()) OR (EXISTS ( SELECT 1
+           FROM profiles pm
+          WHERE ((pm.id = p.reporting_manager_id) AND (pm.reporting_manager_id = auth.uid()))))))))))","((auth.uid() <> requested_by) AND (has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role) OR has_role(auth.uid(), 'management'::app_role) OR has_role(auth.uid(), 'auditor'::app_role) OR (EXISTS ( SELECT 1
+   FROM (kpis k
+     JOIN profiles p ON ((p.id = k.employee_id)))
+  WHERE ((k.id = kpi_rollback_requests.kpi_id) AND ((p.reporting_manager_id = auth.uid()) OR (EXISTS ( SELECT 1
+           FROM profiles pm
+          WHERE ((pm.id = p.reporting_manager_id) AND (pm.reporting_manager_id = auth.uid()))))))))))"
+kpi_scanner_skips,Admins can delete skips,PERMISSIVE,authenticated,DELETE,"has_role(auth.uid(), 'admin'::app_role)",""
+kpi_scanner_skips,Admins can insert skips,PERMISSIVE,authenticated,INSERT,"","has_role(auth.uid(), 'admin'::app_role)"
+kpi_scanner_skips,Admins can view skips,PERMISSIVE,authenticated,SELECT,"has_role(auth.uid(), 'admin'::app_role)",""
+kpi_standardization_actions,Admins can insert standardization actions,PERMISSIVE,authenticated,INSERT,"","has_role(auth.uid(), 'admin'::app_role)"
+kpi_standardization_actions,Admins can read standardization actions,PERMISSIVE,authenticated,SELECT,"has_role(auth.uid(), 'admin'::app_role)",""
+kpi_templates,Admins can manage kpi_templates,PERMISSIVE,public,ALL,"has_role(auth.uid(), 'admin'::app_role)",""
+kpi_templates,Authenticated users can view kpi_templates,PERMISSIVE,authenticated,SELECT,true,""
+kpis,Admins can manage all KPIs,PERMISSIVE,authenticated,ALL,"has_role(auth.uid(), 'admin'::app_role)",""
+kpis,Admins can delete KPIs,PERMISSIVE,authenticated,DELETE,"has_role(auth.uid(), 'admin'::app_role)",""
+kpis,Consolidated KPI view access,PERMISSIVE,authenticated,SELECT,"can_view_kpi_row(id, employee_id, is_org_level, category_id, kra_name, kpi_name)",""
+kpis,FM can view KPIs of mapped employees,PERMISSIVE,authenticated,SELECT,is_functional_manager_of(employee_id),""
+kpis,Admin can update KPI status,PERMISSIVE,authenticated,UPDATE,"has_role(auth.uid(), 'admin'::app_role)",""
+kpis,Auditors can update KPI status,PERMISSIVE,authenticated,UPDATE,"has_role(auth.uid(), 'auditor'::app_role)",""
+kpis,Data owners can update org-level KPI status,PERMISSIVE,public,UPDATE,"((is_org_level = true) AND (EXISTS ( SELECT 1
+   FROM org_kpi_data_owners o
+  WHERE ((o.category_id = kpis.category_id) AND (o.kra_name = kpis.kra_name) AND (o.kpi_name = kpis.kpi_name) AND (o.owner_id = auth.uid())))))",""
+kpis,FM can update KPI status on FM stage,PERMISSIVE,authenticated,UPDATE,(is_functional_manager_of(employee_id) AND (status = 'functional_manager_check'::review_status)),is_functional_manager_of(employee_id)
+kpis,HR PMS can update KPI status during review,PERMISSIVE,authenticated,UPDATE,"has_role(auth.uid(), 'hr_pms'::app_role)",""
+kpis,Management can update KPI status during review,PERMISSIVE,authenticated,UPDATE,"(has_role(auth.uid(), 'management'::app_role) AND (status = 'management_review'::review_status))","has_role(auth.uid(), 'management'::app_role)"
+kpis,Managers can update reports KPI status,PERMISSIVE,authenticated,UPDATE,"(has_role(auth.uid(), 'manager'::app_role) AND (EXISTS ( SELECT 1
+   FROM profiles
+  WHERE ((profiles.id = kpis.employee_id) AND (profiles.reporting_manager_id = auth.uid())))))",""
+kpis,Skip-level managers can update reports KPI status,PERMISSIVE,authenticated,UPDATE,"(EXISTS ( SELECT 1
+   FROM profiles p
+  WHERE ((p.id = kpis.employee_id) AND (get_skip_level_manager(p.id) = auth.uid()))))",""
+kpis,Users can update their own KPIs,PERMISSIVE,authenticated,UPDATE,((employee_id = auth.uid()) AND (status = 'kra_set'::review_status)),"((employee_id = auth.uid()) AND (status = ANY (ARRAY['kra_set'::review_status, 'self_review'::review_status])))"
+kra_categories,Admins can manage kra_categories,PERMISSIVE,authenticated,ALL,"has_role(auth.uid(), 'admin'::app_role)",""
+kra_categories,Authenticated users can view kra_categories,PERMISSIVE,authenticated,SELECT,true,""
+kra_rollover_logs,Admins can insert rollover logs,PERMISSIVE,authenticated,INSERT,"","has_role(auth.uid(), 'admin'::app_role)"
+kra_rollover_logs,Admins can view rollover logs,PERMISSIVE,public,SELECT,"has_role(auth.uid(), 'admin'::app_role)",""
+levels,Admins can delete levels,PERMISSIVE,authenticated,DELETE,"has_role(auth.uid(), 'admin'::app_role)",""
+levels,Admins can insert levels,PERMISSIVE,authenticated,INSERT,"","has_role(auth.uid(), 'admin'::app_role)"
+levels,Authenticated users can read levels,PERMISSIVE,authenticated,SELECT,true,""
+levels,Admins can update levels,PERMISSIVE,authenticated,UPDATE,"has_role(auth.uid(), 'admin'::app_role)",""
+locations,Admins manage locations - delete,PERMISSIVE,authenticated,DELETE,"has_role(auth.uid(), 'admin'::app_role)",""
+locations,Admins manage locations - insert,PERMISSIVE,authenticated,INSERT,"","has_role(auth.uid(), 'admin'::app_role)"
+locations,Locations readable by authenticated,PERMISSIVE,authenticated,SELECT,true,""
+locations,Admins manage locations - update,PERMISSIVE,authenticated,UPDATE,"has_role(auth.uid(), 'admin'::app_role)","has_role(auth.uid(), 'admin'::app_role)"
+menu_access_config,Admins can manage menu config,PERMISSIVE,authenticated,ALL,"has_role(auth.uid(), 'admin'::app_role)","has_role(auth.uid(), 'admin'::app_role)"
+menu_access_config,Anyone authenticated can read menu config,PERMISSIVE,authenticated,SELECT,true,""
+menu_access_user_overrides,Admins can delete menu user overrides,PERMISSIVE,authenticated,DELETE,"has_role(auth.uid(), 'admin'::app_role)",""
+menu_access_user_overrides,Admins can insert menu user overrides,PERMISSIVE,authenticated,INSERT,"","has_role(auth.uid(), 'admin'::app_role)"
+menu_access_user_overrides,Users see own menu overrides; admins see all,PERMISSIVE,authenticated,SELECT,"((user_id = auth.uid()) OR has_role(auth.uid(), 'admin'::app_role))",""
+menu_access_user_overrides,Admins can update menu user overrides,PERMISSIVE,authenticated,UPDATE,"has_role(auth.uid(), 'admin'::app_role)","has_role(auth.uid(), 'admin'::app_role)"
+menu_override_audit,menu_override_audit_admin_insert,PERMISSIVE,authenticated,INSERT,"","has_role(auth.uid(), 'admin'::app_role)"
+menu_override_audit,menu_override_audit_admin_read,PERMISSIVE,authenticated,SELECT,"has_role(auth.uid(), 'admin'::app_role)",""
+menu_overrides,menu_overrides_admin_delete,PERMISSIVE,authenticated,DELETE,"has_role(auth.uid(), 'admin'::app_role)",""
+menu_overrides,menu_overrides_admin_insert,PERMISSIVE,authenticated,INSERT,"","has_role(auth.uid(), 'admin'::app_role)"
+menu_overrides,menu_overrides_read_all_authenticated,PERMISSIVE,authenticated,SELECT,true,""
+menu_overrides,menu_overrides_admin_update,PERMISSIVE,authenticated,UPDATE,"has_role(auth.uid(), 'admin'::app_role)","has_role(auth.uid(), 'admin'::app_role)"
+menu_registry,menu_registry_admin_write,PERMISSIVE,authenticated,ALL,"has_role(auth.uid(), 'admin'::app_role)","has_role(auth.uid(), 'admin'::app_role)"
+menu_registry,menu_registry_read_all_authenticated,PERMISSIVE,authenticated,SELECT,true,""
+module_registry,module_registry_write,PERMISSIVE,authenticated,ALL,"has_role(auth.uid(), 'platform_owner'::app_role)","has_role(auth.uid(), 'platform_owner'::app_role)"
+module_registry,module_registry_read,PERMISSIVE,authenticated,SELECT,true,""
+modules,Admins can manage modules,PERMISSIVE,public,ALL,"has_role(auth.uid(), 'admin'::app_role)",""
+modules,Modules are viewable by authenticated users,PERMISSIVE,authenticated,SELECT,true,""
+notification_event_registry,notification_event_registry_write,PERMISSIVE,authenticated,ALL,"has_role(auth.uid(), 'platform_owner'::app_role)","has_role(auth.uid(), 'platform_owner'::app_role)"
+notification_event_registry,notification_event_registry_read,PERMISSIVE,authenticated,SELECT,true,""
+notifications,Notifications insert requires sender relationship,PERMISSIVE,authenticated,INSERT,"","((auth.uid() IS NOT NULL) AND (user_id IS NOT NULL) AND can_send_notification_to(auth.uid(), user_id))"
+notifications,Users can view own notifications,PERMISSIVE,public,SELECT,(user_id = auth.uid()),""
+notifications,Users can update own notifications,PERMISSIVE,public,UPDATE,(user_id = auth.uid()),""
+okv_migration_history,Admins insert okv migration history,PERMISSIVE,authenticated,INSERT,"","has_role(auth.uid(), 'admin'::app_role)"
+okv_migration_history,Admins read okv migration history,PERMISSIVE,authenticated,SELECT,"has_role(auth.uid(), 'admin'::app_role)",""
+org_head_config,org_head_config writeable by admin/hr_pms,PERMISSIVE,authenticated,ALL,"(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role))","(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role))"
+org_head_config,org_head_config readable by authenticated,PERMISSIVE,authenticated,SELECT,true,""
+org_kpi_data_entry_logs,Authenticated users can insert audit logs,PERMISSIVE,public,INSERT,"",(auth.uid() = performed_by)
+org_kpi_data_entry_logs,Admins and data owners can view audit logs,PERMISSIVE,public,SELECT,"((EXISTS ( SELECT 1
+   FROM user_roles
+  WHERE ((user_roles.user_id = auth.uid()) AND (user_roles.role = 'admin'::app_role)))) OR (performed_by = auth.uid()) OR (EXISTS ( SELECT 1
+   FROM org_kpi_data_owners
+  WHERE ((org_kpi_data_owners.owner_id = auth.uid()) AND (org_kpi_data_owners.category_id = org_kpi_data_entry_logs.category_id) AND (org_kpi_data_owners.kra_name = org_kpi_data_entry_logs.kra_name) AND (org_kpi_data_owners.kpi_name = org_kpi_data_entry_logs.kpi_name)))))",""
+org_kpi_data_owners,Admins can manage org_kpi_data_owners,PERMISSIVE,authenticated,ALL,"has_role(auth.uid(), 'admin'::app_role)","has_role(auth.uid(), 'admin'::app_role)"
+org_kpi_data_owners,Authenticated users can read org_kpi_data_owners,PERMISSIVE,authenticated,SELECT,true,""
+org_kpi_owner_key_backup,Admins can read owner key backup,PERMISSIVE,public,SELECT,"has_role(auth.uid(), 'admin'::app_role)",""
+org_kpi_owner_key_backup_2026_05,Admins read org_kpi_owner_key_backup_2026_05,PERMISSIVE,public,SELECT,"has_role(auth.uid(), 'admin'::app_role)",""
+org_kpi_owner_key_backup_2026_06,Admins can read owner key backup 2026-06,PERMISSIVE,authenticated,SELECT,"has_role(auth.uid(), 'admin'::app_role)",""
+org_kpi_value_history,Admins or data owners can insert org kpi value history,PERMISSIVE,authenticated,INSERT,"","(has_role(auth.uid(), 'admin'::app_role) OR (EXISTS ( SELECT 1
+   FROM org_kpi_data_owners o
+  WHERE ((o.owner_id = auth.uid()) AND (o.category_id = org_kpi_value_history.category_id) AND (normalize_kpi_text(o.kra_name) = normalize_kpi_text(org_kpi_value_history.kra_name)) AND (normalize_kpi_text(o.kpi_name) = normalize_kpi_text(org_kpi_value_history.kpi_name))))))"
+org_kpi_value_history,Admins can view org kpi value history,PERMISSIVE,authenticated,SELECT,"has_role(auth.uid(), 'admin'::app_role)",""
+org_kpi_values,Admins can manage org_kpi_values,PERMISSIVE,authenticated,ALL,"has_role(auth.uid(), 'admin'::app_role)",""
+org_kpi_values,Data owners can insert their assigned org_kpi_values,PERMISSIVE,public,INSERT,"","(has_role(auth.uid(), 'admin'::app_role) OR (EXISTS ( SELECT 1
+   FROM org_kpi_data_owners o
+  WHERE ((o.owner_id = auth.uid()) AND (o.category_id = org_kpi_values.category_id) AND (normalize_kpi_text(o.kra_name) = normalize_kpi_text(org_kpi_values.kra_name)) AND (normalize_kpi_text(o.kpi_name) = normalize_kpi_text(org_kpi_values.kpi_name))))))"
+org_kpi_values,Authenticated users can view org_kpi_values,PERMISSIVE,authenticated,SELECT,true,""
+org_kpi_values,Data owners can update their assigned org_kpi_values,PERMISSIVE,public,UPDATE,"(has_role(auth.uid(), 'admin'::app_role) OR (EXISTS ( SELECT 1
+   FROM org_kpi_data_owners o
+  WHERE ((o.owner_id = auth.uid()) AND (o.category_id = org_kpi_values.category_id) AND (normalize_kpi_text(o.kra_name) = normalize_kpi_text(org_kpi_values.kra_name)) AND (normalize_kpi_text(o.kpi_name) = normalize_kpi_text(org_kpi_values.kpi_name))))))",""
+password_rollout_logs,Admins can insert rollout logs,PERMISSIVE,authenticated,INSERT,"","has_role(auth.uid(), 'admin'::app_role)"
+password_rollout_logs,Admins can view rollout logs,PERMISSIVE,authenticated,SELECT,"has_role(auth.uid(), 'admin'::app_role)",""
+performance_improvement_plans,Admin can delete PIPs,PERMISSIVE,public,DELETE,"has_role(auth.uid(), 'admin'::app_role)",""
+performance_improvement_plans,Managers can create PIPs for team,PERMISSIVE,public,INSERT,"","(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'management'::app_role) OR (has_role(auth.uid(), 'manager'::app_role) AND (EXISTS ( SELECT 1
+   FROM profiles p
+  WHERE ((p.id = performance_improvement_plans.employee_id) AND (p.reporting_manager_id = auth.uid()))))))"
+performance_improvement_plans,Admin and Management can view all PIPs,PERMISSIVE,public,SELECT,"(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'management'::app_role))",""
+performance_improvement_plans,Employees can view their own PIPs,PERMISSIVE,public,SELECT,(auth.uid() = employee_id),""
+performance_improvement_plans,Managers can view PIPs they initiated,PERMISSIVE,public,SELECT,(auth.uid() = initiated_by),""
+performance_improvement_plans,Managers can view team PIPs,PERMISSIVE,public,SELECT,"(EXISTS ( SELECT 1
+   FROM profiles p
+  WHERE ((p.id = performance_improvement_plans.employee_id) AND (p.reporting_manager_id = auth.uid()))))",""
+performance_improvement_plans,Authorized users can update PIPs,PERMISSIVE,public,UPDATE,"(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'management'::app_role) OR (auth.uid() = initiated_by))",""
+performance_reviews,Admins can manage all reviews,PERMISSIVE,authenticated,ALL,"has_role(auth.uid(), 'admin'::app_role)",""
+performance_reviews,Admins and auditors can view all reviews,PERMISSIVE,authenticated,SELECT,"(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'auditor'::app_role))",""
+performance_reviews,Employees can view their own reviews,PERMISSIVE,authenticated,SELECT,(employee_id = auth.uid()),""
+performance_reviews,HR PMS can view all reviews,PERMISSIVE,public,SELECT,"has_role(auth.uid(), 'hr_pms'::app_role)",""
+performance_reviews,Management can view all reviews,PERMISSIVE,public,SELECT,"has_role(auth.uid(), 'management'::app_role)",""
+performance_reviews,Managers can view their reports' reviews,PERMISSIVE,authenticated,SELECT,"(has_role(auth.uid(), 'manager'::app_role) AND (EXISTS ( SELECT 1
+   FROM profiles
+  WHERE ((profiles.id = performance_reviews.employee_id) AND (profiles.reporting_manager_id = auth.uid())))))",""
+performance_reviews,Skip-level managers can view reports reviews,PERMISSIVE,public,SELECT,"(EXISTS ( SELECT 1
+   FROM profiles p
+  WHERE ((p.id = performance_reviews.employee_id) AND (get_skip_level_manager(p.id) = auth.uid()))))",""
+performance_reviews,Auditors can update reviews,PERMISSIVE,authenticated,UPDATE,"has_role(auth.uid(), 'auditor'::app_role)",""
+performance_reviews,Management can update reviews,PERMISSIVE,public,UPDATE,"has_role(auth.uid(), 'management'::app_role)",""
+performance_reviews,Managers can update their reports' reviews,PERMISSIVE,authenticated,UPDATE,"(has_role(auth.uid(), 'manager'::app_role) AND (EXISTS ( SELECT 1
+   FROM profiles
+  WHERE ((profiles.id = performance_reviews.employee_id) AND (profiles.reporting_manager_id = auth.uid())))))",""
+pip_audit_logs,Admins can insert audit logs,PERMISSIVE,authenticated,INSERT,"","has_role(auth.uid(), 'admin'::app_role)"
+pip_audit_logs,Users can view audit logs of accessible PIPs,PERMISSIVE,public,SELECT,"(EXISTS ( SELECT 1
+   FROM performance_improvement_plans pip
+  WHERE ((pip.id = pip_audit_logs.pip_id) AND ((pip.employee_id = auth.uid()) OR (pip.initiated_by = auth.uid()) OR has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'management'::app_role) OR has_role(auth.uid(), 'auditor'::app_role)))))",""
+pip_milestones,Admin can delete milestones,PERMISSIVE,public,DELETE,"has_role(auth.uid(), 'admin'::app_role)",""
+pip_milestones,Managers can manage milestones,PERMISSIVE,public,INSERT,"","(EXISTS ( SELECT 1
+   FROM performance_improvement_plans pip
+  WHERE ((pip.id = pip_milestones.pip_id) AND ((pip.initiated_by = auth.uid()) OR has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'management'::app_role)))))"
+pip_milestones,Users can view milestones of accessible PIPs,PERMISSIVE,public,SELECT,"(EXISTS ( SELECT 1
+   FROM performance_improvement_plans pip
+  WHERE ((pip.id = pip_milestones.pip_id) AND ((pip.employee_id = auth.uid()) OR (pip.initiated_by = auth.uid()) OR has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'management'::app_role) OR (EXISTS ( SELECT 1
+           FROM profiles p
+          WHERE ((p.id = pip.employee_id) AND (p.reporting_manager_id = auth.uid()))))))))",""
+pip_milestones,Managers can update milestones,PERMISSIVE,public,UPDATE,"(EXISTS ( SELECT 1
+   FROM performance_improvement_plans pip
+  WHERE ((pip.id = pip_milestones.pip_id) AND ((pip.initiated_by = auth.uid()) OR has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'management'::app_role)))))",""
+pms_evidence_compression_jobs,Admins manage compression jobs,PERMISSIVE,authenticated,ALL,"has_role(auth.uid(), 'admin'::app_role)","has_role(auth.uid(), 'admin'::app_role)"
+pms_grades,Admins can manage pms_grades,PERMISSIVE,public,ALL,"has_role(auth.uid(), 'admin'::app_role)",""
+pms_grades,Authenticated users can view pms_grades,PERMISSIVE,authenticated,SELECT,true,""
+privacy_consent_settings,Platform owners manage privacy consent settings,PERMISSIVE,authenticated,ALL,"has_role(auth.uid(), 'platform_owner'::app_role)","has_role(auth.uid(), 'platform_owner'::app_role)"
+privacy_consent_settings,Authenticated can read privacy consent settings,PERMISSIVE,authenticated,SELECT,true,""
+production_daily_entries,Admins and menu-override users can manage daily entries,PERMISSIVE,authenticated,ALL,"(has_role(auth.uid(), 'admin'::app_role) OR has_menu_access_override(auth.uid(), 'incentive-config'::text))","(has_role(auth.uid(), 'admin'::app_role) OR has_menu_access_override(auth.uid(), 'incentive-config'::text))"
+production_daily_entries,Incentive data entry users can manage daily entries,PERMISSIVE,authenticated,ALL,"has_menu_access_override(auth.uid(), 'admin-incentive-data'::text)","has_menu_access_override(auth.uid(), 'admin-incentive-data'::text)"
+production_daily_entries,Authenticated users can read daily entries,PERMISSIVE,authenticated,SELECT,true,""
+production_targets,Admins can manage production targets,PERMISSIVE,authenticated,ALL,"has_role(auth.uid(), 'admin'::app_role)","has_role(auth.uid(), 'admin'::app_role)"
+production_targets,Menu override users can delete production targets,PERMISSIVE,authenticated,DELETE,"has_menu_access_override(auth.uid(), 'admin-incentive'::text)",""
+production_targets,Menu override users can insert production targets,PERMISSIVE,authenticated,INSERT,"","has_menu_access_override(auth.uid(), 'admin-incentive'::text)"
+production_targets,Authenticated users can read production targets,PERMISSIVE,authenticated,SELECT,true,""
+production_targets,Menu override users can update production targets,PERMISSIVE,authenticated,UPDATE,"has_menu_access_override(auth.uid(), 'admin-incentive'::text)","has_menu_access_override(auth.uid(), 'admin-incentive'::text)"
+profiles,Admins can manage all profiles,PERMISSIVE,authenticated,ALL,"has_role(auth.uid(), 'admin'::app_role)",""
+profiles,Admins can view all profiles,PERMISSIVE,authenticated,SELECT,"has_role(auth.uid(), 'admin'::app_role)",""
+profiles,Annual review directory reviewers can view scoped profiles,PERMISSIVE,authenticated,SELECT,can_view_profile_for_annual_review_directory(id),""
+profiles,Annual review reviewers can view reviewee profiles,PERMISSIVE,public,SELECT,is_annual_review_reviewer_for_profile(id),""
+profiles,Audit reviewers can view org kpi employee profiles,PERMISSIVE,authenticated,SELECT,is_org_kpi_audit_employee(id),""
+profiles,Auditors can view all profiles,PERMISSIVE,authenticated,SELECT,"has_role(auth.uid(), 'auditor'::app_role)",""
+profiles,Data owners can view org kpi employee profiles,PERMISSIVE,authenticated,SELECT,"is_data_owner_for_employee(id, auth.uid())",""
+profiles,HR PMS can view all profiles,PERMISSIVE,authenticated,SELECT,"has_role(auth.uid(), 'hr_pms'::app_role)",""
+profiles,Management can view all profiles,PERMISSIVE,authenticated,SELECT,"has_role(auth.uid(), 'management'::app_role)",""
+profiles,Managers can view skip-level reports,PERMISSIVE,authenticated,SELECT,"(has_role(auth.uid(), 'manager'::app_role) AND (reporting_manager_id IN ( SELECT get_direct_report_ids(auth.uid()) AS get_direct_report_ids)))",""
+profiles,Managers can view their direct reports,PERMISSIVE,authenticated,SELECT,"(has_role(auth.uid(), 'manager'::app_role) AND (reporting_manager_id = auth.uid()))",""
+profiles,Org KPI data owners can view their mapped employee profiles,PERMISSIVE,authenticated,SELECT,is_org_kpi_data_owner_for_profile(id),""
+profiles,Profile-granted users can view scoped profiles,PERMISSIVE,authenticated,SELECT,"(has_profile_menu_access(auth.uid(), 'admin-users'::text, 'view'::text) AND user_mgmt_can_see_employee(auth.uid(), id))",""
+profiles,Report override users can view all profiles,PERMISSIVE,authenticated,SELECT,has_report_access_override(auth.uid()),""
+profiles,Safety admins can view active profiles for role grants,PERMISSIVE,authenticated,SELECT,"((is_active = true) AND has_safety_role(auth.uid(), 'admin'::safety_app_role))",""
+profiles,Safety roles can view scoped active profiles,PERMISSIVE,authenticated,SELECT,"((is_active = true) AND can_view_profile_for_safety(auth.uid(), id))",""
+profiles,Users can view their own profile,PERMISSIVE,authenticated,SELECT,(auth.uid() = id),""
+profiles,Profile-granted users can update profiles,PERMISSIVE,authenticated,UPDATE,"(has_menu_right(auth.uid(), 'admin-users'::text, 'update'::text) AND user_mgmt_can_see_employee(auth.uid(), id))","(has_menu_right(auth.uid(), 'admin-users'::text, 'update'::text) AND user_mgmt_can_see_employee(auth.uid(), id))"
+profiles,Users can update their own profile,PERMISSIVE,public,UPDATE,(auth.uid() = id),((auth.uid() = id) AND (NOT ((_self_profile_locked_snapshot()).reporting_manager_id IS DISTINCT FROM reporting_manager_id)) AND (NOT ((_self_profile_locked_snapshot()).department_id IS DISTINCT FROM department_id)) AND (NOT ((_self_profile_locked_snapshot()).pms_grade IS DISTINCT FROM pms_grade)) AND (NOT ((_self_profile_locked_snapshot()).employment_status IS DISTINCT FROM employment_status)) AND (NOT ((_self_profile_locked_snapshot()).is_active IS DISTINCT FROM is_active)) AND (NOT ((_self_profile_locked_snapshot()).portal_access IS DISTINCT FROM portal_access)) AND (NOT ((_self_profile_locked_snapshot()).confirmation_increment_granted IS DISTINCT FROM confirmation_increment_granted)) AND (NOT ((_self_profile_locked_snapshot()).company_id IS DISTINCT FROM company_id)) AND (NOT ((_self_profile_locked_snapshot()).designation IS DISTINCT FROM designation)) AND (NOT ((_self_profile_locked_snapshot()).employee_code IS DISTINCT FROM employee_code)) AND (NOT ((_self_profile_locked_snapshot()).level_id IS DISTINCT FROM level_id)) AND (NOT ((_self_profile_locked_snapshot()).location_id IS DISTINCT FROM location_id)) AND (NOT ((_self_profile_locked_snapshot()).functional_manager_id IS DISTINCT FROM functional_manager_id)) AND (NOT ((_self_profile_locked_snapshot()).designated_proxy_user_id IS DISTINCT FROM designated_proxy_user_id)))
+registry_suggestion_dismissals,Admins can delete suggestion dismissals,PERMISSIVE,authenticated,DELETE,"has_role(auth.uid(), 'admin'::app_role)",""
+registry_suggestion_dismissals,Admins can insert suggestion dismissals,PERMISSIVE,authenticated,INSERT,"","has_role(auth.uid(), 'admin'::app_role)"
+registry_suggestion_dismissals,Admins can read suggestion dismissals,PERMISSIVE,authenticated,SELECT,"has_role(auth.uid(), 'admin'::app_role)",""
+report_access_config,Admins can delete report access config,PERMISSIVE,authenticated,DELETE,"has_role(auth.uid(), 'admin'::app_role)",""
+report_access_config,Admins can insert report access config,PERMISSIVE,authenticated,INSERT,"","has_role(auth.uid(), 'admin'::app_role)"
+report_access_config,Authenticated can view report access config,PERMISSIVE,authenticated,SELECT,true,""
+report_access_config,Admins can update report access config,PERMISSIVE,authenticated,UPDATE,"has_role(auth.uid(), 'admin'::app_role)","has_role(auth.uid(), 'admin'::app_role)"
+report_access_user_overrides,Admins can delete report user overrides,PERMISSIVE,authenticated,DELETE,"has_role(auth.uid(), 'admin'::app_role)",""
+report_access_user_overrides,Admins can insert report user overrides,PERMISSIVE,authenticated,INSERT,"","has_role(auth.uid(), 'admin'::app_role)"
+report_access_user_overrides,Admins and HR PMS can view report user overrides,PERMISSIVE,authenticated,SELECT,"(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role) OR (user_id = auth.uid()))",""
+report_access_user_overrides,Admins can update report user overrides,PERMISSIVE,authenticated,UPDATE,"has_role(auth.uid(), 'admin'::app_role)","has_role(auth.uid(), 'admin'::app_role)"
+report_field_override_audit,report_field_override_audit insert,PERMISSIVE,authenticated,INSERT,"","has_role(auth.uid(), 'admin'::app_role)"
+report_field_override_audit,report_field_override_audit admin read,PERMISSIVE,authenticated,SELECT,"has_role(auth.uid(), 'admin'::app_role)",""
+report_field_overrides,report_field_overrides admin write,PERMISSIVE,authenticated,ALL,"has_role(auth.uid(), 'admin'::app_role)","has_role(auth.uid(), 'admin'::app_role)"
+report_field_overrides,report_field_overrides read,PERMISSIVE,authenticated,SELECT,true,""
+report_field_registry,report_field_registry admin write,PERMISSIVE,authenticated,ALL,"has_role(auth.uid(), 'admin'::app_role)","has_role(auth.uid(), 'admin'::app_role)"
+report_field_registry,report_field_registry read,PERMISSIVE,authenticated,SELECT,true,""
+report_registry,report_registry admin write,PERMISSIVE,authenticated,ALL,"has_role(auth.uid(), 'admin'::app_role)","has_role(auth.uid(), 'admin'::app_role)"
+report_registry,report_registry read,PERMISSIVE,authenticated,SELECT,true,""
+report_registry_v2,report_registry_v2_write,PERMISSIVE,authenticated,ALL,"has_role(auth.uid(), 'platform_owner'::app_role)","has_role(auth.uid(), 'platform_owner'::app_role)"
+report_registry_v2,report_registry_v2_read,PERMISSIVE,authenticated,SELECT,true,""
+retention_policies,retention_policies_write_platform_owner,PERMISSIVE,authenticated,ALL,"has_role(auth.uid(), 'platform_owner'::app_role)","has_role(auth.uid(), 'platform_owner'::app_role)"
+retention_policies,retention_policies_read_authenticated,PERMISSIVE,authenticated,SELECT,true,""
+review_action_notes,ran_delete,PERMISSIVE,authenticated,DELETE,"review_note_role_can('delete'::text, auth.uid())",""
+review_action_notes,ran_insert,PERMISSIVE,authenticated,INSERT,"","(review_note_role_can('create'::text, auth.uid()) AND (created_by = auth.uid()))"
+review_action_notes,ran_select,PERMISSIVE,authenticated,SELECT,"(review_note_role_can('view'::text, auth.uid()) OR (review_note_role_can('view_own_subject'::text, auth.uid()) AND (subject_employee_id = auth.uid())) OR (created_by = auth.uid()) OR (assignee_id = auth.uid()))",""
+review_action_notes,ran_update,PERMISSIVE,authenticated,UPDATE,"(review_note_role_can('edit'::text, auth.uid()) OR (assignee_id = auth.uid()))","(review_note_role_can('edit'::text, auth.uid()) OR (assignee_id = auth.uid()))"
+review_period_audit_log,Admins can insert audit log,PERMISSIVE,authenticated,INSERT,"","has_role(auth.uid(), 'admin'::app_role)"
+review_period_audit_log,rpal_select_admin_hr,PERMISSIVE,authenticated,SELECT,"(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role))",""
+review_period_auto_rules,Admins can manage auto rules,PERMISSIVE,authenticated,ALL,"has_role(auth.uid(), 'admin'::app_role)","has_role(auth.uid(), 'admin'::app_role)"
+review_period_auto_rules,Authenticated users can view auto rules,PERMISSIVE,authenticated,SELECT,true,""
+review_period_locks,Admins can delete locks,PERMISSIVE,authenticated,DELETE,"has_role(auth.uid(), 'admin'::app_role)",""
+review_period_locks,Admins can insert locks,PERMISSIVE,authenticated,INSERT,"","has_role(auth.uid(), 'admin'::app_role)"
+review_period_locks,Authenticated users can view locks,PERMISSIVE,authenticated,SELECT,true,""
+review_period_locks,Admins can update locks,PERMISSIVE,authenticated,UPDATE,"has_role(auth.uid(), 'admin'::app_role)","has_role(auth.uid(), 'admin'::app_role)"
+review_period_stages,Admins can insert stages,PERMISSIVE,authenticated,INSERT,"","has_role(auth.uid(), 'admin'::app_role)"
+review_period_stages,Authenticated users can view stages,PERMISSIVE,authenticated,SELECT,true,""
+review_period_stages,Admins can update stages,PERMISSIVE,authenticated,UPDATE,"has_role(auth.uid(), 'admin'::app_role)","has_role(auth.uid(), 'admin'::app_role)"
+review_periods,Admins can manage review_periods,PERMISSIVE,public,ALL,"has_role(auth.uid(), 'admin'::app_role)",""
+review_periods,Authenticated users can view review_periods,PERMISSIVE,authenticated,SELECT,true,""
+review_submissions,Admins can manage all submissions,PERMISSIVE,authenticated,ALL,"has_role(auth.uid(), 'admin'::app_role)",""
+review_submissions,Data owners can insert org-level submissions,PERMISSIVE,authenticated,INSERT,"","(EXISTS ( SELECT 1
+   FROM (kpis k
+     JOIN org_kpi_data_owners o ON (((o.category_id = k.category_id) AND (normalize_kpi_text(o.kra_name) = normalize_kpi_text(k.kra_name)) AND (normalize_kpi_text(o.kpi_name) = normalize_kpi_text(k.kpi_name)))))
+  WHERE ((k.id = review_submissions.kpi_id) AND (k.is_org_level = true) AND (o.owner_id = auth.uid()))))"
+review_submissions,Employees can create their own submissions,PERMISSIVE,authenticated,INSERT,"","((EXISTS ( SELECT 1
+   FROM kpis k
+  WHERE ((k.id = review_submissions.kpi_id) AND (k.employee_id = auth.uid()) AND (k.status = 'self_review'::review_status)))) AND (manager_score IS NULL) AND (manager_rating IS NULL) AND (manager_remarks IS NULL) AND (manager_evidence_url IS NULL) AND (manager_achieved_value IS NULL) AND (auditor_score IS NULL) AND (auditor_rating IS NULL) AND (auditor_remarks IS NULL) AND (auditor_evidence_url IS NULL) AND (auditor_achieved_value IS NULL) AND (management_score IS NULL) AND (management_rating IS NULL) AND (management_remarks IS NULL) AND (management_evidence_url IS NULL) AND (management_achieved_value IS NULL) AND (final_score IS NULL) AND (final_rating IS NULL))"
+review_submissions,Admins and auditors can view all submissions,PERMISSIVE,authenticated,SELECT,"(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'auditor'::app_role))",""
+review_submissions,Data owners can view org-level submissions,PERMISSIVE,authenticated,SELECT,"(EXISTS ( SELECT 1
+   FROM (kpis k
+     JOIN org_kpi_data_owners o ON (((o.category_id = k.category_id) AND (normalize_kpi_text(o.kra_name) = normalize_kpi_text(k.kra_name)) AND (normalize_kpi_text(o.kpi_name) = normalize_kpi_text(k.kpi_name)))))
+  WHERE ((k.id = review_submissions.kpi_id) AND (k.is_org_level = true) AND (o.owner_id = auth.uid()))))",""
+review_submissions,Employees can view their own submissions,PERMISSIVE,authenticated,SELECT,"(EXISTS ( SELECT 1
+   FROM kpis
+  WHERE ((kpis.id = review_submissions.kpi_id) AND (kpis.employee_id = auth.uid()))))",""
+review_submissions,FM can view review_submissions of mapped employees,PERMISSIVE,authenticated,SELECT,"(EXISTS ( SELECT 1
+   FROM kpis k
+  WHERE ((k.id = review_submissions.kpi_id) AND is_functional_manager_of(k.employee_id))))",""
+review_submissions,HR PMS can view all submissions,PERMISSIVE,authenticated,SELECT,"has_role(auth.uid(), 'hr_pms'::app_role)",""
+review_submissions,Management can view all submissions,PERMISSIVE,authenticated,SELECT,"has_role(auth.uid(), 'management'::app_role)",""
+review_submissions,Managers can view their reports' submissions,PERMISSIVE,authenticated,SELECT,"(has_role(auth.uid(), 'manager'::app_role) AND (EXISTS ( SELECT 1
+   FROM (kpis k
+     JOIN profiles p ON ((k.employee_id = p.id)))
+  WHERE ((k.id = review_submissions.kpi_id) AND (p.reporting_manager_id = auth.uid())))))",""
+review_submissions,Report override users can view all submissions,PERMISSIVE,authenticated,SELECT,has_report_access_override(auth.uid()),""
+review_submissions,Skip-level managers can view reports submissions,PERMISSIVE,authenticated,SELECT,"(EXISTS ( SELECT 1
+   FROM (kpis k
+     JOIN profiles p ON ((k.employee_id = p.id)))
+  WHERE ((k.id = review_submissions.kpi_id) AND (get_skip_level_manager(p.id) = auth.uid()))))",""
+review_submissions,Admin can update submissions,PERMISSIVE,authenticated,UPDATE,"has_role(auth.uid(), 'admin'::app_role)",""
+review_submissions,Auditors can update submissions,PERMISSIVE,authenticated,UPDATE,"has_role(auth.uid(), 'auditor'::app_role)",""
+review_submissions,Data owners can update org-level submissions,PERMISSIVE,authenticated,UPDATE,"(EXISTS ( SELECT 1
+   FROM (kpis k
+     JOIN org_kpi_data_owners o ON (((o.category_id = k.category_id) AND (normalize_kpi_text(o.kra_name) = normalize_kpi_text(k.kra_name)) AND (normalize_kpi_text(o.kpi_name) = normalize_kpi_text(k.kpi_name)))))
+  WHERE ((k.id = review_submissions.kpi_id) AND (k.is_org_level = true) AND (o.owner_id = auth.uid()))))","(EXISTS ( SELECT 1
+   FROM (kpis k
+     JOIN org_kpi_data_owners o ON (((o.category_id = k.category_id) AND (normalize_kpi_text(o.kra_name) = normalize_kpi_text(k.kra_name)) AND (normalize_kpi_text(o.kpi_name) = normalize_kpi_text(k.kpi_name)))))
+  WHERE ((k.id = review_submissions.kpi_id) AND (k.is_org_level = true) AND (o.owner_id = auth.uid()))))"
+review_submissions,Employees can update self review fields,PERMISSIVE,authenticated,UPDATE,"(EXISTS ( SELECT 1
+   FROM kpis k
+  WHERE ((k.id = review_submissions.kpi_id) AND (k.employee_id = auth.uid()) AND (k.status = 'self_review'::review_status))))","(EXISTS ( SELECT 1
+   FROM kpis k
+  WHERE ((k.id = review_submissions.kpi_id) AND (k.employee_id = auth.uid()) AND (k.status = 'self_review'::review_status))))"
+review_submissions,FM can update review_submissions on FM stage,PERMISSIVE,authenticated,UPDATE,"(EXISTS ( SELECT 1
+   FROM kpis k
+  WHERE ((k.id = review_submissions.kpi_id) AND is_functional_manager_of(k.employee_id) AND (k.status = 'functional_manager_check'::review_status))))","(EXISTS ( SELECT 1
+   FROM kpis k
+  WHERE ((k.id = review_submissions.kpi_id) AND is_functional_manager_of(k.employee_id))))"
+review_submissions,HR PMS can update submissions during review,PERMISSIVE,authenticated,UPDATE,"has_role(auth.uid(), 'hr_pms'::app_role)",""
+review_submissions,Management can update submissions during review,PERMISSIVE,authenticated,UPDATE,"(has_role(auth.uid(), 'management'::app_role) AND (EXISTS ( SELECT 1
+   FROM kpis k
+  WHERE ((k.id = review_submissions.kpi_id) AND (k.status = 'management_review'::review_status)))))",""
+review_submissions,Managers can update their reports' submissions,PERMISSIVE,authenticated,UPDATE,"(has_role(auth.uid(), 'manager'::app_role) AND (EXISTS ( SELECT 1
+   FROM (kpis k
+     JOIN profiles p ON ((k.employee_id = p.id)))
+  WHERE ((k.id = review_submissions.kpi_id) AND (p.reporting_manager_id = auth.uid())))))",""
+review_submissions,Skip-level managers can update reports submissions,PERMISSIVE,authenticated,UPDATE,"(EXISTS ( SELECT 1
+   FROM (kpis k
+     JOIN profiles p ON ((k.employee_id = p.id)))
+  WHERE ((k.id = review_submissions.kpi_id) AND (get_skip_level_manager(p.id) = auth.uid()))))",""
+safety_asset_calibrations,p_cal_write,PERMISSIVE,authenticated,ALL,"(has_safety_role(auth.uid(), 'admin'::safety_app_role, NULL::uuid) OR has_safety_role(auth.uid(), 'safety_head'::safety_app_role, NULL::uuid) OR has_safety_role(auth.uid(), 'safety_officer'::safety_app_role, NULL::uuid))","(has_safety_role(auth.uid(), 'admin'::safety_app_role, NULL::uuid) OR has_safety_role(auth.uid(), 'safety_head'::safety_app_role, NULL::uuid) OR has_safety_role(auth.uid(), 'safety_officer'::safety_app_role, NULL::uuid))"
+safety_asset_calibrations,p_cal_read,PERMISSIVE,authenticated,SELECT,"(EXISTS ( SELECT 1
+   FROM safety_assets a
+  WHERE ((a.id = safety_asset_calibrations.asset_id) AND (has_safety_role(auth.uid(), 'admin'::safety_app_role, NULL::uuid) OR has_safety_role(auth.uid(), 'safety_head'::safety_app_role, a.business_unit_id) OR has_safety_role(auth.uid(), 'safety_officer'::safety_app_role, a.business_unit_id) OR has_safety_role(auth.uid(), 'bu_head'::safety_app_role, a.business_unit_id) OR has_safety_role(auth.uid(), 'auditor'::safety_app_role, a.business_unit_id)))))",""
+safety_asset_evidence,p_evidence_write,PERMISSIVE,authenticated,ALL,"(has_safety_role(auth.uid(), 'admin'::safety_app_role, NULL::uuid) OR has_safety_role(auth.uid(), 'safety_head'::safety_app_role, NULL::uuid) OR has_safety_role(auth.uid(), 'safety_officer'::safety_app_role, NULL::uuid))","(has_safety_role(auth.uid(), 'admin'::safety_app_role, NULL::uuid) OR has_safety_role(auth.uid(), 'safety_head'::safety_app_role, NULL::uuid) OR has_safety_role(auth.uid(), 'safety_officer'::safety_app_role, NULL::uuid))"
+safety_asset_evidence,p_evidence_read,PERMISSIVE,authenticated,SELECT,"(has_safety_role(auth.uid(), 'admin'::safety_app_role, NULL::uuid) OR has_safety_role(auth.uid(), 'safety_head'::safety_app_role, NULL::uuid) OR has_safety_role(auth.uid(), 'safety_officer'::safety_app_role, NULL::uuid))",""
+safety_assets,p_assets_write,PERMISSIVE,authenticated,ALL,"(has_safety_role(auth.uid(), 'admin'::safety_app_role, NULL::uuid) OR has_safety_role(auth.uid(), 'safety_head'::safety_app_role, NULL::uuid) OR has_safety_role(auth.uid(), 'safety_officer'::safety_app_role, NULL::uuid))","(has_safety_role(auth.uid(), 'admin'::safety_app_role, NULL::uuid) OR has_safety_role(auth.uid(), 'safety_head'::safety_app_role, NULL::uuid) OR has_safety_role(auth.uid(), 'safety_officer'::safety_app_role, NULL::uuid))"
+safety_assets,p_assets_read,PERMISSIVE,authenticated,SELECT,"(has_safety_role(auth.uid(), 'admin'::safety_app_role, NULL::uuid) OR has_safety_role(auth.uid(), 'safety_head'::safety_app_role, NULL::uuid) OR has_safety_role(auth.uid(), 'safety_officer'::safety_app_role, NULL::uuid) OR has_safety_role(auth.uid(), 'auditor'::safety_app_role, NULL::uuid) OR has_safety_role(auth.uid(), 'manager'::safety_app_role, business_unit_id) OR has_safety_role(auth.uid(), 'bu_head'::safety_app_role, business_unit_id) OR has_safety_role(auth.uid(), 'supervisor'::safety_app_role, business_unit_id))",""
+safety_audit_log,Safety admins read audit log,PERMISSIVE,authenticated,SELECT,"has_safety_role(auth.uid(), 'admin'::safety_app_role)",""
+safety_audit_run_responses,p_audit_resp_write,PERMISSIVE,authenticated,ALL,"(EXISTS ( SELECT 1
+   FROM safety_audit_runs r
+  WHERE ((r.id = safety_audit_run_responses.run_id) AND (r.status = 'draft'::safety_audit_run_status) AND ((r.conducted_by = auth.uid()) OR has_safety_role(auth.uid(), 'admin'::safety_app_role, NULL::uuid) OR has_safety_role(auth.uid(), 'safety_head'::safety_app_role, NULL::uuid) OR has_safety_role(auth.uid(), 'safety_officer'::safety_app_role, NULL::uuid)))))","(EXISTS ( SELECT 1
+   FROM safety_audit_runs r
+  WHERE ((r.id = safety_audit_run_responses.run_id) AND (r.status = 'draft'::safety_audit_run_status) AND ((r.conducted_by = auth.uid()) OR has_safety_role(auth.uid(), 'admin'::safety_app_role, NULL::uuid) OR has_safety_role(auth.uid(), 'safety_head'::safety_app_role, NULL::uuid) OR has_safety_role(auth.uid(), 'safety_officer'::safety_app_role, NULL::uuid)))))"
+safety_audit_run_responses,p_audit_resp_read,PERMISSIVE,authenticated,SELECT,"(EXISTS ( SELECT 1
+   FROM safety_audit_runs r
+  WHERE ((r.id = safety_audit_run_responses.run_id) AND (has_safety_role(auth.uid(), 'admin'::safety_app_role, NULL::uuid) OR has_safety_role(auth.uid(), 'safety_head'::safety_app_role, NULL::uuid) OR has_safety_role(auth.uid(), 'safety_officer'::safety_app_role, NULL::uuid) OR has_safety_role(auth.uid(), 'auditor'::safety_app_role, NULL::uuid) OR has_safety_role(auth.uid(), 'manager'::safety_app_role, r.business_unit_id) OR has_safety_role(auth.uid(), 'bu_head'::safety_app_role, r.business_unit_id) OR has_safety_role(auth.uid(), 'supervisor'::safety_app_role, r.business_unit_id) OR (r.conducted_by = auth.uid())))))",""
+safety_audit_runs,p_audit_runs_delete,PERMISSIVE,authenticated,DELETE,"((status = 'draft'::safety_audit_run_status) AND ((conducted_by = auth.uid()) OR has_safety_role(auth.uid(), 'admin'::safety_app_role, NULL::uuid) OR has_safety_role(auth.uid(), 'safety_head'::safety_app_role, NULL::uuid)))",""
+safety_audit_runs,p_audit_runs_insert,PERMISSIVE,authenticated,INSERT,"","(has_safety_role(auth.uid(), 'admin'::safety_app_role, NULL::uuid) OR has_safety_role(auth.uid(), 'safety_head'::safety_app_role, NULL::uuid) OR has_safety_role(auth.uid(), 'safety_officer'::safety_app_role, NULL::uuid) OR has_safety_role(auth.uid(), 'auditor'::safety_app_role, NULL::uuid))"
+safety_audit_runs,p_audit_runs_read,PERMISSIVE,authenticated,SELECT,"(has_safety_role(auth.uid(), 'admin'::safety_app_role, NULL::uuid) OR has_safety_role(auth.uid(), 'safety_head'::safety_app_role, NULL::uuid) OR has_safety_role(auth.uid(), 'safety_officer'::safety_app_role, NULL::uuid) OR has_safety_role(auth.uid(), 'auditor'::safety_app_role, NULL::uuid) OR has_safety_role(auth.uid(), 'manager'::safety_app_role, business_unit_id) OR has_safety_role(auth.uid(), 'bu_head'::safety_app_role, business_unit_id) OR has_safety_role(auth.uid(), 'supervisor'::safety_app_role, business_unit_id) OR (conducted_by = auth.uid()))",""
+safety_audit_runs,p_audit_runs_update,PERMISSIVE,authenticated,UPDATE,"((status = 'draft'::safety_audit_run_status) AND ((conducted_by = auth.uid()) OR has_safety_role(auth.uid(), 'admin'::safety_app_role, NULL::uuid) OR has_safety_role(auth.uid(), 'safety_head'::safety_app_role, NULL::uuid) OR has_safety_role(auth.uid(), 'safety_officer'::safety_app_role, NULL::uuid)))","((status = 'draft'::safety_audit_run_status) AND ((conducted_by = auth.uid()) OR has_safety_role(auth.uid(), 'admin'::safety_app_role, NULL::uuid) OR has_safety_role(auth.uid(), 'safety_head'::safety_app_role, NULL::uuid) OR has_safety_role(auth.uid(), 'safety_officer'::safety_app_role, NULL::uuid)))"
+safety_audit_template_items,p_audit_items_write,PERMISSIVE,authenticated,ALL,"(has_safety_role(auth.uid(), 'admin'::safety_app_role, NULL::uuid) OR has_safety_role(auth.uid(), 'safety_head'::safety_app_role, NULL::uuid) OR has_safety_role(auth.uid(), 'safety_officer'::safety_app_role, NULL::uuid))","(has_safety_role(auth.uid(), 'admin'::safety_app_role, NULL::uuid) OR has_safety_role(auth.uid(), 'safety_head'::safety_app_role, NULL::uuid) OR has_safety_role(auth.uid(), 'safety_officer'::safety_app_role, NULL::uuid))"
+safety_audit_template_items,p_audit_items_read,PERMISSIVE,authenticated,SELECT,"(EXISTS ( SELECT 1
+   FROM safety_audit_templates t
+  WHERE (t.id = safety_audit_template_items.template_id)))",""
+safety_audit_templates,p_audit_tpl_write,PERMISSIVE,authenticated,ALL,"(has_safety_role(auth.uid(), 'admin'::safety_app_role, NULL::uuid) OR has_safety_role(auth.uid(), 'safety_head'::safety_app_role, NULL::uuid) OR has_safety_role(auth.uid(), 'safety_officer'::safety_app_role, NULL::uuid))","(has_safety_role(auth.uid(), 'admin'::safety_app_role, NULL::uuid) OR has_safety_role(auth.uid(), 'safety_head'::safety_app_role, NULL::uuid) OR has_safety_role(auth.uid(), 'safety_officer'::safety_app_role, NULL::uuid))"
+safety_audit_templates,p_audit_tpl_read,PERMISSIVE,authenticated,SELECT,"(has_safety_role(auth.uid(), 'admin'::safety_app_role, NULL::uuid) OR has_safety_role(auth.uid(), 'safety_head'::safety_app_role, NULL::uuid) OR has_safety_role(auth.uid(), 'safety_officer'::safety_app_role, NULL::uuid) OR has_safety_role(auth.uid(), 'auditor'::safety_app_role, NULL::uuid) OR has_safety_role(auth.uid(), 'manager'::safety_app_role, NULL::uuid) OR has_safety_role(auth.uid(), 'bu_head'::safety_app_role, NULL::uuid) OR has_safety_role(auth.uid(), 'supervisor'::safety_app_role, NULL::uuid))",""
+safety_drill_findings,drill_findings_write,PERMISSIVE,authenticated,ALL,"(has_safety_role(auth.uid(), 'admin'::safety_app_role) OR has_safety_role(auth.uid(), 'safety_head'::safety_app_role) OR has_safety_role(auth.uid(), 'safety_officer'::safety_app_role) OR has_safety_role(auth.uid(), 'bu_head'::safety_app_role) OR has_safety_role(auth.uid(), 'supervisor'::safety_app_role))","(has_safety_role(auth.uid(), 'admin'::safety_app_role) OR has_safety_role(auth.uid(), 'safety_head'::safety_app_role) OR has_safety_role(auth.uid(), 'safety_officer'::safety_app_role) OR has_safety_role(auth.uid(), 'bu_head'::safety_app_role) OR has_safety_role(auth.uid(), 'supervisor'::safety_app_role))"
+safety_drill_findings,drill_findings_read,PERMISSIVE,authenticated,SELECT,has_any_safety_role(auth.uid()),""
+safety_drill_participants,drill_participants_write,PERMISSIVE,authenticated,ALL,"(has_safety_role(auth.uid(), 'admin'::safety_app_role) OR has_safety_role(auth.uid(), 'safety_head'::safety_app_role) OR has_safety_role(auth.uid(), 'safety_officer'::safety_app_role) OR has_safety_role(auth.uid(), 'bu_head'::safety_app_role) OR has_safety_role(auth.uid(), 'supervisor'::safety_app_role))","(has_safety_role(auth.uid(), 'admin'::safety_app_role) OR has_safety_role(auth.uid(), 'safety_head'::safety_app_role) OR has_safety_role(auth.uid(), 'safety_officer'::safety_app_role) OR has_safety_role(auth.uid(), 'bu_head'::safety_app_role) OR has_safety_role(auth.uid(), 'supervisor'::safety_app_role))"
+safety_drill_participants,drill_participants_read,PERMISSIVE,authenticated,SELECT,has_any_safety_role(auth.uid()),""
+safety_drill_runs,safety_drill_runs admin/safety_head select,PERMISSIVE,authenticated,SELECT,"(has_role(auth.uid(), 'admin'::app_role) OR has_safety_role(auth.uid(), 'admin'::safety_app_role) OR has_safety_role(auth.uid(), 'safety_head'::safety_app_role))",""
+safety_emergency_contacts,contacts_write_admins,PERMISSIVE,authenticated,ALL,"(has_safety_role(auth.uid(), 'admin'::safety_app_role) OR has_safety_role(auth.uid(), 'safety_head'::safety_app_role))","(has_safety_role(auth.uid(), 'admin'::safety_app_role) OR has_safety_role(auth.uid(), 'safety_head'::safety_app_role))"
+safety_emergency_contacts,contacts_read_any_safety_role,PERMISSIVE,authenticated,SELECT,has_any_safety_role(auth.uid()),""
+safety_emergency_drills,drills_delete_admins,PERMISSIVE,authenticated,DELETE,"(has_safety_role(auth.uid(), 'admin'::safety_app_role) OR has_safety_role(auth.uid(), 'safety_head'::safety_app_role))",""
+safety_emergency_drills,drills_insert_authorized,PERMISSIVE,authenticated,INSERT,"","(has_safety_role(auth.uid(), 'admin'::safety_app_role) OR has_safety_role(auth.uid(), 'safety_head'::safety_app_role) OR has_safety_role(auth.uid(), 'safety_officer'::safety_app_role) OR has_safety_role(auth.uid(), 'bu_head'::safety_app_role) OR has_safety_role(auth.uid(), 'supervisor'::safety_app_role))"
+safety_emergency_drills,drills_read_any_safety_role,PERMISSIVE,authenticated,SELECT,has_any_safety_role(auth.uid()),""
+safety_emergency_drills,drills_update_authorized,PERMISSIVE,authenticated,UPDATE,"(has_safety_role(auth.uid(), 'admin'::safety_app_role) OR has_safety_role(auth.uid(), 'safety_head'::safety_app_role) OR has_safety_role(auth.uid(), 'safety_officer'::safety_app_role) OR has_safety_role(auth.uid(), 'bu_head'::safety_app_role) OR has_safety_role(auth.uid(), 'supervisor'::safety_app_role))",""
+safety_incident_evidence,Delete own evidence or admin,PERMISSIVE,authenticated,DELETE,"((uploaded_by = auth.uid()) OR has_safety_role(auth.uid(), 'admin'::safety_app_role))",""
+safety_incident_evidence,Upload evidence on visible incidents,PERMISSIVE,authenticated,INSERT,"",(can_view_safety_incident(incident_id) AND (uploaded_by = auth.uid()))
+safety_incident_evidence,View evidence for visible incidents,PERMISSIVE,authenticated,SELECT,can_view_safety_incident(incident_id),""
+safety_incident_progress_logs,Log progress on visible incidents,PERMISSIVE,authenticated,INSERT,"",(can_view_safety_incident(incident_id) AND (logged_by = auth.uid()))
+safety_incident_progress_logs,View progress for visible incidents,PERMISSIVE,authenticated,SELECT,can_view_safety_incident(incident_id),""
+safety_incident_routing_rules,safety_routing_admin_write,PERMISSIVE,authenticated,ALL,"(has_safety_role(auth.uid(), 'admin'::safety_app_role) OR has_safety_role(auth.uid(), 'safety_head'::safety_app_role))","(has_safety_role(auth.uid(), 'admin'::safety_app_role) OR has_safety_role(auth.uid(), 'safety_head'::safety_app_role))"
+safety_incident_routing_rules,safety_routing_read,PERMISSIVE,authenticated,SELECT,true,""
+safety_incident_severities,safety_incident_severities_admin_write,PERMISSIVE,authenticated,ALL,"(has_safety_role(auth.uid(), 'admin'::safety_app_role) OR has_safety_role(auth.uid(), 'safety_head'::safety_app_role))","(has_safety_role(auth.uid(), 'admin'::safety_app_role) OR has_safety_role(auth.uid(), 'safety_head'::safety_app_role))"
+safety_incident_severities,safety_incident_severities_read,PERMISSIVE,authenticated,SELECT,true,""
+safety_incident_sla_rules,safety_sla_rules_admin_write,PERMISSIVE,authenticated,ALL,"(has_safety_role(auth.uid(), 'admin'::safety_app_role) OR has_safety_role(auth.uid(), 'safety_head'::safety_app_role))","(has_safety_role(auth.uid(), 'admin'::safety_app_role) OR has_safety_role(auth.uid(), 'safety_head'::safety_app_role))"
+safety_incident_sla_rules,safety_sla_rules_read,PERMISSIVE,authenticated,SELECT,true,""
+safety_incident_timeline,View timeline for visible incidents,PERMISSIVE,authenticated,SELECT,can_view_safety_incident(incident_id),""
+safety_incident_types,safety_incident_types_admin_write,PERMISSIVE,authenticated,ALL,"(has_safety_role(auth.uid(), 'admin'::safety_app_role) OR has_safety_role(auth.uid(), 'safety_head'::safety_app_role))","(has_safety_role(auth.uid(), 'admin'::safety_app_role) OR has_safety_role(auth.uid(), 'safety_head'::safety_app_role))"
+safety_incident_types,safety_incident_types_read,PERMISSIVE,authenticated,SELECT,true,""
+safety_incidents,Safety admins delete incidents,PERMISSIVE,authenticated,DELETE,"has_safety_role(auth.uid(), 'admin'::safety_app_role)",""
+safety_incidents,Authenticated users can report incidents,PERMISSIVE,authenticated,INSERT,"",((auth.uid() IS NOT NULL) AND (reporter_id = auth.uid()))
+safety_incidents,Safety users can view incidents in scope,PERMISSIVE,authenticated,SELECT,can_view_safety_incident(id),""
+safety_incidents,Safety officers/admins update incident metadata,PERMISSIVE,authenticated,UPDATE,"(has_safety_role(auth.uid(), 'admin'::safety_app_role) OR has_safety_role(auth.uid(), 'safety_head'::safety_app_role) OR has_safety_role(auth.uid(), 'safety_officer'::safety_app_role) OR (assigned_to = auth.uid()))","(has_safety_role(auth.uid(), 'admin'::safety_app_role) OR has_safety_role(auth.uid(), 'safety_head'::safety_app_role) OR has_safety_role(auth.uid(), 'safety_officer'::safety_app_role) OR (assigned_to = auth.uid()))"
+safety_master_data,safety_master_data_delete,PERMISSIVE,authenticated,DELETE,"(has_safety_role(auth.uid(), 'admin'::safety_app_role) OR has_safety_role(auth.uid(), 'safety_head'::safety_app_role))",""
+safety_master_data,safety_master_data_insert,PERMISSIVE,authenticated,INSERT,"","(has_safety_role(auth.uid(), 'admin'::safety_app_role) OR has_safety_role(auth.uid(), 'safety_head'::safety_app_role))"
+safety_master_data,safety_master_data_read,PERMISSIVE,authenticated,SELECT,has_safety_module_access(auth.uid()),""
+safety_master_data,safety_master_data_update,PERMISSIVE,authenticated,UPDATE,"(has_safety_role(auth.uid(), 'admin'::safety_app_role) OR has_safety_role(auth.uid(), 'safety_head'::safety_app_role))","(has_safety_role(auth.uid(), 'admin'::safety_app_role) OR has_safety_role(auth.uid(), 'safety_head'::safety_app_role))"
+safety_module_access,Admins manage all safety access,PERMISSIVE,authenticated,ALL,"has_role(auth.uid(), 'admin'::app_role)","has_role(auth.uid(), 'admin'::app_role)"
+safety_module_access,Users read own safety access,PERMISSIVE,authenticated,SELECT,"((user_id = auth.uid()) OR has_role(auth.uid(), 'admin'::app_role))",""
+safety_notifications,safety_notif_admin_insert,PERMISSIVE,authenticated,INSERT,"","(has_safety_role(auth.uid(), 'admin'::safety_app_role) OR has_safety_role(auth.uid(), 'safety_head'::safety_app_role))"
+safety_notifications,safety_notif_select_own,PERMISSIVE,authenticated,SELECT,(recipient_id = auth.uid()),""
+safety_notifications,safety_notif_update_own,PERMISSIVE,authenticated,UPDATE,(recipient_id = auth.uid()),(recipient_id = auth.uid())
+safety_permission_keys,spk_write,PERMISSIVE,authenticated,ALL,"has_safety_role(auth.uid(), 'admin'::safety_app_role)","has_safety_role(auth.uid(), 'admin'::safety_app_role)"
+safety_permission_keys,spk_read,PERMISSIVE,authenticated,SELECT,true,""
+safety_permit_approvals,permit_approvals_select,PERMISSIVE,authenticated,SELECT,"(EXISTS ( SELECT 1
+   FROM safety_permits p
+  WHERE ((p.id = safety_permit_approvals.permit_id) AND (has_safety_role(auth.uid(), 'admin'::safety_app_role, NULL::uuid) OR has_safety_role(auth.uid(), 'safety_head'::safety_app_role, NULL::uuid) OR has_safety_role(auth.uid(), 'safety_officer'::safety_app_role, NULL::uuid) OR (p.requested_by = auth.uid()) OR is_permit_approver(auth.uid(), p.id) OR has_safety_role(auth.uid(), 'manager'::safety_app_role, p.business_unit_id) OR has_safety_role(auth.uid(), 'bu_head'::safety_app_role, p.business_unit_id)))))",""
+safety_permit_approvals,permit_approvals_update,PERMISSIVE,authenticated,UPDATE,"(has_safety_role(auth.uid(), 'admin'::safety_app_role, NULL::uuid) OR has_safety_role(auth.uid(), approver_role, NULL::uuid))",""
+safety_permit_evidence,permit_evidence_insert,PERMISSIVE,authenticated,INSERT,"","((uploaded_by = auth.uid()) AND (EXISTS ( SELECT 1
+   FROM safety_permits p
+  WHERE ((p.id = safety_permit_evidence.permit_id) AND (has_safety_role(auth.uid(), 'admin'::safety_app_role, NULL::uuid) OR has_safety_role(auth.uid(), 'safety_head'::safety_app_role, NULL::uuid) OR has_safety_role(auth.uid(), 'safety_officer'::safety_app_role, NULL::uuid) OR (p.requested_by = auth.uid()) OR is_permit_approver(auth.uid(), p.id) OR has_safety_role(auth.uid(), 'manager'::safety_app_role, p.business_unit_id) OR has_safety_role(auth.uid(), 'bu_head'::safety_app_role, p.business_unit_id))))))"
+safety_permit_evidence,permit_evidence_select,PERMISSIVE,authenticated,SELECT,"(EXISTS ( SELECT 1
+   FROM safety_permits p
+  WHERE ((p.id = safety_permit_evidence.permit_id) AND (has_safety_role(auth.uid(), 'admin'::safety_app_role, NULL::uuid) OR has_safety_role(auth.uid(), 'safety_head'::safety_app_role, NULL::uuid) OR has_safety_role(auth.uid(), 'safety_officer'::safety_app_role, NULL::uuid) OR (p.requested_by = auth.uid()) OR is_permit_approver(auth.uid(), p.id) OR has_safety_role(auth.uid(), 'manager'::safety_app_role, p.business_unit_id) OR has_safety_role(auth.uid(), 'bu_head'::safety_app_role, p.business_unit_id)))))",""
+safety_permit_hira,permit_hira_write,PERMISSIVE,authenticated,ALL,"(EXISTS ( SELECT 1
+   FROM safety_permits p
+  WHERE ((p.id = safety_permit_hira.permit_id) AND (has_safety_role(auth.uid(), 'admin'::safety_app_role, NULL::uuid) OR has_safety_role(auth.uid(), 'safety_head'::safety_app_role, NULL::uuid) OR ((p.requested_by = auth.uid()) AND (p.status = 'draft'::safety_permit_status))))))","(EXISTS ( SELECT 1
+   FROM safety_permits p
+  WHERE ((p.id = safety_permit_hira.permit_id) AND (has_safety_role(auth.uid(), 'admin'::safety_app_role, NULL::uuid) OR has_safety_role(auth.uid(), 'safety_head'::safety_app_role, NULL::uuid) OR ((p.requested_by = auth.uid()) AND (p.status = 'draft'::safety_permit_status))))))"
+safety_permit_hira,permit_hira_select,PERMISSIVE,public,SELECT,"(EXISTS ( SELECT 1
+   FROM safety_permits p
+  WHERE ((p.id = safety_permit_hira.permit_id) AND (has_safety_role(auth.uid(), 'admin'::safety_app_role, NULL::uuid) OR has_safety_role(auth.uid(), 'safety_head'::safety_app_role, NULL::uuid) OR has_safety_role(auth.uid(), 'safety_officer'::safety_app_role, NULL::uuid) OR (p.requested_by = auth.uid()) OR is_permit_approver(auth.uid(), p.id) OR has_safety_role(auth.uid(), 'manager'::safety_app_role, p.business_unit_id) OR has_safety_role(auth.uid(), 'bu_head'::safety_app_role, p.business_unit_id)))))",""
+safety_permit_loto_steps,permit_loto_write,PERMISSIVE,authenticated,ALL,"(EXISTS ( SELECT 1
+   FROM safety_permits p
+  WHERE ((p.id = safety_permit_loto_steps.permit_id) AND ((p.requested_by = auth.uid()) OR is_permit_approver(auth.uid(), p.id) OR has_safety_role(auth.uid(), 'admin'::safety_app_role, NULL::uuid) OR has_safety_role(auth.uid(), 'safety_head'::safety_app_role, NULL::uuid) OR has_safety_role(auth.uid(), 'safety_officer'::safety_app_role, NULL::uuid)))))","(EXISTS ( SELECT 1
+   FROM safety_permits p
+  WHERE ((p.id = safety_permit_loto_steps.permit_id) AND ((p.requested_by = auth.uid()) OR is_permit_approver(auth.uid(), p.id) OR has_safety_role(auth.uid(), 'admin'::safety_app_role, NULL::uuid) OR has_safety_role(auth.uid(), 'safety_head'::safety_app_role, NULL::uuid) OR has_safety_role(auth.uid(), 'safety_officer'::safety_app_role, NULL::uuid)))))"
+safety_permit_loto_steps,permit_loto_select,PERMISSIVE,public,SELECT,"(EXISTS ( SELECT 1
+   FROM safety_permits p
+  WHERE ((p.id = safety_permit_loto_steps.permit_id) AND (has_safety_role(auth.uid(), 'admin'::safety_app_role, NULL::uuid) OR has_safety_role(auth.uid(), 'safety_head'::safety_app_role, NULL::uuid) OR has_safety_role(auth.uid(), 'safety_officer'::safety_app_role, NULL::uuid) OR (p.requested_by = auth.uid()) OR is_permit_approver(auth.uid(), p.id) OR has_safety_role(auth.uid(), 'manager'::safety_app_role, p.business_unit_id) OR has_safety_role(auth.uid(), 'bu_head'::safety_app_role, p.business_unit_id)))))",""
+safety_permit_type_config,permit_type_config_admin_write,PERMISSIVE,authenticated,ALL,"has_safety_role(auth.uid(), 'admin'::safety_app_role, NULL::uuid)","has_safety_role(auth.uid(), 'admin'::safety_app_role, NULL::uuid)"
+safety_permit_type_config,permit_type_config_read,PERMISSIVE,authenticated,SELECT,has_any_safety_role(auth.uid()),""
+safety_permits,permits_delete_admin,PERMISSIVE,authenticated,DELETE,"has_safety_role(auth.uid(), 'admin'::safety_app_role, NULL::uuid)",""
+safety_permits,permits_insert,PERMISSIVE,authenticated,INSERT,"",((requested_by = auth.uid()) AND has_any_safety_role(auth.uid()))
+safety_permits,permits_select,PERMISSIVE,authenticated,SELECT,"(has_safety_role(auth.uid(), 'admin'::safety_app_role, NULL::uuid) OR has_safety_role(auth.uid(), 'safety_head'::safety_app_role, NULL::uuid) OR has_safety_role(auth.uid(), 'safety_officer'::safety_app_role, NULL::uuid) OR (requested_by = auth.uid()) OR is_permit_approver(auth.uid(), id) OR has_safety_role(auth.uid(), 'manager'::safety_app_role, business_unit_id) OR has_safety_role(auth.uid(), 'bu_head'::safety_app_role, business_unit_id))",""
+safety_permits,permits_update,PERMISSIVE,authenticated,UPDATE,"(has_safety_role(auth.uid(), 'admin'::safety_app_role, NULL::uuid) OR has_safety_role(auth.uid(), 'safety_head'::safety_app_role, NULL::uuid) OR ((requested_by = auth.uid()) AND (status = 'draft'::safety_permit_status)) OR is_permit_approver(auth.uid(), id))","(has_safety_role(auth.uid(), 'admin'::safety_app_role, NULL::uuid) OR has_safety_role(auth.uid(), 'safety_head'::safety_app_role, NULL::uuid) OR ((requested_by = auth.uid()) AND (status = ANY (ARRAY['draft'::safety_permit_status, 'active'::safety_permit_status]))) OR is_permit_approver(auth.uid(), id))"
+safety_role_permissions,srp_write,PERMISSIVE,authenticated,ALL,"has_safety_role(auth.uid(), 'admin'::safety_app_role)","has_safety_role(auth.uid(), 'admin'::safety_app_role)"
+safety_role_permissions,srp_read,PERMISSIVE,authenticated,SELECT,true,""
+safety_settings,safety_settings_write,PERMISSIVE,authenticated,ALL,"(has_safety_role(auth.uid(), 'admin'::safety_app_role) OR has_safety_role(auth.uid(), 'safety_head'::safety_app_role))","(has_safety_role(auth.uid(), 'admin'::safety_app_role) OR has_safety_role(auth.uid(), 'safety_head'::safety_app_role))"
+safety_settings,safety_settings_select,PERMISSIVE,authenticated,SELECT,true,""
+safety_severity_sla,Safety admins can manage SLA matrix,PERMISSIVE,authenticated,ALL,"has_safety_role(auth.uid(), 'admin'::safety_app_role)","has_safety_role(auth.uid(), 'admin'::safety_app_role)"
+safety_severity_sla,Safety users can read SLA matrix,PERMISSIVE,authenticated,SELECT,has_safety_module_access(auth.uid()),""
+safety_sla_escalations,safety_sla_esc_select_safety_roles,PERMISSIVE,authenticated,SELECT,has_any_safety_role(auth.uid()),""
+safety_user_permission_overrides,supo_write,PERMISSIVE,authenticated,ALL,"has_safety_role(auth.uid(), 'admin'::safety_app_role)","has_safety_role(auth.uid(), 'admin'::safety_app_role)"
+safety_user_permission_overrides,supo_read,PERMISSIVE,authenticated,SELECT,"((user_id = auth.uid()) OR has_safety_role(auth.uid(), 'admin'::safety_app_role))",""
+safety_user_roles,Safety admins manage safety roles,PERMISSIVE,authenticated,ALL,"has_safety_role(auth.uid(), 'admin'::safety_app_role)","has_safety_role(auth.uid(), 'admin'::safety_app_role)"
+safety_user_roles,Safety admins and heads can view all safety roles,PERMISSIVE,authenticated,SELECT,"(has_safety_role(auth.uid(), 'admin'::safety_app_role) OR has_safety_role(auth.uid(), 'safety_head'::safety_app_role))",""
+safety_user_roles,Users can view their own safety roles,PERMISSIVE,authenticated,SELECT,(user_id = auth.uid()),""
+sensitive_fields,sensitive_fields_write_platform_owner,PERMISSIVE,authenticated,ALL,"has_role(auth.uid(), 'platform_owner'::app_role)","has_role(auth.uid(), 'platform_owner'::app_role)"
+sensitive_fields,sensitive_fields_read_authenticated,PERMISSIVE,authenticated,SELECT,true,""
+skill_competencies,Admins have full access to competencies,PERMISSIVE,authenticated,ALL,"has_role(auth.uid(), 'admin'::app_role)","has_role(auth.uid(), 'admin'::app_role)"
+skill_competencies,Managers can insert team competencies,PERMISSIVE,authenticated,INSERT,"","(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'manager'::app_role))"
+skill_competencies,Employees can view own competencies,PERMISSIVE,authenticated,SELECT,(employee_id = auth.uid()),""
+skill_competencies,Management can view all competencies,PERMISSIVE,authenticated,SELECT,"has_role(auth.uid(), 'management'::app_role)",""
+skill_competencies,Managers can view team competencies,PERMISSIVE,authenticated,SELECT,"(EXISTS ( SELECT 1
+   FROM profiles p
+  WHERE ((p.id = skill_competencies.employee_id) AND (p.reporting_manager_id = auth.uid()))))",""
+skill_competencies,Managers can update team competencies,PERMISSIVE,authenticated,UPDATE,"(has_role(auth.uid(), 'admin'::app_role) OR (EXISTS ( SELECT 1
+   FROM profiles p
+  WHERE ((p.id = skill_competencies.employee_id) AND (p.reporting_manager_id = auth.uid())))))",""
+sub_branches,Admins can manage sub_branches,PERMISSIVE,authenticated,ALL,"has_role(auth.uid(), 'admin'::app_role)",""
+sub_branches,Authenticated users can view sub_branches,PERMISSIVE,authenticated,SELECT,true,""
+sub_period_submissions,Admins can manage all sub-period submissions,PERMISSIVE,public,ALL,"has_role(auth.uid(), 'admin'::app_role)",""
+sub_period_submissions,Employees can create their own sub-period submissions,PERMISSIVE,authenticated,INSERT,"","((EXISTS ( SELECT 1
+   FROM kpis
+  WHERE ((kpis.id = sub_period_submissions.kpi_id) AND (kpis.employee_id = auth.uid())))) AND (manager_achieved_value IS NULL) AND (skip_level_achieved_value IS NULL) AND (hr_pms_achieved_value IS NULL) AND (admin_achieved_value IS NULL) AND (auditor_achieved_value IS NULL) AND (management_achieved_value IS NULL))"
+sub_period_submissions,Auditors can view all sub-period submissions,PERMISSIVE,public,SELECT,"has_role(auth.uid(), 'auditor'::app_role)",""
+sub_period_submissions,Employees can view their own sub-period submissions,PERMISSIVE,public,SELECT,"(EXISTS ( SELECT 1
+   FROM kpis
+  WHERE ((kpis.id = sub_period_submissions.kpi_id) AND (kpis.employee_id = auth.uid()))))",""
+sub_period_submissions,HR PMS can view all sub-period submissions,PERMISSIVE,public,SELECT,"has_role(auth.uid(), 'hr_pms'::app_role)",""
+sub_period_submissions,Management can view all sub-period submissions,PERMISSIVE,public,SELECT,"has_role(auth.uid(), 'management'::app_role)",""
+sub_period_submissions,Managers can view their reports' sub-period submissions,PERMISSIVE,public,SELECT,"(has_role(auth.uid(), 'manager'::app_role) AND (EXISTS ( SELECT 1
+   FROM (kpis k
+     JOIN profiles p ON ((k.employee_id = p.id)))
+  WHERE ((k.id = sub_period_submissions.kpi_id) AND (p.reporting_manager_id = auth.uid())))))",""
+sub_period_submissions,Skip-level managers can view reports sub-period submissions,PERMISSIVE,public,SELECT,"(EXISTS ( SELECT 1
+   FROM (kpis k
+     JOIN profiles p ON ((k.employee_id = p.id)))
+  WHERE ((k.id = sub_period_submissions.kpi_id) AND (get_skip_level_manager(p.id) = auth.uid()))))",""
+sub_period_submissions,Employees can update their own sub-period submissions,PERMISSIVE,public,UPDATE,"(EXISTS ( SELECT 1
+   FROM kpis
+  WHERE ((kpis.id = sub_period_submissions.kpi_id) AND (kpis.employee_id = auth.uid()))))",""
+system_audit_logs,Nobody can delete system audit logs,PERMISSIVE,authenticated,DELETE,false,""
+system_audit_logs,Authenticated can insert system audit logs,PERMISSIVE,authenticated,INSERT,"",((performed_by = auth.uid()) OR (performed_by IS NULL))
+system_audit_logs,Admins can view system audit logs,PERMISSIVE,authenticated,SELECT,"has_role(auth.uid(), 'admin'::app_role)",""
+system_audit_logs,Nobody can update system audit logs,PERMISSIVE,authenticated,UPDATE,false,""
+system_settings,Allow admins to manage settings,PERMISSIVE,public,ALL,"has_role(auth.uid(), 'admin'::app_role)",""
+system_settings,Admins can read all settings,PERMISSIVE,authenticated,SELECT,"has_role(auth.uid(), 'admin'::app_role)",""
+system_settings,Authenticated users can read allowlisted settings,PERMISSIVE,authenticated,SELECT,"(setting_key = ANY (ARRAY['auto_logout_minutes'::text, 'branding_company_name'::text, 'branding_loader_rocket_color'::text, 'branding_loader_show_logo'::text, 'branding_loader_tagline'::text, 'branding_max_size_mb'::text, 'compliance_exclude_bimonthly_not_due'::text, 'compliance_exclude_halfyearly_not_due'::text, 'compliance_exclude_org_kpi'::text, 'compliance_exclude_quarterly_not_due'::text, 'compliance_exclude_sent_back'::text, 'compliance_exclude_yearly_not_due'::text, 'compliance_penalty_auto_remark'::text, 'compliance_penalty_deadline_day'::text, 'compliance_penalty_enabled'::text, 'daily_aggregation_method'::text, 'dev_report_enabled'::text, 'dev_report.project_name'::text, 'dev_report.repository'::text, 'dev_report.tech_stack'::text, 'dev_report.workstreams'::text, 'employee_import_column_order'::text, 'employee_import_mandatory_fields'::text, 'employee_master_field_requirements'::text, 'enable_kpi_canonical_autolink'::text, 'evidence_allow_paste'::text, 'evidence_allowed_types'::text, 'evidence_max_files_per_kpi'::text, 'evidence_max_size_mb'::text, 'hub_enforcement_pilot_enabled'::text, 'hub_platform_settings_enabled'::text, 'image_compression_enabled'::text, 'image_compression_policy'::text, 'import_allowed_types'::text, 'import_background_threshold'::text, 'import_duplicate_handling'::text, 'import_max_rows'::text, 'import_max_size_mb'::text, 'kpi_import_column_order'::text, 'kpi_import_mandatory_fields'::text, 'kra_export_columns'::text, 'manager_penalty_auto_remark'::text, 'max_upload_size_mb'::text, 'menu_overrides_enabled'::text, 'pending_review_auto_remark'::text, 'pending_review_deadline_day'::text, 'pending_review_effective_from_month'::text, 'pms_pip_threshold'::text, 'report_overrides_enabled'::text, 'report_tile_overrides'::text, 'review_action_notes_visibility'::text, 'score_calculation_mode'::text, 'server_compression_enabled'::text, 'server_compression_pms_rewrite'::text, 'show_dummy_in_excel'::text, 'show_dummy_in_frontend'::text]))",""
+template_bundle_items,Admins can manage all bundle items,PERMISSIVE,authenticated,ALL,"has_role(auth.uid(), 'admin'::app_role)","has_role(auth.uid(), 'admin'::app_role)"
+template_bundle_items,Authenticated users can view bundle items,PERMISSIVE,authenticated,SELECT,"(EXISTS ( SELECT 1
+   FROM template_bundles tb
+  WHERE ((tb.id = template_bundle_items.bundle_id) AND (tb.is_active = true))))",""
+template_bundles,Admins can manage all bundles,PERMISSIVE,authenticated,ALL,"has_role(auth.uid(), 'admin'::app_role)","has_role(auth.uid(), 'admin'::app_role)"
+template_bundles,Authenticated users can view active bundles,PERMISSIVE,authenticated,SELECT,(is_active = true),""
+template_change_logs,Admins can manage template change logs,PERMISSIVE,authenticated,ALL,"has_role(auth.uid(), 'admin'::app_role)",""
+training_needs,Admin can delete training needs,PERMISSIVE,public,DELETE,"has_role(auth.uid(), 'admin'::app_role)",""
+training_needs,Managers can create training needs for team,PERMISSIVE,public,INSERT,"","(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'management'::app_role) OR has_role(auth.uid(), 'manager'::app_role) OR (EXISTS ( SELECT 1
+   FROM profiles p
+  WHERE ((p.id = training_needs.employee_id) AND (p.reporting_manager_id = auth.uid())))))"
+training_needs,Admin and HR can view all training needs,PERMISSIVE,public,SELECT,"(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'management'::app_role))",""
+training_needs,Employees can view their own training needs,PERMISSIVE,public,SELECT,(auth.uid() = employee_id),""
+training_needs,Managers can view team training needs,PERMISSIVE,public,SELECT,"(EXISTS ( SELECT 1
+   FROM profiles p
+  WHERE ((p.id = training_needs.employee_id) AND (p.reporting_manager_id = auth.uid()))))",""
+training_needs,Authorized users can update training needs,PERMISSIVE,public,UPDATE,"(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'management'::app_role) OR (EXISTS ( SELECT 1
+   FROM profiles p
+  WHERE ((p.id = training_needs.employee_id) AND (p.reporting_manager_id = auth.uid())))))",""
+user_roles,Admins can manage all roles,PERMISSIVE,authenticated,ALL,"has_role(auth.uid(), 'admin'::app_role)",""
+user_roles,Auditors can view auditor roles,PERMISSIVE,authenticated,SELECT,"((role = 'auditor'::app_role) AND has_role(auth.uid(), 'auditor'::app_role))",""
+user_roles,Users can view their own roles,PERMISSIVE,authenticated,SELECT,(auth.uid() = user_id),""
+vessel_monthly_entries,Admins can delete vessel entries,PERMISSIVE,authenticated,DELETE,"has_role(auth.uid(), 'admin'::app_role)",""
+vessel_monthly_entries,Menu override users can delete vessel entries,PERMISSIVE,authenticated,DELETE,"has_menu_access_override(auth.uid(), 'admin-incentive'::text)",""
+vessel_monthly_entries,Admins can insert vessel entries,PERMISSIVE,authenticated,INSERT,"","has_role(auth.uid(), 'admin'::app_role)"
+vessel_monthly_entries,Menu override users can insert vessel entries,PERMISSIVE,authenticated,INSERT,"","has_menu_access_override(auth.uid(), 'admin-incentive'::text)"
+vessel_monthly_entries,Authenticated users can read vessel entries,PERMISSIVE,authenticated,SELECT,true,""
+vessel_monthly_entries,Admins can update vessel entries,PERMISSIVE,authenticated,UPDATE,"has_role(auth.uid(), 'admin'::app_role)","has_role(auth.uid(), 'admin'::app_role)"
+vessel_monthly_entries,Menu override users can update vessel entries,PERMISSIVE,authenticated,UPDATE,"has_menu_access_override(auth.uid(), 'admin-incentive'::text)","has_menu_access_override(auth.uid(), 'admin-incentive'::text)"
+workflow_config,Admins can manage workflow_config,PERMISSIVE,public,ALL,"has_role(auth.uid(), 'admin'::app_role)",""
+workflow_config,Authenticated users can view workflow_config,PERMISSIVE,authenticated,SELECT,true,""
+workflow_config_migration_log,Admins can insert migration log,PERMISSIVE,authenticated,INSERT,"","has_role(auth.uid(), 'admin'::app_role)"
+workflow_config_migration_log,Admins can view migration log,PERMISSIVE,authenticated,SELECT,"has_role(auth.uid(), 'admin'::app_role)",""
+workflow_final_score_rules,wfsr_write_admin_hr_mgmt,PERMISSIVE,authenticated,ALL,"(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role) OR has_role(auth.uid(), 'management'::app_role))","(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role) OR has_role(auth.uid(), 'management'::app_role))"
+workflow_final_score_rules,wfsr_select_privileged,PERMISSIVE,authenticated,SELECT,"(has_role(auth.uid(), 'admin'::app_role) OR has_role(auth.uid(), 'hr_pms'::app_role) OR has_role(auth.uid(), 'management'::app_role) OR has_role(auth.uid(), 'auditor'::app_role) OR has_role(auth.uid(), 'manager'::app_role))",""
+workflow_settings,Authenticated users can view workflow settings,PERMISSIVE,authenticated,SELECT,true,""
+workflow_settings,Only admins can update workflow settings,PERMISSIVE,public,UPDATE,"(EXISTS ( SELECT 1
+   FROM user_roles
+  WHERE ((user_roles.user_id = auth.uid()) AND (user_roles.role = 'admin'::app_role))))",""
+workflow_templates,Admins can manage workflow_templates,PERMISSIVE,public,ALL,"has_role(auth.uid(), 'admin'::app_role)",""
+workflow_templates,Authenticated users can view workflow_templates,PERMISSIVE,authenticated,SELECT,true,""

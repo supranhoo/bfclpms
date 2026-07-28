@@ -1,0 +1,469 @@
+table_name,constraint_name,constraint_type,definition
+access_profile_assignments,access_profile_assignments_pkey,PRIMARY KEY,PRIMARY KEY (id)
+access_profile_assignments,access_profile_assignments_profile_id_user_id_key,UNIQUE,"UNIQUE (profile_id, user_id)"
+access_profile_menu_rights,access_profile_menu_rights_pkey,PRIMARY KEY,PRIMARY KEY (id)
+access_profile_menu_rights,access_profile_menu_rights_profile_id_menu_key_key,UNIQUE,"UNIQUE (profile_id, menu_key)"
+access_profile_org_scope,at_least_one_filter,CHECK,CHECK (((company_id IS NOT NULL) OR (division_id IS NOT NULL) OR (business_unit_id IS NOT NULL) OR (department_id IS NOT NULL) OR (designation IS NOT NULL) OR (pms_grade IS NOT NULL) OR (level IS NOT NULL)))
+access_profile_org_scope,access_profile_org_scope_pkey,PRIMARY KEY,PRIMARY KEY (id)
+access_profiles,access_profiles_pkey,PRIMARY KEY,PRIMARY KEY (id)
+access_profiles,access_profiles_name_key,UNIQUE,UNIQUE (name)
+action_registry,action_registry_risk_level_check,CHECK,"CHECK ((risk_level = ANY (ARRAY['low'::text, 'medium'::text, 'high'::text, 'critical'::text])))"
+action_registry,action_registry_pkey,PRIMARY KEY,PRIMARY KEY (action_key)
+admin_feature_flags,admin_feature_flags_pkey,PRIMARY KEY,PRIMARY KEY (key)
+ai_feature_registry,ai_feature_registry_pkey,PRIMARY KEY,PRIMARY KEY (feature_key)
+annual_review_access_audit,annual_review_access_audit_action_check,CHECK,"CHECK ((action = ANY (ARRAY['kill_switch_toggled'::text, 'override_upserted'::text, 'override_deleted'::text, 'management_stage.backfilled'::text, 'management_stage.backfilled_bulk'::text, 'management_stage.reverted'::text, 'management_stage.reverted_after'::text, 'bu_terminal_restore'::text, 'collapse_normalise'::text, 'workflow_edited_post_action'::text, 'reviewer_reassigned_supersede'::text, 'system_scores.admin_override'::text])))"
+annual_review_access_audit,annual_review_access_audit_pkey,PRIMARY KEY,PRIMARY KEY (id)
+annual_review_assignment_overrides,annual_review_assignment_overrides_reason_check,CHECK,CHECK ((length(TRIM(BOTH FROM reason)) >= 3))
+annual_review_assignment_overrides,annual_review_assignment_overrides_role_check,CHECK,"CHECK ((role = ANY (ARRAY['manager'::text, 'skip_manager'::text, 'dept_head'::text, 'bu_head'::text, 'hr'::text, 'management'::text])))"
+annual_review_assignment_overrides,annual_review_assignment_overrides_pkey,PRIMARY KEY,PRIMARY KEY (id)
+annual_review_assignment_overrides,annual_review_assignment_overrides_instance_id_role_key,UNIQUE,"UNIQUE (instance_id, role)"
+annual_review_assignment_rules,annual_review_assignment_rules_archetype_code_check,CHECK,"CHECK (((archetype_code IS NULL) OR (archetype_code = ANY (ARRAY['A'::text, 'B'::text, 'C'::text, 'D'::text]))))"
+annual_review_assignment_rules,annual_review_assignment_rules_grade_bucket_check,CHECK,"CHECK (((grade_bucket IS NULL) OR (grade_bucket = ANY (ARRAY['M'::text, 'W'::text, 'T'::text, 'other'::text]))))"
+annual_review_assignment_rules,annual_review_assignment_rules_min_kra_months_in_ay_check,CHECK,CHECK (((min_kra_months_in_ay >= 0) AND (min_kra_months_in_ay <= 12)))
+annual_review_assignment_rules,annual_review_assignment_rules_pkey,PRIMARY KEY,PRIMARY KEY (id)
+annual_review_bu_draft_finalise_2026_07,annual_review_bu_draft_finalise_2026_07_pkey,PRIMARY KEY,PRIMARY KEY (id)
+annual_review_bu_head_terminal_audit_2026_07,annual_review_bu_head_terminal_audit_2026_07_pkey,PRIMARY KEY,PRIMARY KEY (id)
+annual_review_bu_removal_repair_2026_07,annual_review_bu_removal_repair_2026_07_pkey,PRIMARY KEY,PRIMARY KEY (id)
+annual_review_criteria_assignments,annual_review_criteria_assignments_grade_code_check,CHECK,CHECK (((grade_code IS NULL) OR ((length(grade_code) >= 1) AND (length(grade_code) <= 32))))
+annual_review_criteria_assignments,annual_review_criteria_assignments_weight_pct_check,CHECK,CHECK ((weight_pct >= (0)::numeric))
+annual_review_criteria_assignments,annual_review_criteria_assignments_pkey,PRIMARY KEY,PRIMARY KEY (id)
+annual_review_criteria_library,annual_review_criteria_library_max_score_check,CHECK,CHECK ((max_score > (0)::numeric))
+annual_review_criteria_library,annual_review_criteria_library_pkey,PRIMARY KEY,PRIMARY KEY (id)
+annual_review_criteria_library,annual_review_criteria_library_key_key,UNIQUE,UNIQUE (key)
+annual_review_cycles,annual_review_cycles_status_check,CHECK,"CHECK ((status = ANY (ARRAY['draft'::text, 'active'::text, 'closed'::text])))"
+annual_review_cycles,annual_review_cycles_pkey,PRIMARY KEY,PRIMARY KEY (id)
+annual_review_directory_overrides,annual_review_directory_overrides_override_type_check,CHECK,"CHECK ((override_type = ANY (ARRAY['grant_all'::text, 'grant_bu'::text, 'grant_team'::text, 'deny'::text])))"
+annual_review_directory_overrides,annual_review_directory_overrides_pkey,PRIMARY KEY,PRIMARY KEY (user_id)
+annual_review_downstream_rewind_repair_2026_07,annual_review_downstream_rewind_repair_2026_07_pkey,PRIMARY KEY,PRIMARY KEY (id)
+annual_review_empty_stage_repair_2026_07,annual_review_empty_stage_repair_2026_07_pkey,PRIMARY KEY,PRIMARY KEY (id)
+annual_review_final_backfill_audit_2026_07,annual_review_final_backfill_audit_2026_07_pkey,PRIMARY KEY,PRIMARY KEY (id)
+annual_review_final_score_repair_2026_07,annual_review_final_score_repair_2026_07_pkey,PRIMARY KEY,PRIMARY KEY (id)
+annual_review_head_remap_audit_2026_07,annual_review_head_remap_audit_2026_07_pkey,PRIMARY KEY,PRIMARY KEY (id)
+annual_review_instances,annual_review_instances_pkey,PRIMARY KEY,PRIMARY KEY (id)
+annual_review_instances,annual_review_instances_employee_id_cycle_id_key,UNIQUE,"UNIQUE (employee_id, cycle_id)"
+annual_review_kra_rehydrate_items,annual_review_kra_rehydrate_items_pkey,PRIMARY KEY,PRIMARY KEY (id)
+annual_review_kra_rehydrate_runs,annual_review_kra_rehydrate_runs_mode_check,CHECK,"CHECK ((mode = ANY (ARRAY['dry_run'::text, 'apply'::text, 'rollback'::text])))"
+annual_review_kra_rehydrate_runs,annual_review_kra_rehydrate_runs_reason_check,CHECK,CHECK ((char_length(reason) >= 10))
+annual_review_kra_rehydrate_runs,annual_review_kra_rehydrate_runs_status_check,CHECK,"CHECK ((status = ANY (ARRAY['running'::text, 'completed'::text, 'failed'::text])))"
+annual_review_kra_rehydrate_runs,annual_review_kra_rehydrate_runs_pkey,PRIMARY KEY,PRIMARY KEY (id)
+annual_review_mgmt_scope_backfill_2026_07,annual_review_mgmt_scope_backfill_2026_07_pkey,PRIMARY KEY,PRIMARY KEY (id)
+annual_review_missing_system_slot_repair_2026_07,annual_review_missing_system_slot_repair_2026_07_pkey,PRIMARY KEY,PRIMARY KEY (id)
+annual_review_orphan_repair_2026_07,annual_review_orphan_repair_2026_07_pkey,PRIMARY KEY,PRIMARY KEY (id)
+annual_review_proxy_submissions,annual_review_proxy_submissions_pkey,PRIMARY KEY,PRIMARY KEY (id)
+annual_review_rescore_audit_2026_07,annual_review_rescore_audit_2026_07_pkey,PRIMARY KEY,PRIMARY KEY (id)
+annual_review_reset_archive,annual_review_reset_archive_pkey,PRIMARY KEY,PRIMARY KEY (id)
+annual_review_responses,annual_review_responses_pkey,PRIMARY KEY,PRIMARY KEY (id)
+annual_review_responses,annual_review_responses_instance_id_reviewer_role_key,UNIQUE,"UNIQUE (instance_id, reviewer_role)"
+annual_review_reviewer_remap_audit_2026_07,annual_review_reviewer_remap_audit_2026_07_pkey,PRIMARY KEY,PRIMARY KEY (id)
+annual_review_reviewer_resync_audit,annual_review_reviewer_resync_audit_pkey,PRIMARY KEY,PRIMARY KEY (id)
+annual_review_role_capabilities,ar_role_capabilities_scope_chk,CHECK,"CHECK ((assist_scope = ANY (ARRAY['same_as_search'::text, 'direct_reports_only'::text, 'none'::text])))"
+annual_review_role_capabilities,ar_role_capabilities_source_chk,CHECK,"CHECK ((role_source = ANY (ARRAY['admin'::text, 'hr_pms'::text, 'hr_team'::text, 'bu_head'::text, 'hod'::text, 'reporting_manager'::text, 'skip_manager'::text])))"
+annual_review_role_capabilities,annual_review_role_capabilities_pkey,PRIMARY KEY,PRIMARY KEY (role_source)
+annual_review_self_draft_reassign_audit,annual_review_self_draft_reassign_audit_pkey,PRIMARY KEY,PRIMARY KEY (id)
+annual_review_self_review_bundle_items,annual_review_self_review_bundle_items_pkey,PRIMARY KEY,"PRIMARY KEY (bundle_id, field_id)"
+annual_review_self_review_library,annual_review_self_review_library_kind_check,CHECK,"CHECK ((kind = ANY (ARRAY['field'::text, 'bundle'::text])))"
+annual_review_self_review_library,annual_review_self_review_library_pkey,PRIMARY KEY,PRIMARY KEY (id)
+annual_review_self_review_library,annual_review_self_review_library_key_key,UNIQUE,UNIQUE (key)
+annual_review_settings,annual_review_settings_pkey,PRIMARY KEY,PRIMARY KEY (id)
+annual_review_settings,annual_review_settings_key_key,UNIQUE,UNIQUE (key)
+annual_review_stage_transfer_audit_2026_07,annual_review_stage_transfer_audit_2026_07_pkey,PRIMARY KEY,PRIMARY KEY (id)
+annual_review_system_kpi_weights,annual_review_system_kpi_weights_grade_bucket_check,CHECK,"CHECK ((grade_bucket = ANY (ARRAY['M'::text, 'W'::text, 'T'::text, 'other'::text])))"
+annual_review_system_kpi_weights,annual_review_system_kpi_weights_weight_pct_check,CHECK,CHECK (((weight_pct >= (0)::numeric) AND (weight_pct <= (100)::numeric)))
+annual_review_system_kpi_weights,annual_review_system_kpi_weights_pkey,PRIMARY KEY,PRIMARY KEY (id)
+annual_review_system_kpis,annual_review_system_kpis_uom_type_check,CHECK,"CHECK ((uom_type = ANY (ARRAY['count'::text, 'percent'::text, 'days'::text, 'rating'::text])))"
+annual_review_system_kpis,annual_review_system_kpis_pkey,PRIMARY KEY,PRIMARY KEY (id)
+annual_review_system_kpis,annual_review_system_kpis_key_key,UNIQUE,UNIQUE (key)
+annual_review_template_archetypes,annual_review_template_archetypes_code_check,CHECK,"CHECK ((code = ANY (ARRAY['A'::text, 'B'::text, 'C'::text, 'D'::text])))"
+annual_review_template_archetypes,annual_review_template_archetypes_display_mode_check,CHECK,"CHECK ((display_mode = ANY (ARRAY['bilingual'::text, 'en_only'::text, 'hi_only'::text])))"
+annual_review_template_archetypes,annual_review_template_archetypes_pkey,PRIMARY KEY,PRIMARY KEY (id)
+annual_review_template_archetypes,annual_review_template_archetypes_code_key,UNIQUE,UNIQUE (code)
+annual_review_templates,annual_review_templates_pkey,PRIMARY KEY,PRIMARY KEY (id)
+annual_score_config_audit,annual_score_config_audit_pkey,PRIMARY KEY,PRIMARY KEY (id)
+annual_score_configs,annual_score_configs_pkey,PRIMARY KEY,PRIMARY KEY (id)
+app_settings,app_settings_team_queue_default_scope_chk,CHECK,"CHECK (((team_queue_default_scope IS NULL) OR (team_queue_default_scope = ANY (ARRAY['any'::text, 'manager'::text, 'skip'::text, 'dept'::text, 'bu'::text, 'hr'::text, 'management'::text]))))"
+app_settings,single_row,CHECK,CHECK ((id = '00000000-0000-0000-0000-000000000001'::uuid))
+app_settings,app_settings_pkey,PRIMARY KEY,PRIMARY KEY (id)
+audit_kpi_assignments,audit_kpi_assignments_pkey,PRIMARY KEY,PRIMARY KEY (id)
+audit_kpi_assignments,audit_kpi_assignments_auditor_id_employee_id_key,UNIQUE,"UNIQUE (auditor_id, employee_id)"
+audit_kpi_level_assignments,audit_kpi_level_assignments_pkey,PRIMARY KEY,PRIMARY KEY (id)
+audit_kpi_level_assignments,audit_kpi_level_assignments_kpi_id_key,UNIQUE,UNIQUE (kpi_id)
+audit_policies,audit_policies_retention_nonneg,CHECK,CHECK (((retention_days IS NULL) OR (retention_days >= 0)))
+audit_policies,audit_policies_severity_valid,CHECK,"CHECK ((min_severity = ANY (ARRAY['info'::text, 'notice'::text, 'warn'::text, 'critical'::text])))"
+audit_policies,audit_policies_pkey,PRIMARY KEY,PRIMARY KEY (id)
+audit_policies,audit_policies_unique_key,UNIQUE,"UNIQUE (module_key, event_category)"
+auth_lookup_attempts,auth_lookup_attempts_pkey,PRIMARY KEY,PRIMARY KEY (id)
+backup_denylist,backup_denylist_pkey,PRIMARY KEY,PRIMARY KEY (table_name)
+backup_logs,backup_logs_pkey,PRIMARY KEY,PRIMARY KEY (id)
+bulk_review_batches,bulk_review_batches_pkey,PRIMARY KEY,PRIMARY KEY (id)
+bundle_assignment_logs,bundle_assignment_logs_pkey,PRIMARY KEY,PRIMARY KEY (id)
+business_unit_sub_units,business_unit_sub_units_pkey,PRIMARY KEY,PRIMARY KEY (id)
+business_unit_sub_units,business_unit_sub_units_business_unit_id_label_key,UNIQUE,"UNIQUE (business_unit_id, label)"
+business_units,business_units_head_source_check,CHECK,"CHECK ((head_source = ANY (ARRAY['auto'::text, 'manual'::text])))"
+business_units,business_units_pkey,PRIMARY KEY,PRIMARY KEY (id)
+business_units,business_units_code_key,UNIQUE,UNIQUE (code)
+capability_registry,capability_registry_pkey,PRIMARY KEY,PRIMARY KEY (capability_key)
+client_action_entitlements,client_action_entitlements_pkey,PRIMARY KEY,PRIMARY KEY (id)
+client_action_entitlements,client_action_entitlements_client_id_action_key_key,UNIQUE,"UNIQUE (client_id, action_key)"
+client_contacts,client_contacts_archive_consistency_chk,CHECK,CHECK ((((is_active = true) AND (archived_at IS NULL) AND (archived_by IS NULL)) OR ((is_active = false) AND (archived_at IS NOT NULL))))
+client_contacts,client_contacts_email_format_chk,CHECK,CHECK (((email ~* '^[^[:space:]@]+@[^[:space:]@]+\.[^[:space:]@]+$'::text) AND (email = lower(email))))
+client_contacts,client_contacts_primary_requires_active_chk,CHECK,CHECK (((is_primary_for_role = false) OR (is_active = true)))
+client_contacts,client_contacts_role_chk,CHECK,"CHECK ((role = ANY (ARRAY['support'::text, 'hr'::text, 'escalation'::text, 'billing'::text, 'ops'::text, 'other'::text])))"
+client_contacts,client_contacts_pkey,PRIMARY KEY,PRIMARY KEY (id)
+client_error_reports,client_error_reports_pkey,PRIMARY KEY,PRIMARY KEY (id)
+client_implementer_assignments,client_implementer_assignments_pkey,PRIMARY KEY,PRIMARY KEY (id)
+client_implementer_assignments,client_implementer_assignments_client_id_user_id_key,UNIQUE,"UNIQUE (client_id, user_id)"
+client_module_entitlements,client_module_entitlements_pkey,PRIMARY KEY,PRIMARY KEY (id)
+client_module_entitlements,client_module_entitlements_client_id_module_key_key,UNIQUE,"UNIQUE (client_id, module_key)"
+client_notification_templates,client_notification_templates_body_html_len,CHECK,"CHECK ((char_length(COALESCE(body_html, ''::text)) <= 50000))"
+client_notification_templates,client_notification_templates_body_text_len,CHECK,CHECK (((char_length(body_text) >= 1) AND (char_length(body_text) <= 20000)))
+client_notification_templates,client_notification_templates_channel_check,CHECK,CHECK ((channel = 'email'::text))
+client_notification_templates,client_notification_templates_key_format,CHECK,"CHECK ((template_key ~ '^[a-z0-9_]{2,64}$'::text))"
+client_notification_templates,client_notification_templates_subject_len,CHECK,CHECK (((char_length(subject) >= 1) AND (char_length(subject) <= 200)))
+client_notification_templates,client_notification_templates_pkey,PRIMARY KEY,PRIMARY KEY (id)
+client_setup_checklist,client_setup_checklist_pkey,PRIMARY KEY,PRIMARY KEY (id)
+client_setup_checklist,client_setup_checklist_client_id_item_key_key,UNIQUE,"UNIQUE (client_id, item_key)"
+client_smtp_config,client_smtp_config_provider_check,CHECK,"CHECK ((provider = ANY (ARRAY['smtp'::text, 'resend'::text, 'sendgrid'::text, 'lovable'::text])))"
+client_smtp_config,client_smtp_config_pkey,PRIMARY KEY,PRIMARY KEY (client_id)
+client_urls,client_urls_archive_consistency_chk,CHECK,CHECK ((((is_active = true) AND (archived_at IS NULL) AND (archived_by IS NULL)) OR ((is_active = false) AND (archived_at IS NOT NULL))))
+client_urls,client_urls_primary_requires_active_chk,CHECK,CHECK (((is_primary = false) OR (is_active = true)))
+client_urls,client_urls_url_no_unsafe_chk,CHECK,CHECK ((url !~* '^(javascript|data|file|vbscript):'::text))
+client_urls,client_urls_url_scheme_chk,CHECK,CHECK ((url ~* '^https?://[^[:space:]]+$'::text))
+client_urls,client_urls_pkey,PRIMARY KEY,PRIMARY KEY (id)
+clients,clients_deployment_mode_check,CHECK,"CHECK ((deployment_mode = ANY (ARRAY['saas'::text, 'on_prem'::text, 'hybrid'::text])))"
+clients,clients_pkey,PRIMARY KEY,PRIMARY KEY (id)
+clients,clients_client_key_key,UNIQUE,UNIQUE (client_key)
+companies,companies_pkey,PRIMARY KEY,PRIMARY KEY (id)
+confirmation_increment_adjustments,confirmation_increment_adjustments_pkey,PRIMARY KEY,PRIMARY KEY (id)
+confirmation_increment_rules,confirmation_increment_rules_company_scope_mode_check,CHECK,"CHECK ((company_scope_mode = ANY (ARRAY['global'::text, 'selected'::text, 'per_company'::text])))"
+confirmation_increment_rules,confirmation_increment_rules_status_check,CHECK,"CHECK ((status = ANY (ARRAY['draft'::text, 'active'::text, 'archived'::text])))"
+confirmation_increment_rules,confirmation_increment_rules_pkey,PRIMARY KEY,PRIMARY KEY (id)
+custom_reports,custom_reports_pkey,PRIMARY KEY,PRIMARY KEY (id)
+dashboard_registry,dashboard_registry_pkey,PRIMARY KEY,PRIMARY KEY (dashboard_key)
+data_classifications,data_classifications_pkey,PRIMARY KEY,PRIMARY KEY (id)
+data_classifications,data_classifications_classification_key_key,UNIQUE,UNIQUE (classification_key)
+departments,departments_head_source_check,CHECK,"CHECK ((head_source = ANY (ARRAY['auto'::text, 'manual'::text])))"
+departments,departments_pkey,PRIMARY KEY,PRIMARY KEY (id)
+departments,departments_code_key,UNIQUE,UNIQUE (code)
+designations,designations_pkey,PRIMARY KEY,PRIMARY KEY (id)
+designations,designations_name_key,UNIQUE,UNIQUE (name)
+dev_report_entries,dev_report_entries_date_or_period,CHECK,CHECK (((entry_date IS NOT NULL) OR (period_label IS NOT NULL)))
+dev_report_entries,dev_report_entries_pkey,PRIMARY KEY,PRIMARY KEY (id)
+divisions,divisions_pkey,PRIMARY KEY,PRIMARY KEY (id)
+divisions,divisions_code_key,UNIQUE,UNIQUE (code)
+email_change_audit,email_change_audit_source_check,CHECK,"CHECK ((source = ANY (ARRAY['self_service'::text, 'admin'::text, 'system'::text, 'password_rollout'::text, 'create_employee'::text])))"
+email_change_audit,email_change_audit_pkey,PRIMARY KEY,PRIMARY KEY (id)
+email_dispatch_queue,email_dispatch_queue_pkey,PRIMARY KEY,PRIMARY KEY (id)
+email_logs,email_logs_pkey,PRIMARY KEY,PRIMARY KEY (id)
+employee_categories,employee_categories_pkey,PRIMARY KEY,PRIMARY KEY (id)
+employee_incentive_eligibility,employee_incentive_eligibility_pkey,PRIMARY KEY,PRIMARY KEY (id)
+employee_incentive_eligibility,employee_incentive_eligibilit_employee_id_review_period_rev_key,UNIQUE,"UNIQUE (employee_id, review_period, review_year)"
+employee_incentive_records,employee_incentive_records_pkey,PRIMARY KEY,PRIMARY KEY (id)
+employee_incentive_records,employee_incentive_records_emp_period_year_prog_payperiod_key,UNIQUE,"UNIQUE (employee_id, review_period, review_year, program_id, payment_period)"
+employee_job_descriptions,employee_job_descriptions_pkey,PRIMARY KEY,PRIMARY KEY (id)
+employee_job_descriptions,employee_job_descriptions_designation_key,UNIQUE,UNIQUE (designation)
+employee_master_custom_field_values,employee_master_custom_field_values_pkey,PRIMARY KEY,PRIMARY KEY (id)
+employee_master_custom_field_values,employee_master_custom_field_values_employee_unique,UNIQUE,UNIQUE (employee_id)
+employee_master_custom_fields,employee_master_custom_fields_field_key_format,CHECK,"CHECK ((field_key ~ '^[a-z][a-z0-9_]{1,40}$'::text))"
+employee_master_custom_fields,employee_master_custom_fields_field_type_check,CHECK,"CHECK ((field_type = ANY (ARRAY['text'::text, 'number'::text, 'date'::text, 'dropdown'::text, 'yes_no'::text, 'email'::text, 'phone'::text, 'long_text'::text])))"
+employee_master_custom_fields,employee_master_custom_fields_pkey,PRIMARY KEY,PRIMARY KEY (id)
+employee_master_custom_fields,employee_master_custom_fields_field_key_key,UNIQUE,UNIQUE (field_key)
+employee_working_days,working_days_range,CHECK,CHECK (((working_days >= 1) AND (working_days <= 31)))
+employee_working_days,employee_working_days_pkey,PRIMARY KEY,PRIMARY KEY (id)
+employee_working_days,employee_working_days_employee_id_month_year_key,UNIQUE,"UNIQUE (employee_id, month, year)"
+employment_status_history,employment_status_history_source_check,CHECK,"CHECK ((source = ANY (ARRAY['manual_edit'::text, 'bulk_import'::text, 'backfill'::text, 'trigger'::text])))"
+employment_status_history,employment_status_history_pkey,PRIMARY KEY,PRIMARY KEY (id)
+employment_statuses,employment_statuses_pkey,PRIMARY KEY,PRIMARY KEY (id)
+entitlement_audit,entitlement_audit_event_type_check,CHECK,"CHECK ((event_type = ANY (ARRAY['grant'::text, 'revoke'::text, 'update'::text, 'would_deny'::text, 'admin_view'::text, 'deny'::text, 'create'::text])))"
+entitlement_audit,entitlement_audit_pkey,PRIMARY KEY,PRIMARY KEY (id)
+export_policies,export_policies_max_rows_nonneg,CHECK,CHECK (((max_rows_per_export IS NULL) OR (max_rows_per_export >= 0)))
+export_policies,export_policies_retain_days_nonneg,CHECK,CHECK (((retain_export_log_days IS NULL) OR (retain_export_log_days >= 0)))
+export_policies,export_policies_pkey,PRIMARY KEY,PRIMARY KEY (id)
+export_policies,export_policies_classification_key_key,UNIQUE,UNIQUE (classification_key)
+final_score_revisions,final_score_revisions_pkey,PRIMARY KEY,PRIMARY KEY (id)
+final_score_revisions,final_score_revisions_submission_id_revision_no_key,UNIQUE,"UNIQUE (submission_id, revision_no)"
+frequency_config,frequency_config_pkey,PRIMARY KEY,PRIMARY KEY (id)
+frequency_config,frequency_config_frequency_key,UNIQUE,UNIQUE (frequency)
+general_eligibility_audit,general_eligibility_audit_pkey,PRIMARY KEY,PRIMARY KEY (id)
+general_eligibility_configs,general_eligibility_configs_status_check,CHECK,"CHECK ((status = ANY (ARRAY['draft'::text, 'approved'::text, 'archived'::text])))"
+general_eligibility_configs,general_eligibility_service_as_on_mode_chk,CHECK,"CHECK ((service_as_on_mode = ANY (ARRAY['run_date'::text, 'ay_end'::text, 'custom'::text])))"
+general_eligibility_configs,general_eligibility_configs_pkey,PRIMARY KEY,PRIMARY KEY (id)
+general_eligibility_configs,general_eligibility_configs_assessment_year_version_key,UNIQUE,"UNIQUE (assessment_year, version)"
+iac_audit_log,iac_audit_log_pkey,PRIMARY KEY,PRIMARY KEY (id)
+iac_capabilities,iac_capabilities_pkey,PRIMARY KEY,PRIMARY KEY (code)
+iac_role_capabilities,iac_role_capabilities_pkey,PRIMARY KEY,"PRIMARY KEY (role_id, capability_code)"
+iac_roles,iac_roles_pkey,PRIMARY KEY,PRIMARY KEY (id)
+iac_roles,iac_roles_code_key,UNIQUE,UNIQUE (code)
+iac_user_role_assignments,iac_user_role_assignments_pkey,PRIMARY KEY,PRIMARY KEY (id)
+iac_user_role_assignments,iac_assignment_uniq,UNIQUE,"UNIQUE (user_id, role_id, scope_type, scope_id)"
+impl_console_rate_buckets,impl_console_rate_buckets_action_check,CHECK,CHECK ((action = 'test_email_send'::text))
+impl_console_rate_buckets,impl_console_rate_buckets_pkey,PRIMARY KEY,PRIMARY KEY (id)
+impl_console_rate_buckets,impl_console_rate_buckets_actor_id_client_id_action_bucket__key,UNIQUE,"UNIQUE (actor_id, client_id, action, bucket_hour)"
+import_field_settings,import_field_settings_pkey,PRIMARY KEY,PRIMARY KEY (id)
+import_field_settings,import_field_settings_import_type_field_key_key,UNIQUE,"UNIQUE (import_type, field_key)"
+import_progress,import_progress_pkey,PRIMARY KEY,PRIMARY KEY (id)
+incentive_allocation_rules,incentive_allocation_rules_pkey,PRIMARY KEY,PRIMARY KEY (id)
+incentive_allocation_rules,incentive_allocation_rules_program_id_source_label_target_b_key,UNIQUE,"UNIQUE (program_id, source_label, target_bu_id, target_sub_unit)"
+incentive_custom_tab_data,incentive_custom_tab_data_pkey,PRIMARY KEY,PRIMARY KEY (id)
+incentive_custom_tab_data,incentive_custom_tab_data_tab_id_employee_id_key,UNIQUE,"UNIQUE (tab_id, employee_id)"
+incentive_disqualification_rules,incentive_disqualification_rules_pkey,PRIMARY KEY,PRIMARY KEY (id)
+incentive_eligibility_fields,incentive_eligibility_fields_pkey,PRIMARY KEY,PRIMARY KEY (id)
+incentive_production_rates,incentive_production_rates_rate_type_check,CHECK,"CHECK ((rate_type = ANY (ARRAY['employee'::text, 'department'::text, 'bu'::text, 'company'::text, 'common'::text])))"
+incentive_production_rates,incentive_production_rates_pkey,PRIMARY KEY,PRIMARY KEY (id)
+incentive_program_custom_tabs,incentive_program_custom_tabs_pkey,PRIMARY KEY,PRIMARY KEY (id)
+incentive_program_custom_tabs,incentive_program_custom_tabs_program_id_tab_key_key,UNIQUE,"UNIQUE (program_id, tab_key)"
+incentive_program_mappings,incentive_program_mappings_mapping_type_check,CHECK,"CHECK ((mapping_type = ANY (ARRAY['division'::text, 'department'::text, 'business_unit'::text, 'designation'::text, 'pms_grade'::text, 'employee'::text])))"
+incentive_program_mappings,incentive_program_mappings_pkey,PRIMARY KEY,PRIMARY KEY (id)
+incentive_program_mappings,incentive_program_mappings_program_id_mapping_type_mapping__key,UNIQUE,"UNIQUE (program_id, mapping_type, mapping_value)"
+incentive_program_types,incentive_program_types_pkey,PRIMARY KEY,PRIMARY KEY (id)
+incentive_program_types,incentive_program_types_value_key,UNIQUE,UNIQUE (value)
+incentive_programs,incentive_programs_pkey,PRIMARY KEY,PRIMARY KEY (id)
+incentive_score_revisions,incentive_score_revisions_pkey,PRIMARY KEY,PRIMARY KEY (id)
+incentive_slab_categories,incentive_slab_categories_pkey,PRIMARY KEY,PRIMARY KEY (id)
+incentive_slab_categories,incentive_slab_categories_value_key,UNIQUE,UNIQUE (value)
+incentive_slabs,incentive_slabs_pkey,PRIMARY KEY,PRIMARY KEY (id)
+incentive_stale_zero_cleanup_audit,incentive_stale_zero_cleanup_audit_pkey,PRIMARY KEY,PRIMARY KEY (id)
+incentive_vessel_rates,incentive_vessel_rates_pkey,PRIMARY KEY,PRIMARY KEY (id)
+incentive_vessel_rates,incentive_vessel_rates_program_id_employee_id_key,UNIQUE,"UNIQUE (program_id, employee_id)"
+increment_eligibility_audit,increment_eligibility_audit_action_check,CHECK,"CHECK ((action = ANY (ARRAY['create'::text, 'modify'::text, 'delete'::text, 'activate'::text, 'deactivate'::text, 'submit'::text, 'approve'::text, 'reject'::text, 'copy'::text, 'publish'::text, 'exclusion_added'::text, 'exclusion_removed'::text, 'revert_to_draft'::text])))"
+increment_eligibility_audit,increment_eligibility_audit_pkey,PRIMARY KEY,PRIMARY KEY (id)
+increment_eligibility_configs,increment_eligibility_configs_status_check,CHECK,"CHECK ((status = ANY (ARRAY['draft'::text, 'pending_approval'::text, 'approved'::text, 'archived'::text])))"
+increment_eligibility_configs,increment_eligibility_configs_pkey,PRIMARY KEY,PRIMARY KEY (id)
+increment_eligibility_criteria,increment_eligibility_criteria_comparison_operator_check,CHECK,"CHECK ((comparison_operator = ANY (ARRAY['>='::text, '<='::text, '>'::text, '<'::text, '='::text])))"
+increment_eligibility_criteria,increment_eligibility_criteria_pkey,PRIMARY KEY,PRIMARY KEY (id)
+increment_eligibility_exclusions,increment_eligibility_exclusions_pkey,PRIMARY KEY,PRIMARY KEY (id)
+increment_eligibility_exclusions,iee_unique_config_emp_year,UNIQUE,"UNIQUE (config_id, employee_id, assessment_year)"
+increment_inputs,increment_inputs_source_check,CHECK,"CHECK ((source = ANY (ARRAY['manual'::text, 'import'::text, 'bulk'::text])))"
+increment_inputs,increment_inputs_pkey,PRIMARY KEY,PRIMARY KEY (id)
+increment_inputs,increment_inputs_employee_id_assessment_year_key,UNIQUE,"UNIQUE (employee_id, assessment_year)"
+increment_method_configs,increment_method_configs_eligibility_cutoff_day_check,CHECK,CHECK (((eligibility_cutoff_day >= 1) AND (eligibility_cutoff_day <= 31)))
+increment_method_configs,increment_method_configs_eligibility_cutoff_month_check,CHECK,CHECK (((eligibility_cutoff_month >= 1) AND (eligibility_cutoff_month <= 12)))
+increment_method_configs,increment_method_configs_joining_month_cutoff_day_chk,CHECK,CHECK (((joining_month_cutoff_day IS NULL) OR ((joining_month_cutoff_day >= 1) AND (joining_month_cutoff_day <= 31))))
+increment_method_configs,increment_method_configs_pkey,PRIMARY KEY,PRIMARY KEY (id)
+increment_method_slabs,increment_method_slabs_pkey,PRIMARY KEY,PRIMARY KEY (id)
+increment_run_items,increment_run_items_eligibility_status_check,CHECK,"CHECK ((eligibility_status = ANY (ARRAY['eligible'::text, 'ineligible'::text, 'excluded'::text, 'no_score'::text])))"
+increment_run_items,increment_run_items_transition_source_check,CHECK,"CHECK (((transition_source IS NULL) OR (transition_source = ANY (ARRAY['history'::text, 'profile_snapshot'::text, 'none'::text]))))"
+increment_run_items,increment_run_items_pkey,PRIMARY KEY,PRIMARY KEY (id)
+increment_runs,increment_runs_status_check,CHECK,"CHECK ((status = ANY (ARRAY['running'::text, 'completed'::text, 'failed'::text])))"
+increment_runs,increment_runs_pkey,PRIMARY KEY,PRIMARY KEY (id)
+increment_slabs,increment_slabs_check,CHECK,CHECK ((rating_to >= rating_from))
+increment_slabs,increment_slabs_increment_percent_check,CHECK,CHECK (((increment_percent >= (0)::numeric) AND (increment_percent <= (100)::numeric)))
+increment_slabs,increment_slabs_status_check,CHECK,"CHECK ((status = ANY (ARRAY['active'::text, 'archived'::text])))"
+increment_slabs,increment_slabs_pkey,PRIMARY KEY,PRIMARY KEY (id)
+increment_slabs_audit,increment_slabs_audit_pkey,PRIMARY KEY,PRIMARY KEY (id)
+integration_connector_registry,integration_connector_registry_pkey,PRIMARY KEY,PRIMARY KEY (connector_key)
+kpi_audit_logs,kpi_audit_logs_pkey,PRIMARY KEY,PRIMARY KEY (id)
+kpi_definitions,kpi_definitions_pkey,PRIMARY KEY,PRIMARY KEY (id)
+kpi_definitions,kpi_definitions_canonical_kra_name_canonical_kpi_name_categ_key,UNIQUE,"UNIQUE (canonical_kra_name, canonical_kpi_name, category_id)"
+kpi_dust_emission_rescale_2026_06,kpi_dust_emission_rescale_2026_06_pkey,PRIMARY KEY,PRIMARY KEY (id)
+kpi_mention_access,kpi_mention_access_pkey,PRIMARY KEY,PRIMARY KEY (id)
+kpi_mention_access,kpi_mention_access_unique,UNIQUE,"UNIQUE (kpi_id, user_id)"
+kpi_name_aliases,kpi_name_aliases_pkey,PRIMARY KEY,PRIMARY KEY (id)
+kpi_name_aliases,kpi_name_aliases_variant_kra_name_variant_kpi_name_category_key,UNIQUE,"UNIQUE (variant_kra_name, variant_kpi_name, category_id)"
+kpi_observation_replies,kpi_observation_replies_pkey,PRIMARY KEY,PRIMARY KEY (id)
+kpi_observations,kpi_observations_observer_role_check,CHECK,"CHECK ((observer_role = ANY (ARRAY['self'::text, 'manager'::text, 'auditor'::text, 'management'::text, 'admin'::text])))"
+kpi_observations,kpi_observations_score_impact_check,CHECK,CHECK (((score_impact >= '-5'::integer) AND (score_impact <= 5)))
+kpi_observations,kpi_observations_pkey,PRIMARY KEY,PRIMARY KEY (id)
+kpi_observations,kpi_observations_ticket_number_key,UNIQUE,UNIQUE (ticket_number)
+kpi_queries,kpi_queries_pkey,PRIMARY KEY,PRIMARY KEY (id)
+kpi_queries,kpi_queries_ticket_number_key,UNIQUE,UNIQUE (ticket_number)
+kpi_registry_audit_log,kpi_registry_audit_log_pkey,PRIMARY KEY,PRIMARY KEY (id)
+kpi_rollback_requests,kpi_rollback_requests_pkey,PRIMARY KEY,PRIMARY KEY (id)
+kpi_scanner_skips,kpi_scanner_skips_pkey,PRIMARY KEY,PRIMARY KEY (id)
+kpi_scanner_skips,kpi_scanner_skips_unique,UNIQUE,"UNIQUE (category_id, normalized_kpi)"
+kpi_standardization_actions,kpi_standardization_actions_action_type_check,CHECK,"CHECK ((action_type = ANY (ARRAY['create_definition'::text, 'link_alias'::text, 'rename_kpis'::text, 'delete_definition'::text, 'edit_definition'::text, 'unlink_alias'::text, 'skip_group'::text, 'unskip_group'::text, 'backfill_definition_links'::text])))"
+kpi_standardization_actions,kpi_standardization_actions_pkey,PRIMARY KEY,PRIMARY KEY (id)
+kpi_templates,kpi_templates_pkey,PRIMARY KEY,PRIMARY KEY (id)
+kpis,kpis_kpi_group_type_check,CHECK,"CHECK ((kpi_group_type = ANY (ARRAY['individual'::text, 'departmental'::text, 'org'::text])))"
+kpis,kpis_org_level_scope_check,CHECK,"CHECK (((org_level_scope IS NULL) OR (org_level_scope = ANY (ARRAY['organization'::text, 'division'::text, 'business_unit'::text, 'department'::text, 'location'::text, 'pms_grade'::text, 'level'::text, 'employee'::text]))))"
+kpis,kpis_scope_target_check,CHECK,"CHECK (((org_level_scope IS NULL) OR ((org_level_scope = ANY (ARRAY['organization'::text, 'department'::text, 'employee'::text])) AND (division_id IS NULL) AND (business_unit_id IS NULL) AND (location_id IS NULL) AND (pms_grade_id IS NULL) AND (level_id IS NULL)) OR ((org_level_scope = 'division'::text) AND (division_id IS NOT NULL) AND (business_unit_id IS NULL) AND (location_id IS NULL) AND (pms_grade_id IS NULL) AND (level_id IS NULL)) OR ((org_level_scope = 'business_unit'::text) AND (business_unit_id IS NOT NULL) AND (division_id IS NULL) AND (location_id IS NULL) AND (pms_grade_id IS NULL) AND (level_id IS NULL)) OR ((org_level_scope = 'location'::text) AND (location_id IS NOT NULL) AND (division_id IS NULL) AND (business_unit_id IS NULL) AND (pms_grade_id IS NULL) AND (level_id IS NULL)) OR ((org_level_scope = 'pms_grade'::text) AND (pms_grade_id IS NOT NULL) AND (division_id IS NULL) AND (business_unit_id IS NULL) AND (location_id IS NULL) AND (level_id IS NULL)) OR ((org_level_scope = 'level'::text) AND (level_id IS NOT NULL) AND (division_id IS NULL) AND (business_unit_id IS NULL) AND (location_id IS NULL) AND (pms_grade_id IS NULL))))"
+kpis,valid_day_count_type,CHECK,"CHECK (((day_count_type)::text = ANY ((ARRAY['working_days'::character varying, 'all_days'::character varying])::text[])))"
+kpis,kpis_pkey,PRIMARY KEY,PRIMARY KEY (id)
+kra_categories,kra_categories_pkey,PRIMARY KEY,PRIMARY KEY (id)
+kra_rollover_logs,kra_rollover_logs_pkey,PRIMARY KEY,PRIMARY KEY (id)
+levels,levels_pkey,PRIMARY KEY,PRIMARY KEY (id)
+locations,locations_pkey,PRIMARY KEY,PRIMARY KEY (id)
+menu_access_config,menu_access_config_pkey,PRIMARY KEY,PRIMARY KEY (id)
+menu_access_config,menu_access_config_menu_key_key,UNIQUE,UNIQUE (menu_key)
+menu_access_user_overrides,menu_access_user_overrides_pkey,PRIMARY KEY,PRIMARY KEY (id)
+menu_access_user_overrides,menu_access_user_overrides_menu_key_user_id_key,UNIQUE,"UNIQUE (menu_key, user_id)"
+menu_override_audit,menu_override_audit_field_check,CHECK,"CHECK ((field = ANY (ARRAY['label'::text, 'parent'::text, 'sort_order'::text, 'reset'::text, 'is_active'::text, 'menu_level'::text, 'module_key'::text, 'delete_custom_menu_item'::text])))"
+menu_override_audit,menu_override_audit_pkey,PRIMARY KEY,PRIMARY KEY (id)
+menu_overrides,menu_overrides_custom_menu_level_check,CHECK,CHECK (((custom_menu_level IS NULL) OR ((custom_menu_level >= 1) AND (custom_menu_level <= 4))))
+menu_overrides,menu_overrides_pkey,PRIMARY KEY,PRIMARY KEY (id)
+menu_registry,menu_registry_menu_level_check,CHECK,CHECK (((menu_level >= 1) AND (menu_level <= 4)))
+menu_registry,menu_registry_pkey,PRIMARY KEY,PRIMARY KEY (menu_key)
+module_registry,module_registry_pkey,PRIMARY KEY,PRIMARY KEY (module_key)
+modules,modules_pkey,PRIMARY KEY,PRIMARY KEY (id)
+modules,modules_code_key,UNIQUE,UNIQUE (code)
+notification_event_registry,notification_event_registry_pkey,PRIMARY KEY,PRIMARY KEY (event_key)
+notifications,notifications_pkey,PRIMARY KEY,PRIMARY KEY (id)
+okv_migration_history,okv_migration_history_pkey,PRIMARY KEY,PRIMARY KEY (id)
+org_head_config,org_head_config_hr_head_source_check,CHECK,"CHECK ((hr_head_source = ANY (ARRAY['auto'::text, 'manual'::text])))"
+org_head_config,org_head_config_pkey,PRIMARY KEY,PRIMARY KEY (id)
+org_head_config,org_head_config_company_id_key,UNIQUE,UNIQUE (company_id)
+org_kpi_data_entry_logs,org_kpi_data_entry_logs_pkey,PRIMARY KEY,PRIMARY KEY (id)
+org_kpi_data_owners,org_kpi_data_owners_scope_check,CHECK,"CHECK (((org_level_scope = ANY (ARRAY['organization'::text, 'division'::text, 'business_unit'::text, 'department'::text, 'location'::text, 'pms_grade'::text, 'level'::text, 'employee'::text])) AND (((org_level_scope = ANY (ARRAY['organization'::text, 'employee'::text])) AND (division_id IS NULL) AND (business_unit_id IS NULL) AND (department_id IS NULL) AND (location_id IS NULL) AND (pms_grade_id IS NULL) AND (level_id IS NULL)) OR ((org_level_scope = 'division'::text) AND (division_id IS NOT NULL) AND (business_unit_id IS NULL) AND (department_id IS NULL) AND (location_id IS NULL) AND (pms_grade_id IS NULL) AND (level_id IS NULL)) OR ((org_level_scope = 'business_unit'::text) AND (business_unit_id IS NOT NULL) AND (division_id IS NULL) AND (department_id IS NULL) AND (location_id IS NULL) AND (pms_grade_id IS NULL) AND (level_id IS NULL)) OR ((org_level_scope = 'department'::text) AND (department_id IS NOT NULL) AND (division_id IS NULL) AND (business_unit_id IS NULL) AND (location_id IS NULL) AND (pms_grade_id IS NULL) AND (level_id IS NULL)) OR ((org_level_scope = 'location'::text) AND (location_id IS NOT NULL) AND (division_id IS NULL) AND (business_unit_id IS NULL) AND (department_id IS NULL) AND (pms_grade_id IS NULL) AND (level_id IS NULL)) OR ((org_level_scope = 'pms_grade'::text) AND (pms_grade_id IS NOT NULL) AND (division_id IS NULL) AND (business_unit_id IS NULL) AND (department_id IS NULL) AND (location_id IS NULL) AND (level_id IS NULL)) OR ((org_level_scope = 'level'::text) AND (level_id IS NOT NULL) AND (division_id IS NULL) AND (business_unit_id IS NULL) AND (department_id IS NULL) AND (location_id IS NULL) AND (pms_grade_id IS NULL)))))"
+org_kpi_data_owners,org_kpi_data_owners_pkey,PRIMARY KEY,PRIMARY KEY (id)
+org_kpi_data_owners,org_kpi_data_owners_category_id_kra_name_kpi_name_owner_id_key,UNIQUE,"UNIQUE (category_id, kra_name, kpi_name, owner_id)"
+org_kpi_owner_key_backup,org_kpi_owner_key_backup_action_check,CHECK,"CHECK ((action = ANY (ARRAY['updated'::text, 'deleted_duplicate'::text])))"
+org_kpi_owner_key_backup,org_kpi_owner_key_backup_pkey,PRIMARY KEY,PRIMARY KEY (id)
+org_kpi_value_history,org_kpi_value_history_pkey,PRIMARY KEY,PRIMARY KEY (id)
+org_kpi_values,org_kpi_values_pkey,PRIMARY KEY,PRIMARY KEY (id)
+password_rollout_logs,password_rollout_logs_pkey,PRIMARY KEY,PRIMARY KEY (id)
+performance_improvement_plans,performance_improvement_plans_pkey,PRIMARY KEY,PRIMARY KEY (id)
+performance_reviews,performance_reviews_pkey,PRIMARY KEY,PRIMARY KEY (id)
+pip_audit_logs,pip_audit_logs_pkey,PRIMARY KEY,PRIMARY KEY (id)
+pip_milestones,pip_milestones_pkey,PRIMARY KEY,PRIMARY KEY (id)
+pms_evidence_compression_jobs,pms_evidence_compression_jobs_status_check,CHECK,"CHECK ((status = ANY (ARRAY['pending'::text, 'processing'::text, 'done'::text, 'skipped'::text, 'failed'::text])))"
+pms_evidence_compression_jobs,pms_evidence_compression_jobs_pkey,PRIMARY KEY,PRIMARY KEY (id)
+pms_evidence_compression_jobs,pms_evidence_compression_jobs_source_table_source_id_source_key,UNIQUE,"UNIQUE (source_table, source_id, source_column, array_index, original_url)"
+pms_grades,pms_grades_family_bucket_check,CHECK,"CHECK ((family_bucket = ANY (ARRAY['M'::text, 'W'::text, 'T'::text, 'other'::text])))"
+pms_grades,pms_grades_pkey,PRIMARY KEY,PRIMARY KEY (id)
+pms_grades,pms_grades_name_key,UNIQUE,UNIQUE (name)
+privacy_consent_settings,privacy_consent_settings_default_state_valid,CHECK,"CHECK ((default_state = ANY (ARRAY['opt_in'::text, 'opt_out'::text])))"
+privacy_consent_settings,privacy_consent_settings_lawful_basis_valid,CHECK,"CHECK ((lawful_basis = ANY (ARRAY['consent'::text, 'contract'::text, 'legitimate_interest'::text, 'legal_obligation'::text, 'vital_interest'::text, 'public_task'::text])))"
+privacy_consent_settings,privacy_consent_settings_pkey,PRIMARY KEY,PRIMARY KEY (id)
+privacy_consent_settings,privacy_consent_settings_key_unique,UNIQUE,UNIQUE (consent_key)
+production_daily_entries,production_daily_entries_pkey,PRIMARY KEY,PRIMARY KEY (id)
+production_daily_entries,production_daily_entries_program_id_employee_id_month_year_key,UNIQUE,"UNIQUE (program_id, employee_id, month, year)"
+production_targets,production_targets_pkey,PRIMARY KEY,PRIMARY KEY (id)
+production_targets,production_targets_program_id_business_unit_id_sub_unit_lab_key,UNIQUE,"UNIQUE (program_id, business_unit_id, sub_unit_label, slab_category, month, year)"
+profiles,profiles_email_no_synthetic_chk,CHECK,CHECK (((email IS NULL) OR (email !~~* '%@noemail.bfclpms.local'::text) OR (email !~~* '%@placeholder-pms.com'::text)))
+profiles,profiles_team_queue_default_scope_chk,CHECK,"CHECK (((team_queue_default_scope IS NULL) OR (team_queue_default_scope = ANY (ARRAY['any'::text, 'manager'::text, 'skip'::text, 'dept'::text, 'bu'::text, 'hr'::text, 'management'::text]))))"
+profiles,profiles_pkey,PRIMARY KEY,PRIMARY KEY (id)
+profiles,profiles_employee_code_key,UNIQUE,UNIQUE (employee_code)
+registry_suggestion_dismissals,registry_suggestion_dismissals_kind_check,CHECK,"CHECK ((kind = ANY (ARRAY['definition_merge'::text, 'alias_candidate'::text])))"
+registry_suggestion_dismissals,registry_suggestion_dismissals_pkey,PRIMARY KEY,"PRIMARY KEY (kind, left_id, right_id)"
+report_access_config,report_access_config_pkey,PRIMARY KEY,PRIMARY KEY (id)
+report_access_config,report_access_config_report_key_key,UNIQUE,UNIQUE (report_key)
+report_access_user_overrides,report_access_user_overrides_pkey,PRIMARY KEY,PRIMARY KEY (id)
+report_access_user_overrides,report_access_user_overrides_report_key_user_id_key,UNIQUE,"UNIQUE (report_key, user_id)"
+report_field_override_audit,report_field_override_audit_pkey,PRIMARY KEY,PRIMARY KEY (id)
+report_field_overrides,report_field_overrides_pkey,PRIMARY KEY,PRIMARY KEY (id)
+report_field_registry,report_field_registry_pkey,PRIMARY KEY,PRIMARY KEY (id)
+report_field_registry,report_field_registry_report_id_field_key_key,UNIQUE,"UNIQUE (report_id, field_key)"
+report_registry,report_registry_pkey,PRIMARY KEY,PRIMARY KEY (report_id)
+report_registry,report_registry_report_key_key,UNIQUE,UNIQUE (report_key)
+report_registry_v2,report_registry_v2_pkey,PRIMARY KEY,PRIMARY KEY (report_key)
+retention_policies,retention_policies_archive_le_retention,CHECK,CHECK (((archive_after_days IS NULL) OR (retention_days IS NULL) OR (archive_after_days <= retention_days)))
+retention_policies,retention_policies_archive_nonneg,CHECK,CHECK (((archive_after_days IS NULL) OR (archive_after_days >= 0)))
+retention_policies,retention_policies_retention_nonneg,CHECK,CHECK (((retention_days IS NULL) OR (retention_days >= 0)))
+retention_policies,retention_policies_strategy_valid,CHECK,"CHECK ((purge_strategy = ANY (ARRAY['soft_delete'::text, 'hard_delete'::text, 'anonymize'::text, 'archive_only'::text])))"
+retention_policies,retention_policies_pkey,PRIMARY KEY,PRIMARY KEY (id)
+retention_policies,retention_policies_domain_key_unique,UNIQUE,UNIQUE (domain_key)
+review_action_notes,review_action_notes_category_check,CHECK,"CHECK ((category = ANY (ARRAY['kpi_change'::text, 'weightage_change'::text, 'target_change'::text, 'new_kpi'::text, 'remove_kpi'::text, 'role_realignment'::text, 'training_need'::text, 'reaudit'::text, 'other'::text])))"
+review_action_notes,review_action_notes_priority_check,CHECK,"CHECK ((priority = ANY (ARRAY['low'::text, 'medium'::text, 'high'::text])))"
+review_action_notes,review_action_notes_status_check,CHECK,"CHECK ((status = ANY (ARRAY['pending'::text, 'in_progress'::text, 'completed'::text])))"
+review_action_notes,review_action_notes_title_check,CHECK,CHECK (((char_length(title) >= 1) AND (char_length(title) <= 120)))
+review_action_notes,review_action_notes_pkey,PRIMARY KEY,PRIMARY KEY (id)
+review_period_audit_log,review_period_audit_log_pkey,PRIMARY KEY,PRIMARY KEY (id)
+review_period_auto_rules,review_period_auto_rules_rule_type_check,CHECK,"CHECK ((rule_type = ANY (ARRAY['deadline_passed'::text, 'review_submitted'::text, 'approval_complete'::text, 'calibration_complete'::text, 'scheduled_lock'::text, 'auto_advance_zero'::text])))"
+review_period_auto_rules,review_period_auto_rules_pkey,PRIMARY KEY,PRIMARY KEY (id)
+review_period_locks,review_period_locks_lock_type_check,CHECK,"CHECK ((lock_type = ANY (ARRAY['global'::text, 'role'::text, 'department'::text, 'employee'::text])))"
+review_period_locks,review_period_locks_pkey,PRIMARY KEY,PRIMARY KEY (id)
+review_period_stages,review_period_stages_pkey,PRIMARY KEY,PRIMARY KEY (id)
+review_periods,review_periods_pkey,PRIMARY KEY,PRIMARY KEY (id)
+review_periods,review_periods_period_name_review_year_key,UNIQUE,"UNIQUE (period_name, review_year)"
+review_submissions,review_submissions_pkey,PRIMARY KEY,PRIMARY KEY (id)
+review_submissions,review_submissions_kpi_id_unique,UNIQUE,UNIQUE (kpi_id)
+safety_asset_calibrations,safety_asset_calibrations_window_chk,CHECK,CHECK ((next_due_at > performed_at))
+safety_asset_calibrations,safety_asset_calibrations_pkey,PRIMARY KEY,PRIMARY KEY (id)
+safety_asset_evidence,safety_asset_evidence_kind_check,CHECK,"CHECK ((kind = ANY (ARRAY['photo'::text, 'manual'::text, 'certificate'::text, 'other'::text])))"
+safety_asset_evidence,safety_asset_evidence_pkey,PRIMARY KEY,PRIMARY KEY (id)
+safety_assets,safety_assets_interval_chk,CHECK,CHECK (((calibration_interval_days IS NULL) OR ((calibration_interval_days >= 1) AND (calibration_interval_days <= 3650))))
+safety_assets,safety_assets_pkey,PRIMARY KEY,PRIMARY KEY (id)
+safety_assets,safety_assets_asset_code_key,UNIQUE,UNIQUE (asset_code)
+safety_audit_log,safety_audit_log_pkey,PRIMARY KEY,PRIMARY KEY (id)
+safety_audit_run_responses,safety_audit_run_responses_pkey,PRIMARY KEY,PRIMARY KEY (id)
+safety_audit_run_responses,safety_audit_run_responses_run_id_item_id_key,UNIQUE,"UNIQUE (run_id, item_id)"
+safety_audit_runs,safety_audit_runs_pkey,PRIMARY KEY,PRIMARY KEY (id)
+safety_audit_template_items,safety_audit_template_items_weight_check,CHECK,CHECK (((weight > (0)::numeric) AND (weight <= (100)::numeric)))
+safety_audit_template_items,safety_audit_template_items_pkey,PRIMARY KEY,PRIMARY KEY (id)
+safety_audit_templates,safety_audit_templates_pkey,PRIMARY KEY,PRIMARY KEY (id)
+safety_audit_templates,safety_audit_templates_code_key,UNIQUE,UNIQUE (code)
+safety_drill_findings,safety_drill_findings_severity_check,CHECK,"CHECK ((severity = ANY (ARRAY['low'::text, 'medium'::text, 'high'::text, 'critical'::text])))"
+safety_drill_findings,safety_drill_findings_pkey,PRIMARY KEY,PRIMARY KEY (id)
+safety_drill_participants,safety_drill_participants_pkey,PRIMARY KEY,PRIMARY KEY (id)
+safety_drill_participants,safety_drill_participants_drill_id_user_id_key,UNIQUE,"UNIQUE (drill_id, user_id)"
+safety_drill_runs,safety_drill_runs_pkey,PRIMARY KEY,PRIMARY KEY (id)
+safety_emergency_contacts,safety_emergency_contacts_pkey,PRIMARY KEY,PRIMARY KEY (id)
+safety_emergency_drills,safety_emergency_drills_evacuation_seconds_check,CHECK,CHECK (((evacuation_seconds IS NULL) OR (evacuation_seconds >= 0)))
+safety_emergency_drills,safety_emergency_drills_score_check,CHECK,CHECK (((score IS NULL) OR ((score >= (0)::numeric) AND (score <= (100)::numeric))))
+safety_emergency_drills,safety_emergency_drills_pkey,PRIMARY KEY,PRIMARY KEY (id)
+safety_emergency_drills,safety_emergency_drills_drill_code_key,UNIQUE,UNIQUE (drill_code)
+safety_incident_evidence,safety_incident_evidence_compression_status_check,CHECK,"CHECK ((compression_status = ANY (ARRAY['pending'::text, 'processing'::text, 'done'::text, 'skipped'::text, 'failed'::text])))"
+safety_incident_evidence,safety_incident_evidence_pkey,PRIMARY KEY,PRIMARY KEY (id)
+safety_incident_progress_logs,safety_incident_progress_logs_pkey,PRIMARY KEY,PRIMARY KEY (id)
+safety_incident_routing_rules,safety_incident_routing_rules_pkey,PRIMARY KEY,PRIMARY KEY (id)
+safety_incident_severities,safety_incident_severities_pkey,PRIMARY KEY,PRIMARY KEY (id)
+safety_incident_severities,safety_incident_severities_incident_type_id_code_key,UNIQUE,"UNIQUE (incident_type_id, code)"
+safety_incident_sla_rules,safety_incident_sla_rules_amber_threshold_pct_check,CHECK,CHECK (((amber_threshold_pct >= 1) AND (amber_threshold_pct <= 99)))
+safety_incident_sla_rules,safety_incident_sla_rules_target_hours_check,CHECK,CHECK ((target_hours > 0))
+safety_incident_sla_rules,safety_incident_sla_rules_pkey,PRIMARY KEY,PRIMARY KEY (id)
+safety_incident_timeline,safety_incident_timeline_pkey,PRIMARY KEY,PRIMARY KEY (id)
+safety_incident_types,safety_incident_types_pkey,PRIMARY KEY,PRIMARY KEY (id)
+safety_incident_types,safety_incident_types_code_key,UNIQUE,UNIQUE (code)
+safety_incidents,chk_safety_incidents_no_self_duplicate,CHECK,CHECK (((duplicate_of_id IS NULL) OR (duplicate_of_id <> id)))
+safety_incidents,safety_incidents_routing_status_check,CHECK,"CHECK ((routing_status = ANY (ARRAY['dept'::text, 'division'::text, 'unrouted'::text, 'legacy'::text])))"
+safety_incidents,safety_incidents_pkey,PRIMARY KEY,PRIMARY KEY (id)
+safety_incidents,safety_incidents_incident_number_key,UNIQUE,UNIQUE (incident_number)
+safety_incidents,uq_safety_incident_client,UNIQUE,"UNIQUE (reporter_id, client_submission_id)"
+safety_master_data,safety_master_data_pkey,PRIMARY KEY,PRIMARY KEY (id)
+safety_master_data,safety_master_data_unique_code,UNIQUE,"UNIQUE (category, code)"
+safety_module_access,safety_module_access_pkey,PRIMARY KEY,PRIMARY KEY (user_id)
+safety_notifications,safety_notifications_pkey,PRIMARY KEY,PRIMARY KEY (id)
+safety_permission_keys,safety_permission_keys_category_check,CHECK,"CHECK ((category = ANY (ARRAY['nav'::text, 'action'::text, 'widget'::text])))"
+safety_permission_keys,safety_permission_keys_pkey,PRIMARY KEY,PRIMARY KEY (key)
+safety_permit_approvals,safety_permit_approvals_decision_check,CHECK,"CHECK ((decision = ANY (ARRAY['approved'::text, 'rejected'::text])))"
+safety_permit_approvals,safety_permit_approvals_pkey,PRIMARY KEY,PRIMARY KEY (id)
+safety_permit_approvals,safety_permit_approvals_permit_id_level_key,UNIQUE,"UNIQUE (permit_id, level)"
+safety_permit_evidence,safety_permit_evidence_pkey,PRIMARY KEY,PRIMARY KEY (id)
+safety_permit_hira,safety_permit_hira_pkey,PRIMARY KEY,PRIMARY KEY (id)
+safety_permit_loto_steps,safety_permit_loto_steps_pkey,PRIMARY KEY,PRIMARY KEY (id)
+safety_permit_loto_steps,safety_permit_loto_steps_permit_id_step_no_key,UNIQUE,"UNIQUE (permit_id, step_no)"
+safety_permit_type_config,safety_permit_type_config_level_check,CHECK,CHECK (((level >= 1) AND (level <= 6)))
+safety_permit_type_config,safety_permit_type_config_pkey,PRIMARY KEY,PRIMARY KEY (id)
+safety_permit_type_config,safety_permit_type_config_permit_type_level_key,UNIQUE,"UNIQUE (permit_type, level)"
+safety_permits,safety_permits_check,CHECK,CHECK ((end_at > start_at))
+safety_permits,safety_permits_pkey,PRIMARY KEY,PRIMARY KEY (id)
+safety_permits,safety_permits_permit_number_key,UNIQUE,UNIQUE (permit_number)
+safety_role_permissions,safety_role_permissions_pkey,PRIMARY KEY,"PRIMARY KEY (role, permission_key)"
+safety_settings,safety_settings_pkey,PRIMARY KEY,PRIMARY KEY (key)
+safety_severity_sla,safety_severity_sla_pkey,PRIMARY KEY,PRIMARY KEY (severity)
+safety_sla_escalations,safety_sla_escalations_level_check,CHECK,"CHECK ((level = ANY (ARRAY['amber'::text, 'red'::text])))"
+safety_sla_escalations,safety_sla_escalations_pkey,PRIMARY KEY,PRIMARY KEY (id)
+safety_sla_escalations,safety_sla_escalations_incident_id_level_key,UNIQUE,"UNIQUE (incident_id, level)"
+safety_user_permission_overrides,safety_user_permission_overrides_effect_check,CHECK,"CHECK ((effect = ANY (ARRAY['allow'::text, 'deny'::text])))"
+safety_user_permission_overrides,safety_user_permission_overrides_pkey,PRIMARY KEY,"PRIMARY KEY (user_id, permission_key)"
+safety_user_roles,safety_user_roles_pkey,PRIMARY KEY,PRIMARY KEY (id)
+sensitive_fields,sensitive_fields_pkey,PRIMARY KEY,PRIMARY KEY (id)
+sensitive_fields,sensitive_fields_unique_key,UNIQUE,"UNIQUE (module_key, table_name, column_name)"
+skill_competencies,skill_competencies_pkey,PRIMARY KEY,PRIMARY KEY (id)
+sub_branches,sub_branches_pkey,PRIMARY KEY,PRIMARY KEY (id)
+sub_branches,sub_branches_code_key,UNIQUE,UNIQUE (code)
+sub_period_submissions,sub_period_submissions_sub_period_type_check,CHECK,"CHECK ((sub_period_type = ANY (ARRAY['daily'::text, 'weekly'::text])))"
+sub_period_submissions,sub_period_submissions_pkey,PRIMARY KEY,PRIMARY KEY (id)
+sub_period_submissions,sub_period_submissions_kpi_id_sub_period_type_sub_period_va_key,UNIQUE,"UNIQUE (kpi_id, sub_period_type, sub_period_value, review_month, review_year)"
+system_audit_logs,system_audit_logs_pkey,PRIMARY KEY,PRIMARY KEY (id)
+system_settings,system_settings_pkey,PRIMARY KEY,PRIMARY KEY (id)
+system_settings,system_settings_setting_key_key,UNIQUE,UNIQUE (setting_key)
+template_bundle_items,template_bundle_items_pkey,PRIMARY KEY,PRIMARY KEY (id)
+template_bundle_items,template_bundle_items_bundle_id_template_id_key,UNIQUE,"UNIQUE (bundle_id, template_id)"
+template_bundles,template_bundles_pkey,PRIMARY KEY,PRIMARY KEY (id)
+template_change_logs,template_change_logs_pkey,PRIMARY KEY,PRIMARY KEY (id)
+training_needs,training_needs_pkey,PRIMARY KEY,PRIMARY KEY (id)
+user_roles,user_roles_pkey,PRIMARY KEY,PRIMARY KEY (id)
+user_roles,user_roles_user_id_role_key,UNIQUE,"UNIQUE (user_id, role)"
+vessel_monthly_entries,vessel_monthly_entries_pkey,PRIMARY KEY,PRIMARY KEY (id)
+vessel_monthly_entries,vessel_monthly_entries_program_id_employee_id_month_year_key,UNIQUE,"UNIQUE (program_id, employee_id, month, year)"
+workflow_config,workflow_config_config_type_check,CHECK,"CHECK ((config_type = ANY (ARRAY['employee'::text, 'department'::text, 'pms_grade'::text])))"
+workflow_config,workflow_config_pkey,PRIMARY KEY,PRIMARY KEY (id)
+workflow_config_migration_log,workflow_config_migration_log_pkey,PRIMARY KEY,PRIMARY KEY (id)
+workflow_final_score_rules,workflow_final_score_rules_missing_score_policy_check,CHECK,"CHECK ((missing_score_policy = ANY (ARRAY['block'::text, 'ignore'::text, 'zero'::text])))"
+workflow_final_score_rules,workflow_final_score_rules_rule_type_check,CHECK,"CHECK ((rule_type = ANY (ARRAY['terminal_stage'::text, 'self_final'::text, 'manager_final'::text, 'functional_manager_final'::text, 'skip_level_final'::text, 'hr_pms_final'::text, 'auditor_final'::text, 'management_final'::text, 'hr_calibration_final'::text, 'mgmt_calibration_final'::text, 'avg_manager_skip'::text, 'avg_self_manager_skip'::text, 'avg_all_completed'::text, 'weighted_custom'::text])))"
+workflow_final_score_rules,workflow_final_score_rules_scope_type_check,CHECK,"CHECK ((scope_type = ANY (ARRAY['template'::text, 'employee'::text, 'department'::text, 'pms_grade'::text])))"
+workflow_final_score_rules,workflow_final_score_rules_pkey,PRIMARY KEY,PRIMARY KEY (id)
+workflow_settings,workflow_settings_pkey,PRIMARY KEY,PRIMARY KEY (id)
+workflow_settings,workflow_settings_setting_key_key,UNIQUE,UNIQUE (setting_key)
+workflow_templates,workflow_templates_pkey,PRIMARY KEY,PRIMARY KEY (id)
+workflow_templates,workflow_templates_name_key,UNIQUE,UNIQUE (name)

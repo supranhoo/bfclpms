@@ -1,0 +1,12 @@
+view_name,kind,grants
+mv_safety_audit_scoreboard,materialized view,""
+mv_safety_dept_risk_trend,materialized view,""
+mv_safety_incident_monthly_trend,materialized view,""
+mv_safety_incidents_open_vs_closed,materialized view,""
+mv_safety_permit_throughput,materialized view,""
+mv_safety_recurrence,materialized view,""
+mv_safety_severity_rate,materialized view,""
+mv_safety_top_root_causes,materialized view,""
+eligible_login_users,view,"sandbox_exec:INSERT,sandbox_exec:SELECT"
+safety_incidents_with_sla,view,"sandbox_exec:INSERT,sandbox_exec:SELECT"
+v_profile_email_duplicates,view,"sandbox_exec:INSERT,sandbox_exec:SELECT"
