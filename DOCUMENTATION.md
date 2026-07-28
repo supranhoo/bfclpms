@@ -7587,3 +7587,15 @@ Defence in depth: `supabase/functions/send-email-notification/emailFormat.ts` ex
 Also fixed: `DEFAULT_TEMPLATES[event_type]` was mutated in place (subject/body rewrites for `final_approved` and `system_auto_scored`) and could leak across invocations of a warm isolate — the template is now cloned.
 
 Tests: `src/tests/emailFinalScoreFormat.test.ts`. Policy: §EMAIL-SCORE-AND-PREHEADER.
+
+### ADR-192 — Safety-role PII scoping on `profiles` (2026-07-28)
+
+The policy `Safety responsible roles can view active profiles` granted every user matching `has_responsible_safety_role()` SELECT on **all** active profiles. That predicate is deliberately wide — it matches any non-worker `safety_user_roles` row, any active `iac_roles` safety assignment, any user named on an active `safety_incident_routing_rules` row, and any user attached to a single `safety_incidents` row. A supervisor routed on one incident could therefore read the full PII of all ~2,600 employees.
+
+Replaced by `Safety roles can view scoped active profiles`, delegating to two new SECURITY DEFINER helpers:
+- `has_elevated_safety_role(uuid)` — safety admin / safety head / safety officer / `resolve_global_safety_head()`. Org-wide access retained.
+- `can_view_profile_for_safety(viewer, target)` — self · direct or functional report · same `department_id` · `departments.head_user_id` · `business_units.head_user_id` via the target's department · active routing rule for the target's business unit · shared safety incident where the viewer is assignee/router/safety head/verifier/reporter.
+
+`profiles` has no `business_unit_id`; BU membership is resolved through `profiles.department_id → departments.business_unit_id`. (The previous BU-head cascade bug from ADR-173 came from assuming that column existed.)
+
+No other `profiles` policy was touched. Policy: §SAFETY-PII-SCOPE.
