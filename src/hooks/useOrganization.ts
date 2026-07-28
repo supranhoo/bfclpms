@@ -413,7 +413,8 @@ export function useManagerTeamRoster(viewerId: string | undefined) {
         pms_grade: r.pms_grade,
         mobile_number: r.mobile_number,
         is_active: r.is_active,
-        relationship: r.relationship as 'direct' | 'indirect',
+        // ADR-193 — 'functional' rows come from profiles.functional_manager_id.
+        relationship: r.relationship as 'direct' | 'indirect' | 'functional',
         departments: r.department_id
           ? { id: r.department_id, name: r.department_name, code: r.department_code }
           : null,
