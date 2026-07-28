@@ -51,7 +51,7 @@ interface EmployeeProfile {
   pms_grade?: string | null;
   mobile_number?: string | null;
   is_active?: boolean | null;
-  relationship?: 'direct' | 'indirect';
+  relationship?: 'direct' | 'indirect' | 'functional';
   departments?: { id: string; name: string; code: string | null } | null;
 }
 
@@ -268,19 +268,22 @@ export function EmployeeSelectorGrid({
   // Prefer the manager-roster relationship tags whenever they are present; the
   // legacy hooks remain as a fallback for full-access roles (admin / hr_pms /
   // auditor / management) that intentionally skip the RPC.
-  const { directIdSet, skipIdSet } = useMemo(() => {
+  const { directIdSet, skipIdSet, functionalIdSet } = useMemo(() => {
     if (managerRoster && managerRoster.length > 0) {
       const direct = new Set<string>();
       const skip = new Set<string>();
+      const functional = new Set<string>();
       managerRoster.forEach((m: any) => {
         if (m.relationship === 'direct') direct.add(m.id);
         else if (m.relationship === 'indirect') skip.add(m.id);
+        else if (m.relationship === 'functional') functional.add(m.id);
       });
-      return { directIdSet: direct, skipIdSet: skip };
+      return { directIdSet: direct, skipIdSet: skip, functionalIdSet: functional };
     }
     return {
       directIdSet: new Set<string>(teamMembers?.map(m => m.id) || []),
       skipIdSet: new Set<string>(skipLevelMembers?.map(m => m.id) || []),
+      functionalIdSet: new Set<string>(),
     };
   }, [managerRoster, teamMembers, skipLevelMembers]);
 
@@ -603,7 +606,7 @@ export function EmployeeSelectorGrid({
   }, [autoOpenKpiId, allProfiles]);
 
   // Get employee KPI stats using workflow-aware resolution
-  const getEmployeeKpiStats = (employeeId: string, relationship?: 'direct' | 'indirect') => {
+  const getEmployeeKpiStats = (employeeId: string, relationship?: 'direct' | 'indirect' | 'functional') => {
     if (!periodKpis) return { badge1: 0, badge2: 0, badge3: 0, total: 0, clearedKraSet: 0 };
     const empKpis = periodKpis.filter(k => k.employee_id === employeeId);
     const clearedKraSet = empKpis.filter(k => k.status !== 'kra_set').length;
@@ -611,6 +614,21 @@ export function EmployeeSelectorGrid({
 
     if (viewLevel === 'team') {
       const isIndirect = relationship === 'indirect';
+      // ADR-193 §FM-REVIEWER-SCOPE — functional reports queue at the
+      // functional_manager_check stage of their resolved workflow.
+      if (relationship === 'functional') {
+        const reviewable = resolveReviewableStatuses('functional_manager', stages);
+        const pendingKpis = empKpis.filter(k => reviewable.includes(k.status || ''));
+        return {
+          badge1: pendingKpis.length,
+          badge2: empKpis.filter(k => !['kra_set', 'self_review'].includes(k.status || '')).length,
+          badge3: 0,
+          total: empKpis.length,
+          clearedKraSet,
+          orgKpiCount: pendingKpis.filter(k => k.is_org_level).length,
+          nonMonthlyCount: pendingKpis.filter(k => k.frequency && !['monthly', 'daily', 'weekly'].includes(k.frequency.toLowerCase())).length,
+        };
+      }
       if (isIndirect) {
         const reviewable = resolveReviewableStatuses('skip_level', stages);
         const slIdx = stages.indexOf('skip_level_check');
@@ -1398,7 +1416,7 @@ export function EmployeeSelectorGrid({
     const deptMap = new Map((departments || []).map(d => [d.id, d.name]));
     const skipIds = skipIdSet;
 
-    const getPendingKpis = (employeeId: string, relationship?: 'direct' | 'indirect'): KPI[] => {
+    const getPendingKpis = (employeeId: string, relationship?: 'direct' | 'indirect' | 'functional'): KPI[] => {
       const empKpis = periodKpis.filter(k => k.employee_id === employeeId);
       const stages = getStages(employeeId);
 
@@ -1406,6 +1424,10 @@ export function EmployeeSelectorGrid({
       if (viewLevel === 'pending_manager_review') return empKpis.filter(k => k.status === 'self_review');
       if (viewLevel === 'pending_skip_review') return empKpis.filter(k => k.status === 'manager_check');
       if (viewLevel === 'team') {
+        if (relationship === 'functional') {
+          const reviewable = resolveReviewableStatuses('functional_manager', stages);
+          return empKpis.filter(k => reviewable.includes(k.status || ''));
+        }
         const isIndirect = relationship === 'indirect' || skipIds.has(employeeId);
         if (isIndirect) {
           const reviewable = resolveReviewableStatuses('skip_level', stages);
@@ -1676,6 +1698,11 @@ export function EmployeeSelectorGrid({
             {member.relationship === 'direct' && (
               <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 text-xs dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-800">
                 Direct
+              </Badge>
+            )}
+            {member.relationship === 'functional' && (
+              <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200 text-xs dark:bg-purple-900/20 dark:text-purple-400 dark:border-purple-800">
+                Functional
               </Badge>
             )}
             {kpiStats.badge1 > 0 && (

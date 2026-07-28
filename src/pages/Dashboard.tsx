@@ -13,6 +13,7 @@ import { EmployeeSelectorGrid } from '@/components/review/EmployeeSelectorGrid';
 import { UnifiedScorecard } from '@/components/review/UnifiedScorecard';
 import { AlertCircle, RefreshCw, LogOut, Plus } from 'lucide-react';
 import { useDashboardKraPermissions } from '@/hooks/useDashboardKraPermissions';
+import { useIsFunctionalManager } from '@/hooks/useIsFunctionalManager';
 import { AdminKpiCreateDialog } from '@/components/admin/AdminKpiCreateDialog';
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
 import { InlineErrorFallback } from '@/components/ui/InlineErrorFallback';
@@ -26,7 +27,7 @@ interface EmployeeProfile {
   avatar_url: string | null;
   department_id: string | null;
   reporting_manager_id: string | null;
-  relationship?: 'direct' | 'indirect';
+  relationship?: 'direct' | 'indirect' | 'functional';
   departments?: { id: string; name: string; code: string | null } | null;
 }
 
@@ -85,11 +86,14 @@ export default function Dashboard() {
   // Detect skip-level subordinates
   const { data: skipLevelMembers } = useSkipLevelTeamMembers(profile?.id);
   const hasSkipLevelSubordinates = (skipLevelMembers?.length || 0) > 0;
+  // ADR-193 §FM-REVIEWER-SCOPE — Functional Manager is a relationship, not a
+  // role: it must unlock the Team view on its own.
+  const isFunctionalManager = useIsFunctionalManager();
 
   // Calculate available modes based on role
   const availableModes = useMemo(() => {
     const modes: ViewMode[] = ['self'];
-    if (['manager', 'admin', 'management'].includes(role || '') || hasSkipLevelSubordinates) modes.push('team');
+    if (['manager', 'admin', 'management'].includes(role || '') || hasSkipLevelSubordinates || isFunctionalManager) modes.push('team');
     if (role === 'hr_pms' || role === 'admin') {
       modes.push('pending_self_review', 'pending_manager_review', 'pending_skip_review');
     }
@@ -97,7 +101,7 @@ export default function Dashboard() {
     if (['auditor', 'admin'].includes(role || '')) modes.push('audit');
     if (['management', 'admin'].includes(role || '')) modes.push('management');
     return modes;
-  }, [role, hasSkipLevelSubordinates]);
+  }, [role, hasSkipLevelSubordinates, isFunctionalManager]);
 
   // Handle mentioned_kpi deep-link (read-only @mention access)
   useEffect(() => {

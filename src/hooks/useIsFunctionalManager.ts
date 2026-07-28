@@ -9,7 +9,7 @@ import { useAuth } from '@/contexts/AuthContext';
  * dropdown should expose the Functional Manager option to a `manager` user.
  */
 export function useIsFunctionalManager(): boolean {
-  const { user, effectiveRole } = useAuth();
+  const { user } = useAuth();
 
   const { data } = useQuery({
     queryKey: ['is-functional-manager', user?.id],
@@ -24,7 +24,9 @@ export function useIsFunctionalManager(): boolean {
       if (error) return false;
       return (count ?? 0) > 0;
     },
-    enabled: !!user?.id && (effectiveRole === 'manager' || effectiveRole === 'admin'),
+    // ADR-193 — Functional Manager is a relationship, not a role: any active
+    // user may be one, so the probe must not be role-gated.
+    enabled: !!user?.id,
     staleTime: 5 * 60_000,
   });
 

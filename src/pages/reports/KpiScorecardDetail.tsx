@@ -228,7 +228,7 @@ async function fetchScorecardForPeriod(month: string, year: number): Promise<Fla
   const profiles = await fetchAllPaged<any>((from, to) =>
     supabase
       .from('profiles')
-      .select('id, employee_code, full_name, designation, reporting_manager_id, departments!profiles_department_fk ( name )')
+      .select('id, employee_code, full_name, designation, reporting_manager_id, functional_manager_id, departments!profiles_department_fk ( name )')
       .range(from, to)
   );
 

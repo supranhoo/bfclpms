@@ -5260,3 +5260,8 @@ Rules:
 - Widening safety access must be done inside that function with a stated justification, never by adding a second broad policy on `profiles`.
 - `EXECUTE` on both helpers is revoked from `PUBLIC`/`anon`.
 - Non-safety policies on `profiles` (admin, HR, self, manager, annual-review) are out of scope and must not be altered by safety changes.
+
+## §FM-REVIEWER-SCOPE — Functional Manager is a first-class reviewer (ADR-193)
+- Functional Manager is a **relationship** (`profiles.functional_manager_id`), not an `app_role`. Any roster, dashboard, count, export or "Pending With" surface that resolves reviewers MUST include FM-mapped employees, tagged `relationship = 'functional'`.
+- Stage order is resolved from `canonical_stage_order()` / the employee's resolved workflow. Hardcoded stage arrays that omit `functional_manager_check` are forbidden.
+- Mid-flight workflow edits are rating-safe: step-back is additive-only and must snapshot `prior_final_score` / `prior_final_rating` before clearing, restoring them when the approval becomes valid again. No rating may be lost by a workflow change.

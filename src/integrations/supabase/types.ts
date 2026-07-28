@@ -10757,6 +10757,8 @@ export type Database = {
           na_marked_by_role: string | null
           na_reason: string | null
           performance_review_id: string | null
+          prior_final_rating: string | null
+          prior_final_score: number | null
           row_version: number
           self_achieved_value: number | null
           self_evidence_url: string | null
@@ -10824,6 +10826,8 @@ export type Database = {
           na_marked_by_role?: string | null
           na_reason?: string | null
           performance_review_id?: string | null
+          prior_final_rating?: string | null
+          prior_final_score?: number | null
           row_version?: number
           self_achieved_value?: number | null
           self_evidence_url?: string | null
@@ -10891,6 +10895,8 @@ export type Database = {
           na_marked_by_role?: string | null
           na_reason?: string | null
           performance_review_id?: string | null
+          prior_final_rating?: string | null
+          prior_final_score?: number | null
           row_version?: number
           self_achieved_value?: number | null
           self_evidence_url?: string | null
@@ -15029,6 +15035,7 @@ export type Database = {
         Args: { _incident_id: string }
         Returns: boolean
       }
+      canonical_stage_order: { Args: { _stage: string }; Returns: number }
       change_org_kpi_scope_cascading: {
         Args: {
           p_base_period: string
@@ -15616,6 +15623,12 @@ export type Database = {
           source: string
           total_count: number
           total_kpis: number
+        }[]
+      }
+      get_functional_report_ids: {
+        Args: { _viewer: string }
+        Returns: {
+          profile_id: string
         }[]
       }
       get_hierarchy_completed_reviews: {
@@ -17227,6 +17240,8 @@ export type Database = {
           na_marked_by_role: string | null
           na_reason: string | null
           performance_review_id: string | null
+          prior_final_rating: string | null
+          prior_final_score: number | null
           row_version: number
           self_achieved_value: number | null
           self_evidence_url: string | null
