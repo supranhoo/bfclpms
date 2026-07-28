@@ -130,13 +130,13 @@ export interface BulkReviewMatrixGridProps {
   /** Optional map: kpi_id → is_org_level. When absent, ORG badge is hidden. */
   isOrgByKpiId?: ReadonlyMap<string, boolean>;
   /**
-   * When set, the matrix renders ONLY the KPI row matching this key
+   * When non-empty, the matrix renders ONLY the KPI rows matching these keys
    * (`<kra_name>|<kpi_name>`). All employee columns and selection still
-   * function. Pair with `onFocusKpi` to toggle the focus from the row UI.
+   * function. Pair with `onToggleFocusKpi` to toggle focus from the row UI.
    */
-  kpiFocusKey?: string | null;
-  /** Sets/clears the focus key. When omitted, the focus affordance hides. */
-  onFocusKpi?: (rowKey: string | null) => void;
+  kpiFocusKeys?: string[];
+  /** Toggles a key in/out of the focus set. When omitted, the affordance hides. */
+  onToggleFocusKpi?: (rowKey: string) => void;
   /**
    * Replace the entire selection set. Used by the row-level horizontal
    * select handle so it can preserve selections in other rows.
@@ -149,8 +149,8 @@ export function BulkReviewMatrixGrid({
   onToggleSubmission, onToggleAll, onCellClick,
   displayMode = 'score',
   isOrgByKpiId,
-  kpiFocusKey,
-  onFocusKpi,
+  kpiFocusKeys,
+  onToggleFocusKpi,
   onReplaceSelection,
 }: BulkReviewMatrixGridProps) {
   const [showMeta, setShowMeta] = useState(false);
@@ -168,8 +168,9 @@ export function BulkReviewMatrixGrid({
     // When a KPI focus is active, narrow rows to that KPI only. Employees,
     // selection, scoring all keep working — the matrix simply collapses to
     // a single horizontal band of cells for that KPI.
-    const sourceRows = kpiFocusKey
-      ? rows.filter(r => makeKpiRowKey(r) === kpiFocusKey)
+    const focusSet = new Set(kpiFocusKeys ?? []);
+    const sourceRows = focusSet.size > 0
+      ? rows.filter(r => focusSet.has(makeKpiRowKey(r)))
       : rows;
     for (const r of sourceRows) {
       const kpiKey = `${r.kra_name}|${r.kpi_name}`;
@@ -240,7 +241,7 @@ export function BulkReviewMatrixGrid({
       kpiRows: kpiRowsArr, employees: employeesArr, cellMap: cell,
       kraGroups: groups, orgStatusByKpiKey: orgMap, hiddenCount: hidden,
     };
-  }, [rows, isOrgByKpiId, kpiFocusKey, hideProcessed, stageKey]);
+  }, [rows, isOrgByKpiId, kpiFocusKeys, hideProcessed, stageKey]);
 
   const allSubmissionIds = useMemo(
     () => rows.filter(r => r.submission_id).map(r => r.submission_id!),
@@ -429,7 +430,7 @@ export function BulkReviewMatrixGrid({
                         && rowSubIds.every(id => selectedSubmissionIds.has(id));
                       const rowSomeSelected = !rowAllSelected
                         && rowSubIds.some(id => selectedSubmissionIds.has(id));
-                      const isFocused = kpiFocusKey === kpi.key;
+                      const isFocused = (kpiFocusKeys ?? []).includes(kpi.key);
                       return (
                       <tr key={kpi.key} className="group">
                         {/* Sticky KPI cell */}
@@ -485,7 +486,7 @@ export function BulkReviewMatrixGrid({
                               </Tooltip>
                             </TooltipProvider>
                             <OrgKpiBadge status={orgStatusByKpiKey?.get(kpi.key)} />
-                            {onFocusKpi && (
+                            {onToggleFocusKpi && (
                               <TooltipProvider delayDuration={200}>
                                 <Tooltip>
                                   <TooltipTrigger asChild>
@@ -501,7 +502,7 @@ export function BulkReviewMatrixGrid({
                                       )}
                                       onClick={(e) => {
                                         e.stopPropagation();
-                                        onFocusKpi(isFocused ? null : kpi.key);
+                                        onToggleFocusKpi(kpi.key);
                                       }}
                                       aria-label={isFocused
                                         ? `Clear focus on ${kpi.kpiName}`
