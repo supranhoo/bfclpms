@@ -141,8 +141,13 @@ async function buildMonthlyKraSheet(
   if (kraRows.length === 0) return [];
   const fyStart = await fetchCycleFyStart(input.cycleId);
   if (fyStart == null) return [];
-  const matrix = await fetchMonthlyKraMatrix(kraRows.map((r) => r.employee_id), fyStart);
-  return buildMonthlyKraRows(kraRows, matrix, isKraTemplate);
+  try {
+    const matrix = await fetchMonthlyKraMatrix(kraRows.map((r) => r.employee_id), fyStart);
+    return buildMonthlyKraRows(kraRows, matrix, isKraTemplate);
+  } catch {
+    // Fail soft: never block the rest of the workbook on the KRA sheet.
+    return [];
+  }
 }
 
 function summaryRows(s: KpiSummary, cycleName: string) {
