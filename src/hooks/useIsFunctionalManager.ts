@@ -9,7 +9,7 @@ import { useAuth } from '@/contexts/AuthContext';
  * dropdown should expose the Functional Manager option to a `manager` user.
  */
 export function useIsFunctionalManager(): boolean {
-  const { user, effectiveRole } = useAuth();
+  const { user } = useAuth();
 
   const { data } = useQuery({
     queryKey: ['is-functional-manager', user?.id],
