@@ -1621,6 +1621,9 @@ export default function UserManagement() {
                 {paginatedProfiles.map(profile => {
                   const role = (profile.user_roles as any)?.[0]?.role || 'employee';
                   const manager = profiles?.find(p => p.id === profile.reporting_manager_id);
+                  const functionalManager = profiles?.find(
+                    p => p.id === (profile as any).functional_manager_id,
+                  );
                   const isInactive = (profile as any).is_active === false;
                   return (
                     <TableRow key={profile.id} className={isInactive ? 'opacity-60 bg-muted/30' : ''}>
@@ -1676,7 +1679,18 @@ export default function UserManagement() {
                           <Badge variant="secondary" className="text-xs ml-1" title="Dummy/System employee">Dummy/System</Badge>
                         )}
                       </TableCell>
-                      <TableCell>{manager ? formatManagerLabel(manager.full_name, manager.employee_code) : '-'}</TableCell>
+                      <TableCell>
+                        <div>{manager ? formatManagerLabel(manager.full_name, manager.employee_code) : '-'}</div>
+                        {/* ADR-194 §FM-READ-PARITY — surface the stored Functional
+                            Manager so admins can confirm the mapping without
+                            opening the Edit User dialog. */}
+                        <div className="text-xs text-muted-foreground">
+                          F1:{' '}
+                          {functionalManager
+                            ? formatManagerLabel(functionalManager.full_name, functionalManager.employee_code)
+                            : '—'}
+                        </div>
+                      </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-1">
                           <Button size="sm" variant="ghost" onClick={() => openEditDialog(profile)} title="Edit">
