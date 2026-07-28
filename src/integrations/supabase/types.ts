@@ -15000,10 +15000,12 @@ export type Database = {
         Args: { _instance_id: string; _proxy_user_id: string }
         Returns: boolean
       }
-      can_send_notification_to: {
-        Args: { sender: string; target: string }
-        Returns: boolean
-      }
+      can_send_notification_to:
+        | { Args: { sender: string; target: string }; Returns: boolean }
+        | {
+            Args: { context: Json; sender: string; target: string }
+            Returns: boolean
+          }
       can_view_kpi_row: {
         Args: {
           _category_id: string
@@ -16255,6 +16257,10 @@ export type Database = {
         Args: { p_frequency: string; p_month: string; p_year: number }
         Returns: boolean
       }
+      is_observation_participant: {
+        Args: { _observation_id: string; _user: string }
+        Returns: boolean
+      }
       is_org_kpi_audit_employee: {
         Args: { _profile_id: string }
         Returns: boolean
@@ -16428,6 +16434,15 @@ export type Database = {
       override_annual_review_rating: {
         Args: { p_instance_id: string; p_new_rating: string; p_reason: string }
         Returns: undefined
+      }
+      post_observation_reply: {
+        Args: {
+          p_evidence_urls?: Json
+          p_mentioned_user_ids?: string[]
+          p_observation_id: string
+          p_reply_text: string
+        }
+        Returns: Json
       }
       preview_hr_final_sync: {
         Args: { p_cycle_id: string }

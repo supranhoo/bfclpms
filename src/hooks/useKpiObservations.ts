@@ -182,17 +182,20 @@ export function useCreateObservation() {
             },
           }));
 
-          await supabase.from('notifications').insert(notifications);
+          // ADR-189: grant mention access BEFORE notifying. The notification
+          // guard authorises observation notifications between two thread
+          // participants, and the mention access row is what makes the
+          // recipient a participant.
+          await supabase.from('kpi_mention_access').upsert(
+            uniqueIds.map(userId => ({
+              kpi_id: input.kpi_id,
+              user_id: userId,
+              granted_by: userData.user.id,
+            })),
+            { onConflict: 'kpi_id,user_id', ignoreDuplicates: true }
+          );
 
-            // Grant mentioned users read-only access to this KPI
-            await supabase.from('kpi_mention_access').upsert(
-              uniqueIds.map(userId => ({
-                kpi_id: input.kpi_id,
-                user_id: userId,
-                granted_by: userData.user.id,
-              })),
-              { onConflict: 'kpi_id,user_id', ignoreDuplicates: true }
-            );
+          await supabase.from('notifications').insert(notifications);
         }
       }
 

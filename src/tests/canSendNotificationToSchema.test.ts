@@ -10,11 +10,16 @@ import { join } from "node:path";
 
 const MIG_DIR = join(process.cwd(), "supabase", "migrations");
 
-function latestMigrationDefining(fnName: string): { file: string; body: string } {
+// ADR-189 added a 3-arg (sender, target, context jsonb) overload; the
+// relationship matrix asserted here lives in the 2-arg definition.
+function latestMigrationDefining(
+  fnName: string,
+  signature = "sender\\s+uuid\\s*,\\s*target\\s+uuid\\s*\\)",
+): { file: string; body: string } {
   const files = readdirSync(MIG_DIR).filter((f) => f.endsWith(".sql")).sort();
   for (let i = files.length - 1; i >= 0; i--) {
     const body = readFileSync(join(MIG_DIR, files[i]), "utf8");
-    if (new RegExp(`CREATE\\s+OR\\s+REPLACE\\s+FUNCTION\\s+public\\.${fnName}\\s*\\(`, "i").test(body)) {
+    if (new RegExp(`CREATE\\s+OR\\s+REPLACE\\s+FUNCTION\\s+public\\.${fnName}\\s*\\(\\s*${signature}`, "i").test(body)) {
       return { file: files[i], body };
     }
   }

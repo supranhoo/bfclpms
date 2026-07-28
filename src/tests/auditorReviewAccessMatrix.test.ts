@@ -9,11 +9,16 @@ import { join } from "node:path";
 
 const MIG_DIR = join(process.cwd(), "supabase", "migrations");
 
-function latestDefining(fn: string): string {
+// ADR-189 added a 3-arg (sender, target, context jsonb) overload. This guard
+// concerns the 2-arg relationship matrix, so scope the lookup to that
+// signature.
+function latestDefining(fn: string, signature = "sender\\s+uuid\\s*,\\s*target\\s+uuid\\s*\\)"): string {
   const files = readdirSync(MIG_DIR).filter((f) => f.endsWith(".sql")).sort();
   for (let i = files.length - 1; i >= 0; i--) {
     const body = readFileSync(join(MIG_DIR, files[i]), "utf8");
-    if (new RegExp(`CREATE\\s+OR\\s+REPLACE\\s+FUNCTION\\s+public\\.${fn}\\s*\\(`, "i").test(body)) return body;
+    if (new RegExp(`CREATE\\s+OR\\s+REPLACE\\s+FUNCTION\\s+public\\.${fn}\\s*\\(\\s*${signature}`, "i").test(body)) {
+      return body;
+    }
   }
   throw new Error(`No migration defines ${fn}`);
 }
