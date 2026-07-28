@@ -187,7 +187,8 @@ const sendViaMicrosoftGraph = async (
   fromName: string,
   toEmail: string,
   subject: string,
-  html: string
+  html: string,
+  text?: string
 ): Promise<void> => {
   const clientSecret = await getSecretFromSettings(supabase, "graph_client_secret");
   if (!clientSecret) {
@@ -974,6 +975,9 @@ const sendViaSmtp = async (
       to: toEmail.trim(),
       subject: subject,
       html: html,
+      // Plain-text alternative (ADR-191): keeps backend/storage URLs out of the
+      // inbox snippet and improves deliverability.
+      ...(text ? { content: text } : {}),
     });
     console.log("SMTP email sent successfully");
   } finally {
@@ -987,13 +991,15 @@ const sendViaResend = async (
   fromName: string,
   toEmail: string,
   subject: string,
-  html: string
+  html: string,
+  text?: string
 ): Promise<any> => {
   const emailResponse = await resend.emails.send({
     from: `${fromName} <${fromAddress}>`,
     to: [toEmail],
     subject,
     html,
+    ...(text ? { text } : {}),
   });
   console.log("Resend email sent:", emailResponse);
   return emailResponse;
