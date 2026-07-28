@@ -11,4 +11,5 @@ type: feature
 - Unscored month = blank, never `0`.
 - Aggregation is server-side: `get_annual_review_monthly_kra_matrix(p_employee_ids, p_fy_start, p_exclude_na)`, admin/hr_pms/management only. Must stay in parity with `compute_carry_kra_contribution`. Never loop `fetchMonthlyKraScores` per employee (BUG-CARRY-TIMEOUT).
 - fyStart = `cycle.review_year - 1` (`fyStartFromCycle`). Ids batched 500/call, sheet capped at 5,000 rows, fails soft.
+- Employees sheet also carries `KRA Months Counted` right after `KRA Points` — blank for non-KRA templates, derived from the same matrix via `monthsScored`. The matrix is fetched ONCE per export (`resolveKraContext`) and shared by both sheets; never re-derive the count from `kra_points`/`kra_weight`.
 - Code: `src/services/annualReview/monthlyKraSheet.ts`; `isKra` flag added to `fetchTemplateLabelMaps`.
