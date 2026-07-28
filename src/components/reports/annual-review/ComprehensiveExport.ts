@@ -125,6 +125,27 @@ function toEmployeeSheet(
 }
 
 function summaryToSheet(s: KpiSummary, cycleName: string) {
+  return summaryRows(s, cycleName);
+}
+
+/**
+ * ADR-188 — builds the "Monthly KRA Scores" rows. Returns `[]` when the cycle
+ * has no KRA-template employees, in which case the sheet is omitted entirely.
+ */
+async function buildMonthlyKraSheet(
+  input: ExportInput,
+  labelMaps: TemplateLabelMaps,
+): Promise<unknown[]> {
+  const isKraTemplate = (id: string | null | undefined) => !!id && !!labelMaps.isKra[id];
+  const kraRows = input.rows.filter((r) => isKraTemplate(r.template_id));
+  if (kraRows.length === 0) return [];
+  const fyStart = await fetchCycleFyStart(input.cycleId);
+  if (fyStart == null) return [];
+  const matrix = await fetchMonthlyKraMatrix(kraRows.map((r) => r.employee_id), fyStart);
+  return buildMonthlyKraRows(kraRows, matrix, isKraTemplate);
+}
+
+function summaryRows(s: KpiSummary, cycleName: string) {
   return [
     { Metric: 'Cycle', Value: cycleName },
     { Metric: 'Total employees', Value: s.total },
