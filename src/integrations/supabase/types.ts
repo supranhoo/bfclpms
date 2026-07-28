@@ -15947,6 +15947,7 @@ export type Database = {
           email: string
           employee_code: string
           full_name: string
+          functional_manager_id: string
           id: string
           is_active: boolean
           level: string
