@@ -1026,7 +1026,19 @@ function ProgressTab() {
                     isKraTemplate: isKraTpl,
                     kraRating: kraRow?.rating_0_5 ?? null,
                   });
-                  if (value == null) return <span className="text-muted-foreground/50">—</span>;
+                  if (value == null) {
+                    if (source === 'narrative') {
+                      return (
+                        <span
+                          className="text-xs text-muted-foreground"
+                          title="Reviewed — this stage scores no criteria on the assigned template (POLICY §AR-STAGE-SUBMIT-SCORE-COMPLETENESS)."
+                        >
+                          Narrative
+                        </span>
+                      );
+                    }
+                    return <span className="text-muted-foreground/50">—</span>;
+                  }
                   if (source === 'kra') {
                     return (
                       <span title="Derived from KRA achievement (POLICY §AR-KRA-GRID-DISPLAY)">
