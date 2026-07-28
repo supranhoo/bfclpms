@@ -5221,3 +5221,15 @@ detectable and repairable without a developer.
 3. A notification that cannot be delivered is reported as a `skipped`
    recipient. It MUST NOT roll back or block the reply, and MUST NOT surface as
    a destructive error toast.
+
+## §EVIDENCE-READ-KPI-PARTICIPATION (ADR-190, 2026-07-28)
+
+Read access to files in the private `review-evidence` bucket is determined by **participation in the KPI identified by path segment 2**, never by which user's folder the file happens to sit in. Reviewer, auditor and management evidence is written under the *uploader's* UUID, so a folder-owner-only rule locks the employee out of evidence about their own KPI.
+
+Authorised readers for a KPI-scoped evidence object: the KPI owner, their reporting manager, the skip-level manager, an auditor assigned via `audit_kpi_assignments` / `audit_kpi_level_assignments`, a user holding `kpi_mention_access` for that KPI, plus the pre-existing privileged roles (`admin`, `auditor`, `hr_pms`) retained by "Users can view authorized evidence".
+
+Rules:
+- Security changes to evidence access must be **additive**. A migration may `DROP ... IF EXISTS` a policy only if the same migration recreates it.
+- The bucket stays private. Never flip `review-evidence` to public (see §EVIDENCE-DOWNLOAD-PRIVATE-BUCKET / ADR-099).
+- Storage denials must surface a human-readable message via `normalizeEvidenceError()`; rendering a raw error object (`{}`) is a defect.
+- Guarded by `src/test/review/evidenceStorageAccess.test.ts`.
