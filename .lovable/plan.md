@@ -1,119 +1,64 @@
+## What the data actually shows (verified this turn)
 
-# Database Schema Reconstruction & Audit — Phase 1 (read-only)
+Employee 101279 — Dipak Kumar Chandara, instance `360ebf91…`:
 
-## Assumptions
+- Chain is `self → dept_head → bu_head`; current status **`pending_dept`**.
+- The `dept_head` response row exists, is **unlocked, never submitted**, `criteria_scores = {}`, but `qualitative_responses.__overall_recommendation` holds the full written recommendation.
+- Its effective template has **10 criteria explicitly assigned to the `dept_head` stage** — so this stage *is* a scoring stage, not narrative-only.
+- The row was last touched at `2026-07-27 04:15:08` — the exact timestamp of a bulk repair batch.
 
-- This is the audit pass only. No migrations, no application-logic changes, no data repair. The output is documentation plus a gap register awaiting your approval.
-- The live database is reachable read-only, so it is the top of the source-of-truth hierarchy (confirmed below).
-- Existing invariants listed in your brief (0-is-valid, snapshot immutability, no downstream rewind, additive-only migrations, backup parent-first ordering, etc.) are treated as **constraints on recommendations**, never as things to re-litigate.
+Scope across the cycle:
 
-## Pre-plan verification (confirmed facts, queried this turn)
+- `annual_review_empty_stage_repair_2026_07` (the ADR-172 "empty stage" sweep) ran at `2026-07-27 04:15:08` and repaired **30 instances**, unlocking their `dept_head`/`bu_head` responses, preserving the qualitative text, and rewinding status (`completed` or `pending_bu` → `pending_dept` / `pending_bu`).
+- Today there are **93** `dept_head` responses with empty `criteria_scores`; **54** of those also carry a written recommendation — split as 28 `completed`, 25 `pending_dept`, 1 `excluded`.
+- Of those 54, **25 completed ones sit on templates where the dept-head stage has 0 scoreable criteria** (legitimately narrative-only — blank is correct there), while **~26 sit on templates with 10–14 scoreable dept-head criteria** (the real defect class, 101279 among them).
 
-Live `public` schema — actual counts vs the figures in your brief:
+So there are two distinct problems wearing the same symptom, and they need different fixes.
 
-| Object | Your brief | Live DB (confirmed) |
-|---|---|---|
-| Tables | 248 | **248** ✓ |
-| Views | — | 3 |
-| Materialized views | 11 combined | 8 (11 combined ✓) |
-| Functions | 334 | **464** (drift — brief understates by 130) |
-| Enums | 70 | **35** (drift — brief overstates by 35) |
-| RLS policies | — | 736 |
-| Tables with RLS disabled | — | **0** ✓ |
-| Tables with zero policies | — | **0** ✓ |
-| Triggers (non-internal) | — | 209 |
-| Indexes | — | 657 |
-| SECURITY DEFINER functions | — | 375, of which **0 lack a pinned `search_path`** ✓ |
-| JSONB columns | — | 137 |
-| Historical repair/audit-snapshot tables | — | ~18 (`*_2026_0*`, `*_repair_*`, `*_archive_seed`) |
+## Root cause (one confirmed, one to confirm)
 
-Repo — confirmed: 885 migration files, 50 Edge Function directories, `src/integrations/supabase/types.ts` at 17,879 lines. `docs/database/` **does not exist yet**; `docs/specs/` holds 3 files.
+**Confirmed — display/status:** For 101279 and peers, the review really is *not* complete in data terms: the stage has zero criteria scores and was rewound to `pending_dept` by the 27 July sweep. The UI is faithfully rendering "blank / pending". The reviewer's perception of completeness comes from the recommendation text, which survived.
 
-Two baseline security postures are therefore already clean and will be documented as such rather than flagged: RLS coverage and SECURITY DEFINER `search_path` pinning. The function/enum count divergence is the first confirmed documentation drift item.
+**Unconfirmed — how a scoring stage got locked with `{}` scores in the first place.** These rows were submitted before the sweep with no criteria at all. Candidate causes, in order of likelihood: a submit path that bypassed the score requirement (proxy/assisted submit or a bulk stage-advance RPC), or the draft-persistence race where the recommendation textarea saved while the criteria map was not yet flushed. Step 1 below pins this down before any code change — I will not guess it.
 
-## Source-of-truth hierarchy used
+Note the legacy note in `04-erd-annual-review.md` still describes the column as `status`; the real column is `overall_status`. Worth correcting while here.
 
-1. Live database catalogs (`pg_catalog` / `information_schema`) — read-only, **confirmed available**
-2. `src/integrations/supabase/types.ts`
-3. Effective result of `supabase/migrations/`
-4. Runtime usage: `src/hooks`, `src/services`, `src/pages`, `src/components`, `src/lib`, `supabase/functions`
-5. Contract tests under `src/test`, `src/tests`
-6. `POLICY.md`, accepted ADRs, `mem/`, `docs/specs`
-7. `DOCUMENTATION.md`, `CHANGELOG_2026.md` (lowest — treated as claims to verify)
+## 5 Whys
 
-Every statement in the deliverables is tagged: `CONFIRMED` / `INFERRED` / `DOC-ONLY` / `OPEN QUESTION` / `SUSPECTED DRIFT`.
+1. Why is the dept-head data blank? Because `criteria_scores` for the `dept_head` response is `{}`.
+2. Why is the instance pending again? The 27 July empty-stage sweep detected the empty scoring stage and rewound it.
+3. Why was the stage empty despite being locked/submitted? A submit path recorded the stage without criteria — to be identified in Step 1.
+4. Why did that go unnoticed? Only the sweep detects it; nothing surfaces "reviewed but unscored" to the reviewer or to HR at submit time.
+5. Why does the reviewer believe it is done? The recommendation persisted and is visible, so the form looks answered.
 
-## Work plan
+## Plan
 
-### Step 1 — Catalog extraction (machine-readable first)
-Run a fixed set of read-only catalog queries and emit CSV/JSON under `docs/database/data/`: `tables.csv`, `columns.csv`, `foreign_keys.csv`, `constraints.csv`, `indexes.csv`, `policies.csv`, `triggers.csv`, `functions.csv`, `enums.csv`, `views.csv`, `storage_buckets.csv`, `cron_jobs.csv`, `extensions.csv`, `grants.csv`, `publications.csv`.
-*Verification:* row counts in each CSV match the live counts in the table above.
+**Step 1 — Pin the write path (read-only).**
+Correlate the 26 defective responses against proxy-submission rows, bulk stage-advance audit rows and `annual_review_access_audit` to identify which RPC created them. Deliverable: named RPC/UI path. Verification: every defective response maps to one identified path, or the residue is explicitly listed.
 
-### Step 2 — Application usage map
-Ripgrep the whole app for `.from("…")`, `.rpc("…")`, `.storage.from`, `.channel(`/realtime, `functions.invoke`, insert/update/upsert/delete, embedded PostgREST select strings, unpaged reads (missing `.range`/`fetchAllPaged`), and hardcoded status/enum literals. Join against the catalog to classify every object: actively used / DB-internal only / Edge-Function only / audit-compliance / historical repair / legacy-but-referenced / apparently unused / undetermined. Nothing is marked unused on frontend evidence alone — DB function bodies and Edge Functions are searched too.
-*Verification:* every one of the 248 tables carries exactly one classification and at least one evidence path.
+**Step 2 — Classify and publish the two cohorts.**
+A read-only diagnostic RPC `annual_review_unscored_stage_diagnostic(cycle_id)` returning, per instance: employee code, stage, scoreable-criteria count, has-recommendation, locked, status, sweep-touched. Verification: totals reconcile with the counts above (54 = 26 defect + 25 narrative-only + variance).
 
-### Step 3 — Drift detection (four-way diff)
-Live DB ↔ `types.ts` ↔ migration-derived schema ↔ code references ↔ backup manifest (`get_backup_table_order()` + `backup_denylist`). Detects: objects missing from types, code references to non-existent columns, functions redefined with inconsistent signatures across the 885 migrations, duplicate/conflicting policies, remote-only objects with no migration, obsolete enums still referenced in code, and tables absent from backup coverage.
-*Verification:* the confirmed function/enum count divergence appears in the report with a per-object breakdown.
+**Step 3 — Fix the display for the narrative-only cohort (UI only).**
+Where the stage genuinely has 0 scoreable criteria, the grid and detail view must render `Reviewed — narrative only` instead of a blank cell or `0.0`. This is the same class of fix as ADR-179 for KRA-derived rows and goes in the existing `kraStageDisplay` SSOT rather than a new one. Verification: 25 completed instances show the new label; scored rows are unchanged.
 
-### Step 4 — Domain classification & catalogue
-Assign all 248 tables to the 8 domains you named (IAM, Org structure, Monthly PMS/KPI, Org-level KPI, Annual Review, Incentives/Increments, Safety, Platform/Audit/Ops), then write the per-table catalogue with the full attribute matrix (purpose, PK, columns, FKs, unique/check, indexes, RLS + policy summary, triggers, app usage, sensitivity, retention, backup coverage, lifecycle status).
+**Step 4 — Recovery for the 26 defective ones.**
+Scores were never captured, so they cannot be reconstructed — they must be re-entered by the department head. The recommendation text is intact and stays on the form. Deliverable: an HR-visible "Reviewed but unscored" queue (reusing the Orphaned Reviews tab pattern) plus a one-time notification to the affected department heads. No silent auto-scoring, and nothing gets force-completed.
 
-### Step 5 — ERDs
-Nine Mermaid diagrams: one per domain plus one executive-level. FK-derived edges are solid and labelled `CONFIRMED`; application-logical joins (e.g. text-key KPI matching, canonical-key org-KPI links) are dashed and explicitly labelled as logical.
+**Step 5 — Prevent recurrence.**
+Extend the `trg_ar_stage_score_required` guard so a lock/submit on a stage with scoreable criteria > 0 and `criteria_scores = {}` is rejected at the database level regardless of which RPC calls it — including the proxy and bulk paths identified in Step 1. Verification: a regression test asserting the trigger rejects that write on each identified path.
 
-### Step 6 — Workflow data-flow maps
-The 15 workflows you listed, each documented as: tables read → tables written → RPCs → triggers fired → Edge Functions → status transitions → audit rows → notification rows → authorization checks → transaction boundary → failure/retry behaviour.
+**Step 6 — Docs, policy, tests.**
+ADR-197 (`AR-STAGE-SUBMIT-SCORE-COMPLETENESS`), POLICY entry, corrected `overall_status` naming in the ERD doc, unit tests for the display classifier and the trigger, mock data for both cohorts.
 
-### Step 7 — Security & RLS matrix
-Per-table CRUD policy matrix by role; plus targeted checks for broad `authenticated` grants, missing `WITH CHECK`, recursion-prone predicates, org-scope gaps, PII exposure, `anon`/`public` EXECUTE grants, the `verify_jwt = false` Edge Functions in `supabase/config.toml` (and whether each performs independent authorization), storage bucket policies and signed-URL usage, mutability of audit tables, and any secrets stored in tables. All 375 SECURITY DEFINER functions get an entry: owner, execute roles, search_path, internal authz, tables touched, mutation scope, risk class.
+## Risk and impact
 
-### Step 8 — Integrity & performance audit
-Orphan-row probes on every FK-less logical relationship, duplicate master records, nullable-but-UI-mandatory columns, enum/text mismatches, rating-scale inconsistencies, KPI weightage ≠ 100% checks, 1000-row PostgREST cap exposure, N+1 and client-side aggregation, missing indexes on RLS predicates and FK columns, redundant indexes, unbounded JSONB (137 columns triaged), matview grants/refresh strategy, and recursive trigger chains among the 209 triggers. All probes are `SELECT`-only and bounded.
+- **Data:** Steps 1–3 are read-only or presentation-only. Step 5 adds a rejecting trigger — additive, revertible by dropping it. No historical rows are rewritten; no auto-completion.
+- **Workflow:** Step 4 keeps the 26 instances pending until re-scored, which is the correct state. Department heads get extra work — unavoidable, the scores were never captured.
+- **Regression:** The trigger could block a legitimate narrative-only stage if the criteria count is computed wrongly. Mitigated by reusing `annual_review_stage_scoreable_criteria_count`, which already handles the system-scores ≥ 100 case.
+- **Scale:** Diagnostic RPC is per-cycle and paginated at the call site; the affected set is under 100 rows.
+- **Rollback:** Drop the trigger, revert the display commit. No destructive change to roll back.
 
-### Step 9 — Gap register, target state, roadmap
-Every finding gets the full field set you specified (ID, domain, severity, evidence, current behaviour, risk, minimal recommendation, impacted objects, data-migration need, backward compatibility, rollback, confidence) and a category (defect / drift / security / performance / documentation / naming / intentional denormalisation / historical repair object / optional improvement). Target-state proposals stay additive: new columns, `NOT VALID` constraints then validate, concurrent indexes, backfilled snapshots, versioned RPC signatures, compatibility views, deprecation windows.
+## Immediate answer on 101279
 
-## Deliverables
-
-```text
-docs/database/
-  00-executive-schema-overview.md
-  01-object-inventory.md
-  02-current-schema-catalogue.md
-  03-relationship-catalogue.md
-  04-domain-erds.md
-  05-workflow-data-flows.md
-  06-rls-security-matrix.md
-  07-functions-triggers-rpc-catalogue.md
-  08-backup-retention-coverage.md
-  09-schema-drift-report.md
-  10-gap-and-risk-register.md
-  11-recommended-target-state.md
-  12-migration-roadmap.md
-  data/*.csv|json          (machine-readable inventories)
-```
-
-Given 248 tables / 464 functions / 736 policies, `02` and `07` are the large ones and will be generated primarily from the extracted CSVs so the prose stays consistent with the catalog rather than hand-written.
-
-## Explicitly out of scope this pass
-
-No migrations, no `types.ts` regeneration, no Edge Function or hook changes, no data repair, no `POLICY.md`/ADR edits, no reads of `.env` or secret stores. Only new files under `docs/database/` are created.
-
-## Risk & impact
-
-- **Data impact:** none — read-only catalog and bounded `SELECT` probes.
-- **Workflow / UI impact:** none.
-- **Regression risk:** none (no application file is touched).
-- **Performance:** integrity probes on large tables (`kpis`, `review_submissions`, `org_kpi_values`) are `LIMIT`-bounded and run against the read replica path; no full-table scans without limits.
-- **Scalability of the deliverable itself:** catalogues are CSV-backed so they can be regenerated rather than manually maintained.
-
-## Implementation gate
-
-At the end of this pass I will present: top confirmed findings, critical/high issues, drift summary, security summary, integrity summary, performance summary, phased implementation proposal, exact files each phase would touch, migration risk rating, and required production checks — then stop and wait for your explicit approval before any migration is written.
-
-## Open questions (will not block Phase 1)
-
-1. Should the ~18 historical repair tables (`*_2026_0*`, `*_repair_*`) be proposed for archival/retention in the target state, or are they retained indefinitely for compliance?
-2. Do you want the gap register to include Low/Informational findings, or Critical/High/Medium only, to keep it actionable?
+The department head wrote and saved the recommendation but never entered the ten criteria scores, and the 27 July repair sweep correctly pushed the review back to `Dept Head Review Pending`. Nothing was deleted — the recommendation is intact — but the scores must be entered by the department head before this review can move to the BU Head.

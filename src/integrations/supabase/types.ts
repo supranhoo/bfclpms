@@ -14815,6 +14815,27 @@ export type Database = {
           employee_id: string
         }[]
       }
+      annual_review_unscored_stage_diagnostic: {
+        Args: { p_cycle_id?: string }
+        Returns: {
+          classification: string
+          cycle_id: string
+          employee_code: string
+          employee_id: string
+          employee_name: string
+          has_recommendation: boolean
+          instance_id: string
+          is_locked: boolean
+          overall_status: string
+          response_updated_at: string
+          reviewer_id: string
+          reviewer_name: string
+          scoreable_criteria: number
+          stage: string
+          submitted_at: string
+          sweep_touched: boolean
+        }[]
+      }
       annual_review_validate_stage_weights: {
         Args: { p_weights: Json }
         Returns: boolean
