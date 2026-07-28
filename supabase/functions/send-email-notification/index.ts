@@ -1454,13 +1454,16 @@ Sender Email: ${senderEmail}`, { logoUrl, footerText });
     }
 
     // Get template (custom or default)
-    let template = DEFAULT_TEMPLATES[event_type] || DEFAULT_TEMPLATES.kpi_submitted;
+    // Clone: later blocks mutate subject/body, and DEFAULT_TEMPLATES is module-scoped
+    // (mutating it would leak into subsequent invocations of the same isolate).
+    const baseTemplate = DEFAULT_TEMPLATES[event_type] || DEFAULT_TEMPLATES.kpi_submitted;
+    let template = { ...baseTemplate };
     const customTemplate = settingsMap[`email_template_${event_type}`];
     if (customTemplate) {
       try {
         const parsed = typeof customTemplate === 'string' ? JSON.parse(customTemplate) : customTemplate;
         if (parsed.subject && parsed.body) {
-          template = parsed;
+          template = { ...parsed };
         }
       } catch {
         // Use default template
