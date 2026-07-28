@@ -3,6 +3,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Building2, Users, User, Briefcase, RotateCcw, Filter, CheckCircle2 } from 'lucide-react';
+import { CANONICAL_WORKFLOW_STAGES, statusLabels } from '@/lib/reviewConstants';
 
 // ADR-194 §WF-STAGE-SSOT — derive the status chips from the canonical stage
 // list so no stage (e.g. Functional Manager Review) can be silently omitted.

@@ -17,7 +17,16 @@ import { KPI, KpiQuery } from '@/hooks/useKpis';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { LucideIcon } from 'lucide-react';
 
-type ReviewStatus = 'kra_set' | 'self_review' | 'manager_check' | 'skip_level_check' | 'hr_pms_review' | 'audit' | 'management_review' | 'approved';
+type ReviewStatus =
+  | 'kra_set'
+  | 'self_review'
+  | 'manager_check'
+  | 'functional_manager_check'
+  | 'skip_level_check'
+  | 'hr_pms_review'
+  | 'audit'
+  | 'management_review'
+  | 'approved';
 
 interface WorkflowProgressTrackerProps {
   kpis: KPI[];
@@ -59,6 +68,16 @@ const stageConfig: StageConfig[] = [
     bgClass: 'border-orange-300 dark:border-orange-700',
     iconBgClass: 'bg-orange-100 dark:bg-orange-900 text-orange-600 dark:text-orange-400',
     progressColor: 'bg-orange-500 dark:bg-orange-400'
+  },
+  // ADR-194 §WF-STAGE-SSOT — Functional Manager (F1) sits between Manager
+  // Check and Skip-Level in the canonical pipeline. Omitting it here made
+  // F1-workflow KPIs invisible on the dashboard stage strip.
+  {
+    key: 'functional_manager_check', label: 'FUNCTIONAL MGR', shortLabel: 'Func',
+    icon: Briefcase,
+    bgClass: 'border-fuchsia-300 dark:border-fuchsia-700',
+    iconBgClass: 'bg-fuchsia-100 dark:bg-fuchsia-900 text-fuchsia-600 dark:text-fuchsia-400',
+    progressColor: 'bg-fuchsia-500 dark:bg-fuchsia-400'
   },
   { 
     key: 'skip_level_check', label: 'SKIP-LEVEL', shortLabel: 'Skip',
