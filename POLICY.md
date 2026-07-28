@@ -5274,3 +5274,10 @@ Rules:
 ## §FM-READ-PARITY — Functional Manager read-back (ADR-194)
 - Every read path that hydrates a user for editing or display MUST select `functional_manager_id` (`get_reviewer_roster_slim`, User Management supplemental fetch). A persisted FM that renders blank is a defect, not a save failure.
 - The User Management list surfaces the stored Functional Manager so the mapping is verifiable without opening the edit dialog.
+
+## §RPT-STAGE-COLUMN-PARITY — Reports must cover every canonical workflow stage (ADR-194 Phase 2)
+- Every report, export, chart series and field registry entry that enumerates review stages MUST include the Functional Manager (F1) stage, ordered immediately after Manager and before Skip-Level, per `CANONICAL_WORKFLOW_STAGES` (§WF-STAGE-SSOT).
+- Score fallback chains (report rows, carried-score resolver, scorecard cascade, PDF export) must include `functional_manager_score` between `skip_level_score` and `manager_score`.
+- Cumulative completion counters treat any stage at or beyond `skip_level_check` as implying the F1 step was passed; F1 counters must never exceed the Manager counter.
+- Server-side report RPCs are part of this contract: `get_kpi_journey_report` returns `functionalManagerAt` and renders `F1` in the workflow chain label.
+- Drift guard: `src/test/reportStageParity.test.ts` fails the build if any listed surface drops its Functional Manager reference.

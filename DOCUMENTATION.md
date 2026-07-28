@@ -7634,3 +7634,24 @@ and shows the FM in both the mobile card and desktop table.
 `SCORE_COLS_ORDERED` (re-review detection). The column appears only when the
 employee's resolved workflow contains the F1 stage. Regression guard:
 `src/test/kpiDetailsTableFunctionalManagerColumn.test.ts`.
+
+**ADR-194 Phase 2 — Functional Manager reporting parity.**
+Reports updated to expose the F1 stage: `KpiDetailReport` (Functional Mgr score
+column + fallback chain), `MonthlyScorecardReport` (`avg_functional_manager_score`,
+weighted aggregation, `hasFunctionalManagerData`), `CompletionReport`
+(`functionalManagerReviewed` counter, table column and chart series),
+`DepartmentReport` (`functional_manager_check` status breakdown),
+`KRAIssuance` (status label, colour and count), `KpiJourneyReport`
+(`functionalManagerAt` column), and `PerformanceReport` (rating/score fallbacks).
+Registries: `src/lib/reportFieldRegistry.ts` (`scores.functional_manager_score`)
+and `src/lib/reports/catalog.ts` (per-report FM fields).
+Shared logic: `src/lib/carriedScoreResolver.ts` gained the `functional_manager`
+cascade rung, `src/hooks/useKpis.ts` selects and maps `functional_manager_score`,
+`src/components/review/UnifiedScorecard.tsx` includes F1 in the universal score
+fallback, cascade-clear map and step-back clearing, and `src/lib/pdfExport.ts`
+carries `avgFunctionalManagerScore` plus a "Func Mgr" bulk-scorecard column.
+Database: `get_kpi_journey_report(..., p_employee_status)` now emits
+`functionalManagerAt` and the `F1` chain token.
+Tests: `src/test/e2e/functionalManagerWorkflow.e2e.test.tsx` (27),
+`src/test/kpiDetailsTableFunctionalManagerColumn.test.ts` (10),
+`src/test/reportStageParity.test.ts` (15 drift-guard assertions).
