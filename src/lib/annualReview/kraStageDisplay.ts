@@ -30,7 +30,7 @@ export interface StageScoreCell {
   submitted: boolean;
 }
 
-export type StageRatingSource = 'criteria' | 'kra';
+export type StageRatingSource = 'criteria' | 'kra' | 'narrative';
 
 export interface StageDisplayRating {
   /** 0..5 value to render, or null when the column must show "—". */
@@ -40,6 +40,24 @@ export interface StageDisplayRating {
 }
 
 const NONE: StageDisplayRating = { value: null, source: null };
+
+/**
+ * ADR-197 — number of criteria the given stage is expected to score on this
+ * template. Zero means the stage is narrative-only and a blank score column is
+ * correct, not a data defect. Mirrors the PL/pgSQL
+ * `public.annual_review_stage_scoreable_criteria_count`.
+ */
+export function stageScoreableCriteriaCount(
+  criteria: TemplateCriterion[] | null | undefined,
+  role: AnnualReviewerRole,
+): number {
+  let n = 0;
+  for (const c of criteria ?? []) {
+    if (!(c.reviewer_stages ?? []).includes(role)) continue;
+    if ((Number(c.weight) || 0) > 0) n += 1;
+  }
+  return n;
+}
 
 export function resolveStageDisplayRating(args: {
   cell: StageScoreCell | null | undefined;
@@ -62,6 +80,12 @@ export function resolveStageDisplayRating(args: {
   // KRA templates: the stage carries the employee's KRA achievement.
   if (isKraTemplate && typeof kraRating === 'number' && Number.isFinite(kraRating)) {
     return { value: kraRating, source: 'kra' };
+  }
+
+  // ADR-197: the template asks this stage for no scores at all — the reviewer
+  // genuinely completed a narrative-only stage. Distinguish it from a defect.
+  if (stageScoreableCriteriaCount(criteria, role) === 0) {
+    return { value: null, source: 'narrative' };
   }
 
   // ADR-172: unscored stage on a criteria template stays blank.
