@@ -7599,3 +7599,14 @@ Replaced by `Safety roles can view scoped active profiles`, delegating to two ne
 `profiles` has no `business_unit_id`; BU membership is resolved through `profiles.department_id → departments.business_unit_id`. (The previous BU-head cascade bug from ADR-173 came from assuming that column existed.)
 
 No other `profiles` policy was touched. Policy: §SAFETY-PII-SCOPE.
+
+### Functional Manager reviewer scope (ADR-193)
+`profiles.functional_manager_id` reports are unioned into `get_manager_team_roster`
+and `get_reviewer_roster_slim` as `relationship = 'functional'`. Frontend touch points:
+`src/hooks/useIsFunctionalManager.ts` (unlocks the Dashboard Team view),
+`src/components/review/EmployeeSelectorGrid.tsx` ("Functional" badge, counts and
+export rows via `resolveReviewableStatuses('functional_manager')`),
+`src/lib/kpiPendingWith.ts` and `src/services/reports/pendingWithResolver.ts`
+(attribute `functional_manager_check` to the named FM). Workflow edits go through
+the additive-only `workflow_change_step_back()` which snapshots
+`review_submissions.prior_final_score` / `prior_final_rating`.
