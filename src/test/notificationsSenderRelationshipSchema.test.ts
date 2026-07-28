@@ -33,11 +33,15 @@ function invalidRelationshipColumns(sql: string): string[] {
  */
 describe('can_send_notification_to schema references', () => {
   const dir = resolve(__dirname, '../../supabase/migrations');
+  // ADR-189 added a 3-arg (sender, target, context jsonb) overload; the
+  // relationship matrix asserted here lives in the 2-arg definition.
+  const TWO_ARG =
+    /CREATE\s+OR\s+REPLACE\s+FUNCTION\s+public\.can_send_notification_to\s*\(\s*sender\s+uuid\s*,\s*target\s+uuid\s*\)/i;
   const bodies = readdirSync(dir)
     .filter((f) => f.endsWith('.sql'))
     .sort()
     .map((f) => readFileSync(resolve(dir, f), 'utf8'))
-    .filter((b) => b.includes('CREATE OR REPLACE FUNCTION public.can_send_notification_to'));
+    .filter((b) => TWO_ARG.test(b));
 
   it('has at least one migration defining the helper', () => {
     expect(bodies.length).toBeGreaterThan(0);
