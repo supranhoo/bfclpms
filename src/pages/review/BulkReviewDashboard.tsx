@@ -876,7 +876,14 @@ export default function BulkReviewDashboard() {
               <Skeleton className="h-3 w-32 ml-1" />
             ) : preview.data ? (
               <span className="hidden md:flex items-center gap-2 ml-1 text-[11px] text-muted-foreground tabular-nums">
-                <span><strong className="text-foreground">{preview.data.emp_count}</strong> emp</span>
+                <span
+                  title={previewIsApproximate
+                    ? 'Approximate — the pre-load estimate counts the broader server scope when more than one Company / Division / BU / Department is selected. The loaded grid is filtered exactly.'
+                    : undefined}
+                >
+                  {previewIsApproximate && <span className="opacity-70">~</span>}
+                  <strong className="text-foreground">{preview.data.emp_count}</strong> emp
+                </span>
                 <span className="opacity-40">·</span>
                 <span><strong className="text-foreground">{preview.data.kpi_count}</strong> KPI</span>
                 <span className="opacity-40">·</span>
