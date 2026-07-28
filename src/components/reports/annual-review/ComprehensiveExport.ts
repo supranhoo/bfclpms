@@ -11,6 +11,7 @@ import {
 // ADR-188 — monthly KRA detail sheet.
 import {
   buildMonthlyKraRows, fetchCycleFyStart, fetchMonthlyKraMatrix,
+  monthsScored, type MonthlyKraMatrix,
 } from '@/services/annualReview/monthlyKraSheet';
 
 export interface ExportInput {
@@ -27,11 +28,19 @@ export interface ExportInput {
   byStage: GroupSummary[];
 }
 
+/** ADR-188 — one shared KRA context for both the Employees column and the sheet. */
+interface KraContext {
+  matrix: MonthlyKraMatrix;
+  isKraTemplate: (templateId: string | null | undefined) => boolean;
+  kraRows: ComprehensiveRow[];
+}
+
 function toEmployeeSheet(
   rows: ComprehensiveRow[],
   labelMaps: TemplateLabelMaps,
   eligMaps: EligibilityMaps,
   eligColumns: EligibilityColumn[],
+  kra: KraContext,
 ) {
   // ADR-181 — stable column set: every question, blank when not on the template.
   const blankElig: Record<string, string> = {};
@@ -91,6 +100,11 @@ function toEmployeeSheet(
     'Template': r.template_name ?? '',
     'KRA Weight': r.kra_weight ?? '',
     'KRA Points': r.kra_points ?? '',
+    // ADR-188 — number of fiscal months of KRA data behind the KRA score.
+    // Blank for non-KRA templates; never a misleading 0.
+    'KRA Months Counted': kra.isKraTemplate(r.template_id)
+      ? (monthsScored(kra.matrix, r.employee_id) ?? 0)
+      : '',
     'Criteria Weight': r.criteria_weight ?? '',
     'System Weight': r.system_weight ?? '',
     // ADR-180 — humanised score maps (criterion / system-score names, not ids).
