@@ -35,6 +35,13 @@ export function useObservationReplies(observationId: string | undefined) {
   });
 }
 
+/**
+ * ADR-189 / POLICY §OBS-REPLY-ATOMICITY.
+ * The reply, the auto-acknowledgement, the @mention notifications and the
+ * mention access grant are performed by a single server-side transaction
+ * (`post_observation_reply`). Notification permission failures are reported
+ * as `skipped` recipients and never block the reply itself.
+ */
 export function useCreateObservationReply() {
   const queryClient = useQueryClient();
 
@@ -50,95 +57,42 @@ export function useCreateObservationReply() {
       evidenceUrls?: string[];
       mentionedUserIds?: string[];
     }) => {
-      const { data: userData } = await supabase.auth.getUser();
-      if (!userData.user) throw new Error('Not authenticated');
-
-      const { data, error } = await supabase
-        .from('kpi_observation_replies')
-        .insert({
-          observation_id: observationId,
-          reply_by: userData.user.id,
-          reply_text: replyText,
-          evidence_urls: evidenceUrls && evidenceUrls.length > 0 ? evidenceUrls : null,
-        })
-        .select()
-        .single();
+      const { data, error } = await supabase.rpc('post_observation_reply', {
+        p_observation_id: observationId,
+        p_reply_text: replyText,
+        p_evidence_urls:
+          evidenceUrls && evidenceUrls.length > 0 ? (evidenceUrls as unknown as never) : null,
+        p_mentioned_user_ids:
+          mentionedUserIds && mentionedUserIds.length > 0
+            ? [...new Set(mentionedUserIds)]
+            : null,
+      });
 
       if (error) throw error;
 
-      // Auto-acknowledge the observation if it's still 'open'
-      await supabase
-        .from('kpi_observations')
-        .update({ status: 'acknowledged' })
-        .eq('id', observationId)
-        .eq('status', 'open');
+      const result = (data ?? {}) as {
+        reply?: ObservationReply;
+        notified?: string[];
+        skipped?: string[];
+      };
 
-      // Insert @mention notifications
-      if (mentionedUserIds && mentionedUserIds.length > 0) {
-        // Get observation details for notification context
-        const { data: obsData } = await supabase
-          .from('kpi_observations')
-          .select('kpi_id, ticket_number')
-          .eq('id', observationId)
-          .single();
-
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('full_name, email')
-          .eq('id', userData.user.id)
-          .single();
-
-        const mentionerName = profile?.full_name || profile?.email || 'Someone';
-
-        if (obsData) {
-          // Get employee_id from KPI
-          const { data: kpiData } = await supabase
-            .from('kpis')
-            .select('employee_id, kpi_name')
-            .eq('id', obsData.kpi_id)
-            .single();
-
-          const uniqueIds = [...new Set(mentionedUserIds)].filter(id => id !== userData.user.id);
-          // Truncate KPI name to avoid wall-of-text in notifications
-          const shortKpiName = (kpiData?.kpi_name || 'a KPI').split(/[\n\r:]/)[0].trim().slice(0, 80);
-
-          if (uniqueIds.length > 0) {
-            const notifications = uniqueIds.map(userId => ({
-              user_id: userId,
-              type: 'observation_mention',
-              title: '@Mentioned in Observation',
-              message: `${mentionerName} mentioned you in observation ${obsData.ticket_number || ''} on ${shortKpiName}`,
-              kpi_id: obsData.kpi_id,
-              related_user_id: userData.user.id,
-              metadata: {
-                employee_id: kpiData?.employee_id || null,
-                observation_id: observationId,
-                ticket_number: obsData.ticket_number || null,
-              },
-            }));
-
-            await supabase.from('notifications').insert(notifications);
-
-            // Grant mentioned users read-only access to this KPI
-            await supabase.from('kpi_mention_access').upsert(
-              uniqueIds.map(userId => ({
-                kpi_id: obsData.kpi_id,
-                user_id: userId,
-                granted_by: userData.user.id,
-              })),
-              { onConflict: 'kpi_id,user_id', ignoreDuplicates: true }
-            );
-          }
-        }
-      }
-
-      return data;
+      return {
+        ...(result.reply as ObservationReply),
+        skippedCount: result.skipped?.length ?? 0,
+      };
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['observation-replies', data.observation_id] });
       queryClient.invalidateQueries({ queryKey: ['kpi-observations'] });
       queryClient.invalidateQueries({ queryKey: ['kpi-observations-batch'] });
-      toast({ title: 'Reply Added', description: 'Your reply has been posted.' });
+      if (data.skippedCount > 0) {
+        toast({
+          title: 'Reply Added',
+          description: `Your reply has been posted. ${data.skippedCount} participant(s) could not be notified.`,
+        });
+      } else {
+        toast({ title: 'Reply Added', description: 'Your reply has been posted.' });
+      }
     },
     onError: (error) => {
       toast({ title: 'Error', description: error.message, variant: 'destructive' });
