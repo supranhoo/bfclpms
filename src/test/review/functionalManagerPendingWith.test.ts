@@ -9,6 +9,7 @@ describe('Functional Manager pending-with resolution', () => {
     expect(resolvePendingWith({
       status: 'manager_check',
       isOrgKpi: false,
+      dataOwnerNames: '',
       employeeName: 'Emp',
       managerName: 'Mgr',
       functionalManagerName: 'Saibal Kunar',
@@ -21,6 +22,7 @@ describe('Functional Manager pending-with resolution', () => {
     expect(resolvePendingWith({
       status: 'manager_check',
       isOrgKpi: false,
+      dataOwnerNames: '',
       employeeName: 'Emp',
       managerName: 'Mgr',
       functionalManagerName: null,
@@ -33,6 +35,7 @@ describe('Functional Manager pending-with resolution', () => {
     expect(resolvePendingWith({
       status: 'functional_manager_check',
       isOrgKpi: false,
+      dataOwnerNames: '',
       employeeName: 'Emp',
       managerName: 'Mgr',
       functionalManagerName: 'Saibal Kunar',
