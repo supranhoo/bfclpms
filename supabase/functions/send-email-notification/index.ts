@@ -1503,20 +1503,16 @@ Sender Email: ${senderEmail}`, { logoUrl, footerText });
       source_year,
     };
 
-    // For final_approved, inject final_score and score_label
+    // For final_approved, inject final_score and score_label (ADR-191).
+    // When no score can be resolved we drop the score clause entirely rather
+    // than rendering the misleading "N/A/5".
+    let finalScoreDisplay = resolveFinalScoreDisplay(null, false);
     if (event_type === 'final_approved') {
-      const scoreLabels: Record<string, string> = {
-        '5': 'Outstanding',
-        '4': 'Exceeds Expectations',
-        '3': 'Meets Expectations',
-        '2': 'Needs Improvement',
-        '1': 'Below Expectations',
-        '0': 'Not Achieved',
-      };
-      const scoreStr = final_score != null ? String(final_score) : 'N/A';
-      const roundedScore = Math.round(Number(scoreStr)).toString();
-      placeholderData.final_score = scoreStr !== 'N/A' ? scoreStr : 'N/A';
-      placeholderData.score_label = scoreLabels[roundedScore] || 'N/A';
+      finalScoreDisplay = resolveFinalScoreDisplay(final_score, (body as any).is_na);
+      placeholderData.final_score = finalScoreDisplay.scoreText;
+      placeholderData.score_label = finalScoreDisplay.scoreLabel;
+      template.subject = buildFinalApprovedSubjectTemplate(template.subject, finalScoreDisplay);
+      template.body = buildFinalApprovedBodyTemplate(template.body, finalScoreDisplay);
     }
 
     // For kra_batch_assigned, inject the KRA table HTML into the placeholder
