@@ -7664,3 +7664,12 @@ Company / Division / Business Unit / Department filters on `/review/bulk` were s
 - **UI**: pre-load preview counters render `~` with an "approximate" tooltip when any axis has 2+ values.
 - **Tests**: `src/lib/bulkOrgFilter.test.ts` (8 assertions incl. the reported DRI+SMS case).
 - **Policy**: §UI-MULTISELECT-SERVER-PARITY.
+
+### ADR-196 — Functional Manager stage column completeness
+Approving a KPI at the Functional Manager stage failed with *"Could not find the 'functional_manager_achieved_value' column of 'review_submissions' in the schema cache"*. The F1 stage had shipped with only 4 of the 6 standard reviewer columns.
+
+- **DB**: added `functional_manager_achieved_value` (numeric) and `functional_manager_evidence_url` (text) to `public.review_submissions`; relaxed `functional_manager_evidence_urls` to nullable (peer parity).
+- **Triggers**: `enforce_self_snapshot_mirror()` and `tg_review_submissions_self_column_guard()` re-created with the FM columns enumerated.
+- **RPC**: `bulk_write_stage_scores` now sets `functional_manager_achieved_value = v_mirror_achieved` on a score write and `= NULL` on an N/A write, matching manager / skip_level / hr_pms / auditor.
+- **Tests**: `src/test/reviewSubmissionsStageColumnParity.test.ts` (39 assertions across all 6 stages × 6 columns) and the existing 27-assertion F1 e2e suite — 81 assertions green.
+- **Policy**: §WF-STAGE-COLUMN-COMPLETENESS.

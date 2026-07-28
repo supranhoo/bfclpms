@@ -5290,3 +5290,9 @@ Rules:
 - Fail-closed: while the attribute hydration is loading or errored, an active org filter renders zero rows rather than leaking out-of-scope rows.
 - Pre-load scope estimates are labelled approximate (`~`) whenever any axis has 2+ values, because the server counts the broader scope.
 - Regression: `src/lib/bulkOrgFilter.test.ts`.
+
+## §WF-STAGE-COLUMN-COMPLETENESS — Every reviewer stage owns the full column set (ADR-196)
+- Any workflow stage that the client can write MUST have all six columns on `public.review_submissions`: `<stage>_score`, `<stage>_rating`, `<stage>_remarks`, `<stage>_achieved_value`, `<stage>_evidence_url`, `<stage>_evidence_urls` (all nullable). A partially-created stage surfaces as a PostgREST schema-cache error at submit time, not at deploy time.
+- Server parity: `bulk_write_stage_scores` MUST mirror the achieved value into `<stage>_achieved_value` on a score write, and NULL it on an N/A write, identically for every stage.
+- Snapshot/guard triggers (`enforce_self_snapshot_mirror`, `tg_review_submissions_self_column_guard`) MUST enumerate the same stage column set.
+- Regression: `src/test/reviewSubmissionsStageColumnParity.test.ts` (39 assertions) + `src/test/e2e/functionalManagerWorkflow.e2e.test.tsx`.
