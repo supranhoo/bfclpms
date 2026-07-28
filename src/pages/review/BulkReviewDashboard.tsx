@@ -468,7 +468,7 @@ export default function BulkReviewDashboard() {
       rows = rows.filter(r => isRowInMyReviewScope(r, pairs));
     }
     return rows;
-  }, [rawRows, search, hideEmpty, hideNonDue, period, year, kraNames, designations, grades, managerIds, allowedEmpSet, categoryIds, isReviewerRole, myScopeOnly, myReviewScope, isAdminViewer, adminStageReadyOnly, stageReadyScope, stageReadyReady]);
+  }, [rawRows, search, hideEmpty, hideNonDue, period, year, kraNames, designations, grades, managerIds, allowedEmpSet, orgFilterActive, orgAttrsReady, allowedOrgEmpSet, categoryIds, isReviewerRole, myScopeOnly, myReviewScope, isAdminViewer, adminStageReadyOnly, stageReadyScope, stageReadyReady]);
 
   // Count of currently-loaded rows that fall inside the auditor's scope —
   // surfaced as a muted chip so even with the toggle off the auditor knows
