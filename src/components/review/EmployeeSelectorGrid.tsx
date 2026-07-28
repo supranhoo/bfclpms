@@ -606,7 +606,7 @@ export function EmployeeSelectorGrid({
   }, [autoOpenKpiId, allProfiles]);
 
   // Get employee KPI stats using workflow-aware resolution
-  const getEmployeeKpiStats = (employeeId: string, relationship?: 'direct' | 'indirect') => {
+  const getEmployeeKpiStats = (employeeId: string, relationship?: 'direct' | 'indirect' | 'functional') => {
     if (!periodKpis) return { badge1: 0, badge2: 0, badge3: 0, total: 0, clearedKraSet: 0 };
     const empKpis = periodKpis.filter(k => k.employee_id === employeeId);
     const clearedKraSet = empKpis.filter(k => k.status !== 'kra_set').length;
@@ -614,6 +614,21 @@ export function EmployeeSelectorGrid({
 
     if (viewLevel === 'team') {
       const isIndirect = relationship === 'indirect';
+      // ADR-193 §FM-REVIEWER-SCOPE — functional reports queue at the
+      // functional_manager_check stage of their resolved workflow.
+      if (relationship === 'functional') {
+        const reviewable = resolveReviewableStatuses('functional_manager', stages);
+        const pendingKpis = empKpis.filter(k => reviewable.includes(k.status || ''));
+        return {
+          badge1: pendingKpis.length,
+          badge2: empKpis.filter(k => !['kra_set', 'self_review'].includes(k.status || '')).length,
+          badge3: 0,
+          total: empKpis.length,
+          clearedKraSet,
+          orgKpiCount: pendingKpis.filter(k => k.is_org_level).length,
+          nonMonthlyCount: pendingKpis.filter(k => k.frequency && !['monthly', 'daily', 'weekly'].includes(k.frequency.toLowerCase())).length,
+        };
+      }
       if (isIndirect) {
         const reviewable = resolveReviewableStatuses('skip_level', stages);
         const slIdx = stages.indexOf('skip_level_check');
