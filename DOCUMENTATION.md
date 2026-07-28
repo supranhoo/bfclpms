@@ -7673,3 +7673,13 @@ Approving a KPI at the Functional Manager stage failed with *"Could not find the
 - **RPC**: `bulk_write_stage_scores` now sets `functional_manager_achieved_value = v_mirror_achieved` on a score write and `= NULL` on an N/A write, matching manager / skip_level / hr_pms / auditor.
 - **Tests**: `src/test/reviewSubmissionsStageColumnParity.test.ts` (39 assertions across all 6 stages × 6 columns) and the existing 27-assertion F1 e2e suite — 81 assertions green.
 - **Policy**: §WF-STAGE-COLUMN-COMPLETENESS.
+
+### ADR-197 — Blank department/BU stage scores: narrative vs unscored
+Reviews such as employee 101279 showed a saved "Overall Recommendation" but blank stage scores, and were rewound to `pending_dept` by the ADR-172 empty-stage sweep. Two distinct populations were conflated behind the same "—".
+
+- **Diagnostic (DB)**: `annual_review_unscored_stage_diagnostic(p_cycle_id)` — read-only, admin/hr_pms, classifies every empty-score response as `narrative_only` or `unscored`, and flags rows touched by the July sweep. Current cycle: 338 narrative-only (correct), 27 unscored (need re-scoring).
+- **Display (UI)**: `resolveStageDisplayRating` gained a `narrative` source; the Admin → Progress grid renders "Narrative" with a tooltip instead of "—" when the template scores nothing at that stage.
+- **Console (UI)**: Annual Review admin → **Unscored Stages** tab (`UnscoredStagesTab.tsx`) lists the defective cohort with employee, stage, reviewer, criteria count and recommendation state.
+- **Prevention**: the existing `trg_ar_stage_score_required` trigger already blocks new occurrences on INSERT and UPDATE; no new writes are possible.
+- **Tests**: `src/lib/annualReview/narrativeStageDisplay.test.ts` (6 tests).
+- **Policy**: §AR-STAGE-SUBMIT-SCORE-COMPLETENESS.

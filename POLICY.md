@@ -5296,3 +5296,13 @@ Rules:
 - Server parity: `bulk_write_stage_scores` MUST mirror the achieved value into `<stage>_achieved_value` on a score write, and NULL it on an N/A write, identically for every stage.
 - Snapshot/guard triggers (`enforce_self_snapshot_mirror`, `tg_review_submissions_self_column_guard`) MUST enumerate the same stage column set.
 - Regression: `src/test/reviewSubmissionsStageColumnParity.test.ts` (39 assertions) + `src/test/e2e/functionalManagerWorkflow.e2e.test.tsx`.
+
+## §AR-STAGE-SUBMIT-SCORE-COMPLETENESS — Blank stage scores must be classified, never guessed (ADR-197)
+- A reviewer stage holding a response with `criteria_scores = '{}'` has exactly two meanings, and the system MUST distinguish them:
+  - **narrative_only** — the assigned template gives that stage zero weighted criteria. A blank score column is CORRECT; the grid renders "Narrative", not "—".
+  - **unscored** — the template does assign weighted criteria to that stage but none were scored. This is a data defect; the stage must be re-scored before the review can complete.
+- Classification SSOT: `public.annual_review_stage_scoreable_criteria_count(instance_id, reviewer_role)` (server) mirrored by `stageScoreableCriteriaCount()` in `src/lib/annualReview/kraStageDisplay.ts` (client). Client and server must not drift.
+- Diagnostic: `public.annual_review_unscored_stage_diagnostic(p_cycle_id)` — read-only, admin/hr_pms only, exposed as Annual Review admin → **Unscored Stages**. It repairs nothing.
+- Prevention: `trg_ar_stage_score_required` (ADR-172) blocks INSERT/UPDATE of a locked response whose stage has scoreable criteria and no scores. Rows locked before that trigger existed are exactly the historical `unscored` cohort and are only cleared by real re-scoring — never by back-filling zeros or force-completing.
+- Qualitative content (`__overall_recommendation`) is never evidence of scoring completeness and must not advance a stage on its own.
+- Regression: `src/lib/annualReview/narrativeStageDisplay.test.ts`.
