@@ -8,7 +8,9 @@
  *   - kra_set + org KPI              → Org KPI Data Owner name(s)
  *   - kra_set + individual KPI       → Employee name (self review is next)
  *   - self_review                    → Reporting Manager name
- *   - manager_check / skip_level_check → next stage per resolved workflow:
+ *   - manager_check / functional_manager_check / skip_level_check → next stage
+ *     per resolved workflow:
+ *       functional_manager_check → Functional Manager name
  *       skip_level_check → Skip-Level Manager name
  *       audit            → "Audit"
  *       hr_pms_review    → "HR PMS"
@@ -26,6 +28,7 @@ export type PendingWithStage =
   | 'kra_set'
   | 'self_review'
   | 'manager_check'
+  | 'functional_manager_check'
   | 'skip_level_check'
   | 'hr_pms_review'
   | 'audit'
@@ -39,6 +42,8 @@ export interface ResolvePendingWithInput {
   dataOwnerNames: string; // comma-joined; empty string when none
   employeeName: string;
   managerName: string | null;
+  /** ADR-193 — profiles.functional_manager_id resolved to a display name. */
+  functionalManagerName?: string | null;
   skipManagerName: string | null;
   /** Ordered stage chain from get_employee_workflow (no framing stages). */
   stageChain: string[];
@@ -53,6 +58,7 @@ const QUEUE_LABEL: Record<string, string> = {
   hr_pms_review: 'HR PMS',
   audit: 'Audit',
   management_review: 'Management',
+  functional_manager_check: 'Functional Manager',
 };
 
 /** Find the stage that comes strictly after `current` in the resolved chain. */
@@ -73,9 +79,11 @@ function labelForNext(
   hrPmsNames?: string,
   auditorNames?: string,
   managementNames?: string,
+  functionalManagerName?: string | null,
 ): string {
   if (!next) return PENDING_WITH_NONE;
   if (next === 'manager_check') return managerName || PENDING_WITH_NONE;
+  if (next === 'functional_manager_check') return functionalManagerName || QUEUE_LABEL[next];
   if (next === 'skip_level_check') return skipManagerName || PENDING_WITH_NONE;
   if (next === 'hr_pms_review') return (hrPmsNames?.trim()) || QUEUE_LABEL[next] || PENDING_WITH_NONE;
   if (next === 'audit') return (auditorNames?.trim()) || QUEUE_LABEL[next] || PENDING_WITH_NONE;
@@ -90,6 +98,7 @@ export function resolvePendingWith(input: ResolvePendingWithInput): string {
     dataOwnerNames,
     employeeName,
     managerName,
+    functionalManagerName,
     skipManagerName,
     stageChain,
     hrPmsNames,
@@ -111,13 +120,17 @@ export function resolvePendingWith(input: ResolvePendingWithInput): string {
   // For every reviewer stage, look up the next stage from the resolved chain.
   if (
     status === 'manager_check' ||
+    status === 'functional_manager_check' ||
     status === 'skip_level_check' ||
     status === 'hr_pms_review' ||
     status === 'audit' ||
     status === 'management_review'
   ) {
     const next = nextStage(stageChain, status);
-    return labelForNext(next, managerName, skipManagerName, hrPmsNames, auditorNames, managementNames);
+    return labelForNext(
+      next, managerName, skipManagerName, hrPmsNames, auditorNames, managementNames,
+      functionalManagerName,
+    );
   }
 
   return PENDING_WITH_NONE;
