@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { ChevronLeft, ChevronRight, Download, ExternalLink, Loader2, Maximize2, Minimize2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { isPreviewableEvidence } from '@/lib/storageDownload';
+import { normalizeEvidenceError } from '@/lib/review/evidenceError';
 import { toast } from 'sonner';
 
 type EvidenceGroupItem = { url: string; fileName?: string | null };
@@ -40,7 +41,7 @@ export async function resolveDownloadableUrl(url: string): Promise<string> {
     .from(bucket)
     .createSignedUrl(decodeURIComponent(path), 300);
   if (error || !data?.signedUrl) {
-    throw new Error(error?.message || 'Could not prepare file URL');
+    throw new Error(normalizeEvidenceError(error, 'Could not prepare file URL'));
   }
   return data.signedUrl;
 }
@@ -103,7 +104,7 @@ export function EvidencePreviewProvider() {
             const { data, error: sErr } = await supabase.storage
               .from(bucket)
               .createSignedUrl(decodeURIComponent(path), 600);
-            if (sErr || !data?.signedUrl) throw new Error(sErr?.message || 'Could not sign URL');
+            if (sErr || !data?.signedUrl) throw new Error(normalizeEvidenceError(sErr));
             createdUrl = data.signedUrl;
           } else {
             createdUrl = detail.url;
@@ -113,7 +114,7 @@ export function EvidencePreviewProvider() {
           const { data, error: dlErr } = await supabase.storage
             .from(bucket)
             .download(decodeURIComponent(path));
-          if (dlErr || !data) throw new Error(dlErr?.message || 'Download failed');
+          if (dlErr || !data) throw new Error(normalizeEvidenceError(dlErr));
           createdUrl = URL.createObjectURL(data);
         } else {
           // Non-storage URL — use directly
@@ -121,7 +122,7 @@ export function EvidencePreviewProvider() {
         }
         if (!cancelled) setBlobUrl(createdUrl);
       } catch (err) {
-        if (!cancelled) setError((err as Error).message);
+        if (!cancelled) setError(normalizeEvidenceError(err));
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -173,7 +174,7 @@ export function EvidencePreviewProvider() {
       const url = await resolveDownloadableUrl(detail.url);
       downloadDirect(url, displayName);
     } catch (err) {
-      toast.error((err as Error).message || 'Could not prepare file for download');
+      toast.error(normalizeEvidenceError(err, 'Could not prepare file for download'));
     }
   };
 
@@ -183,7 +184,7 @@ export function EvidencePreviewProvider() {
       const url = blobUrl || (await resolveDownloadableUrl(detail.url));
       window.open(url, '_blank', 'noopener,noreferrer');
     } catch (err) {
-      toast.error((err as Error).message || 'Could not open file');
+      toast.error(normalizeEvidenceError(err, 'Could not open file'));
     }
   };
 
@@ -247,7 +248,7 @@ export function EvidencePreviewProvider() {
         )}
         {!loading && error && (
           <div className="text-sm text-destructive p-8 text-center">
-            Preview failed: {error}
+            {error}
             <div className="mt-3">
               <Button variant="outline" size="sm" onClick={handleDownload}>
                 <Download className="h-4 w-4 mr-1" /> Download instead
