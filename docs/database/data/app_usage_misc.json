@@ -1,0 +1,75 @@
+{
+  "storage_buckets_referenced": {
+    "review-evidence": [
+      "src/components/admin/OrgKpiEvidenceManagerSheet.tsx",
+      "src/components/admin/OrgKpiFileUpload.tsx",
+      "src/components/ui/EvidenceUpload.tsx",
+      "src/components/ui/MultiFileUpload.tsx",
+      "supabase/functions/restore-backup/index.ts"
+    ],
+    "avatars": [
+      "src/components/profile/ProfileHero.tsx"
+    ],
+    "branding-assets": [
+      "src/hooks/useAppSettings.ts"
+    ],
+    "database-backups": [
+      "src/hooks/useBackups.ts",
+      "supabase/functions/backup-retention-sweep/index.ts",
+      "supabase/functions/create-backup/index.ts",
+      "supabase/functions/restore-backup/index.ts",
+      "supabase/functions/safety-drill/index.ts"
+    ],
+    "safety-media": [
+      "src/hooks/useSafetyIncidentDetail.ts",
+      "src/lib/safetyIncidentSubmit.ts"
+    ]
+  },
+  "edge_functions_invoked": {
+    "annual-review-reminders": 1,
+    "auto-rollover-kpis": 2,
+    "backfill-employee-master": 1,
+    "backup-retention-sweep": 1,
+    "compress-evidence": 1,
+    "compute-increment": 1,
+    "compute-monthly-incentives": 1,
+    "create-backup": 1,
+    "create-employee": 1,
+    "detect-retroactive-incentive-changes": 1,
+    "fix-corrupted-binary-scores": 1,
+    "generate-pip-letter": 1,
+    "grant-iac-role": 1,
+    "grant-safety-role": 2,
+    "impl-console-retention-sweep": 1,
+    "impl-console-rotate-smtp-secret": 1,
+    "impl-console-send-test-email": 1,
+    "import-kpis": 1,
+    "manage-implementer": 1,
+    "password-rollout": 1,
+    "propagate-template-change": 1,
+    "repair-orphaned-propagations": 1,
+    "repair-stepped-back-siblings": 1,
+    "restore-backup": 1,
+    "safety-analytics": 1,
+    "safety-drill": 1,
+    "send-email-notification": 10,
+    "send-pending-report-reminder": 1,
+    "update-backup-schedule": 1,
+    "update-smtp-password": 1
+  },
+  "realtime_channels": {
+    "audit-review-sub-${selectedKpi.id}": 1,
+    "import-progress-${backgroundImportId}": 1,
+    "modules-access-${user.id}": 1,
+    "notifications-realtime": 1,
+    "profiles-version": 1,
+    "realtime-kpi-sync": 1,
+    "safety_notifications_${user.id}": 1
+  },
+  "unknown_table_refs": [
+    "audit_logs",
+    "avatars",
+    "kpi_categories"
+  ],
+  "unpaged_select_count": 597
+}
