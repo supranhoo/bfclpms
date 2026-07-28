@@ -1416,7 +1416,7 @@ export function EmployeeSelectorGrid({
     const deptMap = new Map((departments || []).map(d => [d.id, d.name]));
     const skipIds = skipIdSet;
 
-    const getPendingKpis = (employeeId: string, relationship?: 'direct' | 'indirect'): KPI[] => {
+    const getPendingKpis = (employeeId: string, relationship?: 'direct' | 'indirect' | 'functional'): KPI[] => {
       const empKpis = periodKpis.filter(k => k.employee_id === employeeId);
       const stages = getStages(employeeId);
 
@@ -1424,6 +1424,10 @@ export function EmployeeSelectorGrid({
       if (viewLevel === 'pending_manager_review') return empKpis.filter(k => k.status === 'self_review');
       if (viewLevel === 'pending_skip_review') return empKpis.filter(k => k.status === 'manager_check');
       if (viewLevel === 'team') {
+        if (relationship === 'functional') {
+          const reviewable = resolveReviewableStatuses('functional_manager', stages);
+          return empKpis.filter(k => reviewable.includes(k.status || ''));
+        }
         const isIndirect = relationship === 'indirect' || skipIds.has(employeeId);
         if (isIndirect) {
           const reviewable = resolveReviewableStatuses('skip_level', stages);
