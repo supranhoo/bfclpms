@@ -7655,3 +7655,12 @@ Database: `get_kpi_journey_report(..., p_employee_status)` now emits
 Tests: `src/test/e2e/functionalManagerWorkflow.e2e.test.tsx` (27),
 `src/test/kpiDetailsTableFunctionalManagerColumn.test.ts` (10),
 `src/test/reportStageParity.test.ts` (15 drift-guard assertions).
+
+### ADR-195 — Bulk Review multi-select filter parity (org axes)
+Company / Division / Business Unit / Department filters on `/review/bulk` were silently ignored whenever 2+ values were selected: the page collapsed the arrays with `oneOrNull()` and the server RPCs (`bulk_scope_preview`, `bulk_review_snapshot`) received `null` (= full scope), with no client-side counterpart.
+
+- **DB**: `rpc_bulk_employee_attrs` now also returns `company_id`, `department_id`, `business_unit_id`, `division_id` (BU/division derived via `departments → business_units → divisions`).
+- **Client**: `allowedOrgEmployeeIds()` / `hasOrgFilter()` in `src/lib/bulkEmployeeFilter.ts`; wired into the `loadedRows` memo in `BulkReviewDashboard.tsx`, fail-closed while attributes hydrate.
+- **UI**: pre-load preview counters render `~` with an "approximate" tooltip when any axis has 2+ values.
+- **Tests**: `src/lib/bulkOrgFilter.test.ts` (8 assertions incl. the reported DRI+SMS case).
+- **Policy**: §UI-MULTISELECT-SERVER-PARITY.

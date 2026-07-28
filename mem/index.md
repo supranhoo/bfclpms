@@ -159,3 +159,4 @@ Fiscal-window: any code fetching time-series data across two calendar years for 
 - [Bulk Upload Stage Coverage](mem://features/annual-review/bulk-upload-stage-coverage) — Bulk System-KPI uploads must classify every status; mid-workflow rows need an opt-in (ADR-186)
 - [Final Score Scale Invariant](mem://features/annual-review/final-score-scale-invariant) — total_score always 0-100, rating band mandatory, compute_final_summary is sole writer (ADR-187)
 - [Monthly KRA Sheet](mem://features/reports/monthly-kra-sheet) — ADR-188: "Monthly KRA Scores" export sheet, Jul→Jun /5 + % per month, KRA-template employees only, server-side aggregation
+- [Bulk Review Multi-select Parity](mem://features/review/bulk-review-multiselect-parity) — Single-valued RPC axes must be re-filtered client-side (ADR-195)

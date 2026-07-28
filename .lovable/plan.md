@@ -1,95 +1,43 @@
-## 1. Assumptions
+## What's wrong (verified)
 
-- "End-to-end" = a full-flow automated test, run in CI without touching the live production database. The app's backend is the live BFCL Cloud project, so a test that literally writes `functional_manager_id` onto a real profile and advances real KPIs would mutate production data. I will build the E2E as a **backend-mocked, full-render integration flow** (React Testing Library + a fake Supabase client) that exercises the real components, hooks and resolvers end to end, plus an optional **read-only** Playwright smoke against the running preview. I will not write to production.
-- "Every relevant dashboard view" = KPI dashboard stage strip/filters, Team review views, admin All-KPIs grid, scorecard/timeline surfaces, and management/bulk review grids.
-- "All reports where this will need to be added" = every report that already enumerates per-stage columns, counts or fallbacks (verified list below).
-- FM stage key is `functional_manager_check`; score fields are `functional_manager_score / _rating / _remarks / _evidence_urls`; mapping lives on `profiles.functional_manager_id`.
+In `src/pages/review/BulkReviewDashboard.tsx` the org filters are multi-select, but the server RPCs (`bulk_scope_preview` / `bulk_review_snapshot`) accept only **one** value per axis. The page therefore does:
 
-## 2. Verified current state
+```
+const oneOrNull = (arr) => arr.length === 1 ? arr[0] : null;
+filters = { company_id, division_id, business_unit_id, department_id, category_id: oneOrNull(...) }
+```
 
-Confirmed by reading the code this turn:
+With 2 divisions selected (DRI + SMS) `division_id` becomes `null` → the server returns the **whole scope**. Client-side there is a compensating filter for **KRA, category, designation, grade, reporting manager** — but **none for company / division / business unit / department**. So those axes become a silent no-op above one selection.
 
-- `src/lib/reviewConstants.ts` already exports `CANONICAL_WORKFLOW_STAGES` including `functional_manager_check`, plus label and colour entries.
-- Already FM-aware: `workflowResolver.ts`, `bottleneckResolver.ts`, `kpiPendingWith.ts`, `finalApproverMap.ts`, `multimonthCycle.ts`, `inboxUtils.ts`, `finalScoreResolver.ts`, `KpiDetailsTable.tsx`, `KpiFilterBar.tsx`, `WorkflowProgressTracker.tsx`, `KpiTimeline.tsx`, `AllKpis.tsx`, `useKpiFilters.ts`, `useAdminDataEntry.ts`, `useKpiRollbackRequests.ts`, `EmployeeSelectorGrid.tsx`.
-- **Not** FM-aware — every file below references `skip_level_*`/`hr_pms_*` but contains zero `functional_manager` references (grep-verified):
-  - Reports: `KpiDetailReport.tsx`, `MonthlyScorecardReport.tsx`, `CompletionReport.tsx`, `DepartmentReport.tsx`, `KRAIssuance.tsx`, `KpiJourneyReport.tsx`, `PerformanceReport.tsx`.
-  - Report plumbing: `src/lib/reportFieldRegistry.ts` (has Manager/Skip-Level/HR PMS/Auditor score fields, no FM score field).
-  - Dashboards/components: `ManagementDashboard.tsx`, `PendingSelfReviews.tsx`, `DirectReporteesMonitor.tsx`, `KpiTrackerModal.tsx`, `EmployeeScorecard.tsx`, `ManagementScorecard.tsx`, `UnifiedScorecard.tsx`, `PreviousMonthsScoreMini.tsx`, `DailySubmissionSummary.tsx`, `BulkCellDrawer.tsx`, `BulkReviewMatrixGrid.tsx`, `BulkReviewVirtualGrid.tsx`, `AdminDataEntryDialog.tsx`, `AdminStatusStepBackDialog.tsx`, `BulkZeroScoreSection.tsx`, `FixCorruptedScoresDialog.tsx`, `PropagationPreviewDialog.tsx`.
-  - Hooks/lib: `useKpis.ts`, `useEmployeeScoresForPeriod.ts`, `useKpiEmployeeMatrix.ts`, `usePendingSelfReviews.ts`, `useCompliancePenalty.ts`, `carriedScoreResolver.ts`, `bulkProcessedFilter.ts`, `teamReviewTileFilter.ts`.
-- `src/lib/reports/catalog.ts` already has a `functional_manager` **person** field, but no FM **score/stage** field.
-- No Playwright/E2E harness exists in `package.json`; Vitest + jsdom is the only test runner.
+Confirmed against the data: Anil Kumar Pathak (200301) is CLU-Operation → BU "CLU" → Division **Ferro**, and Babloo Kumar Shah (101209) is Division **CPP** — neither DRI nor SMS, yet both render.
 
-Not yet verified (will confirm before touching): whether the `report_field_registry` DB table needs an FM row seeded so admins can map the new columns, and whether any report RPC returns stage columns server-side.
+Also confirmed: `profiles` has only `department_id` and `company_id`; division/BU are derived via `departments → business_units → divisions`. `bulk_review_snapshot` rows carry no org columns, and `rpc_bulk_employee_attrs` returns only designation / grade / reporting manager — so the client currently has no way to know a row's division.
 
-## 3. Risk & impact report
+## Fix
 
-- **Data impact**: none from the tests. The report-field additions are additive columns; if a `report_field_registry` seed is needed it is insert-only, reversible by delete. No schema drops, no RLS change.
-- **Workflow impact**: none — FM stage semantics already exist server-side. This work makes existing data visible where it is currently dropped.
-- **UI/UX impact**: one extra column/badge/count per affected report and dashboard, rendered **only** when the resolved workflow contains `functional_manager_check`. Non-F1 employees see no change. Column order: always immediately after Manager.
-- **Regression risk**: medium-low but broad (30+ files). Two real hazards: (a) score-fallback chains — inserting FM into a cascade changes which score wins for F1 KPIs; (b) horizontal table width on already-wide reports.
-- **Mitigation**: fallback-chain edits are covered by dedicated unit tests asserting F1 and non-F1 chains separately; every column addition is workflow-gated so non-F1 output is byte-identical (asserted in tests); changes are additive-only with no removals, so rollback = revert the commit.
-- **Scalability**: no new queries. FM name resolution reuses the profile maps already fetched by each report; column selects add one nullable numeric field per row.
+**1. Extend the employee-attribute RPC (migration)**
+Add to `rpc_bulk_employee_attrs` output: `company_id`, `department_id`, `business_unit_id`, `division_id` (resolved via the department → BU → division join). Signature stays the same (same args, additional returned columns), SECURITY DEFINER, read-only.
 
-## 4. Plan
+**2. Hydrate them client-side**
+Extend `BulkEmployeeAttr` in `src/hooks/useBulkReview.ts` with the four ids and map them through.
 
-### Phase A — E2E flow test (the headline deliverable)
+**3. Apply the missing client-side filter**
+New pure helper in `src/lib/bulkEmployeeFilter.ts` (`allowedOrgEmployeeIds`) — AND across axes, OR within an axis, same convention as the existing designation/grade/manager filter. Wire it into the `loadedRows` memo in `BulkReviewDashboard.tsx` so company/division/BU/department are enforced regardless of how many values are selected. Single-selection keeps its server-side fast path (unchanged), the client filter is then a no-op for it.
 
-Create `src/test/e2e/functionalManagerWorkflow.e2e.test.tsx` with a shared harness `src/test/e2e/fmHarness.tsx`:
+**4. Keep counts honest**
+The header chips (`42 employees`, `57 cells`, `99/99 rows`) derive from the loaded rows, so they self-correct. The pre-load `Load Scope` preview still counts the broader server scope when 2+ values are picked — show an "approximate" hint on the preview count in that case rather than pretending it's exact.
 
-1. **Fake backend**: an in-memory store (profiles, kpis, review_submissions, workflow templates) behind a mocked `@/integrations/supabase/client`, so mutations really persist within the test and are read back — this is what makes it end-to-end rather than a render snapshot.
-2. **Step 1 — Map the FM.** Render the admin Edit User dialog for a test employee, select a Functional Manager, save. Assert the mutation payload contains `functional_manager_id` and the store row is updated.
-3. **Step 2 — Persistence / read-back.** Re-open the dialog and re-render the user list; assert the FM is shown (this is the exact ADR-194 read-back bug class).
-4. **Step 3 — Workflow resolution.** Assert `resolveWorkflow` yields the `Self + L1 + F1 + Audit` chain with the FM as the named reviewer, and no `no_functional_manager_on_profile` reason.
-5. **Step 4 — Render in every relevant view.** Parameterised over each surface, assert the FM stage appears with the right label/order, and assert the FM score renders once written:
-   - KPI dashboard stage strip and status filter (`KpiFilterBar`)
-   - `WorkflowProgressTracker`
-   - `KpiTimeline`
-   - `KpiDetailsTable`
-   - `UnifiedScorecard` / `EmployeeScorecard`
-   - Team review grid (`EmployeeSelectorGrid`) and admin `AllKpis`
-   - Management / bulk review grids
-6. **Step 5 — Stage progression persists.** Drive Self → Manager → **Functional Manager** → Audit through the real submit paths; after each step assert stored status and that "Pending With" resolves to the FM at the FM stage.
-7. **Step 6 — Negative control.** Same run with `functional_manager_id = null` and a non-F1 template: assert no FM column, no FM chip, and that the workflow flags the missing-FM reason.
+**5. Regression tests**
+- Unit tests for `allowedOrgEmployeeIds` (multi-division, blank/unmapped employee, AND-across-axes).
+- A regression test locking the exact reported case: divisions = [DRI, SMS] must exclude a Ferro employee and a CPP employee.
 
-Plus an **optional read-only Playwright smoke** (`/tmp`-scoped, not committed unless you want it) that loads the current dashboard route for an existing F1 employee and screenshots the stage strip and KPI Details table as visual evidence. No writes.
+**6. Docs / policy**
+Add `docs/adr/ADR-195.md` (Bulk Review multi-select filter parity) and a POLICY entry: *any multi-select filter whose server RPC is single-valued MUST have a client-side counterpart* — this is the third occurrence of the same class of bug (KRA, then category, now org axes).
 
-### Phase B — Reports (no exceptions)
+## Risk & impact
 
-For each report, add the FM column/count/fallback, gated on the resolved workflow, positioned after Manager:
-
-| Report | Change |
-|---|---|
-| KPI Detail Report | `functional_manager` field def + select + row mapping + the `stages.includes(...)` null-out guard that Skip-Level already has |
-| Monthly Scorecard Report | `avg_functional_manager_score` field + weighted accumulator |
-| Completion Report | `functional_manager_reviewed` count, chart bar, colour class, status branch |
-| Department Report | `functional_manager_check` status-breakdown count, column, chart entry |
-| KRA Issuance | status colour + label + count for `functional_manager_check` |
-| KPI Journey Report | `functional_manager_at` timestamp column + label + header |
-| Performance Report | FM inserted into the rating and score fallback chains |
-| KPI Scorecard Detail / Status Tracker / Employee Matrix | verify Pending-With and score columns surface FM (they use the shared resolvers; fix any local chain found) |
-| `reportFieldRegistry.ts` | add `scores.functional_manager_score` |
-| `reports/catalog.ts` | add FM score/stage field alongside the existing FM person field |
-| `report_field_registry` (DB) | if a row is required for admin mapping, seed it via migration (insert-only) |
-
-### Phase C — Remaining dashboard/hook gaps
-
-Apply the same FM treatment to the non-report files listed in §2, prioritised: score-fallback chains (`carriedScoreResolver`, `useKpis`, `useEmployeeScoresForPeriod`, `useKpiEmployeeMatrix`) → review surfaces (`UnifiedScorecard` cascade-clear + previous-score unions, `EmployeeScorecard`, `ManagementScorecard`, `PreviousMonthsScoreMini`, bulk grids) → admin dialogs (step-back, bulk-zero, propagation preview, corrupted-score fix) → tiles/filters (`teamReviewTileFilter`, `bulkProcessedFilter`, `usePendingSelfReviews`, `DirectReporteesMonitor`, `ManagementDashboard`).
-
-### Phase D — Tests, docs, policy
-
-- Unit tests per changed resolver/report: F1 path, non-F1 path, FM-unmapped path, zero-vs-null FM score.
-- Extend existing stage tests (`kpiTimelineStages`, `teamReviewTileFilter`, `workflowResolver`, `kpiPendingWith`, `finalApproverMap`) with FM cases.
-- Add a **drift guard** test: any module holding a stage array must equal `CANONICAL_WORKFLOW_STAGES` — this is what stops the next stage from silently vanishing.
-- Update `DOCUMENTATION.md` (ADR-194 completion record) and `POLICY.md` (§WF-STAGE-SSOT extended to reports, plus §RPT-STAGE-COLUMN-PARITY: every stage-enumerating report must derive from the SSOT).
-
-## 5. Verification
-
-Step → check: A) `vitest run src/test/e2e` green; B) each report test green + manual render of one F1 and one non-F1 employee; C) full `vitest run` with no pre-existing failures introduced; D) `tsgo --noEmit` clean.
-
-## 6. Rollback
-
-Every change is additive and behind a workflow gate; reverting the commit restores prior behaviour. The only DB touch would be an insert-only registry seed, removable with a delete.
-
-## 7. Open question
-
-Confirm the E2E should stay backend-mocked (no production writes). If you want a true live-DB E2E, I would need a dedicated test employee and your explicit go-ahead to write to production data.
+- **Data**: none — additive columns on one read-only RPC. No schema change, no writes.
+- **Workflow**: none. RLS unchanged; filtering only narrows what is already visible.
+- **UI**: fewer rows shown when 2+ org values are selected (the correct behaviour). Selection pruning already runs on `loadedRows` change, so stale selections are dropped safely.
+- **Regression risk**: low; employees with no department mapping would be excluded when a division filter is active — treated explicitly as "unmapped" and covered by a test.
+- **Rollback**: revert the client patch; the extra RPC columns are inert.

@@ -16922,7 +16922,11 @@ export type Database = {
       rpc_bulk_employee_attrs: {
         Args: { p_employee_ids: string[] }
         Returns: {
+          business_unit_id: string
+          company_id: string
+          department_id: string
           designation: string
+          division_id: string
           id: string
           pms_grade: string
           reporting_manager_id: string

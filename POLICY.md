@@ -5281,3 +5281,12 @@ Rules:
 - Cumulative completion counters treat any stage at or beyond `skip_level_check` as implying the F1 step was passed; F1 counters must never exceed the Manager counter.
 - Server-side report RPCs are part of this contract: `get_kpi_journey_report` returns `functionalManagerAt` and renders `F1` in the workflow chain label.
 - Drift guard: `src/test/reportStageParity.test.ts` fails the build if any listed surface drops its Functional Manager reference.
+
+## §UI-MULTISELECT-SERVER-PARITY — Multi-select filters must have a client-side counterpart (ADR-195)
+- When a UI filter allows multiple values but the backing RPC accepts a single value per axis (the `oneOrNull` pattern), the page MUST apply the multi-value narrowing client-side over the loaded rows. Sending `null` to the server without a client counterpart makes the filter a silent no-op for 2+ selections — a data-integrity defect, not a cosmetic one.
+- Applies to Bulk Review: Company, Division, Business Unit, Department, Category, KRA, Designation, Grade, Reporting Manager.
+- Org axes (Company / Division / BU / Department) resolve through `rpc_bulk_employee_attrs`, which returns `company_id`, `department_id`, `business_unit_id` and `division_id` per employee. Division/BU derive via `departments → business_units → divisions`.
+- Semantics: AND across axes, OR within an axis, empty array = no constraint. Employees with an unresolved org chain are EXCLUDED when that axis is active.
+- Fail-closed: while the attribute hydration is loading or errored, an active org filter renders zero rows rather than leaking out-of-scope rows.
+- Pre-load scope estimates are labelled approximate (`~`) whenever any axis has 2+ values, because the server counts the broader scope.
+- Regression: `src/lib/bulkOrgFilter.test.ts`.

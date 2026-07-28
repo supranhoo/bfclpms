@@ -53,6 +53,7 @@ import { allowedViewerStages, clampViewerStage } from '@/lib/bulkReviewerStages'
 import { useIsFunctionalManager } from '@/hooks/useIsFunctionalManager';
 import {
   allowedEmployeeIds, distinctAttrOptions, BLANK_SENTINEL, type EmpAttrs,
+  allowedOrgEmployeeIds, hasOrgFilter, type EmpOrgAttrs,
 } from '@/lib/bulkEmployeeFilter';
 import { bulkActionForStage } from '@/lib/bulkActionForStage';
 import { summariseSkipReasons, summariseStageWriteOutcome } from '@/lib/summariseSkipReasons';
@@ -254,6 +255,14 @@ export default function BulkReviewDashboard() {
     category_id: oneOrNull(categoryIds),
   }), [departmentIds, companyIds, divisionIds, businessUnitIds, categoryIds]);
 
+  // When 2+ values are chosen on any org axis the server-side estimate covers
+  // the broader (unfiltered) scope — the exact narrowing happens client-side
+  // (ADR-195). Flag the preview counters as approximate so they aren't read
+  // as exact.
+  const previewIsApproximate =
+    companyIds.length > 1 || divisionIds.length > 1
+    || businessUnitIds.length > 1 || departmentIds.length > 1;
+
   const activeFilterCount =
     (companyIds.length > 0 ? 1 : 0) +
     (divisionIds.length > 0 ? 1 : 0) +
@@ -354,6 +363,31 @@ export default function BulkReviewDashboard() {
     [attrsByEmp, designations, grades, managerIds],
   );
 
+  // ADR-195 — Org-axis client-side filter. The server honours only ONE value
+  // per axis (`oneOrNull`), so multi-selections must be enforced here or the
+  // filter is a silent no-op (RCA: Ferro/CPP employees rendering while only
+  // DRI + SMS divisions were selected).
+  const orgByEmp = useMemo(() => {
+    const m = new Map<string, EmpOrgAttrs>();
+    for (const a of empAttrsQ.data ?? []) {
+      m.set(a.id, {
+        company_id: a.company_id ?? null,
+        department_id: a.department_id ?? null,
+        business_unit_id: a.business_unit_id ?? null,
+        division_id: a.division_id ?? null,
+      });
+    }
+    return m;
+  }, [empAttrsQ.data]);
+  const orgFilterActive = hasOrgFilter(companyIds, divisionIds, businessUnitIds, departmentIds);
+  const allowedOrgEmpSet = useMemo(
+    () => allowedOrgEmployeeIds(orgByEmp, companyIds, divisionIds, businessUnitIds, departmentIds),
+    [orgByEmp, companyIds, divisionIds, businessUnitIds, departmentIds],
+  );
+  // Fail-closed: while the attribute hydration is in flight we cannot decide
+  // membership, so an active org filter must not leak out-of-scope rows.
+  const orgAttrsReady = !orgFilterActive || (!empAttrsQ.isLoading && !empAttrsQ.isError);
+
   // Workflow-driven "My scope" — pairs of (kpi_id, employee_id) where the
   // current user is the resolved reviewer at the active viewerStage for the
   // selected period. Replaces the prior auditor-only `useMyAuditScope` which
@@ -414,6 +448,12 @@ export default function BulkReviewDashboard() {
     if (designations.length || grades.length || managerIds.length) {
       rows = rows.filter(r => allowedEmpSet.has(r.employee_id));
     }
+    // Multi-value Company / Division / BU / Department (ADR-195).
+    if (orgFilterActive) {
+      rows = orgAttrsReady
+        ? rows.filter(r => allowedOrgEmpSet.has(r.employee_id))
+        : [];
+    }
     // Multi-category client filter — server only honours single category
     // (oneOrNull). Without this branch, picking 2+ categories was a silent
     // no-op. Requires `category_id` returned by `bulk_review_snapshot`.
@@ -436,7 +476,7 @@ export default function BulkReviewDashboard() {
       rows = rows.filter(r => isRowInMyReviewScope(r, pairs));
     }
     return rows;
-  }, [rawRows, search, hideEmpty, hideNonDue, period, year, kraNames, designations, grades, managerIds, allowedEmpSet, categoryIds, isReviewerRole, myScopeOnly, myReviewScope, isAdminViewer, adminStageReadyOnly, stageReadyScope, stageReadyReady]);
+  }, [rawRows, search, hideEmpty, hideNonDue, period, year, kraNames, designations, grades, managerIds, allowedEmpSet, orgFilterActive, orgAttrsReady, allowedOrgEmpSet, categoryIds, isReviewerRole, myScopeOnly, myReviewScope, isAdminViewer, adminStageReadyOnly, stageReadyScope, stageReadyReady]);
 
   // Count of currently-loaded rows that fall inside the auditor's scope —
   // surfaced as a muted chip so even with the toggle off the auditor knows
@@ -844,7 +884,14 @@ export default function BulkReviewDashboard() {
               <Skeleton className="h-3 w-32 ml-1" />
             ) : preview.data ? (
               <span className="hidden md:flex items-center gap-2 ml-1 text-[11px] text-muted-foreground tabular-nums">
-                <span><strong className="text-foreground">{preview.data.emp_count}</strong> emp</span>
+                <span
+                  title={previewIsApproximate
+                    ? 'Approximate — the pre-load estimate counts the broader server scope when more than one Company / Division / BU / Department is selected. The loaded grid is filtered exactly.'
+                    : undefined}
+                >
+                  {previewIsApproximate && <span className="opacity-70">~</span>}
+                  <strong className="text-foreground">{preview.data.emp_count}</strong> emp
+                </span>
                 <span className="opacity-40">·</span>
                 <span><strong className="text-foreground">{preview.data.kpi_count}</strong> KPI</span>
                 <span className="opacity-40">·</span>
