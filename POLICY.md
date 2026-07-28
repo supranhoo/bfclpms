@@ -5265,3 +5265,12 @@ Rules:
 - Functional Manager is a **relationship** (`profiles.functional_manager_id`), not an `app_role`. Any roster, dashboard, count, export or "Pending With" surface that resolves reviewers MUST include FM-mapped employees, tagged `relationship = 'functional'`.
 - Stage order is resolved from `canonical_stage_order()` / the employee's resolved workflow. Hardcoded stage arrays that omit `functional_manager_check` are forbidden.
 - Mid-flight workflow edits are rating-safe: step-back is additive-only and must snapshot `prior_final_score` / `prior_final_rating` before clearing, restoring them when the approval becomes valid again. No rating may be lost by a workflow change.
+
+## §WF-STAGE-SSOT — Client-side workflow stage single source of truth (ADR-194)
+- `CANONICAL_WORKFLOW_STAGES` in `src/lib/reviewConstants.ts` is the client-side mirror of `public.canonical_stage_order()` and includes `functional_manager_check` between `manager_check` and `skip_level_check`.
+- No component, hook or report may declare its own workflow stage array or status union that omits a canonical stage. Stage strips, filters, timelines, columns and cascade/rollback orderings must all cover every canonical stage.
+- Functional Manager scores live in `review_submissions.functional_manager_score / _rating / _remarks / _evidence_urls`; there is no FM `achieved_value` or singular `evidence_url` column. Cascade-clear maps must reflect that.
+
+## §FM-READ-PARITY — Functional Manager read-back (ADR-194)
+- Every read path that hydrates a user for editing or display MUST select `functional_manager_id` (`get_reviewer_roster_slim`, User Management supplemental fetch). A persisted FM that renders blank is a defect, not a save failure.
+- The User Management list surfaces the stored Functional Manager so the mapping is verifiable without opening the edit dialog.
