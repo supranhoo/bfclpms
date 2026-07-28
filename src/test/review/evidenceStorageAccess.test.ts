@@ -37,11 +37,17 @@ describe("review evidence storage access (ADR-190)", () => {
     expect(body).toMatch(/kpi_mention_access/);
   });
 
-  it("never drops the pre-existing folder-owner read policy", () => {
-    for (const body of bodies) {
+  it("never leaves the folder-owner read policy dropped without recreating it", () => {
+    // Historical migrations legitimately DROP ... IF EXISTS then re-CREATE.
+    // What must never happen is a migration that only drops it.
+    for (let i = 0; i < bodies.length; i++) {
+      const body = bodies[i];
+      const drops = /DROP\s+POLICY[^;]*"Users can view authorized evidence"/i.test(body);
+      if (!drops) continue;
       expect(
-        /DROP\s+POLICY[^;]*"Users can view authorized evidence"/i.test(body),
-      ).toBe(false);
+        /CREATE\s+POLICY\s*"Users can view authorized evidence"/i.test(body),
+        `${files[i]} drops the folder-owner read policy without recreating it`,
+      ).toBe(true);
     }
   });
 });
