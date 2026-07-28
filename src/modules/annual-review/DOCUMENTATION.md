@@ -133,3 +133,17 @@ So the exact instances an admin needs to re-point mid-cycle — the ones sitting
 **Rollback.** Restore `canChange && !isPastSelf` at the call site; the helper and test can remain.
 
 **Version.** `v2.66.171`
+
+### v2.66.188 — Monthly KRA detail sheet (ADR-188, 2026-07-28)
+
+- New RPC `get_annual_review_monthly_kra_matrix(uuid[], int, boolean)` — set-based
+  July→June monthly KPI aggregation for a batch of employees; guarded to
+  admin / hr_pms / management.
+- New service `src/services/annualReview/monthlyKraSheet.ts` — batched fetch
+  (500 ids/call), pure row builder, 5,000-row cap.
+- `fetchTemplateLabelMaps` now also returns `isKra[templateId]`, so the export
+  detects KRA templates without an extra query.
+- `ComprehensiveExport.ts` appends the `Monthly KRA Scores` sheet after
+  `Employees`; `ComprehensiveTab.tsx` passes `cycleId` so the fiscal-year start
+  can be resolved.
+- Tests: `src/test/annualReview/monthlyKraSheet.test.ts`.

@@ -8,9 +8,15 @@ import {
   fetchTemplateEligibilityMaps, buildEligibilityColumnSet, buildEligibilityRow,
   type EligibilityMaps, type EligibilityColumn,
 } from '@/services/annualReview/eligibilityReportColumns';
+// ADR-188 — monthly KRA detail sheet.
+import {
+  buildMonthlyKraRows, fetchCycleFyStart, fetchMonthlyKraMatrix,
+} from '@/services/annualReview/monthlyKraSheet';
 
 export interface ExportInput {
   cycleName: string;
+  /** ADR-188 — needed to resolve the cycle's fiscal-year start for the KRA sheet. */
+  cycleId?: string;
   rows: ComprehensiveRow[];
   summary: KpiSummary;
   byDepartment: GroupSummary[];
@@ -119,6 +125,32 @@ function toEmployeeSheet(
 }
 
 function summaryToSheet(s: KpiSummary, cycleName: string) {
+  return summaryRows(s, cycleName);
+}
+
+/**
+ * ADR-188 — builds the "Monthly KRA Scores" rows. Returns `[]` when the cycle
+ * has no KRA-template employees, in which case the sheet is omitted entirely.
+ */
+async function buildMonthlyKraSheet(
+  input: ExportInput,
+  labelMaps: TemplateLabelMaps,
+): Promise<unknown[]> {
+  const isKraTemplate = (id: string | null | undefined) => !!id && !!labelMaps.isKra[id];
+  const kraRows = input.rows.filter((r) => isKraTemplate(r.template_id));
+  if (kraRows.length === 0) return [];
+  const fyStart = await fetchCycleFyStart(input.cycleId);
+  if (fyStart == null) return [];
+  try {
+    const matrix = await fetchMonthlyKraMatrix(kraRows.map((r) => r.employee_id), fyStart);
+    return buildMonthlyKraRows(kraRows, matrix, isKraTemplate);
+  } catch {
+    // Fail soft: never block the rest of the workbook on the KRA sheet.
+    return [];
+  }
+}
+
+function summaryRows(s: KpiSummary, cycleName: string) {
   return [
     { Metric: 'Cycle', Value: cycleName },
     { Metric: 'Total employees', Value: s.total },
@@ -166,6 +198,8 @@ export async function downloadComprehensiveWorkbook(input: ExportInput) {
   };
   append('Executive Summary', summaryToSheet(input.summary, input.cycleName));
   append('Employees', toEmployeeSheet(input.rows, labelMaps, eligMaps, eligColumns));
+  // ADR-188 — month-by-month KRA detail for KRA-template employees only.
+  append('Monthly KRA Scores', await buildMonthlyKraSheet(input, labelMaps));
   append('Rating Distribution', ratingDistribution(input.rows));
   append('By Department', groupToSheet(input.byDepartment));
   append('By Business Unit', groupToSheet(input.byBusinessUnit));

@@ -21,6 +21,12 @@ export interface LabelMap {
 export interface TemplateLabelMaps {
   criteria: Record<string, LabelMap>;
   system: Record<string, LabelMap>;
+  /**
+   * ADR-188 — true when the template's scoring is KRA-driven (at least one
+   * `system_scores` slot has `source === 'carry_kra'`). Resolved here so the
+   * export does not need a second templates query.
+   */
+  isKra: Record<string, boolean>;
 }
 
 const EMPTY_LABEL_MAP: LabelMap = { order: [], labels: {} };
@@ -75,7 +81,7 @@ export function formatScoreMap(
  */
 export async function fetchTemplateLabelMaps(templateIds: Array<string | null | undefined>): Promise<TemplateLabelMaps> {
   const ids = Array.from(new Set(templateIds.filter((id): id is string => !!id)));
-  const out: TemplateLabelMaps = { criteria: {}, system: {} };
+  const out: TemplateLabelMaps = { criteria: {}, system: {}, isKra: {} };
   if (ids.length === 0) return out;
 
   const { data, error } = await (supabase as any)
@@ -86,8 +92,10 @@ export async function fetchTemplateLabelMaps(templateIds: Array<string | null | 
 
   for (const row of data as Array<{ id: string; sections: any }>) {
     const sections = row.sections ?? {};
+    const systemScores = (sections.system_scores ?? []) as TemplateSystemScore[];
     out.criteria[row.id] = buildLabelMap(sections.criteria as TemplateCriterion[] | undefined);
-    out.system[row.id] = buildLabelMap(sections.system_scores as TemplateSystemScore[] | undefined);
+    out.system[row.id] = buildLabelMap(systemScores);
+    out.isKra[row.id] = systemScores.some((s) => s?.source === 'carry_kra');
   }
   return out;
 }

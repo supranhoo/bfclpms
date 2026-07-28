@@ -1,70 +1,47 @@
-## 1. Assumptions
+## Goal
+Add a **"Monthly KRA Scores"** sheet to the Annual Review comprehensive report export, listing the July→June monthly KPI performance for every employee whose annual-review template is KRA-driven (has a `carry_kra` system slot).
 
-- The employee codes given are for the current (FY2026-07) annual review cycle; each has exactly one instance, all `completed`.
-- The correct score is whatever `public.annual_review_compute_final_summary(instance_id)` returns — the existing server-side SSOT. No reviewer-entered data changes.
-- You listed 41 codes but said 42; a 42nd instance is affected by the same defect (blank rating) and is included below.
+## Assumptions
+- Fiscal year is July→June, anchored on the cycle's `review_year` (matching `carryKraScore.ts`).
+- Monthly value = weighted KPI average using the existing authority chain (final → auditor → manager → self), excluding `is_na` rows — identical maths to `compute_carry_kra_contribution`, so the sheet reconciles with the KRA points already in the report.
+- Sheet is export-only (Excel). No UI tab is added.
 
-## 2. Clarifications
+## Risk & Impact Report
+- **Data impact**: read-only. One new `SECURITY DEFINER STABLE` RPC; no schema or RLS change to existing tables.
+- **Workflow impact**: none. Export button behaviour unchanged apart from one extra sheet.
+- **UI/UX impact**: none visually; export takes marginally longer (one extra RPC round-trip).
+- **Regression risk**: low. New sheet is appended; existing sheet builders untouched. Risk is query cost on `kpis`/`review_submissions`.
+- **Scalability**: a per-employee client loop (`fetchMonthlyKraScores`) would be hundreds of round-trips and time out. Mitigated by one **set-based server-side RPC** that aggregates all employees in a single pass, plus a client-side row cap.
+- **Mitigation**: RPC restricted to admin/hr_pms/management (same audience as the report); indexed filter on `kpis.employee_id + review_year`; batched employee-id input (chunks of 500) to keep payloads bounded.
+- **Rollback**: drop the RPC and remove the sheet append — no data written.
 
-None blocking. One decision to confirm during implementation: whether affected employees should be notified that their displayed rating changed (default: no notification, audit log only).
+## Steps
 
-## 3. Confirmed findings (verified against the database)
+1. **Migration — bulk monthly aggregation RPC**
+   `get_annual_review_monthly_kra_matrix(p_employee_ids uuid[], p_fy_start int, p_exclude_na boolean default true)`
+   returns `(employee_id, review_period, review_year, avg_rating numeric, achieved numeric, out_of numeric, pct numeric, kpi_count int)`.
+   - Set-based `GROUP BY` over `kpis` joined laterally to `review_submissions`, filtered to the 12 fiscal months of `p_fy_start`.
+   - Guard: `has_role(auth.uid(),'admin'|'hr_pms'|'management')`, else `42501`.
+   - `GRANT EXECUTE ... TO authenticated`.
+   - *Verification*: run against a known KRA employee and confirm the derived KRA points match the value already stored in that instance's `system_scores`.
 
-All 41 listed employees have a completed instance where:
+2. **Service — `src/services/annualReview/monthlyKraSheet.ts`**
+   - `fetchMonthlyKraMatrix(employeeIds, fyStart)` — chunks ids (500/call), calls the RPC, returns `Map<employeeId, Record<FyMonth, {rating, pct, count}>>`.
+   - `buildMonthlyKraRows(rows, matrix, templateIsKraById)` — **pure**, testable: emits one row per KRA employee.
+   - *Verification*: unit test asserts header order, blank months, and FY month ordering.
 
-- `total_score` = `criteria_weighted_score` = the **raw weighted criteria sum** (255 … 450), not the normalised 0–100 value.
-- `final_rating` is **blank** (so the UI and reports show no rating band).
-- System-score points (Safety/HR/Production etc., 7–19 pts each) are **not included** in the stored total.
+3. **Export — `ComprehensiveExport.ts`**
+   - Determine KRA employees: templates carrying a `carry_kra` slot (reuse `isKraBasedTemplate`; template sections are already fetched by `fetchTemplateLabelMaps` — extend that fetch to expose `system_scores` sources rather than adding a new query).
+   - Append sheet `Monthly KRA Scores` after `Employees`, skipped entirely when there are no KRA employees.
+   - Columns: `Employee Code | Name | Department | Business Unit | Template | Jul /5 | Jul % | Aug /5 | Aug % | … | Jun /5 | Jun % | Months Scored | Avg /5 | KRA Points | KRA Weight`.
+   - `Avg /5` = mean of non-null months (mirrors `computeCarryRating`); `KRA Points`/`KRA Weight` reuse the values already on `ComprehensiveRow`.
 
-Recomputing with `annual_review_compute_final_summary` gives sane values for every one of them, e.g.:
+4. **Tests — `src/test/annualReview/monthlyKraSheet.test.ts`**
+   - Header shape and 24 month columns; non-KRA rows excluded; month with no data → blank not `0`; `is_na` excluded; `Avg /5` ignores blank months; empty input → sheet omitted.
 
-```text
-code    stored total   correct total   correct rating
-101755  370.00         92.00           Outstanding
-101909  450.00         97.00           Outstanding
-100323  255.00         67.00           Average
-100216  260.00         70.00           Good
-101707  270.00         68.60           Average
-```
+5. **Docs & policy**
+   - New ADR **ADR-188 — Monthly KRA detail sheet**; `POLICY §RPT-MONTHLY-KRA-SHEET` (definition of the monthly value and its parity with the carry-KRA SSOT); `DOCUMENTATION.md` version history; memory note under `mem/features/reports/`.
 
-Blast radius: of 2,019 completed instances, exactly **41** have `total_score > 100`, and exactly **42** have a blank `final_rating`. The 42nd is **100638 Lakhee Kant Mahto** — total is correctly normalised (79.60) but the rating band is blank.
-
-Root cause evidence: all 41 were finalized on 18-Jul and 20-Jul, and all 41 share an identical `updated_at` of `2026-07-24 12:19:03.863653+00` — a single bulk backfill script rewrote `total_score` from the raw criteria sum and cleared `final_rating`, bypassing the compute SSOT. There is currently **no database trigger enforcing the 0–100 scale or rating presence** on `annual_review_instances` (17 triggers exist; none covers score scale).
-
-## 4. Five Whys
-
-1. Why is the final score wrong? — `total_score` holds a raw weighted sum, not the 0–100 normalised score.
-2. Why is it raw? — A 24-Jul bulk repair wrote `criteria_weighted_score` straight into `total_score`.
-3. Why did it write raw? — The script did its own arithmetic instead of calling `annual_review_compute_final_summary`.
-4. Why was that allowed? — No invariant blocks an out-of-range `total_score` or a completed instance with no `final_rating`.
-5. Why no invariant? — ADR-126 fixed the then-known instances but did not add a permanent guard, so any later write path can reintroduce the defect.
-
-## 5. Risk & impact
-
-- **Data**: 42 rows updated (score/rating only). Reviewer responses, system scores and workflow state untouched. Fully reversible from the pre-image audit table.
-- **Workflow**: none — all instances stay `completed`.
-- **UI/UX**: affected employees' scorecards, admin grid and the Annual Review report will begin showing a normalised score and a rating band. Ratings may move for downstream consumers (increment/incentive eligibility) — flagged below.
-- **Regression risk**: the new trigger could reject legitimate writes. Mitigated by scoping it to `total_score` range only and allowing NULL during in-flight stages.
-- **Scalability**: one-off update over 42 rows; the trigger is O(1) per row.
-
-## 6. Step-by-step plan
-
-1. **Audit table** — create `annual_review_final_score_repair_2026_07` capturing, per instance: employee code, old/new `criteria_weighted_score`, `total_score`, `final_rating`, template id, reason, `performed_by`, timestamp. *Verify: 42 pre-image rows inserted before any update.*
-2. **Recompute repair** — update the 42 instances from `annual_review_compute_final_summary(id)` (total + rating; `criteria_weighted_score` stays as the raw weighted sum, which is its correct meaning). *Verify: zero completed instances with `total_score > 100` or blank `final_rating`.*
-3. **Invariant trigger** — add `trg_ar_total_score_scale` (BEFORE INSERT/UPDATE OF `total_score`, `final_rating`) raising an exception when `total_score` is outside 0–100, and stamping the rating via `annual_review_resolve_final_rating` when a completed instance has a score but no rating. *Verify: a deliberate `UPDATE ... total_score = 315` is rejected.*
-4. **Drift monitor** — extend the existing admin data-integrity surface with a read-only "final score out of range / missing rating" count so a recurrence is visible without a support ticket.
-5. **Regression tests** — `src/test/annualReview/finalScoreScale.test.ts` covering: raw-sum input is normalised, rating bands map correctly at boundaries (Average/Good/Outstanding), and blank rating with a present score is not a valid completed state.
-6. **Docs** — `docs/adr/ADR-187.md` and `POLICY.md` §AR-FINAL-SCORE-SCALE-INVARIANT; memory entry under `mem/features/annual-review/`.
-
-## 7. UI changes
-
-- No layout changes. The 42 affected employee scorecards, the admin progress grid and the Annual Review report will simply render a 0–100 score and a rating chip where they previously showed an inflated number and an empty rating.
-- New (admin-only) integrity counter row on the existing data-integrity panel; no new navigation.
-
-## 8. Rollback
-
-`UPDATE ... FROM annual_review_final_score_repair_2026_07` restores every pre-image value; `DROP TRIGGER trg_ar_total_score_scale` reverts the guard. No schema is dropped or altered destructively.
-
-## 9. Follow-up to confirm with you
-
-If increment or incentive runs for this cycle already consumed the inflated `total_score` for any of these 42, those runs need recomputation. I will report which runs referenced them and will **not** recompute anything outside the annual review without your go-ahead.
+## Technical notes
+- The monthly rating is intentionally the **same aggregation** used by `compute_carry_kra_contribution`; if the two ever diverge the sheet would contradict the KRA Points column, so the RPC is written as the shared set-based form of that logic and the parity check in Step 1 is a hard gate.
+- Client cap: if KRA employees exceed 5,000, the sheet is truncated with a clear warning toast (consistent with existing export caps).
