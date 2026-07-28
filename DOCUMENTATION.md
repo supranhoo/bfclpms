@@ -7493,3 +7493,18 @@ completed reviews via `annual_review_resolve_final_rating`.
 
 Version history: v2.66.187 — ADR-187 final score scale invariant + 42-instance
 repair.
+
+### ADR-188 — Monthly KRA detail sheet (POLICY §RPT-MONTHLY-KRA-SHEET)
+
+- Sheet `Monthly KRA Scores`: identity -> `<Mon> /5` + `<Mon> %` for July..June
+  -> `Months Scored`, `Avg /5`, `KRA Points`, `KRA Weight`.
+- Employees sheet gains `KRA Months Counted` (after `KRA Points`), sharing the
+  one per-export matrix via `monthsScored` so the two sheets cannot disagree.
+- Aggregation RPC: `get_annual_review_monthly_kra_matrix(p_employee_ids,
+  p_fy_start, p_exclude_na)` — STABLE SECURITY DEFINER, admin/hr_pms/management.
+- Code: `src/services/annualReview/monthlyKraSheet.ts`,
+  `src/components/reports/annual-review/ComprehensiveExport.ts`.
+- Tests: `src/test/annualReview/monthlyKraSheet.test.ts` (10).
+
+Version history: v2.66.188 — ADR-188 monthly KRA sheet + KRA Months Counted
+column on the Employees sheet.

@@ -5175,3 +5175,23 @@ detectable and repairable without a developer.
 6. Admins can monitor drift on the Annual Review admin → Orphaned Reviews tab
    ("Final score integrity"); a non-zero count means a write path bypassed the
    SSOT and MUST be investigated before the next cycle close.
+
+## §RPT-MONTHLY-KRA-SHEET — Monthly KRA detail in the Annual Review report (ADR-188)
+
+1. The comprehensive Annual Review workbook carries a `Monthly KRA Scores` sheet
+   with one row per instance whose resolved template holds a `carry_kra` system
+   slot. No KRA employees -> the sheet is omitted, never emitted empty.
+2. The monthly value is the weighted average of the authoritative KPI score
+   (final -> auditor -> manager -> self) for that fiscal month, excluding
+   `is_na` rows. It MUST stay in parity with `compute_carry_kra_contribution`;
+   the set-based RPC `get_annual_review_monthly_kra_matrix` is the SSOT and is
+   restricted to admin / hr_pms / management.
+3. A month with no scored KPI is rendered BLANK. Emitting `0` is forbidden:
+   missing data must never read as a genuine zero rating.
+4. The `Employees` sheet carries `KRA Months Counted` (after `KRA Points") —
+   the count of fiscal months behind the KRA score, blank for non-KRA
+   templates. It MUST be derived from the same matrix as the monthly sheet
+   (`monthsScored`), fetched once per export, and MUST NOT be inferred from
+   `kra_points`/`kra_weight`, which are a submission-time snapshot.
+5. The aggregation fails soft: an RPC error blanks the column and omits the
+   sheet rather than aborting the workbook download.
