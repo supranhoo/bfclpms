@@ -257,6 +257,7 @@ export default function BulkReviewDashboard() {
 
   const activeFilterCount =
     (companyIds.length > 0 ? 1 : 0) +
+    0 +
     (divisionIds.length > 0 ? 1 : 0) +
     (businessUnitIds.length > 0 ? 1 : 0) +
     (departmentIds.length > 0 ? 1 : 0) +
