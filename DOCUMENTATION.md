@@ -7560,3 +7560,16 @@ Security-change checklist (mandatory for any guard/RLS tightening):
 
 Version history: v2.66.189 — ADR-189 observation participation notification
 edge, atomic observation reply RPC, notification edge registry.
+
+### ADR-190 — Review evidence read access (2026-07-28)
+
+`review-evidence` is private. Two SELECT policies now cover KPI evidence:
+
+1. `Users can view authorized evidence` — legacy, keyed on path segment 1 (folder owner) plus `admin` / `auditor` / `hr_pms` and manager/skip-manager lookups. **Unchanged.**
+2. `Review evidence readable by KPI participants` — new, keyed on the KPI id in path segment 2. Grants read to the KPI owner, reporting manager, skip-level manager, assigned auditors and `kpi_mention_access` holders.
+
+Rationale: `src/components/ui/EvidenceUpload.tsx` writes `${uploaderId}/${kpiId}/...`, so reviewer/auditor evidence never sits in the employee's folder.
+
+Client: `src/lib/review/evidenceError.ts` → `normalizeEvidenceError()` converts empty/denial-shaped storage errors into "You do not have access to this file, or it is no longer available." Consumed by `src/components/review/EvidencePreviewDialog.tsx` (preview body, download and open-in-new-tab toasts).
+
+Tests: `src/test/review/evidenceStorageAccess.test.ts`. Policy: §EVIDENCE-READ-KPI-PARTICIPATION.
