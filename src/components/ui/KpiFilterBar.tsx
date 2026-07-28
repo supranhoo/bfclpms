@@ -3,14 +3,28 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Building2, Users, User, Briefcase, RotateCcw, Filter, CheckCircle2 } from 'lucide-react';
+import { CANONICAL_WORKFLOW_STAGES, statusLabels } from '@/lib/reviewConstants';
 
-const statusOptions: { value: ReviewStatus; label: string; color: string }[] = [
-  { value: 'kra_set', label: 'KRA Set', color: 'bg-muted' },
-  { value: 'self_review', label: 'Self Review', color: 'bg-blue-100' },
-  { value: 'manager_check', label: 'Manager Check', color: 'bg-yellow-100' },
-  { value: 'audit', label: 'Audit', color: 'bg-purple-100' },
-  { value: 'approved', label: 'Approved', color: 'bg-green-100' },
-];
+// ADR-194 §WF-STAGE-SSOT — derive the status chips from the canonical stage
+// list so no stage (e.g. Functional Manager Review) can be silently omitted.
+const statusChipColors: Record<string, string> = {
+  kra_set: 'bg-muted',
+  self_review: 'bg-blue-100',
+  manager_check: 'bg-yellow-100',
+  functional_manager_check: 'bg-fuchsia-100',
+  skip_level_check: 'bg-teal-100',
+  hr_pms_review: 'bg-rose-100',
+  audit: 'bg-purple-100',
+  management_review: 'bg-emerald-100',
+  approved: 'bg-green-100',
+};
+
+const statusOptions: { value: ReviewStatus; label: string; color: string }[] =
+  CANONICAL_WORKFLOW_STAGES.map(stage => ({
+    value: stage as ReviewStatus,
+    label: statusLabels[stage] || stage,
+    color: statusChipColors[stage] || 'bg-muted',
+  }));
 
 interface KpiFilterBarProps {
   filters: KpiFilterState;

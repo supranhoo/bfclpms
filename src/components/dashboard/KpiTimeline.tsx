@@ -170,6 +170,8 @@ export const ALL_WORKFLOW_STAGES: Array<{ key: string; label: string; icon: Reac
   { key: 'kra_set',            label: 'KRA Set',     icon: FileText },
   { key: 'self_review',        label: 'Self Review', icon: Send },
   { key: 'manager_check',      label: 'Manager',     icon: User },
+  // ADR-194 §WF-STAGE-SSOT — Functional Manager (F1) stage.
+  { key: 'functional_manager_check', label: 'Functional Mgr', icon: UserCog },
   { key: 'skip_level_check',   label: 'Skip-Level',  icon: UserCog },
   { key: 'hr_pms_review',      label: 'HR PMS',      icon: ClipboardCheck },
   { key: 'audit',              label: 'Audit',       icon: Shield },

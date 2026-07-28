@@ -7610,3 +7610,17 @@ export rows via `resolveReviewableStatuses('functional_manager')`),
 (attribute `functional_manager_check` to the named FM). Workflow edits go through
 the additive-only `workflow_change_step_back()` which snapshots
 `review_submissions.prior_final_score` / `prior_final_rating`.
+
+### ADR-194 — Workflow stage SSOT + Functional Manager read parity
+`src/lib/reviewConstants.ts` now exports `CANONICAL_WORKFLOW_STAGES` and
+`canonicalStageOrder()`. Consumers updated to include `functional_manager_check`:
+`src/components/ui/KpiFilterBar.tsx` (options derived from the SSOT),
+`src/components/review/WorkflowProgressTracker.tsx` (F1 stage card + counter),
+`src/components/dashboard/KpiTimeline.tsx`, `src/pages/admin/AllKpis.tsx`
+(stage columns), `src/hooks/useKpiFilters.ts` (`ReviewStatus` union),
+`src/hooks/useAdminDataEntry.ts` (`STAGE_ORDER`, `ROLE_TO_STAGE`,
+`FULL_STATUS_ORDER`) and `src/hooks/useKpiRollbackRequests.ts`
+(`ALL_WORKFLOW_STATUSES`, `STAGE_FIELD_MAP`, `CANONICAL_ORDER`).
+Read parity: `get_reviewer_roster_slim()` returns `functional_manager_id`, and
+`src/pages/admin/UserManagement.tsx` hydrates the edit dialog from `profiles`
+and shows the FM in both the mobile card and desktop table.

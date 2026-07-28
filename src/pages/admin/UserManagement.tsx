@@ -1036,7 +1036,7 @@ export default function UserManagement() {
     setEditHydrating(true);
     supabase
       .from('profiles')
-      .select('group_doj, doj, confirmation_date, location_id, employee_category, employment_status, mobile_number')
+      .select('group_doj, doj, confirmation_date, location_id, employee_category, employment_status, mobile_number, functional_manager_id')
       .eq('id', user.id)
       .maybeSingle()
       .then(({ data, error }) => {
@@ -1058,6 +1058,10 @@ export default function UserManagement() {
         setEditEmployeeCategory(row.employee_category || '');
         setEditEmploymentStatus(row.employment_status || '');
         setEditMobile(row.mobile_number || '');
+        // ADR-194 §FM-READ-PARITY — authoritative FM value from `profiles`.
+        // The roster cache can be stale right after a save, which previously
+        // made a persisted Functional Manager render as blank.
+        setEditFunctionalManagerId(row.functional_manager_id || '');
         setEditHydrating(false);
       });
   };
@@ -1521,6 +1525,9 @@ export default function UserManagement() {
               {paginatedProfiles.map(profile => {
                 const role = (profile.user_roles as any)?.[0]?.role || 'employee';
                 const manager = profiles?.find(p => p.id === profile.reporting_manager_id);
+                const functionalManager = profiles?.find(
+                  p => p.id === (profile as any).functional_manager_id,
+                );
                 const isInactive = (profile as any).is_active === false;
                 return (
                   <div key={profile.id} className={`border rounded-lg p-3 space-y-2 ${isInactive ? 'opacity-60 bg-muted/30' : ''}`}>
@@ -1546,6 +1553,12 @@ export default function UserManagement() {
                       <span>Dept: {(profile.departments as any)?.name || '-'}</span>
                       <span>Grade: {profile.pms_grade || '-'}</span>
                       <span>Manager: {manager ? formatManagerLabel(manager.full_name, manager.employee_code) : '-'}</span>
+                      <span>
+                        Functional:{' '}
+                        {functionalManager
+                          ? formatManagerLabel(functionalManager.full_name, functionalManager.employee_code)
+                          : '-'}
+                      </span>
                     </div>
                     <div className="flex items-center gap-1 pt-1 border-t">
                       <Button size="sm" variant="ghost" onClick={() => openEditDialog(profile)} className="min-h-[44px]" title="Edit">
@@ -1608,6 +1621,9 @@ export default function UserManagement() {
                 {paginatedProfiles.map(profile => {
                   const role = (profile.user_roles as any)?.[0]?.role || 'employee';
                   const manager = profiles?.find(p => p.id === profile.reporting_manager_id);
+                  const functionalManager = profiles?.find(
+                    p => p.id === (profile as any).functional_manager_id,
+                  );
                   const isInactive = (profile as any).is_active === false;
                   return (
                     <TableRow key={profile.id} className={isInactive ? 'opacity-60 bg-muted/30' : ''}>
@@ -1663,7 +1679,18 @@ export default function UserManagement() {
                           <Badge variant="secondary" className="text-xs ml-1" title="Dummy/System employee">Dummy/System</Badge>
                         )}
                       </TableCell>
-                      <TableCell>{manager ? formatManagerLabel(manager.full_name, manager.employee_code) : '-'}</TableCell>
+                      <TableCell>
+                        <div>{manager ? formatManagerLabel(manager.full_name, manager.employee_code) : '-'}</div>
+                        {/* ADR-194 §FM-READ-PARITY — surface the stored Functional
+                            Manager so admins can confirm the mapping without
+                            opening the Edit User dialog. */}
+                        <div className="text-xs text-muted-foreground">
+                          F1:{' '}
+                          {functionalManager
+                            ? formatManagerLabel(functionalManager.full_name, functionalManager.employee_code)
+                            : '—'}
+                        </div>
+                      </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-1">
                           <Button size="sm" variant="ghost" onClick={() => openEditDialog(profile)} title="Edit">

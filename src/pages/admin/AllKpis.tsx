@@ -40,8 +40,8 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { useToast } from '@/hooks/use-toast';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 
-// Full 8-stage workflow order for columns (includes all possible stages)
-const WORKFLOW_STAGES = ['kra_set', 'self_review', 'manager_check', 'skip_level_check', 'hr_pms_review', 'audit', 'management_review', 'approved'];
+// ADR-194 §WF-STAGE-SSOT — full canonical workflow order for columns.
+const WORKFLOW_STAGES = ['kra_set', 'self_review', 'manager_check', 'functional_manager_check', 'skip_level_check', 'hr_pms_review', 'audit', 'management_review', 'approved'];
 
 interface EmployeeKpiData {
   employeeId: string;

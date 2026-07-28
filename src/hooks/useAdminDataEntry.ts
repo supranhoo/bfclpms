@@ -191,7 +191,7 @@ export function useAdminSubmitReviewData() {
             .single();
 
           const STAGE_ORDER = [
-            'kra_set', 'self_review', 'manager_check', 'skip_level_check',
+            'kra_set', 'self_review', 'manager_check', 'functional_manager_check', 'skip_level_check',
             'hr_pms_review', 'audit', 'management_review', 'approved',
           ];
           const currentStatus = currentKpi?.status || 'kra_set';
@@ -226,6 +226,7 @@ export function useAdminSubmitReviewData() {
 
             const ROLE_TO_STAGE: Record<string, string> = {
               manager: 'manager_check',
+              functional_manager: 'functional_manager_check',
               skip_level: 'skip_level_check',
               hr_pms: 'hr_pms_review',
               auditor: 'audit',
@@ -573,6 +574,7 @@ export const FULL_STATUS_ORDER: Array<Database['public']['Enums']['review_status
   'kra_set',
   'self_review',
   'manager_check',
+  'functional_manager_check',
   'skip_level_check',
   'hr_pms_review',
   'audit',

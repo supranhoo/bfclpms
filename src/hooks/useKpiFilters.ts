@@ -20,7 +20,8 @@ export interface FilteredProfile {
   manager_name?: string | null;
 }
 
-export type ReviewStatus = 'kra_set' | 'self_review' | 'manager_check' | 'skip_level_check' | 'hr_pms_review' | 'audit' | 'management_review' | 'approved';
+// ADR-194 §WF-STAGE-SSOT — must mirror CANONICAL_WORKFLOW_STAGES.
+export type ReviewStatus = 'kra_set' | 'self_review' | 'manager_check' | 'functional_manager_check' | 'skip_level_check' | 'hr_pms_review' | 'audit' | 'management_review' | 'approved';
 
 export interface KpiFilterState {
   divisionId: string | null;

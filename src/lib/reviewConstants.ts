@@ -118,6 +118,36 @@ export const statusLabels: Record<string, string> = {
   approved: 'Approved',
 };
 
+/**
+ * ADR-194 §WF-STAGE-SSOT — canonical, ordered list of workflow stages.
+ *
+ * This MUST mirror `public.canonical_stage_order(text)` in the database.
+ * UI components must derive their stage lists from here instead of
+ * hardcoding their own arrays — the `functional_manager_check` stage was
+ * previously dropped from several dashboards because each one kept its own
+ * copy of the pipeline.
+ */
+export const CANONICAL_WORKFLOW_STAGES = [
+  'kra_set',
+  'self_review',
+  'manager_check',
+  'functional_manager_check',
+  'skip_level_check',
+  'hr_pms_review',
+  'audit',
+  'management_review',
+  'approved',
+] as const;
+
+export type CanonicalWorkflowStage = (typeof CANONICAL_WORKFLOW_STAGES)[number];
+
+/** Position of a stage in the canonical pipeline (1-based; 0 = unknown). */
+export function canonicalStageOrder(stage: string | null | undefined): number {
+  if (!stage) return 0;
+  const idx = (CANONICAL_WORKFLOW_STAGES as readonly string[]).indexOf(stage);
+  return idx === -1 ? 0 : idx + 1;
+}
+
 // KPI submission status colors
 export const kpiStatusColors: Record<KpiStatus, string> = {
   open: 'bg-muted text-muted-foreground',
