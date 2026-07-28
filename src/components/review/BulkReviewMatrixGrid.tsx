@@ -505,8 +505,8 @@ export function BulkReviewMatrixGrid({
                                         onToggleFocusKpi(kpi.key);
                                       }}
                                       aria-label={isFocused
-                                        ? `Clear focus on ${kpi.kpiName}`
-                                        : `Show only ${kpi.kpiName}`}
+                                        ? `Remove ${kpi.kpiName} from focus`
+                                        : `Add ${kpi.kpiName} to focus`}
                                     >
                                       {isFocused
                                         ? <X className="h-3 w-3" />
