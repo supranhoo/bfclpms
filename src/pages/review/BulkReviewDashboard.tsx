@@ -128,7 +128,7 @@ export default function BulkReviewDashboard() {
   const initialUrl = useMemo(
     () => readUrlArrays(
       typeof window !== 'undefined' ? window.location.search : '',
-      ['companies', 'divisions', 'bus', 'depts', 'cats', 'kras', 'desigs', 'grades', 'mgrs'],
+      ['companies', 'divisions', 'bus', 'depts', 'cats', 'kras', 'desigs', 'grades', 'mgrs', 'kpis', 'kpi'],
     ),
     [],
   );
@@ -195,9 +195,17 @@ export default function BulkReviewDashboard() {
   // preview math live and forward them to the RPC at confirm time.
   const [dialogInputs, setDialogInputs] = useState<Map<string, CellInputs>>(new Map());
   const [dialogIsOverride, setDialogIsOverride] = useState(false);
-  // URL-bound focus on a single KPI row (`<kra>|<kpi>`). Persists across
-  // reloads and shareable via the URL — same convention as the other filters.
-  const [kpiFocusKey, setKpiFocusKey] = useUrlFilterStateNullable('kpi');
+  // URL-bound focus on one or more KPI rows (`<kra>|<kpi>`). Multi-select:
+  // empty array = all KPIs in scope. Legacy single `?kpi=` param is migrated
+  // on mount. Persisted with the other array filters.
+  const [kpiFocusKeys, setKpiFocusKeys] = useState<string[]>(
+    initialUrl.kpis.length > 0 ? initialUrl.kpis : initialUrl.kpi,
+  );
+  const toggleKpiFocus = (key: string) => {
+    setKpiFocusKeys(prev =>
+      prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key],
+    );
+  };
   const approve = useBulkManagementApprove();
   const stageWrite = useBulkWriteStageScores();
   const stageDraft = useBulkSaveStageDrafts();
@@ -218,11 +226,12 @@ export default function BulkReviewDashboard() {
       companies: companyIds, divisions: divisionIds, bus: businessUnitIds,
       depts: departmentIds, cats: categoryIds, kras: kraNames,
       desigs: designations, grades, mgrs: managerIds,
+      kpis: kpiFocusKeys, kpi: [],
     });
     const newUrl = `${window.location.pathname}${nextSearch}${window.location.hash}`;
     window.history.replaceState(null, '', newUrl);
   }, [companyIds, divisionIds, businessUnitIds, departmentIds, categoryIds, kraNames,
-      designations, grades, managerIds]);
+      designations, grades, managerIds, kpiFocusKeys]);
 
   const filteredBusinessUnits = useMemo(() => {
     if (divisionIds.length === 0) return businessUnits ?? [];
@@ -306,14 +315,14 @@ export default function BulkReviewDashboard() {
     return Array.from(set).sort((a, b) => a.localeCompare(b));
   }, [rawRows]);
 
-  // Resolve a friendly label for the active KPI focus chip. Falls back to the
+  // Resolve friendly labels for the active KPI focus chips. Falls back to the
   // KPI portion of the key when the row isn't (yet) in the loaded snapshot.
-  const focusedKpiLabel = useMemo(() => {
-    if (!kpiFocusKey) return null;
-    const hit = rawRows.find(r => makeKpiRowKey(r) === kpiFocusKey);
-    if (hit) return `${hit.kra_name} · ${hit.kpi_name}`;
-    return kpiFocusKey.replace('|', ' · ');
-  }, [kpiFocusKey, rawRows]);
+  const focusedKpiLabels = useMemo(() => {
+    return kpiFocusKeys.map((key) => {
+      const hit = rawRows.find(r => makeKpiRowKey(r) === key);
+      return { key, label: hit ? `${hit.kra_name} · ${hit.kpi_name}` : key.replace('|', ' · ') };
+    });
+  }, [kpiFocusKeys, rawRows]);
 
   // Employee attribute index (designation / grade / reporting manager) for
   // the currently loaded snapshot — backs the 3 employee-axis filters.
