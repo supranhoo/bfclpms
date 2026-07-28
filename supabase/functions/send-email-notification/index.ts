@@ -829,6 +829,8 @@ const buildEmailHtml = (
     logoUrl?: string;
     footerText?: string;
     finalScore?: string;
+    /** Hidden snippet text (ADR-191). Prevents the logo URL becoming the inbox preview. */
+    preheader?: string;
   }
 ): string => {
   const style = EVENT_STYLES[eventType] || { color: '#6366f1', emoji: '📬', title: 'Notification' };
@@ -893,6 +895,7 @@ const buildEmailHtml = (
   return `
     <html>
     <head>
+      <meta name="viewport" content="width=device-width, initial-scale=1" />
       <style>
         body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; }
         .container { max-width: 600px; margin: 0 auto; padding: 20px; }
@@ -904,6 +907,8 @@ const buildEmailHtml = (
       </style>
     </head>
     <body>
+      <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;visibility:hidden;mso-hide:all;">${escapeHtml(customization.preheader || style.title)}</div>
+      <div style="display:none;max-height:0;overflow:hidden;">&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</div>
       <div class="container">
         ${sparkleBannerHtml}
         <div class="header">
