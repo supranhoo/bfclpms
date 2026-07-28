@@ -7573,3 +7573,17 @@ Rationale: `src/components/ui/EvidenceUpload.tsx` writes `${uploaderId}/${kpiId}
 Client: `src/lib/review/evidenceError.ts` → `normalizeEvidenceError()` converts empty/denial-shaped storage errors into "You do not have access to this file, or it is no longer available." Consumed by `src/components/review/EvidencePreviewDialog.tsx` (preview body, download and open-in-new-tab toasts).
 
 Tests: `src/test/review/evidenceStorageAccess.test.ts`. Policy: §EVIDENCE-READ-KPI-PARTICIPATION.
+
+### ADR-191 — Email preheader + finalized-score integrity (2026-07-28)
+
+Two defects in outbound notification emails, both render-layer only (no data impact):
+
+1. **Backend storage URL leaked as inbox snippet.** `send-email-notification` sent HTML-only messages whose first `<body>` content was the branding logo `<img src="https://<backend>/storage/v1/object/public/branding-assets/...">`. Mail clients derived the preview line from that URL. Fix: `buildEmailHtml()` now emits a hidden preheader `<div>` (plus zero-width spacer) as the first element, and both `sendViaSmtp` (denomailer `content`) and `sendViaResend` (`text`) attach a plain-text alternative built from the message body only.
+2. **"Score: N/A/5" on every finalized KPI email.** The `send_email_on_notification()` trigger never included `final_score` in the edge-function payload, so `{{final_score}}`/`{{score_label}}` always resolved to `N/A`. Fix (additive, self-guarded): for `final_approved` only, the trigger reads `review_submissions.final_score` / `is_na` for `NEW.kpi_id` (payload `metadata.final_score` wins when present) and posts `final_score` + `is_na`. Any failure in that lookup is caught and the email still dispatches.
+
+Defence in depth: `supabase/functions/send-email-notification/emailFormat.ts` exposes pure helpers —
+`resolveFinalScoreDisplay()`, `buildFinalApprovedSubjectTemplate()`, `buildFinalApprovedBodyTemplate()`, `buildPreheaderText()`, `buildPlainTextEmail()`. When no score resolves, the `— Score: …/5` clause is stripped from the subject and the score line removed from the body; an N/A KPI reads "Marked Not Applicable". The literal `N/A/5` can no longer be produced even if the payload lookup fails.
+
+Also fixed: `DEFAULT_TEMPLATES[event_type]` was mutated in place (subject/body rewrites for `final_approved` and `system_auto_scored`) and could leak across invocations of a warm isolate — the template is now cloned.
+
+Tests: `src/tests/emailFinalScoreFormat.test.ts`. Policy: §EMAIL-SCORE-AND-PREHEADER.
