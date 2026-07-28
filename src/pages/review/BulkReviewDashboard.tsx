@@ -1320,23 +1320,37 @@ export default function BulkReviewDashboard() {
         <div className="px-2 md:px-3 pt-2 pb-3 space-y-2">
           {/* Active KPI focus chip — set via the focus icon in the matrix
               KPI cell. Clearing returns the matrix to all KPIs in scope. */}
-          {kpiFocusKey && (
-            <div className="flex items-center gap-2 text-xs">
-              <Badge variant="secondary" className="gap-1.5 pl-2 pr-1 h-6">
+          {kpiFocusKeys.length > 0 && (
+            <div className="flex flex-wrap items-center gap-1.5 text-xs">
+              <span className="inline-flex items-center gap-1 font-medium text-muted-foreground">
                 <Crosshair className="h-3 w-3 text-primary" />
-                <span className="font-medium">KPI focus:</span>
-                <span className="max-w-[360px] truncate">{focusedKpiLabel}</span>
+                KPI focus{kpiFocusKeys.length > 1 ? ` · ${kpiFocusKeys.length}` : ''}:
+              </span>
+              {focusedKpiLabels.map(({ key, label }) => (
+                <Badge key={key} variant="secondary" className="gap-1.5 pl-2 pr-1 h-6">
+                  <span className="max-w-[320px] truncate">{label}</span>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-4 w-4 ml-0.5"
+                    onClick={() => toggleKpiFocus(key)}
+                    aria-label={`Remove focus on ${label}`}
+                    title="Remove from focus"
+                  >
+                    <X className="h-3 w-3" />
+                  </Button>
+                </Badge>
+              ))}
+              {kpiFocusKeys.length > 1 && (
                 <Button
-                  size="icon"
+                  size="sm"
                   variant="ghost"
-                  className="h-4 w-4 ml-0.5"
-                  onClick={() => setKpiFocusKey(null)}
-                  aria-label="Clear KPI focus"
-                  title="Clear KPI focus"
+                  className="h-6 px-2 text-xs"
+                  onClick={() => setKpiFocusKeys([])}
                 >
-                  <X className="h-3 w-3" />
+                  Clear all
                 </Button>
-              </Badge>
+              )}
             </div>
           )}
           {snapshot.isLoading ? (
@@ -1366,8 +1380,8 @@ export default function BulkReviewDashboard() {
                     onCellClick={setActiveRow}
                     displayMode={displayMode}
                     isOrgByKpiId={isOrgByKpiId}
-                    kpiFocusKey={kpiFocusKey}
-                    onFocusKpi={setKpiFocusKey}
+                    kpiFocusKeys={kpiFocusKeys}
+                    onToggleFocusKpi={toggleKpiFocus}
                     onReplaceSelection={setSelectedIds}
                   />
                 </>
