@@ -71,7 +71,7 @@ function isStageAtOrBeforeCurrent(columnKey: string, kpiStatus: string, stages: 
 }
 
 /** Build dynamic score columns from workflow stages. Final is always appended. */
-function buildScoreColumns(stages: string[]): { key: string; label: string }[] {
+export function buildScoreColumns(stages: string[]): { key: string; label: string }[] {
   const cols: { key: string; label: string }[] = [];
   for (const stage of stages) {
     const col = STAGE_COLUMN_MAP[stage];
@@ -120,7 +120,7 @@ function renderScoreCell(score: number | null | undefined): React.ReactNode {
 /**
  * Get the score value for a specific column from submission
  */
-function getScoreForColumn(
+export function getScoreForColumn(
   submission: ReviewSubmission | undefined,
   columnKey: string,
   kpiStatus?: string
