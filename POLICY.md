@@ -5233,3 +5233,16 @@ Rules:
 - The bucket stays private. Never flip `review-evidence` to public (see §EVIDENCE-DOWNLOAD-PRIVATE-BUCKET / ADR-099).
 - Storage denials must surface a human-readable message via `normalizeEvidenceError()`; rendering a raw error object (`{}`) is a defect.
 - Guarded by `src/test/review/evidenceStorageAccess.test.ts`.
+
+## §EMAIL-SCORE-AND-PREHEADER (ADR-191, 2026-07-28)
+
+Applies to every outbound email produced by `send-email-notification`.
+
+Rules:
+- **Preheader mandatory.** Each HTML email must begin with a hidden preheader containing a human summary. No backend host, storage URL, or any URL may be the first visible/derivable content of an email.
+- **Plain-text alternative mandatory.** SMTP and Resend sends must attach a text part derived from the message body only. `buildPreheaderText()` additionally strips any embedded URL.
+- **Score placeholders must resolve or disappear.** A score placeholder that cannot be resolved is *removed* (clause dropped from subject, line dropped from body) — never rendered as `N/A`, and never as `N/A/5`. A KPI marked N/A reads "Marked Not Applicable".
+- **Score source of truth** for `final_approved` is `review_submissions.final_score` / `is_na` for the notification's `kpi_id`, unless the producer passes `metadata.final_score` explicitly.
+- Score/preheader enrichment in `send_email_on_notification()` must stay additive and wrapped in its own exception guard: an enrichment failure may never block the notification insert or the email dispatch.
+- Template objects must be cloned before per-message mutation; module-level template constants are immutable.
+- Guarded by `src/tests/emailFinalScoreFormat.test.ts`.

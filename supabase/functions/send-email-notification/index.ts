@@ -3,6 +3,14 @@ import { Resend } from "https://esm.sh/resend@2.0.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
 import { withRetry } from "../_shared/retry.ts";
+import {
+  resolveFinalScoreDisplay,
+  buildFinalApprovedSubjectTemplate,
+  buildFinalApprovedBodyTemplate,
+  buildPreheaderText,
+  buildPlainTextEmail,
+  escapeHtml,
+} from "./emailFormat.ts";
 
 const resend = new Resend(Deno.env.get("RESEND_API_KEY"));
 
@@ -179,7 +187,8 @@ const sendViaMicrosoftGraph = async (
   fromName: string,
   toEmail: string,
   subject: string,
-  html: string
+  html: string,
+  text?: string
 ): Promise<void> => {
   const clientSecret = await getSecretFromSettings(supabase, "graph_client_secret");
   if (!clientSecret) {
@@ -821,6 +830,8 @@ const buildEmailHtml = (
     logoUrl?: string;
     footerText?: string;
     finalScore?: string;
+    /** Hidden snippet text (ADR-191). Prevents the logo URL becoming the inbox preview. */
+    preheader?: string;
   }
 ): string => {
   const style = EVENT_STYLES[eventType] || { color: '#6366f1', emoji: '📬', title: 'Notification' };
@@ -885,6 +896,7 @@ const buildEmailHtml = (
   return `
     <html>
     <head>
+      <meta name="viewport" content="width=device-width, initial-scale=1" />
       <style>
         body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; }
         .container { max-width: 600px; margin: 0 auto; padding: 20px; }
@@ -896,6 +908,8 @@ const buildEmailHtml = (
       </style>
     </head>
     <body>
+      <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;visibility:hidden;mso-hide:all;">${escapeHtml(customization.preheader || style.title)}</div>
+      <div style="display:none;max-height:0;overflow:hidden;">&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</div>
       <div class="container">
         ${sparkleBannerHtml}
         <div class="header">
@@ -961,6 +975,9 @@ const sendViaSmtp = async (
       to: toEmail.trim(),
       subject: subject,
       html: html,
+      // Plain-text alternative (ADR-191): keeps backend/storage URLs out of the
+      // inbox snippet and improves deliverability.
+      ...(text ? { content: text } : {}),
     });
     console.log("SMTP email sent successfully");
   } finally {
@@ -974,13 +991,15 @@ const sendViaResend = async (
   fromName: string,
   toEmail: string,
   subject: string,
-  html: string
+  html: string,
+  text?: string
 ): Promise<any> => {
   const emailResponse = await resend.emails.send({
     from: `${fromName} <${fromAddress}>`,
     to: [toEmail],
     subject,
     html,
+    ...(text ? { text } : {}),
   });
   console.log("Resend email sent:", emailResponse);
   return emailResponse;
@@ -1435,13 +1454,16 @@ Sender Email: ${senderEmail}`, { logoUrl, footerText });
     }
 
     // Get template (custom or default)
-    let template = DEFAULT_TEMPLATES[event_type] || DEFAULT_TEMPLATES.kpi_submitted;
+    // Clone: later blocks mutate subject/body, and DEFAULT_TEMPLATES is module-scoped
+    // (mutating it would leak into subsequent invocations of the same isolate).
+    const baseTemplate = DEFAULT_TEMPLATES[event_type] || DEFAULT_TEMPLATES.kpi_submitted;
+    let template = { ...baseTemplate };
     const customTemplate = settingsMap[`email_template_${event_type}`];
     if (customTemplate) {
       try {
         const parsed = typeof customTemplate === 'string' ? JSON.parse(customTemplate) : customTemplate;
         if (parsed.subject && parsed.body) {
-          template = parsed;
+          template = { ...parsed };
         }
       } catch {
         // Use default template
@@ -1484,20 +1506,16 @@ Sender Email: ${senderEmail}`, { logoUrl, footerText });
       source_year,
     };
 
-    // For final_approved, inject final_score and score_label
+    // For final_approved, inject final_score and score_label (ADR-191).
+    // When no score can be resolved we drop the score clause entirely rather
+    // than rendering the misleading "N/A/5".
+    let finalScoreDisplay = resolveFinalScoreDisplay(null, false);
     if (event_type === 'final_approved') {
-      const scoreLabels: Record<string, string> = {
-        '5': 'Outstanding',
-        '4': 'Exceeds Expectations',
-        '3': 'Meets Expectations',
-        '2': 'Needs Improvement',
-        '1': 'Below Expectations',
-        '0': 'Not Achieved',
-      };
-      const scoreStr = final_score != null ? String(final_score) : 'N/A';
-      const roundedScore = Math.round(Number(scoreStr)).toString();
-      placeholderData.final_score = scoreStr !== 'N/A' ? scoreStr : 'N/A';
-      placeholderData.score_label = scoreLabels[roundedScore] || 'N/A';
+      finalScoreDisplay = resolveFinalScoreDisplay(final_score, (body as any).is_na);
+      placeholderData.final_score = finalScoreDisplay.scoreText;
+      placeholderData.score_label = finalScoreDisplay.scoreLabel;
+      template.subject = buildFinalApprovedSubjectTemplate(template.subject, finalScoreDisplay);
+      template.body = buildFinalApprovedBodyTemplate(template.body, finalScoreDisplay);
     }
 
     // For kra_batch_assigned, inject the KRA table HTML into the placeholder
@@ -1548,9 +1566,12 @@ Sender Email: ${senderEmail}`, { logoUrl, footerText });
     // Replace placeholders in subject and body
     const subject = replacePlaceholders(template.subject, placeholderData);
     const bodyContent = replacePlaceholders(template.body, placeholderData);
-    const finalScoreStr = final_score != null ? String(final_score) : undefined;
-    const roundedFinalScore = finalScoreStr ? String(Math.round(Number(finalScoreStr))) : undefined;
-    const html = buildEmailHtml(event_type, bodyContent, { logoUrl, footerText, finalScore: roundedFinalScore });
+    const roundedFinalScore = finalScoreDisplay.hasScore
+      ? String(Math.round(Number(finalScoreDisplay.scoreText)))
+      : undefined;
+    const preheader = buildPreheaderText(bodyContent, subject.replace(/^\[PMS\]\s*/, ''));
+    const html = buildEmailHtml(event_type, bodyContent, { logoUrl, footerText, finalScore: roundedFinalScore, preheader });
+    const plainText = buildPlainTextEmail(bodyContent, footerText);
 
     console.log(`Sending ${event_type} email via ${provider} to ${recipient_email}`);
 
@@ -1579,7 +1600,8 @@ Sender Email: ${senderEmail}`, { logoUrl, footerText });
           senderName,
           recipient_email,
           subject,
-          html
+          html,
+          plainText
         ));
 
         await logEmail({ event_type, recipient_email, recipient_name, subject, status: 'sent', provider: 'smtp', metadata: logMeta });
@@ -1605,7 +1627,7 @@ Sender Email: ${senderEmail}`, { logoUrl, footerText });
           headers: { "Content-Type": "application/json", ...corsHeaders },
         });
       } else {
-        const emailResponse = await withRetry(() => sendViaResend(senderEmail, senderName, recipient_email, subject, html));
+        const emailResponse = await withRetry(() => sendViaResend(senderEmail, senderName, recipient_email, subject, html, plainText));
         await logEmail({ event_type, recipient_email, recipient_name, subject, status: 'sent', provider: 'resend', metadata: logMeta });
         return new Response(JSON.stringify({ success: true, data: emailResponse }), {
           status: 200,
