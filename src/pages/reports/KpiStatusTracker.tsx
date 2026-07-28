@@ -185,7 +185,7 @@ export default function KpiStatusTracker() {
       while (pHasMore) {
         const { data: batch, error: profErr } = await supabase
           .from('profiles')
-          .select('id, employee_code, full_name, designation, is_active, reporting_manager_id, department_id, departments!profiles_department_fk ( name, business_units ( divisions ( name ) ) )')
+          .select('id, employee_code, full_name, designation, is_active, reporting_manager_id, functional_manager_id, department_id, departments!profiles_department_fk ( name, business_units ( divisions ( name ) ) )')
           .range(pOffset, pOffset + batchSize - 1);
         if (profErr) throw profErr;
         if (batch && batch.length > 0) {
