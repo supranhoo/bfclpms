@@ -1,68 +1,49 @@
-# Functional Manager "not saving" (102028) + FM stage on dashboards
+## Assumptions
 
-## 1. What I verified
+- The stage strip already shows "FUNCTIONAL MGR" (ADR-194), but the **KPI Details** table below it still renders only Self / Manager / Auditor / Final — no Functional Mgr column.
+- Scope of this request is the KPI Details table (and its sorting/N-A/re-review helpers), not the review dialog.
 
-| Check | Result |
-|---|---|
-| `profiles` row for 102028 (Brundaban Chandra Das) | `functional_manager_id = 59a7d12e…` = **V.A.V.S.S. Ganapathi Varma (200271)** — **the save DID persist** |
-| Update payload in `UserManagement.tsx:685-715` | Includes `functional_manager_id`; writes to `profiles` and errors loudly if RLS filters the row |
-| Roster RPC `get_reviewer_roster_slim()` | Returns `id, full_name, employee_code, email, designation, pms_grade, department_id, reporting_manager_id, avatar_url, level, is_active, company_id` — **`functional_manager_id` is NOT in the return signature** |
-| Edit dialog hydration | `openEditDialog` (line 1015) reads `user.functional_manager_id` from that roster row; the supplemental `profiles` fetch (line 1039) selects 7 columns and **does not include `functional_manager_id`** |
+## Verified current state
 
-## 2. Root cause — it is a read-back defect, not a write defect
+- `src/components/review/KpiDetailsTable.tsx` builds its columns from `STAGE_COLUMN_MAP` (line 31), which maps `self_review`, `manager_check`, `skip_level_check`, `hr_pms_review`, `audit`, `management_review` — **`functional_manager_check` is absent**. Because `buildScoreColumns()` only emits columns for stages present in that map, an F1 workflow silently loses the column.
+- The same omission repeats in the file's `COLUMN_TO_STAGE` reverse map (line 41), `getScoreForColumn()` (line 120), `STATUS_ORDER` used for status sorting (line 149), and `SCORE_COLS_ORDERED` used for the "Re-review" indicator (line 612).
+- The score exists in the database: `review_submissions.functional_manager_score / _rating / _remarks / _evidence_urls`. There is **no** FM `achieved_value` or singular `evidence_url` column.
+- `canReviewKpi()` in `src/lib/workflowEngine.ts:347` already supports a `'functional-manager-review'` view type, so the action-button path needs no change for the column to render.
 
-The write works. The **read path never returns the column**, so every time the Edit User dialog is reopened the Functional Manager select is initialised to `''` and renders empty. To the admin this is indistinguishable from "saved successfully but not stored", so the same value gets re-entered repeatedly.
+## Risk & Impact Report
 
-**5 Why**
-1. Why does FM look unsaved? The Edit User dialog shows it blank after reopening.
-2. Why blank? `editFunctionalManagerId` is seeded from the roster row's `functional_manager_id`.
-3. Why is that undefined? `get_reviewer_roster_slim()` does not select the column.
-4. Why not? The RPC was deliberately made "slim" for performance and FM was added to `profiles` later; ADR-193 added *functional reports* to rosters but never added the *column* to this signature.
-5. Why did nothing catch it? There is no invariant that every field editable in the Edit User dialog must be present in a read path, and no test asserting write-then-read round-trip for profile fields.
+- **Data impact:** None. Read-only column addition; no schema or RLS change.
+- **Workflow impact:** None. Column visibility is still driven by the employee's resolved workflow stages, so non-F1 employees see no new column.
+- **UI/UX impact:** One extra score column between "Manager" and the next stage, only for F1 workflows. Table is already horizontally scrollable; column count is computed from `scoreColumns.length`, so the colspan stays correct.
+- **Regression risk:** Low. Main risk is the `SCORE_COLS_ORDERED` array used by the re-review indicator — inserting FM in the wrong position would mis-detect downstream scores. Mitigated by inserting it immediately after `manager_score`, matching `canonical_stage_order()`.
+- **Scalability:** No new queries; the FM score comes from the already-fetched submission row.
 
-Same blind spot affects any other surface reading FM off this roster.
+## Plan
 
-## 3. Risk & impact
-- **Data:** none — read-only additions. No values are rewritten; 102028's existing mapping stays as is.
-- **Workflow:** none directly; correct FM display makes F1 workflow mappings verifiable.
-- **UI/UX:** the FM select in Edit User will now show the stored value instead of blank.
-- **Scalability:** adding one uuid column to a ~2,600-row roster RPC is negligible; the supplemental fetch is a single-row read.
-- **Regression risk:** low, but the RPC return signature change requires `DROP FUNCTION` + recreate (Postgres cannot change `RETURNS TABLE` in place) — any concurrent caller must keep working. All callers spread the row object, so extra columns are safe.
-- **Rollback:** revert migration to the previous signature.
+1. **Add FM to the stage/column maps** in `KpiDetailsTable.tsx`
+   - `STAGE_COLUMN_MAP`: `functional_manager_check → { key: 'functional_manager_score', label: 'Functional Mgr' }`, placed after `manager_check`.
+   - `COLUMN_TO_STAGE`: `functional_manager_score → 'functional_manager_check'`.
+   - Verification: an F1 employee's table renders the column; a non-F1 employee's does not.
 
-## 4. Plan — Part A: fix Functional Manager persistence visibility
+2. **Return the score** — add a `case 'functional_manager_score'` to `getScoreForColumn()` reading `submission.functional_manager_score`.
+   - Verification: a KPI with an FM score shows the digit; unscored shows `—`, and a passed stage with no score shows the existing N/A badge.
 
-**A1. Add `functional_manager_id` to the roster RPC (migration)**
-Drop and recreate `get_reviewer_roster_slim()` with `functional_manager_id uuid` appended to the return table, added to all branches of the function body (full-access, admin-users, and the scoped fallback branch).
-*Verify:* query the RPC and confirm 102028's row carries the FM uuid.
+3. **Fix the ordering helpers** — insert `functional_manager_check` into `STATUS_ORDER` and `functional_manager_score` into `SCORE_COLS_ORDERED`, both right after the manager entry.
+   - Verification: sorting by Status places F1 KPIs between Manager Check and Skip-Level; the "Re-review" chip appears only when a later stage holds a score.
 
-**A2. Add the column to the supplemental hydration fetch**
-`UserManagement.tsx:1039` — include `functional_manager_id` in the select and set `editFunctionalManagerId` from the fetched row in the `.then()` handler. This makes the dialog correct even if the roster cache is stale.
-*Verify:* open 102028 → Edit User → Functional Manager shows "V.A.V.S.S. Ganapathi Varma (200271)".
+4. **Derive from the SSOT** — reference `CANONICAL_WORKFLOW_STAGES` from `src/lib/reviewConstants.ts` for `STATUS_ORDER` so this local array can't drift again (POLICY §WF-STAGE-SSOT).
 
-**A3. Show FM in the user list**
-Add a "Functional Manager" column (or a secondary line under "Reporting To") in the All Users table so admins can confirm the mapping without opening the dialog.
+5. **Tests + docs**
+   - Unit test covering `buildScoreColumns()` for an F1 workflow vs a non-F1 workflow, `getScoreForColumn('functional_manager_score')`, and the re-review downstream-score detection with FM present.
+   - Extend **ADR-194** in `DOCUMENTATION.md` with the KpiDetailsTable touch point.
 
-**UI changes explicitly**
-- *What changes:* Edit User → Organization → Functional Manager renders the stored value instead of blank; All Users table gains an FM indicator.
-- *Where:* `/admin/users` list row and Edit User dialog.
-- *Interaction:* unchanged — select still writes on Save Changes.
-- *Responsive:* the FM value is shown as a sub-line under Reporting To on narrow widths, not a separate column, so the table does not overflow on mobile.
+## UI changes
 
-**A4. Round-trip regression test**
-Unit test with mock profile data asserting that the field set written by `updateUser` is a subset of the fields returned by the read paths (roster + supplemental fetch) — this catches the next field that gets added to the editor but not the reader.
+- **What changes:** a new "Functional Mgr" score column in the KPI Details table header and each KPI row.
+- **Where:** Dashboard → KPI Details table, between the "Manager" and "Auditor" columns.
+- **Interaction:** the header is sortable like the other score columns; cells follow the existing score / `—` / N/A / Re-review rendering rules.
+- **Responsiveness:** no layout change for non-F1 employees; F1 tables gain one column within the existing horizontal scroll container.
 
-## 5. Plan — Part B: the dashboard F1 stage (previously agreed, unchanged)
+## Out of scope (flagged)
 
-Now unblocked, since 102028 does have an FM mapped.
-
-- **B1.** Extend `src/lib/reviewConstants.ts` into a canonical ordered stage SSOT (label + icon + colour), mirroring `canonical_stage_order()` in SQL.
-- **B2.** Consume it in `WorkflowProgressTracker.tsx` (adds the missing "Functional Manager" stage card between Manager Check and Audit), `KpiTimeline.tsx` (`ALL_WORKFLOW_STAGES`), and `KpiFilterBar.tsx` (all 8 status chips).
-- **B3.** Remove remaining hardcoded stage arrays in `useAdminDataEntry.ts`, `useKpiRollbackRequests.ts`, `AllKpis.tsx` and the `ReviewStatus` unions in `useKpiFilters.ts` / `useKpis.ts`.
-- **B4.** Add a validation warning when an F1-containing workflow template is assigned to an employee with `functional_manager_id IS NULL`, plus a report of any such employees.
-- **B5.** Tests: stage SSOT completeness vs the DB enum; tracker renders F1 only for F1 workflows.
-
-*Verify:* 102028's dashboard stage strip reads KRA Set → Self Review → Manager Check → **Functional Manager** → Audit → Approved, with July's 13 `kra_set` + 7 `self_review` counted in the right columns.
-
-## 6. Docs
-ADR-194 (FM read-path parity + client stage SSOT), `POLICY §FM-REVIEWER-SCOPE` extended to forbid hardcoded stage lists in UI and to require read/write field parity for the Employee Master editor, and `DOCUMENTATION.md`.
+`src/components/review/UnifiedScorecard.tsx` still has no `functional_manager` stage in its `previousScoreField` union and cascade-clear map, so the FM reviewer's *scoring dialog* may not read/write the FM fields correctly. That is a separate, larger change — tell me if you want it folded into this work or tracked as its own ADR.
