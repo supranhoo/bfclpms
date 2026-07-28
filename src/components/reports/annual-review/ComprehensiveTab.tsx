@@ -117,6 +117,7 @@ export function ComprehensiveTab({ cycleId, cycleName }: { cycleId: string | und
     try {
       await downloadComprehensiveWorkbook({
         cycleName,
+        cycleId,
         rows: sortedRows,
         summary,
         byDepartment: byDept,
