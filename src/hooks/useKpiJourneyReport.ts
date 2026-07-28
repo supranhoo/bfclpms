@@ -23,6 +23,8 @@ export interface KpiJourneyRow {
   kraAssignedAt: string | null;
   selfSubmittedAt: string | null;
   managerActionAt: string | null;
+  // ADR-194 §RPT-STAGE-COLUMN-PARITY — Functional Manager (F1) stage.
+  functionalManagerAt: string | null;
   skipLevelAt: string | null;
   hrPmsAt: string | null;
   auditorAt: string | null;

@@ -27,6 +27,7 @@ const DEP_DEFAULT_FIELDS = [
   { field_key: 'kra_set',           default_label: 'KRA Set',            default_sort: 80 },
   { field_key: 'self_review',       default_label: 'Self Review',        default_sort: 90 },
   { field_key: 'manager_check',     default_label: 'Manager Check',      default_sort: 100 },
+  { field_key: 'functional_manager_check', default_label: 'Functional Mgr Check', default_sort: 105 },
   { field_key: 'skip_level_check',  default_label: 'Skip-Level Check',   default_sort: 110 },
   { field_key: 'hr_pms_review',     default_label: 'HR PMS Review',      default_sort: 120 },
   { field_key: 'audit',             default_label: 'Audit',              default_sort: 130 },
@@ -70,6 +71,7 @@ export default function DepartmentReport() {
         kra_set: deptKpis.filter(k => k.status === 'kra_set').length,
         self_review: deptKpis.filter(k => k.status === 'self_review').length,
         manager_check: deptKpis.filter(k => k.status === 'manager_check').length,
+        functional_manager_check: deptKpis.filter(k => k.status === 'functional_manager_check').length,
         skip_level_check: deptKpis.filter(k => k.status === 'skip_level_check').length,
         hr_pms_review: deptKpis.filter(k => k.status === 'hr_pms_review').length,
         audit: deptKpis.filter(k => k.status === 'audit').length,
@@ -121,6 +123,7 @@ export default function DepartmentReport() {
         case 'kra_set':           return d.statusBreakdown.kra_set;
         case 'self_review':       return d.statusBreakdown.self_review;
         case 'manager_check':     return d.statusBreakdown.manager_check;
+        case 'functional_manager_check': return d.statusBreakdown.functional_manager_check;
         case 'skip_level_check':  return d.statusBreakdown.skip_level_check;
         case 'hr_pms_review':     return d.statusBreakdown.hr_pms_review;
         case 'audit':             return d.statusBreakdown.audit;
@@ -244,7 +247,7 @@ export default function DepartmentReport() {
               const centerKeys = new Set([
                 'total_employees', 'total_kpis', 'approved',
                 'kra_set', 'self_review', 'manager_check',
-                'skip_level_check', 'hr_pms_review', 'audit', 'management_review',
+                'functional_manager_check', 'skip_level_check', 'hr_pms_review', 'audit', 'management_review',
               ]);
               const headClassFor = (key: string) =>
                 centerKeys.has(key) ? 'text-center' : undefined;
@@ -273,6 +276,7 @@ export default function DepartmentReport() {
                   case 'kra_set':           return d.statusBreakdown.kra_set;
                   case 'self_review':       return d.statusBreakdown.self_review;
                   case 'manager_check':     return d.statusBreakdown.manager_check;
+                  case 'functional_manager_check': return d.statusBreakdown.functional_manager_check;
                   case 'skip_level_check':  return d.statusBreakdown.skip_level_check;
                   case 'hr_pms_review':     return d.statusBreakdown.hr_pms_review;
                   case 'audit':             return d.statusBreakdown.audit;

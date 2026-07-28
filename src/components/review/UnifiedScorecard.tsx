@@ -587,6 +587,8 @@ export function UnifiedScorecard({
       ?? submission.auditor_score
       ?? submission.hr_pms_score
       ?? submission.skip_level_score
+      // ADR-194 §WF-STAGE-SSOT — Functional Manager (F1) rung.
+      ?? (submission as any).functional_manager_score
       ?? submission.manager_score
       ?? submission.self_score
       ?? null;
@@ -719,6 +721,7 @@ export function UnifiedScorecard({
       // Clear downstream reviewer fields to prevent stale data after rollback re-submissions
       const STAGE_FIELD_MAP: Record<string, string[]> = {
         manager_check: ['manager_score', 'manager_rating', 'manager_remarks', 'manager_evidence_url', 'manager_achieved_value'],
+        functional_manager_check: ['functional_manager_score', 'functional_manager_rating', 'functional_manager_remarks', 'functional_manager_evidence_url', 'functional_manager_achieved_value'],
         skip_level_check: ['skip_level_score', 'skip_level_rating', 'skip_level_remarks', 'skip_level_evidence_url', 'skip_level_achieved_value'],
         hr_pms_review: ['hr_pms_score', 'hr_pms_rating', 'hr_pms_remarks', 'hr_pms_evidence_url', 'hr_pms_achieved_value'],
         audit: ['auditor_score', 'auditor_rating', 'auditor_remarks', 'auditor_evidence_url', 'auditor_achieved_value'],
@@ -835,6 +838,16 @@ export function UnifiedScorecard({
         clearFields.manager_remarks = null;
         clearFields.manager_evidence_url = null;
         clearFields.manager_achieved_value = null;
+      }
+
+      // Clear functional_manager fields when target is before functional_manager_check (ADR-194)
+      const fmIdx = statusOrder.indexOf('functional_manager_check');
+      if (fmIdx === -1 || targetIdx < fmIdx) {
+        clearFields.functional_manager_rating = null;
+        clearFields.functional_manager_score = null;
+        clearFields.functional_manager_remarks = null;
+        clearFields.functional_manager_evidence_url = null;
+        clearFields.functional_manager_achieved_value = null;
       }
 
       // Clear skip_level fields when target is before skip_level_check (or stage absent)
@@ -994,8 +1007,8 @@ export function UnifiedScorecard({
     if (prevScore === null) {
       const fallbackMap: Record<string, () => number | null> = {
         manager: () => kpi.is_org_level ? existing?.self_score ?? null : null,
-        skip_level: () => existing?.manager_score ?? null,
-        hr_pms: () => (existing as any)?.skip_level_score ?? null,
+        skip_level: () => (existing as any)?.functional_manager_score ?? existing?.manager_score ?? null,
+        hr_pms: () => (existing as any)?.skip_level_score ?? (existing as any)?.functional_manager_score ?? null,
         auditor: () => existing?.manager_score ?? null,
         management: () => existing?.auditor_score ?? null,
       };

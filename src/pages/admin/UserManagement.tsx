@@ -6,6 +6,7 @@ import { Separator } from '@/components/ui/separator';
 import { RequiredMark } from '@/components/ui/RequiredMark';
 import { useEmployeeMasterFieldRequirements } from '@/hooks/useEmployeeMasterFieldRequirements';
 import { validateRequiredFields, type EmployeeMasterFieldKey } from '@/lib/employeeMasterFields';
+import { USER_EDIT_HYDRATION_SELECT } from '@/lib/userEditHydration';
 import {
   useEmployeeMasterCustomFieldDefs,
   saveEmployeeMasterCustomFieldValues,
@@ -1036,7 +1037,7 @@ export default function UserManagement() {
     setEditHydrating(true);
     supabase
       .from('profiles')
-      .select('group_doj, doj, confirmation_date, location_id, employee_category, employment_status, mobile_number, functional_manager_id')
+      .select(USER_EDIT_HYDRATION_SELECT)
       .eq('id', user.id)
       .maybeSingle()
       .then(({ data, error }) => {

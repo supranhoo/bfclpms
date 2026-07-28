@@ -36,6 +36,7 @@ const KJN_DEFAULT_FIELDS = [
   { field_key: 'kra_assigned_at',    default_label: 'KRA Assigned',        default_sort: 120 },
   { field_key: 'self_submitted_at',  default_label: 'Self Submitted',      default_sort: 130 },
   { field_key: 'manager_action_at',  default_label: 'Manager Action',      default_sort: 140 },
+  { field_key: 'functional_manager_at', default_label: 'Functional Mgr',   default_sort: 145 },
   { field_key: 'skip_level_at',      default_label: 'Skip-Level',          default_sort: 150 },
   { field_key: 'hr_pms_at',          default_label: 'HR PMS',              default_sort: 160 },
   { field_key: 'auditor_at',         default_label: 'Auditor',             default_sort: 170 },
@@ -58,6 +59,7 @@ const STATUS_LABELS: Record<string, string> = {
   kra_set: 'KRA Set',
   self_review: 'Self Review',
   manager_check: 'Manager Check',
+  functional_manager_check: 'Functional Mgr',
   skip_level_check: 'Skip-Level',
   hr_pms_review: 'HR PMS',
   audit: 'Audit',
@@ -185,6 +187,7 @@ export default function KpiJourneyReport() {
           case 'kra_assigned_at':    return r.kraAssignedAt ? format(new Date(r.kraAssignedAt), 'dd-MMM-yyyy HH:mm') : '';
           case 'self_submitted_at':  return fmtCell(r.selfSubmittedAt, r.isNa);
           case 'manager_action_at':  return fmtCell(r.managerActionAt, r.isNa);
+          case 'functional_manager_at': return fmtCell(r.functionalManagerAt, r.isNa);
           case 'skip_level_at':      return fmtCell(r.skipLevelAt, r.isNa);
           case 'hr_pms_at':          return fmtCell(r.hrPmsAt, r.isNa);
           case 'auditor_at':         return fmtCell(r.auditorAt, r.isNa);
@@ -399,6 +402,7 @@ export default function KpiJourneyReport() {
                     <TableHead className="min-w-[130px]">KRA Assigned</TableHead>
                     <TableHead className="min-w-[130px]">Self Submitted</TableHead>
                     <TableHead className="min-w-[130px]">Manager</TableHead>
+                    <TableHead className="min-w-[130px]">Functional Mgr</TableHead>
                     <TableHead className="min-w-[130px]">Skip-Level</TableHead>
                     <TableHead className="min-w-[130px]">HR PMS</TableHead>
                     <TableHead className="min-w-[130px]">Auditor</TableHead>
@@ -432,6 +436,7 @@ export default function KpiJourneyReport() {
                       <TableCell className="text-xs font-mono">{formatDate(row.kraAssignedAt)}</TableCell>
                       <TableCell className="text-xs font-mono">{formatDate(row.selfSubmittedAt)}</TableCell>
                       <TableCell className="text-xs font-mono">{formatDate(row.managerActionAt)}</TableCell>
+                      <TableCell className="text-xs font-mono">{formatDate(row.functionalManagerAt)}</TableCell>
                       <TableCell className="text-xs font-mono">{formatDate(row.skipLevelAt)}</TableCell>
                       <TableCell className="text-xs font-mono">{formatDate(row.hrPmsAt)}</TableCell>
                       <TableCell className="text-xs font-mono">{formatDate(row.auditorAt)}</TableCell>

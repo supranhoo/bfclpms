@@ -21,6 +21,7 @@ const CMP_DEFAULT_FIELDS = [
   { field_key: 'total_kpis',            default_label: 'Total KPIs',            default_sort: 30 },
   { field_key: 'self_review_submitted', default_label: 'Self Review Submitted', default_sort: 40 },
   { field_key: 'manager_reviewed',      default_label: 'Manager Reviewed',      default_sort: 50 },
+  { field_key: 'functional_manager_reviewed', default_label: 'Functional Mgr Reviewed', default_sort: 55 },
   { field_key: 'skip_level_reviewed',   default_label: 'Skip-Level Reviewed',   default_sort: 60 },
   { field_key: 'hr_pms_reviewed',       default_label: 'HR PMS Reviewed',       default_sort: 70 },
   { field_key: 'auditor_reviewed',      default_label: 'Auditor Reviewed',      default_sort: 80 },
@@ -66,6 +67,7 @@ export default function CompletionReport() {
       approved: number; 
       selfReviewSubmitted: number;
       managerReviewed: number;
+      functionalManagerReviewed: number;
       skipLevelReviewed: number;
       hrPmsReviewed: number;
       auditorReviewed: number;
@@ -78,7 +80,7 @@ export default function CompletionReport() {
       const key = `${period}-${year}`;
       
       if (!periodMap.has(key)) {
-        periodMap.set(key, { total: 0, approved: 0, selfReviewSubmitted: 0, managerReviewed: 0, skipLevelReviewed: 0, hrPmsReviewed: 0, auditorReviewed: 0, year });
+        periodMap.set(key, { total: 0, approved: 0, selfReviewSubmitted: 0, managerReviewed: 0, functionalManagerReviewed: 0, skipLevelReviewed: 0, hrPmsReviewed: 0, auditorReviewed: 0, year });
       }
       
       const data = periodMap.get(key)!;
@@ -92,24 +94,32 @@ export default function CompletionReport() {
         data.auditorReviewed++;
         data.hrPmsReviewed++;
         data.skipLevelReviewed++;
+        data.functionalManagerReviewed++;
         data.managerReviewed++;
         data.selfReviewSubmitted++;
       } else if (status === 'management_review') {
         data.auditorReviewed++;
         data.hrPmsReviewed++;
         data.skipLevelReviewed++;
+        data.functionalManagerReviewed++;
         data.managerReviewed++;
         data.selfReviewSubmitted++;
       } else if (status === 'audit') {
         data.hrPmsReviewed++;
         data.skipLevelReviewed++;
+        data.functionalManagerReviewed++;
         data.managerReviewed++;
         data.selfReviewSubmitted++;
       } else if (status === 'hr_pms_review') {
         data.skipLevelReviewed++;
+        data.functionalManagerReviewed++;
         data.managerReviewed++;
         data.selfReviewSubmitted++;
       } else if (status === 'skip_level_check') {
+        data.functionalManagerReviewed++;
+        data.managerReviewed++;
+        data.selfReviewSubmitted++;
+      } else if (status === 'functional_manager_check') {
         data.managerReviewed++;
         data.selfReviewSubmitted++;
       } else if (status === 'manager_check') {
@@ -133,6 +143,7 @@ export default function CompletionReport() {
           approved: data.approved,
           selfReviewSubmitted: data.selfReviewSubmitted,
           managerReviewed: data.managerReviewed,
+          functionalManagerReviewed: data.functionalManagerReviewed,
           skipLevelReviewed: data.skipLevelReviewed,
           hrPmsReviewed: data.hrPmsReviewed,
           auditorReviewed: data.auditorReviewed,
@@ -154,6 +165,7 @@ export default function CompletionReport() {
       name: `${p.period.substring(0, 3)} ${p.year}`,
       'Self Review': p.selfReviewSubmitted,
       'Manager Review': p.managerReviewed,
+      'Functional Mgr': p.functionalManagerReviewed,
       'Skip-Level': p.skipLevelReviewed,
       'HR PMS': p.hrPmsReviewed,
       'Auditor': p.auditorReviewed,
@@ -191,6 +203,7 @@ export default function CompletionReport() {
         case 'total_kpis':            return p.total;
         case 'self_review_submitted': return p.selfReviewSubmitted;
         case 'manager_reviewed':      return p.managerReviewed;
+        case 'functional_manager_reviewed': return p.functionalManagerReviewed;
         case 'skip_level_reviewed':   return p.skipLevelReviewed;
         case 'hr_pms_reviewed':       return p.hrPmsReviewed;
         case 'auditor_reviewed':      return p.auditorReviewed;
@@ -363,6 +376,7 @@ export default function CompletionReport() {
                   case 'year':                  return undefined;
                   case 'self_review_submitted': return 'text-center text-blue-600';
                   case 'manager_reviewed':      return 'text-center text-amber-600';
+                  case 'functional_manager_reviewed': return 'text-center text-indigo-600';
                   case 'skip_level_reviewed':   return 'text-center text-teal-600';
                   case 'hr_pms_reviewed':       return 'text-center text-rose-600';
                   case 'auditor_reviewed':      return 'text-center text-purple-600';
@@ -379,6 +393,7 @@ export default function CompletionReport() {
                   case 'total_kpis':            return p.total;
                   case 'self_review_submitted': return p.selfReviewSubmitted;
                   case 'manager_reviewed':      return p.managerReviewed;
+                  case 'functional_manager_reviewed': return p.functionalManagerReviewed;
                   case 'skip_level_reviewed':   return p.skipLevelReviewed;
                   case 'hr_pms_reviewed':       return p.hrPmsReviewed;
                   case 'auditor_reviewed':      return p.auditorReviewed;

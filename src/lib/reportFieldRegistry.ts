@@ -54,6 +54,7 @@ export const REPORT_FIELD_REGISTRY: ReportFieldDef[] = [
   // Scores
   { key: 'scores.self_score', source: 'Scores', field: 'self_score', label: 'Self Score', type: 'number', table: 'review_submissions' },
   { key: 'scores.manager_score', source: 'Scores', field: 'manager_score', label: 'Manager Score', type: 'number', table: 'review_submissions' },
+  { key: 'scores.functional_manager_score', source: 'Scores', field: 'functional_manager_score', label: 'Functional Manager Score', type: 'number', table: 'review_submissions' },
   { key: 'scores.skip_level_score', source: 'Scores', field: 'skip_level_score', label: 'Skip-Level Score', type: 'number', table: 'review_submissions' },
   { key: 'scores.hr_pms_score', source: 'Scores', field: 'hr_pms_score', label: 'HR PMS Score', type: 'number', table: 'review_submissions' },
   { key: 'scores.auditor_score', source: 'Scores', field: 'auditor_score', label: 'Auditor Score', type: 'number', table: 'review_submissions' },

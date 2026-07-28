@@ -109,6 +109,13 @@ export interface ReviewSubmission {
   management_remarks: string | null;
   management_evidence_url: string | null;
   management_evidence_urls: string[] | null;
+  // Functional manager review fields (ADR-194 §WF-STAGE-SSOT)
+  functional_manager_rating?: RatingLevel | null;
+  functional_manager_score?: number | null;
+  functional_manager_remarks?: string | null;
+  functional_manager_evidence_url?: string | null;
+  functional_manager_evidence_urls?: string[] | null;
+  functional_manager_achieved_value?: number | null;
   // Skip-level review fields
   skip_level_rating: RatingLevel | null;
   skip_level_score: number | null;
@@ -448,6 +455,7 @@ export function useReviewSubmissionScoresByKpiIds(
     queryFn: async () => {
       const map = new Map<string, {
         manager_score: number | null;
+        functional_manager_score: number | null;
         skip_level_score: number | null;
         hr_pms_score: number | null;
         auditor_score: number | null;
@@ -462,6 +470,7 @@ export function useReviewSubmissionScoresByKpiIds(
         if (!wantedIds.has(r.kpi_id)) return;
         map.set(r.kpi_id, {
           manager_score: r.manager_score,
+          functional_manager_score: r.functional_manager_score ?? null,
           skip_level_score: r.skip_level_score,
           hr_pms_score: r.hr_pms_score,
           auditor_score: r.auditor_score,
@@ -516,7 +525,7 @@ export function useReviewSubmissionScoresByKpiIds(
         const batch = kpiIds.slice(i, i + BATCH_SIZE);
         const { data, error } = await supabase
           .from('review_submissions')
-          .select('kpi_id, manager_score, skip_level_score, hr_pms_score, auditor_score, management_score, final_score, is_na, self_score')
+          .select('kpi_id, manager_score, functional_manager_score, skip_level_score, hr_pms_score, auditor_score, management_score, final_score, is_na, self_score')
           .in('kpi_id', batch);
         if (error) {
           console.error('[useReviewSubmissionScoresByKpiIds] batch failed:', error);
@@ -1476,6 +1485,7 @@ export function useSendBackKpi() {
           manager_evidence_url: null,
           manager_achieved_value: null,
           skip_level_rating: null,
+          functional_manager_score: null,
           skip_level_score: null,
           skip_level_remarks: null,
           skip_level_evidence_url: null,
