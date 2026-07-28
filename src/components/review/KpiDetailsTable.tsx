@@ -14,7 +14,7 @@ import { KPI, ReviewSubmission, KpiQuery, ReviewStatus } from '@/hooks/useKpis';
 import { InlineDailySubmissionRow } from '@/components/review/InlineDailySubmissionRow';
 import { DailyBadge } from '@/components/review/DailyKpiExpandButton';
 import { FrequencyBadge } from '@/components/review/FrequencyBadge';
-import { statusColors, statusLabels } from '@/lib/reviewConstants';
+import { statusColors, statusLabels, CANONICAL_WORKFLOW_STAGES } from '@/lib/reviewConstants';
 import { renderBoldKpiText } from '@/components/ui/FormattedText';
 import { getKpiSummaryText } from '@/lib/textFormatting';
 import { getQualitativeTargetLabel, getQualitativeAchievedLabel } from '@/lib/qualitativeUom';
@@ -31,6 +31,8 @@ import type { AuditKpiAssignment } from '@/hooks/useAuditKpiAssignments';
 const STAGE_COLUMN_MAP: Record<string, { key: string; label: string }> = {
   self_review: { key: 'self_score', label: 'Self' },
   manager_check: { key: 'manager_score', label: 'Manager' },
+  // ADR-194 §WF-STAGE-SSOT — Functional Manager (F1) sits right after Manager.
+  functional_manager_check: { key: 'functional_manager_score', label: 'Functional Mgr' },
   skip_level_check: { key: 'skip_level_score', label: 'Skip-Level' },
   hr_pms_review: { key: 'hr_pms_score', label: 'HR PMS' },
   audit: { key: 'auditor_score', label: 'Auditor' },
@@ -41,6 +43,7 @@ const STAGE_COLUMN_MAP: Record<string, { key: string; label: string }> = {
 const COLUMN_TO_STAGE: Record<string, string> = {
   self_score: 'self_review',
   manager_score: 'manager_check',
+  functional_manager_score: 'functional_manager_check',
   skip_level_score: 'skip_level_check',
   hr_pms_score: 'hr_pms_review',
   auditor_score: 'audit',
@@ -68,7 +71,7 @@ function isStageAtOrBeforeCurrent(columnKey: string, kpiStatus: string, stages: 
 }
 
 /** Build dynamic score columns from workflow stages. Final is always appended. */
-function buildScoreColumns(stages: string[]): { key: string; label: string }[] {
+export function buildScoreColumns(stages: string[]): { key: string; label: string }[] {
   const cols: { key: string; label: string }[] = [];
   for (const stage of stages) {
     const col = STAGE_COLUMN_MAP[stage];
@@ -117,7 +120,7 @@ function renderScoreCell(score: number | null | undefined): React.ReactNode {
 /**
  * Get the score value for a specific column from submission
  */
-function getScoreForColumn(
+export function getScoreForColumn(
   submission: ReviewSubmission | undefined,
   columnKey: string,
   kpiStatus?: string
@@ -129,6 +132,8 @@ function getScoreForColumn(
       return submission.self_score ?? null;
     case 'manager_score':
       return submission.manager_score ?? null;
+    case 'functional_manager_score':
+      return (submission as any).functional_manager_score ?? null;
     case 'skip_level_score':
       return submission.skip_level_score ?? null;
     case 'hr_pms_score':
@@ -145,11 +150,10 @@ function getScoreForColumn(
   }
 }
 
-// Canonical status order for sorting
-const STATUS_ORDER: string[] = [
-  'kra_set', 'self_review', 'manager_check', 'skip_level_check',
-  'hr_pms_review', 'audit', 'management_review', 'approved',
-];
+// Canonical status order for sorting.
+// ADR-194 §WF-STAGE-SSOT — derived from the shared stage list so this local
+// copy can never drift and silently drop a stage again.
+const STATUS_ORDER: string[] = [...CANONICAL_WORKFLOW_STAGES];
 
 type SortField = 'category' | 'weightage' | 'status' | string; // string for dynamic score column keys
 type SortDirection = 'asc' | 'desc';
@@ -609,7 +613,8 @@ export function KpiDetailsTable({
                    // Without a downstream score, the null simply means the stage is pending.
                    const stageName = COLUMN_TO_STAGE[col.key];
                    const isAtCurrentStage = stageName === (kpi.status || 'kra_set');
-                   const SCORE_COLS_ORDERED = ['self_score', 'manager_score', 'skip_level_score', 'hr_pms_score', 'auditor_score', 'management_score'];
+                   // ADR-194 §WF-STAGE-SSOT — must stay in canonical stage order.
+                   const SCORE_COLS_ORDERED = ['self_score', 'manager_score', 'functional_manager_score', 'skip_level_score', 'hr_pms_score', 'auditor_score', 'management_score'];
                    const currentColIdx = SCORE_COLS_ORDERED.indexOf(col.key);
                    const hasDownstreamScore = currentColIdx >= 0 && SCORE_COLS_ORDERED.slice(currentColIdx + 1).some(laterCol => {
                      const laterScore = submission?.[laterCol as keyof typeof submission];

@@ -7624,3 +7624,13 @@ the additive-only `workflow_change_step_back()` which snapshots
 Read parity: `get_reviewer_roster_slim()` returns `functional_manager_id`, and
 `src/pages/admin/UserManagement.tsx` hydrates the edit dialog from `profiles`
 and shows the FM in both the mobile card and desktop table.
+
+**ADR-194 addendum — KPI Details table.**
+`src/components/review/KpiDetailsTable.tsx` now maps
+`functional_manager_check → { functional_manager_score, 'Functional Mgr' }` in
+`STAGE_COLUMN_MAP` / `COLUMN_TO_STAGE`, resolves the value in
+`getScoreForColumn()`, derives `STATUS_ORDER` from
+`CANONICAL_WORKFLOW_STAGES`, and includes `functional_manager_score` in
+`SCORE_COLS_ORDERED` (re-review detection). The column appears only when the
+employee's resolved workflow contains the F1 stage. Regression guard:
+`src/test/kpiDetailsTableFunctionalManagerColumn.test.ts`.
