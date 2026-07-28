@@ -111,6 +111,23 @@ export function monthlyKraHeaders(): string[] {
   return [...head, 'Months Scored', 'Avg /5', 'KRA Points', 'KRA Weight'];
 }
 
+/**
+ * Pure: how many fiscal months carry a scored rating for this employee.
+ * Returns `null` when the employee is absent from the matrix (no data at all),
+ * so callers can distinguish "not counted" from a genuine `0`.
+ * SSOT for both the "Monthly KRA Scores" sheet and the Employees-sheet column.
+ */
+export function monthsScored(
+  matrix: MonthlyKraMatrix,
+  employeeId: string,
+): number | null {
+  const months = matrix.get(employeeId);
+  if (!months) return null;
+  let n = 0;
+  for (const m of FY_MONTHS) if (months[m]?.rating != null) n += 1;
+  return n;
+}
+
 export type MonthlyKraSheetRow = Record<string, string | number>;
 
 /**
