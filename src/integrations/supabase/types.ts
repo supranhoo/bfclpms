@@ -15449,6 +15449,23 @@ export type Database = {
         }[]
       }
       get_annual_review_directory_access: { Args: never; Returns: Json }
+      get_annual_review_monthly_kra_matrix: {
+        Args: {
+          p_employee_ids: string[]
+          p_exclude_na?: boolean
+          p_fy_start: number
+        }
+        Returns: {
+          achieved: number
+          avg_rating: number
+          employee_id: string
+          kpi_count: number
+          out_of: number
+          pct: number
+          review_period: string
+          review_year: number
+        }[]
+      }
       get_annual_review_pending_at_stage: {
         Args: {
           p_cycle_id: string
