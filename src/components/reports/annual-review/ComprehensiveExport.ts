@@ -8,9 +8,15 @@ import {
   fetchTemplateEligibilityMaps, buildEligibilityColumnSet, buildEligibilityRow,
   type EligibilityMaps, type EligibilityColumn,
 } from '@/services/annualReview/eligibilityReportColumns';
+// ADR-188 — monthly KRA detail sheet.
+import {
+  buildMonthlyKraRows, fetchCycleFyStart, fetchMonthlyKraMatrix,
+} from '@/services/annualReview/monthlyKraSheet';
 
 export interface ExportInput {
   cycleName: string;
+  /** ADR-188 — needed to resolve the cycle's fiscal-year start for the KRA sheet. */
+  cycleId?: string;
   rows: ComprehensiveRow[];
   summary: KpiSummary;
   byDepartment: GroupSummary[];
@@ -166,6 +172,8 @@ export async function downloadComprehensiveWorkbook(input: ExportInput) {
   };
   append('Executive Summary', summaryToSheet(input.summary, input.cycleName));
   append('Employees', toEmployeeSheet(input.rows, labelMaps, eligMaps, eligColumns));
+  // ADR-188 — month-by-month KRA detail for KRA-template employees only.
+  append('Monthly KRA Scores', await buildMonthlyKraSheet(input, labelMaps));
   append('Rating Distribution', ratingDistribution(input.rows));
   append('By Department', groupToSheet(input.byDepartment));
   append('By Business Unit', groupToSheet(input.byBusinessUnit));
