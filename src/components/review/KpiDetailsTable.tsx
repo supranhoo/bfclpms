@@ -31,6 +31,8 @@ import type { AuditKpiAssignment } from '@/hooks/useAuditKpiAssignments';
 const STAGE_COLUMN_MAP: Record<string, { key: string; label: string }> = {
   self_review: { key: 'self_score', label: 'Self' },
   manager_check: { key: 'manager_score', label: 'Manager' },
+  // ADR-194 §WF-STAGE-SSOT — Functional Manager (F1) sits right after Manager.
+  functional_manager_check: { key: 'functional_manager_score', label: 'Functional Mgr' },
   skip_level_check: { key: 'skip_level_score', label: 'Skip-Level' },
   hr_pms_review: { key: 'hr_pms_score', label: 'HR PMS' },
   audit: { key: 'auditor_score', label: 'Auditor' },
@@ -41,6 +43,7 @@ const STAGE_COLUMN_MAP: Record<string, { key: string; label: string }> = {
 const COLUMN_TO_STAGE: Record<string, string> = {
   self_score: 'self_review',
   manager_score: 'manager_check',
+  functional_manager_score: 'functional_manager_check',
   skip_level_score: 'skip_level_check',
   hr_pms_score: 'hr_pms_review',
   auditor_score: 'audit',
@@ -129,6 +132,8 @@ function getScoreForColumn(
       return submission.self_score ?? null;
     case 'manager_score':
       return submission.manager_score ?? null;
+    case 'functional_manager_score':
+      return (submission as any).functional_manager_score ?? null;
     case 'skip_level_score':
       return submission.skip_level_score ?? null;
     case 'hr_pms_score':
@@ -145,11 +150,10 @@ function getScoreForColumn(
   }
 }
 
-// Canonical status order for sorting
-const STATUS_ORDER: string[] = [
-  'kra_set', 'self_review', 'manager_check', 'skip_level_check',
-  'hr_pms_review', 'audit', 'management_review', 'approved',
-];
+// Canonical status order for sorting.
+// ADR-194 §WF-STAGE-SSOT — derived from the shared stage list so this local
+// copy can never drift and silently drop a stage again.
+const STATUS_ORDER: string[] = [...CANONICAL_WORKFLOW_STAGES];
 
 type SortField = 'category' | 'weightage' | 'status' | string; // string for dynamic score column keys
 type SortDirection = 'asc' | 'desc';
