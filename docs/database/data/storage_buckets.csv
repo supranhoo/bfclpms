@@ -1,0 +1,7 @@
+id,name,public,file_size_limit,allowed_mime_types
+avatars,avatars,t,"",""
+branding-assets,branding-assets,t,"",""
+database-backups,database-backups,f,"",""
+proxy-selfies,proxy-selfies,f,"",""
+review-evidence,review-evidence,f,"",""
+safety-media,safety-media,f,"",""
