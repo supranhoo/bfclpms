@@ -23,6 +23,8 @@ export interface PendingWithProfile {
   id: string;
   full_name?: string | null;
   reporting_manager_id?: string | null;
+  /** ADR-193 §FM-REVIEWER-SCOPE — needed to attribute functional_manager_check. */
+  functional_manager_id?: string | null;
   is_active?: boolean | null;
 }
 
@@ -173,6 +175,7 @@ export function resolvePendingWithForKpi(ctx: PendingWithContext, kpi: PendingWi
   const owners = isOrgKpi ? (ctx.ownerMap.get(ownerKey) ?? []) : [];
   const managerId = profile?.reporting_manager_id ?? null;
   const skipId = managerId ? (ctx.managerToSkip.get(managerId) ?? null) : null;
+  const fmId = profile?.functional_manager_id ?? null;
 
   return resolvePendingWith({
     status: kpi.status,
@@ -180,6 +183,7 @@ export function resolvePendingWithForKpi(ctx: PendingWithContext, kpi: PendingWi
     dataOwnerNames: owners.join(', '),
     employeeName: profile?.full_name ?? '',
     managerName: managerId ? (ctx.profileMap.get(managerId)?.full_name ?? null) : null,
+    functionalManagerName: fmId ? (ctx.profileMap.get(fmId)?.full_name ?? null) : null,
     skipManagerName: skipId ? (ctx.profileMap.get(skipId)?.full_name ?? null) : null,
     stageChain: ctx.stageChainMap.get(employeeId) ?? [],
     hrPmsNames: ctx.hrPmsNames,
