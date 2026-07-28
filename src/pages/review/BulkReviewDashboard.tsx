@@ -255,6 +255,14 @@ export default function BulkReviewDashboard() {
     category_id: oneOrNull(categoryIds),
   }), [departmentIds, companyIds, divisionIds, businessUnitIds, categoryIds]);
 
+  // When 2+ values are chosen on any org axis the server-side estimate covers
+  // the broader (unfiltered) scope — the exact narrowing happens client-side
+  // (ADR-195). Flag the preview counters as approximate so they aren't read
+  // as exact.
+  const previewIsApproximate =
+    companyIds.length > 1 || divisionIds.length > 1
+    || businessUnitIds.length > 1 || departmentIds.length > 1;
+
   const activeFilterCount =
     (companyIds.length > 0 ? 1 : 0) +
     (divisionIds.length > 0 ? 1 : 0) +
