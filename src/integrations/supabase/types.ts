@@ -10723,7 +10723,9 @@ export type Database = {
           final_score_explanation: string | null
           final_score_rule_snapshot: Json | null
           final_score_rule_type: string | null
-          functional_manager_evidence_urls: Json
+          functional_manager_achieved_value: number | null
+          functional_manager_evidence_url: string | null
+          functional_manager_evidence_urls: Json | null
           functional_manager_rating:
             | Database["public"]["Enums"]["rating_level"]
             | null
@@ -10792,7 +10794,9 @@ export type Database = {
           final_score_explanation?: string | null
           final_score_rule_snapshot?: Json | null
           final_score_rule_type?: string | null
-          functional_manager_evidence_urls?: Json
+          functional_manager_achieved_value?: number | null
+          functional_manager_evidence_url?: string | null
+          functional_manager_evidence_urls?: Json | null
           functional_manager_rating?:
             | Database["public"]["Enums"]["rating_level"]
             | null
@@ -10861,7 +10865,9 @@ export type Database = {
           final_score_explanation?: string | null
           final_score_rule_snapshot?: Json | null
           final_score_rule_type?: string | null
-          functional_manager_evidence_urls?: Json
+          functional_manager_achieved_value?: number | null
+          functional_manager_evidence_url?: string | null
+          functional_manager_evidence_urls?: Json | null
           functional_manager_rating?:
             | Database["public"]["Enums"]["rating_level"]
             | null
@@ -17211,7 +17217,9 @@ export type Database = {
           final_score_explanation: string | null
           final_score_rule_snapshot: Json | null
           final_score_rule_type: string | null
-          functional_manager_evidence_urls: Json
+          functional_manager_achieved_value: number | null
+          functional_manager_evidence_url: string | null
+          functional_manager_evidence_urls: Json | null
           functional_manager_rating:
             | Database["public"]["Enums"]["rating_level"]
             | null
