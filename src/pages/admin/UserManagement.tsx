@@ -1036,7 +1036,7 @@ export default function UserManagement() {
     setEditHydrating(true);
     supabase
       .from('profiles')
-      .select('group_doj, doj, confirmation_date, location_id, employee_category, employment_status, mobile_number')
+      .select('group_doj, doj, confirmation_date, location_id, employee_category, employment_status, mobile_number, functional_manager_id')
       .eq('id', user.id)
       .maybeSingle()
       .then(({ data, error }) => {
@@ -1058,6 +1058,10 @@ export default function UserManagement() {
         setEditEmployeeCategory(row.employee_category || '');
         setEditEmploymentStatus(row.employment_status || '');
         setEditMobile(row.mobile_number || '');
+        // ADR-194 §FM-READ-PARITY — authoritative FM value from `profiles`.
+        // The roster cache can be stale right after a save, which previously
+        // made a persisted Functional Manager render as blank.
+        setEditFunctionalManagerId(row.functional_manager_id || '');
         setEditHydrating(false);
       });
   };
