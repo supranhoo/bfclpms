@@ -138,6 +138,7 @@ export function WorkflowProgressTracker({
       kra_set: 0,
       self_review: 0,
       manager_check: 0,
+      functional_manager_check: 0,
       skip_level_check: 0,
       hr_pms_review: 0,
       audit: 0,
