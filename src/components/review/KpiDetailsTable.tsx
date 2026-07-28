@@ -14,7 +14,7 @@ import { KPI, ReviewSubmission, KpiQuery, ReviewStatus } from '@/hooks/useKpis';
 import { InlineDailySubmissionRow } from '@/components/review/InlineDailySubmissionRow';
 import { DailyBadge } from '@/components/review/DailyKpiExpandButton';
 import { FrequencyBadge } from '@/components/review/FrequencyBadge';
-import { statusColors, statusLabels } from '@/lib/reviewConstants';
+import { statusColors, statusLabels, CANONICAL_WORKFLOW_STAGES } from '@/lib/reviewConstants';
 import { renderBoldKpiText } from '@/components/ui/FormattedText';
 import { getKpiSummaryText } from '@/lib/textFormatting';
 import { getQualitativeTargetLabel, getQualitativeAchievedLabel } from '@/lib/qualitativeUom';
@@ -613,7 +613,8 @@ export function KpiDetailsTable({
                    // Without a downstream score, the null simply means the stage is pending.
                    const stageName = COLUMN_TO_STAGE[col.key];
                    const isAtCurrentStage = stageName === (kpi.status || 'kra_set');
-                   const SCORE_COLS_ORDERED = ['self_score', 'manager_score', 'skip_level_score', 'hr_pms_score', 'auditor_score', 'management_score'];
+                   // ADR-194 §WF-STAGE-SSOT — must stay in canonical stage order.
+                   const SCORE_COLS_ORDERED = ['self_score', 'manager_score', 'functional_manager_score', 'skip_level_score', 'hr_pms_score', 'auditor_score', 'management_score'];
                    const currentColIdx = SCORE_COLS_ORDERED.indexOf(col.key);
                    const hasDownstreamScore = currentColIdx >= 0 && SCORE_COLS_ORDERED.slice(currentColIdx + 1).some(laterCol => {
                      const laterScore = submission?.[laterCol as keyof typeof submission];
