@@ -50,6 +50,8 @@ export interface KpiRule {
 export interface SubmissionScores {
   self_score: number | null;
   manager_score: number | null;
+  // ADR-194 §WF-STAGE-SSOT — Functional Manager (F1) rung.
+  functional_manager_score?: number | null;
   skip_level_score: number | null;
   hr_pms_score: number | null;
   auditor_score?: number | null;
@@ -133,16 +135,22 @@ export function resolveCarriedScore({ stage, submission, kpi }: ResolveInput): R
   // Stage cascade (mirrors DB exactly, see bulk_write_stage_scores lines 89-114).
   if (stage === 'manager') {
     if (submission.self_score != null) return { score: submission.self_score, source: 'self' };
+  } else if (stage === 'functional_manager') {
+    if (submission.manager_score != null) return { score: submission.manager_score, source: 'manager' };
+    if (submission.self_score != null) return { score: submission.self_score, source: 'self' };
   } else if (stage === 'skip_level') {
+    if (submission.functional_manager_score != null) return { score: submission.functional_manager_score, source: 'functional_manager' };
     if (submission.manager_score != null) return { score: submission.manager_score, source: 'manager' };
     if (submission.self_score != null) return { score: submission.self_score, source: 'self' };
   } else if (stage === 'hr_pms') {
     if (submission.skip_level_score != null) return { score: submission.skip_level_score, source: 'skip_level' };
+    if (submission.functional_manager_score != null) return { score: submission.functional_manager_score, source: 'functional_manager' };
     if (submission.manager_score != null) return { score: submission.manager_score, source: 'manager' };
     if (submission.self_score != null) return { score: submission.self_score, source: 'self' };
   } else if (stage === 'auditor') {
     if (submission.hr_pms_score != null) return { score: submission.hr_pms_score, source: 'hr_pms' };
     if (submission.skip_level_score != null) return { score: submission.skip_level_score, source: 'skip_level' };
+    if (submission.functional_manager_score != null) return { score: submission.functional_manager_score, source: 'functional_manager' };
     if (submission.manager_score != null) return { score: submission.manager_score, source: 'manager' };
     if (submission.self_score != null) return { score: submission.self_score, source: 'self' };
   } else if (stage === 'management') {
@@ -152,6 +160,7 @@ export function resolveCarriedScore({ stage, submission, kpi }: ResolveInput): R
     if (submission.auditor_score != null) return { score: submission.auditor_score, source: 'auditor' };
     if (submission.hr_pms_score != null) return { score: submission.hr_pms_score, source: 'hr_pms' };
     if (submission.skip_level_score != null) return { score: submission.skip_level_score, source: 'skip_level' };
+    if (submission.functional_manager_score != null) return { score: submission.functional_manager_score, source: 'functional_manager' };
     if (submission.manager_score != null) return { score: submission.manager_score, source: 'manager' };
     if (submission.self_score != null) return { score: submission.self_score, source: 'self' };
   }

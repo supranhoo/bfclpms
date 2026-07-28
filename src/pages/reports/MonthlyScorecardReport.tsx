@@ -31,6 +31,7 @@ const MSR_DEFAULT_FIELDS = [
   { field_key: 'approved_kpis',        default_label: 'Approved KPIs',        default_sort: 70 },
   { field_key: 'avg_self_score',       default_label: 'Avg Self Score',       default_sort: 80 },
   { field_key: 'avg_manager_score',    default_label: 'Avg Manager Score',    default_sort: 90 },
+  { field_key: 'avg_functional_manager_score', default_label: 'Avg Functional Mgr Score', default_sort: 95 },
   { field_key: 'avg_skip_level_score', default_label: 'Avg Skip-Level Score', default_sort: 100 },
   { field_key: 'avg_hr_pms_score',     default_label: 'Avg HR PMS Score',     default_sort: 110 },
   { field_key: 'avg_auditor_score',    default_label: 'Avg Auditor Score',    default_sort: 120 },
@@ -143,6 +144,7 @@ export default function MonthlyScorecardReport() {
             manager_rating,
             manager_remarks,
             manager_evidence_url,
+            functional_manager_score,
             skip_level_score,
             skip_level_rating,
             skip_level_remarks,
@@ -229,6 +231,7 @@ export default function MonthlyScorecardReport() {
       let totalWeightage = 0;
       let weightedSelfScore = 0;
       let weightedManagerScore = 0;
+      let weightedFunctionalManagerScore = 0;
       let weightedSkipLevelScore = 0;
       let weightedHrPmsScore = 0;
       let weightedAuditorScore = 0;
@@ -240,6 +243,7 @@ export default function MonthlyScorecardReport() {
       // Track whether ANY KPI has data for each stage (Bug 3 better fix)
       let hasSelfData = false;
       let hasManagerData = false;
+      let hasFunctionalManagerData = false;
       let hasSkipLevelData = false;
       let hasHrPmsData = false;
       let hasAuditorData = false;
@@ -258,6 +262,10 @@ export default function MonthlyScorecardReport() {
           if (submission.manager_score != null) {
             weightedManagerScore += (submission.manager_score * weight);
             hasManagerData = true;
+          }
+          if ((submission as any).functional_manager_score != null) {
+            weightedFunctionalManagerScore += ((submission as any).functional_manager_score * weight);
+            hasFunctionalManagerData = true;
           }
           if (submission.skip_level_score != null) {
             weightedSkipLevelScore += (submission.skip_level_score * weight);
@@ -305,6 +313,7 @@ export default function MonthlyScorecardReport() {
           managerRemarks: submission?.manager_remarks,
           managerEvidence: submission?.manager_evidence_url,
           
+          functionalManagerScore: (submission as any)?.functional_manager_score ?? null,
           skipLevelScore: submission?.skip_level_score,
           skipLevelRating: submission?.skip_level_rating,
           skipLevelRemarks: submission?.skip_level_remarks,
@@ -330,6 +339,7 @@ export default function MonthlyScorecardReport() {
 
       const avgSelf = totalWeightage > 0 ? weightedSelfScore / totalWeightage : 0;
       const avgManager = totalWeightage > 0 ? weightedManagerScore / totalWeightage : 0;
+      const avgFunctionalManager = totalWeightage > 0 ? weightedFunctionalManagerScore / totalWeightage : 0;
       const avgSkipLevel = totalWeightage > 0 ? weightedSkipLevelScore / totalWeightage : 0;
       const avgHrPms = totalWeightage > 0 ? weightedHrPmsScore / totalWeightage : 0;
       const avgAuditor = totalWeightage > 0 ? weightedAuditorScore / totalWeightage : 0;
@@ -368,6 +378,7 @@ export default function MonthlyScorecardReport() {
         avgSelfScore: avgSelf,
         avgManagerScore: avgManager,
         // Use null when no data exists for optional stages to distinguish from zero
+        avgFunctionalManagerScore: hasFunctionalManagerData ? avgFunctionalManager : null,
         avgSkipLevelScore: hasSkipLevelData ? avgSkipLevel : null,
         avgHrPmsScore: hasHrPmsData ? avgHrPms : null,
         avgAuditorScore: avgAuditor,
@@ -375,6 +386,7 @@ export default function MonthlyScorecardReport() {
         avgFinalScore: avgFinal,
         hasSelfData,
         hasManagerData,
+        hasFunctionalManagerData,
         hasSkipLevelData,
         hasHrPmsData,
         hasAuditorData,
@@ -424,6 +436,7 @@ export default function MonthlyScorecardReport() {
         case 'approved_kpis':        return sc.approvedKpis;
         case 'avg_self_score':       return sc.avgSelfScore.toFixed(2);
         case 'avg_manager_score':    return sc.avgManagerScore.toFixed(2);
+        case 'avg_functional_manager_score': return sc.avgFunctionalManagerScore != null ? sc.avgFunctionalManagerScore.toFixed(2) : '-';
         case 'avg_skip_level_score': return sc.avgSkipLevelScore != null ? sc.avgSkipLevelScore.toFixed(2) : '-';
         case 'avg_hr_pms_score':     return sc.avgHrPmsScore != null ? sc.avgHrPmsScore.toFixed(2) : '-';
         case 'avg_auditor_score':    return sc.avgAuditorScore.toFixed(2);
@@ -646,6 +659,7 @@ export default function MonthlyScorecardReport() {
                 const scoreCols: { key: string; fallback: string; getter: (s: typeof filteredScorecards[number]) => React.ReactNode }[] = [
                   { key: 'avg_self_score',       fallback: 'Self',       getter: s => displayScore(s.avgSelfScore, s.hasSelfData) },
                   { key: 'avg_manager_score',    fallback: 'Manager',    getter: s => displayScore(s.avgManagerScore, s.hasManagerData) },
+                  { key: 'avg_functional_manager_score', fallback: 'Functional Mgr', getter: s => displayScore(s.avgFunctionalManagerScore, s.hasFunctionalManagerData) },
                   { key: 'avg_skip_level_score', fallback: 'Skip-Level', getter: s => displayScore(s.avgSkipLevelScore, s.hasSkipLevelData) },
                   { key: 'avg_hr_pms_score',     fallback: 'HR PMS',     getter: s => displayScore(s.avgHrPmsScore, s.hasHrPmsData) },
                   { key: 'avg_auditor_score',    fallback: 'Auditor',    getter: s => displayScore(s.avgAuditorScore, s.hasAuditorData) },

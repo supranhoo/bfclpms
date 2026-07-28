@@ -33,6 +33,8 @@ const KPID_DEFAULT_FIELDS = [
   { field_key: 'weightage',      default_label: 'Weightage',      default_sort: 90 },
   { field_key: 'self',           default_label: 'Self',           default_sort: 100 },
   { field_key: 'manager',        default_label: 'Manager',        default_sort: 110 },
+  // ADR-194 §WF-STAGE-SSOT — Functional Manager (F1) sits right after Manager.
+  { field_key: 'functional_manager', default_label: 'Functional Mgr', default_sort: 115 },
   { field_key: 'skip_level',     default_label: 'Skip-Level',     default_sort: 120 },
   { field_key: 'hr_pms',         default_label: 'HR PMS',         default_sort: 130 },
   { field_key: 'auditor',        default_label: 'Auditor',        default_sort: 140 },
@@ -60,6 +62,7 @@ function resolveFinalScore(sub: any, status?: string): number | null {
     sub.auditor_score ??
     sub.hr_pms_score ??
     sub.skip_level_score ??
+    sub.functional_manager_score ??
     sub.manager_score ??
     sub.self_score;
   return v ?? null;
@@ -88,6 +91,7 @@ interface KpiDetailRow {
   status: string;
   selfScore: number | null;
   managerScore: number | null;
+  functionalManagerScore: number | null;
   skipLevelScore: number | null;
   hrPmsScore: number | null;
   auditorScore: number | null;
@@ -177,6 +181,7 @@ export default function KpiDetailReport() {
             review_submissions (
               self_score,
               manager_score,
+              functional_manager_score,
               skip_level_score,
               hr_pms_score,
               auditor_score,
@@ -247,6 +252,7 @@ export default function KpiDetailReport() {
           status: kpi.status ?? 'kra_set',
           selfScore: sub?.self_score ?? null,
           managerScore: sub?.manager_score ?? null,
+          functionalManagerScore: (sub as any)?.functional_manager_score ?? null,
           skipLevelScore: sub?.skip_level_score ?? null,
           hrPmsScore: sub?.hr_pms_score ?? null,
           auditorScore: sub?.auditor_score ?? null,
@@ -286,6 +292,7 @@ export default function KpiDetailReport() {
       const stages = detailWorkflowMap?.get(r.employeeId);
 
       // Workflow-aware score filtering: blank scores for roles not in the employee's workflow
+      const functionalManagerScore = stages && !stages.includes('functional_manager_check') ? null : r.functionalManagerScore;
       const skipLevelScore = stages && !stages.includes('skip_level_check') ? null : r.skipLevelScore;
       const hrPmsScore = stages && !stages.includes('hr_pms_review') ? null : r.hrPmsScore;
       const auditorScore = stages && !stages.includes('audit') ? null : r.auditorScore;
@@ -296,6 +303,7 @@ export default function KpiDetailReport() {
 
       // Check if any score was blanked
       const scoresChanged = (
+        functionalManagerScore !== r.functionalManagerScore ||
         skipLevelScore !== r.skipLevelScore ||
         hrPmsScore !== r.hrPmsScore ||
         auditorScore !== r.auditorScore ||
@@ -305,7 +313,7 @@ export default function KpiDetailReport() {
       // Recalculate finalScore for non-approved KPIs when out-of-workflow scores were blanked
       let finalScore = r.finalScore;
       if (scoresChanged && r.status !== 'approved') {
-        finalScore = managementScore ?? auditorScore ?? hrPmsScore ?? skipLevelScore ?? r.managerScore ?? r.selfScore ?? null;
+        finalScore = managementScore ?? auditorScore ?? hrPmsScore ?? skipLevelScore ?? functionalManagerScore ?? r.managerScore ?? r.selfScore ?? null;
         if (r.isNa || r.isFrequencyLocked) finalScore = null;
       }
 
@@ -319,6 +327,7 @@ export default function KpiDetailReport() {
 
         return {
           ...r,
+          functionalManagerScore,
           skipLevelScore,
           hrPmsScore,
           auditorScore,
@@ -332,7 +341,7 @@ export default function KpiDetailReport() {
         };
       }
 
-      return { ...r, skipLevelScore, hrPmsScore, auditorScore, managementScore, isOrphaned };
+      return { ...r, functionalManagerScore, skipLevelScore, hrPmsScore, auditorScore, managementScore, isOrphaned };
     });
   }, [rows, detailWorkflowMap]);
 
@@ -405,6 +414,7 @@ export default function KpiDetailReport() {
         case 'weightage':      return r.weightage;
         case 'self':           return r.isNa ? 'N/A' : (r.selfScore ?? '');
         case 'manager':        return r.isNa ? 'N/A' : (r.managerScore ?? '');
+        case 'functional_manager': return r.isNa ? 'N/A' : (r.functionalManagerScore ?? '');
         case 'skip_level':     return r.isNa ? 'N/A' : (r.skipLevelScore ?? '');
         case 'hr_pms':         return r.isNa ? 'N/A' : (r.hrPmsScore ?? '');
         case 'auditor':        return r.isNa ? 'N/A' : (r.auditorScore ?? '');
@@ -631,6 +641,7 @@ export default function KpiDetailReport() {
                     {/* Score columns */}
                     <th className="h-10 px-2 text-center align-middle font-medium text-muted-foreground text-xs w-16">Self</th>
                     <th className="h-10 px-2 text-center align-middle font-medium text-muted-foreground text-xs w-16">Manager</th>
+                    <th className="h-10 px-2 text-center align-middle font-medium text-muted-foreground text-xs w-24">Functional Mgr</th>
                     <th className="h-10 px-2 text-center align-middle font-medium text-muted-foreground text-xs w-20">Skip-Level</th>
                     <th className="h-10 px-2 text-center align-middle font-medium text-muted-foreground text-xs w-16">HR PMS</th>
                     <th className="h-10 px-2 text-center align-middle font-medium text-muted-foreground text-xs w-16">Auditor</th>
@@ -667,6 +678,9 @@ export default function KpiDetailReport() {
                       </td>
                       <td className="px-2 py-2 align-middle text-center">
                         <ScoreCell score={row.managerScore} isNa={row.isNa} />
+                      </td>
+                      <td className="px-2 py-2 align-middle text-center">
+                        <ScoreCell score={row.functionalManagerScore} isNa={row.isNa} />
                       </td>
                       <td className="px-2 py-2 align-middle text-center">
                         <ScoreCell score={row.skipLevelScore} isNa={row.isNa} />

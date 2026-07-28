@@ -17,6 +17,8 @@ export interface EmployeeScorecard {
   approvedKpis: number;
   avgSelfScore: number;
   avgManagerScore: number;
+  // ADR-194 §WF-STAGE-SSOT — Functional Manager (F1) stage.
+  avgFunctionalManagerScore?: number | null;
   avgSkipLevelScore?: number | null;
   avgHrPmsScore?: number | null;
   avgAuditorScore: number;
@@ -24,6 +26,7 @@ export interface EmployeeScorecard {
   avgFinalScore: number;
   hasSelfData?: boolean;
   hasManagerData?: boolean;
+  hasFunctionalManagerData?: boolean;
   hasSkipLevelData?: boolean;
   hasHrPmsData?: boolean;
   hasAuditorData?: boolean;
@@ -55,6 +58,12 @@ export interface KpiDetail {
   managerRemarks?: string | null;
   managerEvidence?: string | null;
   
+  // Functional Manager Review (ADR-194)
+  functionalManagerAchieved?: string | number | null;
+  functionalManagerScore?: number | null;
+  functionalManagerRating?: string | null;
+  functionalManagerRemarks?: string | null;
+
   // Skip-Level Review
   skipLevelAchieved?: string | number | null;
   skipLevelScore?: number | null;
@@ -1188,6 +1197,7 @@ export function generateBulkScorecardPdf(
     `${sc.approvedKpis}/${sc.totalKpis}`,
     formatScore(sc.avgSelfScore),
     formatScore(sc.avgManagerScore),
+    sc.avgFunctionalManagerScore != null ? formatScore(sc.avgFunctionalManagerScore) : '-',
     sc.avgSkipLevelScore != null ? formatScore(sc.avgSkipLevelScore) : '-',
     sc.avgHrPmsScore != null ? formatScore(sc.avgHrPmsScore) : '-',
     formatScore(sc.avgAuditorScore),
@@ -1197,7 +1207,7 @@ export function generateBulkScorecardPdf(
 
   autoTable(doc, {
     startY: yPos,
-    head: [['Code', 'Name', 'Designation', 'Dept', 'KPIs', 'Self', 'Mgr', 'Skip-L', 'HR PMS', 'Auditor', 'Mgmt', 'Final']],
+    head: [['Code', 'Name', 'Designation', 'Dept', 'KPIs', 'Self', 'Mgr', 'Func Mgr', 'Skip-L', 'HR PMS', 'Auditor', 'Mgmt', 'Final']],
     body: tableData,
     styles: { fontSize: 7, cellPadding: 2, lineColor: [220, 220, 220], lineWidth: 0.1 },
     headStyles: { fillColor: COLORS.primary, textColor: COLORS.white, fontSize: 7, fontStyle: 'bold' },
