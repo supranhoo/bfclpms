@@ -1525,6 +1525,9 @@ export default function UserManagement() {
               {paginatedProfiles.map(profile => {
                 const role = (profile.user_roles as any)?.[0]?.role || 'employee';
                 const manager = profiles?.find(p => p.id === profile.reporting_manager_id);
+                const functionalManager = profiles?.find(
+                  p => p.id === (profile as any).functional_manager_id,
+                );
                 const isInactive = (profile as any).is_active === false;
                 return (
                   <div key={profile.id} className={`border rounded-lg p-3 space-y-2 ${isInactive ? 'opacity-60 bg-muted/30' : ''}`}>
@@ -1550,6 +1553,12 @@ export default function UserManagement() {
                       <span>Dept: {(profile.departments as any)?.name || '-'}</span>
                       <span>Grade: {profile.pms_grade || '-'}</span>
                       <span>Manager: {manager ? formatManagerLabel(manager.full_name, manager.employee_code) : '-'}</span>
+                      <span>
+                        Functional:{' '}
+                        {functionalManager
+                          ? formatManagerLabel(functionalManager.full_name, functionalManager.employee_code)
+                          : '-'}
+                      </span>
                     </div>
                     <div className="flex items-center gap-1 pt-1 border-t">
                       <Button size="sm" variant="ghost" onClick={() => openEditDialog(profile)} className="min-h-[44px]" title="Edit">
