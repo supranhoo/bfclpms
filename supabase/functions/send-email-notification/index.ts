@@ -1568,7 +1568,9 @@ Sender Email: ${senderEmail}`, { logoUrl, footerText });
     const bodyContent = replacePlaceholders(template.body, placeholderData);
     const finalScoreStr = final_score != null ? String(final_score) : undefined;
     const roundedFinalScore = finalScoreStr ? String(Math.round(Number(finalScoreStr))) : undefined;
-    const html = buildEmailHtml(event_type, bodyContent, { logoUrl, footerText, finalScore: roundedFinalScore });
+    const preheader = buildPreheaderText(bodyContent, subject.replace(/^\[PMS\]\s*/, ''));
+    const html = buildEmailHtml(event_type, bodyContent, { logoUrl, footerText, finalScore: roundedFinalScore, preheader });
+    const plainText = buildPlainTextEmail(bodyContent, footerText);
 
     console.log(`Sending ${event_type} email via ${provider} to ${recipient_email}`);
 
@@ -1597,7 +1599,8 @@ Sender Email: ${senderEmail}`, { logoUrl, footerText });
           senderName,
           recipient_email,
           subject,
-          html
+          html,
+          plainText
         ));
 
         await logEmail({ event_type, recipient_email, recipient_name, subject, status: 'sent', provider: 'smtp', metadata: logMeta });
@@ -1623,7 +1626,7 @@ Sender Email: ${senderEmail}`, { logoUrl, footerText });
           headers: { "Content-Type": "application/json", ...corsHeaders },
         });
       } else {
-        const emailResponse = await withRetry(() => sendViaResend(senderEmail, senderName, recipient_email, subject, html));
+        const emailResponse = await withRetry(() => sendViaResend(senderEmail, senderName, recipient_email, subject, html, plainText));
         await logEmail({ event_type, recipient_email, recipient_name, subject, status: 'sent', provider: 'resend', metadata: logMeta });
         return new Response(JSON.stringify({ success: true, data: emailResponse }), {
           status: 200,
