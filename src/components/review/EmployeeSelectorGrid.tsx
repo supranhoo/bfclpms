@@ -51,7 +51,7 @@ interface EmployeeProfile {
   pms_grade?: string | null;
   mobile_number?: string | null;
   is_active?: boolean | null;
-  relationship?: 'direct' | 'indirect';
+  relationship?: 'direct' | 'indirect' | 'functional';
   departments?: { id: string; name: string; code: string | null } | null;
 }
 
@@ -268,19 +268,22 @@ export function EmployeeSelectorGrid({
   // Prefer the manager-roster relationship tags whenever they are present; the
   // legacy hooks remain as a fallback for full-access roles (admin / hr_pms /
   // auditor / management) that intentionally skip the RPC.
-  const { directIdSet, skipIdSet } = useMemo(() => {
+  const { directIdSet, skipIdSet, functionalIdSet } = useMemo(() => {
     if (managerRoster && managerRoster.length > 0) {
       const direct = new Set<string>();
       const skip = new Set<string>();
+      const functional = new Set<string>();
       managerRoster.forEach((m: any) => {
         if (m.relationship === 'direct') direct.add(m.id);
         else if (m.relationship === 'indirect') skip.add(m.id);
+        else if (m.relationship === 'functional') functional.add(m.id);
       });
-      return { directIdSet: direct, skipIdSet: skip };
+      return { directIdSet: direct, skipIdSet: skip, functionalIdSet: functional };
     }
     return {
       directIdSet: new Set<string>(teamMembers?.map(m => m.id) || []),
       skipIdSet: new Set<string>(skipLevelMembers?.map(m => m.id) || []),
+      functionalIdSet: new Set<string>(),
     };
   }, [managerRoster, teamMembers, skipLevelMembers]);
 
