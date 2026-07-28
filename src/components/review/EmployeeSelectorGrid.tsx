@@ -1700,6 +1700,11 @@ export function EmployeeSelectorGrid({
                 Direct
               </Badge>
             )}
+            {member.relationship === 'functional' && (
+              <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200 text-xs dark:bg-purple-900/20 dark:text-purple-400 dark:border-purple-800">
+                Functional
+              </Badge>
+            )}
             {kpiStats.badge1 > 0 && (
               <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200 text-xs dark:bg-yellow-900/20 dark:text-yellow-400 dark:border-yellow-800">
                 {kpiStats.badge1} pending
