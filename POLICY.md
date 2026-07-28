@@ -1,4 +1,5 @@
 ### §AR-DEPT-TERMINAL-OVERRIDE — Department-scoped terminal reviewer override (ADR-198, v2.66.186, 2026-07-28)
+- Applied cohorts: **EHS-Health** (v2.66.186, BU Head Amit Kumar Sharma excluded, Firoz Ahmad terminal) and **EHS-Safety** (v2.66.187, same BU Head excluded, Firoz Ahmad terminal). Any further department contraction MUST follow this clause verbatim.
 - HR/admin may contract a department's Annual Review chain so the Department Head is the terminal reviewer. The removal MUST clear the downstream reviewer id (`bu_head_id`) as well as the stage entry in `enabled_stages`; a dangling reviewer id is forbidden.
 - Every contracted instance MUST be flagged `has_admin_workflow_override = true`. Head-cascade triggers (`tg_cascade_bu_head_change`, `tg_business_units_cascade_head_to_ar`) MUST skip flagged instances, so later org-master head edits cannot re-add the stage or re-stamp the reviewer.
 - When the stage removal leaves every enabled stage actioned, the instance becomes `completed` with aggregates recomputed via `annual_review_compute_final_summary` (§AR-FINAL-SCORE-SCALE-INVARIANT) — never nulled and never carried forward from the removed stage.
