@@ -214,7 +214,12 @@ export default function TNIReport() {
 
   const filteredNeeds = useMemo(() => {
     if (!trainingNeeds) return [];
-    let rows = trainingNeeds;
+    // ADR-199 — employee active/inactive scope.
+    let rows = applyEmployeeStatusFilter(
+      trainingNeeds,
+      empStatus,
+      (tn) => (tn.employee as any)?.is_active,
+    );
     if (gapTypeFilter === 'compliance') {
       rows = rows.filter(tn => tn.gap_type === 'compliance');
     } else if (gapTypeFilter === 'training') {
@@ -228,7 +233,7 @@ export default function TNIReport() {
       tn.kpi?.kpi_name?.toLowerCase().includes(term) ||
       tn.category?.name?.toLowerCase().includes(term)
     );
-  }, [trainingNeeds, searchTerm, gapTypeFilter]);
+  }, [trainingNeeds, searchTerm, gapTypeFilter, empStatus]);
 
   const pieChartData = useMemo(() => {
     if (!summary) return [];
@@ -770,6 +775,7 @@ export default function TNIReport() {
                     className="pl-10"
                   />
                 </div>
+                <EmployeeStatusFilter />
                 <Select value={gapTypeFilter} onValueChange={(v) => setGapTypeFilter(v as any)}>
                   <SelectTrigger className="w-48">
                     <SelectValue />
