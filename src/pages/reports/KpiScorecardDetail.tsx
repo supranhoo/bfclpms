@@ -391,6 +391,8 @@ export default function KpiScorecardDetail() {
     let result = rows;
     // Company filter
     result = result.filter(r => filterByCompany(r.employeeId));
+    // ADR-199 — employee active/inactive scope.
+    result = applyEmployeeStatusFilter(result, empStatus, r => r.employeeIsActive);
     if (selectedDept !== 'all') result = result.filter(r => r.department === selectedDept);
     if (searchTerm) {
       const s = searchTerm.toLowerCase();
@@ -428,13 +430,14 @@ export default function KpiScorecardDetail() {
       return sortDir === 'asc' ? cmp : -cmp;
     });
     return result;
-  }, [rows, selectedDept, searchTerm, sortField, sortDir, filterByCompany, freqFilter, typeFilter, approverFilter, statusFilter, pendingWithFilter, groupByPendingWith]);
+  }, [rows, selectedDept, searchTerm, sortField, sortDir, filterByCompany, freqFilter, typeFilter, approverFilter, statusFilter, pendingWithFilter, groupByPendingWith, empStatus]);
 
   // Distinct values for column filters — derived from company/dept/search-filtered
   // rows (ignoring column filters themselves, so users can always re-expand).
   const baseForDistinct = useMemo(() => {
     if (!rows) return [] as FlatRow[];
     let result = rows.filter(r => filterByCompany(r.employeeId));
+    result = applyEmployeeStatusFilter(result, empStatus, r => r.employeeIsActive);
     if (selectedDept !== 'all') result = result.filter(r => r.department === selectedDept);
     if (searchTerm) {
       const s = searchTerm.toLowerCase();
@@ -516,6 +519,7 @@ export default function KpiScorecardDetail() {
     const headers = visible.map((f) => f.label);
     const exportData = filtered.map((r) => toExportRecord(r, selectedYear, visible));
     const ws = XLSX.utils.json_to_sheet(exportData, { header: headers });
+    appendEmployeeScopeNote(ws, empStatus);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'KPI Scorecard');
     appendPendingWithSummarySheet(wb, filtered, overdueDays);
@@ -598,6 +602,7 @@ export default function KpiScorecardDetail() {
         // Apply the same Company / Department / Search filters as the on-screen view
         const filteredPeriod = periodRows.filter(r => {
           if (!filterByCompany(r.employeeId)) return false;
+          if (applyEmployeeStatusFilter([r], empStatus, x => x.employeeIsActive).length === 0) return false;
           if (selectedDept !== 'all' && r.department !== selectedDept) return false;
           if (search) {
             if (
@@ -626,6 +631,7 @@ export default function KpiScorecardDetail() {
       }
 
       const ws = XLSX.utils.json_to_sheet(allRecords, { header: headers });
+      appendEmployeeScopeNote(ws, empStatus);
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, 'KPI Scorecard');
       appendPendingWithSummarySheet(wb, allFlatRows, overdueDays);
@@ -697,6 +703,8 @@ export default function KpiScorecardDetail() {
               selectedCompanyId={selectedCompanyId}
               onCompanyChange={v => { setSelectedCompanyId(v); setCurrentPage(1); }}
             />
+
+            <EmployeeStatusFilter />
 
             <Select value={selectedDept} onValueChange={v => { setSelectedDept(v); setCurrentPage(1); }}>
               <SelectTrigger className="w-[160px] h-8 text-xs">
