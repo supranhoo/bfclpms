@@ -321,6 +321,7 @@ export default function KpiScorecardDetail() {
   const ORG_WIDE_ROLES: Array<string> = ['admin', 'management', 'hr_pms', 'auditor'];
   const hasOrgWideAccess = effectiveRole ? ORG_WIDE_ROLES.includes(effectiveRole) : false;
   const { companies, selectedCompanyId, setSelectedCompanyId, filterByCompany, getCompanyName, getCompanyCode } = useCompanyFilter();
+  const { mode: empStatus } = useEmployeeStatusFilter();
   const resolvedFields = useResolvedReportFields('RPT-KSD-001', KSD_DEFAULT_FIELDS);
   const now = new Date();
   const [selectedMonth, setSelectedMonth] = useState(MONTHS[now.getMonth()]);
