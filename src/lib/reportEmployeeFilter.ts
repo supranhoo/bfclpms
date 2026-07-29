@@ -50,3 +50,19 @@ export function countByStatus<T>(
   }
   return { active, inactive, total: rows.length };
 }
+
+/**
+ * Header line stamped into Excel/CSV exports so a downloaded file always
+ * records which employee scope produced it (POLICY §RPT-EMPLOYEE-STATUS-FILTER).
+ */
+export function employeeStatusExportHeader(mode: EmployeeStatusMode): string {
+  return `Employee scope: ${employeeStatusLabel(mode)}`;
+}
+
+/**
+ * Per-row export cell value for the shared "Employee Status" column.
+ * Unknown flags render as Active, mirroring applyEmployeeStatusFilter.
+ */
+export function employeeStatusCell(isActive: boolean | null | undefined): 'Active' | 'Inactive' {
+  return isActive === false ? 'Inactive' : 'Active';
+}

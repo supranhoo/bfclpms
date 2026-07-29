@@ -6,6 +6,10 @@ import { supabase } from '@/integrations/supabase/client';
 import { fetchAllPaged } from '@/lib/fetchAll';
 import { useCompanyFilter } from '@/hooks/useCompanyFilter';
 import { CompanyFilter } from '@/components/reports/CompanyFilter';
+import { EmployeeStatusFilter } from '@/components/reports/EmployeeStatusFilter';
+import { useEmployeeStatusFilter } from '@/hooks/useEmployeeStatusFilter';
+import { applyEmployeeStatusFilter, employeeStatusCell } from '@/lib/reportEmployeeFilter';
+import { appendEmployeeScopeNote } from '@/lib/reportExportScope';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Card, CardContent } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -23,6 +27,7 @@ const KSD_DEFAULT_FIELDS = [
   { field_key: 'company',           default_label: 'Company',            default_sort: 10 },
   { field_key: 'employee_code',     default_label: 'Employee Code',      default_sort: 20, is_required: true },
   { field_key: 'name',              default_label: 'Name',               default_sort: 30, is_required: true },
+  { field_key: 'employee_status',   default_label: 'Employee Status',    default_sort: 35 },
   { field_key: 'designation',       default_label: 'Designation',        default_sort: 40 },
   { field_key: 'department',        default_label: 'Department',         default_sort: 50 },
   { field_key: 'month',             default_label: 'Month',              default_sort: 60 },
@@ -98,6 +103,7 @@ interface FlatRow {
   employeeId: string;
   employeeCode: string;
   employeeName: string;
+  employeeIsActive: boolean | null;
   designation: string;
   department: string;
   month: string;
@@ -228,7 +234,7 @@ async function fetchScorecardForPeriod(month: string, year: number): Promise<Fla
   const profiles = await fetchAllPaged<any>((from, to) =>
     supabase
       .from('profiles')
-      .select('id, employee_code, full_name, designation, reporting_manager_id, functional_manager_id, departments!profiles_department_fk ( name )')
+      .select('id, employee_code, full_name, designation, is_active, reporting_manager_id, functional_manager_id, departments!profiles_department_fk ( name )')
       .range(from, to)
   );
 
@@ -271,6 +277,7 @@ async function fetchScorecardForPeriod(month: string, year: number): Promise<Fla
     return {
       employeeId: kpi.employee_id ?? '',
       employeeCode: profile?.employee_code ?? '',
+      employeeIsActive: (profile as any)?.is_active ?? null,
       employeeName: profile?.full_name ?? '',
       designation: profile?.designation ?? '',
       department: (dept && typeof dept === 'object' && 'name' in dept ? (dept as any).name : '') ?? '',
@@ -314,6 +321,7 @@ export default function KpiScorecardDetail() {
   const ORG_WIDE_ROLES: Array<string> = ['admin', 'management', 'hr_pms', 'auditor'];
   const hasOrgWideAccess = effectiveRole ? ORG_WIDE_ROLES.includes(effectiveRole) : false;
   const { companies, selectedCompanyId, setSelectedCompanyId, filterByCompany, getCompanyName, getCompanyCode } = useCompanyFilter();
+  const { mode: empStatus } = useEmployeeStatusFilter();
   const resolvedFields = useResolvedReportFields('RPT-KSD-001', KSD_DEFAULT_FIELDS);
   const now = new Date();
   const [selectedMonth, setSelectedMonth] = useState(MONTHS[now.getMonth()]);
@@ -384,6 +392,8 @@ export default function KpiScorecardDetail() {
     let result = rows;
     // Company filter
     result = result.filter(r => filterByCompany(r.employeeId));
+    // ADR-199 — employee active/inactive scope.
+    result = applyEmployeeStatusFilter(result, empStatus, r => r.employeeIsActive);
     if (selectedDept !== 'all') result = result.filter(r => r.department === selectedDept);
     if (searchTerm) {
       const s = searchTerm.toLowerCase();
@@ -421,13 +431,14 @@ export default function KpiScorecardDetail() {
       return sortDir === 'asc' ? cmp : -cmp;
     });
     return result;
-  }, [rows, selectedDept, searchTerm, sortField, sortDir, filterByCompany, freqFilter, typeFilter, approverFilter, statusFilter, pendingWithFilter, groupByPendingWith]);
+  }, [rows, selectedDept, searchTerm, sortField, sortDir, filterByCompany, freqFilter, typeFilter, approverFilter, statusFilter, pendingWithFilter, groupByPendingWith, empStatus]);
 
   // Distinct values for column filters — derived from company/dept/search-filtered
   // rows (ignoring column filters themselves, so users can always re-expand).
   const baseForDistinct = useMemo(() => {
     if (!rows) return [] as FlatRow[];
     let result = rows.filter(r => filterByCompany(r.employeeId));
+    result = applyEmployeeStatusFilter(result, empStatus, r => r.employeeIsActive);
     if (selectedDept !== 'all') result = result.filter(r => r.department === selectedDept);
     if (searchTerm) {
       const s = searchTerm.toLowerCase();
@@ -509,6 +520,7 @@ export default function KpiScorecardDetail() {
     const headers = visible.map((f) => f.label);
     const exportData = filtered.map((r) => toExportRecord(r, selectedYear, visible));
     const ws = XLSX.utils.json_to_sheet(exportData, { header: headers });
+    appendEmployeeScopeNote(ws, empStatus);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'KPI Scorecard');
     appendPendingWithSummarySheet(wb, filtered, overdueDays);
@@ -521,6 +533,7 @@ export default function KpiScorecardDetail() {
       case 'company':           return getCompanyCode(r.employeeId);
       case 'employee_code':     return r.employeeCode;
       case 'name':              return r.employeeName;
+      case 'employee_status':   return employeeStatusCell(r.employeeIsActive);
       case 'designation':       return r.designation;
       case 'department':        return r.department;
       case 'month':             return r.month;
@@ -590,6 +603,7 @@ export default function KpiScorecardDetail() {
         // Apply the same Company / Department / Search filters as the on-screen view
         const filteredPeriod = periodRows.filter(r => {
           if (!filterByCompany(r.employeeId)) return false;
+          if (applyEmployeeStatusFilter([r], empStatus, x => x.employeeIsActive).length === 0) return false;
           if (selectedDept !== 'all' && r.department !== selectedDept) return false;
           if (search) {
             if (
@@ -618,6 +632,7 @@ export default function KpiScorecardDetail() {
       }
 
       const ws = XLSX.utils.json_to_sheet(allRecords, { header: headers });
+      appendEmployeeScopeNote(ws, empStatus);
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, 'KPI Scorecard');
       appendPendingWithSummarySheet(wb, allFlatRows, overdueDays);
@@ -689,6 +704,8 @@ export default function KpiScorecardDetail() {
               selectedCompanyId={selectedCompanyId}
               onCompanyChange={v => { setSelectedCompanyId(v); setCurrentPage(1); }}
             />
+
+            <EmployeeStatusFilter />
 
             <Select value={selectedDept} onValueChange={v => { setSelectedDept(v); setCurrentPage(1); }}>
               <SelectTrigger className="w-[160px] h-8 text-xs">

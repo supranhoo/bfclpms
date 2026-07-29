@@ -5010,7 +5010,7 @@ detectable and repairable without a developer.
    `src/lib/reports/catalog.ts` and `report_registry`; that alone makes it
    mappable, no access-config seed needed.
 
-## §RPT-EMPLOYEE-STATUS-FILTER — Employee-scoped reports must scope by active status (ADR-177, 2026-07-27)
+## §RPT-EMPLOYEE-STATUS-FILTER — Employee-scoped reports must scope by active status (ADR-177, 2026-07-27) — extended universally (ADR-199, 2026-07-29)
 
 1. **Control required.** Every report whose rows are keyed to an employee MUST
    expose the shared `EmployeeStatusFilter` (Active / Inactive / All), which
@@ -5018,6 +5018,11 @@ detectable and repairable without a developer.
 2. **Default is Active.** The landing state MUST be "Active only". Inactive
    (separated) employees are never counted as pending work by default; they stay
    reachable via the Inactive and All modes.
+2a. **Universal coverage (ADR-199).** The control is mandatory on every employee-keyed
+   report, including server-paged reports, which MUST accept an equivalent server-side
+   parameter (e.g. `get_first_kra_rollout(p_emp_status)`). Exports MUST honour the on-screen
+   scope and stamp it into the sheet. Coverage is enforced by
+   `src/test/reportEmployeeStatusCoverage.test.ts`.
 3. **Single source of truth.** Scoping MUST go through
    `applyEmployeeStatusFilter()` in `src/lib/reportEmployeeFilter.ts`. Unknown
    `is_active` is treated as active to avoid silent data loss.

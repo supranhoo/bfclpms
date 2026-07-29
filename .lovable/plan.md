@@ -1,76 +1,65 @@
-## 1. Audit findings — department "EHS-Safety" (read-only, verified)
+## Goal
 
-- Department id `49bb719c-69b6-449e-b35c-991a52c58898`, Business Unit **EHS**.
-- **BU Head (to be excluded): Amit Kumar Sharma (102050)** — active, mapped as BU head for all EHS departments.
-- **Department Head: Firoz Ahmad (100801)** — active; he is already the mapped dept head and the intended final reviewer.
+The `Employees: Active | Inactive | All` control exists today but is only wired into 3 places (`EmployeePerformanceSummary`, `KpiJourneyReport`, `KpiStatusTracker` — verified by search). Extend it to every report whose rows map to an employee, with `Active` as the default and the choice stamped into exports.
 
-**18 active annual review instances (25 employees are in the department — 7 have no instance, listed below).**
+## Assumptions
 
-| Code | Name | Status | Stages | Self | Dept-head response | Notes |
-|---|---|---|---|---|---|---|
-| 100228 | Rahul Kumar Singh | pending_dept | self, dept_head, bu_head | done 10/10 | draft 0/10 | awaiting Firoz |
-| 100640 | Ramanand Kumar | pending_dept | self, dept_head, bu_head | done | draft 0/10 | awaiting Firoz |
-| 100722 | Nand Kumar | pending_dept | self, dept_head, bu_head | done | draft 0/10 | awaiting Firoz |
-| 100747 | Bilendra Bedia | pending_dept | self, dept_head, bu_head | done | draft 0/10 | awaiting Firoz |
-| 100757 | Kanhaiya Kumar Singh | **pending_bu** | self, dept_head, bu_head | done | submitted 10/10 | completes once BU removed |
-| 100801 | **Firoz Ahmad (dept head himself)** | pending_management | self, bu_head, **management** | submitted (narrative template) | n/a | see §4 |
-| 100857 | Avinash Prasad Sinha | pending_dept | self, dept_head, bu_head | done | draft 0/10 | awaiting Firoz |
-| 100890 | Firdoush Alam | pending_dept | self, dept_head | narrative | submitted, **0 scoreable criteria in template** | narrative-only (ADR-197), needs Firoz to submit |
-| 101279 | Dipak Kumar Chandara | **pending_bu** | self, dept_head, bu_head | done | submitted 10/10 | completes once BU removed |
-| 101292 | Rajesh Kumar Chand | pending_dept | self, dept_head, bu_head | done | submitted 10/10 | status lags behind a complete dept response — needs advance |
-| 101983 | Prashant Kumar Singh | pending_dept | self, dept_head, bu_head | done | draft 0/10 | awaiting Firoz |
-| 101985 | Akash Kumar Choudhary | pending_dept | self, dept_head, bu_head | done | draft 0/10 | awaiting Firoz |
-| 102001 | Rahul Kumar | pending_dept | self, dept_head, bu_head | done | draft 0/10 | awaiting Firoz |
-| 102008 | Sujal Haldar | completed | self, dept_head | done | 10/10 | correct (80.00 / Good) |
-| 102009 | Manoranjan Kumar Barik | completed | self, dept_head | done | 10/10 | correct (81.00 / Good) |
-| 200563 | Mritunjay Kumar Thakur | pending_dept | self, dept_head, bu_head | done | draft 0/10 | awaiting Firoz |
-| 200611 | Vishal Ray | pending_dept | self, dept_head, bu_head | done | draft 0/10 | awaiting Firoz |
-| 200839 | Ramesh Ekka | pending_dept | self, dept_head, bu_head | done | draft 0/10 | awaiting Firoz |
+- Default stays `active`, so no report changes what it shows on first load.
+- Only employee-row reports get the control; Issues / Audit Trail / Workflow Resolution / Bottleneck / Annual Review keep their current behaviour.
+- Filtering stays client-side via the existing `applyEmployeeStatusFilter`, matching how KPI Status Tracker already does it — no RPC signature changes.
 
-No manager / skip / HR stages exist on these instances; only `bu_head` needs removing (13 instances still carry it).
+## Risk & Impact
 
-**Employees with no annual review instance at all (7):** 100768 Shaikh Masuk Ali, 100863 Alok Kumar Mishra, 101158 Md. Akif Ansari, 101211 Manoj Kumar, 101749 Deepak Ray, 101966 Vedant Pawar, 200557 Rajat Kumar. Reported only — not seeded in this change unless you ask.
+- **Data impact:** none. Read-only presentation filter; no schema, RLS, or RPC changes.
+- **Workflow impact:** none.
+- **UI/UX:** one extra chip in each report's filter bar; mobile collapses to a Select (already handled in the component).
+- **Regression risk:** medium — the main hazard is a report whose row source does not carry `is_active`, which would silently drop rows. Mitigated by the "treat unknown as active" rule already baked into `applyEmployeeStatusFilter`, plus a per-report unit test.
+- **Scalability:** filtering happens on already-fetched rows, so no added queries. Where a report reads `profiles` directly it must use `fetchAllPaged` (project policy) so `Inactive`/`All` don't hit the 1000-row cap — this is the one place volume matters.
+- **Rollback:** each report is an isolated additive change; revert per file.
 
-No defective completion exists here (unlike EHS-Health 200449): both completed rows have full 10/10 dept-head scoring.
+## Step-by-step
 
-## 2. Changes to apply (same pattern as ADR-198 / §AR-DEPT-TERMINAL-OVERRIDE)
+### 1. Shared plumbing
+- Add a small hook `useEmployeeStatusFilter(paramKey?)` next to `reportEmployeeFilter.ts` that returns `{ mode, setMode, label }`, so every report wires up identically instead of repeating URL-state code.
+- Extend `reportEmployeeFilter.ts` with an `employeeStatusExportHeader(mode)` helper for the export header line.
+- **Verify:** unit tests on the helper.
 
-**Step A — Contract the chain to Self → Dept Head**
-- For the 13 instances carrying `bu_head`: remove it from `enabled_stages`, set `bu_head_id = NULL`, set `has_admin_workflow_override = true` (so the hardened BU-head cascade triggers skip them permanently).
-- Excludes Firoz's own instance (100801) — handled in §4.
+### 2. Audit each report's row source for `is_active`
+For every report below, confirm the row already carries the employee's active flag; where it does not, add `is_active` to the existing `profiles` select (paged via `fetchAllPaged`) or join it in client-side from the roster already being fetched.
 
-**Step B — Unstick the three instances whose dept-head review is already complete**
-- 100757 Kanhaiya Kumar Singh: `pending_bu` → **completed**.
-- 101279 Dipak Kumar Chandara: `pending_bu` → **completed**.
-- 101292 Rajesh Kumar Chand: dept-head response is locked and 10/10 but status is still `pending_dept` → advance to **completed**.
-- For each, recompute `criteria_weighted_score`, `total_score`, `final_rating` via `annual_review_compute_final_summary` (scale invariant, ADR-187). No score is invented.
+Reports in scope:
+- KpiDetailReport, KpiScorecardDetail, KpiEmployeeMatrix, MonthlyScorecardReport
+- CompletionReport, DepartmentReport, PerformanceReport, QueryReport, KRAIssuance (all `useAllKpis`-backed — one shared enrichment point)
+- ManagerTeamKpiReport, TeamVsManagerScoreReport, VarianceReport
+- TNIReport, DevelopmentReport, FirstKraRolloutReport, CustomReport
 
-**Step C — Audit + reversibility**
-- Before/after snapshot of every touched instance into `annual_review_bu_removal_repair_2026_07` with reason "EHS-Safety terminal dept-head override".
+**Verify:** for each, load with `Inactive` selected and confirm rows appear that were previously hidden.
 
-**Step D — Verification**
-- Re-query the department: every instance must show `enabled_stages = [self, dept_head]`, `bu_head_id = NULL`; no instance left in `pending_bu`.
-- Report the outstanding list for Firoz (10 blank drafts + 1 narrative-only submit).
+### 3. Wire the control per report
+- Render `<EmployeeStatusFilter />` in the existing filter bar (same visual slot each time, left of the export button).
+- Apply `applyEmployeeStatusFilter(rows, mode, r => r.isActive)` at the same point where other client-side filters run, before totals/summary cards are computed so counts stay consistent with the grid.
+- `CustomReport` additionally needs its hardcoded `.eq('is_active', true)` made conditional on the mode.
 
-**Step E — Documentation**
-- Extend `docs/adr/ADR-198.md` with the EHS-Safety cohort (same policy clause, no new clause needed) and add DOCUMENTATION.md / POLICY.md version-history lines.
+**Verify:** summary tiles and row count agree for all three modes.
 
-## 3. Data captured / ratings check (your specific ask)
+### 4. Exports
+- Add a header line (`Employee scope: <label>`) to each report's Excel/CSV export, and an `Employee Status` column rendering `Active` / `Inactive`, following the pattern KPI Status Tracker already uses.
+- Register the new column in `report_field_registry` where the report is field-driven, so admins can hide it.
 
-- Complete and rated: 100757, 101279, 101292, 102008, 102009 (10/10 each).
-- **Nothing captured yet (blank drafts, 0 of 10 rated):** 100228, 100640, 100722, 100747, 100857, 101983, 101985, 102001, 200563, 200611, 200839 — Firoz must score these; the system cannot advance them without ratings (`trg_ar_stage_score_required`).
-- Narrative-only by template design: 100890 Firdoush Alam — no scoreable criteria at dept-head stage, only a written recommendation is required, then submit.
+**Verify:** export one report per pattern and open the file.
 
-## 4. Firoz Ahmad's own review (100801) — needs your decision
+### 5. Drift guard + docs
+- Add `src/test/reportEmployeeStatusParity.test.ts` — enumerates the in-scope report modules and asserts each imports the filter, so new reports can't silently ship without it.
+- Update `POLICY.md §RPT-EMPLOYEE-STATUS-FILTER` to cover all reports (not just KPI Status Tracker), add `docs/adr/ADR-199.md`, and bump `DOCUMENTATION.md` version history.
 
-His instance runs `self → bu_head → management` and currently sits at **Management review** (management reviewer already assigned). He obviously cannot review himself. Options:
-1. **Leave as is** (recommended) — Management is a valid, senior terminal reviewer for the dept head.
-2. Remove `bu_head` from his chain too, leaving `self → management`.
-Note his BU-head stage is still mapped to Amit Kumar Sharma but the instance has already passed it.
+## UI changes
 
-## 5. Risk & impact
+- **What changes visually:** a segmented `Active | Inactive | All` control appears in each report's filter row; on <640px it renders as a compact dropdown.
+- **Where:** report filter bar, consistent position across all reports.
+- **Interaction:** selection persists in the URL as `?emp_status=`, so refresh and shared links keep the scope.
 
-- **Data**: 13–16 instances in one cycle; only `enabled_stages`, `bu_head_id`, status and recomputed aggregates. Fully audited and reversible.
-- **Workflow**: Amit Kumar Sharma loses 13 EHS-Safety items from his queue (intended). Firoz's queue size unchanged but becomes terminal.
-- **Regression**: cascade re-mapping already mitigated by the override guard shipped with ADR-198; verification query re-run after the change.
-- **Rollback**: restore prior state from `annual_review_bu_removal_repair_2026_07`.
+## Tests
+
+- Helper unit tests (`active` / `inactive` / `all` / unknown-flag).
+- Per-report filter tests using mock rows including an inactive and an unknown-flag employee.
+- Parity drift-guard test listing all in-scope reports.

@@ -4,6 +4,11 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useCompanyFilter } from '@/hooks/useCompanyFilter';
 import { CompanyFilter } from '@/components/reports/CompanyFilter';
+import { EmployeeStatusFilter } from '@/components/reports/EmployeeStatusFilter';
+import { useEmployeeStatusFilter } from '@/hooks/useEmployeeStatusFilter';
+import { applyEmployeeStatusFilter, employeeStatusCell } from '@/lib/reportEmployeeFilter';
+import { appendEmployeeScopeNote } from '@/lib/reportExportScope';
+import { fetchAllPaged } from '@/lib/fetchAll';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -25,6 +30,7 @@ const MSR_DEFAULT_FIELDS = [
   { field_key: 'company',              default_label: 'Company',              default_sort: 10 },
   { field_key: 'employee_code',        default_label: 'Employee Code',        default_sort: 20, is_required: true },
   { field_key: 'employee_name',        default_label: 'Employee Name',        default_sort: 30, is_required: true },
+  { field_key: 'employee_status',      default_label: 'Employee Status',      default_sort: 35 },
   { field_key: 'designation',          default_label: 'Designation',          default_sort: 40 },
   { field_key: 'department',           default_label: 'Department',           default_sort: 50 },
   { field_key: 'total_kpis',           default_label: 'Total KPIs',           default_sort: 60 },
@@ -55,6 +61,7 @@ export default function MonthlyScorecardReport() {
   const { canDownload } = useReportAccess();
   const canExport = canDownload('monthly-scorecard');
   const { getCompanyCode } = useCompanyFilter();
+  const { mode: empStatus } = useEmployeeStatusFilter();
   const resolvedMsrFields = useResolvedReportFields('RPT-MSR-001', MSR_DEFAULT_FIELDS);
   const currentYear = new Date().getFullYear();
   const currentMonth = MONTHS[new Date().getMonth()];
@@ -176,12 +183,14 @@ export default function MonthlyScorecardReport() {
   const { data: profiles, isLoading: profilesLoading } = useQuery({
     queryKey: ['scorecard-profiles'],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('id, full_name, employee_code, designation, department_id');
-      
-      if (error) throw error;
-      return data || [];
+      // mem://architecture/profiles-query-policy — paged fetch (1000-row cap).
+      return await fetchAllPaged<any>((from, to) =>
+        supabase
+          .from('profiles')
+          .select('id, full_name, employee_code, designation, department_id, is_active')
+          .order('id')
+          .range(from, to)
+      );
     },
   });
 
@@ -369,6 +378,7 @@ export default function MonthlyScorecardReport() {
       return {
         employeeId,
         employeeName: profile.full_name || 'Unknown',
+        employeeIsActive: (profile as any).is_active ?? null,
         employeeCode: profile.employee_code || '',
         designation: profile.designation || '',
         department: deptName || 'Unknown',
@@ -401,14 +411,16 @@ export default function MonthlyScorecardReport() {
 
   // Filter by search
   const filteredScorecards = useMemo(() => {
-    if (!searchTerm) return employeeScorecards;
+    // ADR-199 — employee active/inactive scope applies before the text search.
+    const scoped = applyEmployeeStatusFilter(employeeScorecards, empStatus, sc => sc.employeeIsActive);
+    if (!searchTerm) return scoped;
     const term = searchTerm.toLowerCase();
-    return employeeScorecards.filter(sc => 
+    return scoped.filter(sc =>
       sc.employeeName.toLowerCase().includes(term) ||
       sc.employeeCode.toLowerCase().includes(term) ||
       sc.department.toLowerCase().includes(term)
     );
-  }, [employeeScorecards, searchTerm]);
+  }, [employeeScorecards, searchTerm, empStatus]);
 
   // Summary stats
   const stats = useMemo(() => {
@@ -430,6 +442,7 @@ export default function MonthlyScorecardReport() {
         case 'company':              return getCompanyCode(sc.employeeId);
         case 'employee_code':        return sc.employeeCode;
         case 'employee_name':        return sc.employeeName;
+        case 'employee_status':      return employeeStatusCell(sc.employeeIsActive);
         case 'designation':          return sc.designation;
         case 'department':           return sc.department;
         case 'total_kpis':           return sc.totalKpis;
@@ -452,6 +465,7 @@ export default function MonthlyScorecardReport() {
     });
     const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.json_to_sheet(exportData, { header: visible.map(fld => fld.label) });
+    appendEmployeeScopeNote(ws, empStatus);
     XLSX.utils.book_append_sheet(wb, ws, 'Monthly Scorecard');
     XLSX.writeFile(wb, `Monthly_Scorecard_${selectedPeriod}_${selectedYear}.xlsx`);
   };
@@ -573,6 +587,7 @@ export default function MonthlyScorecardReport() {
                 </SelectContent>
               </Select>
             </div>
+            <EmployeeStatusFilter />
             <div className="relative flex-1 md:max-w-sm">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input

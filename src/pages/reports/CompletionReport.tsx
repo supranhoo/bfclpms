@@ -3,6 +3,10 @@ import { useReportAccess } from '@/hooks/useReportAccess';
 import { useAllKpis } from '@/hooks/useKpis';
 import { useCompanyFilter } from '@/hooks/useCompanyFilter';
 import { CompanyFilter } from '@/components/reports/CompanyFilter';
+import { EmployeeStatusFilter } from '@/components/reports/EmployeeStatusFilter';
+import { useEmployeeStatusFilter } from '@/hooks/useEmployeeStatusFilter';
+import { applyEmployeeStatusFilter } from '@/lib/reportEmployeeFilter';
+import { appendEmployeeScopeNote } from '@/lib/reportExportScope';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -44,6 +48,7 @@ export default function CompletionReport() {
 
   const [selectedYear, setSelectedYear] = useState<string>('all');
   const { companies, selectedCompanyId, setSelectedCompanyId, filterByCompany } = useCompanyFilter();
+  const { mode: empStatus } = useEmployeeStatusFilter();
   // Get available years
   const availableYears = useMemo(() => {
     if (!allKpis) return [];
@@ -56,9 +61,14 @@ export default function CompletionReport() {
     if (!allKpis) return [];
 
     // Filter by year if selected
-    const filteredKpis = (selectedYear === 'all' 
-      ? allKpis 
-      : allKpis.filter(k => k.review_year?.toString() === selectedYear))
+    const scoped = applyEmployeeStatusFilter(
+      allKpis,
+      empStatus,
+      (k: any) => k.profiles?.is_active,
+    );
+    const filteredKpis = (selectedYear === 'all'
+      ? scoped
+      : scoped.filter(k => k.review_year?.toString() === selectedYear))
       .filter(k => filterByCompany(k.employee_id));
 
     // Group by period
@@ -157,7 +167,7 @@ export default function CompletionReport() {
         if (a.year !== b.year) return b.year - a.year;
         return MONTH_ORDER.indexOf(a.period) - MONTH_ORDER.indexOf(b.period);
       });
-  }, [allKpis, selectedYear]);
+  }, [allKpis, selectedYear, empStatus, filterByCompany]);
 
   // Chart data (last 6 periods)
   const chartData = useMemo(() => {
@@ -220,11 +230,12 @@ export default function CompletionReport() {
       return row;
     });
     const ws = XLSX.utils.json_to_sheet(exportData, { header: visible.map((f) => f.label) });
+    appendEmployeeScopeNote(ws, empStatus);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Completion Report');
     XLSX.writeFile(wb, `Completion_Report_${new Date().toISOString().split('T')[0]}.xlsx`);
     toast({ title: 'Report downloaded successfully' });
-  }, [periodData, toast, resolvedFields]);
+  }, [periodData, toast, resolvedFields, empStatus]);
 
   if (isLoading) {
     return (
@@ -312,6 +323,7 @@ export default function CompletionReport() {
         <CardContent>
           <div className="flex flex-wrap items-center gap-3">
             <CompanyFilter companies={companies} selectedCompanyId={selectedCompanyId} onCompanyChange={setSelectedCompanyId} />
+            <EmployeeStatusFilter />
             <Select value={selectedYear} onValueChange={setSelectedYear}>
             <SelectTrigger className="w-48">
               <SelectValue placeholder="Filter by year" />

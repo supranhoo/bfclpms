@@ -224,7 +224,7 @@ async function hydrateKpiRelations(kpis: any[]): Promise<any[]> {
       ? chunked<any>(employeeIds, (slice) =>
           supabase
             .from('profiles')
-            .select('id, full_name, email, employee_code, department_id, reporting_manager_id')
+            .select('id, full_name, email, employee_code, department_id, reporting_manager_id, is_active')
             .in('id', slice),
         )
       : Promise.resolve<any[]>([]),

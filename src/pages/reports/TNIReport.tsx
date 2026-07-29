@@ -1,6 +1,10 @@
 import { useState, useMemo } from 'react';
 import { useReportAccess } from '@/hooks/useReportAccess';
 import { useCompanyFilter } from '@/hooks/useCompanyFilter';
+import { EmployeeStatusFilter } from '@/components/reports/EmployeeStatusFilter';
+import { useEmployeeStatusFilter } from '@/hooks/useEmployeeStatusFilter';
+import { applyEmployeeStatusFilter, employeeStatusCell } from '@/lib/reportEmployeeFilter';
+import { appendEmployeeScopeNote } from '@/lib/reportExportScope';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -47,6 +51,7 @@ const TNI_DEFAULT_FIELDS = [
   { field_key: 'company',                 default_label: 'Company',                 default_sort: 10 },
   { field_key: 'employee_name',           default_label: 'Employee Name',           default_sort: 20, is_required: true },
   { field_key: 'employee_code',           default_label: 'Employee Code',           default_sort: 30, is_required: true },
+  { field_key: 'employee_status',         default_label: 'Employee Status',         default_sort: 35 },
   { field_key: 'department',              default_label: 'Department',              default_sort: 40 },
   { field_key: 'designation',             default_label: 'Designation',             default_sort: 50 },
   { field_key: 'kpi',                     default_label: 'KPI',                     default_sort: 60 },
@@ -158,6 +163,7 @@ export default function TNIReport() {
   const canExport = canDownload('tni');
   const { getCompanyCode } = useCompanyFilter();
   const resolvedFields = useResolvedReportFields('RPT-TNI-001', TNI_DEFAULT_FIELDS);
+  const { mode: empStatus } = useEmployeeStatusFilter();
   const currentYear = new Date().getFullYear();
   const currentMonth = MONTHS[new Date().getMonth()];
   const [periodMode, setPeriodMode] = useState<PeriodMode>('single');
@@ -208,7 +214,12 @@ export default function TNIReport() {
 
   const filteredNeeds = useMemo(() => {
     if (!trainingNeeds) return [];
-    let rows = trainingNeeds;
+    // ADR-199 — employee active/inactive scope.
+    let rows = applyEmployeeStatusFilter(
+      trainingNeeds,
+      empStatus,
+      (tn) => (tn.employee as any)?.is_active,
+    );
     if (gapTypeFilter === 'compliance') {
       rows = rows.filter(tn => tn.gap_type === 'compliance');
     } else if (gapTypeFilter === 'training') {
@@ -222,7 +233,7 @@ export default function TNIReport() {
       tn.kpi?.kpi_name?.toLowerCase().includes(term) ||
       tn.category?.name?.toLowerCase().includes(term)
     );
-  }, [trainingNeeds, searchTerm, gapTypeFilter]);
+  }, [trainingNeeds, searchTerm, gapTypeFilter, empStatus]);
 
   const pieChartData = useMemo(() => {
     if (!summary) return [];
@@ -247,12 +258,19 @@ export default function TNIReport() {
 
   const handleExport = () => {
     if (!trainingNeeds) return;
+    // ADR-199 — exports honour the on-screen employee scope.
+    const scopedNeeds = applyEmployeeStatusFilter(
+      trainingNeeds,
+      empStatus,
+      (tn) => (tn.employee as any)?.is_active,
+    );
     const visible = resolvedFields.filter((f) => !f.is_hidden);
     const valueFor = (tn: typeof trainingNeeds[number], key: string): string | number => {
       switch (key) {
         case 'company':                 return getCompanyCode(tn.employee_id || '');
         case 'employee_name':           return tn.employee?.full_name || '';
         case 'employee_code':           return tn.employee?.employee_code || '';
+        case 'employee_status':         return employeeStatusCell((tn.employee as any)?.is_active);
         case 'department':              return (tn.employee as any)?.department?.name || '';
         case 'designation':             return tn.employee?.designation || '';
         case 'kpi':                     return tn.kpi?.kpi_name || '';
@@ -268,25 +286,23 @@ export default function TNIReport() {
         default: return '';
       }
     };
-    const exportData = trainingNeeds.map((tn) => {
+    const exportData = scopedNeeds.map((tn) => {
       const row: Record<string, string | number> = {};
       for (const fld of visible) row[fld.label] = valueFor(tn, fld.field_key);
       return row;
     });
 
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(
-      wb,
-      XLSX.utils.json_to_sheet(exportData, { header: visible.map((f) => f.label) }),
-      'Detail',
-    );
+    const detailWs = XLSX.utils.json_to_sheet(exportData, { header: visible.map((f) => f.label) });
+    appendEmployeeScopeNote(detailWs, empStatus);
+    XLSX.utils.book_append_sheet(wb, detailWs, 'Detail');
 
     // Monthly Summary sheet — pivot by (Year, Month)
     const buckets = new Map<string, {
       Year: number; Month: string; SkillGaps: number; ComplianceGaps: number;
       HighPriority: number; Employees: Set<string>;
     }>();
-    trainingNeeds.forEach(tn => {
+    scopedNeeds.forEach(tn => {
       const key = `${tn.review_year}|${tn.review_period}`;
       if (!buckets.has(key)) {
         buckets.set(key, {
@@ -759,6 +775,7 @@ export default function TNIReport() {
                     className="pl-10"
                   />
                 </div>
+                <EmployeeStatusFilter />
                 <Select value={gapTypeFilter} onValueChange={(v) => setGapTypeFilter(v as any)}>
                   <SelectTrigger className="w-48">
                     <SelectValue />
