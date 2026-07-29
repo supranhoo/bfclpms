@@ -6,6 +6,10 @@ import { supabase } from '@/integrations/supabase/client';
 import { fetchAllPaged } from '@/lib/fetchAll';
 import { useCompanyFilter } from '@/hooks/useCompanyFilter';
 import { CompanyFilter } from '@/components/reports/CompanyFilter';
+import { EmployeeStatusFilter } from '@/components/reports/EmployeeStatusFilter';
+import { useEmployeeStatusFilter } from '@/hooks/useEmployeeStatusFilter';
+import { applyEmployeeStatusFilter, employeeStatusCell } from '@/lib/reportEmployeeFilter';
+import { appendEmployeeScopeNote } from '@/lib/reportExportScope';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Card, CardContent } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -23,6 +27,7 @@ const KSD_DEFAULT_FIELDS = [
   { field_key: 'company',           default_label: 'Company',            default_sort: 10 },
   { field_key: 'employee_code',     default_label: 'Employee Code',      default_sort: 20, is_required: true },
   { field_key: 'name',              default_label: 'Name',               default_sort: 30, is_required: true },
+  { field_key: 'employee_status',   default_label: 'Employee Status',    default_sort: 35 },
   { field_key: 'designation',       default_label: 'Designation',        default_sort: 40 },
   { field_key: 'department',        default_label: 'Department',         default_sort: 50 },
   { field_key: 'month',             default_label: 'Month',              default_sort: 60 },
@@ -98,6 +103,7 @@ interface FlatRow {
   employeeId: string;
   employeeCode: string;
   employeeName: string;
+  employeeIsActive: boolean | null;
   designation: string;
   department: string;
   month: string;
@@ -228,7 +234,7 @@ async function fetchScorecardForPeriod(month: string, year: number): Promise<Fla
   const profiles = await fetchAllPaged<any>((from, to) =>
     supabase
       .from('profiles')
-      .select('id, employee_code, full_name, designation, reporting_manager_id, functional_manager_id, departments!profiles_department_fk ( name )')
+      .select('id, employee_code, full_name, designation, is_active, reporting_manager_id, functional_manager_id, departments!profiles_department_fk ( name )')
       .range(from, to)
   );
 
@@ -271,6 +277,7 @@ async function fetchScorecardForPeriod(month: string, year: number): Promise<Fla
     return {
       employeeId: kpi.employee_id ?? '',
       employeeCode: profile?.employee_code ?? '',
+      employeeIsActive: (profile as any)?.is_active ?? null,
       employeeName: profile?.full_name ?? '',
       designation: profile?.designation ?? '',
       department: (dept && typeof dept === 'object' && 'name' in dept ? (dept as any).name : '') ?? '',
@@ -521,6 +528,7 @@ export default function KpiScorecardDetail() {
       case 'company':           return getCompanyCode(r.employeeId);
       case 'employee_code':     return r.employeeCode;
       case 'name':              return r.employeeName;
+      case 'employee_status':   return employeeStatusCell(r.employeeIsActive);
       case 'designation':       return r.designation;
       case 'department':        return r.department;
       case 'month':             return r.month;
