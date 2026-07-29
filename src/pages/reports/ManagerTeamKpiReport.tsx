@@ -21,6 +21,7 @@ const MTK_DEFAULT_FIELDS = [
   { field_key: 'company',        default_label: 'Company',         default_sort: 20 },
   { field_key: 'employee_code',  default_label: 'Employee Code',   default_sort: 30, is_required: true },
   { field_key: 'employee_name',  default_label: 'Employee Name',   default_sort: 40, is_required: true },
+  { field_key: 'employee_status', default_label: 'Employee Status', default_sort: 45 },
   { field_key: 'department',     default_label: 'Department',      default_sort: 50 },
   { field_key: 'kpi_name',       default_label: 'KPI Name',        default_sort: 60, is_required: true },
   { field_key: 'manager_name',   default_label: 'Manager Name',    default_sort: 70 },
@@ -41,6 +42,7 @@ interface MismatchRow {
   employeeId: string;
   employeeCode: string;
   employeeName: string;
+  employeeIsActive: boolean | null;
   department: string;
   kpiName: string;
   managerName: string;
@@ -57,6 +59,7 @@ export default function ManagerTeamKpiReport() {
   const [page, setPage] = useState(0);
   const { canDownload } = useReportAccess();
   const { getCompanyCode } = useCompanyFilter();
+  const { mode: empStatus } = useEmployeeStatusFilter();
   const resolvedFields = useResolvedReportFields('RPT-MTK-001', MTK_DEFAULT_FIELDS);
 
   const { data: rawData, isLoading } = useQuery({
@@ -67,7 +70,7 @@ export default function ManagerTeamKpiReport() {
         .select(`
           id, kpi_name, employee_id, review_period,
           review_submissions(final_score),
-          profiles!kpis_employee_id_fkey(employee_code, full_name, department_id, reporting_manager_id,
+          profiles!kpis_employee_id_fkey(employee_code, full_name, department_id, is_active, reporting_manager_id,
             departments!profiles_department_fk(name))
         `)
         .eq('review_period', month)
@@ -135,6 +138,7 @@ export default function ManagerTeamKpiReport() {
         employeeId: kpi.employee_id || '',
         employeeCode: profile?.employee_code || '—',
         employeeName: profile?.full_name || 'Unknown',
+        employeeIsActive: profile?.is_active ?? null,
         department: (Array.isArray(dept) ? dept[0]?.name : dept?.name) || '—',
         kpiName: kpi.kpi_name || '—',
         managerName: managerNameMap[managerId] || '—',
@@ -148,9 +152,11 @@ export default function ManagerTeamKpiReport() {
   }, [rawData]);
 
   const filtered = useMemo(() => {
-    if (!search.trim()) return rows;
+    // ADR-199 — employee active/inactive scope.
+    const scoped = applyEmployeeStatusFilter(rows, empStatus, r => r.employeeIsActive);
+    if (!search.trim()) return scoped;
     const q = search.toLowerCase();
-    return rows.filter(
+    return scoped.filter(
       (r) =>
         r.employeeName.toLowerCase().includes(q) ||
         r.employeeCode.toLowerCase().includes(q) ||
@@ -158,7 +164,7 @@ export default function ManagerTeamKpiReport() {
         r.department.toLowerCase().includes(q) ||
         r.managerName.toLowerCase().includes(q)
     );
-  }, [rows, search]);
+  }, [rows, search, empStatus]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const paged = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
@@ -178,6 +184,7 @@ export default function ManagerTeamKpiReport() {
         case 'company':        return getCompanyCode(row.employeeId);
         case 'employee_code':  return row.employeeCode;
         case 'employee_name':  return row.employeeName;
+        case 'employee_status': return employeeStatusCell(row.employeeIsActive);
         case 'department':     return row.department;
         case 'kpi_name':       return row.kpiName;
         case 'manager_name':   return row.managerName;
@@ -195,6 +202,7 @@ export default function ManagerTeamKpiReport() {
       }),
       { header: visible.map((fld) => fld.label) },
     );
+    appendEmployeeScopeNote(ws, empStatus);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Manager vs Team KPI');
     XLSX.writeFile(wb, `Manager_Team_KPI_${month}_${year}.xlsx`);
