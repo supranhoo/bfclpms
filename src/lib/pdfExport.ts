@@ -9,6 +9,8 @@ export interface EmployeeScorecard {
   employeeId: string;
   employeeName: string;
   employeeCode: string;
+  /** ADR-199 — employee active flag for report scoping (unknown → treated active). */
+  employeeIsActive?: boolean | null;
   designation: string;
   department: string;
   division?: string;
