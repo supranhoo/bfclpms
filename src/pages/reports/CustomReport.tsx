@@ -10,15 +10,21 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { Download } from 'lucide-react';
 import * as XLSX from 'xlsx';
+import { EmployeeStatusFilter } from '@/components/reports/EmployeeStatusFilter';
+import { useEmployeeStatusFilter } from '@/hooks/useEmployeeStatusFilter';
+import { applyEmployeeStatusFilter } from '@/lib/reportEmployeeFilter';
+import { appendEmployeeScopeNote } from '@/lib/reportExportScope';
 
 export default function CustomReport() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { data: report, isLoading: reportLoading } = useCustomReport(id);
+  // ADR-199 — employee active/inactive scope.
+  const { mode: empStatus } = useEmployeeStatusFilter();
 
   // Build and execute the dynamic query
   const { data: rows = [], isLoading: dataLoading } = useQuery({
-    queryKey: ['custom-report-data', id, report?.columns],
+    queryKey: ['custom-report-data', id, report?.columns, empStatus],
     enabled: !!report && (report.columns?.length ?? 0) > 0,
     queryFn: async () => {
       if (!report) return [];
@@ -77,11 +83,17 @@ export default function CustomReport() {
         if (error) throw error;
 
         // Flatten the nested data
-        return (data || []).map((row: any) => flattenRow(row, columns));
+        const scoped = applyEmployeeStatusFilter(
+          (data || []) as any[],
+          empStatus,
+          (row: any) => row.employee?.is_active,
+        );
+        return scoped.map((row: any) => flattenRow(row, columns));
       }
 
       // Employee-only query
-      let query = supabase.from('profiles').select(selectParts.join(', ')).eq('is_active', true).limit(500);
+      let query = supabase.from('profiles').select(selectParts.join(', ')).limit(500);
+      if (empStatus !== 'all') query = query.eq('is_active', empStatus === 'active');
       const { data, error } = await query;
       if (error) throw error;
       return (data || []).map((row: any) => flattenRow(row, columns));
@@ -139,6 +151,7 @@ export default function CustomReport() {
     const headers = columns.map(c => c.alias || getFieldByKey(c.key)?.label || c.key);
     const wsData = [headers, ...rows.map(row => columns.map(c => row[c.key] ?? ''))];
     const ws = XLSX.utils.aoa_to_sheet(wsData);
+    appendEmployeeScopeNote(ws, empStatus);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, report.name.slice(0, 31));
     XLSX.writeFile(wb, `${report.filename_template || report.name}.xlsx`);
@@ -173,6 +186,7 @@ export default function CustomReport() {
       />
 
       <div className="flex justify-end gap-2">
+        <EmployeeStatusFilter />
         {report.export_excel && (
           <Button variant="outline" size="sm" onClick={handleExportExcel} disabled={rows.length === 0} className="gap-2">
             <Download className="h-4 w-4" /> Export Excel
