@@ -4,6 +4,10 @@ import { useAllKpis } from '@/hooks/useKpis';
 import { useDepartments, useDivisions } from '@/hooks/useOrganization';
 import { useCompanyFilter } from '@/hooks/useCompanyFilter';
 import { CompanyFilter } from '@/components/reports/CompanyFilter';
+import { EmployeeStatusFilter } from '@/components/reports/EmployeeStatusFilter';
+import { useEmployeeStatusFilter } from '@/hooks/useEmployeeStatusFilter';
+import { applyEmployeeStatusFilter } from '@/lib/reportEmployeeFilter';
+import { appendEmployeeScopeNote } from '@/lib/reportExportScope';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -44,7 +48,13 @@ export default function DepartmentReport() {
 
   const [selectedDivision, setSelectedDivision] = useState<string>('all');
   const { companies, selectedCompanyId, setSelectedCompanyId, filterByCompany } = useCompanyFilter();
+  const { mode: empStatus } = useEmployeeStatusFilter();
   const resolvedFields = useResolvedReportFields('RPT-DEP-001', DEP_DEFAULT_FIELDS);
+  // ADR-199 — employee scope applies to the underlying KPI rows.
+  const scopedKpis = useMemo(
+    () => applyEmployeeStatusFilter(allKpis ?? [], empStatus, (k: any) => k.profiles?.is_active),
+    [allKpis, empStatus],
+  );
   // Build department stats
   const departmentData = useMemo(() => {
     if (!allKpis || !departments) return [];
@@ -56,7 +66,7 @@ export default function DepartmentReport() {
 
     return filteredDepts.map(dept => {
       // Get KPIs for employees in this department
-      const deptKpis = allKpis.filter(kpi => {
+      const deptKpis = scopedKpis.filter(kpi => {
         const employee = kpi.profiles as { department_id?: string } | null;
         return employee?.department_id === dept.id && filterByCompany(kpi.employee_id);
       });
@@ -91,7 +101,7 @@ export default function DepartmentReport() {
         statusBreakdown,
       };
     }).filter(d => d.totalKpis > 0).sort((a, b) => b.completionRate - a.completionRate);
-  }, [allKpis, departments, selectedDivision]);
+  }, [allKpis, scopedKpis, departments, selectedDivision, filterByCompany]);
 
   // Overall stats
   const stats = useMemo(() => {
@@ -137,11 +147,12 @@ export default function DepartmentReport() {
       return row;
     });
     const ws = XLSX.utils.json_to_sheet(exportData, { header: visible.map((f) => f.label) });
+    appendEmployeeScopeNote(ws, empStatus);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Department Summary');
     XLSX.writeFile(wb, `Department_Report_${new Date().toISOString().split('T')[0]}.xlsx`);
     toast({ title: 'Report downloaded successfully' });
-  }, [departmentData, resolvedFields, toast]);
+  }, [departmentData, resolvedFields, toast, empStatus]);
 
   if (isLoading) {
     return (
@@ -219,6 +230,7 @@ export default function DepartmentReport() {
         <CardContent>
           <div className="flex flex-wrap items-center gap-3">
             <CompanyFilter companies={companies} selectedCompanyId={selectedCompanyId} onCompanyChange={setSelectedCompanyId} />
+            <EmployeeStatusFilter />
             <Select value={selectedDivision} onValueChange={setSelectedDivision}>
               <SelectTrigger className="w-48">
                 <SelectValue placeholder="Filter by division" />

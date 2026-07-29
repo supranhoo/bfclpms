@@ -4,6 +4,10 @@ import { useAllKpis, useKpiQueries } from '@/hooks/useKpis';
 import { useProfiles } from '@/hooks/useOrganization';
 import { useCompanyFilter } from '@/hooks/useCompanyFilter';
 import { CompanyFilter } from '@/components/reports/CompanyFilter';
+import { EmployeeStatusFilter } from '@/components/reports/EmployeeStatusFilter';
+import { useEmployeeStatusFilter } from '@/hooks/useEmployeeStatusFilter';
+import { applyEmployeeStatusFilter, employeeStatusCell } from '@/lib/reportEmployeeFilter';
+import { appendEmployeeScopeNote } from '@/lib/reportExportScope';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -22,6 +26,7 @@ const QRY_DEFAULT_FIELDS = [
   { field_key: 'kpi',              default_label: 'KPI',              default_sort: 30, is_required: true },
   { field_key: 'kra',              default_label: 'KRA',              default_sort: 40 },
   { field_key: 'employee',         default_label: 'Employee',         default_sort: 50 },
+  { field_key: 'employee_status',  default_label: 'Employee Status',  default_sort: 55 },
   { field_key: 'raised_by',        default_label: 'Raised By',        default_sort: 60 },
   { field_key: 'raised_to',        default_label: 'Raised To',        default_sort: 70 },
   { field_key: 'reason',           default_label: 'Reason',           default_sort: 80 },
@@ -44,6 +49,7 @@ export default function QueryReport() {
 
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const { companies, selectedCompanyId, setSelectedCompanyId, filterByCompany, getCompanyCode } = useCompanyFilter();
+  const { mode: empStatus } = useEmployeeStatusFilter();
   // Create lookup maps
   const profileMap = useMemo(() => {
     return new Map(profiles?.map(p => [p.id, p]) || []);
@@ -63,6 +69,11 @@ export default function QueryReport() {
         const kpi = kpiMap.get(q.kpi_id);
         return filterByCompany(kpi?.employee_id);
       })
+      // ADR-199 — employee active/inactive scope (unknown flag treated as active).
+      .filter(q => {
+        const kpi = kpiMap.get(q.kpi_id) as any;
+        return applyEmployeeStatusFilter([kpi], empStatus, (k: any) => k?.profiles?.is_active).length > 0;
+      })
       .map(q => {
         const kpi = kpiMap.get(q.kpi_id);
         const raisedBy = profileMap.get(q.raised_by);
@@ -77,13 +88,14 @@ export default function QueryReport() {
           kpiName: kpi?.kpi_name || 'Unknown',
           kraName: kpi?.kra_name || 'Unknown',
           employeeName: kpi?.profiles?.full_name || 'Unknown',
+          employeeIsActive: (kpi?.profiles as any)?.is_active,
           raisedByName: raisedBy?.full_name || 'Unknown',
           raisedToName: raisedTo?.full_name || 'Unknown',
           daysSinceCreated,
           daysToResolve,
         };
       });
-  }, [queries, statusFilter, kpiMap, profileMap, filterByCompany]);
+  }, [queries, statusFilter, kpiMap, profileMap, filterByCompany, empStatus]);
 
   // Stats
   const stats = useMemo(() => {
@@ -117,6 +129,7 @@ export default function QueryReport() {
         case 'kpi':              return q.kpiName;
         case 'kra':              return q.kraName;
         case 'employee':         return q.employeeName;
+        case 'employee_status':  return employeeStatusCell(q.employeeIsActive);
         case 'raised_by':        return q.raisedByName;
         case 'raised_to':        return q.raisedToName;
         case 'reason':           return q.reason;
@@ -133,11 +146,12 @@ export default function QueryReport() {
       return row;
     });
     const ws = XLSX.utils.json_to_sheet(exportData, { header: visible.map((f) => f.label) });
+    appendEmployeeScopeNote(ws, empStatus);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Queries');
     XLSX.writeFile(wb, `Query_Report_${new Date().toISOString().split('T')[0]}.xlsx`);
     toast({ title: 'Report downloaded successfully' });
-  }, [enrichedQueries, toast, resolvedFields, kpiMap, getCompanyCode]);
+  }, [enrichedQueries, toast, resolvedFields, kpiMap, getCompanyCode, empStatus]);
 
   const isLoading = kpisLoading || queriesLoading;
 
@@ -217,6 +231,7 @@ export default function QueryReport() {
         <CardContent>
           <div className="flex flex-wrap items-center gap-3">
             <CompanyFilter companies={companies} selectedCompanyId={selectedCompanyId} onCompanyChange={setSelectedCompanyId} />
+            <EmployeeStatusFilter />
             <Select value={statusFilter} onValueChange={setStatusFilter}>
               <SelectTrigger className="w-48">
                 <SelectValue placeholder="Filter by status" />

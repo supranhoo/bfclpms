@@ -5,6 +5,10 @@ import { useKraCategories } from '@/hooks/useOrganization';
 import { useCompanyFilter } from '@/hooks/useCompanyFilter';
 import { useManagersWithoutKras } from '@/hooks/useManagersWithoutKras';
 import { CompanyFilter } from '@/components/reports/CompanyFilter';
+import { EmployeeStatusFilter } from '@/components/reports/EmployeeStatusFilter';
+import { useEmployeeStatusFilter } from '@/hooks/useEmployeeStatusFilter';
+import { applyEmployeeStatusFilter } from '@/lib/reportEmployeeFilter';
+import { appendEmployeeScopeNote } from '@/lib/reportExportScope';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -60,6 +64,7 @@ export default function KRAIssuance() {
   const { data: allKpis, isLoading } = useAllKpis();
   const { data: categories } = useKraCategories();
   const { companies, selectedCompanyId, setSelectedCompanyId, filterByCompany } = useCompanyFilter();
+  const { mode: empStatus } = useEmployeeStatusFilter();
 
   // v2.66.11.12 — Managers without KRAs panel (period-scoped).
   const now = new Date();
@@ -67,29 +72,38 @@ export default function KRAIssuance() {
   const [gapYear, setGapYear] = useState<number>(now.getFullYear());
   const { data: gapManagers, isLoading: gapLoading } = useManagersWithoutKras(gapMonth, gapYear, { minReports: 5 });
 
-  const filteredKpis = useMemo(() => allKpis?.filter(k => filterByCompany(k.employee_id)) ?? [], [allKpis, filterByCompany]);
+  // ADR-199 — company + employee active/inactive scope drives every tile below.
+  const filteredKpis = useMemo(
+    () =>
+      applyEmployeeStatusFilter(
+        allKpis?.filter(k => filterByCompany(k.employee_id)) ?? [],
+        empStatus,
+        (k: any) => k.profiles?.is_active,
+      ),
+    [allKpis, filterByCompany, empStatus],
+  );
 
   const statusCounts = {
-    kra_set: allKpis?.filter(k => k.status === 'kra_set').length || 0,
-    self_review: allKpis?.filter(k => k.status === 'self_review').length || 0,
-    manager_check: allKpis?.filter(k => k.status === 'manager_check').length || 0,
-    functional_manager_check: allKpis?.filter(k => k.status === 'functional_manager_check').length || 0,
-    skip_level_check: allKpis?.filter(k => k.status === 'skip_level_check').length || 0,
-    hr_pms_review: allKpis?.filter(k => k.status === 'hr_pms_review').length || 0,
-    audit: allKpis?.filter(k => k.status === 'audit').length || 0,
-    management_review: allKpis?.filter(k => k.status === 'management_review').length || 0,
-    approved: allKpis?.filter(k => k.status === 'approved').length || 0,
+    kra_set: filteredKpis.filter(k => k.status === 'kra_set').length,
+    self_review: filteredKpis.filter(k => k.status === 'self_review').length,
+    manager_check: filteredKpis.filter(k => k.status === 'manager_check').length,
+    functional_manager_check: filteredKpis.filter(k => k.status === 'functional_manager_check').length,
+    skip_level_check: filteredKpis.filter(k => k.status === 'skip_level_check').length,
+    hr_pms_review: filteredKpis.filter(k => k.status === 'hr_pms_review').length,
+    audit: filteredKpis.filter(k => k.status === 'audit').length,
+    management_review: filteredKpis.filter(k => k.status === 'management_review').length,
+    approved: filteredKpis.filter(k => k.status === 'approved').length,
   };
 
-  const total = allKpis?.length || 1;
+  const total = filteredKpis.length || 1;
   const completionRate = Math.round((statusCounts.approved / total) * 100);
 
   // Category breakdown
   const categoryBreakdown = categories?.map(cat => ({
     name: cat.name,
     color: cat.color,
-    total: allKpis?.filter(k => k.category_id === cat.id).length || 0,
-    approved: allKpis?.filter(k => k.category_id === cat.id && k.status === 'approved').length || 0,
+    total: filteredKpis.filter(k => k.category_id === cat.id).length,
+    approved: filteredKpis.filter(k => k.category_id === cat.id && k.status === 'approved').length,
   })) || [];
 
   const { toast } = useToast();
@@ -145,13 +159,15 @@ export default function KRAIssuance() {
     ];
 
     const ws1 = XLSX.utils.json_to_sheet(exportData, { header: visible.map((f) => f.label) });
+    appendEmployeeScopeNote(ws1, empStatus);
     const ws2 = XLSX.utils.json_to_sheet(statusData);
+    appendEmployeeScopeNote(ws2, empStatus);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws1, 'By Category');
     XLSX.utils.book_append_sheet(wb, ws2, 'By Status');
     XLSX.writeFile(wb, `KRA_Issuance_Report_${new Date().toISOString().split('T')[0]}.xlsx`);
     toast({ title: 'Report downloaded successfully' });
-  }, [categoryBreakdown, statusCounts, resolvedFields, toast]);
+  }, [categoryBreakdown, statusCounts, resolvedFields, toast, empStatus, visibleFields]);
 
   if (isLoading) {
     return <div className="space-y-6"><Skeleton className="h-8 w-48" /><Skeleton className="h-96" /></div>;
@@ -172,6 +188,11 @@ export default function KRAIssuance() {
           ) : undefined
         }
       />
+
+      <div className="flex flex-wrap items-center gap-3">
+        <CompanyFilter companies={companies} selectedCompanyId={selectedCompanyId} onCompanyChange={setSelectedCompanyId} />
+        <EmployeeStatusFilter />
+      </div>
 
       <div className="grid gap-4 grid-cols-2 md:grid-cols-4">
         <Card>

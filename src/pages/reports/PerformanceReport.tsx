@@ -5,6 +5,10 @@ import { useProfiles, useKraCategories } from '@/hooks/useOrganization';
 import { useAuth } from '@/contexts/AuthContext';
 import { useCompanyFilter } from '@/hooks/useCompanyFilter';
 import { CompanyFilter } from '@/components/reports/CompanyFilter';
+import { EmployeeStatusFilter } from '@/components/reports/EmployeeStatusFilter';
+import { useEmployeeStatusFilter } from '@/hooks/useEmployeeStatusFilter';
+import { applyEmployeeStatusFilter } from '@/lib/reportEmployeeFilter';
+import { appendEmployeeScopeNote } from '@/lib/reportExportScope';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -45,6 +49,7 @@ export default function PerformanceReport() {
   const scopeLabel = isOrgWideRole ? 'Organization Performance' : 'Team Performance';
 
   const { companies, selectedCompanyId, setSelectedCompanyId, filterByCompany } = useCompanyFilter();
+  const { mode: empStatus } = useEmployeeStatusFilter();
 
   // Filter KPIs based on role scope + company
   const scopedKpis = useMemo(() => {
@@ -52,8 +57,10 @@ export default function PerformanceReport() {
     const roleFiltered = isOrgWideRole ? allKpis : allKpis.filter(k =>
       k.employee_id !== user?.id && !(k as any).is_org_level
     );
-    return roleFiltered.filter(k => filterByCompany(k.employee_id));
-  }, [allKpis, isOrgWideRole, user?.id, filterByCompany]);
+    const companyFiltered = roleFiltered.filter(k => filterByCompany(k.employee_id));
+    // ADR-199 — employee active/inactive scope.
+    return applyEmployeeStatusFilter(companyFiltered, empStatus, (k: any) => k.profiles?.is_active);
+  }, [allKpis, isOrgWideRole, user?.id, filterByCompany, empStatus]);
 
   const kpiIds = scopedKpis.map(k => k.id);
   const { data: submissions } = useReviewSubmissions(kpiIds);
@@ -131,11 +138,12 @@ export default function PerformanceReport() {
     const ws = XLSX.utils.json_to_sheet(exportData, {
       header: visibleFields.map((f) => f.label),
     });
+    appendEmployeeScopeNote(ws, empStatus);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Performance Report');
     XLSX.writeFile(wb, `Performance_Report_${new Date().toISOString().split('T')[0]}.xlsx`);
     toast({ title: 'Report downloaded successfully' });
-  }, [categoryPerformance, resolvedFields, toast]);
+  }, [categoryPerformance, resolvedFields, toast, empStatus]);
 
   if (kpisLoading) {
     return <div className="space-y-6"><Skeleton className="h-8 w-48" /><Skeleton className="h-96" /></div>;
@@ -150,6 +158,7 @@ export default function PerformanceReport() {
         actions={
           <div className="flex items-center gap-2">
             <CompanyFilter companies={companies} selectedCompanyId={selectedCompanyId} onCompanyChange={setSelectedCompanyId} />
+            <EmployeeStatusFilter />
             <Badge variant={isOrgWideRole ? 'default' : 'secondary'}>
               {scopeLabel}
             </Badge>

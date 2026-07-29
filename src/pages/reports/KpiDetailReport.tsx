@@ -4,6 +4,11 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useCompanyFilter } from '@/hooks/useCompanyFilter';
 import { CompanyFilter } from '@/components/reports/CompanyFilter';
+import { EmployeeStatusFilter } from '@/components/reports/EmployeeStatusFilter';
+import { useEmployeeStatusFilter } from '@/hooks/useEmployeeStatusFilter';
+import { applyEmployeeStatusFilter, employeeStatusCell } from '@/lib/reportEmployeeFilter';
+import { appendEmployeeScopeNote } from '@/lib/reportExportScope';
+import { fetchAllPaged } from '@/lib/fetchAll';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -25,6 +30,7 @@ const KPID_DEFAULT_FIELDS = [
   { field_key: 'company',        default_label: 'Company',        default_sort: 10 },
   { field_key: 'employee_code',  default_label: 'Employee Code',  default_sort: 20, is_required: true },
   { field_key: 'employee_name',  default_label: 'Employee Name',  default_sort: 30, is_required: true },
+  { field_key: 'employee_status', default_label: 'Employee Status', default_sort: 35 },
   { field_key: 'department',     default_label: 'Department',     default_sort: 40 },
   { field_key: 'category',       default_label: 'Category',       default_sort: 50 },
   { field_key: 'kra',            default_label: 'KRA',            default_sort: 60 },
@@ -81,6 +87,7 @@ interface KpiDetailRow {
   employeeId: string;
   employeeCode: string;
   employeeName: string;
+  employeeIsActive: boolean | null;
   department: string;
   category: string;
   kraName: string;
@@ -125,6 +132,7 @@ export default function KpiDetailReport() {
   const { canDownload } = useReportAccess();
   const canExport = canDownload('kpi-detail');
   const { getCompanyCode } = useCompanyFilter();
+  const { mode: empStatus } = useEmployeeStatusFilter();
   const resolvedFields = useResolvedReportFields('RPT-KPID-001', KPID_DEFAULT_FIELDS);
   const currentYear = new Date().getFullYear();
 
@@ -209,13 +217,17 @@ export default function KpiDetailReport() {
         }
       }
 
-      // Fetch profiles with department info
-      const { data: profiles, error: profErr } = await supabase
-        .from('profiles')
-        .select('id, employee_code, full_name, departments!profiles_department_fk ( name )');
-      if (profErr) throw profErr;
+      // Fetch profiles with department info.
+      // mem://architecture/profiles-query-policy — paged fetch, PostgREST caps at 1000.
+      const profiles = await fetchAllPaged<any>((from, to) =>
+        supabase
+          .from('profiles')
+          .select('id, employee_code, full_name, is_active, departments!profiles_department_fk ( name )')
+          .order('id')
+          .range(from, to)
+      );
 
-      const profileMap = new Map((profiles ?? []).map(p => [p.id, p]));
+      const profileMap = new Map((profiles ?? []).map((p: any) => [p.id, p]));
 
       const result: KpiDetailRow[] = allKpis.map(kpi => {
         const profile = profileMap.get(kpi.employee_id);
@@ -242,6 +254,7 @@ export default function KpiDetailReport() {
           employeeId: kpi.employee_id,
           employeeCode: profile?.employee_code ?? '—',
           employeeName: profile?.full_name ?? 'Unknown',
+          employeeIsActive: (profile as any)?.is_active ?? null,
           department: (profile?.departments as any)?.name ?? '—',
           category: (kpi.kra_categories as any)?.name ?? '—',
           kraName: kpi.kra_name ?? '—',
@@ -357,7 +370,9 @@ export default function KpiDetailReport() {
   const filteredRows = useMemo(() => {
     if (!enrichedRows) return [];
     const term = searchTerm.toLowerCase();
-    return enrichedRows.filter(r => {
+    // ADR-199 — employee active/inactive scope.
+    const scoped = applyEmployeeStatusFilter(enrichedRows, empStatus, r => r.employeeIsActive);
+    return scoped.filter(r => {
       if (!includeNa && r.isNa) return false;
       if (!showFreqLocked && r.isFrequencyLocked) return false;
       if (selectedDept !== 'all' && r.department !== selectedDept) return false;
@@ -372,7 +387,7 @@ export default function KpiDetailReport() {
       }
       return true;
     });
-  }, [enrichedRows, searchTerm, selectedDept, selectedCategory, includeNa, showFreqLocked]);
+  }, [enrichedRows, searchTerm, selectedDept, selectedCategory, includeNa, showFreqLocked, empStatus]);
 
   // Stats
   const stats = useMemo(() => {
@@ -406,6 +421,7 @@ export default function KpiDetailReport() {
         case 'company':        return getCompanyCode(r.employeeId);
         case 'employee_code':  return r.employeeCode;
         case 'employee_name':  return r.employeeName;
+        case 'employee_status': return employeeStatusCell(r.employeeIsActive);
         case 'department':     return r.department;
         case 'category':       return r.category;
         case 'kra':            return r.kraName;
@@ -433,6 +449,7 @@ export default function KpiDetailReport() {
       return row;
     });
     const ws = XLSX.utils.json_to_sheet(exportData, { header: visible.map((f) => f.label) });
+    appendEmployeeScopeNote(ws, empStatus);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'KPI Detail');
     XLSX.writeFile(wb, `KPI_Detail_Report_${selectedYear}${selectedPeriod !== 'all' ? `_${selectedPeriod}` : ''}.xlsx`);
@@ -458,6 +475,10 @@ export default function KpiDetailReport() {
       <Card>
         <CardContent className="pt-4">
           <div className="flex flex-wrap gap-3 items-end">
+            <div className="space-y-1">
+              <Label className="text-xs text-muted-foreground">Employees</Label>
+              <EmployeeStatusFilter />
+            </div>
             {/* Year */}
             <div className="space-y-1">
               <Label className="text-xs text-muted-foreground">Year</Label>
