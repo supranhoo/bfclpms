@@ -3039,6 +3039,14 @@ Admin tooling that mutates `auth.users` (the `password-rollout` edge function an
 
 **Forbidden**: skipping the probe, minting a fresh auth id, or relying on a separate "create login" tool to backfill missing auth users — these patterns leave the Password Rollout UI silently failing for the most common new-employee case.
 
+### §113.1 — Password rollout logs are append-only and fully visible (ADR-201, v2.66.189)
+
+`public.password_rollout_logs` is the immutable credential-issuance trail. No client or edge-function code may update or delete rows in it; every rollout attempt (success or failure) appends exactly one row.
+
+Admin surfaces MUST expose the **full per-user history**, not just the latest attempt: the User Access Sheet → Password tab renders every log row for the selected user, newest first, showing timestamp, status, email outcome (`sent` / error text), the failure message when present, and the acting admin resolved from `generated_by` (label `System` when the id cannot be resolved).
+
+History reads MUST be **server-side paginated** (`.range()` + `count: 'exact'`, page size 10) per §94 — never load the full log into the client. Performer names are resolved with a single batched `profiles` lookup scoped to the ids on the current page.
+
 ## §114 — Auth Triggers Must Be Idempotent for Backfilled Employees (v2.66.7.47, BUG-045)
 
 Any `AFTER INSERT ON auth.users` trigger that writes to `public.profiles` or `public.user_roles` (today: `public.handle_new_user()`) MUST be idempotent. Backfilled employees (master HR import, see `mem://features/admin/non-login-user-provisioning`) already have a `public.profiles` row before the matching `auth.users` row exists, so a blind `INSERT` raises `duplicate key value violates unique constraint` inside the auth-create transaction and Supabase surfaces it as the generic `Database error creating new user`. This is what blocked Password Rollout in BUG-045 even after BUG-044's probe→create flow was correct.
