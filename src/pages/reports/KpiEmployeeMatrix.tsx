@@ -16,6 +16,10 @@ import { useKpiEmployeeMatrix, useKpiEmployeeMatrixScope, MATRIX_CELL_CAP, type 
 import { useDepartments, useBusinessUnits, useKraCategories, useDivisions } from '@/hooks/useOrganization';
 import { useCompanyFilter } from '@/hooks/useCompanyFilter';
 import { CompanyFilter } from '@/components/reports/CompanyFilter';
+import { EmployeeStatusFilter } from '@/components/reports/EmployeeStatusFilter';
+import { useEmployeeStatusFilter } from '@/hooks/useEmployeeStatusFilter';
+import { applyEmployeeStatusFilter } from '@/lib/reportEmployeeFilter';
+import { appendEmployeeScopeNote } from '@/lib/reportExportScope';
 import { useToast } from '@/hooks/use-toast';
 import * as XLSX from 'xlsx';
 import { useResolvedReportFields } from '@/hooks/useResolvedReportFields';
@@ -108,6 +112,7 @@ export default function KpiEmployeeMatrix() {
 
   // Company filter
   const { companies, selectedCompanyId, setSelectedCompanyId, filterByCompany } = useCompanyFilter();
+  const { mode: empStatus } = useEmployeeStatusFilter();
 
   // Org data
   const { data: departments } = useDepartments();
@@ -263,6 +268,7 @@ export default function KpiEmployeeMatrix() {
     wsData.push(totalsRow);
 
     const ws = XLSX.utils.aoa_to_sheet(wsData);
+    appendEmployeeScopeNote(ws, empStatus);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'KPI-Employee Matrix');
 
@@ -404,6 +410,7 @@ export default function KpiEmployeeMatrix() {
                       selectedCompanyId={selectedCompanyId}
                       onCompanyChange={setSelectedCompanyId}
                     />
+                    <EmployeeStatusFilter />
                   </div>
                 </div>
                 <div>
