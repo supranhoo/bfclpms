@@ -32,6 +32,7 @@ type Row = {
   source: 'bundle' | 'rollover' | 'manual' | null;
   kpis_in_first_batch: number;
   total_kpis: number;
+  is_active?: boolean | null;
   total_count: number;
 };
 
