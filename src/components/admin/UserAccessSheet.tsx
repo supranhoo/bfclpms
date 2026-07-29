@@ -308,34 +308,17 @@ function RolesPanel({ user }: { user: UserAccessSheetUser }) {
 // ============================================================
 // Password
 // ============================================================
-interface RolloutLog {
-  id: string;
-  created_at: string;
-  email_sent: boolean;
-  status: string;
-  email_error: string | null;
-  error_message: string | null;
-}
-
 function PasswordPanel({ user }: { user: UserAccessSheetUser }) {
   const { toast } = useToast();
   const qc = useQueryClient();
   const [busy, setBusy] = useState<'email' | 'no_email' | null>(null);
+  const [page, setPage] = useState(0);
 
-  const { data: lastLog } = useQuery<RolloutLog | null>({
-    queryKey: ['password-rollout-last', user.id],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('password_rollout_logs')
-        .select('id, created_at, email_sent, status, email_error, error_message')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      if (error) throw error;
-      return (data as RolloutLog | null) ?? null;
-    },
-  });
+  const { data: history, isFetching: historyLoading } = usePasswordRolloutHistory(user.id, page);
+  const rows = history?.rows ?? [];
+  const total = history?.totalCount ?? 0;
+  const rangeStart = total === 0 ? 0 : page * ROLLOUT_HISTORY_PAGE_SIZE + 1;
+  const rangeEnd = Math.min((page + 1) * ROLLOUT_HISTORY_PAGE_SIZE, total);
 
   const run = async (sendEmail: boolean) => {
     setBusy(sendEmail ? 'email' : 'no_email');
@@ -354,7 +337,8 @@ function PasswordPanel({ user }: { user: UserAccessSheetUser }) {
           ? 'Credentials emailed to the user.'
           : 'Share the password manually — user logs in via Employee Code.',
       });
-      qc.invalidateQueries({ queryKey: ['password-rollout-last', user.id] });
+      setPage(0);
+      qc.invalidateQueries({ queryKey: ['password-rollout-history', user.id] });
     } catch (e) {
       toast({ title: 'Rollout failed', description: (e as Error).message, variant: 'destructive' });
     } finally {
