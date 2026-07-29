@@ -790,6 +790,42 @@ export type Database = {
         }
         Relationships: []
       }
+      annual_review_dept_deadend_repair_2026_07: {
+        Row: {
+          created_at: string
+          employee_code: string | null
+          enabled_stages: Json | null
+          id: string
+          instance_id: string
+          moved_response_role: string | null
+          new_overall_status: string | null
+          prev_overall_status: string | null
+          reason: string | null
+        }
+        Insert: {
+          created_at?: string
+          employee_code?: string | null
+          enabled_stages?: Json | null
+          id?: string
+          instance_id: string
+          moved_response_role?: string | null
+          new_overall_status?: string | null
+          prev_overall_status?: string | null
+          reason?: string | null
+        }
+        Update: {
+          created_at?: string
+          employee_code?: string | null
+          enabled_stages?: Json | null
+          id?: string
+          instance_id?: string
+          moved_response_role?: string | null
+          new_overall_status?: string | null
+          prev_overall_status?: string | null
+          reason?: string | null
+        }
+        Relationships: []
+      }
       annual_review_directory_overrides: {
         Row: {
           business_unit_ids: string[]
@@ -14755,6 +14791,13 @@ export type Database = {
         Args: {
           p_enabled: Json
           p_role: Database["public"]["Enums"]["annual_reviewer_role"]
+        }
+        Returns: Database["public"]["Enums"]["annual_review_status"]
+      }
+      annual_review_reanchor_status: {
+        Args: {
+          p_enabled: Json
+          p_status: Database["public"]["Enums"]["annual_review_status"]
         }
         Returns: Database["public"]["Enums"]["annual_review_status"]
       }
