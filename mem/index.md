@@ -135,6 +135,7 @@ Fiscal-window: any code fetching time-series data across two calendar years for 
 - [Safety Evidence Auto-Naming](mem://features/safety/evidence-rename) — Auto-generated {Stage}_{EmpCode}_v{n} display names; original_file_name + storage path immutable; manual rename removed
 - [Safety Incident Excel Export](mem://features/safety/excel-export) — Safety-Head/Admin .xlsx export with locked columns; server-paginated over the SLA view; reuses existing xlsx dep
 - [Safety Incident Advanced Filters](mem://features/safety/incident-filters) — Array-based multi-select + date-range presets on /safety/incidents; server-side .in/.gte/.lte
+- [AR Status/Enabled-Stage Invariant](mem://features/annual-review/status-enabled-stage-invariant) — ADR-200: overall_status must sit on an enabled stage; reanchorStatus SSOT + self-healing trigger
 - [Annual Review Per-Employee Workflow](mem://features/annual-review/per-employee-workflow) — enabled_stages column, stageChain SSOT, configurable per-employee stage chain with bulk XLSX
 - [Org Heads (BU & HR head mapping)](mem://features/admin/org-heads) — Admin-managed BU/HR head; auto-resolve from top of hierarchy with manual override; powers Annual Review BU/HR Finalization seeding
 - [Development Report](mem://features/reports/development-report) — Genuine-entry rule, Feb 2026 floor, no Cover tab, filter-driven Reporting Period, reseed tooling
