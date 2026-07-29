@@ -4,6 +4,10 @@ import { supabase } from '@/integrations/supabase/client';
 import { useReportAccess } from '@/hooks/useReportAccess';
 import { useCompanyFilter } from '@/hooks/useCompanyFilter';
 import { CompanyFilter } from '@/components/reports/CompanyFilter';
+import { EmployeeStatusFilter } from '@/components/reports/EmployeeStatusFilter';
+import { useEmployeeStatusFilter } from '@/hooks/useEmployeeStatusFilter';
+import { applyEmployeeStatusFilter, employeeStatusCell } from '@/lib/reportEmployeeFilter';
+import { appendEmployeeScopeNote } from '@/lib/reportExportScope';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Card, CardContent } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -21,6 +25,7 @@ const TVM_DEFAULT_FIELDS = [
   { field_key: 'company',                 default_label: 'Company',                 default_sort: 10 },
   { field_key: 'employee_code',           default_label: 'Employee Code',           default_sort: 20, is_required: true },
   { field_key: 'employee_name',           default_label: 'Employee Name',           default_sort: 30, is_required: true },
+  { field_key: 'employee_status',         default_label: 'Employee Status',         default_sort: 35 },
   { field_key: 'designation',             default_label: 'Designation',             default_sort: 40 },
   { field_key: 'department',              default_label: 'Department',              default_sort: 50 },
   { field_key: 'month',                   default_label: 'Month',                   default_sort: 60 },
@@ -42,6 +47,7 @@ interface SummaryRow {
   employeeId: string;
   employeeCode: string;
   employeeName: string;
+  employeeIsActive: boolean | null;
   designation: string;
   department: string;
   month: string;
@@ -86,6 +92,7 @@ export default function TeamVsManagerScoreReport() {
   );
   const { canDownload } = useReportAccess();
   const { getCompanyCode } = useCompanyFilter();
+  const { mode: empStatus } = useEmployeeStatusFilter();
   const resolvedFields = useResolvedReportFields('RPT-TVM-001', TVM_DEFAULT_FIELDS);
 
   const { data: rawData, isLoading } = useQuery({
@@ -102,7 +109,7 @@ export default function TeamVsManagerScoreReport() {
             id, employee_id, weightage,
             review_submissions(final_score, is_na),
             profiles!kpis_employee_id_fkey(
-              employee_code, full_name, reporting_manager_id, designation,
+              employee_code, full_name, reporting_manager_id, designation, is_active,
               departments!profiles_department_fk(name)
             )
           `)
@@ -196,6 +203,7 @@ export default function TeamVsManagerScoreReport() {
         employeeId: empId,
         employeeCode: p.employee_code || '—',
         employeeName: p.full_name || '—',
+        employeeIsActive: p.is_active ?? null,
         designation: p.designation || '—',
         department: p.departments?.name || '—',
         month,
@@ -220,15 +228,17 @@ export default function TeamVsManagerScoreReport() {
   }, [rawData, managerProfiles, month, year, sortField, sortDir]);
 
   const filtered = useMemo(() => {
-    if (!search) return rows;
+    // ADR-199 — employee active/inactive scope.
+    const scoped = applyEmployeeStatusFilter(rows, empStatus, r => r.employeeIsActive);
+    if (!search) return scoped;
     const q = search.toLowerCase();
-    return rows.filter(r =>
+    return scoped.filter(r =>
       r.employeeName.toLowerCase().includes(q) ||
       r.employeeCode.toLowerCase().includes(q) ||
       r.managerName.toLowerCase().includes(q) ||
       r.department.toLowerCase().includes(q)
     );
-  }, [rows, search]);
+  }, [rows, search, empStatus]);
 
   const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
   const paged = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
@@ -240,6 +250,7 @@ export default function TeamVsManagerScoreReport() {
         case 'company':                 return getCompanyCode(r.employeeId);
         case 'employee_code':           return r.employeeCode;
         case 'employee_name':           return r.employeeName;
+        case 'employee_status':         return employeeStatusCell(r.employeeIsActive);
         case 'designation':             return r.designation;
         case 'department':              return r.department;
         case 'month':                   return r.month;
@@ -257,6 +268,7 @@ export default function TeamVsManagerScoreReport() {
       return out;
     });
     const ws = XLSX.utils.json_to_sheet(exportData, { header: visible.map(fld => fld.label) });
+    appendEmployeeScopeNote(ws, empStatus);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Team Vs Manager Score');
     XLSX.writeFile(wb, `Team_Vs_Manager_Score_${month}_${year}.xlsx`);
@@ -307,6 +319,7 @@ export default function TeamVsManagerScoreReport() {
                   className="pl-9 w-[250px]"
                 />
               </div>
+              <EmployeeStatusFilter />
             </div>
             {canDownload('team-vs-manager-score') && (
               <Button variant="outline" size="sm" onClick={handleExport} disabled={filtered.length === 0}>
