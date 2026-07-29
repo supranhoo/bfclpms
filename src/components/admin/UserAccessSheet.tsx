@@ -21,6 +21,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Loader2, UserPlus, Trash2, Mail, KeyRound, ShieldCheck, History, Inbox, Search, ExternalLink, AlertTriangle } from 'lucide-react';
 import { useIacAssignments, useIacRoles, useGrantRole, useRevokeAssignment } from '@/hooks/useIac';
 import { CanAction } from '@/components/platform/CanAction';
+import { usePasswordRolloutHistory, ROLLOUT_HISTORY_PAGE_SIZE } from '@/hooks/usePasswordRollout';
 
 export interface UserAccessSheetUser {
   id: string;
